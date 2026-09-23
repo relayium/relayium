@@ -347,7 +347,7 @@
 "nearby.resumeReceiving" = "Resume receiving";
 "nearby.pauseReceiving" = "Pause receiving";
 "nearby.pausedBody" = "This device is not listening for nearby devices. It can still send, and pairing codes still work.";
-"nearby.listeningBody" = "While Relayium is running, a device on this address can send files or start a message session without asking first. Anything sharing this public address can try — pause receiving if that is not what you want.";
+"nearby.listeningBody" = "While Relayium is running, a device on this address can ask to connect. Nothing connects until you accept, and each set of files it sends waits for your accept too. Anything sharing this public address can ask — pause receiving if you do not want to be asked.";
 "nearby.savedToDownloads" = "Incoming files are written to your Downloads folder.";
 "nearby.savedToAppFolder" = "Incoming files are saved in Relayium's own folder, which you can open in the Files app.";
 "nearby.a11yReceiving" = "Nearby receiving";
@@ -368,7 +368,7 @@
 "nearby.addFilesHint" = "Add files or folders above, then send them to that device.";
 "nearby.textIntent" = "Opens an end-to-end encrypted message session. Nothing is stored on Relayium.";
 "nearby.startMessageSession" = "Start a message session";
-"nearby.acceptanceNote" = "On relayium.com the other person still chooses where to save incoming files; a message session opens on their side without a prompt unless advanced verification is on for either device (below). This device accepts incoming nearby transfers the same way while receiving is on.";
+"nearby.acceptanceNote" = "On relayium.com the other person still chooses where to save incoming files; a message session opens on their side without a further prompt unless advanced verification is on for either device (below). This device asks you before accepting a connection it did not start, and again before saving each set of incoming files.";
 "nearby.backToDevices" = "Back to nearby devices";
 "nearby.leavingClearsHistory" = "Leaving clears this session's local message history.";
 "nearby.deviceGone" = "That device is no longer nearby. Pick another one.";
@@ -384,8 +384,15 @@
 "nearby.iosSafetySummary" = "Devices on your local network running Relayium. A shared network can include strangers — choose who you send to.";
 "nearby.iosExplain" = "Relayium looks for one Bonjour service, _relayium._tcp, on the local network this device has joined, and publishes the same service while receiving is on. It does not scan addresses, read anything else about the network, or ask anything outside this network who is nearby. Only devices running the Relayium app can appear here — a web browser cannot. On a shared network such as a café, hotel or office, the devices that answer can belong to strangers.";
 "nearby.iosEmptyRoster" = "No other devices yet. Open the Relayium app on the other device, connected to this same network, and leave it open.";
-"nearby.iosListeningBody" = "While this app is open, a device on this network can send files or start a message session without asking first. Anything on this network running Relayium can try — pause receiving if that is not what you want.";
-"nearby.iosAcceptanceNote" = "The device you pick accepts what you send without asking while it is receiving, and a message session opens on its side without a prompt, unless advanced verification is on for either device (below). This device accepts incoming transfers from this network the same way while receiving is on and this app is open.";
+"nearby.iosListeningBody" = "While this app is open, a device on this network can ask to connect. Nothing connects until you accept, and each set of files it sends waits for your accept too. Anything on this network running Relayium can ask — pause receiving if you do not want to be asked.";
+"nearby.iosAcceptanceNote" = "A current Relayium app on the device you pick asks its user before accepting your connection, and each set of files you send waits for their accept; a message session then opens without a further prompt unless advanced verification is on for either device (below). This device asks you the same way before accepting a connection while receiving is on and this app is open.";
+/* A23-A25: an unrequested nearby connection asks first. */
+"nearby.incomingTitle" = "%@ wants to connect";
+"nearby.incomingDetail" = "Accept only if you recognise this device. Its name is what it calls itself, not a verified identity. Each set of files it sends still waits for your accept.";
+"nearby.incomingDiscardsText" = "Accepting clears the conversation and unsent text still on this page. Decline to keep them.";
+"nearby.incomingAccept" = "Accept";
+"nearby.incomingDecline" = "Decline";
+/* End A23-A25. */
 "nearby.iosReconnecting" = "Lost the local network connection. Reconnecting…";
 
 /* MARK: drop zone, picker, received result, QR */
@@ -812,7 +819,6 @@
 "link.interrupted" = "Relayium left the screen, so the connection ended. It runs only while the app is open on both devices. The conversation is gone — it was never stored anywhere — and anything partly received was removed.";
 "link.connectToDevice" = "Connect";
 "link.connectToDeviceHint" = "Opens one encrypted connection. Messages and as many files or folders as you like, without connecting again.";
-"link.connectCarriesStagedFiles" = "The files you chose will be sent on this connection once you have compared the code.";
 "link.conversationHeading" = "Conversation";
 "link.conversationEmpty" = "Nothing said yet. Write a message below.";
 "link.savedToAppFolder" = "Files you accept are saved to Relayium's folder in the Files app.";

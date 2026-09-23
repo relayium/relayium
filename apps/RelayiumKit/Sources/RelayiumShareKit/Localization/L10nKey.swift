@@ -572,8 +572,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case linkConnectToDevice = "link.connectToDevice"
     /// What that one verb will produce, said before it is pressed.
     case linkConnectToDeviceHint = "link.connectToDeviceHint"
-    /// The staged batch travels with the connection rather than after it.
-    case linkConnectCarriesStagedFiles = "link.connectCarriesStagedFiles"
     /// The heading over the conversation on a screen that also lists transfers.
     case linkConversationHeading = "link.conversationHeading"
     /// Nothing has been said yet. An empty transcript with no explanation reads
@@ -1241,6 +1239,17 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// Relayium app on this link, not a browser, so the shared note's
     /// production-host sentence describes a device that cannot be there.
     case nearbyIOSAcceptanceNote = "nearby.iosAcceptanceNote"
+
+    // A23-A25: an unrequested nearby connection asks first. One contiguous block.
+    /// %@ — the asking device's peer-supplied roster label. Title of the prompt.
+    case nearbyIncomingTitle = "nearby.incomingTitle"
+    /// Why to accept only a recognised device, and that files still ask.
+    case nearbyIncomingDetail = "nearby.incomingDetail"
+    /// Shown only when accepting would clear text still on the ended page.
+    case nearbyIncomingDiscardsText = "nearby.incomingDiscardsText"
+    case nearbyIncomingAccept = "nearby.incomingAccept"
+    case nearbyIncomingDecline = "nearby.incomingDecline"
+    // End A23-A25.
     /// The iOS drop banner. There is no rendezvous to lose here — what dropped
     /// is the local link — so `LanDiscoveryModel` renders this key instead of
     /// `nearbyReconnecting` when `LocalNearbyEnvironment` composed it.

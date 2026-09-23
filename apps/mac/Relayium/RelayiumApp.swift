@@ -547,8 +547,12 @@ struct RelayiumApp: App {
         // Same arbitration as the legacy one above, through the same NEARBY
         // presence, which is what makes "a link session and a legacy session
         // cannot coexist *in this module*" true rather than merely intended.
-        // Navigation follows, so a link that arrives while the user is on
-        // another destination is not invisible.
+        //
+        // **Asked at ACCEPT, not on arrival (A23).** The link's consent is
+        // `.prompt` by default, so an unrequested link waits behind
+        // `inboundAsk` — a card on LAN Transfer, an alert over any other
+        // destination — and this runs only when the user accepts. Navigation
+        // therefore follows the user's own answer, never a stranger's offer.
         nearbyLink.shouldAcceptLink = { peerID in
             guard nearbyModule.presence.beginSession(
                 .nearby, peerLabel: nearby.label(forPeerID: peerID))
@@ -760,6 +764,11 @@ struct RelayiumApp: App {
                 }
                 AppShellView()
             }
+                // A nearby device asking to connect while another destination
+                // is showing (A23). LAN Transfer draws the same question in
+                // place; see `InboundLinkAskPrompt`.
+                .modifier(InboundLinkAskAlert(link: transferModules.nearby.link,
+                                              navigation: navigation))
                 .environmentObject(navigation)
                 // BOTH modules, as one container. SwiftUI's environment is keyed
                 // by type, so two `TransferModule`s could not both live in it —

@@ -115,6 +115,16 @@ struct NearbyLinkWorkspaceView: View {
                       allowsMultipleSelection: true) { result in
             sendChosen(result)
         }
+        // **Debug acceptance only.** `UITestMode.linkFixtureSelection` answers
+        // nil in Release and without its launch argument; with it, the open
+        // link receives the fixture ONCE, through the same `sendChosen` the
+        // importer above calls — only the system browser is replaced. Keyed on
+        // `acceptsWork` so it runs when the link is open and past any
+        // verification, and on appearance if it already was.
+        .task(id: link.acceptsWork) {
+            guard link.acceptsWork, let fixture = UITestMode.linkFixtureSelection() else { return }
+            sendChosen(fixture)
+        }
         // A draft the lane never took comes back to the field rather than
         // vanishing. `task(id:)` rather than `onChange`, because the hand-back
         // can happen while this view is being rebuilt by the very state change

@@ -36,6 +36,9 @@ struct LanConnectPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.section) {
+            // A device asking to connect comes first: it is waiting for an
+            // answer, and the answer has a deadline (A23).
+            InboundLinkAskSlot(link: link)
             // Why every control below is inert. A greyed control with no
             // stated reason is the dead end this app's design rules forbid.
             if sessionLocked {

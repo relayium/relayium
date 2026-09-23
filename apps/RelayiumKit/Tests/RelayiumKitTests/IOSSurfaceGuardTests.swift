@@ -321,8 +321,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(selector.contains("\"On My iPhone\", \"On My iPad\""),
                       "the browser-state selector cannot enter on-device storage "
                       + "on both compact and regular-width devices")
-        for picker in ["func testPendingSendNamesTheFileAndItsSizeBeforeTransfer()",
-                       "func testASignedInStoredSendNamesTheFileItWouldUpload()"] {
+        // Nearby's own pre-connect chooser is gone (connect first, A25) — not a
+        // coverage trade, there is no such control to pick through — so its
+        // dedicated picker test became `testNearbyStagesNothingBeforeADeviceIsChosen`
+        // and Stored Send keeps the real-picker coverage.
+        XCTAssertTrue(ui.contains("func testNearbyStagesNothingBeforeADeviceIsChosen()"),
+                      "nothing pins that Nearby stages nothing before a device is chosen")
+        for picker in ["func testASignedInStoredSendNamesTheFileItWouldUpload()"] {
             let body = try XCTUnwrap(ui.components(separatedBy: picker)
                 .dropFirst().first?.components(separatedBy: "\n    /// ").first,
                 "the dedicated real-picker test \(picker) is gone")
@@ -335,31 +340,59 @@ final class IOSSurfaceGuardTests: XCTestCase {
                            + "exercises the picker any more")
         }
 
-        // 9. The built-App transfer gate uses the deterministic seam too. Its
+        // 9. The built-App transfer gate uses a deterministic seam too. Its
         //    subject is the transfer after selection; picker presentation stays
-        //    owned by the two tests above.
+        //    owned by the real-picker test above. **Connect first (A25):** a
+        //    link carries no pre-connect batch, so the fixture is handed to the
+        //    OPEN workspace — through the same `sendChosen` its importer calls,
+        //    once the link accepts work — rather than to a pre-connect selection.
         let local = try RepoRoot.text("apps/ios/RelayiumUITests/LocalSessionUITests.swift")
         let nearbyTransfer = try XCTUnwrap(local.components(
             separatedBy: "func testNearbyLinkTransfersThenDoneReturnsToACleanRoster()")
             .dropFirst().first?.components(separatedBy: "\n    // MARK:").first,
             "the built-App Nearby transfer acceptance is gone")
-        XCTAssertTrue(nearbyTransfer.contains(
-            "--relayium-ui-testing-preselect-direct-fixture"),
+        XCTAssertTrue(nearbyTransfer.contains("--relayium-ui-testing-link-fixture"),
                       "the Nearby transfer gate again depends on Files presenting")
         XCTAssertTrue(nearbyTransfer.contains("\"pendingFile.0\""),
-                      "the Nearby transfer gate no longer proves a file was staged")
+                      "the Nearby transfer gate no longer proves which file was sent")
         XCTAssertFalse(nearbyTransfer.contains("DOC.browsingModeTabBar"),
                        "the Nearby transfer gate duplicates the real-picker tests")
+        XCTAssertFalse(nearbyTransfer.contains("--relayium-ui-testing-preselect"),
+                       "the Nearby transfer gate stages before Connect again")
 
-        XCTAssertTrue(debugHalf.contains(
-            "static func preselectPendingFixture(into selection: DirectSendSelection)"),
-                      "the direct preselection seam no longer targets Nearby's model")
-        XCTAssertTrue(app.contains("UITestMode.preselectPendingFixture(into: selecting)"),
-                      "the app no longer installs the direct preselection seam")
-        XCTAssertTrue(debugHalf.contains("guard preselectsDirectPendingFixture else"),
-                      "the direct seam can run without its dedicated launch argument")
-        XCTAssertFalse(releaseHalf.contains("selection.chooseFiles(.success([url]))"),
-                       "the shipped iOS build can inject a direct file selection")
+        XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-link-fixture"),
+                      "the link-fixture argument is not in the Debug half")
+        XCTAssertTrue(debugHalf.contains("guard suppliesLinkFixture, !linkFixtureSupplied else"),
+                      "the link seam can run without its argument, or more than once")
+        XCTAssertTrue(debugHalf.contains("return .success([url])"),
+                      "the link seam no longer answers with the importer's own result shape")
+        XCTAssertFalse(releaseHalf.contains("--relayium-ui-testing-link-fixture"),
+                       "the shipped iOS build parses the link-fixture argument")
+        XCTAssertTrue(releaseHalf.contains(
+            "static func linkFixtureSelection() -> Result<[URL], Error>? { nil }"),
+                      "the Release half lost its inert link-seam entry point, or it "
+                      + "answers something other than nil")
+        XCTAssertFalse(releaseHalf.contains(".success([url])"),
+                       "the shipped iOS build can hand a file to a link nobody chose it for")
+        // The old pre-connect direct seam is gone with the staging it fed.
+        XCTAssertFalse(mode.contains("preselectPendingFixture(into selection: DirectSendSelection)"),
+                       "the pre-connect direct-selection seam is back")
+        XCTAssertFalse(app.contains("UITestMode.preselectPendingFixture(into: selecting)"),
+                       "the app installs a pre-connect selection again")
+        // Wired once, in the workspace, through the importer's own callback and
+        // only once the link accepts work.
+        let workspace = try code(at: try iosRoot.appendingPathComponent(
+            "NearbyLinkWorkspaceView.swift"))
+        let hook = try XCTUnwrap(workspace.components(
+            separatedBy: ".task(id: link.acceptsWork) {").dropFirst().first?
+            .components(separatedBy: "\n        }").first,
+            "the workspace no longer takes the link fixture when the link accepts work")
+        XCTAssertTrue(hook.contains("guard link.acceptsWork, let fixture = UITestMode.linkFixtureSelection()"),
+                      "the link fixture can reach a link that is not accepting work")
+        XCTAssertTrue(hook.contains("sendChosen(fixture)"),
+                      "the link fixture bypasses the importer's own callback")
+        XCTAssertEqual(workspace.components(separatedBy: "UITestMode.").count - 1, 1,
+                       "the workspace reaches into UITestMode more than once")
     }
 
     /// The refused-link seam, and the coverage it must not quietly replace.
@@ -3681,7 +3714,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         for once in ["makeRealtimeModel(", "VerificationPreference(",
                      "DirectModeSelection(",
                      "ForegroundSessionCoordinator(",
-                     "InboundRoom(", "makeNearbyReceiveModel(",
+                     "InboundRoom(", "makeListeningOnlyNearbyReceiveModel(",
                      "makeLinkWorkspaceModel(",
                      "NearbyResidencyCoordinator(", "TransferPresence(", "AppNavigationModel("] {
             XCTAssertEqual(all.map { $0.text.components(separatedBy: once).count - 1 }.reduce(0, +), 1,
@@ -4648,23 +4681,82 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// An inbound session settles its surface, its mode and its tab in ONE
-    /// synchronous call, before the responder is built.
+    /// **Inbound legacy offers are refused, as on macOS (A23, decision L1).**
     ///
-    /// Three separate writes in a SwiftUI closure could be reordered by a later
-    /// edit, and any interleaving that puts a write after the `await` inside
-    /// `NearbyReceiveModel.accept` loses the race it exists to win.
-    /// `AppRoutingTests` drives the function itself.
-    func testAnIncomingSessionClaimsItsSurfaceThroughTheOneRoutingCall() throws {
+    /// The legacy one-shot wire had no consent step on this side: its file lane
+    /// accepted the manifest itself and wrote to disk. iOS now composes the
+    /// listener-only receive model, which answers such an offer with a tagged
+    /// `busy` before anything is published, claimed or built —
+    /// `NearbyReceiveListenerOnlyTests` drives that. What this pins is that the
+    /// app takes that composition and that no legacy admission handler, and no
+    /// arrival-time navigation for one, is left anywhere in the app.
+    func testTheiOSAppRefusesInboundLegacyOffersThroughTheListenerOnlyModel() throws {
         let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
-        XCTAssertTrue(app.text.contains("receive.shouldAcceptSession = "),
-                      "nothing arbitrates and brings an unsolicited session forward")
-        XCTAssertTrue(app.text.contains("AppRouting.claimIncoming(kind,"),
-                      "the claim must be the one shared call, not three writes in a closure")
-        for (name, text) in try sources() where name != "RelayiumApp.swift" {
+        XCTAssertTrue(app.text.contains("AppEnvironment.makeListeningOnlyNearbyReceiveModel("),
+                      "iOS still composes a receive model that admits legacy offers unasked")
+        XCTAssertFalse(app.text.contains("AppEnvironment.makeNearbyReceiveModel("))
+        for (name, text) in try sources() {
             XCTAssertFalse(text.contains("shouldAcceptSession"),
-                           "\(name) is a second inbound admission handler")
+                           "\(name) installs an inbound legacy admission handler")
+            XCTAssertFalse(text.contains("AppRouting.claimIncoming("),
+                           "\(name) claims and navigates for an inbound legacy session")
         }
+    }
+
+    /// **An unrequested link asks first, and nothing navigates on arrival (A23).**
+    ///
+    ///  - the app never declares `.automatic`, so the model's `.prompt` default
+    ///    is what ships;
+    ///  - the only navigation to LAN Transfer for an inbound link is inside the
+    ///    `shouldAcceptLink` gate, which the model runs at Accept;
+    ///  - the prompt is drawn app-wide in `RootView` and in place on LAN
+    ///    Transfer, and both answer through the model.
+    func testAnUnrequestedLinkPromptsAndNavigatesOnlyOnAccept() throws {
+        let all = try sources()
+        for (name, text) in all {
+            XCTAssertFalse(text.contains("inboundConsent"),
+                           "\(name) overrides the prompt an unrequested link must raise")
+        }
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" }).text
+        let gate = try XCTUnwrap(app.components(separatedBy: "unified.shouldAcceptLink = ")
+            .dropFirst().first)
+        let gateBody = try XCTUnwrap(gate.components(separatedBy: "\n        }\n").first)
+        XCTAssertTrue(gateBody.contains("routing.select(.nearby)"),
+                      "Accept no longer brings LAN Transfer forward")
+        // Outside the gate, the only other `routing.select(.nearby)` is the
+        // DEBUG terminal-screen fixture.
+        let outside = app.replacingOccurrences(of: gateBody, with: "")
+        XCTAssertEqual(outside.components(separatedBy: "routing.select(.nearby)").count - 1, 1,
+                       "something navigates to LAN Transfer on arrival")
+
+        let root = try XCTUnwrap(all.first { $0.name == "RootView.swift" }).text
+        for call in ["link.inboundAsk", "link.acceptInboundAsk()", "link.declineInboundAsk()",
+                     "link.inboundAskDiscardsLocalText"] {
+            XCTAssertTrue(root.contains(call), "the app-wide prompt lost \(call)")
+        }
+        let view = try nearby().text
+        for call in ["link.inboundAsk", "link.acceptInboundAsk()", "link.declineInboundAsk()",
+                     "link.inboundAskDiscardsLocalText"] {
+            XCTAssertTrue(view.contains(call), "the LAN Transfer prompt lost \(call)")
+        }
+    }
+
+    /// **Connect carries nothing (A25).** Files for a link are chosen inside
+    /// the open workspace; the tab passes no pre-connect batch to
+    /// `link.connect`, drops a legacy peer's staged batch once a link is under
+    /// way, and no longer promises that staged files ride the connection.
+    func testNearbyViewPassesNoPreConnectFilesToALink() throws {
+        let view = try nearby().text
+        let connect = try XCTUnwrap(view.components(separatedBy: "link.connect(").dropFirst().first)
+        let arguments = try XCTUnwrap(connect.components(separatedBy: ")").first)
+        XCTAssertFalse(arguments.contains("files:"), "Connect carries a pre-connect batch again")
+        XCTAssertFalse(arguments.contains("sources:"))
+        XCTAssertEqual(view.components(separatedBy: "link.connect(").count - 1, 1)
+        XCTAssertFalse(view.contains("linkConnectCarriesStagedFiles"),
+                       "the tab still promises staged files ride the connection")
+        let after = try XCTUnwrap(view.components(separatedBy: "if link.connect(").dropFirst().first)
+        XCTAssertTrue(after.prefix(120).contains("selection.clear()"),
+                      "a staged legacy batch survives the link and waits for the next device")
     }
 
     func testNearbySessionKeepsItsPeerVisibleAfterTheRosterDisappears() throws {

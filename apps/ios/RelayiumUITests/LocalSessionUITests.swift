@@ -535,21 +535,30 @@ final class LocalSessionUITests: XCTestCase {
 
     // MARK: - Nearby, 完成后下一步
 
-    /// A staged file and a typed message cross a verified link, and Done leaves
-    /// a clean roster behind.
+    /// A file and a typed message cross a verified link, and Done leaves a
+    /// clean roster behind.
+    ///
+    /// **Connect first (A25).** Nothing is staged before the link exists: the
+    /// roster screen offers no chooser, Connect carries no files, and the batch
+    /// is chosen INSIDE the open workspace. This transfer gate is not a system
+    /// Files presentation test, so `--relayium-ui-testing-link-fixture` hands
+    /// the fixture to the workspace's own `sendChosen` once the link accepts
+    /// work — the importer callback, the workspace selection, staging and
+    /// `link.send` are production; only the browser is replaced. The picker
+    /// itself stays covered by the dedicated `AppShellUITests` case.
     ///
     /// The verification toggle is switched on through the app's OWN shipped
     /// control rather than through a launch argument. `VerificationPreference`
     /// defaults to off, so without this the SAS boundary — the one gate that
-    /// holds an armed batch back until a human answers — would never appear and
-    /// the path would evidence the weaker of the two shapes the product ships.
+    /// holds work back until a human answers — would never appear and the path
+    /// would evidence the weaker of the two shapes the product ships.
     func testNearbyLinkTransfersThenDoneReturnsToACleanRoster() throws {
         let harness = try requireHarness()
         awaitIdleCounterpart(harness)
         let baseline = counterpartEpoch(harness)
         let knownPeers = counterpartRoster(harness)
         launch(harness, verifying: true,
-               extraArguments: ["--relayium-ui-testing-preselect-direct-fixture"])
+               extraArguments: ["--relayium-ui-testing-link-fixture"])
 
         open(Shell.lanTransfer, in: app)
 
@@ -565,17 +574,9 @@ final class LocalSessionUITests: XCTestCase {
             the SAS boundary below would never appear
             """)
 
-        // Stage the batch BEFORE connecting, which is the shape the copy under
-        // Connect promises: the files travel with the connection and are
-        // released once the digits are compared. This transfer acceptance uses
-        // the Debug-only preselection seam and waits for its production-model
-        // result. The two AppShellUITests dedicated to the picker still drive
-        // the real system browser, security scope and expansion. Repeating that
-        // external presentation here made a transport gate fail when Files did
-        // not present, before any transport behavior ran.
-        XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"]
-            .waitForExistence(timeout: 20),
-                      "the preselected fixture never became a pending Nearby send")
+        // Connect first: nothing to stage before a device is chosen.
+        XCTAssertFalse(app.buttons["Choose Files or Folders…"].exists,
+                       "Nearby offers a pre-connect chooser with no device chosen")
 
         // Before the roster is touched, for the reason the roster case records.
         awaitCounterpartDiscovery(harness, notIn: knownPeers)
@@ -584,12 +585,13 @@ final class LocalSessionUITests: XCTestCase {
         scrollUntilHittable(row)
         row.tap()
 
-        XCTAssertTrue(app.staticTexts[
-            "The files you chose will be sent on this connection once you have compared the code."
-        ].waitForExistence(timeout: 15),
-                      "a staged batch is not named as travelling with the connection")
+        // …and none for a link peer either: its files are chosen inside the
+        // connection.
+        XCTAssertFalse(app.buttons["Choose Files or Folders…"].waitForExistence(timeout: 3),
+                       "a link peer was offered a pre-connect chooser")
 
         let connect = app.buttons["Connect"]
+        XCTAssertTrue(connect.waitForExistence(timeout: 15))
         scrollUntilHittable(connect)
         connect.tap()
 
@@ -614,9 +616,7 @@ final class LocalSessionUITests: XCTestCase {
         // string but labels the element `spokenCode` — each digit separated by a
         // space — so VoiceOver reads "5 9 0 3 9 7" rather than the number five
         // hundred ninety thousand. Accessibility labels are what XCUITest
-        // matches on, so asserting the written form finds nothing even when the
-        // right digits are on screen, which is exactly what the first run of
-        // this assertion did.
+        // matches on.
         let spoken = peerSAS.map(String.init).joined(separator: " ")
         XCTAssertTrue(app.staticTexts[spoken].exists, """
             the app is showing different digits from the counterpart's \
@@ -629,30 +629,27 @@ final class LocalSessionUITests: XCTestCase {
         scrollUntilHittable(matches)
         matches.tap()
 
-        // The armed batch is released by the confirmation and nothing else.
+        // The batch, handed to the verified link's own importer callback the
+        // moment it accepts work — never before the digits were answered.
         // Addressed by the transfer list's own accessibility container rather
         // than by its heading: the heading is the word "Files", which several
         // unrelated surfaces also render, and a negative assertion on it later
         // would be answered by whichever one happened to be on screen.
         let transfers = app.otherElements["Files on this connection"]
         XCTAssertTrue(transfers.waitForExistence(timeout: 30),
-                      "confirming the digits did not release the staged batch")
+                      "the chosen batch never reached the link")
 
-        // The released batch still says WHAT it is sending, not only that it is
-        // sending one of something. The same identity row the staging section
-        // showed before Connect, now inside the transfer list — the outbound
-        // half of the receipt the Cross-network cell asserts inbound. The size
-        // is left to that cell, which derives it from the counterpart; here the
-        // fixture's name is the identity and the digest at the end of this test
-        // is the byte evidence.
+        // The batch says WHAT it is sending, not only that it is sending one of
+        // something. The fixture's name is the identity and the digest at the
+        // end of this test is the byte evidence.
         let sending = transfers.descendants(matching: .any)["pendingFile.0"]
         XCTAssertTrue(sending.waitForExistence(timeout: 30), """
-            the released batch is unnamed: the transfer list shows a count and \
+            the outbound batch is unnamed: the transfer list shows a count and \
             no file identity.
             \(app.debugDescription)
             """)
         XCTAssertTrue(sending.label.hasPrefix("Relayium product brief.txt,"), """
-            the outbound row names "\(sending.label)" rather than the staged fixture.
+            the outbound row names "\(sending.label)" rather than the chosen fixture.
             \(app.debugDescription)
             """)
 
@@ -685,7 +682,7 @@ final class LocalSessionUITests: XCTestCase {
         // the right number of zero bytes into a file of the right length.
         let received = awaitCounterpart(
             harness.nearbyPort, timeout: 180,
-            describing: "received the staged file and the message") { facts in
+            describing: "received the chosen file and the message") { facts in
                 guard (facts["epoch"] as? Int ?? 0) > baseline else { return false }
                 let files = facts["files"] as? [[String: Any]] ?? []
                 let messages = facts["messages"] as? [String] ?? []
@@ -694,7 +691,7 @@ final class LocalSessionUITests: XCTestCase {
         let files = try XCTUnwrap(received?["files"] as? [[String: Any]])
         let receipt = try XCTUnwrap(files.first)
         XCTAssertEqual(receipt["name"] as? String, "Relayium product brief.txt",
-                       "the counterpart wrote a different name than was staged")
+                       "the counterpart wrote a different name than was chosen")
         XCTAssertEqual(receipt["size"] as? Int, 1_536,
                        "the counterpart wrote a different number of bytes")
         // `UITestMode.stagePendingFixture` writes exactly 1,536 bytes of 0x52,

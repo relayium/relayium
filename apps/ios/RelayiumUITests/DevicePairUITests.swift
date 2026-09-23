@@ -425,10 +425,22 @@ final class DevicePairUITests: XCTestCase {
                          describing: "this device joining the Nearby room") else { return }
         emitDevicePair(.ready, value: run.tag, for: run)
 
+        // **The unrequested connection asks first (A23).** Nothing connects,
+        // claims the tab or navigates until this device's user accepts, so the
+        // prompt at the top of the Nearby tab is what arrives first — and its
+        // Accept is the one tap that lets the link in.
+        let acceptConnection = app.buttons["nearby-incoming-accept"]
+        XCTAssertTrue(acceptConnection.waitForExistence(timeout: DevicePair.transferBudget), """
+            the connecting device's ask never reached this device as a prompt.
+            \(app.debugDescription)
+            """)
+        scrollUntilHittable(acceptConnection, in: app)
+        acceptConnection.tap()
+
         // The inbound link, drawn by the Nearby tab because this device is on
         // it. Nothing that could send is on screen until the digits are
         // answered — the model refuses it — so the verification card is what
-        // arrives first.
+        // arrives next.
         compareAndConfirm(run, title: DevicePair.verifyTitle,
                           confirm: DevicePair.verifyMatchesLabel)
 
@@ -475,11 +487,12 @@ final class DevicePairUITests: XCTestCase {
     func testNearbyConnectsToThePhysicalPeerAndTransfersBothWays() throws {
         let run = try requireDevicePairRun(role: "nearby-connector")
         app = XCUIApplication()
-        // Staged BEFORE connecting, which is the shape the copy under Connect
-        // promises: the files travel with the connection and are released once
-        // the digits are compared. The staging seam replaces the system document
-        // browser and nothing else — the scope, the expansion, the limits, the
-        // pending row, the arming and the wire are all production.
+        // **Connect first (A25).** Nothing is staged before the link exists.
+        // The link-fixture seam hands the OPEN workspace the fixture once it
+        // accepts work — after the digits are answered — through the importer
+        // callback the system document browser would have called; the
+        // selection, the scope, the limits, the wire and the peer's writer are
+        // all production.
         launchForDevicePair(app, verifying: true, stagingFixture: true)
 
         guard openDevicePairDestination(DevicePair.nearbySurface, in: app)
@@ -487,17 +500,9 @@ final class DevicePairUITests: XCTestCase {
         requireVerificationIsOn()
         emitDevicePair(.ready, value: run.tag, for: run)
 
-        XCTAssertTrue(app.descendants(matching: .any)["pendingFile.0"]
-            .waitForExistence(timeout: DevicePair.settleBudget),
-                      "the preselected fixture never became a pending Nearby send")
-
         guard let row = awaitPeerRow(run, in: app) else { return }
         scrollUntilHittable(row, in: app)
         row.tap()
-
-        awaitLabel(containing: DevicePair.stagedTravelsNote, in: app,
-                   within: DevicePair.settleBudget,
-                   describing: "the note that a staged batch travels with the connection")
 
         // A `link/1` peer offers exactly one verb, and its presence is the
         // assertion that the capability announcement crossed the room and was
@@ -517,8 +522,8 @@ final class DevicePairUITests: XCTestCase {
         awaitPeerMessage(run)
         sendMessage(run.message, composer: DevicePair.composerLabel)
 
-        // The armed batch was released by the confirmation and nothing else,
-        // and it reaches its terminal state only once the peer has accepted and
+        // The batch was handed to the link only once it accepted work, and it
+        // reaches its terminal state only once the peer has accepted and
         // written it — which is what orders this runner behind the resident
         // without either of them waiting on a clock.
         awaitBatchState(DevicePair.batchFinishedLabel)
@@ -566,12 +571,13 @@ final class DevicePairUITests: XCTestCase {
     /// batch inside the workspace, through the system document browser, and
     /// this harness has no way to drive that browser on a physical device. The
     /// legacy lane staged its batch BEFORE the code existed, which is what the
-    /// `--relayium-ui-testing-preselect-direct-fixture` seam stood in for; there
-    /// is no pre-connect selection left for it to fill. The unified workspace's
-    /// file lane is still proved on hardware by the two Nearby roles, which drive
-    /// the same view over the same `link/1`; what is NOT yet proved on hardware
-    /// is a file crossing a RELAYED pairing room from an iPhone. That needs an
-    /// in-workspace staging seam and is recorded as its own requirement.
+    /// old pre-connect direct-selection seam stood in for; there is no
+    /// pre-connect selection left for it to fill. The unified workspace's file
+    /// lane is still proved on hardware by the two Nearby roles, which drive the
+    /// same view over the same `link/1` through the in-workspace
+    /// `--relayium-ui-testing-link-fixture` seam (A25). These Cross-network roles
+    /// do not pass it yet, so a file crossing a RELAYED pairing room from an
+    /// iPhone is still not proved on hardware; that remains its own requirement.
     private static let filePhaseNeedsAWorkspaceStagingSeam = """
         The Cross-network file phase is not driveable yet: since iOS 0.4.0 the \
         batch is chosen inside the connected workspace through the system \

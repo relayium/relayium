@@ -38,31 +38,34 @@ final class NearbyConnectPresentationTests: XCTestCase {
             for: device(announcesLegacyText: true)))
     }
 
-    /// **No device chosen is not a third state**, and answering `unifiedLink`
-    /// there would be worse than useless: the picker would then APPEAR when a
-    /// legacy device was tapped, which reads as the app changing its mind about
-    /// what it is.
-    func testNoChosenDeviceKeepsTheShippedSurface() {
+    /// **With nobody chosen there is no question yet (A25).** The roster is
+    /// the first step: no Files/Text picker and no chooser on an empty or
+    /// unselected roster.
+    func testNoChosenDeviceOffersNoPickerAndNoStaging() {
         XCTAssertEqual(NearbyConnectPresentation.sendChoice(for: nil), .legacyLanes)
-        XCTAssertTrue(NearbyConnectPresentation.showsModePicker(for: nil))
+        XCTAssertFalse(NearbyConnectPresentation.showsModePicker(for: nil),
+                       "the picker asks files-or-text before there is anybody to ask about")
+        for mode in TransferMode.allCases {
+            XCTAssertFalse(NearbyConnectPresentation.showsStaging(for: nil, mode: mode),
+                           "files can be staged with no device chosen, mode: \(mode)")
+        }
     }
 
     // MARK: - staging
 
-    /// iOS still stages before connecting, on BOTH products. For a link peer the
-    /// batch is armed on the connection; for a legacy one it is the file lane's,
-    /// exactly as it shipped.
-    func testStagingIsOfferedToALinkPeerWhateverTheStalePickerSaysToo() {
+    /// **Connect first (A25).** A link peer is offered no pre-connect chooser:
+    /// files are chosen inside the open workspace, and Connect carries none.
+    func testALinkPeerIsOfferedNoPreConnectStagingWhateverThePickerSays() {
         for mode in TransferMode.allCases {
-            XCTAssertTrue(
+            XCTAssertFalse(
                 NearbyConnectPresentation.showsStaging(for: device(supportsLink: true),
                                                        mode: mode),
-                "a link peer can always be handed a batch, mode: \(mode)")
+                "a link peer was offered a pre-connect batch, mode: \(mode)")
         }
     }
 
-    /// A legacy peer's staging is still gated on the picker, because for it the
-    /// text lane genuinely cannot carry a file.
+    /// The one exception: a legacy peer's one-shot wire needs the manifest at
+    /// connect, and its staging still follows the picker.
     func testALegacyPeersStagingStillFollowsThePicker() {
         XCTAssertTrue(NearbyConnectPresentation.showsStaging(for: device(), mode: .files))
         XCTAssertFalse(NearbyConnectPresentation.showsStaging(for: device(), mode: .text),

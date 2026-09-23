@@ -1123,6 +1123,80 @@ final class LinkAdmissionTests: XCTestCase {
                        "the getter must see the live phase, not a stale snapshot")
     }
 
+    // MARK: - consent for an unrequested link (A23)
+
+    private func consenting(selfId: String,
+                            canAccept: @escaping (String) -> Bool = { _ in true })
+    -> LinkAdmission {
+        LinkAdmission(selfId: { selfId }, supportsLink: { _ in true },
+                      canAcceptLink: canAccept, requiresConsent: { _ in true })
+    }
+
+    /// An idle room answers `ask`, in the role the deterministic rule gives —
+    /// and the phase does not move: nothing is claimed for a question.
+    func testAnIdleRoomAsksForAnUnrequestedOfferOrRequestAndClaimsNothing() {
+        let responder = consenting(selfId: larger)
+        XCTAssertEqual(responder.route(from: smaller, signal: linkOffer()), .ask(role: .responder))
+        XCTAssertEqual(responder.phase, .idle)
+
+        let initiator = consenting(selfId: smaller)
+        XCTAssertEqual(initiator.route(from: larger, signal: linkRequestSignal()),
+                       .ask(role: .initiator))
+        XCTAssertEqual(initiator.phase, .idle)
+    }
+
+    /// A failed room is an idle room for this purpose.
+    func testAFailedRoomAsksToo() {
+        let b = consenting(selfId: larger)
+        b.didFail()
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .ask(role: .responder))
+    }
+
+    /// **The crossing reply to this side's own attempt is never a question**:
+    /// the user already chose this peer by pressing Connect.
+    func testACrossingReplyToOurOwnAttemptIsStillEstablishOrInFlight() {
+        let b = consenting(selfId: larger)
+        XCTAssertTrue(b.admitRequest(peerId: smaller))
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .establish(role: .responder))
+
+        let a = consenting(selfId: smaller)
+        a.didBeginEstablishing(peerId: larger, role: .initiator)
+        XCTAssertEqual(a.route(from: larger, signal: linkRequestSignal()), .alreadyInFlight)
+    }
+
+    /// A pairing room (and every headless host) states no consent requirement
+    /// and keeps the shipped answer.
+    func testWithoutAConsentRequirementTheShippedAnswerIsUnchanged() {
+        let b = admission(selfId: larger)
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .establish(role: .responder))
+        let a = admission(selfId: smaller)
+        XCTAssertEqual(a.route(from: larger, signal: linkRequestSignal()),
+                       .establish(role: .initiator))
+    }
+
+    /// Consent never widens admission: a surface that says no is `busy`
+    /// before anybody is asked, and a held link is `busy` as it always was.
+    func testConsentNeverTurnsARefusalIntoAQuestion() {
+        let closed = consenting(selfId: larger, canAccept: { _ in false })
+        XCTAssertEqual(closed.route(from: smaller, signal: linkOffer()), .busy)
+
+        let held = consenting(selfId: larger)
+        held.didBeginEstablishing(peerId: "ccc", role: .initiator)
+        held.didOpen(peerId: "ccc")
+        XCTAssertEqual(held.route(from: smaller, signal: linkOffer()), .busy)
+        XCTAssertEqual(held.route(from: "ddd", signal: linkRequestSignal()), .busy)
+    }
+
+    /// A late offer from a timed-out ask of ours is consumed as `busy`, never
+    /// raised as a prompt.
+    func testALateOfferFromOurTimedOutRequestIsBusyNotAQuestion() {
+        let b = consenting(selfId: larger)
+        XCTAssertTrue(b.admitRequest(peerId: smaller))
+        XCTAssertTrue(b.endRequest(peerId: smaller, as: .timedOut))
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .busy)
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .ask(role: .responder))
+    }
+
     // MARK: - helpers
 
     private func linkOffer() -> JSONValue {

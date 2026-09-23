@@ -70,12 +70,16 @@ import RelayiumKit
 /// Connect. It is untouched for a legacy peer, whose two generations genuinely
 /// do not interoperate.
 ///
-/// **Staging before connecting is kept**, on both. That is where this platform
-/// still differs from macOS, deliberately: macOS removed pre-connect staging
-/// because opening a picker inside a live Mac session costs nothing, while on
-/// iOS the picker is a full-screen document browser. A batch staged before
-/// Connect is ARMED on the link and released once the digits are answered —
-/// never sent early, and never lost.
+/// **Connect first (A25).** Nothing is staged before a link exists: with no
+/// device chosen, or a link peer chosen, there is no picker and no chooser, and
+/// Connect carries no files — they are chosen inside the open workspace, as on
+/// macOS and Cross-network. Only a legacy peer in Files mode still stages,
+/// because its one-shot wire needs the manifest at connect.
+///
+/// **An unrequested connection asks first (A23).** A device that reaches this
+/// one is shown as a prompt at the top of this screen (and app-wide from
+/// `RootView` when another tab is showing); nothing connects, claims this tab
+/// or navigates until Accept.
 struct NearbyView: View {
     @ObservedObject var file: RealtimeSessionModel
     @ObservedObject var text: RealtimeTextSessionModel
@@ -209,6 +213,38 @@ struct NearbyView: View {
         }
     }
 
+    // MARK: - a device is asking (A23)
+
+    /// The in-tab form of the prompt `RootView` raises app-wide. Accept is the
+    /// only way the connection happens; Decline tells the device no.
+    private func incomingAsk(_ ask: LinkInboundAsk) -> some View {
+        SectionCard(L10n.t(.nearbyIncomingTitle, [L10n.token(ask.peerLabel)])) {
+            Text(L10n.t(.nearbyIncomingDetail))
+                .font(.callout)
+                .foregroundStyle(Palette.supportingLabel)
+                .fixedSize(horizontal: false, vertical: true)
+            if link.inboundAskDiscardsLocalText {
+                Text(L10n.t(.nearbyIncomingDiscardsText))
+                    .font(.callout.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button { link.acceptInboundAsk() } label: {
+                Text(L10n.t(.nearbyIncomingAccept)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityIdentifier("nearby-incoming-accept")
+            Button { link.declineInboundAsk() } label: {
+                Text(L10n.t(.nearbyIncomingDecline)).frame(maxWidth: .infinity)
+            }
+            .borderedAction()
+            .controlSize(.large)
+            .accessibilityIdentifier("nearby-incoming-decline")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("nearby-incoming-ask")
+    }
+
     // MARK: - not this tab's session
 
     /// The other direct tab is presenting it. Say so and offer the way there —
@@ -232,6 +268,10 @@ struct NearbyView: View {
 
     @ViewBuilder
     private var discoverySection: some View {
+        // First, above everything: a device is waiting for an answer, and the
+        // answer has a deadline.
+        if let ask = link.inboundAsk { incomingAsk(ask) }
+
         safetySummary
 
         if let notice = foreground.interruption { interruption(notice) }
@@ -273,20 +313,19 @@ struct NearbyView: View {
     /// the rest of the mechanism.
     private var sendTask: some View {
         SectionCard(L10n.t(.nearbySendTaskTitle)) {
-            OpenSection(L10n.t(.nearbyWhatToSend)) {
-                // **The picker is not always the right question.** For a peer
-                // that announced exact `link/1` the connection carries messages
-                // and files at once, so "files or text?" has no answer that
-                // means anything — and whichever half the user picked, the
-                // workspace would then ignore it. Hidden for that peer, kept for
-                // every legacy one, and the rule lives in
-                // `NearbyConnectPresentation` so `swift test` drives it.
-                if NearbyConnectPresentation.showsModePicker(for: discovery.selectedDevice) {
-                    modePicker
-                }
-                if NearbyConnectPresentation.showsStaging(for: discovery.selectedDevice,
-                                                          mode: modes.mode) {
-                    filesToSend
+            // **Connect first.** The picker and the chooser exist only for a
+            // chosen legacy peer: with nobody chosen there is no question yet,
+            // and a link peer's files are chosen inside the open workspace. The
+            // rule lives in `NearbyConnectPresentation` so `swift test` drives
+            // it; the section heading goes with its content.
+            let showsPicker = NearbyConnectPresentation.showsModePicker(
+                for: discovery.selectedDevice)
+            let showsStaging = NearbyConnectPresentation.showsStaging(
+                for: discovery.selectedDevice, mode: modes.mode)
+            if showsPicker || showsStaging {
+                OpenSection(L10n.t(.nearbyWhatToSend)) {
+                    if showsPicker { modePicker }
+                    if showsStaging { filesToSend }
                 }
             }
 
@@ -659,14 +698,6 @@ struct NearbyView: View {
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .disabled(busy)
-        if !selection.isEmpty {
-            // The one thing a staged batch needs said before Connect: it is not
-            // being sent now, and it is not being dropped either.
-            Text(L10n.t(.linkConnectCarriesStagedFiles))
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
-        }
         // `actionError` is NOT rendered here: `sendTask` already draws it once,
         // below this whole group, and a second copy would put the same sentence
         // on screen twice for a link peer and once for a legacy one.
@@ -818,26 +849,18 @@ struct NearbyView: View {
             actionError = L10n.t(.nearbyDeviceGone)
             return
         }
-        // Staged only if the user chose something. An empty selection is the
-        // ordinary case on a connect-first surface and must not be an error:
-        // `stageForSend` writes `directChooseFilesFirst` for an empty store, and
-        // reporting that here would refuse a connection nobody asked to carry
-        // anything.
-        var metas: [FileMeta] = []
-        var sources: [PlaintextSource] = []
-        if !selection.isEmpty {
-            guard let staged = selection.stageForSend() else {
-                actionError = selection.errorMessage ?? L10n.t(.nearbyAddFilesFirst)
-                return
-            }
-            metas = staged.metas
-            sources = staged.sources
-        }
+        // **Connect carries nothing (A25).** Files for a link are chosen inside
+        // the open workspace, behind whatever verification the user asked for.
+        // A batch staged earlier for a LEGACY peer is not this connection's:
+        // it is dropped once the link is under way, so it can neither ride this
+        // link nor wait, hidden, for whichever device is connected to next.
         actionError = nil
         guard presence.beginSession(.nearby, peerLabel: live.label) else { return }
         foreground.sessionStarting()
-        guard !link.connect(peerId: live.id, peerLabel: live.label,
-                            files: metas, sources: sources) else { return }
+        if link.connect(peerId: live.id, peerLabel: live.label) {
+            selection.clear()
+            return
+        }
         // A refusal, and the two kinds are not the same thing to the user.
         //
         // `connect` refuses having ALREADY published a terminal reason when the

@@ -148,7 +148,8 @@ final class LinkWorkspaceModelTests: XCTestCase {
                      // before this seam still drives the behaviour it was
                      // written for — and a flipped default fails rather than
                      // quietly re-scoping the whole file.
-                     pendingMessages: LinkPendingMessagePolicy = .replaceWaiting) -> Rig {
+                     pendingMessages: LinkPendingMessagePolicy = .replaceWaiting,
+                     scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler()) -> Rig {
         let capabilities = PeerCapabilityRegistry(linkRoomActive: { roomActive })
         let channel = FakeWebSocketChannel()
         let signaling = SignalingClient(channel: channel, name: "self")
@@ -163,6 +164,7 @@ final class LinkWorkspaceModelTests: XCTestCase {
             requiresVerification: { requiresVerification },
             iceClient: nil,
             pendingMessages: pendingMessages,
+            scheduler: scheduler,
             assemble: { signaling, peerId, role, iceServers, relayOnly, generation,
                         receiveDirectory, admission, initialSignal, _ in
                 let transport = WorkspaceTransport()
@@ -987,51 +989,331 @@ final class LinkWorkspaceModelTests: XCTestCase {
         XCTAssertEqual(rig.transports.count, 1)
     }
 
-    /// The app is the authority on whether an unsolicited link may take the
-    /// Workspace, and a refusal ends it at once rather than leaving the room
-    /// connecting to a link nothing will render.
-    func testAnUnsolicitedLinkTheAppRefusesIsEndedImmediately() async {
-        // This side is "zzz" and the peer is "aaa", so the peer is the smaller
-        // id and therefore the one allowed to offer. The role rule is not a
-        // preference: two offers into one pair of lanes is what it removes.
-        let rig = rig(selfId: "zzz")
-        rig.model.shouldAcceptLink = { _ in false }
-        announceLink(rig, "aaa")
+    // MARK: - 8a. an unrequested link asks first (A23)
 
-        // An offer the room routes: exactly what `LinkRoomRouter` consumes and
-        // `handOff` hands to the assembly.
-        let offer = linkSDPSignal(kind: "offer", sdp: "v=0", commit: nil,
-                                  caps: [TEXT_CAPABILITY, LINK_CAPABILITY])
-        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: offer))
-        await settle()
-
-        XCTAssertEqual(rig.transports.count, 1, "the offer really was routed and assembled")
-        XCTAssertEqual(rig.model.connection, .ended(.unavailable))
-        XCTAssertTrue(rig.transports.allSatisfy { $0.isClosed },
-                      "a refused link must not be left running")
+    /// A link offer from the peer, exactly as the room routes one.
+    private func peerOffer() -> JSONValue {
+        linkSDPSignal(kind: "offer", sdp: "v=0", commit: nil,
+                      caps: [TEXT_CAPABILITY, LINK_CAPABILITY])
     }
 
-    /// The mirror image, and the one that has to keep working: an unsolicited
-    /// link the app ACCEPTS becomes the Workspace's session, labelled from the
-    /// same roster the user was looking at.
-    func testAnUnsolicitedLinkTheAppAcceptsBecomesTheSession() async {
+    private func peerCandidate(_ id: String) -> JSONValue {
+        .object(["link": .bool(true),
+                 "ice": .object(["candidate": .string("candidate:\(id) 1 udp 1 10.0.0.1 1 typ host"),
+                                 "sdpMid": .string("0"),
+                                 "sdpMLineIndex": .number(0)])])
+    }
+
+    /// Every `busy` this side put on the wire, by recipient.
+    private func busied(_ rig: Rig) -> [String] {
+        rig.channel.sent.compactMap { text in
+            guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                  envelope.type == SignalType.signal,
+                  let data = envelope.data, isLinkBusy(data) else { return nil }
+            return envelope.to
+        }
+    }
+
+    private func requested(_ rig: Rig) -> [String] {
+        rig.channel.sent.compactMap { text in
+            guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                  envelope.type == SignalType.signal,
+                  let data = envelope.data, isLinkRequest(data) else { return nil }
+            return envelope.to
+        }
+    }
+
+    private func receivedFiles() -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+    }
+
+    /// The default, stated: a composition that says nothing prompts.
+    func testTheModelPromptsUnlessACompositionDeclaresOtherwise() {
+        XCTAssertEqual(rig().model.inboundConsent, .prompt)
+    }
+
+    /// **Nothing happens for an unrequested link until the user says yes** —
+    /// no claim, no transport, no surface question. The prompt names the peer
+    /// the way the roster did.
+    func testAnUnrequestedOfferRaisesAPromptAndBuildsNothing() async {
         let rig = rig(selfId: "zzz")
+        var surfaceAsked = 0
+        rig.model.shouldAcceptLink = { _ in surfaceAsked += 1; return true }
         rig.model.resolvePeerLabel { _ in "Studio Mac" }
-        rig.model.shouldAcceptLink = { _ in true }
         announceLink(rig, "aaa")
 
-        let offer = linkSDPSignal(kind: "offer", sdp: "v=0", commit: nil,
-                                  caps: [TEXT_CAPABILITY, LINK_CAPABILITY])
-        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: offer))
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerCandidate("c1")))
         await settle()
 
+        XCTAssertEqual(rig.model.inboundAsk?.peerId, "aaa")
+        XCTAssertEqual(rig.model.inboundAsk?.peerLabel, "Studio Mac")
+        XCTAssertTrue(rig.transports.isEmpty, "a transport was built before anybody accepted")
+        XCTAssertEqual(surfaceAsked, 0, "the surface was claimed (and navigated) on arrival")
+        XCTAssertEqual(rig.model.connection, .idle)
+        XCTAssertTrue(busied(rig).isEmpty)
+    }
+
+    /// The mirror image, and the one that has to keep working: an ask the user
+    /// ACCEPTS becomes the Workspace's session, labelled from the same roster
+    /// the user was looking at, with the held offer and its candidate replayed
+    /// to the transport in wire order.
+    func testAnAcceptedAskBecomesTheSessionAndReplaysWhatWasHeld() async {
+        let rig = rig(selfId: "zzz")
+        var surfaceAsked: [String] = []
+        rig.model.resolvePeerLabel { _ in "Studio Mac" }
+        rig.model.shouldAcceptLink = { surfaceAsked.append($0); return true }
+        announceLink(rig, "aaa")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerCandidate("c1")))
+        await settle()
+        rig.model.acceptInboundAsk()
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(surfaceAsked, ["aaa"], "the surface is claimed exactly once, at accept")
         XCTAssertEqual(rig.transports.count, 1)
         XCTAssertTrue(rig.model.connection.isActive)
         XCTAssertEqual(rig.model.peerLabel, "Studio Mac")
+        let routed = rig.transports[0].routed.map(\.signal)
+        XCTAssertEqual(routed.count, 2, "the held offer and its candidate reach the transport")
+        XCTAssertEqual(parseSDP(routed.first ?? .null)?.type, "offer")
+        XCTAssertEqual(parseICE(routed.last ?? .null)?.candidate,
+                       "candidate:c1 1 udp 1 10.0.0.1 1 typ host")
 
         rig.transports[0].publish(identity(peerId: "aaa", role: .responder))
         await settle()
         XCTAssertTrue(rig.model.connection.isOpen)
+    }
+
+    /// The app is still the authority on whether the link may take the
+    /// Workspace. A refusal at accept answers `busy` and builds nothing.
+    func testAnAcceptTheAppRefusesAnswersBusyAndBuildsNothing() async {
+        let rig = rig(selfId: "zzz")
+        rig.model.shouldAcceptLink = { _ in false }
+        announceLink(rig, "aaa")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        await settle()
+        rig.model.acceptInboundAsk()
+        await settle()
+
+        XCTAssertTrue(rig.transports.isEmpty)
+        XCTAssertEqual(rig.model.connection, .idle)
+        XCTAssertEqual(busied(rig), ["aaa"])
+    }
+
+    /// **Decline leaves nothing**: no assembly, no file, a `busy` to the peer —
+    /// and the peer's retry of the same ask inside its window is refused
+    /// without asking the user twice.
+    func testDeclineLeavesNothingAndARetryIsNotAskedAgain() async {
+        let rig = rig()   // "aaa": the peer "zzz" can only request
+        announceLink(rig, "zzz")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+        rig.model.declineInboundAsk()
+        await settle()
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk, "the retry of a declined ask was put to the user again")
+        XCTAssertEqual(busied(rig), ["zzz", "zzz"])
+        XCTAssertTrue(rig.transports.isEmpty)
+        XCTAssertEqual(receivedFiles(), [])
+        XCTAssertEqual(rig.model.connection, .idle)
+    }
+
+    /// **Unanswered is not yes.** The deadline answers `busy`, withdraws the
+    /// prompt and builds nothing — and then the peer may ask afresh.
+    func testTimeoutAnswersBusyWithdrawsThePromptAndBuildsNothing() async {
+        let scheduler = FakeLinkScheduler()
+        let rig = rig(scheduler: scheduler)
+        announceLink(rig, "zzz")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+        scheduler.fireAll()
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(busied(rig), ["zzz"])
+        XCTAssertTrue(rig.transports.isEmpty)
+        XCTAssertEqual(receivedFiles(), [])
+
+        // A timeout is not a decline: a genuinely new ask is asked.
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertEqual(rig.model.inboundAsk?.peerId, "zzz")
+    }
+
+    /// **Never preempt.** A live link, or an attempt holding an armed batch,
+    /// meets an unrequested ask with `busy` — no prompt, no second transport,
+    /// and the armed batch still waits for its own peer.
+    func testAnAskDuringALiveOrArmedAttemptIsBusyAndPreemptsNothing() async {
+        let live = rig()
+        _ = await openLink(live)
+        announceLink(live, "yyy")
+        live.channel.fire(Envelope(type: SignalType.signal, from: "yyy", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNil(live.model.inboundAsk)
+        XCTAssertEqual(busied(live), ["yyy"])
+        XCTAssertEqual(live.transports.count, 1)
+        XCTAssertTrue(live.model.connection.isOpen)
+
+        // Armed: this side ("zzz") can only ASK "aaa", and holds a batch for it.
+        let armed = rig(selfId: "zzz")
+        announceLink(armed, "aaa")
+        announceLink(armed, "bbb")
+        XCTAssertTrue(armed.model.connect(peerId: "aaa", peerLabel: "Studio Mac",
+                                          files: [meta("brief.txt", 8)],
+                                          sources: [source("brief.txt", 8)]))
+        armed.channel.fire(Envelope(type: SignalType.signal, from: "bbb", data: peerOffer()))
+        await settle()
+        XCTAssertNil(armed.model.inboundAsk)
+        XCTAssertEqual(busied(armed), ["bbb"])
+        XCTAssertTrue(armed.transports.isEmpty, "the stranger's offer was built")
+        XCTAssertEqual(armed.model.armedFiles.map(\.name), ["brief.txt"])
+        XCTAssertEqual(armed.model.connection, .requesting)
+    }
+
+    /// **Two asks racing a local Connect never cross peers.** Connecting to a
+    /// third device declines the pending prompt; a second ask during that
+    /// attempt is busy; the only transport is for the device the user chose.
+    func testAsksRacingALocalConnectNeverCrossPeers() async {
+        let rig = rig()   // "aaa" offers to everybody
+        announceLink(rig, "yyy")
+        announceLink(rig, "xxx")
+        announceLink(rig, "zzz")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "yyy", data: linkRequestSignal()))
+        await settle()
+        XCTAssertEqual(rig.model.inboundAsk?.peerId, "yyy")
+
+        XCTAssertTrue(rig.model.connect(peerId: "zzz", peerLabel: "Chosen"))
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "xxx", data: linkRequestSignal()))
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(rig.peers, ["zzz"], "a link was built for a device the user did not choose")
+        XCTAssertEqual(Set(busied(rig)), ["yyy", "xxx"])
+        XCTAssertEqual(rig.model.peerLabel, "Chosen")
+    }
+
+    /// Connect to the device that is asking IS the accept: the held offer is
+    /// adopted, and this side does not ask back.
+    func testConnectToTheAskingDeviceAdoptsItsOffer() async {
+        let rig = rig(selfId: "zzz")   // "aaa" offers; this side could only ask
+        announceLink(rig, "aaa")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+
+        XCTAssertTrue(rig.model.connect(peerId: "aaa", peerLabel: "Studio Mac"))
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(rig.peers, ["aaa"])
+        XCTAssertEqual(requested(rig), [], "this side asked back a peer that had already offered")
+        XCTAssertTrue(busied(rig).isEmpty)
+        XCTAssertEqual(parseSDP(rig.transports[0].routed.first?.signal ?? .null)?.type, "offer")
+    }
+
+    /// The peer going away takes its prompt with it, silently.
+    func testThePeerLeavingWithdrawsThePromptWithoutAnswering() async {
+        let rig = rig()
+        announceLink(rig, "zzz")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+
+        rig.model.roomPeerLeft("zzz")
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertTrue(busied(rig).isEmpty)
+        rig.model.acceptInboundAsk()
+        await settle()
+        XCTAssertTrue(rig.transports.isEmpty, "a withdrawn prompt could still be accepted")
+    }
+
+    /// The socket going away takes the prompt with it too: the peer id meant
+    /// something only in the room that is gone.
+    func testLeavingTheRoomWithdrawsThePrompt() async {
+        let rig = rig()
+        announceLink(rig, "zzz")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+
+        rig.model.roomDidDisconnect()
+        XCTAssertNil(rig.model.inboundAsk)
+    }
+
+    /// **Accepting must not silently drop the user's text.** A prompt that can
+    /// replace an ended page says so; Decline keeps the text, Accept is the
+    /// informed choice that clears it.
+    func testAPromptOverAnEndedPageSaysAcceptDiscardsTheTextAndDeclineKeepsIt() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        let first = await openLink(rig)
+        rig.model.draft = "for the first peer"
+        first.hangUp()
+        await settle()
+        guard case .ended = rig.model.connection else { return XCTFail("the link did not end") }
+
+        announceLink(rig, "yyy")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "yyy", data: linkRequestSignal()))
+        await settle()
+        XCTAssertTrue(rig.model.inboundAskDiscardsLocalText,
+                      "the prompt does not warn that accepting clears the ended page's text")
+
+        rig.model.declineInboundAsk()
+        await settle()
+        XCTAssertEqual(rig.model.draft, "for the first peer", "declining lost the text")
+        XCTAssertFalse(rig.model.inboundAskDiscardsLocalText)
+
+        announceLink(rig, "xxx")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "xxx", data: linkRequestSignal()))
+        await settle()
+        XCTAssertTrue(rig.model.inboundAskDiscardsLocalText)
+        rig.model.acceptInboundAsk()
+        await settle()
+        XCTAssertEqual(rig.model.draft, "", "the accepted peer inherited the previous draft")
+        XCTAssertEqual(rig.peers.last, "xxx")
+    }
+
+    /// An empty ended page has nothing to lose, and the prompt says nothing
+    /// about losing it.
+    func testAPromptOverAnEmptyPageDoesNotWarn() async {
+        let rig = rig()
+        announceLink(rig, "zzz")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+        XCTAssertFalse(rig.model.inboundAskDiscardsLocalText)
+    }
+
+    /// A composition that declares `.automatic` — the headless hosts — admits
+    /// an unrequested link as it always did, still behind the app's gate.
+    func testAnAutomaticCompositionAdmitsWithoutAPrompt() async {
+        let rig = rig(selfId: "zzz")
+        rig.model.inboundConsent = .automatic
+        rig.model.shouldAcceptLink = { _ in false }
+        announceLink(rig, "aaa")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(rig.transports.count, 1, "the offer really was routed and assembled")
+        XCTAssertEqual(rig.model.connection, .ended(.unavailable),
+                       "the app's refusal still ends an automatic admission at once")
+        XCTAssertTrue(rig.transports.allSatisfy { $0.isClosed })
     }
 
     /// Connect from the side that can only ASK, with the surface already claimed
