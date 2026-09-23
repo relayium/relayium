@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -222,6 +223,7 @@ type Rule struct {
 
 // Faults is the middleware.
 type Faults struct {
+	legacy  atomic.Bool
 	mu      sync.Mutex
 	rules   []*Rule
 	hits    map[string]int
@@ -373,7 +375,40 @@ func hangUp(w http.ResponseWriter) {
 	}
 }
 
-func (f *Faults) wrap(h http.Handler) http.Handler {
+// SetLegacyServer emulates a server that predates W-N40 (or one rolled back
+// to such a build) on the sender's path: GET /api/devices answers without
+// serverCapabilities, exactly the response shape those builds produced.
+// Everything else is still the real handler.
+func (f *Faults) SetLegacyServer(on bool) { f.legacy.Store(on) }
+
+func (f *Faults) legacyDevices(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !f.legacy.Load() || r.Method != http.MethodGet || r.URL.Path != "/api/devices" {
+			h.ServeHTTP(w, r)
+			return
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		body := rec.Body.Bytes()
+		if rec.Code == http.StatusOK {
+			var m map[string]json.RawMessage
+			if err := json.Unmarshal(body, &m); err == nil {
+				delete(m, "serverCapabilities")
+				body, _ = json.Marshal(m)
+			}
+		}
+		for k, v := range rec.Header() {
+			if k != "Content-Length" {
+				w.Header()[k] = v
+			}
+		}
+		w.WriteHeader(rec.Code)
+		_, _ = w.Write(body)
+	})
+}
+
+func (f *Faults) wrap(inner http.Handler) http.Handler {
+	h := f.legacyDevices(inner)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(bypassHeader) != "" {
 			r.Header.Del(bypassHeader)

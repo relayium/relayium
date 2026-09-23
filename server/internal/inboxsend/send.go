@@ -102,18 +102,43 @@ func ctxErr(err error) *Error {
 	return nil
 }
 
+// capZeroLengthStoredObject is the server capability (account.
+// CapZeroLengthStoredObject) that says a stored object of zero bytes is
+// readable. An all-empty delivery is exactly such an object: every empty file
+// contributes no frame, so the ciphertext is empty. A server without it
+// stores and debits the upload and then fails every receiver's fetch
+// stored_object_unavailable, so without it such a delivery is refused here,
+// before anything is uploaded.
+const capZeroLengthStoredObject = "stored-object-zero-length-v1"
+
 // resolveSelf reads the device list and the row this bearer is.
 func (s *Session) resolveSelf(ctx context.Context) ([]inboxclient.Device, inboxclient.Device, error) {
-	devs, err := s.client.ListDevices(ctx)
+	devs, cur, _, err := s.resolveSelfWithCaps(ctx)
+	return devs, cur, err
+}
+
+// resolveSelfWithCaps is resolveSelf plus the server capabilities advertised
+// on the same read.
+func (s *Session) resolveSelfWithCaps(ctx context.Context) ([]inboxclient.Device, inboxclient.Device, []string, error) {
+	devs, caps, err := s.client.listDevicesWithCaps(ctx)
 	if err != nil {
-		return nil, inboxclient.Device{}, readErr(err)
+		return nil, inboxclient.Device{}, nil, readErr(err)
 	}
 	cur, ok := currentDevice(devs)
 	if !ok || !isInertID(cur.ID) {
-		return nil, inboxclient.Device{}, failed(CodeSignedOut,
+		return nil, inboxclient.Device{}, nil, failed(CodeSignedOut,
 			"this credential is not bound to a device — run `relayium login` again")
 	}
-	return devs, cur, nil
+	return devs, cur, caps, nil
+}
+
+func hasCap(caps []string, want string) bool {
+	for _, c := range caps {
+		if c == want {
+			return true
+		}
+	}
+	return false
 }
 
 // Send plans, encrypts, uploads and queues one delivery.
@@ -139,9 +164,14 @@ func (s *Session) Send(ctx context.Context, req SendRequest) (Result, error) {
 
 	// A FRESH read immediately before the first write, so a device that turned
 	// receiving off or rotated its key a moment ago costs nothing.
-	devs, cur, err := s.resolveSelf(ctx)
+	devs, cur, caps, err := s.resolveSelfWithCaps(ctx)
 	if err != nil {
 		return Result{}, err
+	}
+	// Judged on this same fresh read, so a server rolled back to a build that
+	// cannot serve an empty object is caught before the upload it would charge.
+	if plan.CiphertextBytes == 0 && !hasCap(caps, capZeroLengthStoredObject) {
+		return Result{}, local(CodeUnsendableContent, "every file named is empty; a delivery must contain at least one byte")
 	}
 	var target inboxclient.Device
 	found := false

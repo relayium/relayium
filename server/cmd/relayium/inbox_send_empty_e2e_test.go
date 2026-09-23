@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/relayium/relayium/internal/inboxsend/sendtest"
 )
 
 // W-N40 through the real binaries' code paths: `relayium inbox send` (the real
@@ -52,5 +55,27 @@ func TestInboxSendAllEmptyToTheRealCLIReceiver(t *testing.T) {
 	}
 	if n := s.taskCount(); n != 1 {
 		t.Fatalf("tasks = %d; want 1", n)
+	}
+}
+
+// The same CLI against a server that predates W-N40 (no zero-length-object
+// capability on the device list): the all-empty send is refused before any
+// upload, exit 2 "refused", and nothing is charged or queued.
+func TestInboxSendAllEmptyRefusedByAnOldServer(t *testing.T) {
+	s := newSendEnv(t)
+	s.env.Faults.SetLegacyServer(true)
+	root := tree(t, map[string][]byte{"e/a.txt": {}, "e/b/c.txt": {}})
+	code, out, errOut := s.send("--to", s.recvID, "--json", filepath.Join(root, "e"))
+	if code != 2 || decodeJSON(t, out)["outcome"] != "refused" || !strings.Contains(errOut, "every file named is empty") {
+		t.Fatalf("send = %d\nstdout %s\nstderr %s", code, out, errOut)
+	}
+	if n := s.env.Faults.Hits(sendtest.KeyInit); n != 0 {
+		t.Fatalf("%d upload(s) opened", n)
+	}
+	if q := s.env.QuotaBytes(s.uid); q != 0 {
+		t.Fatalf("daily quota = %d", q)
+	}
+	if n := s.taskCount(); n != 0 {
+		t.Fatalf("tasks = %d", n)
 	}
 }

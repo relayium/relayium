@@ -452,3 +452,24 @@ func TestEmptyObjectExpiryCleanupTerminatesAcrossANodeOutage(t *testing.T) {
 		t.Fatalf("cleanup metered %d upload bytes", up)
 	}
 }
+
+// The device list advertises the zero-length-object capability that CLI
+// senders require before an all-empty upload (W-N40 compatibility gate).
+func TestDeviceListAdvertisesZeroLengthStoredObjects(t *testing.T) {
+	ts, _, _, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "caps@example.com")
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/devices", nil)
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		ServerCapabilities []string `json:"serverCapabilities"`
+	}
+	decodeJSON(t, resp, &out)
+	if len(out.ServerCapabilities) != 1 || out.ServerCapabilities[0] != CapZeroLengthStoredObject ||
+		CapZeroLengthStoredObject != "stored-object-zero-length-v1" {
+		t.Fatalf("serverCapabilities = %v", out.ServerCapabilities)
+	}
+}
