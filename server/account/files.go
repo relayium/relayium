@@ -271,7 +271,8 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// Cheap pre-check to avoid writing a blob we'd immediately delete: if the
 	// declared body already overflows the remaining daily quota, reject before
 	// touching disk. Content-Length is client-supplied, so it is trusted only to
-	// fail fast — never to admit; the authoritative gate is ReserveUpload below.
+	// fail fast — never to admit; the authoritative gate is the daily-quota
+	// charge the object's own insert carries below (persistStoredFile).
 	// Own-node uploads (billable=false) use the user's own disk, not our
 	// DailyQuota, so this pre-check does not apply to them.
 	if billable && r.ContentLength > 0 {
@@ -395,50 +396,37 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		}
 	}
 
-	// Daily quota: atomically re-read the rolling 24h sum, verify this upload
-	// fits, and record the event in one transaction. This closes the read/record
-	// race where concurrent uploads each see a stale sum and collectively bust the
-	// quota. Reserve first, then commit the file — if either fails, drop the blob.
+	// Daily quota: the debit is NOT written here. It rides into the object's
+	// own insert (StoredFile.QuotaCharge), whose transaction re-reads the
+	// rolling 24h sum, verifies this upload fits and records the event — before
+	// the caps, so 429 still outranks them — and commits it with the object or
+	// not at all. A debit committed ahead of its object used to be stranded by
+	// anything that stopped the object landing afterwards (a crash, a database
+	// failure, a refund that itself failed), charging quota for a file that
+	// never existed (A33); there is now nothing to refund.
 	// The debit is billed at max(size, minBillableBytes): a near-zero object
 	// still costs the 64 KiB floor, indirectly capping object count; the stored
 	// row/stats below stay at the actual size.
-	// Own-node uploads (billable=false) skip this entirely: they never reserved
-	// against the daily quota, so there is nothing to refund on failure below.
-	var reservedUploadID string
+	// Own-node uploads (billable=false) carry no charge: they use the user's
+	// own disk, not our daily quota.
+	var charge *UploadQuotaCharge
 	if billable {
 		billed := size
 		if billed < minBillableBytes {
 			billed = minBillableBytes
 		}
-		// This is the authoritative gate, so a quota read error fails CLOSED
-		// exactly like the ReserveUpload error just below: drop the blob and 500,
-		// never admit an upload against an unknown cap.
+		// This is the authoritative gate, so a quota read error fails CLOSED:
+		// drop the blob and 500, never admit an upload against an unknown cap.
 		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
 		if err != nil {
 			s.dropBlob(bs, blobKey, nodeID)
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		reservedUploadID = authx.NewID()
-		ok, err := s.store.ReserveUpload(r.Context(),
-			UploadEvent{ID: reservedUploadID, UserID: u.ID, Bytes: billed, UploadedAt: now},
-			now-dayWindow, quota)
-		if err != nil {
-			s.dropBlob(bs, blobKey, nodeID)
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
+		charge = &UploadQuotaCharge{
+			Event: UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
+			Since: now - dayWindow, Quota: quota,
 		}
-		if !ok {
-			s.dropBlob(bs, blobKey, nodeID)
-			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
-			return
-		}
-	}
-	// refundReserved undoes the daily-quota reservation above when a LATER gate
-	// (the authoritative storage-cap check) rejects the upload — otherwise the
-	// user is charged daily quota for a file that never landed.
-	refundReserved := func() {
-		s.refundUploadReservation(r.Context(), reservedUploadID)
 	}
 	id := authx.NewID()
 	// resolveRetention above turns request params + admin default policy into
@@ -449,25 +437,27 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	sf := StoredFile{
 		ID: id, UserID: u.ID, BlobKey: blobKey, EncManifest: encManifest,
 		Size: size, BurnAfterRead: maxDL == 1, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
-		MaxDownloads: maxDL, Purpose: purpose,
+		MaxDownloads: maxDL, Purpose: purpose, QuotaCharge: charge,
 	}
-	// Atomic, fail-closed storage-cap enforcement + insert. This is what actually
-	// stops N concurrent uploads from collectively busting the plan/global cap
-	// (the over* pre-checks race and fail open).
+	// Atomic, fail-closed daily-quota + storage-cap enforcement + insert. This is
+	// what actually stops N concurrent uploads from collectively busting the
+	// daily quota or the plan/global cap (the pre-checks race and fail open).
+	// Every refusal and every error below leaves no debit and no object.
 	switch persisted, err := s.persistStoredFile(r.Context(), sf, billable); {
 	case err != nil:
 		s.dropBlob(bs, blobKey, nodeID)
-		refundReserved()
 		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	case persisted.Reason == "quota":
+		s.dropBlob(bs, blobKey, nodeID)
+		http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
 		return
 	case persisted.Reason == "global":
 		s.dropBlob(bs, blobKey, nodeID)
-		refundReserved()
 		http.Error(w, "server storage is full", http.StatusInsufficientStorage)
 		return
 	case persisted.Reason == "storage":
 		s.dropBlob(bs, blobKey, nodeID)
-		refundReserved()
 		http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -496,29 +486,6 @@ func (s *Service) recordUploadTraffic(ctx context.Context, userID string, n, at 
 	defer cancel()
 	if err := s.store.RecordMeter(mctx, userID, MeterUpload, n, at); err != nil {
 		log.Printf("upload: recording %d bytes of upload traffic for user %s failed; they stay unbilled: %v", n, userID, err)
-	}
-}
-
-// uploadRefundBudget bounds refundUploadReservation's detached context.
-const uploadRefundBudget = 5 * time.Second
-
-// refundUploadReservation deletes the daily-quota event eventID after a gate
-// later than ReserveUpload refused the upload; "" (nothing reserved) is a
-// no-op. Both upload handlers used to refund on the request's context, so a
-// client that hung up after the reservation committed failed the persist AND
-// the refund: the event stayed, the user was charged daily quota for a file
-// that never landed, and the error was discarded. The refund therefore runs
-// on a detached context — values kept, cancellation dropped, bounded by
-// uploadRefundBudget — and a failure is logged, never reported as a refund.
-// A refund that fails leaves the event to expire with the 24h window.
-func (s *Service) refundUploadReservation(ctx context.Context, eventID string) {
-	if eventID == "" {
-		return
-	}
-	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), uploadRefundBudget)
-	defer cancel()
-	if err := s.store.RefundUpload(rctx, eventID); err != nil {
-		log.Printf("upload: refunding daily-quota reservation %s failed; it stays charged until it leaves the 24h window: %v", eventID, err)
 	}
 }
 
