@@ -266,8 +266,19 @@ func TestLanRoomIgnoresHint(t *testing.T) {
 	writeFrame(t, ctx, a2, map[string]any{"type": "join", "name": "A", "deviceId": devA, "proto": []string{"link/1"}})
 	writeFrame(t, ctx, b, map[string]any{"type": "join", "name": "B", "deviceId": devB})
 	got := readRosterRaw(t, ctx, b, 1)
-	if want := `{"type":"peers","peers":[{"id":"p1","name":"A"}]}`; got != want {
-		t.Fatalf("LAN roster = %s, want %s (one grouped entry, no hint)", got, want)
+	// Which connection the server numbered first is scheduling, not grouping,
+	// so the representative's id is not asserted: one grouped entry for the
+	// installation, named A, and no hint anywhere in the frame.
+	var roster struct {
+		Type  string            `json:"type"`
+		Peers []json.RawMessage `json:"peers"`
+	}
+	if err := json.Unmarshal([]byte(got), &roster); err != nil || roster.Type != "peers" || len(roster.Peers) != 1 {
+		t.Fatalf("LAN roster = %s, want one grouped entry", got)
+	}
+	var entry map[string]any
+	if err := json.Unmarshal(roster.Peers[0], &entry); err != nil || entry["name"] != "A" || len(entry) != 2 {
+		t.Fatalf("LAN roster entry = %s, want exactly {id, name:A} with no hint", roster.Peers[0])
 	}
 }
 
