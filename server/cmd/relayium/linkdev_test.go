@@ -4,10 +4,15 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,12 +20,16 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
+	turnv4 "github.com/pion/turn/v4"
+
 	"github.com/relayium/relayium/internal/signal"
 )
 
@@ -37,14 +46,39 @@ const ldOldCommit = "723481c78"
 
 // ldHub is the real hub in one pairing-code room (two members, hints honoured
 // as on production). Ids are deterministic: peer1, peer2, ... in join order.
+//
+// It also serves /api/ice, because the link transport asks the same server
+// for its ICE configuration (A09b). The handler is the test's; every request
+// is counted and its code recorded, because the count IS the M1 assertion
+// (credentials are issued to the code owner once per link end, never for a
+// legacy pairing, never again after a denial).
 type ldHub struct {
 	url   string
 	joins chan string
+
+	ice      http.HandlerFunc
+	iceMu    sync.Mutex
+	iceCodes []string
 }
 
-func startLinkDevHub(t *testing.T) *ldHub {
+func (h *ldHub) iceHits() []string {
+	h.iceMu.Lock()
+	defer h.iceMu.Unlock()
+	return append([]string(nil), h.iceCodes...)
+}
+
+// ldNoRelayICE is a code room the server issued nothing for: STUN-less, no
+// TURN (the Web's "none").
+func ldNoRelayICE(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"iceServers":[]}`))
+}
+
+func startLinkDevHub(t *testing.T) *ldHub { return startLinkDevHubICE(t, ldNoRelayICE) }
+
+func startLinkDevHubICE(t *testing.T, ice http.HandlerFunc) *ldHub {
 	t.Helper()
-	h := &ldHub{joins: make(chan string, 16)}
+	h := &ldHub{joins: make(chan string, 16), ice: ice}
 	hub := signal.NewHub()
 	var seq int32
 	handle := signal.ServeWSObserved(hub, func() string { return fmt.Sprintf("peer%d", atomic.AddInt32(&seq, 1)) },
@@ -57,6 +91,12 @@ func startLinkDevHub(t *testing.T) *ldHub {
 		}
 		handle(r.Context(), c, "testroom", 2, "127.0.0.1", false)
 		c.Close(websocket.StatusNormalClosure, "")
+	})
+	mux.HandleFunc("/api/ice", func(w http.ResponseWriter, r *http.Request) {
+		h.iceMu.Lock()
+		h.iceCodes = append(h.iceCodes, r.URL.Query().Get("code"))
+		h.iceMu.Unlock()
+		h.ice(w, r)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -242,6 +282,7 @@ func ldPairUp(t *testing.T, hub *ldHub, bin string, first, second ldPeer) (ldRes
 			t.Fatalf("pairing did not end in time\nfirst: %s\nsecond: %s", ra, rb)
 		}
 	}
+	t.Logf("first:\n%s\nsecond:\n%s", ra, rb)
 	return ra, rb
 }
 
@@ -254,18 +295,34 @@ func ldSAS(r ldResult) string {
 	return ""
 }
 
-// ldWantLink: discovery chose link/1 and stopped there, as A08d must.
+// ldWantLink: discovery chose link/1 and the link ran to a clean end over the
+// real transport (A09b): exit 0, a path reported from the selected pair, and
+// never the legacy handshake.
 func ldWantLink(t *testing.T, who string, r ldResult, serverHints bool) {
 	t.Helper()
-	if r.code != linkDevExitLinkPending || !strings.Contains(r.stderr, "link would be established") {
-		t.Errorf("%s: want the link outcome (exit %d)\n%s", who, linkDevExitLinkPending, r)
+	if r.code != 0 || !strings.Contains(r.stderr, "link-dev: link admitted") {
+		t.Errorf("%s: want a completed link (exit 0)\n%s", who, r)
 	}
 	if want := fmt.Sprintf("serverHints=%t", serverHints); !strings.Contains(r.stderr, want) {
 		t.Errorf("%s: room view lacks %q\n%s", who, want, r)
 	}
-	if strings.Contains(r.stderr, "verification code") {
+	if strings.Contains(r.stderr, "legacy handshake") {
 		t.Errorf("%s: a link outcome must not run the legacy handshake\n%s", who, r)
 	}
+	if !ldPathLine.MatchString(r.stderr) {
+		t.Errorf("%s: no path line from the selected pair\n%s", who, r)
+	}
+}
+
+var ldPathLine = regexp.MustCompile(`(?m)^path: (relay|lan|direct) \(selected pair local=(\w+) remote=(\w+) (\w+)\)$`)
+
+// ldPaths lists every path a run reported, in order.
+func ldPaths(r ldResult) []string {
+	var out []string
+	for _, m := range ldPathLine.FindAllStringSubmatch(r.stderr, -1) {
+		out = append(out, m[1])
+	}
+	return out
 }
 
 // ldWantLegacy: both ends completed today's commit/reveal handshake with each
@@ -454,19 +511,59 @@ func TestLinkDevNewToNewWithHints(t *testing.T) {
 			hub := startLinkDevHub(t)
 			a := ldPeer{cmd: pc[0], via: hub.url}
 			b := ldPeer{cmd: pc[1], via: hub.url}
-			for _, p := range []*ldPeer{&a, &b} {
+			var dest string
+			for i, p := range []*ldPeer{&a, &b} {
 				switch p.cmd {
 				case "send":
 					p.args = []string{ldSrc(t), ldCode}
 				case "receive":
-					p.args = []string{ldCode, t.TempDir()}
+					dest = t.TempDir()
+					p.args = []string{ldCode, dest}
+				case "text":
+					// A script, not stdin: in-process ends share os.Stdin.
+					p.args = []string{"--script", ldScript(t, fmt.Sprintf("text hello from end %d", i), "wait-texts 1"), ldCode}
 				default:
 					p.args = []string{ldCode}
+					if pc[0] == "pair" && pc[1] == "text" {
+						p.args = []string{"--script", ldScript(t, "text hello from end 0", "wait-texts 1"), ldCode}
+					}
 				}
 			}
 			ra, rb := ldPairUp(t, hub, "", a, b)
 			ldWantLink(t, "first", ra, true)
 			ldWantLink(t, "second", rb, true)
+			if sa, sb := ldSAS(ra), ldSAS(rb); sa == "" || sa != sb {
+				t.Errorf("link SAS differs: %q vs %q", sa, sb)
+			}
+			if dest != "" {
+				ldCheckReceived(t, ra, rb, dest)
+				if b, err := os.ReadFile(filepath.Join(dest, "payload.txt")); err != nil || len(b) == 0 {
+					t.Errorf("the receiving end saved nothing: %v", err)
+				}
+			}
+			if pc[0] == "text" || pc[1] == "text" {
+				if !strings.Contains(ra.stdout, "hello from end 1") || !strings.Contains(rb.stdout, "hello from end 0") {
+					t.Errorf("messages did not cross\nfirst: %s\nsecond: %s", ra, rb)
+				}
+			}
+			// M1: one /api/ice request per link end, for this code, and only
+			// because discovery chose link/1.
+			if hits := hub.iceHits(); len(hits) != 2 || hits[0] != ldCode || hits[1] != ldCode {
+				t.Errorf("/api/ice requests %q, want exactly one per end for %s", hits, ldCode)
+			}
+			for _, r := range []ldResult{ra, rb} {
+				if n := strings.Count(r.stderr, "relay unavailable:"); n != 1 {
+					t.Errorf("want one truthful no-relay line, got %d\n%s", n, r)
+				}
+				if !strings.Contains(r.stderr, "ice policy=all") {
+					t.Errorf("no TURN issued, so policy must be all\n%s", r)
+				}
+				for _, p := range ldPaths(r) {
+					if p == "relay" {
+						t.Errorf("reported relay with no TURN configured\n%s", r)
+					}
+				}
+			}
 			for _, r := range []ldResult{ra, rb} {
 				if !strings.Contains(r.stderr, "peerHint=true") {
 					t.Errorf("the real hub did not carry the peer's hint\n%s", r)
@@ -482,9 +579,9 @@ func TestLinkDevNewToNewWithHints(t *testing.T) {
 
 func ldRole(r ldResult) string {
 	switch {
-	case strings.Contains(r.stderr, "link/1, initiator"):
+	case strings.Contains(r.stderr, "link/1 initiator"):
 		return "initiator"
-	case strings.Contains(r.stderr, "link/1, responder"):
+	case strings.Contains(r.stderr, "link/1 responder"):
 		return "responder"
 	}
 	return "?"
@@ -503,6 +600,21 @@ func TestLinkDevNewToNewWithoutHints(t *testing.T) {
 			ldPeer{cmd: "pair", args: []string{ldCode}, via: via})
 		ldWantLink(t, "first", ra, false)
 		ldWantLink(t, "second", rb, false)
+	})
+	// M1: a pairing that went legacy never asks /api/ice (no credential is
+	// issued to the code owner for a link that never exists).
+	t.Run("legacy-never-fetches-ice", func(t *testing.T) {
+		t.Parallel()
+		hub := startLinkDevHub(t)
+		via := startLinkDevProxy(t, hub.url, true, false)
+		dest := t.TempDir()
+		ra, rb := ldPairUp(t, hub, "",
+			ldPeer{cmd: "send", args: []string{ldSrc(t), ldCode}, via: via},
+			ldPeer{cmd: "receive", args: []string{ldCode, dest}, via: via})
+		ldWantLegacy(t, ra, rb)
+		if hits := hub.iceHits(); len(hits) != 0 {
+			t.Fatalf("legacy pairing requested /api/ice %d time(s)", len(hits))
+		}
 	})
 	t.Run("send-receive", func(t *testing.T) {
 		t.Parallel()
@@ -565,7 +677,7 @@ func ldOldMatrix(t *testing.T, bin string) {
 	}
 	legacy := func(t *testing.T, rn, ro ldResult, dest string) {
 		ldWantLegacy(t, rn, ro)
-		if strings.Contains(rn.stderr, "link would be established") {
+		if strings.Contains(rn.stderr, "link/1 ") || strings.Contains(rn.stderr, "link admitted") {
 			t.Errorf("new side chose link against an old CLI\n%s", rn)
 		}
 	}
@@ -661,6 +773,12 @@ func ldOldMatrix(t *testing.T, bin string) {
 				t.Errorf("new side's room view lacks %q\n%s", want, rn)
 			}
 			c.check(t, rn, ro, dest)
+			// M1: against an old CLI no link exists, so no relay credential
+			// may be issued to the code owner — discovery waits here (the
+			// peer's roster lacks the hint), and must not fetch while it does.
+			if hits := hub.iceHits(); len(hits) != 0 {
+				t.Errorf("/api/ice requested %d time(s) for a pairing that never linked", len(hits))
+			}
 			if c.newCmd == "text" && c.oldCmd == "text" {
 				ldCheckText(t, rn)
 			}
@@ -712,5 +830,537 @@ func ldOldCapture(t *testing.T, bin string) {
 				}
 			})
 		}
+	}
+}
+
+// ================================================================ A09b: the link transport
+
+// ldScript writes a __link script and returns its path.
+func ldScript(t *testing.T, lines ...string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "script.txt")
+	if err := os.WriteFile(p, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// ldTree writes files (relative path -> size) of random bytes under a fresh
+// directory named root and returns the directory's path.
+func ldTree(t *testing.T, root string, files map[string]int) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), root)
+	for rel, n := range files {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		b := make([]byte, n)
+		if _, err := rand.Read(b); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// ldSameTree: every file under src (a sent root) is byte-identical under
+// dest/<base(src)>, and nothing else was written there.
+func ldSameTree(t *testing.T, src, dest string) {
+	t.Helper()
+	base := filepath.Base(src)
+	n := 0
+	_ = filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rel, _ := filepath.Rel(src, p)
+		want, _ := os.ReadFile(p)
+		got, gerr := os.ReadFile(filepath.Join(dest, base, rel))
+		if gerr != nil || !bytes.Equal(got, want) {
+			t.Errorf("%s/%s: received %d bytes (%v), sent %d", base, rel, len(got), gerr, len(want))
+		}
+		n++
+		return nil
+	})
+	if n == 0 {
+		t.Fatalf("empty source tree %s", src)
+	}
+}
+
+// ---------------------------------------------------------------- in-process TURN (patched turn/v4)
+
+// ldTURN is the PATCHED pion TURN v4 server (third_party/pion-turn, via the
+// go.mod replace) configured like relayium-node: TURN REST credentials
+// ("<unix-expiry>:<token>", password = base64(HMAC-SHA1(secret, username))),
+// an expired or malformed username refused, and every relay socket wrapped in
+// a per-allocation byte counter that tallies ReadFrom and WriteTo exactly as
+// cmd/relayium-node/counter.go's countingPacketConn does. Those counters are
+// the provider-side truth the relayed runs are checked against (M2).
+type ldTURN struct {
+	srv    *turnv4.Server
+	addr   string
+	secret string
+
+	mu     sync.Mutex
+	allocs []*ldCountingConn
+	// authOK counts key LOOKUPS for a username the relay did not refuse
+	// outright; a lookup is not a successful authentication (the request's
+	// MESSAGE-INTEGRITY is checked against the key afterwards).
+	authOK   map[string]int
+	authDeny map[string]int
+}
+
+type ldCountingConn struct {
+	net.PacketConn
+	n atomic.Int64
+}
+
+func (c *ldCountingConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	n, a, err := c.PacketConn.ReadFrom(p)
+	c.n.Add(int64(n))
+	return n, a, err
+}
+
+func (c *ldCountingConn) WriteTo(p []byte, a net.Addr) (int, error) {
+	n, err := c.PacketConn.WriteTo(p, a)
+	c.n.Add(int64(n))
+	return n, err
+}
+
+type ldCountingGen struct {
+	inner turnv4.RelayAddressGenerator
+	t     *ldTURN
+}
+
+func (g *ldCountingGen) Validate() error { return g.inner.Validate() }
+func (g *ldCountingGen) AllocateConn(network string, port int) (net.Conn, net.Addr, error) {
+	return g.inner.AllocateConn(network, port)
+}
+
+func (g *ldCountingGen) AllocatePacketConn(network string, port int) (net.PacketConn, net.Addr, error) {
+	pc, addr, err := g.inner.AllocatePacketConn(network, port)
+	if err != nil {
+		return pc, addr, err
+	}
+	c := &ldCountingConn{PacketConn: pc}
+	g.t.mu.Lock()
+	g.t.allocs = append(g.t.allocs, c)
+	g.t.mu.Unlock()
+	return c, addr, nil
+}
+
+func ldRESTExpired(username string, now int64) bool {
+	i := strings.IndexByte(username, ':')
+	if i <= 0 {
+		return true
+	}
+	exp, err := strconv.ParseInt(username[:i], 10, 64)
+	return err != nil || exp < now
+}
+
+func ldRESTPassword(secret, username string) string {
+	mac := hmac.New(sha1.New, []byte(secret))
+	mac.Write([]byte(username))
+	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func startLinkDevTURN(t *testing.T) *ldTURN {
+	t.Helper()
+	udp, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lt := &ldTURN{addr: udp.LocalAddr().String(), secret: "a09b-test-secret",
+		authOK: map[string]int{}, authDeny: map[string]int{}}
+	gen := &ldCountingGen{t: lt, inner: &turnv4.RelayAddressGeneratorPortRange{
+		RelayAddress: net.ParseIP("127.0.0.1"), Address: "127.0.0.1", MinPort: 49152, MaxPort: 65535,
+	}}
+	const realm = "relayium.test"
+	srv, err := turnv4.NewServer(turnv4.ServerConfig{
+		Realm: realm,
+		AuthHandler: func(username, realm string, _ net.Addr) ([]byte, bool) {
+			lt.mu.Lock()
+			defer lt.mu.Unlock()
+			if ldRESTExpired(username, time.Now().Unix()) {
+				lt.authDeny[username]++
+				return nil, false
+			}
+			lt.authOK[username]++
+			return turnv4.GenerateAuthKey(username, realm, ldRESTPassword(lt.secret, username)), true
+		},
+		PacketConnConfigs: []turnv4.PacketConnConfig{{PacketConn: udp, RelayAddressGenerator: gen}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lt.srv = srv
+	t.Cleanup(func() { _ = srv.Close() })
+	return lt
+}
+
+// cred is a TURN REST credential as account.turnCredentials mints it.
+func (lt *ldTURN) cred(expiry time.Time, token string) map[string]any {
+	u := fmt.Sprintf("%d:%s", expiry.Unix(), token)
+	return map[string]any{"urls": []string{"turn:" + lt.addr + "?transport=udp"}, "username": u, "credential": ldRESTPassword(lt.secret, u)}
+}
+
+func (lt *ldTURN) counters() []int64 {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+	var out []int64
+	for _, c := range lt.allocs {
+		out = append(out, c.n.Load())
+	}
+	return out
+}
+
+func (lt *ldTURN) created() int {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+	return len(lt.allocs)
+}
+
+func (lt *ldTURN) auths() (ok, deny map[string]int) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+	ok, deny = map[string]int{}, map[string]int{}
+	for k, v := range lt.authOK {
+		ok[k] = v
+	}
+	for k, v := range lt.authDeny {
+		deny[k] = v
+	}
+	return
+}
+
+func (lt *ldTURN) waitAllocations(t *testing.T, want int, d time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for lt.srv.AllocationCount() != want {
+		if time.Now().After(deadline) {
+			t.Fatalf("TURN allocations %d, want %d", lt.srv.AllocationCount(), want)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func ldJSONICE(body any) http.HandlerFunc {
+	b, _ := json.Marshal(body)
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(b)
+	}
+}
+
+var ldMovedLine = regexp.MustCompile(`link-dev: moved sent=(\d+) received=(\d+)`)
+
+func ldMoved(t *testing.T, r ldResult) (sent, recv int64) {
+	t.Helper()
+	m := ldMovedLine.FindStringSubmatch(r.stderr)
+	if m == nil {
+		t.Fatalf("no moved line\n%s", r)
+	}
+	s, _ := strconv.ParseInt(m[1], 10, 64)
+	v, _ := strconv.ParseInt(m[2], 10, 64)
+	return s, v
+}
+
+// ldBidi is the bidirectional multi-batch, multi-text session both ends run:
+// two batches (a directory of three files incl. an empty one and a 9 MiB file
+// that crosses the 8 MiB flow window) and three messages each way, then the
+// scripted finish (wait for everything, end the conversation, leave).
+type ldBidi struct {
+	a, b         ldPeer
+	srcA, srcB   []string
+	destA, destB string
+	textsA       []string
+	textsB       []string
+}
+
+func newLDBidi(t *testing.T, via string, bigFile int) *ldBidi {
+	t.Helper()
+	x := &ldBidi{destA: t.TempDir(), destB: t.TempDir()}
+	for i, side := range []string{"A", "B"} {
+		d1 := ldTree(t, "dir"+side, map[string]int{"one.bin": 70_000, "sub/two.bin": 200_000, "sub/empty": 0})
+		d2 := ldTree(t, "big"+side, map[string]int{"big.bin": bigFile})
+		texts := []string{"first from " + side, "second from " + side + " — ünïcödé", "third from " + side}
+		script := []string{"send " + d1, "send " + d2}
+		for _, m := range texts {
+			script = append(script, "text "+m)
+		}
+		script = append(script, "wait-files 2", "wait-texts 3")
+		dest := x.destA
+		if i == 1 {
+			dest = x.destB
+		}
+		p := ldPeer{cmd: "pair", via: via, args: []string{"--yes", "--dest", dest, "--script", ldScript(t, script...), ldCode}}
+		if i == 0 {
+			x.a, x.srcA, x.textsA = p, []string{d1, d2}, texts
+		} else {
+			x.b, x.srcB, x.textsB = p, []string{d1, d2}, texts
+		}
+	}
+	return x
+}
+
+func (x *ldBidi) check(t *testing.T, ra, rb ldResult) {
+	t.Helper()
+	for _, r := range []ldResult{ra, rb} {
+		if r.code != 0 || !strings.Contains(r.stderr, "batches sent=2 received=2 texts received=3") {
+			t.Errorf("want a complete bidirectional session\n%s", r)
+		}
+	}
+	for _, src := range x.srcA {
+		ldSameTree(t, src, x.destB)
+	}
+	for _, src := range x.srcB {
+		ldSameTree(t, src, x.destA)
+	}
+	for _, m := range x.textsA {
+		if !strings.Contains(rb.stdout, m) {
+			t.Errorf("B never printed %q\n%s", m, rb)
+		}
+	}
+	for _, m := range x.textsB {
+		if !strings.Contains(ra.stdout, m) {
+			t.Errorf("A never printed %q\n%s", m, ra)
+		}
+	}
+	if sa, sb := ldSAS(ra), ldSAS(rb); sa == "" || sa != sb {
+		t.Errorf("link SAS differs: %q vs %q", sa, sb)
+	}
+	// Either end's sent payload is exactly what the other received.
+	as, ar := ldMoved(t, ra)
+	bs, br := ldMoved(t, rb)
+	if as != br || bs != ar {
+		t.Errorf("payload bytes do not balance: A sent %d / B received %d, B sent %d / A received %d", as, br, bs, ar)
+	}
+}
+
+// Loopback CLI↔CLI, no relay issued: a bidirectional multi-batch, multi-text
+// session over the real link transport, in both link roles at once.
+func TestLinkDevBidirectionalLoopback(t *testing.T) {
+	hub := startLinkDevHub(t)
+	x := newLDBidi(t, hub.url, 9<<20)
+	ra, rb := ldPairUp(t, hub, "", x.a, x.b)
+	x.check(t, ra, rb)
+	if ldRole(ra)+"/"+ldRole(rb) != "initiator/responder" && ldRole(ra)+"/"+ldRole(rb) != "responder/initiator" {
+		t.Errorf("roles %s/%s", ldRole(ra), ldRole(rb))
+	}
+	for _, r := range []ldResult{ra, rb} {
+		ps := ldPaths(r)
+		if len(ps) == 0 || ps[len(ps)-1] == "relay" {
+			t.Errorf("paths %v: want lan or direct with no relay issued\n%s", ps, r)
+		}
+	}
+	t.Logf("A: %s\nB: %s", ldMovedLine.FindString(ra.stderr), ldMovedLine.FindString(rb.stderr))
+}
+
+// Relayed CLI↔CLI through the PATCHED TURN server: the issued TURN forces
+// relay-only (the Web's policy, M2), the reported path comes from the
+// selected pair and says relay on both ends, and the relay's own per-
+// allocation byte counters match the payload that crossed, plus framing.
+func TestLinkDevRelayedThroughPatchedTURN(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	exp := time.Now().Add(time.Hour)
+	hub := startLinkDevHubICE(t, ldJSONICE(map[string]any{
+		"iceServers": []any{map[string]any{"urls": "stun:" + lt.addr}, lt.cred(exp, "owner1.tagA")},
+	}))
+	x := newLDBidi(t, hub.url, 3<<20)
+	ra, rb := ldPairUp(t, hub, "", x.a, x.b)
+	x.check(t, ra, rb)
+	for _, r := range []ldResult{ra, rb} {
+		if !strings.Contains(r.stderr, "ice policy=relay") {
+			t.Errorf("TURN was issued: want relay-only\n%s", r)
+		}
+		if ps := ldPaths(r); len(ps) == 0 || ps[0] != "relay" {
+			t.Errorf("paths %v, want relay from the selected pair\n%s", ps, r)
+		}
+		if strings.Contains(r.stderr, "relay unavailable") {
+			t.Errorf("a relay was issued; no denial line expected\n%s", r)
+		}
+	}
+	if hits := hub.iceHits(); len(hits) != 2 {
+		t.Errorf("/api/ice requests %q, want one per end", hits)
+	}
+	lt.waitAllocations(t, 0, 10*time.Second) // both ends closed their allocations
+
+	as, _ := ldMoved(t, ra)
+	bs, _ := ldMoved(t, rb)
+	payload := as + bs
+	counts := lt.counters()
+	if len(counts) != 2 {
+		t.Fatalf("relay allocations %v, want exactly one per end", counts)
+	}
+	// Each allocation relays BOTH directions (WriteTo toward the peer's relay
+	// address, ReadFrom from it), so each carries all of the payload. What it
+	// adds is framing: DTLS records, SCTP chunks and SACKs, linkwire's 21-byte
+	// piece header, the manifests, ACK/COMPLETE/END controls, ICE consent.
+	for i, n := range counts {
+		ratio := float64(n) / float64(payload)
+		t.Logf("allocation %d relayed %d bytes for %d payload bytes (x%.4f)", i, n, payload, ratio)
+		if n < payload || n > payload+payload/5+512<<10 {
+			t.Errorf("allocation %d relayed %d bytes, want payload %d plus framing (<= 20%% + 512 KiB)", i, n, payload)
+		}
+	}
+}
+
+// relayDenied: quota. The server withheld TURN: one truthful line on each end,
+// one /api/ice request per end (no refetch loop, M3), policy "all" with the
+// STUN it did issue, the transfer still completes directly, and the relay was
+// never touched (no allocation at all).
+func TestLinkDevRelayDeniedQuota(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub := startLinkDevHubICE(t, ldJSONICE(map[string]any{
+		"iceServers": []any{map[string]any{"urls": "stun:" + lt.addr}}, "relayDenied": "quota",
+	}))
+	src := ldTree(t, "q", map[string]int{"f.bin": 300_000})
+	destB := t.TempDir()
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--script", ldScript(t, "send "+src, "text ping", "wait-texts 1"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--dest", destB, "--script", ldScript(t, "text pong", "wait-files 1", "wait-texts 1"), ldCode}})
+	for _, r := range []ldResult{ra, rb} {
+		if r.code != 0 {
+			t.Errorf("want the link to complete without a relay\n%s", r)
+		}
+		if n := strings.Count(r.stderr, "relay unavailable: the pairing code owner's monthly relay allowance is used up"); n != 1 {
+			t.Errorf("want exactly one quota line, got %d\n%s", n, r)
+		}
+		if !strings.Contains(r.stderr, "ice policy=all") {
+			t.Errorf("relay withheld: want policy all\n%s", r)
+		}
+		for _, p := range ldPaths(r) {
+			if p == "relay" {
+				t.Errorf("reported relay after a quota denial\n%s", r)
+			}
+		}
+	}
+	ldSameTree(t, src, destB)
+	if hits := hub.iceHits(); len(hits) != 2 {
+		t.Errorf("/api/ice requests %q, want exactly one per end (a denial is never re-requested)", hits)
+	}
+	if n := lt.created(); n != 0 {
+		t.Errorf("%d relay allocation(s) after a quota denial", n)
+	}
+}
+
+// Adversarial (M4): an already-expired credential cannot relay anything and
+// cannot extend anything. The deadline derived from it is "now", so the link
+// ends during establishment with a truthful line; the relay refuses the
+// credential itself; no allocation ever exists; no payload moves.
+func TestLinkDevExpiredCredentialCannotRelay(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub := startLinkDevHubICE(t, ldJSONICE(map[string]any{
+		"iceServers": []any{lt.cred(time.Now().Add(-10*time.Second), "owner1.tagOld")},
+	}))
+	start := time.Now()
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text never", "wait-texts 1"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text never", "wait-texts 1"), ldCode}})
+	for _, r := range []ldResult{ra, rb} {
+		if r.code == 0 || strings.Contains(r.stderr, "link admitted") {
+			t.Errorf("an expired credential produced a link\n%s", r)
+		}
+		if !strings.Contains(r.stderr, "the relay credential for this link ended") {
+			t.Errorf("want the truthful credential-ended line\n%s", r)
+		}
+		if s, v := ldMoved(t, r); s != 0 || v != 0 {
+			t.Errorf("payload moved over an expired credential: %d/%d", s, v)
+		}
+	}
+	if el := time.Since(start); el > 20*time.Second {
+		t.Errorf("an expired credential took %v to end the link", el)
+	}
+	if n := lt.created(); n != 0 {
+		t.Errorf("%d allocation(s) from an expired credential", n)
+	}
+}
+
+// Adversarial (M4): a forged relays[] entry — a far-future expiry on a
+// credential that cannot authenticate — cannot extend the link. The deadline
+// is the EARLIEST expiry (the real, short one, minus the 60 s skew); the link
+// runs relayed until exactly then and ends truthfully, long before either the
+// real credential or the forged one would have expired; the relay refused
+// every attempt to allocate with the forged credential.
+func TestLinkDevForgedRelayCannotExtendDeadline(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	realExp := time.Now().Add(linkrtcSkew() + 12*time.Second)
+	forgedUser := "4102444800:attacker.tag"
+	forged := map[string]any{"urls": []string{"turn:" + lt.addr + "?transport=udp"}, "username": forgedUser, "credential": "not-the-hmac"}
+	// The forged credential rides BOTH lists: beside the real one in the
+	// legacy top-level list (after it, so "first wins" would be wrong too) and
+	// as a pool entry. The bound must be the earliest across and within both.
+	hub := startLinkDevHubICE(t, ldJSONICE(map[string]any{
+		"iceServers": []any{lt.cred(realExp, "owner1.tagShort"), forged},
+		"relays":     []any{map[string]any{"id": "forged", "iceServers": []any{forged}}},
+	}))
+	deadline := realExp.Add(-linkrtcSkew())
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text a", "wait-texts 1", "hold"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text b", "wait-texts 1", "hold"), ldCode}})
+	ended := time.Now()
+	for _, r := range []ldResult{ra, rb} {
+		if !strings.Contains(r.stderr, "link admitted") || !strings.Contains(r.stderr, "path: relay") {
+			t.Errorf("want a relayed link before the deadline\n%s", r)
+		}
+		if !strings.Contains(r.stderr, "report link relay-credential-ended") ||
+			!strings.Contains(r.stderr, "the relay credential for this link ended; nothing more can be sent over it") {
+			t.Errorf("want the link ended truthfully at the relay deadline\n%s", r)
+		}
+		if !strings.Contains(r.stderr, "link deadline "+deadline.UTC().Format(time.RFC3339)) &&
+			!strings.Contains(r.stderr, "link deadline "+deadline.Local().Format(time.RFC3339)) {
+			t.Errorf("the link's deadline is not the real credential's expiry - 60 s (%s)\n%s", deadline.Format(time.RFC3339), r)
+		}
+	}
+	// Ended at the deadline (1 s of whole-second rounding in the expiry, plus
+	// scheduling), and well before the real credential itself expired.
+	if ended.Before(deadline.Add(-1500*time.Millisecond)) || ended.After(deadline.Add(8*time.Second)) {
+		t.Errorf("link ended at %s, deadline %s", ended.Format(time.RFC3339Nano), deadline.Format(time.RFC3339Nano))
+	}
+	if !ended.Before(realExp) {
+		t.Errorf("the link outlived the credential (ended %s, expiry %s)", ended, realExp)
+	}
+	// The forged entry was really tried (the relay looked its key up), and it
+	// produced no allocation: the MESSAGE-INTEGRITY check against the key
+	// derived from the relay's secret failed. Only the real credential
+	// allocated, once per end.
+	lookups, _ := lt.auths()
+	if lookups[forgedUser] == 0 {
+		t.Errorf("the forged relays[] entry was never tried; the test proves nothing (lookups %v)", lookups)
+	}
+	if n := lt.created(); n != 2 {
+		t.Errorf("%d allocation(s), want exactly the real credential's one per end", n)
+	}
+	_, denied := lt.auths()
+	t.Logf("relay key lookups %v, refused outright %v", lookups, denied)
+	lt.waitAllocations(t, 0, 10*time.Second)
+}
+
+// linkrtcSkew is the Web's TURN_CLOCK_SKEW_MS, the margin the deadline takes.
+func linkrtcSkew() time.Duration { return 60 * time.Second }
+
+// Many small and empty files in one batch: the sender's per-turn burst bound
+// must not strand a batch that earns no flow-control ACK to wake it.
+func TestLinkDevManySmallFiles(t *testing.T) {
+	hub := startLinkDevHub(t)
+	files := map[string]int{}
+	for i := 0; i < 120; i++ {
+		files[fmt.Sprintf("d%d/f%03d.bin", i%7, i)] = i % 3 * 17 // 0, 17 or 34 bytes
+	}
+	src := ldTree(t, "many", files)
+	dest := t.TempDir()
+	start := time.Now()
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "send", via: hub.url, args: []string{src, ldCode}},
+		ldPeer{cmd: "receive", via: hub.url, args: []string{ldCode, dest}})
+	if ra.code != 0 || rb.code != 0 {
+		t.Fatalf("want both ends to finish\n%s\n%s", ra, rb)
+	}
+	ldSameTree(t, src, dest)
+	if el := time.Since(start); el > 20*time.Second {
+		t.Errorf("120 small files took %v (a stalled sender?)", el)
 	}
 }
