@@ -233,7 +233,7 @@ func TestAuthorizedAppleLifecycleAtomicallyBindsAndResolvesDispatch(t *testing.T
 	if err != nil || !created {
 		t.Fatalf("dispatch created=%v err=%v", created, err)
 	}
-	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original-one", ExternalScope: testBundleIOS, BillingProductID: testAppleProduct, AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 102000, AppleDispatchPurchase: true, AppleDispatchProductID: testAppleProduct, EventAt: 200, Now: 102}
+	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original-one", ExternalScope: testBundleIOS, BillingProductID: testAppleProduct, AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 102000, EventAt: 200, Now: 102}
 	renewal := AppleRenewalState{UserID: u.ID, ExternalID: ev.ExternalID, BundleID: testBundleIOS, CurrentProductID: testAppleProduct, AutoRenewProductID: testAppleProduct, EventAt: 201, UpdatedAt: 102}
 	result, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvProduction)
 	if err != nil || !result.Applied {
@@ -340,7 +340,7 @@ func TestAppleRenewalAndOldTokenCannotResolveANewerPurchaseAttempt(t *testing.T)
 	if err != nil || !created {
 		t.Fatalf("first dispatch=%+v created=%v err=%v", first, created, err)
 	}
-	purchase := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "plus", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original", ExternalScope: testBundleIOS, BillingProductID: "plus.monthly", AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 102000, AppleDispatchPurchase: true, AppleDispatchProductID: "plus.monthly", EventAt: 200, Now: 102}
+	purchase := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "plus", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original", ExternalScope: testBundleIOS, BillingProductID: "plus.monthly", AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 102000, EventAt: 200, Now: 102}
 	if result, err := store.ApplyAuthorizedAppleSource(ctx, purchase, firstToken, appleEnvProduction, purchase.BillingProductID); err != nil || !result.Applied {
 		t.Fatalf("first purchase result=%+v err=%v", result, err)
 	}
@@ -355,8 +355,6 @@ func TestAppleRenewalAndOldTokenCannotResolveANewerPurchaseAttempt(t *testing.T)
 	renewal.Now = 104
 	renewal.PeriodEnd = 2000
 	renewal.AppleTransactionReason = "RENEWAL"
-	renewal.AppleDispatchPurchase = false
-	renewal.AppleDispatchProductID = ""
 	if result, err := store.ApplyAuthorizedAppleSource(ctx, renewal, firstToken, appleEnvProduction, renewal.BillingProductID); err != nil || !result.Applied {
 		t.Fatalf("old-token renewal result=%+v err=%v", result, err)
 	}
@@ -408,7 +406,7 @@ func TestAnOldTokenCarryingTheDispatchedProductCannotResolveANewerAttempt(t *tes
 	if err != nil || !created {
 		t.Fatalf("first dispatch=%+v created=%v err=%v", first, created, err)
 	}
-	purchase := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "plus", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original", ExternalScope: testBundleIOS, BillingProductID: product, AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 102000, AppleDispatchPurchase: true, AppleDispatchProductID: product, EventAt: 200, Now: 102}
+	purchase := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "plus", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original", ExternalScope: testBundleIOS, BillingProductID: product, AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 102000, EventAt: 200, Now: 102}
 	if result, err := store.ApplyAuthorizedAppleSource(ctx, purchase, firstToken, appleEnvProduction, product); err != nil || !result.Applied {
 		t.Fatalf("first purchase result=%+v err=%v", result, err)
 	}
@@ -434,8 +432,6 @@ func TestAnOldTokenCarryingTheDispatchedProductCannotResolveANewerAttempt(t *tes
 	stale.Now = 104
 	stale.PeriodEnd = 2000
 	stale.AppleTransactionReason = "RENEWAL"
-	stale.AppleDispatchPurchase = false
-	stale.AppleDispatchProductID = ""
 	if result, err := store.ApplyAuthorizedAppleSource(ctx, stale, firstToken, appleEnvProduction, product); err != nil || !result.Applied {
 		t.Fatalf("the old subscription's own lifecycle must still apply: result=%+v err=%v", result, err)
 	}
@@ -485,7 +481,7 @@ func TestExactAppleDispatchProofDoesNotDependOnDeviceClock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:old", ExternalScope: testBundleIOS, BillingProductID: testAppleProduct, AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 199000, AppleDispatchPurchase: true, AppleDispatchProductID: testAppleProduct, EventAt: 400, Now: 201}
+	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:old", ExternalScope: testBundleIOS, BillingProductID: testAppleProduct, AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 199000, EventAt: 400, Now: 201}
 	if result, err := store.ApplyAuthorizedAppleSource(ctx, ev, token, appleEnvProduction, testAppleProduct); err != nil || !result.Applied {
 		t.Fatalf("canonical old purchase result=%+v err=%v", result, err)
 	}
@@ -682,15 +678,13 @@ func TestTokenlessCanonicalUpdateUsesBoundExternalIdentity(t *testing.T) {
 	if _, _, err := store.DispatchAppleBillingPurchase(ctx, authority, testAppleProduct, token, 101); err != nil {
 		t.Fatal(err)
 	}
-	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:tokenless", ExternalScope: testBundleIOS, BillingProductID: testAppleProduct, AppleDispatchPurchase: true, AppleDispatchProductID: testAppleProduct, EventAt: 200, Now: 102}
+	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:tokenless", ExternalScope: testBundleIOS, BillingProductID: testAppleProduct, EventAt: 200, Now: 102}
 	if _, err := store.ApplyAuthorizedAppleSource(ctx, ev, token, appleEnvProduction, testAppleProduct); err != nil {
 		t.Fatal(err)
 	}
 	ev.PeriodEnd = 2000
 	ev.EventAt++
 	ev.Now++
-	ev.AppleDispatchPurchase = false
-	ev.AppleDispatchProductID = ""
 	if result, err := store.ApplyAuthorizedAppleSource(ctx, ev, "", appleEnvProduction, testAppleProduct); err != nil || !result.Applied {
 		t.Fatalf("tokenless canonical update result=%+v err=%v", result, err)
 	}

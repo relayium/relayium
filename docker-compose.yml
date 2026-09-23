@@ -1,7 +1,7 @@
 # Relayium — docker compose.
 #
 #   docker compose up -d                 # server only (LAN realtime + stored links)
-#   docker compose --profile relay up -d # + coturn TURN relay + redis metering
+#   docker compose --profile relay up -d # + coturn TURN relay (+ redis; metering ingest disabled)
 #
 # App config comes from ./server/.env (optional) plus the `environment:` block
 # below. See server/.env.example for every RELAYIUM_* key.
@@ -27,7 +27,9 @@ services:
       RELAYIUM_STATIC: "/app/web/dist"
       RELAYIUM_DB: "/data/relayium.db"
       RELAYIUM_BLOB_DIR: "/data/blobs"
-      # Enable relay-byte metering when the `relay` profile is running:
+      # RELAYIUM_REDIS_ADDR is DISABLED: the server ignores it (it only logs a
+      # warning), so coturn relay bytes are not metered even with the `relay`
+      # profile's Redis running. Its old ingest could bill the wrong account.
       # RELAYIUM_REDIS_ADDR: "redis:6379"
     volumes:
       - relayium-data:/data
@@ -69,7 +71,8 @@ services:
       # Relay-byte metering: also write stats to redis (host-networked, so localhost):
       # - --redis-statsdb=ip=127.0.0.1 dbname=0
 
-  # --- Optional: Redis for coturn relay-byte metering (profile: relay) ---
+  # --- Optional: Redis for coturn relay stats (profile: relay). The server's
+  # ingest of these stats is DISABLED pending a re-keyed design (F02). ---
   redis:
     image: redis:7-alpine
     profiles: ["relay"]

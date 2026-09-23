@@ -20,7 +20,6 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"github.com/relayium/relayium/account"
-	"github.com/relayium/relayium/internal/metering"
 	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/storage"
 	"github.com/relayium/relayium/selfupdate"
@@ -283,7 +282,7 @@ func main() {
 	// 默认留空：见下面 defaultSTUNFrom 的注释——默认值不再是第三方 STUN。
 	stunURLs := flag.String("stun-urls", envStr("RELAYIUM_STUN_URLS", ""), "comma-separated STUN URLs (empty: derived from -turn-urls, since coturn answers STUN on the same host:port)")
 	turnRelays := flag.String("turn-relays", envStr("RELAYIUM_TURN_RELAYS", ""), `JSON array of TURN relays for the multi-relay pool, e.g. [{"id":"asia-tok","region":"asia","urls":["turn:tok:3478"],"secret":"..."}]; empty uses -turn-urls only`)
-	redisAddr := flag.String("redis-addr", envStr("RELAYIUM_REDIS_ADDR", ""), "Redis host:port for coturn relay-byte metering (empty disables)")
+	redisAddr := flag.String("redis-addr", envStr("RELAYIUM_REDIS_ADDR", ""), "DISABLED, ignored: the direct coturn->Redis relay-byte ingest keys usage by coturn's restart-reset session id and would bill the wrong user; it stays off until a re-keyed ingest (F02) replaces it. Setting it only logs a warning at startup.")
 	nodeToken := flag.String("node-token", envStr("RELAYIUM_NODE_TOKEN", ""), "fleet bootstrap bearer token for relay-node /api/nodes/* (empty disables the node API)")
 	enableUserNodes := flag.Bool("enable-user-nodes", envBool("RELAYIUM_ENABLE_USER_NODES", true), "serve per-user BYO node tokens (account-bound relay/storage nodes)")
 	directDownload := flag.Bool("direct-download", envBool("RELAYIUM_DIRECT_DOWNLOAD", false), "allow a user's own storage node to serve their stored downloads directly to clients that opt in (default off = central proxies everything). Fleet-hosted downloads are always proxied regardless of this flag; see docs/direct-download-deploy.md before enabling on an upgrade")
@@ -1144,32 +1143,10 @@ func main() {
 			}
 			go checker.Run(context.Background(), time.Hour)
 		}
-		if *redisAddr != "" {
-			worker := &metering.Worker{
-				Sink: store,
-				Now:  func() int64 { return time.Now().Unix() },
-				Log:  log.Default(),
-			}
-			src := metering.NewRedisSource(*redisAddr)
-			// The Redis source now reconnects internally, so Run only returns on a
-			// setup error; retry so a startup blip can't permanently disable
-			// metering. It exits cleanly (nil) only if the context is cancelled.
-			go func() {
-				for {
-					err := worker.Run(context.Background(), src)
-					if err == nil {
-						return
-					}
-					log.Printf("metering worker error, retrying in 5s: %v", err)
-					time.Sleep(5 * time.Second)
-				}
-			}()
-			// M2: warn if metering is enabled but the coturn→redis pipe goes silent
-			// (routine restart / reconnect gap is the common blinding case).
-			const meterSilenceWarn = 5 * time.Minute
-			go worker.Watchdog(context.Background(), time.Minute, meterSilenceWarn)
-			log.Printf("metering: ingesting coturn relay stats from redis %s", *redisAddr)
-		}
+		// The direct coturn->Redis ingest is deliberately inert: see
+		// guardCoturnRedisMetering. The flag stays parseable so an existing
+		// unit file or env keeps booting; it just no longer starts anything.
+		guardCoturnRedisMetering(*redisAddr, log.Printf)
 		mux.Handle("/api/", acct.Routes())
 		acct.RegisterAdmin(mux)
 		acct.RegisterDevicePage(mux) // GET /device on the root mux (see RegisterDevicePage)
@@ -1256,4 +1233,29 @@ func generateAdminTOTP(adminUser string) error {
 	fmt.Println()
 	fmt.Println("把 Secret 填入 RELAYIUM_ADMIN_TOTP_SECRET 后重启服务即可启用 2FA。")
 	return nil
+}
+
+// coturnRedisMeteringDisabledLog is the one startup line printed when
+// -redis-addr / RELAYIUM_REDIS_ADDR is set.
+const coturnRedisMeteringDisabledLog = "metering: -redis-addr/RELAYIUM_REDIS_ADDR is set but the direct coturn->Redis relay-byte ingest is DISABLED and nothing was started: it keys usage by coturn's raw session id, which restarts from zero on every coturn restart and is shared across coturn hosts, so a reused id would add one user's relay bytes to another user's bill. It stays off until the re-keyed ingest (F02) replaces it; unset the variable to silence this line."
+
+// guardCoturnRedisMetering is the whole of the -redis-addr wiring. It never
+// starts the metering worker, its Redis subscription or its silence watchdog.
+//
+// Invariant (money): no coturn byte report may reach the usage ledger through
+// this path. usage_events.alloc_id is the ledger's primary key and RecordUsage
+// keeps an existing row's user_id, so feeding it coturn's reusable session ids
+// would charge a later allocation's bytes to whichever user first held that id
+// in the same period. Failing safe here means leaving coturn traffic unmetered,
+// exactly as production already runs (the flag is unset there), rather than
+// crashing the server or misattributing usage.
+//
+// It returns whether ingest was started, which is always false; the return
+// value exists so a test pins that contract.
+func guardCoturnRedisMetering(redisAddr string, logf func(format string, args ...any)) (started bool) {
+	if redisAddr == "" {
+		return false
+	}
+	logf("%s", coturnRedisMeteringDisabledLog)
+	return false
 }

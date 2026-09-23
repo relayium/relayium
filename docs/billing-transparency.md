@@ -139,19 +139,23 @@ ICE/TURN credentials for a pairing-code transfer. It:
    that report to the same accept-as-reported path an expired code has always
    taken. Nothing is lost.
 
-**Ingesting what was actually relayed** is a separate, one-way pipeline:
-coturn (the TURN server) reports each allocation's cumulative relayed bytes
-over Redis pub/sub; `internal/metering/metering.go` ingests those reports.
+**Ingesting what coturn relayed** is a separate, one-way pipeline that is
+**currently disabled** (details at the end of this paragraph). As designed,
+coturn (the TURN server) would report each allocation's cumulative relayed
+bytes over Redis pub/sub and `internal/metering/metering.go` would ingest them.
 `Worker.handle` (`internal/metering/metering.go:81`) parses the coturn
 username via `relayusage.TokenFromUsername` and `relayusage.SplitAttrib`
 (`internal/relayusage/parse.go:18` and `:21`) to recover the owner's user ID,
 and records a `UsageEvent{RelayedBytes, Billable: true}` against that user.
 A username with no owner prefix (a legacy/anonymous code) is recorded but
 never attributed to any account and never billed — see the
-`SplitAttrib` doc comment. If Redis isn't configured
-(`-redis-addr` / `RELAYIUM_REDIS_ADDR` unset), this whole pipeline never
-starts (`main.go:1054-1078`) and relay usage is never ingested at all — transfers
-still work, they're simply not metered.
+`SplitAttrib` doc comment. **This pipeline is currently disabled and never
+starts**, whether or not `-redis-addr` / `RELAYIUM_REDIS_ADDR` is set:
+`guardCoturnRedisMetering` (`main.go:1255`) only logs a warning. The ingest
+keyed usage by coturn's session id, which restarts from zero on every coturn
+restart, so a reused id would have billed one account for another's relay
+bytes. Until a re-keyed ingest replaces it, relay traffic through coturn is not
+ingested or metered at all — transfers still work, they're simply not metered.
 
 **Self-hosted relay nodes are recorded but never billed.** If you point
 Relayium at your own TURN node (BYO), its relay traffic is reported over a
@@ -470,10 +474,11 @@ discovered months later to still have evidence attached to it.
 Everything above is what the code *can* do; what actually runs depends on
 which flags a given deployment sets (`main.go`):
 
-- **Relay metering** is entirely off unless `-redis-addr` /
-  `RELAYIUM_REDIS_ADDR` is set (`main.go:286`, wired at `main.go:1054-1078`). No
-  Redis configured → the metering worker never starts → relay bytes are
-  never ingested or attributed to anyone, full stop.
+- **coturn relay metering** is off in every deployment. `-redis-addr` /
+  `RELAYIUM_REDIS_ADDR` (`main.go:285`) no longer starts anything:
+  `guardCoturnRedisMetering` (`main.go:1255`) only logs a warning, so the
+  metering worker never starts and coturn-relayed bytes are never ingested or
+  attributed to anyone, full stop.
 - **TURN relay itself** is off unless `-turn-secret` /
   `RELAYIUM_TURN_SECRET` is set (`main.go:281`) — without it there's simply no
   relay to meter. What still works is LAN browser transfers and the direct-only

@@ -69,7 +69,7 @@ definitions in [`server/main.go`](../server/main.go). The essentials:
 | `RELAYIUM_STATIC` | Built SPA directory the Go server falls back to serving. Docker image default: `/app/web/dist`. |
 | `RELAYIUM_STUN_URLS` | Comma-separated STUN URLs for cross-network NAT traversal. Empty is derived from `RELAYIUM_TURN_URLS` (a TURN server answers STUN on the same host:port); with neither set, no STUN is advertised and only same-LAN transfers work. |
 | `RELAYIUM_TURN_URLS` / `RELAYIUM_TURN_SECRET` | Optional TURN relay for transfers where a direct P2P connection isn't possible (see [Cross-network transfers](#cross-network-transfers) below). With the bundled `relay` profile the secret must be set in **two** places — see that section; setting only one of them leaves TURN silently off. |
-| `RELAYIUM_REDIS_ADDR` | Optional Redis `host:port` for TURN relay-byte metering. Empty disables metering entirely; transfers still work without it. |
+| `RELAYIUM_REDIS_ADDR` | **Disabled; leave unset.** It used to start a coturn→Redis relay-byte ingest, but that ingest keyed usage by coturn's session id, which restarts from zero on every coturn restart, so it could bill one account for another's traffic. Setting it now starts nothing and only logs a warning at startup; coturn relay traffic is not metered until a re-keyed ingest replaces it. Transfers work either way. |
 | `RELAYIUM_ADMIN_USER` / `RELAYIUM_ADMIN_PASS` | Credentials for the `/admin` console (username defaults to `admin` if unset). It is a full mutating console, not a read-only viewer — see [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. Password empty (the default) disables `/admin` outright — it 404s and falls through to the SPA. |
 | `RELAYIUM_ADMIN_TOTP_SECRET` | Optional TOTP 2FA on top of the admin login. See [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. |
 | `RELAYIUM_RELEASE_CHECK` | On (`true`) by default: ask GitHub hourly for the newest release and offer it in `/admin`. See [Release check](#release-check-on-by-default) below. `false` disables it — no request is made at all. |
@@ -79,11 +79,10 @@ definitions in [`server/main.go`](../server/main.go). The essentials:
 billing, App Store purchases (see
 [App Store purchases](#app-store-purchases-off-by-default) below), and
 multi-node fleet settings — none of those are required to run a basic
-instance; leave them unset. If you do turn on `RELAYIUM_REDIS_ADDR`
-and/or `RELAYIUM_STRIPE_SECRET_KEY`, see
-[`docs/billing-transparency.md`](billing-transparency.md) for exactly what
-that starts recording and metering, and what stays off when you leave them
-unset.
+instance; leave them unset. If you do turn on `RELAYIUM_STRIPE_SECRET_KEY`,
+see [`docs/billing-transparency.md`](billing-transparency.md) for exactly what
+that starts recording and metering, and what stays off when you leave it
+unset. (`RELAYIUM_REDIS_ADDR` is disabled, as noted in the table above.)
 
 Secrets belong in `server/.env` with mode `0600` — never on the command line,
 where `ps` or `/proc/<pid>/environ` would expose them. `server/.env` is

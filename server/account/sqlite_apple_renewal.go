@@ -192,9 +192,10 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 	//
 	//   - transactionReason=="PURCHASE", so a RESTORE AFTER A RENEWAL (which
 	//     carries RENEWAL) could never resolve the dispatch it belonged to;
-	//   - the product read from ev.AppleDispatchProductID, a field ONLY the
-	//     authenticated transaction handler ever set -- so a NOTIFICATION-FIRST
-	//     delivery could never match it, however exactly the product agreed;
+	//   - the product read from a dispatch-only SourceEvent field (since
+	//     removed) that ONLY the authenticated transaction handler ever set --
+	//     so a NOTIFICATION-FIRST delivery could never match it, however
+	//     exactly the product agreed;
 	//   - result.Applied, so an ALREADY-ACCOUNTED stale submission or a duplicate
 	//     JWS resolved nothing, when "there was nothing left to apply" is itself
 	//     the evidence that this account already owns the subscription.
