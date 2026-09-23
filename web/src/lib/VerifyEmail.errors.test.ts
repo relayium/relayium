@@ -75,3 +75,35 @@ describe("verify-email says which failure it was", () => {
     expect(takeReactivationOffer()).toBe("react-9");
   });
 });
+
+describe("verify-email and the registration password (A29 R1b)", () => {
+  it("a password_mismatch keeps the form, says so, and leaves the link usable", async () => {
+    await verifyWith(async () =>
+      new Response(JSON.stringify({ error: "password_mismatch" }), { status: 400 }));
+    expect(target.querySelector("#verify-password"), "the form is gone").not.toBeNull();
+    expect(target.querySelector("[data-testid=verify-mismatch]")?.textContent?.trim())
+      .toBe(messages.en.verifyEmail.errPasswordMismatch);
+    expect((target.querySelector(".status")?.textContent ?? "").trim())
+      .not.toBe(messages.en.verifyEmail.invalidTitle);
+  });
+
+  it("only the explicit without-a-password choice sends an empty password", async () => {
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: RequestInit) => {
+      bodies.push(String(init?.body ?? ""));
+      return new Response(JSON.stringify({ error: "invalid_token" }), { status: 400 });
+    }));
+    target = document.createElement("div");
+    document.body.appendChild(target);
+    app = mount(VerifyEmail, { target });
+    await settle();
+    const input = target.querySelector("#verify-password") as HTMLInputElement;
+    input.value = "typed-but-abandoned";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+    (target.querySelector("button.auth-link") as HTMLButtonElement).click();
+    await settle();
+    expect(bodies.length).toBe(1);
+    expect(JSON.parse(bodies[0])).toEqual({ token: "verify-tok", password: "" });
+  });
+});

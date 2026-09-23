@@ -510,6 +510,7 @@ const en: Messages = {
     successBody: "Email verified — signing you in…",
     noToken: "This link is invalid.",
     invalidTitle: "This link is invalid or has expired.",
+    errPasswordMismatch: "That isn't the password you signed up with. Nothing has changed and this link still works — try again, or choose \"I signed up without a password\" to continue without one.",
     serverError: "Something went wrong while verifying, and this link can't be used again. Try logging in — if your email still isn't verified, request a new link below.",
     backHome: "Back to home",
   },

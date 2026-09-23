@@ -761,6 +761,7 @@ export interface Messages {
     noToken: string; // opened without a ?token= param
     invalidTitle: string; // token rejected (expired / already used / malformed)
     serverError: string; // 500: the link may already be spent with the account verified — never "invalid"
+    errPasswordMismatch: string; // 400 password_mismatch: nothing changed, the link still works
     backHome: string; // link back to the app
   };
   // /reset-password — landing page for the emailed reset link (?token=).

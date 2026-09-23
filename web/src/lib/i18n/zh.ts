@@ -493,6 +493,7 @@ const zh: Messages = {
     successBody: "邮箱验证成功，正在进入…",
     noToken: "链接无效。",
     invalidTitle: "链接无效或已过期",
+    errPasswordMismatch: "这不是你注册时设置的密码。什么都没有改变，这个链接仍然有效——请重试，或选择“我注册时没有设置密码”后继续。",
     serverError: "验证时出了问题，这个链接已不能再次使用。请先尝试登录；如果邮箱仍未验证，可在下方重新发送验证邮件。",
     backHome: "返回首页",
   },

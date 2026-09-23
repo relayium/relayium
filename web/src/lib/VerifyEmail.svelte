@@ -18,11 +18,17 @@
   // it, rather than a victim's click activating an attacker's password.
   let token = $state("");
   let password = $state("");
+  let mismatch = $state(false);
   let redirectTimer: ReturnType<typeof setTimeout> | undefined;
 
-  async function runVerify() {
+  // `withoutPassword` is the explicit "I signed up without a password" choice:
+  // only it sends an empty password, which is what lets the server drop the
+  // unconfirmed one. A typed password that does not match is refused with
+  // 400 password_mismatch and changes nothing, so the form stays.
+  async function runVerify(withoutPassword = false) {
     phase = "checking";
-    const res = await verifyEmail(token, password);
+    mismatch = false;
+    const res = await verifyEmail(token, withoutPassword ? "" : password);
     // POST /api/auth/email/verify (handlers.go handleVerifyEmail):
     //   200 {user}            → success (session cookie set)
     //   200 pending_deletion  → no session; hand the reactivate token to
@@ -41,6 +47,9 @@
       navigate("account-reactivate");
     } else if (res.error === "network") {
       phase = "network";
+    } else if (res.error === "password_mismatch") {
+      mismatch = true;
+      phase = "confirm";
     } else if (res.error === "invalid_token") {
       phase = "invalid";
     } else {
@@ -109,9 +118,10 @@
         <input class="ui-input" id="verify-password" type="password" name="password" autocomplete="current-password"
                bind:value={password} />
       </div>
+      {#if mismatch}<p class="hint" role="alert" data-testid="verify-mismatch">{t.verifyEmail.errPasswordMismatch}</p>{/if}
       <button type="submit" class="btn btn-primary auth-action">{t.verifyEmail.confirmBtn}</button>
     </form>
-    <button type="button" class="btn btn-link auth-link" onclick={() => runVerify()}>{t.verifyEmail.noPasswordLink}</button>
+    <button type="button" class="btn btn-link auth-link" onclick={() => runVerify(true)}>{t.verifyEmail.noPasswordLink}</button>
   {:else if phase === "no-token"}
     <button type="button" class="btn btn-ghost auth-action" onclick={() => navigate("lan")}>{t.verifyEmail.backHome}</button>
   {:else if phase === "invalid" || phase === "server-error"}
