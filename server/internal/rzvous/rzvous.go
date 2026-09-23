@@ -27,31 +27,13 @@ func (s *Session) PeerID() string { return s.peerID }
 
 // Join dials the rendezvous, announces the given nickname, and blocks until
 // exactly one peer shares the room. An empty code joins the LAN room.
+//
+// Signals that arrive before the peer is selected are discarded; JoinRoom is
+// the variant that captures them.
 func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
-	u, err := url.Parse(serverURL)
+	conn, err := dialRendezvous(ctx, serverURL, code)
 	if err != nil {
 		return nil, err
-	}
-	u.Path = "/ws"
-	if code != "" {
-		// Check the shape here, not just at the server: a code that cannot be a
-		// code (a made-up number, a typo'd character) costs a round trip only to
-		// come back as an opaque 403, and "expected handshake response status
-		// code 101 but got 403" tells the user nothing about what to type instead.
-		if !signal.ValidCodeFormat(code) {
-			// "issued by the server", not "issued by relayium.com": serverURL is
-			// whatever --server points at, so naming the first-party host tells a
-			// self-hoster their own instance's codes come from a service they
-			// deliberately are not using.
-			return nil, fmt.Errorf(
-				"pairing code %q is not a valid code: codes are %s, and are issued by the server — one cannot be made up",
-				code, signal.CodeFormatNote())
-		}
-		u.RawQuery = "code=" + url.QueryEscape(code)
-	}
-	conn, resp, err := websocket.Dial(ctx, u.String(), nil)
-	if err != nil {
-		return nil, dialError(err, resp)
 	}
 	s := &Session{conn: conn}
 	var roster []signal.Peer
@@ -96,6 +78,38 @@ func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
 			}
 		}
 	}
+}
+
+// dialRendezvous validates the code's shape and opens the WebSocket. Shared by
+// Join and JoinRoom so both refuse an impossible code before any round trip and
+// both explain a refused handshake the same way.
+func dialRendezvous(ctx context.Context, serverURL, code string) (*websocket.Conn, error) {
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	u.Path = "/ws"
+	if code != "" {
+		// Check the shape here, not just at the server: a code that cannot be a
+		// code (a made-up number, a typo'd character) costs a round trip only to
+		// come back as an opaque 403, and "expected handshake response status
+		// code 101 but got 403" tells the user nothing about what to type instead.
+		if !signal.ValidCodeFormat(code) {
+			// "issued by the server", not "issued by relayium.com": serverURL is
+			// whatever --server points at, so naming the first-party host tells a
+			// self-hoster their own instance's codes come from a service they
+			// deliberately are not using.
+			return nil, fmt.Errorf(
+				"pairing code %q is not a valid code: codes are %s, and are issued by the server — one cannot be made up",
+				code, signal.CodeFormatNote())
+		}
+		u.RawQuery = "code=" + url.QueryEscape(code)
+	}
+	conn, resp, err := websocket.Dial(ctx, u.String(), nil)
+	if err != nil {
+		return nil, dialError(err, resp)
+	}
+	return conn, nil
 }
 
 // dialError turns a failed rendezvous handshake into something the user can act

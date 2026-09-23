@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -379,5 +380,115 @@ func TestDoHandshakeQuotesAnUnexpectedKind(t *testing.T) {
 	}
 	if strings.Contains(got.Error(), "\x1b") || !strings.Contains(got.Error(), `"reveal\x1b[2J"`) {
 		t.Fatalf("kind must be quoted, got %q", got.Error())
+	}
+}
+
+// DoHandshakeFromPeerCommit against the unchanged DoHandshake, with the commit
+// read by the caller after an ordinary Join (the discovery layer's case: it
+// reads the first signal to learn which wire the peer speaks, then hands it
+// over). Both modes, and both TLS roles for the new side.
+func TestDoHandshakeFromPeerCommitInteroperatesWithDoHandshake(t *testing.T) {
+	for _, mode := range []string{ModeFile, ModeText} {
+		for _, newIsA := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/newIsA=%v", mode, newIsA), func(t *testing.T) {
+				base := startHub(t)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				aCh := make(chan *Session, 1)
+				go func() { s, _ := Join(ctx, base, "", "a"); aCh <- s }()
+				b, err := Join(ctx, base, "", "b")
+				if err != nil {
+					t.Fatalf("join b: %v", err)
+				}
+				a := <-aCh
+				defer a.Close()
+				defer b.Close()
+				oldS, newS := b, a
+				if !newIsA {
+					oldS, newS = a, b
+				}
+				idOld, _ := secure.NewIdentity()
+				idNew, _ := secure.NewIdentity()
+
+				type res struct {
+					h   *Handshake
+					err error
+				}
+				ch := make(chan res, 1)
+				go func() {
+					h, err := DoHandshake(ctx, oldS, idOld, []string{"1.1.1.1:1"}, mode)
+					ch <- res{h, err}
+				}()
+				first, err := newS.RecvSignal(ctx)
+				if err != nil {
+					t.Fatalf("recv first: %v", err)
+				}
+				hn, err := DoHandshakeFromPeerCommit(ctx, newS, idNew, []string{"2.2.2.2:2"}, mode, first)
+				if err != nil {
+					t.Fatalf("new side: %v", err)
+				}
+				ro := <-ch
+				if ro.err != nil {
+					t.Fatalf("old side: %v", ro.err)
+				}
+				if ro.h.SAS != hn.SAS || ro.h.PeerFingerprint != idNew.Fingerprint || hn.PeerFingerprint != idOld.Fingerprint {
+					t.Fatal("SAS or pinned fingerprints disagree")
+				}
+				if ro.h.IsServer == hn.IsServer {
+					t.Fatal("both peers picked the same TLS role")
+				}
+				if !ModeCompatible(mode, hn.PeerMode) || !ModeCompatible(mode, ro.h.PeerMode) {
+					t.Fatalf("modes: new saw %q, old saw %q", hn.PeerMode, ro.h.PeerMode)
+				}
+			})
+		}
+	}
+}
+
+// The first signal is judged by DoHandshake's own rules, and a refused one
+// gets no answer on the wire at all.
+func TestDoHandshakeFromPeerCommitRefusesBeforeSpeaking(t *testing.T) {
+	for name, tc := range map[string]struct {
+		first  string
+		notCLI bool
+		quoted string
+	}{
+		"caps hello":        {first: `{"caps":["link/1"]}`, notCLI: true},
+		"app commit":        {first: `{"commit":"AAAA"}`, notCLI: true},
+		"not json":          {first: `nope`, notCLI: true},
+		"reveal first":      {first: `{"kind":"reveal"}`, quoted: `"reveal"`},
+		"commit not base64": {first: `{"kind":"commit","commit":"%%%"}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			base := startHub(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			aCh := make(chan *Session, 1)
+			go func() { s, _ := Join(ctx, base, "", "a"); aCh <- s }()
+			b, err := Join(ctx, base, "", "b")
+			if err != nil {
+				t.Fatalf("join b: %v", err)
+			}
+			a := <-aCh
+			defer a.Close()
+			defer b.Close()
+			id, _ := secure.NewIdentity()
+
+			h, err := DoHandshakeFromPeerCommit(ctx, b, id, nil, ModeFile, json.RawMessage(tc.first))
+			if h != nil || err == nil {
+				t.Fatalf("accepted %s: %+v", tc.first, h)
+			}
+			if errors.Is(err, ErrPeerNotCLI) != tc.notCLI {
+				t.Fatalf("err = %v, notCLI want %v", err, tc.notCLI)
+			}
+			if tc.quoted != "" && !strings.Contains(err.Error(), tc.quoted) {
+				t.Fatalf("err = %v, want it to quote %s", err, tc.quoted)
+			}
+			quiet, stop := context.WithTimeout(ctx, 300*time.Millisecond)
+			defer stop()
+			if got, err := a.RecvSignal(quiet); err == nil {
+				t.Fatalf("refusing side still sent %s", got)
+			}
+		})
 	}
 }
