@@ -298,8 +298,10 @@ final class SharedDraftAdoptionTests: XCTestCase {
         await waitUntil { !send.sharedDrafts.isEmpty }
         XCTAssertEqual(send.sharedDrafts.map(\.id), [plan.id])
 
-        // And it stays a pure read: nothing is adopted, selected or uploaded by
-        // the app simply being brought forward.
+        // And with no arrival ledger — this model is built without one, which
+        // switches automatic loading off — it stays a pure read: nothing is
+        // adopted, selected or uploaded by the app simply being brought
+        // forward. What a ledger adds is `SharedDraftArrivalTests`'.
         XCTAssertNil(send.adoptedDraft)
         XCTAssertNil(upload.sourceDraftId)
         XCTAssertEqual(upload.state, .idle)

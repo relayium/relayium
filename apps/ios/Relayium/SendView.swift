@@ -85,7 +85,9 @@ struct SendView: View {
         // SwiftUI may have torn this view down in the meantime. The scene root
         // refreshes too, on every activation, which is what covers the user who
         // shares a file and then switches back to a Relayium that was already
-        // running with this tab on screen.
+        // running with this tab on screen. This read only ever LISTS: loading a
+        // newly shared draft by itself is reserved to the scene becoming
+        // active, and a tab appearing is not the user coming back.
         .task { selection.refreshSharedDrafts() }
     }
 

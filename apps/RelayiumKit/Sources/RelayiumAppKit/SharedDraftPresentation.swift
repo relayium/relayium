@@ -105,3 +105,59 @@ public enum SharedDraftGate {
                language: language)
     }
 }
+
+/// What the send model tells the shell about shared-draft arrivals.
+public enum SharedDraftArrivalSignal: Equatable, Sendable {
+    /// A newly shared draft was loaded into the Send selection without a tap.
+    case draftLoaded
+    /// The scene went to the background.
+    case leftForeground
+}
+
+/// Whether loading a newly shared draft may ALSO bring the Send tab forward.
+///
+/// Loading is safe on its own — it only fills an empty Send screen. Moving the
+/// user is not: they may have opened the app through a link, or tapped a tab,
+/// after the share and before the inbox was read. So the tab moves only when
+/// nothing has chosen a destination since the app last left the foreground:
+///
+///  - no link is waiting to be delivered;
+///  - `AppNavigationModel.selectionWrites` has not moved since then. Every
+///    link delivery and every tab or sidebar choice goes through `select`, so
+///    this catches a link that was delivered and consumed as well as one still
+///    pending, in whichever order the system reported the link and the scene;
+///  - the stored-receive sheet is not up, because that is a surface the user
+///    was in the middle of rather than a tab they happened to be on.
+///
+/// Any doubt leaves the user where they are. The draft is still loaded, and
+/// the Send tab shows it when they get there.
+public struct SharedDraftArrivalNavigation: Equatable, Sendable {
+    private var baseline: Int
+
+    /// `selectionWrites` at the point the app was constructed, which is zero:
+    /// nothing has navigated before the first frame.
+    public init(selectionWrites: Int = 0) {
+        baseline = selectionWrites
+    }
+
+    /// Apply a signal. Returns true when the caller should select Send.
+    public mutating func handle(_ signal: SharedDraftArrivalSignal,
+                                selectionWrites: Int,
+                                current: AppDestination,
+                                linkPending: Bool) -> Bool {
+        switch signal {
+        case .leftForeground:
+            baseline = selectionWrites
+            return false
+        case .draftLoaded:
+            guard !linkPending, selectionWrites == baseline, current != .storedReceive else {
+                return false
+            }
+            let moves = current != .storedSend
+            // The caller's own `select` is not the user's choice, so it must
+            // not count as one against a later arrival in this same stint.
+            baseline = selectionWrites + (moves ? 1 : 0)
+            return moves
+        }
+    }
+}

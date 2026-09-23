@@ -481,6 +481,26 @@ enum UITestMode {
         return defaults
     }
 
+    /// The defaults domain the shared-draft arrival ledger may use.
+    ///
+    /// The ledger is what decides whether a draft waiting in the App Group is
+    /// loaded on its own, and it remembers every draft it has considered. An
+    /// acceptance launch that wrote into the product's own defaults would
+    /// change which of the operator's real drafts the installed app later
+    /// treats as new — and one that inherited them would judge this run by
+    /// whatever the last one left. A suite of this launch's own, removed first,
+    /// exactly like `inboxDefaults` and for the same reason; the product's
+    /// domain is never read, written or cleared from here.
+    static func arrivalDefaults() -> UserDefaults? {
+        // nonlocalized: a defaults suite name, never displayed. A private
+        // namespace beside `inboxDefaults`'s, and deliberately not the same
+        // one: clearing either on entry must not reset the other.
+        let suite = "com.relayium.app.uitest-share-arrivals"
+        guard isActive, let defaults = UserDefaults(suiteName: suite) else { return nil }
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }
+
     /// A receive directory of this launch's own.
     ///
     /// The product receives into `Documents/Received`, which is also where a
@@ -719,6 +739,11 @@ enum UITestMode {
     /// nil, so a shipped launch always keeps the user's receiving consent in the
     /// domain the product reads it from.
     static func inboxDefaults() -> UserDefaults? { nil }
+
+    /// nil, so a shipped launch always remembers which shared drafts it has
+    /// considered in the product's own defaults, and no argument can point that
+    /// memory anywhere else.
+    static func arrivalDefaults() -> UserDefaults? { nil }
 
     /// nil, so a shipped launch always receives into the one folder it publishes
     /// to the Files app, and no argument can redirect a delivery.

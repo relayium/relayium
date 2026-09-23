@@ -354,7 +354,11 @@ struct RelayiumApp: App {
         leaving.observe(managing.$needsSignOut)
         _signOut = StateObject(wrappedValue: leaving)
         _upload = StateObject(wrappedValue: uploads)
-        let sending = AppEnvironment.makeSendSelectionModel(upload: uploads, drafts: drafts)
+        // Its arrival ledger lives in the product's own defaults, except in an
+        // acceptance launch, which gets a private suite of its own so a UI run
+        // neither reads nor rewrites which real drafts count as new.
+        let sending = AppEnvironment.makeSendSelectionModel(upload: uploads, drafts: drafts,
+                                                            arrivalDefaults: UITestMode.arrivalDefaults())
         // App-scoped, for the model's whole life, and BEFORE any view exists.
         // A `.task` inside SendView would not do: SwiftUI mounts a TabView's
         // tabs lazily and may tear down an off-screen one, so a user who signs
@@ -784,9 +788,11 @@ struct RelayiumApp: App {
                     // lets do that — so what brings a staged draft onto the Send
                     // tab is the user coming back to Relayium, which is this.
                     // The phase is reported and nothing more: whether `.active`
-                    // means "re-read the App Group inbox", and whether
-                    // `.inactive` does, is `SendSelectionModel`'s decision, and
-                    // `SharedDraftAdoptionTests` drives it.
+                    // means "re-read the App Group inbox" — and whether a single
+                    // newly shared draft is then loaded into an empty Send
+                    // screen — is `SendSelectionModel`'s decision, and
+                    // `SharedDraftAdoptionTests`/`SharedDraftArrivalTests`
+                    // drive it. Nothing here or there ever sends.
                     send.phaseChanged(to: lifecycle(phase))
                     // **The Device Inbox receiver is foreground-only, and this
                     // is where that is enforced rather than merely stated.**
@@ -845,7 +851,9 @@ struct RelayiumApp: App {
                     // screen. `onChange` fires on a CHANGE and the scene is
                     // already `.active` when it first appears, so without this a
                     // draft staged before launch would not appear until the app
-                    // had been backgrounded and brought forward again.
+                    // had been backgrounded and brought forward again. On this
+                    // launch the session is usually still restoring; the model
+                    // waits for that and for recovery before judging arrivals.
                     send.phaseChanged(to: .active)
                 }
                 // A Universal Link the OS verified against relayium.com, at the

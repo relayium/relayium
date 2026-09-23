@@ -1725,14 +1725,23 @@ public enum AppEnvironment {
     /// tests can gate the response and land it at a chosen moment — the case that
     /// matters is a response arriving after the account that asked for it is
     /// gone, and that cannot be staged against a real `URLSession`.
+    ///
+    /// With a draft store, the model also loads a single newly shared draft
+    /// into an empty Send screen when the user comes back, and remembers which
+    /// drafts it has considered in `arrivalDefaults` — this app's own
+    /// `persistentDefaults` unless a test supplies a private suite. Without a
+    /// store there is nothing to arrive, and no ledger is made.
     @MainActor
     public static func makeSendSelectionModel(baseURL: URL = transferBaseURL,
                                               upload: CloudUploadModel,
-                                              drafts: SharedDraftStore? = nil) -> SendSelectionModel {
+                                              drafts: SharedDraftStore? = nil,
+                                              arrivalDefaults: UserDefaults? = nil) -> SendSelectionModel {
         let client = CloudClient(baseURL: baseURL)
         return SendSelectionModel(upload: upload,
                                   drafts: drafts,
-                                  fetchConfig: { try await client.fetchConfig() })
+                                  fetchConfig: { try await client.fetchConfig() },
+                                  arrivals: drafts == nil ? nil : SharedDraftArrivalLedger(
+                                      defaults: arrivalDefaults ?? persistentDefaults))
     }
 
     /// `transport` exists for the same reason as `makeSession`'s: this model

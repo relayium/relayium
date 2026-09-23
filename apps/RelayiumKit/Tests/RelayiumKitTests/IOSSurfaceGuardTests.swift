@@ -2962,8 +2962,59 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // them was pointed somewhere else.
         XCTAssertEqual(app.text.components(separatedBy: "makeSharedDraftStore()").count - 1, 1,
                        "a second draft store would be a second answer to what is waiting")
-        XCTAssertTrue(app.text.contains("makeSendSelectionModel(upload: uploads, drafts: drafts)"),
+        // The call's argument list may grow (its arrival ledger's defaults are
+        // passed after the store — see the next test), so the pin is the call
+        // and the store it carries, not the closing parenthesis.
+        XCTAssertEqual(app.text.components(separatedBy: "makeSendSelectionModel(").count - 1, 1,
+                       "a second send model would be a second judge of what is waiting")
+        XCTAssertTrue(app.text.contains("makeSendSelectionModel(upload: uploads, drafts: drafts,"),
                       "the send model must take the SAME store the upload model retires through")
+    }
+
+    /// The shared-draft arrival ledger remembers which of the drafts waiting in
+    /// the App Group count as new, and an acceptance launch must neither read
+    /// nor rewrite the product's memory of that.
+    ///
+    /// Four halves, each of which fails on its own: the app passes the
+    /// acceptance suite to the ONE send model; the Debug suite is private,
+    /// scoped to an acceptance launch, cleared on entry and not the Device
+    /// Inbox's; the Release answer is nil; and nil means the product's own
+    /// defaults — so a shipped build keeps its memory where it always was.
+    func testUITestLaunchesKeepSharedDraftArrivalsInAPrivateSuite() throws {
+        let all = try sources()
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" }?.text)
+        let mode = try XCTUnwrap(all.first { $0.name == "UITestMode.swift" }?.text)
+        XCTAssertTrue(app.filter { !$0.isWhitespace }.contains(
+            "makeSendSelectionModel(upload:uploads,drafts:drafts,arrivalDefaults:UITestMode.arrivalDefaults())"),
+                      "the send model's arrival ledger is not given the acceptance suite")
+
+        let halves = mode.components(separatedBy: "#else")
+        XCTAssertEqual(halves.count, 2, "UITestMode lost its Debug/Release split")
+        let debugHalf = try XCTUnwrap(halves.first)
+        let releaseHalf = try XCTUnwrap(halves.last)
+        let seam = try XCTUnwrap(debugHalf.components(
+            separatedBy: "static func arrivalDefaults() -> UserDefaults? {")
+            .dropFirst().first?.components(separatedBy: "\n    }").first?
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n"),
+            "the acceptance arrival suite is not in the Debug half")
+        XCTAssertTrue(seam.contains("let suite = \"com.relayium.app.uitest-share-arrivals\""),
+                      "the acceptance arrival suite is not a private namespace of its own")
+        XCTAssertTrue(seam.contains("guard isActive, let defaults = UserDefaults(suiteName: suite)"),
+                      "the arrival suite is reachable outside an acceptance launch")
+        XCTAssertTrue(seam.contains("defaults.removePersistentDomain(forName: suite)"),
+                      "one acceptance run inherits the arrivals another left behind")
+        for forbidden in [".standard", "persistentDefaults", "uitest-inbox", "suiteName: nil"] {
+            XCTAssertFalse(seam.contains(forbidden),
+                           "the acceptance arrival suite reaches a domain it does not own: \(forbidden)")
+        }
+        XCTAssertTrue(releaseHalf.contains("static func arrivalDefaults() -> UserDefaults? { nil }"),
+                      "a shipped build can be pointed at another arrival memory")
+
+        let environment = try code(at: try appKitRoot.appendingPathComponent("AppEnvironment.swift"))
+        XCTAssertTrue(environment.contains("defaults: arrivalDefaults ?? persistentDefaults"),
+                      "without a suite the ledger no longer lives in the product's own defaults")
     }
 
     /// **The share extension's hand-off is the scene becoming active, and it is

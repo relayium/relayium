@@ -15,7 +15,9 @@ import Foundation
 /// Share Extension and is not a supported hand-off, so this extension does not
 /// make it. What it does instead is finish the copy, say so, and let the user
 /// open Relayium — which is the mechanism Apple actually supports, and which is
-/// why `SendSelectionModel.refreshSharedDrafts` runs on scene activation.
+/// why `SendSelectionModel.phaseChanged(to: .active)` re-reads the inbox and,
+/// when exactly one draft is new and the Send screen is empty, loads it (never
+/// sends it).
 @MainActor
 public protocol SharedDraftHost: AnyObject {
     /// `completeRequest(returningItems:completionHandler:)`. The extension
