@@ -171,6 +171,54 @@ public final class SelectionStore: ObservableObject {
         revision += 1
     }
 
+    /// Take the upload model's selection as this store's own, when the two
+    /// have come apart (A32 M2).
+    ///
+    /// The Stored Send pane owns this store as view state, and the macOS shell
+    /// draws that pane inside a switch arm — so leaving the destination and
+    /// coming back builds an EMPTY store beside a model still holding
+    /// `.picked`. That pane then hid Clear (nothing in the store to clear) and
+    /// the next pick or drop pushed only the new files, silently replacing the
+    /// draft or the files chosen before. The model is the one that outlives the
+    /// view, so the store follows it.
+    ///
+    /// Only the two choosing states are mirrored. A running, finished or failed
+    /// upload is drawn from the model's own `sessionFiles`, and a store that
+    /// kept a refused selection beside a failure is what lets the user see why.
+    ///
+    /// Silent: `revision` does not move, because nothing new was chosen — the
+    /// pane's push to the model must not fire for a value the model already has.
+    /// The roots are rebuilt from each file's `relativePath`, so a folder
+    /// becomes that folder again and a later `add` re-expands it whole rather
+    /// than as a flat list of its files.
+    public func mirror(_ state: UploadState) {
+        let files: [SelectedFile]
+        switch state {
+        case .idle: files = []
+        case let .picked(picked): files = picked
+        default: return
+        }
+        guard files != self.files || (files.isEmpty && !roots.isEmpty) else { return }
+        roots = Self.roots(of: files)
+        selection = files.isEmpty ? nil : FileSelection(files: files, emptyDirectories: [])
+        error = nil
+    }
+
+    /// The roots an expanded selection came from: a bare file is its own root,
+    /// and a nested file's root is the folder its `relativePath` starts with.
+    /// In first-seen order, de-duplicated.
+    public static func roots(of files: [SelectedFile]) -> [URL] {
+        var roots: [URL] = []
+        var seen = Set<String>()
+        for file in files {
+            let depth = file.relativePath.split(separator: "/").count - 1
+            var root = file.url
+            for _ in 0..<max(depth, 0) { root.deleteLastPathComponent() }
+            if seen.insert(root.standardizedFileURL.path).inserted { roots.append(root) }
+        }
+        return roots
+    }
+
     private func reload() {
         defer { revision += 1 }
         guard !roots.isEmpty else {

@@ -821,6 +821,18 @@ struct RelayiumApp: App {
                     guard subscriptionAccountID != nil else { return }
                     await appleSubscription?.reconcileUnfinishedTransactions()
                 }
+                // A32 M4: a different account must not inherit what the previous
+                // one chose — a Share-extension draft included. Keyed on the same
+                // ready identity; the coordinator ignores `nil` and the first
+                // identity it sees, so a launch restoring its own session keeps a
+                // draft adopted before the keychain answered. Drafts stay adopted
+                // in `SharedDraftInbox` for this session, so the next account is
+                // not offered them again; they retire next launch as before.
+                .task(id: subscriptionAccountID) {
+                    if fileOpenRouting.accountDidChange(to: subscriptionAccountID) {
+                        uploadModel.forgetSelectionForAccountChange()
+                    }
+                }
                 // Files the Share extension staged while this app was closed or
                 // in the background.
                 //

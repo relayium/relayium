@@ -1687,6 +1687,64 @@ final class AppShellUITests: XCTestCase {
                       "the stored send omitted the formatted file size")
     }
 
+    /// **A selection survives leaving Stored Send and coming back (A32 M2).**
+    ///
+    /// The pane's selection store is view state inside the shell's destination
+    /// switch, so coming back used to build an empty store beside a model that
+    /// still held the files: Clear disappeared, and the next pick silently
+    /// replaced everything chosen before — a shared draft included. Now the
+    /// pane takes the model's selection on appear.
+    func testAStoredSendSelectionCanBeExtendedAndClearedAfterLeavingAndReturning() throws {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let send = sidebarDestination("Share a link", in: window)
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.click()
+
+        let first = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium first \(UUID().uuidString).txt")
+        let second = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium second \(UUID().uuidString).txt")
+        try Data(repeating: 0x52, count: 512).write(to: first, options: .atomic)
+        try Data(repeating: 0x53, count: 512).write(to: second, options: .atomic)
+        pendingFileFixture = first
+        addTeardownBlock { try? FileManager.default.removeItem(at: second) }
+
+        chooseFixture(first, in: window)
+        let row0 = window.descendants(matching: .any)["pendingFile.0"].firstMatch
+        XCTAssertTrue(row0.waitForExistence(timeout: 10))
+
+        // Away and back: the pane, and its store, are rebuilt.
+        let account = sidebarDestination("Account", in: window)
+        XCTAssertTrue(account.waitForExistence(timeout: 10))
+        account.click()
+        send.click()
+
+        XCTAssertTrue(row0.waitForExistence(timeout: 10),
+                      "the chosen file vanished after leaving and returning")
+        XCTAssertTrue(window.buttons["Clear"].waitForExistence(timeout: 10),
+                      "the returned-to selection cannot be removed")
+
+        chooseFixture(second, in: window)
+        let row1 = window.descendants(matching: .any)["pendingFile.1"].firstMatch
+        XCTAssertTrue(row1.waitForExistence(timeout: 10),
+                      "the next pick replaced the earlier selection instead of joining it")
+        let names = [row0.label, row1.label].joined(separator: " ")
+        XCTAssertTrue(names.contains(first.lastPathComponent)
+                      && names.contains(second.lastPathComponent),
+                      "the selection does not name both files: \(names)")
+
+        window.buttons["Clear"].click()
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: row0, handler: nil)
+        waitForExpectations(timeout: 10)
+    }
+
     /// A stored send that finishes hands the result over, and offers the way to
     /// start another.
     ///

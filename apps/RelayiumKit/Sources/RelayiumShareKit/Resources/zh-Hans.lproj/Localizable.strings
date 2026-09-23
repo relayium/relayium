@@ -387,6 +387,11 @@
 "nearby.incomingAccept" = "接受";
 "nearby.incomingDecline" = "拒绝";
 /* End A23-A25. */
+/* A32: files the OS handed over wait instead of displacing a result or a session. */
+"storedSend.filesWaiting" = "有文件正在等待以链接发送。";
+"storedSend.filesWaitingShow" = "查看";
+"storedSend.filesWaitingNext" = "还有文件在等待，开始下一次发送时会加入。";
+/* End A32. */
 "nearby.iosReconnecting" = "与本地网络的连接已断开，正在重新连接…";
 
 /* MARK: 拖放区、选择器、接收结果、二维码 */

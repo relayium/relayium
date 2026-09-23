@@ -54,6 +54,37 @@ struct AppShellView: View {
     /// Where AppKit put the traffic lights, so the drawn chrome lines up.
     @State private var controls = WindowControlsMetrics()
 
+    /// Whether the destination on screen is a transfer module holding a live or
+    /// retained session — the one place an opened batch must not navigate from.
+    private var showsLiveSession: Bool {
+        modules.module(for: navigation.selection)?.sessionIsLiveOrRetained ?? false
+    }
+
+    /// The batch waiting in a destination other than the one on screen.
+    @ViewBuilder
+    private var waitingFilesIndicator: some View {
+        if let staged = fileOpenRouting.staged, staged.destination != navigation.selection {
+            HStack(spacing: 12) {
+                Label(L10n.t(.storedSendFilesWaiting), systemImage: "doc.badge.clock")
+                    .font(.callout)
+                    .foregroundStyle(Palette.text)
+                Spacer(minLength: 8)
+                Button(L10n.t(.storedSendFilesWaitingShow)) {
+                    navigation.select(staged.destination)
+                }
+                .buttonStyle(.referenceSecondary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(Palette.cardBackground)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Palette.hairline).frame(height: 1)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("shell.filesWaiting")
+        }
+    }
+
     var body: some View {
         // **A flat split rather than `NavigationSplitView`.** The reference is
         // a full-height 216pt sidebar in its own colour, flush with the window
@@ -100,6 +131,11 @@ struct AppShellView: View {
             .accessibilityIdentifier("destination-\(navigation.selection.macSurface.rawValue)")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Palette.pageBackground)
+            // A batch staged without navigating (A32 M3), or left behind when
+            // the user walked away from the send flow it waits in. Drawn over
+            // the detail column rather than inside any destination, so no
+            // transfer screen has to know opened files exist.
+            .safeAreaInset(edge: .bottom, spacing: 0) { waitingFilesIndicator }
         }
         // Under the transparent title bar, so the sidebar colour and the
         // toolbar run to the window's top edge as they do in the reference.
@@ -172,7 +208,12 @@ struct AppShellView: View {
         // than one, so a batch that arrives while the window is closed is still
         // routed the moment this subscription is rebuilt.
         .onReceive(fileOpens.$pending.compactMap { $0 }) { urls in
-            fileOpenRouting.deliver(urls)
+            // A32 M3: never move the user off a transfer session that is live or
+            // retained on the screen they are looking at. Share-extension drafts
+            // are collected on every activation, so without this, coming back
+            // to a running LAN or cross-network session could land them on the
+            // send flow instead. Staged either way; the indicator says where.
+            fileOpenRouting.deliver(urls, keepsLiveSession: showsLiveSession)
             Task { @MainActor in fileOpens.consume(urls) }
         }
         // **No `activeKind` task.**

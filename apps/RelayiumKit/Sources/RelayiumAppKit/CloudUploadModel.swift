@@ -140,6 +140,43 @@ public final class CloudUploadModel: ObservableObject {
         }
     }
 
+    /// Whether files the OS handed this app — a Finder Open With, a Dock drop, a
+    /// Share-extension draft — may join the selection right now (A32 M1).
+    ///
+    /// Narrower than `!isBusy`, and the difference is the defect it fixes:
+    /// `.done` is not busy, but adopting there runs `pick`, which replaces the
+    /// finished link — and the only on-screen copy of its key — with a new
+    /// selection. A `.failed` card would be replaced the same way. Only the two
+    /// choosing states take files; anything else leaves the batch waiting, and
+    /// "Send another" or "Try again" is what brings the pane back to one of them.
+    public var acceptsOpenedFiles: Bool {
+        switch state {
+        case .idle, .picked: return true
+        default: return false
+        }
+    }
+
+    /// A different account is now signed in (A32 M4): nothing the previous one
+    /// chose may carry into it.
+    ///
+    /// The choosing states are cleared outright. A running upload and a finished
+    /// link are left on screen — cancelling bytes in flight, or hiding the only
+    /// copy of a key, is not this event's to decide — but `lastPicked` is
+    /// forgotten in every state, because it is what "Send another", "Try again"
+    /// and a cancel restore, and restoring it would put the previous account's
+    /// files straight back into this one's selection.
+    public func forgetSelectionForAccountChange() {
+        lastPicked = []
+        switch state {
+        case .idle, .picked, .failed:
+            generation += 1
+            sessionFiles = []
+            state = .idle
+        default:
+            return
+        }
+    }
+
     /// Exposed for the superseded-callback test; nothing else should read it.
     var currentGeneration: Int { generation }
 
