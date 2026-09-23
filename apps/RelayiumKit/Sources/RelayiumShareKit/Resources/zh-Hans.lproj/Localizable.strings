@@ -1096,3 +1096,26 @@
 "inbox.checkNothingNew" = "暂无新内容。发送方上传完成后，投递才会出现在这里。";
 "inbox.checkDone" = "检查完成。";
 "inbox.checkFailed" = "检查未完成，原因见上方状态。";
+
+/* MARK: A17-A19 iOS browser sign-in, password reset request, version support */
+"login.browserHint" = "账户没有设置密码？请在 relayium.com 登录，并在那里批准这台设备。";
+"login.browserWaiting" = "正在等待你在浏览器中批准这台设备…";
+"login.forgotPassword" = "忘记密码？";
+"login.resetTitle" = "重设密码";
+"login.resetBody" = "输入你用于登录的邮箱地址。我们会发送一个链接，打开后在 relayium.com 上设置新密码。";
+"login.resetSend" = "发送重设链接";
+"login.resetSending" = "正在发送…";
+"login.resetRequested" = "如果 %@ 对应一个账户，重设链接已在发送途中。请在任意设备上打开它并设置新密码，然后回到这里用新密码登录。每个链接只能使用一次且会过期；如果链接已失效，请在这里重新申请。";
+"version.title" = "应用版本";
+"version.current" = "版本 %@（%@）";
+"version.channelAppStore" = "通过 App Store 安装";
+"version.channelTestFlight" = "通过 TestFlight 安装";
+"version.channelDevelopment" = "开发版本——此处不提供更新";
+"version.stateCurrent" = "此安装方式目前没有更新的版本。";
+"version.stateAvailable" = "版本 %@ 已可更新。";
+"version.stateRecommended" = "建议更新到版本 %@。";
+"version.stateRequired" = "此版本已不再受支持。请更新到版本 %@，以便继续与其他 Relayium 应用正常传输。";
+"version.stateUnknown" = "此版本无法读取自身版本号，因此不提供更新。";
+"version.updateAppStore" = "在 App Store 中更新";
+"version.updateTestFlight" = "打开 TestFlight";
+"version.testFlightUnavailable" = "无法打开 TestFlight。请先从 App Store 安装 TestFlight，然后重试。";

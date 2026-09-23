@@ -482,7 +482,12 @@ final class IOSSupportingTextGuardTests: XCTestCase {
         // The Inbox message composer's exact-bytes line (left / over the
         // limit) adds two: the rounded size line and the bytes-left line under
         // the field.
-        XCTAssertEqual(supporting, 120,
+        //
+        // A17-A19 (2026-09-23) moves it to 125. Five are A17-A19's own: the
+        // browser sign-in hint on the form, the reset sheet's explanation, and
+        // the version card's install-channel line and its two no-offer
+        // sentences.
+        XCTAssertEqual(supporting, 125,
                        "the supporting role should reach every one of the sentences the "
                        + "audit counted across both targets, plus the two disclosure tints")
         // The over-limit byte counter, the not-sent label, and the three

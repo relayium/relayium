@@ -703,7 +703,12 @@ final class IOSPrivacyManifestTests: XCTestCase {
     /// the moment somebody wired one of them up from an iOS screen.
     ///
     ///  1. `HTTPDeviceAuthClient.start` posts `install_id` when a BROWSER
-    ///     sign-in begins. There is no browser sign-in on iOS.
+    ///     sign-in begins — on macOS. iOS has had a browser sign-in since A17,
+    ///     and it is built by `AppEnvironment.makeIOSBrowserLoginModel`, which
+    ///     passes `installationID: nil`: the start request is the bodyless POST
+    ///     every CLI sends. Both halves are asserted below, and
+    ///     `BrowserLoginModelTests.testTheIOSFactorySendsNoInstallationHint`
+    ///     proves the wire.
     ///  2. `purchase-dispatch`/`purchase-outcome` can carry an `appInstanceId`.
     ///     **This app does reach `purchase-dispatch`**, so "iOS never calls it"
     ///     would be the wrong proof and would fail on a correct build. The
@@ -764,6 +769,23 @@ final class IOSPrivacyManifestTests: XCTestCase {
                        + "continuation; iOS may now send one unconditionally")
         XCTAssertTrue(billing.contains("continuationProtocol: continuation == nil ? nil :"),
                       "the continuation fields are no longer omitted when there is no capability")
+
+        // The iOS browser sign-in exists, and it is built by the factory that
+        // sends no hint — never the macOS one that resolves an identity.
+        XCTAssertTrue(iosApp.contains("AppEnvironment.makeIOSBrowserLoginModel("),
+                      "the iOS browser sign-in is no longer built by the no-hint factory")
+        XCTAssertFalse(iosApp.contains("makeBrowserLoginModel("),
+                       "iOS builds the macOS browser model, which posts install_id")
+        let environment = try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumAppKit/AppEnvironment.swift")
+        guard let factory = environment.range(of: "public static func makeIOSBrowserLoginModel("),
+              let end = environment.range(of: "\n    }\n", range: factory.upperBound..<environment.endIndex)
+        else { return XCTFail("the iOS browser factory is gone") }
+        let body = environment[factory.upperBound..<end.lowerBound]
+        XCTAssertTrue(body.contains("installationID: nil"),
+                      "the iOS browser factory now sends an installation identifier; declare "
+                       + "\(absentDeviceIDType) and re-audit")
+        XCTAssertFalse(body.contains("InstallationIdentityProvider"),
+                       "the iOS browser factory resolves an installation identity")
 
         // The install_id producer still exists in the module that owns it. If it
         // were deleted outright, the loop above would keep passing over source

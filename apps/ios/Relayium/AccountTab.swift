@@ -20,11 +20,21 @@ struct AccountTab: View {
     @EnvironmentObject private var session: AccountSession
     @Environment(\.openURL) private var openURL
     let onOpenStoredLink: (String) -> Void
+    /// This build's version support (A19). Owned here, beside the one surface
+    /// that shows it, and built with no account dependency: the policy route is
+    /// anonymous, so the card is the same signed in or not.
+    @StateObject private var versionSupport = AppEnvironment.makeIOSVersionSupportModel(
+        channel: .current,
+        // An acceptance launch keeps the policy cache out of the product's
+        // defaults, like every other store it touches.
+        defaults: UITestMode.isActive ? UserDefaults(suiteName: "relayium.uitest.iosVersionPolicy") : nil, // nonlocalized: a defaults suite name
+        transport: UITestMode.makeAccountTransport())
 
     var body: some View {
         NavigationStack {
             DestinationPage {
                 content
+                VersionSupportCard(model: versionSupport)
             }
             .navigationTitle(L10n.t(.tabAccount))
         }

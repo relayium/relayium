@@ -1505,8 +1505,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // said. `StoreKitLinkageTests` reads the whole tree and both Xcode
         // projects instead. The positive iOS ownership and observation wiring
         // is asserted immediately below this test.
+        //
+        // **`BrowserLoginModel` LEFT this list with A17 (2026-09-23)**, for the
+        // reason `CloudUploadModel` left it in R3-C: this is the slice that
+        // ships it. It was banned while iOS had no browser sign-in, which left a
+        // passwordless, non-Apple account with no way in at all (iOS audit O1).
+        // What replaces the ban is narrower and stronger than an absence:
+        // `testBrowserSignInIsTheDeviceFlowInAnInAppSheetWithNoInstallationHint`
+        // pins the ONE construction site (the iOS factory, which sends no
+        // `install_id`), the one presenter, the cancel-on-dismiss wiring and the
+        // single `adoptBearer` hand-off inside the model's current-run callback;
+        // `BrowserLoginModelTests` drives the late-token, cancel and supersede
+        // races against the model itself; and `IOSPrivacyManifestTests` keeps
+        // the no-Device-ID declaration true.
         let deferred = [
-            "BrowserLoginModel",
             "acceptNearby", "NearbyError",
             "UNUserNotificationCenter",
             "NSWorkspace",
@@ -1958,15 +1970,146 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// A second importer would be a second place an Apple authorization can
     /// start, and the nonce that binds one attempt is `SignInView`'s own state:
     /// an authorization begun anywhere else could not be checked against it.
+    ///
+    /// **One deliberate exception since A17:** `BrowserSignInPresenter.swift`
+    /// imports the framework for `ASWebAuthenticationSession` — the in-app
+    /// browser sheet the device-flow sign-in shows — and for nothing else. It
+    /// may name no Apple ID type, so it still cannot start an Apple
+    /// authorization; the nonce rule above is untouched.
     func testOnlyTheFormImportsAuthenticationServices() throws {
+        let appleID = ["SignInWithAppleButton", "ASAuthorizationAppleID", "ASAuthorizationController",
+                       "ASAuthorization"]
         for (name, text) in try sources() where name != "SignInView.swift" {
-            for symbol in ["AuthenticationServices", "SignInWithAppleButton",
-                           "ASAuthorizationAppleID", "ASAuthorizationController"] {
+            if name == "BrowserSignInPresenter.swift" {
+                for symbol in appleID {
+                    XCTAssertFalse(text.contains(symbol),
+                                   "the browser presenter starts an Apple authorization: \(symbol)")
+                }
+                continue
+            }
+            for symbol in ["AuthenticationServices"] + appleID {
                 XCTAssertFalse(text.contains(symbol), "\(name) starts its own Apple authorization: \(symbol)")
             }
         }
         let form = try XCTUnwrap(try sources().first { $0.name == "SignInView.swift" })
         XCTAssertTrue(form.text.contains("import AuthenticationServices"))
+        let presenter = try XCTUnwrap(try sources().first { $0.name == "BrowserSignInPresenter.swift" })
+        XCTAssertTrue(presenter.text.contains("import AuthenticationServices"))
+    }
+
+    // MARK: - A17 browser sign-in, A18 reset request, A19 version support
+
+    /// **The browser sign-in is the device flow, in an in-app sheet, and it
+    /// sends no installation identifier.**
+    ///
+    /// Each clause is a way it could look finished and not be:
+    ///  - built through `makeBrowserLoginModel`, it would post `install_id` —
+    ///    a device identifier the iOS privacy manifest says this app never sends;
+    ///  - a second `adoptBearer` call site would be a token path outside the
+    ///    model's current-run callback, which is what keeps a late token from a
+    ///    cancelled or superseded run out of the session;
+    ///  - a sheet whose dismissal did not cancel would leave a poll loop
+    ///    running against a code nobody will approve;
+    ///  - `openURL`/Safari would background the app mid-poll and give the user
+    ///    no way back that the app controls.
+    func testBrowserSignInIsTheDeviceFlowInAnInAppSheetWithNoInstallationHint() throws {
+        let all = try sources()
+        let form = try XCTUnwrap(all.first { $0.name == "SignInView.swift" }?.text)
+        let presenter = try XCTUnwrap(all.first { $0.name == "BrowserSignInPresenter.swift" }?.text)
+
+        XCTAssertTrue(form.contains("AppEnvironment.makeIOSBrowserLoginModel("),
+                      "the form must build the iOS (no install_id) browser model")
+        for (name, text) in all {
+            XCTAssertFalse(text.contains("makeBrowserLoginModel("),
+                           "\(name) builds the macOS browser model, which sends install_id")
+            XCTAssertFalse(text.contains("BrowserLoginModel(client:"),
+                           "\(name) builds a browser model around its own client")
+        }
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "makeIOSBrowserLoginModel(").count - 1 }
+                          .reduce(0, +), 1, "one browser sign-in, one owner")
+
+        // The one token hand-off, inside the model's own callback, after the
+        // sheet is closed.
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "session.adoptBearer(").count - 1 }
+                          .reduce(0, +), 1, "a second adoptBearer is a token path outside the model")
+        guard let begin = form.range(of: "await browserLogin.begin { token in"),
+              let dismiss = form.range(of: "presenter.dismiss()", range: begin.upperBound..<form.endIndex),
+              let adopt = form.range(of: "session.adoptBearer(token)", range: begin.upperBound..<form.endIndex)
+        else { return XCTFail("the token no longer reaches the session through begin's callback") }
+        XCTAssertTrue(dismiss.lowerBound < adopt.lowerBound, "close the sheet, then adopt")
+
+        // Closing the sheet cancels; leaving the form cancels unless the sheet is up.
+        XCTAssertTrue(form.contains("presenter.present(url) {"))
+        XCTAssertTrue(form.contains("if !presenter.isPresenting { cancelBrowserLogin() }"))
+        XCTAssertTrue(form.contains("browserLogin.cancel()"))
+        // While the browser flow runs, the other ways in are disabled.
+        XCTAssertTrue(form.contains("private var anyBusy: Bool { form.isBusy || browserBusy }"))
+
+        // The presenter: an authentication session sharing Safari's cookies,
+        // and no other way of opening anything.
+        XCTAssertTrue(presenter.contains("ASWebAuthenticationSession(url: url"))
+        XCTAssertTrue(presenter.contains("prefersEphemeralWebBrowserSession = false"))
+        for webbish in ["openURL", "UIApplication.shared.open", "SFSafariViewController"] {
+            XCTAssertFalse(presenter.contains(webbish), "the presenter hands off to \(webbish)")
+        }
+        for (name, text) in all where !["SignInView.swift", "BrowserSignInPresenter.swift"].contains(name) {
+            XCTAssertFalse(text.contains("ASWebAuthenticationSession"),
+                           "\(name) presents its own web authentication sheet")
+            XCTAssertFalse(text.contains("BrowserSignInPresenter("),
+                           "\(name) owns a second browser presenter")
+        }
+    }
+
+    /// **Forgot password asks for an email, and the website does the reset.**
+    ///
+    /// The app never spends a reset token: no `/api/auth/password/reset` call,
+    /// no token field. Offered only on the sign-in half.
+    func testForgotPasswordOnlyRequestsAResetEmail() throws {
+        let all = try sources()
+        let form = try XCTUnwrap(all.first { $0.name == "SignInView.swift" }?.text)
+        let sheet = try XCTUnwrap(all.first { $0.name == "PasswordResetRequestView.swift" }?.text)
+
+        guard let signInOnly = form.range(of: "if mode == .signIn {"),
+              let link = form.range(of: "Button(L10n.t(.loginForgotPassword))") else {
+            return XCTFail("the sign-in form lost its forgot-password link")
+        }
+        XCTAssertTrue(signInOnly.upperBound <= link.lowerBound)
+        XCTAssertTrue(form.contains("PasswordResetRequestView(initialEmail: draft.email)"))
+        XCTAssertTrue(sheet.contains("AppEnvironment.makePasswordResetRequestModel("))
+        XCTAssertTrue(sheet.contains("await model.request(email: submitted)"))
+        // One sentence for every accepted address.
+        XCTAssertTrue(sheet.contains("case let .requested(address):"))
+        XCTAssertTrue(sheet.contains("L10n.t(.loginResetRequested, [L10n.token(address)])"))
+        XCTAssertTrue(sheet.contains(".onDisappear { model.cancel() }"))
+        for (name, text) in all {
+            for spend in ["password/reset", "resetPassword(", "reset-password?token"] {
+                XCTAssertFalse(text.contains(spend), "\(name) spends a reset token in the app: \(spend)")
+            }
+        }
+    }
+
+    /// **The version card: shown signed in or not, never blocking, and only
+    /// ever pointing at a compiled-in destination.**
+    func testTheVersionCardIsAnonymousNonBlockingAndCompiledIn() throws {
+        let all = try sources()
+        let tab = try XCTUnwrap(all.first { $0.name == "AccountTab.swift" }?.text)
+        let card = try XCTUnwrap(all.first { $0.name == "VersionSupportCard.swift" }?.text)
+
+        // Outside the state switch: every account state shows it.
+        guard let content = tab.range(of: "                content\n                VersionSupportCard(model: versionSupport)")
+        else { return XCTFail("the version card is no longer beside every account state") }
+        XCTAssertFalse(content.isEmpty)
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "makeIOSVersionSupportModel(").count - 1 }
+                          .reduce(0, +), 1)
+        // The only destinations are the compiled ones; the policy names none.
+        XCTAssertTrue(card.contains("openURL(AppEnvironment.iosAppStoreURL)"))
+        XCTAssertTrue(card.contains("openURL(AppEnvironment.iosTestFlightURL)"))
+        XCTAssertFalse(card.contains("URL(string:"), "the card builds a destination of its own")
+        // No lockout anywhere: the iOS state has no blocking notion to read.
+        for (name, text) in all {
+            XCTAssertFalse(text.contains("versionSupport.isBlocked") || text.contains("model.isBlocked"),
+                           "\(name) blocks on the iOS version policy")
+        }
     }
 
     /// Two entitlements, and each is one this app earned.

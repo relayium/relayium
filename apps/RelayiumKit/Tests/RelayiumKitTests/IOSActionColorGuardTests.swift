@@ -115,15 +115,20 @@ final class IOSActionColorGuardTests: XCTestCase {
         // Files and Text minting Cancels became one, and the expired-code Cancel
         // is new. The inbound LAN connection prompt (A23) adds one: its Decline
         // is ordinary, not destructive — declining keeps everything as it was.
-        XCTAssertEqual(ordinary, 41, "ordinary bordered actions")
+        // A17 (2026-09-23) adds one ordinary control: the sign-in form's
+        // "Sign in using your browser", outlined because it is the third and
+        // longest way in, below the prominent password submit and the system
+        // Apple button.
+        XCTAssertEqual(ordinary, 42, "ordinary bordered actions")
         XCTAssertEqual(destructive, 20, "destructive bordered actions")
         XCTAssertEqual(conditional, 1,
                        "exactly one control has a conditional role: "
                        + "NearbyLinkWorkspaceView's exit, destructive while the "
                        + "session is live and ordinary once it has ended")
-        XCTAssertEqual(ordinary + destructive + conditional, 62,
-                       "the app had 64 bordered controls when this boundary was drawn and "
-                       + "61 since Cross-network became connect-first; a new one is fine, "
+        XCTAssertEqual(ordinary + destructive + conditional, 63,
+                       "the app had 64 bordered controls when this boundary was drawn, "
+                       + "61 since Cross-network became connect-first, 63 with the A23 "
+                       + "connection prompt and the A17 browser sign-in; a new one is fine, "
                        + "but it has to be counted here and its role has to be a decision "
                        + "rather than a default")
     }
@@ -171,7 +176,7 @@ final class IOSActionColorGuardTests: XCTestCase {
                                + "2.02:1 accent.")
             }
         }
-        XCTAssertEqual(checked, 62, "every bordered control must have been paired")
+        XCTAssertEqual(checked, 63, "every bordered control must have been paired")
     }
 
     /// A line that is prose rather than code.

@@ -1117,3 +1117,26 @@
 "inbox.checkNothingNew" = "Nothing new. A delivery appears here only after the sender's upload has finished.";
 "inbox.checkDone" = "Check complete.";
 "inbox.checkFailed" = "The check didn't finish. The status above says why.";
+
+/* MARK: A17-A19 iOS browser sign-in, password reset request, version support */
+"login.browserHint" = "No password on your account? Sign in on relayium.com and approve this device there.";
+"login.browserWaiting" = "Waiting for you to approve this device in the browser…";
+"login.forgotPassword" = "Forgot password?";
+"login.resetTitle" = "Reset your password";
+"login.resetBody" = "Enter the email address you sign in with. We'll send a link that opens relayium.com, where you choose a new password.";
+"login.resetSend" = "Send reset link";
+"login.resetSending" = "Sending…";
+"login.resetRequested" = "If an account uses %@, a reset link is on its way. Open it on any device, choose a new password, then sign in here with it. Each link works once and expires; if yours no longer works, request another one here.";
+"version.title" = "App version";
+"version.current" = "Version %@ (%@)";
+"version.channelAppStore" = "Installed from the App Store";
+"version.channelTestFlight" = "Installed with TestFlight";
+"version.channelDevelopment" = "Development build — updates aren't offered here";
+"version.stateCurrent" = "No newer version is available for this installation.";
+"version.stateAvailable" = "Version %@ is available.";
+"version.stateRecommended" = "Updating to version %@ is recommended.";
+"version.stateRequired" = "This version is no longer supported. Update to version %@ so transfers with other Relayium apps keep working.";
+"version.stateUnknown" = "This build couldn't read its own version, so no update is offered.";
+"version.updateAppStore" = "Update in the App Store";
+"version.updateTestFlight" = "Open TestFlight";
+"version.testFlightUnavailable" = "Couldn't open TestFlight. Install the TestFlight app from the App Store, then try again.";

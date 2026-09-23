@@ -1185,6 +1185,69 @@ public enum AppEnvironment {
                                                               installationID: identity.current()))
     }
 
+    // MARK: - iOS sign-in extras (A17-A19)
+
+    /// **The iOS browser sign-in: the same device flow, and no installation hint.**
+    ///
+    /// Deliberately NOT `makeBrowserLoginModel`. That factory resolves this
+    /// installation's identity and posts it as `install_id`, which is why the
+    /// macOS privacy manifest declares Device ID. iOS password and Apple
+    /// sign-in send no such identifier, and the iOS manifest says so; the
+    /// browser path does not change that. `start` therefore goes out as the
+    /// bodyless POST every CLI sends, and the server records a fresh device
+    /// row exactly as it does for them (`validatedInstallID` treats "absent"
+    /// as "no hint"). `IOSPrivacyManifestTests` holds both halves.
+    @MainActor
+    public static func makeIOSBrowserLoginModel(baseURL: URL = transferBaseURL,
+                                                transport: URLSession? = nil) -> BrowserLoginModel {
+        BrowserLoginModel(client: HTTPDeviceAuthClient(baseURL: baseURL,
+                                                       session: transport ?? .shared,
+                                                       installationID: nil))
+    }
+
+    /// The "forgot password" request, against `POST /api/auth/password/forgot`.
+    @MainActor
+    public static func makePasswordResetRequestModel(baseURL: URL = transferBaseURL,
+                                                     transport: URLSession? = nil)
+        -> PasswordResetRequestModel {
+        let client = AccountClient(baseURL: baseURL, session: transport ?? .shared)
+        return PasswordResetRequestModel(send: { try await client.requestPasswordReset(email: $0) })
+    }
+
+    /// The iOS app's App Store product page.
+    ///
+    /// Apple ID `6791918822` is the App Store Connect record for bundle ID
+    /// `com.relayium.app`, verified by the owner (OA-009). Compiled in, never
+    /// read from the policy document. The page only resolves publicly once a
+    /// version is live, which is why the app offers it only when the served
+    /// policy names an App Store version.
+    public static let iosAppStoreURL = URL(string: "https://apps.apple.com/app/id6791918822")!
+    /// The TestFlight app. A tester installs the newer build there; opening
+    /// it is all this app can do for them, and it cannot be told where else
+    /// to go.
+    public static let iosTestFlightURL = URL(string: "itms-beta://")!
+
+    /// The iOS version support model: the running bundle's version and
+    /// channel, the `/api/client-policy/ios` source and its own cache.
+    ///
+    /// `defaults` is a parameter so an acceptance launch can keep the cache
+    /// out of the product's domain.
+    @MainActor
+    public static func makeIOSVersionSupportModel(bundle: Bundle = .main,
+                                                  channel: IOSDistributionChannel,
+                                                  baseURL: URL = transferBaseURL,
+                                                  defaults: UserDefaults? = nil,
+                                                  transport: URLSession? = nil)
+        -> IOSVersionSupportModel {
+        IOSVersionSupportModel(
+            currentVersion: SupportedVersionModel.bundleVersion(bundle),
+            currentBuild: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+            channel: channel,
+            store: defaults.map { UserDefaultsIOSVersionPolicyStore(defaults: $0) }
+                ?? UserDefaultsIOSVersionPolicyStore(),
+            source: HTTPIOSVersionPolicySource(baseURL: baseURL, session: transport ?? .shared))
+    }
+
     /// The keys of stored uploads made from this installation.
     ///
     /// Built once by the app and handed to BOTH the upload model (which writes

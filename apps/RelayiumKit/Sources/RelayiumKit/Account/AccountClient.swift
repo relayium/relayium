@@ -180,6 +180,33 @@ public struct AccountClient {
         }
     }
 
+    /// Ask for a password-reset email: `POST /api/auth/password/forgot`.
+    ///
+    /// Same contract as `resendVerification`, and for the same reason: the
+    /// server answers **200 unconditionally** — whether or not an account uses
+    /// the address, and whether or not its per-address throttle swallowed this
+    /// request — because any other answer would be an account-enumeration
+    /// oracle. A 200 therefore means *the request was accepted* and nothing
+    /// stronger. The reset itself happens in the mailbox and then on the
+    /// website's own `/reset-password` page, which spends the one-time token;
+    /// this client never sees that token and never spends one.
+    ///
+    /// A 429 comes only from something in front of the handler (the handler
+    /// itself never answers one), and it is reported as `rateLimited` — never
+    /// as anything that reads like a wrong password.
+    public func requestPasswordReset(email: String) async throws {
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/auth/password/forgot"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["email": email])
+        let (_, resp) = try await send(req)
+        switch resp.statusCode {
+        case 200: return
+        case 429: throw AccountError.rateLimited
+        default:  throw AccountError.server(status: resp.statusCode)
+        }
+    }
+
     /// Ask the server to email this account a deletion-confirm link.
     ///
     /// This endpoint DELETES NOTHING. It mints a short-lived, single-use token,
