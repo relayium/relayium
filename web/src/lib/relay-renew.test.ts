@@ -11,7 +11,7 @@
 // fence and the post-commit window are properties of the machine in motion,
 // not of any function in isolation.
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import {
   RENEW_ACK_VERIFY_RESERVE,
   RENEW_MAX_PREGRANT_ATTEMPTS,
@@ -2550,6 +2550,356 @@ describe("lifecycle", () => {
     for (const f of acks) p.a.renewal.frame(f);
     await clock.flush();
     expect(p.a.commits).toHaveLength(0);
+  });
+});
+
+// ── outbound signal order ───────────────────────────────────────────────────
+
+interface SignedFields { kind?: string; from?: string; epoch?: number }
+type SignFilter = (m: SignedFields) => boolean;
+
+const signed = (kind: string, from: string): SignFilter => (m) =>
+  m.kind === `link-renew-${kind}` && m.from === from;
+
+let restoreSign: (() => void) | null = null;
+let offUnhandled: (() => void) | null = null;
+
+/**
+ * Hold ONE real renewal MAC behind a gate, keeping its real value.
+ *
+ * Nothing about the signature is synthetic: the real HMAC runs, and its real
+ * bytes are what the controller eventually receives. Only WHEN the controller
+ * sees them moves, which is the one thing WebCrypto never promised — and that
+ * inversion is what these tests are about. The real sign stays tracked by the
+ * harness; the gate is deliberately not, like a held server promise.
+ *
+ * `later` names the signal whose real MAC is watched: `laterLanded` turns true
+ * when it resolves. With `auto`, that is also what opens the gate — "the later
+ * signal's MAC finished first". Without it, the test opens the gate itself.
+ */
+function holdMac(hold: SignFilter, later: SignFilter, auto: boolean) {
+  const inner = crypto.subtle.sign;
+  let open!: () => void;
+  const gate = new Promise<void>((resolve) => { open = resolve; });
+  const h = { held: false, laterLanded: false, released: false, release: () => open() };
+  crypto.subtle.sign = function (this: SubtleCrypto, alg: AlgorithmIdentifier, k: CryptoKey, data: BufferSource) {
+    const real = inner.call(this, alg, k, data) as Promise<ArrayBuffer>;
+    let m: SignedFields = {};
+    try { m = JSON.parse(new TextDecoder().decode(data as Uint8Array)); } catch { /* not a signal */ }
+    if (!h.held && hold(m)) {
+      h.held = true;
+      return real.then(async (mac) => { await gate; h.released = true; return mac; });
+    }
+    if (h.held && !h.laterLanded && later(m)) {
+      return real.then((mac) => {
+        h.laterLanded = true;
+        if (auto) open();
+        return mac;
+      });
+    }
+    return real;
+  } as typeof crypto.subtle.sign;
+  restoreSign = () => { crypto.subtle.sign = inner; };
+  return h;
+}
+
+/** Fail one real signature: the MAC of the first matching signal rejects. */
+function failMac(fail: SignFilter) {
+  const inner = crypto.subtle.sign;
+  const f = { failed: false };
+  crypto.subtle.sign = function (this: SubtleCrypto, alg: AlgorithmIdentifier, k: CryptoKey, data: BufferSource) {
+    let m: SignedFields = {};
+    try { m = JSON.parse(new TextDecoder().decode(data as Uint8Array)); } catch { /* not a signal */ }
+    if (!f.failed && fail(m)) {
+      f.failed = true;
+      return Promise.reject(new Error("injected sign failure"));
+    }
+    return inner.call(this, alg, k, data) as Promise<ArrayBuffer>;
+  } as typeof crypto.subtle.sign;
+  restoreSign = () => { crypto.subtle.sign = inner; };
+  return f;
+}
+
+/** Unhandled rejections observed for the rest of the test. */
+function watchUnhandled(): unknown[] {
+  const seen: unknown[] = [];
+  const on = (reason: unknown) => { seen.push(reason); };
+  process.on("unhandledRejection", on);
+  offUnhandled = () => { process.off("unhandledRejection", on); };
+  return seen;
+}
+
+const wireTypes = (side: Side, from = 0) => signalsSince(side, from).map((r) => r.type);
+
+/** A's epoch, started, with its prepare MAC held and its ready MAC landed. */
+async function readyQueuedBehindPrepare() {
+  const clock = scheduler();
+  const p = pair(clock);
+  const h = holdMac(signed("prepare", "peer-a"), signed("ready", "peer-a"), false);
+  p.a.renewal.tick();
+  await clock.flush();
+  // The ready's own MAC is done and, read at that instant, every fence passed.
+  // It is waiting only for its turn.
+  expect(h.held).toBe(true);
+  expect(h.laterLanded).toBe(true);
+  expect(h.released).toBe(false);
+  expect(wireTypes(p.a)).toEqual([]);
+  return { clock, p, h };
+}
+
+describe("outbound signal order", () => {
+  afterEach(() => {
+    restoreSign?.();
+    restoreSign = null;
+    offUnhandled?.();
+    offUnhandled = null;
+  });
+
+  it("puts a starting side's prepare on the wire before its ready, whichever MAC lands first", async () => {
+    // Both sides, and so both link roles. The side that ticks signs `prepare`,
+    // then `ready` once its own server answers.
+    for (const who of ["a", "b"] as const) {
+      const clock = scheduler();
+      const p = pair(clock);
+      const side = p[who];
+      const h = holdMac(signed("prepare", side.id), signed("ready", side.id), true);
+      side.renewal.tick();
+      await clock.flush();
+      // The inversion really happened at the crypto layer: the ready's MAC
+      // finished while the prepare's was held, and only that released it.
+      expect(h.laterLanded, who).toBe(true);
+      expect(h.released, who).toBe(true);
+      expect(wireTypes(side), who).toEqual(["prepare", "ready"]);
+      restoreSign?.();
+      restoreSign = null;
+    }
+  });
+
+  it("does the same for a side joining its peer's epoch", async () => {
+    // The other emission path: `onPrepare` signs this side's `prepare`, and its
+    // server grant then signs `ready`.
+    for (const [who, other] of [["b", "a"], ["a", "b"]] as const) {
+      const clock = scheduler();
+      const p = pair(clock);
+      const side = p[who];
+      const peer = p[other];
+      const h = holdMac(signed("prepare", side.id), signed("ready", side.id), true);
+      side.renewal.signal(peer.id, await sealFor(peer.id, side.id, { type: "prepare", epoch: 1 }));
+      await clock.flush();
+      expect(h.laterLanded, who).toBe(true);
+      expect(h.released, who).toBe(true);
+      expect(wireTypes(side), who).toEqual(["prepare", "ready"]);
+      restoreSign?.();
+      restoreSign = null;
+    }
+  });
+
+  it("completes an R4 repair whose ready MAC lands before its prepare, with no second issuance", async () => {
+    // The full-suite failure, forced rather than waited for. A drives the
+    // repair and its ready overtakes its prepare at the crypto layer. B must
+    // still hear them in order: a ready that arrives first finds no attempt,
+    // is dropped, and B never adopts the round it already holds.
+    const clock = scheduler();
+    const p = pair(clock);
+    await oneSidedCommit(clock, p);
+    const issuedToB = p.b.requests.length;
+    const boundB = p.b.deadline!.deadlineAt;
+    const anchorB = p.b.anchor;
+    const commitsB = p.b.commits.length;
+    p.b.server = async (round, rid) => ({ status: "unavailable", round, rid, reason: "rate" });
+    p.a.server = async (round, rid) => (round === 1
+      ? grantFor(1, rid, Math.floor((clock.now() + 2 * HOUR) / 1000))
+      : { status: "unavailable", round, rid, reason: "rate" });
+    await clock.advance(RENEW_RETRY_BACKOFF_MS + 1000);
+    p.a.anchor = clock.now() - 50 * 60_000;
+    p.a.deadline = deadlineAt(p.a.anchor, HOUR);
+    const mark = p.b.signalLog.length;
+    const markA = p.a.signalLog.length;
+    const releasedA = p.a.transport.released;
+    const releasedB = p.b.transport.released;
+    const h = holdMac(signed("prepare", "peer-a"), signed("ready", "peer-a"), true);
+    p.a.renewal.tick();
+    await pumpUntil(
+      p,
+      () => signalsSince(p.b, mark).some((r) => r.type === "ready" && r.round === 1),
+      "B adopting its installed round",
+    );
+    expect(h.laterLanded).toBe(true);
+    expect(wireTypes(p.a, markA).slice(0, 2)).toEqual(["prepare", "ready"]);
+    restoreSign?.();
+    restoreSign = null;
+
+    await pumpUntil(
+      p,
+      () => iceWindowsOpen(p)()
+        && p.a.transport.released > releasedA && p.b.transport.released > releasedB,
+      "both sides releasing the repair round's candidates",
+    );
+    p.a.transport.land();
+    p.b.transport.land();
+    await clock.advance(600);
+    await pumpUntil(p, () => p.a.commits.length === 1, "A committing the repair");
+    await clock.advance(600);
+    await p.deliver();
+
+    expect(p.a.commits).toHaveLength(1);
+    expect(p.a.renewal.round).toBe(1);
+    // B asked for R+1 once and was refused; it obtained no second credential,
+    // and a repair buys it no time.
+    expect(p.b.requests.length).toBe(issuedToB + 1);
+    expect(p.b.requests[issuedToB].round).toBe(2);
+    expect(p.b.renewal.round).toBe(1);
+    expect(p.b.commits).toHaveLength(commitsB);
+    expect(p.b.deadline!.deadlineAt).toBe(boundB);
+    expect(p.b.anchor).toBe(anchorB);
+  });
+
+  it("sends nothing still queued once stop() has run", async () => {
+    const { clock, p, h } = await readyQueuedBehindPrepare();
+    const bound = p.a.deadline!.deadlineAt;
+    p.a.renewal.stop();
+    h.release();
+    await clock.flush();
+    expect(h.released).toBe(true);
+    expect(wireTypes(p.a)).toEqual([]);
+    expect(p.a.commits).toHaveLength(0);
+    expect(p.a.deadline!.deadlineAt).toBe(bound);
+  });
+
+  it("drops a queued signal whose attempt ended while it waited its turn", async () => {
+    const { clock, p, h } = await readyQueuedBehindPrepare();
+    const bound = p.a.deadline!.deadlineAt;
+    // The peer ends epoch 1 with an authenticated abort. The ready was alive
+    // when its MAC landed; it is not alive at its turn.
+    p.a.renewal.signal("peer-b", await sealFor("peer-b", "peer-a", {
+      type: "abort", epoch: 1, reason: "unavailable",
+    }));
+    await clock.flush();
+    expect(p.a.renewal.state).not.toBe("renewing");
+    h.release();
+    await clock.flush();
+    expect(h.released).toBe(true);
+    expect(wireTypes(p.a)).not.toContain("prepare");
+    expect(wireTypes(p.a)).not.toContain("ready");
+    expect(p.a.requests).toHaveLength(1);
+    expect(p.a.commits).toHaveLength(0);
+    expect(p.a.deadline!.deadlineAt).toBe(bound);
+  });
+
+  it("does not let a MAC stuck on a replaced link hold up the replacement", async () => {
+    // Same keys, new transport object: the rebuild case, which tells the peer.
+    {
+      const { clock, p, h } = await readyQueuedBehindPrepare();
+      const rebuilt = {
+        ...p.a.link,
+        conn: { renew: p.a.transport } as unknown as MixedPeerLink["conn"],
+      } as MixedPeerLink;
+      p.a.renewal.setLink(rebuilt);
+      await clock.flush();
+      // The old link's prepare is still held, and the abort went out anyway.
+      expect(h.released).toBe(false);
+      expect(wireTypes(p.a)).toEqual(["abort"]);
+      h.release();
+      await clock.flush();
+      // Released, the old link's queue belongs to nobody: nothing more is sent.
+      expect(h.released).toBe(true);
+      expect(wireTypes(p.a)).toEqual(["abort"]);
+      expect(p.a.commits).toHaveLength(0);
+      restoreSign?.();
+      restoreSign = null;
+    }
+    // Different keys: a genuinely new link. Nobody to tell, but its own first
+    // epoch must not wait for the old one's signature.
+    {
+      const { clock, p, h } = await readyQueuedBehindPrepare();
+      const otherKey = await crypto.subtle.importKey(
+        "raw", new Uint8Array(32).fill(9) as Uint8Array<ArrayBuffer>,
+        { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+      );
+      const fresh = { ...p.a.link, keys: { resumeAuth: otherKey } } as unknown as MixedPeerLink;
+      p.a.renewal.setLink(fresh);
+      p.a.renewal.tick();
+      await clock.flush();
+      expect(h.released).toBe(false);
+      expect(wireTypes(p.a)).toEqual(["prepare", "ready"]);
+      expect(signalsSince(p.a, 0).every((r) => r.epoch === 1)).toBe(true);
+      h.release();
+      await clock.flush();
+      expect(wireTypes(p.a)).toEqual(["prepare", "ready"]);
+      expect(p.a.commits).toHaveLength(0);
+    }
+  });
+
+  it("survives a signature that fails: later signals still go out, and the link still renews once", async () => {
+    const unhandled = watchUnhandled();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const clock = scheduler();
+      const p = pair(clock);
+      const bound = p.a.deadline!.deadlineAt;
+      const f = failMac(signed("prepare", "peer-a"));
+      p.a.renewal.tick();
+      await p.deliver();
+      expect(f.failed).toBe(true);
+      // The failed prepare is simply absent; the ready behind it was not lost.
+      expect(wireTypes(p.a)).toEqual(["ready"]);
+      await clock.flush();
+      expect(unhandled).toEqual([]);
+      expect(errors).toHaveBeenCalledWith("relayium renew sign error", expect.any(Error));
+      restoreSign?.();
+      restoreSign = null;
+
+      // Unannounced, the epoch times out on the old deadline — nothing moved.
+      await clock.advance(RENEW_EPOCH_HARD_CAP_MS + 1000);
+      await p.deliver();
+      expect(p.a.commits).toHaveLength(0);
+      expect(p.b.commits).toHaveLength(0);
+      expect(p.a.deadline!.deadlineAt).toBe(bound);
+      expect(wireTypes(p.a)).toContain("abort");
+
+      // The queue is not poisoned: the next epoch renews, exactly once.
+      await clock.advance(RENEW_RETRY_BACKOFF_MS + 1000);
+      await renewBoth(clock, p);
+      expect(p.a.commits).toHaveLength(1);
+      expect(p.b.commits).toHaveLength(1);
+      expect(p.a.commits[0].round).toBe(1);
+      expect(p.b.commits[0].round).toBe(1);
+      expect(p.a.requests.every((r) => r.round === 1)).toBe(true);
+      expect(p.b.requests.every((r) => r.round === 1)).toBe(true);
+      await clock.flush();
+      expect(unhandled).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("survives a send that throws: the next signal still goes out, and nothing is unhandled", async () => {
+    const unhandled = watchUnhandled();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const clock = scheduler();
+      const p = pair(clock);
+      const queue = p.a.outSignals;
+      const push = queue.push;
+      let thrown = 0;
+      queue.push = function (...items: RenewEnvelope[]) {
+        if (thrown === 0) {
+          thrown++;
+          throw new Error("injected send failure");
+        }
+        return push.apply(this, items);
+      };
+      p.a.renewal.tick();
+      await clock.flush();
+      expect(thrown).toBe(1);
+      await clock.flush();
+      expect(unhandled).toEqual([]);
+      expect(wireTypes(p.a)).toEqual(["ready"]);
+      expect(p.a.commits).toHaveLength(0);
+      expect(errors).toHaveBeenCalledWith("relayium renew send error", expect.any(Error));
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
 
