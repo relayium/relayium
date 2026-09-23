@@ -4371,10 +4371,11 @@ func (s *SQLiteStore) ListExpiredOpenUploadSessions(ctx context.Context, before 
 //
 // A finalize that REFUSED the object matches this clause too. A non-pair-room
 // refusal queues and reclaims its own blob settle-first on the way out
-// (PrepareRefusedUploadReclaim), so the claim this pass takes re-queues a key
-// that is normally already gone — with the same obligation, whose floor the
-// refusal's settle already advanced, so nothing is billed twice — and the
-// drain treats the missing blob as success. A pair-room refusal deliberately
+// (PrepareRefusedUploadReclaim), which marks the session's residual as
+// handed off in the same transaction. The claim this pass takes is therefore
+// deletion-only: it never re-derives the obligation (whose queue row may
+// already be settled and retired, leaving no floor to protect a stale
+// observation), and the drain treats the missing blob as success. A pair-room refusal deliberately
 // drops nothing — that blob may be a room void's billing evidence — and this
 // pass is how a tombstone the void did not take reaches the queue. A finalize
 // that SUCCEEDED never matches, tombstone and all — its blob is referenced by
@@ -6823,8 +6824,8 @@ func (s *SQLiteStore) DeletePendingNodeDelete(ctx context.Context, blobKey, node
 // session rows), the orphan cleanup claim (ClaimUploadSessionCleanup, which
 // deletes the row), the set-based purge (PurgeDoneUploadSessions, its SQL twin)
 // and a refused finalize (PrepareRefusedUploadReclaim, which keeps the row as a
-// tombstone that no longer owns the blob's billing: the queue row does, and a
-// later claim of the tombstone re-derives the same obligation).
+// tombstone that no longer owns the blob's billing: the queue row does, and
+// the tombstone is marked handed-off so its later claim is deletion-only).
 //
 // This is also what the cleanup design's I9 (single destroyer for obligated
 // evidence) rests on: a blob whose key carries, or may carry, an obligation is
@@ -6842,11 +6843,12 @@ func (s *SQLiteStore) DeletePendingNodeDelete(ctx context.Context, blobKey, node
 // obligation, inside its own writer transaction, from the session row it
 // deletes or tombstones: the close, the claim and the purge DELETE the row, so
 // on the single SQLite writer whichever commits second finds no row to derive
-// from. The refusal keeps its row, and the only producer that can follow it —
-// the tombstone's cleanup claim or purge — derives the SAME user, cap and floor
-// from it; the upsert keeps the higher floor, which by then includes whatever
-// the refusal already settled. Any future producer must re-audit this, and the
-// single-destroyer rule, before it lands.
+// from. The refusal keeps its row but marks it handed off
+// (residual_provenance = 3) in the transaction that writes the obligation, so
+// the only producers that can follow it — the tombstone's cleanup claim or
+// purge — write deletion-only rows and never re-derive the obligation, even
+// after a drain has settled and retired it. Any future producer must re-audit
+// this, and the single-destroyer rule, before it lands.
 //
 // The conflict clause keeps enqueueNodeDeleteOn's rules for the hold and the
 // enqueue time, overwrites the obligation identity (the latest session close is
