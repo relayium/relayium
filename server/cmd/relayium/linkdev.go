@@ -32,7 +32,14 @@ package main
 //     the link continues STUN-only with policy "all". Nothing re-requests.
 //   - M4: the relay deadline is derived once from the issued credentials
 //     (earliest expiry − 60 s) and held in a latch that can only move earlier;
-//     the session ends the link at it. Nothing extends it (renewal is A11).
+//     the session ends the link at it. Only a PROVEN relay renewal (A11,
+//     relay-renew/1, below) ever moves it later.
+//   - M6 (A11, [$]): relay renewal. A relayed link whose user is active asks
+//     the server for a fresh credential inside the final margin, over its own
+//     signalling socket (the server's renewal authority), migrates onto it and
+//     moves the deadline ONLY on relay-renew-v1 §6.5 commit. Pion restarts ICE
+//     break-before-make, so a renewal that fails after the restart ends the
+//     link at once with a truthful line; it never extends anything.
 //
 // The pairing code is required. The code-less LAN room ignores roster hints
 // (A08a), so a missing welcome echo there would read as "old hub" when it is
@@ -77,6 +84,8 @@ script (one command per line, run once the link is admitted; end of script = fin
   wait-files <n>   until n inbound batches were saved in total
   wait-texts <n>   until n inbound messages were delivered in total
   wait-sent        until every offered batch was delivered and every message sent
+  wait-renewed <n> until this end's relay renewal committed n rounds
+  sleep <duration> wait (e.g. 15s)
   hold             until the link ends
 `
 
@@ -117,6 +126,9 @@ type linkDevOpts struct {
 	script string
 	yes    bool
 	dest   string
+	// noRenew stands in for a CLI build without relay-renew/1 (A11 tests):
+	// nothing is announced and renewal envelopes reach nothing.
+	noRenew bool
 }
 
 func splitLinkDevFlags(args []string) (linkDevOpts, []string, error) {
@@ -127,6 +139,8 @@ func splitLinkDevFlags(args []string) (linkDevOpts, []string, error) {
 		switch {
 		case a == "--yes":
 			o.yes = true
+		case a == "--no-renew":
+			o.noRenew = true
 		case a == "--script" || a == "--dest":
 			if i+1 >= len(args) {
 				return o, nil, fmt.Errorf("%s needs a value", a)
@@ -386,9 +400,10 @@ func linkDevLegacyConn(ctx context.Context, res *linkDevResult, f crossFlags, mo
 
 type ldCmd struct {
 	op   string
-	srcs []string // send
-	text string   // text
-	n    int      // wait-files / wait-texts
+	srcs []string      // send
+	text string        // text
+	n    int           // wait-files / wait-texts / wait-renewed
+	dur  time.Duration // sleep
 	line int
 }
 
@@ -420,6 +435,20 @@ func parseLinkDevScript(src string) ([]ldCmd, error) {
 				return nil, fmt.Errorf("script line %d: %s needs a count", i+1, op)
 			}
 			c.n = n
+		case "wait-renewed":
+			// A11 developer harness: until this end's relay renewal committed
+			// n rounds.
+			n, err := strconv.Atoi(strings.TrimSpace(arg))
+			if err != nil || n < 1 {
+				return nil, fmt.Errorf("script line %d: wait-renewed needs a round count", i+1)
+			}
+			c.n = n
+		case "sleep":
+			dur, err := time.ParseDuration(strings.TrimSpace(arg))
+			if err != nil || dur <= 0 {
+				return nil, fmt.Errorf("script line %d: sleep needs a duration", i+1)
+			}
+			c.dur = dur
 		case "wait-sent", "hold":
 		default:
 			return nil, fmt.Errorf("script line %d: unknown command %q", i+1, op)
@@ -455,9 +484,10 @@ const (
 	ldICEReady
 	ldWriteFailed
 	ldInputFailed
-	ldAnswer    // A10: the person answered the current file prompt (ok)
-	ldInterrupt // A10: ctrl-C — an authenticated leave, now
-	ldCeiling   // A10: the whole-session ceiling of `text` passed — a normal end
+	ldAnswer     // A10: the person answered the current file prompt (ok)
+	ldInterrupt  // A10: ctrl-C — an authenticated leave, now
+	ldCeiling    // A10: the whole-session ceiling of `text` passed — a normal end
+	ldRenewBroke // A11: a relay renewal failed after the path switched — end the link
 )
 
 type ldItem struct {
@@ -489,8 +519,9 @@ func (q *ldQueue) drain() []ldItem {
 }
 
 type ldRead struct {
-	data json.RawMessage
-	err  error
+	data  json.RawMessage
+	err   error
+	grant bool // A11: an ice-grant reply from the server, not a peer signal
 }
 
 // ldOut is one outbound batch.
@@ -588,9 +619,10 @@ type linkDevDriver struct {
 	verifyAsked bool
 
 	// script
-	script    []ldCmd
-	scriptEOF bool
-	holding   bool
+	script     []ldCmd
+	scriptEOF  bool
+	holding    bool
+	sleepUntil time.Time // the script's `sleep`
 
 	// files
 	outQ      []*ldOut
@@ -675,6 +707,23 @@ type linkDevDriver struct {
 	peerDone bool
 	// outputFailed: a message could not be written out; the run has failed.
 	outputFailed bool
+
+	// ---- A11: relay renewal (relay-renew/1)
+
+	renew   *linksession.Renewal
+	renewer *linkrtc.Renewer
+	// boundAt is when the relay bound in force was installed: the renewal
+	// margin's fixed anchor (relay-renew-v1 §7.2), never "now".
+	boundAt time.Time
+	// lastUser is the last authenticated USER-lane activity (file bytes, ACK
+	// progress, user text) — never control frames or keepalives (§7.1).
+	lastUser time.Time
+	// peerRenew: the peer's link offer/answer announced relay-renew/1.
+	peerRenew bool
+	// cutMu/cutTimer: the loop-independent cutoff at the relay deadline,
+	// resettable only by a proven renewal.
+	cutMu    sync.Mutex
+	cutTimer *time.Timer
 }
 
 func newLinkDevDriver(ctx context.Context, cmd linksession.Cmd, room *rzvous.Room, f crossFlags, dev linkDevOpts,
@@ -956,10 +1005,11 @@ func (d *linkDevDriver) run() (*linkDevResult, error) {
 		if !d.pending && !d.readsDead && d.heldLeave == nil {
 			d.pending = true
 			go func() {
-				// RecvSignal returns signals only. In a pairing-code room the
-				// hub admits two members, so every signal is the bound peer's.
-				data, err := room.Session.RecvSignal(d.ctx)
-				reads <- ldRead{data, err}
+				// Signals and (A11) the server's ice-grant replies. In a
+				// pairing-code room the hub admits two members, so every
+				// signal is the bound peer's.
+				data, grant, err := room.Session.RecvSignalOrGrant(d.ctx)
+				reads <- ldRead{data: data, err: err, grant: grant}
 			}()
 		}
 		if !timer.Stop() {
@@ -984,6 +1034,15 @@ func (d *linkDevDriver) run() (*linkDevResult, error) {
 				}
 				return nil, fmt.Errorf("rendezvous connection lost: %w", r.err)
 			}
+			if r.grant {
+				if d.renew != nil {
+					d.renew.Grant(r.data)
+				}
+				continue
+			}
+			if d.renewSignal(r.data) {
+				continue
+			}
 			if d.holdLeave(r.data) {
 				continue
 			}
@@ -1003,6 +1062,7 @@ func (d *linkDevDriver) run() (*linkDevResult, error) {
 			if err := d.do(d.s.Tick()); err != nil {
 				return nil, err
 			}
+			d.renewTick()
 			d.warnCheck()
 		}
 	}
@@ -1139,8 +1199,14 @@ func (d *linkDevDriver) nextWake() time.Time {
 	if d.cur == nil && len(d.outQ) > 0 {
 		future(d.outQ[0].notBefore)
 	}
+	future(d.sleepUntil)
 	if d.heldLeave != nil || d.heldLost != nil {
 		future(d.heldUntil) // releaseLeave applies them once due
+	}
+	if d.renew != nil {
+		if t, ok := d.renew.NextDeadline(); ok {
+			future(t)
+		}
 	}
 	return at
 }
@@ -1221,7 +1287,7 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 				return err
 			}
 		case linksession.EffSendOffer:
-			d.commit, d.caps = e.Commit, e.Caps
+			d.commit, d.caps = e.Commit, d.renewCaps(e.Caps)
 			if err := d.ensureConn(linkrtc.Initiator); err != nil {
 				return err
 			}
@@ -1235,7 +1301,8 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 				d.defer_(func() ([]linksession.Effect, error) { return d.s.TransportLost(ep) })
 			}
 		case linksession.EffSendAnswer:
-			d.commit, d.caps = e.Commit, e.Caps
+			d.commit, d.caps = e.Commit, d.renewCaps(e.Caps)
+			d.notePeerCaps(e.Bytes)
 			if err := d.ensureConn(linkrtc.Responder); err != nil {
 				return err
 			}
@@ -1244,6 +1311,14 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 				d.defer_(func() ([]linksession.Effect, error) { return d.s.TransportLost(d.connEp) })
 			}
 		case linksession.EffApplyAnswer, linksession.EffApplyRestartOffer:
+			d.notePeerCaps(e.Bytes)
+			if e.Kind == linksession.EffApplyRestartOffer && d.renew != nil && d.renew.LockUnsigned() {
+				// relay-renew-v1 §4.1: once a renewal signal verified (or the
+				// transport migrated), unsigned link SDP is refused for the
+				// rest of this PeerConnection.
+				d.logf("unsigned restart offer refused: this link has renewed")
+				continue
+			}
 			if d.conn != nil {
 				if err := d.applyRemote(e.Bytes); err != nil {
 					d.logf("peer description not applied: %v", err)
@@ -1259,7 +1334,13 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 				}
 			}
 		case linksession.EffICERestart:
-			d.commit, d.caps = e.Commit, e.Caps
+			d.commit, d.caps = e.Commit, d.renewCaps(e.Caps)
+			if d.renew != nil && (d.renew.InFlight() || d.renew.LockUnsigned()) {
+				// §4.1: the unauthenticated restart is suppressed while an
+				// epoch is in flight, and for good once the link renewed.
+				d.logf("ICE restart suppressed: relay renewal owns this transport")
+				continue
+			}
 			if d.conn != nil {
 				if err := d.conn.RestartICE(); err != nil {
 					d.logf("ICE restart not sent: %v", err)
@@ -1294,6 +1375,7 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 			fmt.Fprintf(d.stderr, "%s%s — not the pairing code; compare it on both ends to rule out a substituted endpoint\n", sasLinePrefix, d.s.SAS())
 		case linksession.EffAdmitted:
 			d.admitted = true
+			d.startRenewal()
 			d.logf("link admitted")
 			if d.ui != nil {
 				d.ui.admitted(d)
@@ -1330,6 +1412,9 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 				d.defer_(d.s.CancelIncoming)
 			}
 		case linksession.EffWriteChunk:
+			if len(e.Bytes) > 0 {
+				d.lastUser = time.Now() // received file bytes: user activity (§7.1)
+			}
 			d.writeChunk(e.Prompt, e.Index, e.Bytes)
 		case linksession.EffFileVerified:
 			d.finalizeFile(e.Prompt, e.Index)
@@ -1354,6 +1439,7 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 				continue
 			}
 			d.textsIn++
+			d.lastUser = time.Now() // received user text (§7.1)
 			d.recvBytes += uint64(len(e.Text))
 			if d.ui != nil {
 				if err := d.ui.text(e.Text); err != nil && !d.outputFailed {
@@ -1387,6 +1473,10 @@ func (d *linkDevDriver) write(lane linkrtc.Lane, b []byte) {
 		return
 	}
 	d.outSeq++
+	if len(b) > 0 && ((lane == linkrtc.LaneFile && (b[0] == linkwire.KindChunk || b[0] == linkwire.KindChunkPart)) ||
+		(lane == linkrtc.LaneText && b[0] == linkwire.KindText)) {
+		d.lastUser = time.Now() // sent file bytes or user text (§7.1)
+	}
 	d.writers[lane].push(b)
 }
 
@@ -1403,6 +1493,9 @@ var (
 	// ldHookInbound runs on the file lane's reader for each received frame,
 	// before it is queued for the loop.
 	ldHookInbound func(d *linkDevDriver, lane linkrtc.Lane, frame []byte)
+	// ldHookRenewFrame sees each inbound relay-renew control frame on the
+	// loop; true drops it (A11: a lost probe/ack).
+	ldHookRenewFrame func(d *linkDevDriver, frame []byte) bool
 )
 
 // ldCutoff closes the transport from any goroutine, once: at the relay
@@ -1677,19 +1770,14 @@ func (d *linkDevDriver) armDeadline() {
 		return
 	}
 	d.armed = true
+	d.boundAt = time.Now()
 	d.s.SetRelayDeadline(b.DeadlineAt)
 	// The same bound, enforced WITHOUT the loop: whatever the loop is doing
 	// at the deadline, the transport — and with it every TURN allocation —
-	// is closed then.
-	go func(at time.Time) {
-		t := time.NewTimer(time.Until(at))
-		defer t.Stop()
-		select {
-		case <-t.C:
-			d.cut.fire("relay deadline")
-		case <-d.cut.done:
-		}
-	}(b.DeadlineAt)
+	// is closed then. Only a proven renewal (renewCommit) may move it.
+	d.cutMu.Lock()
+	d.cutTimer = time.AfterFunc(time.Until(b.DeadlineAt), func() { d.cut.fire("relay deadline") })
+	d.cutMu.Unlock()
 }
 
 // iceConfig waits for the link's one /api/ice answer and applies it.
@@ -1811,6 +1899,14 @@ func (d *linkDevDriver) closeTransport() {
 
 // shutdown releases everything the driver still holds.
 func (d *linkDevDriver) shutdown() {
+	if d.renew != nil {
+		d.renew.Stop()
+	}
+	d.cutMu.Lock()
+	if d.cutTimer != nil {
+		d.cutTimer.Stop()
+	}
+	d.cutMu.Unlock()
 	d.stopInput()
 	d.closeTransport()
 	d.closing.Wait()
@@ -1831,8 +1927,24 @@ func (d *linkDevDriver) item(it ldItem) error {
 	case ldEvent:
 		return d.event(it.ev, it.ep)
 	case ldFileFrame:
+		if len(it.frame) > 0 && it.frame[0] == linkwire.KindAck {
+			d.lastUser = time.Now() // ACK progress on our outbound bytes (§7.1)
+		}
 		return d.do(d.s.FileFrame(it.ep, it.frame))
 	case ldTextFrame:
+		// The text lane's FRONT demux (relay-renew-v1 §6.2): a 0x0d control
+		// frame is renewal's and never reaches the text session — not its
+		// idle clock, not its rate budget, not the AEAD — even with no
+		// renewal running (then it is dropped).
+		if linksession.IsRenewControlFrame(it.frame) {
+			if ldHookRenewFrame != nil && ldHookRenewFrame(d, it.frame) {
+				return nil // test: the frame is lost
+			}
+			if d.renew != nil {
+				d.renew.Frame(it.frame)
+			}
+			return nil
+		}
 		return d.do(d.s.TextFrame(it.ep, it.frame))
 	case ldItemScript:
 		d.script = append(d.script, it.cmds...)
@@ -1852,6 +1964,8 @@ func (d *linkDevDriver) item(it ldItem) error {
 		if d.ui != nil {
 			return d.ui.answer(d, it.ok)
 		}
+	case ldRenewBroke:
+		return d.do(d.s.Close())
 	case ldCeiling:
 		if d.ui != nil {
 			d.ui.ceiling(d)
@@ -1880,6 +1994,9 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 			return err
 		}
 	case linkrtc.EventLocalCandidate:
+		if d.renewCandidate(*ev.Candidate) {
+			return nil // renewal's: signed under its epoch, or dropped
+		}
 		b, err := iceSignal(*ev.Candidate)
 		if err != nil {
 			return err
@@ -1908,8 +2025,14 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 	case linkrtc.EventSetupNoProgress, linkrtc.EventSetupHardCap:
 		// The session runs the same link §5.2 timers and is the authority.
 	case linkrtc.EventDisconnected:
+		if d.renew != nil && d.renew.Restarted() {
+			return nil // the migration's own timers bound it; see Broke
+		}
 		return d.do(d.s.Disconnected(ep))
 	case linkrtc.EventReconnected:
+		if d.renew != nil && d.renew.Restarted() {
+			return nil
+		}
 		return d.do(d.s.Reconnected(ep))
 	case linkrtc.EventTransportLost:
 		if d.holdLost(ep) {
@@ -1928,6 +2051,9 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 		}
 		if p.Path == linkrtc.PathRelay {
 			d.armDeadline() // a relayed pair is bounded by the credential, whatever the policy
+		}
+		if d.renew != nil {
+			d.renew.PathChanged()
 		}
 	}
 	return nil
@@ -1953,6 +2079,7 @@ func (d *linkDevDriver) progress() error {
 		d.startICE()
 	}
 	d.warnCheck()
+	d.renewTick()
 	if !d.admitted || d.closed {
 		return nil
 	}
@@ -2016,6 +2143,18 @@ func (d *linkDevDriver) advanceScript() {
 		case "hold":
 			d.holding = true
 			return
+		case "wait-renewed":
+			if d.renew == nil || d.renew.Round() < uint32(c.n) {
+				return
+			}
+		case "sleep":
+			if d.sleepUntil.IsZero() {
+				d.sleepUntil = time.Now().Add(c.dur)
+			}
+			if time.Now().Before(d.sleepUntil) {
+				return
+			}
+			d.sleepUntil = time.Time{}
 		case "quit":
 			// `pair` /quit: what was queued before it still goes; then leave,
 			// even with a non-terminal stdin, and read nothing after it.
@@ -2519,4 +2658,225 @@ func (d *linkDevDriver) exitCode(stderr io.Writer) int {
 		fmt.Fprintf(stderr, "link-dev: the link ended (%s) before the script finished\n", d.closeCode)
 	}
 	return 1
+}
+
+// ================================================================ A11: relay renewal (relay-renew/1)
+//
+// The engine is linksession.Renewal (the protocol, budgets and the §6.5 proof);
+// the transport is linkrtc.Renewer. This is only the wiring: the server round
+// on this session's own socket, the text lane's 0x0d demux, the candidate
+// routing, the user-activity clock, and the one place a relayed deadline may
+// move later (renewCommit).
+
+// linkRenewEnabled: this build announces relay-renew/1 and runs renewal. Only
+// tests turn it off, to stand in for a CLI build without it.
+var linkRenewEnabled = true
+
+func (d *linkDevDriver) renewEnabled() bool { return linkRenewEnabled && !d.dev.noRenew }
+
+// renewCaps is the SDP-signal caps this end announces: relay-renew/1 only
+// when the whole path is wired.
+func (d *linkDevDriver) renewCaps(caps []string) []string {
+	out := append([]string(nil), caps...)
+	if d.renewEnabled() {
+		for _, c := range out {
+			if c == linksession.CapRenew {
+				return out
+			}
+		}
+		out = append(out, linksession.CapRenew)
+	}
+	return out
+}
+
+// notePeerCaps reads the caps snapshot of the peer's link offer or answer.
+// An unsigned hint (link §1.6): it only decides whether an epoch is worth
+// spending; every renewal message is authenticated on its own.
+func (d *linkDevDriver) notePeerCaps(raw []byte) {
+	var sig struct {
+		Caps *[]any `json:"caps"`
+	}
+	if json.Unmarshal(raw, &sig) != nil || sig.Caps == nil {
+		return
+	}
+	d.peerRenew = false
+	for _, c := range *sig.Caps {
+		if s, ok := c.(string); ok && s == linksession.CapRenew {
+			d.peerRenew = true
+		}
+	}
+}
+
+// renewSignal consumes renewal envelopes ahead of the link session. A signal
+// carrying a `renew` key never reaches the session, parsed or not.
+func (d *linkDevDriver) renewSignal(raw []byte) bool {
+	if d.renew != nil {
+		return d.renew.Signal(raw)
+	}
+	return linksession.HasRenewKey(raw)
+}
+
+// renewCandidate routes a local candidate once the transport has migrated.
+func (d *linkDevDriver) renewCandidate(c webrtc.ICECandidateInit) bool {
+	if d.renew == nil || d.renewer == nil || !d.renew.Migrated() {
+		return false
+	}
+	var idx *uint32
+	if c.SDPMLineIndex != nil {
+		v := uint32(*c.SDPMLineIndex)
+		idx = &v
+	}
+	return d.renew.LocalCandidate(linksession.RenewCandidate{
+		Candidate: c.Candidate, SDPMid: c.SDPMid, SDPMLineIndex: idx,
+		Ufrag: d.renewer.LocalGeneration(c.Candidate),
+	})
+}
+
+func (d *linkDevDriver) renewTick() {
+	if d.renew != nil {
+		d.renew.Tick()
+	}
+}
+
+// ldRenewed is a granted configuration: what the transport migrates onto and
+// the bound it states, derived at receipt — installed only on commit.
+type ldRenewed struct {
+	wcfg  webrtc.Configuration
+	bound linkrtc.RelayDeadline
+}
+
+// startRenewal binds renewal to the admitted link.
+func (d *linkDevDriver) startRenewal() {
+	if !d.renewEnabled() || d.renew != nil || d.conn == nil {
+		return
+	}
+	d.renewer = linkrtc.NewRenewer(d.conn)
+	r, err := d.s.NewRenewal(linksession.RenewDeps{
+		Now:        time.Now,
+		SendSignal: func(env []byte) error { return d.room.Session.SendSignal(d.ctx, env) },
+		// The server's renewal authority is THIS socket (frozen at pairing):
+		// the request carries no code and names nobody.
+		RequestRound:      func(round, rid uint32) error { return d.room.Session.SendRenew(d.ctx, round, rid) },
+		PeerSupportsRenew: func() bool { return d.peerRenew || d.s.PeerAnnouncedRenew() },
+		UserActive: func() bool {
+			return !d.lastUser.IsZero() && time.Since(d.lastUser) < linksession.RenewActivityWindow
+		},
+		Bound: func() (linksession.RenewBound, bool) {
+			b, ok := d.latch.Bound()
+			if !ok || !d.armed {
+				return linksession.RenewBound{}, false // not relayed: nothing to renew
+			}
+			return linksession.RenewBound{DeadlineAt: b.DeadlineAt, AnchoredAt: d.boundAt}, true
+		},
+		RenewedConfig: func(body []byte) (any, time.Time, bool) {
+			// The SAME sanitiser and policy the link's first configuration
+			// went through: no second credential format, no second parser.
+			cfg, ok := linkrtc.ParseICEConfig(body)
+			if !ok {
+				return nil, time.Time{}, false
+			}
+			choice := linkrtc.ChooseRTCConfig(cfg, "")
+			if !choice.RelayOnly {
+				return nil, time.Time{}, false // no TURN: nothing to migrate onto
+			}
+			wcfg, err := choice.WebRTC()
+			if err != nil {
+				return nil, time.Time{}, false
+			}
+			b, ok := linkrtc.RelayDeadlineFor(cfg, time.Now())
+			if !ok || !b.DeadlineAt.After(time.Now()) {
+				return nil, time.Time{}, false // states no bound, or one already past
+			}
+			return ldRenewed{wcfg: wcfg, bound: b}, b.DeadlineAt, true
+		},
+		Commit: func(cfg any, _ time.Time, round uint32) {
+			if rc, ok := cfg.(ldRenewed); ok {
+				d.renewCommit(rc, round)
+			}
+		},
+		Broke: d.renewBroke,
+		OnState: func(s linksession.RenewState) {
+			d.logf("relay renewal: %s", s)
+		},
+	}, &ldRenewTransport{d: d})
+	if err != nil {
+		d.logf("relay renewal unavailable: %v", err)
+		d.renewer = nil
+		return
+	}
+	d.renew = r
+}
+
+// renewCommit is the ONE place a relayed link's deadline moves later, and it
+// is reached only from the engine's §6.5 commit. The loop-independent cutoff
+// is stopped first: if it already fired, nothing is extended.
+func (d *linkDevDriver) renewCommit(rc ldRenewed, round uint32) {
+	d.cutMu.Lock()
+	if d.cutTimer == nil || !d.cutTimer.Stop() {
+		d.cutMu.Unlock()
+		d.logf("relay renewal proven after the cutoff: nothing extended")
+		return
+	}
+	old, _ := d.latch.Bound()
+	if !d.latch.Renew(rc.bound) {
+		d.cutTimer = time.AfterFunc(time.Until(old.DeadlineAt), func() { d.cut.fire("relay deadline") })
+		d.cutMu.Unlock()
+		d.logf("relay renewal refused: the new bound is not later")
+		return
+	}
+	d.cutTimer = time.AfterFunc(time.Until(rc.bound.DeadlineAt), func() { d.cut.fire("relay deadline") })
+	d.cutMu.Unlock()
+	d.boundAt = time.Now()
+	d.warned = false
+	d.s.SetRelayDeadline(rc.bound.DeadlineAt)
+	d.notice("relay renewed: this link may now run until %s", rc.bound.DeadlineAt.Format(time.RFC3339))
+	d.logf("relay renewal committed round %d", round)
+}
+
+// renewBroke: a renewal failed after the transport restarted onto the new
+// credential. Pion retired the old path at that restart, so the link cannot
+// run out its old deadline; it ends now, with an authenticated leave and a
+// truthful line. The deadline was never moved.
+func (d *linkDevDriver) renewBroke(reason string) {
+	d.notice("the relay renewal did not complete after the relay path was switched (%s); the link has ended — pair again to continue", reason)
+	d.record("link: relay-renewal-failed")
+	d.q.push(ldItem{kind: ldRenewBroke})
+}
+
+// ldRenewTransport is the engine's view of this link's transport.
+type ldRenewTransport struct{ d *linkDevDriver }
+
+var errLDRenewConfig = errors.New("link-dev: not a renewal configuration")
+
+func (t *ldRenewTransport) SetConfiguration(cfg any) error {
+	rc, ok := cfg.(ldRenewed)
+	if !ok {
+		return errLDRenewConfig
+	}
+	return t.d.renewer.SetConfiguration(rc.wcfg)
+}
+func (t *ldRenewTransport) BaselineSDP() (string, bool)   { return t.d.renewer.BaselineSDP() }
+func (t *ldRenewTransport) RestartOffer() (string, error) { return t.d.renewer.RestartOffer() }
+func (t *ldRenewTransport) ApplyRemote(typ, sdp string) (string, error) {
+	return t.d.renewer.ApplyRemote(typ, sdp)
+}
+func (t *ldRenewTransport) Answer() (string, error) { return t.d.renewer.Answer() }
+func (t *ldRenewTransport) LocalUfrag() string      { return t.d.renewer.LocalUfrag() }
+func (t *ldRenewTransport) RemoteUfrag() string     { return t.d.renewer.RemoteUfrag() }
+func (t *ldRenewTransport) AddCandidate(c linksession.RenewCandidate) error {
+	return t.d.renewer.AddCandidate(c.Candidate, c.SDPMid, c.SDPMLineIndex, c.Ufrag)
+}
+func (t *ldRenewTransport) SelectedGeneration() (string, string) {
+	return t.d.renewer.SelectedGeneration()
+}
+
+// SendControl puts a 0x0d frame on the text lane's transport writer: not
+// through the text session, its sequence or its queue (§6.4).
+func (t *ldRenewTransport) SendControl(frame []byte) error {
+	w := t.d.writers[linkrtc.LaneText]
+	if w == nil {
+		return linkrtc.ErrClosed
+	}
+	w.push(frame)
+	return nil
 }
