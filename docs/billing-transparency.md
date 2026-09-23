@@ -319,8 +319,13 @@ The dimensions actually checked, each fail-closed at write time:
   near-empty file still debits a 64 KiB floor
   (`minBillableBytes`, `account/files.go:33` — capping object *count*, not
   just size). Uploads that land on your own storage node are never debited.
-  Exceeding it: `429` "daily quota exceeded" — checked before the storage
-  caps, so it is the answer when both are exceeded.
+  Exceeding it: `429` "daily quota exceeded". Inside the transaction that
+  stores the file it is checked before the storage caps, so there it is the
+  answer when both are exceeded. Two earlier refusals can answer first: a
+  single-shot upload's pre-check uses the declared size without the 64 KiB
+  floor, so a small file can pass it and then meet a full storage cap
+  (`413`/`507`); and if the plan cannot be read, the upload fails closed
+  with `500` before the quota is consulted. Neither leaves a debit.
 - **Monthly traffic cap** — relay bytes (billable rows in `usage_periods`)
   plus stored upload/download bytes (`usage_monthly`), summed by
   `currentMonthTraffic` (`account/plan_enforce.go:69`) against
