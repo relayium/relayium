@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/relayium/relayium/authx"
@@ -57,6 +58,97 @@ func (c *cappedReader) Read(p []byte) (int, error) {
 		return n, errTooLarge
 	}
 	return n, err
+}
+
+// errClientBodyReleased is what clientBody returns to any reader that arrives
+// after the handler took the request body back.
+var errClientBodyReleased = errors.New("account: upload body already released")
+
+// clientBodyReleaseWait bounds how long release waits for a read that is still
+// running when the handler takes the body back.
+const clientBodyReleaseWait = 5 * time.Second
+
+// clientBody is the single-shot upload's request body as the handler owns it:
+// it counts every byte read from the client and can be taken back.
+//
+// bs.Put may return while something is still reading its reader:
+// RemoteBlobStore hands the body to net/http, whose transport answers as soon
+// as the node's response arrives and keeps copying the request body in its own
+// goroutine (a node answers 401/507 before reading, and 500 mid-stream). Left
+// alone, that goroutine keeps pulling client bytes after the handler has
+// counted them — and after the handler has returned, when the Request.Body is
+// no longer the handler's to read. release ends that: no read starts after it,
+// and the one still running is interrupted through the connection's read
+// deadline and waited for, so the count it returns is final and exact.
+type clientBody struct {
+	r        io.Reader
+	mu       sync.Mutex
+	n        int64
+	active   int
+	released bool
+	idle     chan struct{} // made by release while reads run; closed when the last one returns
+}
+
+func (b *clientBody) Read(p []byte) (int, error) {
+	b.mu.Lock()
+	if b.released {
+		b.mu.Unlock()
+		return 0, errClientBodyReleased
+	}
+	b.active++
+	b.mu.Unlock()
+	n, err := b.r.Read(p)
+	b.mu.Lock()
+	b.n += int64(n)
+	b.active--
+	if b.active == 0 && b.idle != nil {
+		close(b.idle)
+		b.idle = nil
+	}
+	b.mu.Unlock()
+	return n, err
+}
+
+// release takes the body back and returns how many bytes were read from it.
+// A read still running is interrupted (interrupt sets the connection's read
+// deadline, which also ends the request's context) and waited for, at most
+// wait; if it outlasts that — only possible where the deadline cannot be set —
+// the handler stops waiting rather than hang, and what that read returns later
+// is logged as unbilled. Calling release again returns the count so far.
+func (b *clientBody) release(interrupt func() error, wait time.Duration) int64 {
+	b.mu.Lock()
+	if b.released {
+		defer b.mu.Unlock()
+		return b.n
+	}
+	b.released = true
+	var idle chan struct{}
+	if b.active > 0 {
+		b.idle = make(chan struct{})
+		idle = b.idle
+	}
+	b.mu.Unlock()
+	if idle != nil {
+		if err := interrupt(); err != nil {
+			log.Printf("upload: cannot interrupt the request body read still running (%v); waiting up to %v", err, wait)
+		}
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-idle:
+		case <-t.C:
+			log.Printf("upload: a request body read outlasted %v; bytes it returns later are not billed", wait)
+		}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.n
+}
+
+// interruptBodyRead makes a body read still blocked on the client's connection
+// return now, by moving the connection's read deadline to the present.
+func interruptBodyRead(w http.ResponseWriter) func() error {
+	return func() error { return http.NewResponseController(w).SetReadDeadline(time.Now()) }
 }
 
 // registerFileRoutes mounts the stored-transfer endpoints on the account mux.
@@ -156,7 +248,8 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		ttl = capSecs
 	}
 
-	br := bufio.NewReader(r.Body)
+	body := &clientBody{r: r.Body}
+	br := bufio.NewReader(body)
 	// Length-prefixed opaque encrypted manifest.
 	var mlen uint32
 	if err := binary.Read(br, binary.BigEndian, &mlen); err != nil {
@@ -237,23 +330,49 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		}
 	}
 	capped := &cappedReader{r: br, max: writeCap}
+	// Monthly traffic is what moved, so once bs.Put starts reading the body,
+	// every way out of this handler bills the ciphertext read from the client —
+	// everything past the manifest framing, never the declared Content-Length —
+	// exactly once. The count is final only once the body is released (see
+	// clientBody), which happens as soon as Put returns. A cancelled or
+	// oversize upload that fails inside Put, and one refused after Put by a
+	// later gate (traffic, daily quota, storage caps, a failed persist, a client
+	// that hung up after the last byte), all used to be free or partly free:
+	// the body crossed the network and the disk absorbed it, but no stored file
+	// was created, so nothing was metered — free bandwidth for anyone willing
+	// to be refused. The success path calls it explicitly, before answering;
+	// every other return reaches it through the defer, which runs after the
+	// post-Put traffic check, so that check still judges this upload against
+	// the traffic that existed before it. Own-node uploads (billable=false) are
+	// never metered: they use the user's own disk.
+	framing := 4 + int64(mlen)
+	releaseBody := func() int64 {
+		return body.release(interruptBodyRead(w), clientBodyReleaseWait) - framing
+	}
+	metered := false
+	meterConsumed := func() {
+		if metered {
+			return
+		}
+		metered = true
+		// Released again here only for a panic out of Put; otherwise this is
+		// the count taken when Put returned.
+		if sent := releaseBody(); billable && sent > 0 {
+			s.recordUploadTraffic(r.Context(), u.ID, sent, now)
+		}
+	}
+	defer meterConsumed()
 	size, err := bs.Put(r.Context(), blobKey, capped)
+	// Nothing reads the client's body past this point. Interrupting a read
+	// still running — which only a node answering before the body ended
+	// leaves behind — ends the request's context too: a refusal then only
+	// drops the blob and meters, both detached, and a node claiming success
+	// early fails the gates below closed.
+	releaseBody()
 	if err != nil {
 		// Reclaim a committed-but-response-lost blob; if the node is unreachable
 		// the pending-delete queue ensures GC retries instead of orphaning it.
 		s.dropBlob(bs, blobKey, nodeID)
-		// Bill what the client actually sent before it failed. A cancelled or
-		// oversize single-shot upload used to be entirely free: the body crossed
-		// the network, the disk absorbed it, and because no stored file was
-		// created nothing was ever metered — an unbounded free-bandwidth channel
-		// for anyone willing to hang up before the last byte. cappedReader has
-		// counted exactly what was read; a detached context so the client's own
-		// hangup cannot cancel the accounting for it.
-		if billable && capped.n > 0 {
-			mctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
-			_ = s.store.RecordMeter(mctx, u.ID, MeterUpload, capped.n, now)
-			cancel()
-		}
 		if errors.Is(err, errTooLarge) {
 			http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
 			return
@@ -359,10 +478,25 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// pre-checks already skip them, and the relay side likewise only counts
 	// billable traffic. Metering them here (as it used to) let a user's own-node
 	// traffic eat their plan's monthly cap, contradicting that contract.
-	if billable {
-		_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
-	}
+	meterConsumed()
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
+}
+
+// uploadMeterBudget bounds recordUploadTraffic's detached context.
+const uploadMeterBudget = 5 * time.Second
+
+// recordUploadTraffic bills n bytes of single-shot upload traffic to userID.
+// It runs on a detached context — values kept, cancellation dropped, bounded
+// by uploadMeterBudget — because the client's own hangup is one of the ways
+// an upload that already moved its bytes ends. It records once and never
+// retries; a failure is logged with who and how much, and those bytes stay
+// unbilled rather than being guessed at later.
+func (s *Service) recordUploadTraffic(ctx context.Context, userID string, n, at int64) {
+	mctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), uploadMeterBudget)
+	defer cancel()
+	if err := s.store.RecordMeter(mctx, userID, MeterUpload, n, at); err != nil {
+		log.Printf("upload: recording %d bytes of upload traffic for user %s failed; they stay unbilled: %v", n, userID, err)
+	}
 }
 
 // uploadRefundBudget bounds refundUploadReservation's detached context.

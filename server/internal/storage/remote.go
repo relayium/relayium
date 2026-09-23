@@ -121,6 +121,13 @@ func (e *errCapturingReader) readerErr() error {
 	return e.err
 }
 
+// Put streams body to the node. It can return before the transport is done
+// with body: net/http hands back a response that arrives while the request
+// body is still being copied (the node refuses 401/507 before reading, or 500
+// mid-stream) and keeps reading body in its own goroutine until that copy
+// stops. A caller that must know exactly what was read — or must stop the
+// reading, because body is its own Request.Body — has to take body back
+// itself once Put returns (account's clientBody does).
 func (r *RemoteBlobStore) Put(ctx context.Context, key string, body io.Reader) (int64, error) {
 	er := &errCapturingReader{r: body}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, r.url(key), er)

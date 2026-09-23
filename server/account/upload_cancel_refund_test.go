@@ -336,8 +336,9 @@ func TestSingleShotCancelBeforeReserveLeavesNoEvent(t *testing.T) {
 	code := h.serve(t, cancelBeforeReserve, "POST", "/api/files?ttl=0", singleShotBody())
 	st := h.state(t)
 	t.Logf("cancel-before-reserve single-shot: code=%d state=%+v", code, st)
-	// meter 0: see the single-shot under-metering note on the next test.
-	want := cancelState{seed: true}
+	// The body was read and written before the refusal, so its 900 bytes of
+	// traffic moved and are metered (W-N35); nothing else is kept or charged.
+	want := cancelState{meter: 900, seed: true}
 	if code == http.StatusOK || st != want {
 		t.Fatalf("control broken: code=%d state=%+v, want non-200 %+v", code, st, want)
 	}
@@ -357,23 +358,24 @@ func TestSingleShotCancelAfterReserveRefundsDailyQuota(t *testing.T) {
 		t.Fatalf("cancelled upload answered %d, want 500", code)
 	}
 	id := assertLiveRefundOf(t, h)
-	// The meter stays at 0: a single-shot rejected after bs.Put bills nothing.
-	// That is the pre-existing behaviour this fix does not touch, pinned here so
-	// the refund change provably moves no traffic — it is recorded as a separate
-	// finding, not endorsed.
-	want := cancelState{seed: true}
-	if before != want || st != want {
-		t.Fatalf("state: before=%+v after=%+v, want both %+v (no event, file, blob or traffic; seed intact)", before, st, want)
+	// The daily-quota reservation is refunded, but the 900 bytes this request
+	// moved stay metered as monthly traffic (W-N35): a refund is a quota
+	// correction, not a traffic refund.
+	wantBefore := cancelState{seed: true}
+	want := cancelState{meter: 900, seed: true}
+	if before != wantBefore || st != want {
+		t.Fatalf("state: before=%+v after=%+v, want %+v then %+v (no event, file or blob; 900 bytes of traffic; seed intact)", before, st, wantBefore, want)
 	}
 	if h.eventExists(t, id) {
 		t.Fatalf("reservation %s still charged", id)
 	}
 
-	// A retry is a fresh upload and is charged once.
+	// A retry is a fresh upload and is charged once: one daily-quota event, and
+	// its own 900 bytes of traffic on top of the cancelled attempt's 900.
 	rcode := h.serve(t, cancelNever, "POST", "/api/files?ttl=0", singleShotBody())
 	rs := h.state(t)
 	t.Logf("retry after cancelled single-shot: code=%d state=%+v", rcode, rs)
-	rwant := cancelState{events: 1, eventBytes: minBillableBytes, files: 1, blobs: 1, meter: 900, seed: true}
+	rwant := cancelState{events: 1, eventBytes: minBillableBytes, files: 1, blobs: 1, meter: 1800, seed: true}
 	if rcode != http.StatusOK || rs != rwant {
 		t.Fatalf("retry: code=%d state=%+v, want 200 %+v", rcode, rs, rwant)
 	}
@@ -471,7 +473,7 @@ func TestCancelAfterReserveRefundFailureIsLoggedNotCredited(t *testing.T) {
 	}{
 		{"single-shot", func(h *cancelHarness) (string, string, func() *bytes.Buffer) {
 			return "POST", "/api/files?ttl=0", singleShotBody
-		}, 0},
+		}, 900},
 		{"finalize", func(h *cancelHarness) (string, string, func() *bytes.Buffer) {
 			id := h.landSession(t)
 			return "POST", "/api/uploads/" + id + "/finalize", func() *bytes.Buffer { return nil }
