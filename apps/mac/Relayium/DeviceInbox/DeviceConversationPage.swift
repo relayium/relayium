@@ -781,8 +781,10 @@ struct DeviceConversationPage: View {
     /// property, not to a card, not to a log. What leaves this view with it is
     /// the model, which hands it to the protected sent-message store and to the
     /// seal, and nothing else.
+    /// Read-only: the message itself is never trimmed (see the Inbox surface
+    /// guard), only asked whether it holds anything but whitespace.
     private var draftIsBlank: Bool {
-        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        draft.allSatisfy(\.isWhitespace)
     }
 
     /// Put a returned message back, for THIS device only. The model answers nil

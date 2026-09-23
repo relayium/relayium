@@ -173,8 +173,15 @@ final class InboxCLISenderLiveInteropTests: XCTestCase {
             return result
         }
 
-        var stdout: String { (try? String(contentsOf: stdoutURL, encoding: .utf8)) ?? "" }
-        var stderr: String { (try? String(contentsOf: stderrURL, encoding: .utf8)) ?? "" }
+        var stdout: String { Self.log(stdoutURL) }
+        var stderr: String { Self.log(stderrURL) }
+
+        /// A child's captured output. An unreadable log is reported as such,
+        /// never as empty output, so a lost log cannot read as "said nothing".
+        static func log(_ url: URL) -> String {
+            do { return try String(contentsOf: url, encoding: .utf8) }
+            catch { return "<unreadable \(url.lastPathComponent): \(error)>" }
+        }
     }
 
     /// Everything one case started, registered the moment it exists, torn down
