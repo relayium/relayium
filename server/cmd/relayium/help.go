@@ -18,6 +18,20 @@ import (
 // at the bottom of this file are what make every one of them reachable through
 // all three forms.
 
+// linkRelayPolicy states, once for every command that can link, what decides
+// whether the bytes are relayed — which is also what decides whether the code
+// owner's relay allowance is spent. It mirrors linkrtc.ChooseRTCConfig (the
+// Web's chooseRtcConfig): relay-only WHENEVER a TURN relay was issued, with no
+// direct-first attempt, even on one LAN. TestLinkRelayPolicyHelpMatchesTheCode
+// holds the two together; change them together (A09c ice-direct/1 owns any
+// direct-first policy).
+const linkRelayPolicy = `Relay and your allowance: whenever the server issues a TURN relay for the
+code, a link sends every byte through that relay, even when the two ends could
+reach each other directly (on one LAN, too), and relayed traffic counts toward
+the code owner's relay allowance; the relay carries only ciphertext it cannot
+read. Only when no relay is issued (none configured, or the allowance is used
+up) does the link go peer to peer, and then it needs a direct path.`
+
 const pairUsage = `relayium pair — a live, two-way session with another device
 
 usage:
@@ -32,9 +46,9 @@ Once linked, the session is end-to-end encrypted: files, folders and messages
 go both ways, as often as you like, until either side leaves. The verification
 code (SAS) is printed on both ends; compare it to rule out a substituted
 endpoint (--verify makes that a required step). The "path:" line says what the
-bytes actually take: "direct" or "lan" (peer to peer), or "relay" — a TURN
-relay, used when no direct path exists, which carries only ciphertext it cannot
-read; relayed traffic counts toward the code owner's relay allowance.
+bytes actually take: "direct" or "lan" (peer to peer), or "relay".
+
+` + linkRelayPolicy + `
 
 In the session, each line you type is sent as a message, except:
   /send <path>...   send files or folders (quote names with spaces)
@@ -83,13 +97,15 @@ Device Inbox ("relayium inbox send", the Web or a native app).
 
 A short rendezvous on Relayium's server introduces the two ends. With a current
 relayium on the other end ("relayium receive" or "relayium pair"), or a
-Relayium app or the web page, they set up an end-to-end encrypted link: direct
-when a path exists, otherwise through a TURN relay that carries only
-ciphertext it cannot read (relayed traffic counts toward the code owner's relay
-allowance). The "path:" line says which one was used. Against an older relayium
-CLI, or on a server that predates pairing hints, the older CLI pairing is used
-unchanged: it is direct-only, so without a direct path (both ends behind strict
-NAT) the transfer fails rather than falling back to a relay.
+Relayium app or the web page, they set up an end-to-end encrypted link. The
+"path:" line says what the bytes took.
+
+` + linkRelayPolicy + `
+
+Against an older relayium CLI, or on a server that predates pairing hints, the
+older CLI pairing is used unchanged: it is direct-only, so without a direct
+path (both ends behind strict NAT) the transfer fails rather than falling back
+to a relay.
 
 The command ends once the receiver has verified and saved the files (exit 0),
 or when they were declined or not delivered (exit 1). Ctrl-C leaves the
@@ -120,8 +136,10 @@ account is needed to receive: the code is the introduction. Both machines must
 be online at the same time.
 
 With a current relayium or an app on the other end the files travel over an
-end-to-end encrypted link: direct when a path exists, otherwise through a TURN
-relay that carries only ciphertext it cannot read. The "path:" line says which.
+end-to-end encrypted link. The "path:" line says what the bytes took.
+
+` + linkRelayPolicy + `
+
 Against an older relayium CLI, or on a server that predates pairing hints, the
 older CLI pairing is used unchanged, and it is direct-only: without a direct
 path the transfer fails rather than falling back to a relay.
@@ -153,11 +171,14 @@ Both ends run this command (or one end runs "relayium pair", or uses a Relayium
 app or the web page). The session is end-to-end encrypted; Relayium keeps no
 message body and no server-side history. Both machines must be
 online at the same time. With a current relayium or an app on the other end it
-runs over a link — direct when possible, otherwise through a TURN relay that
-carries only ciphertext it cannot read. Against an older relayium CLI, or on a server that
-predates pairing hints, the older CLI pairing is used unchanged, and it is
-direct-only: with no direct path between the two machines the session cannot
-open, rather than falling back to a relay.
+runs over an end-to-end encrypted link.
+
+` + linkRelayPolicy + `
+
+Against an older relayium CLI, or on a server that predates pairing hints, the
+older CLI pairing is used unchanged, and it is direct-only: with no direct path
+between the two machines the session cannot open, rather than falling back to a
+relay.
 
 positional arguments:
   [code]   an existing 6-digit pairing code. Leave it out to mint one, which

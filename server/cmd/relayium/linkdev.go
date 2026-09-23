@@ -523,18 +523,20 @@ const linkDevBusyRetries = 8
 // ldSink is one inbound batch's files, created no-clobber under dest.
 //
 // Durability is reported to the session (FileDurable, which paces ACKs and
-// gates COMPLETE) as every byte written EXCEPT the last byte of a file that
-// is not yet finalized (synced and closed without error). So the session can
-// only reach "every byte durable" — and send COMPLETE / report saved — after
-// the last file was finalized; a finalization failure withdraws the batch
-// (REJECT) instead, and no COMPLETE can exist for it.
+// gates COMPLETE) as every byte written EXCEPT the last byte of each file not
+// yet finalized — synced, closed without error, AND installed under its final
+// name with the rest of the batch. So the session can only reach "every byte
+// durable" — and send COMPLETE / report saved — once the whole batch is at its
+// final names; a sync or install failure withdraws the batch (REJECT) instead,
+// and no COMPLETE can exist for it.
 type ldSink struct {
 	prompt    uint64
 	out       *linkSink // nil until the sink opened
 	wrote     []uint64  // bytes written per file
-	finalized []bool
-	written   uint64 // bytes written, all files
-	reported  uint64 // the durable total last reported
+	verified  []bool    // the session verified the file's chain (and it is synced)
+	finalized []bool    // installed under its final name
+	written   uint64    // bytes written, all files
+	reported  uint64    // the durable total last reported
 }
 
 // durable is written minus one held-back byte per written, unfinalized file.
@@ -671,6 +673,8 @@ type linkDevDriver struct {
 	textDone bool
 	saidDone bool
 	peerDone bool
+	// outputFailed: a message could not be written out; the run has failed.
+	outputFailed bool
 }
 
 func newLinkDevDriver(ctx context.Context, cmd linksession.Cmd, room *rzvous.Room, f crossFlags, dev linkDevOpts,
@@ -1352,7 +1356,12 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 			d.textsIn++
 			d.recvBytes += uint64(len(e.Text))
 			if d.ui != nil {
-				d.ui.text(e.Text)
+				if err := d.ui.text(e.Text); err != nil && !d.outputFailed {
+					// Nothing more can be shown: fail the run and leave.
+					d.outputFailed = true
+					d.fail(err.Error())
+					d.defer_(d.s.Close)
+				}
 				continue
 			}
 			fmt.Fprintln(d.stdout, termSafe(e.Text))
@@ -2329,11 +2338,12 @@ func (d *linkDevDriver) lanesAcknowledged() bool {
 // ---------------------------------------------------------------- inbound files
 
 // openSink creates every file of an accepted batch BEFORE the ACCEPT that
-// follows this effect, through the receive sink (linkSink, pair.go): only new
-// files, root-relative under dest, never through a symbolic link, each one
-// recorded as ours when it is created.
+// follows this effect — in the batch's private staging directory
+// (linkSink, pair.go). Nothing reaches its final name before the whole batch
+// is verified and durable (installBatch).
 func (d *linkDevDriver) openSink(prompt uint64, files []linkwire.FileMeta) error {
-	k := &ldSink{prompt: prompt, wrote: make([]uint64, len(files)), finalized: make([]bool, len(files))}
+	k := &ldSink{prompt: prompt, wrote: make([]uint64, len(files)), finalized: make([]bool, len(files)),
+		verified: make([]bool, len(files))}
 	d.sinks[prompt] = k
 	out, err := openLinkSink(d.dest, files)
 	if err != nil {
@@ -2344,13 +2354,21 @@ func (d *linkDevDriver) openSink(prompt uint64, files []linkwire.FileMeta) error
 	if d.ui != nil {
 		d.ui.receiving(d, out)
 	}
+	var total uint64
 	for i, f := range files {
+		total += f.Size
 		if f.Size == 0 {
-			// An empty file is complete now; finalize it here, checked.
-			if err := d.finalizeFile0(k, i); err != nil {
+			// An empty file is complete now; sync and close it, checked.
+			if err := d.syncStaged(k, i); err != nil {
 				return err
 			}
 		}
+	}
+	if total == 0 {
+		// No byte can be held back to gate COMPLETE, so a batch of empty
+		// files is installed now, before the ACCEPT; a later cancel takes
+		// back exactly what this installed.
+		return d.installBatch(k)
 	}
 	return nil
 }
@@ -2387,34 +2405,60 @@ func (d *linkDevDriver) reportDurable(k *ldSink) {
 }
 
 // finalizeFile runs when the session verified file idx's chain: sync and
-// close it, checked. Only a success releases its held-back byte, and with it
-// (for the last file) the batch's COMPLETE. A failure withdraws the batch
-// (REJECT, discard): the peer is told it was not saved, never that it was.
+// close it, checked; once every file of the batch is verified, install the
+// batch. Only a successful install releases the held-back bytes, and with
+// them the batch's COMPLETE. A failure withdraws the batch (REJECT, discard):
+// the peer is told it was not saved, never that it was.
 func (d *linkDevDriver) finalizeFile(prompt uint64, idx int) {
 	k := d.sinks[prompt]
-	if k == nil || k.out == nil || idx >= len(k.out.files) || k.finalized[idx] {
+	if k == nil || k.out == nil || idx >= len(k.out.files) || k.verified[idx] {
 		return
 	}
-	if err := d.finalizeFile0(k, idx); err != nil {
-		d.fail("save " + k.out.show(idx) + ": " + err.Error())
+	if k.out.files[idx] != nil {
+		if err := d.syncStaged(k, idx); err != nil {
+			d.fail("save " + k.out.show(idx) + ": " + err.Error())
+			d.defer_(d.s.CancelIncoming)
+			return
+		}
+	}
+	k.verified[idx] = true
+	for _, v := range k.verified {
+		if !v {
+			return
+		}
+	}
+	if err := d.installBatch(k); err != nil {
+		d.fail("save into " + termSafe(k.out.absDest) + ": " + err.Error())
 		d.defer_(d.s.CancelIncoming)
 		return
 	}
 	d.reportDurable(k)
 }
 
-func (d *linkDevDriver) finalizeFile0(k *ldSink, idx int) error {
+// syncStaged syncs and closes staged file idx.
+func (d *linkDevDriver) syncStaged(k *ldSink, idx int) error {
 	fh := k.out.files[idx]
 	k.out.files[idx] = nil
 	if fh == nil {
 		return errors.New("the file is not open")
 	}
-	if err := d.finalize(fh, k.out.path(idx)); err != nil {
+	return d.finalize(fh, k.out.path(idx))
+}
+
+// installBatch gives the batch its final names; only then is it "finalized"
+// (its held-back bytes released).
+func (d *linkDevDriver) installBatch(k *ldSink) error {
+	if k.out.done {
+		return nil
+	}
+	if err := k.out.install(); err != nil {
 		return err
 	}
-	k.finalized[idx] = true
-	if d.ui != nil {
-		d.ui.recvFileDone(k.out.rels[idx], k.out.sizes[idx])
+	for i := range k.finalized {
+		k.finalized[i] = true
+		if d.ui != nil {
+			d.ui.recvFileDone(k.out.rels[i], k.out.sizes[i])
+		}
 	}
 	return nil
 }

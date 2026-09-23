@@ -41,6 +41,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -51,6 +53,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -472,7 +475,9 @@ func (u *linkUI) feed(d *linkDevDriver, r io.Reader) {
 			line := sc.Text()
 			switch {
 			case len(line) > linkwire.TextMaxBytes:
-				d.q.push(ldItem{kind: ldItemScript, cmds: []ldCmd{{op: "note", text: tooLongNote(len(line))}}})
+				// Refused whole and unsent: a lost message, so the run fails
+				// (n: 1), as every other input loss does.
+				d.q.push(ldItem{kind: ldItemScript, cmds: []ldCmd{{op: "note", text: tooLongNote(len(line)), n: 1}}})
 			case line != "":
 				d.q.push(ldItem{kind: ldItemScript, cmds: []ldCmd{{op: "text", text: line}}})
 			}
@@ -505,12 +510,16 @@ func feedPairInput(d *linkDevDriver, r io.Reader) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
+		msg, isMsg := line, !strings.HasPrefix(line, "/")
 		if strings.HasPrefix(line, "//") { // "//x" sends the message "/x"
-			push(ldCmd{op: "text", text: line[1:]})
-			continue
+			msg, isMsg = line[1:], true
 		}
-		if !strings.HasPrefix(line, "/") {
-			push(ldCmd{op: "text", text: line})
+		if isMsg {
+			if len(msg) > linkwire.TextMaxBytes {
+				push(ldCmd{op: "note", text: tooLongNote(len(msg)), n: 1}) // unsent: the run fails
+				continue
+			}
+			push(ldCmd{op: "text", text: msg})
 			continue
 		}
 		verb, rest, _ := strings.Cut(strings.TrimSpace(line), " ")
@@ -723,18 +732,33 @@ func (u *linkUI) sendFileDone(p string, size uint64) {
 // ---------------------------------------------------------------- text
 
 // text prints one inbound message.
-func (u *linkUI) text(body string) {
+//
+// A write that fails or comes up short means the message was lost on our
+// side; the error is returned and the caller fails the run (the legacy
+// copyIncoming does the same).
+func (u *linkUI) text(body string) error {
 	u.finishBars()
+	var out []string
 	switch {
 	case u.outTTY:
 		for _, l := range strings.Split(body, "\n") {
-			fmt.Fprintf(u.stdout, "peer> %s\n", peerTextSafe(l))
+			out = append(out, "peer> "+peerTextSafe(l)+"\n")
 		}
 	case u.exact:
-		_, _ = io.WriteString(u.stdout, body)
+		out = []string{body}
 	default:
-		_, _ = io.WriteString(u.stdout, body+"\n")
+		out = []string{body + "\n"}
 	}
+	for _, s := range out {
+		n, err := io.WriteString(u.stdout, s)
+		if err == nil && n != len(s) {
+			err = io.ErrShortWrite
+		}
+		if err != nil {
+			return fmt.Errorf("a message from the other side could not be written to stdout, so it was lost: %w", err)
+		}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------- outcomes
@@ -920,29 +944,60 @@ func stripBidi(s string) string {
 
 // ================================================================ receive sink
 
-// linkSink is one accepted batch's files on disk (A08-DESIGN §6.2):
+// linkSink is one accepted batch on disk (A08-DESIGN §6.2).
 //
-//   - every path is opened through an os.Root on the destination, so nothing
-//     can be created outside it, whatever the peer named;
-//   - no symbolic link is followed: an existing link anywhere on the way is a
-//     refusal, and a leaf that exists in any form (a link included) is never
-//     opened — the file gets a " (n)" name instead (O_EXCL, no clobber);
-//   - every file and directory is recorded as ours when it is created, and a
-//     discard removes exactly those (directories only when empty) — never a
-//     file that was there before.
+// Incomplete bytes never sit at their final names. Each batch gets a private
+// staging directory in the destination (".relayium-partial-<random>", mode
+// 0700, created new), opened as its own os.Root and held for the batch's life;
+// its files are created there under flat names ("0", "1", …, O_EXCL), so
+// there is no directory inside it to swap. Only once every file is verified
+// and durable is the batch installed:
+//
+//   - each directory on the way to a final name is created new or walked,
+//     never through a symbolic link (an existing link is a refusal);
+//   - each file is hard-linked (or, where links are unsupported, copied)
+//     from its staged name to a final name that must not exist — nothing is
+//     ever overwritten; a taken name gets " (n)" — and the result is checked
+//     to be the very file this batch staged;
+//   - the staging directory is then emptied and removed.
+//
+// A discard (a batch that does not complete, ctrl-C, a failed install)
+// removes only what this batch owns: its staged files, by name inside its own
+// staging root, and any installed file or created directory only while the
+// path still names the same file this batch recorded when it made it
+// (os.SameFile). A path that was swapped for another file or a symbolic link
+// is left alone, so a concurrent rename can never make cleanup delete an
+// unrelated file.
 //
 // Peer names are display values (linkwire strips bidi and C0/C1). Here each
 // "/" or "\" segment is further cleaned for the filesystem: ".", ".." and
-// empty segments are dropped, a leading or trailing space or dot trimmed, and
-// on Windows the reserved characters replaced.
+// empty segments are dropped, a leading or trailing space trimmed, and on
+// Windows the reserved characters replaced.
 type linkSink struct {
-	root    *os.Root
-	absDest string
-	rels    []string // root-relative, slash-separated, as created
-	sizes   []uint64
-	files   []*os.File
-	dirs    []string // directories this batch created, in creation order
+	root      *os.Root
+	absDest   string
+	stageName string
+	stage     *os.Root
+	stageInfo fs.FileInfo
+
+	want      [][]string // intended segments per file
+	rels      []string   // the final (or, before install, intended) root-relative path
+	sizes     []uint64
+	files     []*os.File // staged handles, until synced and closed
+	staged    []fs.FileInfo
+	installed []fs.FileInfo // nil until that file is installed
+	dirs      []string      // directories this batch created, in creation order
+	dirInfo   []fs.FileInfo
+	done      bool // installed and staging removed
 }
+
+const sinkStagePrefix = ".relayium-partial-"
+
+// Test seams: run between the steps a concurrent process could race.
+var (
+	sinkHookBeforeInstall func(k *linkSink)
+	sinkHookAfterLink     func(k *linkSink, rel string)
+)
 
 func openLinkSink(dest string, files []linkwire.FileMeta) (*linkSink, error) {
 	abs, err := filepath.Abs(dest)
@@ -960,21 +1015,52 @@ func openLinkSink(dest string, files []linkwire.FileMeta) (*linkSink, error) {
 		return nil, err
 	}
 	k := &linkSink{root: root, absDest: abs}
+	var rnd [8]byte
+	if _, err := rand.Read(rnd[:]); err != nil {
+		k.discard()
+		return nil, err
+	}
+	k.stageName = sinkStagePrefix + hex.EncodeToString(rnd[:])
+	if err := root.Mkdir(k.stageName, 0o700); err != nil {
+		k.discard()
+		return nil, fmt.Errorf("create a private staging directory in %s: %w", termSafe(abs), err)
+	}
+	fi, err := root.Lstat(k.stageName)
+	if err != nil || !fi.IsDir() {
+		k.discard()
+		return nil, fmt.Errorf("the staging directory in %s changed under us", termSafe(abs))
+	}
+	k.stageInfo = fi
+	stage, err := root.OpenRoot(k.stageName)
+	if err != nil {
+		k.discard()
+		return nil, err
+	}
+	if st, err := stage.Stat("."); err != nil || !os.SameFile(st, fi) {
+		stage.Close()
+		k.discard()
+		return nil, fmt.Errorf("the staging directory in %s changed under us", termSafe(abs))
+	}
+	k.stage = stage
 	for i, f := range files {
 		segs := sinkSegments(f, i)
-		dir, err := k.mkdirs(segs[:len(segs)-1])
+		fh, err := stage.OpenFile(strconv.Itoa(i), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
 			k.discard()
 			return nil, err
 		}
-		fh, rel, err := k.create(dir, segs[len(segs)-1])
+		st, err := fh.Stat()
 		if err != nil {
+			fh.Close()
 			k.discard()
 			return nil, err
 		}
-		k.files = append(k.files, fh)
-		k.rels = append(k.rels, rel)
+		k.want = append(k.want, segs)
+		k.rels = append(k.rels, path.Join(segs...))
 		k.sizes = append(k.sizes, f.Size)
+		k.files = append(k.files, fh)
+		k.staged = append(k.staged, st)
+		k.installed = append(k.installed, nil)
 	}
 	return k, nil
 }
@@ -989,7 +1075,7 @@ func sinkSegments(f linkwire.FileMeta, i int) []string {
 	for _, s := range strings.FieldsFunc(rel, func(r rune) bool { return r == '/' || r == '\\' }) {
 		s = linkwire.SanitizeDisplayName(s)
 		s = strings.Map(func(r rune) rune {
-			if r == 0 || isBidiControl(r) || unicode.IsControl(r) || r == ' ' || r == ' ' {
+			if r == 0 || isBidiControl(r) || unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
 				return -1
 			}
 			if runtime.GOOS == "windows" && strings.ContainsRune(`<>:"|?*`, r) {
@@ -1012,6 +1098,36 @@ func sinkSegments(f linkwire.FileMeta, i int) []string {
 	return segs
 }
 
+// install moves a complete, verified batch to its final names (see linkSink).
+// Every staged file must already be synced and closed. On failure everything
+// this batch installed is removed again and the error returned.
+func (k *linkSink) install() error {
+	if k.done {
+		return nil
+	}
+	if sinkHookBeforeInstall != nil {
+		sinkHookBeforeInstall(k)
+	}
+	for i := range k.want {
+		segs := k.want[i]
+		dir, err := k.mkdirs(segs[:len(segs)-1])
+		if err == nil {
+			err = k.place(i, dir, segs[len(segs)-1])
+		}
+		if err != nil {
+			k.uninstall()
+			return err
+		}
+	}
+	for i := range k.want {
+		_ = k.stage.Remove(strconv.Itoa(i))
+	}
+	k.closeStage()
+	k.removeOwned(k.stageName, k.stageInfo)
+	k.done = true
+	return nil
+}
+
 // mkdirs creates (or walks) the directories, refusing any symbolic link.
 func (k *linkSink) mkdirs(segs []string) (string, error) {
 	cur := ""
@@ -1031,36 +1147,119 @@ func (k *linkSink) mkdirs(segs []string) (string, error) {
 		if err := k.root.Mkdir(cur, 0o755); err != nil {
 			return "", err
 		}
+		fi, err = k.root.Lstat(cur)
+		if err != nil || !fi.IsDir() {
+			return "", fmt.Errorf("%s in %s changed as it was created", termSafe(cur), termSafe(k.absDest))
+		}
 		k.dirs = append(k.dirs, cur)
+		k.dirInfo = append(k.dirInfo, fi)
 	}
 	return cur, nil
 }
 
-// create opens a new file named base (or "base (n).ext") in dir, O_EXCL.
-func (k *linkSink) create(dir, base string) (*os.File, string, error) {
+// place gives staged file i a final name base (or "base (n).ext") in dir.
+func (k *linkSink) place(i int, dir, base string) error {
 	ext := path.Ext(base)
 	stem := strings.TrimSuffix(base, ext)
 	if stem == "" { // ".profile": the whole name is the stem
 		stem, ext = base, ""
 	}
+	staged := path.Join(k.stageName, strconv.Itoa(i))
 	for n := 0; n < 1000; n++ {
 		cand := base
 		if n > 0 {
 			cand = fmt.Sprintf("%s (%d)%s", stem, n, ext)
 		}
 		rel := path.Join(dir, cand)
-		fh, err := k.root.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if err == nil {
-			return fh, rel, nil
+		err := k.root.Link(staged, rel)
+		if errors.Is(err, fs.ErrExist) {
+			continue
 		}
-		if !errors.Is(err, fs.ErrExist) {
-			return nil, "", err
+		if err != nil {
+			// No hard links here (some filesystems): copy instead.
+			if err = k.copyStaged(i, rel); errors.Is(err, fs.ErrExist) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
 		}
+		if sinkHookAfterLink != nil {
+			sinkHookAfterLink(k, rel)
+		}
+		fi, err := k.root.Lstat(rel)
+		if err != nil {
+			return err
+		}
+		if err == nil && !os.SameFile(fi, k.staged[i]) && !k.copiedOK(i, fi) {
+			// The name now holds something that is not our file (a path on
+			// the way was swapped under us): not ours to remove; refuse.
+			return fmt.Errorf("%s in %s changed while it was being saved", termSafe(rel), termSafe(k.absDest))
+		}
+		k.installed[i] = fi
+		k.rels[i] = rel
+		return nil
 	}
-	return nil, "", fmt.Errorf("no free name for %s in %s", termSafe(base), termSafe(k.absDest))
+	return fmt.Errorf("no free name for %s in %s", termSafe(base), termSafe(k.absDest))
 }
 
-// path is file i's location, for the finalize hook and messages.
+// copied records files installed by copy (their identity is the new file).
+func (k *linkSink) copiedOK(i int, fi fs.FileInfo) bool {
+	return k.installed[i] != nil && os.SameFile(fi, k.installed[i])
+}
+
+// copyStaged copies staged file i to a new file rel (O_EXCL), synced.
+func (k *linkSink) copyStaged(i int, rel string) error {
+	src, err := k.stage.Open(strconv.Itoa(i))
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	dst, err := k.root.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	st, err := dst.Stat()
+	if err == nil {
+		k.installed[i] = st
+		_, err = io.Copy(dst, src)
+	}
+	if err == nil {
+		err = dst.Sync()
+	}
+	if cerr := dst.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// removeOwned removes rel only while it still names the file (or directory)
+// recorded as ours.
+func (k *linkSink) removeOwned(rel string, info fs.FileInfo) {
+	if k.root == nil || info == nil {
+		return
+	}
+	if fi, err := k.root.Lstat(rel); err == nil && os.SameFile(fi, info) {
+		_ = k.root.Remove(rel)
+	}
+}
+
+// uninstall takes back every installed file and created directory of ours.
+func (k *linkSink) uninstall() {
+	for i, info := range k.installed {
+		if info != nil {
+			k.removeOwned(k.rels[i], info)
+			k.installed[i] = nil
+		}
+	}
+	for i := len(k.dirs) - 1; i >= 0; i-- {
+		k.removeOwned(k.dirs[i], k.dirInfo[i]) // fails, and is kept, when not empty
+	}
+	k.dirs, k.dirInfo = nil, nil
+}
+
+// path is file i's (intended or final) location, for the finalize hook and
+// messages.
 func (k *linkSink) path(i int) string { return filepath.Join(k.absDest, filepath.FromSlash(k.rels[i])) }
 
 func (k *linkSink) show(i int) string {
@@ -1070,7 +1269,14 @@ func (k *linkSink) show(i int) string {
 	return "a file"
 }
 
-// close releases open handles; the files stay.
+func (k *linkSink) closeStage() {
+	if k.stage != nil {
+		_ = k.stage.Close()
+		k.stage = nil
+	}
+}
+
+// close releases handles once the batch is installed; the files stay.
 func (k *linkSink) close() {
 	for i, fh := range k.files {
 		if fh != nil {
@@ -1078,13 +1284,18 @@ func (k *linkSink) close() {
 			k.files[i] = nil
 		}
 	}
+	if !k.done {
+		k.discard() // never leave a staging directory behind
+		return
+	}
+	k.closeStage()
 	if k.root != nil {
 		_ = k.root.Close()
 		k.root = nil
 	}
 }
 
-// discard removes exactly what this batch created.
+// discard removes exactly what this batch owns (see linkSink).
 func (k *linkSink) discard() {
 	for i, fh := range k.files {
 		if fh != nil {
@@ -1095,12 +1306,14 @@ func (k *linkSink) discard() {
 	if k.root == nil {
 		return
 	}
-	for _, rel := range k.rels {
-		_ = k.root.Remove(rel)
+	k.uninstall()
+	if k.stage != nil {
+		for i := range k.staged {
+			_ = k.stage.Remove(strconv.Itoa(i))
+		}
+		k.closeStage()
 	}
-	for i := len(k.dirs) - 1; i >= 0; i-- {
-		_ = k.root.Remove(k.dirs[i]) // fails, and is kept, when not empty
-	}
+	k.removeOwned(k.stageName, k.stageInfo)
 	_ = k.root.Close()
 	k.root = nil
 }

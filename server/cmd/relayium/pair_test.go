@@ -812,8 +812,20 @@ func TestInterruptIsALeaveAndNeverReportedSaved(t *testing.T) {
 			<-hub.joins
 			s := startCLI(t, "send", nil, strings.NewReader(""), "send", "--server", hub.url, src, ldCode)
 			pairWaitFor(t, 60*time.Second, "bytes on disk", func() bool {
-				fi, err := os.Stat(filepath.Join(dest, "big.bin"))
-				return err == nil && fi.Size() > 4<<20
+				// Incomplete bytes live in the batch's staging directory.
+				var big bool
+				_ = filepath.WalkDir(dest, func(_ string, e os.DirEntry, err error) error {
+					if err == nil && !e.IsDir() {
+						if fi, err := e.Info(); err == nil && fi.Size() > 4<<20 {
+							big = true
+						}
+					}
+					return nil
+				})
+				if _, err := os.Stat(filepath.Join(dest, "big.bin")); err == nil {
+					t.Errorf("an incomplete file appeared under its final name")
+				}
+				return big
 			}, r, s)
 			victim, other := r, s
 			if who == "sender" {
@@ -870,17 +882,41 @@ func TestLinkSinkNoClobberOwnedAndRootRelative(t *testing.T) {
 	meta := func(p string) linkwire.FileMeta {
 		return linkwire.FileMeta{Name: filepath.Base(p), Path: p, HasPath: true, Size: 1}
 	}
+	fill := func(k *linkSink) {
+		for i, fh := range k.files {
+			if _, err := fh.Write([]byte{byte('a' + i)}); err != nil {
+				t.Fatal(err)
+			}
+			fh.Close()
+			k.files[i] = nil
+		}
+	}
 
-	// No clobber: an existing file, a link at the leaf (never opened).
+	// Staged, nothing at a final name yet; then installed without clobbering
+	// the existing file or the link at the leaf.
 	k, err := openLinkSink(dest, []linkwire.FileMeta{meta("keep.txt"), meta("leaf.txt"), meta("new/dir/f.txt"), meta("../../escape.txt")})
 	if err != nil {
+		t.Fatal(err)
+	}
+	fill(k)
+	if _, err := os.Lstat(filepath.Join(dest, "new")); !errors.Is(err, os.ErrNotExist) {
+		t.Error("a final path exists before install")
+	}
+	if err := k.install(); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"keep (1).txt", "leaf (1).txt", "new/dir/f.txt", "escape.txt"}
 	if strings.Join(k.rels, "|") != strings.Join(want, "|") {
 		t.Errorf("rels = %q, want %q", k.rels, want)
 	}
-	k.discard()
+	for _, g := range pairListTree(t, dest) {
+		if strings.HasPrefix(g, sinkStagePrefix) {
+			t.Errorf("staging left behind after install: %s", g)
+		}
+	}
+	// An installed batch taken back (a later failure) removes exactly its own.
+	k.uninstall()
+	k.close()
 	if b, _ := os.ReadFile(filepath.Join(dest, "keep.txt")); len(b) != 3 {
 		t.Error("the pre-existing file was touched")
 	}
@@ -889,21 +925,29 @@ func TestLinkSinkNoClobberOwnedAndRootRelative(t *testing.T) {
 	}
 	for _, gone := range []string{"keep (1).txt", "leaf (1).txt", "new", "escape.txt"} {
 		if _, err := os.Lstat(filepath.Join(dest, gone)); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("discard left %s (%v)", gone, err)
+			t.Errorf("uninstall left %s (%v)", gone, err)
 		}
-	}
-	if got := pairListTree(t, outside); len(got) != 0 {
-		t.Errorf("something was written outside: %v", got)
 	}
 
-	// A symbolic link on the way is refused, inside the root or out of it.
+	// A symbolic link on the way is refused at install, inside the root or out
+	// of it, and the refused batch leaves nothing — not even its staging.
 	for _, p := range []string{"out/x.txt", "inroot/x.txt"} {
-		if k, err := openLinkSink(dest, []linkwire.FileMeta{meta("ok.txt"), meta(p)}); err == nil {
-			k.discard()
-			t.Errorf("%s: wrote through a symbolic link", p)
+		k, err := openLinkSink(dest, []linkwire.FileMeta{meta("ok.txt"), meta(p)})
+		if err != nil {
+			t.Fatal(err)
 		}
+		fill(k)
+		if err := k.install(); err == nil {
+			t.Errorf("%s: installed through a symbolic link", p)
+		}
+		k.discard()
 		if _, err := os.Stat(filepath.Join(dest, "ok.txt")); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s: a refused batch left ok.txt behind", p)
+		}
+	}
+	for _, g := range pairListTree(t, dest) {
+		if strings.HasPrefix(g, sinkStagePrefix) {
+			t.Errorf("a discarded batch left its staging: %s", g)
 		}
 	}
 	if got := pairListTree(t, outside); len(got) != 0 {
@@ -912,6 +956,80 @@ func TestLinkSinkNoClobberOwnedAndRootRelative(t *testing.T) {
 	if got := pairListTree(t, filepath.Join(dest, "other")); strings.Join(got, "|") != "x" {
 		t.Errorf("wrote through the in-root link: %v", got)
 	}
+}
+
+// Codex gate-2 #2, deterministic: while a batch is being received, another
+// process renames the batch's directory away and puts a symbolic link to an
+// unrelated directory — which holds a file of the same name — in its place.
+// Neither the install nor the cleanup may touch that unrelated file.
+func TestLinkSinkDirectoryReplacementCannotRedirectCleanup(t *testing.T) {
+	meta := linkwire.FileMeta{Name: "f", Path: "batch/f", HasPath: true, Size: 1}
+	setup := func(t *testing.T) (dest string) {
+		dest = t.TempDir()
+		pairWriteFile(t, filepath.Join(dest, "existing", "f"), 7) // the unrelated file
+		return dest
+	}
+	swap := func(t *testing.T, dest string) {
+		if err := os.Rename(filepath.Join(dest, "batch"), filepath.Join(dest, "batch-moved")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("existing", filepath.Join(dest, "batch")); err != nil {
+			t.Skip("no symlinks here:", err)
+		}
+	}
+	unrelatedIntact := func(t *testing.T, dest string) {
+		if b, err := os.ReadFile(filepath.Join(dest, "existing", "f")); err != nil || len(b) != 7 {
+			t.Errorf("the unrelated file was changed or removed (%d bytes, %v)", len(b), err)
+		}
+	}
+	t.Run("before-install-then-cancel", func(t *testing.T) {
+		dest := setup(t)
+		k, err := openLinkSink(dest, []linkwire.FileMeta{meta})
+		if err != nil {
+			t.Fatal(err)
+		}
+		k.files[0].Write([]byte("x"))
+		swap(t, dest)
+		k.discard() // the batch was cancelled
+		unrelatedIntact(t, dest)
+	})
+	t.Run("during-install", func(t *testing.T) {
+		dest := setup(t)
+		k, err := openLinkSink(dest, []linkwire.FileMeta{meta})
+		if err != nil {
+			t.Fatal(err)
+		}
+		k.files[0].Write([]byte("x"))
+		k.files[0].Close()
+		k.files[0] = nil
+		sinkHookBeforeInstall = func(*linkSink) { swap(t, dest) }
+		t.Cleanup(func() { sinkHookBeforeInstall = nil })
+		if err := k.install(); err == nil {
+			t.Error("installed through the swapped-in link")
+		}
+		k.discard()
+		unrelatedIntact(t, dest)
+	})
+	t.Run("after-install-then-cancel", func(t *testing.T) {
+		dest := setup(t)
+		k, err := openLinkSink(dest, []linkwire.FileMeta{meta})
+		if err != nil {
+			t.Fatal(err)
+		}
+		k.files[0].Write([]byte("x"))
+		k.files[0].Close()
+		k.files[0] = nil
+		if err := k.install(); err != nil {
+			t.Fatal(err)
+		}
+		swap(t, dest) // batch/ now points at existing/, whose f is not ours
+		k.uninstall() // a failure after install takes the batch back
+		k.close()
+		unrelatedIntact(t, dest)
+		if b, err := os.ReadFile(filepath.Join(dest, "batch-moved", "f")); err != nil || string(b) != "x" {
+			t.Logf("our file stays where it was moved (%q, %v): not removable by path any more, and not deleted by guess", b, err)
+		}
+	})
 }
 
 func TestSplitPairPaths(t *testing.T) {
@@ -1074,5 +1192,99 @@ func TestProductInputLossFailsTheRun(t *testing.T) {
 				t.Errorf("B got %q\n%s", b.out.String(), b)
 			}
 		})
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("injected: no space left on device")
+}
+
+// shortWriter accepts all but the last byte and reports no error (a broken
+// io.Writer); the front end must still treat the message as lost.
+type shortWriter struct{}
+
+func (shortWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	return len(p) - 1, nil
+}
+
+func TestLinkUITextReportsLostOutput(t *testing.T) {
+	for name, w := range map[string]io.Writer{"failing": failingWriter{}, "short": shortWriter{}} {
+		for _, mode := range []linkUI{{outTTY: true}, {exact: true}, {}} {
+			u := mode
+			u.stdout, u.stderr = w, io.Discard
+			if err := u.text("hello"); err == nil {
+				t.Errorf("%s writer, tty=%t exact=%t: a lost message was not reported", name, u.outTTY, u.exact)
+			}
+		}
+	}
+	var ok bytes.Buffer
+	u := &linkUI{stdout: &ok, stderr: io.Discard}
+	if err := u.text("fine"); err != nil || ok.String() != "fine\n" {
+		t.Errorf("a good writer: %q, %v", ok.String(), err)
+	}
+}
+
+// A message that arrives but cannot be written out (a full disk under a
+// redirected stdout) fails the run instead of ending it with exit 0.
+func TestProductTextOutputFailureFailsTheRun(t *testing.T) {
+	hub := startLinkDevHub(t)
+	oldIn, oldTTY := textStdin, textStdinIsTTY
+	textStdin = func() io.Reader { return strings.NewReader("from A") }
+	textStdinIsTTY = func() bool { return false }
+	t.Cleanup(func() { textStdin, textStdinIsTTY = oldIn, oldTTY })
+	var errb lockedBuf
+	done := make(chan int, 1)
+	go func() { done <- Run([]string{"text", "--server", hub.url, ldCode}, failingWriter{}, &errb) }()
+	<-hub.joins
+	b := startCLI(t, "B", nil, nil, "pair", "--server", hub.url, ldCode)
+	pairWaitFor(t, 30*time.Second, "B admitted", func() bool { return strings.Contains(b.err.String(), "connected.") }, b)
+	b.line(t, "hello A")
+	select {
+	case code := <-done:
+		if code != 1 || !strings.Contains(errb.String(), "could not be written to stdout") {
+			t.Errorf("A: exit %d, want 1 with the lost-output reason\n%s", code, errb.String())
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatalf("A did not end\n%s\n%s", errb.String(), b)
+	}
+	b.wait(t, 30*time.Second)
+}
+
+// The exact message limit: 65,536 bytes are sent; 65,537 are refused whole
+// and fail the run (a lost message), for `text` typed at a terminal and for
+// `pair`.
+func TestProductMessageLimitBoundary(t *testing.T) {
+	for _, cmd := range []string{"text", "pair"} {
+		for _, n := range []int{linkwire.TextMaxBytes, linkwire.TextMaxBytes + 1} {
+			t.Run(fmt.Sprintf("%s/%d", cmd, n), func(t *testing.T) {
+				hub := startLinkDevHub(t)
+				body := strings.Repeat("m", n)
+				a := startCLI(t, "A", []string{"RELAYIUM_TEST_FORCE_TTY=1"}, strings.NewReader("before\n"+body+"\nafter\n"),
+					cmd, "--server", hub.url, ldCode)
+				<-hub.joins
+				b := startCLI(t, "B", nil, nil, "pair", "--server", hub.url, ldCode)
+				pairWaitFor(t, 60*time.Second, "B got the last line", func() bool {
+					return strings.Contains(b.out.String(), "after\n")
+				}, a, b)
+				b.line(t, "/quit") // `text` waits for the other side to finish
+				code := a.wait(t, 60*time.Second, b)
+				b.wait(t, 30*time.Second, a)
+				got := strings.Contains(b.out.String(), body+"\n")
+				if n == linkwire.TextMaxBytes {
+					if code != 0 || !got {
+						t.Errorf("at the limit: exit %d, delivered %t\n%s", code, got, a)
+					}
+				} else {
+					if code != 1 || got || !strings.Contains(a.err.String(), "over the 65536-byte limit") {
+						t.Errorf("over the limit: exit %d, delivered %t\n%s", code, got, a)
+					}
+				}
+			})
+		}
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/relayium/relayium/internal/linkrtc"
 )
 
 // A person asking for help should get an answer on stdout and a success exit,
@@ -281,5 +283,48 @@ func TestUsageListsPairAndHidesTheDeveloperCommand(t *testing.T) {
 	}
 	if _, ok := commandUsage["__link"]; ok {
 		t.Error("__link must not be a documented command")
+	}
+}
+
+// The relay sentence is a billing statement: it says when the code owner's
+// relay allowance is spent. It must say what linkrtc.ChooseRTCConfig does —
+// relay-only whenever a TURN server was issued, peer to peer otherwise — in
+// every command that can link, and no help may claim a direct-first policy.
+// If the policy changes (A09c ice-direct/1), this test fails until the help
+// changes with it.
+func TestLinkRelayPolicyHelpMatchesTheCode(t *testing.T) {
+	turn := linkrtc.ICEConfig{ICEServers: []linkrtc.ICEServer{
+		{URLs: []string{"stun:stun.example:3478"}},
+		{URLs: []string{"turn:turn.example:3478?transport=udp"}, Username: "1:u", Credential: "p"},
+	}}
+	stunOnly := linkrtc.ICEConfig{ICEServers: []linkrtc.ICEServer{{URLs: []string{"stun:stun.example:3478"}}}}
+	if !linkrtc.ChooseRTCConfig(turn, "").RelayOnly {
+		t.Fatal("the code no longer relays every byte when TURN is issued: rewrite linkRelayPolicy (and this test) to say what it does")
+	}
+	if linkrtc.ChooseRTCConfig(stunOnly, "").RelayOnly {
+		t.Fatal("the code relays without TURN: rewrite linkRelayPolicy")
+	}
+	for _, n := range []string{"whenever the server issues a TURN relay", "every byte through that relay",
+		"even when the two ends could\nreach each other directly", "relay allowance", "Only when no relay is issued"} {
+		if !strings.Contains(linkRelayPolicy, n) {
+			t.Errorf("linkRelayPolicy lost %q", n)
+		}
+	}
+	for _, cmd := range []string{"pair", "send", "receive", "text"} {
+		var stdout, stderr bytes.Buffer
+		if rc := Run([]string{cmd, "-h"}, &stdout, &stderr); rc != 0 {
+			t.Fatalf("%s -h: rc = %d", cmd, rc)
+		}
+		got := stdout.String()
+		if !strings.Contains(got, linkRelayPolicy) {
+			t.Errorf("%s -h does not state the relay policy", cmd)
+		}
+		flat := strings.Join(strings.Fields(got), " ")
+		for _, banned := range []string{"direct when a path exists", "direct when possible", "used when no direct path",
+			"otherwise through a TURN relay", "direct-first"} {
+			if strings.Contains(flat, banned) {
+				t.Errorf("%s -h claims a direct-first policy (%q) the code does not have", cmd, banned)
+			}
+		}
 	}
 }
