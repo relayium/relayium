@@ -222,4 +222,12 @@ export const PATH_MATRIX = [
     + "no other governed workflow runs that test. Named one file at a time rather than through "
     + "`docs/**`, which would start the full web suite, the accessibility scan and three "
     + "headless-Chrome journeys for every unrelated document in the repository"],
+  ["server/cmd/relayium/run.go",
+    ["android-interop.yml", "go.yml", "native-web-pairing.yml", "web.yml", "windows.yml"],
+    "a server source file that is ALSO web TEST INPUT. Every lane that compiles and runs this "
+    + "server starts, as for any server file; web.yml starts as well because "
+    + "`web/scripts/pages/cli-backup-integrity-recovery.test.mjs` reads reportExit's failure "
+    + "line out of this file and asserts the SSH backup guide quotes it, and that test runs in "
+    + "web.yml's `npm test` step. Only this one file: server/account/pairroom.go above must "
+    + "still not start web.yml, so `server/cmd/relayium/**` would be the wrong fix"],
 ];

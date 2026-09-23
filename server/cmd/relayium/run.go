@@ -493,8 +493,11 @@ func runSend(args []string, stdout, stderr io.Writer) int {
 
 func reportExit(rep xfer.Report, stderr io.Writer) int {
 	if len(rep.Failed) > 0 {
-		// The names are the peer's manifest paths on a pull or a receive.
-		fmt.Fprintf(stderr, "%d file(s) failed integrity check: %v\n", len(rep.Failed), termtext.SafeAll(rep.Failed))
+		// The names are the peer's manifest paths on a pull or a receive. Failed
+		// holds both a hash mismatch and a file the receiver could not save or
+		// install, and the result on the wire does not say which, so neither side
+		// names a cause.
+		fmt.Fprintf(stderr, "%d file(s) could not be verified or saved: %v\n", len(rep.Failed), termtext.SafeAll(rep.Failed))
 		return 1
 	}
 	return 0

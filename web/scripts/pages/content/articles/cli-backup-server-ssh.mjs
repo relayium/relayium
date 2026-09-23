@@ -145,14 +145,15 @@ sent 2 file(s) (zero-dependency mode)`,
             fix: "No relayium on the remote means push took the tar-stream fallback, which hashes nothing per file and can leave a batch partly applied when a name collides mid-extraction. Install the CLI on the server to get the up-front collision check and per-file SHA-256 back. It also lets you switch the job to relayium sync, which has no fallback at all and fails loudly instead of downgrading silently.",
           },
           {
-            symptom: "\"N file(s) failed integrity check\" and a non-zero exit.",
+            symptom: "\"N file(s) could not be verified or saved\" and a non-zero exit.",
             code: [
               `relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
 # 1`,
             ],
-            fix: "The SHA-256 computed on arrival did not match the one sent, and the native protocol stages each file and installs it only once the hash matches — so that path was never written to the server, and there is nothing to remove there. Re-running the whole batch is still refused by the collision check, because the other files from that batch already landed, so push that one path on its own. If it fails again it is not a one-off transit error: look at the source file (something writing to it while it is read) and at the storage on either end.",
+            fix: "Either the SHA-256 computed on arrival did not match the one sent, or relayium on the server could not save or install the file — no free space, no permission, or a destination path it cannot write to; the message does not say which. The first line is printed by relayium on the server and forwarded over SSH, and exit status 1 is that remote process's exit code. Either way, the native protocol stages each file and installs it only after its hash matches and it has been saved — so this transfer did not install that path. That does not prove nothing is there, since something else may have created it in the meantime, so do not delete anything already at the destination just because of this message. If other files from that batch did land, re-running the whole batch is refused by the collision check, so push that one path on its own, to the same intended destination. If it fails again it is not a one-off transit error: check free space, permissions and the destination path on the server, and look at the source file (something writing to it while it is read).",
           },
         ],
       },
@@ -331,14 +332,15 @@ sent 2 file(s) (zero-dependency mode)`,
             fix: "远端没有 relayium，就意味着 push 走了 tar 流兜底：它逐文件不做任何哈希，而且在解压中途遇到重名时可能让一批文件只装了一半。在服务器上装好 CLI，就能把发送前的冲突预检和逐文件 SHA-256 拿回来。装好之后你还可以把这个任务改成 relayium sync——它根本没有兜底路径，会响亮地失败而不是悄悄降级。",
           },
           {
-            symptom: "出现 “N file(s) failed integrity check”，并以非 0 退出。",
+            symptom: "出现 “N file(s) could not be verified or saved”，并以非 0 退出。",
             code: [
               `relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
 # 1`,
             ],
-            fix: "落地时算出的 SHA-256 与发送时的不一致；原生协议会先把每个文件写到暂存区，只有校验一致才安装，所以那个路径根本没写到服务器上，接收端没有东西需要删。整批重跑仍然会被冲突检查拒绝——同一批里其他文件已经落地了——所以单独 push 那一个路径。如果它反复失败，就不是一次偶发的链路错误：去查源文件（读取时是否正被写入）和两端的存储。",
+            fix: "要么落地时算出的 SHA-256 与发送时的不一致，要么服务器上的 relayium 没能保存或安装这个文件（磁盘空间不足、没有权限，或目标路径无法写入）；这条消息不区分是哪一种。第一行由服务器上的 relayium 打印、经 SSH 转发过来，后面的 exit status 1 是那个远程进程的退出码。无论哪种，原生协议都会先把每个文件写到暂存区，只有校验一致并且保存成功才安装，所以这次传输没有安装那个路径。但这并不能证明目标位置什么都没有——期间可能有别的程序创建了它——所以不要仅仅因为这条消息就删除接收端已有的文件。如果同一批里有其他文件已经落地，整批重跑会被冲突检查拒绝，所以单独 push 那一个路径，目标仍是原来打算的位置。如果它反复失败，就不是一次偶发的链路错误：检查服务器上的剩余空间、权限和目标路径，并查源文件（读取时是否正被写入）。",
           },
         ],
       },
@@ -512,14 +514,15 @@ sent 2 file(s) (zero-dependency mode)`,
             fix: "リモートに relayium が無いということです。sync にはフォールバックが無いのでそもそも動かず、push は何も検証しない tar ストリームに落ちて毎回ファイル全体を送り直します。サーバーに入れてください。半端なファイルを次回に続けるのは sync だけで、push と pull はどちらのプロトコルでも再開しません。すでに sync を使っているなら、その待ち受け側の再開を実際に切る --no-resume を渡していないかも確認してください。",
           },
           {
-            symptom: "「N file(s) failed integrity check」と表示され、終了コードが 0 以外になる。",
+            symptom: "「N file(s) could not be verified or saved」と表示され、終了コードが 0 以外になる。",
             code: [
               `relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
 # 1`,
             ],
-            fix: "到着時に計算した SHA-256 が送信時のものと一致せず、ネイティブプロトコルは各ファイルをいったん暫定領域に置いてハッシュが一致したときだけ設置します。つまりそのパスはサーバーに書き込まれておらず、向こう側に削除すべきものはありません。同じバッチの他のファイルはすでに設置済みなので、バッチ全体をやり直しても衝突チェックに拒否されます。そのパスだけを push し直してください。それでも繰り返し失敗するなら一度きりの転送エラーではありません。元ファイル（読み取り中に何かが書き込んでいないか）と両端のストレージを調べてください。",
+            fix: "到着時に計算した SHA-256 が送信時のものと一致しなかったか、サーバー上の relayium がファイルを保存・設置できなかった（空き容量不足、権限がない、書き込めない保存先パスなど）かのどちらかで、このメッセージはどちらなのかを区別しません。1 行目はサーバー上の relayium が出力して SSH 経由で転送されたもので、続く exit status 1 はそのリモートプロセスの終了コードです。どちらの場合も、ネイティブプロトコルは各ファイルをいったん暫定領域に置き、ハッシュが一致して保存できたときだけ設置します。つまり今回の転送はそのパスを設置していません。ただし、それは保存先に何も無いことの証明にはなりません（その間に別のプログラムが作成した可能性があります）。このメッセージだけを理由に、受信側に既にあるファイルを削除しないでください。同じバッチの他のファイルがすでに設置されている場合は、バッチ全体をやり直すと衝突チェックに拒否されるので、そのパスだけを本来の保存先に向けて push し直してください。それでも繰り返し失敗するなら一度きりの転送エラーではありません。サーバー側の空き容量・権限・保存先パスを確認し、元ファイル（読み取り中に何かが書き込んでいないか）も調べてください。",
           },
         ],
       },
@@ -689,14 +692,15 @@ sent 2 file(s) (zero-dependency mode)`,
             fix: "원격에 relayium이 없다는 뜻입니다. sync는 대체 방식이 없어 아예 실행되지 않고, push는 아무것도 검증하지 않는 tar 스트림으로 내려가 늘 파일 전체를 다시 보냅니다. 서버에 설치하세요. 부분 파일을 다음 실행에서 이어가는 것은 sync뿐이며, push와 pull은 어느 프로토콜에서든 재개하지 않습니다. 이미 sync를 쓰고 있다면, 그 수신 측의 재개를 실제로 끄는 --no-resume 을 넘기고 있지는 않은지도 확인하세요.",
           },
           {
-            symptom: "“N file(s) failed integrity check”가 나오고 0이 아닌 코드로 종료됩니다.",
+            symptom: "“N file(s) could not be verified or saved”가 나오고 0이 아닌 코드로 종료됩니다.",
             code: [
               `relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
 # 1`,
             ],
-            fix: "도착 시 계산한 SHA-256이 보낸 값과 달랐고, 네이티브 프로토콜은 각 파일을 먼저 스테이징한 뒤 해시가 맞을 때만 설치합니다 — 그래서 그 경로는 서버에 쓰인 적이 없고, 저쪽에서 지울 것도 없습니다. 같은 배치의 다른 파일들은 이미 자리에 설치되었기 때문에 배치 전체를 다시 실행하면 충돌 검사가 그대로 거부합니다. 그 경로 하나만 다시 push하세요. 그래도 계속 실패한다면 일회성 전송 오류가 아닙니다: 원본 파일(읽는 도중에 무언가가 쓰고 있는지)과 양쪽 저장소를 살펴보세요.",
+            fix: "도착 시 계산한 SHA-256이 보낸 값과 달랐거나, 서버의 relayium이 파일을 저장하거나 설치하지 못했습니다(여유 공간 부족, 권한 없음, 쓸 수 없는 대상 경로 등). 이 메시지는 둘 중 어느 쪽인지 구분하지 않습니다. 첫 줄은 서버의 relayium이 출력해 SSH로 전달된 것이고, 뒤의 exit status 1은 그 원격 프로세스의 종료 코드입니다. 어느 쪽이든 네이티브 프로토콜은 각 파일을 먼저 스테이징한 뒤 해시가 맞고 저장에 성공했을 때만 설치합니다 — 그래서 이번 전송은 그 경로를 설치하지 않았습니다. 다만 그렇다고 대상 위치에 아무것도 없다는 증거는 아닙니다(그 사이에 다른 프로그램이 만들었을 수 있습니다). 이 메시지만 보고 수신 측에 이미 있는 파일을 지우지 마세요. 같은 배치의 다른 파일이 이미 설치되었다면 배치 전체를 다시 실행할 때 충돌 검사가 거부하므로, 그 경로 하나만 원래 의도한 대상 위치로 다시 push하세요. 그래도 계속 실패한다면 일회성 전송 오류가 아닙니다: 서버의 여유 공간, 권한, 대상 경로를 확인하고 원본 파일(읽는 도중에 무언가가 쓰고 있는지)도 살펴보세요.",
           },
         ],
       },
@@ -866,14 +870,15 @@ sent 2 file(s) (zero-dependency mode)`,
             fix: "Auf der Gegenseite fehlt relayium. sync hat keinen Fallback und läuft dann gar nicht; push fällt auf den tar-Stream zurück, der nichts prüft und jede Datei immer vollständig überträgt. Installier es auf dem Server. Nur sync führt eine Teildatei im nächsten Lauf weiter — push und pull setzen in keinem der beiden Protokolle fort. Nutzt du bereits sync, prüf außerdem, dass du nicht --no-resume übergibst, das genau dieses Fortsetzen auf dem Listener abschaltet.",
           },
           {
-            symptom: "„N file(s) failed integrity check“ und ein Exit-Code ungleich null.",
+            symptom: "„N file(s) could not be verified or saved“ und ein Exit-Code ungleich null.",
             code: [
               `relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
 # 1`,
             ],
-            fix: "Der beim Eintreffen berechnete SHA-256 stimmte nicht mit dem gesendeten überein, und das native Protokoll legt jede Datei zuerst in einen Zwischenbereich und installiert sie nur, wenn der Hash passt — dieser Pfad wurde also nie auf den Server geschrieben, und dort gibt es nichts zu entfernen. Den ganzen Stapel erneut zu senden lehnt die Kollisionsprüfung weiterhin ab, weil die übrigen Dateien dieses Stapels bereits an ihrem Platz liegen; wiederhol den push deshalb nur für genau diesen einen Pfad. Scheitert er erneut, ist es kein einmaliger Übertragungsfehler: Sieh dir die Quelldatei an (schreibt etwas hinein, während sie gelesen wird) und den Speicher auf beiden Seiten.",
+            fix: "Entweder stimmte der beim Eintreffen berechnete SHA-256 nicht mit dem gesendeten überein, oder relayium auf dem Server konnte die Datei nicht speichern oder installieren – kein freier Speicher, keine Berechtigung oder ein Zielpfad, in den es nicht schreiben kann; die Meldung sagt nicht, welcher Fall vorliegt. Die erste Zeile gibt relayium auf dem Server aus und SSH reicht sie weiter, und exit status 1 ist der Exit-Code dieses entfernten Prozesses. In beiden Fällen legt das native Protokoll jede Datei zuerst in einen Zwischenbereich und installiert sie nur, wenn der Hash passt und sie gespeichert werden konnte — diese Übertragung hat den Pfad also nicht installiert. Das beweist nicht, dass am Ziel nichts liegt (ein anderes Programm kann ihn inzwischen angelegt haben); lösch also keine Datei, die beim Empfänger schon existiert, nur wegen dieser Meldung. Wenn andere Dateien dieses Stapels bereits angekommen sind, lehnt die Kollisionsprüfung einen erneuten Versand des ganzen Stapels ab; wiederhol den push deshalb nur für genau diesen einen Pfad, zum selben vorgesehenen Ziel. Scheitert er erneut, ist es kein einmaliger Übertragungsfehler: Prüf freien Speicher, Berechtigungen und den Zielpfad auf dem Server, und sieh dir die Quelldatei an (schreibt etwas hinein, während sie gelesen wird).",
           },
         ],
       },
@@ -1043,14 +1048,15 @@ sent 2 file(s) (zero-dependency mode)`,
             fix: "relayium manque en face. sync n'a aucun repli et ne démarre donc pas du tout, et push retombe sur le flux tar, qui ne vérifie rien et renvoie toujours chaque fichier en entier. Installez-le sur le serveur. Seul sync poursuit un fichier partiel à l'exécution suivante : ni push ni pull ne reprend, dans aucun des deux protocoles. Si vous utilisez déjà sync, vérifiez aussi que vous ne passez pas --no-resume, qui désactive volontairement cette reprise côté processus à l'écoute.",
           },
           {
-            symptom: "« N file(s) failed integrity check » et un code de sortie non nul.",
+            symptom: "« N file(s) could not be verified or saved » et un code de sortie non nul.",
             code: [
               `relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
 # 1`,
             ],
-            fix: "Le SHA-256 calculé à l'arrivée ne correspondait pas à celui envoyé, et le protocole natif place chaque fichier en zone d'attente puis ne l'installe que si le hachage concorde — ce chemin n'a donc jamais été écrit sur le serveur, et il n'y a rien à y supprimer. Relancer tout le lot reste refusé par le contrôle de collision, puisque les autres fichiers de ce lot sont déjà en place : relancez donc le push sur ce seul chemin. S'il échoue de nouveau, ce n'est pas une erreur de transit ponctuelle : regardez le fichier source (quelque chose y écrit-il pendant qu'il est lu) et le stockage de chaque côté.",
+            fix: "Soit le SHA-256 calculé à l'arrivée ne correspondait pas à celui envoyé, soit relayium sur le serveur n'a pas pu enregistrer ou installer le fichier (plus d'espace libre, pas de permission, ou un chemin de destination où il ne peut pas écrire) ; le message ne dit pas lequel. La première ligne est affichée par relayium sur le serveur et relayée par SSH, et exit status 1 est le code de sortie de ce processus distant. Dans les deux cas, le protocole natif place chaque fichier en zone d'attente puis ne l'installe que si le hachage concorde et que l'enregistrement a réussi — ce transfert n'a donc pas installé ce chemin. Cela ne prouve pas qu'il n'y a rien à destination (un autre programme a pu le créer entre-temps) : ne supprimez pas un fichier déjà présent sur le récepteur à cause de ce seul message. Si d'autres fichiers de ce lot sont déjà arrivés, relancer tout le lot est refusé par le contrôle de collision : relancez donc le push sur ce seul chemin, vers la même destination prévue. S'il échoue de nouveau, ce n'est pas une erreur de transit ponctuelle : vérifiez l'espace libre, les permissions et le chemin de destination sur le serveur, et regardez le fichier source (quelque chose y écrit-il pendant qu'il est lu).",
           },
         ],
       },
@@ -1220,14 +1226,15 @@ sent 2 file(s) (zero-dependency mode)`,
             fix: "‏relayium غائب عن الطرف البعيد. لا يملك sync أي تراجع فلا يعمل أصلًا، ويهبط push إلى مسار بث tar الذي لا يتحقق من شيء ويعيد إرسال كل ملف كاملًا في كل مرة. ثبّته على الخادم. وحده sync يُكمل ملفًا جزئيًا في التشغيل التالي؛ فلا push ولا pull يستأنف في أي من البروتوكولين. وإن كنت تستخدم sync أصلًا، فتأكّد أيضًا من أنك لا تمرّر --no-resume الذي يعطّل ذلك الاستئناف على المُستمِع عمدًا.",
           },
           {
-            symptom: "تظهر «N file(s) failed integrity check» مع رمز خروج غير صفري.",
+            symptom: "تظهر «N file(s) could not be verified or saved» مع رمز خروج غير صفري.",
             code: [
               `relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
 # 1`,
             ],
-            fix: "قيمة SHA-256 المحسوبة عند الوصول لم تطابق المُرسَلة، والبروتوكول الأصلي يضع كل ملف في منطقة مؤقتة ولا يثبّته إلا عند تطابق البصمة — لذلك لم يُكتب ذلك المسار على الخادم أصلًا، ولا شيء هناك يحتاج إلى حذف. وإعادة تشغيل الدفعة كاملة سيظل فحص التعارض يرفضها، لأن بقية ملفات تلك الدفعة قد استقرت بالفعل، فأعد push لذلك المسار وحده. وإن فشل مجددًا فهو ليس خطأ نقل عابرًا: افحص الملف المصدر (هل يكتب فيه شيء أثناء قراءته) والتخزين على الطرفين.",
+            fix: "إما أن قيمة SHA-256 المحسوبة عند الوصول لم تطابق المُرسَلة، وإما أن relayium على الخادم لم يتمكن من حفظ الملف أو تثبيته (لا مساحة فارغة، أو لا صلاحية، أو مسار وجهة لا يستطيع الكتابة فيه)؛ والرسالة لا تحدد أيهما. السطر الأول يطبعه relayium على الخادم ويمرّره SSH، و exit status 1 بعده هو رمز خروج تلك العملية البعيدة. وفي الحالتين يضع البروتوكول الأصلي كل ملف في منطقة مؤقتة ولا يثبّته إلا عند تطابق البصمة ونجاح الحفظ — لذلك لم يثبّت هذا النقل ذلك المسار. لكن هذا لا يثبت أن الوجهة فارغة (فقد يكون برنامج آخر أنشأه في الأثناء)، فلا تحذف ملفًا موجودًا لدى المستقبِل لمجرد هذه الرسالة. وإن كانت ملفات أخرى من تلك الدفعة قد استقرت بالفعل، فسيرفض فحص التعارض إعادة تشغيل الدفعة كاملة، فأعد push لذلك المسار وحده إلى الوجهة المقصودة نفسها. وإن فشل مجددًا فهو ليس خطأ نقل عابرًا: تحقق من المساحة الفارغة والصلاحيات ومسار الوجهة على الخادم، وافحص الملف المصدر (هل يكتب فيه شيء أثناء قراءته).",
           },
         ],
       },
@@ -1397,14 +1404,15 @@ sent 2 file(s) (zero-dependency mode)`,
             fix: "Falta relayium en el remoto. sync no tiene alternativa alguna y por tanto ni siquiera arranca, y push cae al flujo tar, que no verifica nada y siempre reenvía cada archivo entero. Instálalo en el servidor. Solo sync continúa un archivo parcial en la ejecución siguiente: ni push ni pull reanuda, en ninguno de los dos protocolos. Si ya usas sync, comprueba además que no estás pasando --no-resume, que desactiva a propósito esa reanudación en el proceso a la escucha.",
           },
           {
-            symptom: "«N file(s) failed integrity check» y una salida distinta de cero.",
+            symptom: "«N file(s) could not be verified or saved» y una salida distinta de cero.",
             code: [
               `relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
 # 1`,
             ],
-            fix: "El SHA-256 calculado al llegar no coincidió con el enviado, y el protocolo nativo deja cada archivo en una zona temporal y solo lo instala cuando el hash cuadra: esa ruta nunca se escribió en el servidor y allí no hay nada que borrar. Repetir el lote entero lo sigue rechazando la comprobación de colisiones, porque los demás archivos de ese lote ya están en su sitio, así que repite el push solo con esa ruta. Si vuelve a fallar no es un error puntual de tránsito: revisa el archivo de origen (si algo escribe en él mientras se lee) y el almacenamiento de ambos lados.",
+            fix: "O el SHA-256 calculado al llegar no coincidió con el enviado, o relayium en el servidor no pudo guardar o instalar el archivo (sin espacio libre, sin permiso o una ruta de destino en la que no puede escribir); el mensaje no dice cuál de las dos. La primera línea la imprime relayium en el servidor y llega reenviada por SSH, y exit status 1 es el código de salida de ese proceso remoto. En ambos casos el protocolo nativo deja cada archivo en una zona temporal y solo lo instala cuando el hash cuadra y se pudo guardar: esta transferencia no instaló esa ruta. Eso no demuestra que no haya nada en el destino (otro programa pudo crearla mientras tanto), así que no borres un archivo que ya exista en el receptor solo por este mensaje. Si otros archivos de ese lote ya llegaron, repetir el lote entero lo rechaza la comprobación de colisiones, así que repite el push solo con esa ruta, hacia el mismo destino previsto. Si vuelve a fallar no es un error puntual de tránsito: revisa el espacio libre, los permisos y la ruta de destino en el servidor, y el archivo de origen (si algo escribe en él mientras se lee).",
           },
         ],
       },
@@ -1574,14 +1582,15 @@ sent 2 file(s) (zero-dependency mode)`,
             fix: "Falta o relayium no remoto. O sync não tem alternativa nenhuma e por isso nem chega a rodar, e o push cai no fluxo tar, que não verifica nada e sempre reenvia cada arquivo inteiro. Instale-o no servidor. Só o sync continua um arquivo parcial na execução seguinte: nem o push nem o pull retoma, em nenhum dos dois protocolos. Se você já usa o sync, confira também que não está passando --no-resume, que desliga de propósito essa retomada no processo à escuta.",
           },
           {
-            symptom: "“N file(s) failed integrity check” e uma saída diferente de zero.",
+            symptom: "“N file(s) could not be verified or saved” e uma saída diferente de zero.",
             code: [
               `relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
 # 1`,
             ],
-            fix: "O SHA-256 calculado na chegada não bateu com o enviado, e o protocolo nativo põe cada arquivo numa área temporária e só o instala quando o hash confere — então aquele caminho nunca foi escrito no servidor, e não há nada para remover lá. Rodar o lote inteiro de novo continua sendo recusado pela verificação de colisões, porque os outros arquivos daquele lote já estão no lugar, então rode o push de novo só naquele caminho. Se falhar outra vez, não é um erro de trânsito pontual: olhe o arquivo de origem (se algo escreve nele enquanto é lido) e o armazenamento dos dois lados.",
+            fix: "Ou o SHA-256 calculado na chegada não bateu com o enviado, ou o relayium no servidor não conseguiu salvar ou instalar o arquivo (sem espaço livre, sem permissão ou um caminho de destino em que ele não consegue escrever); a mensagem não diz qual dos dois. A primeira linha é impressa pelo relayium no servidor e repassada pelo SSH, e exit status 1 é o código de saída desse processo remoto. Nos dois casos o protocolo nativo põe cada arquivo numa área temporária e só o instala quando o hash confere e ele pôde ser salvo — então esta transferência não instalou aquele caminho. Isso não prova que não há nada no destino (outro programa pode tê-lo criado nesse meio-tempo), então não apague um arquivo que já exista no receptor só por causa desta mensagem. Se outros arquivos daquele lote já chegaram, rodar o lote inteiro de novo é recusado pela verificação de colisões, então rode o push de novo só naquele caminho, para o mesmo destino pretendido. Se falhar outra vez, não é um erro de trânsito pontual: confira o espaço livre, as permissões e o caminho de destino no servidor, e olhe o arquivo de origem (se algo escreve nele enquanto é lido).",
           },
         ],
       },

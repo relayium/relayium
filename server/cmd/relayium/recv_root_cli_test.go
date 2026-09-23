@@ -170,6 +170,11 @@ func TestServeNeverRecreatesAVanishedReceiveDirectory(t *testing.T) {
 	if code := waitCode(t, done); code == 0 {
 		t.Fatalf("serve reported success: %s", sout.String())
 	}
+	// Every file failed to save, not to verify; the receipt must not say
+	// otherwise.
+	if got := serr.String(); !strings.Contains(got, "file(s) from "+pusher.Fingerprint+" could not be verified or saved: [") || strings.Contains(got, "integrity") {
+		t.Fatalf("serve stderr = %q, want the generic per-file failure and no integrity verdict", got)
+	}
 	entries, err := os.ReadDir(recvParent)
 	if err != nil {
 		t.Fatal(err)

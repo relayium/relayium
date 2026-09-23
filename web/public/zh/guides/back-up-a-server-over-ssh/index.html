@@ -252,10 +252,11 @@ sent 2 file(s) (zero-dependency mode)</code></pre></div>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>cron 任务卡住，或者日志停在一个输入密码的提示上。</dt><dd><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
 # Permission denied (publickey).</code></pre><p>BatchMode=yes 会拒绝弹出提示，于是把静默的卡死变成了这一行。把这把密钥的公钥加到服务器的 ~/.ssh/authorized_keys 里，或者让任务改用 agent 已经持有的那把密钥。</p></dd><dt>crontab 那行跑了，日志却始终是空的。</dt><dd><pre tabindex="0"><code>command -v relayium
 # /usr/local/bin/relayium</code></pre><p>cron 用的是一份极简 PATH，通常不含 /usr/local/bin，所以那行在 relayium 启动之前就失败了。把刚才查出来的绝对路径写进 crontab 条目里，并保留 &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 重定向，好让下一次失败看得见。</p></dd><dt>任务每晚都报成功，但其实什么都没有被校验过。</dt><dd><pre tabindex="0"><code>ssh user@your-server command -v relayium
-# （什么都不打印）</code></pre><p>远端没有 relayium，就意味着 push 走了 tar 流兜底：它逐文件不做任何哈希，而且在解压中途遇到重名时可能让一批文件只装了一半。在服务器上装好 CLI，就能把发送前的冲突预检和逐文件 SHA-256 拿回来。装好之后你还可以把这个任务改成 relayium sync——它根本没有兜底路径，会响亮地失败而不是悄悄降级。</p></dd><dt>出现 “N file(s) failed integrity check”，并以非 0 退出。</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# （什么都不打印）</code></pre><p>远端没有 relayium，就意味着 push 走了 tar 流兜底：它逐文件不做任何哈希，而且在解压中途遇到重名时可能让一批文件只装了一半。在服务器上装好 CLI，就能把发送前的冲突预检和逐文件 SHA-256 拿回来。装好之后你还可以把这个任务改成 relayium sync——它根本没有兜底路径，会响亮地失败而不是悄悄降级。</p></dd><dt>出现 “N file(s) could not be verified or saved”，并以非 0 退出。</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
-# 1</code></pre><p>落地时算出的 SHA-256 与发送时的不一致；原生协议会先把每个文件写到暂存区，只有校验一致才安装，所以那个路径根本没写到服务器上，接收端没有东西需要删。整批重跑仍然会被冲突检查拒绝——同一批里其他文件已经落地了——所以单独 push 那一个路径。如果它反复失败，就不是一次偶发的链路错误：去查源文件（读取时是否正被写入）和两端的存储。</p></dd></dl></div></section>
+# 1</code></pre><p>要么落地时算出的 SHA-256 与发送时的不一致，要么服务器上的 relayium 没能保存或安装这个文件（磁盘空间不足、没有权限，或目标路径无法写入）；这条消息不区分是哪一种。第一行由服务器上的 relayium 打印、经 SSH 转发过来，后面的 exit status 1 是那个远程进程的退出码。无论哪种，原生协议都会先把每个文件写到暂存区，只有校验一致并且保存成功才安装，所以这次传输没有安装那个路径。但这并不能证明目标位置什么都没有——期间可能有别的程序创建了它——所以不要仅仅因为这条消息就删除接收端已有的文件。如果同一批里有其他文件已经落地，整批重跑会被冲突检查拒绝，所以单独 push 那一个路径，目标仍是原来打算的位置。如果它反复失败，就不是一次偶发的链路错误：检查服务器上的剩余空间、权限和目标路径，并查源文件（读取时是否正被写入）。</p></dd></dl></div></section>
       <h2>常见问题</h2>
       <h3>文件会经过 Relayium 的服务器吗？</h3>
       <p>不会。push 和 pull 完全跑在你自己的 SSH 连接上。Relayium 的服务器全程不参与，也不需要账号。</p>

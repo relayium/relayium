@@ -45,6 +45,14 @@ on:
       - 'server/account/files.go'
       - 'server/account/uploads_resumable.go'
       - 'docs/billing-transparency.md'
+      # And one Go SOURCE FILE read as test input, not compiled here.
+      # `web/scripts/pages/cli-backup-integrity-recovery.test.mjs` extracts
+      # reportExit's per-file failure line from it and asserts the SSH backup
+      # guide in all nine locales still quotes that exact line. A reword there
+      # without this suite running leaves the guide quoting a line the CLI no
+      # longer prints. The one file, not `server/cmd/relayium/**`, for the same
+      # reason as the document above.
+      - 'server/cmd/relayium/run.go'
       # And three frozen-bytes FIXTURES, for exactly the same reason and named
       # exactly as narrowly. They live in the Swift package because that is
       # where they were frozen from, but three tests in this suite read them

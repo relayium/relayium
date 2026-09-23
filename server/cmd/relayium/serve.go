@@ -527,7 +527,8 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 		fmt.Fprintf(h.stderr, "warning: sender requested --delete but this listener isn't started with --allow-delete; nothing was deleted\n")
 	}
 	if len(rep.Failed) > 0 {
-		fmt.Fprintf(h.stderr, "%d file(s) failed integrity check from %s: %v\n", len(rep.Failed), fp, termtext.SafeAll(rep.Failed))
+		// The same generic wording as reportExit: Failed does not record why.
+		fmt.Fprintf(h.stderr, "%d file(s) from %s could not be verified or saved: %v\n", len(rep.Failed), fp, termtext.SafeAll(rep.Failed))
 		return false
 	}
 	fmt.Fprintf(h.stdout, "received %d file(s), %d bytes from %s\n", rep.Files, rep.Bytes, fp)
