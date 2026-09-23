@@ -106,6 +106,10 @@ export const PATH_MATRIX = [
     + "acceptance that compiles it and the package's own suite. The rest of that package's "
     + "ownership, including the `!apps/RelayiumKit/Tests/**` exclusions the three heavy filters "
     + "now carry, is `scripts/test/swift-ci-boundary-test.mjs`"],
+  ["apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json", ["go.yml", "swift-package.yml", "web.yml"],
+    "the W-N18 A08e link-session state-machine vectors: a fixture-only edit must start the Web "
+    + "authority suite and the Go link-session suite, both of which run their real lane machines "
+    + "against it, and the package lane that owns the file — and no heavy Apple or pairing lane"],
   ["scripts/ios-ui-session-acceptance.sh", ["ios.yml"],
     "the iOS built-App acceptance: the workflow that runs it, and only that one. The pairing "
     + "workflow does not source this script, and `scripts/**` is gone from its filter"],
