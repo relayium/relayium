@@ -457,7 +457,7 @@ func (u *linkUI) feed(d *linkDevDriver, r io.Reader) {
 			body, err := io.ReadAll(io.LimitReader(r, linkwire.TextMaxBytes+1))
 			switch {
 			case err != nil:
-				d.q.push(ldItem{kind: ldItemScript, cmds: []ldCmd{{op: "note", text: "reading stdin: " + err.Error(), n: 1}}})
+				inputFailed(d, err)
 			case len(body) > linkwire.TextMaxBytes:
 				d.q.push(ldItem{kind: ldItemScript, cmds: []ldCmd{{op: "note", text: tooLongNote(len(body)), n: 1}}})
 			case len(body) > 0:
@@ -477,11 +477,22 @@ func (u *linkUI) feed(d *linkDevDriver, r io.Reader) {
 				d.q.push(ldItem{kind: ldItemScript, cmds: []ldCmd{{op: "text", text: line}}})
 			}
 		}
-		if err := sc.Err(); err != nil {
-			d.q.push(ldItem{kind: ldItemScript, cmds: []ldCmd{{op: "note", text: tooLongNote(linkwire.TextMaxBytes + 2)}}})
-		}
+		inputFailed(d, sc.Err())
 		d.q.push(ldItem{kind: ldScriptEOF})
 	}
+}
+
+// inputFailed reports input that could not be read — a line over the bound,
+// a read error — as a failure of the run (ldInputFailed, A09b round 3): the
+// lines after it were never sent. A stop by shutdown is not a failure.
+func inputFailed(d *linkDevDriver, err error) {
+	if err == nil || d.inputStopped() || errors.Is(err, errInputStopped) {
+		return
+	}
+	if errors.Is(err, bufio.ErrTooLong) {
+		err = fmt.Errorf("%s (%w)", tooLongNote(linkwire.TextMaxBytes+2), err)
+	}
+	d.q.push(ldItem{kind: ldInputFailed, err: err})
 }
 
 // feedPairInput: one line is one message, unless it is a command.
@@ -527,9 +538,7 @@ func feedPairInput(d *linkDevDriver, r io.Reader) {
 			push(ldCmd{op: "note", text: "unknown command " + termSafe(verb) + " — /help lists them; start a message with // to send a leading /"})
 		}
 	}
-	if err := sc.Err(); err != nil {
-		push(ldCmd{op: "note", text: "reading input: " + err.Error()})
-	}
+	inputFailed(d, sc.Err())
 	d.q.push(ldItem{kind: ldScriptEOF})
 }
 

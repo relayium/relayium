@@ -454,6 +454,7 @@ const (
 	ldVerify
 	ldICEReady
 	ldWriteFailed
+	ldInputFailed
 	ldAnswer    // A10: the person answered the current file prompt (ok)
 	ldInterrupt // A10: ctrl-C — an authenticated leave, now
 	ldCeiling   // A10: the whole-session ceiling of `text` passed — a normal end
@@ -632,6 +633,12 @@ type linkDevDriver struct {
 	stdinText    bool // `text` without --script: stdin lines, read only once admitted
 	stdinStarted bool
 
+	// input lifecycle (readInput / stopInput)
+	inputMu   sync.Mutex
+	inputStop chan struct{}
+	inputSrc  io.Reader
+	inputWG   sync.WaitGroup
+
 	heldLeave []byte             // a peer leave kept back by holdLeave
 	heldLost  *linksession.Epoch // a transport loss kept back by holdLost
 	heldUntil time.Time
@@ -769,6 +776,9 @@ func ldConfirmSAS(w io.Writer, in io.Reader) bool {
 }
 
 // feedTextLines turns each line of r into one message (the `text` default).
+// Input that could not be read — a line over the 1 MiB bound, a read error —
+// is a FAILURE of the run, never a quiet end of input: the messages after it
+// were not sent. A stop by shutdown is not a failure (nothing is waiting).
 func (d *linkDevDriver) feedTextLines(r io.Reader) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1<<20)
@@ -777,7 +787,103 @@ func (d *linkDevDriver) feedTextLines(r io.Reader) {
 			d.q.push(ldItem{kind: ldItemScript, cmds: []ldCmd{{op: "text", text: line}}})
 		}
 	}
+	if err := sc.Err(); err != nil && !d.inputStopped() {
+		d.q.push(ldItem{kind: ldInputFailed, err: err})
+	}
 	d.q.push(ldItem{kind: ldScriptEOF})
+}
+
+// errInputStopped: shutdown stopped this run's input.
+var errInputStopped = errors.New("link-dev: input stopped")
+
+// ldStopReader is this run's view of its input: once the run stops its
+// input, no further Read reaches the underlying reader, so an input shared
+// with a later run in the same process is not consumed by this one.
+type ldStopReader struct {
+	r    io.Reader
+	stop <-chan struct{}
+}
+
+func (s ldStopReader) Read(p []byte) (int, error) {
+	select {
+	case <-s.stop:
+		return 0, errInputStopped
+	default:
+	}
+	return s.r.Read(p)
+}
+
+// linkDevInputJoin bounds how long shutdown waits for an input reader.
+const linkDevInputJoin = time.Second
+
+// readInput runs fn on this run's input, off the loop, under the run's input
+// lifecycle (stopInput).
+func (d *linkDevDriver) readInput(fn func(io.Reader)) {
+	d.inputMu.Lock()
+	defer d.inputMu.Unlock()
+	if d.inputStop == nil {
+		d.inputStop = make(chan struct{})
+		d.inputSrc = d.input()
+	}
+	stop := d.inputStop
+	d.inputWG.Add(1)
+	go func() {
+		defer d.inputWG.Done()
+		fn(ldStopReader{r: d.inputSrc, stop: stop})
+	}()
+}
+
+func (d *linkDevDriver) inputStopped() bool {
+	d.inputMu.Lock()
+	defer d.inputMu.Unlock()
+	if d.inputStop == nil {
+		return false
+	}
+	select {
+	case <-d.inputStop:
+		return true
+	default:
+		return false
+	}
+}
+
+// stopInput ends this run's input readers: no new Read reaches the input,
+// and a Read already blocked is interrupted through the input's read
+// deadline when it has one, joined (bounded), and the deadline cleared again
+// for whoever reads the input next. An input that cannot be interrupted is
+// not waited for beyond linkDevInputJoin; such a reader may still complete
+// the one Read it is blocked in.
+func (d *linkDevDriver) stopInput() {
+	d.inputMu.Lock()
+	if d.inputStop == nil {
+		d.inputMu.Unlock()
+		return
+	}
+	select {
+	case <-d.inputStop:
+		d.inputMu.Unlock()
+		return
+	default:
+	}
+	close(d.inputStop)
+	src := d.inputSrc
+	d.inputMu.Unlock()
+	// An input whose blocked Read can be interrupted: os.File for pipes and
+	// terminals (text.go's readDeadliner).
+	dl, canInterrupt := src.(readDeadliner)
+	if canInterrupt && dl.SetReadDeadline(time.Now()) != nil {
+		canInterrupt = false // e.g. a regular file
+	}
+	joined := make(chan struct{})
+	go func() { d.inputWG.Wait(); close(joined) }()
+	select {
+	case <-joined:
+	case <-time.After(linkDevInputJoin):
+		d.logf("an input reader is still blocked; it was left behind")
+	}
+	if canInterrupt {
+		_ = dl.SetReadDeadline(time.Time{})
+	}
 }
 
 // run drives discovery and, when discovery chooses link/1, the link, until
@@ -1696,6 +1802,7 @@ func (d *linkDevDriver) closeTransport() {
 
 // shutdown releases everything the driver still holds.
 func (d *linkDevDriver) shutdown() {
+	d.stopInput()
 	d.closeTransport()
 	d.closing.Wait()
 	if why := d.cut.reason(); why == "relay deadline" {
@@ -1726,6 +1833,9 @@ func (d *linkDevDriver) item(it ldItem) error {
 		return d.do(d.s.ConfirmSAS(it.ok))
 	case ldICEReady:
 		d.useICE()
+	case ldInputFailed:
+		d.fail("input could not be read (messages after it were not sent): " + it.err.Error())
+		return nil
 	case ldWriteFailed:
 		d.logf("%v", it.err)
 		return d.do(d.s.TransportLost(it.ep))
@@ -1825,8 +1935,7 @@ func (d *linkDevDriver) progress() error {
 	// one reader owns that input at any time.
 	if d.s.Admission() == linksession.AdmPendingSAS && !d.verifyAsked {
 		d.verifyAsked = true
-		in := d.input()
-		go func() { d.q.push(ldItem{kind: ldVerify, ok: ldConfirmSAS(d.stderr, in)}) }()
+		d.readInput(func(in io.Reader) { d.q.push(ldItem{kind: ldVerify, ok: ldConfirmSAS(d.stderr, in)}) })
 	}
 	// The link's one /api/ice request starts as soon as discovery has bound a
 	// link (M1: never for a legacy pairing), so the responder's is in hand by
@@ -1843,12 +1952,12 @@ func (d *linkDevDriver) progress() error {
 	// was read from the same input first).
 	if d.stdinText && !d.stdinStarted {
 		d.stdinStarted = true
-		go d.feedTextLines(d.input())
+		d.readInput(d.feedTextLines)
 	}
 	if d.ui != nil {
 		if d.ui.readsInput && !d.stdinStarted {
 			d.stdinStarted = true
-			go d.ui.feed(d, d.input())
+			d.readInput(func(r io.Reader) { d.ui.feed(d, r) })
 		}
 		d.ui.poll(d)
 	}
