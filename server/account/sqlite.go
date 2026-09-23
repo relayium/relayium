@@ -1530,6 +1530,44 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		`CREATE INDEX IF NOT EXISTS idx_apple_notifications_terminal_age
 		   ON apple_notifications(updated_at)
 		   WHERE state IN ('applied', 'ignored', 'unsupported')`,
+		// Single-shot upload Idempotency-Key claims (2026-09, A14). One row per
+		// committed keyed upload, written in the object's own insert transaction
+		// (CreateStoredFileWithinStorageCaps), so a row exists only for an object
+		// that was created together with its daily-quota debit. The primary key
+		// is the exactly-once rule; the key is scoped to its user.
+		//
+		// Deliberately NO foreign key to users: ArchiveAndPurgeUser deletes the
+		// rows, but an older binary rolled back onto this database does not know
+		// the table, and a reference would make its purge's final users delete
+		// fail. That older binary never reads or writes the table — a keyed
+		// retry then simply uploads again, as it did before — and the rows it
+		// leaves behind are aged out by the next binary's prune
+		// (PruneUploadEvents), whose NOT EXISTS finds their objects gone.
+		//
+		// gone_seen is prune bookkeeping only: 0 while the object exists, else
+		// the prune cutoff of the first sweep that found it gone.
+		`CREATE TABLE IF NOT EXISTS upload_operations (
+  user_id        TEXT NOT NULL,
+  op_key         TEXT NOT NULL,
+  file_id        TEXT NOT NULL,
+  request_digest BLOB NOT NULL,
+  created_at     INTEGER NOT NULL,
+  gone_seen      INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, op_key))`,
+		// The account's upload fence (2026-09, A14). purgeTransientUserDataTx —
+		// the account-deletion step that removes every object, Idempotency-Key
+		// claim, session and CLI token — bumps it in the same transaction, and a
+		// single-shot upload's insert commits only if it still holds the value
+		// its request read while its credential was still valid (see
+		// StoredFile.UploadFence). An upload that was in flight across a
+		// deletion therefore cannot land afterwards — not while the account is
+		// pending deletion, and not after the deletion is cancelled either,
+		// because cancelling does not un-bump it.
+		//
+		// ADDITIVE and defaulted: an older binary's explicit column lists never
+		// name it. Rolled back, it simply has no fence (the behaviour before this
+		// column), and a database it touched is fenced again from the next bump.
+		`ALTER TABLE users ADD COLUMN upload_epoch INTEGER NOT NULL DEFAULT 0`,
 		// Time-bounded administrator membership grants (2026-08). The overlay is
 		// three columns on the users row and NOT a change to the projection — see
 		// admin_grant.go for why it is stored this way rather than written into
@@ -2918,6 +2956,11 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		{`DELETE FROM sessions WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM cli_tokens WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM cli_device_auth WHERE user_id=?`, []any{userID}},
+		// Fence every upload still in flight: its insert re-reads this in its own
+		// transaction and refuses a value it did not start with (UploadFence).
+		// In THIS transaction, with the credentials, objects and key claims, so
+		// no request can hold a valid credential and a pre-deletion value at once.
+		{`UPDATE users SET upload_epoch = upload_epoch + 1 WHERE id=?`, []any{userID}},
 		// Before devices. REDUNDANT with target_device_id's ON DELETE CASCADE
 		// today, and kept anyway: it is scoped by user_id, so it does not depend
 		// on every task having a live device row, and it survives a future schema
@@ -2928,6 +2971,9 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		{`DELETE FROM devices WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM magic_tokens WHERE email=(SELECT email FROM users WHERE id=?)`, []any{userID}},
 		{`DELETE FROM stored_files WHERE user_id=?`, []any{userID}},
+		// Their Idempotency-Key claims name those objects and carry the user_id;
+		// with the objects gone there is nothing left for a key to answer with.
+		{`DELETE FROM upload_operations WHERE user_id=?`, []any{userID}},
 		// Every chunked upload the account has open or half-finished, in whatever
 		// state — including the recovery state, which every automatic sweep is
 		// forbidden to touch. Their partial ciphertext is real ciphertext and their
@@ -3120,6 +3166,7 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// PurgeTransientUserData — but it holds a user_id, so it goes too.
 		{`DELETE FROM pair_rooms WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM upload_events WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM upload_operations WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM user_stats WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM usage_monthly WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM email_tokens WHERE user_id=?`, []any{userID}},
@@ -5259,9 +5306,12 @@ const storedFileSelectCols = storedFileCols + `, download_count`
 //
 // An insert that carries a session precondition (f.UploadSessionID, a resumable
 // finalize) takes the transactional door too, so an own-node finalize — which
-// skips the caps — is refused under the same rule as a capped one.
+// skips the caps — is refused under the same rule as a capped one. So does one
+// carrying an Idempotency-Key claim (f.Operation) or an account fence
+// (f.UploadFence) — an own-node single-shot upload: both are only ever checked
+// or written in the object's own transaction.
 func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
-	if f.PairRoomID == "" && f.UploadSessionID == "" {
+	if f.PairRoomID == "" && f.UploadSessionID == "" && f.Operation == nil && f.UploadFence == nil {
 		return insertStoredFileOn(ctx, s.db, f)
 	}
 	_, err := s.CreateStoredFileWithinStorageCaps(ctx, f, f.CreatedAt, 0, 0)
@@ -5411,11 +5461,55 @@ func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f S
 			return StoredFileWrite{}, errors.New("stored file quota charge: event must be the object owner's, with an id and positive bytes")
 		}
 	}
+	if op := f.Operation; op != nil {
+		// Same rule for the idempotency claim: it names this object, for this
+		// object's owner, or it is a caller bug.
+		if op.UserID != f.UserID || op.FileID != f.ID || op.Key == "" || len(op.RequestDigest) == 0 {
+			return StoredFileWrite{}, errors.New("stored file operation: must be the object owner's, name this object, and carry a key and digest")
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return StoredFileWrite{}, err
 	}
 	defer tx.Rollback() // no-op after a successful Commit
+	if fence := f.UploadFence; fence != nil {
+		// The account fence comes before everything, the key claim included: an
+		// upload that was in flight when its account was deleted must not take
+		// a claim the deletion just freed, write a debit, or store ciphertext.
+		var deletedAt, epoch int64
+		err := tx.QueryRowContext(ctx, `SELECT deleted_at, upload_epoch FROM users WHERE id = ?`, f.UserID).Scan(&deletedAt, &epoch)
+		if err == sql.ErrNoRows {
+			return StoredFileWrite{}, ErrUploadAccountFenced
+		}
+		if err != nil {
+			return StoredFileWrite{}, err
+		}
+		if deletedAt != 0 || epoch != fence.Epoch {
+			return StoredFileWrite{}, ErrUploadAccountFenced
+		}
+	}
+	if op := f.Operation; op != nil {
+		// The Idempotency-Key claim is FIRST, ahead of the daily-quota charge:
+		// a request whose key another request already committed is a replay of
+		// that request, not a new upload, so it must hear that request's result
+		// rather than a 429 caused by that very request's own debit. The claim
+		// then rides the rest of this transaction: any refusal or error below
+		// rolls it back with the object and the debit, so a refused keyed upload
+		// leaves the key free for its retry.
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO upload_operations (user_id, op_key, file_id, request_digest, created_at)
+			 VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, op_key) DO NOTHING`,
+			op.UserID, op.Key, op.FileID, op.RequestDigest, op.CreatedAt)
+		if err != nil {
+			return StoredFileWrite{}, err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return StoredFileWrite{}, err
+		} else if n != 1 {
+			return StoredFileWrite{}, ErrUploadOperationExists
+		}
+	}
 	if q := f.QuotaCharge; q != nil {
 		var used sql.NullInt64
 		if err := tx.QueryRowContext(ctx,
@@ -5474,6 +5568,34 @@ func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f S
 		return StoredFileWrite{}, err
 	}
 	return StoredFileWrite{ExpiresAt: f.ExpiresAt}, tx.Commit()
+}
+
+// UploadEpoch reads the account's upload fence value (users.upload_epoch), or
+// ErrNotFound for no such user.
+func (s *SQLiteStore) UploadEpoch(ctx context.Context, userID string) (int64, error) {
+	var epoch int64
+	err := s.db.QueryRowContext(ctx, `SELECT upload_epoch FROM users WHERE id = ?`, userID).Scan(&epoch)
+	if err == sql.ErrNoRows {
+		return 0, ErrNotFound
+	}
+	return epoch, err
+}
+
+// GetUploadOperation reads one committed single-shot upload operation. It is
+// read on the writer pool, like GetStoredFile, so a request that just lost an
+// ErrUploadOperationExists race sees the winner's committed row.
+func (s *SQLiteStore) GetUploadOperation(ctx context.Context, userID, key string) (UploadOperation, error) {
+	op := UploadOperation{UserID: userID, Key: key}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT file_id, request_digest, created_at FROM upload_operations WHERE user_id = ? AND op_key = ?`,
+		userID, key).Scan(&op.FileID, &op.RequestDigest, &op.CreatedAt)
+	if err == sql.ErrNoRows {
+		return UploadOperation{}, ErrNotFound
+	}
+	if err != nil {
+		return UploadOperation{}, err
+	}
+	return op, nil
 }
 
 func (s *SQLiteStore) GetStoredFile(ctx context.Context, id string) (StoredFile, error) {
@@ -5817,8 +5939,39 @@ func (s *SQLiteStore) RefundUpload(ctx context.Context, id string) error {
 	return err
 }
 
+// uploadOperationGoneRetention is how long an Idempotency-Key row outlives
+// its object: a retry of a keyed upload whose object was deleted or expired
+// must keep hearing 410 rather than create the object again, for at least
+// this long after the object is gone.
+const uploadOperationGoneRetention = int64(86400) // 24h
+
 func (s *SQLiteStore) PruneUploadEvents(ctx context.Context, before int64) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_events WHERE uploaded_at < ?`, before)
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM upload_events WHERE uploaded_at < ?`, before); err != nil {
+		return err
+	}
+	// upload_operations, on the same sweep and the same clock. `before` is the
+	// sweep's clock minus a constant, so the difference between two sweeps'
+	// cutoffs is the time between them: a row stamped by the first sweep that
+	// found its object gone is deleted by the first sweep at least
+	// uploadOperationGoneRetention later. Stamped, not deleted, on sight,
+	// because nothing records WHEN an object went (it may be deleted by its
+	// owner, a download limit, expiry or an account purge), and a row pruned
+	// on its creation age alone would let a late retry re-create an object
+	// its owner had already deleted.
+	stamp := before
+	if stamp <= 0 {
+		stamp = 1 // 0 means "not seen gone"
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE upload_operations SET gone_seen = ?
+		  WHERE gone_seen = 0
+		    AND NOT EXISTS (SELECT 1 FROM stored_files f WHERE f.id = upload_operations.file_id)`,
+		stamp); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM upload_operations WHERE gone_seen > 0 AND gone_seen < ?`,
+		before-uploadOperationGoneRetention)
 	return err
 }
 
