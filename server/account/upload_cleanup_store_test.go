@@ -121,8 +121,10 @@ func TestAFailedCleanupClaimWritesNothing(t *testing.T) {
 }
 
 // The purge is one transaction: a failed queue write rolls back its deletes, and
-// a successful one queues exactly the unreferenced rows it removes, keeping an
-// existing hold and obligation on a key.
+// a successful one queues exactly the unreferenced rows it removes — a fresh,
+// billable row with headroom WITH its residual obligation (residualOwedSQL), the
+// same hand-off the single claim makes — keeping an existing hold and
+// obligation on a key its deletion-only branch queues.
 func TestThePurgeIsOneTransaction(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
@@ -136,6 +138,12 @@ func TestThePurgeIsOneTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := enqueueBilledNodeDeleteOn(ctx, st.db, "blob-held", "", 50, 9999, u.ID, MeterUpload, 100, 10); err != nil {
+		t.Fatal(err)
+	}
+	// "held" predates the residual rule (unknown provenance), so the purge
+	// queues it deletion-only — and that upsert must leave the obligation
+	// already on its key exactly as it was.
+	if _, err := st.db.Exec(`UPDATE upload_sessions SET residual_provenance = 0 WHERE id = 'held'`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -166,8 +174,9 @@ func TestThePurgeIsOneTransaction(t *testing.T) {
 			t.Fatalf("after the purge row %s present=%v, want %v", id, got, want)
 		}
 	}
-	if q := queueRows(t, st, "blob-orphan"); len(q) != 1 || q[0].EnqueuedAt != 7000 || q[0].BillUserID != "" {
-		t.Fatalf("the orphan's queue = %+v, want one deletion-only row enqueued at 7000", q)
+	if q := queueRows(t, st, "blob-orphan"); len(q) != 1 || q[0].EnqueuedAt != 7000 || q[0].NotBefore != 0 ||
+		q[0].BillUserID != u.ID || q[0].BillKind != MeterUpload || q[0].BilledThrough != 10 || q[0].BillMax != 1<<20 {
+		t.Fatalf("the orphan's queue = %+v, want one obligation enqueued at 7000: %s, floor 10, capped at max_size", q, u.ID)
 	}
 	if q := queueRows(t, st, "blob-live"); len(q) != 0 {
 		t.Fatalf("the purge queued a live object's blob: %+v", q)

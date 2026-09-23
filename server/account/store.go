@@ -2448,6 +2448,9 @@ type Store interface {
 	BumpNodeUpdateAttempts(ctx context.Context, nodeID string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
+	// PrepareRefusedUploadReclaim is a refused finalize's settle-first ownership
+	// step for its blob; see SQLiteStore.PrepareRefusedUploadReclaim.
+	PrepareRefusedUploadReclaim(ctx context.Context, sessionID, blobKey, nodeID string, at int64) (bool, error)
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
 	DeletePendingNodeDelete(ctx context.Context, blobKey, nodeID string) error
 	// MarkPendingNodeDeleteDone stamps the first delete that succeeded for a

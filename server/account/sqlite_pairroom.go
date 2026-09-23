@@ -459,7 +459,19 @@ func closePairRoomOn(ctx context.Context, tx *sql.Tx, id string, at, holdUntil i
 			// the physical phase from billing the same bytes a second time.
 			out.Sessions[i].Metered = r.Received
 		}
-		if r.Billable {
+		// A session whose blob a stored object has EVER named (residualPersisted:
+		// finalized, then completed or deleted while the room stayed open) holds
+		// the documented live-finalize residual past that object's size, which is
+		// never billed, so its intent is deletion-only. Fresh and unknown (legacy)
+		// sessions keep the rule below: this void has always billed the residual
+		// of a session it cannot classify, and a legacy row keeps the policy it was
+		// created under.
+		var prov residualProvenance
+		if err := tx.QueryRowContext(ctx,
+			`SELECT residual_provenance FROM upload_sessions WHERE id = ?`, r.ID).Scan(&prov); err != nil {
+			return PairRoomClosure{}, err
+		}
+		if r.Billable && prov != residualPersisted {
 			// The delete intent carries the BILLING OBLIGATION too: whoever destroys
 			// this blob's bytes must first durably bill any size past `received`
 			// (clamped to max_size) to this user. Written HERE — the same transaction
