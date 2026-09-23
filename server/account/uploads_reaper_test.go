@@ -115,7 +115,7 @@ func TestOrphanDoneUploadReaping(t *testing.T) {
 	}
 
 	// Purge clears every stale done=1 row (orphan + the referenced one).
-	if err := st.PurgeDoneUploadSessions(ctx, 5000); err != nil {
+	if err := st.PurgeDoneUploadSessions(ctx, 5000, 5000); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, _ := st.GetUploadSession(ctx, "orphan", u.ID); ok {

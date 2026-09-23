@@ -393,7 +393,7 @@ func TestAnUnreachableBlobIsNeverWrittenOffAgainstTheOffsetWeHappenToKnow(t *tes
 		t.Fatalf("a session whose blob could never be read back is marked settled: %+v", got)
 	}
 	// ...and the purge agrees, however old the row gets.
-	if err := h.store.PurgeDoneUploadSessions(context.Background(), h.now+3650*86400); err != nil {
+	if err := h.store.PurgeDoneUploadSessions(context.Background(), h.now+3650*86400, h.now+3650*86400); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if !h.sessionExists(t, uploadID) {
@@ -423,13 +423,45 @@ func TestAnUnreachableBlobIsBilledExactlyOnceItsNodeReturns(t *testing.T) {
 	if h.sessionExists(t, uploadID) {
 		t.Fatal("a settled session was left behind")
 	}
+	// The reaper hands the settled blob to the pending-delete queue rather than
+	// deleting it itself: the bytes are still on the node, and a deletion-only
+	// queue row owns them (no billing obligation — the bill above is settled).
+	if got := nodeBlobSize(t, node.dir, sess.BlobKey); got != onNode {
+		t.Fatalf("the blob holds %d bytes before the drain, want the %d it was billed for", got, onNode)
+	}
+	var queued []PendingNodeDelete
+	for _, p := range h.pendingDeletes(t) {
+		if p.BlobKey == sess.BlobKey {
+			queued = append(queued, p)
+		}
+	}
+	if len(queued) != 1 || queued[0].NodeID != sess.NodeID || queued[0].BillUserID != "" {
+		t.Fatalf("after the reaper, the blob's queue ownership is %+v, want one deletion-only row for node %s",
+			queued, sess.NodeID)
+	}
+	// GC's drain is what deletes it, and retires the row on the confirmed delete.
+	cleanupDrain(h, h.store, h.now+7*86400)
 	if nodeBlobSize(t, node.dir, sess.BlobKey) != 0 {
 		t.Fatal("the partial blob was not reclaimed once its bytes were accounted for")
+	}
+	for _, p := range h.pendingDeletes(t) {
+		if p.BlobKey == sess.BlobKey {
+			t.Fatalf("the queue row outlived a confirmed delete: %+v", p)
+		}
+	}
+	if got := h.uploadMetered(t); got != onNode {
+		t.Fatalf("the drain moved the bill: %d, want %d", got, onNode)
 	}
 	// Exactly once: a later sweep must not re-bill what is already paid for.
 	h.svc.ReapPendingUploads(h.now + 8*86400)
 	if got := h.uploadMetered(t); got != onNode {
 		t.Fatalf("a later sweep re-billed: %d, want %d", got, onNode)
+	}
+	// ...nor a later drain plus reap, on a queue that no longer names the blob.
+	cleanupDrain(h, h.store, h.now+9*86400)
+	h.svc.ReapPendingUploads(h.now + 9*86400)
+	if got := h.uploadMetered(t); got != onNode {
+		t.Fatalf("a later drain and sweep re-billed: %d, want %d", got, onNode)
 	}
 }
 
@@ -1136,7 +1168,7 @@ func TestPreMigrationFinalizedSessionsAreBackfilledAsSettled(t *testing.T) {
 	if billed, err := st.ReconcileUploadMeter(ctx, row.ID, 2000); err != nil || billed != 0 {
 		t.Fatalf("reconciling a pre-migration row billed %d again (err %v)", billed, err)
 	}
-	if err := st.PurgeDoneUploadSessions(ctx, 1<<40); err != nil {
+	if err := st.PurgeDoneUploadSessions(ctx, 1<<40, 1<<40); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if _, ok, _ := st.GetUploadSession(ctx, row.ID, u.ID); ok {

@@ -1234,8 +1234,10 @@ const pairRoomCloseBudget = 10 * time.Second
 
 // pairRoomReclaimBudget bounds the PHYSICAL phase: probing blobs for their real
 // size and deleting them. Everything in this phase is best-effort by
-// construction, so running out is a loss of billing accuracy on the residual,
-// never a loss of ciphertext or of a row.
+// construction, so running out only postpones work to GC: the residual bill and
+// the delete both ride on the intent row phase one committed, and GC's drain
+// settles the one before it performs the other. Never a loss of a bill, of a
+// row, or of the delete.
 //
 // A var only so a test can shrink it to reach the exhausted-budget path without
 // stalling for ten seconds; production never reassigns it.
@@ -1300,10 +1302,10 @@ func (s *Service) reclaimPairRoomClosure(base context.Context, room PairRoom, cl
 	// PHASE TWO. Budget checked before each artifact rather than during one: a
 	// probe or a delete against an unreachable node can take its own short
 	// timeout, and a fan-out of them must not make a request that is answering
-	// 410 wait on all of them. Whatever is left has already been paid for in full
-	// by phase one — a durable delete intent — so stopping here costs only the
-	// chance to bill an unrecorded residual, which is the write-off the owner's
-	// rule already grants a timed-out room.
+	// 410 wait on all of them. Whatever is left is already owned by phase one — a
+	// durable delete intent that, for a billable upload, also carries the billing
+	// obligation — so stopping here costs only promptness: GC's drain re-probes
+	// each such blob, bills any unrecorded residual, and only then deletes it.
 	pctx, cancel := context.WithTimeout(base, pairRoomReclaimBudget)
 	defer cancel()
 	for i, sf := range closed.Objects {
@@ -1316,7 +1318,7 @@ func (s *Service) reclaimPairRoomClosure(base context.Context, room PairRoom, cl
 	}
 	for i, r := range closed.Sessions {
 		if pctx.Err() != nil {
-			log.Printf("pair room %s: out of reclaim budget with %d of %d upload session(s) left; their rows are already gone and their blobs are queued for deletion, so what is lost is the chance to bill an unrecorded residual",
+			log.Printf("pair room %s: out of reclaim budget with %d of %d upload session(s) left; their rows are already gone and their intent rows keep any unrecorded residual owed, so GC bills it before it deletes the blobs",
 				room.ID, len(closed.Sessions)-i, len(closed.Sessions))
 			return nil
 		}
@@ -1330,38 +1332,47 @@ func (s *Service) reclaimPairRoomClosure(base context.Context, room PairRoom, cl
 // recorded, then delete it.
 //
 // Its row is already gone and its known bytes are already billed (ClosePairRoom
-// did both, in one transaction). What is left is the question only the blob can
-// answer — `received` is as good as the last append that survived to write it
-// down, and a node that committed bytes and died before it could say so leaves
-// the truth on the blob and nowhere else. The probe has to come before the
-// delete, because the delete destroys the answer.
+// metered `received` and deleted the row in one transaction). The same
+// transaction queued the blob's delete intent, and for a billable upload that
+// intent carries the BILLING OBLIGATION: any bytes past `received` (clamped to
+// max_size) must be durably billed before the blob is destroyed. What is left
+// is the question only the blob can answer — `received` is as good as the last
+// append that survived to write it down, and a node that committed bytes and
+// died before it could say so leaves the truth on the blob and nowhere else.
+// The probe has to come before the delete, because the delete destroys the
+// answer.
 //
-// WHEN THE NODE CANNOT BE REACHED, THIS DOES NOT KEEP THE EVIDENCE. The ordinary
-// reaper moves such a session to the durable recovery state and holds its row
-// and its blob indefinitely, because `received` is only a lower bound and
-// writing the session off against it permanently underbills bytes the node
-// really took. That is the right answer for an abandoned upload. It is the wrong
-// answer here: the room's deadline passed, and the promise attached to that
-// deadline is that the ciphertext is deleted — "we are still holding your
-// encrypted file because a machine of ours is offline" is not a deletion, and no
-// amount of billing accuracy buys it back.
+// WHEN THE NODE CANNOT BE REACHED, NOTHING IS WRITTEN OFF. This returns without
+// deleting — nothing could, the node is not answering — and the residual stays
+// owed on the intent row. GC's drain re-probes the blob every sweep, settles the
+// obligation from the size it learns (TestAFailedLateAppendThatCannotAskTheBlobKeepsIt
+// pins this: the bytes are billed once the node answers), and only then
+// deletes. An obligation row whose delete never succeeded is not age-retired
+// (RetirePendingNodeDeletes), so the hold (pairRoomBlobHold) bounds how long a
+// discharged row lingers, never how long an unsettled bill survives.
 //
-// So the precedence inverts, exactly as it does when an account asks to be
-// deleted (PurgeTransientUserData): what is KNOWN stays billed, the blob is
-// queued for deletion so GC keeps trying, the session and its binding to the
-// room stop existing, and the unknown residual is written off. The write-off is
-// bounded by one append (maxAppendBytes) and is logged with the number, so it is
-// visible rather than silent.
+// What the room's deadline does change is everything that could reach the
+// ciphertext: the session and its binding to the room stop existing, nobody can
+// append to, read or extend it, and the delete is retried on every sweep until
+// the node takes it. The ordinary reaper's recovery state keeps a session row
+// as evidence; here the intent row is the evidence, so the promise that the
+// ciphertext is deleted does not have to buy billing accuracy with a write-off.
+//
+// The one path where deletion does override the evidence is an account asking
+// to be deleted (PurgeTransientUserData): it drops the account's upload sessions
+// in every state and reclaims their blobs without asking them anything, because
+// a residual can never be charged to a deleted account and keeping its partial
+// ciphertext for a node that may never return would make that promise false.
 func (s *Service) settleReclaimedUpload(ctx context.Context, r UploadSessionRow, now int64) {
 	size, probed := s.probeUploadForReclaim(ctx, r)
 	if !probed {
-		log.Printf("pair room %s: node %s cannot say how big upload %s's partial blob %s really is, and the room's deadline has passed, so the %d bytes it acknowledged stay billed, anything beyond them is written off, and the blob is queued for deletion",
+		log.Printf("pair room %s: node %s cannot say how big upload %s's partial blob %s really is, and the room's deadline has passed, so the %d bytes it acknowledged stay billed, the intent row keeps anything beyond them owed, and GC bills it before it deletes the blob",
 			r.PairRoomID, nodeLabelForLog(r.NodeID), r.ID, r.BlobKey, r.Received)
 		return
 	}
-	// Bytes the node committed that no append survived to record. This is the last
-	// moment anything can charge them, and the session's own ledger is gone, so
-	// they go straight onto the account's meter.
+	// Bytes the node committed that no append survived to record. The session's
+	// own ledger is gone, so they are charged against the intent row's
+	// obligation rather than the session's meter column.
 	//
 	// CLAMPED to the write budget this server authorized at init, for the reason
 	// every other blob-reported number is: a malicious BYO or fleet node is free
@@ -1369,14 +1380,17 @@ func (s *Service) settleReclaimedUpload(ctx context.Context, r UploadSessionRow,
 	// allowed to send. Non-billable (own-node) uploads spend the user's own disk
 	// and are never metered at all.
 	if to := min(size, r.MaxSize); r.Billable && to > r.Received {
-		// Through settleBlobBillingDurably, not RecordMeter. The probe above is the
-		// last time anything will ever know this number — the session row is gone —
-		// so the bill must be DURABLE (metered, or journaled with the intent row's
-		// floor advanced) before the delete on the next line destroys the evidence.
+		// Through settleBlobBillingDurably, not RecordMeter. The delete below
+		// destroys the only copy of this number, so the bill must be DURABLE —
+		// metered, or journaled to the owed-bills outbox, with the intent row's
+		// floor advanced in the same transaction — before it runs. A direct
+		// RecordMeter would charge the account without advancing that floor, so
+		// the obligation would still say the bytes are owed and GC's drain would
+		// bill them a second time.
 		//
-		// This is the difference between the two halves of the write-off rule below.
-		// UNKNOWN (the node could not be asked) is written off, deliberately. KNOWN
-		// (the node answered) is billed, and stays billed through a database that is
+		// Neither outcome here writes anything off. UNKNOWN (the node could not be
+		// asked, above) stays owed on the intent row until GC learns it. KNOWN (the
+		// node answered) is billed, and stays billed through a database that is
 		// briefly refusing writes and through this process dying.
 		if !s.settleBlobBillingDurably(ctx, r.BlobKey, r.NodeID, to, now,
 			"bytes blob "+r.BlobKey+" held when pair room "+r.PairRoomID+" ended") {

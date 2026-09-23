@@ -4269,7 +4269,8 @@ func (s *SQLiteStore) ClaimUploadDone(ctx context.Context, id string, now int64)
 	var metered, billable int64
 	// Refresh last_activity as we claim: a finalize on an idle-past-TTL upload
 	// would otherwise leave the just-claimed done=1 row "expired", letting the
-	// orphan reaper drop its blob in the window before persistStoredFile runs.
+	// orphan reaper claim its blob in the window before persistStoredFile runs
+	// (which the insert's session precondition would then have to refuse).
 	err = tx.QueryRowContext(ctx,
 		`UPDATE upload_sessions SET done = 1, last_activity = ? WHERE id = ? AND done = 0
 		 RETURNING user_id, received, metered, billable`, now, id,
@@ -4295,6 +4296,10 @@ func (s *SQLiteStore) ClaimUploadDone(ctx context.Context, id string, now int64)
 	return received, billed, true, tx.Commit()
 }
 
+// DeleteUploadSession deletes the row and nothing else. The reaper no longer
+// calls it: every reaper path ends a session through ClaimUploadSessionCleanup,
+// which hands the blob to the pending-delete queue in the transaction that
+// deletes the row.
 func (s *SQLiteStore) DeleteUploadSession(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_sessions WHERE id = ?`, id)
 	return err
@@ -4319,14 +4324,22 @@ func (s *SQLiteStore) ListExpiredOpenUploadSessions(ctx context.Context, before 
 // Their partial blobs would otherwise leak forever, since the open-session
 // reaper only ever looks at done=0 rows.
 //
-// A finalize that REFUSED the object matches this clause too, and harmlessly:
-// it keeps its row as a tombstone but drops its own blob on the way out, so
-// this pass finds nothing left to delete. A finalize that SUCCEEDED never
-// matches, tombstone and all — its blob is referenced by the stored_files row
-// it wrote.
+// A finalize that REFUSED the object matches this clause too. A non-pair-room
+// refusal drops its own blob on the way out, so the claim this pass takes
+// queues a key that is already gone (the drain treats that 404 as success). A
+// pair-room refusal deliberately drops nothing — that blob may be a room
+// void's billing evidence — and this pass is how a tombstone the void did not
+// take reaches the queue. A finalize that SUCCEEDED never matches, tombstone
+// and all — its blob is referenced by the stored_files row it wrote.
+//
+// This is only the candidate list. What the reaper acts on is the cleanup
+// claim (ClaimUploadSessionCleanup), which re-evaluates this predicate inside
+// its own transaction: a row listed here can be referenced, voided or settled
+// differently by the time the reaper gets to it, and a snapshot is not
+// allowed to decide anything destructive.
 //
 // `unresolved_at = 0` keeps the recovery state out of it, and that clause is
-// load-bearing rather than tidy: this pass DROPS BLOBS, and an unresolved
+// load-bearing rather than tidy: this pass RECLAIMS BLOBS, and an unresolved
 // session's blob is the only thing left that can say how many bytes its node
 // really accepted. Deleting it would make the exact bill unrecoverable at the
 // moment the node comes back — the same underbill the state exists to prevent,
@@ -4335,6 +4348,65 @@ func (s *SQLiteStore) ListOrphanDoneUploadSessions(ctx context.Context, before i
 	return s.uploadSessionsWhere(ctx,
 		`WHERE done = 1 AND unresolved_at = 0 AND max(last_activity, created_at) <= ?
 		   AND blob_key NOT IN (SELECT blob_key FROM stored_files)`, before)
+}
+
+// uploadCleanupEligible is the predicate a terminal session must satisfy for
+// cleanup to take its blob: finalize-claimed, not in recovery, settled, and idle
+// since at/before the bound. The reference clause is added by each claimer.
+// ClaimUploadSessionCleanup and PurgeDoneUploadSessions share it, so the single
+// and the set-based claim cannot drift.
+const uploadCleanupEligible = `done = 1 AND unresolved_at = 0 AND max(last_activity, created_at) <= ?
+   AND (billable = 0 OR metered >= received)`
+
+// ClaimUploadSessionCleanup takes cleanup ownership of one settled terminal
+// session: the eligibility re-check, the hand-off of its blob to the
+// pending-delete queue, and the deletion of the row are one writer transaction.
+// Nothing touches the blob here; GC's drainPending is its only destroyer.
+//
+// The re-check is the point. The reaper found this row in a list, and between
+// that read and now a finalize may have committed a stored file for its blob, a
+// pair room's close may have taken the row (with a billing obligation on the
+// blob), or the row may have moved. Reading `stored_files` inside this
+// transaction, which SQLite's single writer serializes against the finalize's
+// insert, is what stops a live object's blob from ever being queued; the
+// insert's own check (requireUploadSessionOn) is the other half.
+//
+// The queue write is the existing upsert: it keeps the stronger hold and the
+// earlier enqueue time, and it never touches a billing obligation already on
+// the key, so a claim can only add a deletion intent — never shorten one or
+// discharge a bill. A claim cannot create an obligation either: the only
+// writer of one (closePairRoomOn) deletes this row in its own transaction, so
+// whichever of the two commits second finds no row.
+//
+// ok=false with a nil error means not eligible, and nothing was written. An
+// error means nothing was written and the row still owns the blob.
+func (s *SQLiteStore) ClaimUploadSessionCleanup(ctx context.Context, id string, idleBefore, at int64) (blobKey, nodeID string, ok bool, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", "", false, err
+	}
+	defer tx.Rollback()
+	err = tx.QueryRowContext(ctx,
+		`SELECT blob_key, node_id FROM upload_sessions
+		  WHERE id = ? AND `+uploadCleanupEligible+`
+		    AND blob_key NOT IN (SELECT blob_key FROM stored_files)`, id, idleBefore).
+		Scan(&blobKey, &nodeID)
+	if err == sql.ErrNoRows {
+		return "", "", false, tx.Commit()
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	if err := enqueueNodeDeleteOn(ctx, tx, blobKey, nodeID, at, 0); err != nil {
+		return "", "", false, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM upload_sessions WHERE id = ?`, id); err != nil {
+		return "", "", false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", "", false, err
+	}
+	return blobKey, nodeID, true, nil
 }
 
 // ListUnresolvedUploadSessions returns recovery-state rows due for another
@@ -4447,9 +4519,14 @@ func (s *SQLiteStore) SettleUnresolvedUpload(ctx context.Context, id string, siz
 }
 
 // PurgeDoneUploadSessions deletes finalized (done=1) rows idle since at/before
-// `before` — housekeeping for rows a finalize left behind. Their blob is either
-// a live stored_files entry (kept) or was already dropped by the orphan pass, so
-// this only reclaims the tiny session row.
+// `before` — housekeeping for rows a finalize left behind. A row whose blob a
+// stored_files entry references just goes: the blob is that live object's. A
+// row whose blob nothing references is normally already gone, claimed by the
+// orphan pass; one that is not (the orphan list failed, or the row became
+// eligible in between) has its blob queued in pending_node_deletes, enqueued at
+// `at`, in the SAME transaction that deletes it. That makes this a set-based
+// cleanup claim, and deleting the row without the queue write is not a state
+// it can commit: a failed queue write rolls the whole purge back.
 //
 // SETTLED rows only. `metered >= received` is the guard, and it is the whole
 // reason this is not an unconditional delete: the row is the only place that
@@ -4464,12 +4541,28 @@ func (s *SQLiteStore) SettleUnresolvedUpload(ctx context.Context, id string, siz
 // bound, and everything up to it is billed — so age alone would quietly delete
 // the evidence for the bytes beyond it. Nothing about "the node has been away a
 // long time" makes those bytes free.
-func (s *SQLiteStore) PurgeDoneUploadSessions(ctx context.Context, before int64) error {
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM upload_sessions
-		 WHERE done = 1 AND unresolved_at = 0 AND max(last_activity, created_at) <= ?
-		   AND (billable = 0 OR metered >= received)`, before)
-	return err
+func (s *SQLiteStore) PurgeDoneUploadSessions(ctx context.Context, before, at int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// The same upsert as enqueueNodeDeleteOn, set-based: the stronger hold and
+	// the earlier enqueue survive, and an obligation already on a key is kept.
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO pending_node_deletes (blob_key, node_id, enqueued_at, not_before)
+		 SELECT blob_key, node_id, ?, 0 FROM upload_sessions
+		  WHERE `+uploadCleanupEligible+`
+		    AND blob_key NOT IN (SELECT blob_key FROM stored_files)
+		 ON CONFLICT(blob_key, node_id) DO UPDATE SET
+		   not_before = max(pending_node_deletes.not_before, excluded.not_before)`, at, before); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM upload_sessions WHERE `+uploadCleanupEligible, before); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // ClearPassword NULLs the password hash so the account has no usable password
@@ -4837,8 +4930,12 @@ const storedFileSelectCols = storedFileCols + `, download_count`
 // points into one insert is how the object's deadline came to depend on which
 // call site an upload arrived through; there is one now, and this is the plain
 // door into it.
+//
+// An insert that carries a session precondition (f.UploadSessionID, a resumable
+// finalize) takes the transactional door too, so an own-node finalize — which
+// skips the caps — is refused under the same rule as a capped one.
 func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
-	if f.PairRoomID == "" {
+	if f.PairRoomID == "" && f.UploadSessionID == "" {
 		return insertStoredFileOn(ctx, s.db, f)
 	}
 	_, err := s.CreateStoredFileWithinStorageCaps(ctx, f, f.CreatedAt, 0, 0)
@@ -4861,6 +4958,27 @@ func insertStoredFileOn(ctx context.Context, ex sqlExecer, f StoredFile) error {
 		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
 		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads,
 		purposeOrShare(f.Purpose), f.InboxTaskID, f.PairRoomID, nullBytes(f.CompletionVerifier))
+	return err
+}
+
+// requireUploadSessionOn is the finalize side of cleanup ownership: when the
+// insert carries f.UploadSessionID, the session it claimed must still exist as
+// this user's finalize-claimed tombstone for this blob, read inside the
+// insert's own transaction. A missing row means a cleanup claim or a room's
+// close owns the blob now — possibly already queued for deletion — and an
+// object pointing at it would be a 200 for bytes that are going away.
+func requireUploadSessionOn(ctx context.Context, tx *sql.Tx, f StoredFile) error {
+	if f.UploadSessionID == "" {
+		return nil
+	}
+	var one int
+	err := tx.QueryRowContext(ctx,
+		`SELECT 1 FROM upload_sessions
+		  WHERE id = ? AND user_id = ? AND blob_key = ? AND done = 1 AND unresolved_at = 0`,
+		f.UploadSessionID, f.UserID, f.BlobKey).Scan(&one)
+	if err == sql.ErrNoRows {
+		return ErrUploadSessionReclaimed
+	}
 	return err
 }
 
@@ -4896,6 +5014,13 @@ func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) (Stor
 	}
 	if !found || !pairRoomOpenAt(room, f.CreatedAt) {
 		return StoredFileWrite{}, ErrPairRoomClosed
+	}
+	// The session precondition comes AFTER the room's, and the order is the
+	// contract: a room's close deletes every session row of that room, so a
+	// finalize racing the close would otherwise be answered "reclaimed" (500)
+	// instead of "room over" (410) and lose its endPairRoomByID.
+	if err := requireUploadSessionOn(ctx, tx, f); err != nil {
+		return StoredFileWrite{}, err
 	}
 	f.ExpiresAt = pairRoomExpiry(room)
 	if err := insertStoredFileOn(ctx, tx, f); err != nil {
@@ -4959,6 +5084,11 @@ func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f S
 			return StoredFileWrite{}, err
 		}
 		return out, tx.Commit()
+	}
+	// After the caps, so a cap refusal still reports its Reason; before the
+	// insert, in this transaction, so a claimed session cannot gain an object.
+	if err := requireUploadSessionOn(ctx, tx, f); err != nil {
+		return StoredFileWrite{}, err
 	}
 	if err := insertStoredFileOn(ctx, tx, f); err != nil {
 		return StoredFileWrite{}, err
@@ -6349,6 +6479,23 @@ func (s *SQLiteStore) DeletePendingNodeDelete(ctx context.Context, blobKey, node
 // deletes the session rows — the obligation has to be durable BEFORE the
 // session stops existing, or a database that starts refusing writes a moment
 // later leaves the residual with no owner at all.
+//
+// This is also what the cleanup design's I9 (single destroyer for obligated
+// evidence) rests on: a blob whose key carries, or may carry, an obligation is
+// destroyed only after a durable settle — by GC's drainPending, by
+// settleReclaimedUpload, or by settleAppendIntoAVoidedRoom (a late append that
+// either knows the blob's whole size because its own append landed, or else
+// goes through settleReclaimedUpload itself) — and nothing else; each keeps the
+// blob when the settle cannot be made durable or the blob cannot be sized. The
+// floor advanced in every settle's transaction is what lets several of them
+// race on one key without double billing. The reaper's cleanup claim
+// (ClaimUploadSessionCleanup) and this producer cannot both own one blob
+// because the sole producer today, closePairRoomOn, writes the obligation and
+// deletes the session row in the SAME transaction on the single SQLite writer —
+// once it commits there is no session left to claim, and a claim that committed
+// first left no session for it to find. A second caller could invalidate that
+// argument rather than merely add a path: any future producer must re-audit
+// that mutual exclusion and the single-destroyer rule before it lands.
 //
 // The conflict clause keeps enqueueNodeDeleteOn's rules for the hold and the
 // enqueue time, overwrites the obligation identity (the latest session close is

@@ -677,6 +677,15 @@ type PairRoomCompletion struct {
 // upload routes turn it into the same 410 a pre-check refusal produces.
 var ErrPairRoomClosed = errors.New("account: pair room is closed")
 
+// ErrUploadSessionReclaimed is returned by a stored-file insert that carries
+// StoredFile.UploadSessionID when, inside the insert's own transaction, that
+// session row no longer exists: a cleanup claim (ClaimUploadSessionCleanup or
+// PurgeDoneUploadSessions) or a pair room's close took it first, and with it
+// the ownership of the blob this object would have pointed at. Nothing was
+// written. It is terminal — the row cannot come back — and the finalize
+// answers it as a server error, keeping the bill for bytes that did move.
+var ErrUploadSessionReclaimed = errors.New("account: upload session was reclaimed by cleanup")
+
 // StoredFile is one zero-knowledge stored-transfer object's lifecycle row. The
 // server holds only ciphertext: EncManifest (encrypted filenames/sizes) and the
 // blob it points at are opaque. It never sees plaintext content, names, or the key.
@@ -726,6 +735,19 @@ type StoredFile struct {
 	// "no verifier" is answered with a distinct status rather than a refusal that
 	// looks like a wrong proof.
 	CompletionVerifier []byte
+	// UploadSessionID is NOT a column and is never read back. It is a
+	// precondition of the insert, and only a resumable finalize sets it: the
+	// insert lands only if, inside its own transaction, that session row still
+	// exists for this user and blob as a finalize-claimed tombstone (done, not
+	// in recovery). Otherwise it is refused with ErrUploadSessionReclaimed. ""
+	// — every other writer — inserts exactly as before.
+	//
+	// This is the half of the cleanup ownership rule the insert owns. The
+	// cleanup claim reads stored_files and the insert reads upload_sessions, in
+	// two transactions SQLite's single writer serializes, so whichever commits
+	// second sees the first: a claimed blob is never reported as a live object,
+	// and a live object's blob is never claimed.
+	UploadSessionID string
 }
 
 // StoredFileWrite is what a stored-file insert ACTUALLY landed — the row's own
@@ -1607,7 +1629,22 @@ type Store interface {
 	// no record left of what was lost. Together they are all-or-nothing, so a
 	// failure claims nothing and the caller's retry settles it exactly once.
 	ClaimUploadDone(ctx context.Context, id string, now int64) (received, billed int64, ok bool, err error)
+	// DeleteUploadSession deletes a session row and nothing else. No reaper
+	// path calls it: removing the row that owns a blob without handing the blob
+	// to the pending-delete queue in the same transaction is how a blob loses
+	// its last owner (see ClaimUploadSessionCleanup).
 	DeleteUploadSession(ctx context.Context, id string) error
+	// ClaimUploadSessionCleanup takes cleanup ownership of ONE settled terminal
+	// session before anything touches its blob. In one writer transaction it
+	// re-checks eligibility (done, not in recovery, settled, idle since ≤
+	// idleBefore, blob referenced by no stored_files row), queues the blob in
+	// pending_node_deletes with the existing upsert — a hold or a billing
+	// obligation already on that key is kept — and deletes the row. It performs
+	// no blob I/O; GC's drainPending is what deletes the bytes.
+	//
+	// ok=false, err=nil: not eligible, nothing written. err: nothing written,
+	// and the row still owns the blob.
+	ClaimUploadSessionCleanup(ctx context.Context, id string, idleBefore, at int64) (blobKey, nodeID string, ok bool, err error)
 	// ListExpiredOpenUploadSessions returns open sessions idle since ≤ before.
 	// Never a session already in the recovery state (see MarkUploadUnresolved).
 	ListExpiredOpenUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error)
@@ -1615,13 +1652,18 @@ type Store interface {
 	// blob no stored_files row references (a finalize that crashed before persist).
 	//
 	// EXCLUDES rows in the recovery state. Their blob is the only thing that can
-	// still say how many bytes the node accepted, and this pass drops blobs.
+	// still say how many bytes the node accepted, and this pass reclaims blobs.
+	// A candidate list only: the reaper acts through ClaimUploadSessionCleanup,
+	// which re-checks every clause inside its own transaction.
 	ListOrphanDoneUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error)
-	// PurgeDoneUploadSessions deletes finalized rows idle since ≤ before (their
-	// blob is either a live file or already dropped by the orphan pass). Rows
+	// PurgeDoneUploadSessions deletes finalized rows idle since ≤ before, and in
+	// the same transaction queues (enqueued at `at`) the blob of every one that
+	// no stored_files row references — a set-based cleanup claim, so a row the
+	// orphan pass did not get to never takes its blob's only owner with it. A
+	// referenced row's blob belongs to its live object and is not queued. Rows
 	// whose meter is short, and rows in the recovery state, are never purged:
 	// the row is the only record of what an upload accepted.
-	PurgeDoneUploadSessions(ctx context.Context, before int64) error
+	PurgeDoneUploadSessions(ctx context.Context, before, at int64) error
 	// MarkUploadUnresolved moves an abandoned open session into the RECOVERY
 	// state: terminal for the client, but explicitly NOT settled. ok=false ⇒ the
 	// session was claimed by a racing finalize or reaper first.

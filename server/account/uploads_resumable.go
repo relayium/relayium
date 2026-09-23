@@ -156,16 +156,27 @@ const uploadUnresolvedRetryEvery int64 = 3600
 // and the leftovers wait for the next sweep — the rows are not going anywhere.
 const uploadUnresolvedRecoverBatch = 16
 
-// ReapPendingUploads drops abandoned upload sessions and their partial blobs.
-// Wired into the GC tick (see main.go). now is unix seconds. It runs three
-// passes; the first two are keyed on IDLE time (no chunk since) rather than
-// absolute age, so a legit long upload is never reaped mid-flight:
-//   - open sessions idle past the TTL, settled and dropped by reapOpenUpload;
+// ReapPendingUploads ends abandoned upload sessions and hands their partial
+// blobs to deletion. Wired into the GC tick (see main.go). now is unix seconds.
+// It runs three passes; the first two are keyed on IDLE time (no chunk since)
+// rather than absolute age, so a legit long upload is never reaped mid-flight:
+//   - open sessions idle past the TTL, settled and claimed by reapOpenUpload;
 //   - finalized (done=1) sessions idle past the TTL whose blob nothing
-//     references — a finalize that crashed before persisting the file — whose
-//     partial blob would otherwise leak forever;
+//     references — a finalize that crashed before persisting the file, or a
+//     refused pair-room finalize — whose partial blob would otherwise leak
+//     forever;
 //   - sessions in the recovery state, whose node was unreachable when the
 //     reaper got to them, re-probed on their own slower cadence.
+//
+// None of them deletes a blob. Each one ends a session with a CLEANUP CLAIM
+// (ClaimUploadSessionCleanup): one transaction that re-checks the row, moves
+// ownership of its blob to the pending-delete queue and deletes the row. GC's
+// drainPending, which runs earlier in the same sweep, deletes queued blobs on
+// the next tick. The reaper works from list snapshots, and a snapshot must not
+// decide anything destructive: between the list and the act, a finalize can
+// commit an object for the blob, and a pair room's void can attach a billing
+// obligation to it whose only evidence is the blob itself. The claim sees both
+// inside its transaction; a DELETE issued from the snapshot would see neither.
 func (s *Service) ReapPendingUploads(now int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -175,7 +186,7 @@ func (s *Service) ReapPendingUploads(now int64) {
 			s.reapOpenUpload(ctx, r, now)
 		}
 	}
-	// Orphaned finalized rows: settle the bill, then drop the unreferenced blob.
+	// Orphaned finalized rows: settle the bill, then claim the unreferenced blob.
 	//
 	// BEFORE the recovery pass, not after. Recovery stamps each attempt, and a
 	// stamp is idle time — running it first would keep a recovery-state row out
@@ -188,19 +199,32 @@ func (s *Service) ReapPendingUploads(now int64) {
 		for _, r := range orphans {
 			// A finalize that crashed between claiming the session and billing it.
 			// Idempotent, so a session that WAS billed pays nothing again here — and
-			// its blob only goes once the bill is settled, because the row is the
-			// only record of what those bytes were.
+			// its blob is only claimed once the bill is settled, because the row is
+			// the only record of what those bytes were.
 			if !s.reconcileUploadMeter(ctx, r.ID, now) {
 				continue
 			}
-			s.dropUploadBlob(ctx, r.NodeID, r.BlobKey)
+			// The claim re-reads the row: r may be stale by now (see above).
+			s.claimUploadCleanup(ctx, r.ID, before, now)
 		}
 	}
 	s.recoverUnresolvedUploads(ctx, now)
 	// Purges only rows whose meter is settled (see PurgeDoneUploadSessions); an
 	// unreconciled one survives to be reconciled on the next sweep instead of
-	// taking its unbilled bytes to the grave.
-	_ = s.store.PurgeDoneUploadSessions(ctx, before)
+	// taking its unbilled bytes to the grave. An unreferenced row it purges has
+	// its blob queued in the same transaction, so a failed orphan list above
+	// cannot turn into a blob with no owner.
+	_ = s.store.PurgeDoneUploadSessions(ctx, before, now)
+}
+
+// claimUploadCleanup ends ONE settled terminal session through the cleanup
+// claim: its blob goes to the pending-delete queue and its row goes, in one
+// transaction, or nothing happens and the row keeps owning the blob until the
+// next sweep. There is no blob I/O here on purpose — see ReapPendingUploads.
+func (s *Service) claimUploadCleanup(ctx context.Context, id string, idleBefore, now int64) {
+	if _, _, _, err := s.store.ClaimUploadSessionCleanup(ctx, id, idleBefore, now); err != nil {
+		log.Printf("upload session %s: handing its blob to the pending-delete queue: %v; the session keeps it until the next sweep", id, err)
+	}
 }
 
 // reapOpenUpload settles and removes ONE abandoned open session.
@@ -214,7 +238,9 @@ func (s *Service) ReapPendingUploads(now int64) {
 //     This is the last moment anything can ask.
 //  2. CLAIM the session terminally, which settles its meter in the same
 //     transaction: the bill and the terminal state are one fact.
-//  3. Only then drop the blob and the row.
+//  3. Only then hand the blob to the pending-delete queue and remove the row,
+//     in one transaction (claimUploadCleanup). The next sweep's drainPending
+//     deletes the bytes.
 //
 // A step that cannot be completed leaves the session exactly as it was, for the
 // next sweep. Deleting it anyway would erase the only record that those bytes
@@ -243,8 +269,8 @@ func (s *Service) reapOpenUpload(ctx context.Context, r UploadSessionRow, now in
 	if billed > 0 {
 		log.Printf("upload session %s: billed %d committed bytes no append recorded", r.ID, billed)
 	}
-	s.dropUploadBlob(ctx, r.NodeID, r.BlobKey)
-	_ = s.store.DeleteUploadSession(ctx, r.ID)
+	// The claim above just stamped last_activity = now, so now is the idle bound.
+	s.claimUploadCleanup(ctx, r.ID, now, now)
 }
 
 // recoverUploadSize asks the blob how big it really is and records whatever the
@@ -349,7 +375,7 @@ func (s *Service) recoverUnresolvedUpload(ctx context.Context, r UploadSessionRo
 }
 
 // settleUnresolvedUpload writes the bill a successful probe finally made
-// possible, then reclaims the blob and the row.
+// possible, then claims the blob for deletion and removes the row.
 func (s *Service) settleUnresolvedUpload(ctx context.Context, r UploadSessionRow, size, now int64) bool {
 	billed, err := s.store.SettleUnresolvedUpload(ctx, r.ID, size, now)
 	if err != nil {
@@ -362,8 +388,9 @@ func (s *Service) settleUnresolvedUpload(ctx context.Context, r UploadSessionRow
 		log.Printf("upload session %s: node %s came back holding %d bytes; billed the %d that no append had recorded",
 			r.ID, nodeLabelForLog(r.NodeID), size, billed)
 	}
-	s.dropUploadBlob(ctx, r.NodeID, r.BlobKey)
-	_ = s.store.DeleteUploadSession(ctx, r.ID)
+	// Settled, which stamped last_activity = now. A failed claim leaves the row
+	// settled and unreferenced, so the orphan pass claims it after the TTL.
+	s.claimUploadCleanup(ctx, r.ID, now, now)
 	return true
 }
 
@@ -820,10 +847,13 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 		// ciphertext back after a void has deleted it: the void removes the session
 		// row and drops the blob, and this request — which read that row a moment
 		// earlier — was already streaming to the node. Its write lands afterwards
-		// and re-creates the key. Nothing central holds points at it any more, so if
-		// this request does not clean up after itself, only the void's held delete
-		// intent will (see pairRoomBlobHold) — and that is the crash net, not the
-		// mechanism.
+		// and re-creates the key. Nothing central holds points at it any more but
+		// the void's held delete intent (see pairRoomBlobHold), so this request
+		// cleans up after itself — yet never ahead of the bill: when the blob's
+		// bytes cannot be made durable, or cannot be sized, it stays under that
+		// intent and GC settles before it deletes. Whether or not this append
+		// itself succeeded (err above) changes how the number is learned, never
+		// that rule.
 		s.settleAppendIntoAVoidedRoom(r.Context(), sess, committed,
 			err == nil && progress.Received <= sess.Received)
 		writePairRoomError(w, errPairRoomOver)
@@ -980,38 +1010,81 @@ func (s *Service) commitUploadProgress(ctx context.Context, sess UploadSessionRo
 }
 
 // settleAppendIntoAVoidedRoom bills the bytes an append committed after its
-// pairing room was voided underneath it, then removes the ciphertext they left.
+// pairing room was voided underneath it, then removes the ciphertext they left
+// — in that order, and only in that order.
 //
 // It closes the one window a room's void cannot pre-empt. The void settles and
 // deletes the session row and drops the blob; an append already streaming to the
 // node lands after both and re-creates the key with up to one chunk's worth of
 // bytes (maxAppendBytes), or with an empty file when its offset no longer
-// matches what the node holds. Nothing central holds references it any more, so
-// the request that created it is the right thing to remove it — immediately,
-// while it still knows the key.
+// matches what the node holds. Nothing central holds references the key any
+// more except the void's delete intent, so the request that created the bytes
+// settles them while it still knows the key.
+//
+// It is NOT a second destroyer of billing evidence. The void queued its delete
+// intent with a BILLING OBLIGATION (PendingNodeDelete.BillUserID) in the same
+// transaction that deleted the session, and when it could make nothing durable
+// it deliberately left the blob as the bill's last copy. Whatever this request
+// does, it may delete the blob only after what the blob holds is durably billed
+// (settleBlobBillingDurably: metered, or journaled with the intent row's floor
+// advanced); when that cannot be done — or the blob cannot even be asked — the
+// blob and its intent row stay, and GC's drainPending bills before it deletes.
+// Deleting first would trade the bill for a tidier disk.
 //
 // WHO BILLS WHAT. `ownBytes` is the caller's answer to "did this request's own
 // append land, and did the store's transaction fail to charge for it" — a
 // successful append starts exactly at the offset the session held, so
-// `committed - Received` is precisely what this request wrote and nothing else's
-// bytes can be inside it. When the append FAILED, the number on the blob is
-// whatever survived, and settling it is the void's probe's job
-// (settleReclaimedUpload), not this request's: billing here as well would charge
-// the same bytes twice. Clamped to the session's write cap for the reason every
-// blob-reported number is — a node may answer with anything, and max_size is the
-// budget this server authorized.
+// `committed` is the whole blob and `committed - Received` precisely what this
+// request wrote. That number is settled as it stands.
+//
+// Every other outcome — above all an append that FAILED — says nothing reliable
+// about the blob: the node may have committed this request's bytes, an earlier
+// request's unrecorded residual, both, or neither, and the void may already
+// have billed some or all of them. So the blob is asked again and settled
+// through settleReclaimedUpload, the void's own physical half, against the same
+// obligation: the probe, the clamp to the write budget, the own-node exemption,
+// the durable rungs, and the rule that a blob nothing could make durable (or
+// nothing could size) is KEPT. Double billing is impossible by construction,
+// not by care: every rung charges only `through - billed_through` and advances
+// that floor in the same transaction (SettleBlobBilling), so this request, the
+// void and GC can each settle the same bytes and exactly one of them is charged.
+//
+// Clamped twice, like every blob-reported number: here to the session's
+// max_size, and again inside the store to the obligation's own bill_max — a
+// node may answer with anything, and the durable cap is the one that counts.
 //
 // So "every accepted byte is billed" holds through the void as well: the bytes
 // crossed the wire, they are charged, they buy no deadline, and the object they
 // were going into is never created.
 //
 // Detached, like every other reclaim on a request that is about to answer 410:
-// a client that hangs up on reading the status must not cancel the deletion the
-// status is claiming.
+// a client that hangs up on reading the status must not cancel the settlement
+// the status is claiming; and bounded by voidedAppendSettleBudget (each probe
+// and journal write carries its own shorter bound) so a hung node or database
+// cannot pin this request.
 func (s *Service) settleAppendIntoAVoidedRoom(ctx context.Context, sess UploadSessionRow, committed int64, ownBytes bool) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), voidedAppendSettleBudget)
 	defer cancel()
-	if to := min(committed, sess.MaxSize); ownBytes && sess.Billable && to > sess.Received {
+	// Only a COMMITTED close hands the blob over: it deletes the session in the
+	// transaction that queues the intent and its obligation. The caller refuses
+	// on "the room is over" even when the void it just attempted failed, or the
+	// room could not be read (endPairRoomByID fails closed), and then the session
+	// row still exists, still owns the blob, and holds the offset the bill is
+	// measured from — while no intent row exists for a settle to charge against,
+	// so a "durable" settle would charge nothing. Deleting then would destroy
+	// the evidence the next void re-reads. The row's owner (the retried void, or
+	// the reaper) settles and reclaims it; unreadable is treated the same way.
+	if _, exists, err := s.store.GetUploadSession(ctx, sess.ID, sess.UserID); err != nil || exists {
+		log.Printf("upload session %s: room %s refused a late append but its session still owns blob %s (read err: %v); leaving the blob to it",
+			sess.ID, sess.PairRoomID, sess.BlobKey, err)
+		return
+	}
+	if !ownBytes {
+		// Deletes only after a durable settle, and keeps the blob otherwise.
+		s.settleReclaimedUpload(ctx, sess, s.now().Unix())
+		return
+	}
+	if to := min(committed, sess.MaxSize); sess.Billable && to > sess.Received {
 		// Through settleBlobBillingDurably, not RecordMeter: the blob these bytes
 		// are the measure of is deleted on the next line, so the bill must be
 		// durable — metered, or journaled with the intent row's floor advanced —
@@ -1021,7 +1094,7 @@ func (s *Service) settleAppendIntoAVoidedRoom(ctx context.Context, sess UploadSe
 			// Neither the meter nor the journal could be written. The blob stays as
 			// the bill's own evidence: the void's intent row owns both the billing
 			// and the deletion, and GC settles the first before it performs the
-			// second. Deleting here would trade the bill for a tidier disk.
+			// second.
 			log.Printf("upload session %s: keeping blob %s until the bill for its post-void bytes is durable",
 				sess.ID, sess.BlobKey)
 			return
@@ -1198,8 +1271,9 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// fail refunds it so a file rejected by the later storage-cap gate doesn't
 	// leave the user charged daily quota for bytes that never landed.
 	var reservedUploadID string
-	// fail drops the partial blob and writes the given HTTP error. The session
-	// row STAYS — done-claimed, and now this upload's tombstone.
+	// fail drops the partial blob (not for a pair-room upload — see below) and
+	// writes the given HTTP error. The session row STAYS — done-claimed, and now
+	// this upload's tombstone.
 	//
 	// It used to be deleted here, and deleting it is what made a refusal
 	// indistinguishable from an upload that never existed. The claim above is
@@ -1210,12 +1284,23 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// two apart either. The row answers 409 instead, once, for as long as it
 	// lives.
 	//
-	// Nothing is leaked by keeping it: the blob went on the line above, so the
-	// reaper's orphan pass finds nothing left to drop, and the row itself is
-	// purged by PurgeDoneUploadSessions once it is idle past pendingUploadTTL.
-	// It occupies no open-session slot either — that cap counts done = 0.
+	// Nothing is leaked by keeping it: the reaper's orphan pass claims the
+	// tombstone once it is idle past pendingUploadTTL, queueing whatever blob is
+	// left, and it occupies no open-session slot — that cap counts done = 0.
+	//
+	// A PAIR-ROOM session's blob is not this handler's to delete. The room's
+	// void may already have taken this row, in a transaction that wrote a
+	// billing obligation on the blob: its bytes past `received` are billed from
+	// the blob itself, and a DELETE here would destroy the only evidence of
+	// them before that bill is durable. The blob's owner deletes it through a
+	// settle-first path — the void's own physical phase or GC's drainPending —
+	// or, when the room is still open, the orphan pass claims the tombstone
+	// into a deletion-only queue row. pair_room_id never changes, so no other
+	// session's blob can carry an obligation, and the drop stays for those.
 	fail := func(msg string, code int) {
-		s.dropUploadBlob(r.Context(), sess.NodeID, sess.BlobKey)
+		if sess.PairRoomID == "" {
+			s.dropUploadBlob(r.Context(), sess.NodeID, sess.BlobKey)
+		}
 		s.refundUploadReservation(r.Context(), reservedUploadID)
 		http.Error(w, msg, code)
 	}
@@ -1223,12 +1308,12 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	now := s.now().Unix()
 	// A pre-upload's room can have ended while the last chunks were arriving.
 	// Binding an object to a room that is over would create ciphertext no reader
-	// can ever reach, so this finalize fails and the partial blob goes with it —
-	// while the bytes stay billed, because they moved.
+	// can ever reach, so this finalize fails — while the bytes stay billed,
+	// because they moved. The partial blob is left to the room's void (see fail).
 	//
-	// Checked AFTER the terminal claim so this refusal takes the same
-	// drop-blob/drop-session path as every other one, and so a racing reaper
-	// cannot delete the blob out from under a finalize that is about to succeed.
+	// Checked AFTER the terminal claim so this refusal leaves the same
+	// tombstone as every other one, and so a racing reaper cannot claim the
+	// blob out from under a finalize that is about to succeed.
 	var pairRoom PairRoom
 	if sess.PairRoomID != "" {
 		room, perr := s.pairRoomStillOpen(r.Context(), sess.PairRoomID)
@@ -1317,6 +1402,9 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		Size: size, BurnAfterRead: sess.MaxDL == 1, CreatedAt: now, ExpiresAt: now + sess.TTL,
 		NodeID: sess.NodeID, MaxDownloads: sess.MaxDL, Purpose: sess.Purpose,
 		PairRoomID: sess.PairRoomID, CompletionVerifier: completionVerifier,
+		// The insert's precondition: this session must still own the blob. See
+		// StoredFile.UploadSessionID and ErrUploadSessionReclaimed.
+		UploadSessionID: sess.ID,
 	}
 	// sf.ExpiresAt above is the SESSION's TTL, and for a pre-upload it is not the
 	// answer: the object inherits its ROOM's deadline, which is the same 300
@@ -1342,6 +1430,13 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	case errors.Is(perr, ErrPairRoomClosed):
 		s.endPairRoomByID(r.Context(), sess.PairRoomID)
 		fail(errPairRoomOver.msg, errPairRoomOver.status)
+		return
+	case errors.Is(perr, ErrUploadSessionReclaimed):
+		// A finalize held past the idle TTL, whose session the reaper claimed in
+		// the meantime: the blob is queued for deletion, so there is no object to
+		// report. The bill stays (the bytes moved); the reservation is refunded.
+		log.Printf("upload finalize %s: the session was reclaimed by cleanup before its object could be stored; refusing it", sess.ID)
+		fail("server error", http.StatusInternalServerError)
 		return
 	case perr != nil:
 		fail("server error", http.StatusInternalServerError)
@@ -1386,10 +1481,10 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// (TestRacingFinalizesLandOneObjectAndItCarriesTheVerifier).
 	//
 	// The row costs nothing that matters. It holds no open-session slot (the cap
-	// counts done = 0), its blob is now referenced by a stored_files row so the
-	// reaper's orphan pass is excluded from it by construction, and
-	// PurgeDoneUploadSessions collects the row itself once it is idle past
-	// pendingUploadTTL.
+	// counts done = 0), its blob is now referenced by a stored_files row so no
+	// cleanup claim can take it (each one re-reads stored_files in its own
+	// transaction), and PurgeDoneUploadSessions collects the row itself once it
+	// is idle past pendingUploadTTL.
 
 	// The row's own deadline, which for a pre-upload is the room's and never the
 	// session TTL sf still carries. This number is what the sender counts down and
