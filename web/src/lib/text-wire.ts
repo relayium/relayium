@@ -67,7 +67,10 @@ const enc = new TextEncoder();
 // fatal: invalid UTF-8 must fail loudly. A U+FFFD replacement character would
 // corrupt content while reporting success, and "opaque valid Unicode" is a
 // contract the receiver has to enforce, not hope for.
-const dec = new TextDecoder("utf-8", { fatal: true });
+// ignoreBOM: a leading U+FEFF is message content, not a byte-order mark. The
+// default decoder strips it, so a message that starts with one would arrive a
+// character short while the sender's TextEncoder kept it.
+const dec = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /**
  * The number the limit is measured in, and the number the composer's counter
