@@ -640,7 +640,9 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// on the functional same-origin proxy path. Fleet hosts are under
 	// *.relayium.com and remain CSP-compatible without the opt-in.
 	byoDirectRequested := r.Header.Get("X-Relayium-Direct-Download") == "1"
-	if directCapable && directNode.OwnerType == "user" && directNode.OwnerUserID == sf.UserID && byoDirectRequested {
+	// Never for an empty object: it has no blob on the node to be served from
+	// (see openStoredObject), so the redirect would hand the client a 404.
+	if directCapable && directNode.OwnerType == "user" && directNode.OwnerUserID == sf.UserID && byoDirectRequested && sf.Size > 0 {
 		s.redirectToNode(w, r, directNode, sf.BlobKey)
 		return
 	}
@@ -687,7 +689,7 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		start = parseRangeStart(r.Header.Get("Range"), sf.Size)
 	}
 
-	rc, err := bs.GetRange(r.Context(), sf.BlobKey, start)
+	rc, err := openStoredObject(r.Context(), bs, sf, start)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -809,6 +811,33 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = s.store.IncDownloadCount(ctx, sf.ID)
 	}
+}
+
+// openStoredObject opens sf's committed ciphertext from start.
+//
+// An object whose committed size is zero is the empty stream, and is served
+// as one without touching storage. That is not a shortcut around a missing
+// blob; it is what the object IS. Every all-empty batch is such an object — an
+// empty file contributes no AEAD frame, so the frame stream has no bytes — and
+// a resumable upload of it never sends a PATCH, so neither central's disk nor
+// a storage node ever creates the key. Before W-N40 the read went to storage
+// anyway, got ErrNotFound, and answered 404 (a share) or, on the Device Inbox
+// route, deleted the row and failed the task stored_object_unavailable — after
+// the finalize had already stored the object, bound its task and debited its
+// quota floor.
+//
+// The committed size is central's own record (the session's received count,
+// fixed by the terminal finalize claim), never a client declaration, so a
+// non-empty object can never be read as empty. Bytes a late append left past
+// the committed size were never part of the object and are not served, which
+// is what Content-Length already did for every non-empty object. Reading no
+// storage also means a storage node that is down cannot make an empty object
+// unreadable; a non-empty one keeps its 503.
+func openStoredObject(ctx context.Context, bs storage.BlobStore, sf StoredFile, start int64) (io.ReadCloser, error) {
+	if sf.Size == 0 {
+		return http.NoBody, nil
+	}
+	return bs.GetRange(ctx, sf.BlobKey, start)
 }
 
 // validResumeRange accepts exactly the one open-ended range shape Relayium's

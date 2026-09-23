@@ -96,12 +96,6 @@ func BuildPlan(paths []string) (*Plan, error) {
 		}
 		total += cs
 	}
-	if total == 0 {
-		// Every file is empty, so the upload would carry no bytes and the server
-		// would hold no ciphertext object for the receiver to fetch: central
-		// queues the task and every receiver then fails it as unavailable.
-		return nil, local(CodeUnsendableContent, "every file named is empty; a delivery must contain at least one byte")
-	}
 	m, err := inboxmanifest.NewFiles(items)
 	if err != nil {
 		return nil, localf(CodeUnsendableContent, "this delivery cannot be sent: %s", termtext.Safe(err.Error()))

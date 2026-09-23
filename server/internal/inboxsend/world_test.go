@@ -45,7 +45,18 @@ type device struct {
 
 func newWorld(t *testing.T, maxFile int64) *world {
 	t.Helper()
-	env := sendtest.New(t, maxFile)
+	return worldOn(t, sendtest.New(t, maxFile))
+}
+
+// newWorldOnNode is newWorld with every upload placed on a fleet storage node.
+func newWorldOnNode(t *testing.T, maxFile int64) (*world, *sendtest.Node) {
+	t.Helper()
+	env, node := sendtest.NewWithNode(t, maxFile)
+	return worldOn(t, env), node
+}
+
+func worldOn(t *testing.T, env *sendtest.Env) *world {
+	t.Helper()
 	w := &world{t: t, env: env, uid: env.User("sender@example.com"), cfgDir: t.TempDir()}
 	tok := env.Login(w.uid, "sender-box")
 	if err := cloud.Save(w.cfgDir, cloud.Creds{Server: env.TS.URL, AccessToken: tok, AccountEmail: "sender@example.com"}); err != nil {

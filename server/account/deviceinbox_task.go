@@ -110,7 +110,7 @@ func (s *Service) handleInboxTaskBlob(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	start := parseRangeStart(r.Header.Get("Range"), sf.Size)
-	rc, err := bs.GetRange(r.Context(), sf.BlobKey, start)
+	rc, err := openStoredObject(r.Context(), bs, sf, start)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			// Heal the crash window where physical deletion completed but the

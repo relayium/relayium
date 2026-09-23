@@ -54,6 +54,11 @@ type Env struct {
 // cmd/relayium uses 1 MiB; multi-chunk tests need more).
 func New(t testing.TB, maxFile int64) *Env {
 	t.Helper()
+	return newEnv(t, maxFile)
+}
+
+func newEnv(t testing.TB, maxFile int64) *Env {
+	t.Helper()
 	store, err := account.OpenSQLite(":memory:")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)

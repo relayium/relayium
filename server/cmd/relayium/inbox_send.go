@@ -85,8 +85,7 @@ positional arguments:
   <path...>   files or folders. A folder is sent with its structure; a symbolic
               link or special file inside it, or a name a receiving device would
               refuse, stops the send before anything is uploaded. Empty folders
-              cannot be sent and are listed on stderr; a delivery made only of
-              empty files is refused.
+              cannot be sent and are listed on stderr.
 
 flags:
   --to <device>    the receiving device: its id, or its exact name if no other

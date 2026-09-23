@@ -322,7 +322,12 @@ The dimensions actually checked, each fail-closed at write time:
   returned when you delete the file: it leaves the window after 24 hours. A
   near-empty file still debits a 64 KiB floor
   (`minBillableBytes`, `account/files.go:33` — capping object *count*, not
-  just size). Uploads that land on your own storage node are never debited.
+  just size). An empty object — a batch made only of zero-byte files carries
+  no ciphertext at all — is still an object and debits the same single 64 KiB
+  floor, once, however often its finalize is retried; it adds 0 bytes to
+  metered upload and download traffic and to stored bytes, and it is served
+  as an empty body without reading storage, so no node holds a blob for it.
+  Uploads that land on your own storage node are never debited.
   Exceeding it: `429` "daily quota exceeded". Inside the transaction that
   stores the file it is checked before the storage caps, so there it is the
   answer when both are exceeded. Two earlier refusals can answer first: a
