@@ -37,6 +37,7 @@
   import type { Peer } from "./lib/protocol";
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
+  import { startBrowserThemeColor } from "./lib/browser-theme-color";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, clearOutbox, uploadedRefs, uploadedFingerprint } from "./lib/outbox.svelte";
   import { resetPreupload } from "./lib/preupload.svelte";
@@ -966,6 +967,10 @@
     document.documentElement.classList.toggle("shell-route", shellRoute);
     return () => document.documentElement.classList.remove("shell-route");
   });
+  // The browser's theme-color follows what that class, the manual theme, the
+  // OS scheme and the width make `body` paint (lib/browser-theme-color.ts).
+  // Synchronous so Svelte keeps the returned teardown.
+  onMount(() => startBrowserThemeColor());
 
   // <head> upkeep, split in two on purpose. The meta/canonical/hreflang block
   // depends only on route + language, but it used to sit in the same effect as
