@@ -341,6 +341,30 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// confirmed teardown clears it exactly once.
     @Published public var draft: String = ""
 
+    /// **Counts the times the MODEL replaced `draft`, never the times a
+    /// composer edited it.**
+    ///
+    /// A text field must not be bound straight to `draft`. Bound that way, the
+    /// iOS composer lost and reordered keystrokes on the CI iOS 18.5 simulator
+    /// while a batch was in flight on this same object: "T2b-acceptance-peer-…"
+    /// arrived at the peer as "Teptance-peer-…acc" — the shape of earlier field
+    /// text written back over later keystrokes with a stale caret (run 35877967996,
+    /// `ios-transfer-acceptance`). The same composer bound to view `@State`
+    /// passed that path on every earlier `main` run. So the composer edits its
+    /// own `@State`, mirrors every edit here, and adopts `draft` back ONLY when
+    /// this counter moves — a send that took the text, a restored hand-back, a
+    /// new attempt, a confirmed discard. Typing never reads the model back, so
+    /// no published value can race it.
+    @Published public private(set) var draftReplacement = 0
+
+    /// The one way the model changes the composer's text. Always counted, even
+    /// to the same value: an edit the composer has not mirrored yet must still
+    /// be told that the model decided what the field holds.
+    private func replaceDraft(with text: String) {
+        draft = text
+        draftReplacement &+= 1
+    }
+
     /// Whether this link holds text a teardown would destroy — the draft, the
     /// transcript, or a message still waiting for a conversation to open.
     ///
@@ -379,7 +403,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     public func restoreReturnedDraft() -> Bool {
         guard let returned = returnedDraft else { return false }
         guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        draft = returned
+        replaceDraft(with: returned)
         returnedDraft = nil
         return true
     }
@@ -2987,7 +3011,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // transcript above is already dropped for exactly that reason. A draft
         // or a handed-back message left here would sit in the next peer's
         // composer one tap from being sent to somebody it was never meant for.
-        draft = ""
+        replaceDraft(with: "")
         returnedDraft = nil
         armedBatches = []
         textModel = nil
@@ -3320,7 +3344,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return false }
         guard send(message: body) else { return false }
-        draft = ""
+        replaceDraft(with: "")
         return true
     }
 
@@ -3488,7 +3512,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // Done and rode into the next session, invisible and unasked for. Every
         // piece of model-owned local text goes through this operation now, so a
         // fourth holder would be added here rather than in a view.
-        draft = ""
+        replaceDraft(with: "")
         returnedDraft = nil
         pendingMessage = nil
         if case .ended = connection {

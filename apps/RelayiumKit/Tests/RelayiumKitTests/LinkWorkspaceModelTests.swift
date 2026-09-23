@@ -1726,6 +1726,60 @@ extension LinkWorkspaceModelTests {
         XCTAssertEqual(rig.model.draft, "held")
         XCTAssertNil(rig.model.returnedDraft, "a landed message was not consumed")
     }
+
+    /// **Typing is never told the model replaced the draft; the model's own
+    /// replacements always are.**
+    ///
+    /// The iOS composer edits a view buffer, mirrors each edit into `draft`,
+    /// and re-seeds the buffer only when `draftReplacement` moves. Bound to
+    /// `draft` directly, the field lost and reordered keystrokes on iOS 18
+    /// while a batch published on this model (CI run 35877967996). So the
+    /// counter has to hold still for every composer edit — or a re-seed would
+    /// write a lagging copy back over what is being typed — and move for every
+    /// replacement the model makes, or a sent, restored or discarded draft
+    /// would stay on screen.
+    func testOnlyTheModelsOwnDraftReplacementsAreCounted() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        var seen = rig.model.draftReplacement
+
+        // Composer edits, including clearing the field by hand: never counted.
+        for text in ["T", "T2", "T2b-", "", "again"] {
+            rig.model.draft = text
+            XCTAssertEqual(rig.model.draftReplacement, seen,
+                           "a keystroke counted as a model replacement: \"\(text)\"")
+        }
+
+        // A send the lane took clears the draft, and the field must hear it.
+        XCTAssertTrue(rig.model.submitDraft())
+        XCTAssertEqual(rig.model.draft, "")
+        XCTAssertGreaterThan(rig.model.draftReplacement, seen,
+                             "a sent draft would stay in the field")
+        seen = rig.model.draftReplacement
+
+        // A refused send changes nothing, so it tells the field nothing.
+        rig.model.draft = "second"
+        XCTAssertFalse(rig.model.submitDraft(), "a second message was taken while one waits")
+        XCTAssertEqual(rig.model.draft, "second")
+        XCTAssertEqual(rig.model.draftReplacement, seen,
+                       "a refused send re-seeded the field")
+
+        // A hand-back restored into a free composer.
+        rig.model.leave()
+        await settle()
+        rig.model.draft = ""
+        XCTAssertTrue(rig.model.restoreReturnedDraft())
+        XCTAssertGreaterThan(rig.model.draftReplacement, seen,
+                             "a restored message would never reach the field")
+        seen = rig.model.draftReplacement
+
+        // A confirmed discard.
+        rig.model.leaveDiscardingLocalText()
+        await settle()
+        XCTAssertEqual(rig.model.draft, "")
+        XCTAssertGreaterThan(rig.model.draftReplacement, seen,
+                             "a discarded draft would stay on screen")
+    }
 }
 
 
