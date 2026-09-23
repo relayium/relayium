@@ -665,6 +665,29 @@ func (c *Conn) Write(lane Lane, frame []byte) error {
 	return nil
 }
 
+// Unacknowledged is how many bytes written on lane the peer's SCTP stack has
+// not yet acknowledged (Pion releases a stream's buffered amount only on a
+// SACK covering it). Zero after a frame was written means the peer's
+// transport holds that frame: SCTP orders delivery per stream, so a caller
+// that needs to know a particular lane's frames arrived — before telling the
+// peer something over another path — waits for this, not for another lane.
+func (c *Conn) Unacknowledged(lane Lane) (uint64, error) {
+	if lane != LaneFile && lane != LaneText {
+		return 0, ErrLaneProtocol
+	}
+	c.mu.Lock()
+	closed, dc := c.closed, c.dcs[lane]
+	c.mu.Unlock()
+	switch {
+	case closed:
+		return 0, ErrClosed
+	case dc == nil:
+		return 0, ErrNotOpen
+	}
+	// Outside c.mu: never hold our lock across a call that takes Pion's.
+	return dc.BufferedAmount(), nil
+}
+
 // SelectedPath classifies the pair the ICE agent has selected right now.
 func (c *Conn) SelectedPath() (PathInfo, error) {
 	t := c.pc.SCTP()

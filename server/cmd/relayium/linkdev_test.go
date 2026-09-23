@@ -30,6 +30,9 @@ import (
 	"github.com/coder/websocket"
 	turnv4 "github.com/pion/turn/v4"
 
+	"github.com/relayium/relayium/internal/linkrtc"
+	"github.com/relayium/relayium/internal/linksession"
+	"github.com/relayium/relayium/internal/linkwire"
 	"github.com/relayium/relayium/internal/signal"
 )
 
@@ -664,6 +667,62 @@ func TestLinkDevAgainstOldCLI(t *testing.T) {
 	bin := ldOldCLI(t, t.TempDir())
 	t.Run("matrix", func(t *testing.T) { ldOldMatrix(t, bin) })
 	t.Run("capture", func(t *testing.T) { ldOldCapture(t, bin) })
+	t.Run("piped-text-new-to-old", func(t *testing.T) { ldOldPipedText(t, bin) })
+}
+
+// ldOldPipedText: new `text` with PIPED stdin against an old `text`. The new
+// end must not read stdin before discovery picked the wire: on the legacy
+// outcome, pumpText is stdin's one and only reader, and the old end prints
+// what was piped in. Sequential (it swaps the process's text stdin), and
+// repeated until today's direct race connects (it loses ~1 in 5 on hosts with
+// TUN/CGNAT addresses, A08d finding): the claim is about the bytes once the
+// legacy wire exists, and the race is not this code.
+func ldOldPipedText(t *testing.T, bin string) {
+	const piped = "from the new CLI, piped"
+	for _, newFirst := range []bool{true, false} {
+		name := "old-first"
+		if newFirst {
+			name = "new-first"
+		}
+		t.Run(name, func(t *testing.T) {
+			in := strings.NewReader(piped + "\n")
+			oldIn, oldTTY := textStdin, textStdinIsTTY
+			textStdin = func() io.Reader { return in } // ONE reader, as os.Stdin is
+			textStdinIsTTY = func() bool { return false }
+			t.Cleanup(func() { textStdin, textStdinIsTTY = oldIn, oldTTY })
+			for attempt := 1; attempt <= 6; attempt++ {
+				in.Reset(piped + "\n")
+				hub := startLinkDevHub(t)
+				newP := ldPeer{cmd: "text", via: hub.url, args: []string{ldCode}}
+				oldP := ldPeer{old: true, cmd: "text", via: hub.url, args: []string{ldCode}}
+				var rn, ro ldResult
+				if newFirst {
+					rn, ro = ldPairUp(t, hub, bin, newP, oldP)
+				} else {
+					ro, rn = ldPairUp(t, hub, bin, oldP, newP)
+				}
+				ldWantLegacy(t, rn, ro)
+				if strings.Contains(rn.stderr, "link/1 ") {
+					t.Fatalf("new side linked against an old CLI\n%s", rn)
+				}
+				if rn.code != 0 || ro.code != 0 {
+					t.Logf("attempt %d: direct race did not connect; retrying", attempt)
+					continue
+				}
+				if !strings.Contains(ro.stdout, piped) {
+					t.Fatalf("the old CLI never received the piped text\nnew: %s\nold: %s", rn, ro)
+				}
+				if !strings.Contains(rn.stdout, strings.TrimSpace(ldOldText)) {
+					t.Fatalf("the new CLI never printed the old side's text\n%s", rn)
+				}
+				if len(hub.iceHits()) != 0 {
+					t.Fatalf("legacy text requested /api/ice")
+				}
+				return
+			}
+			t.Skip("today's direct race never connected in 6 attempts on this host")
+		})
+	}
 }
 
 func ldOldMatrix(t *testing.T, bin string) {
@@ -1362,5 +1421,207 @@ func TestLinkDevManySmallFiles(t *testing.T) {
 	ldSameTree(t, src, dest)
 	if el := time.Since(start); el > 20*time.Second {
 		t.Errorf("120 small files took %v (a stalled sender?)", el)
+	}
+}
+
+// ================================================================ A09b gate-2 fixes
+
+// ldAllocWatch samples the relay's live allocation count until the test ends:
+// the peak, and the last instant it was above zero. That instant is the
+// provider-side truth for "the relay stopped at the deadline".
+type ldAllocWatch struct {
+	mu          sync.Mutex
+	peak        int
+	lastNonZero time.Time
+}
+
+func (lt *ldTURN) watch(t *testing.T) *ldAllocWatch {
+	w := &ldAllocWatch{}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tk := time.NewTicker(10 * time.Millisecond)
+		defer tk.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-tk.C:
+				n := lt.srv.AllocationCount()
+				w.mu.Lock()
+				if n > w.peak {
+					w.peak = n
+				}
+				if n > 0 {
+					w.lastNonZero = time.Now()
+				}
+				w.mu.Unlock()
+			}
+		}
+	}()
+	t.Cleanup(func() { close(stop); <-done })
+	return w
+}
+
+func (w *ldAllocWatch) get() (int, time.Time) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.peak, w.lastNonZero
+}
+
+// ldShortRelay is a hub issuing one real TURN credential whose link deadline
+// (expiry - 60 s skew) falls `in` from now.
+func ldShortRelay(t *testing.T, lt *ldTURN, in time.Duration) (*ldHub, time.Time) {
+	t.Helper()
+	// Credentials state whole seconds: compute the deadline from exactly the
+	// expiry the credential will carry.
+	exp := time.Now().Add(linkrtcSkew() + in).Truncate(time.Second)
+	hub := startLinkDevHubICE(t, ldJSONICE(map[string]any{"iceServers": []any{lt.cred(exp, "owner1.tagStall")}}))
+	return hub, exp.Add(-linkrtcSkew())
+}
+
+func ldWantCutAt(t *testing.T, w *ldAllocWatch, deadline time.Time) {
+	t.Helper()
+	peak, last := w.get()
+	if peak == 0 {
+		t.Fatal("no relay allocation ever existed; the test proves nothing")
+	}
+	// The relay's own teardown (Refresh lifetime 0) plus sampling.
+	if last.After(deadline.Add(time.Second)) {
+		t.Errorf("a relay allocation was still live %v after the deadline", last.Sub(deadline))
+	}
+	t.Logf("allocations peaked at %d; last live %v relative to the deadline", peak, last.Sub(deadline))
+}
+
+// Gate-2 #1a: a lane write stuck on transport backpressure must not hold the
+// session loop, nor the relay past the credential. A's file-lane writes stall
+// (as a Write waiting for an SCTP buffer that never drains would) for the
+// whole run; A's loop still accepts B's conversation and prints its message,
+// the session ends the link at the deadline, and the relay is released then.
+func TestLinkDevStalledWriteCannotHoldRelayPastDeadline(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub, deadline := ldShortRelay(t, lt, 9*time.Second)
+	big := ldTree(t, "stall", map[string]int{"big.bin": 4 << 20})
+	destA := t.TempDir()
+	ldHookLaneWrite = func(d *linkDevDriver, lane linkrtc.Lane, _ []byte, stop <-chan struct{}) {
+		if d.dest == destA && lane == linkrtc.LaneFile {
+			<-stop // backpressure that never clears
+		}
+	}
+	t.Cleanup(func() { ldHookLaneWrite = nil })
+	w := lt.watch(t)
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--dest", destA, "--script", ldScript(t, "send "+big, "wait-texts 1", "hold"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--script", ldScript(t, "text hello while stalled", "hold"), ldCode}})
+	if !strings.Contains(ra.stdout, "hello while stalled") {
+		t.Errorf("A's loop did not run while its file lane write was stalled\n%s", ra)
+	}
+	for _, r := range []ldResult{ra, rb} {
+		if !strings.Contains(r.stderr, "path: relay") || !strings.Contains(r.stderr, "report link relay-credential-ended") {
+			t.Errorf("want a relayed link ended at the relay deadline\n%s", r)
+		}
+	}
+	ldWantCutAt(t, w, deadline)
+	lt.waitAllocations(t, 0, 5*time.Second)
+}
+
+// Gate-2 #1b: the relay cutoff does not depend on the loop at all. A's loop
+// is held (inside the delivery of B's message) through the deadline; the
+// transport, and with it the TURN allocation, is closed at the deadline
+// anyway.
+func TestLinkDevBlockedLoopCannotHoldRelayPastDeadline(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub, deadline := ldShortRelay(t, lt, 9*time.Second)
+	destA := t.TempDir()
+	ldHookLoopText = func(d *linkDevDriver, stop <-chan struct{}) {
+		if d.dest == destA {
+			<-stop // the loop is stuck until the transport is cut
+		}
+	}
+	t.Cleanup(func() { ldHookLoopText = nil })
+	w := lt.watch(t)
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--dest", destA, "--script", ldScript(t, "wait-texts 1", "hold"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--script", ldScript(t, "text hold the loop", "hold"), ldCode}})
+	if !strings.Contains(ra.stderr, "transport closed at the relay deadline") {
+		t.Errorf("A: want the transport cut at the relay deadline\n%s", ra)
+	}
+	for _, r := range []ldResult{ra, rb} {
+		if r.code == 0 {
+			t.Errorf("a held link cannot finish its script\n%s", r)
+		}
+	}
+	ldWantCutAt(t, w, deadline)
+	lt.waitAllocations(t, 0, 5*time.Second)
+}
+
+// Gate-2 #2: the receiver's leave must not overtake its COMPLETE. The
+// receiver's COMPLETE is held back 2 s on the file lane while its text lane
+// and signalling run freely; the receiver must still not leave until the
+// peer's transport acknowledged the file stream, so the sender sees
+// delivered-and-verified, never delivery-unconfirmed.
+func TestLinkDevLeaveWaitsForFileStreamAck(t *testing.T) {
+	hub := startLinkDevHub(t)
+	var held atomic.Int32
+	ldHookLaneWrite = func(d *linkDevDriver, lane linkrtc.Lane, frame []byte, stop <-chan struct{}) {
+		if d.cmd != linksession.CmdReceive || lane != linkrtc.LaneFile {
+			return
+		}
+		if c, ok := linkwire.FileLifecycle(frame); ok && c == linkwire.FileComplete {
+			held.Add(1)
+			select {
+			case <-time.After(2 * time.Second):
+			case <-stop:
+			}
+		}
+	}
+	t.Cleanup(func() { ldHookLaneWrite = nil })
+	dest := t.TempDir()
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "send", via: hub.url, args: []string{ldSrc(t), ldCode}},
+		ldPeer{cmd: "receive", via: hub.url, args: []string{ldCode, dest}})
+	if held.Load() != 1 {
+		t.Fatalf("COMPLETE held %d time(s), want 1: the test proves nothing", held.Load())
+	}
+	if ra.code != 0 || !strings.Contains(ra.stderr, "report file delivered-and-verified") ||
+		strings.Contains(ra.stderr, "delivery-unconfirmed") {
+		t.Errorf("sender: want delivered-and-verified\n%s", ra)
+	}
+	if rb.code != 0 || !strings.Contains(rb.stderr, "saved(verified,durable)") {
+		t.Errorf("receiver: want a clean save and exit\n%s", rb)
+	}
+}
+
+// Gate-2 #3: a file whose finalization fails (a delayed write error reported
+// at close) is never reported saved, and the peer is never sent COMPLETE for
+// it: the batch is withdrawn, the partial discarded, both ends fail.
+func TestLinkDevFinalizationFailureNeverCompletes(t *testing.T) {
+	hub := startLinkDevHub(t)
+	var injected atomic.Int32
+	ldHookFinalize = func(d *linkDevDriver, name string) error {
+		if strings.HasSuffix(name, "payload.txt") {
+			injected.Add(1)
+			return errors.New("injected: delayed write failure reported at close")
+		}
+		return nil
+	}
+	t.Cleanup(func() { ldHookFinalize = nil })
+	dest := t.TempDir()
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "send", via: hub.url, args: []string{ldSrc(t), ldCode}},
+		ldPeer{cmd: "receive", via: hub.url, args: []string{ldCode, dest}})
+	if injected.Load() == 0 {
+		t.Fatal("finalization was never reached: the test proves nothing")
+	}
+	if rb.code == 0 || strings.Contains(rb.stderr, "saved(verified,durable)") || !strings.Contains(rb.stderr, "injected: delayed write failure") {
+		t.Errorf("receiver: a failed save must be reported as failed\n%s", rb)
+	}
+	if ra.code == 0 || strings.Contains(ra.stderr, "delivered-and-verified") ||
+		!(strings.Contains(ra.stderr, "receiver-failed-to-save") || strings.Contains(ra.stderr, "stopped-by-receiver")) {
+		t.Errorf("sender: must never hear COMPLETE for a failed save\n%s", ra)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "payload.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the failed file was left behind (%v)", err)
 	}
 }

@@ -276,7 +276,10 @@ func runLinkDev(args []string, stdout, stderr io.Writer) int {
 	case cmd == linksession.CmdReceive:
 		d.feedScript([]ldCmd{{op: "wait-files", n: 1}}, true)
 	case cmd == linksession.CmdText:
-		go d.feedTextLines(textStdin())
+		// Read stdin only once discovery has chosen link/1 (progress starts
+		// it). A legacy outcome hands stdin to pumpText untouched: exactly one
+		// reader, whichever protocol wins.
+		d.stdinText = true
 	default:
 		d.feedScript(nil, true)
 	}
@@ -498,6 +501,7 @@ const (
 	ldScriptEOF
 	ldVerify
 	ldICEReady
+	ldWriteFailed
 )
 
 type ldItem struct {
@@ -507,6 +511,7 @@ type ldItem struct {
 	frame []byte
 	cmds  []ldCmd
 	ok    bool
+	err   error
 }
 
 func (q *ldQueue) push(it ldItem) {
@@ -552,11 +557,32 @@ type ldOut struct {
 const linkDevBusyRetries = 8
 
 // ldSink is one inbound batch's files, created no-clobber under dest.
+//
+// Durability is reported to the session (FileDurable, which paces ACKs and
+// gates COMPLETE) as every byte written EXCEPT the last byte of a file that
+// is not yet finalized (synced and closed without error). So the session can
+// only reach "every byte durable" — and send COMPLETE / report saved — after
+// the last file was finalized; a finalization failure withdraws the batch
+// (REJECT) instead, and no COMPLETE can exist for it.
 type ldSink struct {
-	prompt  uint64
-	files   []*os.File
-	names   []string
-	written uint64
+	prompt    uint64
+	files     []*os.File
+	names     []string
+	wrote     []uint64 // bytes written per file
+	finalized []bool
+	written   uint64 // bytes written, all files
+	reported  uint64 // the durable total last reported
+}
+
+// durable is written minus one held-back byte per written, unfinalized file.
+func (k *ldSink) durable() uint64 {
+	n := k.written
+	for i, w := range k.wrote {
+		if w > 0 && !k.finalized[i] {
+			n--
+		}
+	}
+	return n
 }
 
 // ldICE is the one /api/ice answer of this link (M1).
@@ -624,15 +650,25 @@ type linkDevDriver struct {
 	quitting  bool
 	closed    bool
 	closeCode string
-	// outSeq counts frames written on either lane. A leave travels over
-	// signalling, which can overtake frames still in flight on the link (a
-	// COMPLETE, a last message), so we leave only once a round trip on the
-	// LINK — the peer answering our text-lane probe, or acknowledging our END
-	// — was started after the last frame we wrote (covered >= outSeq).
+	// outSeq counts frames handed to the lane writers. A leave travels over
+	// signalling, which can overtake frames still in flight on the link, and
+	// SCTP orders delivery per STREAM only — a text-lane round trip says
+	// nothing about the file lane's COMPLETE. So we leave only once every
+	// lane's writer is empty and the peer's SCTP stack has acknowledged every
+	// byte of every lane (linkrtc.Conn.Unacknowledged == 0).
 	outSeq     uint64
-	covered    uint64
-	barrier    string // "", "probe" or "end": the round trip in flight
-	barrierSeq uint64
+	probed     bool
+	drainSince time.Time
+	draining   bool
+
+	// writers carry lane frames to the transport off the session loop, so a
+	// transport that stops draining (SCTP backpressure) can never stall the
+	// loop; cut closes the transport independently of the loop.
+	writers [2]*ldLaneWriter
+	cut     *ldCutoff
+
+	stdinText    bool // `text` without --script: stdin lines, read only on a link outcome
+	stdinStarted bool
 
 	// deferred session calls, run after the current effects (never re-entered)
 	later []func() ([]linksession.Effect, error)
@@ -645,11 +681,21 @@ func newLinkDevDriver(ctx context.Context, cmd linksession.Cmd, room *rzvous.Roo
 	if err != nil {
 		return nil, err
 	}
-	return &linkDevDriver{
+	d := &linkDevDriver{
 		ctx: ctx, cmd: cmd, room: room, f: f, dev: dev, code: code, dest: dest, stdout: stdout, stderr: stderr,
 		s: s, res: &linkDevResult{room: room}, q: &ldQueue{wake: make(chan struct{}, 1)},
-		sinks: map[uint64]*ldSink{},
-	}, nil
+		sinks: map[uint64]*ldSink{}, cut: newLDCutoff(),
+	}
+	// The run's own end (whole-run timeout, cancellation) cuts the transport
+	// without waiting for the loop.
+	go func() {
+		select {
+		case <-ctx.Done():
+			d.cut.fire("the run ended")
+		case <-d.cut.done:
+		}
+	}()
+	return d, nil
 }
 
 func (d *linkDevDriver) logf(format string, a ...any) {
@@ -800,6 +846,9 @@ func (d *linkDevDriver) nextWake() time.Time {
 	if d.pumpMore {
 		return now
 	}
+	if d.draining {
+		return now.Add(20 * time.Millisecond) // SACKs raise no event: poll the drain
+	}
 	at := now.Add(time.Hour)
 	if t, ok := d.s.NextDeadline(); ok && t.Before(at) {
 		at = t
@@ -902,7 +951,13 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 				return err
 			}
 			if err := d.conn.Offer(); err != nil {
-				return fmt.Errorf("link offer: %w", err)
+				if !errors.Is(err, linkrtc.ErrClosed) {
+					return fmt.Errorf("link offer: %w", err)
+				}
+				// Cut already (e.g. a credential inside the skew margin): the
+				// session's own timers report why.
+				ep := d.connEp
+				d.defer_(func() ([]linksession.Effect, error) { return d.s.TransportLost(ep) })
 			}
 		case linksession.EffSendAnswer:
 			d.commit, d.caps = e.Commit, e.Caps
@@ -987,10 +1042,7 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 		case linksession.EffWriteChunk:
 			d.writeChunk(e.Prompt, e.Index, e.Bytes)
 		case linksession.EffFileVerified:
-			if k := d.sinks[e.Prompt]; k != nil && e.Index < len(k.files) && k.files[e.Index] != nil {
-				_ = k.files[e.Index].Close()
-				k.files[e.Index] = nil
-			}
+			d.finalizeFile(e.Prompt, e.Index)
 		case linksession.EffDiscardPartial:
 			d.discardSink(e.Prompt)
 		case linksession.EffSendData:
@@ -1000,6 +1052,9 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 		case linksession.EffTextOpened:
 			d.logf("conversation open")
 		case linksession.EffDeliverText:
+			if ldHookLoopText != nil {
+				ldHookLoopText(d, d.cut.done)
+			}
 			d.textsIn++
 			d.recvBytes += uint64(len(e.Text))
 			fmt.Fprintln(d.stdout, termSafe(e.Text))
@@ -1016,15 +1071,135 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 	return nil
 }
 
+// write hands a frame to its lane's writer; it never blocks the loop.
 func (d *linkDevDriver) write(lane linkrtc.Lane, b []byte) {
-	if d.conn == nil {
+	if d.conn == nil || d.writers[lane] == nil {
 		return
 	}
 	d.outSeq++
-	if err := d.conn.Write(lane, b); err != nil && !errors.Is(err, linkrtc.ErrClosed) {
-		d.logf("%s write: %v", lane, err)
-		ep := d.connEp
-		d.defer_(func() ([]linksession.Effect, error) { return d.s.TransportLost(ep) })
+	d.writers[lane].push(b)
+}
+
+// ---------------------------------------------------------------- lane writers and the cutoff
+
+// Test hooks. nil in production; only linkdev_test.go sets them.
+var (
+	// ldHookLaneWrite runs on a lane writer before each transport Write.
+	ldHookLaneWrite func(d *linkDevDriver, lane linkrtc.Lane, frame []byte, stop <-chan struct{})
+	// ldHookLoopText runs ON THE SESSION LOOP when a message is delivered.
+	ldHookLoopText func(d *linkDevDriver, stop <-chan struct{})
+	// ldHookFinalize runs before a received file is synced and closed.
+	ldHookFinalize func(d *linkDevDriver, name string) error
+)
+
+// ldCutoff closes the transport from any goroutine, once: at the relay
+// deadline (armed by armDeadline, M4), when the run's context ends, or after
+// the leave's linger. It needs nothing from the session loop, so a loop that
+// is stuck — in a lane write, a signal write, anything — cannot keep a TURN
+// allocation alive past the credential. done is closed when it fires; lane
+// writers stop on it.
+type ldCutoff struct {
+	mu    sync.Mutex
+	conn  *linkrtc.Conn
+	fired bool
+	why   string
+	done  chan struct{}
+}
+
+func newLDCutoff() *ldCutoff { return &ldCutoff{done: make(chan struct{})} }
+
+// attach registers the transport; one attached after the cutoff fired is
+// closed at once.
+func (c *ldCutoff) attach(conn *linkrtc.Conn) {
+	c.mu.Lock()
+	c.conn = conn
+	fired := c.fired
+	c.mu.Unlock()
+	if fired {
+		conn.Close()
+	}
+}
+
+func (c *ldCutoff) fire(why string) {
+	c.mu.Lock()
+	if c.fired {
+		c.mu.Unlock()
+		return
+	}
+	c.fired, c.why = true, why
+	conn := c.conn
+	close(c.done)
+	c.mu.Unlock()
+	if conn != nil {
+		conn.Close() // unblocks any Write waiting on backpressure (ErrClosed)
+	}
+}
+
+func (c *ldCutoff) reason() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.why
+}
+
+// ldLaneWriter is one lane's ordered frame queue and the goroutine that
+// performs the (possibly blocking) transport Writes.
+type ldLaneWriter struct {
+	lane linkrtc.Lane
+	mu   sync.Mutex
+	q    [][]byte
+	// pending counts bytes pushed and not yet returned from Write.
+	pending int
+	wake    chan struct{}
+}
+
+func (w *ldLaneWriter) push(b []byte) {
+	w.mu.Lock()
+	w.q = append(w.q, b)
+	w.pending += len(b)
+	w.mu.Unlock()
+	select {
+	case w.wake <- struct{}{}:
+	default:
+	}
+}
+
+// queued is the bytes not yet accepted by the transport.
+func (w *ldLaneWriter) queued() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.pending
+}
+
+func (d *linkDevDriver) runWriter(w *ldLaneWriter, conn *linkrtc.Conn, ep linksession.Epoch) {
+	defer d.closing.Done()
+	for {
+		w.mu.Lock()
+		if len(w.q) == 0 {
+			w.mu.Unlock()
+			select {
+			case <-w.wake:
+				continue
+			case <-d.cut.done:
+				return
+			}
+		}
+		frame := w.q[0]
+		w.q[0] = nil
+		w.q = w.q[1:]
+		w.mu.Unlock()
+		if ldHookLaneWrite != nil {
+			ldHookLaneWrite(d, w.lane, frame, d.cut.done)
+		}
+		err := conn.Write(w.lane, frame)
+		w.mu.Lock()
+		w.pending -= len(frame)
+		w.mu.Unlock()
+		if err != nil {
+			if !errors.Is(err, linkrtc.ErrClosed) {
+				d.q.push(ldItem{kind: ldWriteFailed, ep: ep, err: fmt.Errorf("%s write: %w", w.lane, err)})
+			}
+			return
+		}
 	}
 }
 
@@ -1132,6 +1307,13 @@ func (d *linkDevDriver) ensureConn(role linkrtc.Role) error {
 		return err
 	}
 	d.conn, d.connEp = conn, ep
+	d.cut.attach(conn)
+	for _, lane := range []linkrtc.Lane{linkrtc.LaneFile, linkrtc.LaneText} {
+		w := &ldLaneWriter{lane: lane, wake: make(chan struct{}, 1)}
+		d.writers[lane] = w
+		d.closing.Add(1)
+		go d.runWriter(w, conn, ep)
+	}
 	return nil
 }
 
@@ -1180,6 +1362,18 @@ func (d *linkDevDriver) armDeadline() {
 	}
 	d.armed = true
 	d.s.SetRelayDeadline(b.DeadlineAt)
+	// The same bound, enforced WITHOUT the loop: whatever the loop is doing
+	// at the deadline, the transport — and with it every TURN allocation —
+	// is closed then.
+	go func(at time.Time) {
+		t := time.NewTimer(time.Until(at))
+		defer t.Stop()
+		select {
+		case <-t.C:
+			d.cut.fire("relay deadline")
+		case <-d.cut.done:
+		}
+	}(b.DeadlineAt)
 }
 
 // iceConfig waits for the link's one /api/ice answer and applies it.
@@ -1277,15 +1471,18 @@ func iceSignal(c webrtc.ICECandidateInit) ([]byte, error) {
 func (d *linkDevDriver) closeTransport() {
 	if d.conn == nil || d.closed {
 		d.closed = true
+		d.cut.fire("closed")
 		return
 	}
 	d.closed = true
-	c := d.conn
 	d.closing.Add(1)
 	go func() {
 		defer d.closing.Done()
-		time.Sleep(linkDevCloseLinger)
-		c.Close()
+		select {
+		case <-time.After(linkDevCloseLinger):
+		case <-d.cut.done:
+		}
+		d.cut.fire("closed")
 	}()
 }
 
@@ -1293,6 +1490,9 @@ func (d *linkDevDriver) closeTransport() {
 func (d *linkDevDriver) shutdown() {
 	d.closeTransport()
 	d.closing.Wait()
+	if why := d.cut.reason(); why == "relay deadline" {
+		d.logf("transport closed at the relay deadline")
+	}
 	for p := range d.sinks {
 		d.closeSink(p)
 	}
@@ -1318,6 +1518,9 @@ func (d *linkDevDriver) item(it ldItem) error {
 		return d.do(d.s.ConfirmSAS(it.ok))
 	case ldICEReady:
 		d.useICE()
+	case ldWriteFailed:
+		d.logf("%v", it.err)
+		return d.do(d.s.TransportLost(it.ep))
 	}
 	return nil
 }
@@ -1395,6 +1598,10 @@ func (d *linkDevDriver) progress() error {
 	// the time the offer arrives.
 	if disc, _, _, _ := d.s.States(); disc == "Link" {
 		d.startICE()
+		if d.stdinText && !d.stdinStarted {
+			d.stdinStarted = true
+			go d.feedTextLines(textStdin())
+		}
 	}
 	d.warnCheck()
 	if !d.admitted || d.closed {
@@ -1565,7 +1772,11 @@ func (d *linkDevDriver) pumpTexts() error {
 			return nil
 		}
 		body := d.texts[0]
-		effs, err := d.s.SendText([]byte(body), 0)
+		buffered := d.writers[linkrtc.LaneText].queued()
+		if n, err := d.conn.Unacknowledged(linkrtc.LaneText); err == nil {
+			buffered += int(n)
+		}
+		effs, err := d.s.SendText([]byte(body), buffered)
 		if errors.Is(err, linksession.ErrTextBackpressure) {
 			d.nextTextAt = time.Now().Add(linkDevTextGap)
 			return d.do(effs, nil)
@@ -1589,13 +1800,24 @@ func (d *linkDevDriver) pumpTexts() error {
 	return nil
 }
 
-// quitStep finishes after the script: everything offered is delivered and
-// every message sent; the conversation, if one is open, is ended and its END
-// acknowledged; and a round trip on the link covers the last frame we wrote
-// (see outSeq) — a text-lane probe when nothing else provided one. Only then
-// the authenticated leave. The probe also means a leave never outruns a peer
-// that is still establishing: it has to have answered on the link.
+// linkDevDrainCap bounds the wait for the peer's acknowledgement of our last
+// lane bytes. A peer whose transport stopped acknowledging is gone; the
+// link's own loss detection normally ends it well before this.
+const linkDevDrainCap = 30 * time.Second
+
+// quitStep finishes after the script, in order:
+//
+//  1. everything offered is delivered and every message sealed;
+//  2. an open conversation is ended and its END acknowledged;
+//  3. if we never wrote anything, a text-lane probe the peer must answer, so
+//     a leave never outruns a peer still establishing;
+//  4. every lane writer is empty and the peer's SCTP stack has acknowledged
+//     every byte of BOTH lanes — per stream, so this covers the file lane's
+//     COMPLETE, which a text-lane round trip cannot;
+//
+// and only then the authenticated leave.
 func (d *linkDevDriver) quitStep() error {
+	d.draining = false
 	if !d.scriptEOF || len(d.script) > 0 || d.holding {
 		return nil
 	}
@@ -1604,40 +1826,58 @@ func (d *linkDevDriver) quitStep() error {
 	}
 	d.quitting = true
 	_, ts := d.laneStates()
-	switch d.barrier {
-	case "probe":
-		if ts == "WaitAccept" {
+	switch ts {
+	case "WaitAccept":
+		if d.probe {
 			return nil // the peer has not answered the probe yet
 		}
-		d.covered, d.barrier, d.probe = d.barrierSeq, "", false
-	case "end":
-		if ts == "EndWait" {
-			return nil // our END is not acknowledged yet
-		}
-		d.covered, d.barrier = d.barrierSeq, ""
-	}
-	switch ts {
-	case "Open", "WaitAccept":
-		if err := d.do(d.s.EndText()); err != nil {
-			return err
-		}
-		d.barrier, d.barrierSeq = "end", d.outSeq
-		return nil
+		return d.do(d.s.EndText())
+	case "Open":
+		return d.do(d.s.EndText())
 	case "EndWait", "Incoming":
 		return nil // the acknowledgement (or the peer's END) is on its way
 	case "Idle":
-		if d.covered < d.outSeq || d.outSeq == 0 {
-			d.probe = true
-			if err := d.do(d.s.RequestText()); err != nil {
-				return err
-			}
-			d.barrier, d.barrierSeq = "probe", d.outSeq
-			return nil
+		d.probe = false
+		if d.outSeq == 0 && !d.probed {
+			d.probed, d.probe = true, true
+			return d.do(d.s.RequestText())
 		}
 	}
-	// Covered, or the text lane failed and no round trip is possible.
+	if !d.lanesAcknowledged() {
+		if d.drainSince.IsZero() {
+			d.drainSince = time.Now()
+		}
+		if time.Since(d.drainSince) < linkDevDrainCap {
+			d.draining = true
+			return nil
+		}
+		d.fail("the peer did not acknowledge our last frames; leaving anyway")
+	}
 	d.logf("script done: leaving")
 	return d.do(d.s.Close())
+}
+
+// lanesAcknowledged: nothing waits in a lane writer and the peer's SCTP stack
+// acknowledged every byte written on either lane.
+func (d *linkDevDriver) lanesAcknowledged() bool {
+	if d.conn == nil {
+		return true
+	}
+	select {
+	case <-d.cut.done:
+		return true // the transport is gone: nothing more can be acknowledged
+	default:
+	}
+	for _, lane := range []linkrtc.Lane{linkrtc.LaneFile, linkrtc.LaneText} {
+		if w := d.writers[lane]; w != nil && w.queued() > 0 {
+			return false
+		}
+		n, err := d.conn.Unacknowledged(lane)
+		if err == nil && n > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // ---------------------------------------------------------------- inbound files
@@ -1692,9 +1932,16 @@ func (d *linkDevDriver) openSink(prompt uint64, files []linkwire.FileMeta) error
 		}
 		k.files = append(k.files, fh)
 		k.names = append(k.names, name)
+		k.wrote = append(k.wrote, 0)
+		k.finalized = append(k.finalized, false)
 		if f.Size == 0 {
-			_ = fh.Close()
+			// An empty file is complete now; finalize it here, checked.
+			if err := d.finalize(fh, name); err != nil {
+				k.files[len(k.files)-1] = nil
+				return err
+			}
 			k.files[len(k.files)-1] = nil
+			k.finalized[len(k.finalized)-1] = true
 		}
 	}
 	d.logf("receiving %d file(s) into %s", len(files), d.dest)
@@ -1714,9 +1961,59 @@ func (d *linkDevDriver) writeChunk(prompt uint64, idx int, b []byte) {
 		return
 	}
 	k.written += uint64(len(b))
+	k.wrote[idx] += uint64(len(b))
 	d.recvBytes += uint64(len(b))
-	total := k.written
+	d.reportDurable(k)
+}
+
+// reportDurable tells the session the durable total (see ldSink), when it moved.
+func (d *linkDevDriver) reportDurable(k *ldSink) {
+	total := k.durable()
+	if total <= k.reported {
+		return
+	}
+	k.reported = total
 	d.defer_(func() ([]linksession.Effect, error) { return d.s.FileDurable(d.s.Epoch(), total) })
+}
+
+// finalizeFile runs when the session verified file idx's chain: sync and
+// close it, checked. Only a success releases its held-back byte, and with it
+// (for the last file) the batch's COMPLETE. A failure withdraws the batch
+// (REJECT, discard): the peer is told it was not saved, never that it was.
+func (d *linkDevDriver) finalizeFile(prompt uint64, idx int) {
+	k := d.sinks[prompt]
+	if k == nil || idx >= len(k.files) || k.finalized[idx] {
+		return
+	}
+	fh := k.files[idx]
+	k.files[idx] = nil
+	if fh == nil {
+		d.fail("finalize: file is not open")
+		d.defer_(d.s.CancelIncoming)
+		return
+	}
+	if err := d.finalize(fh, k.names[idx]); err != nil {
+		d.fail("save " + k.names[idx] + ": " + err.Error())
+		d.defer_(d.s.CancelIncoming)
+		return
+	}
+	k.finalized[idx] = true
+	d.reportDurable(k)
+}
+
+// finalize syncs and closes one received file; any error is a failed save.
+func (d *linkDevDriver) finalize(fh *os.File, name string) error {
+	if ldHookFinalize != nil {
+		if err := ldHookFinalize(d, name); err != nil {
+			_ = fh.Close()
+			return err
+		}
+	}
+	if err := fh.Sync(); err != nil {
+		_ = fh.Close()
+		return err
+	}
+	return fh.Close()
 }
 
 func (d *linkDevDriver) closeSink(prompt uint64) {
