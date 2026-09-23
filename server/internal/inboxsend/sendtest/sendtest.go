@@ -58,6 +58,13 @@ func New(t testing.TB, maxFile int64) *Env {
 	return newEnvAt(t, maxFile, ":memory:", t.TempDir())
 }
 
+// NewOn is New over the SQLite database at dsn — a file path for a test that
+// wants the production file-backed configuration (WAL, a separate read pool).
+func NewOn(t testing.TB, maxFile int64, dsn string) *Env {
+	t.Helper()
+	return newEnvAt(t, maxFile, dsn, t.TempDir())
+}
+
 // NewAt is New on a SQLite file and blob directory the caller owns, so the
 // state a delivery leaves behind can be opened afterwards by another build of
 // the server (the W-N40 legacy-reader check).
@@ -77,6 +84,7 @@ func newEnvAt(t testing.TB, maxFile int64, dbPath, blobDir string) *Env {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	t.Cleanup(func() { store.Close() }) // after the server (cleanups run last-in first-out)
 	svc := account.NewService(store, noopMailer{}, account.Config{
 		BaseURL: "http://127.0.0.1", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute,
 		MaxFileSize: maxFile, DailyQuota: 16 * maxFile,
@@ -243,6 +251,28 @@ type Faults struct {
 	patches []Patch
 	creates [][]byte
 	observe func(kind string)
+	// preRecovery strips every finalize body (see EmulatePreRecoveryServer).
+	preRecovery bool
+	// finalizeBodies records every finalize body as it reached the middleware.
+	finalizeBodies [][]byte
+}
+
+// EmulatePreRecoveryServer makes central answer every finalize exactly as a
+// server that predates finalize recovery does. Such a server decodes the body
+// and ignores the unknown `recoverFinalized` field, which is precisely what the
+// real handler does with no body at all, so the middleware removes the body
+// before any rule or handler sees it. Everything else is the real handler.
+func (f *Faults) EmulatePreRecoveryServer() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.preRecovery = true
+}
+
+// FinalizeBodies returns every finalize body the client sent, in order.
+func (f *Faults) FinalizeBodies() [][]byte {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([][]byte(nil), f.finalizeBodies...)
 }
 
 // SetObserve installs fn, called with the request class before any rule for
@@ -449,6 +479,19 @@ func (f *Faults) wrap(inner http.Handler) http.Handler {
 			f.mu.Lock()
 			f.patches = append(f.patches, Patch{UploadID: strings.TrimPrefix(r.URL.Path, "/api/uploads/"), Start: start, Body: body})
 			f.mu.Unlock()
+		}
+		if k == KeyFinalize {
+			body, _ := io.ReadAll(r.Body)
+			f.mu.Lock()
+			f.finalizeBodies = append(f.finalizeBodies, body)
+			strip := f.preRecovery
+			f.mu.Unlock()
+			if strip {
+				body = nil
+				r.Header.Del("Content-Type")
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			r.ContentLength = int64(len(body))
 		}
 		if k == KeyCreate {
 			body, _ := io.ReadAll(r.Body)

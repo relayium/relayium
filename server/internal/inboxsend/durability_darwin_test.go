@@ -89,6 +89,7 @@ func TestCheckpointFailureKeepsTheRecordEvenWhenUnlinkWorks(t *testing.T) {
 	t.Run("stored object not recorded (send)", func(t *testing.T) {
 		fastBackoff(t)
 		w := newWorld(t, 4<<20)
+		w.env.Faults.EmulatePreRecoveryServer() // a server that cannot confirm
 		lift := aclDenyAddFileAt(w, atFinalize)
 		_, e := sendOne(t, w)
 		quota := w.env.QuotaBytes(w.uid)
@@ -111,6 +112,25 @@ func TestCheckpointFailureKeepsTheRecordEvenWhenUnlinkWorks(t *testing.T) {
 			t.Fatalf("hits %+v; retry must not upload", h)
 		}
 		onlyRecord(t, w)
+	})
+	t.Run("stored object not recorded (send), recovering server", func(t *testing.T) {
+		fastBackoff(t)
+		w := newWorld(t, 4<<20)
+		lift := aclDenyAddFileAt(w, atFinalize)
+		_, e := sendOne(t, w)
+		quota := w.env.QuotaBytes(w.uid)
+		if h := hitsOf(w); h.finalize != 1 || h.create != 0 || quota == 0 {
+			t.Fatalf("hits %+v quota %d; want a committed upload and no create", h, quota)
+		}
+		if e == nil || e.Code != CodeJournalWrite {
+			t.Fatalf("err = %v", e)
+		}
+		j := onlyRecord(t, w)
+		if j.Phase != PhaseFinalizing || e.LocalSendID != j.ID {
+			t.Fatalf("record %s %s, reported %q", j.ID, j.Phase, e.LocalSendID)
+		}
+		lift()
+		assertRetryConverges(t, w, j.ID, quota)
 	})
 	t.Run("upload id not recorded (send)", func(t *testing.T) {
 		fastBackoff(t)

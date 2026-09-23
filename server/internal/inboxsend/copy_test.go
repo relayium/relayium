@@ -8,7 +8,11 @@ import (
 // H3 for the messages the sender prints: no "within an hour" cleanup promise,
 // no claim about bytes that were never sent, no exactly-once promise.
 func TestSenderMessagesMakeNoCleanupOrChargePromise(t *testing.T) {
-	for _, s := range []string{msgOrphanPartial, msgOrphanObject, msgFinalizeRefused, msgUnknownOutcome, msgUnknownDelivery, msgStaleAfterRestart} {
+	outcomes := []string{}
+	for _, o := range []string{outcomeFailed, outcomeExpired, outcomeRemoved} {
+		outcomes = append(outcomes, finalizeOutcomeFailure(o, nil).Msg)
+	}
+	for _, s := range append([]string{msgOrphanPartial, msgOrphanObject, msgFinalizeRefused, msgUnknownOutcome, msgUnknownDelivery, msgStaleAfterRestart, msgSendAgain}, outcomes...) {
 		low := strings.ToLower(s)
 		for _, banned := range []string{"within 1 hour", "within an hour", "within one hour", "within 1 h",
 			"charged for bytes not sent", "bytes that were not sent", "exactly once"} {

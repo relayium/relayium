@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -45,17 +46,23 @@ type device struct {
 
 func newWorld(t *testing.T, maxFile int64) *world {
 	t.Helper()
-	return worldOn(t, sendtest.New(t, maxFile))
+	return newWorldOn(t, sendtest.New(t, maxFile))
 }
 
 // newWorldOnNode is newWorld with every upload placed on a fleet storage node.
 func newWorldOnNode(t *testing.T, maxFile int64) (*world, *sendtest.Node) {
 	t.Helper()
 	env, node := sendtest.NewWithNode(t, maxFile)
-	return worldOn(t, env), node
+	return newWorldOn(t, env), node
 }
 
-func worldOn(t *testing.T, env *sendtest.Env) *world {
+// newFileWorld is newWorld on a file-backed SQLite database.
+func newFileWorld(t *testing.T, maxFile int64) *world {
+	t.Helper()
+	return newWorldOn(t, sendtest.NewOn(t, maxFile, filepath.Join(t.TempDir(), "central.sqlite")))
+}
+
+func newWorldOn(t *testing.T, env *sendtest.Env) *world {
 	t.Helper()
 	w := &world{t: t, env: env, uid: env.User("sender@example.com"), cfgDir: t.TempDir()}
 	tok := env.Login(w.uid, "sender-box")
@@ -268,4 +275,36 @@ func randomBytes(t *testing.T, n int) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// assertRetryConverges is `inbox retry` against a server with finalize
+// recovery, from a record whose finalize committed but whose object id was
+// never learned: the server returns the object that finalize stored, and the
+// retry queues it — one task, no second upload, the daily quota unchanged, the
+// record removed.
+func assertRetryConverges(t *testing.T, w *world, id string, quota int64) Result {
+	t.Helper()
+	res, err := w.session().Retry(context.Background(), id)
+	if err != nil {
+		t.Fatalf("retry against a recovering server: %v", err)
+	}
+	if res.TaskID == "" || !res.Created {
+		t.Fatalf("retry = %+v; want the delivery queued now", res)
+	}
+	if n := len(w.tasks()); n != 1 {
+		t.Fatalf("tasks = %d, want exactly one", n)
+	}
+	if got := w.env.Faults.Hits(sendtest.KeyInit); got != 1 {
+		t.Fatalf("inits = %d; recovery must never upload again", got)
+	}
+	if got := w.env.QuotaBytes(w.uid); got != quota {
+		t.Fatalf("daily quota %d -> %d; recovery must not count the upload again", quota, got)
+	}
+	if ids, _ := newJournalStore(w.cfgDir).ids(); len(ids) != 0 {
+		t.Fatalf("record kept after completion: %v", ids)
+	}
+	if !strings.Contains(w.notice.String(), "already completed this upload") {
+		t.Fatalf("notice does not say the upload was recovered: %s", w.notice.String())
+	}
+	return res
 }

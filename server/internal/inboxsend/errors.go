@@ -126,6 +126,9 @@ const (
 	// longer advertises zero-length stored objects (a rollback). The record is
 	// kept for a later `inbox retry`.
 	CodeServerUnsupported = "server_unsupported"
+	// CodeFinalizeRefused: the server confirmed, when asked again, that it did
+	// not complete the upload (a finalize-recovery "failed" answer).
+	CodeFinalizeRefused = "finalize_refused"
 )
 
 // CodeUsage is a command line the CLI could not accept. This package never
@@ -197,6 +200,7 @@ const (
 	msgUnknownDelivery = "The upload was completed and the delivery may have been queued, but this could not " +
 		"be confirmed. Nothing will be uploaded again automatically. Check `relayium inbox sent`, or run " +
 		"`relayium inbox retry %s` later; a new `relayium inbox send` is a new upload and is counted again."
+	msgSendAgain         = "Run `relayium inbox send` again; that is a new upload and is counted again."
 	msgStaleAfterRestart = "The device's receiving key changed and this send can no longer be completed. " +
 		"Run `relayium inbox send` again (a new upload, counted again)."
 )

@@ -399,38 +399,95 @@ func uploadFailure(err error) *Error {
 // finalizeAttempts bounds finalize replays after an ambiguous answer.
 const finalizeAttempts = 3
 
+// finalizeRunningBudget bounds how long finalize keeps asking a server that
+// answers "running" (its finalize of this upload is still in flight) before
+// the outcome is reported as unknown. A variable so tests can shorten it.
+var finalizeRunningBudget = 60 * time.Second
+
+// finalizeRunningPoll is the wait between "running" answers: the server's
+// Retry-After, clamped to [1s, 10s], 5s when it gives none. A variable so tests
+// can shorten it.
+var finalizeRunningPoll = func(retryAfter time.Duration) time.Duration {
+	if retryAfter <= 0 {
+		return 5 * time.Second
+	}
+	return min(max(retryAfter, time.Second), 10*time.Second)
+}
+
 // finalize completes the upload. It NEVER re-uploads (N5): an answer that
 // cannot be established ends as ClassUnknown with the journal kept.
 //
+// Every finalize carries the recovery opt-in (Client.Finalize). A server that
+// supports it answers a finalize it already completed from the session's
+// durable record: the object itself (200, recovered), or a JSON 409 whose
+// outcome is authoritative about the UPLOAD rather than about one request —
+// running (ask again), failed (refused, no object), expired or removed (the
+// object existed and is gone). Those answers are definitive whatever happened
+// to earlier attempts, because they read what the server committed. A
+// plain-text 409 is a server without recovery and stays "cannot confirm".
+//
 // resumed is true when a previous process may already have sent a finalize
-// (retry in phase finalizing), which makes even the first 409 ambiguous. sent
-// also becomes true here after any ambiguous attempt. From then on a
-// definitive refusal describes only the request it answers, never the earlier
-// one that may have committed, so it ends as unknown with the record kept.
+// (retry in phase finalizing), which makes even the first ambiguous refusal
+// ambiguous. sent also becomes true here after any ambiguous attempt. From then
+// on a definitive refusal describes only the request it answers, never the
+// earlier one that may have committed, so it ends as unknown with the record
+// kept.
 func (s *Session) finalize(ctx context.Context, j *Journal, resumed bool) (string, int64, error) {
 	sent := resumed
-	for attempt := 0; attempt < finalizeAttempts; attempt++ {
-		if attempt > 0 {
-			if err := sleepCtx(ctx, uploadBackoff(attempt)); err != nil {
-				return "", 0, s.interrupted(j, err)
-			}
-		}
-		id, exp, err := s.client.Finalize(ctx, j.UploadID)
+	var runningSince time.Time
+	for attempt := 0; attempt < finalizeAttempts; {
+		id, exp, recovered, err := s.client.Finalize(ctx, j.UploadID)
 		if err == nil {
+			if recovered {
+				s.notef("The server had already completed this upload; it was not uploaded or counted again.")
+			}
 			return id, exp, nil
 		}
 		if ctx.Err() != nil {
 			return "", 0, s.interrupted(j, err)
 		}
+		var ae *APIError
+		if errors.As(err, &ae) && ae.Status == http.StatusConflict && ae.Outcome != "" {
+			if ae.Outcome != outcomeRunning {
+				s.drop(j)
+				return "", 0, finalizeOutcomeFailure(ae.Outcome, err)
+			}
+			// Running: a finalize of this upload — possibly not the one this
+			// request sent — has claimed it and not ended yet. It may commit an
+			// object (and its debit) at any moment, so from here on the outcome
+			// is uncertain exactly as after a lost answer: a later 404 (its
+			// tombstone purged) or refusal (a revoked login) says nothing about
+			// that finalize, and must end unknown with the record kept. Ask
+			// again, bounded; this is not a failed attempt.
+			sent = true
+			if runningSince.IsZero() {
+				runningSince = time.Now()
+			}
+			wait := finalizeRunningPoll(ae.RetryAfter)
+			if time.Since(runningSince)+wait > finalizeRunningBudget {
+				return "", 0, s.unknown(j, errors.New("the server was still completing the upload"))
+			}
+			if err := sleepCtx(ctx, wait); err != nil {
+				return "", 0, s.interrupted(j, err)
+			}
+			continue
+		}
 		st := statusOf(err)
 		switch {
 		case isTransport(err) || st >= 500:
 			sent = true
+			attempt++
+			if attempt < finalizeAttempts {
+				if err := sleepCtx(ctx, uploadBackoff(attempt)); err != nil {
+					return "", 0, s.interrupted(j, err)
+				}
+			}
 			continue
 		case st == http.StatusConflict || (st == http.StatusNotFound && sent):
-			// Today's server answers a repeated finalize 409 `already finalized`
-			// with no id, and a purged session 404. Either way the object may
-			// exist; this server cannot say. Unknown — never a second upload.
+			// A server without recovery answers a repeated finalize 409 `already
+			// finalized` with no id, and a purged session 404. Either way the
+			// object may exist; this server cannot say. Unknown — never a second
+			// upload.
 			return "", 0, s.unknown(j, err)
 		case st == http.StatusNotFound:
 			s.drop(j)
@@ -441,8 +498,8 @@ func (s *Session) finalize(ctx context.Context, j *Journal, resumed bool) (strin
 			return "", 0, s.refusedAfterAmbiguity(j, err)
 		default:
 			// The server refused the only finalize ever sent. At its finalize
-			// gates (quota, storage) central drops the blob and refunds any
-			// reservation itself; a refusal before the handler (auth) leaves
+			// gates (quota, storage) central drops the blob itself and leaves
+			// no daily-quota debit; a refusal before the handler (auth) leaves
 			// the session to cleanup. Either way nothing was completed.
 			s.drop(j)
 			return "", 0, uploadRefusal(err, msgFinalizeRefused)
@@ -472,6 +529,22 @@ func (s *Session) serverUnsupported(j *Journal) *Error {
 		state, j.ID), errors.New("server lacks "+capZeroLengthStoredObject))
 	e.LocalSendID = j.ID
 	return e
+}
+
+// finalizeOutcomeFailure is a definitive recovery answer that there is no
+// object to queue.
+func finalizeOutcomeFailure(outcome string, cause error) *Error {
+	switch outcome {
+	case outcomeFailed:
+		return newErr(ClassFailed, CodeFinalizeRefused, "the server did not complete this upload (it refused it, or ended it "+
+			"before it was completed), so nothing was queued. "+msgFinalizeRefused+" "+msgSendAgain, cause)
+	case outcomeExpired:
+		return newErr(ClassFailed, CodeStoredObjectUnavailable, "the server completed this upload, but the stored upload has "+
+			"since expired, so nothing was queued. "+msgCountedComplete+" "+msgSendAgain, cause)
+	default: // outcomeRemoved
+		return newErr(ClassFailed, CodeStoredObjectUnavailable, "the server completed this upload, but the stored upload has "+
+			"since been removed, so nothing was queued. "+msgCountedComplete+" "+msgSendAgain, cause)
+	}
 }
 
 func (s *Session) unknown(j *Journal, cause error) *Error {

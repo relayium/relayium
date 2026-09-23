@@ -345,11 +345,12 @@ func TestInboxSendRefusesUnsendableContentWithoutTouchingTheNetwork(t *testing.T
 	}
 }
 
-// E5 at the CLI: a lost finalize answer against today's server exits 3 with
-// the local id, never uploads again (not even through retry), and `sent`
-// shows the unfinished local send.
+// E5 at the CLI: a lost finalize answer against a server without finalize
+// recovery exits 3 with the local id, never uploads again (not even through
+// retry), and `sent` shows the unfinished local send.
 func TestInboxSendLostFinalizeExitsUnknownAndNeverReuploads(t *testing.T) {
 	s := newSendEnv(t)
+	s.env.Faults.EmulatePreRecoveryServer()
 	root := tree(t, map[string][]byte{"a.bin": bytes.Repeat([]byte("q"), 200_000)})
 	s.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.DropResponse})
 	code, out, errOut := s.send("--to", s.recvID, "--json", filepath.Join(root, "a.bin"))
@@ -379,6 +380,40 @@ func TestInboxSendLostFinalizeExitsUnknownAndNeverReuploads(t *testing.T) {
 	}
 }
 
+// S0-CLI: the same lost finalize answer against a server with finalize
+// recovery: the command recovers the object the first finalize stored and
+// exits 0 with the delivery queued — one upload, one daily-quota debit, one
+// task, saved byte-exact by the real CLI receiver.
+func TestInboxSendLostFinalizeIsRecoveredWithoutReupload(t *testing.T) {
+	s := newSendEnv(t)
+	data := bytes.Repeat([]byte("q"), 200_000)
+	root := tree(t, map[string][]byte{"a.bin": data})
+	s.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.DropResponse})
+	code, out, errOut := s.send("--to", s.recvID, "--json", filepath.Join(root, "a.bin"))
+	if code != 0 {
+		t.Fatalf("send = %d, want 0\n%s", code, errOut)
+	}
+	if doc := decodeJSON(t, out); doc["state"] != "queued" || doc["created"] != true {
+		t.Fatalf("JSON = %v", doc)
+	}
+	if !strings.Contains(errOut, "already completed this upload") {
+		t.Fatalf("stderr:\n%s", errOut)
+	}
+	if n := s.env.Faults.Hits(sendtest.KeyInit); n != 1 || s.taskCount() != 1 {
+		t.Fatalf("inits = %d tasks = %d; want one upload and one task", n, s.taskCount())
+	}
+	if q := s.env.QuotaBytes(s.uid); q < int64(len(data)) || q > int64(len(data))+4096 {
+		t.Fatalf("daily quota %d for one %d-byte upload", q, len(data))
+	}
+	s.receiveOnce()
+	if got, _ := os.ReadFile(filepath.Join(s.recvDir, "a.bin")); !bytes.Equal(got, data) {
+		t.Fatal("not saved byte-exact")
+	}
+	if len(s.journalIDs()) != 0 {
+		t.Fatal("journal kept after the send completed")
+	}
+}
+
 // E10 at the CLI: a redirect on init is refused; the redirect target sees
 // nothing.
 func TestInboxSendRefusesARedirect(t *testing.T) {
@@ -403,6 +438,7 @@ func TestInboxSendSurvivesSIGKILLAndRetryFinishesFromTheJournal(t *testing.T) {
 	}
 	t.Run("killed while finalize is in flight: unknown, no upload", func(t *testing.T) {
 		s := newSendEnv(t)
+		s.env.Faults.EmulatePreRecoveryServer()
 		hold := s.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.HoldResponse, Hit: make(chan struct{})})
 		root := tree(t, map[string][]byte{"a.txt": []byte("x")})
 		s.killSenderAt(hold, "--to", s.recvID, filepath.Join(root, "a.txt"))
@@ -415,6 +451,31 @@ func TestInboxSendSurvivesSIGKILLAndRetryFinishesFromTheJournal(t *testing.T) {
 		}
 		if s.env.Faults.Hits(sendtest.KeyInit) != 1 || s.taskCount() != 0 {
 			t.Fatal("retry uploaded or invented a task")
+		}
+	})
+	t.Run("killed while finalize is in flight: recovery finishes it, no upload", func(t *testing.T) {
+		s := newSendEnv(t)
+		hold := s.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.HoldResponse, Hit: make(chan struct{})})
+		root := tree(t, map[string][]byte{"a.txt": []byte("recovered by retry")})
+		s.killSenderAt(hold, "--to", s.recvID, filepath.Join(root, "a.txt"))
+		ids := s.journalIDs()
+		if len(ids) != 1 {
+			t.Fatalf("journals = %v", ids)
+		}
+		quota := s.env.QuotaBytes(s.uid)
+		code, out, errOut := s.cli("retry", ids[0], "--json", "--config-dir", s.senderCfg)
+		if code != 0 {
+			t.Fatalf("retry = %d, want 0\n%s", code, errOut)
+		}
+		if doc := decodeJSON(t, out); doc["state"] != "queued" || doc["created"] != true {
+			t.Fatalf("retry JSON = %v", doc)
+		}
+		if s.env.Faults.Hits(sendtest.KeyInit) != 1 || s.taskCount() != 1 || s.env.QuotaBytes(s.uid) != quota {
+			t.Fatal("want one upload, one task and the daily quota unchanged")
+		}
+		s.receiveOnce()
+		if got, _ := os.ReadFile(filepath.Join(s.recvDir, "a.txt")); string(got) != "recovered by retry" {
+			t.Fatal("not saved")
 		}
 	})
 	t.Run("killed before the create reached central: retry creates it", func(t *testing.T) {

@@ -6379,10 +6379,34 @@ extension IOSSurfaceGuardTests {
         let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
         XCTAssertFalse(view.contains("@State private var draft"),
                        "a view-local draft dies with the tab and rides into the next peer")
-        XCTAssertTrue(view.contains("text: $link.draft"),
-                      "the composer does not edit the model-owned draft")
-        XCTAssertTrue(view.contains(".disabled(!link.canSubmitDraft)"),
+        // The field edits a buffer that is mirrored into `link.draft` on every
+        // change and re-seeded only by the model's own replacements. Bound to
+        // `$link.draft` directly, the field lost and reordered keystrokes on
+        // iOS 18 while a batch published on the same model (CI run
+        // 35877967996).
+        XCTAssertFalse(view.contains("text: $link.draft"),
+                       "the field is bound straight to the published draft again")
+        XCTAssertTrue(view.contains("text: $composerText"),
+                      "the composer field has no editing buffer")
+        XCTAssertTrue(view.contains("_composerText = State(initialValue: link.draft)"),
+                      "a rebuilt workspace does not reopen on the model's draft")
+        // Mirrored WITHOUT publishing. The app root observes this model, so a
+        // publishing write re-rendered the whole shell per keystroke, and on
+        // iOS 18 that scrambled typed text (CI runs 35877967996, 35888861444).
+        XCTAssertTrue(view.contains("link.mirrorComposerDraft(text)"),
+                      "an edit is not mirrored into the model-owned draft")
+        XCTAssertFalse(view.contains("link.draft = "),
+                       "the composer writes the draft through its publishing setter")
+        XCTAssertTrue(view.contains(".onChange(of: link.draftReplacement)"),
+                      "the field never learns that the model cleared or restored the draft")
+        XCTAssertFalse(view.contains(".onChange(of: link.draft)"),
+                       "the field re-reads the published draft while it is being typed")
+        // `canSubmitDraft`'s rule, asked of the field: the silent mirror cannot
+        // re-render a gate that reads the model's copy.
+        XCTAssertTrue(view.contains(".disabled(!canSubmitComposerText)"),
                       "Send is live while a first message is still waiting")
+        XCTAssertTrue(view.contains("link.canSendMessage && !composerIsFree"),
+                      "Send is gated on something other than canSubmitDraft's rule")
         XCTAssertFalse(view.contains("link.canCompose ||") || view.contains("!link.canCompose"),
                        "Send is gated on canCompose, which stays true while a message waits")
         XCTAssertTrue(view.contains("link.submitDraft()"),

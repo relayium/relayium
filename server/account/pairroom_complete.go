@@ -178,32 +178,42 @@ func parseCompletionValue(s string) ([]byte, error) {
 	return b, nil
 }
 
-// finalizeCompletionVerifier reads the OPTIONAL completion verifier out of a
-// finalize request.
+// finalizeRequestBody reads the OPTIONAL finalize body: the completion
+// verifier, and the finalize-recovery opt-in.
 //
-// Three outcomes, and the difference between the first two is the whole
-// backward-compatibility story:
+// Three outcomes for the verifier, and the difference between the first two is
+// the whole backward-compatibility story:
 //
-//   - no body at all, or a JSON object without the field: (nil, nil). This is
-//     every client that exists today, and it must keep landing exactly the object
-//     it always landed. The column ends up NULL.
-//   - the field, well formed: (32 bytes, nil).
+//   - no body at all, or a JSON object without the field: nil verifier, no
+//     error. This is every client that predates it, and it must keep landing
+//     exactly the object it always landed. The column ends up NULL.
+//   - the field, well formed: the 32 bytes.
 //   - anything else: an error the caller turns into 400. Malformed JSON, trailing
 //     JSON after the object, a non-string field, a body past
 //     maxCompletionBodyBytes, and every strict-encoding failure are one refusal.
+//
+// recoverFinalized is true only for the JSON literal `true` in a body that
+// parsed. Any other value — absent, false, null, a string — is the ordinary
+// finalize, and never a refusal: the field was an unknown one until it meant
+// something, and a body this server accepted before it must be answered exactly
+// as before. What the opt-in does, and for which purposes, is the handler's
+// (handleUploadFinalize, answerFinalizeRecovery).
 //
 // UNKNOWN FIELDS ARE ALLOWED THROUGH, deliberately and unlike the encoding rules.
 // This body is additive to an endpoint that had none, and the next thing to be
 // added to it must not have to break every client that predates it — the same
 // reason the response fields this feature's siblings added are optional. What is
-// strict is the value, because that is the part a lenient reading could get
-// WRONG rather than merely ignore.
-func finalizeCompletionVerifier(r *http.Request) ([]byte, error) {
+// strict is the verifier's value, because that is the part a lenient reading
+// could get WRONG rather than merely ignore.
+func finalizeRequestBody(r *http.Request) (verifier []byte, recoverFinalized bool, err error) {
 	var body struct {
 		// RawMessage rather than *string so an explicit `null` is distinguishable
 		// from an absent field: a pointer would be set to nil by both, and `null`
 		// is a caller stating something rather than omitting it.
 		CompletionVerifier json.RawMessage `json:"completionVerifier"`
+		// RawMessage so a non-boolean value is ignored rather than failing the
+		// whole decode (see above).
+		RecoverFinalized json.RawMessage `json:"recoverFinalized"`
 	}
 	dec := json.NewDecoder(completionBody(r.Body))
 	if err := dec.Decode(&body); err != nil {
@@ -211,28 +221,33 @@ func finalizeCompletionVerifier(r *http.Request) ([]byte, error) {
 		// as errTooLarge, which is the refusal it should be: a body of a kilobyte
 		// of whitespace is not a client that sent nothing.
 		if errors.Is(err, io.EOF) {
-			return nil, nil // no body: the pre-completion client, unchanged
+			return nil, false, nil // no body: the pre-completion client, unchanged
 		}
-		return nil, errCompletionFieldMalformed
+		return nil, false, errCompletionFieldMalformed
 	}
 	// Nothing may follow the object. A body that parses as a valid request and
 	// then carries a second one is not a request this server can answer honestly:
 	// it is ambiguous about which value was meant, and ambiguity about a
 	// credential is the thing to refuse rather than resolve.
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return nil, errCompletionFieldMalformed
+		return nil, false, errCompletionFieldMalformed
 	}
+	recoverFinalized = string(body.RecoverFinalized) == "true"
 	if body.CompletionVerifier == nil {
-		return nil, nil // a body, but no opinion about completion
+		return nil, recoverFinalized, nil // a body, but no opinion about completion
 	}
 	var s string
 	if err := json.Unmarshal(body.CompletionVerifier, &s); err != nil {
-		return nil, errCompletionFieldMalformed
+		return nil, false, errCompletionFieldMalformed
 	}
 	// `null` lands here as the empty string (encoding/json treats a null as a
 	// no-op for a string), and the empty string is not a 32-byte token, so it is
 	// refused by the same rule as every other wrong length.
-	return parseCompletionValue(s)
+	v, err := parseCompletionValue(s)
+	if err != nil {
+		return nil, false, err
+	}
+	return v, recoverFinalized, nil
 }
 
 // completionProofFromRequest reads the REQUIRED proof out of a completion

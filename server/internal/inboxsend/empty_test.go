@@ -216,37 +216,48 @@ func TestEmptyDeliveryNeedsNoNodeAndNodeOutageStaysTransientForBytes(t *testing.
 	node.SetDown(false)
 }
 
-// A lost finalize answer on an all-empty delivery: the sender exits with the
-// unknown outcome and never uploads again; the one object and its one floor
-// debit are all there is.
+// A lost finalize answer on an all-empty delivery never uploads again and
+// never charges a second floor. On a server with finalize recovery (A02) the
+// sender recovers the one object and queues it; on one without, it ends with
+// the unknown outcome and the retry re-finalizes the same upload (409).
 func TestEmptyDeliveryLostFinalizeNeverDoubleCharges(t *testing.T) {
-	fastBackoff(t)
-	w := newWorld(t, 4<<20)
-	root := writeTree(t, map[string][]byte{"e/a": {}, "e/b": {}})
-	w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.DropResponse})
-	s := w.session()
-	_, err := s.Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "e")}})
-	if err == nil {
-		t.Fatal("a lost finalize answer was reported as a success")
-	}
-	// The sender may ask finalize again (and hear 409); it must never open a
-	// second upload.
-	if w.env.Faults.Hits(sendtest.KeyInit) != 1 {
-		t.Fatalf("inits=%d; want 1", w.env.Faults.Hits(sendtest.KeyInit))
-	}
-	if q := w.env.QuotaBytes(w.uid); q != quotaFloor {
-		t.Fatalf("quota = %d; want one floor for the one object the lost finalize stored", q)
-	}
-	// Retrying through the journal re-finalizes the same upload: 409, never a
-	// second upload or a second debit.
-	for _, id := range journalIDsIn(t, w) {
-		_, _ = s.Retry(context.Background(), id)
-	}
-	if w.env.Faults.Hits(sendtest.KeyInit) != 1 {
-		t.Fatalf("a retry opened a second upload (%d inits)", w.env.Faults.Hits(sendtest.KeyInit))
-	}
-	if q := w.env.QuotaBytes(w.uid); q != quotaFloor {
-		t.Fatalf("quota after retry = %d; want %d", q, quotaFloor)
+	for _, preRecovery := range []bool{false, true} {
+		name := "recovery server"
+		if preRecovery {
+			name = "pre-recovery server"
+		}
+		t.Run(name, func(t *testing.T) {
+			fastBackoff(t)
+			w := newWorld(t, 4<<20)
+			if preRecovery {
+				w.env.Faults.EmulatePreRecoveryServer()
+			}
+			root := writeTree(t, map[string][]byte{"e/a": {}, "e/b": {}})
+			w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.DropResponse})
+			s := w.session()
+			res, err := s.Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "e")}})
+			if preRecovery {
+				if e := AsError(err); e == nil || e.Code != CodeUnknownOutcome {
+					t.Fatalf("send = %v; want the unknown outcome on a server that cannot confirm", err)
+				}
+				for _, id := range journalIDsIn(t, w) {
+					_, _ = s.Retry(context.Background(), id)
+				}
+			} else {
+				if err != nil || res.State != "queued" {
+					t.Fatalf("send = %+v, %v; want the recovered object queued", res, err)
+				}
+				if d := w.receive(res.TaskID); len(d.manifest.Items) != 2 || len(d.blob) != 0 {
+					t.Fatalf("recovered delivery: %d items, %d bytes", len(d.manifest.Items), len(d.blob))
+				}
+			}
+			if w.env.Faults.Hits(sendtest.KeyInit) != 1 {
+				t.Fatalf("inits = %d; never a second upload", w.env.Faults.Hits(sendtest.KeyInit))
+			}
+			if q := w.env.QuotaBytes(w.uid); q != quotaFloor {
+				t.Fatalf("quota = %d; want exactly one floor", q)
+			}
+		})
 	}
 }
 
@@ -500,12 +511,9 @@ func TestRetryOfAnAllEmptySendIsGatedOnTheCapability(t *testing.T) {
 			if q := w.env.QuotaBytes(w.uid); q != quotaFloor && !(q == 0 && err != nil) {
 				t.Fatalf("quota after re-promotion = %d (err %v); want at most one floor", q, err)
 			}
-			if c.name == "finalizing, earlier finalize committed but its answer was lost" {
-				if e := AsError(err); e == nil || e.Code != CodeUnknownOutcome {
-					t.Fatalf("retry = %v; want the unchanged unknown outcome for a finalize that committed unseen", err)
-				}
-				return
-			}
+			// A finalize that committed unseen is now RECOVERED (A02): the empty
+			// append on retry meets a spent session (404) and is left to finalize,
+			// whose recovery answer is the same object — queued, one floor.
 			if err != nil || res.State != "queued" {
 				t.Fatalf("retry after re-promotion = %+v, %v; want a queued task", res, err)
 			}
