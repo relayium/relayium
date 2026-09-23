@@ -181,6 +181,10 @@ type wireVectors struct {
 	} `json:"multiFileResume"`
 	Capability fxCapability `json:"capability"`
 	Link       fxLink       `json:"link"`
+	// Roster is the signaling roster-hint row. It is not a link-wire value:
+	// its reader is internal/signal (TestRosterHintFixtureIsServerBytes), so
+	// this package only requires it to be present and non-null.
+	Roster json.RawMessage `json:"roster"`
 }
 
 type fxCapability struct {
@@ -551,6 +555,7 @@ func TestWireVectorsCoverageMap(t *testing.T) {
 			"doneHashes": consumed, "sanitizedNames": consumed, "text": consumed, "kinds": consumed,
 			"limits": consumed, "resume": consumed, "fragmentation": consumed, "durableResume": consumed,
 			"multiFileResume": consumed, "capability": consumed, "link": consumed,
+			"roster": "not applicable: signaling roster hint, consumed by internal/signal",
 		},
 		"capability": {
 			"hello": consumed, "retry": constant, "settleSeconds": constant, "lastAttemptSeconds": constant,

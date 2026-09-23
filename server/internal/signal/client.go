@@ -258,10 +258,17 @@ func ServeWSHooked(h *Hub, idgen func() string, hooks WSHooks) func(ctx context.
 			case TypeJoin:
 				if !joined {
 					device, active := "", false
+					var proto ProtoHint
 					if lan {
 						device, active = e.DeviceID, e.Active
+					} else {
+						// The link-pairing hint is a pairing-code room
+						// concept; the LAN room ignores it entirely (no echo,
+						// no roster field), mirroring how a code room ignores
+						// deviceId.
+						proto = e.Proto
 					}
-					if admitted, peers, members := h.JoinDeviceLimitedObservedMembers(room, id, e.Name, conn, maxPeers, clientIP, device, active); admitted {
+					if admitted, peers, members := h.JoinDeviceLimitedObservedMembers(room, id, e.Name, conn, maxPeers, clientIP, device, active, proto...); admitted {
 						joined = true
 						cancelJoin() // joined in time — stop the join deadline
 						if observe != nil {
@@ -321,6 +328,9 @@ func ServeWSHooked(h *Hub, idgen func() string, hooks WSHooks) func(ctx context.
 				// cost to receive, it just does not travel.
 				if joined {
 					e.From = id
+					// The hint is server-authored on welcome/roster only. A
+					// peer cannot make one appear on a relayed frame.
+					e.Proto = nil
 					h.Relay(room, e)
 				}
 			}

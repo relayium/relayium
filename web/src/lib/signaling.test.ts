@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { SignalingClient, type WebSocketLike } from "./signaling";
 
 class FakeSocket implements WebSocketLike {
@@ -290,5 +291,50 @@ describe("SignalingClient.send 在重连窗口里", () => {
     }
     const c = new SignalingClient("ws://x", "Alice", () => new ThrowingSocket());
     expect(() => c.sendSignal("peer", { hi: true })).not.toThrow();
+  });
+});
+
+// The server's link-pairing roster hint (relayium-signaling-v1 "Protocol hint").
+// The row is shared with the Go server (which must encode these exact bytes),
+// the Apple and the Android suites. This client does not read the hint; the
+// claim pinned here is that a welcome echoing `proto` and a roster mixing a
+// hinted and an unhinted entry reach the app exactly as the same frames without
+// the hint would, and that this client never sends one.
+describe("SignalingClient roster protocol hint tolerance", () => {
+  const WIRE = "../apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json";
+  const row = JSON.parse(readFileSync(WIRE, "utf8")).roster.protoHint as {
+    welcomeFrame: string;
+    peersFrame: string;
+    selfId: string;
+    ip: string;
+    peers: { id: string; name: string; proto?: string[] }[];
+  };
+
+  it("the fixture row really carries the hint (on welcome and on one entry only)", () => {
+    expect(JSON.parse(row.welcomeFrame).proto).toEqual(["link/1"]);
+    const entries = JSON.parse(row.peersFrame).peers as { proto?: unknown }[];
+    expect(entries.filter((e) => "proto" in e)).toHaveLength(1);
+    expect(entries.filter((e) => !("proto" in e)).length).toBeGreaterThan(0);
+  });
+
+  it("decodes the hinted welcome and roster to the unhinted self id, ip and entries", () => {
+    const sock = new FakeSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    const got: { self: string; ip: string; peers: { id: string; name: string }[] | null } =
+      { self: "", ip: "", peers: null };
+    c.onSelfId((id, addr) => { got.self = id; got.ip = addr; });
+    c.onPeers((p) => { got.peers = p; });
+    sock.onopen?.();
+    // Inert: this client never announces the hint.
+    expect(JSON.parse(sock.sent[0])).not.toHaveProperty("proto");
+
+    sock.raw(row.welcomeFrame);
+    sock.raw(row.peersFrame);
+    expect(got.self).toBe(row.selfId);
+    expect(got.ip).toBe(row.ip);
+    expect(got.peers).not.toBeNull();
+    expect((got.peers ?? []).map((p) => ({ id: p.id, name: p.name }))).toEqual(
+      row.peers.map((p) => ({ id: p.id, name: p.name })),
+    );
   });
 });

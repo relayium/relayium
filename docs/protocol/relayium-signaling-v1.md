@@ -54,14 +54,18 @@ handshake ride inside `data` and are defined by the realtime layer, not here.
 
 ## Envelope (every frame, both directions), JSON:
 { "type": string, "from"?: string, "to"?: string, "name"?: string,
-  "ip"?: string, "peers"?: [{"id":string,"name":string}], "data"?: <any JSON>,
-  "peer"?: string, "deviceId"?: string, "active"?: boolean }
+  "ip"?: string, "peers"?: [{"id":string,"name":string,"proto"?:[string]}],
+  "data"?: <any JSON>, "peer"?: string, "deviceId"?: string, "active"?: boolean,
+  "proto"?: [string] }
 - `type` ∈ { "join", "welcome", "peers", "left", "signal", "activate" }.
 - Fields other than `type` are message-specific. The current server always
   includes `peers` on a `peers` frame, including `[]`.
 - `deviceId` / `active` are **client→server only**, and only on `join`. The
-  server never echoes either to anyone: the roster stays `{id,name}`, so no
-  client can read or confirm another client's `deviceId`.
+  server never echoes either to anyone: no roster entry ever carries an
+  installation id, so no client can read or confirm another client's `deviceId`.
+- `proto` is the optional link-pairing hint (see "Protocol hint" below): on
+  `join` from the client, on `welcome` as the server's echo, and on the joiner's
+  own roster entry.
 - `peer` is **server→client only** and appears only on `left`.
 
 ## LAN installation presence (optional, LAN room only)
@@ -89,10 +93,52 @@ pick one and have its request land on a page nobody was looking at.
 - `active:true` on `join` is the same statement for a page that is already
   current when it joins.
 
+## Protocol hint (optional, pairing-code rooms only)
+Lets two new CLIs in a pairing-code room know, before either speaks, that the
+other accepts a link hello as its first frame — without a timing guess and
+without sending an older peer a frame it would reject.
+
+```
+C→S join     {"type":"join","name":"…","proto":["link/1"]}
+S→C welcome  {"type":"welcome","name":"<selfId>","ip":"…","proto":["link/1"]}
+S→C peers    {"type":"peers","peers":[{"id":"…","name":"…","proto":["link/1"]},{"id":"…","name":"…"}]}
+```
+
+- Meaning of `"proto":["link/1"]` on a roster entry: *this peer accepts a link
+  hello as its first inbound frame and will announce `link/1` itself.* Only a
+  client that honours both halves may send it; today only the new CLI does.
+- Accepted only as a JSON array of **1–4 strings, each byte-equal (after JSON
+  unescaping) to a server-known token**. The known set is exactly `{"link/1"}`
+  (`signal.ProtoLink1`). Anything else — not an array, `null`, `[]`, more than
+  four elements, a non-string element, an unknown or differently cased token,
+  or any unknown token mixed with a known one — is treated as **absent**, the
+  same fail-to-absent rule as `deviceId`. It never makes the frame malformed and
+  never refuses the join. The server never echoes a string it does not know.
+- The echo and the roster value are canonical: each known token once, in the
+  server's order.
+- A valid hint is echoed on that connection's `welcome` (its presence tells the
+  client this server supports hints; an older server sends a welcome without
+  it) and carried on that peer's roster entry. `omitempty`: a peer that sent no
+  valid hint gets byte-identical `welcome` and roster entries to a server
+  without hints.
+- **LAN room:** ignored entirely — no echo, no roster field.
+- It plays no part in admission, room capacity, device grouping or roster
+  order. The server strips `proto` from relayed `signal` frames, so it appears
+  only where the server wrote it.
+- It is a **hint, never a security input.** A hostile server can strip or forge
+  it (a denial of service) but cannot reach keys, which still come only from
+  the commit-reveal handshake.
+- Decoders that do not read it ignore it; the shared row
+  `roster.protoHint` in `apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json`
+  pins that for the Web, Apple and Android clients, and the Go server test pins
+  that those are the bytes the server produces.
+
 ## Sequence
 1. On open, the client sends `{"type":"join","name":<device nickname>}`, plus
-   `"deviceId"` (and `"active"` when this page is the current one) in the LAN room.
-2. Server replies `{"type":"welcome","name":<this client's peer id>,"ip":<server-observed public IP or "">}`.
+   `"deviceId"` (and `"active"` when this page is the current one) in the LAN room,
+   or the optional `"proto"` hint in a pairing-code room.
+2. Server replies `{"type":"welcome","name":<this client's peer id>,"ip":<server-observed public IP or "">}`,
+   plus the `"proto"` echo when the join carried a valid hint.
    (The self peer id is carried in `name` on welcome.)
 3. Server sends `{"type":"peers","peers":[{id,name},…]}` — this recipient's view
    of the room, and again whenever it changes.

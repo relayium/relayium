@@ -1089,6 +1089,38 @@ const link = {
   bounds: linkBounds,
 };
 
+// ── Roster protocol hint (relayium-signaling-v1.md "Protocol hint") ───────
+//
+// The one block in this file whose bytes the Web does NOT author: the signaling
+// SERVER writes these frames, and `server/internal/signal/proto_hint_test.go`
+// (TestRosterHintFixtureIsServerBytes) asserts that its encoder produces them
+// byte for byte. They live here anyway because this is the file every client
+// suite already reads, and the claim being pinned is a CLIENT property: a
+// welcome that echoes `proto` and a roster that mixes a hinted entry with an
+// unhinted one decode to exactly the self id, IP and {id,name} entries they did
+// before hints existed. Every shipped decoder ignores the extra key today; the
+// Web (`signaling.test.ts`), Apple (`SignalEnvelopeRosterHintTests.swift`) and
+// Android (`BoundaryRegressionTest.kt`) tests make that tolerance a pinned fact
+// instead of an assumption. `peers[].proto` is the per-entry expectation for a
+// reader that does read the hint (the new CLI); an unhinted entry has none.
+const PROTO_LINK = "link/1";
+const hintSelfId = "p1";
+const hintIp = "203.0.113.7";
+// Sorted by (name, id), as the server sends them.
+const hintPeers = [
+  { id: hintSelfId, name: "Build box", proto: [PROTO_LINK] },
+  { id: "p2", name: "Phone" },
+];
+const roster = {
+  protoHint: {
+    welcomeFrame: JSON.stringify({ type: "welcome", name: hintSelfId, ip: hintIp, proto: [PROTO_LINK] }),
+    peersFrame: JSON.stringify({ type: "peers", peers: hintPeers }),
+    selfId: hintSelfId,
+    ip: hintIp,
+    peers: hintPeers,
+  },
+};
+
 const out = {
   sessionKeyHex: hex(keyRaw),
   manifest: manifestObj,
@@ -1121,6 +1153,7 @@ const out = {
   multiFileResume,
   capability,
   link,
+  roster,
 };
 
 writeFileSync("../apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json", JSON.stringify(out, null, 2) + "\n");
