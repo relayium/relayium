@@ -734,6 +734,14 @@ func TestSpooledRecordValidation(t *testing.T) {
 		"chunk while planned":   func(j *Journal) { j.Phase, j.UploadID = PhasePlanned, "" },
 		"v1 with a copy":        func(j *Journal) { j.V = journalVersion },
 		"unknown version":       func(j *Journal) { j.V = 3 },
+		// An all-empty delivery never takes the local-copy path (it has no
+		// bytes to resume and needs the ordinary zero-byte append), so a
+		// zero-byte copy is refused before any request: the capability gate in
+		// Retry relies on that for a planned record.
+		"zero-byte copy": func(j *Journal) { j.CiphertextBytes, j.SpoolBytes = 0, j.HeaderBytes },
+		"zero-byte copy, planned": func(j *Journal) {
+			j.Phase, j.UploadID, j.ChunkSize, j.CiphertextBytes, j.SpoolBytes = PhasePlanned, "", 0, 0, j.HeaderBytes
+		},
 	} {
 		j := base
 		mut(&j)
