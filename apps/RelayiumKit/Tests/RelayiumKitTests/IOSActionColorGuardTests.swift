@@ -114,13 +114,15 @@ final class IOSActionColorGuardTests: XCTestCase {
         // legacy terminal Done controls went with the Files/Text lanes, the
         // Files and Text minting Cancels became one, and the expired-code Cancel
         // is new.
-        XCTAssertEqual(ordinary, 40, "ordinary bordered actions")
+        // A21 adds one: the received-file Open / Share / Save to Files group in
+        // `DeviceConversationView`, ordinary, applied once to the three.
+        XCTAssertEqual(ordinary, 41, "ordinary bordered actions")
         XCTAssertEqual(destructive, 20, "destructive bordered actions")
         XCTAssertEqual(conditional, 1,
                        "exactly one control has a conditional role: "
                        + "NearbyLinkWorkspaceView's exit, destructive while the "
                        + "session is live and ordinary once it has ended")
-        XCTAssertEqual(ordinary + destructive + conditional, 61,
+        XCTAssertEqual(ordinary + destructive + conditional, 62,
                        "the app had 64 bordered controls when this boundary was drawn and "
                        + "61 since Cross-network became connect-first; a new one is fine, "
                        + "but it has to be counted here and its role has to be a decision "
@@ -170,7 +172,7 @@ final class IOSActionColorGuardTests: XCTestCase {
                                + "2.02:1 accent.")
             }
         }
-        XCTAssertEqual(checked, 61, "every bordered control must have been paired")
+        XCTAssertEqual(checked, 62, "every bordered control must have been paired")
     }
 
     /// A line that is prose rather than code.

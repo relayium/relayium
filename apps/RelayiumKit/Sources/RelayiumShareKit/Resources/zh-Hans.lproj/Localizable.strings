@@ -895,6 +895,65 @@
 "help.account.failure" = "本周期的额度用完后，创建配对码和发送链接都会停止工作。同一网络传输，以及用别人创建的配对码连接，都不受影响——两者都不记在你账上。";
 "help.account.recovery" = "等待周期滚动，或更换套餐。无论哪种情况，同一网络传输都照常可用，因为它不经由 Relayium 传输任何字节。";
 
+/* A20-A21 — iOS 五个目的地的帮助（A20），以及设备收件箱已收文件的
+   打开 / 分享 / 存储到「文件」（A21）。 */
+
+"help.ios.lan.purpose" = "向同一本地网络中的设备发送文件、文件夹或消息。不需要账户，服务器上也不会留下任何内容。";
+"help.ios.lan.step1" = "在两台设备上打开 Relayium，连接同一个 Wi-Fi 或本地网络；iOS 询问时，允许访问本地网络。";
+"help.ios.lan.step2" = "从列表中选择另一台设备——Relayium 从不替你选——然后连接，发送文件或消息。";
+"help.ios.lan.step3" = "若已开启高级验证，请先确认两边屏幕显示相同的代码，再发送任何内容。";
+"help.ios.lan.boundary" = "设备只通过这个本地网络上的 Bonjour 互相发现，不会去问 Relayium 的服务器附近有谁。连接在两台设备之间建立并加密，从不经过 Relayium 的中继——所以不占用你的套餐。共享网络中可能有陌生人，发送前请核对名称。";
+"help.ios.lan.where" = "收到的文件保存在「文件」App 的 Relayium/Received 文件夹中。来自当前版本设备的每一批文件，都会等你点“接受”；较旧的版本在接收开启时会直接送达。消息只留在这两台设备上，连接结束即消失。";
+"help.ios.lan.failure" = "另一台设备不在列表里。常见原因：Relayium 的本地网络访问已关闭、其中一台设备连着访客网络或 VPN、路由器隔离了设备，或者另一台设备上没有打开 Relayium。iPhone 和 iPad 上的 Relayium 只在打开时接收。";
+"help.ios.lan.recovery" = "在“设置 › 隐私与安全性 › 本地网络”中打开 Relayium，关闭 VPN，加入同一个网络，并在两台设备上都保持 Relayium 打开。若仍然互相看不到，改用“跨网络”界面的配对码。";
+
+"help.ios.cross.purpose" = "用六位配对码连接任何地方的设备。两台设备不必在同一网络。";
+"help.ios.cross.step1" = "创建配对码，然后把配对码或旁边的链接交给对方。";
+"help.ios.cross.step2" = "在另一台设备的 Relayium 中输入配对码，或打开链接。";
+"help.ios.cross.step3" = "连接后，就在这一条连接上双向发送文件、文件夹和消息。若已开启验证，请先确认两边屏幕显示相同的代码。";
+"help.ios.cross.boundary" = "文件在两台设备之间加密，Relayium 始终没有密钥。创建配对码需要账户，因为连接可能由 Relayium 的中继承载，这些流量记在创建配对码的人账上。加入别人创建的配对码不需要账户。";
+"help.ios.cross.where" = "你接受的文件保存在「文件」App 的 Relayium/Received 文件夹中。消息只留在这两台设备上，连接结束即丢弃。这条路发送的内容不会存储在 Relayium 的服务器上。";
+"help.ios.cross.failure" = "配对码只有几分钟有效期；输错或过期时，对方会被告知配对码无效。连接还需要两台设备都打开 Relayium：App 一离开屏幕，连接就无法继续。";
+"help.ios.cross.recovery" = "新建一个配对码交给对方，并在两台设备上都让 Relayium 留在屏幕上，直到传输完成。内容较大时，改用“发送”——对方可以稍后再取。";
+
+"help.ios.storedSend.purpose" = "把加密后的文件上传一次，分享一个无论这台设备是否开着都能用的链接。";
+"help.ios.storedSend.step1" = "登录，选择文件、文件夹、照片或视频，并决定链接的有效时长。";
+"help.ios.storedSend.step2" = "Relayium 会先在这台设备上加密所有内容，再上传。上传完成前请保持 App 打开。";
+"help.ios.storedSend.step3" = "分享该链接。打开它所需的密钥就在链接之中，绝不会传到 Relayium。";
+"help.ios.storedSend.boundary" = "在任何内容上传之前，文件就已在这台设备上加密。密钥位于链接中 # 之后的部分，浏览器从不会把这一段发给服务器，所以 Relayium 存的是它读不懂的内容。任何拿到完整链接的人都能打开这些文件，所以请把链接本身当作机密。存储的文件计入你套餐的限额。";
+"help.ios.storedSend.where" = "加密后的文件会留在 Relayium 的服务器上，直到链接过期，或你在“账户”界面删除它们——删除会立即让链接失效。若开启了“首次下载后删除”，第一次下载也会删除它们。";
+"help.ios.storedSend.failure" = "离开 Relayium 会暂停上传——上传从不在后台继续。另外，被缩短、被聊天软件重新包装，或复制时漏掉 # 之后那一段的链接都打不开：缺的是密钥，不是文件。";
+"help.ios.storedSend.recovery" = "打开 Relayium 并点“继续上传”：在那之前文件会保留在这台设备上。从“账户”界面重新复制链接，并通过不会改动它的方式发出去。如果已经过期，就重新发送一次文件。";
+
+"help.ios.inbox.purpose" = "你自己已登录的设备可以把文件和消息直接发到这台设备，你也可以从这里发给它们。";
+"help.ios.inbox.step1" = "在这台设备和你的其他设备上登录同一个账户。";
+"help.ios.inbox.step2" = "选择投递是自动保存，还是先等你接受。";
+"help.ios.inbox.step3" = "打开一台设备，查看你们之间的往来，打开或分享它发来的内容，并给它发送文件或消息。";
+"help.ios.inbox.boundary" = "投递是用这台设备自己的密钥加密的，而那把密钥从不离开本机。Relayium 只是保管加密后的投递直到这台设备取走，既读不到里面的内容，也说不出文件叫什么。";
+"help.ios.inbox.where" = "收到的文件保存在「文件」App 的 Relayium/Received 文件夹中，消息留在这台设备上的对话里。尚未取走的投递会在服务器上等待，直到这台设备取走或它过期。";
+"help.ios.inbox.failure" = "Relayium 关闭、在后台，或你已退出登录时，什么都不会到达。在 iPhone 和 iPad 上，它只在打开时接收，也不会给你发通知。";
+"help.ios.inbox.recovery" = "打开 Relayium 并登录同一个账户，等待中的内容就会到达。如果某个投递停止了，这个界面会说明原因和下一步。";
+
+"help.ios.account.purpose" = "你的套餐和本周期的用量、已登录你账户的设备，以及你存储的文件。";
+"help.ios.account.step1" = "创建账户或登录——发送链接、创建配对码和设备收件箱都需要账户。";
+"help.ios.account.step2" = "查看你所用的套餐，以及本周期已用掉多少存储空间和流量。";
+"help.ios.account.step3" = "查看已登录你账户的设备和你存储的文件，并可撤销或删除其中任意一项。";
+"help.ios.account.boundary" = "Relayium 保存的是你的邮箱地址、你用的套餐，以及你存储和传输了多少字节。它从不保存你文件的密钥，所以这个界面上的任何内容——以及 Relayium 数据库里的任何内容——都打不开它们。";
+"help.ios.account.where" = "删除已存储的文件会把它从 Relayium 的服务器上移除，并立刻让它的链接失效。撤销某台设备只会结束那台设备的会话，它已经收到的文件仍留在它上面。";
+"help.ios.account.failure" = "本周期的额度用完后，创建配对码和发送链接都会停止工作。同一网络传输，以及加入别人创建的配对码，都不受影响——两者都不记在你账上。";
+"help.ios.account.recovery" = "等待周期重置，或更换套餐。无论哪种情况，同一网络传输都照常可用，因为它的字节都不经过 Relayium。";
+
+"inbox.receivedOpen" = "打开";
+"inbox.receivedShare" = "分享";
+"inbox.receivedSave" = "存储到「文件」";
+"inbox.receivedOpenLabel" = "打开 %@";
+"inbox.receivedShareLabel" = "分享 %@";
+"inbox.receivedSaveLabel" = "将 %@ 存储到「文件」";
+"inbox.receivedAllMissing" = "这些文件已不在这台设备上，可能已在「文件」App 中被删除或移走。如果还需要，请让发送方重新发送。";
+"inbox.receivedSomeMissing" = "其中一些文件已不在这台设备上。“打开”“分享”和“存储到「文件」”只会使用仍在的那些。";
+"inbox.receivedFolderNote" = "这些文件是放在一个文件夹里送达的。“分享”和“存储到「文件」”交出的是文件本身；文件夹仍留在「文件」App 的 %@ 中。";
+"inbox.receivedUnavailable" = "这些文件现在无法打开。请确认它们仍在「文件」App 的 %@ 中，然后重试。";
+
 /* In-app subscription (Mac App Store build). The purchase surface the App Store
    build renders instead of the direct build's link to the website. Prices are
    never written here: the store's own localized price is substituted in. */

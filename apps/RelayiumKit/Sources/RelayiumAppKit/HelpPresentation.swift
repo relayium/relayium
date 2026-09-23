@@ -1,7 +1,21 @@
 import Foundation
 import RelayiumShareKit
 
-/// **What each browseable macOS destination teaches, below the thing it does.**
+/// **What each browseable destination teaches, below the thing it does — on
+/// macOS and on iOS, each from its own table.**
+///
+/// The shape (`HelpTopic`), the guide rule (`HelpGuide`, `url(for:)`) and the
+/// shared headings are platform-neutral. The ANSWERS are not: the two apps share
+/// destination names, but not the facts behind them. macOS finds same-network
+/// devices through Relayium's hub and saves into Downloads or a folder the user
+/// chose; iOS finds them with Bonjour on the local network alone and saves into
+/// `Relayium › Received` in the Files app; the Mac Device Inbox receives with
+/// the window closed and the iOS one only while the app is open. Swapping
+/// "this Mac" for "this iPhone" in the Mac table would have stated each of those
+/// wrongly, so iOS has its own keys (`help.ios.*`) and its own switch,
+/// `topic(forIOS:)`, rather than a platform parameter threaded through prose.
+///
+/// The rest of this comment is the original macOS argument and applies to both.
 ///
 /// The owner's report was that a screen tells you what it is and gives you the
 /// controls, and then stops: someone who does not already know what a pairing
@@ -142,6 +156,77 @@ public enum HelpPresentation {
                 destination: .helpAccountWhere,
                 failure: .helpAccountFailure,
                 recovery: .helpAccountRecovery,
+                guide: nil)
+        case .storedReceive:
+            return nil
+        }
+    }
+
+    /// **The iOS table: the same five questions, answered for what the iOS app
+    /// actually does.**
+    ///
+    /// Named `topic(forIOS:)` rather than overloading `topic(for:)`, because
+    /// both surface enums have `.storedReceive`, `.account` and the rest — an
+    /// overload would make every `.account` literal ambiguous.
+    ///
+    /// Every network, privacy and billing sentence behind these keys restates a
+    /// fact the iOS composition already enforces and already tells the user
+    /// elsewhere; `IOSHelpPresentationTests` pins each one to the source it
+    /// restates, so a behaviour change that makes a sentence false fails there.
+    ///
+    /// `storedReceive` is nil for the Mac reason: it is presented, not browsed.
+    public static func topic(forIOS surface: IOSSurface) -> HelpTopic? {
+        switch surface {
+        case .lanTransfer:
+            return HelpTopic(
+                purpose: .helpIOSLanPurpose,
+                steps: [.helpIOSLanStep1, .helpIOSLanStep2, .helpIOSLanStep3],
+                boundary: .helpIOSLanBoundary,
+                destination: .helpIOSLanWhere,
+                failure: .helpIOSLanFailure,
+                recovery: .helpIOSLanRecovery,
+                // nonlocalized: a URL path slug, generated per language by the site
+                guide: .localizedGuide(slug: "what-is-peer-to-peer-file-transfer"))
+        case .crossNetworkTransfer:
+            return HelpTopic(
+                purpose: .helpIOSCrossPurpose,
+                steps: [.helpIOSCrossStep1, .helpIOSCrossStep2, .helpIOSCrossStep3],
+                boundary: .helpIOSCrossBoundary,
+                destination: .helpIOSCrossWhere,
+                failure: .helpIOSCrossFailure,
+                recovery: .helpIOSCrossRecovery,
+                // nonlocalized: a URL path slug, generated per language by the site
+                guide: .localizedGuide(slug: "send-a-file-to-someone"))
+        case .storedSend:
+            return HelpTopic(
+                purpose: .helpIOSStoredSendPurpose,
+                steps: [.helpIOSStoredSendStep1, .helpIOSStoredSendStep2,
+                        .helpIOSStoredSendStep3],
+                boundary: .helpIOSStoredSendBoundary,
+                destination: .helpIOSStoredSendWhere,
+                failure: .helpIOSStoredSendFailure,
+                recovery: .helpIOSStoredSendRecovery,
+                // nonlocalized: a URL path slug, generated per language by the site
+                guide: .localizedGuide(slug: "push-to-cloud-pull-on-another-computer"))
+        case .deviceInbox:
+            return HelpTopic(
+                purpose: .helpIOSInboxPurpose,
+                steps: [.helpIOSInboxStep1, .helpIOSInboxStep2, .helpIOSInboxStep3],
+                boundary: .helpIOSInboxBoundary,
+                destination: .helpIOSInboxWhere,
+                failure: .helpIOSInboxFailure,
+                recovery: .helpIOSInboxRecovery,
+                // nonlocalized: a URL path, not user copy
+                guide: .englishPage(path: "device-inbox"))
+        case .account:
+            // No guide, for the macOS reason.
+            return HelpTopic(
+                purpose: .helpIOSAccountPurpose,
+                steps: [.helpIOSAccountStep1, .helpIOSAccountStep2, .helpIOSAccountStep3],
+                boundary: .helpIOSAccountBoundary,
+                destination: .helpIOSAccountWhere,
+                failure: .helpIOSAccountFailure,
+                recovery: .helpIOSAccountRecovery,
                 guide: nil)
         case .storedReceive:
             return nil

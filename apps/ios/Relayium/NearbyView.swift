@@ -183,6 +183,9 @@ struct NearbyView: View {
                         discoverySection
                     }
                 }
+                // A20: what this screen is for and what to do when it does not
+                // work, last on the page and collapsed — see `IOSHelpCard`.
+                IOSHelpCard(surface: .lanTransfer)
             }
             .navigationTitle(L10n.t(.navNearby))
         }

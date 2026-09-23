@@ -478,7 +478,13 @@ final class IOSSupportingTextGuardTests: XCTestCase {
         // the lanes they described, the wall-clock expiry line became the live
         // countdown, and the create card gained the one sentence that says what
         // happens after connecting.
-        XCTAssertEqual(supporting, 118,
+        //
+        // 120 on this branch's base, not 118: the reviewed iOS composer commit
+        // (`3810f99c8`) added two without moving this count. A20/A21 add five:
+        // the help card's glyph, purpose line, chevron and prose role
+        // (`IOSHelpCard`), and the received-files folder note in
+        // `DeviceConversationView`.
+        XCTAssertEqual(supporting, 125,
                        "the supporting role should reach every one of the sentences the "
                        + "audit counted across both targets, plus the two disclosure tints")
         // The over-limit byte counter, the not-sent label, and the three

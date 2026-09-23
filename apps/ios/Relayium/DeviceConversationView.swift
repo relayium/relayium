@@ -68,6 +68,14 @@ struct DeviceConversationView: View {
     /// stays as a new unread row rather than being erased by a decision taken
     /// before it existed.
     @State private var deletingConversation: Set<String>?
+    /// A21: Open / Share / Save to Files for what this device RECEIVED here.
+    ///
+    /// Page-scoped and holding no file of its own: each action re-locates the
+    /// files inside the receive folder the Device Inbox controller resolved,
+    /// and re-checks the account and the row when that lookup lands — see
+    /// `InboxReceivedFileAccessModel`. It never reads the bearer.
+    @StateObject private var receivedFiles = InboxReceivedFileAccessModel()
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         DestinationPage {
@@ -85,6 +93,151 @@ struct DeviceConversationView: View {
         // device the directory has not been asked about yet, and the composer
         // renders from `selectedCandidate` rather than from the conversation.
         .task { deliveries.refreshTargets(token: session.bearerToken ?? "") }
+        // A message whose staging failed after `sendText` accepted it comes back
+        // to this field rather than vanishing — the field was cleared on
+        // acceptance. Two triggers, the rule `NearbyLinkWorkspaceView` follows:
+        // the hand-back itself, and the field becoming free again, because the
+        // model refuses to overwrite text the user has started typing.
+        .task(id: deliveries.returnedMessageToken) { restoreReturnedMessage() }
+        .task(id: draftIsBlank) { if draftIsBlank { restoreReturnedMessage() } }
+        // A21: what each received row can still hand over, re-checked when the
+        // rows or the account change and whenever the app comes back — the
+        // Files app may have deleted or moved something in between.
+        .task(id: receivedRowsKey) { refreshReceivedFiles() }
+        // A notification rather than the scene phase: the phase has ONE
+        // app-scoped reader by rule (`IOSSurfaceGuardTests`), and this only
+        // re-reads the disk — it drives no lifecycle.
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIApplication.willEnterForegroundNotification)) { _ in
+            refreshReceivedFiles()
+        }
+        // A presented Open / Share / Save to Files is withdrawn the moment its
+        // account or its row stops being current.
+        .onChange(of: inbox.activeAccountID) { account in
+            receivedFiles.invalidate(scope: receivedScope, accountID: account)
+        }
+        .onChange(of: inbox.conversations) { _ in
+            receivedFiles.invalidate(scope: receivedScope, accountID: inbox.activeAccountID)
+        }
+        .onChange(of: inbox.deletedTimelineIDs) { _ in
+            receivedFiles.invalidate(scope: receivedScope, accountID: inbox.activeAccountID)
+        }
+    }
+
+    // MARK: - received files (A21)
+
+    /// The live answer to "is this row still this account's received files?",
+    /// read from the controller at the moment it is asked.
+    private var receivedScope: @MainActor (String) -> InboxReceivedFileScope? {
+        let inbox = self.inbox
+        let peerID = self.peerID
+        return { entryID in inbox.receivedFileScope(peerDeviceID: peerID, entryID: entryID) }
+    }
+
+    /// Which received rows are on this page, and for which account.
+    private var receivedRowsKey: [String] {
+        let rows = conversation?.entries
+            .filter { $0.direction == .received && $0.kind == .files }
+            .map(\.id) ?? []
+        return [inbox.activeAccountID ?? ""] + rows
+    }
+
+    private func refreshReceivedFiles() {
+        receivedFiles.refresh(entryIDs: Array(receivedRowsKey.dropFirst()),
+                              receiveFolder: inbox.folder.url, scope: receivedScope)
+    }
+
+    private func beginReceived(_ action: InboxReceivedFileAction, _ entry: InboxTimelineEntry) {
+        receivedFiles.begin(action, entryID: entry.id, receiveFolder: inbox.folder.url,
+                            scope: receivedScope)
+    }
+
+    /// The Files app route to the receive folder, spelled the one way every
+    /// other iOS sentence spells it.
+    private var receiveFolderRoute: String { IOSInboxCopy.receiveFolderRoute() }
+
+    /// The three hand-offs, and the honest state when there is nothing to hand.
+    ///
+    /// A row whose files have all gone says so and offers nothing: a button that
+    /// opens an empty preview is the "saved" claim outliving the file. A row
+    /// with some gone says that, and the actions use the rest. A delivery that
+    /// arrived inside a folder says what Share and Save to Files hand over.
+    @ViewBuilder
+    private func receivedFileActions(_ entry: InboxTimelineEntry) -> some View {
+        let known = receivedFiles.files[entry.id]
+        let available = known?.filter { $0.url != nil }.count
+        if let known, available == 0 {
+            let refused = known.contains { $0.availability == .refused }
+            InlineMessage(.warning, refused
+                          ? L10n.t(.inboxReceivedUnavailable, [receiveFolderRoute])
+                          : L10n.t(.inboxReceivedAllMissing))
+                .accessibilityIdentifier("inbox-received-missing")
+        } else {
+            if let known, let available, available < known.count {
+                InlineMessage(.info, L10n.t(.inboxReceivedSomeMissing))
+                    .accessibilityIdentifier("inbox-received-some-missing")
+            }
+            if known?.contains(where: { $0.relativePath?.contains("/") == true }) == true {
+                Text(L10n.t(.inboxReceivedFolderNote, [receiveFolderRoute]))
+                    .font(.footnote)
+                    .foregroundStyle(Palette.supportingLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            receivedActionButtons(entry)
+                // The iPad popover's anchor, and the presenter that withdraws a
+                // sheet whose account or row has gone. Handed this row's request
+                // only.
+                .background(ReceivedFileSheetAnchor(
+                    request: receivedFiles.request?.entryID == entry.id
+                        ? receivedFiles.request : nil,
+                    onFinish: { receivedFiles.finish($0) }))
+            if receivedFiles.unavailableEntryID == entry.id {
+                InlineMessage(.warning, L10n.t(.inboxReceivedUnavailable, [receiveFolderRoute]))
+                    .accessibilityIdentifier("inbox-received-unavailable")
+            }
+        }
+    }
+
+    /// Side by side, and stacked once the reader's text size would break the
+    /// words mid-label — the rule the pairing link's Copy/Share follows.
+    @ViewBuilder
+    private func receivedActionButtons(_ entry: InboxTimelineEntry) -> some View {
+        let names = InboxTimelinePresentation.fileNames(of: entry)
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Metrics.tight))
+            : AnyLayout(HStackLayout(spacing: Metrics.tight))
+        layout {
+            Group {
+                Button { beginReceived(.open, entry) } label: {
+                    Label(L10n.t(.inboxReceivedOpen), systemImage: "eye") // nonlocalized: SF Symbol name
+                }
+                .accessibilityLabel(L10n.t(.inboxReceivedOpenLabel, [L10n.token(names)]))
+                .accessibilityIdentifier("inbox-received-open")
+                Button { beginReceived(.share, entry) } label: {
+                    Label(L10n.t(.inboxReceivedShare), systemImage: "square.and.arrow.up") // nonlocalized: SF Symbol name
+                }
+                .accessibilityLabel(L10n.t(.inboxReceivedShareLabel, [L10n.token(names)]))
+                .accessibilityIdentifier("inbox-received-share")
+                Button { beginReceived(.export, entry) } label: {
+                    Label(L10n.t(.inboxReceivedSave), systemImage: "folder") // nonlocalized: SF Symbol name
+                }
+                .accessibilityLabel(L10n.t(.inboxReceivedSaveLabel, [L10n.token(names)]))
+                .accessibilityIdentifier("inbox-received-save")
+            }
+            .borderedAction()
+        }
+    }
+
+    private var draftIsBlank: Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Put a returned message back, for THIS device only. The model answers nil
+    /// for another device's words or a field that is not empty, and keeps them.
+    private func restoreReturnedMessage() {
+        if let text = deliveries.takeReturnedMessage(for: peerID, composerText: draft) {
+            draft = text
+        }
     }
 
     /// The device this page may send to, or nil.
@@ -477,6 +630,11 @@ struct DeviceConversationView: View {
                 .font(.callout)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
+            // Only what this device RECEIVED: an outgoing row carries no path,
+            // and the sender's own copy is not this page's to hand out.
+            if entry.direction == .received {
+                receivedFileActions(entry)
+            }
         } else if entry.direction == .sent {
             // A body this device no longer holds — the process died between the
             // durable plan and the body being written, and the staged copy went

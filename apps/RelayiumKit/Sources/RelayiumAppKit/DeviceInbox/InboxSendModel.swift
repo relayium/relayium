@@ -70,6 +70,23 @@ public final class InboxSendModel: ObservableObject {
     @Published public private(set) var actionError: InboxSendActionError?
     @Published public private(set) var renamingDeviceIDs: Set<String> = []
     @Published public private(set) var renameFailureDeviceID: String?
+    /// **A message whose local staging failed AFTER `sendText` returned, waiting
+    /// to go back into the composer it came from.**
+    ///
+    /// `sendText` accepts synchronously and stages asynchronously, so a composer
+    /// that clears its field on acceptance has already emptied it by the time a
+    /// `stagingFailed` or `keyStorageFailed` refusal lands — and without this the
+    /// words were held by nobody. Only an opaque token is published: the body
+    /// itself stays in `returnedMessage`, which is private, so the rule that a
+    /// message body never reaches this model's published state still holds.
+    /// A view reacts to the token and asks for the text with
+    /// `takeReturnedMessage(for:composerText:)`.
+    ///
+    /// Scoped to the account that wrote it: an account change drops it in
+    /// `isolateFromPreviousAccount`, and a staging that fails after the account
+    /// moved hands nothing back at all.
+    @Published public private(set) var returnedMessageToken: UUID?
+    private var returnedMessage: (token: UUID, accountId: String, targetID: String, text: String)?
 
     // MARK: - collaborators
 
@@ -284,7 +301,37 @@ public final class InboxSendModel: ObservableObject {
         actionError = nil
         renamingDeviceIDs = []
         renameFailureDeviceID = nil
+        // The previous account's words, which no later account may be handed.
+        returnedMessage = nil
+        returnedMessageToken = nil
         publish()
+    }
+
+    /// **Give a returned message back to the composer for `targetID`, but only
+    /// where it can land without replacing anything.**
+    ///
+    /// The order is `LinkWorkspaceModel.restoreReturnedDraft`'s: decide whether
+    /// the composer is free FIRST, and consume only when it is. A composer that
+    /// already holds text, or that belongs to a different device, gets nil and
+    /// the message stays here for the next time the right composer is empty —
+    /// refusing is not losing.
+    public func takeReturnedMessage(for targetID: String, composerText: String) -> String? {
+        guard let held = returnedMessage,
+              held.accountId == accountId,
+              held.targetID == targetID,
+              composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        returnedMessage = nil
+        returnedMessageToken = nil
+        return held.text
+    }
+
+    /// Hold a message whose staging failed, for the composer it came from.
+    private func returnMessage(_ text: String, accountId: String, targetID: String) {
+        let token = UUID()
+        returnedMessage = (token, accountId, targetID, text)
+        returnedMessageToken = token
     }
 
     // MARK: - targets
@@ -753,6 +800,14 @@ public final class InboxSendModel: ObservableObject {
                 self.work[Self.stagingKey] = nil
                 self.records.removeValue(forKey: Self.stagingKey)
                 self.publish()
+                // Nothing durable owns these words, and the composer may already
+                // have cleared them. Hand them back — to THIS account only. A
+                // generation bump for the same account (the session re-publishing
+                // its state) still returns them; an account change does not, and
+                // `isolateFromPreviousAccount` has already run by then.
+                if self.accountId == accountId {
+                    self.returnMessage(message, accountId: accountId, targetID: targetID)
+                }
                 guard g == self.accountGeneration else { return }
                 if let refusal = error as? InboxSendRefusal {
                     self.refusal = refusal

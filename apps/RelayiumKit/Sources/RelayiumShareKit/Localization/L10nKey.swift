@@ -2179,6 +2179,67 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case helpAccountFailure = "help.account.failure"
     case helpAccountRecovery = "help.account.recovery"
 
+    // MARK: - A20-A21: iOS help (A20) and received Device Inbox files (A21)
+    //
+    // One contiguous block. The iOS help keys are the iOS table in
+    // `HelpPresentation.topic(forIOS:)`; the `inbox.received*` keys are the
+    // Open / Share / Save to Files actions on a received files row.
+    case helpIOSLanPurpose = "help.ios.lan.purpose"
+    case helpIOSLanStep1 = "help.ios.lan.step1"
+    case helpIOSLanStep2 = "help.ios.lan.step2"
+    case helpIOSLanStep3 = "help.ios.lan.step3"
+    case helpIOSLanBoundary = "help.ios.lan.boundary"
+    case helpIOSLanWhere = "help.ios.lan.where"
+    case helpIOSLanFailure = "help.ios.lan.failure"
+    case helpIOSLanRecovery = "help.ios.lan.recovery"
+    case helpIOSCrossPurpose = "help.ios.cross.purpose"
+    case helpIOSCrossStep1 = "help.ios.cross.step1"
+    case helpIOSCrossStep2 = "help.ios.cross.step2"
+    case helpIOSCrossStep3 = "help.ios.cross.step3"
+    case helpIOSCrossBoundary = "help.ios.cross.boundary"
+    case helpIOSCrossWhere = "help.ios.cross.where"
+    case helpIOSCrossFailure = "help.ios.cross.failure"
+    case helpIOSCrossRecovery = "help.ios.cross.recovery"
+    case helpIOSStoredSendPurpose = "help.ios.storedSend.purpose"
+    case helpIOSStoredSendStep1 = "help.ios.storedSend.step1"
+    case helpIOSStoredSendStep2 = "help.ios.storedSend.step2"
+    case helpIOSStoredSendStep3 = "help.ios.storedSend.step3"
+    case helpIOSStoredSendBoundary = "help.ios.storedSend.boundary"
+    case helpIOSStoredSendWhere = "help.ios.storedSend.where"
+    case helpIOSStoredSendFailure = "help.ios.storedSend.failure"
+    case helpIOSStoredSendRecovery = "help.ios.storedSend.recovery"
+    case helpIOSInboxPurpose = "help.ios.inbox.purpose"
+    case helpIOSInboxStep1 = "help.ios.inbox.step1"
+    case helpIOSInboxStep2 = "help.ios.inbox.step2"
+    case helpIOSInboxStep3 = "help.ios.inbox.step3"
+    case helpIOSInboxBoundary = "help.ios.inbox.boundary"
+    case helpIOSInboxWhere = "help.ios.inbox.where"
+    case helpIOSInboxFailure = "help.ios.inbox.failure"
+    case helpIOSInboxRecovery = "help.ios.inbox.recovery"
+    case helpIOSAccountPurpose = "help.ios.account.purpose"
+    case helpIOSAccountStep1 = "help.ios.account.step1"
+    case helpIOSAccountStep2 = "help.ios.account.step2"
+    case helpIOSAccountStep3 = "help.ios.account.step3"
+    case helpIOSAccountBoundary = "help.ios.account.boundary"
+    case helpIOSAccountWhere = "help.ios.account.where"
+    case helpIOSAccountFailure = "help.ios.account.failure"
+    case helpIOSAccountRecovery = "help.ios.account.recovery"
+    case inboxReceivedOpen = "inbox.receivedOpen"
+    case inboxReceivedShare = "inbox.receivedShare"
+    case inboxReceivedSave = "inbox.receivedSave"
+    /// %@ — the received file names.
+    case inboxReceivedOpenLabel = "inbox.receivedOpenLabel"
+    /// %@ — the received file names.
+    case inboxReceivedShareLabel = "inbox.receivedShareLabel"
+    /// %@ — the received file names.
+    case inboxReceivedSaveLabel = "inbox.receivedSaveLabel"
+    case inboxReceivedAllMissing = "inbox.receivedAllMissing"
+    case inboxReceivedSomeMissing = "inbox.receivedSomeMissing"
+    /// %@ — the Files app route to the receive folder.
+    case inboxReceivedFolderNote = "inbox.receivedFolderNote"
+    /// %@ — the Files app route to the receive folder.
+    case inboxReceivedUnavailable = "inbox.receivedUnavailable"
+
     // MARK: - Sending to one of the account's own devices (iOS → Mac/CLI)
     //
     // The rules this whole section is written against:
