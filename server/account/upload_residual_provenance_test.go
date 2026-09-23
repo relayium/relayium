@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -415,7 +416,10 @@ func TestProvenanceCommitsAndRollsBackWithTheObjectInsert(t *testing.T) {
 	node := newCommitThenFailNode(t)
 	h.registerStorageNode(t, node.URL)
 	id := initUpload(t, h.ts, h.cookie, []byte("MANIFEST"), 10, 0)
-	if _, err := h.store.db.Exec(`ALTER TABLE upload_sessions ADD COLUMN finalized_file_id TEXT NOT NULL DEFAULT ''`); err != nil {
+	// The column is part of the schema once the link exists (A02); the ALTER
+	// stays for a base that predates it.
+	if _, err := h.store.db.Exec(`ALTER TABLE upload_sessions ADD COLUMN finalized_file_id TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
 		t.Fatal(err)
 	}
 	claimDone(t, h, id)

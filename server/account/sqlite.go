@@ -990,6 +990,20 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// EVIDENCE — never purged, its blob never dropped — until a probe answers.
 		// See UploadSessionRow.UnresolvedAt and Service.recoverUnresolvedUploads.
 		`ALTER TABLE upload_sessions ADD COLUMN unresolved_at INTEGER NOT NULL DEFAULT 0`,
+		// The durable finalize outcome of a resumable upload, which is what lets
+		// a caller whose finalize answer was lost ask for it again
+		// (`{"recoverFinalized":true}`, see answerFinalizeRecovery).
+		// finalized_file_id is the stored object this session produced, written
+		// ONLY by the object's own insert transaction (requireUploadSessionOn),
+		// so it exists exactly when that object was committed; it is never
+		// backfilled or guessed from a blob key. finalize_refused_at is when a
+		// non-pair finalize refused the object, written only inside the refusal's
+		// ownership step and only while no link exists. Both default to "no
+		// fact" on every existing row, neither is in any cleanup or purge
+		// predicate, and a binary that predates them never reads them (session
+		// reads name their columns, uploadSessionCols).
+		`ALTER TABLE upload_sessions ADD COLUMN finalized_file_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE upload_sessions ADD COLUMN finalize_refused_at INTEGER NOT NULL DEFAULT 0`,
 		// How long a queued delete's RESPONSIBILITY outlives the first delete that
 		// succeeds. 0 — every row written before this column existed, and every
 		// ordinary enqueue since — keeps the old behaviour exactly: one success and
@@ -4171,6 +4185,38 @@ func (s *SQLiteStore) GetUploadSession(ctx context.Context, id, userID string) (
 	return r, true, nil
 }
 
+// GetUploadFinalizeRecord is the recovery read behind `{"recoverFinalized":true}`:
+// the session's durable finalize facts and, through its link, the object it
+// produced — ONE statement, so the session and object halves are one snapshot.
+// Scoped to (id, userID) exactly like GetUploadSession; ok=false for a missing
+// or foreign session. The object is found ONLY through finalized_file_id, never
+// by blob key, and only when it is still this user's, of this session's
+// purpose, on this session's blob. It writes nothing.
+func (s *SQLiteStore) GetUploadFinalizeRecord(ctx context.Context, id, userID string) (UploadFinalizeRecord, bool, error) {
+	var rec UploadFinalizeRecord
+	var done, fileFound int64
+	err := s.reader().QueryRowContext(ctx,
+		`SELECT s.purpose, s.done, s.unresolved_at, s.finalize_refused_at, s.finalized_file_id,
+		        f.id IS NOT NULL, COALESCE(f.expires_at, 0)
+		   FROM upload_sessions s
+		   LEFT JOIN stored_files f
+		     ON s.finalized_file_id <> '' AND f.id = s.finalized_file_id
+		    AND f.user_id = s.user_id AND f.blob_key = s.blob_key
+		    AND COALESCE(NULLIF(f.purpose, ''), 'share') = COALESCE(NULLIF(s.purpose, ''), 'share')
+		  WHERE s.id = ? AND s.user_id = ?`, id, userID).
+		Scan(&rec.Purpose, &done, &rec.UnresolvedAt, &rec.RefusedAt, &rec.FileID, &fileFound, &rec.FileExpiresAt)
+	if err == sql.ErrNoRows {
+		return UploadFinalizeRecord{}, false, nil
+	}
+	if err != nil {
+		return UploadFinalizeRecord{}, false, err
+	}
+	rec.Purpose = purposeOrShare(rec.Purpose)
+	rec.Done = done != 0
+	rec.FileFound = fileFound != 0
+	return rec, true, nil
+}
+
 // CommitUploadProgress records one committed append: offset, meter, ledger and
 // (for a pre-upload) the room's deadline, in one transaction. See the Store
 // interface for why they are one.
@@ -4637,6 +4683,20 @@ func (s *SQLiteStore) PrepareRefusedUploadReclaim(ctx context.Context, sessionID
 		return false, tx.Commit()
 	}
 	if err := handOffTerminalBlobOn(ctx, tx, r, prov, at); err != nil {
+		return false, err
+	}
+	// The refusal marker a recovering caller reads as outcome "failed"
+	// (answerFinalizeRecovery). Written here, in the unreferenced branch and
+	// before any blob I/O, so it commits with the hand-off or not at all; and
+	// only while the session has no object link, so it can never overwrite a
+	// success (a referenced blob returned above before writing anything). Its
+	// failure fails the whole step, exactly like the hand-off's: the blob stays
+	// with the tombstone and the caller keeps answering "running" until cleanup
+	// ends the row — never a wrong answer.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE upload_sessions SET finalize_refused_at = ?
+		  WHERE id = ? AND done = 1 AND finalized_file_id = '' AND finalize_refused_at = 0`,
+		max(at, 1), sessionID); err != nil {
 		return false, err
 	}
 	// The row stays (it answers the retry 409), but its residual right is now
@@ -5229,23 +5289,44 @@ func insertStoredFileOn(ctx context.Context, ex sqlExecer, f StoredFile) error {
 
 // requireUploadSessionOn is the finalize side of cleanup ownership: when the
 // insert carries f.UploadSessionID, the session it claimed must still exist as
-// this user's finalize-claimed tombstone for this blob, read inside the
+// this user's finalize-claimed tombstone for this blob, checked inside the
 // insert's own transaction. A missing row means a cleanup claim or a room's
 // close owns the blob now — possibly already queued for deletion — and an
 // object pointing at it would be a 200 for bytes that are going away.
+//
+// The check IS the durable session→object link: a compare-and-set that writes
+// f.ID into the tombstone's finalized_file_id and must hit exactly one row. It
+// runs before the insert in the same transaction, so the link commits with the
+// object or not at all — an insert that fails after it (a constraint, a crash
+// before Commit) rolls the link back with it, and a link therefore always names
+// an object this session really stored. Requiring an empty finalized_file_id
+// and a zero finalize_refused_at makes it once-only and keeps it from coexisting with
+// a refusal marker (PrepareRefusedUploadReclaim writes the marker only while
+// the link is still empty). It moves nothing else: last_activity and every
+// cleanup and purge predicate are untouched.
 func requireUploadSessionOn(ctx context.Context, tx *sql.Tx, f StoredFile) error {
 	if f.UploadSessionID == "" {
 		return nil
 	}
-	var one int
-	err := tx.QueryRowContext(ctx,
-		`SELECT 1 FROM upload_sessions
-		  WHERE id = ? AND user_id = ? AND blob_key = ? AND done = 1 AND unresolved_at = 0`,
-		f.UploadSessionID, f.UserID, f.BlobKey).Scan(&one)
-	if err == sql.ErrNoRows {
+	if f.ID == "" {
+		return errors.New("stored file insert: a session-linked object needs its id")
+	}
+	res, err := tx.ExecContext(ctx,
+		`UPDATE upload_sessions SET finalized_file_id = ?
+		  WHERE id = ? AND user_id = ? AND blob_key = ? AND done = 1 AND unresolved_at = 0
+		    AND finalized_file_id = '' AND finalize_refused_at = 0`,
+		f.ID, f.UploadSessionID, f.UserID, f.BlobKey)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
 		return ErrUploadSessionReclaimed
 	}
-	return err
+	return nil
 }
 
 // insertPairRoomObjectOn inserts an object under its room's open precondition AND

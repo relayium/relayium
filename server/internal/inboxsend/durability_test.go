@@ -227,6 +227,7 @@ func TestSendCheckpointFailureStopsBeforeTheNextIrreversibleRequest(t *testing.T
 		fastBackoff(t)
 		watchNonces(t)
 		w := newWorld(t, 4<<20)
+		w.env.Faults.EmulatePreRecoveryServer() // a server that cannot confirm
 		b := breakAt(w, atFinalize)
 		_, e := sendOne(t, w)
 		quota := w.env.QuotaBytes(w.uid)
@@ -253,6 +254,27 @@ func TestSendCheckpointFailureStopsBeforeTheNextIrreversibleRequest(t *testing.T
 		}
 		if _, err := newJournalStore(w.cfgDir).load(j.ID); err != nil {
 			t.Fatalf("record not kept: %v", err)
+		}
+	})
+
+	t.Run("stored object is not recorded: create is not sent; a recovering server lets retry finish", func(t *testing.T) {
+		fastBackoff(t)
+		watchNonces(t)
+		w := newWorld(t, 4<<20)
+		b := breakAt(w, atFinalize)
+		_, e := sendOne(t, w)
+		quota := w.env.QuotaBytes(w.uid)
+		if h := hitsOf(w); h.finalize != 1 || h.create != 0 || len(w.tasks()) != 0 || quota == 0 {
+			t.Fatalf("hits %+v tasks %d quota %d; want a committed upload and no create", h, len(w.tasks()), quota)
+		}
+		assertJournalWriteFailure(t, e)
+		j := b.restore(w)
+		if j.Phase != PhaseFinalizing || e.LocalSendID != j.ID {
+			t.Fatalf("record %s %s, reported %q", j.ID, j.Phase, e.LocalSendID)
+		}
+		res := assertRetryConverges(t, w, j.ID, quota)
+		if string(w.receive(res.TaskID).files["a.txt"]) != payload {
+			t.Fatal("content differs")
 		}
 	})
 
@@ -322,6 +344,7 @@ func TestRetryCheckpointFailureStopsBeforeTheNextIrreversibleRequest(t *testing.
 	t.Run("stored object is not recorded: create is not sent", func(t *testing.T) {
 		fastBackoff(t)
 		w, id := uploaded(t)
+		w.env.Faults.EmulatePreRecoveryServer() // a server that cannot confirm
 		b := breakAt(w, atFinalize)
 		_, err := w.session().Retry(context.Background(), id)
 		quota := w.env.QuotaBytes(w.uid)
@@ -339,6 +362,22 @@ func TestRetryCheckpointFailureStopsBeforeTheNextIrreversibleRequest(t *testing.
 		if h := hitsOf(w); h.init != 1 || h.create != 0 || w.env.QuotaBytes(w.uid) != quota {
 			t.Fatalf("hits %+v quota %d", h, w.env.QuotaBytes(w.uid))
 		}
+	})
+
+	t.Run("stored object is not recorded: a recovering server lets the next retry finish", func(t *testing.T) {
+		fastBackoff(t)
+		w, id := uploaded(t)
+		b := breakAt(w, atFinalize)
+		_, err := w.session().Retry(context.Background(), id)
+		quota := w.env.QuotaBytes(w.uid)
+		if h := hitsOf(w); h.finalize != 1 || h.create != 0 || len(w.tasks()) != 0 || quota == 0 {
+			t.Fatalf("hits %+v tasks %d quota %d; want a committed upload and no create", h, len(w.tasks()), quota)
+		}
+		assertJournalWriteFailure(t, AsError(err))
+		if j := b.restore(w); j.Phase != PhaseFinalizing {
+			t.Fatalf("phase = %s", j.Phase)
+		}
+		assertRetryConverges(t, w, id, quota)
 	})
 }
 

@@ -271,6 +271,8 @@ func TestLostFinalizeIsUnknownAndNeverUploadsAgain(t *testing.T) {
 	fastBackoff(t)
 	watchNonces(t)
 	w := newWorld(t, 4<<20)
+	// A server without finalize recovery (every server before Stage 0).
+	w.env.Faults.EmulatePreRecoveryServer()
 	root := writeTree(t, map[string][]byte{"a.bin": randomBytes(t, 300_000)})
 	w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.DropResponse})
 	_, err := w.session().Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "a.bin")}})
@@ -465,9 +467,10 @@ func TestRefusedTargetOpensNoUpload(t *testing.T) {
 // Interrupted while the create answer is in flight (finalize known): `retry`
 // replays the journalled create and converges on one task.
 func TestInterruptThenRetryByPhase(t *testing.T) {
-	t.Run("finalizing", func(t *testing.T) {
+	t.Run("finalizing (server without finalize recovery)", func(t *testing.T) {
 		fastBackoff(t)
 		w := newWorld(t, 4<<20)
+		w.env.Faults.EmulatePreRecoveryServer()
 		root := writeTree(t, map[string][]byte{"a.txt": []byte("x")})
 		hold := w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.HoldResponse, Hit: make(chan struct{})})
 		id := interruptAt(t, w, hold, filepath.Join(root, "a.txt"))
@@ -477,6 +480,17 @@ func TestInterruptThenRetryByPhase(t *testing.T) {
 		}
 		if w.env.Faults.Hits(sendtest.KeyInit) != 1 || len(w.tasks()) != 0 {
 			t.Fatal("retry must not upload or invent a task")
+		}
+	})
+	t.Run("finalizing (finalize recovery)", func(t *testing.T) {
+		fastBackoff(t)
+		w := newWorld(t, 4<<20)
+		root := writeTree(t, map[string][]byte{"a.txt": []byte("held finalize")})
+		hold := w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.HoldResponse, Hit: make(chan struct{})})
+		id := interruptAt(t, w, hold, filepath.Join(root, "a.txt"))
+		res := assertRetryConverges(t, w, id, w.env.QuotaBytes(w.uid))
+		if string(w.receive(res.TaskID).files["a.txt"]) != "held finalize" {
+			t.Fatal("content differs")
 		}
 	})
 	t.Run("finalized", func(t *testing.T) {

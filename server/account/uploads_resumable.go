@@ -1274,7 +1274,7 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// It is additive in both directions. A client that sends no body is every
 	// client that exists today and is answered exactly as before; a client that
 	// sends one against a server predating this simply has it ignored.
-	completionVerifier, cerr := finalizeCompletionVerifier(r)
+	completionVerifier, recoverFinalized, cerr := finalizeRequestBody(r)
 	if cerr != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -1287,6 +1287,17 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// for retention parameters it cannot honour.
 	if completionVerifier != nil && sess.Purpose != StoredPurposePairRoom {
 		http.Error(w, "completion verifier is only for a pair-room upload", http.StatusBadRequest)
+		return
+	}
+	// The finalize-recovery opt-in, for the purposes that have a use for it
+	// (finalizeRecoverable). For every other request — no opt-in, or a pair-room
+	// session — nothing below changes: the default answers, including the text
+	// 409 for a repeat, are byte-for-byte what they were.
+	recoverAnswer := recoverFinalized && finalizeRecoverable(sess.Purpose)
+	if recoverAnswer && sess.Done {
+		// Already terminal: answer from the durable record without taking the
+		// writer for a claim that can only lose.
+		s.answerFinalizeRecovery(w, r, sess.ID, u.ID)
 		return
 	}
 	// Claim the session terminally AND settle its meter, in one store transaction:
@@ -1310,6 +1321,12 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 	if !claimed {
+		if recoverAnswer {
+			// A racing finalize (or the reaper) claimed it between the read above
+			// and this claim: the same pure read answers it.
+			s.answerFinalizeRecovery(w, r, sess.ID, u.ID)
+			return
+		}
 		http.Error(w, "already finalized", http.StatusConflict)
 		return
 	}
@@ -1552,6 +1569,69 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// session TTL sf still carries. This number is what the sender counts down and
 	// treats as certainty about its code, so it has to be the one that landed.
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": fid, "expiresAt": persisted.ExpiresAt})
+}
+
+// finalizeRecoverable reports whether a finalize of a session with this purpose
+// honours `{"recoverFinalized":true}`. The session id is the operation's
+// identity, so any purpose whose finalize writes the durable link could; the
+// ones listed are the ones with a caller that needs it. A pair-room upload is
+// deliberately NOT one: its object lives on its room's deadline and carries a
+// completion verifier, and its finalize keeps exactly the answers it had
+// (first 200, repeat text 409) with the field ignored.
+func finalizeRecoverable(purpose string) bool {
+	return purpose == StoredPurposeDeviceTask || purpose == StoredPurposeShare
+}
+
+// finalizeRecoveryRetryAfter is the Retry-After (seconds) of a "running" answer.
+const finalizeRecoveryRetryAfter = "5"
+
+// answerFinalizeRecovery answers an opted-in finalize of a session that is
+// already terminal, from its durable finalize record and nothing else. It is a
+// PURE READ: it reserves, meters, refunds, inserts and deletes nothing, and it
+// never looks at the blob. An id is returned only for the object the session's
+// own insert linked, and only while that object is live — so an object cleanup
+// took, or one that expired or was removed, is never handed back, and nothing
+// is re-created.
+//
+//	D1 no session for (id, caller)          404 text, as the default path
+//	D4 link → live object                   200 {"id","expiresAt","recovered":true}
+//	D5 link → object past its expiry        409 {"error":"already_finalized","outcome":"expired"}
+//	D6 link → object gone                   409 … "outcome":"removed"
+//	D7 no link, refused or unresolved       409 … "outcome":"failed"
+//	D8 no link, no refusal (in flight)      409 … "outcome":"running", Retry-After
+//
+// D8 converges: the in-flight finalize commits its link (→ D4) or records its
+// refusal (→ D7); one that never returns leaves the tombstone to cleanup, which
+// deletes the row (→ D1). A session finalized by a binary that predates the
+// link also reads D8 until its tombstone is purged — "cannot confirm", never an
+// id the link did not name.
+func (s *Service) answerFinalizeRecovery(w http.ResponseWriter, r *http.Request, sessionID, userID string) {
+	rec, ok, err := s.store.GetUploadFinalizeRecord(r.Context(), sessionID, userID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	now := s.now().Unix()
+	outcome := ""
+	switch {
+	case rec.FileID != "" && rec.FileFound && rec.FileExpiresAt > now:
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": rec.FileID, "expiresAt": rec.FileExpiresAt, "recovered": true})
+		return
+	case rec.FileID != "" && rec.FileFound:
+		outcome = "expired"
+	case rec.FileID != "":
+		outcome = "removed"
+	case rec.RefusedAt > 0 || rec.UnresolvedAt > 0:
+		outcome = "failed"
+	default:
+		outcome = "running"
+		w.Header().Set("Retry-After", finalizeRecoveryRetryAfter)
+	}
+	httpx.WriteJSON(w, http.StatusConflict, map[string]any{"error": "already_finalized", "outcome": outcome})
 }
 
 // handleUploadStatus (GET /api/files/uploads/{uploadId}) reports the committed

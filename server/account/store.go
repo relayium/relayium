@@ -476,6 +476,25 @@ type UsageEvent struct {
 	Billable     bool
 }
 
+// UploadFinalizeRecord is what a finalize recovery may learn about one
+// session (Store.GetUploadFinalizeRecord), read in one snapshot. It carries no
+// blob key, node, size or verifier: only what decides the answer.
+type UploadFinalizeRecord struct {
+	Purpose      string // the session's purpose, normalized like UploadSessionRow.Purpose
+	Done         bool
+	UnresolvedAt int64
+	// RefusedAt is upload_sessions.finalize_refused_at: when a non-pair
+	// finalize refused this session's object (0 = never recorded).
+	RefusedAt int64
+	// FileID is upload_sessions.finalized_file_id, the object this session's
+	// finalize committed ("" = none committed).
+	FileID string
+	// FileFound: the linked object still exists as this user's object of this
+	// session's purpose on this session's blob. FileExpiresAt is its expiry.
+	FileFound     bool
+	FileExpiresAt int64
+}
+
 // UploadSessionRow is the durable state of one in-progress chunked upload
 // (item #9). The live blob handle is NOT stored — it is reconstructed from
 // NodeID per request via blobFor; the DB replaces the per-session mutex.
@@ -735,11 +754,14 @@ type StoredFile struct {
 	// "no verifier" is answered with a distinct status rather than a refusal that
 	// looks like a wrong proof.
 	CompletionVerifier []byte
-	// UploadSessionID is NOT a column and is never read back. It is a
-	// precondition of the insert, and only a resumable finalize sets it: the
-	// insert lands only if, inside its own transaction, that session row still
-	// exists for this user and blob as a finalize-claimed tombstone (done, not
-	// in recovery). Otherwise it is refused with ErrUploadSessionReclaimed. ""
+	// UploadSessionID is NOT a stored_files column. It is a precondition of
+	// the insert, and only a resumable finalize sets it: the insert lands only
+	// if, inside its own transaction, that session row still exists for this
+	// user and blob as a finalize-claimed tombstone (done, not in recovery, no
+	// object linked and no refusal recorded). Otherwise it is refused with
+	// ErrUploadSessionReclaimed. The same statement records this object's ID
+	// on the session (upload_sessions.finalized_file_id), so the link commits
+	// or rolls back with the object; it is what a finalize recovery reads. ""
 	// — every other writer — inserts exactly as before.
 	//
 	// This is the half of the cleanup ownership rule the insert owns. The
@@ -1613,6 +1635,9 @@ type Store interface {
 	// See the multi-instance-state-migration doc in relayium-ops, item #9.
 	CreateUploadSession(ctx context.Context, row UploadSessionRow, maxPerUser int) (ok bool, err error)
 	GetUploadSession(ctx context.Context, id, userID string) (UploadSessionRow, bool, error)
+	// GetUploadFinalizeRecord is the read-only finalize-recovery view of one of
+	// userID's sessions; see SQLiteStore.GetUploadFinalizeRecord.
+	GetUploadFinalizeRecord(ctx context.Context, id, userID string) (UploadFinalizeRecord, bool, error)
 	// CommitUploadProgress records ONE committed append: it advances the session's
 	// offset to the blob's authoritative size (only ever forward, only while the
 	// session is open, never past max_size), adds exactly the bytes that advance
