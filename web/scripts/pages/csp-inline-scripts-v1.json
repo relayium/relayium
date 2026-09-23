@@ -1,0 +1,18 @@
+{
+  "schema": "relayium.web.csp-inline-scripts",
+  "version": 1,
+  "scripts": [
+    {
+      "id": "theme",
+      "hash": "sha256-90DHLPjSMy6YJPUudw1r0v+ryRrFlQv7l1/N5GjSSJk=",
+      "scope": "every-page",
+      "source": "web/index.html pre-paint theme snippet; THEME_SCRIPT in web/scripts/pages/page-chrome.mjs is a byte-identical copy"
+    },
+    {
+      "id": "cli-copy-builder",
+      "hash": "sha256-hC+O133pxD+rFy7WdsgsjWDBdlxcxDnjnXb9qyar3eY=",
+      "scope": "some-pages",
+      "source": "BUILDER_SCRIPT in web/scripts/pages/article-template.mjs, on articles with a download-command builder"
+    }
+  ]
+}

@@ -160,7 +160,14 @@ jobs:
       - run: npm run check
       - run: npm test -- --run
       - run: npm run build
-      # Runs immediately after build: the scanner serves web/dist and drives a real
+      # Every executable inline script in the BUILT dist must be one
+      # scripts/pages/csp-inline-scripts-v1.json allows, and every hash there
+      # must still be shipped — the bytes nginx will serve, not the generator's
+      # strings, which csp-headers.test.mjs above already covers. It fails on a
+      # missing dist, a missing generated page or an unknown script type, and
+      # prints each allowed hash with its page count.
+      - run: node scripts/check-csp-inline.mjs dist
+      # Runs after build: the scanner serves web/dist and drives a real
       # headless Chrome, so it needs the freshly built output — an earlier position
       # would scan whatever dist happened to be lying around, or nothing at all.
       # Fails on any axe violation not claimed by e2e/a11y-allowlist.json (empty);
