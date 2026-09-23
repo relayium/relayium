@@ -454,6 +454,10 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                         viewModel = viewModel,
                         onDismiss = { showShare = false },
                         onOpenAccount = { destination = Destination.ACCOUNT; showShare = false },
+                        // Storage STAGES the share: the retention and burn
+                        // options and the Upload button live on Cloud, so that
+                        // is where the user is taken (A32 D2).
+                        onOpenCloud = { destination = Destination.CLOUD; showShare = false },
                     )
                 } else {
                     when (destination) {
@@ -514,6 +518,10 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                     }
                     Destination.ACCOUNT -> AccountScreen(viewModel)
                     }
+                    // The same collapsed help at the foot of every destination
+                    // (A31 b): what this screen does, what Relayium can see,
+                    // where things end up, and what to do when it fails.
+                    HelpCard(destination, viewModel.backendOrigin)
                 }
                 }
             }
@@ -888,6 +896,10 @@ private fun JoinScreen(
     )
 
     CreateCard(viewModel, onOpenAccount)
+
+    // Before a link is made, never during one: JoinScreen is drawn only in IDLE
+    // and ENDED, so the preference cannot change under a live link.
+    VerificationSettingCard(viewModel, locked = false)
 
     // The update row lives HERE and only here. Being drawn by JoinScreen — the
     // IDLE and ENDED phases — is what makes "a check can never interrupt a
@@ -1385,6 +1397,7 @@ internal fun errorText(key: String): Int = when (key) {
     "error_legacy_no_offer" -> R.string.error_legacy_no_offer
     "error_cli_peer" -> R.string.error_cli_peer
     "error_nearby_unavailable" -> R.string.error_nearby_unavailable
+    "error_verification_rejected" -> R.string.error_verification_rejected
     else -> R.string.error_transfer_failed
 }
 
@@ -1493,10 +1506,15 @@ private fun ShareSurface(
     viewModel: TransferViewModel,
     onDismiss: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenCloud: () -> Unit,
 ) {
     val account by viewModel.account.state.collectAsStateWithLifecycle()
     val inbox by viewModel.inbox.collectAsStateWithLifecycle()
+    val cloud by viewModel.cloudUpload.state.collectAsStateWithLifecycle()
     val signedIn = account is AccountState.Ready
+    // A32 D1: the storage surface takes a share only when it has nothing to
+    // lose — never over a running upload, a resumable job or an uncopied link.
+    val cloudFree = com.relayium.android.cloud.CloudUploadModel.acceptsSelection(cloud)
     val connected = state.phase == TransferController.Phase.CONNECTED
 
     ScreenHeader(title = stringResource(R.string.share_title))
@@ -1592,9 +1610,14 @@ private fun ShareSurface(
         )
         DestinationButton(
             label = stringResource(R.string.share_to_cloud),
-            enabled = signedIn,
-            unavailable = if (signedIn) null else stringResource(R.string.share_needs_account),
-            onClick = { viewModel.dispatchStagedToCloud(staged.id); onDismiss() },
+            enabled = signedIn && cloudFree,
+            unavailable = when {
+                !signedIn -> stringResource(R.string.share_needs_account)
+                !cloudFree -> stringResource(R.string.share_cloud_busy)
+                // Not a failure, but said up front: this does not upload yet.
+                else -> stringResource(R.string.share_to_cloud_note)
+            },
+            onClick = { viewModel.dispatchStagedToCloud(staged.id); onOpenCloud() },
         )
     }
 

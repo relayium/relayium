@@ -178,6 +178,32 @@ class AccountClient(private val transport: AccountTransport) {
         }
     }
 
+    /**
+     * `POST /api/account/delete/request`, asking the server to EMAIL a deletion
+     * confirmation link to this account's own address.
+     *
+     * Nothing is deleted by this call. The server reads the address off the
+     * account the bearer resolves to — never off the request, which carries no
+     * body — and answers **200 unconditionally** (its per-user throttle is not
+     * observable), so success means *the request was accepted* and nothing
+     * stronger. Deletion happens only when the emailed link is opened and
+     * confirmed on the website.
+     *
+     * An empty bearer is answered here rather than sent: the server could only
+     * say 401, and offline the round trip would fail with the wrong reason.
+     */
+    suspend fun requestAccountDeletion(token: String): Result<Unit> {
+        if (token.isEmpty()) return fail(AccountFailure.Kind.NOT_SIGNED_IN)
+        val answer = exchange(AccountRequest("POST", "api/account/delete/request", bearer = token))
+            .getOrElse { return Result.failure(it) }
+        return when (answer.status) {
+            200 -> Result.success(Unit)
+            401 -> fail(AccountFailure.Kind.INVALID_CREDENTIALS)
+            429 -> fail(AccountFailure.Kind.RATE_LIMITED)
+            else -> server(answer.status)
+        }
+    }
+
     /** `GET /api/me`. */
     suspend fun fetchMe(token: String): Result<AccountUser> {
         val answer = authedGet("api/me", token).getOrElse { return Result.failure(it) }

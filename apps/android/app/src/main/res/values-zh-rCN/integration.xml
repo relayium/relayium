@@ -50,7 +50,9 @@
     <string name="share_destination_title">要发送到哪里？</string>
     <string name="share_to_session">在当前传输中发送</string>
     <string name="share_text_to_draft">放入消息框</string>
-    <string name="share_to_cloud">上传到你的存储空间</string>
+    <string name="share_to_cloud">准备上传到你的存储空间</string>
+    <string name="share_to_cloud_note">将打开“云端”并选好这些文件。在你选择保存时长并点“上传”之前，不会上传任何内容。</string>
+    <string name="share_cloud_busy">“云端”正在处理另一次上传或正在显示链接——请先在那里完成。这些内容会保留在这里。</string>
     <string name="share_to_inbox">发送到你的某台设备</string>
     <string name="share_needs_session">请先连接一台设备再回来——这些内容会保留在这里。</string>
     <string name="share_needs_account">请先登录——登录期间这些内容会保留在这里。</string>

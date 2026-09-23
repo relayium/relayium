@@ -126,6 +126,7 @@ class TransferControllerTest {
         timeouts: TransferController.Timeouts = quietTimeouts(),
         store: ReceiveStore? = null,
         intent: TransferController.Intent = TransferController.Intent.JOINER,
+        verifyPeers: () -> Boolean = { false },
     ): Rig {
         val signaling = FakeSignaling()
         val transports = ConcurrentLinkedQueue<FakeTransport>()
@@ -140,6 +141,7 @@ class TransferControllerTest {
             store = store ?: ReceiveStore(temp.newFolder("staging-${System.nanoTime()}")),
             providerOps = ops,
             timeouts = timeouts,
+            verifyPeers = verifyPeers,
         )
         val controller = TransferController(scope, "test-device", deps)
         controllers.add(controller)
@@ -259,6 +261,133 @@ class TransferControllerTest {
         awaitTrue("the genuine leave ends the session") {
             rig.controller.state.value.phase == TransferController.Phase.ENDED
         }
+    }
+
+    // ── A31 (a): the verification boundary ─────────────────────────────────
+
+    private fun oneFile(name: String = "held.bin") = listOf(
+        TransferController.OutgoingSource(FileMeta(name, 3)) { ByteArrayInputStream(byteArrayOf(1, 2, 3)) },
+    )
+
+    private fun manifestsSent(rig: Rig): Int =
+        rig.transport.fileFrames.count { RealtimeFrame.kindOf(it) == RealtimeFrame.KIND_BATCH_ENC }
+
+    @Test
+    fun `with verification off nothing is held, exactly as before`() {
+        val rig = rig(verifyPeers = { false })
+        connect(rig)
+        assertEquals(TransferController.Verification.NONE, rig.controller.state.value.verification)
+        rig.controller.sendFiles(oneFile())
+        awaitTrue("the manifest went out at once") { manifestsSent(rig) == 1 }
+        rig.transport.events.onTextFrame(TextWire.REQUEST)
+        awaitTrue("the conversation is admitted at once") {
+            rig.controller.state.value.textState == TextLaneSession.State.OPEN
+        }
+    }
+
+    @Test
+    fun `with verification on nothing moves in either direction before the codes are answered`() {
+        val rig = rig(verifyPeers = { true })
+        connect(rig)
+        assertEquals(TransferController.Verification.PENDING, rig.controller.state.value.verification)
+
+        rig.controller.sendFiles(oneFile())
+        awaitTrue("the batch is held and says so") { rig.controller.state.value.heldFiles == 1 }
+        val outcomes = ArrayList<Boolean>()
+        rig.controller.sendText("not yet") { outcomes.add(it) }
+        awaitTrue("the message is refused, so the draft stays") { outcomes.size == 1 }
+        assertFalse(outcomes[0])
+        rig.controller.requestText()
+        rig.transport.events.onTextFrame(TextWire.REQUEST)
+        Thread.sleep(150)
+        assertEquals("no file frame of any kind", 0, rig.transport.fileFrames.size)
+        assertEquals("no text frame of any kind", 0, rig.transport.textFrames.size)
+        assertEquals(
+            "the peer's request is held, not admitted",
+            TextLaneSession.State.INCOMING_REQUEST,
+            rig.controller.state.value.textState,
+        )
+        assertTrue(rig.controller.state.value.outgoing.isEmpty())
+    }
+
+    @Test
+    fun `confirming releases the held work exactly once, batch first`() {
+        val rig = rig(verifyPeers = { true })
+        connect(rig)
+        rig.controller.sendFiles(oneFile("first.bin"))
+        rig.controller.sendFiles(oneFile("second.bin"))
+        rig.transport.events.onTextFrame(TextWire.REQUEST)
+        awaitTrue("held") { rig.controller.state.value.heldFiles == 1 }
+        val link = rig.controller.state.value.linkId
+
+        rig.controller.confirmSas(link - 1)
+        Thread.sleep(100)
+        assertEquals("an answer for another link confirms nothing", 0, manifestsSent(rig))
+
+        rig.controller.confirmSas(link)
+        rig.controller.confirmSas(link)
+        awaitTrue("the held batch went") { manifestsSent(rig) == 1 }
+        awaitTrue("and the held conversation was admitted") {
+            rig.controller.state.value.textState == TextLaneSession.State.OPEN
+        }
+        Thread.sleep(150)
+        val state = rig.controller.state.value
+        assertEquals(TransferController.Verification.CONFIRMED, state.verification)
+        assertEquals(0, state.heldFiles)
+        assertEquals("the batch the user chose first", listOf("first.bin"), state.outgoing.map { it.name })
+        assertEquals("released once", 1, manifestsSent(rig))
+        assertEquals(1, rig.transport.textFrames.count { it.contentEquals(TextWire.ACCEPT) })
+    }
+
+    @Test
+    fun `rejecting ends the link as its own ending and sends nothing held`() {
+        val rig = rig(verifyPeers = { true })
+        connect(rig)
+        rig.controller.sendFiles(oneFile())
+        awaitTrue("held") { rig.controller.state.value.heldFiles == 1 }
+        rig.controller.rejectSas(rig.controller.state.value.linkId)
+        awaitTrue("ended") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        assertEquals("error_verification_rejected", rig.controller.state.value.errorKey)
+        assertEquals(0, rig.transport.fileFrames.size)
+        assertEquals(0, rig.controller.state.value.heldFiles)
+        assertEquals(TransferController.Verification.NONE, rig.controller.state.value.verification)
+    }
+
+    @Test
+    fun `an incoming batch cannot be accepted until the codes match`() {
+        val rig = rig(verifyPeers = { true })
+        val remote = connect(rig)
+        promptIncoming(rig, remote, listOf(FileMeta("in.bin", 3)))
+        val prompt = rig.controller.state.value.promptId
+        rig.controller.acceptIncoming(prompt, rig.ops.node(rig.treeDir))
+        Thread.sleep(200)
+        assertTrue("the prompt still stands", rig.controller.state.value.awaitingFolder)
+        assertEquals("no ACCEPT went out", 0, controlFrames(rig, RealtimeFrame.CTRL_ACCEPT))
+
+        rig.controller.confirmSas(rig.controller.state.value.linkId)
+        rig.controller.acceptIncoming(prompt, rig.ops.node(rig.treeDir))
+        awaitTrue("after the compare the same prompt accepts") {
+            controlFrames(rig, RealtimeFrame.CTRL_ACCEPT) == 1
+        }
+    }
+
+    @Test
+    fun `changing the preference during a link changes nothing on it`() {
+        var on = false
+        val rig = rig(verifyPeers = { on })
+        connect(rig)
+        on = true
+        rig.controller.sendFiles(oneFile())
+        awaitTrue("a link that came up unverified stays unverified") { manifestsSent(rig) == 1 }
+        assertEquals(TransferController.Verification.NONE, rig.controller.state.value.verification)
+
+        val second = rig(verifyPeers = { on })
+        connect(second)
+        on = false
+        second.controller.sendFiles(oneFile())
+        awaitTrue("held") { second.controller.state.value.heldFiles == 1 }
+        assertEquals(TransferController.Verification.PENDING, second.controller.state.value.verification)
+        assertEquals("and turning it off released nothing", 0, manifestsSent(second))
     }
 
     // ── R4.2/R13: the end-barrier lease at the adapter ──────────────────────

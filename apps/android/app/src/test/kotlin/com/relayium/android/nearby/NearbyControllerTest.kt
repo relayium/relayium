@@ -363,6 +363,82 @@ class NearbyControllerTest {
     }
 
     /**
+     * A23 G5. The asking side re-sends its request every few seconds until its
+     * own deadline, so a retry already in flight when the user declines lands in
+     * an idle room. It is the same ask, already answered: busy, and no second
+     * question for the user.
+     */
+    @Test
+    fun `a retry after decline inside the prompt's window is busy and asks nothing`() {
+        val rig = rig(selfId = SELF_HIGH)
+        announce(rig, PEER_A, PEER_B)
+        rig.signaling.events.onSignal(PEER_A, offerFrom())
+        awaitTrue("prompted") { rig.nearby.incomingId == PEER_A }
+        rig.controller.rejectPeer(PEER_A, rig.nearby.incomingPromptId)
+        awaitTrue("declined") { rig.nearby.incomingId == null }
+        val promptAfterDecline = rig.nearby.incomingPromptId
+        awaitTrue("told once") { rig.signaling.busyTo().count { it == PEER_A } == 1 }
+
+        rig.signaling.events.onSignal(PEER_A, Signal.linkRequest().toJson())
+        rig.signaling.events.onSignal(PEER_A, offerFrom())
+        awaitTrue("each retry is refused in band") {
+            rig.signaling.busyTo().count { it == PEER_A } == 3
+        }
+        assertNull("and no second prompt", rig.nearby.incomingId)
+        assertEquals(promptAfterDecline, rig.nearby.incomingPromptId)
+        assertTrue("nothing built", rig.transports.isEmpty())
+
+        // The mark is about ONE peer: anyone else still asks normally.
+        rig.signaling.events.onSignal(PEER_B, offerFrom())
+        awaitTrue("B may still ask") { rig.nearby.incomingId == PEER_B }
+    }
+
+    @Test
+    fun `the decline mark lasts only until the prompt's own deadline`() {
+        val rig = rig(selfId = SELF_HIGH, timeouts = quiet().copy(pendingAdmissionMs = 400))
+        announce(rig, PEER_A)
+        rig.signaling.events.onSignal(PEER_A, offerFrom())
+        awaitTrue("prompted") { rig.nearby.incomingId == PEER_A }
+        rig.controller.rejectPeer(PEER_A, rig.nearby.incomingPromptId)
+        awaitTrue("declined") { rig.nearby.incomingId == null }
+        val declinedPrompt = rig.nearby.incomingPromptId
+        rig.signaling.events.onSignal(PEER_A, offerFrom())
+        awaitTrue("the retry was refused") { rig.signaling.busyTo().count { it == PEER_A } == 2 }
+        assertNull(rig.nearby.incomingId)
+        assertEquals("no prompt was raised for the retry", declinedPrompt, rig.nearby.incomingPromptId)
+
+        Thread.sleep(700)
+        rig.signaling.events.onSignal(PEER_A, offerFrom())
+        awaitTrue("a NEW ask after the window is a new question") { rig.nearby.incomingId == PEER_A }
+    }
+
+    @Test
+    fun `a declined peer that leaves and returns asks afresh`() {
+        val rig = rig(selfId = SELF_HIGH)
+        announce(rig, PEER_A, PEER_B)
+        rig.signaling.events.onSignal(PEER_A, offerFrom())
+        awaitTrue("prompted") { rig.nearby.incomingId == PEER_A }
+        rig.controller.rejectPeer(PEER_A, rig.nearby.incomingPromptId)
+        awaitTrue("declined") { rig.nearby.incomingId == null }
+        rig.signaling.events.onPeers(rig.roster(listOf(PEER_B)))
+        awaitTrue("A left") { rig.nearby.devices.none { it.id == PEER_A } }
+        announce(rig, PEER_B, PEER_A)
+        rig.signaling.events.onSignal(PEER_A, offerFrom())
+        awaitTrue("a departure clears the mark") { rig.nearby.incomingId == PEER_A }
+    }
+
+    @Test
+    fun `an unanswered prompt that times out leaves no decline mark`() {
+        val rig = rig(selfId = SELF_HIGH, timeouts = quiet().copy(pendingAdmissionMs = 200))
+        announce(rig, PEER_A)
+        rig.signaling.events.onSignal(PEER_A, offerFrom())
+        awaitTrue("prompted") { rig.nearby.incomingId == PEER_A }
+        awaitTrue("timed out") { rig.nearby.incomingId == null }
+        rig.signaling.events.onSignal(PEER_A, offerFrom())
+        awaitTrue("unanswered is not a decline: asked again") { rig.nearby.incomingId == PEER_A }
+    }
+
+    /**
      * The exact frames that must NOT be able to put a question in front of the
      * user, or open a buffer in this process. Anything in the room can send
      * these; only an ask may raise a prompt.
@@ -573,8 +649,13 @@ class NearbyControllerTest {
         rig.signaling.events.onSignal(PEER_A, offerFrom())
         awaitTrue("first prompt") { rig.nearby.incomingId == PEER_A }
         val stale = rig.nearby.incomingPromptId
-        rig.controller.rejectPeer(PEER_A, stale)
+        // Withdrawn by the device leaving and coming back with the same id (a
+        // local-link peer keeps its identity). A DECLINE no longer serves here:
+        // a declined peer's re-ask inside the prompt's window raises nothing
+        // (A23 G5), see the decline-mark tests.
+        rig.signaling.events.onPeers(rig.roster(listOf(PEER_B)))
         awaitTrue("withdrawn") { rig.nearby.incomingId == null }
+        announce(rig, PEER_B, PEER_A)
         rig.signaling.events.onSignal(PEER_A, offerFrom())
         awaitTrue("a NEW question from the same device") { rig.nearby.incomingId == PEER_A }
         assertNotEquals(stale, rig.nearby.incomingPromptId)

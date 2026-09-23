@@ -91,6 +91,13 @@ class TransferController(
         val store: ReceiveStore,
         val providerOps: ProviderOps,
         val timeouts: Timeouts = Timeouts(),
+        /**
+         * The user's "compare verification codes" preference, read ONCE per
+         * link at the moment it becomes ready (A31 a). Off by default, as on
+         * Apple and the website. A change while a link is up neither releases
+         * nor re-gates anything on that link; it applies to the next one.
+         */
+        val verifyPeers: () -> Boolean = { false },
     )
 
     /** Every deadline, injectable so a test is not a 30-second wait. Defaults
@@ -119,6 +126,24 @@ class TransferController(
     // ── observable state ────────────────────────────────────────────────────
 
     enum class Phase { IDLE, CONNECTING, WAITING_PEER, CONNECTED, ENDED }
+
+    /**
+     * The verification boundary of the CURRENT link (A31 a, parity with Apple's
+     * `LinkWorkspaceModel.verification`).
+     *
+     *  - [NONE]: the preference was off when the link came up. Nothing is
+     *    held; the code stays one tap away, exactly as before.
+     *  - [PENDING]: the user asked to compare codes. No work moves in either
+     *    direction until they answer: an outgoing batch is HELD (not sent, not
+     *    dropped), a message cannot be sent, an incoming batch cannot be
+     *    accepted and an incoming conversation is not admitted.
+     *  - [CONFIRMED]: they matched. Held work was released once, in order.
+     *
+     * Local only. Nothing about it goes on the wire, and the handshake's
+     * commit-reveal and AEAD are identical in every state — this changes what
+     * waits for a person, never the encryption.
+     */
+    enum class Verification { NONE, PENDING, CONFIRMED }
 
     /**
      * Why this device is in the room, and therefore who offers on a wire that
@@ -235,6 +260,11 @@ class TransferController(
          *  this by watching phases, which conflate and repeat. */
         val linkId: Int = 0,
         val sas: String? = null,
+        /** See [Verification]. */
+        val verification: Verification = Verification.NONE,
+        /** Files in an outgoing batch held behind [Verification.PENDING]; 0
+         *  when nothing is held. Shown so the compare step can say they wait. */
+        val heldFiles: Int = 0,
         /** A stable identifier the UI maps to localised copy. Never raw text. */
         val errorKey: String? = null,
         /** Why relay will not be available to this cross-network session —
@@ -513,6 +543,24 @@ class TransferController(
      * is NOT enough to prove the answer belongs to the ask; this is.
      */
     private var pendingPromptId = 0
+
+    /**
+     * Peers whose prompt the user DECLINED, keyed to that prompt's id, with the
+     * prompt's own deadline timer still running for it (A23 G5, parity with the
+     * Apple `LinkRoomRouter.declinedAsks`).
+     *
+     * The asking side re-sends its request every few seconds until its own
+     * deadline, so a retry already in flight when the user said no reaches an
+     * idle room. Without the mark it raised a SECOND prompt for a question the
+     * user had just answered. While a mark stands that peer's asks are answered
+     * `busy` and nothing is shown. It lasts exactly as long as the declined
+     * prompt would have stood — the window in which retries of that same ask can
+     * still arrive — and goes early when the peer leaves the roster, the room
+     * changes, or the user taps Connect on that very device.
+     */
+    private val declinedPeers = HashMap<String, DeclineMark>()
+
+    private class DeclineMark(val promptId: Int, val timer: ScheduledFuture<*>?)
 
     /** A room drop that arrived while a connection was live. The reconnect is
      *  deferred rather than dropped: replacing the registry under a live link
@@ -904,6 +952,7 @@ class TransferController(
                     // not.
                     forgetHeldRoomWork(peerId)
                     if (peerId == pendingPeer) clearPendingAdmission()
+                    declinedPeers.remove(peerId)?.timer?.cancel(false)
                     if (admission == PeerAdmission.EXPLICIT) publishNearby()
                 }
                 override fun onIceGrant(data: Json) = postRoom(room) {
@@ -982,6 +1031,7 @@ class TransferController(
             // "the other peer" to take.
             val present = others.toSet()
             if (pendingPeer != null && pendingPeer !in present) clearPendingAdmission()
+            forgetDeclined(keep = { it in present })
             publishNearby()
             return
         }
@@ -1461,6 +1511,13 @@ class TransferController(
         val registry = linkSession ?: return
         val pending = pendingPeer
 
+        // Declined inside that prompt's window: a retry of the SAME ask is
+        // refused in band, and the user is not asked a second time.
+        if (declinedPeers.containsKey(from)) {
+            if (asks) signaling?.sendSignal(from, Signal.busy().toJson())
+            return
+        }
+
         if (pending == null) {
             if (!asks) return
             if (provesLink) registry.recordProvenLink(from)
@@ -1557,14 +1614,32 @@ class TransferController(
      *  because that is what the prompt belongs to. */
     private fun armPendingAdmission(room: Int) {
         pendingTimer?.cancel(false)
+        val prompt = pendingPromptId
         pendingTimer = session.schedule(
             {
-                pendingTimer = null
-                if (roomGen != room || pendingPeer == null) return@schedule
-                rejectPendingAdmission(null)
+                if (roomGen != room) return@schedule
+                if (pendingPeer != null && pendingPromptId == prompt) {
+                    pendingTimer = null
+                    rejectPendingAdmission(null)
+                    return@schedule
+                }
+                // The prompt was DECLINED and this is its deadline: the window
+                // for retries of that ask is over, so the mark goes with it.
+                declinedPeers.entries.removeAll { it.value.promptId == prompt }
             },
             deps.timeouts.pendingAdmissionMs, TimeUnit.MILLISECONDS,
         )
+    }
+
+    /** Drop the decline marks for peers no longer present, or all of them. */
+    private fun forgetDeclined(keep: (String) -> Boolean = { false }) {
+        val it = declinedPeers.entries.iterator()
+        while (it.hasNext()) {
+            val entry = it.next()
+            if (keep(entry.key)) continue
+            entry.value.timer?.cancel(false)
+            it.remove()
+        }
     }
 
     /** Retire the prompt in silence. For the cases where the peer already knows:
@@ -1581,8 +1656,15 @@ class TransferController(
     /** Retire the prompt and TELL the peer, with the same `busy` an established
      *  session sends. [errorKey] is what this side shows, and is null for an
      *  ordinary decline — refusing a device is not a fault. */
-    private fun rejectPendingAdmission(errorKey: String?) {
+    private fun rejectPendingAdmission(errorKey: String?, declined: Boolean = false) {
         val peer = pendingPeer
+        if (declined && peer != null) {
+            // The prompt's deadline timer is handed to the mark instead of being
+            // cancelled: when it fires it retires the mark.
+            declinedPeers.remove(peer)?.timer?.cancel(false)
+            declinedPeers[peer] = DeclineMark(pendingPromptId, pendingTimer)
+            pendingTimer = null
+        }
         clearPendingAdmission()
         if (peer != null) signaling?.sendSignal(peer, Signal.busy().toJson())
         if (errorKey != null) _state.value = _state.value.copy(errorKey = errorKey)
@@ -1614,6 +1696,8 @@ class TransferController(
             linkId = mine,
             wire = null,
             sas = null,
+            verification = Verification.NONE,
+            heldFiles = 0,
             errorKey = null,
             incoming = emptyList(),
             outgoing = emptyList(),
@@ -1665,7 +1749,9 @@ class TransferController(
         }
         // A prompt from someone ELSE is retired: leaving it standing would let a
         // later Accept connect to a device the user has moved on from.
-        if (pendingPeer != null) rejectPendingAdmission(null)
+        if (pendingPeer != null) rejectPendingAdmission(null, declined = true)
+        // The person chose this device now; an earlier "no" to it is superseded.
+        declinedPeers.remove(peerId)?.timer?.cancel(false)
         // MINTER, because this device is the one that dialled. On the shipped
         // legacy wire that is what decides who offers, and a Nearby room has no
         // pairing code to infer it from.
@@ -1726,7 +1812,7 @@ class TransferController(
     fun rejectPeer(peerId: String, expectedPrompt: Int) = post {
         if (expectedPrompt != pendingPromptId) return@post
         if (pendingPeer != peerId) return@post
-        rejectPendingAdmission(null)
+        rejectPendingAdmission(null, declined = true)
     }
 
     /** Search again now, after a failure the user can see. Resets the backoff,
@@ -1855,6 +1941,7 @@ class TransferController(
         helloTimer?.cancel(false)
         helloTimer = null
         clearPendingAdmission()
+        forgetDeclined()
         runCatching { signaling?.close() }
         signaling = null
         roster = emptyList()
@@ -2045,10 +2132,15 @@ class TransferController(
         lastTextActivity = System.currentTimeMillis()
         armTextIdle(epoch)
         startRenewal(epoch)
+        // Read once, here. A toggle later in this link changes nothing on it.
+        val verify = deps.verifyPeers()
+        heldBatch = null
         _state.value = _state.value.copy(
             phase = Phase.CONNECTED,
             wire = wire,
             sas = sas,
+            verification = if (verify) Verification.PENDING else Verification.NONE,
+            heldFiles = 0,
             errorKey = null,
             textState = text?.state ?: TextLaneSession.State.IDLE,
             textLimit = text?.plainLimit ?: com.relayium.protocol.TextWire.MAX_BYTES,
@@ -2612,6 +2704,9 @@ class TransferController(
     fun acceptIncoming(promptId: Int, tree: ProviderOps.Node?) = post {
         val lane = fileLane ?: return@post
         if (promptId != promptCounter || !_state.value.awaitingFolder) return@post
+        // Accepting releases a write to this user's disk: never before the codes
+        // were compared. The prompt STAYS — it is answered after the compare.
+        if (verificationPending) return@post
         val mine = epoch
         if (tree == null) {
             bumpReceiveGen()
@@ -2706,6 +2801,20 @@ class TransferController(
         if (expectedLink != null && expectedLink != epoch) return@post
         val lane = fileLane ?: return@post
         if (sources.isEmpty() || _state.value.fileLaneDown) return@post
+        if (verificationPending) {
+            // HELD, not sent and not dropped: the user asked for this batch and
+            // is owed it once they have compared the codes. One batch, as the
+            // lane itself carries one at a time; a second is refused.
+            if (heldBatch == null) {
+                heldBatch = HeldBatch(sources, epoch)
+                _state.value = _state.value.copy(heldFiles = sources.size)
+            }
+            return@post
+        }
+        startOutgoing(lane, sources)
+    }
+
+    private fun startOutgoing(lane: FileLaneSession, sources: List<OutgoingSource>) {
         val mine = epoch
         retirePump()
         batchGen++
@@ -2736,6 +2845,12 @@ class TransferController(
      * be genuinely retired, and this is that edge.
      */
     fun cancelSend() = post {
+        if (heldBatch != null) {
+            // A batch that never reached the lane: nothing to tell the peer.
+            heldBatch = null
+            _state.value = _state.value.copy(heldFiles = 0)
+            return@post
+        }
         val lane = fileLane ?: return@post
         retirePump()
         batchGen++
@@ -2971,7 +3086,11 @@ class TransferController(
             // screen said why. The pair was already admitted and authenticated
             // when the link came up; this is not a second consent. The older
             // wire keeps its prompt: there the conversation IS the connection.
-            if (requestedNow && lane.state == TextLaneSession.State.INCOMING_REQUEST) {
+            // Not while the codes are unanswered: the request is HELD in
+            // INCOMING_REQUEST and admitted by [confirmSas].
+            if (requestedNow && lane.state == TextLaneSession.State.INCOMING_REQUEST &&
+                !verificationPending
+            ) {
                 lastTextActivity = System.currentTimeMillis()
                 // Counted, because the state passes through INCOMING_REQUEST in
                 // one executor turn and an observer polling the published state
@@ -3057,12 +3176,14 @@ class TransferController(
     }
 
     fun requestText() = post {
+        if (verificationPending) return@post
         val lane = textLane ?: return@post
         lastTextActivity = System.currentTimeMillis()
         if (lane.canRequest) applyText(epoch, lane.request())
     }
 
     fun acceptText() = post {
+        if (verificationPending) return@post
         val lane = textLane ?: return@post
         lastTextActivity = System.currentTimeMillis()
         if (lane.state == TextLaneSession.State.INCOMING_REQUEST) applyText(epoch, lane.accept())
@@ -3104,6 +3225,12 @@ class TransferController(
         // be sealed for another. The outcome is `false` — the conservative
         // answer for a draft, which the caller then keeps rather than clears.
         if (expectedLink != null && expectedLink != epoch) {
+            onOutcome?.invoke(false)
+            return@post
+        }
+        // Refused, not held, while the codes are unanswered — as on Apple, where
+        // the composer is closed until then. The draft stays in the field.
+        if (verificationPending) {
             onOutcome?.invoke(false)
             return@post
         }
@@ -3206,6 +3333,57 @@ class TransferController(
         endSession(null)
     }
 
+    // ── the verification boundary (A31 a) ───────────────────────────────────
+
+    private class HeldBatch(val sources: List<OutgoingSource>, val link: Int)
+
+    /** The one outgoing batch held behind [Verification.PENDING]. */
+    private var heldBatch: HeldBatch? = null
+
+    private val verificationPending: Boolean
+        get() = _state.value.verification == Verification.PENDING
+
+    /**
+     * The user compared the codes and they MATCH. The only way held work is
+     * released, and released once: the held batch first, because it is what the
+     * user asked for before they were asked anything, then a conversation the
+     * peer requested while the codes were on screen (`link/1` only; the older
+     * wire keeps its own prompt).
+     *
+     * [expectedLink] is the [State.linkId] the screen was showing: an answer
+     * composed against one link must not confirm the next.
+     */
+    fun confirmSas(expectedLink: Int) = post {
+        if (expectedLink != epoch) return@post
+        if (!verificationPending) return@post
+        _state.value = _state.value.copy(verification = Verification.CONFIRMED, heldFiles = 0)
+        val held = heldBatch
+        heldBatch = null
+        val files = fileLane
+        if (held != null && held.link == epoch && files != null && !_state.value.fileLaneDown) {
+            startOutgoing(files, held.sources)
+        }
+        val text = textLane
+        if (!isLegacy && text != null && text.state == TextLaneSession.State.INCOMING_REQUEST) {
+            lastTextActivity = System.currentTimeMillis()
+            _state.value = _state.value.copy(textAutoAdmits = _state.value.textAutoAdmits + 1)
+            applyText(epoch, text.accept())
+        }
+    }
+
+    /**
+     * The codes DIFFER. Terminal and named as its own ending, so the screen can
+     * say why rather than report an ordinary hangup. Nothing held was sent, and
+     * nothing is: the held batch goes with the link.
+     */
+    fun rejectSas(expectedLink: Int) = post {
+        if (expectedLink != epoch) return@post
+        if (!verificationPending) return@post
+        heldBatch = null
+        announceLeave()
+        endSession("error_verification_rejected")
+    }
+
     /** Tell the peer this side is going, if there is a peer and a wire that can
      *  carry it. The authenticated leave is a `link/1` signal — it rides the
      *  `link` generation and carries an HMAC over a link payload. Sending one to
@@ -3248,6 +3426,8 @@ class TransferController(
                 phase = Phase.WAITING_PEER,
                 wire = null,
                 sas = null,
+                verification = Verification.NONE,
+                heldFiles = 0,
                 // Cleared, not preserved: this is a live surface the user acts
                 // on next, and a stale failure standing over a fresh list reads
                 // as the list being broken.
@@ -3280,6 +3460,8 @@ class TransferController(
         _state.value = _state.value.copy(
             phase = Phase.ENDED,
             errorKey = errorKey ?: _state.value.errorKey,
+            verification = Verification.NONE,
+            heldFiles = 0,
             receiveProgress = null,
             sendProgress = null,
             awaitingFolder = false,
@@ -3343,6 +3525,7 @@ class TransferController(
         fileLane = null
         textLane = null
         dropPendingText()
+        heldBatch = null
         wireProfile = null
         peerId = ""
         receivedBytes = 0
@@ -3359,6 +3542,7 @@ class TransferController(
         reconnectTimer?.cancel(false)
         reconnectTimer = null
         clearPendingAdmission()
+        forgetDeclined()
         runCatching { signaling?.close() }
         signaling = null
         linkSession = null

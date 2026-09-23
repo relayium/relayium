@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="help_title">使用说明</string>
+    <string name="help_collapsed">已收起</string>
+    <string name="help_expanded">已展开</string>
+    <string name="help_steps_heading">步骤</string>
+    <string name="help_boundary_heading">Relayium 能看到什么</string>
+    <string name="help_where_heading">内容最终在哪里</string>
+    <string name="help_trouble_heading">如果不成功</string>
+    <string name="help_open_guide">在 relayium.com 阅读指南</string>
+    <string name="help_guide_language">zh</string>
+
+    <string name="help_transfer_purpose">用六位数代码连接任意位置的一台设备，然后在这条连接上发送文件和消息。两台设备不需要在同一网络。</string>
+    <string name="help_transfer_step1">一台设备创建链接，这需要账户；加入链接永远不需要账户。</string>
+    <string name="help_transfer_step2">另一台设备输入六位数代码、粘贴链接或扫描二维码。</string>
+    <string name="help_transfer_step3">连接后选择文件或输入消息。发给你的文件会等你选好保存位置后才保存。</string>
+    <string name="help_transfer_boundary">文件和消息在发送设备上加密，只在另一台设备上解密；Relayium 从不持有密钥。Relayium 负责介绍两台设备，视网络情况，连接可能经由 Relayium 中继传输，中继只能看到密文。经中继传输的流量计入创建链接的账户的额度。</string>
+    <string name="help_transfer_where">收到的文件保存在你为每批文件选择的文件夹里。消息只保留在两台设备的应用中，连接结束后即消失。以这种方式发送的内容不会存储在 Relayium 服务器上。</string>
+    <string name="help_transfer_failure">代码只在几分钟内有效，输错的代码和过期的代码会得到同样的提示。经中继的连接在中继时长用完时也会结束。</string>
+    <string name="help_transfer_recovery">创建一个新代码并发给对方。如果连接结束了，重新连接即可；已经保存的内容不会丢失。</string>
+
+    <string name="help_nearby_purpose">无需代码，发送到同一网络中的设备。</string>
+    <string name="help_nearby_step1">选择搜索方式：仅限本 Wi-Fi 上的 Relayium 应用，或通过 relayium.com 查找网页版、Mac 应用和其他设备。</string>
+    <string name="help_nearby_step2">点按你要连接的设备。请求连接你的设备会弹出提示；只接受你认识的设备。</string>
+    <string name="help_nearby_step3">像代码连接一样发送文件和消息。请保持 Relayium 打开：离开应用会停止搜索并关闭传输。</string>
+    <string name="help_nearby_boundary">文件端到端加密，Relayium 从不持有密钥。仅限 Wi-Fi 的搜索不会向 Relayium 服务器发送任何内容，连介绍设备也不需要。relayium.com 搜索会介绍从同一公网地址上网的设备，并显示这个地址。</string>
+    <string name="help_nearby_where">收到的文件保存在你为每批文件选择的文件夹里。消息只保留在应用中，连接结束后即消失。</string>
+    <string name="help_nearby_failure">列表里没有对方设备。仅限 Wi-Fi 的搜索看不到网页版和 Mac 应用；relayium.com 搜索按公网地址分组，所以 VPN、访客网络或移动数据会让设备分到不同的组。</string>
+    <string name="help_nearby_recovery">选择对方设备也能用的搜索方式，关闭 VPN 并加入同一网络。如果仍然互相看不到，就在“传输”页使用代码，它不需要共享网络。</string>
+
+    <string name="help_inbox_purpose">直接向你已登录的其他设备发送文件和消息，也接收它们发来的，不需要两台设备同时在线连接。</string>
+    <string name="help_inbox_step1">在这里和你的其他设备上登录同一个账户。</string>
+    <string name="help_inbox_step2">选择这台手机的接收方式：关闭、每次询问或自动保存。</string>
+    <string name="help_inbox_step3">选择要发送到的设备。它下次运行时就会取回这份投递。</string>
+    <string name="help_inbox_boundary">每份投递都用接收设备自己的密钥加密，这个密钥不会离开那台设备。Relayium 保存加密后的投递直到被取回，无法读取其中内容。</string>
+    <string name="help_inbox_where">这台手机接受的投递保存在 Relayium 在本机的专属存储中。可在每一项里打开、另存一份或分享。仍在等待的投递会以加密形式留在 relayium.com，直到被取回、被取消或过期。</string>
+    <string name="help_inbox_failure">Relayium 关闭或未登录时收不到任何内容：本应用只在打开时接收，从不在后台接收。</string>
+    <string name="help_inbox_recovery">打开 Relayium 并登录同一个账户，等待中的内容就会送达。如果密钥卡片提示这台手机无法打开投递，请使用“修复密钥”。</string>
+
+    <string name="help_cloud_purpose">把文件加密后上传一次，分享一个链接。对方不需要同时在线，也不需要账户。</string>
+    <string name="help_cloud_step1">选择文件、链接的有效时长，以及是否在首次下载后删除。</string>
+    <string name="help_cloud_step2">点“上传”。所有内容在离开这台手机之前都会先加密。</string>
+    <string name="help_cloud_step3">复制或分享链接。要打开别人发来的链接，粘贴到“打开链接”下。</string>
+    <string name="help_cloud_boundary">密钥位于链接 # 之后的部分，这部分从不发送给服务器，所以 Relayium 存储的是它读不了的内容。任何拿到完整链接的人都能打开文件，请把链接本身当作秘密保管。</string>
+    <string name="help_cloud_where">加密文件会保留在 Relayium 服务器上，直到链接过期或你在“我的文件”中删除。删除后链接立即失效。只有上传它的设备才能重新生成链接。</string>
+    <string name="help_cloud_failure">被缩短、或复制时丢了 # 之后部分的链接无法打开：缺少的是密钥。上传只在 Relayium 打开时进行。</string>
+    <string name="help_cloud_recovery">在这台手机的“我的文件”里重新复制链接，并通过能保持链接完整的方式发送。中断的大文件上传可以在这里继续；小文件需要重新选择。</string>
+
+    <string name="help_account_purpose">你的账户：所用套餐、本期用量、已登录的设备，以及删除账户。</string>
+    <string name="help_account_step1">登录或创建账户。创建链接、上传到云端和设备收件箱都需要账户。</string>
+    <string name="help_account_step2">查看你的套餐以及本期额度和存储空间的用量。本应用只显示套餐，不出售也不更改套餐。</string>
+    <string name="help_account_step3">查看登录到你账户的设备，并可将其中任意一台退出登录。</string>
+    <string name="help_account_boundary">Relayium 保存你的邮箱地址、你的套餐和你传输的字节数。它从不持有你文件的密钥，所以这个页面上的任何内容都打不开它们。</string>
+    <string name="help_account_where">将某台设备退出登录只会结束那台设备的会话；它已经收到的文件仍保留在上面。存储的文件在“云端”页列出和删除。</string>
+    <string name="help_account_failure">本期额度或存储空间用完后，创建链接和上传会停止。加入别人创建的链接不计入你的账户。</string>
+    <string name="help_account_recovery">等到“套餐”下显示的日期额度重置，或在“云端”页删除文件以释放存储空间。</string>
+</resources>

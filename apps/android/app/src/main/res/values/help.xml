@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The help layer (A31 b): one collapsed card at the foot of each destination.
+  English is the source; every key has a Simplified Chinese twin in
+  values-zh-rCN/help.xml. Each claim is about what THIS app does: the folder
+  picker for received files, foreground-only Nearby and Inbox, the Cloud tab's
+  own file list, a read-only plan. Nothing here promises background delivery,
+  in-app purchase, or anything the Mac or iPhone app does and this one does not.
+-->
+<resources>
+    <string name="help_title">How this works</string>
+    <string name="help_collapsed">Collapsed</string>
+    <string name="help_expanded">Expanded</string>
+    <string name="help_steps_heading">Steps</string>
+    <string name="help_boundary_heading">What Relayium can see</string>
+    <string name="help_where_heading">Where things end up</string>
+    <string name="help_trouble_heading">If it doesn\'t work</string>
+    <string name="help_open_guide">Read the guide on relayium.com</string>
+    <!-- Which relayium.com guide language matches the copy the app resolved to. -->
+    <string name="help_guide_language">en</string>
+
+    <string name="help_transfer_purpose">Connect to one device anywhere with a six-digit code, then send files and messages on that connection. The two devices do not have to be on the same network.</string>
+    <string name="help_transfer_step1">One device creates a link. That needs an account; joining one never does.</string>
+    <string name="help_transfer_step2">The other device enters the six-digit code, pastes the link, or scans the code.</string>
+    <string name="help_transfer_step3">Once connected, choose files or type a message. Files sent to you wait until you choose where to save them.</string>
+    <string name="help_transfer_boundary">Files and messages are encrypted on the sending device and decrypted only on the other one; Relayium never has the key. Relayium introduces the two devices, and depending on the networks a Relayium relay may carry the connection. The relay only ever sees ciphertext. Relayed bytes count toward the allowance of the account that created the link.</string>
+    <string name="help_transfer_where">Received files are saved in the folder you choose for each batch. Messages stay only in the app on the two devices and are gone when the connection ends. Nothing sent this way is stored on Relayium\'s servers.</string>
+    <string name="help_transfer_failure">A code works for only a few minutes, and a mistyped or expired code is reported the same way. A relayed connection also ends when its relay time runs out.</string>
+    <string name="help_transfer_recovery">Create a fresh code and pass on the new one. If a connection ends, connect again; nothing already saved is lost.</string>
+
+    <string name="help_nearby_purpose">Send to a device on the same network without a code.</string>
+    <string name="help_nearby_step1">Choose how to search: Relayium apps on this Wi-Fi only, or the website, Mac app and other devices through relayium.com.</string>
+    <string name="help_nearby_step2">Tap the device you want. A device that asks to connect to you shows a prompt; accept only devices you recognise.</string>
+    <string name="help_nearby_step3">Send files and messages as on a code connection. Keep Relayium open: leaving the app stops searching and closes the transfer.</string>
+    <string name="help_nearby_boundary">Files are encrypted end to end, so Relayium never has the key. The Wi-Fi-only search sends nothing to a Relayium server, not even to introduce the devices. The relayium.com search introduces devices that reach the internet from the same public address, and shows that address.</string>
+    <string name="help_nearby_where">Received files are saved in the folder you choose for each batch. Messages stay only in the app and are gone when the connection ends.</string>
+    <string name="help_nearby_failure">The other device is not listed. The Wi-Fi-only search cannot see the website or the Mac app, and the relayium.com search groups devices by public address, so a VPN, a guest network or mobile data puts them in different groups.</string>
+    <string name="help_nearby_recovery">Pick the search the other device can use, turn off any VPN and join the same network. If they still cannot see each other, use a code on the Transfer tab, which needs no shared network.</string>
+
+    <string name="help_inbox_purpose">Send files and messages straight to your other signed-in devices, and receive theirs, without both being connected at the same moment.</string>
+    <string name="help_inbox_step1">Sign in to the same account here and on your other devices.</string>
+    <string name="help_inbox_step2">Choose how this phone receives: off, ask each time, or save automatically.</string>
+    <string name="help_inbox_step3">Pick one of your devices to send to. It collects the delivery the next time it is running.</string>
+    <string name="help_inbox_boundary">Each delivery is encrypted for the receiving device\'s own key, which never leaves that device. Relayium holds the encrypted delivery until it is collected and cannot read what is inside.</string>
+    <string name="help_inbox_where">Deliveries this phone accepts are kept in Relayium\'s own storage on this phone. Open, save a copy or share each one from its entry. A delivery still waiting stays on relayium.com, encrypted, until it is collected, cancelled or expires.</string>
+    <string name="help_inbox_failure">Nothing arrives while Relayium is closed or signed out: this app receives only while it is open, and never in the background.</string>
+    <string name="help_inbox_recovery">Open Relayium and sign in to the same account, and whatever is waiting arrives. If the key card says this phone cannot open deliveries, use Repair key.</string>
+
+    <string name="help_cloud_purpose">Upload encrypted files once and share one link. The other person does not need to be online at the same time, or to have an account.</string>
+    <string name="help_cloud_step1">Choose files, how long the link should keep working, and whether it is deleted after the first download.</string>
+    <string name="help_cloud_step2">Tap Upload. Everything is encrypted on this phone before any of it leaves.</string>
+    <string name="help_cloud_step3">Copy or share the link. To open a link you received, paste it under Open a link.</string>
+    <string name="help_cloud_boundary">The key lives in the part of the link after the #, which is never sent to a server, so Relayium stores something it cannot read. Anyone holding the whole link can open the files, so treat the link as the secret.</string>
+    <string name="help_cloud_where">The encrypted files stay on Relayium\'s servers until the link expires or you delete them under Your files. Deleting them breaks the link at once. A link can be rebuilt only on the device that uploaded it.</string>
+    <string name="help_cloud_failure">A link that was shortened, or copied without the part after the #, cannot be opened: what is missing is the key. Uploading runs only while Relayium is open.</string>
+    <string name="help_cloud_recovery">Copy the link again from Your files on this phone and send it somewhere that keeps it intact. A large upload that stopped can be resumed here; a small one has to be chosen again.</string>
+
+    <string name="help_account_purpose">Your account: the plan you are on, what you have used this period, the devices signed in to it, and deleting it.</string>
+    <string name="help_account_step1">Sign in or create an account. Creating a link, uploading to Cloud and the Device Inbox need one.</string>
+    <string name="help_account_step2">See your plan and how much of this period\'s allowance and storage you have used. This app shows the plan; it does not sell or change one.</string>
+    <string name="help_account_step3">Review the devices signed in to your account and sign any of them out.</string>
+    <string name="help_account_boundary">Relayium holds your email address, your plan and how many bytes you have moved. It never holds the keys to your files, so nothing on this screen can open them.</string>
+    <string name="help_account_where">Signing a device out ends that device\'s session and nothing else; files it already received stay on it. Stored files are listed and deleted on the Cloud tab.</string>
+    <string name="help_account_failure">Creating links and uploading stop once this period\'s allowance or storage is used up. Joining a link somebody else created is not counted against your account.</string>
+    <string name="help_account_recovery">Wait for the allowance to reset on the date shown under Plan, or free storage by deleting files on the Cloud tab.</string>
+</resources>

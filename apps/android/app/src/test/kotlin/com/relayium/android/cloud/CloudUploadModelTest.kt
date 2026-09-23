@@ -433,6 +433,103 @@ class CloudUploadModelTest {
         }
     }
 
+    /**
+     * A32 D1. A share sent to storage used to go straight into `select`, which
+     * cancelled whatever was running and replaced it: a share mid-upload killed
+     * the upload, and a share on the finished screen dropped a link the user
+     * had not copied yet.
+     */
+    @Test
+    fun `a selection arriving mid-upload is refused and the upload carries on`() {
+        val release = java.util.concurrent.CountDownLatch(1)
+        val reading = java.util.concurrent.CountDownLatch(1)
+        val closedEarly = java.util.concurrent.atomic.AtomicBoolean(false)
+        uploadServer().use { server ->
+            val account = account(scope, owner)
+            signIn(account)
+            val model = model(server, account, open = { selection ->
+                object : PlaintextSource {
+                    private var done = false
+                    override val name = selection.name
+                    override val size = selection.size
+                    override fun read(max: Int): ByteArray {
+                        reading.countDown()
+                        release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                        if (done) return ByteArray(0)
+                        done = true
+                        return ByteArray(selection.size.toInt())
+                    }
+                    override fun close() {
+                        if (release.count > 0) closedEarly.set(true)
+                        release.countDown()
+                    }
+                }
+            })
+            model.select(selection, model.beginSelection())
+            await({ model.state.value }) { it is CloudUploadModel.State.Selected }
+            model.upload()
+            assertTrue(reading.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            await({ model.state.value }) { it is CloudUploadModel.State.Uploading }
+
+            model.select(listOf(CloudSelection("content://x/9", "shared.txt", 5)), model.beginSelection())
+            Thread.sleep(150)
+            assertTrue(
+                "the running upload is still the state, not the share",
+                model.state.value is CloudUploadModel.State.Uploading,
+            )
+            assertFalse("and its sources were not closed under it", closedEarly.get())
+
+            release.countDown()
+            val ready = await({ model.state.value }) { it is CloudUploadModel.State.Ready }
+                    as CloudUploadModel.State.Ready
+            assertEquals("the upload that finished is the original one", 2, ready.files)
+        }
+    }
+
+    @Test
+    fun `a selection arriving on a finished link keeps the link on screen`() {
+        uploadServer().use { server ->
+            val account = account(scope, owner)
+            signIn(account)
+            val model = model(server, account)
+            model.select(selection, model.beginSelection())
+            await({ model.state.value }) { it is CloudUploadModel.State.Selected }
+            model.upload()
+            val ready = await({ model.state.value }) { it is CloudUploadModel.State.Ready }
+
+            model.select(listOf(CloudSelection("content://x/9", "shared.txt", 5)), model.beginSelection())
+            model.selectionUnreadable(model.beginSelection())
+            Thread.sleep(150)
+            assertEquals("the uncopied link is still what the user sees", ready, model.state.value)
+
+            // After the user moves on, a selection is accepted as ever.
+            model.reset()
+            await({ model.state.value }) { it is CloudUploadModel.State.Idle }
+            model.select(listOf(CloudSelection("content://x/9", "shared.txt", 5)), model.beginSelection())
+            await({ model.state.value }) { it is CloudUploadModel.State.Selected }
+        }
+    }
+
+    /** The one predicate both the share destination and `select` read. */
+    @Test
+    fun `only a surface with nothing to lose accepts a new selection`() {
+        val accepts = CloudUploadModel.Companion::acceptsSelection
+        assertTrue(accepts(CloudUploadModel.State.Idle))
+        assertTrue(accepts(CloudUploadModel.State.Selected(selection, 14)))
+        assertTrue(accepts(CloudUploadModel.State.Failed(CloudFailure(CloudFailure.Kind.MALFORMED))))
+        // The in-app picker is offered here too: nothing is resumable, so the
+        // only other action is the discard.
+        assertTrue(accepts(CloudUploadModel.State.Interrupted(1, 1, resumable = false, failure = null)))
+
+        assertFalse(accepts(CloudUploadModel.State.Staging(1, 2)))
+        assertFalse(accepts(CloudUploadModel.State.Verifying))
+        assertFalse(accepts(CloudUploadModel.State.Uploading(1, 2)))
+        assertFalse(accepts(CloudUploadModel.State.Interrupted(1, 1, resumable = true, failure = null)))
+        assertFalse(accepts(CloudUploadModel.State.Uncertain(1, 1)))
+        assertFalse(accepts(CloudUploadModel.State.Completing(1, 1)))
+        assertFalse(accepts(CloudUploadModel.State.Ready("https://relayium.com/d/a#k=b", 1, false, 1)))
+    }
+
     @Test
     fun `a slow picker result never lands on top of a newer one`() {
         uploadServer().use { server ->

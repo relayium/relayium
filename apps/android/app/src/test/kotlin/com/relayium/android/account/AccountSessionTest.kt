@@ -398,6 +398,94 @@ class AccountSessionTest {
         assertEquals(logoutsBefore, h.transport.calls.count { it == "POST api/auth/logout" })
     }
 
+    // ── account deletion request (A31 c) ───────────────────────────────────
+
+    @Test
+    fun `a deletion request is accepted, never reported as a deletion`() = runTest {
+        val h = harness().signedInServer("rlm_cli_a")
+        h.transport.answer("api/account/delete/request", 200, """{"status":"sent"}""")
+        h.session.signIn("a@x.invalid", "pw")
+        testScheduler.advanceUntilIdle()
+
+        h.session.requestAccountDeletion()
+        testScheduler.advanceUntilIdle()
+        assertEquals(RequestState.Requested, h.session.deletion.value)
+        assertEquals(1, h.transport.calls.count { it == "POST api/account/delete/request" })
+        assertEquals("rlm_cli_a", h.transport.bearers[h.transport.calls.indexOf("POST api/account/delete/request")])
+        assertTrue(
+            "the account is still signed in: nothing is deleted until the emailed link is confirmed",
+            h.session.state.value is AccountState.Ready,
+        )
+        assertEquals("rlm_cli_a", h.store.saved)
+    }
+
+    @Test
+    fun `a second press while the request is in flight sends nothing more`() = runTest {
+        val h = harness().signedInServer()
+        h.transport.answer("api/account/delete/request", 200, "")
+        h.session.signIn("a@x.invalid", "pw")
+        testScheduler.advanceUntilIdle()
+
+        h.transport.hold("api/account/delete/request")
+        h.session.requestAccountDeletion()
+        testScheduler.advanceUntilIdle()
+        assertEquals(RequestState.Sending, h.session.deletion.value)
+        h.session.requestAccountDeletion()
+        h.session.requestAccountDeletion()
+        testScheduler.advanceUntilIdle()
+        h.transport.release("api/account/delete/request")
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, h.transport.calls.count { it == "POST api/account/delete/request" })
+        assertEquals(RequestState.Requested, h.session.deletion.value)
+    }
+
+    @Test
+    fun `a deletion answer that lands after a sign-out is dropped`() = runTest {
+        val h = harness().signedInServer()
+        h.transport.answer("api/account/delete/request", 200, "")
+        h.session.signIn("a@x.invalid", "pw")
+        testScheduler.advanceUntilIdle()
+
+        h.transport.hold("api/account/delete/request")
+        h.session.requestAccountDeletion()
+        testScheduler.advanceUntilIdle()
+        h.session.signOut()
+        testScheduler.advanceUntilIdle()
+        assertEquals(AccountState.SignedOut, h.session.state.value)
+        h.transport.release("api/account/delete/request")
+        testScheduler.advanceUntilIdle()
+        assertEquals(
+            "a notice about the previous account must not reach the next screen",
+            RequestState.Idle,
+            h.session.deletion.value,
+        )
+    }
+
+    @Test
+    fun `no deletion request is made without an account`() = runTest {
+        val h = harness()
+        h.transport.answer("api/account/delete/request", 200, "")
+        h.session.requestAccountDeletion()
+        testScheduler.advanceUntilIdle()
+        assertTrue(h.transport.calls.none { it.contains("delete/request") })
+        assertEquals(RequestState.Idle, h.session.deletion.value)
+    }
+
+    @Test
+    fun `a refused deletion request says so and deletes nothing`() = runTest {
+        val h = harness().signedInServer()
+        h.transport.answer("api/account/delete/request", 429, "")
+        h.session.signIn("a@x.invalid", "pw")
+        testScheduler.advanceUntilIdle()
+        h.session.requestAccountDeletion()
+        testScheduler.advanceUntilIdle()
+        assertEquals(
+            RequestState.Failed(AccountFailure(AccountFailure.Kind.RATE_LIMITED)),
+            h.session.deletion.value,
+        )
+        assertTrue(h.session.state.value is AccountState.Ready)
+    }
+
     /** A screen-local request must not supersede the account: a resend that
      *  aborted an in-flight sign-in would be a fence pointed the wrong way. */
     @Test
