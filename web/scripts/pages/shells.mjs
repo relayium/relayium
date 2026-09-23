@@ -214,6 +214,12 @@ const NOINDEX_ROUTES = [
   { file: "verify-email.html", hero: "Verify your email", pitch: "Enter the password you chose to finish verifying your account." },
   { file: "reset-password.html", hero: "Reset your password", pitch: "Choose a new password for your Relayium account." },
   { file: "magic-link.html", hero: "Sign in", pitch: "You opened your sign-in link. Confirm below to finish signing in on this device." },
+  // The account-deletion and reactivation emails (server/account/deletion.go)
+  // link to nested paths, so these shells live in a subdirectory: nginx's
+  // `try_files $uri $uri.html` and server/spa.go both resolve
+  // /account/delete/confirm to account/delete/confirm.html.
+  { file: "account/delete/confirm.html", hero: "Delete your account", pitch: "You opened the link to confirm deleting your Relayium account. Nothing has happened yet — it starts only when you press the button below." },
+  { file: "account/reactivate.html", hero: "Reactivate your account", pitch: "Your account is scheduled for deletion. Reactivate it to cancel the deletion and sign in on this device." },
   { file: "share-target.html", hero: "Shared files", pitch: "Files shared into Relayium from your device land here. JavaScript is required." },
 ];
 

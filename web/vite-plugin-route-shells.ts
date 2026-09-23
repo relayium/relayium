@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { Plugin, ResolvedConfig } from "vite";
 // @ts-expect-error — plain ESM JS shared with the static-page build (no types).
 import { buildShells, applyShell } from "./scripts/pages/shells.mjs";
@@ -53,7 +53,9 @@ export function routeShellsPlugin(): Plugin {
         cliArticles: CLI_ARTICLES,
       });
       for (const shell of shells) {
-        writeFileSync(join(outDir, shell.file), applyShell(index, shell), "utf8");
+        const out = join(outDir, shell.file);
+        mkdirSync(dirname(out), { recursive: true }); // account/delete/confirm.html is nested
+        writeFileSync(out, applyShell(index, shell), "utf8");
       }
       this.info?.(`route shells: wrote ${shells.length} per-route SPA shells`);
     },
