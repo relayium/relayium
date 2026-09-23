@@ -2,7 +2,9 @@ package account
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -180,6 +182,24 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	if s.blobs == nil {
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
 		return
+	}
+	// Idempotency-Key (optional). Without the header nothing below changes.
+	// With it, a key this account already committed is answered HERE, before
+	// the body is read — net/http sends "100 Continue" only on the first body
+	// read, so a replay moves no body bytes and bills nothing — and before
+	// every gate, so a retry whose first attempt used up the daily quota still
+	// hears its object rather than a 429. See answerUploadOperation.
+	opKey, okKey := uploadOperationKey(r)
+	if !okKey {
+		http.Error(w, "bad Idempotency-Key: 16-128 characters of A-Z a-z 0-9 . _ : -", http.StatusBadRequest)
+		return
+	}
+	var opDigest []byte
+	if opKey != "" {
+		opDigest = uploadOperationDigest(r)
+		if s.answerUploadOperation(w, r, u.ID, opKey, opDigest) {
+			return
+		}
 	}
 	// M1: cap concurrent uploads per account so a burst of parallel writes can't
 	// pile MaxFileSize each onto disk before the quota refuses them.
@@ -439,11 +459,28 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		Size: size, BurnAfterRead: maxDL == 1, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
 		MaxDownloads: maxDL, Purpose: purpose, QuotaCharge: charge,
 	}
+	if opKey != "" {
+		// The key's claim commits with the object and its debit, or not at all.
+		sf.Operation = &UploadOperation{UserID: u.ID, Key: opKey, FileID: id, RequestDigest: opDigest, CreatedAt: now}
+	}
 	// Atomic, fail-closed daily-quota + storage-cap enforcement + insert. This is
 	// what actually stops N concurrent uploads from collectively busting the
 	// daily quota or the plan/global cap (the pre-checks race and fail open).
 	// Every refusal and every error below leaves no debit and no object.
 	switch persisted, err := s.persistStoredFile(r.Context(), sf, billable); {
+	case errors.Is(err, ErrUploadOperationExists):
+		// A concurrent request with the same key committed first (both missed
+		// the lookup above). Nothing of this one was written — no object, no
+		// debit — so its blob goes, and it answers with the committed result.
+		// The bytes it moved stay billed (the deferred meter), because they did
+		// move.
+		s.dropBlob(bs, blobKey, nodeID)
+		if !s.answerUploadOperation(w, r, u.ID, opKey, opDigest) {
+			// The winner's row is gone again already (an account purge); there
+			// is no result to give and this request created nothing.
+			http.Error(w, "server error", http.StatusInternalServerError)
+		}
+		return
 	case err != nil:
 		s.dropBlob(bs, blobKey, nodeID)
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -470,6 +507,103 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// traffic eat their plan's monthly cap, contradicting that contract.
 	meterConsumed()
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
+}
+
+// Idempotency-Key bounds. A key is the client's own identifier for one
+// logical upload; it is scoped to the account, so the length floor only has to
+// keep one client's keys from colliding with each other.
+const (
+	uploadOperationKeyMin = 16
+	uploadOperationKeyMax = 128
+)
+
+// uploadOperationKey returns the request's Idempotency-Key: ("", true) when
+// the header is absent, ("", false) when it is present but unusable (empty,
+// repeated, the wrong length, or outside A-Z a-z 0-9 . _ : -).
+func uploadOperationKey(r *http.Request) (string, bool) {
+	vals := r.Header.Values("Idempotency-Key")
+	if len(vals) == 0 {
+		return "", true
+	}
+	if len(vals) != 1 {
+		return "", false
+	}
+	k := vals[0]
+	if len(k) < uploadOperationKeyMin || len(k) > uploadOperationKeyMax {
+		return "", false
+	}
+	for i := 0; i < len(k); i++ {
+		c := k[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9',
+			c == '.', c == '_', c == ':', c == '-':
+		default:
+			return "", false
+		}
+	}
+	return k, true
+}
+
+// uploadOperationDigest is what a keyed single-shot request looked like BEFORE
+// its body was read — which is all a replay may be compared on, since reading
+// the body is exactly what a replay must not do. It covers every request
+// parameter the object's retention is made from, raw as sent (the resolved
+// values depend on settings and plan, which may move between attempts), and
+// the declared Content-Length (-1 when unknown), the one pre-body signal of
+// the body's shape. The ciphertext itself is not covered: that a key names one
+// logical upload is the client's contract.
+func uploadOperationDigest(r *http.Request) []byte {
+	q := r.URL.Query()
+	var b bytes.Buffer
+	b.WriteString("relayium.upload-operation.v1")
+	for _, k := range []string{"purpose", "burnAfterRead", "ttl", "maxDownloads"} {
+		b.WriteByte(0)
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(q.Get(k))
+	}
+	b.WriteByte(0)
+	b.WriteString(strconv.FormatInt(r.ContentLength, 10))
+	sum := sha256.Sum256(b.Bytes())
+	return sum[:]
+}
+
+// answerUploadOperation answers a keyed single-shot upload from the operation
+// this account already committed under that key, and reports whether it did.
+// false means no operation exists and the request must upload normally.
+//
+// Every answer is a pure read: no debit, no meter, no object.
+//   - digest differs: 422 — the key was reused for a different request;
+//   - the object is gone (deleted, expired, download limit spent): 410 — it
+//     is never created a second time;
+//   - otherwise: the original 200 body with `Idempotent-Replay: true`.
+func (s *Service) answerUploadOperation(w http.ResponseWriter, r *http.Request, userID, key string, digest []byte) bool {
+	op, err := s.store.GetUploadOperation(r.Context(), userID, key)
+	if errors.Is(err, ErrNotFound) {
+		return false
+	}
+	if err != nil {
+		// Fail closed: an unknown answer must not become a second upload.
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return true
+	}
+	if !bytes.Equal(op.RequestDigest, digest) {
+		http.Error(w, "Idempotency-Key was already used for a different request", http.StatusUnprocessableEntity)
+		return true
+	}
+	sf, err := s.store.GetStoredFile(r.Context(), op.FileID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return true
+	}
+	if err != nil || sf.UserID != userID || s.now().Unix() >= sf.ExpiresAt ||
+		(sf.MaxDownloads > 0 && sf.DownloadCount >= sf.MaxDownloads) {
+		http.Error(w, "the upload made with this Idempotency-Key no longer exists", http.StatusGone)
+		return true
+	}
+	w.Header().Set("Idempotent-Replay", "true")
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": sf.ID, "expiresAt": sf.ExpiresAt})
+	return true
 }
 
 // uploadMeterBudget bounds recordUploadTraffic's detached context.

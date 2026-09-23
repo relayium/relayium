@@ -762,7 +762,38 @@ type StoredFile struct {
 	// upload handler. Only the capped insert honours it; persistStoredFile
 	// refuses a charge on the uncapped door rather than drop it silently.
 	QuotaCharge *UploadQuotaCharge
+	// Operation is NOT a column of stored_files and is never read back. It is
+	// the single-shot upload's Idempotency-Key record, and only
+	// handleUploadFile sets it. The insert's own transaction claims it FIRST —
+	// before the daily-quota charge, the caps and the object — in
+	// upload_operations, whose primary key (user_id, op_key) is the whole of
+	// the exactly-once rule: a key already claimed refuses the insert with
+	// ErrUploadOperationExists and nothing is written (no object, no debit),
+	// and every later refusal or error in the transaction takes the claim with
+	// it. A committed claim therefore always names an object that was created
+	// together with its debit. nil — every other writer — inserts exactly as
+	// before.
+	Operation *UploadOperation
 }
+
+// UploadOperation is one committed single-shot upload made under an
+// Idempotency-Key: (UserID, Key) is its identity, FileID the object it
+// created, RequestDigest what the request that created it looked like before
+// its body was read (see uploadOperationDigest). The key is scoped to its
+// user: another account's same key is a different operation.
+type UploadOperation struct {
+	UserID        string
+	Key           string
+	FileID        string
+	RequestDigest []byte
+	CreatedAt     int64
+}
+
+// ErrUploadOperationExists is returned by a stored-file insert carrying
+// StoredFile.Operation whose (user, key) another request already committed.
+// Nothing was written: not the object, not its debit. The caller answers with
+// the committed operation's result instead of a second object.
+var ErrUploadOperationExists = errors.New("account: upload operation key already used")
 
 // UploadQuotaCharge is a daily-quota debit carried into the object insert
 // (StoredFile.QuotaCharge). Event is the upload_events row to write — its
@@ -1903,7 +1934,7 @@ type Store interface {
 	// period, no user identity retained), then deletes every user-linked row
 	// (identities, sessions, magic_tokens, devices, cli_tokens,
 	// cli_device_auth, usage_events, stored_files, upload_sessions, pair_rooms,
-	// upload_events, user_stats, usage_monthly, email_tokens, node_tokens,
+	// upload_events, upload_operations, user_stats, usage_monthly, email_tokens, node_tokens,
 	// the user's own nodes) before
 	// finally deleting the users row itself. FK-safe delete order (children
 	// before the users parent, PRAGMA foreign_keys=ON). The final users delete
@@ -2078,7 +2109,15 @@ type Store interface {
 	// For a pair-room object the same transaction also carries the room's open
 	// precondition (ErrPairRoomClosed if it ended first) and is where the object's
 	// expires_at is DECIDED — see StoredFileWrite.
+	//
+	// When f.Operation is set, its (user, key) claim is written first in that
+	// transaction; a key already committed returns ErrUploadOperationExists
+	// with nothing written. CreateStoredFile routes such an insert through this
+	// transaction too.
 	CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (StoredFileWrite, error)
+	// GetUploadOperation reads the committed single-shot upload operation
+	// (userID, key), or ErrNotFound. It never writes.
+	GetUploadOperation(ctx context.Context, userID, key string) (UploadOperation, error)
 	GetStoredFile(ctx context.Context, id string) (StoredFile, error)
 	// GetStoredFileByBlobKey resolves a blob key back to its stored-file row (a
 	// direct-download receipt only carries the blob key). ErrNotFound if absent.
@@ -2253,6 +2292,12 @@ type Store interface {
 	// refused upload never holds one, and a committed object's debit is never
 	// refunded (it leaves only with the 24h prune).
 	RefundUpload(ctx context.Context, id string) error
+	// PruneUploadEvents drops upload_events rows older than `before`, and in
+	// the same pass ages out upload_operations (Idempotency-Key) rows: a row
+	// whose object still exists is kept; the first pass that finds the object
+	// gone stamps the row with its `before`, and a later pass deletes it once
+	// its own `before` is uploadOperationGoneRetention past that stamp — so a
+	// key keeps answering 410 for at least 24h after its object is gone.
 	PruneUploadEvents(ctx context.Context, before int64) error
 	// PruneDownloadReceipts deletes direct-download dedup rows older than `before`
 	// (a generous margin past any in-flight download) to keep the table bounded.
