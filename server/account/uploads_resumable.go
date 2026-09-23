@@ -1195,8 +1195,8 @@ func nodeLabelForLog(nodeID string) string {
 }
 
 // handleUploadFinalize (POST /api/files/uploads/{uploadId}/finalize) commits the
-// upload: it reserves the daily quota against the real byte count, creates the
-// stored-file row, and records stats/metering.
+// upload: it creates the stored-file row with its daily-quota debit (charged
+// against the real byte count) in one transaction, and records stats/metering.
 //
 // The session is claimed terminally, NOT deleted. Success and refusal alike
 // leave the row behind as this upload's tombstone, which is the only thing that
