@@ -127,6 +127,21 @@ func (s *Session) LocalSends() []LocalSend {
 	return out
 }
 
+// CheckRecords proves the local send record directory safe (see
+// journalStore.openDir) without creating it; an absent one is fine. `inbox
+// sent` calls it before any request, so an unsafe directory is reported
+// before anything is read from the server or from it.
+func (s *Session) CheckRecords() error {
+	r, err := s.store.openDir(false)
+	if errors.Is(err, errNoDir) {
+		return nil
+	}
+	if err != nil {
+		return unsafeRecords(err)
+	}
+	return r.Close()
+}
+
 // MaxSentLimit is the most tasks read per device.
 const MaxSentLimit = 500
 

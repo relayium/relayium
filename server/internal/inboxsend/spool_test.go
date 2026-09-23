@@ -1025,3 +1025,131 @@ func TestAmbiguousFirstSaveKeepsTheCopyItNames(t *testing.T) {
 	}
 	assertNoSendState(t, w)
 }
+
+// armOpenDirHook runs fn once, the first time openDir reaches stage.
+func armOpenDirHook(t *testing.T, stage string, fn func()) {
+	t.Helper()
+	var once atomic.Bool
+	openDirHook = func(at string) {
+		if at == stage && once.CompareAndSwap(false, true) {
+			fn()
+		}
+	}
+	t.Cleanup(func() { openDirHook = func(string) {} })
+}
+
+// R17 (review r2 finding 1): the configuration directory is replaced right
+// AFTER it passed its check — by a symbolic link to another directory of
+// this user, or by a new directory at the same path. The opened handle is
+// not the checked directory, so every entry path refuses before any request,
+// and the substitute is never written to.
+func TestConfigDirectorySubstitutedAfterItsCheckIsRefused(t *testing.T) {
+	for _, kind := range []string{"symlink", "new directory"} {
+		t.Run(kind, func(t *testing.T) {
+			fastBackoff(t)
+			w := newWorld(t, 64<<20)
+			root := writeTree(t, map[string][]byte{"big.bin": randomBytes(t, 9<<20)})
+			ctx, cancel := cancelAt(w, atPatch, 1)
+			defer cancel()
+			if _, e := sendResumable(t, w, ctx, filepath.Join(root, "big.bin")); e == nil {
+				t.Fatal("want interrupted")
+			}
+			j := theRecord(t, w)
+			orig := w.cfgDir + "-orig"
+			substitute := filepath.Join(t.TempDir(), "substitute")
+			if err := os.Mkdir(substitute, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			swap := func() {
+				if err := os.Rename(w.cfgDir, orig); err != nil {
+					t.Fatal(err)
+				}
+				var err error
+				if kind == "symlink" {
+					err = os.Symlink(substitute, w.cfgDir)
+				} else {
+					err = os.Mkdir(w.cfgDir, 0o700)
+					substitute = w.cfgDir
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			unswap := func() {
+				os.RemoveAll(w.cfgDir)
+				if err := os.Rename(orig, w.cfgDir); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, op := range []struct {
+				name string
+				run  func(s *Session) error
+			}{
+				{"retry", func(s *Session) error { _, err := s.Retry(context.Background(), j.ID); return err }},
+				{"discard", func(*Session) error { _, err := Discard(w.cfgDir, j.ID); return err }},
+				{"sent preflight", func(s *Session) error { return s.CheckRecords() }},
+				{"send", func(s *Session) error {
+					_, err := s.Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "big.bin")}})
+					return err
+				}},
+			} {
+				s := w.session() // credentials read before the swap
+				h, reads := hitsOf(w), w.env.Faults.Hits("GET /api/devices")
+				armOpenDirHook(t, hookConfigChecked, swap)
+				err := op.run(s)
+				openDirHook = func(string) {}
+				if e := AsError(err); e == nil || !strings.Contains(e.Msg, "changed while it was being opened") {
+					unswap()
+					t.Fatalf("%s = %v; want a refusal of the substituted directory", op.name, err)
+				}
+				if ents, _ := os.ReadDir(substitute); len(ents) != 0 {
+					t.Fatalf("%s wrote into the substitute: %v", op.name, ents)
+				}
+				if hitsOf(w) != h || w.env.Faults.Hits("GET /api/devices") != reads {
+					t.Fatalf("%s made a request", op.name)
+				}
+				unswap()
+			}
+			// Untouched: the record still finishes normally.
+			if _, err := w.session().Retry(context.Background(), j.ID); err != nil {
+				t.Fatalf("retry after restore: %v", err)
+			}
+		})
+	}
+}
+
+// R18: a substitution AFTER the configuration directory was opened and
+// verified changes nothing: the record directory is looked up relative to
+// the verified handle, so the original records are used and the substitute
+// is never touched.
+func TestRecordLookupIsAnchoredToTheVerifiedConfigHandle(t *testing.T) {
+	w := newWorld(t, 4<<20)
+	st := newJournalStore(w.cfgDir)
+	if err := st.ensure(); err != nil {
+		t.Fatal(err)
+	}
+	marker := strings.Repeat("e", 32)
+	if err := os.WriteFile(filepath.Join(st.dir, marker+spoolSuffix), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	orig := w.cfgDir + "-orig"
+	substitute := filepath.Join(t.TempDir(), "substitute")
+	if err := os.MkdirAll(filepath.Join(substitute, journalDirName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	armOpenDirHook(t, hookConfigOpened, func() {
+		if err := os.Rename(w.cfgDir, orig); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(substitute, w.cfgDir); err != nil {
+			t.Fatal(err)
+		}
+	})
+	has, err := st.hasSpool(marker)
+	if err != nil || !has {
+		t.Fatalf("hasSpool = %v, %v; want the ORIGINAL record directory's file", has, err)
+	}
+	if ents, _ := os.ReadDir(filepath.Join(substitute, journalDirName)); len(ents) != 0 {
+		t.Fatalf("the substitute was touched: %v", ents)
+	}
+}

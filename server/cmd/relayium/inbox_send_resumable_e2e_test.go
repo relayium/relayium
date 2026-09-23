@@ -389,3 +389,39 @@ func TestInboxSendDefaultStreamsAndResumableHelpIsHonest(t *testing.T) {
 		}
 	}
 }
+
+// E-R6 (review r2 finding 2): `inbox sent`, both forms, proves the local
+// record directory safe before ANY request.
+func TestInboxSentChecksTheRecordDirectoryBeforeAnyRequest(t *testing.T) {
+	if os.Getenv("RELAYIUM_INBOX_SEND_RHELPER") != "" {
+		t.Skip("helper")
+	}
+	s := newSendEnv(t)
+	dir := filepath.Join(s.senderCfg, "inbox-send")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	for _, args := range [][]string{
+		{"sent", "--json", "--config-dir", s.senderCfg},
+		{"sent", "0123456789abcdef0123456789abcdef", "--json", "--config-dir", s.senderCfg},
+	} {
+		before := s.env.Faults.Hits("GET /api/devices")
+		code, out, errOut := s.cli(args...)
+		if code != 1 || decodeJSON(t, out)["error"] != "local_state" || !strings.Contains(errOut, "writable by other users") {
+			t.Fatalf("%v = %d %s %s", args, code, out, errOut)
+		}
+		if s.env.Faults.Hits("GET /api/devices") != before {
+			t.Fatalf("%v made a request before refusing", args)
+		}
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errOut := s.cli("sent", "--config-dir", s.senderCfg); code != 0 {
+		t.Fatalf("sent on a safe directory = %d %s", code, errOut)
+	}
+}

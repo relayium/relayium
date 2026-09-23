@@ -677,6 +677,10 @@ func runInboxSent(args []string, stdout, stderr io.Writer) int {
 	if s == nil {
 		return rc
 	}
+	// The local send records are proved safe before any request (both forms).
+	if err := s.CheckRecords(); err != nil {
+		return failure(err, asJSON, stdout, stderr)
+	}
 	ctx, cancel := signalContext()
 	defer cancel()
 	if fs.NArg() == 1 {

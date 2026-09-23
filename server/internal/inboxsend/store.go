@@ -65,6 +65,11 @@ var syncRootDir = func(r *os.Root) error {
 // openDir proves the directory safe and opens it. create makes it (0700)
 // when it does not exist; otherwise a missing directory is errNoDir.
 func (s journalStore) openDir(create bool) (*os.Root, error) {
+	// The configuration directory: checked by Lstat, then OPENED, and the
+	// opened handle must be that very directory (a path swapped for a symbolic
+	// link or another directory in between is refused). From here on the
+	// record directory is inspected, created and opened RELATIVE to that
+	// handle, never by resolving the configuration path again.
 	cfi, err := os.Lstat(s.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("the configuration directory: %w", err)
@@ -72,15 +77,30 @@ func (s journalStore) openDir(create bool) (*os.Root, error) {
 	if err := checkDirInfo(cfi); err != nil {
 		return nil, fmt.Errorf("the configuration directory %v", err)
 	}
-	fi, err := os.Lstat(s.dir)
+	openDirHook(hookConfigChecked)
+	cfg, err := os.OpenRoot(s.cfg)
+	if err != nil {
+		return nil, fmt.Errorf("the configuration directory: %w", err)
+	}
+	defer cfg.Close()
+	copened, err := cfg.Stat(".")
+	if err != nil || !os.SameFile(cfi, copened) {
+		return nil, errors.New("the configuration directory changed while it was being opened")
+	}
+	if err := checkDirInfo(copened); err != nil {
+		return nil, fmt.Errorf("the configuration directory %v", err)
+	}
+	openDirHook(hookConfigOpened)
+
+	fi, err := cfg.Lstat(journalDirName)
 	if errors.Is(err, os.ErrNotExist) {
 		if !create {
 			return nil, errNoDir
 		}
-		if err := os.Mkdir(s.dir, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		if err := cfg.Mkdir(journalDirName, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
-		fi, err = os.Lstat(s.dir)
+		fi, err = cfg.Lstat(journalDirName)
 	}
 	if err != nil {
 		return nil, err
@@ -88,7 +108,7 @@ func (s journalStore) openDir(create bool) (*os.Root, error) {
 	if err := checkDirInfo(fi); err != nil {
 		return nil, fmt.Errorf("the send record directory %v", err)
 	}
-	r, err := os.OpenRoot(s.dir)
+	r, err := cfg.OpenRoot(journalDirName)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +129,15 @@ func (s journalStore) openDir(create bool) (*os.Root, error) {
 	}
 	return r, nil
 }
+
+// openDirHook is a TEST-ONLY seam: called at each stage of openDir so a test
+// can substitute a directory at exactly that point.
+var openDirHook = func(string) {}
+
+const (
+	hookConfigChecked = "config-checked" // after the Lstat check, before opening
+	hookConfigOpened  = "config-opened"  // after the handle is verified, before the child lookup
+)
 
 // openRegular opens name inside r only if it is a regular file (never a
 // symbolic link) and is the file an Lstat through r showed.
