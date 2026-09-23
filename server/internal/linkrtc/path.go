@@ -16,10 +16,13 @@ type Path string
 const (
 	// PathRelay: either end of the selected pair is a relay (TURN) candidate.
 	PathRelay Path = "relay"
-	// PathLAN: both ends are host candidates on private, loopback or
-	// link-local addresses.
+	// PathLAN: both ends are host or peer-reflexive candidates on private,
+	// loopback or link-local addresses. A prflx candidate is only the peer's
+	// own address learned from a connectivity check before its host
+	// candidate was signalled, so on a local-scope address it is the same
+	// on-link path.
 	PathLAN Path = "lan"
-	// PathDirect: any other selected pair (srflx/prflx, or a public host).
+	// PathDirect: any other selected pair (srflx, or a public host/prflx).
 	PathDirect Path = "direct"
 	// PathUnknown: no pair is selected (yet).
 	PathUnknown Path = "unknown"
@@ -47,13 +50,18 @@ func Classify(p *webrtc.ICECandidatePair) PathInfo {
 	switch {
 	case p.Local.Typ == webrtc.ICECandidateTypeRelay || p.Remote.Typ == webrtc.ICECandidateTypeRelay:
 		info.Path = PathRelay
-	case p.Local.Typ == webrtc.ICECandidateTypeHost && p.Remote.Typ == webrtc.ICECandidateTypeHost &&
+	case onLink(p.Local.Typ) && onLink(p.Remote.Typ) &&
 		localScope(p.Local.Address) && localScope(p.Remote.Address):
 		info.Path = PathLAN
 	default:
 		info.Path = PathDirect
 	}
 	return info
+}
+
+// onLink: a candidate type that names the endpoint's own address.
+func onLink(t webrtc.ICECandidateType) bool {
+	return t == webrtc.ICECandidateTypeHost || t == webrtc.ICECandidateTypePrflx
 }
 
 // localScope: RFC 1918 / ULA, loopback, or link-local. An unparseable address
