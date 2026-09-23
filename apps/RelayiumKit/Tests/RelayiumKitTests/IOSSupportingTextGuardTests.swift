@@ -478,7 +478,14 @@ final class IOSSupportingTextGuardTests: XCTestCase {
         // the lanes they described, the wall-clock expiry line became the live
         // countdown, and the create card gained the one sentence that says what
         // happens after connecting.
-        XCTAssertEqual(supporting, 118,
+        //
+        // A17-A19 (2026-09-23) moves it to 125. Two came from the iOS composer
+        // commit 3810f99c8, which added them without moving this number (the
+        // count was already 120 at that commit). Five are A17-A19's own: the
+        // browser sign-in hint on the form, the reset sheet's explanation, and
+        // the version card's install-channel line and its two no-offer
+        // sentences.
+        XCTAssertEqual(supporting, 125,
                        "the supporting role should reach every one of the sentences the "
                        + "audit counted across both targets, plus the two disclosure tints")
         // The over-limit byte counter, the not-sent label, and the three

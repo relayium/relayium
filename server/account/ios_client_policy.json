@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "ios": {
+    "policyRevision": 1,
+    "minimumSupportedVersion": "0.0.0",
+    "recommendedVersion": "0.0.0",
+    "appStoreVersion": "",
+    "testFlightVersion": ""
+  }
+}

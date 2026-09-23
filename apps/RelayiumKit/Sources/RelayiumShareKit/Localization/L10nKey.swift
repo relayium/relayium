@@ -651,8 +651,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// sheet and polls `/api/cli/device/*` for an approval. The wording now
     /// names what actually happens.
     ///
-    /// iOS ships the real system button instead (`SignInView`), and this key is
-    /// not rendered there. The macOS app still cannot: a Developer ID build
+    /// iOS ships the real system Apple button (`SignInView`) AND, since A17, the
+    /// same browser device flow under this key, for accounts that have neither
+    /// a password nor an Apple ID. The macOS app still cannot: a Developer ID build
     /// cannot carry `com.apple.developer.applesignin`, so the honest control on
     /// that platform stays a browser sign-in until a Mac App Store track exists.
     case loginBrowserSignIn = "login.browserSignIn"
@@ -2399,6 +2400,50 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case inboxCheckNothingNew = "inbox.checkNothingNew"
     case inboxCheckDone = "inbox.checkDone"
     case inboxCheckFailed = "inbox.checkFailed"
+
+    // MARK: - A17-A19 iOS browser sign-in, password reset request, version support (2026-09-23)
+    /// Beside the iOS browser sign-in button: who it is for.
+    case loginBrowserHint = "login.browserHint"
+    /// The device flow is waiting for the approval in the browser sheet.
+    case loginBrowserWaiting = "login.browserWaiting"
+    /// The sign-in form's way to the reset-link request.
+    case loginForgotPassword = "login.forgotPassword"
+    /// Title of the reset-link request sheet.
+    case loginResetTitle = "login.resetTitle"
+    /// What the reset sheet does, and where the reset itself happens.
+    case loginResetBody = "login.resetBody"
+    /// The reset sheet's submit button.
+    case loginResetSend = "login.resetSend"
+    /// A reset-link request in flight.
+    case loginResetSending = "login.resetSending"
+    /// %@ — the address, as typed. Identical whether or not an account uses it: the endpoint never says, and neither may this sentence.
+    case loginResetRequested = "login.resetRequested"
+    /// The Account tab's version card.
+    case versionTitle = "version.title"
+    /// %@ — marketing version; %@ — build number.
+    case versionCurrent = "version.current"
+    /// How this build was installed.
+    case versionChannelAppStore = "version.channelAppStore"
+    /// How this build was installed.
+    case versionChannelTestFlight = "version.channelTestFlight"
+    /// A build no store can update.
+    case versionChannelDevelopment = "version.channelDevelopment"
+    /// No newer build on this installation's channel.
+    case versionStateCurrent = "version.stateCurrent"
+    /// %@ — the newer version this channel can install.
+    case versionStateAvailable = "version.stateAvailable"
+    /// %@ — the newer version this channel can install.
+    case versionStateRecommended = "version.stateRecommended"
+    /// %@ — the newer version this channel can install. A notice, never a lockout.
+    case versionStateRequired = "version.stateRequired"
+    /// The bundle's version could not be read.
+    case versionStateUnknown = "version.stateUnknown"
+    /// Opens the App Store product page.
+    case versionUpdateAppStore = "version.updateAppStore"
+    /// Opens the TestFlight app.
+    case versionUpdateTestFlight = "version.updateTestFlight"
+    /// TestFlight could not be opened.
+    case versionTestFlightUnavailable = "version.testFlightUnavailable"
 }
 
 /// Keys whose value depends on a count.

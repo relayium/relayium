@@ -187,8 +187,10 @@
 		       · macOS sends `InstallationIdentity`'s 32 random bytes as
 		         `install_id` when a BROWSER sign-in begins
 		         (`HTTPDeviceAuthClient.start`, reached from
-		         `AppEnvironment.makeBrowserLoginModel`). This app has no browser
-		         sign-in path and never calls that client;
+		         `AppEnvironment.makeBrowserLoginModel`). This app's browser
+		         sign-in (A17) is built by `makeIOSBrowserLoginModel` instead,
+		         which passes no installation identifier, so its start request is
+		         the bodyless POST every CLI sends;
 		       · the Apple purchase-continuation flow can post an `appInstanceId`
 		         to `purchase-dispatch`/`purchase-outcome`. **This app does call
 		         `purchase-dispatch`**, so "iOS never reaches it" would be the
