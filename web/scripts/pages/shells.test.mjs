@@ -82,6 +82,8 @@ describe("buildShells", () => {
   it("emits a file per SPA route", () => {
     expect(Object.keys(byFile).sort()).toEqual(
       [
+        "account/delete/confirm.html",
+        "account/reactivate.html",
         "apps.html",
         "cli.html",
         "cross-network.html",
@@ -146,7 +148,7 @@ describe("buildShells", () => {
   });
 
   it("marks the private routes noindex and gives them no canonical", () => {
-    for (const f of ["me.html", "d.html", "verify-email.html", "reset-password.html", "magic-link.html", "share-target.html"]) {
+    for (const f of ["me.html", "d.html", "verify-email.html", "reset-password.html", "magic-link.html", "share-target.html", "account/delete/confirm.html", "account/reactivate.html"]) {
       expect(byFile[f].head, f).toContain('content="noindex, nofollow"');
       expect(byFile[f].head, f).not.toContain("rel=\"canonical\"");
     }
@@ -183,6 +185,8 @@ describe("buildShells", () => {
       "verify-email.html": [`${en.verifyEmail.title} · Relayium`, en.verifyEmail.confirmPrompt],
       "reset-password.html": [`${en.resetPassword.title} · Relayium`, en.resetPassword.lead],
       "magic-link.html": [`${en.magicLink.title} · Relayium`, en.magicLink.lead],
+      "account/delete/confirm.html": [`${en.accountDelete.title} · Relayium`, en.accountDelete.lead],
+      "account/reactivate.html": [`${en.accountReactivate.title} · Relayium`, en.accountReactivate.lead],
     };
     for (const [file, [title, description]] of Object.entries(want)) {
       expect(byFile[file].head, file).toContain(`<title>${esc(title)}</title>`);

@@ -3,14 +3,14 @@
   // Unlike VerifyEmail, the token is only spent on submit (not on mount) — the
   // page just shows the new-password form until the user commits.
   import { onDestroy, onMount } from "svelte";
-  import { resetPassword } from "./auth.svelte";
+  import { resetPassword, offerReactivation } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
   import AuthLanding from "./AuthLanding.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
 
-  type Phase = "boot" | "no-token" | "form" | "success" | "invalid";
+  type Phase = "boot" | "no-token" | "form" | "success" | "invalid" | "pending-deletion";
   let phase = $state<Phase>("boot");
   let token = "";
 
@@ -19,17 +19,30 @@
   let error = $state("");
   let busy = $state(false);
   let redirectTimer: ReturnType<typeof setTimeout> | undefined;
+  // Handed back by the server when the account is scheduled for deletion; the
+  // password was NOT changed and this reset link is spent.
+  let reactivateToken = $state("");
 
   const status = $derived(
     phase === "form" ? t.resetPassword.lead
       : phase === "success" ? t.resetPassword.successBody
       : phase === "invalid" ? t.resetPassword.invalidBody
       : phase === "no-token" ? t.resetPassword.noToken
+      : phase === "pending-deletion" ? t.resetPassword.pendingDeletion
       : "",
   );
   const tone = $derived<"neutral" | "success" | "danger">(
-    phase === "success" ? "success" : phase === "invalid" || phase === "no-token" ? "danger" : "neutral",
+    phase === "success" ? "success"
+      : phase === "invalid" || phase === "no-token" || phase === "pending-deletion" ? "danger"
+      : "neutral",
   );
+
+  // Same hand-off as MagicLink: the reactivate token goes to /account/reactivate
+  // in memory (never in a URL), and that page asks for the click.
+  function toReactivate() {
+    offerReactivation(reactivateToken);
+    navigate("account-reactivate");
+  }
 
   onMount(() => {
     token = new URLSearchParams(location.search).get("token") ?? "";
@@ -47,13 +60,26 @@
     busy = true;
     try {
       const res = await resetPassword(token, newPw);
+      // POST /api/auth/password/reset (handlers.go handleResetPassword):
+      //   200 {user}                 → success (session cookie set)
+      //   200 pending_deletion       → password unchanged, link spent: offer reactivation
+      //   400 invalid_token          → invalid
+      //   400 password too short     → errTooShort (link still valid)
+      //   400 password_too_long      → errTooLong  (link still valid)
+      //   network                    → errNetwork
+      //   500 / other                → resetPassword.errGeneric
       if (res.ok) {
         phase = "success";
         redirectTimer = setTimeout(() => navigate("lan"), 1200);
+      } else if (res.pendingDeletion) {
+        reactivateToken = res.reactivateToken ?? "";
+        phase = "pending-deletion";
       } else if (res.error === "invalid_token") {
         phase = "invalid";
       } else if (res.error === "password too short") {
         error = t.account.errTooShort;
+      } else if (res.error === "password_too_long") {
+        error = t.account.errTooLong;
       } else if (res.error === "network") {
         error = t.account.errNetwork;
       } else {
@@ -73,6 +99,11 @@
   {#if phase === "no-token"}
     <button type="button" class="btn btn-ghost auth-action" onclick={() => navigate("lan")}>{t.resetPassword.backHome}</button>
   {:else if phase === "invalid"}
+    <button type="button" class="btn btn-ghost auth-action" onclick={() => navigate("lan")}>{t.resetPassword.backHome}</button>
+  {:else if phase === "pending-deletion"}
+    {#if reactivateToken}
+      <button type="button" class="btn btn-primary auth-action" onclick={toReactivate}>{t.account.reactivate}</button>
+    {/if}
     <button type="button" class="btn btn-ghost auth-action" onclick={() => navigate("lan")}>{t.resetPassword.backHome}</button>
   {:else if phase === "form"}
     <form class="auth-form" onsubmit={(e) => { e.preventDefault(); onSubmit(); }}>

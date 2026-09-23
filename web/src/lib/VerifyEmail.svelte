@@ -4,14 +4,14 @@
   // postForUser updates auth.svelte's session store too), so this page just
   // shows a brief confirmation and hands off to the app home.
   import { onDestroy, onMount } from "svelte";
-  import { verifyEmail, resendVerification } from "./auth.svelte";
+  import { verifyEmail, resendVerification, offerReactivation } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
   import AuthLanding from "./AuthLanding.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
 
-  type Phase = "boot" | "confirm" | "checking" | "success" | "no-token" | "invalid";
+  type Phase = "boot" | "confirm" | "checking" | "success" | "no-token" | "invalid" | "server-error" | "network";
   let phase = $state<Phase>("boot");
   // The token is kept out of the URL (stripped on mount) and confirmed with the
   // password the user chose at signup — proving they set it so the server keeps
@@ -23,11 +23,28 @@
   async function runVerify() {
     phase = "checking";
     const res = await verifyEmail(token, password);
+    // POST /api/auth/email/verify (handlers.go handleVerifyEmail):
+    //   200 {user}            → success (session cookie set)
+    //   200 pending_deletion  → no session; hand the reactivate token to
+    //                           /account/reactivate (the MagicLink pattern). The
+    //                           server calls this unreachable; defence in depth.
+    //   400 invalid_token     → invalid (+ resend form)
+    //   network               → the request never arrived: the link is untouched,
+    //                           so offer the same form again
+    //   500 / other           → serverError. Not "invalid": the link may already
+    //                           be spent with the account verified.
     if (res.ok) {
       phase = "success";
       redirectTimer = setTimeout(() => navigate("lan"), 1200);
-    } else {
+    } else if (res.pendingDeletion && res.reactivateToken) {
+      offerReactivation(res.reactivateToken);
+      navigate("account-reactivate");
+    } else if (res.error === "network") {
+      phase = "network";
+    } else if (res.error === "invalid_token") {
       phase = "invalid";
+    } else {
+      phase = "server-error";
     }
   }
 
@@ -45,10 +62,14 @@
       : phase === "success" ? t.verifyEmail.successBody
       : phase === "no-token" ? t.verifyEmail.noToken
       : phase === "invalid" ? t.verifyEmail.invalidTitle
+      : phase === "server-error" ? t.verifyEmail.serverError
+      : phase === "network" ? t.account.errNetwork
       : "",
   );
   const tone = $derived<"neutral" | "success" | "danger">(
-    phase === "success" ? "success" : phase === "invalid" || phase === "no-token" ? "danger" : "neutral",
+    phase === "success" ? "success"
+      : phase === "invalid" || phase === "no-token" || phase === "server-error" || phase === "network" ? "danger"
+      : "neutral",
   );
 
   async function onResend() {
@@ -81,7 +102,7 @@
 </script>
 
 <AuthLanding title={t.verifyEmail.title} {status} {tone}>
-  {#if phase === "confirm"}
+  {#if phase === "confirm" || phase === "network"}
     <form class="auth-form" onsubmit={(e) => { e.preventDefault(); runVerify(); }}>
       <div class="ui-field">
         <label for="verify-password">{t.account.password}</label>
@@ -93,7 +114,7 @@
     <button type="button" class="btn btn-link auth-link" onclick={() => runVerify()}>{t.verifyEmail.noPasswordLink}</button>
   {:else if phase === "no-token"}
     <button type="button" class="btn btn-ghost auth-action" onclick={() => navigate("lan")}>{t.verifyEmail.backHome}</button>
-  {:else if phase === "invalid"}
+  {:else if phase === "invalid" || phase === "server-error"}
     <p class="hint">{t.account.checkSpamHint}</p>
     <form class="auth-form" onsubmit={(e) => { e.preventDefault(); onResend(); }}>
       <div class="ui-field">

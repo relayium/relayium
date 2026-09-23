@@ -96,6 +96,8 @@
     "verify-email": () => import("./lib/VerifyEmail.svelte"),
     "reset-password": () => import("./lib/ResetPassword.svelte"),
     "magic-link": () => import("./lib/MagicLink.svelte"),
+    "account-delete": () => import("./lib/AccountDeleteConfirm.svelte"),
+    "account-reactivate": () => import("./lib/AccountReactivate.svelte"),
     // 不是路由，是首页折叠线以下那一大块 —— 借用同一个记忆化加载器，省得再写一套。
     "home-sections": () => import("./lib/HomeSections.svelte"),
   } as const;
@@ -909,7 +911,7 @@
     currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me" || currentRoute() === "cli"
     || currentRoute() === "apps" || currentRoute() === "device-inbox"
     || currentRoute() === "pricing" || currentRoute() === "verify-email" || currentRoute() === "reset-password"
-    || currentRoute() === "magic-link"
+    || currentRoute() === "magic-link" || currentRoute() === "account-delete" || currentRoute() === "account-reactivate"
       ? false
       : currentRoute() === "cross"
         ? showTransfer
@@ -936,6 +938,7 @@
   const SHELL_ROUTES = [
     "lan", "cross", "offline", "device-inbox",
     "pricing", "cli", "apps", "me", "verify-email", "reset-password", "magic-link",
+    "account-delete", "account-reactivate",
     "download",
   ] as const;
   const shellRoute = $derived((SHELL_ROUTES as readonly string[]).includes(currentRoute()));
@@ -2701,6 +2704,14 @@
   {:else if currentRoute() === "magic-link"}
     {#await routePage("magic-link") then { default: MagicLink }}
       <MagicLink />
+    {/await}
+  {:else if currentRoute() === "account-delete"}
+    {#await routePage("account-delete") then { default: AccountDeleteConfirm }}
+      <AccountDeleteConfirm />
+    {/await}
+  {:else if currentRoute() === "account-reactivate"}
+    {#await routePage("account-reactivate") then { default: AccountReactivate }}
+      <AccountReactivate />
     {/await}
   {:else}
     {#if notice}
