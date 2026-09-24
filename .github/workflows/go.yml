@@ -149,9 +149,17 @@ jobs:
       - name: go vet
         working-directory: server
         run: go vet ./...
+      # The A11 relay-renewal driver tests run in REAL time on 100-300 s
+      # credentials — a renewal only happens inside a credential's final
+      # margin — and together they take ~20 minutes, which pushed
+      # `cmd/relayium` past Go's 10-minute per-package default here (run
+      # 35959733079). They are skipped by ONE pattern and run, under -race, in
+      # their own `link-renew` job below with that SAME pattern;
+      # scripts/test/ci-event-policy-test.mjs asserts the two stay identical,
+      # so nothing is skipped here that `link-renew` does not run.
       - name: go test
         working-directory: server
-        run: go test ./...
+        run: go test -skip '^(TestLinkRenew|TestLDRenew)' ./...
       # A12: the CLI pairing matrix, by exact name, with the old-version pairs
       # NOT skipping. This checkout is one commit deep, so `ldOldCLI` cannot
       # find 723481c78 and the step above ran every old-version pair as a SKIP;
@@ -169,6 +177,16 @@ jobs:
       - name: CLI pairing interop matrix (named; old-version pairs included; no SKIP)
         shell: bash
         run: bash scripts/interop/cli-go-matrix.sh run linux "$RUNNER_TEMP/cli-matrix-linux.log"
+      # The step prints each failed test's output itself; the whole -v log
+      # (both CLI processes' transcripts for every cell) is kept on failure.
+      - name: Keep the CLI matrix log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cli-matrix-linux-log
+          path: ${{ runner.temp }}/cli-matrix-linux.log
+          if-no-files-found: ignore
+          retention-days: 14
       # `relayium push host:path` over a REAL OpenSSH client and a private sshd
       # on 127.0.0.1, both modes, native into a missing destination, plus
       # host-key refusal; `pull host:file -`; and `push - host:file` (stdin,
@@ -433,6 +451,17 @@ jobs:
       - name: Windows CLI pairing interop matrix (named; old-version pairs included; no SKIP)
         shell: bash
         run: bash scripts/interop/cli-go-matrix.sh run windows "$RUNNER_TEMP/cli-matrix-windows.log"
+      # Run 35959733079 printed only the FAIL summary and the log died with the
+      # runner; now the failed tests' output is printed by the step and the
+      # whole log is kept.
+      - name: Keep the Windows CLI matrix log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cli-matrix-windows-log
+          path: ${{ runner.temp }}/cli-matrix-windows.log
+          if-no-files-found: ignore
+          retention-days: 14
 
   # Central runs concurrent goroutines against shared state by design — the GC
   # sweep, the metering worker, the node storage prober — and the failure mode
@@ -555,7 +584,8 @@ jobs:
           echo "$PKGS"
           # Word splitting is the point: this is a package list.
           # shellcheck disable=SC2086
-          go test -race -count=1 -timeout 20m $PKGS
+          # The renewal driver tests run in `link-renew` (same pattern).
+          go test -race -count=1 -timeout 20m -skip '^(TestLinkRenew|TestLDRenew)' $PKGS
       # server/third_party/pion-turn is pion/turn v4.1.4 plus Relayium's
       # allocation identity patch (see its PATCHES.md), and it is its OWN
       # module: the `go.mod` there is upstream's, byte for byte. `go list ./...`
@@ -576,6 +606,65 @@ jobs:
           set -euo pipefail
           go vet . ./internal/...
           go test -race -count=1 -timeout 10m . ./internal/...
+
+  # A11 relay-renew/1, end to end: two CLI ends, the real signalling hub and
+  # grant registry, the in-process TURN server with REST auth on every request
+  # and per-allocation byte counters, and (Linux/macOS) a real node's ledger.
+  # These tests are wall-clock bound BY DESIGN: a renewal is only requested
+  # inside a credential's final margin and only proven by moving bytes past the
+  # old deadline, so each one waits out 100-300 s credentials in real time.
+  # Accelerating them further would mean shrinking the product's own margins,
+  # which is what they prove.
+  #
+  # Split from `test` and `race-rest` (run 35959733079: both hit the 10m / 20m
+  # per-package bound inside cmd/relayium with no failed assertion). The
+  # pattern is the one both of those `-skip`; ci-event-policy-test.mjs asserts
+  # the three are the same string, that this job runs it under -race with a
+  # finite -timeout and -count=1, and that it matches every test in
+  # linkrenew*_test.go.
+  #
+  # Under -race as a whole, in one job. Measured locally on 2026-09-24: the 15
+  # tests take 1183s WITHOUT -race, and the per-test times sum to that — they
+  # sleep far more than they compute, so the race build adds little wall clock
+  # (~1190s with -race, same machine) and the hosted runner's CPU factor
+  # (3.66x for account) does not apply to a wait. The 35m package bound is
+  # ~1.8x the measurement, the same margin race-account uses; the 45m job
+  # bound adds checkout, setup and the race build. One job at ~20 min is not
+  # the workflow's critical path (cli-windows is bounded at 50m), so it is not
+  # sharded; splitting would buy latency nobody waits for at the price of a
+  # second partition to keep exact. Both bounds stay finite on purpose:
+  # exceeding either is a hung renewal, not a number to raise.
+  link-renew:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Toolchain version
+        run: go version
+      # The PASS grep is load-bearing, as elsewhere: a renamed test would make
+      # `-run` match less and still exit 0. Every Test in cmd/relayium that
+      # the pattern names must PASS; none may SKIP (the ledger test skips only
+      # under -short).
+      - name: go test -race (A11 relay-renewal driver tests)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/link-renew.log"
+          go test -race -count=1 -v -timeout 35m -run '^(TestLinkRenew|TestLDRenew)' ./cmd/relayium | tee "$log"
+          want="$(grep -hoE '^func (TestLinkRenew|TestLDRenew)[A-Za-z0-9_]*' cmd/relayium/*_test.go | awk '{print $2}')"
+          [ -n "$want" ] || { echo "::error::no renewal tests found in cmd/relayium" >&2; exit 1; }
+          for t in $want; do
+            grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
+          done
+          if grep -E '^ *--- SKIP: ' "$log"; then
+            echo "::error::a renewal test skipped" >&2
+            exit 1
+          fi
 
   # The one lane that runs an OLD server binary against a NEW database.
   #

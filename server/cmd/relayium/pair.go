@@ -551,8 +551,22 @@ func feedPairInput(d *linkDevDriver, r io.Reader) {
 }
 
 // splitPairPaths splits "/send" arguments like a shell would for the simple
-// cases: whitespace separates, '…' and "…" quote, a backslash escapes.
+// cases: whitespace separates, '…' and "…" quote, and — except on Windows — a
+// backslash escapes.
+//
+// On Windows the backslash is the path separator, so it is kept literally, as
+// cmd.exe and PowerShell keep it: `/send C:\Users\me\a.txt` names that file,
+// and a path with spaces is quoted. Treating it as an escape there turned
+// every native path into a name that does not exist (`C:Usersmea.txt`), found
+// by the first A12 matrix run on a real Windows host.
 func splitPairPaths(s string) ([]string, error) {
+	return splitPairPathsWith(s, pairBackslashEscapes)
+}
+
+// pairBackslashEscapes: whether "/send" treats a backslash as an escape.
+var pairBackslashEscapes = runtime.GOOS != "windows"
+
+func splitPairPathsWith(s string, backslashEscapes bool) ([]string, error) {
 	var out []string
 	var cur strings.Builder
 	in, quote, esc := false, rune(0), false
@@ -561,7 +575,7 @@ func splitPairPaths(s string) ([]string, error) {
 		case esc:
 			cur.WriteRune(r)
 			esc, in = false, true
-		case r == '\\' && quote != '\'':
+		case backslashEscapes && r == '\\' && quote != '\'':
 			esc = true
 		case quote != 0:
 			if r == quote {

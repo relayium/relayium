@@ -441,6 +441,9 @@ const CANCEL = "${{ github.event_name == 'pull_request' }}";
 const ACCOUNT_PKG = "github.com/relayium/relayium/account";
 const SHARD_HELPER = "scripts/go-race-shard.go";
 const SHARDS = 8;
+/** The A11 relay-renewal driver tests' job, and the one pattern (section 3b). */
+const RENEW_JOB = "link-renew";
+const RENEW_PATTERN = "^(TestLinkRenew|TestLDRenew)";
 
 const failures = [];
 function check(ok, message) {
@@ -1062,10 +1065,11 @@ if (go) {
     assertNoRetryAndFiniteTimeouts("go.yml", name, job, text);
   }
 
-  // The other half of ./... — everything the shards do not cover.
+  // The other half of ./... — everything the shards do not cover. The A11
+  // renewal job (below) is the one other race job, identified by name.
   const restJobs = Object.entries(go.jobs ?? {}).filter(([jobName, job]) => {
     const text = runText(job);
-    return jobName !== shardJobs[0]?.[0] && /go test .*-race/.test(text);
+    return jobName !== shardJobs[0]?.[0] && jobName !== RENEW_JOB && /go test .*-race/.test(text);
   });
   check(
     restJobs.length === 1,
@@ -1087,6 +1091,65 @@ if (go) {
     );
     assertNoRetryAndFiniteTimeouts("go.yml", name, job, text);
   }
+}
+
+// ── 3b. the A11 renewal driver tests: skipped by `test` and `race-rest`, run
+//        by `link-renew` — with ONE pattern, so a skip can never outgrow the
+//        job that makes up for it ──────────────────────────────────────────
+//
+// They wait out 100-300 s credentials in real time (~20 min together) and
+// pushed cmd/relayium past the per-package bound in both `test` and
+// `race-rest` (run 35959733079). The pattern is a literal here and in go.yml;
+// every occurrence must be the same string, and the tests it names must exist.
+if (go) {
+  const skipFlag = `-skip '${RENEW_PATTERN}'`;
+  const runFlag = `-run '${RENEW_PATTERN}'`;
+  const renew = go.jobs?.[RENEW_JOB];
+  check(renew !== undefined, `go.yml: the \`${RENEW_JOB}\` job is gone, but \`test\` and \`race-rest\` still skip `
+    + `${RENEW_PATTERN} — the relay-renewal driver tests would run nowhere.`);
+  for (const [jobName, job] of Object.entries(go.jobs ?? {})) {
+    const text = runText(job);
+    const skips = [...text.matchAll(/-skip\s+('[^']*'|"[^"]*"|\S+)/g)].map((m) => m[1]);
+    for (const sk of skips) {
+      check(sk === `'${RENEW_PATTERN}'`,
+        `go.yml/${jobName}: \`-skip ${sk}\` is not the renewal pattern '${RENEW_PATTERN}'. A skip no job `
+        + `makes up for deletes coverage silently.`);
+    }
+    if (jobName === "test" || jobName === "race-rest") {
+      check(text.includes(skipFlag) && skips.length === 1,
+        `go.yml/${jobName}: expected exactly one \`${skipFlag}\` (the renewal tests run in \`${RENEW_JOB}\`); `
+        + `found ${JSON.stringify(skips)}. Without it cmd/relayium outruns the per-package bound.`);
+    }
+    if (jobName !== "test" && jobName !== "race-rest" && jobName !== RENEW_JOB) {
+      check(!text.includes(RENEW_PATTERN),
+        `go.yml/${jobName}: names the renewal pattern; only \`test\`, \`race-rest\` (skip) and `
+        + `\`${RENEW_JOB}\` (run) may.`);
+    }
+  }
+  if (renew) {
+    const text = runText(renew);
+    check(/go test -race /.test(text) && text.includes(runFlag) && /\.\/cmd\/relayium\b/.test(text),
+      `go.yml/${RENEW_JOB}: does not run \`go test -race ... ${runFlag} ./cmd/relayium\`.`);
+    check(/-v\b/.test(text) && /--- PASS: \$t /.test(text) && /--- SKIP: /.test(text),
+      `go.yml/${RENEW_JOB}: lost its per-test PASS grep or its no-SKIP check; a renamed test would then `
+      + `make \`-run\` match less and still exit 0.`);
+    check(renew.strategy === undefined, `go.yml/${RENEW_JOB}: gained a strategy/matrix; the section-3 shard `
+      + `check assumes exactly one matrix job.`);
+    assertNoRetryAndFiniteTimeouts("go.yml", RENEW_JOB, renew, text);
+  }
+  // The pattern names real tests, all of them in cmd/relayium.
+  const renewSrc = spawnSync("git", ["-C", repoRoot, "grep", "-hoE", `^func ${RENEW_PATTERN.slice(1)}[A-Za-z0-9_]*`,
+    "--", "server/*_test.go"], { encoding: "utf8" }).stdout ?? "";
+  const renewTests = renewSrc.split("\n").filter(Boolean);
+  check(renewTests.length >= 10,
+    `the renewal pattern ${RENEW_PATTERN} names ${renewTests.length} test(s) in server/; want the A11 driver `
+    + `tests (15 when this check was written). A rename would make \`${RENEW_JOB}\` run nothing.`);
+  const outside = spawnSync("git", ["-C", repoRoot, "grep", "-lE", `^func ${RENEW_PATTERN.slice(1)}`,
+    "--", "server/*_test.go"], { encoding: "utf8" }).stdout.split("\n").filter(Boolean)
+    .filter((f) => !f.startsWith("server/cmd/relayium/"));
+  check(outside.length === 0,
+    `the renewal pattern also matches tests outside cmd/relayium (${outside.join(", ")}); \`test\` and `
+    + `\`race-rest\` skip them everywhere but \`${RENEW_JOB}\` runs only ./cmd/relayium.`);
 }
 
 /**
@@ -6938,7 +7001,7 @@ const MUTATIONS = [
     // The other direction, and the expensive one: fuzzing that migrates back
     // into a lane every change waits for.
     name: "go.yml starts generating fuzz inputs on every pull request",
-    mutate: (world) => withCommandJob(world, "go.yml", "go test ./...", (job, step) => {
+    mutate: (world) => withCommandJob(world, "go.yml", `go test -skip '${RENEW_PATTERN}' ./...`, (job, step) => {
       step.run = "go test -fuzz '^Fuzz' -fuzztime 10m ./...\n";
     }),
     expect: /go\.yml\/test runs a timed fuzz campaign/,
@@ -6958,7 +7021,7 @@ const MUTATIONS = [
     // running the DISCOVERY script on a pull request is a legitimate thing to
     // want, and its name contains the letters the fuzz check looks for.
     name: "go.yml runs the inventory script as an ordinary check",
-    mutate: (world) => withCommandJob(world, "go.yml", "go test ./...", (job, step) => {
+    mutate: (world) => withCommandJob(world, "go.yml", `go test -skip '${RENEW_PATTERN}' ./...`, (job, step) => {
       step.run = `${String(step.run).trimEnd()}\n${FUZZ_INVENTORY}\n`;
     }),
     refute: /go\.yml\/test runs a timed fuzz campaign/,
