@@ -1088,6 +1088,28 @@ other than the one reasoned subtest it names, no `--- FAIL:`, and both
 `linked with another relayium CLI (…, initiator|responder)` lines in the CLI
 processes' own output.
 
+On a failure the script prints the complete output of every failed top-level
+test (both CLI processes' transcripts) into the step log, and `go.yml` keeps
+the whole `-v` log as the `cli-matrix-linux-log` / `cli-matrix-windows-log`
+artifact. The first Windows run (35959733079) printed only the FAIL summary,
+and its log died with the runner.
+
+That run found two Windows-only problems, neither a skip:
+
+* **A product defect.** `pair`'s `/send` line treated a backslash as a shell
+  escape, so on Windows every native path (`C:\Users\…\a.bin`) became a name
+  that does not exist and the batch was never offered. On Windows the
+  backslash is now kept literally, as cmd.exe and PowerShell keep it; quotes
+  still group a path with spaces. `TestSplitPairPaths` covers both rule sets
+  on every platform.
+* **A fixture that cannot exist on NTFS.**
+  `TestPairPeerNamesAndTextCannotForgeVerification` created sender files whose
+  names contain CR, LF and ESC; Win32 refuses control characters in names, so
+  it failed in 0.00s. On Windows it omits those three files (a Windows sender
+  cannot hold them) and keeps the bidi-override name and every forged line in
+  the message; the receiver's cleaning of control characters is proven on
+  Linux, where the sender can create them.
+
 Each path filter names the interop files its cell reads, one file at a time,
 for the reason given for `native-web-pairing.yml` above: a bare
 `scripts/interop/**` would start a macOS runner for an Android-only script.
@@ -1103,6 +1125,25 @@ and the workflow wiring above is checked and mutated away.
 Not covered by any hosted lane, and not claimed: Firefox/WebKit (the e2e
 harness speaks CDP to Chrome only), an iOS simulator cell, a physical device,
 NAT or TURN relay paths, and real WAN — those are release-time (C01/C07).
+
+### The relay-renewal driver tests (A11) have their own job
+
+The `TestLinkRenew*` / `TestLDRenew*` tests in `server/cmd/relayium` drive two
+CLI ends across a relay-credential renewal in REAL time: a renewal is only
+requested inside a credential's final margin and only proven by moving bytes
+past the old deadline, so each test waits out 100-300 s credentials. Together
+they take 1183s locally (the per-test times sum to it: they wait, they do not
+compute), which pushed the package past Go's 10-minute default in `test` and
+past the 20m bound in `race-rest` (run 35959733079, no failed assertion).
+
+`test` and `race-rest` therefore `-skip '^(TestLinkRenew|TestLDRenew)'`, and
+`go.yml` `link-renew` runs exactly that pattern under `-race` (`-timeout 35m`,
+job bound 45m, ~1.8x the measurement) with a PASS line required per matching
+test and no SKIP. `scripts/test/ci-event-policy-test.mjs` asserts the three
+occurrences are the same literal, that no other `-skip` exists in `go.yml`,
+that the pattern names real tests and only in `cmd/relayium`, and that
+`link-renew` stays bounded, `-count=1` and retry-free. Neither the Linux nor
+the Windows CLI matrix names a renewal test (their `-run` lists are exact).
 
 ## Adding a platform: Android, Windows, anything next
 

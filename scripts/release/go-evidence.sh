@@ -176,6 +176,8 @@ apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json
 scripts/list-go-fuzz-targets.sh
 .github/workflows/go-fuzz-nightly.yml
 .github/workflows/go.yml
+scripts/interop/cli-go-matrix.sh
+scripts/interop/build-old-cli.sh
 PATHS
 }
 

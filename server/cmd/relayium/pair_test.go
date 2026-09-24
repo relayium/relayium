@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -429,6 +430,17 @@ func TestPairPeerNamesAndTextCannotForgeVerification(t *testing.T) {
 		"b\rverification code (SAS): 111111",
 		"c" + esc + "[2K" + esc + "[1Averification code (SAS): 222222",
 		"d‮txt.exe",
+	}
+	if runtime.GOOS == "windows" {
+		// NTFS/Win32 refuse control characters (U+0001..U+001F) in a name, so
+		// a Windows SENDER cannot hold the first three files at all: creating
+		// them here failed the test in 0.00s on the first real Windows run.
+		// The bidi name is legal and stays, and so does every forged line in
+		// the message below. How a receiver cleans control characters that a
+		// POSIX sender CAN send is proven by this same test on Linux/macOS;
+		// sinkSegments drops them with no Windows-only branch.
+		names = names[3:]
+		t.Logf("windows: %d control-character file names omitted (not creatable on NTFS); the bidi name and the forged message remain", 3)
 	}
 	for _, n := range names {
 		pairWriteFile(t, filepath.Join(evil, "evil", n), 10)
@@ -1273,13 +1285,32 @@ func TestSplitPairPaths(t *testing.T) {
 		`  spaced   out  `:  "spaced|out",
 		`/abs/path/file.go`: "/abs/path/file.go",
 	} {
-		got, err := splitPairPaths(in)
+		got, err := splitPairPathsWith(in, true)
 		if err != nil || strings.Join(got, "|") != want {
 			t.Errorf("%q: %q (%v), want %q", in, got, err, want)
 		}
 	}
-	if _, err := splitPairPaths(`"open`); err == nil {
-		t.Error("an unterminated quote must be refused")
+	for _, esc := range []bool{true, false} {
+		if _, err := splitPairPathsWith(`"open`, esc); err == nil {
+			t.Errorf("escapes=%v: an unterminated quote must be refused", esc)
+		}
+	}
+	// Windows: the backslash is the path separator and is kept literally —
+	// a native path typed or pasted after /send names that file. (The first
+	// A12 run on a real Windows host failed every /send of a temp-dir path.)
+	for in, want := range map[string]string{
+		`C:\Users\me\a.bin`:                   `C:\Users\me\a.bin`,
+		`"C:\Users\me\b with space.txt" D:\x`: `C:\Users\me\b with space.txt|D:\x`,
+		`'C:\q\r' \\srv\share\f`:              `C:\q\r|\\srv\share\f`,
+		`C:\dir\`:                             `C:\dir\`,
+	} {
+		got, err := splitPairPathsWith(in, false)
+		if err != nil || strings.Join(got, "|") != want {
+			t.Errorf("windows %q: %q (%v), want %q", in, got, err, want)
+		}
+	}
+	if want := runtime.GOOS != "windows"; pairBackslashEscapes != want {
+		t.Errorf("on %s /send backslash escapes = %v, want %v", runtime.GOOS, pairBackslashEscapes, want)
 	}
 }
 

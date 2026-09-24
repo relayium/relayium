@@ -80,6 +80,33 @@ if [ "$platform" != windows ]; then
   names+=("${posix_only[@]}")
 fi
 
+# The complete output of every failed top-level test, printed to the step log
+# so a hosted failure is diagnosable without the log file (which go.yml also
+# uploads, on failure). A run that never reached a FAIL line — a build error,
+# a `-timeout` panic — shows the log's tail instead.
+show_failures() {
+  local f="$1" failed
+  failed="$(grep -E '^--- FAIL: ' "$f" | awk '{print $3}' | sort -u || true)"
+  if [ -z "$failed" ]; then
+    echo "::group::cli-go-matrix: last 200 lines of $f (no top-level FAIL line)"
+    tail -200 "$f"
+    echo "::endgroup::"
+    return 0
+  fi
+  local t
+  for t in $failed; do
+    echo "::group::cli-go-matrix: output of $t"
+    # From its `=== RUN` line to its `--- FAIL` line; capped, keeping the end
+    # (where the timeout message and both processes' transcripts are).
+    awk -v t="$t" '
+      $0 == "=== RUN   " t { on = 1 }
+      on { print }
+      on && index($0, "--- FAIL: " t " (") == 1 { exit }
+    ' "$f" | tail -1500
+    echo "::endgroup::"
+  done
+}
+
 if [ "$mode" = run ]; then
   if [ -z "${RELAYIUM_OLD_CLI:-}" ]; then
     echo "::error::RELAYIUM_OLD_CLI is not set: the old-version pairs would build from local history or SKIP; this lane builds 723481c78 first" >&2
@@ -95,7 +122,12 @@ if [ "$mode" = run ]; then
   status=$?
   set -e
   tail -5 "$log"
-  [ "$status" -eq 0 ] || { grep -E '^[[:space:]]*--- FAIL' "$log" >&2 || true; echo "::error::go test exited $status" >&2; exit 1; }
+  if [ "$status" -ne 0 ]; then
+    show_failures "$log"
+    grep -E '^[[:space:]]*--- FAIL' "$log" >&2 || true
+    echo "::error::go test exited $status" >&2
+    exit 1
+  fi
 fi
 
 [ -s "$log" ] || { echo "::error::no test log at $log" >&2; exit 1; }
@@ -124,6 +156,7 @@ grep -qE 'linked with another relayium CLI \(end-to-end encrypted link/1, respon
   || problem "no CLI in the log was the link RESPONDER"
 
 if [ "$problems" -ne 0 ]; then
+  [ "$mode" = run ] && show_failures "$log"
   echo "cli-go-matrix: $problems problem(s) on $platform" >&2
   exit 1
 fi
