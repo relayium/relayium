@@ -246,7 +246,12 @@ func TestPlanFollowsANamedTopLevelSymlinkOnceUnderItsOwnName(t *testing.T) {
 // ---------------------------------------------------------------- journal
 
 func TestJournalRoundTripsAndRejectsHostileRecords(t *testing.T) {
-	st := newJournalStore(t.TempDir())
+	cfgDir := t.TempDir()
+	// Model a private configuration directory regardless of the runner's umask.
+	if err := os.Chmod(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	st := newJournalStore(cfgDir)
 	j := validJournal()
 	if err := st.save(j); err != nil {
 		t.Fatal(err)

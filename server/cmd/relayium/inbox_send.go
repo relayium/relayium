@@ -721,6 +721,10 @@ func runInboxSent(args []string, stdout, stderr io.Writer) int {
 	}
 	for _, l := range locals {
 		fmt.Fprintf(stdout, "local %s %s\n", l.LocalSendID, l.Phase)
+		if l.Resumable && l.Phase == inboxsend.PhaseUploading {
+			fmt.Fprintf(stdout, "  An encrypted copy may still occupy disk space. Use `relayium inbox retry %s` to check and resume, or "+
+				"`relayium inbox retry --discard %s` to remove its local record and copy.\n", l.LocalSendID, l.LocalSendID)
+		}
 	}
 	if len(tasks) == 0 && len(locals) == 0 {
 		fmt.Fprintln(stderr, "no deliveries found")

@@ -1193,6 +1193,11 @@ func TestResumableInitRateLimitKeepsCopy(t *testing.T) {
 	if e == nil || e.LocalSendID == "" {
 		t.Fatalf("missing retained send: %v", e)
 	}
+	for _, phrase := range []string{"24 hours from its creation", "relayium inbox sent", "relayium inbox send --resumable", "removes the planned copy and record"} {
+		if !strings.Contains(e.Msg, phrase) {
+			t.Errorf("planned-copy notice omits %q: %s", phrase, e.Msg)
+		}
+	}
 	j := theRecord(t, w)
 	if j.Phase != PhasePlanned || w.env.QuotaBytes(w.uid) != 0 {
 		t.Fatal("init was counted or advanced")

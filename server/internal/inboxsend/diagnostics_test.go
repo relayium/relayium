@@ -81,7 +81,12 @@ func TestCredentialHoldersNeverPrintTheBearer(t *testing.T) {
 // but whitespace is refused, including a closing delimiter that Decoder.More
 // does not report.
 func TestJournalRefusesAnythingAfterTheRecord(t *testing.T) {
-	st := newJournalStore(t.TempDir())
+	cfgDir := t.TempDir()
+	// Model a private configuration directory regardless of the runner's umask.
+	if err := os.Chmod(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	st := newJournalStore(cfgDir)
 	if err := st.ensure(); err != nil {
 		t.Fatal(err)
 	}

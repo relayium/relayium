@@ -149,16 +149,17 @@ func TestInboxSendResumableSurvivesSIGKILLAtEveryBoundary(t *testing.T) {
 		resumedMidway bool
 		// quotaAlreadyCounted: the killed process's finalize committed.
 		quotaAlreadyCounted bool
+		showCopyHint        bool
 	}{
 		{name: "init answered but lost (record planned)",
 			rule: sendtest.Rule{Method: http.MethodPost, PathPrefix: "/api/uploads", PathSuffix: "/api/uploads", Action: sendtest.HoldResponse},
 			want: want{inits: 2, finalizes: 1}},
 		{name: "first PATCH never reached central (uploading recorded, nothing appended)",
 			rule: sendtest.Rule{Method: http.MethodPatch, PathPrefix: "/api/uploads/", Action: sendtest.HoldUnhandled},
-			want: want{inits: 1, finalizes: 1}},
+			want: want{inits: 1, finalizes: 1}, showCopyHint: true},
 		{name: "second PATCH never reached central (mid-upload)",
 			rule: sendtest.Rule{Method: http.MethodPatch, PathPrefix: "/api/uploads/", Skip: 1, Action: sendtest.HoldUnhandled},
-			want: want{inits: 1, finalizes: 1}, resumedMidway: true},
+			want: want{inits: 1, finalizes: 1}, resumedMidway: true, showCopyHint: true},
 		{name: "finalize never reached central (finalizing recorded)",
 			rule: sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.HoldUnhandled},
 			want: want{inits: 1, finalizes: 2}},
@@ -186,6 +187,24 @@ func TestInboxSendResumableSurvivesSIGKILLAtEveryBoundary(t *testing.T) {
 			id := ids[0]
 			if _, err := os.Stat(s.spoolOf(id)); err != nil {
 				t.Fatalf("the local copy did not survive the kill: %v", err)
+			}
+			code, listed, errOut := s.cli("sent", "--config-dir", s.senderCfg)
+			if code != 0 {
+				t.Fatalf("sent = %d %s", code, errOut)
+			}
+			if strings.Contains(listed, "occupy disk space") != tc.showCopyHint {
+				t.Fatalf("copy hint for %s: %s", tc.name, listed)
+			}
+			if tc.showCopyHint && (!strings.Contains(listed, "relayium inbox retry "+id) || !strings.Contains(listed, "relayium inbox retry --discard "+id)) {
+				t.Fatalf("missing actions: %s", listed)
+			}
+			code, listed, errOut = s.cli("sent", "--json", "--config-dir", s.senderCfg)
+			if code != 0 {
+				t.Fatalf("sent JSON = %d %s", code, errOut)
+			}
+			rows := decodeJSON(t, listed)["localSends"].([]any)
+			if len(rows) != 1 || len(rows[0].(map[string]any)) != 5 || strings.Contains(listed, "occupy disk space") {
+				t.Fatalf("JSON schema changed: %s", listed)
 			}
 			flipEveryByte(t, src)
 			quotaBefore := s.env.QuotaBytes(s.uid)

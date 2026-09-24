@@ -180,9 +180,10 @@ func (s *Session) uploadSpooled(ctx context.Context, j *Journal) error {
 // `inbox retry` resumes it.
 func (s *Session) spoolKept(j *Journal, class Class, code, what string, cause error) *Error {
 	if j.Phase == PhasePlanned {
-		e := newErr(class, code, what+fmt.Sprintf(" No file data was uploaded for this send. The local encrypted copy was kept: "+
-			"once the refusal or interruption is resolved, `relayium inbox retry %s` starts the upload from the copy without encrypting again. "+
-			"Nothing will be uploaded again automatically; `relayium inbox retry --discard %s` removes the copy and record.", j.ID, j.ID), cause)
+		e := newErr(class, code, what+fmt.Sprintf(" No file data was uploaded for this send. The local encrypted copy was kept. "+
+			"After %g hours from its creation, the next `relayium inbox sent` or `relayium inbox send --resumable` removes the planned copy and record. "+
+			"Once the refusal or interruption is resolved, `relayium inbox retry %s` starts the upload from the copy without encrypting again. "+
+			"Nothing will be uploaded again automatically; `relayium inbox retry --discard %s` removes the copy and record.", spoolMaxAge.Hours(), j.ID, j.ID), cause)
 		e.LocalSendID = j.ID
 		return e
 	}
