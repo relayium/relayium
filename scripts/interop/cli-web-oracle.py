@@ -177,7 +177,7 @@ def judge(plan, obs):
         (r"^declined$", 1, "its own decline"),
         (r"^delivered: the other side verified and saved the files$", 2, "delivered"),
         (r"^not sent: the other side declined the files$", 1, "the page's decline"),
-        (r"^not saved: the sender cancelled; nothing from it was kept$", 1, "the sender's cancel"),
+        (r"^not saved: the sender cancelled$", 1, "the sender's cancel"),
         (r"^not delivered: the other side stopped the transfer$", 1, "the receiver's stop"),
         (r"^the partial files of that batch were removed; nothing from it was kept$", 1, "the discard of the cancelled batch"),
     ]

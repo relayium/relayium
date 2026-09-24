@@ -548,7 +548,12 @@ async function run() {
       cli.signal("SIGCONT");
       observed.cancel.resumed = true;
       observed.web.sendStatuses.cancelled = await awaitCardDone(tab, "send", "the page's cancelled send to finish", 60_000, { orGone: true });
-      await cli.waitLine(/^not saved: the sender cancelled; nothing from it was kept$/, "the CLI to report the sender's cancel", { from, timeoutMs: 120_000 });
+      // pair.go reports the outcome and the cleanup on two lines since
+      // b897f15bd: "not saved: the sender cancelled", then the discard line
+      // that alone claims "nothing from it was kept". Both are required here
+      // and counted exactly by the oracle.
+      await cli.waitLine(/^not saved: the sender cancelled$/, "the CLI to report the sender's cancel", { from, timeoutMs: 120_000 });
+      await cli.waitLine(/^the partial files of that batch were removed; nothing from it was kept$/, "the CLI to report the discard of the cancelled batch", { from, timeoutMs: 30_000 });
       step("web → cli cancelled by the sending page; the CLI kept nothing");
     }
 

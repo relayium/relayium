@@ -95,7 +95,7 @@ try {
         "delivered: the other side verified and saved the files", "delivered: the other side verified and saved the files",
         "not sent: the other side declined the files",
         "the partial files of that batch were removed; nothing from it was kept",
-        "not saved: the sender cancelled; nothing from it was kept",
+        "not saved: the sender cancelled",
         "not delivered: the other side stopped the transfer",
       ];
       const obs = {
@@ -146,6 +146,12 @@ try {
           mutate: (w) => { w.obs.cli.stderr.splice(w.obs.cli.stderr.indexOf("saved: every file verified and written to disk in /x"), 1); } },
         { name: "the CLI never reported the receiver's stop", expect: /receiver's stop 0 time/,
           mutate: (w) => { w.obs.cli.stderr = w.obs.cli.stderr.filter((l) => !l.startsWith("not delivered")); } },
+        { name: "the CLI never reported the sender's cancel", expect: /sender's cancel 0 time/,
+          mutate: (w) => { w.obs.cli.stderr = w.obs.cli.stderr.filter((l) => l !== "not saved: the sender cancelled"); } },
+        { name: "the pre-b897f15bd cancel wording", expect: /sender's cancel 0 time/,
+          mutate: (w) => { const i = w.obs.cli.stderr.indexOf("not saved: the sender cancelled"); w.obs.cli.stderr[i] = "not saved: the sender cancelled; nothing from it was kept"; } },
+        { name: "the CLI never reported the discard of the cancelled batch", expect: /discard of the cancelled batch 0 time/,
+          mutate: (w) => { w.obs.cli.stderr = w.obs.cli.stderr.filter((l) => !l.startsWith("the partial files of that batch")); } },
         { name: "the connection was lost", expect: /lost connection/,
           mutate: (w) => { w.obs.cli.stderr.push("the connection to the other side was lost"); } },
         { name: "the CLI exited 0 after declines and cancels", expect: /exited .* not 1/,
