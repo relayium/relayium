@@ -280,8 +280,12 @@ func (s *streamSender) run() (StreamReport, error) {
 				return s.onResult(ev.res)
 			case evPeerError:
 				if writeErr != nil {
+					// The receiver's own word explains a write failure; so does
+					// a receiver that closed before ever accepting (an
+					// unauthorized listener resets the connection, which
+					// Windows can surface on the write first).
 					var re *RemoteError
-					if !errors.As(ev.err, &re) {
+					if !errors.As(ev.err, &re) && !(s.src == nil && errors.Is(ev.err, ErrStreamNotAccepted)) {
 						return s.fail(writeErr)
 					}
 				}

@@ -472,7 +472,12 @@ func TestResumableRefusesADamagedCopyAndKeepsTheEvidence(t *testing.T) {
 			fastBackoff(t)
 			w := newWorld(t, 64<<20)
 			root := writeTree(t, map[string][]byte{"big.bin": randomBytes(t, 9<<20)})
-			ctx, cancel := cancelAt(w, atPatch, 1)
+			// Cancelled at the FIRST append: the cancel races that append on
+			// the server, so at most its one chunk (8 MiB of 9) is committed
+			// and the retry always needs the copy. Cancelling at the second
+			// append let a fast runner commit every byte, and a retry that
+			// needs nothing from the copy rightly never reads it.
+			ctx, cancel := cancelAt(w, atPatch, 0)
 			defer cancel()
 			if _, e := sendResumable(t, w, ctx, filepath.Join(root, "big.bin")); e == nil {
 				t.Fatal("want interrupted")

@@ -574,6 +574,35 @@ func TestStreamNoSourceAfterWriteFailure(t *testing.T) {
 	joined(t, f, nil)
 }
 
+// A receiver that closes without accepting is reported as not accepting even
+// when the sender's write fails first (Windows reports the listener's reset
+// on the write), so the caller can still give its authorization hint.
+func TestStreamCloseBeforeAcceptAfterWriteFailureIsNotAccepted(t *testing.T) {
+	defer func(d time.Duration) { streamErrDrainGrace = d }(streamErrDrainGrace)
+	streamErrDrainGrace = 2 * time.Second
+	f := newFakeTransport()
+	var called atomic.Bool
+	res := sendAsync(context.Background(), f, "out.bin", noStart(t, &called))
+	f.peerExpect(t, MsgHello)
+	f.toPeerR.CloseWithError(errors.New("fake: connection reset")) // the Manifest write fails
+	for deadline := time.Now().Add(5 * time.Second); f.inflight.Load() != 1; {
+		if time.Now().After(deadline) {
+			t.Fatal("the Manifest write never failed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	f.peerEOF() // and the receiver's side is closed without an Accept
+	r := waitSend(t, res, 5*time.Second)
+	var se *StreamSendError
+	if !errors.As(r.err, &se) || se.Stage != StreamBeforeAccept || !errors.Is(r.err, ErrStreamNotAccepted) {
+		t.Fatalf("error %v; want not accepted, before accept", r.err)
+	}
+	if called.Load() {
+		t.Fatal("source started")
+	}
+	joined(t, f, nil)
+}
+
 // U-S3: a source blocked in Read (silent stdin) is released and joined when
 // the receiver refuses mid-stream and when the caller cancels.
 func TestStreamJoinsBlockedSource(t *testing.T) {
