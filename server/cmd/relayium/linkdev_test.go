@@ -1731,7 +1731,11 @@ func ldInputLossCannotSucceed(t *testing.T, in io.Reader, why string) {
 	ldUseTextInput(t, in)
 	ra, rb := ldPairUp(t, hub, "",
 		ldPeer{cmd: "text", via: hub.url, args: []string{ldCode}},
-		ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--script", ldScript(t, "wait-texts 1"), ldCode}})
+		// The peer holds until WE leave. Leaving after the first text (as it
+		// once did) raced our reader: when the peer left before the scan
+		// reached the unreadable input, shutdown stopped the reader and the
+		// run failed without naming the input (5 in 10 under -race; A10 r5).
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--script", ldScript(t, "hold"), ldCode}})
 	if !strings.Contains(rb.stdout, "first line ok") {
 		t.Fatalf("the line before the failure never arrived; the test proves nothing\n%s", rb)
 	}

@@ -328,3 +328,24 @@ func TestLinkRelayPolicyHelpMatchesTheCode(t *testing.T) {
 		}
 	}
 }
+
+// Cleanup of an incomplete batch is attempted, not promised: a permission or
+// I/O failure can leave files, and the run then warns by name. The help must
+// say that, not that such a batch "is removed" (Codex r5 #2).
+func TestHelpDoesNotPromiseUnconditionalCleanup(t *testing.T) {
+	for _, cmd := range []string{"pair", "receive"} {
+		var stdout, stderr bytes.Buffer
+		if rc := Run([]string{cmd, "-h"}, &stdout, &stderr); rc != 0 {
+			t.Fatalf("%s -h: rc = %d", cmd, rc)
+		}
+		flat := strings.Join(strings.Fields(stdout.String()), " ")
+		if !strings.Contains(flat, "if that cleanup cannot remove something, a warning names what may be left") {
+			t.Errorf("%s -h does not say a failed cleanup is reported", cmd)
+		}
+		for _, banned := range []string{"does not complete is removed", "is removed, never reported saved"} {
+			if strings.Contains(flat, banned) {
+				t.Errorf("%s -h promises removal (%q)", cmd, banned)
+			}
+		}
+	}
+}

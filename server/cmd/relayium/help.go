@@ -61,8 +61,9 @@ In the session, each line you type is sent as a message, except:
 
 Received files are only ever created new under --dest: an existing file is
 never overwritten (a new file gets a " (n)" name), nothing is written through a
-symbolic link or outside the directory, and a batch that does not complete is
-removed.
+symbolic link or outside the directory. When a batch does not complete, its
+files are removed; if that cleanup cannot remove something, a warning names
+what may be left.
 
 Scripts: stdout carries only the other side's messages (one per line); status,
 prompts, the SAS and errors go to stderr. When stdin is not a terminal, its end
@@ -147,9 +148,10 @@ path the transfer fails rather than falling back to a relay.
 Exactly one batch is accepted into destdir; the command then ends (exit 0 once
 every file is verified and on disk, 1 otherwise). Over a link, files are only
 created new: nothing existing is overwritten (a new file gets a " (n)" name),
-nothing is written through a symbolic link or outside destdir, and a batch that
-does not complete — Ctrl-C included (exit 130) — is removed, never reported
-saved.
+nothing is written through a symbolic link or outside destdir. A batch that
+does not complete — Ctrl-C included (exit 130) — is never reported saved; its
+files are removed, and if that cleanup cannot remove something, a warning
+names what may be left.
 
 positional arguments:
   <code>      the 6-digit pairing code the sender printed

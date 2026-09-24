@@ -44,12 +44,7 @@ func init() {
 	}
 	// A receiving process whose cleanup cannot remove names containing this.
 	if sub := os.Getenv("RELAYIUM_TEST_SINK_REMOVE_FAIL"); sub != "" {
-		sinkRemove = func(r *os.Root, name string) error {
-			if strings.Contains(name, sub) {
-				return errors.New("injected: removal failed")
-			}
-			return r.Remove(name)
-		}
+		failRemovalOf(sub)
 	}
 }
 
@@ -1147,14 +1142,9 @@ func TestLinkSinkPostInstallCheckFailureRollsBack(t *testing.T) {
 func TestLinkSinkCleanupFailuresAreReported(t *testing.T) {
 	old := sinkRemove
 	t.Cleanup(func() { sinkRemove = old })
-	failFor := func(sub string) {
-		sinkRemove = func(r *os.Root, name string) error {
-			if strings.Contains(name, sub) {
-				return errors.New("injected: removal failed")
-			}
-			return r.Remove(name)
-		}
-	}
+	oldRename := sinkRename
+	t.Cleanup(func() { sinkRename = oldRename })
+	failFor := failRemovalOf
 	t.Run("cancelled", func(t *testing.T) {
 		dest := t.TempDir()
 		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("d/one")})
@@ -1162,7 +1152,7 @@ func TestLinkSinkCleanupFailuresAreReported(t *testing.T) {
 			t.Fatal(err)
 		}
 		failFor(sinkStagePrefix)
-		t.Cleanup(func() { sinkRemove = old })
+		t.Cleanup(func() { sinkRemove, sinkRename = old, oldRename })
 		err = k.discard()
 		if err == nil || !strings.Contains(err.Error(), "could not be removed") || !strings.Contains(err.Error(), sinkStagePrefix) {
 			t.Fatalf("discard = %v, want the leftover named", err)
@@ -1175,7 +1165,7 @@ func TestLinkSinkCleanupFailuresAreReported(t *testing.T) {
 	})
 	t.Run("failed-install", func(t *testing.T) {
 		oldLstat := sinkVerifyLstat
-		t.Cleanup(func() { sinkVerifyLstat, sinkRemove = oldLstat, old })
+		t.Cleanup(func() { sinkVerifyLstat, sinkRemove, sinkRename = oldLstat, old, oldRename })
 		sinkVerifyLstat = func(*os.Root, string) (fs.FileInfo, error) { return nil, errors.New("injected: stat failure") }
 		dest := t.TempDir()
 		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("one")})
@@ -1191,7 +1181,7 @@ func TestLinkSinkCleanupFailuresAreReported(t *testing.T) {
 		if k.finalName[0] != "one" {
 			t.Error("ownership of the file that could not be removed was dropped")
 		}
-		sinkRemove = old // the next attempt can remove it
+		sinkRemove, sinkRename = old, oldRename // the next attempt can remove it
 		if err := k.discard(); err != nil {
 			t.Fatal(err)
 		}
@@ -1636,4 +1626,120 @@ func TestSinkInstallErrorIsTruthful(t *testing.T) {
 	if !strings.Contains(xdev.Error(), "hard links") || strings.Contains(xdev.Error(), "not kept") {
 		t.Errorf("EXDEV: %v", xdev)
 	}
+}
+
+// failRemovalOf makes every removal of a name containing sub fail: the
+// quarantine move of that name and the final removal alike.
+func failRemovalOf(sub string) {
+	sinkRemove = func(r *os.Root, name string) error {
+		if strings.Contains(name, sub) {
+			return errors.New("injected: removal failed")
+		}
+		return r.Remove(name)
+	}
+	sinkRename = func(r *os.Root, oldname, newname string) error {
+		if strings.Contains(oldname, sub) {
+			return errors.New("injected: removal failed")
+		}
+		return r.Rename(oldname, newname)
+	}
+}
+
+// Codex r5 #1, deterministic: another process atomically replaces a file of
+// ours at the exact moment after cleanup's identity check. The replacement
+// must never be deleted: it is caught in quarantine, recognised as not ours,
+// and put back — or, when its name was taken again, kept and reported.
+func TestLinkSinkLeafReplacementIsNeverDeleted(t *testing.T) {
+	installed := func(t *testing.T) (string, *linkSink) {
+		dest := t.TempDir()
+		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("f")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkFill(t, k)
+		if err := k.install(); err != nil {
+			t.Fatal(err)
+		}
+		return dest, k
+	}
+	// replace atomically swaps a new file with content c in at dest/name.
+	replace := func(t *testing.T, dest, name, c string) {
+		tmp := filepath.Join(dest, "attacker-tmp")
+		if err := os.WriteFile(tmp, []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, filepath.Join(dest, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	content := func(p string) string { b, _ := os.ReadFile(p); return string(b) }
+	t.Cleanup(func() { sinkHookBeforeRemove, sinkHookAfterQuarantine = nil, nil })
+
+	t.Run("between-check-and-quarantine", func(t *testing.T) {
+		dest, k := installed(t)
+		sinkHookBeforeRemove = func(_ *linkSink, _, name string) {
+			if name == "f" {
+				replace(t, dest, "f", "THEIRS")
+			}
+		}
+		defer func() { sinkHookBeforeRemove = nil }()
+		if err := k.discard(); err != nil {
+			t.Fatalf("discard: %v", err)
+		}
+		if got := content(filepath.Join(dest, "f")); got != "THEIRS" {
+			t.Errorf("the replacement was deleted or changed: %q", got)
+		}
+		sinkNoStaging(t, dest)
+	})
+	t.Run("between-quarantine-and-check", func(t *testing.T) {
+		dest, k := installed(t)
+		sinkHookAfterQuarantine = func(_ *linkSink, _, name, q string) {
+			if name == "f" {
+				replace(t, dest, q, "THEIRS") // what sits in quarantine is no longer ours
+			}
+		}
+		defer func() { sinkHookAfterQuarantine = nil }()
+		if err := k.discard(); err != nil {
+			t.Fatalf("discard: %v", err)
+		}
+		if got := content(filepath.Join(dest, "f")); got != "THEIRS" {
+			t.Errorf("the replacement was not put back: %q", got)
+		}
+		sinkNoStaging(t, dest)
+	})
+	t.Run("put-back-name-taken", func(t *testing.T) {
+		dest, k := installed(t)
+		sinkHookBeforeRemove = func(_ *linkSink, _, name string) {
+			if name == "f" {
+				replace(t, dest, "f", "THEIRS-A")
+			}
+		}
+		sinkHookAfterQuarantine = func(_ *linkSink, _, name, q string) {
+			if name == "f" {
+				if err := os.WriteFile(filepath.Join(dest, "f"), []byte("THEIRS-B"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		defer func() { sinkHookBeforeRemove, sinkHookAfterQuarantine = nil, nil }()
+		err := k.discard()
+		if err == nil || !strings.Contains(err.Error(), "could not be put back") {
+			t.Fatalf("discard = %v, want both names reported", err)
+		}
+		if got := content(filepath.Join(dest, "f")); got != "THEIRS-B" {
+			t.Errorf("the newer file at the name was touched: %q", got)
+		}
+		var kept bool
+		for _, g := range pairListTree(t, dest) {
+			if strings.HasPrefix(g, sinkStagePrefix) && content(filepath.Join(dest, g)) == "THEIRS-A" {
+				kept = true
+				if !strings.Contains(err.Error(), g) {
+					t.Errorf("the quarantine name %s is not reported: %v", g, err)
+				}
+			}
+		}
+		if !kept {
+			t.Error("the replacement was deleted")
+		}
+	})
 }

@@ -977,10 +977,13 @@ func stripBidi(s string) string {
 //     handle and only while the name still holds the recorded file (a
 //     directory only when empty).
 //
-// Residual: between that last identity check and the removal of a single
-// name inside one of OUR held directories, a concurrent process of the same
-// user could swap that one entry; the removal then takes the swapped-in entry
-// of that directory. Nothing outside the batch's directories is reachable.
+// A FILE is removed through quarantine (quarantineRemove): moved inside its
+// held directory to a fresh random hidden name, checked again there, and
+// removed only if it is ours; a replacement swapped in after the first check
+// is put back (no-replace link) or, failing that, kept and reported. Residual:
+// another process of the same user that learns the fresh random name could
+// still swap THAT entry between the second check and the removal. A
+// directory is removed with rmdir, which only ever removes an empty one.
 //
 // Peer names are display values (linkwire strips bidi and C0/C1). Here each
 // "/" or "\" segment is further cleaned for the filesystem: ".", ".." and
@@ -1022,9 +1025,13 @@ var (
 	sinkHookBeforeOpenDir func(k *linkSink, dirPath string)
 	sinkHookBeforeLink    func(k *linkSink, i int)
 	sinkHookBeforeRemove  func(k *linkSink, dirPath, name string)
-	sinkLink              = func(r *os.Root, oldname, newname string) error { return r.Link(oldname, newname) }
-	sinkVerifyLstat       = func(r *os.Root, name string) (fs.FileInfo, error) { return r.Lstat(name) }
-	sinkRemove            = func(r *os.Root, name string) error { return r.Remove(name) }
+	// sinkHookAfterQuarantine runs between moving an entry to quarantine
+	// and checking what arrived there.
+	sinkHookAfterQuarantine func(k *linkSink, dirPath, name, q string)
+	sinkRename              = func(r *os.Root, oldname, newname string) error { return r.Rename(oldname, newname) }
+	sinkLink                = func(r *os.Root, oldname, newname string) error { return r.Link(oldname, newname) }
+	sinkVerifyLstat         = func(r *os.Root, name string) (fs.FileInfo, error) { return r.Lstat(name) }
+	sinkRemove              = func(r *os.Root, name string) error { return r.Remove(name) }
 )
 
 // sinkOpenError is a batch that could not be set up. What the partial setup
@@ -1311,13 +1318,79 @@ func (k *linkSink) removeOwned(di int, name string, info fs.FileInfo) error {
 	if sinkHookBeforeRemove != nil {
 		sinkHookBeforeRemove(k, d.path, name)
 	}
-	if err := sinkRemove(d.root, name); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		if fi.IsDir() && sinkDirNotEmpty(err) {
-			return nil // a directory of ours that now holds someone else's files stays
+	if fi.IsDir() {
+		// rmdir removes only an EMPTY directory: at worst an empty one swapped
+		// in at this instant, never anyone's files.
+		if err := sinkRemove(d.root, name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			if sinkDirNotEmpty(err) {
+				return nil // a directory of ours that now holds someone else's files stays
+			}
+			return fmt.Errorf("%s could not be removed: %w", shown, err)
+		}
+		return nil
+	}
+	return k.quarantineRemove(d, name, info)
+}
+
+// quarantineRemove removes a FILE the check above found to be ours without
+// ever deleting a replacement swapped in after that check: the entry is first
+// moved, inside the held directory, to a fresh private name; its identity is
+// checked again THERE, where nobody else is looking; only our own file is
+// removed. Anything else is put back under its name with the no-replace hard
+// link — or, if that name was taken again meanwhile, left in quarantine and
+// reported by both names.
+func (k *linkSink) quarantineRemove(d *sinkDir, name string, info fs.FileInfo) error {
+	shown := termSafe(path.Join(d.path, name))
+	q, err := sinkQuarantineName(d.root)
+	if err != nil {
+		return fmt.Errorf("%s could not be removed: %w", shown, err)
+	}
+	if err := sinkRename(d.root, name, q); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil // gone already
 		}
 		return fmt.Errorf("%s could not be removed: %w", shown, err)
 	}
+	qShown := termSafe(path.Join(d.path, q))
+	if sinkHookAfterQuarantine != nil {
+		sinkHookAfterQuarantine(k, d.path, name, q)
+	}
+	fi, err := d.root.Lstat(q)
+	switch {
+	case err != nil:
+		return fmt.Errorf("%s was set aside as %s for removal, which could not then be checked: %w", shown, qShown, err)
+	case os.SameFile(fi, info):
+		if err := sinkRemove(d.root, q); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%s (set aside as %s) could not be removed: %w", shown, qShown, err)
+		}
+		return nil
+	}
+	// Not ours: another process replaced the entry after our check. Put it
+	// back — never over anything — and delete nothing.
+	if err := sinkLink(d.root, q, name); err != nil {
+		return fmt.Errorf("%s was replaced by another file while it was being removed; that file was set aside as %s "+
+			"and could not be put back (%v) — both are left for you to check", shown, qShown, err)
+	}
+	if err := sinkRemove(d.root, q); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%s was replaced by another file while it was being removed; that file is back in place, "+
+			"but its extra name %s could not be removed: %w", shown, qShown, err)
+	}
 	return nil
+}
+
+// sinkQuarantineName picks a fresh hidden name in r that does not exist.
+func sinkQuarantineName(r *os.Root) (string, error) {
+	for tries := 0; tries < 8; tries++ {
+		var rnd [8]byte
+		if _, err := rand.Read(rnd[:]); err != nil {
+			return "", err
+		}
+		q := sinkStagePrefix + "q-" + hex.EncodeToString(rnd[:])
+		if _, err := r.Lstat(q); errors.Is(err, fs.ErrNotExist) {
+			return q, nil
+		}
+	}
+	return "", errors.New("no free quarantine name")
 }
 
 // sinkDirNotEmpty: a directory removal refused because it is not empty.
