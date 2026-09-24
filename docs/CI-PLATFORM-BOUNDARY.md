@@ -1485,3 +1485,21 @@ written.
 * `scripts/test/native-web-pairing-gate-test.mjs` — that the acceptance and the
   wire-vector gate are wired at all
 * `docs/MACOS-RELEASE-POLICY.md` — the macOS release pipeline in detail
+
+### Root product and repository-status claims
+
+`repo-hygiene.yml`'s unfiltered `repository-policy` job owns these two
+dependency-free Node suites, formerly under `web/scripts/pages/` in Vitest:
+
+| Check | Inputs |
+|---|---|
+| `scripts/test/readme-product-facts-test.mjs` | root `README.md` |
+| `scripts/test/repository-status-test.mjs` | root `README.md`, `SECURITY.md`, `web/native-releases.json`, `web/mac-app-store-release.json` |
+
+A README- or SECURITY-only push therefore evaluates these claims immediately.
+The former Web copies are removed; their assertions, including exact strings,
+regular expressions, negations, release-record comparisons and diagnostics, are
+preserved using Node's strict assertions. Inputs resolve relative to the module,
+so the checks also work when invoked from another directory. The existing
+`ci-guard-coverage-test.mjs` rejects a missing invocation for either suite. Other
+cross-directory Web/Swift claim checks retain their existing ownership.

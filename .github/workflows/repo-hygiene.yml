@@ -257,6 +257,13 @@ jobs:
       - name: what the repository's own documents may claim
         run: node scripts/test/document-claims-test.mjs
 
+      # Root README/SECURITY edits do not select web.yml. Preserve the former
+      # Vitest assertions here, without a Web dependency install or build.
+      - name: README product facts stay accurate
+        run: node scripts/test/readme-product-facts-test.mjs
+      - name: public repository status matches the release records
+        run: node scripts/test/repository-status-test.mjs
+
       # The home page's trust block ("Every claim here can be checked") makes
       # four statements of fact about things OUTSIDE `web/`: the three LICENSE
       # files, `docs/protocol/`, this repository's release workflow attesting
