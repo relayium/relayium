@@ -224,7 +224,10 @@ func (s *transferProgress) finish() {
 }
 
 // termSafe returns path fit to print on a terminal line; see termtext.Safe.
-func termSafe(path string) string { return termtext.Safe(path) }
+// Bidi controls are removed first: they print nothing yet reorder what is
+// shown around them, so a name could otherwise disguise itself ("\u202etxt.exe"
+// reading as "exe.txt") or the rest of the line.
+func termSafe(path string) string { return termtext.Safe(stripBidi(path)) }
 
 // humanBytes formats a byte count with a binary (1024) unit and one decimal.
 func humanBytes(n int64) string {

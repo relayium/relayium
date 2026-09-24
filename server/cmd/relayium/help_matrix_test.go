@@ -22,6 +22,7 @@ var publicCommands = []struct {
 	{"push", "relayium push"},
 	{"pull", "relayium pull"},
 	{"sync", "relayium sync"},
+	{"pair", "relayium pair"}, // A10: the live two-way session
 	{"send", "relayium send"},
 	{"receive", "relayium receive"},
 	{"text", "relayium text"},
@@ -181,7 +182,7 @@ func TestHelpDoesNoAccountOrNetworkWork(t *testing.T) {
 	for _, args := range [][]string{
 		{"id", "-h"}, {"login", "-h"}, {"logout", "-h"}, {"whoami", "-h"},
 		{"up", "-h"}, {"down", "-h"}, {"update", "-h"}, {"authorize", "-h"},
-		{"serve", "-h"}, {"send", "-h"}, {"receive", "-h"}, {"text", "-h"},
+		{"serve", "-h"}, {"pair", "-h"}, {"send", "-h"}, {"receive", "-h"}, {"text", "-h"},
 		{"inbox", "enable", "-h"}, {"inbox", "run", "-h"}, {"inbox", "status", "-h"},
 		{"inbox", "disable", "-h"}, {"inbox", "service", "-h"},
 	} {
@@ -227,6 +228,9 @@ func TestMissingAndUnknownStillExitTwo(t *testing.T) {
 		{[]string{"inbox", "enable"}, 2},          // --dir is required
 		{[]string{"inbox", "service"}, 2},         // <kind> is required
 		{[]string{"text", "one", "two"}, 2},       // one code at most
+		{[]string{"pair", "one", "two"}, 2},       // one code at most
+		{[]string{"pair", "K7M4XR"}, 2},           // not a code: refused before any network
+		{[]string{"pair", "--nope"}, 2},           // unknown flag
 		{[]string{"push", "--nope", "a", "b"}, 2}, /* unknown flag */
 	}
 	for _, c := range cases {
@@ -320,6 +324,7 @@ func TestHelpStatesAccountAndOnlineConstraints(t *testing.T) {
 		"push":      {"no Relayium account"},
 		"pull":      {"no Relayium account"},
 		"sync":      {"no Relayium account"},
+		"pair":      {"relayium login", "online at the same time", "needs no account"},
 		"send":      {"relayium login", "online at the same time"},
 		"receive":   {"No Relayium\naccount is needed", "online at the same time"},
 		"text":      {"relayium login", "online at the same time"},
@@ -380,6 +385,7 @@ func TestHelpNamesItsPositionals(t *testing.T) {
 		"push":      {"<src...>", "<dest>"},
 		"pull":      {"[user@]host:src", "<dest>"},
 		"sync":      {"<src...>", "<dest>"},
+		"pair":      {"[code]"},
 		"send":      {"<src...>", "[code]"},
 		"receive":   {"<code>", "[destdir]"},
 		"text":      {"[code]"},

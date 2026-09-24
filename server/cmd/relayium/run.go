@@ -43,6 +43,10 @@ usage:
   relayium sync <src...> <dest> [--delete] [--watch]   incremental one-way folder mirror
   relayium pull [user@]host:src <dest>       pull files from such a server
                                              (<dest> "-": one file to stdout)
+  relayium pair [code]                       a live two-way session with another device:
+                                             files, folders and messages both ways
+                                             (omit the code to mint one; requires login;
+                                              the other side may be an app or the web page)
   relayium send <src...> [code]              send to a peer over a pairing code (cross-network)
                                              (omit the code to mint one; requires login)
   relayium receive <code> [destdir]          receive such a transfer
@@ -82,7 +86,7 @@ flags (after the subcommand; "→" lists every command the flag applies to):
                   collision before a partial file could ever be continued.
                   → push, pull, serve
   --verify        stop to compare the SAS before sending/opening
-                  → send, receive, text
+                  → pair, send, receive, text
   --yes           never prompt for SAS confirmation (this is already the
                   default; it is kept for scripts)
                   → text
@@ -148,6 +152,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runSync(args[1:], stdout, stderr)
 	case "pull":
 		return runPull(args[1:], stdout, stderr)
+	case "pair":
+		return runPair(args[1:], stdout, stderr)
 	case "send":
 		return runSendCross(args[1:], stdout, stderr)
 	case "receive":
@@ -677,7 +683,11 @@ func reportExit(rep xfer.Report, stderr io.Writer) int {
 		// holds both a hash mismatch and a file the receiver could not save or
 		// install, and the result on the wire does not say which, so neither side
 		// names a cause.
-		fmt.Fprintf(stderr, "%d file(s) could not be verified or saved: %v\n", len(rep.Failed), termtext.SafeAll(rep.Failed))
+		shown := make([]string, len(rep.Failed))
+		for i, f := range rep.Failed {
+			shown[i] = termSafe(f) // controls visible, bidi removed
+		}
+		fmt.Fprintf(stderr, "%d file(s) could not be verified or saved: %v\n", len(rep.Failed), shown)
 		return 1
 	}
 	return 0
