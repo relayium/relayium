@@ -684,3 +684,155 @@ func TestLinkRenewBlockedSignallingAfterRestart(t *testing.T) {
 		t.Errorf("ended after %s; the original deadline is +140 s", ended)
 	}
 }
+
+// ---------------------------------------------------------------- Codex gate-2 round 2
+
+// While renewal owns the transport (here: the initiator's session went into
+// its legacy Restarting state during preparation, so an unsigned answer would
+// be ACCEPTED by the session's table), a replay of the peer's ORIGINAL
+// unsigned answer arrives just before the signed renewal answer. It must be
+// refused before the session or Pion sees it: the renewal still commits and
+// the link runs on.
+func TestLinkRenewReplayedUnsignedAnswerRefused(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub := startLinkDevRenewHub(t, lt, 100*time.Second, ldGrantFor(lt, 300*time.Second))
+	var disconnected, replayed atomic.Int32
+	var mu sync.Mutex
+	var original []byte
+	ldHookProgress = func(d *linkDevDriver) {
+		if d.conn == nil || d.conn.Role() != linkrtc.Initiator || d.renew == nil {
+			return
+		}
+		if d.renew.InFlight() && !d.renew.Restarted() && disconnected.CompareAndSwap(0, 1) {
+			d.q.push(ldItem{kind: ldEvent, ev: linkrtc.Event{Kind: linkrtc.EventDisconnected}, ep: d.connEp})
+		}
+	}
+	ldHookSignal = func(d *linkDevDriver, raw []byte) [][]byte {
+		if d.conn == nil || d.conn.Role() != linkrtc.Initiator {
+			return [][]byte{raw}
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if original == nil && ldUnsignedLinkSDP(raw) {
+			original = append([]byte(nil), raw...)
+		}
+		if sig, _, ok := linksession.ParseRenewEnvelope(raw); ok && sig.Type == "sdp" && sig.SDPType == "answer" &&
+			original != nil && replayed.CompareAndSwap(0, 1) {
+			return [][]byte{original, raw}
+		}
+		return [][]byte{raw}
+	}
+	t.Cleanup(func() { ldHookProgress, ldHookSignal = nil, nil })
+	script := func(m1, m2 string) string {
+		return ldScript(t, "text "+m1, "wait-texts 1", "wait-renewed 1", "text "+m2, "wait-texts 2")
+	}
+	ra, rb := ldPairUpWithin(t, hub.ldHub,
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", script("a1", "a2"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", script("b1", "b2"), ldCode}},
+		3*time.Minute)
+	if disconnected.Load() != 1 || replayed.Load() != 1 {
+		t.Fatalf("disconnect %d, replay %d: the scenario was not produced", disconnected.Load(), replayed.Load())
+	}
+	for _, r := range []ldResult{ra, rb} {
+		if r.code != 0 || !strings.Contains(r.stderr, "relay renewal committed round 1") || strings.Contains(r.stderr, "relay-renewal-failed") {
+			t.Errorf("a replayed unsigned answer disturbed the renewal\n%s", r)
+		}
+	}
+	if !strings.Contains(ra.stderr+rb.stderr, "unsigned link SDP refused: relay renewal owns this transport") {
+		t.Error("the replay was not refused ahead of the session")
+	}
+}
+
+// An overdue renewal deadline wakes the loop at once (Codex r2 item 2).
+// Every probe and ack is lost, so after both ends restart onto the renewed
+// credential only the epoch's own ICE-window deadline can end the attempt.
+// Each end's loop is held, once, between its progress tick and its wake
+// computation until that deadline is already past. A wake computation that
+// drops overdue renewal deadlines leaves the attempt — and the link, on a path
+// that no longer relays — waiting for an unrelated event; with the fix the
+// loop acts at once and the renewal failure ends the link within seconds.
+func TestLinkRenewOverdueDeadlineWakesLoop(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	ldHookRenewFrame = func(*linkDevDriver, []byte) bool { return true }
+	var mu sync.Mutex
+	held := map[*linkDevDriver]bool{}
+	var holds atomic.Int32
+	var heldUntil atomic.Int64
+	ldHookBeforeWake = func(d *linkDevDriver) {
+		if d.renew == nil || !d.renew.Restarted() {
+			return
+		}
+		at, ok := d.renew.NextDeadline()
+		// The ICE-window / epoch deadlines: the probe (2 s) and observe
+		// (0.5 s) cadences are nearer and are left alone.
+		if !ok || at.Sub(time.Now()) < 5*time.Second {
+			return
+		}
+		mu.Lock()
+		if held[d] {
+			mu.Unlock()
+			return
+		}
+		held[d] = true
+		mu.Unlock()
+		holds.Add(1)
+		time.Sleep(time.Until(at) + 700*time.Millisecond)
+		if u := time.Now().UnixNano(); u > heldUntil.Load() {
+			heldUntil.Store(u)
+		}
+	}
+	t.Cleanup(func() { ldHookRenewFrame, ldHookBeforeWake = nil, nil })
+	hub := startLinkDevRenewHub(t, lt, 200*time.Second, ldGrantFor(lt, 300*time.Second))
+	ra, rb := ldPairUpWithin(t, hub.ldHub,
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text a", "wait-texts 1", "sleep 150s"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text b", "wait-texts 1", "sleep 150s"), ldCode}},
+		4*time.Minute)
+	ended := time.Now()
+	if holds.Load() == 0 {
+		t.Fatal("no loop was held past a renewal deadline: the test proves nothing")
+	}
+	if !strings.Contains(ra.stderr+rb.stderr, "the relay renewal did not complete after the relay path was switched") {
+		t.Errorf("the failed renewal was never acted on\nA:\n%s\nB:\n%s", ra, rb)
+	}
+	if lag := ended.Sub(time.Unix(0, heldUntil.Load())); lag > 5*time.Second {
+		t.Errorf("the link ended %s after its overdue renewal deadline: the deadline waited for an unrelated wake", lag)
+	}
+}
+
+// stop() ends the renewal writer even with several writes queued behind a
+// blocked one: the write in progress is cancelled, the rest are discarded,
+// none reaches the hook (or the socket) after stop.
+func TestLDRenewWriterStopEndsBlockedWrites(t *testing.T) {
+	d := &linkDevDriver{ctx: context.Background(), q: &ldQueue{wake: make(chan struct{}, 1)}}
+	var calls atomic.Int32
+	entered := make(chan struct{}, 8)
+	ldHookRenewWrite = func(ctx context.Context, _ *linkDevDriver, _ ldRenewWrite) {
+		calls.Add(1)
+		entered <- struct{}{}
+		<-ctx.Done()
+	}
+	t.Cleanup(func() { ldHookRenewWrite = nil })
+	w := newLDRenewWriter(d)
+	for i := 0; i < 5; i++ {
+		if err := w.push(ldRenewWrite{renew: true, round: 1, rid: uint32(i + 1)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	<-entered
+	start := time.Now()
+	w.stop()
+	select {
+	case <-w.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the writer did not end after stop")
+	}
+	if el := time.Since(start); el > time.Second {
+		t.Errorf("stop took %s", el)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Errorf("%d writes reached the hook; after stop, queued writes must be discarded", n)
+	}
+	if err := w.push(ldRenewWrite{renew: true, round: 1, rid: 9}); err == nil {
+		t.Error("a stopped writer accepted a write")
+	}
+}
