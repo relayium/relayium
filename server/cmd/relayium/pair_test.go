@@ -1445,8 +1445,12 @@ func TestProductInputLossFailsTheRun(t *testing.T) {
 			pairWaitFor(t, 60*time.Second, "A reports the input failure", func() bool {
 				return strings.Contains(a.err.String(), "could not be read")
 			}, a, b)
-			// `text` still waits for the other side to finish (its replies are
-			// read until then); B finishes.
+			// Input failure is reported when queued, before the earlier valid
+			// message necessarily reaches B. Keep B alive until receipt so
+			// this tests input loss, not a peer leaving during delivery.
+			pairWaitFor(t, 60*time.Second, "B receives the valid line before leaving", func() bool {
+				return strings.Contains(b.out.String(), "first line ok")
+			}, a, b)
 			b.line(t, "/quit")
 			if code := a.wait(t, 60*time.Second, b); code != 1 || !strings.Contains(a.err.String(), "could not be read") {
 				t.Errorf("A: exit %d, want 1 with the input failure\n%s", code, a)

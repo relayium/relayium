@@ -44,6 +44,8 @@ repo="$(cd "$here/../.." && pwd)"
 
 # The cells every platform runs.
 core=(
+  TestLinkSinkReservedDeviceNames                  # actual filesystem names/bytes on each platform
+  TestProductInputLossFailsTheRun                  # first line delivered before peer exit, input error retained
   TestPairInterleavedBatchesAndTextsBothWays        # cli↔cli: files, folder, texts, both directions, consecutive batches
   TestPairDeclinedBatchAndRejectedSASNeverWrite     # cli↔cli: decline, rejected SAS
   TestPairPeerNamesAndTextCannotForgeVerification   # cli↔cli: hostile names/text vs the SAS line

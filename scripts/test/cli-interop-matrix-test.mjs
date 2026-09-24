@@ -298,6 +298,8 @@ try {
       return m[1].split("\n").map((l) => l.replace(/#.*$/, "").trim()).filter(Boolean);
     };
     const core = names("core"), posix = names("posix_only"), old = names("old");
+    need(core.includes("TestLinkSinkReservedDeviceNames") && core.includes("TestProductInputLossFailsTheRun"),
+      "CLI matrix must execute receive-name and input-loss regressions on every platform");
     need(old.includes("TestLinkDevAgainstOldCLI") && old.includes("TestProductCommandsKeepTheLegacyWireWithOlderCLI")
       && old.includes("TestPairAgainstOlderCLIEndsFast"), "cli-go-matrix.sh no longer names the three old-version pair tests");
     need(core.includes("TestPairInterleavedBatchesAndTextsBothWays") && core.includes("TestPairDeclinedBatchAndRejectedSASNeverWrite"),

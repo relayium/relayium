@@ -1270,6 +1270,16 @@ func sinkSegments(f linkwire.FileMeta, i int) []string {
 		if s == "" || s == "." || s == ".." {
 			continue
 		}
+		if runtime.GOOS == "windows" {
+			// Device names address Windows devices, not ordinary files. Check
+			// the stem too so names with extensions remain portable across
+			// Windows versions; a leading dot still names an ordinary dotfile.
+			stem, _, _ := strings.Cut(s, ".")
+			stem = strings.TrimRight(stem, " ")
+			if !filepath.IsLocal(s) || (stem != "" && !filepath.IsLocal(stem)) {
+				s = "_" + s
+			}
+		}
 		if strings.HasPrefix(s, sinkStagePrefix) {
 			s = "_" + s // never mistaken for (or colliding with) a staged file
 		}
