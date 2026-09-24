@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -1183,5 +1184,162 @@ func TestRenewProvenPeerSilenceIsNotUnsupported(t *testing.T) {
 	}
 	if len(h.commits[0]) != 1 || len(h.commits[1]) != 1 {
 		t.Errorf("commits %v %v", h.commits[0], h.commits[1])
+	}
+}
+
+// ---------------------------------------------------------------- Codex r5: epoch exhaustion
+
+// rtCapture records every envelope side i sends.
+func rtCapture(h *rtHarness, i int) *[][]byte {
+	var out [][]byte
+	orig := h.e[i].deps.SendSignal
+	h.e[i].deps.SendSignal = func(env []byte) error {
+		out = append(out, append([]byte(nil), env...))
+		return orig(env)
+	}
+	return &out
+}
+
+// rtEpochs lists every epoch either side ever put on the wire.
+func rtEpochs(h *rtHarness) []uint32 {
+	var out []uint32
+	for i := range 2 {
+		for _, s := range h.sigLog[i] {
+			out = append(out, s.Epoch)
+		}
+	}
+	return out
+}
+
+// Busy refusal at the very top of the epoch space. The peer (side 1) sits
+// just below the end and starts the last or second-to-last epoch while side 0
+// is busy; side 0 refuses and records it. After recovery:
+//
+//   - last-1: side 0 still has exactly one epoch (the last) and renews with it;
+//   - last:   no epoch is left for anyone — no attempt starts, nothing is
+//     asked of the server again, and both ends run to the deadline they have.
+//
+// In both, no epoch ever wraps to 0 or is reused, every old signed envelope
+// replayed afterwards is inert, and the server's request/issuance counts are
+// exactly what the one legitimate path needs.
+func TestRenewEpochExhaustionNeverWrapsOrReplays(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		peerStart uint32 // side 1's counter before its attempt
+		commit    bool
+	}{
+		{"last-minus-1", math.MaxUint32 - 2, true},
+		{"last", math.MaxUint32 - 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newRT(t)
+			h.e[0].epochCounter = tc.peerStart - 1
+			h.e[1].epochCounter = tc.peerStart
+			sent0, sent1 := rtCapture(h, 0), rtCapture(h, 1)
+			old := h.bound
+			h.busy[0] = true
+			h.toWindow()
+			h.run(40 * time.Second)
+			if h.e[0].epochCounter != tc.peerStart+1 {
+				t.Fatalf("the refused prepare was not recorded: counter %d, want %d", h.e[0].epochCounter, tc.peerStart+1)
+			}
+			h.busy[0] = false
+			h.run(9 * time.Minute)
+			for _, e := range rtEpochs(h) {
+				if e == 0 || e < tc.peerStart {
+					t.Fatalf("epoch %d went on the wire (wrapped or reused)", e)
+				}
+			}
+			if tc.commit {
+				if len(h.commits[0]) != 1 || len(h.commits[1]) != 1 || h.issued.Load() != 1 {
+					t.Fatalf("commits %v %v issued %d, want one renewal on the last epoch", h.commits[0], h.commits[1], h.issued.Load())
+				}
+			} else {
+				if len(h.commits[0])+len(h.commits[1]) != 0 || h.issued.Load() != 0 {
+					t.Fatalf("renewed past exhaustion: commits %v %v issued %d", h.commits[0], h.commits[1], h.issued.Load())
+				}
+				if h.requests[0] != 0 || h.requests[1] != 1 {
+					t.Fatalf("requests %v: side 0 must ask nothing, side 1 only its one refused attempt", h.requests)
+				}
+				for i := range 2 {
+					if !h.bound[i].DeadlineAt.Equal(old[i].DeadlineAt) {
+						t.Fatalf("side %d deadline moved", i)
+					}
+				}
+			}
+			if h.e[0].epochCounter != math.MaxUint32 || h.e[1].epochCounter != math.MaxUint32 {
+				t.Fatalf("counters %d/%d, want both at the last epoch", h.e[0].epochCounter, h.e[1].epochCounter)
+			}
+			// Replay every envelope either side ever sent, both ways, and let
+			// several more renewal windows pass: nothing starts, nothing is
+			// asked, nothing is issued.
+			reqs, iss := h.requests, h.issued.Load()
+			for _, env := range *sent1 {
+				h.push(0, "signal", env)
+			}
+			for _, env := range *sent0 {
+				h.push(1, "signal", env)
+			}
+			h.run(3 * time.Hour)
+			if h.requests != reqs || h.issued.Load() != iss {
+				t.Fatalf("after exhaustion: requests %v -> %v, issued %d -> %d", reqs, h.requests, iss, h.issued.Load())
+			}
+			if h.e[0].attempt != nil || h.e[1].attempt != nil {
+				t.Fatal("an attempt exists after exhaustion")
+			}
+		})
+	}
+}
+
+// One authenticated prepare cannot jump the link to the end of its epoch
+// space: an implausible jump is dropped unrecorded, before it can be acted on
+// or refused.
+func TestRenewImplausibleEpochJumpDropped(t *testing.T) {
+	h := newRT(t)
+	h.busy[0] = true
+	sig := RenewSignal{Type: "prepare", Epoch: math.MaxUint32}
+	p, _ := RenewSignalPayload(sig, "b", "a")
+	auth, _ := h.e[1].sign(p)
+	h.toWindow()
+	h.l.clk.t = h.l.clk.t.Add(2 * time.Second)
+	if !h.e[0].Signal(EncodeRenewEnvelope(sig, auth)) {
+		t.Fatal("the envelope was not consumed")
+	}
+	if h.e[0].epochCounter != 0 || h.e[0].peerProven || h.e[0].attempt != nil || len(h.q) != 0 {
+		t.Fatalf("an implausible jump acted: counter %d proven %v attempt %v replies %d",
+			h.e[0].epochCounter, h.e[0].peerProven, h.e[0].attempt != nil, len(h.q))
+	}
+	// A plausible one still works (the next ordinary step is unaffected).
+	h.busy[0] = false
+	h.run(3 * time.Minute)
+	if len(h.commits[0]) != 1 || len(h.commits[1]) != 1 {
+		t.Fatalf("ordinary renewal broken after a dropped jump: %v %v", h.commits[0], h.commits[1])
+	}
+}
+
+// An epoch spent by a busy refusal while an attempt was already in flight is
+// never reusable: replaying that signed prepare once the side is no longer
+// busy must not supersede the attempt (which would start a second attempt at
+// a spent epoch and ask the server again).
+func TestRenewRefusedEpochNotReusableDuringAttempt(t *testing.T) {
+	h := newRT(t)
+	h.toWindow()
+	h.l.clk.t = h.l.clk.t.Add(2 * time.Second)
+	e := h.e[0]
+	a := e.begin(5, false)
+	h.busy[0] = true
+	sig := RenewSignal{Type: "prepare", Epoch: 6}
+	p, _ := RenewSignalPayload(sig, "b", "a")
+	auth, _ := h.e[1].sign(p)
+	env := EncodeRenewEnvelope(sig, auth)
+	e.Signal(env) // refused while busy: epoch 6 is spent
+	if e.epochCounter != 6 || e.attempt != a {
+		t.Fatalf("refusal: counter %d, attempt kept %v", e.epochCounter, e.attempt == a)
+	}
+	h.busy[0] = false
+	reqs := h.requests[0]
+	e.Signal(env) // the same signed prepare, replayed
+	if e.attempt != a || h.requests[0] != reqs {
+		t.Fatalf("a replayed prepare at a spent epoch superseded the attempt (requests %d -> %d)", reqs, h.requests[0])
 	}
 }

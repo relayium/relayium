@@ -91,6 +91,20 @@ const (
 
 	// renewRoundsRetained bounds the per-round budget maps.
 	renewRoundsRetained = 8
+
+	// renewEpochLast is the last epoch a link may ever use. Epochs are uint32
+	// on the wire (§1) and are never reused, so a link that has spent this one
+	// has no renewal left: it keeps its current deadline and legacy recovery,
+	// and ends truthfully at that deadline. Nothing ever wraps to 0.
+	renewEpochLast = math.MaxUint32
+	// RenewMaxEpochJump bounds how far ahead of everything this link has seen
+	// a peer's prepare may name its epoch. The spec sets no bound; honest
+	// peers advance one per attempt they spend, and every attempt costs a
+	// server round request under the per-round budgets, so a jump of more
+	// than this is not an ordinary gap. Such a prepare is dropped unacted
+	// (and unrecorded): one message must not be able to exhaust the link's
+	// epochs. A client-side rule only — nothing on the wire changes.
+	RenewMaxEpochJump = 1024
 )
 
 const (
@@ -1105,7 +1119,7 @@ func (r *Renewal) NextDeadline() (time.Time, bool) {
 		// the trigger is polled on a bounded cadence (renewPoll): whether an
 		// attempt is due also depends on activity, which has no deadline.
 		now := r.now()
-		if b, ok := r.deps.Bound(); ok && now.Before(b.DeadlineAt) && !r.broken {
+		if b, ok := r.deps.Bound(); ok && now.Before(b.DeadlineAt) && !r.broken && r.epochCounter < renewEpochLast {
 			open := b.DeadlineAt.Add(-RenewMargin(b.DeadlineAt, b.AnchoredAt))
 			switch {
 			case open.After(now):
@@ -1271,6 +1285,11 @@ func (r *Renewal) due() bool {
 	if r.stopped || r.broken || r.attempt != nil || r.peerUnsupported || r.roundDenied {
 		return false
 	}
+	// Epochs exhausted: no attempt can ever start again (never wrap, never
+	// reuse). The link keeps its deadline and its legacy recovery.
+	if r.epochCounter >= renewEpochLast {
+		return false
+	}
 	if !r.deps.PeerSupportsRenew() {
 		return false
 	}
@@ -1299,6 +1318,9 @@ func (r *Renewal) due() bool {
 func (r *Renewal) trigger() {
 	if !r.due() {
 		return
+	}
+	if r.epochCounter >= renewEpochLast {
+		return // defensive: due() already refused
 	}
 	a := r.begin(r.epochCounter+1, false)
 	r.prepareSent++
@@ -1643,10 +1665,13 @@ func (r *Renewal) routable(sig RenewSignal) bool {
 		if r.peerUnsupported {
 			return false
 		}
-		if r.attempt != nil {
-			return sig.Epoch >= r.attempt.epoch
+		// The attempt in flight coalesces; anything else must be an epoch
+		// this link has never spent (never one at or below the counter —
+		// which also rules out any reuse), and a plausible step ahead.
+		if r.attempt != nil && sig.Epoch == r.attempt.epoch {
+			return true
 		}
-		return sig.Epoch > r.epochCounter
+		return sig.Epoch > r.epochCounter && sig.Epoch-r.epochCounter <= RenewMaxEpochJump
 	}
 	return r.attempt != nil && sig.Epoch == r.attempt.epoch
 }
