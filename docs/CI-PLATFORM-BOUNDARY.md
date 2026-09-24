@@ -1516,3 +1516,9 @@ unfiltered job, including documentation-only changes outside Web selectors.
 Chinese locale tables, and CLI crawler content share the existing protocol-specific
 SAS assertions. Node 24 strips the locale tables' TypeScript types without Web
 build dependencies. The former Vitest copy is removed.
+
+`native-cross-directory-claims-test.mjs` owns the Web CLI route source assertion
+and the server activation aggregate schema guard formerly in Swift tests. The
+native runtime CLI URL assertion stays in `HelpPresentationTests`. The aggregate
+parser still matches nested parentheses, top-level columns and the closed stage
+list. Web/server-only edits now execute both source checks in repository-policy.

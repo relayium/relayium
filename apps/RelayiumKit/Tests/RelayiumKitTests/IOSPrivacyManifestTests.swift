@@ -443,9 +443,6 @@ final class IOSPrivacyManifestTests: XCTestCase {
     /// source scan below cannot drift apart.
     private let absentDeviceIDType = "NSPrivacyCollectedDataTypeDeviceID"
 
-    /// The three server-owned milestones the aggregate may count.
-    private let activationStages = ["code_minted", "room_opened", "room_paired"]
-
     /// **The app's collected-data set, exactly.**
     ///
     /// Apple's definition of collection is "transmitted off device and retained
@@ -829,96 +826,8 @@ final class IOSPrivacyManifestTests: XCTestCase {
                        "an Analytics purpose is attached to a linked entry")
     }
 
-    /// **The aggregate's shape, read out of the schema that keeps it.**
-    ///
-    /// The Product Interaction entry is declared UNLINKED, and that claim rests
-    /// entirely on the table carrying no identifier. A column added there would
-    /// make the manifest false without touching a line of Swift, so the DDL is
-    /// parsed rather than grepped: exactly three columns, the three closed
-    /// stages, and none of the identifier columns a funnel table drifts toward.
-    func testTheActivationAggregateCarriesNoIdentifier() throws {
-        let schema = try RepoRoot.text("server/account/sqlite.go")
-        let head = "CREATE TABLE IF NOT EXISTS activation_funnel_monthly ("
-        let start = try XCTUnwrap(schema.range(of: head),
-                                  "the activation aggregate's table is no longer created here")
-
-        // Read by matching parentheses rather than by searching for `);`: every
-        // column carries a CHECK, and the first `)` after the head belongs to
-        // `CAST(substr(period, 1, 4) AS INTEGER)`. A substring parse would
-        // return a prefix that still contains the three columns this test wants
-        // to see, and would therefore keep passing after a fourth was appended.
-        var depth = 1
-        var columnList = ""
-        var index = start.upperBound
-        while index < schema.endIndex {
-            let character = schema[index]
-            index = schema.index(after: index)
-            if character == "(" { depth += 1 }
-            if character == ")" {
-                depth -= 1
-                if depth == 0 { break }
-            }
-            columnList.append(character)
-        }
-        XCTAssertEqual(depth, 0, "the activation table's column list is unterminated")
-
-        // Split on the commas that are NOT inside a CHECK, then drop the table
-        // constraints — `PRIMARY KEY (...)` is not a column called `PRIMARY`.
-        var entryDepth = 0
-        var entries: [String] = [""]
-        for character in columnList {
-            if character == "," && entryDepth == 0 { entries.append(""); continue }
-            if character == "(" { entryDepth += 1 }
-            if character == ")" { entryDepth -= 1 }
-            entries[entries.count - 1].append(character)
-        }
-        let columns = entries
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .filter { !["PRIMARY", "UNIQUE", "CHECK", "FOREIGN", "CONSTRAINT"]
-                .contains(($0.split(separator: " ").first.map(String.init) ?? "").uppercased()) }
-        XCTAssertEqual(columns.map { $0.split(separator: " ").first.map(String.init) ?? "" },
-                       ["period", "stage", "count"],
-                       "the activation aggregate no longer has exactly three columns; an "
-                        + "identifier here would make the unlinked Product Interaction "
-                        + "declaration false")
-
-        // The stage vocabulary is closed, and it is the same three the manifest
-        // comment names. Read as the COMPLETE list of quoted literals in the
-        // `stage` column's own entry, so a fourth stage cannot be appended
-        // alongside the three — and scoped to that entry rather than the whole
-        // column list, because `period`'s CHECK carries a `'*[^0-9]*'` GLOB
-        // pattern that is a quoted literal and is not a stage.
-        let stageColumn = try XCTUnwrap(columns.first { $0.hasPrefix("stage ") },
-                                        "the aggregate has no stage column")
-        var literals: [String] = []
-        var rest = Substring(stageColumn)
-        while let open = rest.range(of: "'"),
-              let close = rest.range(of: "'", range: open.upperBound..<rest.endIndex) {
-            literals.append(String(rest[open.upperBound..<close.lowerBound]))
-            rest = rest[close.upperBound...]
-        }
-        XCTAssertEqual(literals, activationStages,
-                       "the aggregate's stage vocabulary is no longer exactly the closed three")
-        XCTAssertTrue(columnList.contains(
-            "stage IN ('code_minted','room_opened','room_paired')"),
-                      "the three stages are no longer enforced by a CHECK")
-
-        // And the identifiers a funnel table drifts toward, checked against the
-        // COLUMN NAMES rather than the raw DDL text. The raw text cannot be
-        // searched for these: `code` and `room` are substrings of the stage
-        // literals `code_minted` and `room_opened`, so a text scan reports the
-        // correct table as carrying a `code` column and a `room` column. That
-        // false positive is worth naming — it is the version of this check that
-        // was written first, and it fails on a table that is exactly right.
-        let names = columns.map { $0.split(separator: " ").first.map(String.init) ?? "" }
-        for identifier in ["user_id", "account_id", "install_id", "device_id", "ip",
-                           "code", "room", "session", "token", "locale", "platform"] {
-            XCTAssertFalse(names.contains(identifier),
-                           "the activation aggregate gained a \(identifier) column; it is "
-                            + "declared UNLINKED and that is now false")
-        }
-    }
+    // The server aggregate schema guard moved to native-cross-directory-claims-test.mjs
+    // so server-only changes execute it in unfiltered Linux repository-policy.
 
     /// **The extension collects nothing, and the code is why.**
     ///

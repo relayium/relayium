@@ -344,8 +344,7 @@ final class HelpPresentationTests: XCTestCase {
     /// site keeps English-only beside `/pricing`.
     func testTheCLIPageIsTheSiteRoute() throws {
         XCTAssertEqual(AppEnvironment.cliWebURL.absoluteString, "https://relayium.com/cli")
-        let router = try RepoRoot.text("web/src/lib/router.svelte.ts")
-        XCTAssertTrue(router.contains("CLI_PATH = \"/cli\""),
-                      "the app links to a path the web router no longer serves")
+        // The Web router assertion lives in native-cross-directory-claims-test.mjs,
+        // whose unfiltered Linux lane also runs on router-only edits.
     }
 }
