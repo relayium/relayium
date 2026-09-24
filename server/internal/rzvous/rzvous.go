@@ -159,6 +159,44 @@ func (s *Session) RecvSignal(ctx context.Context) (json.RawMessage, error) {
 	}
 }
 
+// SendRenew asks the server for relay renewal round `round`, correlated by
+// `rid` (docs/protocol/relay-renew-v1.md §2.1): {"type":"ice-renew",
+// "data":{"round":R,"rid":N}}. It rides THIS session's socket because the
+// server's renewal authority is the admitted connection itself, frozen when
+// the room first held both peers; no other connection can ask for it.
+// A server that predates renewal ignores the frame: the caller treats silence
+// as `unavailable`.
+func (s *Session) SendRenew(ctx context.Context, round, rid uint32) error {
+	data := json.RawMessage(fmt.Sprintf(`{"round":%d,"rid":%d}`, round, rid))
+	return s.write(ctx, signal.Envelope{Type: signal.TypeICERenew, Data: data})
+}
+
+// RecvSignalOrGrant is RecvSignal that also returns the server's `ice-grant`
+// replies (grant=true) instead of skipping them. Signals kept by Join come
+// first, exactly as for RecvSignal; roster and presence frames are skipped.
+// RecvSignal itself is unchanged: a caller that never renews never sees a
+// grant.
+func (s *Session) RecvSignalOrGrant(ctx context.Context) (data json.RawMessage, grant bool, err error) {
+	if len(s.pending) > 0 {
+		data := s.pending[0]
+		s.pending[0] = nil
+		s.pending = s.pending[1:]
+		return data, false, nil
+	}
+	for {
+		env, err := s.read(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		switch env.Type {
+		case signal.TypeSignal:
+			return env.Data, false, nil
+		case signal.TypeICEGrant:
+			return env.Data, true, nil
+		}
+	}
+}
+
 func (s *Session) Close() error { return s.conn.Close(websocket.StatusNormalClosure, "") }
 
 func (s *Session) write(ctx context.Context, e signal.Envelope) error {

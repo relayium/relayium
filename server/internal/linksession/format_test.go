@@ -135,6 +135,7 @@ var keyBearingLeaves = []reflect.Type{
 	reflect.TypeOf(linkwire.TextReceiver{}),
 	reflect.TypeOf(Link{}),
 	reflect.TypeOf(pendingKeys{}),
+	reflect.TypeOf(Renewal{}), // holds a copy of the link's resumeAuth (A11)
 }
 
 // packageStructs registers every struct type declared in the package's
@@ -148,6 +149,15 @@ var packageStructs = map[string]reflect.Type{
 	"timer": reflect.TypeOf(timer{}), "tables": reflect.TypeOf(tables{}), "capturedSignal": reflect.TypeOf(capturedSignal{}),
 	"laneFrame": reflect.TypeOf(laneFrame{}), "fileIn": reflect.TypeOf(fileIn{}), "fileOut": reflect.TypeOf(fileOut{}),
 	"queuedBatch": reflect.TypeOf(queuedBatch{}), "Session": reflect.TypeOf(Session{}),
+	// A11 relay renewal
+	"IceGrant": reflect.TypeOf(IceGrant{}), "RenewBound": reflect.TypeOf(RenewBound{}),
+	"RenewCandidate": reflect.TypeOf(RenewCandidate{}), "RenewDeps": reflect.TypeOf(RenewDeps{}),
+	"RenewProbeFrame": reflect.TypeOf(RenewProbeFrame{}), "RenewSignal": reflect.TypeOf(RenewSignal{}),
+	"Renewal": reflect.TypeOf(Renewal{}), "SdpPin": reflect.TypeOf(SdpPin{}),
+	"renewAttempt": reflect.TypeOf(renewAttempt{}), "renewBudget": reflect.TypeOf(renewBudget{}),
+	"renewCommitted": reflect.TypeOf(renewCommitted{}), "renewConfig": reflect.TypeOf(renewConfig{}),
+	"renewPayload": reflect.TypeOf(renewPayload{}), "renewRequest": reflect.TypeOf(renewRequest{}),
+	"renewVerified": reflect.TypeOf(renewVerified{}),
 }
 
 func declaredStructs(t *testing.T) []string {

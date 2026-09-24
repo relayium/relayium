@@ -191,6 +191,15 @@ func (s *Session) textFrame(raw []byte) {
 	if s.textM.State == TFailed || !s.lk.alive() {
 		return
 	}
+	// relay-renew/1 control (0x0d, relay-renew-v1 §6.2) is demuxed AHEAD of
+	// activity: a probe or ack is never user activity, so it must not re-arm
+	// the link idle timer. The renewal engine consumes it before the session
+	// (IsRenewControlFrame); one that still arrives here is ignored exactly
+	// as before, without touching the idle clock.
+	if IsRenewControlFrame(raw) {
+		s.fireText(TPeerUnknown)
+		return
+	}
 	s.touchLink()
 	if c, ok := linkwire.TextLifecycle(raw); ok {
 		switch c {
