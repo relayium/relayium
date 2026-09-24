@@ -1000,7 +1000,18 @@ func stripBidi(s string) string {
 // is put back with the no-replace hard link or, failing that, left in
 // quarantine and reported by both names — kept in report-only accounting
 // (foreign) through the final discard, never a deletion candidate. A directory
-// is never removed (above). Accepted residual: a
+// is never removed (above).
+//
+// Accepted residual (owner/root decision, A10 r8): portable Go has no rename
+// that refuses a directory source, so if another process swaps a FOLDER in at
+// one of our file names between our identity check and our quarantine rename,
+// that folder — unchanged, contents and all — is displaced to our hidden
+// quarantine name. Nothing in it is deleted: settle never removes a
+// directory; it tries once to rename it back, only if its original name is
+// absent, and otherwise keeps it report-only and names both paths ("…that
+// folder was set aside unchanged as <q>; move it back if it is yours").
+//
+// Accepted residual: a
 // same-user process that deliberately swaps the entry at OUR fresh random
 // quarantine name between the second check and the removal — it has the
 // same authority we have, and the race gains it nothing. Everything else
@@ -1038,7 +1049,10 @@ type linkSink struct {
 	// leftDirs: directories created for this batch, left in place by discard
 	// (the sink never removes a directory).
 	leftDirs []string
-	done     bool // installed
+	// createdPaths: every directory this batch's Mkdir created, recorded the
+	// moment it was created (report-only).
+	createdPaths []string
+	done         bool // installed
 }
 
 type sinkDir struct {
@@ -1064,6 +1078,7 @@ var (
 	sinkHookAfterQuarantine func(k *linkSink, dirPath, name, q string)
 	sinkRename              = func(r *os.Root, oldname, newname string) error { return r.Rename(oldname, newname) }
 	sinkStatHandle          = func(f *os.File) (fs.FileInfo, error) { return f.Stat() }
+	sinkDirLstat            = func(r *os.Root, name string) (fs.FileInfo, error) { return r.Lstat(name) }
 	sinkLink                = func(r *os.Root, oldname, newname string) error { return r.Link(oldname, newname) }
 	sinkVerifyLstat         = func(r *os.Root, name string) (fs.FileInfo, error) { return r.Lstat(name) }
 	sinkRemove              = func(r *os.Root, name string) error { return r.Remove(name) }
@@ -1171,7 +1186,11 @@ func (k *linkSink) openDir(segs []string) (int, error) {
 				return 0, err
 			}
 			created = true
-			fi, err = parent.Lstat(seg)
+			// Named for the report at once, before (and whatever happens to)
+			// the identity capture below: a folder we created is always named
+			// among what a discard leaves (report-only; never removed).
+			k.createdPaths = append(k.createdPaths, p)
+			fi, err = sinkDirLstat(parent, seg)
 		}
 		switch {
 		case err != nil:
@@ -1438,8 +1457,16 @@ func (k *linkSink) settle(j int) error {
 	// stays in quarantine.
 	var perr error
 	if fi.IsDir() {
-		perr = fmt.Errorf("%s was replaced by a directory while it was being removed; that directory was set aside as %s "+
-			"and left there untouched — both are left for you to check", shown, qShown)
+		// Someone's folder, swapped in at a file's name after our check and
+		// moved (unchanged, contents and all) into our quarantine name by our
+		// rename. Never removed. One attempt to give it its name back, only if
+		// that name is absent; otherwise it stays set aside, reported.
+		if _, lerr := d.root.Lstat(l.orig); errors.Is(lerr, fs.ErrNotExist) && sinkRename(d.root, l.q, l.orig) == nil {
+			return done(fmt.Errorf("%s was replaced by a folder while it was being removed; that folder was moved aside "+
+				"and then back, unchanged, and the file of this batch it replaced may be left elsewhere", shown))
+		}
+		perr = fmt.Errorf("%s was replaced by a folder while it was being removed; that folder was set aside unchanged as %s; "+
+			"move it back if it is yours", shown, qShown)
 	} else if err := sinkLink(d.root, l.q, l.orig); err != nil {
 		perr = fmt.Errorf("%s was replaced by another file while it was being removed; that file was set aside as %s "+
 			"and could not be put back (%v) — both are left for you to check", shown, qShown, err)
@@ -1547,12 +1574,7 @@ func (k *linkSink) discard() error {
 	// Directories are never removed: those this batch created are left in
 	// place and named (leftDirs). A directory removal could, in a race, take
 	// someone else's (a substituted directory is only ever used as a parent).
-	k.leftDirs = nil
-	for _, d := range k.dirs[1:] {
-		if d.created {
-			k.leftDirs = append(k.leftDirs, d.path)
-		}
-	}
+	k.leftDirs = append([]string(nil), k.createdPaths...)
 	// Someone else's entries set aside and not put back: reported, never
 	// deleted. (Our own, still in quarantine, were reported by settle.)
 	errs = append(errs, k.foreign...)

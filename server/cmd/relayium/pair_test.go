@@ -1960,3 +1960,111 @@ func pairListFiles(t *testing.T, root string) []string {
 	})
 	return out
 }
+
+// Codex r8 #1 (accepted residual, root decision): a FOLDER swapped in at one
+// of our file names between the check and the quarantine rename is displaced,
+// unchanged, into quarantine. Nothing inside it is ever deleted: it is moved
+// back if its name is free, otherwise kept set aside and reported by both
+// names.
+func TestLinkSinkFolderSwappedInForAFileIsNeverDeleted(t *testing.T) {
+	setup := func(t *testing.T) (string, *linkSink) {
+		dest := t.TempDir()
+		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("f")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkFill(t, k)
+		if err := k.install(); err != nil {
+			t.Fatal(err)
+		}
+		return dest, k
+	}
+	swapInFolder := func(t *testing.T, dest string) {
+		if err := os.Rename(filepath.Join(dest, "f"), filepath.Join(dest, "f-moved")); err != nil {
+			t.Fatal(err)
+		}
+		pairWriteFile(t, filepath.Join(dest, "f", "inner"), 9)
+	}
+	t.Cleanup(func() { sinkHookBeforeRemove, sinkHookAfterQuarantine = nil, nil })
+	t.Run("moved-back", func(t *testing.T) {
+		dest, k := setup(t)
+		sinkHookBeforeRemove = func(_ *linkSink, _, name string) {
+			if name == "f" {
+				swapInFolder(t, dest)
+			}
+		}
+		defer func() { sinkHookBeforeRemove = nil }()
+		err := k.discard()
+		if err == nil || !strings.Contains(err.Error(), "replaced by a folder") {
+			t.Errorf("discard = %v, want the substitution reported", err)
+		}
+		if b, rerr := os.ReadFile(filepath.Join(dest, "f", "inner")); rerr != nil || len(b) != 9 {
+			t.Errorf("the folder's content is not back in place (%v)", rerr)
+		}
+	})
+	t.Run("name-taken-kept-aside", func(t *testing.T) {
+		dest, k := setup(t)
+		sinkHookBeforeRemove = func(_ *linkSink, _, name string) {
+			if name == "f" {
+				swapInFolder(t, dest)
+			}
+		}
+		sinkHookAfterQuarantine = func(_ *linkSink, _, name, _ string) {
+			if name == "f" {
+				if err := os.WriteFile(filepath.Join(dest, "f"), []byte("NEWER"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		defer func() { sinkHookBeforeRemove, sinkHookAfterQuarantine = nil, nil }()
+		err := k.discard()
+		if err == nil || !strings.Contains(err.Error(), "set aside unchanged as") || !strings.Contains(err.Error(), "move it back if it is yours") {
+			t.Fatalf("discard = %v, want both names reported", err)
+		}
+		var found bool
+		for _, g := range pairListFiles(t, dest) {
+			if strings.HasPrefix(g, sinkStagePrefix) && strings.HasSuffix(g, "/inner") {
+				found = true
+				if !strings.Contains(err.Error(), strings.TrimSuffix(g, "/inner")) {
+					t.Errorf("the quarantine path %s is not named: %v", g, err)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("the folder's content was deleted: %v", pairListFiles(t, dest))
+		}
+		if b, _ := os.ReadFile(filepath.Join(dest, "f")); string(b) != "NEWER" {
+			t.Error("the newer file at the name was touched")
+		}
+	})
+}
+
+// Codex r8 #2: a folder is named in the report from the moment our Mkdir
+// created it — even when the identity check right after fails.
+func TestLinkSinkCreatedFolderNamedEvenIfItCannotBeChecked(t *testing.T) {
+	old := sinkDirLstat
+	t.Cleanup(func() { sinkDirLstat = old })
+	sinkDirLstat = func(r *os.Root, name string) (fs.FileInfo, error) {
+		if name == "a" {
+			return nil, errors.New("injected: I/O error")
+		}
+		return r.Lstat(name)
+	}
+	dest := t.TempDir()
+	_, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("a/one")})
+	var oe *sinkOpenError
+	if !errors.As(err, &oe) {
+		t.Fatalf("open = %v", err)
+	}
+	if strings.Join(oe.leftDirs, "|") != "a" {
+		t.Errorf("leftDirs = %v, want the created folder named", oe.leftDirs)
+	}
+	if fi, err := os.Stat(filepath.Join(dest, "a")); err != nil || !fi.IsDir() {
+		t.Errorf("the created folder is not there (%v)", err)
+	}
+	var buf bytes.Buffer
+	(&linkUI{stderr: &buf}).discarded(nil, oe.cleanup, oe.leftDirs)
+	if strings.Contains(buf.String(), "nothing from it was kept") || !strings.Contains(buf.String(), "left in place: a") {
+		t.Errorf("report %q", buf.String())
+	}
+}
