@@ -1631,17 +1631,135 @@ func TestSinkInstallErrorIsTruthful(t *testing.T) {
 // failRemovalOf makes every removal of a name containing sub fail: the
 // quarantine move of that name and the final removal alike.
 func failRemovalOf(sub string) {
+	failRenameOf(sub)
+	failRemoveOf(sub)
+}
+
+// failRenameOf makes the quarantine move of a name containing sub fail.
+func failRenameOf(sub string) {
+	sinkRename = func(r *os.Root, oldname, newname string) error {
+		if strings.Contains(oldname, sub) {
+			return errors.New("injected: removal failed")
+		}
+		return r.Rename(oldname, newname)
+	}
+}
+
+// failRemoveOf makes the final removal of a name containing sub fail.
+func failRemoveOf(sub string) {
 	sinkRemove = func(r *os.Root, name string) error {
 		if strings.Contains(name, sub) {
 			return errors.New("injected: removal failed")
 		}
 		return r.Remove(name)
 	}
-	sinkRename = func(r *os.Root, oldname, newname string) error {
-		if strings.Contains(oldname, sub) {
-			return errors.New("injected: removal failed")
+}
+
+// Codex r6 #1: a directory of ours is replaced by a FILE right after the
+// cleanup's check. Directory removal must never unlink that file: it is moved
+// to quarantine, found not to be our directory, put back, and reported.
+func TestLinkSinkDirectoryReplacedByFileIsNeverDeleted(t *testing.T) {
+	dest := t.TempDir()
+	k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("d/one")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sinkHookBeforeRemove = func(_ *linkSink, _, name string) {
+		if name == "d" {
+			if err := os.Rename(filepath.Join(dest, "d"), filepath.Join(dest, "d-moved")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dest, "d"), []byte("THEIRS"), 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}
-		return r.Rename(oldname, newname)
+	}
+	t.Cleanup(func() { sinkHookBeforeRemove = nil })
+	err = k.discard()
+	if b, rerr := os.ReadFile(filepath.Join(dest, "d")); rerr != nil || string(b) != "THEIRS" {
+		t.Fatalf("the file swapped in for our directory was deleted or changed (%q, %v)", b, rerr)
+	}
+	if err == nil || !strings.Contains(err.Error(), "the directory d was replaced") {
+		t.Errorf("discard = %v, want the replacement reported", err)
+	}
+	sinkNoStaging(t, dest)
+}
+
+// Codex r6 #2: when a freshly created staged file cannot be identified, it is
+// left in place and reported — never removed by name.
+func TestLinkSinkUnidentifiedStagedFileIsLeftAndReported(t *testing.T) {
+	old := sinkStatHandle
+	t.Cleanup(func() { sinkStatHandle = old })
+	sinkStatHandle = func(*os.File) (fs.FileInfo, error) { return nil, errors.New("injected: stat failed") }
+	dest := t.TempDir()
+	_, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("one")})
+	var oe *sinkOpenError
+	if !errors.As(err, &oe) || oe.cleanup == nil || !strings.Contains(oe.cleanup.Error(), "was left in place") {
+		t.Fatalf("open = %v, want the unresolved entry reported", err)
+	}
+	var staged []string
+	for _, g := range pairListTree(t, dest) {
+		if strings.HasPrefix(g, sinkStagePrefix) {
+			staged = append(staged, g)
+		}
+	}
+	if len(staged) != 1 || !strings.Contains(oe.cleanup.Error(), staged[0]) {
+		t.Errorf("the entry must stay and be named: on disk %v, reported %v", staged, oe.cleanup)
+	}
+}
+
+// Codex r6 #3: the move to quarantine succeeds but the removal there fails.
+// The entry stays recorded as ours at its quarantine name: reported by both
+// names, and removed by a later attempt.
+func TestLinkSinkQuarantinedEntryStaysOwned(t *testing.T) {
+	oldR, oldM := sinkRemove, sinkRename
+	t.Cleanup(func() { sinkRemove, sinkRename = oldR, oldM })
+	dest := t.TempDir()
+	k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("d/one")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sinkFill(t, k)
+	failRemoveOf("-q-") // renames succeed; removal at a quarantine name fails
+	err = k.install()
+	if err == nil || !strings.Contains(err.Error(), "set aside as") {
+		t.Fatalf("install = %v, want the quarantined leftover reported", err)
+	}
+	if len(k.quarantined) == 0 {
+		t.Fatal("the quarantined entry was dropped from ownership")
+	}
+	sinkRemove = oldR // a later attempt can remove it
+	if err := k.discard(); err != nil {
+		t.Fatalf("discard = %v", err)
+	}
+	if got := pairListTree(t, dest); len(got) != 0 {
+		t.Errorf("left %v: a quarantined entry lost its ownership", got)
+	}
+}
+
+// ... and when the later attempt fails too, the final report names both the
+// quarantine path and the original name.
+func TestLinkSinkQuarantinedLeftoverIsReportedByBothNames(t *testing.T) {
+	oldR := sinkRemove
+	t.Cleanup(func() { sinkRemove = oldR })
+	dest := t.TempDir()
+	k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("one")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failRemoveOf("-q-")
+	err = k.discard()
+	if err == nil {
+		t.Fatal("a leftover was not reported")
+	}
+	var q string
+	for _, g := range pairListTree(t, dest) {
+		if strings.Contains(g, "-q-") {
+			q = g
+		}
+	}
+	if q == "" || !strings.Contains(err.Error(), q) || !strings.Contains(err.Error(), k.tmp[0]) {
+		t.Errorf("discard = %v; on disk %v: want both names", err, pairListTree(t, dest))
 	}
 }
 

@@ -342,6 +342,9 @@ func TestHelpDoesNotPromiseUnconditionalCleanup(t *testing.T) {
 		if !strings.Contains(flat, "if that cleanup cannot remove something, a warning names what may be left") {
 			t.Errorf("%s -h does not say a failed cleanup is reported", cmd)
 		}
+		if !strings.Contains(flat, `hidden ".relayium-partial-*" entries may be left`) || !strings.Contains(flat, "safe to inspect and delete by hand") {
+			t.Errorf("%s -h does not explain crash leftovers", cmd)
+		}
 		for _, banned := range []string{"does not complete is removed", "is removed, never reported saved"} {
 			if strings.Contains(flat, banned) {
 				t.Errorf("%s -h promises removal (%q)", cmd, banned)
