@@ -1,5 +1,8 @@
 package main
 
+// Dormant SSH pull engine tests retained for a future reviewed reopening.
+// Public CLI retirement is covered by TestSSHTransfersDisabled.
+
 import (
 	"bytes"
 	"crypto/sha256"
@@ -109,7 +112,7 @@ func runBoundedPull(t *testing.T, stdout io.Writer, args ...string) (rc int, std
 	t.Helper()
 	var errb bytes.Buffer
 	done := make(chan int, 1)
-	go func() { done <- Run(append([]string{"pull"}, args...), stdout, &errb) }()
+	go func() { done <- legacyPull(args, stdout, &errb) }()
 	select {
 	case rc := <-done:
 		return rc, errb.String()
@@ -143,7 +146,7 @@ func assertDirEmpty(t *testing.T, dir string) {
 
 var stdoutPayload = []byte("to stdout\x00\r\n\xff\xfe exact bytes\n")
 
-func TestPullToStdoutWritesExactlyTheFile(t *testing.T) {
+func TestLegacyPullToStdoutWritesExactlyTheFile(t *testing.T) {
 	cwd := inEmptyDir(t)
 	stubStdoutTerminal(t, false)
 	src := filepath.Join(t.TempDir(), "data.bin")
@@ -172,7 +175,7 @@ func TestPullToStdoutWritesExactlyTheFile(t *testing.T) {
 
 // A literal local directory named "-" is still reachable as "./-", through the
 // ordinary directory pull.
-func TestPullDotSlashDashIsStillADirectory(t *testing.T) {
+func TestLegacyPullDotSlashDashIsStillADirectory(t *testing.T) {
 	cwd := inEmptyDir(t)
 	src := filepath.Join(t.TempDir(), "data.bin")
 	writeFile(t, src, string(stdoutPayload), 0o600)
@@ -188,7 +191,7 @@ func TestPullDotSlashDashIsStillADirectory(t *testing.T) {
 	assertOnlyFile(t, filepath.Join(cwd, "-"), "data.bin", stdoutPayload)
 }
 
-func TestPullToStdoutRefusesATerminal(t *testing.T) {
+func TestLegacyPullToStdoutRefusesATerminal(t *testing.T) {
 	cwd := inEmptyDir(t)
 	stubStdoutTerminal(t, true)
 	rec := stubPeer(t, func(net.Conn) { t.Error("dialed despite a terminal stdout") })
@@ -206,7 +209,7 @@ func TestPullToStdoutRefusesATerminal(t *testing.T) {
 // The terminal test is the real one: /dev/null is a character device, and a
 // ModeCharDevice heuristic would call it a terminal and refuse
 // `pull host:f - > /dev/null`.
-func TestPullToStdoutAcceptsDevNull(t *testing.T) {
+func TestLegacyPullToStdoutAcceptsDevNull(t *testing.T) {
 	inEmptyDir(t)
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err != nil {
@@ -224,7 +227,7 @@ func TestPullToStdoutAcceptsDevNull(t *testing.T) {
 	}
 }
 
-func TestPullToStdoutRefusesDirectoryShapedSourcesBeforeConnecting(t *testing.T) {
+func TestLegacyPullToStdoutRefusesDirectoryShapedSourcesBeforeConnecting(t *testing.T) {
 	stubStdoutTerminal(t, false)
 	for _, src := range []string{"host:", "host:.", "host:/", "host://", "host:dir/", "host:/tmp/.", "host:/tmp/..", "host:a/..", "host:.."} {
 		rec := stubPeer(t, func(net.Conn) {})
@@ -246,7 +249,7 @@ func TestPullToStdoutRefusesDirectoryShapedSourcesBeforeConnecting(t *testing.T)
 	}
 }
 
-func TestPullToStdoutRefusesADirectoryAndAborts(t *testing.T) {
+func TestLegacyPullToStdoutRefusesADirectoryAndAborts(t *testing.T) {
 	cwd := inEmptyDir(t)
 	stubStdoutTerminal(t, false)
 	dir := filepath.Join(t.TempDir(), "only")
@@ -291,7 +294,7 @@ func oldSender(path string, body []byte) func(net.Conn) {
 
 // Against an old sender that keeps streaming after the refusal, pull must end
 // promptly: with Close instead of Abort this hangs until the test times out.
-func TestPullToStdoutAbortsAnOldSenderThatIgnoresTheRefusal(t *testing.T) {
+func TestLegacyPullToStdoutAbortsAnOldSenderThatIgnoresTheRefusal(t *testing.T) {
 	stubStdoutTerminal(t, false)
 	rec := stubPeer(t, oldSender("dir/big.bin", make([]byte, 8<<20)))
 	var out bytes.Buffer
@@ -305,7 +308,7 @@ func TestPullToStdoutAbortsAnOldSenderThatIgnoresTheRefusal(t *testing.T) {
 }
 
 // An old sender sending a valid single file is accepted: no wire change.
-func TestPullToStdoutAcceptsAnOldSender(t *testing.T) {
+func TestLegacyPullToStdoutAcceptsAnOldSender(t *testing.T) {
 	stubStdoutTerminal(t, false)
 	body := bytes.Repeat([]byte("old peer "), 50000)
 	stubPeer(t, oldSender("f.bin", body))
@@ -333,7 +336,7 @@ func (w *brokenStdout) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestPullToStdoutBrokenOutputAbortsPromptly(t *testing.T) {
+func TestLegacyPullToStdoutBrokenOutputAbortsPromptly(t *testing.T) {
 	stubStdoutTerminal(t, false)
 	src := filepath.Join(t.TempDir(), "big.bin")
 	writeFile(t, src, strings.Repeat("z", 16<<20), 0o600)
@@ -350,7 +353,7 @@ func TestPullToStdoutBrokenOutputAbortsPromptly(t *testing.T) {
 	}
 }
 
-func TestPullToStdoutHashMismatchSaysDiscard(t *testing.T) {
+func TestLegacyPullToStdoutHashMismatchSaysDiscard(t *testing.T) {
 	stubStdoutTerminal(t, false)
 	body := []byte("tampered in transit")
 	rec := stubPeer(t, func(c net.Conn) {
@@ -372,7 +375,7 @@ func TestPullToStdoutHashMismatchSaysDiscard(t *testing.T) {
 	}
 }
 
-func TestPullToStdoutRemoteEndsAtOnce(t *testing.T) {
+func TestLegacyPullToStdoutRemoteEndsAtOnce(t *testing.T) {
 	stubStdoutTerminal(t, false)
 	stubPeer(t, func(net.Conn) {})
 	var out bytes.Buffer
@@ -382,39 +385,11 @@ func TestPullToStdoutRemoteEndsAtOnce(t *testing.T) {
 	}
 }
 
-func TestPullHelpDescribesStdout(t *testing.T) {
-	var out, errb bytes.Buffer
-	if rc := Run([]string{"pull", "-h"}, &out, &errb); rc != 0 {
-		t.Fatalf("rc=%d", rc)
-	}
-	// Phrases may wrap, so compare with runs of whitespace collapsed.
-	help := strings.Join(strings.Fields(out.String()), " ")
-	for _, want := range []string{"relayium pull [user@]host:file -", "exactly one remote regular file to stdout", "cannot be taken back", `"./-"`,
-		"none of their bytes written to stdout", "verified before it is installed"} {
-		if !strings.Contains(help, want) {
-			t.Errorf("pull -h lacks %q", want)
-		}
-	}
-	// An old sender ignores a refusal and streams into the dropped connection,
-	// and a directory pull writes staging files before it verifies them: the
-	// guarantees are "nothing on stdout" and "verified before installed".
-	for _, claim := range []string{"before any file byte is sent", "before any bytes move", "verify before anything is"} {
-		if strings.Contains(help, claim) {
-			t.Errorf("pull -h still claims %q", claim)
-		}
-	}
-	out.Reset()
-	Run([]string{"--help"}, &out, &errb)
-	if !strings.Contains(out.String(), `(<dest> "-": one file to stdout)`) {
-		t.Errorf("top-level usage lacks the stdout form")
-	}
-}
-
 // F1, in-process: an ordinary directory pull that THIS side refuses (the file
 // already exists) against a sender that ignores the refusal. Before the abort,
 // pull waited on Close forever; reproduced over real ssh against v0.11.1 and
 // v0.23.0 (TestE2EPullCollisionOldPeerOverSSH).
-func TestPullCollisionAbortsAnOldSender(t *testing.T) {
+func TestLegacyPullCollisionAbortsAnOldSender(t *testing.T) {
 	dst := t.TempDir()
 	writeFile(t, filepath.Join(dst, "big.bin"), "ORIGINAL", 0o600)
 	rec := stubPeer(t, oldSender("big.bin", make([]byte, 8<<20)))
@@ -432,7 +407,7 @@ func TestPullCollisionAbortsAnOldSender(t *testing.T) {
 // A sender that sends the whole body and then disappears before its hash: the
 // bytes are all out but unverified, and the message must say so — not claim
 // that nothing arrived.
-func TestPullToStdoutMissingHashIsNotReportedAsNothingSent(t *testing.T) {
+func TestLegacyPullToStdoutMissingHashIsNotReportedAsNothingSent(t *testing.T) {
 	stubStdoutTerminal(t, false)
 	body := []byte("complete but never verified")
 	stubPeer(t, func(c net.Conn) {

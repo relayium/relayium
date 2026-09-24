@@ -2639,3 +2639,14 @@ Manual smoke on a device or emulator: join a live code from another device's
 file and one message in each direction, and cancel one incoming batch — the
 folder must not silently keep partial files. `docs/android-development.md`
 carries the build, scope and CI shape.
+
+### SSH retirement (2026-09-24)
+
+Current source disables CLI SSH transfers. The former real-sshd acceptance cases
+are preserved in Git at `d0c414087`; they are no longer current functionality.
+`TestSSHTransfersDisabled` builds the actual CLI and checks push, stdin push,
+pull, sync/watch and remote-helper rejection before filesystem/network work;
+`TestSSHRetirementDoesNotConsumeStdin` proves input bytes remain unread.
+Linux and Windows Go CI require both named tests to pass. Shared stream/receiver
+engine and daemon-direct acceptance remain active. See
+[retirement and reopening](CLI-SSH-RETIREMENT.md) before restoring SSH support.

@@ -187,57 +187,16 @@ jobs:
           path: ${{ runner.temp }}/cli-matrix-linux.log
           if-no-files-found: ignore
           retention-days: 14
-      # `relayium push host:path` over a REAL OpenSSH client and a private sshd
-      # on 127.0.0.1, both modes, native into a missing destination, plus
-      # host-key refusal; `pull host:file -`; and `push - host:file` (stdin,
-      # R-C14 phase 2b: e2e_stdin_test.go — real OpenSSH, real receiver unless a
-      # test names a stand-in — plus TestE2EPushStdinStandIn, which uses an ssh
-      # stand-in and is also the Windows lane's end-to-end). The step above ran
-      # the real-sshd tests as SKIPs;
-      # RELAYIUM_E2E_SSH=1 turns every setup problem into a failure instead
-      # (see server/cmd/relayium/e2e_test.go for the fixture).
-      #
-      # The PASS grep is load-bearing: a renamed or deleted test makes `-run`
-      # match nothing, and `go test` still exits 0 having proved nothing.
-      - name: SSH push e2e (private loopback sshd; zero-dep, native, missing destination, host-key refusal)
+      # SSH transport is retired. Verify the real binary rejects every former
+      # entrypoint, without source/config writes, and never consumes stdin.
+      - name: Retired SSH entrypoints (real CLI)
         working-directory: server
         shell: bash
-        env:
-          RELAYIUM_E2E_SSH: '1'
         run: |
           set -euo pipefail
-          ssh -V
-          if SSHD="$(command -v sshd)" || { SSHD=/usr/sbin/sshd; [ -x "$SSHD" ]; }; then
-            echo "sshd preinstalled: $SSHD"
-          else
-            echo "sshd not preinstalled; installing openssh-server"
-            sudo apt-get update -q
-            sudo apt-get install -y -q --no-install-recommends openssh-server
-            SSHD=/usr/sbin/sshd
-          fi
-          ls -l "$SSHD"
-          log="$RUNNER_TEMP/ssh-e2e.log"
-          RELAYIUM_E2E_SSHD="$SSHD" go test -count=1 -v -timeout 8m \
-            -run '^(TestE2EZeroDepPushOverSSH|TestE2ENativePushOverSSH|TestE2ENativePushCreatesMissingDestinationOverSSH|TestE2EPushOverSSHRefusesUnknownHostKey|TestE2EPullToStdoutOverSSH|TestE2EPullToStdoutRefusesNonFilesOverSSH|TestE2EPullToStdoutBrokenPipeOverSSH|TestE2EPullToStdoutRefusesUnknownHostKey|TestE2EPullToStdoutRejectsRemoteNoiseOverSSH|TestE2EPullToStdoutRefusesARealTerminal|TestE2EPullToStdoutSilentRemoteOverSSH|TestE2EPushStdinOverSSH|TestE2EPushStdinEchoesEndChallengeOverSSH|TestE2EPushStdinUnknownLengthOverSSH|TestE2EPushStdinRefusalsLeaveStdinUnreadOverSSH|TestE2EPushStdinRefusesUnknownHostKeyOverSSH|TestE2EPushStdinRefusesARealTerminal|TestE2EPushStdinDestinationPlantedMidStreamOverSSH|TestE2EPushStdinParentSwappedMidStreamOverSSH|TestE2EPushStdinRemoteWriteFailureOverSSH|TestE2EPushStdinKilledPumpOverSSH|TestE2EPushStdinRemoteHelperTerminatedOverSSH|TestE2EPushStdinBlockedTransportInterruptOverSSH|TestE2EPushStdinSilentPeerInterruptOverSSH|TestE2EPushStdinSignalsOverSSH|TestE2EPushStdinPrematureResultOverSSH|TestE2EPushStdinLostReceiptOverSSH|TestE2EPushStdinStandIn)$' \
-            ./cmd/relayium | tee "$log"
-          for t in TestE2EZeroDepPushOverSSH TestE2ENativePushOverSSH TestE2ENativePushCreatesMissingDestinationOverSSH TestE2EPushOverSSHRefusesUnknownHostKey TestE2EPullToStdoutOverSSH TestE2EPullToStdoutRefusesNonFilesOverSSH TestE2EPullToStdoutBrokenPipeOverSSH TestE2EPullToStdoutRefusesUnknownHostKey TestE2EPullToStdoutRejectsRemoteNoiseOverSSH TestE2EPullToStdoutRefusesARealTerminal TestE2EPullToStdoutSilentRemoteOverSSH \
-            TestE2EPushStdinOverSSH \
-            TestE2EPushStdinEchoesEndChallengeOverSSH \
-            TestE2EPushStdinUnknownLengthOverSSH \
-            TestE2EPushStdinRefusalsLeaveStdinUnreadOverSSH \
-            TestE2EPushStdinRefusesUnknownHostKeyOverSSH \
-            TestE2EPushStdinRefusesARealTerminal \
-            TestE2EPushStdinDestinationPlantedMidStreamOverSSH \
-            TestE2EPushStdinParentSwappedMidStreamOverSSH \
-            TestE2EPushStdinRemoteWriteFailureOverSSH \
-            TestE2EPushStdinKilledPumpOverSSH \
-            TestE2EPushStdinRemoteHelperTerminatedOverSSH \
-            TestE2EPushStdinBlockedTransportInterruptOverSSH \
-            TestE2EPushStdinSilentPeerInterruptOverSSH \
-            TestE2EPushStdinSignalsOverSSH \
-            TestE2EPushStdinPrematureResultOverSSH \
-            TestE2EPushStdinLostReceiptOverSSH \
-            TestE2EPushStdinStandIn; do
+          log="$RUNNER_TEMP/ssh-retirement.log"
+          go test -count=1 -v -timeout 3m -run '^TestSSH(TransfersDisabled|RetirementDoesNotConsumeStdin)$' ./cmd/relayium | tee "$log"
+          for t in TestSSHTransfersDisabled TestSSHRetirementDoesNotConsumeStdin; do
             grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
           done
       - name: govulncheck
@@ -302,9 +261,8 @@ jobs:
   #
   # Phase 2b extended this job to `./cmd/relayium` (the `push -` CLI, the
   # real `__pump-stdin` dispatch, the `__recv --stream-file` receiver as a
-  # process, and an ssh STAND-IN end-to-end: real CLI, pump, sshx.Session
-  # Abort/reap and receiver on NTFS; NOT OpenSSH — no Windows OpenSSH is
-  # exercised). A Windows-red compile of that package's TESTS means a new
+  # process via a test-only receiver-engine role). SSH CLI entrypoints are
+  # now disabled; this job proves rejection with the actual built binary. A Windows-red compile of that package's TESTS means a new
   # server-only test file (one that imports `account`/`internal/storage`,
   # which use syscall.Statfs, or a helper from such a file) needs
   # `//go:build !windows` with a reason — never a Windows `storage`
@@ -382,24 +340,20 @@ jobs:
       # listener test needs privately built old binaries
       # (RELAYIUM_E2E_OLD_RELAYIUM), which this job does not build. Any other
       # SKIP fails the job.
-      - name: Windows runtime tests (push - CLI, pump dispatch, stream receiver, ssh stand-in, serve listener)
+      - name: Windows runtime tests (SSH retirement, stream receiver, serve listener)
         working-directory: server
         shell: bash
         run: |
           set -euo pipefail
           log="$RUNNER_TEMP/cli-windows-push-stdin.log"
           go test -count=1 -v -timeout 10m \
-            -run '^(TestPushStdin|TestRecvStreamFile|TestStandinPosixWords|TestE2EPushStdinStandIn|TestE2EPushStdinDaemon|TestE2EServeOnceStream)' \
+            -run '^(TestPushStdin|TestRecvStreamFile|TestSSH|TestStandinPosixWords|TestE2EPushStdinDaemon|TestE2EServeOnceStream)' \
             ./cmd/relayium | tee "$log"
           may_skip=" TestRecvStreamFileHelperSignalRemovesStaging TestE2EPushStdinDaemonOldReleases "
-          for t in TestPushStdinShapeRefusalsTouchNothing TestPushStdinRefusesATerminal \
-            TestPushStdinRefusesZeroDependencyRemote TestPushStdinProbeFailureReadsNothing \
-            TestPushStdinOldRemoteIsNamedAndReadsNothing TestPushStdinReceiverRefusalAbortsAndReadsNothing \
-            TestPushStdinRealHelperDispatchRoundTrip TestPushStdinSignalExitCodes TestRecvStreamFileArgv \
+          for t in TestSSHTransfersDisabled TestSSHRetirementDoesNotConsumeStdin TestPushStdinShapeRefusalsTouchNothing TestPushStdinRefusesATerminal TestRecvStreamFileArgv \
             TestRecvStreamFileHelperInstalls TestRecvStreamFileHelperRefusesBeforeAccept \
             TestRecvStreamFileHelperIdleWatchdog TestRecvStreamFileHelperSignalRemovesStaging \
             TestRecvStreamFileHelperLostReceiptIsReportedOnStderr TestStandinPosixWordsUndoShellQuote \
-            TestE2EPushStdinStandIn \
             TestE2EPushStdinDaemonLoopback TestE2EPushStdinDaemonRefusals TestPushStdinDaemonPathRefusedBeforeDial \
             TestPushStdinDaemonListenerRefusesBadPaths TestE2EPushStdinDaemonUnauthorized TestE2EPushStdinDaemonPinMismatch \
             TestE2EPushStdinDaemonOldPeerFixtures TestE2EServeOnceStream TestE2EPushStdinDaemonStreamCut \

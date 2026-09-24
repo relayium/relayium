@@ -2099,3 +2099,51 @@ func TestLinkSinkCreatedFolderNamedEvenIfItCannotBeChecked(t *testing.T) {
 		t.Errorf("report %q", buf.String())
 	}
 }
+
+// G34-N12: shutdown must name directories intentionally retained after errors,
+// while preserving completed batches without calling them discarded.
+func TestPairShutdownReportsRetainedFolders(t *testing.T) {
+	for _, saved := range []bool{false, true} {
+		t.Run(fmt.Sprintf("saved=%v", saved), func(t *testing.T) {
+			dest := t.TempDir()
+			k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("folder/file")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = k.close() })
+			sinkFill(t, k)
+			if saved {
+				if err := k.install(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var output bytes.Buffer
+			d := &linkDevDriver{stderr: &output, ui: &linkUI{stderr: &output}, sinks: map[uint64]*ldSink{1: {out: k}}}
+			d.shutdownSinks()
+			if len(d.sinks) != 0 {
+				t.Fatal("shutdown retained sink handles")
+			}
+			if saved {
+				b, err := os.ReadFile(filepath.Join(dest, "folder", "file"))
+				if err != nil || string(b) != "a" {
+					t.Fatalf("saved file changed: %q, %v", b, err)
+				}
+				if output.Len() != 0 {
+					t.Fatalf("saved batch reported discarded: %s", &output)
+				}
+			} else {
+				if got := strings.Join(pairListTree(t, dest), "|"); got != "folder" {
+					t.Fatalf("remaining tree: %s", got)
+				}
+				if !strings.Contains(output.String(), "left in place: folder") || strings.Contains(output.String(), "nothing from it was kept") {
+					t.Fatalf("misleading cleanup report: %s", &output)
+				}
+			}
+			before := output.String()
+			d.shutdownSinks()
+			if output.String() != before {
+				t.Fatal("shutdown reported the same batch twice")
+			}
+		})
+	}
+}

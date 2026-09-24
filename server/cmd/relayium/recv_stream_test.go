@@ -36,7 +36,7 @@ type recvProc struct {
 func startRecvProc(t *testing.T, path string, env ...string) *recvProc {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "__recv", "--stream-file", "--", path)
-	cmd.Env = append(append(os.Environ(), "RELAYIUM_TEST_ROLE=cli"), env...)
+	cmd.Env = append(append(os.Environ(), "RELAYIUM_TEST_ROLE=recv-engine"), env...)
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)

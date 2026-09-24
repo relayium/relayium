@@ -1961,12 +1961,22 @@ func (d *linkDevDriver) shutdown() {
 	if why := d.cut.reason(); why == "relay deadline" {
 		d.logf("transport closed at the relay deadline")
 	}
-	for p := range d.sinks {
-		d.closeSink(p)
-	}
+	d.shutdownSinks()
 	d.finishCur()
 	d.room.Session.Close()
 	d.renewOut.join() // after the socket closed: a blocked write has returned
+}
+
+// shutdownSinks preserves installed batches and reports anything retained from
+// interrupted batches, including directories left deliberately in place.
+func (d *linkDevDriver) shutdownSinks() {
+	for p, k := range d.sinks {
+		if k.out != nil && k.out.done {
+			d.closeSink(p)
+		} else {
+			d.discardSink(p)
+		}
+	}
 }
 
 // ---------------------------------------------------------------- queued inputs
@@ -2711,8 +2721,8 @@ func (d *linkDevDriver) retireSaved() {
 	}
 }
 
-// discardSink deletes exactly what this batch created: its files, then its
-// directories if they are empty. Never a pre-existing file.
+// discardSink removes only owned partial files and reports retained directories.
+// It never removes a pre-existing file or any directory.
 func (d *linkDevDriver) discardSink(prompt uint64) {
 	k := d.sinks[prompt]
 	if k == nil {

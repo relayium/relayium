@@ -18,6 +18,8 @@ import (
 
 const usage = `relayium — file and text transfer
 
+SSH transfers (including relayium pull) are currently disabled.
+
 server to server, direct (no relay, no Relayium account):
   relayium serve [--dir D] [--bind ADDR] [--port N] [--once] [--allow-delete]
                                              listen for direct pushes from another machine
@@ -37,12 +39,8 @@ server to server, direct (no relay, no Relayium account):
   serve and authorize; see "relayium serve -h".
 
 usage:
-  relayium push <src...> [user@]host:dest    push files to a server you can ssh into
-  relayium push - [user@]host:file           stream stdin into one new file there
-                                             (needs relayium on that server)
+  relayium push - relayium://host[:port]/path  stream stdin into one new file
   relayium sync <src...> <dest> [--delete] [--watch]   incremental one-way folder mirror
-  relayium pull [user@]host:src <dest>       pull files from such a server
-                                             (<dest> "-": one file to stdout)
   relayium pair [code]                       a live two-way session with another device:
                                              files, folders and messages both ways
                                              (omit the code to mint one; requires login;
@@ -76,15 +74,11 @@ usage:
   relayium version                          print the CLI version
 
 flags (after the subcommand; "→" lists every command the flag applies to):
-  -i <file>       ssh identity file
-                  → push, pull, sync
-  -p <port>       ssh port
-                  → push, pull, sync
   --no-resume     turn off resuming partial files. Resume is a "sync" feature:
                   it is real on a serve listener receiving a sync, and this flag
-                  is accepted but does nothing on push and pull, which refuse a
+                  is accepted but does nothing on push, which refuses a
                   collision before a partial file could ever be continued.
-                  → push, pull, serve
+                  → push, serve
   --verify        stop to compare the SAS before sending/opening
                   → pair, send, receive, text
   --yes           never prompt for SAS confirmation (this is already the
@@ -182,10 +176,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runUpdate(args[1:], stdout, stderr)
 	case "version", "--version", "-version":
 		return runVersion(args[1:], stdout, stderr)
-	case "__recv":
-		return runRecv(args[1:], stdout, stderr)
-	case "__send":
-		return runSend(args[1:], stdout, stderr)
+	case "__recv", "__send":
+		return sshRetired(stderr)
 	case "__link": // hidden developer entry (A08d); not in usage or help
 		return runLinkDev(args[1:], stdout, stderr)
 	case stdinpump.HelperArg:
@@ -217,8 +209,6 @@ const pushUsage = `relayium push — copy files to another machine
 
 usage:
   relayium push <src...> relayium://host[:port]   direct to a listening peer (no SSH, no account)
-  relayium push <src...> [user@]host:dest         over SSH to a server you can log into
-  relayium push - [user@]host:file                stdin into one new file, over SSH
   relayium push - relayium://host[:port]/path     stdin into one new file under a listener's --dir
 
 A relayium:// destination is the direct server-to-server path: the receiver runs
@@ -228,47 +218,31 @@ this host only once its fingerprint ("relayium id") is authorized there. The
 listener's own fingerprint is pinned on first contact and a later change is
 refused, not trusted.
 
-Any other destination is the SSH path, and what it gives you depends on what is
-installed on the far end. The two are not equivalent:
+The whole batch is checked for collisions BEFORE any bytes are sent, so a push
+onto an existing file is refused with nothing written. Each file is verified by SHA-256
+and staged before it is installed, so a corrupt file never reaches its real name.
 
-  relayium installed on the remote — the native Relayium receiver. The whole
-  batch is checked for collisions BEFORE any bytes are sent, so a push onto an
-  existing file is refused with nothing written, and each file is verified by
-  SHA-256 and staged before it is installed, so a file that arrives corrupt is
-  never installed under its real name.
+What this is NOT is a transaction, and re-running is NOT the recovery step.
+Files are installed one at a time as they pass, so a connection lost partway
+through leaves the files that already landed in place and the rest missing —
+and because those files now exist, re-running the SAME push is refused by the
+collision check above ("destination already exists"). Push does not resume a
+partial file either: the collision check runs first, so there is never a
+partial destination to continue from. To finish an interrupted push, either
+push only the files that are still missing, or use "relayium sync", which is
+the mode that skips what already matches and does resume.
 
-  What this is NOT is a transaction, and re-running is NOT the recovery step.
-  Files are installed one at a time as they pass, so a connection lost partway
-  through leaves the files that already landed in place and the rest missing —
-  and because those files now exist, re-running the SAME push is refused by the
-  collision check above ("destination already exists"). Push does not resume a
-  partial file either: the collision check runs first, so there is never a
-  partial destination to continue from. To finish an interrupted push, either
-  push only the files that are still missing, or use "relayium sync", which is
-  the mode that skips what already matches and does resume.
-
-  relayium NOT installed — the zero-dependency fallback: a tar stream piped into
-  the remote's own "tar -x -k". It does NOT resume and does NOT verify anything
-  per file. Existing receiver files are kept rather than overwritten, but tar
-  extracts members in order, so a collision can happen after other new files
-  from the same batch were already written, leaving the batch partly applied.
-  Whether the collision is reported depends on the remote's tar: GNU tar names
-  it and exits non-zero, bsdtar keeps the file and exits 0. A "sent" line is
-  therefore not proof that every file landed. Install relayium on the remote
-  when you need per-file verification and the up-front collision check.
-
-Reading stdin ("-"): "relayium push - [user@]host:file" (or
-"relayium push - relayium://host[:port]/path") sends standard input, of any
-length, as ONE new file. It is streamed: neither side holds the whole
+Reading stdin ("-"): "relayium push - relayium://host[:port]/path" sends standard
+input of any length as ONE new file. It is streamed: neither side holds the whole
 input in memory, and nothing is spooled except the receiver's private staging
 file beside the destination.
-  - host:file is the exact file to create. It must not exist yet (nothing is
-    ever overwritten), and the directory that holds it must already exist.
+  - The path is the exact file to create under the listener's --dir. It must
+    not exist yet, and the directory that holds it must already exist.
   - It needs relayium on the remote at this version or newer. There is no
-    zero-dependency (tar) form for stdin. An older remote relayium refuses
+    alternative transport for stdin. An older remote relayium refuses
     before anything is read from stdin; run "relayium update" there.
   - Nothing reads stdin until the remote has accepted the file, so every
-    refusal (a destination that exists, a missing directory, ssh failing, an
+    refusal (a destination that exists, a missing directory, connection failure, an
     older remote) leaves stdin unread.
   - The remote stages the bytes privately and installs the file only after
     their size and SHA-256 match what was sent; an interrupted transfer leaves
@@ -287,16 +261,13 @@ file beside the destination.
 
 positional arguments:
   <src...>   files or directories to push, or "-" alone for stdin
-  <dest>     relayium://host[:port], or [user@]host:dest for the SSH path
-             (with "-": [user@]host:file or relayium://host[:port]/path,
-             the exact new file)
+  <dest>     relayium://host[:port]
+             (with "-": relayium://host[:port]/path, the exact new file)
 
 flags:
-  -i <file>        ssh identity file (SSH destinations)
-  -p <port>        ssh port (SSH destinations)
   --no-resume      accepted, and a no-op for push: resume is a "sync" feature.
                    Push refuses a collision before it could ever continue a
-                   partial file, and the tar fallback has no resume at all.
+                   partial file.
   --config-dir D   identity/trust directory for relayium:// destinations
                    (default ~/.config/relayium)
 
@@ -304,51 +275,12 @@ No push overwrites a file that is already on the receiver; use "relayium sync"
 for the explicit replace/mirror operation.
 `
 
-const pullUsage = `relayium pull — copy files from a server you can ssh into
+const pullUsage = `relayium pull — unavailable
 
-usage:
-  relayium pull [user@]host:src <dest>
-  relayium pull [user@]host:file -          write that one file to stdout
-
-Pull runs over your own SSH connection: the bytes travel through it and never
-touch Relayium's servers, and no Relayium account is involved. Host-key checking
-(known_hosts) is what authenticates the server, exactly as for any other ssh.
-
-It requires relayium to be INSTALLED ON THE REMOTE, because the remote acts as
-the sender. There is no tar fallback for pull; install relayium there, or fetch
-with scp/rsync. Each file is verified by SHA-256 and staged before it is
-installed locally, and a pull onto a path that already exists is refused before
-anything is written locally.
-
-Like push, this is not a transaction and does not resume: files are installed
-one at a time as they pass, so an interrupted pull leaves the files that already
-landed in place, and re-running the same pull is then refused because those
-files exist. Fetch the remainder explicitly, or mirror with "relayium sync".
-
-A lone "-" as <dest> writes exactly one remote regular file to stdout and
-nothing else: no local file or directory is created, and progress and errors
-go to stderr. A directory (even one holding a single file), a symlink, a
-special file or several files are refused with none of their bytes written
-to stdout. The one file's bytes are written as they arrive and cannot be taken
-back: if the stream is cut short or its final SHA-256 check fails, pull exits
-non-zero and says to discard the output, so check the exit status (in a
-pipeline, "set -o pipefail"). Pull into a directory instead to have each file
-verified before it is installed. stdout must not be a terminal. A local
-directory named "-" is written "./-".
-
-positional arguments:
-  [user@]host:src   the remote file or directory to fetch
-  <dest>            local directory to write into, or "-" for stdout
-                    (exactly one regular file)
-
-flags:
-  -i <file>        ssh identity file
-  -p <port>        ssh port
-  --no-resume      accepted, and a no-op for pull, for the same reason as push:
-                   resume is a "sync" feature.
-  --config-dir D   accepted because pull shares push's flag set, and IGNORED:
-                   pull has no relayium:// path and reads no identity or trust
-                   directory.
+SSH transfers are currently disabled, including pull and SSH destinations for
+push/sync. Use a live pairing session (relayium pair), or run relayium serve on
+the receiving device and relayium push/sync relayium://host on the sending device.
+For stored download links use relayium down.
 `
 
 // What this side can honestly say about a zero-dependency push. The remote ran
@@ -391,20 +323,23 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	destArg := rest[len(rest)-1]
+	if !strings.HasPrefix(destArg, daemonScheme) || f.identity != "" || f.port != 0 {
+		return sshRetired(stderr)
+	}
 	srcArgs := rest[:len(rest)-1]
 	// A lone "-" is stdin, and then it is the only source. This is decided
 	// before any manifest, probe or dial: a local file named "-" is "./-".
 	for _, s := range srcArgs {
 		if s == "-" {
 			if len(srcArgs) != 1 {
-				fmt.Fprintln(stderr, "push: \"-\" (stdin) must be the only source: relayium push - [user@]host:file")
+				fmt.Fprintln(stderr, "push: \"-\" (stdin) must be the only source: relayium push - relayium://host/path")
 				return 2
 			}
 			return pushStdin(destArg, f, stderr)
 		}
 	}
 	// A relayium:// target is a daemon-direct push (server-to-server, no SSH);
-	// everything else keeps the SSH path below unchanged.
+	// other targets were rejected above; the legacy SSH body is dormant.
 	if strings.HasPrefix(destArg, daemonScheme) {
 		return pushDaemon(destArg, srcArgs, f.configDir, f.noResume, stdout, stderr)
 	}
@@ -482,6 +417,15 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 }
 
 func runPull(args []string, stdout, stderr io.Writer) int {
+	if wantsHelpFS(stdFlagSet(&sshFlags{}), args) {
+		fmt.Fprint(stdout, pullUsage)
+		return 0
+	}
+	return sshRetired(stderr)
+}
+
+// legacyPull is dormant implementation, retained for a future reviewed reopening.
+func legacyPull(args []string, stdout, stderr io.Writer) int {
 	if wantsHelpFS(stdFlagSet(&sshFlags{}), args) {
 		fmt.Fprint(stdout, pullUsage)
 		return 0
@@ -691,4 +635,10 @@ func reportExit(rep xfer.Report, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// There is deliberately no runtime switch to restore the retired SSH transport.
+func sshRetired(stderr io.Writer) int {
+	fmt.Fprintln(stderr, "SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.")
+	return 2
 }

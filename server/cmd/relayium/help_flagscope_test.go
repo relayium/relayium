@@ -19,29 +19,21 @@ import (
 // flagProbe is how a flag is written on a command line: the spelling, plus a
 // value token for the flags that take one.
 var flagProbe = map[string][]string{
-	"-i":           {"-i", "/nonexistent/key"},
-	"-p":           {"-p", "2222"},
 	"--no-resume":  {"--no-resume"},
 	"--verify":     {"--verify"},
 	"--yes":        {"--yes"},
 	"--config-dir": {"--config-dir", "/nonexistent/config"},
 }
 
-// acceptedButUndocumented is the one gap between "accepts" and "does something",
-// recorded rather than papered over. pull shares push's FlagSet, so it parses
-// --config-dir and ignores it: it has no relayium:// path and reads no identity
-// or trust directory. `relayium pull -h` says so. Listing pull in the top-level
-// table instead would be the lie this test exists to prevent.
-var acceptedButUndocumented = map[string]map[string]string{
-	"--config-dir": {"pull": "shares push's FlagSet; parsed and ignored (see pullUsage)"},
-}
+// Retired SSH flags are covered by TestSSHTransfersDisabled; they are not
+// supported shared flags. pull returns the retirement notice without parsing.
 
 // flagParsingCommands is every command path that reaches a FlagSet. `whoami`
 // and `version` take no flags at all and never parse, so the probe below cannot
 // speak about them; TestFlagFreeCommandsTakeNoSharedFlags covers them instead.
 func flagParsingCommands() [][]string {
 	paths := [][]string{
-		{"push"}, {"pull"}, {"sync"}, {"send"}, {"receive"}, {"text"},
+		{"push"}, {"sync"}, {"send"}, {"receive"}, {"text"},
 		{"serve"}, {"id"}, {"authorize"}, {"login"}, {"logout"},
 		{"up"}, {"down"}, {"update"},
 	}
@@ -152,19 +144,11 @@ func TestTopLevelFlagScopesMatchTheCommands(t *testing.T) {
 				switch {
 				case accepts && documented[name]:
 					// stated and true
-				case accepts && acceptedButUndocumented[flag][name] != "":
-					// a known, recorded gap
 				case accepts:
 					t.Errorf("`relayium %s` accepts %s but the top-level table does not list it "+
-						"(document it, or record it in acceptedButUndocumented with the reason)", name, flag)
+						"(document the supported scope)", name, flag)
 				case documented[name]:
 					t.Errorf("the top-level table scopes %s to %q, but `relayium %s` rejects it", flag, name, name)
-				}
-			}
-			// A recorded exception that stopped being true is also drift.
-			for name := range acceptedButUndocumented[flag] {
-				if documented[name] {
-					t.Errorf("%s is both documented for %q and listed as undocumented", flag, name)
 				}
 			}
 		})

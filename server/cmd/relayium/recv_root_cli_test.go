@@ -47,7 +47,7 @@ func TestRecvHelperCreatesAMissingDestination(t *testing.T) {
 	stubHelperStdio(t, conn)
 
 	var out, errb bytes.Buffer
-	rc := Run([]string{"__recv", "--", dst}, &out, &errb)
+	rc := runRecv([]string{"--", dst}, &out, &errb)
 	conn.Close()
 	if rc != 0 {
 		t.Fatalf("`__recv` rc=%d: %s", rc, errb.String())
@@ -61,14 +61,14 @@ func TestRecvHelperCreatesAMissingDestination(t *testing.T) {
 	}
 }
 
-func TestPullCreatesAMissingDestination(t *testing.T) {
+func TestLegacyPullCreatesAMissingDestination(t *testing.T) {
 	isolatedEnv(t)
 	dst := filepath.Join(t.TempDir(), "new", "nested")
 	conn, errc, big := treeSenderOnAPipe(t)
 	stubSSHDial(t, conn)
 
 	var out, errb bytes.Buffer
-	if rc := Run([]string{"pull", "example.com:/srv/tree", dst}, &out, &errb); rc != 0 {
+	if rc := legacyPull([]string{"example.com:/srv/tree", dst}, &out, &errb); rc != 0 {
 		t.Fatalf("`pull` rc=%d: %s", rc, errb.String())
 	}
 	if serr := <-errc; serr != nil {
@@ -109,7 +109,7 @@ func TestRecvHelperReportsAnUncreatableDestination(t *testing.T) {
 	stubHelperStdio(t, conn)
 
 	var out, errb bytes.Buffer
-	rc := Run([]string{"__recv", "--", dst}, &out, &errb)
+	rc := runRecv([]string{"--", dst}, &out, &errb)
 	conn.Close()
 	if rc != 1 {
 		t.Fatalf("`__recv` rc=%d, want 1: %s", rc, errb.String())

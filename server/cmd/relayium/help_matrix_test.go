@@ -280,39 +280,25 @@ func TestHelpStatesTheTransportGuaranteesTruthfully(t *testing.T) {
 	if strings.Contains(push, "scp with resume") {
 		t.Error("push help still describes the whole SSH path as scp with resume")
 	}
-	for _, n := range []string{
-		"tar -x -k",       // the actual remote command
-		"does NOT resume", // the fallback's limit
-		"kept rather than overwritten",
-		"partly applied", // a collision can follow files that already landed
-	} {
+	for _, n := range []string{"verified by SHA-256", "BEFORE any bytes are sent", "Push does not resume"} {
 		if !strings.Contains(push, n) {
-			t.Errorf("push help omits %q:\n%s", n, push)
+			t.Errorf("push help omits %q", n)
 		}
 	}
-
-	// sync's --delete consent differs by destination, and the SSH side has no
-	// --allow-delete to set. Saying otherwise tells an operator their mirror is
-	// safe when it is not.
 	sync := help("sync", "-h")
 	for _, n := range []string{"relayium://", "--allow-delete", "top-level", "never touched", "empty source"} {
 		if !strings.Contains(sync, n) {
-			t.Errorf("sync help omits %q:\n%s", n, sync)
+			t.Errorf("sync help omits %q", n)
 		}
 	}
-	ssh := strings.Index(sync, "[user@]host:dest — there is no separate listener")
-	if ssh < 0 {
-		t.Errorf("sync help does not say the SSH receiver has no separate consent step:\n%s", sync)
-	}
-	if !strings.Contains(sync[ssh:], "No --allow-delete is involved") {
-		t.Errorf("sync help does not say --allow-delete is not part of the SSH path:\n%s", sync[ssh:])
-	}
-
-	// pull has no fallback at all; claiming one would send someone to a remote
-	// that cannot answer.
 	pull := help("pull", "-h")
-	if !strings.Contains(pull, "INSTALLED ON THE REMOTE") || !strings.Contains(pull, "no tar fallback") {
-		t.Errorf("pull help does not state its remote requirement:\n%s", pull)
+	if !strings.Contains(pull, "currently disabled") {
+		t.Error("pull help must state retirement")
+	}
+	for _, text := range []string{push, sync} {
+		if strings.Contains(text, "[user@]") || strings.Contains(text, "tar -x") {
+			t.Error("help advertises retired SSH transfer")
+		}
 	}
 }
 
@@ -322,7 +308,7 @@ func TestHelpStatesTheTransportGuaranteesTruthfully(t *testing.T) {
 func TestHelpStatesAccountAndOnlineConstraints(t *testing.T) {
 	want := map[string][]string{
 		"push":      {"no Relayium account"},
-		"pull":      {"no Relayium account"},
+		"pull":      {"currently disabled"},
 		"sync":      {"no Relayium account"},
 		"pair":      {"relayium login", "online at the same time", "needs no account"},
 		"send":      {"relayium login", "online at the same time"},
@@ -383,7 +369,6 @@ func TestHelpStatesAccountAndOnlineConstraints(t *testing.T) {
 func TestHelpNamesItsPositionals(t *testing.T) {
 	want := map[string][]string{
 		"push":      {"<src...>", "<dest>"},
-		"pull":      {"[user@]host:src", "<dest>"},
 		"sync":      {"<src...>", "<dest>"},
 		"pair":      {"[code]"},
 		"send":      {"<src...>", "[code]"},

@@ -114,7 +114,7 @@ func signalExitCode(s os.Signal) int {
 // 128+N after signal N, 0 when the receiver confirmed exactly the bytes sent.
 func pushStdin(destArg string, f sshFlags, stderr io.Writer) int {
 	if pushStdinIsTerminal() {
-		fmt.Fprintln(stderr, "push: refusing to read file bytes from a terminal; pipe or redirect stdin (… | relayium push - host:file)")
+		fmt.Fprintln(stderr, "push: refusing to read file bytes from a terminal; pipe or redirect stdin (… | relayium push - relayium://host/file)")
 		return 2
 	}
 	if strings.HasPrefix(destArg, daemonScheme) {

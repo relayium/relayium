@@ -73,14 +73,14 @@ func TestReceiveCommandReportsProgress(t *testing.T) {
 	}
 }
 
-func TestPullCommandReportsProgress(t *testing.T) {
+func TestLegacyPullCommandReportsProgress(t *testing.T) {
 	isolatedEnv(t)
 	dst := t.TempDir()
 	conn, errc, big := treeSenderOnAPipe(t)
 	stubSSHDial(t, conn)
 
 	var out, errb bytes.Buffer
-	if rc := Run([]string{"pull", "example.com:/srv/tree", dst}, &out, &errb); rc != 0 {
+	if rc := legacyPull([]string{"example.com:/srv/tree", dst}, &out, &errb); rc != 0 {
 		t.Fatalf("`pull` rc=%d: %s", rc, errb.String())
 	}
 	if serr := <-errc; serr != nil {
@@ -98,20 +98,22 @@ func TestPullCommandReportsProgress(t *testing.T) {
 }
 
 func TestReceiveCommandFailureLeavesOnlyTheError(t *testing.T) {
-	for _, cmd := range []string{"receive", "pull"} {
+	for _, cmd := range []string{"receive", "legacy-pull"} {
 		t.Run(cmd, func(t *testing.T) {
 			isolatedEnv(t)
 			peer, local := net.Pipe()
 			peer.Close() // the peer is gone before the first frame
 			args := []string{"receive", "483920", t.TempDir()}
 			stubCrossnetReceive(t, local)
-			if cmd == "pull" {
+			run := Run
+			if cmd == "legacy-pull" {
+				run = func(args []string, out, errout io.Writer) int { return legacyPull(args[1:], out, errout) }
 				args = []string{"pull", "example.com:/srv/tree", t.TempDir()}
 				stubSSHDial(t, local)
 			}
 
 			var out, errb bytes.Buffer
-			if rc := Run(args, &out, &errb); rc != 1 {
+			if rc := run(args, &out, &errb); rc != 1 {
 				t.Fatalf("`%s` rc=%d, want 1 (stderr %q)", cmd, rc, errb.String())
 			}
 			got := errb.String()
@@ -246,7 +248,7 @@ func TestRecvHelperReportsNoProgress(t *testing.T) {
 	t.Cleanup(func() { helperStdio = old })
 
 	var out, errb bytes.Buffer
-	rc := Run([]string{"__recv", "--", dst}, &out, &errb)
+	rc := runRecv([]string{"--", dst}, &out, &errb)
 	conn.Close()
 	if rc != 0 {
 		t.Fatalf("`__recv` rc=%d: %s", rc, errb.String())

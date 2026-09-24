@@ -2,8 +2,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
+
 	"errors"
 	"io"
 	"os"
@@ -13,7 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
+
 	"testing"
 	"time"
 
@@ -38,15 +37,18 @@ func TestMain(m *testing.M) {
 	case "ssh":
 		os.Exit(standinSSH(os.Args[1:]))
 	}
-	switch os.Getenv("RELAYIUM_TEST_ROLE") {
-	case "cli":
-		if v := os.Getenv("RELAYIUM_TEST_RECV_IDLE"); v != "" {
-			d, err := time.ParseDuration(v)
-			if err != nil {
-				panic(err)
-			}
-			streamRecvIdle = d
+	if v := os.Getenv("RELAYIUM_TEST_RECV_IDLE"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			panic(err)
 		}
+		streamRecvIdle = d
+	}
+	switch os.Getenv("RELAYIUM_TEST_ROLE") {
+	case "recv-engine":
+		os.Exit(runRecv(os.Args[2:], os.Stdout, os.Stderr))
+	case "cli":
+
 		os.Exit(Run(os.Args[1:], os.Stdout, os.Stderr))
 	case "exit":
 		code, _ := strconv.Atoi(os.Getenv("RELAYIUM_TEST_EXIT"))
@@ -218,8 +220,41 @@ func (b *blockedSource) Stop() error { b.stopOnce.Do(func() { close(b.stopped) }
 
 // ── tests ───────────────────────────────────────────────────────────────────
 
-// Every refusal the command line alone justifies exits 2 before ssh is
-// probed or dialed and before stdin is touched.
+// exitError returns a real *exec.ExitError with the given code.
+func exitError(t *testing.T, code int) error {
+	t.Helper()
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(), "RELAYIUM_TEST_ROLE=exit", "RELAYIUM_TEST_EXIT="+strconv.Itoa(code))
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != code {
+		t.Fatalf("exit role: %v", err)
+	}
+	return err
+}
+
+// swapStdin makes f this process's os.Stdin for the test.
+func swapStdin(t *testing.T, f *os.File) {
+	t.Helper()
+	old := os.Stdin
+	os.Stdin = f
+	t.Cleanup(func() { os.Stdin = old })
+}
+
+// __recv's argv: --stream-file takes exactly one path and no --no-resume.
+func TestRecvStreamFileArgv(t *testing.T) {
+	for _, argv := range [][]string{
+		{"__recv", "--stream-file"},
+		{"__recv", "--stream-file", "--", "a", "b"},
+		{"__recv", "--stream-file", "--no-resume", "--", "a"},
+	} {
+		if _, _, code := runCLI(argv...); code != 2 {
+			t.Errorf("%q: exit %d, want 2", argv, code)
+		}
+	}
+}
+
+// Active daemon stdin validation, retained across SSH retirement.
 func TestPushStdinShapeRefusalsTouchNothing(t *testing.T) {
 	for _, argv := range [][]string{
 		{"push", "-", "host:"},
@@ -235,6 +270,8 @@ func TestPushStdinShapeRefusalsTouchNothing(t *testing.T) {
 		{"push", "-", "relayium://127.0.0.1/a/../b"},
 		{"push", "-", "relayium:///x"},
 		{"push", "a", "-", "host:x"},
+		{"push", "a", "-", "relayium://127.0.0.1/file"},
+		{"push", "-", "-", "relayium://127.0.0.1/file"},
 		{"push", "-", "-", "host:x"},
 		{"push", "-", "--", "-oProxyCommand=id:x"},
 	} {
@@ -249,227 +286,14 @@ func TestPushStdinShapeRefusalsTouchNothing(t *testing.T) {
 	}
 }
 
+// Active daemon stdin validation, retained across SSH retirement.
 func TestPushStdinRefusesATerminal(t *testing.T) {
 	rec := installStdinSeams(t, true, true, nil, nil, nil)
-	stdout, stderr, code := runCLI("push", "-", "host:file")
+	stdout, stderr, code := runCLI("push", "-", "relayium://127.0.0.1:1/file")
 	if code != 2 || stdout != "" || !strings.Contains(stderr, "refusing to read file bytes from a terminal") {
 		t.Fatalf("exit %d stdout %q stderr %q", code, stdout, stderr)
 	}
 	if rec.probes.Load()+rec.dials.Load()+rec.starts.Load() != 0 {
 		t.Fatal("a terminal stdin still reached ssh or the pump")
-	}
-}
-
-// No relayium on the remote: exit 1 with nothing read. There is no tar form.
-func TestPushStdinRefusesZeroDependencyRemote(t *testing.T) {
-	rec := installStdinSeams(t, false, false, nil, nil, nil)
-	stdout, stderr, code := runCLI("push", "-", "host:file")
-	if code != 1 || stdout != "" || !strings.Contains(stderr, "no zero-dependency form for stdin") || !strings.Contains(stderr, "Nothing was read from stdin") {
-		t.Fatalf("exit %d stdout %q stderr %q", code, stdout, stderr)
-	}
-	if rec.probes.Load() != 1 || rec.dials.Load()+rec.starts.Load() != 0 {
-		t.Fatalf("probes %d dials %d starts %d", rec.probes.Load(), rec.dials.Load(), rec.starts.Load())
-	}
-}
-
-// ssh failing to connect (host key refused: RemoteHasRelayium's 255 split).
-func TestPushStdinProbeFailureReadsNothing(t *testing.T) {
-	rec := installStdinSeams(t, false, false, errors.New("ssh: could not connect to host"), nil, nil)
-	_, stderr, code := runCLI("push", "-", "host:file")
-	if code != 1 || !strings.Contains(stderr, "could not connect") || !strings.Contains(stderr, "nothing was read from stdin") {
-		t.Fatalf("exit %d stderr %q", code, stderr)
-	}
-	if rec.dials.Load()+rec.starts.Load() != 0 {
-		t.Fatal("dialed or started after a failed probe")
-	}
-}
-
-// exitError returns a real *exec.ExitError with the given code.
-func exitError(t *testing.T, code int) error {
-	t.Helper()
-	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(), "RELAYIUM_TEST_ROLE=exit", "RELAYIUM_TEST_EXIT="+strconv.Itoa(code))
-	err := cmd.Run()
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) || ee.ExitCode() != code {
-		t.Fatalf("exit role: %v", err)
-	}
-	return err
-}
-
-// An old remote `__recv` exits 2 on --stream-file and closes the channel
-// without a frame: "predates", exit 1, stdin never started, Abort not Close.
-// Control: the same silent close with any other status is not called "old".
-func TestPushStdinOldRemoteIsNamedAndReadsNothing(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		waitErr error
-		predate bool
-	}{
-		{"exit2", exitError(t, 2), true},
-		{"exit1", exitError(t, 1), false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			sess := newStdinFakeSession(func(rw io.ReadWriter) {})
-			sess.waitErr = tc.waitErr
-			rec := installStdinSeams(t, false, true, nil, sess, nil)
-			stdout, stderr, code := runCLI("push", "-", "host:dir/file")
-			if code != 1 || stdout != "" {
-				t.Fatalf("exit %d stdout %q stderr %q", code, stdout, stderr)
-			}
-			if got := strings.Contains(stderr, "predates"); got != tc.predate {
-				t.Fatalf("predates in stderr = %v, want %v: %s", got, tc.predate, stderr)
-			}
-			if !strings.Contains(stderr, "nothing was installed") && !strings.Contains(stderr, "Nothing was read") {
-				t.Fatalf("stderr does not say nothing happened: %s", stderr)
-			}
-			if rec.starts.Load() != 0 || sess.closes.Load() != 0 || sess.aborts.Load() == 0 {
-				t.Fatalf("starts %d closes %d aborts %d", rec.starts.Load(), sess.closes.Load(), sess.aborts.Load())
-			}
-			if want := "relayium __recv --stream-file -- 'dir/file'"; rec.dialCmd != want {
-				t.Fatalf("remote command %q, want %q", rec.dialCmd, want)
-			}
-		})
-	}
-}
-
-// The real receiver refuses (the destination exists): exit 1, the
-// receiver's reason, stdin never started, Abort not Close, original intact.
-func TestPushStdinReceiverRefusalAbortsAndReadsNothing(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "f"), "ORIGINAL", 0o600)
-	sess, _, rerr := receiverSession(t, dir, "f")
-	rec := installStdinSeams(t, false, true, nil, sess, nil)
-	stdout, stderr, code := runCLI("push", "-", "host:"+dir+"/f")
-	if code != 1 || stdout != "" || !strings.Contains(stderr, "already exists") ||
-		!strings.Contains(stderr, "nothing was read from stdin and nothing was installed") {
-		t.Fatalf("exit %d stdout %q stderr %q", code, stdout, stderr)
-	}
-	if rec.starts.Load() != 0 || sess.closes.Load() != 0 || sess.aborts.Load() == 0 {
-		t.Fatalf("starts %d closes %d aborts %d", rec.starts.Load(), sess.closes.Load(), sess.aborts.Load())
-	}
-	if *rerr == nil {
-		t.Fatal("receiver reported no refusal")
-	}
-	assertDirNames(t, dir, "f")
-	if b, _ := os.ReadFile(filepath.Join(dir, "f")); string(b) != "ORIGINAL" {
-		t.Fatalf("original changed: %q", b)
-	}
-}
-
-// swapStdin makes f this process's os.Stdin for the test.
-func swapStdin(t *testing.T, f *os.File) {
-	t.Helper()
-	old := os.Stdin
-	os.Stdin = f
-	t.Cleanup(func() { os.Stdin = old })
-}
-
-// The whole sender with the REAL default stdinPumpStart: stdinpump.Start
-// re-executes this binary as `__pump-stdin`, which reaches RunHelper only
-// through Run's dispatch. Success writes nothing to stdout, one summary line
-// to stderr, and closes (not aborts) the session.
-func TestPushStdinRealHelperDispatchRoundTrip(t *testing.T) {
-	body := make([]byte, 3*xfer.StreamChunkMax+17)
-	for i := range body {
-		body[i] = byte(i*13 + i/509)
-	}
-	in := filepath.Join(t.TempDir(), "in")
-	writeFile(t, in, string(body), 0o600)
-	f, err := os.Open(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	swapStdin(t, f)
-
-	dir := t.TempDir()
-	sess, rep, rerr := receiverSession(t, dir, "out.bin")
-	rec := installStdinSeams(t, false, true, nil, sess, nil)
-	stdinPumpStart = func() (xfer.StreamSource, error) { // the default, counted
-		rec.starts.Add(1)
-		p, err := stdinpump.Start()
-		if err != nil {
-			return nil, err
-		}
-		return p, nil
-	}
-	stdout, stderr, code := runCLI("push", "-", "host:"+dir+"/out.bin")
-	if code != 0 || stdout != "" {
-		t.Fatalf("exit %d stdout %q stderr %s", code, stdout, stderr)
-	}
-	sum := sha256.Sum256(body)
-	if !strings.Contains(stderr, "out.bin (") || !strings.Contains(stderr, hex.EncodeToString(sum[:])) {
-		t.Fatalf("no summary line on stderr: %s", stderr)
-	}
-	if *rerr != nil || !rep.Installed {
-		t.Fatalf("receiver: %v %+v", *rerr, *rep)
-	}
-	got, err := os.ReadFile(filepath.Join(dir, "out.bin"))
-	if err != nil || !bytes.Equal(got, body) {
-		t.Fatalf("installed %d bytes (err %v), want %d", len(got), err, len(body))
-	}
-	assertDirNames(t, dir, "out.bin")
-	if rec.starts.Load() != 1 || sess.closes.Load() != 1 || sess.aborts.Load() != 0 {
-		t.Fatalf("starts %d closes %d aborts %d", rec.starts.Load(), sess.closes.Load(), sess.aborts.Load())
-	}
-}
-
-// A signal while the stream is running (stdin silent) ends it in bounded
-// time with 128+N, stops the source, aborts the session, installs nothing.
-func TestPushStdinSignalExitCodes(t *testing.T) {
-	for _, tc := range []struct {
-		sig  os.Signal
-		code int
-	}{
-		{os.Interrupt, 130},
-		{syscall.SIGTERM, 143},
-	} {
-		t.Run(tc.sig.String(), func(t *testing.T) {
-			dir := t.TempDir()
-			sess, _, _ := receiverSession(t, dir, "x")
-			src := newBlockedSource()
-			installStdinSeams(t, false, true, nil, sess, func() (xfer.StreamSource, error) { return src, nil })
-			pushStdinNotify = func(c chan<- os.Signal) func() {
-				go func() {
-					<-src.reading // the stream is running and stdin is blocked
-					c <- tc.sig
-				}()
-				return func() {}
-			}
-			began := time.Now()
-			stdout, stderr, code := runCLI("push", "-", "host:"+dir+"/x")
-			if code != tc.code || stdout != "" {
-				t.Fatalf("exit %d, want %d; stdout %q stderr %s", code, tc.code, stdout, stderr)
-			}
-			if el := time.Since(began); el > 5*time.Second {
-				t.Fatalf("took %v", el)
-			}
-			if !strings.Contains(stderr, "interrupted") || !strings.Contains(stderr, "nothing was installed") {
-				t.Fatalf("stderr: %s", stderr)
-			}
-			select {
-			case <-src.stopped:
-			default:
-				t.Fatal("source not stopped")
-			}
-			if sess.aborts.Load() == 0 || sess.closes.Load() != 0 {
-				t.Fatalf("aborts %d closes %d", sess.aborts.Load(), sess.closes.Load())
-			}
-			assertDirNames(t, dir) // no destination, no staging
-		})
-	}
-}
-
-// __recv's argv: --stream-file takes exactly one path and no --no-resume.
-func TestRecvStreamFileArgv(t *testing.T) {
-	for _, argv := range [][]string{
-		{"__recv", "--stream-file"},
-		{"__recv", "--stream-file", "--", "a", "b"},
-		{"__recv", "--stream-file", "--no-resume", "--", "a"},
-	} {
-		if _, _, code := runCLI(argv...); code != 2 {
-			t.Errorf("%q: exit %d, want 2", argv, code)
-		}
 	}
 }

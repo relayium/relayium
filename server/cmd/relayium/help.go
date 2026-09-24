@@ -306,7 +306,7 @@ to the server. Anyone with the link can open it in a browser or fetch it with
 This is a hosted, asynchronous stored-link mode: the ciphertext sits in
 Relayium's storage until someone fetches it, so the two ends never have to be
 online together. That is what makes it unlike the pairing-code modes
-("send"/"receive"/"text") and the direct server modes ("push"/"pull"/"sync"
+("send"/"receive"/"text") and the direct server modes ("push"/"sync"
 with "serve"), which move bytes straight between two machines. It is not the
 only CLI mode that involves the server, though — the Device Inbox is hosted and
 asynchronous too ("relayium inbox send" and "relayium inbox run").
