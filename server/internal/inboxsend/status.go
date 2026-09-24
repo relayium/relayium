@@ -132,6 +132,10 @@ func (s *Session) LocalSends() []LocalSend {
 							time.Unix(j.CreatedAt, 0).UTC().Format(time.RFC3339), id)
 						continue
 					}
+					// remove can fail after unlink, while syncing the directory.
+					// Do not promise either durable removal or retention.
+					s.notef("warning: cannot confirm removal of expired local send record %s: %s; run `relayium inbox sent` again to check",
+						id, termtext.Safe(err.Error()))
 				} else {
 					lk.release()
 				}
