@@ -133,14 +133,12 @@ public final class TransferPresence: ObservableObject {
             .eraseToAnyPublisher())
     }
 
-    /// **The macOS composition's liveness: one `link/1`, and the code that is
+    /// **Link-only composition liveness: one `link/1`, and the code that is
     /// waiting for a peer to bring one.**
     ///
-    /// A THIRD overload rather than a nil-legacy variant of the two above,
-    /// because those two are the paused iOS implementation's and must keep
-    /// answering exactly what they answer today. This one is added, not
-    /// substituted: neither existing overload changes, and nothing iOS
-    /// subscribes to is reachable from here.
+    /// Used by the macOS transfer modules and iOS Cross-network. iOS Nearby
+    /// still uses the file/text/link overload above because it also renders
+    /// legacy LAN sessions. Each composition observes only its own models.
     ///
     /// It still installs the ONE subscription `observeSessionLiveness` owns, so
     /// "exactly one thing releases the surface" survives the macOS contraction

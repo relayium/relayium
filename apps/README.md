@@ -1494,6 +1494,11 @@ So the screen now follows the rule macOS, the Web and Android already follow:
   the macOS answers: it observes no LAN roster, announces link-only, and
   **refuses** a peer without `link/1` — after 0.4.0 that can only be an internal
   iOS build at or below 0.3.2, which "needs updating" describes truthfully.
+  iOS Nearby retains its own file/text/link models and the three-model
+  `TransferPresence.observeSessions` subscription; it can still render legacy
+  LAN sessions. Cross-network uses the separate code/link subscription. macOS
+  uses two link-only transfer modules. The shared Swift types support these
+  distinct compositions; the legacy overloads are still used by iOS Nearby.
 - **A live deadline.** The waiting code counts down from the shared
   `PairingCodeExpiry`; past it the card says the code has expired and offers a
   replacement. The old card printed a wall-clock time and went on looking live.

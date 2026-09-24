@@ -87,8 +87,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         // that must never happen, so this branch reads the delivery rather than
         // making a second one.
         if let taskID = plan.deviceTaskId {
-            return try await finishRecordedDelivery(plan, target: target, taskID: taskID,
-                                                    token: token)
+            return try await finishRecordedDelivery(plan, target: target, taskID: taskID)
         }
 
         // A delivery staged before this build may already have fed a server
@@ -103,7 +102,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         // state exactly as the attempt that created it left it.
         let staged = plan.speaksInboxV2 ? plan : try await restartOnInboxV2(plan)
 
-        var contentKey = try await contentKey(for: staged, token: token)
+        var contentKey = try await contentKey(for: staged)
         defer { InboxKeyMaterial.zero(&contentKey) }
         // A sign-out or account switch may have cancelled the owner while the
         // protected store was answering. Never let that old credential cross
@@ -212,7 +211,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                     // the existing task and otherwise preserve every recovery
                     // input because the recent-task page is not authoritative.
                     return try await converge(current, target: target,
-                                              resealed: resealed, token: token)
+                                              resealed: resealed)
                 case .refused(let token_):
                     // Includes `stored_object_already_bound`, which says a task
                     // we did not create owns these bytes. Only the local job is
@@ -240,13 +239,13 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                                     resealed: resealed, plan: current, target: target)
         }
 
-        return try await converge(current, target: target, resealed: resealed, token: token)
+        return try await converge(current, target: target, resealed: resealed)
     }
 
     /// Every create attempt was ambiguous. Ask central what actually exists
     /// rather than guess — it is the only honest way out.
     private func converge(_ plan: PendingUploadPlan, target: PendingUploadTarget,
-                          resealed: Bool, token: String) async throws -> InboxSendResult {
+                          resealed: Bool) async throws -> InboxSendResult {
         let existing: [InboxTask]
         do {
             try Task.checkCancellation()
@@ -274,7 +273,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
 
     /// A previous attempt created the task and died before finishing cleanup.
     private func finishRecordedDelivery(_ plan: PendingUploadPlan, target: PendingUploadTarget,
-                                        taskID: String, token: String) async throws
+                                        taskID: String) async throws
         -> InboxSendResult {
         let task: InboxTask
         do {
@@ -391,7 +390,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         }
     }
 
-    private func contentKey(for plan: PendingUploadPlan, token: String) async throws -> [UInt8] {
+    private func contentKey(for plan: PendingUploadPlan) async throws -> [UInt8] {
         let stored: String?
         do {
             stored = try await keys.key(for: plan.jobId)

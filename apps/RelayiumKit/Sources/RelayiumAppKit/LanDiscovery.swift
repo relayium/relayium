@@ -319,7 +319,7 @@ public final class LanDiscoveryModel: ObservableObject {
     /// **What this client announces in the code-less room.**
     ///
     /// Injectable, and defaulted to `linkCapsHello` so every existing consumer —
-    /// the paused iOS composition, the headless acceptance hosts, every test
+    /// the iOS Nearby composition, the headless acceptance hosts, every test
     /// written before this seam — announces exactly what it announced before.
     ///
     /// macOS passes `linkOnlyCapsHello`. Its legacy file and text transports are

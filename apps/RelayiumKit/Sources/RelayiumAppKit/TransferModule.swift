@@ -5,7 +5,7 @@ import RelayiumKit
 /// Which of the two panes a macOS transfer destination draws.
 ///
 /// **Two, where `TransferSurfacePane` has three.** That type keeps its
-/// `legacySession` case and still needs it — the paused iOS implementation
+/// `legacySession` case and still needs it — the iOS Nearby composition
 /// renders one — but no macOS composition can reach one now: there is no legacy
 /// transport on this platform to put in it. So macOS answers with this type
 /// rather than promising never to return a case it can still name. A pane enum
@@ -306,8 +306,8 @@ public final class TransferModule: ObservableObject {
     ///
     /// An overload rather than a replacement: the three-argument form above is
     /// what `TransferPresence.observeSessions(fileModel:textModel:link:)` reads
-    /// and what the paused iOS implementation subscribes to, and it keeps
-    /// answering exactly what it answers today.
+    /// and what iOS Nearby subscribes to. Cross-network uses the code/link
+    /// overload below on both Apple platforms.
     ///
     /// The code is a liveness source in its own right and the link is not enough
     /// without it. A creator holds six digits on screen while `connection` is
