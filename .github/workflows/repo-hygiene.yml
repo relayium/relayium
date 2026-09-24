@@ -264,6 +264,8 @@ jobs:
       - name: public repository status matches the release records
         run: node scripts/test/repository-status-test.mjs
 
+      - name: iOS collection claims match sending and retained storage
+        run: node scripts/test/ios-collection-claims-test.mjs
       - name: native claims track Web routes and server aggregate schema
         run: node scripts/test/native-cross-directory-claims-test.mjs
       - name: public SAS claims stay protocol-specific
