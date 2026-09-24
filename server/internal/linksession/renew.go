@@ -1595,6 +1595,16 @@ func (r *Renewal) Signal(raw []byte) bool {
 	if err != nil || !linkcrypto.VerifyResume(r.key, payload, auth) {
 		return true
 	}
+	// A prepare that would start a NEW attempt while a legacy (link §8)
+	// recovery owns the transport is refused here, BEFORE it is acted on: a
+	// refused prepare must not establish the permanent unsigned-SDP lock
+	// (§4.1), or the legacy restart's own unsigned answer — which may simply
+	// arrive after it — would be refused and the recovery would expire.
+	// Verified first, so a forgery gets no reply.
+	if sig.Type == "prepare" && (r.attempt == nil || sig.Epoch > r.attempt.epoch) && r.deps.Busy != nil && r.deps.Busy() {
+		r.emit(RenewSignal{Type: "abort", Epoch: sig.Epoch, Reason: renewAbortUnavailable})
+		return true
+	}
 	r.peerAuthenticated = true
 	if a := r.attempt; a != nil && (sig.Type == "prepare" || sig.Epoch == a.epoch) {
 		a.peerResponded = true

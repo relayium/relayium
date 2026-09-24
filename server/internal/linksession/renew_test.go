@@ -1057,6 +1057,11 @@ func TestRenewWaitsForLegacyRestart(t *testing.T) {
 	if h.sigCount(1, "abort") == 0 {
 		t.Fatal("a busy side did not refuse the peer's prepare")
 	}
+	// A refused prepare was never acted on: it must not lock out the
+	// legacy restart's unsigned SDP (Codex r3).
+	if h.e[0].LockUnsigned() {
+		t.Fatal("a prepare refused while busy established the unsigned-SDP lock")
+	}
 	h.busy[0] = false
 	h.run(3 * time.Minute)
 	if len(h.commits[0]) != 1 || len(h.commits[1]) != 1 {

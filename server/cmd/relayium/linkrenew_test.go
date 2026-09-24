@@ -836,3 +836,82 @@ func TestLDRenewWriterStopEndsBlockedWrites(t *testing.T) {
 		t.Error("a stopped writer accepted a write")
 	}
 }
+
+// ---------------------------------------------------------------- Codex gate-2 round 3
+
+// A REAL legacy recovery must not be broken by a renewal it refused. The
+// initiator loses its path shortly before the renewal window and runs the
+// ordinary link §8 restart (an unsigned restart offer; Pion retires the path).
+// The responder's signed renewal prepare then reaches the initiator BEFORE the
+// responder's unsigned restart answer (held back here to force the order the
+// separate writer makes possible). The initiator is busy with its restart, so
+// it refuses the prepare — and that refusal must not lock out unsigned SDP: the
+// answer is applied, the path recovers, and messages flow again.
+func TestLinkRenewBusyPrepareDoesNotBreakLegacyRestart(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub := startLinkDevRenewHub(t, lt, 100*time.Second, ldGrantFor(lt, 300*time.Second))
+	var disconnected, reordered atomic.Int32
+	var mu sync.Mutex
+	var heldAnswer []byte
+	var heldAt time.Time
+	ldHookProgress = func(d *linkDevDriver) {
+		if d.conn == nil || d.conn.Role() != linkrtc.Initiator || d.renew == nil || d.renew.InFlight() {
+			return
+		}
+		at, ok := d.renew.NextDeadline()
+		if ok && time.Until(at) > 0 && time.Until(at) < 5*time.Second && disconnected.CompareAndSwap(0, 1) {
+			d.q.push(ldItem{kind: ldEvent, ev: linkrtc.Event{Kind: linkrtc.EventDisconnected}, ep: d.connEp})
+		}
+	}
+	ldHookSignal = func(d *linkDevDriver, raw []byte) [][]byte {
+		if d.conn == nil || d.conn.Role() != linkrtc.Initiator || disconnected.Load() == 0 {
+			return [][]byte{raw}
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if heldAnswer == nil && reordered.Load() == 0 && ldUnsignedLinkSDP(raw) {
+			heldAnswer, heldAt = append([]byte(nil), raw...), time.Now()
+			return nil // hold the restart answer until the prepare arrives
+		}
+		if heldAnswer != nil {
+			sig, _, ok := linksession.ParseRenewEnvelope(raw)
+			if (ok && sig.Type == "prepare") || time.Since(heldAt) > 10*time.Second {
+				out := [][]byte{raw, heldAnswer}
+				if ok && sig.Type == "prepare" {
+					reordered.Store(1)
+				} else {
+					reordered.Store(2)
+				}
+				heldAnswer = nil
+				return out
+			}
+		}
+		return [][]byte{raw}
+	}
+	t.Cleanup(func() { ldHookProgress, ldHookSignal = nil, nil })
+	script := func(m1, m2 string) string {
+		return ldScript(t, "text "+m1, "wait-texts 1", "sleep 22s", "sleep 8s", "text "+m2, "wait-texts 2")
+	}
+	ra, rb := ldPairUpWithin(t, hub.ldHub,
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", script("a1", "a2"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", script("b1", "b2"), ldCode}},
+		3*time.Minute)
+	if disconnected.Load() != 1 || reordered.Load() != 1 {
+		t.Fatalf("disconnect %d, reorder %d: the prepare-before-answer order was not produced", disconnected.Load(), reordered.Load())
+	}
+	ini := ra
+	if ldRole(rb) == "initiator" {
+		ini = rb
+	}
+	if strings.Contains(ini.stderr, "unsigned link SDP refused") || strings.Contains(ini.stderr, "restart-failed") {
+		t.Errorf("the legacy restart's answer was refused after a refused renewal\n%s", ini)
+	}
+	for _, r := range []ldResult{ra, rb} {
+		if r.code != 0 {
+			t.Errorf("the link did not recover and carry the later messages\n%s", r)
+		}
+	}
+	if !strings.Contains(ra.stdout, "b2") || !strings.Contains(rb.stdout, "a2") {
+		t.Error("messages after the recovery were not delivered")
+	}
+}
