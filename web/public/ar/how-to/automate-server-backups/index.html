@@ -225,7 +225,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <section class="sheet"><h2>قبل أن تبدأ</h2>
       <p>كل ما يلي هو relayium CLI، فثبّته أولًا إن لم تكن قد فعلت. على macOS وLinux، يُسقط أمر واحد ملفًا ثنائيًا مُسبق البناء في PATH الخاص بك:</p>
       <pre tabindex="0" dir="ltr"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build -o relayium ./cmd/relayium إن كان لديك Go).</li><li>يؤكّد relayium --version أنه مثبَّت. تخطَّ هذا وستطبع الأوامر أدناه ‘command not found’ لا غير.</li></ul></section>
+      <ul><li>تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build ./cmd/relayium إن كان لديك Go).</li><li>يؤكّد relayium --version أنه مثبَّت. تخطَّ هذا وستطبع الأوامر أدناه ‘command not found’ لا غير.</li></ul></section>
       <section class="sheet"><h2>وسيلتا نقل: SSH أو daemon-direct</h2>
       <p>وجِّه أيًّا من الأمرين إلى وجهة SSH (بأسلوب scp، باستخدام ~/.ssh/config لديك)، أو إذا كان الجهاز الآخر يشغّل relayium serve، فمباشرةً إليه عبر بروتوكول daemon-direct — دون حاجة إلى SSH.</p>
       <pre tabindex="0" dir="ltr"><code># وجهة SSH — تستخدم مفاتيح SSH وإعداداتك الحالية

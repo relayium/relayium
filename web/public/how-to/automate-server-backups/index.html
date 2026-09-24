@@ -225,7 +225,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <section class="sheet"><h2>Before you start</h2>
       <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul></section>
+      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul></section>
       <section class="sheet"><h2>Two transports: SSH or daemon-direct</h2>
       <p>Point either command at an SSH destination (scp-style, using your ~/.ssh/config) or, if the other machine is running relayium serve, straight at it over the daemon-direct protocol — no SSH needed.</p>
       <pre tabindex="0"><code># SSH destination — uses your existing SSH keys and config

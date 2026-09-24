@@ -875,7 +875,7 @@ const en: Messages = {
     installWindowsUpdateNote:
       "relayium update cannot replace a running .exe on Windows, so it prints the download URL instead — unzip the new build over the old one.",
     installReleases: "Every platform, checksum and signature on the releases page →",
-    installBuild: "Or build it yourself with Go:",
+    installBuild: "Or build it yourself with Go. This creates relayium.exe on Windows, or relayium on macOS/Linux:",
     installHelp:
       "Then relayium --help lists every command, and relayium help <command> prints that command's own usage — offline, with no account and no network request.",
     tasksIntro:

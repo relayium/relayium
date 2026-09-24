@@ -221,7 +221,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <section class="sheet"><h2>시작하기 전에</h2>
       <p>아래는 모두 relayium CLI이므로, 설치하지 않았다면 먼저 설치하세요. macOS나 Linux에서는 명령어 하나로 사전 빌드된 바이너리가 PATH에 등록됩니다:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build -o relayium ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul></section>
+      <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul></section>
       <section class="sheet"><h2>디렉터리를 서버로 push하기</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">필요한 것</p><ul><li>이미 쓰고 있는 SSH 접근 권한. ssh user@your-server true 가 조용히 돌아와야 합니다 — push는 바로 그 연결을 재사용하며 자체 설정은 아무것도 만들지 않습니다.</li><li>서버에 쓰기 가능한 대상. 대상 경로의 상위 디렉터리가 존재하고 그 SSH 사용자가 쓸 수 있어야 합니다.</li><li>선택적으로 서버의 relayium. 보내기 전 충돌 검사와 파일별 SHA-256을 얻게 해 주는 것이 이것입니다. 없어도 push는 평범한 tar 스트림으로 동작하지만, 그쪽은 아무것도 검증하지 않습니다.</li><li>Relayium 계정도, 어느 쪽 데몬도 필요 없습니다. 여기서 Relayium 서버와 통신하는 것은 아무것도 없습니다.</li></ul></div>
       <p>push는 하나 이상의 소스와 scp 형식의 대상을 받습니다. Relayium은 평소 쓰는 키와 설정으로 SSH를 통해 연결한 뒤, 파일을 대상 디렉터리로 스트리밍합니다:</p>

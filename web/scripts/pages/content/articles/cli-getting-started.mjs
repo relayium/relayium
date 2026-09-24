@@ -32,7 +32,7 @@ const en = {
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "Prefer to pick the file yourself? Download a binary from the releases page.",
-        "Have Go installed? Clone the repo and run: go build -o relayium ./cmd/relayium (from the server directory).",
+        "Have Go installed? Clone the repo and run: go build ./cmd/relayium (from the server directory).",
         "Then run relayium --help to see every command, and relayium version to check the build.",
       ],
     },
@@ -215,7 +215,7 @@ const zh = {
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "想自己挑选文件？从发布页下载对应的二进制。",
-        "已安装 Go？克隆仓库后运行：go build -o relayium ./cmd/relayium（在 server 目录下执行）。",
+        "已安装 Go？克隆仓库后运行：go build ./cmd/relayium（在 server 目录下执行）。",
         "然后运行 relayium --help 查看全部命令，运行 relayium version 检查构建版本。",
       ],
     },
@@ -398,7 +398,7 @@ const ja = {
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "自分でファイルを選びたい場合は、リリースページからバイナリをダウンロードしてください。",
-        "Go がインストール済みなら、リポジトリを clone して次を実行します：go build -o relayium ./cmd/relayium（server ディレクトリから）。",
+        "Go がインストール済みなら、リポジトリを clone して次を実行します：go build ./cmd/relayium（server ディレクトリから）。",
         "その後 relayium --help を実行するとすべてのコマンドを確認でき、relayium version でビルドを確認できます。",
       ],
     },
@@ -578,7 +578,7 @@ const ko = {
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "직접 파일을 고르고 싶나요? 릴리스 페이지에서 바이너리를 내려받으세요.",
-        "Go가 설치되어 있나요? 저장소를 clone한 뒤 다음을 실행하세요: go build -o relayium ./cmd/relayium (server 디렉터리에서).",
+        "Go가 설치되어 있나요? 저장소를 clone한 뒤 다음을 실행하세요: go build ./cmd/relayium (server 디렉터리에서).",
         "이후 relayium --help로 모든 명령어를 확인하고, relayium version으로 빌드를 확인하세요.",
       ],
     },
@@ -758,7 +758,7 @@ const de = {
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "Möchtest du die Datei lieber selbst auswählen? Lade ein Binary von der Releases-Seite herunter.",
-        "Go installiert? Clone das Repository und führe go build -o relayium ./cmd/relayium im server-Verzeichnis aus.",
+        "Go installiert? Clone das Repository und führe go build ./cmd/relayium im server-Verzeichnis aus.",
         "Führe dann relayium --help aus, um alle Befehle zu sehen, und relayium version, um den Build zu prüfen.",
       ],
     },
@@ -938,7 +938,7 @@ const fr = {
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "Vous préférez choisir le fichier vous-même ? Téléchargez un binaire depuis la page des releases.",
-        "Go est installé ? Clonez le dépôt et lancez : go build -o relayium ./cmd/relayium (depuis le répertoire server).",
+        "Go est installé ? Clonez le dépôt et lancez : go build ./cmd/relayium (depuis le répertoire server).",
         "Lancez ensuite relayium --help pour voir toutes les commandes, et relayium version pour vérifier le build.",
       ],
     },
@@ -1118,7 +1118,7 @@ const ar = {
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "تفضّل اختيار الملف بنفسك؟ نزّل ملفًا ثنائيًا من صفحة الإصدارات.",
-        "لديك Go مثبّت؟ استنسخ المستودع ونفّذ: go build -o relayium ./cmd/relayium (من مجلد server).",
+        "لديك Go مثبّت؟ استنسخ المستودع ونفّذ: go build ./cmd/relayium (من مجلد server).",
         "ثم نفّذ relayium --help لرؤية كل أمر، وrelayium version للتحقق من نسخة البناء.",
       ],
     },
@@ -1298,7 +1298,7 @@ const es = {
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "¿Prefieres elegir el archivo tú mismo? Descarga un binario desde la página de releases.",
-        "¿Tienes Go instalado? Clona el repositorio y ejecuta: go build -o relayium ./cmd/relayium (desde el directorio server).",
+        "¿Tienes Go instalado? Clona el repositorio y ejecuta: go build ./cmd/relayium (desde el directorio server).",
         "Luego ejecuta relayium --help para ver todos los comandos, y relayium version para comprobar la compilación.",
       ],
     },
@@ -1478,7 +1478,7 @@ const pt = {
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "Prefere escolher o arquivo você mesmo? Baixe um binário na página de releases.",
-        "Tem o Go instalado? Clone o repositório e execute: go build -o relayium ./cmd/relayium (a partir do diretório server).",
+        "Tem o Go instalado? Clone o repositório e execute: go build ./cmd/relayium (a partir do diretório server).",
         "Depois execute relayium --help para ver todos os comandos, e relayium version para conferir o build.",
       ],
     },

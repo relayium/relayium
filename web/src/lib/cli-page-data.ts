@@ -257,7 +257,7 @@ export const COMMAND_BLOCKS = [
     name: "build from source",
     code: `git clone ${CLI_REPO}.git
 cd relayium/server
-go build -o relayium ./cmd/relayium`,
+go build ./cmd/relayium`,
   },
   {
     key: "cloudLogin",

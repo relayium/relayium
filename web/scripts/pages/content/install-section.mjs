@@ -12,7 +12,7 @@ export const installSection = {
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).",
+      "Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build ./cmd/relayium if you have Go).",
       "relayium --version confirms it's installed. Skip this and the commands below just print 'command not found'.",
     ],
   },
@@ -23,7 +23,7 @@ export const installSection = {
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。",
+      "想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build ./cmd/relayium）。",
       "relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。",
     ],
   },
@@ -34,7 +34,7 @@ export const installSection = {
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build -o relayium ./cmd/relayium も可）。",
+      "自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build ./cmd/relayium も可）。",
       "relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。",
     ],
   },
@@ -45,7 +45,7 @@ export const installSection = {
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build -o relayium ./cmd/relayium 도 가능).",
+      "직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build ./cmd/relayium 도 가능).",
       "relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.",
     ],
   },
@@ -56,7 +56,7 @@ export const installSection = {
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "Willst du die Datei lieber selbst wählen, oder unter Windows? Hol dir ein Binary von der Releases-Seite — relayium.com/cli listet alle Installationswege (mit Go auch go build -o relayium ./cmd/relayium).",
+      "Willst du die Datei lieber selbst wählen, oder unter Windows? Hol dir ein Binary von der Releases-Seite — relayium.com/cli listet alle Installationswege (mit Go auch go build ./cmd/relayium).",
       "relayium --version bestätigt die Installation. Ohne das geben die Befehle unten nur „command not found“ aus.",
     ],
   },
@@ -67,7 +67,7 @@ export const installSection = {
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build -o relayium ./cmd/relayium).",
+      "Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build ./cmd/relayium).",
       "relayium --version confirme l'installation. Sans cela, les commandes ci-dessous affichent seulement « command not found ».",
     ],
   },
@@ -78,7 +78,7 @@ export const installSection = {
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build -o relayium ./cmd/relayium إن كان لديك Go).",
+      "تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build ./cmd/relayium إن كان لديك Go).",
       "يؤكّد relayium --version أنه مثبَّت. تخطَّ هذا وستطبع الأوامر أدناه ‘command not found’ لا غير.",
     ],
   },
@@ -89,7 +89,7 @@ export const installSection = {
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "¿Prefieres elegir el archivo tú mismo, o estás en Windows? Coge un binario de la página de releases — relayium.com/cli lista todas las opciones de instalación (o go build -o relayium ./cmd/relayium si tienes Go).",
+      "¿Prefieres elegir el archivo tú mismo, o estás en Windows? Coge un binario de la página de releases — relayium.com/cli lista todas las opciones de instalación (o go build ./cmd/relayium si tienes Go).",
       "relayium --version confirma que está instalada. Sáltate esto y los comandos de abajo solo imprimirán « command not found ».",
     ],
   },
@@ -100,7 +100,7 @@ export const installSection = {
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "Prefere escolher o arquivo você mesmo, ou está no Windows? Pegue um binário na página de releases — relayium.com/cli lista todas as opções de instalação (ou go build -o relayium ./cmd/relayium se você tiver Go).",
+      "Prefere escolher o arquivo você mesmo, ou está no Windows? Pegue um binário na página de releases — relayium.com/cli lista todas as opções de instalação (ou go build ./cmd/relayium se você tiver Go).",
       "relayium --version confirma que está instalada. Pule isso e os comandos abaixo só imprimirão “command not found”.",
     ],
   },

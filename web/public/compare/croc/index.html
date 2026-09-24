@@ -205,7 +205,7 @@ pre code{background:none;padding:0;border-radius:0}
       <section class="sheet"><h2>Before you start</h2>
       <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul></section>
+      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul></section>
       <section class="sheet"><h2>SSH and daemon-direct: talking to a server you already run</h2>
       <p>This is the biggest practical difference. croc is built around a single flow — code phrase in, code phrase out. Relayium&#39;s CLI adds two more ways to move files that lean on infrastructure you already have.</p>
       <p>relayium push / pull reuses your existing SSH access, so there&#39;s nothing new to trust and no code to share. push even works against a server with no relayium installed at all, falling back to a plain tar stream over the SSH connection — that fallback is push-only; pull always needs relayium on the remote, since it acts as the sender there.</p>

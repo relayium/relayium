@@ -205,7 +205,7 @@ pre code{background:none;padding:0;border-radius:0}
       <section class="sheet"><h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
+      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
       <section class="sheet"><h2>Relayium sync 换了一种做法</h2>
       <p>relayium sync &lt;源...&gt; &lt;目标&gt; [--delete] [--watch] 是单向增量镜像：它比较每个文件的大小和修改时间，跳过已经一致的文件，只发送其余的。</p>
       <p>它支持两种传输方式。指向 user@host:/dest 时走 SSH——但远端必须已经装好 relayium；和 push 不同，sync 没有 tar 兜底方案。指向 relayium://host[:port] 时则完全不需要 SSH：直接用证书固定的 TLS 1.3 连接到对端机器上运行的 relayium serve 监听端，通过对端的指纹认证（首次批准，之后记住）。第二种方式才是真正的便利所在：不用配置 sshd，不用管理 SSH 密钥，只要两台机器都装了 relayium，并且之间有一个端口互通即可。</p>

@@ -207,7 +207,7 @@ pre code{background:none;padding:0;border-radius:0}
       <section class="sheet"><h2>시작하기 전에</h2>
       <p>아래는 모두 relayium CLI이므로, 설치하지 않았다면 먼저 설치하세요. macOS나 Linux에서는 명령어 하나로 사전 빌드된 바이너리가 PATH에 등록됩니다:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build -o relayium ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul></section>
+      <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul></section>
       <section class="sheet"><h2>SSH와 데몬 다이렉트: 이미 운영 중인 서버와 대화하기</h2>
       <p>여기가 실용적으로 가장 큰 차이입니다. croc은 하나의 흐름을 중심으로 만들어졌습니다 — 코드 문구를 입력하고, 코드 문구를 전달하는 것. Relayium CLI는 여러분이 이미 가진 인프라를 활용하는 두 가지 방식을 더 제공합니다.</p>
       <p>relayium push / pull은 기존 SSH 접근 권한을 재사용하므로 새로 신뢰할 것도, 공유할 코드도 없습니다. push는 relayium이 전혀 설치되지 않은 서버에도 작동해, SSH 연결 위의 일반 tar 스트림으로 대체됩니다 — 이 대체 방식은 push에만 있습니다. pull은 항상 원격지에 relayium이 필요합니다. 그곳에서 pull이 송신자 역할을 하기 때문입니다.</p>

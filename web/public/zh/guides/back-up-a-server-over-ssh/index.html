@@ -220,7 +220,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <section class="sheet"><h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
+      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
       <section class="sheet"><h2>把一个目录 push 到你的服务器</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>你已经在用的 SSH 访问权限。ssh user@your-server true 必须静默返回——push 复用的就是这条连接，它自己不做任何额外配置。</li><li>服务器上一个可写的落点。目标路径的上一级目录必须存在，且那个 SSH 用户对它有写权限。</li><li>服务器上可选装 relayium，它换来的是发送前的冲突预检和逐文件 SHA-256。不装 push 也能用，走一条什么都不校验的普通 tar 流。</li><li>不需要 Relayium 账号，两端也都不需要跑守护进程。这里的一切都不会与 Relayium 的服务器通信。</li></ul></div>
       <p>push 接受一个或多个源，以及一个 scp 风格的目标地址。Relayium 会用你平常的密钥和配置通过 SSH 连过去，再把文件流式写入目标目录：</p>

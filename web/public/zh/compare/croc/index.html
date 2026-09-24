@@ -205,7 +205,7 @@ pre code{background:none;padding:0;border-radius:0}
       <section class="sheet"><h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
+      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
       <section class="sheet"><h2>SSH 与 daemon 直连：对接你已有的服务器</h2>
       <p>这是两者在实际使用上最大的差别。croc 围绕单一流程构建——输入暗号、输出暗号。Relayium CLI 又加了两种传输方式，用的是你本就已有的基础设施。</p>
       <p>relayium push / pull 复用你现有的 SSH 权限，因此没有新增的信任关系，也无需分享任何暗号。push 甚至能在远程完全没装 relayium 的服务器上工作，退化为通过 SSH 连接传输一段普通的 tar 流——但这个兜底只属于 push；pull 始终需要远程装有 relayium，因为在那里它要充当发送方。</p>

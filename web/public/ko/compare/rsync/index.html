@@ -207,7 +207,7 @@ pre code{background:none;padding:0;border-radius:0}
       <section class="sheet"><h2>시작하기 전에</h2>
       <p>아래는 모두 relayium CLI이므로, 설치하지 않았다면 먼저 설치하세요. macOS나 Linux에서는 명령어 하나로 사전 빌드된 바이너리가 PATH에 등록됩니다:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build -o relayium ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul></section>
+      <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul></section>
       <section class="sheet"><h2>Relayium sync의 방식</h2>
       <p>relayium sync &lt;소스...&gt; &lt;대상&gt; [--delete] [--watch]는 단방향 증분 미러입니다. 각 파일의 크기와 수정 시각을 비교해 이미 일치하는 것은 건너뛰고 나머지만 보냅니다.</p>
       <p>두 가지 전송 방식으로 동작합니다. user@host:/dest를 가리키면 SSH로 동작하지만, 원격에 이미 relayium이 설치되어 있어야 합니다. push와 달리 sync에는 tar 폴백이 없습니다. 대신 relayium://host[:port]를 가리키면 SSH를 완전히 건너뜁니다. 인증서 고정 TLS 1.3 연결로 상대 기기에서 실행 중인 relayium serve 리스너에 직접 연결되며, 그 기기의 핑거프린트로 인증됩니다(한 번 승인하면 이후로는 기억됩니다). 이 두 번째 경로가 진짜 편리한 부분입니다. sshd를 설정할 필요도, SSH 키를 관리할 필요도 없이, relayium이 설치된 두 기기와 그 사이의 열린 포트 하나만 있으면 됩니다.</p>

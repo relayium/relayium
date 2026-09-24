@@ -207,7 +207,7 @@ pre code{background:none;padding:0;border-radius:0}
       <section class="sheet"><h2>시작하기 전에</h2>
       <p>아래는 모두 relayium CLI이므로, 설치하지 않았다면 먼저 설치하세요. macOS나 Linux에서는 명령어 하나로 사전 빌드된 바이너리가 PATH에 등록됩니다:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build -o relayium ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul></section>
+      <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul></section>
       <section class="sheet"><h2>push / pull: 같은 SSH에 재개, 체크섬, 진행률을 더하다</h2>
       <p>relayium push와 relayium pull은 scp가 사용하는 것과 동일한 SSH 접근 — 같은 호스트, 같은 키, 같은 포트 — 으로 연결합니다. 차이는 연결이 열린 뒤에 무슨 일이 일어나느냐입니다.</p>
       <p>모든 파일은 도착 후 SHA-256 해시로 종단간 검증되므로, 끝난 것처럼 보이는 전송이 실제로 보낸 것과 바이트 단위로 일치함을 확인할 수 있습니다. 전송이 중단되면 — 연결이 끊기거나 노트북 덮개가 닫히거나 — 같은 명령을 다시 실행하면 전체를 다시 보내는 대신 멈춘 지점에서 이어서 진행하며, 조용히 복사만 되는 게 아니라 파일별 실제 진행률을 계속 볼 수 있습니다.</p>

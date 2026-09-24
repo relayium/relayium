@@ -839,7 +839,7 @@ const zh: Messages = {
     installWindowsUpdateNote:
       "在 Windows 上，relayium update 无法替换正在运行的 .exe，所以它会改为打印下载地址——把新版本解压覆盖旧的即可。",
     installReleases: "全部平台、校验和与签名都在发布页 →",
-    installBuild: "或者用 Go 自己构建：",
+    installBuild: "或者用 Go 自己构建：Windows 会生成 relayium.exe，macOS/Linux 会生成 relayium：",
     installHelp:
       "然后 relayium --help 会列出所有命令，relayium help <命令> 会打印该命令自己的用法——离线可用，不需要账号，也不会发任何网络请求。",
     tasksIntro: "两个问题就能定下模式：对端机器此刻可以是离线的吗？它是不是一台由你管理的机器？",

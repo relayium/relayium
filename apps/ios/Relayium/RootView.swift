@@ -490,7 +490,7 @@ struct RootView: View {
         switch surface {
         case .lanTransfer:          return L10n.t(.navNearby)
         case .crossNetworkTransfer: return L10n.t(.navCrossNetworkShort)
-        case .storedSend:           return L10n.t(.tabSend)
+        case .storedSend:           return L10n.t(.navStoredSend)
         case .deviceInbox:          return L10n.t(.tabDeviceInbox)
         case .account:              return L10n.t(.tabAccount)
         case .storedReceive:        return L10n.t(.navStoredReceive)
