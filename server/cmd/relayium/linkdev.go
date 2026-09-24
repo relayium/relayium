@@ -535,11 +535,13 @@ type ldSink struct {
 	// initCleanup is what cleaning up a setup that failed partway could not
 	// remove (nil: everything); reported when the batch is discarded.
 	initCleanup error
-	wrote       []uint64 // bytes written per file
-	verified    []bool   // the session verified the file's chain (and it is synced)
-	finalized   []bool   // installed under its final name
-	written     uint64   // bytes written, all files
-	reported    uint64   // the durable total last reported
+	// initLeftDirs: directories that failed setup created and left in place.
+	initLeftDirs []string
+	wrote        []uint64 // bytes written per file
+	verified     []bool   // the session verified the file's chain (and it is synced)
+	finalized    []bool   // installed under its final name
+	written      uint64   // bytes written, all files
+	reported     uint64   // the durable total last reported
 }
 
 // durable is written minus one held-back byte per written, unfinalized file.
@@ -2354,6 +2356,7 @@ func (d *linkDevDriver) openSink(prompt uint64, files []linkwire.FileMeta) error
 		var oe *sinkOpenError
 		if errors.As(err, &oe) {
 			k.initCleanup = oe.cleanup
+			k.initLeftDirs = oe.leftDirs
 			return oe.cause
 		}
 		return err
@@ -2522,8 +2525,10 @@ func (d *linkDevDriver) discardSink(prompt uint64) {
 		return
 	}
 	err := k.initCleanup // a setup that failed partway was cleaned up then
+	dirs := k.initLeftDirs
 	if k.out != nil {
 		err = errors.Join(err, k.out.discard())
+		dirs = append(dirs, k.out.leftDirs...)
 	}
 	delete(d.sinks, prompt)
 	d.logf("discarded a partial batch")
@@ -2531,7 +2536,7 @@ func (d *linkDevDriver) discardSink(prompt uint64) {
 		d.record("an incomplete batch could not be fully removed: " + err.Error())
 	}
 	if d.ui != nil {
-		d.ui.discarded(d, err)
+		d.ui.discarded(d, err, dirs)
 	}
 }
 

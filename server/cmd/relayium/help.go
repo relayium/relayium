@@ -62,9 +62,10 @@ In the session, each line you type is sent as a message, except:
 Received files are only ever created new under --dest: an existing file is
 never overwritten (a new file gets a " (n)" name), nothing is written through a
 symbolic link or outside the directory. When a batch does not complete, its
-files are removed; if that cleanup cannot remove something, a warning names
-what may be left. After a crash, hidden ".relayium-partial-*" entries may be
-left in --dest; they are safe to inspect and delete by hand.
+files are removed (folders created for it are left in place, and named); if
+that cleanup cannot remove something, a warning names what may be left. After
+a crash, hidden ".relayium-partial-*" entries may be left in --dest: they may
+be inspected and deleted by hand, after checking their contents.
 
 Scripts: stdout carries only the other side's messages (one per line); status,
 prompts, the SAS and errors go to stderr. When stdin is not a terminal, its end
@@ -151,9 +152,10 @@ every file is verified and on disk, 1 otherwise). Over a link, files are only
 created new: nothing existing is overwritten (a new file gets a " (n)" name),
 nothing is written through a symbolic link or outside destdir. A batch that
 does not complete — Ctrl-C included (exit 130) — is never reported saved; its
-files are removed, and if that cleanup cannot remove something, a warning
-names what may be left. After a crash, hidden ".relayium-partial-*" entries may
-be left in destdir; they are safe to inspect and delete by hand.
+files are removed (folders created for it are left in place, and named), and
+if that cleanup cannot remove something, a warning names what may be left.
+After a crash, hidden ".relayium-partial-*" entries may be left in destdir:
+they may be inspected and deleted by hand, after checking their contents.
 
 positional arguments:
   <code>      the 6-digit pairing code the sender printed

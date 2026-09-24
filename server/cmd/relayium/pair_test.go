@@ -914,10 +914,17 @@ func TestLinkSinkNoClobberOwnedAndRootRelative(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(dest, "leaf.txt")); err != nil {
 		t.Error("the pre-existing link was removed")
 	}
-	for _, gone := range []string{"keep (1).txt", "leaf (1).txt", "new", "escape.txt"} {
+	for _, gone := range []string{"keep (1).txt", "leaf (1).txt", "new/dir/f.txt", "escape.txt"} {
 		if _, err := os.Lstat(filepath.Join(dest, gone)); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("discard left %s (%v)", gone, err)
 		}
+	}
+	// Directories are never removed: the created ones stay, and are named.
+	if fi, err := os.Stat(filepath.Join(dest, "new", "dir")); err != nil || !fi.IsDir() {
+		t.Errorf("a created folder was removed (%v)", err)
+	}
+	if strings.Join(k.leftDirs, "|") != "new|new/dir" {
+		t.Errorf("leftDirs = %v", k.leftDirs)
 	}
 
 	// A symbolic link on the way is refused, inside the root or out of it,
@@ -1099,7 +1106,7 @@ func TestLinkSinkRefusesWithoutHardLinks(t *testing.T) {
 	if err := k.discard(); err != nil {
 		t.Fatal(err)
 	}
-	if got := pairListTree(t, dest); strings.Join(got, "|") != "f.txt" {
+	if got := pairListFiles(t, dest); strings.Join(got, "|") != "f.txt" {
 		t.Errorf("a refused batch left %v", got)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dest, "f.txt")); len(b) != 3 {
@@ -1132,7 +1139,7 @@ func TestLinkSinkPostInstallCheckFailureRollsBack(t *testing.T) {
 	if err := k.discard(); err != nil {
 		t.Fatal(err)
 	}
-	if got := pairListTree(t, dest); len(got) != 0 {
+	if got := pairListFiles(t, dest); len(got) != 0 {
 		t.Errorf("a rolled-back install left %v", got)
 	}
 }
@@ -1158,7 +1165,7 @@ func TestLinkSinkCleanupFailuresAreReported(t *testing.T) {
 			t.Fatalf("discard = %v, want the leftover named", err)
 		}
 		var buf bytes.Buffer
-		(&linkUI{stderr: &buf}).discarded(nil, err)
+		(&linkUI{stderr: &buf}).discarded(nil, err, nil)
 		if strings.Contains(buf.String(), "nothing from it was kept") || !strings.Contains(buf.String(), "could NOT be fully removed") {
 			t.Errorf("the report claims a clean removal: %q", buf.String())
 		}
@@ -1655,34 +1662,111 @@ func failRemoveOf(sub string) {
 	}
 }
 
-// Codex r6 #1: a directory of ours is replaced by a FILE right after the
-// cleanup's check. Directory removal must never unlink that file: it is moved
-// to quarantine, found not to be our directory, put back, and reported.
-func TestLinkSinkDirectoryReplacedByFileIsNeverDeleted(t *testing.T) {
+// Codex r7 / root decision: the sink never removes a directory. The folders
+// a cancelled batch created are left in place and named; a directory
+// substituted for one of ours is never deleted either.
+func TestLinkSinkNeverDeletesDirectories(t *testing.T) {
+	t.Run("created-folders-left-and-named", func(t *testing.T) {
+		dest := t.TempDir()
+		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("a/b/one")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := k.discard(); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(k.leftDirs, "|") != "a|a/b" {
+			t.Errorf("leftDirs = %v, want a, a/b", k.leftDirs)
+		}
+		if got := pairListTree(t, dest); strings.Join(got, "|") != "a|a/b" {
+			t.Errorf("on disk %v, want only the two empty folders", got)
+		}
+		var buf bytes.Buffer
+		(&linkUI{stderr: &buf}).discarded(nil, nil, k.leftDirs)
+		if !strings.Contains(buf.String(), "left in place: a, a/b") || strings.Contains(buf.String(), "nothing from it was kept") {
+			t.Errorf("report %q", buf.String())
+		}
+	})
+	t.Run("substituted-directory", func(t *testing.T) {
+		dest := t.TempDir()
+		// After our Mkdir of "a" and before we open it, another process moves
+		// ours away and puts its own directory (holding its file) there.
+		sinkHookBeforeOpenDir = func(_ *linkSink, p string) {
+			if p == "a" {
+				if err := os.Rename(filepath.Join(dest, "a"), filepath.Join(dest, "a-moved")); err != nil {
+					t.Fatal(err)
+				}
+				pairWriteFile(t, filepath.Join(dest, "a", "theirs"), 3)
+			}
+		}
+		t.Cleanup(func() { sinkHookBeforeOpenDir = nil })
+		_, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("a/one")})
+		var oe *sinkOpenError
+		if !errors.As(err, &oe) {
+			t.Fatalf("open = %v, want the refused setup", err)
+		}
+		if b, err := os.ReadFile(filepath.Join(dest, "a", "theirs")); err != nil || len(b) != 3 {
+			t.Errorf("the substituted directory's content was touched (%v)", err)
+		}
+		if _, err := os.Stat(filepath.Join(dest, "a-moved")); err != nil {
+			t.Errorf("our own (moved) directory was removed: %v", err)
+		}
+		if strings.Join(oe.leftDirs, "|") != "a" {
+			t.Errorf("leftDirs = %v, want the folder named", oe.leftDirs)
+		}
+	})
+}
+
+// Codex r7 #2: an entry of someone else's that cleanup set aside and could
+// not put back stays in report-only accounting: a later discard reports it
+// (never deletes it), so "nothing … kept" can never print over it.
+func TestLinkSinkForeignQuarantineIsReportedThroughDiscard(t *testing.T) {
 	dest := t.TempDir()
-	k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("d/one")})
+	k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("one")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sinkHookBeforeRemove = func(_ *linkSink, _, name string) {
-		if name == "d" {
-			if err := os.Rename(filepath.Join(dest, "d"), filepath.Join(dest, "d-moved")); err != nil {
+	sinkFill(t, k)
+	tmp := k.tmp[0]
+	// During install, the staged name is removed through quarantine: what
+	// arrives there is someone else's file, and the staged name is taken
+	// again, so it cannot be put back.
+	sinkHookAfterQuarantine = func(_ *linkSink, _, name, q string) {
+		if name == tmp {
+			if err := os.WriteFile(filepath.Join(dest, "x"), []byte("THEIRS"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(dest, "d"), []byte("THEIRS"), 0o644); err != nil {
+			if err := os.Rename(filepath.Join(dest, "x"), filepath.Join(dest, q)); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dest, tmp), []byte("NEWER"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	t.Cleanup(func() { sinkHookBeforeRemove = nil })
+	t.Cleanup(func() { sinkHookAfterQuarantine = nil })
+	if err := k.install(); err == nil || !strings.Contains(err.Error(), "could not be put back") {
+		t.Fatalf("install = %v, want the unresolved entry reported", err)
+	}
+	sinkHookAfterQuarantine = nil
 	err = k.discard()
-	if b, rerr := os.ReadFile(filepath.Join(dest, "d")); rerr != nil || string(b) != "THEIRS" {
-		t.Fatalf("the file swapped in for our directory was deleted or changed (%q, %v)", b, rerr)
+	if err == nil || !strings.Contains(err.Error(), "could not be put back") {
+		t.Fatalf("discard = %v: the foreign entry dropped out of the final report", err)
 	}
-	if err == nil || !strings.Contains(err.Error(), "the directory d was replaced") {
-		t.Errorf("discard = %v, want the replacement reported", err)
+	var theirs bool
+	for _, g := range pairListTree(t, dest) {
+		if b, _ := os.ReadFile(filepath.Join(dest, g)); string(b) == "THEIRS" {
+			theirs = true
+		}
 	}
-	sinkNoStaging(t, dest)
+	if !theirs {
+		t.Error("the foreign file set aside was deleted")
+	}
+	var buf bytes.Buffer
+	(&linkUI{stderr: &buf}).discarded(nil, err, nil)
+	if strings.Contains(buf.String(), "nothing from it was kept") {
+		t.Errorf("report %q", buf.String())
+	}
 }
 
 // Codex r6 #2: when a freshly created staged file cannot be identified, it is
@@ -1732,7 +1816,7 @@ func TestLinkSinkQuarantinedEntryStaysOwned(t *testing.T) {
 	if err := k.discard(); err != nil {
 		t.Fatalf("discard = %v", err)
 	}
-	if got := pairListTree(t, dest); len(got) != 0 {
+	if got := pairListFiles(t, dest); len(got) != 0 {
 		t.Errorf("left %v: a quarantined entry lost its ownership", got)
 	}
 }
@@ -1860,4 +1944,19 @@ func TestLinkSinkLeafReplacementIsNeverDeleted(t *testing.T) {
 			t.Error("the replacement was deleted")
 		}
 	})
+}
+
+// pairListFiles lists the non-directories under root (created folders are
+// left in place by design).
+func pairListFiles(t *testing.T, root string) []string {
+	t.Helper()
+	var out []string
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			rel, _ := filepath.Rel(root, p)
+			out = append(out, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	return out
 }
