@@ -30,9 +30,11 @@ The Web sender (Phase 1D-B) is implemented and delivered; its client-side code
 lives in `web/src/lib/device-send.ts`, `web/src/lib/device-seal.ts` and
 `web/src/lib/device-inbox.ts`, and it drives the §24-§28 surface. Its UI is not
 specified here — this document specifies the wire and the receiver, not the
-sender's presentation. The iOS clients (Phase 3) are not specified here and are
-not implemented: iOS 0.3.0 development has resumed, but Phase 3 remains
-unimplemented.
+sender's presentation. The iOS client implements foreground sending and receiving
+using Device Inbox v3; see [`relayium-device-inbox-v3.md`](relayium-device-inbox-v3.md),
+`apps/ios/Relayium/DeviceInboxView.swift` and the shared DeviceInbox engines.
+Background receiving remains deferred: leaving the foreground stops the receive
+loop. This v1 document does not specify the iOS UI or background enhancements.
 
 The product requirements this specification was written from are not published in
 this repository, so nothing here cites them. Where an earlier revision pointed at

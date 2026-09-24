@@ -71,6 +71,7 @@
   const SHELL_ROUTES = new Set<Route>([
     "lan", "cross", "offline", "device-inbox",
     "pricing", "cli", "apps", "me", "verify-email", "reset-password", "magic-link",
+    "account-delete", "account-reactivate",
     "download",
   ]);
   const inShell = $derived(SHELL_ROUTES.has(currentRoute()));

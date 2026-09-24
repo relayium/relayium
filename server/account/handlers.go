@@ -83,6 +83,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/client-policy/macos", s.handleMacVersionPolicy)
 	mux.HandleFunc("GET /api/client-policy/windows", s.handleWindowsVersionPolicy)
+	mux.HandleFunc("GET /api/client-policy/ios", s.handleIOSVersionPolicy)
 	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 	mux.HandleFunc("POST /api/auth/password/login", s.handlePasswordLogin)
 	mux.HandleFunc("POST /api/auth/password/change", s.RequireSession(s.handleChangePassword))
@@ -363,8 +364,29 @@ func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request, u Us
 		}
 		out = append(out, v)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"devices": out})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"devices":            out,
+		"serverCapabilities": deviceListServerCapabilities,
+	})
 }
+
+// CapZeroLengthStoredObject is advertised by a server that finalizes a
+// zero-byte upload into a real zero-byte blob (materializeEmptyBlob) and
+// serves a stored object whose committed size is zero as an empty body
+// (openStoredObject), W-N40. A server without it finalizes such an upload
+// with no blob and fails the receiver's fetch stored_object_unavailable after
+// the upload was already stored and debited, so a sender must not finalize an
+// all-empty delivery on it. v2: v1 (never deployed) served empty objects but
+// did not materialize their blob, so a reader rolled back past it could not.
+//
+// It rides the device list because that is the read every sender already
+// makes immediately before its first write; a server rolled back to a build
+// without this field stops advertising it on that same read.
+const CapZeroLengthStoredObject = "stored-object-zero-length-v2"
+
+// deviceListServerCapabilities is the closed set this build advertises on
+// GET /api/devices. Additive: clients that predate it ignore the field.
+var deviceListServerCapabilities = []string{CapZeroLengthStoredObject}
 
 func (s *Service) handleUpsertDevice(w http.ResponseWriter, r *http.Request, u User) {
 	var in struct {
@@ -1062,6 +1084,12 @@ func (s *Service) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrInvalidToken) {
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
+		return
+	}
+	// A mistyped confirmation of the registration password changed nothing
+	// and left the link unspent, so the page can ask again.
+	if errors.Is(err, ErrVerifyPasswordMismatch) {
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password_mismatch"})
 		return
 	}
 	if err != nil {

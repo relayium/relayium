@@ -701,13 +701,21 @@ label:has(> .file-pick-input:focus-visible) {
    the four destinations only — which is also what replaces `body`'s two
    accent-tinted radial washes (the "满屏紫" the reference warns against). Those
    washes are wider than <main>, so nothing inside it could have covered them,
-   and no other route loses them. */
-:root.shell-route body {
-  background: var(--shell-content);
-  background-attachment: scroll;
-}
+   and no other route loses them.
+
+   `--browser-surface` names the flat colour `body` paints, so the browser's
+   `theme-color` can read it back (lib/browser-theme-color.ts) instead of
+   keeping its own copy of the palette. The shell routes paint it directly; the
+   other routes paint `--bg` under the accent washes. Resolved on <html>, where
+   `data-theme` and `shell-route` live. */
+:root { --browser-surface: var(--bg); }
+:root.shell-route { --browser-surface: var(--shell-content); }
 @media (min-width: 1180px) {
-  :root.shell-route body { background: var(--shell-win); }
+  :root.shell-route { --browser-surface: var(--shell-win); }
+}
+:root.shell-route body {
+  background: var(--browser-surface);
+  background-attachment: scroll;
 }
 
 /* ── Type scale and accent, as token overrides on the wrapper ────────────────

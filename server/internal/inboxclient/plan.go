@@ -149,6 +149,24 @@ func sanitizeName(name string) (string, error) {
 	return clean, nil
 }
 
+// CheckPortableName reports whether a receiver would refuse to plan name, using
+// the exact rules PlanDestinations applies to each entry: sanitizeName plus the
+// reserved top-level entries of the receive directory.
+//
+// Exported for the SENDER, so a name every receiver refuses is caught before a
+// byte is encrypted or uploaded, rather than re-stated there and left to drift.
+// It adds no rule and changes none: the receiver still runs its own planner.
+func CheckPortableName(name string) error {
+	rel, err := sanitizeName(name)
+	if err != nil {
+		return err
+	}
+	if top, _, _ := strings.Cut(rel, "/"); reservedTopLevelNames[top] {
+		return fmt.Errorf("%w: names a reserved receive-directory entry", ErrUnsafeName)
+	}
+	return nil
+}
+
 // reservedDeviceNames are the Windows device names. A file cannot be created
 // with any of them, with or without an extension, in any case.
 var reservedDeviceNames = map[string]bool{

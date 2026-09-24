@@ -29,7 +29,29 @@ const (
 	// (Hello.ResumeProof and ResumeState.ResumeProof), so a peer that predates
 	// it never sends one and is never waited for. See ResumeVerdict.
 	MsgResumeVerdict MsgType = 8
+
+	// The stream-only frames of `push -` (see stream_send.go). They are
+	// exchanged only after a Hello with Stream set, so a v1 transfer never sees
+	// one and a v1 receiver is never sent one it could mistake for its own.
+	//
+	// MsgStreamAccept is the receiver's go-ahead (StreamAccept): nothing is
+	// read from the sender's input before it arrives. MsgStreamData carries
+	// 0..StreamChunkMax raw bytes; zero bytes is a keepalive. MsgStreamEnd
+	// (StreamEnd) closes the body with its size, hash and a fresh challenge.
+	// MsgStreamResult (StreamResult) is the receiver's confirmation, sent only
+	// after the file is installed, echoing that challenge.
+	MsgStreamAccept MsgType = 9
+	MsgStreamData   MsgType = 10
+	MsgStreamEnd    MsgType = 11
+	MsgStreamResult MsgType = 12
 )
+
+// StreamChunkMax bounds one MsgStreamData payload.
+const StreamChunkMax = 1 << 20
+
+// StreamChallengeLen is the exact length of StreamEnd.Challenge and
+// StreamResult.Challenge: 32 lowercase hexadecimal characters, 16 random bytes.
+const StreamChallengeLen = 32
 
 const maxFramePayload = 8 << 20 // 8 MiB guard for control frames
 
@@ -48,6 +70,11 @@ type Hello struct {
 	// not. A receiver only hands out a resume offset to a sender that can do
 	// both; absent (an older sender) it gets the whole file instead.
 	ResumeProof bool
+	// Stream announces the stream-only protocol of `push -`: one file of
+	// unknown length (Size -1) sent as MsgStreamData frames after the
+	// receiver's MsgStreamAccept. omitempty keeps every v1 Hello byte-for-byte
+	// what it was (stream_golden_test.go), so no released peer sees a new field.
+	Stream bool `json:",omitempty"`
 }
 
 type FileEntry struct {
@@ -99,6 +126,29 @@ type FileHash struct {
 	SHA256 string
 }
 
+// StreamAccept is the receiver's go-ahead for a stream. ChunkMax is the largest
+// MsgStreamData payload it takes; a sender frames at most
+// min(ChunkMax, StreamChunkMax) bytes.
+type StreamAccept struct{ ChunkMax int }
+
+// StreamEnd closes a stream. Size and SHA256 cover exactly the bytes framed.
+// Challenge is 16 bytes from crypto/rand as 32 lowercase hex characters,
+// created only when the body is complete and carried in no earlier frame, so a
+// StreamResult that echoes it was produced by a party that had this End.
+type StreamEnd struct {
+	Size      int64
+	SHA256    string
+	Challenge string
+}
+
+// StreamResult is the receiver's confirmation, sent only after the file is
+// installed. Challenge is StreamEnd.Challenge, verbatim.
+type StreamResult struct {
+	Size      int64
+	SHA256    string
+	Challenge string
+}
+
 type Result struct {
 	OK           bool
 	Failed       []string
@@ -111,6 +161,11 @@ const (
 	ErrCodeManifestTooLarge  = "manifest_too_large"
 	ErrCodeDestinationExists = "destination_exists"
 	ErrCodeSyncNotAllowed    = "sync_not_allowed"
+	// Stream-only codes (a v1 transfer never receives one).
+	ErrCodeStreamNotAccepted  = "stream_not_accepted"
+	ErrCodeInvalidDestination = "invalid_destination"
+	ErrCodeWriteFailed        = "write_failed"
+	ErrCodeProtocol           = "protocol_error"
 )
 
 // WireError is the payload of a MsgError frame: why the receiver refused a

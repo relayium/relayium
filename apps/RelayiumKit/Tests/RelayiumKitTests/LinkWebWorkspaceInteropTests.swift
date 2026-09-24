@@ -327,6 +327,11 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
         await settle()
+        // The Mac puts an unrequested link to its user first (A23); the user
+        // accepts, and everything below is the wire exactly as before.
+        XCTAssertEqual(rig.model.inboundAsk?.peerId, "aaa-web")
+        rig.model.acceptInboundAsk()
+        await settle()
 
         XCTAssertEqual(rig.assembledPeers, ["aaa-web"])
         XCTAssertEqual(rig.assembledRoles, [.responder],
@@ -343,6 +348,11 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
         rig.capabilities.record(peerId: "aaa-web", signal: try textOnlyHello())
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
+        await settle()
+        // Not a link, so not a prompt either — and an accept pressed anyway
+        // accepts nothing.
+        XCTAssertNil(rig.model.inboundAsk, "a peer outside link/1 was put to the user as a link")
+        rig.model.acceptInboundAsk()
         await settle()
 
         XCTAssertTrue(rig.assembledPeers.isEmpty,
@@ -368,6 +378,7 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
                                       data: webLinkOffer()))
             await settle()
 
+            XCTAssertNil(rig.model.inboundAsk, "caps \(caps) was put to the user as a link")
             XCTAssertTrue(rig.assembledPeers.isEmpty,
                           "caps \(caps) reached a link; only exact link/1 may")
             XCTAssertEqual(rig.model.connection, .idle, "caps \(caps)")
@@ -381,6 +392,11 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
         let rig = interopRig()
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
+        await settle()
+        // Not a link, so not a prompt either — and an accept pressed anyway
+        // accepts nothing.
+        XCTAssertNil(rig.model.inboundAsk, "a peer outside link/1 was put to the user as a link")
+        rig.model.acceptInboundAsk()
         await settle()
         XCTAssertTrue(rig.assembledPeers.isEmpty)
     }
@@ -398,6 +414,11 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
         rig.capabilities.record(peerId: "aaa-web", signal: try webLinkHello())
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
+        await settle()
+        // The Mac puts an unrequested link to its user first (A23); the user
+        // accepts, and everything below is the wire exactly as before.
+        XCTAssertEqual(rig.model.inboundAsk?.peerId, "aaa-web")
+        rig.model.acceptInboundAsk()
         await settle()
 
         let transport = try XCTUnwrap(rig.transports.first)
@@ -458,6 +479,11 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
         rig.capabilities.record(peerId: "aaa-web", signal: try webLinkHello())
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
+        await settle()
+        // The Mac puts an unrequested link to its user first (A23); the user
+        // accepts, and everything below is the wire exactly as before.
+        XCTAssertEqual(rig.model.inboundAsk?.peerId, "aaa-web")
+        rig.model.acceptInboundAsk()
         await settle()
         let transport = try XCTUnwrap(rig.transports.first)
         transport.publish(peerId: "aaa-web", role: .responder)

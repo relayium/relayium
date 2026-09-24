@@ -990,6 +990,20 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// EVIDENCE — never purged, its blob never dropped — until a probe answers.
 		// See UploadSessionRow.UnresolvedAt and Service.recoverUnresolvedUploads.
 		`ALTER TABLE upload_sessions ADD COLUMN unresolved_at INTEGER NOT NULL DEFAULT 0`,
+		// The durable finalize outcome of a resumable upload, which is what lets
+		// a caller whose finalize answer was lost ask for it again
+		// (`{"recoverFinalized":true}`, see answerFinalizeRecovery).
+		// finalized_file_id is the stored object this session produced, written
+		// ONLY by the object's own insert transaction (requireUploadSessionOn),
+		// so it exists exactly when that object was committed; it is never
+		// backfilled or guessed from a blob key. finalize_refused_at is when a
+		// non-pair finalize refused the object, written only inside the refusal's
+		// ownership step and only while no link exists. Both default to "no
+		// fact" on every existing row, neither is in any cleanup or purge
+		// predicate, and a binary that predates them never reads them (session
+		// reads name their columns, uploadSessionCols).
+		`ALTER TABLE upload_sessions ADD COLUMN finalized_file_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE upload_sessions ADD COLUMN finalize_refused_at INTEGER NOT NULL DEFAULT 0`,
 		// How long a queued delete's RESPONSIBILITY outlives the first delete that
 		// succeeds. 0 — every row written before this column existed, and every
 		// ordinary enqueue since — keeps the old behaviour exactly: one success and
@@ -1012,6 +1026,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE pending_node_deletes ADD COLUMN bill_kind INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pending_node_deletes ADD COLUMN bill_max INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pending_node_deletes ADD COLUMN billed_through INTEGER NOT NULL DEFAULT 0`,
+		// The owed-bills outbox's retry ORDER. 0 = never attempted, the state
+		// every existing row and every new INSERT (whose column list omits it)
+		// is in; a failed settle stamps the row with the next value of a
+		// counter, which moves it behind every row not yet attempted since. See
+		// SettleUnbilledMeter: a batch of rows that keep failing must not be
+		// selected ahead of newer bills on every pass.
+		`ALTER TABLE unbilled_meter ADD COLUMN retry_seq INTEGER NOT NULL DEFAULT 0`,
+		`CREATE INDEX IF NOT EXISTS idx_unbilled_meter_retry ON unbilled_meter(retry_seq, at)`,
 		// SHA-256 of the completion proof a receiver must present to end a
 		// pair-room object's life (see pairroom_complete.go). NULLable, and
 		// deliberately without a DEFAULT: NULL is a real state that outranks every
@@ -1508,6 +1530,44 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		`CREATE INDEX IF NOT EXISTS idx_apple_notifications_terminal_age
 		   ON apple_notifications(updated_at)
 		   WHERE state IN ('applied', 'ignored', 'unsupported')`,
+		// Single-shot upload Idempotency-Key claims (2026-09, A14). One row per
+		// committed keyed upload, written in the object's own insert transaction
+		// (CreateStoredFileWithinStorageCaps), so a row exists only for an object
+		// that was created together with its daily-quota debit. The primary key
+		// is the exactly-once rule; the key is scoped to its user.
+		//
+		// Deliberately NO foreign key to users: ArchiveAndPurgeUser deletes the
+		// rows, but an older binary rolled back onto this database does not know
+		// the table, and a reference would make its purge's final users delete
+		// fail. That older binary never reads or writes the table — a keyed
+		// retry then simply uploads again, as it did before — and the rows it
+		// leaves behind are aged out by the next binary's prune
+		// (PruneUploadEvents), whose NOT EXISTS finds their objects gone.
+		//
+		// gone_seen is prune bookkeeping only: 0 while the object exists, else
+		// the prune cutoff of the first sweep that found it gone.
+		`CREATE TABLE IF NOT EXISTS upload_operations (
+  user_id        TEXT NOT NULL,
+  op_key         TEXT NOT NULL,
+  file_id        TEXT NOT NULL,
+  request_digest BLOB NOT NULL,
+  created_at     INTEGER NOT NULL,
+  gone_seen      INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, op_key))`,
+		// The account's upload fence (2026-09, A14). purgeTransientUserDataTx —
+		// the account-deletion step that removes every object, Idempotency-Key
+		// claim, session and CLI token — bumps it in the same transaction, and a
+		// single-shot upload's insert commits only if it still holds the value
+		// its request read while its credential was still valid (see
+		// StoredFile.UploadFence). An upload that was in flight across a
+		// deletion therefore cannot land afterwards — not while the account is
+		// pending deletion, and not after the deletion is cancelled either,
+		// because cancelling does not un-bump it.
+		//
+		// ADDITIVE and defaulted: an older binary's explicit column lists never
+		// name it. Rolled back, it simply has no fence (the behaviour before this
+		// column), and a database it touched is fenced again from the next bump.
+		`ALTER TABLE users ADD COLUMN upload_epoch INTEGER NOT NULL DEFAULT 0`,
 		// Time-bounded administrator membership grants (2026-08). The overlay is
 		// three columns on the users row and NOT a change to the projection — see
 		// admin_grant.go for why it is stored this way rather than written into
@@ -1579,6 +1639,15 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		}
 	} else if _, err := db.ExecContext(context.Background(),
 		`UPDATE upload_sessions SET metered = received WHERE done = 1`); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// residual_provenance records whether a stored object has ever named an
+	// upload session's blob, which is what decides whether cleanup may bill the
+	// bytes that blob holds past `received`. See residualProvenance and
+	// migrateUploadResidualProvenance; it runs on every open, in one
+	// transaction.
+	if err := migrateUploadResidualProvenance(context.Background(), db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -2887,6 +2956,11 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		{`DELETE FROM sessions WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM cli_tokens WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM cli_device_auth WHERE user_id=?`, []any{userID}},
+		// Fence every upload still in flight: its insert re-reads this in its own
+		// transaction and refuses a value it did not start with (UploadFence).
+		// In THIS transaction, with the credentials, objects and key claims, so
+		// no request can hold a valid credential and a pre-deletion value at once.
+		{`UPDATE users SET upload_epoch = upload_epoch + 1 WHERE id=?`, []any{userID}},
 		// Before devices. REDUNDANT with target_device_id's ON DELETE CASCADE
 		// today, and kept anyway: it is scoped by user_id, so it does not depend
 		// on every task having a live device row, and it survives a future schema
@@ -2897,6 +2971,9 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		{`DELETE FROM devices WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM magic_tokens WHERE email=(SELECT email FROM users WHERE id=?)`, []any{userID}},
 		{`DELETE FROM stored_files WHERE user_id=?`, []any{userID}},
+		// Their Idempotency-Key claims name those objects and carry the user_id;
+		// with the objects gone there is nothing left for a key to answer with.
+		{`DELETE FROM upload_operations WHERE user_id=?`, []any{userID}},
 		// Every chunked upload the account has open or half-finished, in whatever
 		// state — including the recovery state, which every automatic sweep is
 		// forbidden to touch. Their partial ciphertext is real ciphertext and their
@@ -2904,6 +2981,15 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		// promise for as long as an unreachable node stayed away, which is forever.
 		// The blobs went into the reclaim list above.
 		{`DELETE FROM upload_sessions WHERE user_id=?`, []any{userID}},
+		// The account's queued blob OBLIGATIONS become deletion-only. An
+		// obligation is a residual nobody has measured yet, and its only
+		// evidence is this account's ciphertext; an explicit deletion overrides
+		// that evidence hold, so the residual is forgiven and the blobs can go
+		// at once instead of being kept to bill an account that is leaving.
+		// Owed bills that are already NUMBERS (unbilled_meter) are not touched:
+		// they stay the account's through the grace window and a restore, and
+		// the hard purge folds them into the anonymized archive.
+		{`UPDATE pending_node_deletes SET bill_user_id = '', bill_kind = 0, bill_max = 0 WHERE bill_user_id = ?`, []any{userID}},
 		// The room row a pre-upload created. Its ciphertext is in stored_files and
 		// upload_sessions (deleted on the lines above, blobs reclaimed by the
 		// caller), so this only clears the deadline bookkeeping — but leaving it
@@ -3034,6 +3120,16 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		  download_bytes = download_bytes + excluded.download_bytes`, userID); err != nil {
 		return err
 	}
+	// The account's OWED bills (unbilled_meter) are usage the meter has not
+	// absorbed yet, so they are treated exactly like usage_monthly: folded into
+	// the anonymized period totals, then deleted. The archive ends up with what a
+	// healthy meter would have produced — counted once, attributed to no one —
+	// and no row naming the purged account survives to FK-fail in
+	// SettleUnbilledMeter. Same transaction as the users delete, so a
+	// reactivation that wins the race rolls this back too.
+	if err := foldOwedBillsOn(ctx, tx, userID); err != nil {
+		return err
+	}
 
 	stmts := []struct {
 		q    string
@@ -3063,10 +3159,14 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// the row. A session opened between the two would be an account uploading
 		// while frozen, which every upload route refuses.
 		{`DELETE FROM upload_sessions WHERE user_id=?`, []any{userID}},
+		// Blob obligations naming the account, as in PurgeTransientUserData —
+		// repeated so the hard purge is correct standalone.
+		{`UPDATE pending_node_deletes SET bill_user_id = '', bill_kind = 0, bill_max = 0 WHERE bill_user_id = ?`, []any{userID}},
 		// Deadline bookkeeping only, for the same reason as in
 		// PurgeTransientUserData — but it holds a user_id, so it goes too.
 		{`DELETE FROM pair_rooms WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM upload_events WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM upload_operations WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM user_stats WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM usage_monthly WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM email_tokens WHERE user_id=?`, []any{userID}},
@@ -3441,6 +3541,84 @@ func (s *SQLiteStore) UseEmailToken(ctx context.Context, tokenHash, purpose stri
 		   FROM email_tokens WHERE token_hash = ?`, tokenHash,
 	).Scan(&t.TokenHash, &t.UserID, &t.Email, &t.Purpose, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
 	return t, err == nil, err
+}
+
+// VerifyEmailWithToken spends a verify token and, in the same transaction,
+// drops an unconfirmed registration password when dropPassword is set, marks
+// the email verified and inserts sess (its ID is the raw session token).
+//
+// Every outcome other than VerifyApplied changed nothing and left the token
+// unspent, and so does a returned error: the transaction rolls back. The token
+// is spent by the same conditional UPDATE UseEmailToken runs, so of two
+// concurrent verifications with one link exactly one commits. The password
+// drop is guarded by email_verified = 0 so an already-verified account keeps
+// its password, and a pending-deletion account rolls back with the token still
+// unspent so the caller's frozen-account path can spend it.
+func (s *SQLiteStore) VerifyEmailWithToken(ctx context.Context, tokenHash string, now int64, dropPassword bool, sess Session) (VerifyOutcome, string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE email_tokens SET used_at = ?
+		 WHERE token_hash = ? AND purpose = 'verify' AND used_at = 0 AND expires_at > ?`,
+		now, tokenHash, now)
+	if err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return VerifyTokenInvalid, "", nil
+	}
+	var userID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT user_id FROM email_tokens WHERE token_hash = ?`, tokenHash,
+	).Scan(&userID); err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	if userID != sess.UserID {
+		return VerifyTokenInvalid, "", fmt.Errorf("account: verify token belongs to %q, session built for %q", userID, sess.UserID)
+	}
+	var deletedAt int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT deleted_at FROM users WHERE id = ?`, userID,
+	).Scan(&deletedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return VerifyTokenInvalid, "", ErrNotFound
+		}
+		return VerifyTokenInvalid, "", err
+	}
+	if deletedAt > 0 {
+		return VerifyAccountFrozen, userID, nil
+	}
+	if dropPassword {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE users SET password_hash = NULL
+			 WHERE id = ? AND email_verified = 0 AND password_hash IS NOT NULL`, userID)
+		if err != nil {
+			return VerifyTokenInvalid, "", err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			if _, err := tx.ExecContext(ctx,
+				`DELETE FROM identities WHERE provider = 'password' AND user_id = ?`, userID); err != nil {
+				return VerifyTokenInvalid, "", err
+			}
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET email_verified = 1 WHERE id = ?`, userID); err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, 0)`,
+		authx.HashToken(sess.ID), userID, sess.CreatedAt, sess.ExpiresAt); err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	return VerifyApplied, userID, nil
 }
 
 func (s *SQLiteStore) DeleteSpentEmailTokens(ctx context.Context, now int64) error {
@@ -4020,11 +4198,17 @@ func (s *SQLiteStore) CreateUploadSession(ctx context.Context, r UploadSessionRo
 		return false, nil
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO upload_sessions (`+uploadSessionCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		// The ONLY writer of residualFresh, and true by construction rather
+		// than by assumption: the key is a fresh random token, and no stored
+		// object references it as of this very statement. A key that somehow
+		// is referenced is recorded as persisted, never as fresh.
+		`INSERT INTO upload_sessions (`+uploadSessionCols+`, residual_provenance)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		         CASE WHEN EXISTS (SELECT 1 FROM stored_files WHERE blob_key = ?)
+		              THEN 2 ELSE 1 END)`,
 		r.ID, r.UserID, r.BlobKey, r.NodeID, b2i(r.Billable), r.EncManifest,
 		r.TTL, r.MaxDL, r.MaxSize, r.Received, r.CreatedAt, b2i(r.Done),
-		purposeOrShare(r.Purpose), r.PairRoomID, r.Metered, r.UnresolvedAt); err != nil {
+		purposeOrShare(r.Purpose), r.PairRoomID, r.Metered, r.UnresolvedAt, r.BlobKey); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -4046,6 +4230,38 @@ func (s *SQLiteStore) GetUploadSession(ctx context.Context, id, userID string) (
 		return UploadSessionRow{}, false, err
 	}
 	return r, true, nil
+}
+
+// GetUploadFinalizeRecord is the recovery read behind `{"recoverFinalized":true}`:
+// the session's durable finalize facts and, through its link, the object it
+// produced — ONE statement, so the session and object halves are one snapshot.
+// Scoped to (id, userID) exactly like GetUploadSession; ok=false for a missing
+// or foreign session. The object is found ONLY through finalized_file_id, never
+// by blob key, and only when it is still this user's, of this session's
+// purpose, on this session's blob. It writes nothing.
+func (s *SQLiteStore) GetUploadFinalizeRecord(ctx context.Context, id, userID string) (UploadFinalizeRecord, bool, error) {
+	var rec UploadFinalizeRecord
+	var done, fileFound int64
+	err := s.reader().QueryRowContext(ctx,
+		`SELECT s.purpose, s.done, s.unresolved_at, s.finalize_refused_at, s.finalized_file_id,
+		        f.id IS NOT NULL, COALESCE(f.expires_at, 0)
+		   FROM upload_sessions s
+		   LEFT JOIN stored_files f
+		     ON s.finalized_file_id <> '' AND f.id = s.finalized_file_id
+		    AND f.user_id = s.user_id AND f.blob_key = s.blob_key
+		    AND COALESCE(NULLIF(f.purpose, ''), 'share') = COALESCE(NULLIF(s.purpose, ''), 'share')
+		  WHERE s.id = ? AND s.user_id = ?`, id, userID).
+		Scan(&rec.Purpose, &done, &rec.UnresolvedAt, &rec.RefusedAt, &rec.FileID, &fileFound, &rec.FileExpiresAt)
+	if err == sql.ErrNoRows {
+		return UploadFinalizeRecord{}, false, nil
+	}
+	if err != nil {
+		return UploadFinalizeRecord{}, false, err
+	}
+	rec.Purpose = purposeOrShare(rec.Purpose)
+	rec.Done = done != 0
+	rec.FileFound = fileFound != 0
+	return rec, true, nil
 }
 
 // CommitUploadProgress records one committed append: offset, meter, ledger and
@@ -4269,7 +4485,8 @@ func (s *SQLiteStore) ClaimUploadDone(ctx context.Context, id string, now int64)
 	var metered, billable int64
 	// Refresh last_activity as we claim: a finalize on an idle-past-TTL upload
 	// would otherwise leave the just-claimed done=1 row "expired", letting the
-	// orphan reaper drop its blob in the window before persistStoredFile runs.
+	// orphan reaper claim its blob in the window before persistStoredFile runs
+	// (which the insert's session precondition would then have to refuse).
 	err = tx.QueryRowContext(ctx,
 		`UPDATE upload_sessions SET done = 1, last_activity = ? WHERE id = ? AND done = 0
 		 RETURNING user_id, received, metered, billable`, now, id,
@@ -4295,6 +4512,10 @@ func (s *SQLiteStore) ClaimUploadDone(ctx context.Context, id string, now int64)
 	return received, billed, true, tx.Commit()
 }
 
+// DeleteUploadSession deletes the row and nothing else. The reaper no longer
+// calls it: every reaper path ends a session through ClaimUploadSessionCleanup,
+// which hands the blob to the pending-delete queue in the transaction that
+// deletes the row.
 func (s *SQLiteStore) DeleteUploadSession(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_sessions WHERE id = ?`, id)
 	return err
@@ -4319,14 +4540,26 @@ func (s *SQLiteStore) ListExpiredOpenUploadSessions(ctx context.Context, before 
 // Their partial blobs would otherwise leak forever, since the open-session
 // reaper only ever looks at done=0 rows.
 //
-// A finalize that REFUSED the object matches this clause too, and harmlessly:
-// it keeps its row as a tombstone but drops its own blob on the way out, so
-// this pass finds nothing left to delete. A finalize that SUCCEEDED never
-// matches, tombstone and all — its blob is referenced by the stored_files row
-// it wrote.
+// A finalize that REFUSED the object matches this clause too. A non-pair-room
+// refusal queues and reclaims its own blob settle-first on the way out
+// (PrepareRefusedUploadReclaim), which marks the session's residual as
+// handed off in the same transaction. The claim this pass takes is therefore
+// deletion-only: it never re-derives the obligation (whose queue row may
+// already be settled and retired, leaving no floor to protect a stale
+// observation), and the drain treats the missing blob as success. A pair-room refusal deliberately
+// drops nothing — that blob may be a room void's billing evidence — and this
+// pass is how a tombstone the void did not take reaches the queue. A finalize
+// that SUCCEEDED never matches, tombstone and all — its blob is referenced by
+// the stored_files row it wrote.
+//
+// This is only the candidate list. What the reaper acts on is the cleanup
+// claim (ClaimUploadSessionCleanup), which re-evaluates this predicate inside
+// its own transaction: a row listed here can be referenced, voided or settled
+// differently by the time the reaper gets to it, and a snapshot is not
+// allowed to decide anything destructive.
 //
 // `unresolved_at = 0` keeps the recovery state out of it, and that clause is
-// load-bearing rather than tidy: this pass DROPS BLOBS, and an unresolved
+// load-bearing rather than tidy: this pass RECLAIMS BLOBS, and an unresolved
 // session's blob is the only thing left that can say how many bytes its node
 // really accepted. Deleting it would make the exact bill unrecoverable at the
 // moment the node comes back — the same underbill the state exists to prevent,
@@ -4335,6 +4568,198 @@ func (s *SQLiteStore) ListOrphanDoneUploadSessions(ctx context.Context, before i
 	return s.uploadSessionsWhere(ctx,
 		`WHERE done = 1 AND unresolved_at = 0 AND max(last_activity, created_at) <= ?
 		   AND blob_key NOT IN (SELECT blob_key FROM stored_files)`, before)
+}
+
+// uploadCleanupEligible is the predicate a terminal session must satisfy for
+// cleanup to take its blob: finalize-claimed, not in recovery, settled, and idle
+// since at/before the bound. The reference clause is added by each claimer.
+// ClaimUploadSessionCleanup and PurgeDoneUploadSessions share it, so the single
+// and the set-based claim cannot drift.
+const uploadCleanupEligible = `done = 1 AND unresolved_at = 0 AND max(last_activity, created_at) <= ?
+   AND (billable = 0 OR metered >= received)`
+
+// ClaimUploadSessionCleanup takes cleanup ownership of one settled terminal
+// session: the eligibility re-check, the hand-off of its blob to the
+// pending-delete queue, and the deletion of the row are one writer transaction.
+// Nothing touches the blob here; GC's drainPending is its only destroyer.
+//
+// The re-check is the point. The reaper found this row in a list, and between
+// that read and now a finalize may have committed a stored file for its blob, a
+// pair room's close may have taken the row (with a billing obligation on the
+// blob), or the row may have moved. Reading `stored_files` inside this
+// transaction, which SQLite's single writer serializes against the finalize's
+// insert, is what stops a live object's blob from ever being queued; the
+// insert's own check (requireUploadSessionOn) is the other half.
+//
+// The queue write is handOffTerminalBlobOn. For a session residualOwed says
+// owes a residual, it is an obligation — bill this user for whatever the blob
+// holds past `received`, capped at max_size, before the blob may be destroyed —
+// written in the SAME transaction that deletes the row, so the residual always
+// has exactly one durable owner: the row before this commits, the queue row
+// after. For every other session it is the deletion-only intent. Either way
+// the upsert keeps the stronger hold, the earlier enqueue time and the higher
+// billing floor, so a claim never shortens a hold or un-accounts a bill. A
+// pair room's close (closePairRoomOn) also derives an obligation from this
+// row and deletes it in its own transaction, so whichever of the two commits
+// second finds no row: one owner, not two.
+//
+// ok=false with a nil error means not eligible, and nothing was written. An
+// error means nothing was written and the row still owns the blob.
+func (s *SQLiteStore) ClaimUploadSessionCleanup(ctx context.Context, id string, idleBefore, at int64) (blobKey, nodeID string, ok bool, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", "", false, err
+	}
+	defer tx.Rollback()
+	var r UploadSessionRow
+	var prov residualProvenance
+	err = tx.QueryRowContext(ctx,
+		`SELECT blob_key, node_id, user_id, billable, received, max_size, residual_provenance
+		   FROM upload_sessions
+		  WHERE id = ? AND `+uploadCleanupEligible+`
+		    AND blob_key NOT IN (SELECT blob_key FROM stored_files)`, id, idleBefore).
+		Scan(&r.BlobKey, &r.NodeID, &r.UserID, &r.Billable, &r.Received, &r.MaxSize, &prov)
+	if err == sql.ErrNoRows {
+		return "", "", false, tx.Commit()
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	blobKey, nodeID = r.BlobKey, r.NodeID
+	if err := handOffTerminalBlobOn(ctx, tx, r, prov, at); err != nil {
+		return "", "", false, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM upload_sessions WHERE id = ?`, id); err != nil {
+		return "", "", false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", "", false, err
+	}
+	return blobKey, nodeID, true, nil
+}
+
+// residualOwed is the one rule for whether ending a terminal session that
+// never became an object hands a residual billing obligation to the queue. It
+// takes all three:
+//
+//   - billable: own-node uploads spend the user's own disk and are never metered;
+//   - residualFresh: positively never persisted, and created under this rule.
+//     An unknown (legacy) session keeps the deletion-only cleanup it was created
+//     under, and a persisted one's residual is the documented live-finalize
+//     residual, never billed (see residualProvenance);
+//   - headroom above the recorded offset: a residual is capped at max_size, so
+//     without headroom it is provably zero, and a zero cap never reaches the
+//     queue.
+//
+// residualOwedSQL is the same predicate for the set-based purge.
+func residualOwed(r UploadSessionRow, prov residualProvenance) bool {
+	return r.Billable && prov == residualFresh && r.MaxSize > r.Received
+}
+
+// residualOwedSQL is residualOwed over upload_sessions columns. Keep the two
+// together: the single claim and the set-based purge must not drift.
+const residualOwedSQL = `billable <> 0 AND residual_provenance = 1 AND max_size > received`
+
+// handOffTerminalBlobOn hands a terminal session's blob to the pending-delete
+// queue, inside the caller's transaction: the residual obligation when
+// residualOwed, the deletion-only intent otherwise. The per-row cleanup
+// producers — the orphan claim and a refused finalize — both use it.
+//
+// The floor is `received`: every byte up to it is already on the meter, billed
+// by the appends or by the terminal claim, and both precede any cleanup
+// (uploadCleanupEligible requires metered >= received; a refusal runs after
+// ClaimUploadDone). There is no hold (not_before = 0), exactly as for the
+// deletion-only claim: an append that lands after the drain's delete finds an
+// empty file at a non-zero offset and writes nothing.
+func handOffTerminalBlobOn(ctx context.Context, tx *sql.Tx, r UploadSessionRow, prov residualProvenance, at int64) error {
+	if residualOwed(r, prov) {
+		return enqueueBilledNodeDeleteOn(ctx, tx, r.BlobKey, r.NodeID, at, 0,
+			r.UserID, MeterUpload, r.MaxSize, r.Received)
+	}
+	return enqueueNodeDeleteOn(ctx, tx, r.BlobKey, r.NodeID, at, 0)
+}
+
+// PrepareRefusedUploadReclaim is a refused non-pair finalize's ownership step,
+// taken before it may touch its blob. One writer transaction; true means the
+// caller may reclaim the blob settle-first (see Service.reclaimRefusedUpload):
+//
+//   - A blob a stored object references is never the refusal's: false, and
+//     nothing is written.
+//   - The session row is gone — a cleanup claim, the set-based purge or an
+//     account deletion took it, each having queued (or deleted) the blob in
+//     the transaction that removed the row: true, and the caller's settle runs
+//     against whatever that queue row carries.
+//   - The row is this finalize's claimed tombstone: the blob is queued by
+//     handOffTerminalBlobOn — the residual obligation or the deletion-only
+//     intent, exactly as a cleanup claim would queue it — and the row is NOT
+//     deleted, because it answers the retry 409. true.
+//   - The row is in any other state: it still owns the blob. false.
+//
+// Handing the obligation over also marks the tombstone residualHandedOff in
+// the same transaction, so its later cleanup claim queues it deletion-only and
+// can never re-issue the obligation — not even after a drain has settled it,
+// deleted the blob and retired the queue row that carried the settled floor.
+func (s *SQLiteStore) PrepareRefusedUploadReclaim(ctx context.Context, sessionID, blobKey, nodeID string, at int64) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var referenced int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM stored_files WHERE blob_key = ?)`, blobKey).Scan(&referenced); err != nil {
+		return false, err
+	}
+	if referenced != 0 {
+		return false, tx.Commit()
+	}
+	var r UploadSessionRow
+	var prov residualProvenance
+	var done, unresolvedAt int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT blob_key, node_id, user_id, billable, received, max_size, done, unresolved_at, residual_provenance
+		   FROM upload_sessions WHERE id = ?`, sessionID).
+		Scan(&r.BlobKey, &r.NodeID, &r.UserID, &r.Billable, &r.Received, &r.MaxSize, &done, &unresolvedAt, &prov)
+	if err == sql.ErrNoRows {
+		return true, tx.Commit()
+	}
+	if err != nil {
+		return false, err
+	}
+	if r.BlobKey != blobKey || r.NodeID != nodeID || done != 1 || unresolvedAt != 0 {
+		return false, tx.Commit()
+	}
+	if err := handOffTerminalBlobOn(ctx, tx, r, prov, at); err != nil {
+		return false, err
+	}
+	// The refusal marker a recovering caller reads as outcome "failed"
+	// (answerFinalizeRecovery). Written here, in the unreferenced branch and
+	// before any blob I/O, so it commits with the hand-off or not at all; and
+	// only while the session has no object link, so it can never overwrite a
+	// success (a referenced blob returned above before writing anything). Its
+	// failure fails the whole step, exactly like the hand-off's: the blob stays
+	// with the tombstone and the caller keeps answering "running" until cleanup
+	// ends the row — never a wrong answer.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE upload_sessions SET finalize_refused_at = ?
+		  WHERE id = ? AND done = 1 AND finalized_file_id = '' AND finalize_refused_at = 0`,
+		max(at, 1), sessionID); err != nil {
+		return false, err
+	}
+	// The row stays (it answers the retry 409), but its residual right is now
+	// the queue row's. Without this, once a drain has billed the residual,
+	// deleted the blob and retired the queue row, the tombstone's cleanup claim
+	// would re-derive the obligation at `received` — a floor below what was
+	// already billed — and any drain still holding its earlier observation of
+	// the blob's size would bill the same bytes a second time against it.
+	if residualOwed(r, prov) {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE upload_sessions SET residual_provenance = ? WHERE id = ? AND residual_provenance = ?`,
+			residualHandedOff, sessionID, residualFresh); err != nil {
+			return false, err
+		}
+	}
+	return true, tx.Commit()
 }
 
 // ListUnresolvedUploadSessions returns recovery-state rows due for another
@@ -4447,9 +4872,16 @@ func (s *SQLiteStore) SettleUnresolvedUpload(ctx context.Context, id string, siz
 }
 
 // PurgeDoneUploadSessions deletes finalized (done=1) rows idle since at/before
-// `before` — housekeeping for rows a finalize left behind. Their blob is either
-// a live stored_files entry (kept) or was already dropped by the orphan pass, so
-// this only reclaims the tiny session row.
+// `before` — housekeeping for rows a finalize left behind. A row whose blob a
+// stored_files entry references just goes: the blob is that live object's. A
+// row whose blob nothing references is normally already gone, claimed by the
+// orphan pass; one that is not (the orphan list failed, or the row became
+// eligible in between) has its blob queued in pending_node_deletes, enqueued at
+// `at`, in the SAME transaction that deletes it. That makes this a set-based
+// cleanup claim, and deleting the row without the queue write is not a state
+// it can commit: a failed queue write rolls the whole purge back. The queue
+// write is ClaimUploadSessionCleanup's, set-based: the residual obligation for
+// the rows residualOwedSQL selects, the deletion-only intent for the rest.
 //
 // SETTLED rows only. `metered >= received` is the guard, and it is the whole
 // reason this is not an unconditional delete: the row is the only place that
@@ -4464,12 +4896,46 @@ func (s *SQLiteStore) SettleUnresolvedUpload(ctx context.Context, id string, siz
 // bound, and everything up to it is billed — so age alone would quietly delete
 // the evidence for the bytes beyond it. Nothing about "the node has been away a
 // long time" makes those bytes free.
-func (s *SQLiteStore) PurgeDoneUploadSessions(ctx context.Context, before int64) error {
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM upload_sessions
-		 WHERE done = 1 AND unresolved_at = 0 AND max(last_activity, created_at) <= ?
-		   AND (billable = 0 OR metered >= received)`, before)
-	return err
+func (s *SQLiteStore) PurgeDoneUploadSessions(ctx context.Context, before, at int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// handOffTerminalBlobOn, set-based, as two complementary statements. First
+	// the obligations — enqueueBilledNodeDeleteOn's upsert: the stronger hold,
+	// the earlier enqueue and the higher floor survive.
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO pending_node_deletes
+		   (blob_key, node_id, enqueued_at, not_before, bill_user_id, bill_kind, bill_max, billed_through)
+		 SELECT blob_key, node_id, ?, ?, user_id, ?, max_size, received FROM upload_sessions
+		  WHERE `+uploadCleanupEligible+`
+		    AND `+residualOwedSQL+`
+		    AND blob_key NOT IN (SELECT blob_key FROM stored_files)
+		 ON CONFLICT(blob_key, node_id) DO UPDATE SET
+		   not_before     = max(pending_node_deletes.not_before, excluded.not_before),
+		   bill_user_id   = excluded.bill_user_id,
+		   bill_kind      = excluded.bill_kind,
+		   bill_max       = excluded.bill_max,
+		   billed_through = max(pending_node_deletes.billed_through, excluded.billed_through)`,
+		at, 0, int(MeterUpload), before); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO pending_node_deletes (blob_key, node_id, enqueued_at, not_before)
+		 SELECT blob_key, node_id, ?, 0 FROM upload_sessions
+		  WHERE `+uploadCleanupEligible+`
+		    AND NOT (`+residualOwedSQL+`)
+		    AND blob_key NOT IN (SELECT blob_key FROM stored_files)
+		 ON CONFLICT(blob_key, node_id) DO UPDATE SET
+		   not_before = max(pending_node_deletes.not_before, excluded.not_before)`, at, before); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM upload_sessions WHERE `+uploadCleanupEligible, before); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // ClearPassword NULLs the password hash so the account has no usable password
@@ -4837,8 +5303,15 @@ const storedFileSelectCols = storedFileCols + `, download_count`
 // points into one insert is how the object's deadline came to depend on which
 // call site an upload arrived through; there is one now, and this is the plain
 // door into it.
+//
+// An insert that carries a session precondition (f.UploadSessionID, a resumable
+// finalize) takes the transactional door too, so an own-node finalize — which
+// skips the caps — is refused under the same rule as a capped one. So does one
+// carrying an Idempotency-Key claim (f.Operation) or an account fence
+// (f.UploadFence) — an own-node single-shot upload: both are only ever checked
+// or written in the object's own transaction.
 func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
-	if f.PairRoomID == "" {
+	if f.PairRoomID == "" && f.UploadSessionID == "" && f.Operation == nil && f.UploadFence == nil {
 		return insertStoredFileOn(ctx, s.db, f)
 	}
 	_, err := s.CreateStoredFileWithinStorageCaps(ctx, f, f.CreatedAt, 0, 0)
@@ -4862,6 +5335,48 @@ func insertStoredFileOn(ctx context.Context, ex sqlExecer, f StoredFile) error {
 		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads,
 		purposeOrShare(f.Purpose), f.InboxTaskID, f.PairRoomID, nullBytes(f.CompletionVerifier))
 	return err
+}
+
+// requireUploadSessionOn is the finalize side of cleanup ownership: when the
+// insert carries f.UploadSessionID, the session it claimed must still exist as
+// this user's finalize-claimed tombstone for this blob, checked inside the
+// insert's own transaction. A missing row means a cleanup claim or a room's
+// close owns the blob now — possibly already queued for deletion — and an
+// object pointing at it would be a 200 for bytes that are going away.
+//
+// The check IS the durable session→object link: a compare-and-set that writes
+// f.ID into the tombstone's finalized_file_id and must hit exactly one row. It
+// runs before the insert in the same transaction, so the link commits with the
+// object or not at all — an insert that fails after it (a constraint, a crash
+// before Commit) rolls the link back with it, and a link therefore always names
+// an object this session really stored. Requiring an empty finalized_file_id
+// and a zero finalize_refused_at makes it once-only and keeps it from coexisting with
+// a refusal marker (PrepareRefusedUploadReclaim writes the marker only while
+// the link is still empty). It moves nothing else: last_activity and every
+// cleanup and purge predicate are untouched.
+func requireUploadSessionOn(ctx context.Context, tx *sql.Tx, f StoredFile) error {
+	if f.UploadSessionID == "" {
+		return nil
+	}
+	if f.ID == "" {
+		return errors.New("stored file insert: a session-linked object needs its id")
+	}
+	res, err := tx.ExecContext(ctx,
+		`UPDATE upload_sessions SET finalized_file_id = ?
+		  WHERE id = ? AND user_id = ? AND blob_key = ? AND done = 1 AND unresolved_at = 0
+		    AND finalized_file_id = '' AND finalize_refused_at = 0`,
+		f.ID, f.UploadSessionID, f.UserID, f.BlobKey)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrUploadSessionReclaimed
+	}
+	return nil
 }
 
 // insertPairRoomObjectOn inserts an object under its room's open precondition AND
@@ -4897,6 +5412,13 @@ func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) (Stor
 	if !found || !pairRoomOpenAt(room, f.CreatedAt) {
 		return StoredFileWrite{}, ErrPairRoomClosed
 	}
+	// The session precondition comes AFTER the room's, and the order is the
+	// contract: a room's close deletes every session row of that room, so a
+	// finalize racing the close would otherwise be answered "reclaimed" (500)
+	// instead of "room over" (410) and lose its endPairRoomByID.
+	if err := requireUploadSessionOn(ctx, tx, f); err != nil {
+		return StoredFileWrite{}, err
+	}
 	f.ExpiresAt = pairRoomExpiry(room)
 	if err := insertStoredFileOn(ctx, tx, f); err != nil {
 		return StoredFileWrite{}, err
@@ -4912,8 +5434,9 @@ func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) (Stor
 // CreateStoredFile pair leaves open (N concurrent uploads each reading the same
 // pre-commit total and all committing). A non-positive cap disables that check.
 //
-// Returns a StoredFileWrite whose Reason is "storage" (owner cap) or "global"
-// (disk cap) when a cap would be exceeded and nothing was written; a real store
+// Returns a StoredFileWrite whose Reason is "quota" (the daily-quota charge
+// below), "storage" (owner cap) or "global" (disk cap) when that gate would be
+// exceeded and nothing was written; a real store
 // error is returned as err so the caller fails CLOSED. "Live" bytes are
 // expires_at > now, matching CurrentStorage / GlobalStorageUsed; the row being
 // inserted is added explicitly since it is not yet visible to the pre-insert sums.
@@ -4921,12 +5444,88 @@ func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) (Stor
 // For a pair-room object the returned deadlines are the ROOM's, read from its row
 // in this same transaction — which is where they have to be decided, not where
 // they are merely confirmed (see StoredFileWrite).
+//
+// A non-nil f.QuotaCharge is the object's daily-quota debit, and it is decided
+// and written FIRST in this transaction (Reason "quota" when it would not fit).
+// First, because the daily quota answered before the caps when it was a
+// separate reservation, so an upload over both still hears 429; in this
+// transaction, because every later refusal here — a cap, a closed pair room, a
+// reclaimed session, an error, a crash before Commit — must take the debit with
+// it. The writer pool's single connection serializes the window sum against
+// every other upload's, exactly as the separate reservation did.
 func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (StoredFileWrite, error) {
+	if q := f.QuotaCharge; q != nil {
+		// A debit billed to anyone but the object's owner, or one that cannot be
+		// told apart from another, is a caller bug; refuse it before writing.
+		if q.Event.UserID != f.UserID || q.Event.ID == "" || q.Event.Bytes <= 0 {
+			return StoredFileWrite{}, errors.New("stored file quota charge: event must be the object owner's, with an id and positive bytes")
+		}
+	}
+	if op := f.Operation; op != nil {
+		// Same rule for the idempotency claim: it names this object, for this
+		// object's owner, or it is a caller bug.
+		if op.UserID != f.UserID || op.FileID != f.ID || op.Key == "" || len(op.RequestDigest) == 0 {
+			return StoredFileWrite{}, errors.New("stored file operation: must be the object owner's, name this object, and carry a key and digest")
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return StoredFileWrite{}, err
 	}
 	defer tx.Rollback() // no-op after a successful Commit
+	if fence := f.UploadFence; fence != nil {
+		// The account fence comes before everything, the key claim included: an
+		// upload that was in flight when its account was deleted must not take
+		// a claim the deletion just freed, write a debit, or store ciphertext.
+		var deletedAt, epoch int64
+		err := tx.QueryRowContext(ctx, `SELECT deleted_at, upload_epoch FROM users WHERE id = ?`, f.UserID).Scan(&deletedAt, &epoch)
+		if err == sql.ErrNoRows {
+			return StoredFileWrite{}, ErrUploadAccountFenced
+		}
+		if err != nil {
+			return StoredFileWrite{}, err
+		}
+		if deletedAt != 0 || epoch != fence.Epoch {
+			return StoredFileWrite{}, ErrUploadAccountFenced
+		}
+	}
+	if op := f.Operation; op != nil {
+		// The Idempotency-Key claim is FIRST, ahead of the daily-quota charge:
+		// a request whose key another request already committed is a replay of
+		// that request, not a new upload, so it must hear that request's result
+		// rather than a 429 caused by that very request's own debit. The claim
+		// then rides the rest of this transaction: any refusal or error below
+		// rolls it back with the object and the debit, so a refused keyed upload
+		// leaves the key free for its retry.
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO upload_operations (user_id, op_key, file_id, request_digest, created_at)
+			 VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, op_key) DO NOTHING`,
+			op.UserID, op.Key, op.FileID, op.RequestDigest, op.CreatedAt)
+		if err != nil {
+			return StoredFileWrite{}, err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return StoredFileWrite{}, err
+		} else if n != 1 {
+			return StoredFileWrite{}, ErrUploadOperationExists
+		}
+	}
+	if q := f.QuotaCharge; q != nil {
+		var used sql.NullInt64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT SUM(bytes) FROM upload_events WHERE user_id = ? AND uploaded_at >= ?`,
+			q.Event.UserID, q.Since).Scan(&used); err != nil {
+			return StoredFileWrite{}, err
+		}
+		if used.Int64+q.Event.Bytes > q.Quota {
+			return StoredFileWrite{Reason: "quota"}, nil
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO upload_events (id, user_id, bytes, uploaded_at) VALUES (?, ?, ?, ?)`,
+			q.Event.ID, q.Event.UserID, q.Event.Bytes, q.Event.UploadedAt); err != nil {
+			return StoredFileWrite{}, err
+		}
+	}
 	if userCap > 0 {
 		var used sql.NullInt64
 		if err := tx.QueryRowContext(ctx,
@@ -4960,10 +5559,43 @@ func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f S
 		}
 		return out, tx.Commit()
 	}
+	// After the caps, so a cap refusal still reports its Reason; before the
+	// insert, in this transaction, so a claimed session cannot gain an object.
+	if err := requireUploadSessionOn(ctx, tx, f); err != nil {
+		return StoredFileWrite{}, err
+	}
 	if err := insertStoredFileOn(ctx, tx, f); err != nil {
 		return StoredFileWrite{}, err
 	}
 	return StoredFileWrite{ExpiresAt: f.ExpiresAt}, tx.Commit()
+}
+
+// UploadEpoch reads the account's upload fence value (users.upload_epoch), or
+// ErrNotFound for no such user.
+func (s *SQLiteStore) UploadEpoch(ctx context.Context, userID string) (int64, error) {
+	var epoch int64
+	err := s.db.QueryRowContext(ctx, `SELECT upload_epoch FROM users WHERE id = ?`, userID).Scan(&epoch)
+	if err == sql.ErrNoRows {
+		return 0, ErrNotFound
+	}
+	return epoch, err
+}
+
+// GetUploadOperation reads one committed single-shot upload operation. It is
+// read on the writer pool, like GetStoredFile, so a request that just lost an
+// ErrUploadOperationExists race sees the winner's committed row.
+func (s *SQLiteStore) GetUploadOperation(ctx context.Context, userID, key string) (UploadOperation, error) {
+	op := UploadOperation{UserID: userID, Key: key}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT file_id, request_digest, created_at FROM upload_operations WHERE user_id = ? AND op_key = ?`,
+		userID, key).Scan(&op.FileID, &op.RequestDigest, &op.CreatedAt)
+	if err == sql.ErrNoRows {
+		return UploadOperation{}, ErrNotFound
+	}
+	if err != nil {
+		return UploadOperation{}, err
+	}
+	return op, nil
 }
 
 func (s *SQLiteStore) GetStoredFile(ctx context.Context, id string) (StoredFile, error) {
@@ -5271,6 +5903,10 @@ func (s *SQLiteStore) UserUploadedSince(ctx context.Context, userID string, sinc
 // in one transaction. With MaxOpenConns(1) SQLite serializes writers, so two
 // concurrent reservations can never both read a stale (pre-insert) sum and both
 // pass the check — the loser sees the winner's committed row.
+//
+// Upload handlers no longer call it: their debit is StoredFile.QuotaCharge,
+// written by CreateStoredFileWithinStorageCaps in the object's own transaction
+// with this same sum-check-insert (A33).
 func (s *SQLiteStore) ReserveUpload(ctx context.Context, e UploadEvent, since, quota int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -5294,16 +5930,48 @@ func (s *SQLiteStore) ReserveUpload(ctx context.Context, e UploadEvent, since, q
 	return true, tx.Commit()
 }
 
-// RefundUpload removes a previously-reserved upload event by id — used when a
-// finalize reserves the daily quota but then fails the authoritative storage-cap
-// check, so the quota isn't charged for a file that never landed.
+// RefundUpload removes an upload event by id. No upload handler calls it: a
+// refused upload's debit rolls back with its object's insert, and a stored
+// object's debit is never refunded — it leaves the window only through
+// PruneUploadEvents.
 func (s *SQLiteStore) RefundUpload(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_events WHERE id = ?`, id)
 	return err
 }
 
+// uploadOperationGoneRetention is how long an Idempotency-Key row outlives
+// its object: a retry of a keyed upload whose object was deleted or expired
+// must keep hearing 410 rather than create the object again, for at least
+// this long after the object is gone.
+const uploadOperationGoneRetention = int64(86400) // 24h
+
 func (s *SQLiteStore) PruneUploadEvents(ctx context.Context, before int64) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_events WHERE uploaded_at < ?`, before)
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM upload_events WHERE uploaded_at < ?`, before); err != nil {
+		return err
+	}
+	// upload_operations, on the same sweep and the same clock. `before` is the
+	// sweep's clock minus a constant, so the difference between two sweeps'
+	// cutoffs is the time between them: a row stamped by the first sweep that
+	// found its object gone is deleted by the first sweep at least
+	// uploadOperationGoneRetention later. Stamped, not deleted, on sight,
+	// because nothing records WHEN an object went (it may be deleted by its
+	// owner, a download limit, expiry or an account purge), and a row pruned
+	// on its creation age alone would let a late retry re-create an object
+	// its owner had already deleted.
+	stamp := before
+	if stamp <= 0 {
+		stamp = 1 // 0 means "not seen gone"
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE upload_operations SET gone_seen = ?
+		  WHERE gone_seen = 0
+		    AND NOT EXISTS (SELECT 1 FROM stored_files f WHERE f.id = upload_operations.file_id)`,
+		stamp); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM upload_operations WHERE gone_seen > 0 AND gone_seen < ?`,
+		before-uploadOperationGoneRetention)
 	return err
 }
 
@@ -5591,10 +6259,24 @@ func (s *SQLiteStore) EnqueueUnbilledMeter(ctx context.Context, m UnbilledMeter)
 //
 // A row that cannot be settled stays and is retried on the next sweep. There is
 // deliberately no age eviction: the row IS the evidence, and time does not
-// answer what it records.
+// answer what it records. It does not hold up the rest of the batch either:
+// each row is an independent increment, so order carries no meaning, and one
+// row that keeps failing must not stand in front of every bill queued after it.
+// The batch carries on and the first error is returned with the count.
+//
+// Nor across batches: the batch is taken in retry order (retry_seq, then age),
+// and a row that fails is stamped to the back of that order. Rows that have
+// never been attempted come before every row that has failed, oldest first,
+// and the failures are retried round-robin behind them. However long a backlog
+// of rows that can never settle grows, a new bill is attempted as soon as every
+// row owed before it has been attempted once — never starved — and the failing
+// rows themselves are kept and retried in turn.
+//
+// Whose meter a row lands on is settleOneUnbilledMeter's rule: the account's
+// while the account exists, the anonymized archive once it does not.
 func (s *SQLiteStore) SettleUnbilledMeter(ctx context.Context, limit int) (int, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, kind, bytes, at FROM unbilled_meter ORDER BY at LIMIT ?`, limit)
+		`SELECT id, user_id, kind, bytes, at FROM unbilled_meter ORDER BY retry_seq, at LIMIT ?`, limit)
 	if err != nil {
 		return 0, err
 	}
@@ -5614,28 +6296,129 @@ func (s *SQLiteStore) SettleUnbilledMeter(ctx context.Context, limit int) (int, 
 		return 0, err
 	}
 	var settled int
+	var firstErr error
 	for _, m := range owed {
-		if err := s.settleOneUnbilledMeter(ctx, m); err != nil {
-			return settled, err
+		done, err := s.settleOneUnbilledMeter(ctx, m)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			// To the back of the retry order. Best effort: if even this write
+			// is refused, every row is equally stuck and order is moot.
+			_, _ = s.db.ExecContext(ctx,
+				`UPDATE unbilled_meter SET retry_seq = (SELECT COALESCE(MAX(retry_seq), 0) + 1 FROM unbilled_meter)
+				  WHERE id = ?`, m.ID)
+			continue
 		}
-		settled++
+		if done {
+			settled++
+		}
 	}
-	return settled, nil
+	return settled, firstErr
 }
 
-func (s *SQLiteStore) settleOneUnbilledMeter(ctx context.Context, m UnbilledMeter) error {
+// settleOneUnbilledMeter settles one owed row in one transaction and reports
+// whether THIS call settled it.
+//
+// The row is CLAIMED first — deleted, and exactly one row must go. The batch
+// was read outside any transaction, so by now a hard purge may have folded
+// the row or another settler metered it; claim-first turns either
+// interleaving into a no-op instead of a second charge.
+//
+// Then ownership, the hard purge's rule: an account that still exists — live,
+// inside its deletion grace window, or restored — is metered. A row whose
+// account no longer exists can only have been left by an older binary that
+// purged the account without folding its owed bills; it is folded into the
+// anonymized archive exactly as the purge would have folded it, so it can
+// neither fail its foreign key forever nor block a live account's bill.
+func (s *SQLiteStore) settleOneUnbilledMeter(ctx context.Context, m UnbilledMeter) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `DELETE FROM unbilled_meter WHERE id = ?`, m.ID)
+	if err != nil {
+		return false, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return false, err
+	} else if n != 1 {
+		return false, tx.Commit()
+	}
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)`, m.UserID).Scan(&exists); err != nil {
+		return false, err
+	}
+	if exists != 0 {
+		if err := recordMeterOn(ctx, tx, m.UserID, m.Kind, m.Bytes, m.At); err != nil {
+			return false, err
+		}
+	} else if err := archiveOwedMeterOn(ctx, tx, m.Kind, m.Bytes, m.At); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+// archiveOwedMeterOn folds one owed bill into the anonymized period totals,
+// exactly as ArchiveAndPurgeUser folds usage_monthly, in the period the bill
+// belongs to (periodOf, the meter's own bucketing). A kind with no archive
+// column has no meter column either — it could never have been settled for
+// anyone — so it contributes nothing.
+func archiveOwedMeterOn(ctx context.Context, tx *sql.Tx, kind UsageKind, bytes, at int64) error {
+	var up, down int64
+	switch kind {
+	case MeterUpload:
+		up = bytes
+	case MeterDownload:
+		down = bytes
+	default:
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO usage_archive(period, upload_bytes, download_bytes) VALUES (?, ?, ?)
+		ON CONFLICT(period) DO UPDATE SET
+		  upload_bytes = upload_bytes + excluded.upload_bytes,
+		  download_bytes = download_bytes + excluded.download_bytes`,
+		periodOf(at), up, down)
+	return err
+}
+
+// foldOwedBillsOn folds every owed bill of one account into the archive and
+// deletes it, inside the hard purge's transaction (see ArchiveAndPurgeUser).
+func foldOwedBillsOn(ctx context.Context, tx *sql.Tx, userID string) error {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT kind, bytes, at FROM unbilled_meter WHERE user_id = ?`, userID)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	if err := recordMeterOn(ctx, tx, m.UserID, m.Kind, m.Bytes, m.At); err != nil {
+	type owedRow struct {
+		kind      UsageKind
+		bytes, at int64
+	}
+	var owed []owedRow
+	for rows.Next() {
+		var o owedRow
+		var k int
+		if err := rows.Scan(&k, &o.bytes, &o.at); err != nil {
+			rows.Close()
+			return err
+		}
+		o.kind = UsageKind(k)
+		owed = append(owed, o)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM unbilled_meter WHERE id = ?`, m.ID); err != nil {
-		return err
+	for _, o := range owed {
+		if err := archiveOwedMeterOn(ctx, tx, o.kind, o.bytes, o.at); err != nil {
+			return err
+		}
 	}
-	return tx.Commit()
+	_, err = tx.ExecContext(ctx, `DELETE FROM unbilled_meter WHERE user_id = ?`, userID)
+	return err
 }
 
 // CountUnbilledMeter reports how many bills are still owed — the one number an
@@ -6345,10 +7128,39 @@ func (s *SQLiteStore) DeletePendingNodeDelete(ctx context.Context, blobKey, node
 // enqueueBilledNodeDeleteOn is enqueueNodeDeleteOn plus a billing obligation:
 // the row records who must be billed for any bytes the blob turns out to hold
 // past `billedThrough` (clamped to `billMax`) before those bytes may be
-// destroyed. Only a pairing room's close calls it, inside the transaction that
-// deletes the session rows — the obligation has to be durable BEFORE the
-// session stops existing, or a database that starts refusing writes a moment
-// later leaves the residual with no owner at all.
+// destroyed. Every producer writes it inside the transaction that ends the
+// session it derives the obligation from — the obligation has to be durable
+// BEFORE the session stops owning the blob, or a database that starts refusing
+// writes a moment later leaves the residual with no owner at all. The
+// producers are a pairing room's close (closePairRoomOn, which deletes the
+// session rows), the orphan cleanup claim (ClaimUploadSessionCleanup, which
+// deletes the row), the set-based purge (PurgeDoneUploadSessions, its SQL twin)
+// and a refused finalize (PrepareRefusedUploadReclaim, which keeps the row as a
+// tombstone that no longer owns the blob's billing: the queue row does, and
+// the tombstone is marked handed-off so its later claim is deletion-only).
+//
+// This is also what the cleanup design's I9 (single destroyer for obligated
+// evidence) rests on: a blob whose key carries, or may carry, an obligation is
+// destroyed only after a durable settle — by GC's drainPending, by
+// settleReclaimedUpload, or by settleAppendIntoAVoidedRoom (a late append that
+// either knows the blob's whole size because its own append landed, or else
+// goes through settleReclaimedUpload itself) — and nothing else; each keeps the
+// blob when the settle cannot be made durable or the blob cannot be sized. The
+// floor advanced in every settle's transaction is what lets several of them
+// race on one key without double billing — and a refused finalize's reclaim
+// (Service.reclaimRefusedUpload) is one more such destroyer, deleting only after
+// a durable settle as well.
+//
+// Two producers cannot bill one residual twice, because each derives its
+// obligation, inside its own writer transaction, from the session row it
+// deletes or tombstones: the close, the claim and the purge DELETE the row, so
+// on the single SQLite writer whichever commits second finds no row to derive
+// from. The refusal keeps its row but marks it handed off
+// (residual_provenance = 3) in the transaction that writes the obligation, so
+// the only producers that can follow it — the tombstone's cleanup claim or
+// purge — write deletion-only rows and never re-derive the obligation, even
+// after a drain has settled and retired it. Any future producer must re-audit
+// this, and the single-destroyer rule, before it lands.
 //
 // The conflict clause keeps enqueueNodeDeleteOn's rules for the hold and the
 // enqueue time, overwrites the obligation identity (the latest session close is
@@ -6369,6 +7181,132 @@ func enqueueBilledNodeDeleteOn(ctx context.Context, ex sqlExecer, blobKey, nodeI
 		   billed_through = max(pending_node_deletes.billed_through, excluded.billed_through)`,
 		blobKey, nodeID, at, notBefore, billUserID, int(billKind), billMax, billedThrough)
 	return err
+}
+
+// residualProvenance is upload_sessions.residual_provenance: what this server
+// can PROVE about whether a session's blob ever became a stored object. It
+// decides one thing — whether cleanup may bill the residual, the bytes a blob
+// holds past the `received` offset central recorded — and it only ever moves
+// towards "persisted" (0 -> 2, 1 -> 2, 1 -> 3, 3 -> 2), never back to fresh:
+//
+//   - residualUnknown (0): every row that predates the column, and every row an
+//     older binary inserts (its column list omits the column, so the row gets
+//     the DEFAULT). Such a row keeps the residual policy it was created under,
+//     path for path: cleanup claims, the set-based purge and a refused finalize
+//     are deletion-only, and a room's void bills it (the pairing-room rule).
+//   - residualFresh (1): inserted by CreateUploadSession for a key no stored
+//     object referenced at that instant, and no stored object has referenced it
+//     since. Only CreateUploadSession writes it, and only such a row can be
+//     billed a residual by cleanup (residualOwed).
+//   - residualPersisted (2): a stored object has named this key at least once.
+//     Bytes past a persisted object's size are the documented live-finalize
+//     residual (see CommitUploadProgress) and are never billed, on any path,
+//     the void included.
+//   - residualHandedOff (3): see the constant. A fresh row's residual right,
+//     already moved to the queue; deletion-only from then on.
+//
+// Nothing ever reads "no stored object references this key now" as proof that
+// none ever did: the object may have been deleted since. The value 2 is written
+// only on positive evidence — the triggers below, inside the very statement
+// that inserts or re-keys a stored_files row (whichever binary issues it: a
+// trigger lives in the database, so an older binary running on a migrated file
+// executes it too), and the migration's backfill for keys an object references
+// right now.
+type residualProvenance = int64
+
+const (
+	residualUnknown   residualProvenance = 0
+	residualFresh     residualProvenance = 1
+	residualPersisted residualProvenance = 2
+	// residualHandedOff (3): a fresh session whose residual obligation a
+	// refused finalize has already handed to the queue, while the session
+	// itself stays behind as the 409 tombstone (PrepareRefusedUploadReclaim).
+	// The queue row owns that residual from then on — it is billed against
+	// that row and the row is retired once the blob is gone — so the tombstone
+	// must never hand it over a second time: its later cleanup is
+	// deletion-only. Written only by PrepareRefusedUploadReclaim, from 1, in the
+	// transaction that writes the obligation.
+	residualHandedOff residualProvenance = 3
+)
+
+// residualTriggers names the two provenance guards. The guard-loss check in
+// migrateUploadResidualProvenance counts exactly these names.
+var residualTriggers = [...]string{
+	"stored_files_insert_marks_session_persisted",
+	"stored_files_rekey_marks_session_persisted",
+}
+
+// migrateUploadResidualProvenance brings the provenance schema up to date. It
+// runs on every open, in ONE transaction, so a crash leaves either the previous
+// schema or all of it:
+//
+//  1. Add the column. Existing rows get DEFAULT 0 (unknown); there is no
+//     backfill towards 1, because absence of an object proves nothing.
+//  2. Guard-loss check. If the column already existed but either trigger is
+//     missing, something outside this code dropped a guard (a manual schema
+//     rollback), and a 1 written before that can no longer be trusted to mean
+//     "never persisted": every 1 becomes 0. That can only remove a residual
+//     bill, never add one.
+//  3. The indexes the triggers and CreateUploadSession's check look up by.
+//  4. Positive backfill: a row whose key a stored object references right now
+//     is 2. Presence is proof, so repeating it on every open is safe.
+//  5. (Re)create the triggers.
+//
+// Rolling the code back needs no schema change: an older binary never drops
+// these triggers or rebuilds upload_sessions, its inserts get the DEFAULT, and
+// its finalize fires the triggers. Rolling the schema back is optional and
+// manual (DROP TRIGGER / DROP INDEX; the column may stay), and a later open by
+// this code then takes step 2.
+func migrateUploadResidualProvenance(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	added := true
+	if _, err := tx.ExecContext(ctx,
+		`ALTER TABLE upload_sessions ADD COLUMN residual_provenance INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return err
+		}
+		added = false
+	}
+	var guards int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name IN (?, ?)`,
+		residualTriggers[0], residualTriggers[1]).Scan(&guards); err != nil {
+		return err
+	}
+	if !added && guards != len(residualTriggers) {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE upload_sessions SET residual_provenance = 0 WHERE residual_provenance = 1`); err != nil {
+			return err
+		}
+	}
+	// The two blob_key indexes are new on an upgraded database and are built
+	// inside this transaction before the listener binds; say so, like every
+	// other index build, so a slow first open on a large table is explained.
+	log.Printf("sqlite: ensuring index (may take a while on a large table, and runs before the listener binds): %s", "idx_upload_sessions_blob, idx_stored_files_blob")
+	for _, q := range []string{
+		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_blob ON upload_sessions(blob_key)`,
+		`CREATE INDEX IF NOT EXISTS idx_stored_files_blob ON stored_files(blob_key)`,
+		`UPDATE upload_sessions SET residual_provenance = 2
+		  WHERE residual_provenance <> 2
+		    AND blob_key IN (SELECT blob_key FROM stored_files)`,
+		`CREATE TRIGGER IF NOT EXISTS ` + residualTriggers[0] + `
+		 AFTER INSERT ON stored_files
+		 BEGIN UPDATE upload_sessions SET residual_provenance = 2
+		        WHERE blob_key = NEW.blob_key AND residual_provenance <> 2; END`,
+		`CREATE TRIGGER IF NOT EXISTS ` + residualTriggers[1] + `
+		 AFTER UPDATE OF blob_key ON stored_files
+		 BEGIN UPDATE upload_sessions SET residual_provenance = 2
+		        WHERE blob_key = NEW.blob_key AND residual_provenance <> 2; END`,
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // SettleBlobBilling atomically discharges the billing obligation a pending blob
@@ -6423,7 +7361,35 @@ func (s *SQLiteStore) settleBlobBilling(ctx context.Context, blobKey, nodeID str
 	if userID == "" {
 		return 0, nil // deletion-only row
 	}
-	if billMax > 0 && through > billMax {
+	// An obligation is an UNKNOWN residual whose only evidence is the account's
+	// ciphertext, and it never outlives the account's entry into deletion (see
+	// SQLiteStore.PurgeTransientUserData). The confirm-time purge neutralizes
+	// every obligation naming the account in its own transaction; this applies
+	// the same rule, at the one place a charge is made, to any row that escaped
+	// it — an older binary confirmed or hard-purged the account, or a producer
+	// raced the confirm. The account missing or pending deletion: the row turns
+	// deletion-only in this transaction and nothing is metered or journaled, so
+	// no bill can name an account that is gone and nothing can FK-fail later.
+	// (An owed bill that is already a NUMBER is a different form and follows a
+	// different rule; see settleOneUnbilledMeter.)
+	var live int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM users WHERE id = ? AND deleted_at = 0)`, userID).Scan(&live); err != nil {
+		return 0, err
+	}
+	if live == 0 {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE pending_node_deletes SET bill_user_id = '', bill_kind = 0, bill_max = 0
+			  WHERE blob_key = ? AND node_id = ?`, blobKey, nodeID); err != nil {
+			return 0, err
+		}
+		return 0, tx.Commit()
+	}
+	// Clamped to the row's own cap unconditionally. Every producer writes the
+	// session's write budget (max_size) here, and a budget of 0 means nothing
+	// may be written, never "uncapped"; the callers clamp too, and this keeps a
+	// future caller that forgets from charging past what was authorized.
+	if through > billMax {
 		through = billMax
 	}
 	owe := through - floor

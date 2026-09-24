@@ -2,7 +2,9 @@ package account
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -13,6 +15,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/relayium/relayium/authx"
@@ -59,6 +62,97 @@ func (c *cappedReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// errClientBodyReleased is what clientBody returns to any reader that arrives
+// after the handler took the request body back.
+var errClientBodyReleased = errors.New("account: upload body already released")
+
+// clientBodyReleaseWait bounds how long release waits for a read that is still
+// running when the handler takes the body back.
+const clientBodyReleaseWait = 5 * time.Second
+
+// clientBody is the single-shot upload's request body as the handler owns it:
+// it counts every byte read from the client and can be taken back.
+//
+// bs.Put may return while something is still reading its reader:
+// RemoteBlobStore hands the body to net/http, whose transport answers as soon
+// as the node's response arrives and keeps copying the request body in its own
+// goroutine (a node answers 401/507 before reading, and 500 mid-stream). Left
+// alone, that goroutine keeps pulling client bytes after the handler has
+// counted them — and after the handler has returned, when the Request.Body is
+// no longer the handler's to read. release ends that: no read starts after it,
+// and the one still running is interrupted through the connection's read
+// deadline and waited for, so the count it returns is final and exact.
+type clientBody struct {
+	r        io.Reader
+	mu       sync.Mutex
+	n        int64
+	active   int
+	released bool
+	idle     chan struct{} // made by release while reads run; closed when the last one returns
+}
+
+func (b *clientBody) Read(p []byte) (int, error) {
+	b.mu.Lock()
+	if b.released {
+		b.mu.Unlock()
+		return 0, errClientBodyReleased
+	}
+	b.active++
+	b.mu.Unlock()
+	n, err := b.r.Read(p)
+	b.mu.Lock()
+	b.n += int64(n)
+	b.active--
+	if b.active == 0 && b.idle != nil {
+		close(b.idle)
+		b.idle = nil
+	}
+	b.mu.Unlock()
+	return n, err
+}
+
+// release takes the body back and returns how many bytes were read from it.
+// A read still running is interrupted (interrupt sets the connection's read
+// deadline, which also ends the request's context) and waited for, at most
+// wait; if it outlasts that — only possible where the deadline cannot be set —
+// the handler stops waiting rather than hang, and what that read returns later
+// is logged as unbilled. Calling release again returns the count so far.
+func (b *clientBody) release(interrupt func() error, wait time.Duration) int64 {
+	b.mu.Lock()
+	if b.released {
+		defer b.mu.Unlock()
+		return b.n
+	}
+	b.released = true
+	var idle chan struct{}
+	if b.active > 0 {
+		b.idle = make(chan struct{})
+		idle = b.idle
+	}
+	b.mu.Unlock()
+	if idle != nil {
+		if err := interrupt(); err != nil {
+			log.Printf("upload: cannot interrupt the request body read still running (%v); waiting up to %v", err, wait)
+		}
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-idle:
+		case <-t.C:
+			log.Printf("upload: a request body read outlasted %v; bytes it returns later are not billed", wait)
+		}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.n
+}
+
+// interruptBodyRead makes a body read still blocked on the client's connection
+// return now, by moving the connection's read deadline to the present.
+func interruptBodyRead(w http.ResponseWriter) func() error {
+	return func() error { return http.NewResponseController(w).SetReadDeadline(time.Now()) }
+}
+
 // registerFileRoutes mounts the stored-transfer endpoints on the account mux.
 // Public routes (meta/blob) are unauthenticated; the rest require auth — a
 // session cookie (browser) or a CLI bearer token (RequireAuth covers both).
@@ -89,11 +183,56 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	// Idempotency-Key (optional). Without the header nothing below changes.
+	// With it, a key this account already committed is answered HERE, before
+	// the body is read — net/http sends "100 Continue" only on the first body
+	// read, so a replay moves no body bytes and bills nothing — and before
+	// every gate, so a retry whose first attempt used up the daily quota still
+	// hears its object rather than a 429. See answerUploadOperation.
+	opKey, okKey := uploadOperationKey(r)
+	if !okKey {
+		http.Error(w, "bad Idempotency-Key: 16-128 characters of A-Z a-z 0-9 . _ : -", http.StatusBadRequest)
+		return
+	}
+	// Account-deletion fence. Deleting an account removes its objects, its
+	// key claims and its credentials and bumps users.upload_epoch, all in one
+	// transaction; this upload's insert commits only if the epoch is still the
+	// one read here (StoredFile.UploadFence). The credential is re-checked
+	// AFTER the read, so the value held is one read while the credential was
+	// valid — i.e. before any deletion — and an upload in flight across a
+	// deletion (and a later reactivation) can never land, neither re-creating
+	// ciphertext after the deletion nor taking a key claim the deletion freed.
+	epoch, err := s.store.UploadEpoch(r.Context(), u.ID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if again, ok := s.UserFromAuth(r); err != nil || !ok || again.ID != u.ID {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var opDigest []byte
+	if opKey != "" {
+		opDigest = uploadOperationDigest(r)
+		if s.answerUploadOperation(w, r, u.ID, opKey, opDigest, true) {
+			return
+		}
+	}
+	// refuse answers a LIMIT refusal (concurrency, quota, caps, traffic,
+	// size). A keyed request that missed the lookup above may be refused by a
+	// limit that its own twin — the same key, committed meanwhile — just used
+	// up; it then hears that committed result instead of the refusal.
+	refuse := func(msg string, code int) {
+		if opKey != "" && s.answerUploadOperation(w, r, u.ID, opKey, opDigest, false) {
+			return
+		}
+		http.Error(w, msg, code)
+	}
 	// M1: cap concurrent uploads per account so a burst of parallel writes can't
 	// pile MaxFileSize each onto disk before the quota refuses them.
 	if !s.uploadSem.acquire(u.ID) {
 		w.Header().Set("Retry-After", "1")
-		http.Error(w, "too many concurrent uploads", http.StatusTooManyRequests)
+		refuse("too many concurrent uploads", http.StatusTooManyRequests)
 		return
 	}
 	defer s.uploadSem.release(u.ID)
@@ -156,7 +295,8 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		ttl = capSecs
 	}
 
-	br := bufio.NewReader(r.Body)
+	body := &clientBody{r: r.Body}
+	br := bufio.NewReader(body)
 	// Length-prefixed opaque encrypted manifest.
 	var mlen uint32
 	if err := binary.Read(br, binary.BigEndian, &mlen); err != nil {
@@ -178,7 +318,8 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// Cheap pre-check to avoid writing a blob we'd immediately delete: if the
 	// declared body already overflows the remaining daily quota, reject before
 	// touching disk. Content-Length is client-supplied, so it is trusted only to
-	// fail fast — never to admit; the authoritative gate is ReserveUpload below.
+	// fail fast — never to admit; the authoritative gate is the daily-quota
+	// charge the object's own insert carries below (persistStoredFile).
 	// Own-node uploads (billable=false) use the user's own disk, not our
 	// DailyQuota, so this pre-check does not apply to them.
 	if billable && r.ContentLength > 0 {
@@ -197,7 +338,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 				return
 			}
 			if used+declared > quota {
-				http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
+				refuse("daily quota exceeded", http.StatusTooManyRequests)
 				return
 			}
 		}
@@ -212,15 +353,15 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		}
 		// Global logical storage ceiling (oversubscription backstop) first.
 		if over, err := s.overGlobalStorage(r.Context(), declared); err == nil && over {
-			http.Error(w, "server storage is full", http.StatusInsufficientStorage)
+			refuse("server storage is full", http.StatusInsufficientStorage)
 			return
 		}
 		if over, err := s.overStorage(r.Context(), u.ID, declared); err == nil && over {
-			http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
+			refuse("storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 			return
 		}
 		if over, err := s.overTraffic(r.Context(), u.ID, declared); err == nil && over {
-			http.Error(w, "monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
+			refuse("monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
 			return
 		}
 	}
@@ -237,25 +378,51 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		}
 	}
 	capped := &cappedReader{r: br, max: writeCap}
+	// Monthly traffic is what moved, so once bs.Put starts reading the body,
+	// every way out of this handler bills the ciphertext read from the client —
+	// everything past the manifest framing, never the declared Content-Length —
+	// exactly once. The count is final only once the body is released (see
+	// clientBody), which happens as soon as Put returns. A cancelled or
+	// oversize upload that fails inside Put, and one refused after Put by a
+	// later gate (traffic, daily quota, storage caps, a failed persist, a client
+	// that hung up after the last byte), all used to be free or partly free:
+	// the body crossed the network and the disk absorbed it, but no stored file
+	// was created, so nothing was metered — free bandwidth for anyone willing
+	// to be refused. The success path calls it explicitly, before answering;
+	// every other return reaches it through the defer, which runs after the
+	// post-Put traffic check, so that check still judges this upload against
+	// the traffic that existed before it. Own-node uploads (billable=false) are
+	// never metered: they use the user's own disk.
+	framing := 4 + int64(mlen)
+	releaseBody := func() int64 {
+		return body.release(interruptBodyRead(w), clientBodyReleaseWait) - framing
+	}
+	metered := false
+	meterConsumed := func() {
+		if metered {
+			return
+		}
+		metered = true
+		// Released again here only for a panic out of Put; otherwise this is
+		// the count taken when Put returned.
+		if sent := releaseBody(); billable && sent > 0 {
+			s.recordUploadTraffic(r.Context(), u.ID, sent, now)
+		}
+	}
+	defer meterConsumed()
 	size, err := bs.Put(r.Context(), blobKey, capped)
+	// Nothing reads the client's body past this point. Interrupting a read
+	// still running — which only a node answering before the body ended
+	// leaves behind — ends the request's context too: a refusal then only
+	// drops the blob and meters, both detached, and a node claiming success
+	// early fails the gates below closed.
+	releaseBody()
 	if err != nil {
 		// Reclaim a committed-but-response-lost blob; if the node is unreachable
 		// the pending-delete queue ensures GC retries instead of orphaning it.
 		s.dropBlob(bs, blobKey, nodeID)
-		// Bill what the client actually sent before it failed. A cancelled or
-		// oversize single-shot upload used to be entirely free: the body crossed
-		// the network, the disk absorbed it, and because no stored file was
-		// created nothing was ever metered — an unbounded free-bandwidth channel
-		// for anyone willing to hang up before the last byte. cappedReader has
-		// counted exactly what was read; a detached context so the client's own
-		// hangup cannot cancel the accounting for it.
-		if billable && capped.n > 0 {
-			mctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
-			_ = s.store.RecordMeter(mctx, u.ID, MeterUpload, capped.n, now)
-			cancel()
-		}
 		if errors.Is(err, errTooLarge) {
-			http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+			refuse("file too large", http.StatusRequestEntityTooLarge)
 			return
 		}
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -271,56 +438,41 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	if billable {
 		if over, err := s.overTraffic(r.Context(), u.ID, size); err == nil && over {
 			s.dropBlob(bs, blobKey, nodeID)
-			http.Error(w, "monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
+			refuse("monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
 			return
 		}
 	}
 
-	// Daily quota: atomically re-read the rolling 24h sum, verify this upload
-	// fits, and record the event in one transaction. This closes the read/record
-	// race where concurrent uploads each see a stale sum and collectively bust the
-	// quota. Reserve first, then commit the file — if either fails, drop the blob.
+	// Daily quota: the debit is NOT written here. It rides into the object's
+	// own insert (StoredFile.QuotaCharge), whose transaction re-reads the
+	// rolling 24h sum, verifies this upload fits and records the event — before
+	// the caps, so 429 still outranks them — and commits it with the object or
+	// not at all. A debit committed ahead of its object used to be stranded by
+	// anything that stopped the object landing afterwards (a crash, a database
+	// failure, a refund that itself failed), charging quota for a file that
+	// never existed (A33); there is now nothing to refund.
 	// The debit is billed at max(size, minBillableBytes): a near-zero object
 	// still costs the 64 KiB floor, indirectly capping object count; the stored
 	// row/stats below stay at the actual size.
-	// Own-node uploads (billable=false) skip this entirely: they never reserved
-	// against the daily quota, so there is nothing to refund on failure below.
-	var reservedUploadID string
+	// Own-node uploads (billable=false) carry no charge: they use the user's
+	// own disk, not our daily quota.
+	var charge *UploadQuotaCharge
 	if billable {
 		billed := size
 		if billed < minBillableBytes {
 			billed = minBillableBytes
 		}
-		// This is the authoritative gate, so a quota read error fails CLOSED
-		// exactly like the ReserveUpload error just below: drop the blob and 500,
-		// never admit an upload against an unknown cap.
+		// This is the authoritative gate, so a quota read error fails CLOSED:
+		// drop the blob and 500, never admit an upload against an unknown cap.
 		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
 		if err != nil {
 			s.dropBlob(bs, blobKey, nodeID)
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		reservedUploadID = authx.NewID()
-		ok, err := s.store.ReserveUpload(r.Context(),
-			UploadEvent{ID: reservedUploadID, UserID: u.ID, Bytes: billed, UploadedAt: now},
-			now-dayWindow, quota)
-		if err != nil {
-			s.dropBlob(bs, blobKey, nodeID)
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
-		}
-		if !ok {
-			s.dropBlob(bs, blobKey, nodeID)
-			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
-			return
-		}
-	}
-	// refundReserved undoes the daily-quota reservation above when a LATER gate
-	// (the authoritative storage-cap check) rejects the upload — otherwise the
-	// user is charged daily quota for a file that never landed.
-	refundReserved := func() {
-		if reservedUploadID != "" {
-			_ = s.store.RefundUpload(r.Context(), reservedUploadID)
+		charge = &UploadQuotaCharge{
+			Event: UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
+			Since: now - dayWindow, Quota: quota,
 		}
 	}
 	id := authx.NewID()
@@ -332,26 +484,52 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	sf := StoredFile{
 		ID: id, UserID: u.ID, BlobKey: blobKey, EncManifest: encManifest,
 		Size: size, BurnAfterRead: maxDL == 1, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
-		MaxDownloads: maxDL, Purpose: purpose,
+		MaxDownloads: maxDL, Purpose: purpose, QuotaCharge: charge,
+		UploadFence: &UploadFence{Epoch: epoch},
 	}
-	// Atomic, fail-closed storage-cap enforcement + insert. This is what actually
-	// stops N concurrent uploads from collectively busting the plan/global cap
-	// (the over* pre-checks race and fail open).
+	if opKey != "" {
+		// The key's claim commits with the object and its debit, or not at all.
+		sf.Operation = &UploadOperation{UserID: u.ID, Key: opKey, FileID: id, RequestDigest: opDigest, CreatedAt: now}
+	}
+	// Atomic, fail-closed daily-quota + storage-cap enforcement + insert. This is
+	// what actually stops N concurrent uploads from collectively busting the
+	// daily quota or the plan/global cap (the pre-checks race and fail open).
+	// Every refusal and every error below leaves no debit and no object.
 	switch persisted, err := s.persistStoredFile(r.Context(), sf, billable); {
+	case errors.Is(err, ErrUploadOperationExists):
+		// A concurrent request with the same key committed first (both missed
+		// the lookup above). Nothing of this one was written — no object, no
+		// debit — so its blob goes, and it answers with the committed result.
+		// The bytes it moved stay billed (the deferred meter), because they did
+		// move.
+		s.dropBlob(bs, blobKey, nodeID)
+		if !s.answerUploadOperation(w, r, u.ID, opKey, opDigest, true) {
+			// The winner's row is gone again already (an account purge); there
+			// is no result to give and this request created nothing.
+			http.Error(w, "server error", http.StatusInternalServerError)
+		}
+		return
+	case errors.Is(err, ErrUploadAccountFenced):
+		// The account was deleted while this upload was in flight: nothing
+		// was written, and nothing may be. Its credential is gone too.
+		s.dropBlob(bs, blobKey, nodeID)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	case err != nil:
 		s.dropBlob(bs, blobKey, nodeID)
-		refundReserved()
 		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	case persisted.Reason == "quota":
+		s.dropBlob(bs, blobKey, nodeID)
+		refuse("daily quota exceeded", http.StatusTooManyRequests)
 		return
 	case persisted.Reason == "global":
 		s.dropBlob(bs, blobKey, nodeID)
-		refundReserved()
-		http.Error(w, "server storage is full", http.StatusInsufficientStorage)
+		refuse("server storage is full", http.StatusInsufficientStorage)
 		return
 	case persisted.Reason == "storage":
 		s.dropBlob(bs, blobKey, nodeID)
-		refundReserved()
-		http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
+		refuse("storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 		return
 	}
 	// Lifetime stats are best-effort: a stats write failure must not fail the
@@ -361,10 +539,133 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// pre-checks already skip them, and the relay side likewise only counts
 	// billable traffic. Metering them here (as it used to) let a user's own-node
 	// traffic eat their plan's monthly cap, contradicting that contract.
-	if billable {
-		_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
-	}
+	meterConsumed()
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
+}
+
+// Idempotency-Key bounds. A key is the client's own identifier for one
+// logical upload; it is scoped to the account, so the length floor only has to
+// keep one client's keys from colliding with each other.
+const (
+	uploadOperationKeyMin = 16
+	uploadOperationKeyMax = 128
+)
+
+// uploadOperationKey returns the request's Idempotency-Key: ("", true) when
+// the header is absent, ("", false) when it is present but unusable (empty,
+// repeated, the wrong length, or outside A-Z a-z 0-9 . _ : -).
+func uploadOperationKey(r *http.Request) (string, bool) {
+	vals := r.Header.Values("Idempotency-Key")
+	if len(vals) == 0 {
+		return "", true
+	}
+	if len(vals) != 1 {
+		return "", false
+	}
+	k := vals[0]
+	if len(k) < uploadOperationKeyMin || len(k) > uploadOperationKeyMax {
+		return "", false
+	}
+	for i := 0; i < len(k); i++ {
+		c := k[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9',
+			c == '.', c == '_', c == ':', c == '-':
+		default:
+			return "", false
+		}
+	}
+	return k, true
+}
+
+// uploadOperationDigest is what a keyed single-shot request looked like BEFORE
+// its body was read — which is all a replay may be compared on, since reading
+// the body is exactly what a replay must not do. It covers every request
+// parameter the object's retention is made from, raw as sent (the resolved
+// values depend on settings and plan, which may move between attempts), and
+// the declared Content-Length (-1 when unknown), the one pre-body signal of
+// the body's shape. The ciphertext itself is not covered: that a key names one
+// logical upload is the client's contract.
+func uploadOperationDigest(r *http.Request) []byte {
+	q := r.URL.Query()
+	var b bytes.Buffer
+	// Every field is length-prefixed, so no value — whatever bytes a decoded
+	// query value holds — can be read as the boundary of the next one.
+	field := func(v string) {
+		var n [8]byte
+		binary.BigEndian.PutUint64(n[:], uint64(len(v)))
+		b.Write(n[:])
+		b.WriteString(v)
+	}
+	field("relayium.upload-operation.v2")
+	for _, k := range []string{"purpose", "burnAfterRead", "ttl", "maxDownloads"} {
+		field(k)
+		field(q.Get(k))
+	}
+	field(strconv.FormatInt(r.ContentLength, 10))
+	sum := sha256.Sum256(b.Bytes())
+	return sum[:]
+}
+
+// answerUploadOperation answers a keyed single-shot upload from the operation
+// this account already committed under that key, and reports whether it did.
+// false means no operation exists and the request must upload normally.
+//
+// Every answer is a pure read: no debit, no meter, no object. failClosed
+// decides a lookup error: true answers 500 (the pre-body lookup — an unknown
+// answer must not become a second upload); false returns false so the caller
+// gives its own refusal (refuse — it is refusing anyway).
+//   - digest differs: 422 — the key was reused for a different request;
+//   - the object is gone (deleted, expired, download limit spent): 410 — it
+//     is never created a second time;
+//   - otherwise: the original 200 body with `Idempotent-Replay: true`.
+func (s *Service) answerUploadOperation(w http.ResponseWriter, r *http.Request, userID, key string, digest []byte, failClosed bool) bool {
+	op, err := s.store.GetUploadOperation(r.Context(), userID, key)
+	if errors.Is(err, ErrNotFound) || (err != nil && !failClosed) {
+		return false
+	}
+	if err != nil {
+		// Fail closed: an unknown answer must not become a second upload.
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return true
+	}
+	if !bytes.Equal(op.RequestDigest, digest) {
+		http.Error(w, "Idempotency-Key was already used for a different request", http.StatusUnprocessableEntity)
+		return true
+	}
+	sf, err := s.store.GetStoredFile(r.Context(), op.FileID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		if !failClosed {
+			return false
+		}
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return true
+	}
+	if err != nil || sf.UserID != userID || s.now().Unix() >= sf.ExpiresAt ||
+		(sf.MaxDownloads > 0 && sf.DownloadCount >= sf.MaxDownloads) {
+		http.Error(w, "the upload made with this Idempotency-Key no longer exists", http.StatusGone)
+		return true
+	}
+	w.Header().Set("Idempotent-Replay", "true")
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": sf.ID, "expiresAt": sf.ExpiresAt})
+	return true
+}
+
+// uploadMeterBudget bounds recordUploadTraffic's detached context.
+const uploadMeterBudget = 5 * time.Second
+
+// recordUploadTraffic bills n bytes of single-shot upload traffic to userID.
+// It runs on a detached context — values kept, cancellation dropped, bounded
+// by uploadMeterBudget — because the client's own hangup is one of the ways
+// an upload that already moved its bytes ends. It records once and never
+// retries; a failure is logged with who and how much, and those bytes stay
+// unbilled rather than being guessed at later.
+func (s *Service) recordUploadTraffic(ctx context.Context, userID string, n, at int64) {
+	mctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), uploadMeterBudget)
+	defer cancel()
+	if err := s.store.RecordMeter(mctx, userID, MeterUpload, n, at); err != nil {
+		log.Printf("upload: recording %d bytes of upload traffic for user %s failed; they stay unbilled: %v", n, userID, err)
+	}
 }
 
 // dropBlob reclaims an orphaned upload blob. It deletes best-effort, and on a
@@ -518,7 +819,10 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// on the functional same-origin proxy path. Fleet hosts are under
 	// *.relayium.com and remain CSP-compatible without the opt-in.
 	byoDirectRequested := r.Header.Get("X-Relayium-Direct-Download") == "1"
-	if directCapable && directNode.OwnerType == "user" && directNode.OwnerUserID == sf.UserID && byoDirectRequested {
+	// Never for an empty object: it is served in place as the empty stream
+	// (see openStoredObject), and an object stored before W-N40 may have no
+	// blob on the node, so a redirect could hand the client a 404.
+	if directCapable && directNode.OwnerType == "user" && directNode.OwnerUserID == sf.UserID && byoDirectRequested && sf.Size > 0 {
 		s.redirectToNode(w, r, directNode, sf.BlobKey)
 		return
 	}
@@ -565,7 +869,7 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		start = parseRangeStart(r.Header.Get("Range"), sf.Size)
 	}
 
-	rc, err := bs.GetRange(r.Context(), sf.BlobKey, start)
+	rc, err := openStoredObject(r.Context(), bs, sf, start)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -687,6 +991,37 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = s.store.IncDownloadCount(ctx, sf.ID)
 	}
+}
+
+// openStoredObject opens sf's committed ciphertext from start.
+//
+// An object whose committed size is zero is the empty stream, and is served
+// as one without touching storage. That is not a shortcut around a missing
+// blob; it is what the object IS. Every all-empty batch is such an object — an
+// empty file contributes no AEAD frame, so the frame stream has no bytes.
+// Current invariant: the blob DOES exist — the CLI sends a zero-byte append
+// and finalize materializes it if missing — so older readers can serve it;
+// do not remove either step. Historically (before W-N40) a resumable upload
+// of it sent no PATCH, neither central's disk nor a node created the key,
+// and such rows still exist, which is why this branch never needs the blob.
+// Before W-N40 the read went to storage
+// anyway, got ErrNotFound, and answered 404 (a share) or, on the Device Inbox
+// route, deleted the row and failed the task stored_object_unavailable — after
+// the finalize had already stored the object, bound its task and debited its
+// quota floor.
+//
+// The committed size is central's own record (the session's received count,
+// fixed by the terminal finalize claim), never a client declaration, so a
+// non-empty object can never be read as empty. Bytes a late append left past
+// the committed size were never part of the object and are not served, which
+// is what Content-Length already did for every non-empty object. Reading no
+// storage also means a storage node that is down cannot make an empty object
+// unreadable; a non-empty one keeps its 503.
+func openStoredObject(ctx context.Context, bs storage.BlobStore, sf StoredFile, start int64) (io.ReadCloser, error) {
+	if sf.Size == 0 {
+		return http.NoBody, nil
+	}
+	return bs.GetRange(ctx, sf.BlobKey, start)
 }
 
 // validResumeRange accepts exactly the one open-ended range shape Relayium's

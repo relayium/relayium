@@ -79,6 +79,8 @@ struct DeviceInboxView: View {
         NavigationStack(path: conversationPath) {
             DestinationPage {
                 content
+                // A20: last on the page and collapsed — see `IOSHelpCard`.
+                IOSHelpCard(surface: .deviceInbox)
             }
             .navigationTitle(L10n.t(.inboxTitle))
             .navigationDestination(for: String.self) { peerID in

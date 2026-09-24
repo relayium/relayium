@@ -12,31 +12,34 @@
 // So three things are pinned here:
 //   1. the two copies are byte-identical;
 //   2. every generated page emits exactly one of them;
-//   3. the hash is the literal nginx carries.
+//   3. the hash is the fixture's "theme" entry — the hash nginx carries.
 //
-// (3) is deliberately a hard-coded string rather than a computed comparison.
-// csp-headers.test.mjs does compare the two, but only when a relayium-ops
-// checkout happens to be present at deploy/nginx/ — it skips otherwise, which
-// is the normal case, so on its own it would let an edit to the snippet reach
-// production with a stale header. This one always runs and names the file to
-// change.
+// (3) reads csp-inline-scripts-v1.json rather than keeping its own copy of the
+// hash: that fixture is the one hand-edited record of what production's
+// script-src allows, relayium-ops vendors it, and a second literal here could
+// only drift from it. The fixture is never regenerated from the snippet, so an
+// edit to the snippet still fails here until someone changes the fixture on
+// purpose. csp-headers.test.mjs and scripts/check-csp-inline.mjs hold every
+// OTHER inline script (source and built) to the same fixture.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { THEME_SCRIPT } from "./page-chrome.mjs";
 import { buildAllPages } from "../gen-pages.mjs";
+import { loadFixture } from "../check-csp-inline.mjs";
 
-/** The hash in relayium-ops deploy/nginx/relayium-security.conf, script-src. */
-const ALLOWED = "sha256-90DHLPjSMy6YJPUudw1r0v+ryRrFlQv7l1/N5GjSSJk=";
+/** The hash relayium-ops' nginx script-src carries, from the fixture it vendors. */
+const theme = loadFixture().scripts.find((s) => s.id === "theme");
+const ALLOWED = theme?.hash;
 
 const inner = (block) => /^<script>([\s\S]*)<\/script>$/.exec(block)?.[1];
 
 describe("the pre-paint theme snippet", () => {
   it("is byte-identical to the one in web/index.html", () => {
     const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
-    // The same extraction server/spa.go's spaScriptHashes and
-    // csp-headers.test.mjs use: the first inline <script> with no src.
+    // The same extraction server/spa.go's spaScriptHashes uses: the first
+    // inline <script> with no src.
     const first = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)]
       .find((m) => !m[1].toLowerCase().includes("src="))?.[2];
     expect(first, "no inline script found in index.html").toBeTruthy();
@@ -44,8 +47,13 @@ describe("the pre-paint theme snippet", () => {
   });
 
   it("hashes to the value nginx allows", () => {
+    expect(theme?.scope, "csp-inline-scripts-v1.json has no every-page theme entry").toBe("every-page");
     const got = "sha256-" + createHash("sha256").update(inner(THEME_SCRIPT)).digest("base64");
-    expect(got, "update script-src in relayium-ops deploy/nginx/relayium-security.conf to " + got)
+    expect(
+      got,
+      "the snippet changed: update the theme entry in scripts/pages/csp-inline-scripts-v1.json to " +
+        got + ", then relayium-ops' vendored copy and nginx script-src before promoting",
+    )
       .toBe(ALLOWED);
   });
 

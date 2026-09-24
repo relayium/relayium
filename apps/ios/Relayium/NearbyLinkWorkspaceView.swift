@@ -68,13 +68,34 @@ struct NearbyLinkWorkspaceView: View {
     /// this view's lifetime, which `TabView` decides.
     @ObservedObject var selection: DirectSendSelection
 
-    @State private var draft = ""
+    // The text being composed is `link.draft`, owned by the model that owns
+    // the link: `TabView` tears this view down when the user switches tabs
+    // while the link lives on, and a view-local draft died with it. The model
+    // also clears it when a new attempt begins, so text written for one peer
+    // can never be sitting in the next peer's composer.
+    //
+    // `composerText` is only the FIELD's editing buffer, never a second holder:
+    // seeded from `link.draft`, every edit mirrored into it at once WITHOUT
+    // publishing (`mirrorComposerDraft`), and re-seeded whenever the model
+    // replaces the draft (`draftReplacement`). Neither a `$link.draft` binding
+    // nor a publishing mirror: the app root observes this model, so either one
+    // re-rendered the whole shell on every keystroke, and on iOS 18 that
+    // scrambled what was typed — see `LinkWorkspaceModel.mirrorComposerDraft`.
+    // Everything this view derives from the draft reads `composerText`.
+    @State private var composerText: String
     @State private var isChoosingFiles = false
     @State private var actionError: String?
     /// The one question this view asks before tearing anything down. Leave and
     /// Done both destroy text that exists nowhere else — the transcript is never
     /// stored — so neither may do it on a single tap.
     @State private var confirmingLocalTextDiscard = false
+
+    init(link: LinkWorkspaceModel, selection: DirectSendSelection) {
+        self.link = link
+        self.selection = selection
+        // A view rebuilt by a tab switch opens on the draft the model kept.
+        _composerText = State(initialValue: link.draft)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.section) {
@@ -111,11 +132,32 @@ struct NearbyLinkWorkspaceView: View {
                       allowsMultipleSelection: true) { result in
             sendChosen(result)
         }
+        // **Debug acceptance only.** `UITestMode.linkFixtureSelection` answers
+        // nil in Release and without its launch argument; with it, the open
+        // link receives the fixture ONCE, through the same `sendChosen` the
+        // importer above calls — only the system browser is replaced. Keyed on
+        // `acceptsWork` so it runs when the link is open and past any
+        // verification, and on appearance if it already was.
+        .task(id: link.acceptsWork) {
+            guard link.acceptsWork, let fixture = UITestMode.linkFixtureSelection() else { return }
+            sendChosen(fixture)
+        }
         // A draft the lane never took comes back to the field rather than
         // vanishing. `task(id:)` rather than `onChange`, because the hand-back
         // can happen while this view is being rebuilt by the very state change
-        // that caused it.
-        .task(id: link.returnedDraft) { restoreReturnedDraft() }
+        // that caused it. The model refuses to overwrite live text, so the
+        // second task retries whenever the composer becomes free — the rule
+        // macOS's `TransferLinkPane` follows.
+        .task(id: link.returnedDraft) { link.restoreReturnedDraft() }
+        .task(id: composerIsFree) { if composerIsFree { link.restoreReturnedDraft() } }
+        // The field's buffer and the model's draft, kept one: every edit goes
+        // to the model, and only the model's own replacements come back.
+        .onChange(of: composerText) { text in
+            link.mirrorComposerDraft(text)
+        }
+        .onChange(of: link.draftReplacement) { _ in
+            if composerText != link.draft { composerText = link.draft }
+        }
     }
 
     // MARK: - who
@@ -234,6 +276,15 @@ struct NearbyLinkWorkspaceView: View {
 
     /// The same composer shape as `DirectTextSessionView`, deliberately.
     ///
+    /// **Send is gated on `canSubmitDraft`'s rule — `canSendMessage` and a
+    /// non-blank field — asked of the field's own text, not on `canCompose`.**
+    /// The latter only
+    /// answers "is this link open and verified" and stays true while a first
+    /// message is still waiting for the peer to accept, so the button stayed
+    /// live for a press that used to replace that first message. The press goes
+    /// through `submitDraft`, which clears the field only if the lane took the
+    /// message — a refusal leaves every character where it was.
+    ///
     /// A person who has written a message on the Direct tab should meet the
     /// same field here: `TextField(axis: .vertical)` growing 2…6 lines, Send
     /// beside it. No keyboard shortcut — macOS binds ⌘Return because it has a
@@ -241,16 +292,18 @@ struct NearbyLinkWorkspaceView: View {
     /// that problem.
     private var composer: some View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
-            TextField(L10n.t(.linkComposerPlaceholder), text: $draft, axis: .vertical)
+            TextField(L10n.t(.linkComposerPlaceholder), text: $composerText, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(2...6)
                 .accessibilityLabel(L10n.t(.linkComposerLabel))
+                .accessibilityIdentifier("link-composer-field")
             Button { sendDraft() } label: {
                 Text(L10n.t(.linkSend)).frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(!link.canCompose || trimmedDraft.isEmpty)
+            .disabled(!canSubmitComposerText)
+            .accessibilityIdentifier("link-send-message")
         }
     }
 
@@ -348,11 +401,11 @@ struct NearbyLinkWorkspaceView: View {
         !(link.textModel?.textMessages.isEmpty ?? true)
     }
 
-    /// Everything a teardown would destroy: what the MODEL holds — a transcript,
-    /// a message waiting for the conversation to open, one the lane handed back —
-    /// and the draft, which on this platform still lives in the view.
+    /// Everything a teardown would destroy — the draft, a transcript, a message
+    /// waiting for the conversation to open, one the lane handed back — all of
+    /// it held by the model, so this is the model's one predicate.
     private var holdsLocalText: Bool {
-        link.holdsLocalText || !trimmedDraft.isEmpty
+        link.holdsLocalText
     }
 
     private var isEnded: Bool {
@@ -366,28 +419,28 @@ struct NearbyLinkWorkspaceView: View {
 
     // MARK: - actions
 
-    private var trimmedDraft: String {
-        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Keyed on emptiness rather than on the text, so ordinary typing does not
+    /// re-ask for the returned draft on every keystroke.
+    private var composerIsFree: Bool {
+        composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Put a handed-back draft in front of the user again, without overwriting
-    /// something they have since typed.
-    private func restoreReturnedDraft() {
-        guard let returned = link.takeReturnedDraft() else { return }
-        guard trimmedDraft.isEmpty else { return }
-        draft = returned
+    /// `LinkWorkspaceModel.canSubmitDraft`, asked of the field's own text: the
+    /// mirror does not publish, so the model's copy cannot re-render this.
+    private var canSubmitComposerText: Bool {
+        link.canSendMessage && !composerIsFree
     }
 
+    /// **Transactional: the field is cleared only if the model took the
+    /// message.** `submitDraft` owns the whole transaction — trim, send, clear
+    /// on acceptance — so a second message pressed while the first still waits
+    /// for the peer is refused with the words kept in the field, and a double
+    /// tap finds an empty draft the second time.
     private func sendDraft() {
-        let body = trimmedDraft
-        guard !body.isEmpty else { return }
         actionError = nil
-        link.send(message: body)
-        // Cleared once the model has taken responsibility for it. The model
-        // holds an unsent draft itself until the conversation opens and hands it
-        // back through `returnedDraft` if the peer refuses, so nothing is
-        // silently lost.
-        draft = ""
+        // What is on screen is what is sent, even if the mirror has not run.
+        link.mirrorComposerDraft(composerText)
+        link.submitDraft()
     }
 
     /// The picker's result, staged and enqueued on the open link.
@@ -423,11 +476,10 @@ struct NearbyLinkWorkspaceView: View {
         confirmingLocalTextDiscard = true
     }
 
-    /// The confirmed exit. The model clears every holder it owns in one
-    /// operation — leaving an open link, dismissing an ended one — and the
-    /// view-local draft goes with them, or it would ride into the next session.
+    /// The confirmed exit. The model clears every holder it owns — the draft
+    /// included — in one operation: leaving an open link, dismissing an ended
+    /// one.
     private func leaveDiscardingLocalText() {
-        draft = ""
         link.leaveDiscardingLocalText()
     }
 
@@ -453,10 +505,46 @@ struct NearbyLinkWorkspaceView: View {
 /// two scroll regions on a phone is something the user cannot reliably get
 /// past, and at the largest content sizes an inner one with a fixed height
 /// shows about a line and a half.
+///
+/// **Newest first, with a Copy on every row** — the macOS `LinkTranscriptView`
+/// rule, because the two surfaces must not disagree about where the message
+/// somebody is waiting for appears or how it is taken out of an ephemeral
+/// session. The model's array stays chronological; `textMessagesNewestFirst`
+/// reverses it without renaming a row, so `ForEach` identity — and with it
+/// VoiceOver focus and the "Copied" acknowledgement — stays on the message it
+/// belongs to when a new one lands above it.
 private struct LinkConversationTranscript: View {
     @ObservedObject var text: LinkSessionPresentationModel
+    /// Presentation state only, and an id rather than a body: acknowledging a
+    /// copy must not put a second copy of ephemeral plaintext in view state.
+    @State private var copiedMessageID: Int?
 
     var body: some View {
+        Group { rows }
+            // A conversation can be cleared and reopened on the same link, and
+            // the ids are the model's. An acknowledgement whose row is gone is an
+            // acknowledgement about nothing. Attached OUTSIDE the empty/non-empty
+            // branch so it stays live while the list is empty too.
+            .onChange(of: text.textMessages) { messages in
+                guard let copiedMessageID,
+                      !messages.contains(where: { $0.id == copiedMessageID }) else { return }
+                self.copiedMessageID = nil
+            }
+            // A different conversation model restarts its ids; an acknowledgement
+            // carried over would land on a stranger's row.
+            .onChange(of: ObjectIdentifier(text)) { _ in copiedMessageID = nil }
+            // Brief: the acknowledgement goes back to "Copy" after a moment, and
+            // a second copy restarts the clock rather than being cleared by the
+            // first one's timer.
+            .task(id: copiedMessageID) {
+                guard copiedMessageID != nil else { return }
+                do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
+                copiedMessageID = nil
+            }
+    }
+
+    @ViewBuilder
+    private var rows: some View {
         if text.textMessages.isEmpty {
             Text(L10n.t(.linkConversationEmpty))
                 .font(.callout)
@@ -464,33 +552,68 @@ private struct LinkConversationTranscript: View {
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             LazyVStack(alignment: .leading, spacing: Metrics.tight) {
-                ForEach(text.textMessages) { message in
+                ForEach(text.textMessagesNewestFirst) { message in
                     VStack(alignment: .leading, spacing: Metrics.hairline) {
-                        Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Palette.supportingLabel)
-                        // Verbatim, and never parsed: the body is peer-supplied
-                        // text, and `Text(verbatim:)` is what stops it being read
-                        // as markup.
-                        Text(verbatim: message.body)
-                            .font(.body.monospaced())
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: Metrics.hairline) {
+                            Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Palette.supportingLabel)
+                            // Verbatim, and never parsed: the body is peer-supplied
+                            // text, and `Text(verbatim:)` is what stops it being
+                            // read as markup.
+                            Text(verbatim: message.body)
+                                .font(.body.monospaced())
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        // One element for the message, so VoiceOver reads
+                        // "Sent, <body>" rather than stopping on the direction
+                        // label alone…
+                        .accessibilityElement(children: .combine)
+                        // …and the Copy after it as its own button, so it is a
+                        // real, focusable control rather than a word folded into
+                        // the message's label.
+                        HStack {
+                            Spacer(minLength: 0)
+                            copyButton(message)
+                        }
                     }
                     .padding(Metrics.tight)
                     .background(Palette.chip,
                                 in: RoundedRectangle(cornerRadius: Metrics.corner,
                                                      style: .continuous))
-                    // One element per message, so VoiceOver reads "Sent, <body>"
-                    // rather than stopping on the direction label alone.
-                    .accessibilityElement(children: .combine)
+                    .accessibilityElement(children: .contain)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(L10n.t(.linkA11yConversation))
         }
+    }
+
+    private func copyButton(_ message: LinkTextMessage) -> some View {
+        Button {
+            copy(message)
+        } label: {
+            Label(L10n.t(copiedMessageID == message.id ? .commonCopied : .commonCopy),
+                  systemImage: copiedMessageID == message.id ? "checkmark" : "doc.on.doc")
+                .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        // The visible label changes to "Copied", so the accessible name is what
+        // keeps the sent/received context — the same sentence macOS speaks.
+        .accessibilityLabel(TextMessagePresentation.copyActionLabel(
+            outgoing: message.direction == .outgoing,
+            copied: copiedMessageID == message.id))
+        .accessibilityIdentifier("link-message-copy")
+    }
+
+    /// The one pasteboard write on this surface, on a tap, of the exact body
+    /// this row shows — never trimmed, never re-encoded, never read back.
+    private func copy(_ message: LinkTextMessage) {
+        UIPasteboard.general.string = message.body
+        copiedMessageID = message.id
     }
 }
 
@@ -527,7 +650,12 @@ private struct LinkTransfersSection: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 LazyVStack(alignment: .leading, spacing: Metrics.inner) {
-                    ForEach(files.batches) { batch in
+                    // Newest first, the macOS `LinkTransferListView` rule: the
+                    // batch just started belongs at the top, not under every
+                    // batch already finished. `batchesNewestFirst` reverses
+                    // without renaming, so each row's Accept/Cancel stays bound
+                    // to its own batch id as the list grows.
+                    ForEach(files.batchesNewestFirst) { batch in
                         batchRow(batch)
                     }
                 }

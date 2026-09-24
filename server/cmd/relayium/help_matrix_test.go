@@ -22,6 +22,7 @@ var publicCommands = []struct {
 	{"push", "relayium push"},
 	{"pull", "relayium pull"},
 	{"sync", "relayium sync"},
+	{"pair", "relayium pair"}, // A10: the live two-way session
 	{"send", "relayium send"},
 	{"receive", "relayium receive"},
 	{"text", "relayium text"},
@@ -50,6 +51,11 @@ var inboxSubcommands = []struct {
 	{"pause", "relayium inbox pause"},
 	{"resume", "relayium inbox resume"},
 	{"service", "relayium inbox service"},
+	{"devices", "relayium inbox devices"},
+	{"send", "relayium inbox send"},
+	{"sent", "relayium inbox sent"},
+	{"cancel", "relayium inbox cancel"},
+	{"retry", "relayium inbox retry"},
 }
 
 // helpForms returns the argv spellings that must all answer identically for a
@@ -176,7 +182,7 @@ func TestHelpDoesNoAccountOrNetworkWork(t *testing.T) {
 	for _, args := range [][]string{
 		{"id", "-h"}, {"login", "-h"}, {"logout", "-h"}, {"whoami", "-h"},
 		{"up", "-h"}, {"down", "-h"}, {"update", "-h"}, {"authorize", "-h"},
-		{"serve", "-h"}, {"send", "-h"}, {"receive", "-h"}, {"text", "-h"},
+		{"serve", "-h"}, {"pair", "-h"}, {"send", "-h"}, {"receive", "-h"}, {"text", "-h"},
 		{"inbox", "enable", "-h"}, {"inbox", "run", "-h"}, {"inbox", "status", "-h"},
 		{"inbox", "disable", "-h"}, {"inbox", "service", "-h"},
 	} {
@@ -222,6 +228,9 @@ func TestMissingAndUnknownStillExitTwo(t *testing.T) {
 		{[]string{"inbox", "enable"}, 2},          // --dir is required
 		{[]string{"inbox", "service"}, 2},         // <kind> is required
 		{[]string{"text", "one", "two"}, 2},       // one code at most
+		{[]string{"pair", "one", "two"}, 2},       // one code at most
+		{[]string{"pair", "K7M4XR"}, 2},           // not a code: refused before any network
+		{[]string{"pair", "--nope"}, 2},           // unknown flag
 		{[]string{"push", "--nope", "a", "b"}, 2}, /* unknown flag */
 	}
 	for _, c := range cases {
@@ -271,39 +280,25 @@ func TestHelpStatesTheTransportGuaranteesTruthfully(t *testing.T) {
 	if strings.Contains(push, "scp with resume") {
 		t.Error("push help still describes the whole SSH path as scp with resume")
 	}
-	for _, n := range []string{
-		"tar -x -k",       // the actual remote command
-		"does NOT resume", // the fallback's limit
-		"kept rather than overwritten",
-		"partly applied", // a collision can follow files that already landed
-	} {
+	for _, n := range []string{"verified by SHA-256", "BEFORE any bytes are sent", "Push does not resume"} {
 		if !strings.Contains(push, n) {
-			t.Errorf("push help omits %q:\n%s", n, push)
+			t.Errorf("push help omits %q", n)
 		}
 	}
-
-	// sync's --delete consent differs by destination, and the SSH side has no
-	// --allow-delete to set. Saying otherwise tells an operator their mirror is
-	// safe when it is not.
 	sync := help("sync", "-h")
 	for _, n := range []string{"relayium://", "--allow-delete", "top-level", "never touched", "empty source"} {
 		if !strings.Contains(sync, n) {
-			t.Errorf("sync help omits %q:\n%s", n, sync)
+			t.Errorf("sync help omits %q", n)
 		}
 	}
-	ssh := strings.Index(sync, "[user@]host:dest — there is no separate listener")
-	if ssh < 0 {
-		t.Errorf("sync help does not say the SSH receiver has no separate consent step:\n%s", sync)
-	}
-	if !strings.Contains(sync[ssh:], "No --allow-delete is involved") {
-		t.Errorf("sync help does not say --allow-delete is not part of the SSH path:\n%s", sync[ssh:])
-	}
-
-	// pull has no fallback at all; claiming one would send someone to a remote
-	// that cannot answer.
 	pull := help("pull", "-h")
-	if !strings.Contains(pull, "INSTALLED ON THE REMOTE") || !strings.Contains(pull, "no tar fallback") {
-		t.Errorf("pull help does not state its remote requirement:\n%s", pull)
+	if !strings.Contains(pull, "currently disabled") {
+		t.Error("pull help must state retirement")
+	}
+	for _, text := range []string{push, sync} {
+		if strings.Contains(text, "[user@]") || strings.Contains(text, "tar -x") {
+			t.Error("help advertises retired SSH transfer")
+		}
 	}
 }
 
@@ -313,8 +308,9 @@ func TestHelpStatesTheTransportGuaranteesTruthfully(t *testing.T) {
 func TestHelpStatesAccountAndOnlineConstraints(t *testing.T) {
 	want := map[string][]string{
 		"push":      {"no Relayium account"},
-		"pull":      {"no Relayium account"},
+		"pull":      {"currently disabled"},
 		"sync":      {"no Relayium account"},
+		"pair":      {"relayium login", "online at the same time", "needs no account"},
 		"send":      {"relayium login", "online at the same time"},
 		"receive":   {"No Relayium\naccount is needed", "online at the same time"},
 		"text":      {"relayium login", "online at the same time"},
@@ -342,13 +338,18 @@ func TestHelpStatesAccountAndOnlineConstraints(t *testing.T) {
 	}
 
 	inboxWant := map[string][]string{
-		"run":     {"Requires \"relayium login\"", "RECEIVE SIDE ONLY"},
+		"run":     {"Requires \"relayium login\"", "receiving side", "relayium inbox send"},
 		"enable":  {"Requires \"relayium login\"", "network access"},
 		"disable": {"Requires network access"},
 		"status":  {"works offline", "needs \"relayium login\""},
 		"pause":   {"needs no network"},
 		"resume":  {"needs network access"},
 		"service": {"needs no\nnetwork, and needs no account"},
+		"devices": {"Requires \"relayium login\" and network access", "enrols nothing"},
+		"send":    {"Requires \"relayium login\" and network access", "does not need Device\nInbox receiving turned on"},
+		"sent":    {"Requires \"relayium login\" and network access"},
+		"cancel":  {"Requires \"relayium login\" and network access"},
+		"retry":   {"Requires \"relayium login\" and network access", "never encrypts and never\nuploads"},
 	}
 	for sub, needles := range inboxWant {
 		var stdout, stderr bytes.Buffer
@@ -368,8 +369,8 @@ func TestHelpStatesAccountAndOnlineConstraints(t *testing.T) {
 func TestHelpNamesItsPositionals(t *testing.T) {
 	want := map[string][]string{
 		"push":      {"<src...>", "<dest>"},
-		"pull":      {"[user@]host:src", "<dest>"},
 		"sync":      {"<src...>", "<dest>"},
+		"pair":      {"[code]"},
 		"send":      {"<src...>", "[code]"},
 		"receive":   {"<code>", "[destdir]"},
 		"text":      {"[code]"},
@@ -444,7 +445,7 @@ func TestPushHelpClaimsNoAtomicBatch(t *testing.T) {
 
 // "up" is a hosted asynchronous stored-link mode. It is NOT "the one CLI mode
 // that is not direct": Device Inbox is server-stored and asynchronous too, and
-// the CLI is its receive side. Someone reading the old claim would conclude
+// the CLI now has both of its sides. Someone reading the old claim would conclude
 // inbox files move machine-to-machine, which is wrong about where their
 // ciphertext sits.
 func TestUpHelpDoesNotClaimToBeTheOnlyNonDirectMode(t *testing.T) {
@@ -469,7 +470,7 @@ func TestUpHelpDoesNotClaimToBeTheOnlyNonDirectMode(t *testing.T) {
 	for _, n := range []string{
 		"hosted, asynchronous stored-link mode",
 		"Device Inbox is hosted and asynchronous too",
-		"the CLI is only its receive side",
+		`("relayium inbox send" and "relayium inbox run")`,
 	} {
 		if !strings.Contains(flat, n) {
 			t.Errorf("up help omits %q:\n%s", n, got)
@@ -477,16 +478,16 @@ func TestUpHelpDoesNotClaimToBeTheOnlyNonDirectMode(t *testing.T) {
 	}
 }
 
-// Device Inbox sends come from the Web or a native app. `inbox run -h` has said
-// so; `send -h` used to name only the Web, which reads as "there is no app
-// path" to someone deciding how to reach a machine that is offline.
+// Device Inbox sends come from the CLI, the Web or a native app. `send -h` used
+// to name only the Web, which reads as "there is no app path" to someone
+// deciding how to reach a machine that is offline; it must name all three.
 func TestSendHelpNamesBothInboxSenders(t *testing.T) {
 	isolatedEnv(t)
 	var stdout, stderr bytes.Buffer
 	if rc := Run([]string{"send", "-h"}, &stdout, &stderr); rc != 0 {
 		t.Fatalf("send -h: rc = %d (%s)", rc, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "Device Inbox from the Web or a native app") {
+	if !strings.Contains(stdout.String(), `Device Inbox ("relayium inbox send", the Web or a native app)`) {
 		t.Errorf("send help does not name both Device Inbox senders:\n%s", stdout.String())
 	}
 }

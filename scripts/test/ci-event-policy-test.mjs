@@ -147,6 +147,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { PATH_MATRIX } from "./fixtures/ci-path-selection.mjs";
+import { LANES as SELECTOR_LANES } from "../ci/select-lanes.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const workflowsDir = resolve(repoRoot, ".github/workflows");
@@ -203,6 +204,16 @@ const GOVERNED = [
   // `!apps/RelayiumKit/Tests/**` exclusions, and which workflow starts on which
   // package path) belongs to `scripts/test/swift-ci-boundary-test.mjs`.
   { file: "swift-package.yml", dispatch: true, call: true, directPr: false },
+  // The Go side of the two Swift<->Go interop classes: a narrow macOS lane that
+  // runs ONLY those two classes on a `server/**` change, which
+  // `swift-package.yml` never watches. What it may contain (exactly two
+  // selectors, forced, one pinned setup-go, the named-execution proof, no
+  // `apps/**` path) belongs to `scripts/test/swift-ci-boundary-test.mjs`.
+  // `dispatch: false`, like `contracts.yml`: it starts on every change to the
+  // tree it watches, and a manual run proves nothing a push does not — a
+  // pre-merge hosted run of the same two classes comes from dispatching
+  // `swift-package.yml`, which runs them forced as part of its suite.
+  { file: "inbox-swift-interop.yml", dispatch: false, call: true, directPr: false },
   // The Android platform's two lanes. `android.yml` is the heavy owner of
   // `apps/android/**` — protocol tests, app unit tests, lint, debug assemble —
   // and `android-interop.yml` is the emulator↔browser acceptance, a separate
@@ -326,6 +337,7 @@ const GATE_LANES = new Map([
   ["android-interop", "android-interop.yml"],
   ["windows", "windows.yml"],
   ["swift-package", "swift-package.yml"],
+  ["inbox-swift-interop", "inbox-swift-interop.yml"],
   ["native-web-pairing", "native-web-pairing.yml"],
   ["contracts", "contracts.yml"],
   ["ops-contract", "ops-deploy-contract.yml"],
@@ -414,6 +426,7 @@ const LITERAL_GROUP_PREFIX = new Map([
   ["android-interop.yml", "android-interop-lane"],
   ["windows.yml", "windows-lane"],
   ["swift-package.yml", "swift-package-lane"],
+  ["inbox-swift-interop.yml", "inbox-swift-interop-lane"],
   ["native-web-pairing.yml", "native-web-pairing-lane"],
   ["contracts.yml", "contracts-lane"],
   ["ops-deploy-contract.yml", "ops-deploy-contract-lane"],
@@ -428,6 +441,9 @@ const CANCEL = "${{ github.event_name == 'pull_request' }}";
 const ACCOUNT_PKG = "github.com/relayium/relayium/account";
 const SHARD_HELPER = "scripts/go-race-shard.go";
 const SHARDS = 8;
+/** The A11 relay-renewal driver tests' job, and the one pattern (section 3b). */
+const RENEW_JOB = "link-renew";
+const RENEW_PATTERN = "^(TestLinkRenew|TestLDRenew)";
 
 const failures = [];
 function check(ok, message) {
@@ -1049,10 +1065,11 @@ if (go) {
     assertNoRetryAndFiniteTimeouts("go.yml", name, job, text);
   }
 
-  // The other half of ./... — everything the shards do not cover.
+  // The other half of ./... — everything the shards do not cover. The A11
+  // renewal job (below) is the one other race job, identified by name.
   const restJobs = Object.entries(go.jobs ?? {}).filter(([jobName, job]) => {
     const text = runText(job);
-    return jobName !== shardJobs[0]?.[0] && /go test .*-race/.test(text);
+    return jobName !== shardJobs[0]?.[0] && jobName !== RENEW_JOB && /go test .*-race/.test(text);
   });
   check(
     restJobs.length === 1,
@@ -1074,6 +1091,65 @@ if (go) {
     );
     assertNoRetryAndFiniteTimeouts("go.yml", name, job, text);
   }
+}
+
+// ── 3b. the A11 renewal driver tests: skipped by `test` and `race-rest`, run
+//        by `link-renew` — with ONE pattern, so a skip can never outgrow the
+//        job that makes up for it ──────────────────────────────────────────
+//
+// They wait out 100-300 s credentials in real time (~20 min together) and
+// pushed cmd/relayium past the per-package bound in both `test` and
+// `race-rest` (run 35959733079). The pattern is a literal here and in go.yml;
+// every occurrence must be the same string, and the tests it names must exist.
+if (go) {
+  const skipFlag = `-skip '${RENEW_PATTERN}'`;
+  const runFlag = `-run '${RENEW_PATTERN}'`;
+  const renew = go.jobs?.[RENEW_JOB];
+  check(renew !== undefined, `go.yml: the \`${RENEW_JOB}\` job is gone, but \`test\` and \`race-rest\` still skip `
+    + `${RENEW_PATTERN} — the relay-renewal driver tests would run nowhere.`);
+  for (const [jobName, job] of Object.entries(go.jobs ?? {})) {
+    const text = runText(job);
+    const skips = [...text.matchAll(/-skip\s+('[^']*'|"[^"]*"|\S+)/g)].map((m) => m[1]);
+    for (const sk of skips) {
+      check(sk === `'${RENEW_PATTERN}'`,
+        `go.yml/${jobName}: \`-skip ${sk}\` is not the renewal pattern '${RENEW_PATTERN}'. A skip no job `
+        + `makes up for deletes coverage silently.`);
+    }
+    if (jobName === "test" || jobName === "race-rest") {
+      check(text.includes(skipFlag) && skips.length === 1,
+        `go.yml/${jobName}: expected exactly one \`${skipFlag}\` (the renewal tests run in \`${RENEW_JOB}\`); `
+        + `found ${JSON.stringify(skips)}. Without it cmd/relayium outruns the per-package bound.`);
+    }
+    if (jobName !== "test" && jobName !== "race-rest" && jobName !== RENEW_JOB) {
+      check(!text.includes(RENEW_PATTERN),
+        `go.yml/${jobName}: names the renewal pattern; only \`test\`, \`race-rest\` (skip) and `
+        + `\`${RENEW_JOB}\` (run) may.`);
+    }
+  }
+  if (renew) {
+    const text = runText(renew);
+    check(/go test -race /.test(text) && text.includes(runFlag) && /\.\/cmd\/relayium\b/.test(text),
+      `go.yml/${RENEW_JOB}: does not run \`go test -race ... ${runFlag} ./cmd/relayium\`.`);
+    check(/-v\b/.test(text) && /--- PASS: \$t /.test(text) && /--- SKIP: /.test(text),
+      `go.yml/${RENEW_JOB}: lost its per-test PASS grep or its no-SKIP check; a renamed test would then `
+      + `make \`-run\` match less and still exit 0.`);
+    check(renew.strategy === undefined, `go.yml/${RENEW_JOB}: gained a strategy/matrix; the section-3 shard `
+      + `check assumes exactly one matrix job.`);
+    assertNoRetryAndFiniteTimeouts("go.yml", RENEW_JOB, renew, text);
+  }
+  // The pattern names real tests, all of them in cmd/relayium.
+  const renewSrc = spawnSync("git", ["-C", repoRoot, "grep", "-hoE", `^func ${RENEW_PATTERN.slice(1)}[A-Za-z0-9_]*`,
+    "--", "server/*_test.go"], { encoding: "utf8" }).stdout ?? "";
+  const renewTests = renewSrc.split("\n").filter(Boolean);
+  check(renewTests.length >= 10,
+    `the renewal pattern ${RENEW_PATTERN} names ${renewTests.length} test(s) in server/; want the A11 driver `
+    + `tests (15 when this check was written). A rename would make \`${RENEW_JOB}\` run nothing.`);
+  const outside = spawnSync("git", ["-C", repoRoot, "grep", "-lE", `^func ${RENEW_PATTERN.slice(1)}`,
+    "--", "server/*_test.go"], { encoding: "utf8" }).stdout.split("\n").filter(Boolean)
+    .filter((f) => !f.startsWith("server/cmd/relayium/"));
+  check(outside.length === 0,
+    `the renewal pattern also matches tests outside cmd/relayium (${outside.join(", ")}); \`test\` and `
+    + `\`race-rest\` skip them everywhere but \`${RENEW_JOB}\` runs only ./cmd/relayium.`);
 }
 
 /**
@@ -1713,6 +1789,23 @@ const RUNNER_BUDGETS = [
       "swift-test": {
         max: 30,
         why: "a PAID macOS runner is held by a `swift test` that never exits",
+      },
+    },
+  },
+  {
+    // Declared 30 for its one job: a cold SwiftPM package build (about two
+    // minutes hosted for `swift-package.yml`'s identical build), a setup-go,
+    // and nine filtered cases measured at ~40s locally including their small Go
+    // builds. The budget is the declared value itself — the hosted cost is
+    // unmeasured until the lane's first run — and the `jobs` form makes a
+    // second job fail here until somebody budgets it.
+    file: "inbox-swift-interop.yml",
+    why: "a PAID macOS runner is held by a `swift test` that never exits",
+    jobs: {
+      "swift-live-interop": {
+        max: 30,
+        why: "a PAID macOS runner is held by a `swift test` that never exits, or by a live "
+          + "interop helper whose own bounded teardown failed",
       },
     },
   },
@@ -6696,7 +6789,7 @@ const MUTATIONS = [
       delete jobs[COMPAT_JOB];
       return world;
     },
-    expect: /compat\.yml declares no job named `wire-vectors`; it declares \[android-protocol, vectors\]/,
+    expect: /compat\.yml declares no job named `wire-vectors`; it declares \[android-protocol, cli-interop-guards, vectors\]/,
   },
   // ── the fuzz campaign (7) ────────────────────────────────────────────────
   //
@@ -6908,7 +7001,7 @@ const MUTATIONS = [
     // The other direction, and the expensive one: fuzzing that migrates back
     // into a lane every change waits for.
     name: "go.yml starts generating fuzz inputs on every pull request",
-    mutate: (world) => withCommandJob(world, "go.yml", "go test ./...", (job, step) => {
+    mutate: (world) => withCommandJob(world, "go.yml", `go test -skip '${RENEW_PATTERN}' ./...`, (job, step) => {
       step.run = "go test -fuzz '^Fuzz' -fuzztime 10m ./...\n";
     }),
     expect: /go\.yml\/test runs a timed fuzz campaign/,
@@ -6928,7 +7021,7 @@ const MUTATIONS = [
     // running the DISCOVERY script on a pull request is a legitimate thing to
     // want, and its name contains the letters the fuzz check looks for.
     name: "go.yml runs the inventory script as an ordinary check",
-    mutate: (world) => withCommandJob(world, "go.yml", "go test ./...", (job, step) => {
+    mutate: (world) => withCommandJob(world, "go.yml", `go test -skip '${RENEW_PATTERN}' ./...`, (job, step) => {
       step.run = `${String(step.run).trimEnd()}\n${FUZZ_INVENTORY}\n`;
     }),
     refute: /go\.yml\/test runs a timed fuzz campaign/,
@@ -7433,7 +7526,7 @@ const MUTATIONS = [
   {
     // The hardcoded roster drifting away from the jobs it judges.
     name: "the aggregate's hardcoded roster loses a lane",
-    mutate: (world) => withGateRule(world, "swift-package native-web-pairing", "native-web-pairing"),
+    mutate: (world) => withGateRule(world, "swift-package inbox-swift-interop", "inbox-swift-interop"),
     expect: /CONDITIONAL_LANES roster is \[.*\]; want \[.*swift-package.*\]/,
   },
   {
@@ -8119,6 +8212,72 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       + `Expected NO message matching ${refute}; got ${rendered}.`,
     );
   }
+}
+
+// ── 6r. every path-filtered reusable lane on disk is registered ─────────────
+//
+// A workflow that declares BOTH a `push.paths` filter and `workflow_call:` is,
+// by shape, a conditional lane: something is meant to call it on a pull
+// request and select it by that filter. If it is in neither `GOVERNED` nor the
+// selector's `LANES`, then none of the trigger, concurrency or budget rules in
+// this file bind it, the gate never calls it, and it runs only on `push: main`
+// — after the merge it was supposed to gate. Before this rule such a lane was
+// caught only if it happened to run `swift test` (the Swift boundary's host
+// set); any other unregistered lane passed every CI guard. Read from disk, so a
+// new file cannot route around it by existing.
+
+function unregisteredLaneFailures(texts, governed, selectorLanes) {
+  const out = [];
+  const governedFiles = new Set(governed.map((g) => g.file));
+  const laneFiles = new Set(selectorLanes.map((lane) => lane.workflow));
+  const detected = new Set();
+  for (const [name, text] of [...texts].sort(([a], [b]) => a.localeCompare(b))) {
+    const filtered = /^ {2}push:[^\n]*\n(?:(?: {4,}[^\n]*| *)\n)*? {4}paths:/m.test(text);
+    const callable = /^ {2}workflow_call:/m.test(text);
+    if (!filtered || !callable) continue;
+    detected.add(name);
+    if (!governedFiles.has(name) || !laneFiles.has(name)) {
+      out.push(`${name} declares a \`push.paths\` filter and \`workflow_call:\` — the shape of a `
+        + `conditional lane — but is ${governedFiles.has(name) ? "" : "not in this file's GOVERNED "
+        + "list"}${!governedFiles.has(name) && !laneFiles.has(name) ? " and " : ""}`
+        + `${laneFiles.has(name) ? "" : `not in ${SELECTOR}'s LANES`}. Unregistered, no trigger, `
+        + `concurrency or budget rule binds it and ${AGGREGATE} never calls it, so it runs only `
+        + `after the merge it was meant to gate.`);
+    }
+  }
+  // Non-vacuity: every lane the selector names must be recognised by the shape
+  // test above, or the shape test has stopped matching real lanes and this
+  // rule is passing by inspecting nothing.
+  const missed = [...laneFiles].filter((file) => texts.has(file) && !detected.has(file)).sort();
+  if (missed.length) {
+    out.push(`6r's lane-shape test does not recognise [${missed.join(", ")}], which ${SELECTOR} `
+      + `names as lanes. The closed-set rule would then pass on any lane shaped like them.`);
+  }
+  return out;
+}
+
+for (const message of unregisteredLaneFailures(workflowTexts, GOVERNED, SELECTOR_LANES)) {
+  check(false, message);
+}
+{
+  // The proof it can fail, and that it does not fire on the lanes that exist.
+  const fake = "on:\n  push:\n    branches:\n      - main\n    paths:\n      - 'server/**'\n"
+    + "  workflow_call:\njobs:\n  x:\n    runs-on: ubuntu-latest\n";
+  const withFake = new Map([...workflowTexts, ["unregistered-lane.yml", fake]]);
+  const got = unregisteredLaneFailures(withFake, GOVERNED, SELECTOR_LANES);
+  check(
+    got.length === 1 && /unregistered-lane\.yml declares a `push\.paths` filter and `workflow_call:`/.test(got[0]),
+    `6r did NOT complain about an unregistered path-filtered reusable lane; got `
+    + `${JSON.stringify(got)}. A closed-set rule that cannot fail is the hole it was written to close.`,
+  );
+  const selectorOnly = unregisteredLaneFailures(
+    withFake, GOVERNED, [...SELECTOR_LANES, { id: "x", workflow: "unregistered-lane.yml" }],
+  );
+  check(
+    selectorOnly.length === 1 && /not in this file's GOVERNED list/.test(selectorOnly[0]),
+    `6r did NOT complain about a lane the selector calls but GOVERNED omits; got `
+    + `${JSON.stringify(selectorOnly)}.`,
+  );
 }
 
 // ── report ──────────────────────────────────────────────────────────────────

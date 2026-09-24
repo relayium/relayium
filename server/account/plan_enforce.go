@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -338,7 +339,7 @@ func (s *Service) overStorage(ctx context.Context, userID string, add int64) (bo
 // remainingDailyQuota 返回 userID 滚动 24 小时窗口内还剩多少上传额度。
 //
 // 这里没有 unlimited 出口：日额度 <= 0 在既有语义里是"什么都传不了"，不是"无限"
-// ——finalize 把 quota 原样交给 ReserveUpload，那边判的是 used+bytes > quota，
+// ——上传把 quota 原样放进 StoredFile.QuotaCharge，由对象插入事务判 used+bytes > quota，
 // quota=0 时任何字节都会被拒。所以这里也不能把 0 解释成无限。
 func (s *Service) remainingDailyQuota(ctx context.Context, userID string) (int64, error) {
 	quota, err := s.dailyQuotaFor(ctx, userID)
@@ -374,11 +375,16 @@ func (s *Service) overGlobalStorage(ctx context.Context, add int64) (bool, error
 // fail open) allow. Own-node uploads (enforceCaps=false) skip caps entirely —
 // they land on the user's own disk and are never metered against a plan.
 //
-// Returns a StoredFileWrite whose Reason is "" on success and "storage" (owner
-// cap) or "global" (disk cap) when a cap is hit, or a non-nil err on a real store
-// failure (caller 500s and drops the blob — never admits an upload against an
-// unknown cap). Its ExpiresAt is what the row actually landed with, which for a
-// pair-room object is decided by the store rather than by f (StoredFileWrite).
+// A billable upload also hands its daily-quota debit in as f.QuotaCharge; the
+// same transaction writes it (and refuses with Reason "quota" before either cap
+// when it would not fit), so an object and its debit land or fail together.
+//
+// Returns a StoredFileWrite whose Reason is "" on success and "quota" (daily
+// quota), "storage" (owner cap) or "global" (disk cap) when a gate is hit, or a
+// non-nil err on a real store failure (caller 500s and drops the blob — never
+// admits an upload against an unknown cap). Its ExpiresAt is what the row
+// actually landed with, which for a pair-room object is decided by the store
+// rather than by f (StoredFileWrite).
 //
 // A PAIR-ROOM object takes the capped call whether or not caps apply to it, with
 // the caps simply switched off when they do not (a non-positive cap is already
@@ -388,6 +394,13 @@ func (s *Service) overGlobalStorage(ctx context.Context, add int64) (bool, error
 // insert by a different route is how "which door did this upload come in
 // through" became something an object's expiry could depend on.
 func (s *Service) persistStoredFile(ctx context.Context, f StoredFile, enforceCaps bool) (StoredFileWrite, error) {
+	// A daily-quota debit belongs to a billable upload, and only the capped
+	// transaction writes one (StoredFile.QuotaCharge). A charge arriving with
+	// enforceCaps=false is a caller bug; the uncapped door would drop it and
+	// admit a free object, so refuse instead — the caller then fails closed.
+	if f.QuotaCharge != nil && !enforceCaps {
+		return StoredFileWrite{}, errors.New("persistStoredFile: a daily-quota charge requires the capped insert")
+	}
 	if !enforceCaps && f.PairRoomID == "" {
 		return StoredFileWrite{ExpiresAt: f.ExpiresAt}, s.Store().CreateStoredFile(ctx, f)
 	}

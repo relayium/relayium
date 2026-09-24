@@ -304,8 +304,8 @@ func mkUnresolved(t *testing.T, id string, received int64) (*SQLiteStore, string
 // Nothing that reclaims may touch a row in the recovery state. Both passes below
 // are how the evidence would be destroyed WITHOUT anyone deciding to write the
 // bytes off: the purge deletes the row that records the lower bound, and the
-// orphan pass deletes the blob that is the only thing which can ever produce
-// the exact number.
+// orphan pass hands the blob that is the only thing which can ever produce the
+// exact number to the pending-delete queue, whose drain destroys it.
 func TestUnresolvedUploadEvidenceSurvivesEveryReclaimingPass(t *testing.T) {
 	ctx := context.Background()
 	st, userID := mkUnresolved(t, "unres1", 4000)
@@ -313,7 +313,7 @@ func TestUnresolvedUploadEvidenceSurvivesEveryReclaimingPass(t *testing.T) {
 	// Ten years later. `metered >= received` is true — everything the database
 	// knows about IS billed — so an age-plus-settled rule would delete this.
 	const farFuture = 1000 + 3650*86400
-	if err := st.PurgeDoneUploadSessions(ctx, farFuture); err != nil {
+	if err := st.PurgeDoneUploadSessions(ctx, farFuture, farFuture); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	got, ok, err := st.GetUploadSession(ctx, "unres1", userID)
@@ -327,8 +327,9 @@ func TestUnresolvedUploadEvidenceSurvivesEveryReclaimingPass(t *testing.T) {
 		t.Fatalf("the lower bound was rewritten: received=%d metered=%d", got.Received, got.Metered)
 	}
 
-	// The orphan pass drops blobs. This blob is the only remaining witness to
-	// what the node really accepted, so the pass must not see the row at all.
+	// The orphan pass claims blobs for deletion (the queue's drain then destroys
+	// them). This blob is the only remaining witness to what the node really
+	// accepted, so the pass must not see the row at all.
 	orphans, err := st.ListOrphanDoneUploadSessions(ctx, farFuture)
 	if err != nil {
 		t.Fatalf("list orphans: %v", err)

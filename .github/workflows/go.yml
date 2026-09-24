@@ -19,20 +19,40 @@ on:
       - 'server/**'
       - 'scripts/go-race-shard.go'
       - 'scripts/test/db-rollback-harness.sh'
-      # One frozen-bytes fixture, named one file at a time.
-      # `server/internal/inboxmanifest/vectors_test.go` reads it directly at
-      # `../../../apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json`
-      # and asserts the Go manifest implementation still agrees with it, so the
-      # file is an input to this suite exactly like a `.go` file is. Without
-      # this line an edit to those vectors lands having never run the Go half of
-      # the cross-language contract, and the failure surfaces later against an
-      # innocent commit that happened to touch `server/**`.
+      # Four frozen fixtures, named one file at a time, each with the Go
+      # test that reads it directly:
+      #
+      # - `server/internal/inboxmanifest/vectors_test.go` reads
+      #   `../../../apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json`
+      #   and asserts the Go manifest implementation still agrees with it.
+      # - `server/internal/linkcrypto/vectors_test.go` reads
+      #   `../../../apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json` and
+      #   asserts every block of it against the Go link-crypto library.
+      # - `server/internal/linkwire/vectors_test.go` reads
+      #   `../../../apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json`
+      #   and asserts the Go link-wire codecs and classifiers against it. That
+      #   library is not imported by any command yet; the CLI keeps its own
+      #   separate wire.
+      # - `server/internal/linksession/vectors_test.go` reads
+      #   `../../../apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json`
+      #   (W-N18 A08e) and drives the CLI's real lane machines through every
+      #   cross-language state-machine scenario in it.
+      #
+      # Each file is therefore an input to this suite exactly like a `.go` file
+      # is. Without its line an edit to those vectors lands having never run the
+      # Go half of the cross-language contract, and the failure surfaces later
+      # against an innocent commit that happened to touch `server/**`.
       #
       # Deliberately NOT `apps/RelayiumKit/**` or the whole `Tests/Fixtures/`
       # tree: no other file in that package is an input to any Go test, and
       # either glob would start the entire eight-shard race lane on every Swift
-      # edit. `swift-package.yml` owns the package; this is one file it shares.
+      # edit. `swift-package.yml` owns the package; these are four files it
+      # shares. Every line here is mirrored in scripts/release/go-evidence.sh
+      # `lane_paths`, which scripts/test/go-evidence-test.sh compares.
       - 'apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json'
+      - 'apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json'
+      - 'apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json'
+      - 'apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json'
       # The fuzz campaign's own two files. Neither runs here — the campaign is
       # scheduled, never gating (see .github/workflows/go-fuzz-nightly.yml) —
       # but an edit to either must still start THIS workflow, because that is
@@ -41,6 +61,10 @@ on:
       # these two lines a change to the discovery script or to the campaign
       # lands having run no Go test at all.
       - 'scripts/list-go-fuzz-targets.sh'
+      # A12: the CLI side of the pairing interop matrix, run by exact name in
+      # `test` and `cli-windows` below, and the old-CLI builder it needs.
+      - 'scripts/interop/cli-go-matrix.sh'
+      - 'scripts/interop/build-old-cli.sh'
       - '.github/workflows/go-fuzz-nightly.yml'
       - '.github/workflows/go.yml'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
@@ -99,7 +123,10 @@ jobs:
   # wait behind a race detector run to be reported.
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 15 before A12 added the named CLI pairing matrix (real CLI processes,
+    # old-CLI build included), measured locally at a few minutes; the bound
+    # stays finite and roughly twice the expected wall clock.
+    timeout-minutes: 30
     steps:
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
@@ -122,12 +149,273 @@ jobs:
       - name: go vet
         working-directory: server
         run: go vet ./...
+      # The A11 relay-renewal driver tests run in REAL time on 100-300 s
+      # credentials — a renewal only happens inside a credential's final
+      # margin — and together they take ~20 minutes, which pushed
+      # `cmd/relayium` past Go's 10-minute per-package default here (run
+      # 35959733079). They are skipped by ONE pattern and run, under -race, in
+      # their own `link-renew` job below with that SAME pattern;
+      # scripts/test/ci-event-policy-test.mjs asserts the two stay identical,
+      # so nothing is skipped here that `link-renew` does not run.
       - name: go test
         working-directory: server
-        run: go test ./...
+        run: go test -skip '^(TestLinkRenew|TestLDRenew)' ./...
+      # A12: the CLI pairing matrix, by exact name, with the old-version pairs
+      # NOT skipping. This checkout is one commit deep, so `ldOldCLI` cannot
+      # find 723481c78 and the step above ran every old-version pair as a SKIP;
+      # the builder fetches that commit (read from `ldOldCommit`, never a second
+      # literal), builds its CLI and refuses a binary that knows `__link`.
+      # `cli-go-matrix.sh` then requires a PASS line per named test, no SKIP
+      # (one named, reasoned subtest excepted), no FAIL, and both link roles in
+      # the CLI processes' own output. See docs/CI-PLATFORM-BOUNDARY.md.
+      - name: Build the released CLI (723481c78) the old-version pairs talk to
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$(scripts/interop/build-old-cli.sh "$RUNNER_TEMP/relayium-old")"
+          echo "RELAYIUM_OLD_CLI=$old" >> "$GITHUB_ENV"
+      - name: CLI pairing interop matrix (named; old-version pairs included; no SKIP)
+        shell: bash
+        run: bash scripts/interop/cli-go-matrix.sh run linux "$RUNNER_TEMP/cli-matrix-linux.log"
+      # The step prints each failed test's output itself; the whole -v log
+      # (both CLI processes' transcripts for every cell) is kept on failure.
+      - name: Keep the CLI matrix log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cli-matrix-linux-log
+          path: ${{ runner.temp }}/cli-matrix-linux.log
+          if-no-files-found: ignore
+          retention-days: 14
+      # SSH transport is retired. Verify the real binary rejects every former
+      # entrypoint, without source/config writes, and never consumes stdin.
+      - name: Retired SSH entrypoints (real CLI)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/ssh-retirement.log"
+          go test -count=1 -v -timeout 3m -run '^TestSSH(TransfersDisabled|RetirementDoesNotConsumeStdin)$' ./cmd/relayium | tee "$log"
+          for t in TestSSHTransfersDisabled TestSSHRetirementDoesNotConsumeStdin; do
+            grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
+          done
       - name: govulncheck
         working-directory: server
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+      # The step above cannot see pion/turn. server/go.mod replaces it with the
+      # directory server/third_party/pion-turn (see its PATCHES.md), and a
+      # directory replace has no version, so govulncheck reports nothing for it
+      # — not "clean", just unscanned. This asks the vulnerability database
+      # about the exact upstream version the copy was taken from instead.
+      #
+      # Query mode exits 0 whether or not it finds advisories; findings arrive
+      # only as `osv` entries in the JSON stream. So the stream is read, and
+      # everything short of a positive, well-formed "nothing found for exactly
+      # this module and version" fails: unparseable or empty output, a report
+      # from another scanner version or mode, no confirmation that this module
+      # at this version was looked up, an unknown message type, and any
+      # advisory at all. The version comes from go.mod (whose require
+      # TestPionTurnLocalCopyProvenance ties to the copy), never a second
+      # literal here.
+      - name: govulncheck (pion/turn, which the directory replace hides from the step above)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          scanner=golang.org/x/vuln/cmd/govulncheck@v1.6.0
+          mod=github.com/pion/turn/v4
+          ver="$(go list -m -f '{{.Version}}' "$mod")"
+          if ! [[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::go.mod gives no release version for $mod (got '$ver')" >&2
+            exit 1
+          fi
+          report="$RUNNER_TEMP/govulncheck-pion-turn.json"
+          go run "$scanner" -mode=query -json "$mod@$ver" > "$report"
+          if ! jq -e -n -r \
+            --arg scanner_version "${scanner##*@}" \
+            --arg lookup "Looking up vulnerabilities in $mod at $ver..." '
+              [inputs] as $m
+              | if ($m | map(select(type != "object")) | length) > 0 then error("non-object message")
+                elif ($m | map(select(keys - ["config", "progress", "osv"] != [])) | length) > 0 then error("unknown message type")
+                elif ($m | map(select(has("config"))) | length) != 1 then error("expected exactly one config message")
+                elif ($m | map(select(.config.scanner_version == $scanner_version and .config.scan_mode == "query")) | length) != 1
+                  then error("not a govulncheck " + $scanner_version + " query-mode report")
+                elif ($m | map(select(.progress.message == $lookup)) | length) != 1 then error("no confirmation of: " + $lookup)
+                elif ($m | map(select(has("osv"))) | length) > 0
+                  then error("advisories: " + ($m | map(select(has("osv")) | "\(.osv.id) \(.osv.summary)") | join("; ")))
+                else "no advisories for " + $lookup end
+            ' < "$report"; then
+            echo "::error::$mod@$ver: the vulnerability query did not come back clean (see above)" >&2
+            exit 1
+          fi
+
+  # The Windows runtime lane of the `push -` stdin library (R-C14 phase 2a):
+  # the exact-owned stdin helper (`internal/stdinpump`), and the stream
+  # sender/receiver (`internal/xfer` stream_*.go), executed on a real Windows
+  # host. Its mechanisms differ there in ways only running them can prove:
+  # the parent-death pipe is an inherited handle named in argv, closing a
+  # pipe cancels a pending ReadFile, TerminateProcess replaces signals, and
+  # the no-clobber install is NTFS FileLinkInformation against files and
+  # junctions. Compiling for Windows proves none of that; these are runtime
+  # tests, and each one must appear as PASS below.
+  #
+  # Phase 2b extended this job to `./cmd/relayium` (the `push -` CLI, the
+  # real `__pump-stdin` dispatch, the `__recv --stream-file` receiver as a
+  # process via a test-only receiver-engine role). SSH CLI entrypoints are
+  # now disabled; this job proves rejection with the actual built binary. A Windows-red compile of that package's TESTS means a new
+  # server-only test file (one that imports `account`/`internal/storage`,
+  # which use syscall.Statfs, or a helper from such a file) needs
+  # `//go:build !windows` with a reason — never a Windows `storage`
+  # implementation (the relay node is not released for Windows). Tagged so
+  # far: cloud_e2e_test.go, inbox_e2e_test.go, inbox_send_e2e_test.go,
+  # inbox_send_json_test.go; e2e_stdin_test.go is Unix-only (real sshd).
+  #
+  # No -race: the race toolchain is not established on this runner; the same
+  # tests run under -race on ubuntu in `race-rest`.
+  cli-windows:
+    runs-on: windows-latest
+    # 30 before A12 appended the CLI pairing matrix and the old-CLI build.
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Toolchain version
+        run: go version
+      - name: go vet (Windows; the stream library's packages and the CLI)
+        working-directory: server
+        run: go vet ./internal/xfer ./internal/sshx ./internal/stdinpump ./cmd/relayium
+      # The PASS grep is load-bearing, as in `test`: a renamed or deleted test
+      # makes `-run` match nothing and `go test` still exits 0. Three tests
+      # may SKIP here, each for a reason stated in the test itself: POSIX
+      # umask/modes do not exist, os.Interrupt cannot be sent to one process,
+      # and Windows may refuse to rename a directory another handle holds
+      # (which makes that swap impossible). Any other SKIP fails the job.
+      - name: Windows runtime tests (stdin pump, stream protocol)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/cli-windows.log"
+          go test -count=1 -v -timeout 10m \
+            -run '^(TestStream|TestPump|TestHelper|TestExitWatchdog|TestReceiveAny|TestValidateStreamPath)' \
+            ./internal/stdinpump ./internal/xfer | tee "$log"
+          may_skip=" TestPumpHelperIgnoresInterrupt TestStreamRecvModesUnderUmask TestStreamRecvParentSwap "
+          for t in TestPumpStopJoinsBlockedStdinWindows TestPumpHelperExitsOnParentDeathWindows TestStreamRecvRootWindows \
+            TestPumpStopReleasesBlockedRead TestPumpEndMarkerIsEOF TestPumpKilledHelperIsNotEOF TestPumpStdinReadErrorIsStdinError \
+            TestPumpHelperIgnoresInterrupt TestPumpSharedOffsetBeforeAndAfterStart TestPumpNotStartedLeavesPipeUnread \
+            TestPumpStopBoundsStuckHelperAfterEnd TestPumpHelperExitsOnParentDeath TestHelperFraming TestPumpReadDecoding \
+            TestStreamGoldenV1HelloUnchanged TestStreamGoldenFrames TestStreamRecvRefusesBeforeAccept \
+            TestStreamRecvIncompleteInstallsNothing TestStreamRecvNoClobberRace TestStreamRecvModesUnderUmask \
+            TestStreamRecvParentSwap TestStreamRecvWriteFailure TestStreamRecvBoundedErrorWrite TestStreamRecvIdle \
+            TestStreamRecvRejectsMalformedChallenge TestStreamRecvResultEchoesAfterInstall \
+            TestStreamRecvAbandonedGuardNeverInstalls TestStreamRecvWatchdogExitsWithFullStdoutAndStderr \
+            TestStreamRecvWatchdogIdleRemovesStaging TestExitWatchdogPeerBounds TestStreamRoundTrip \
+            TestStreamNoSourceBeforeAccept TestStreamJoinsBlockedSource TestStreamSourceVanishedNeverEnds \
+            TestStreamAbortReleasesBlockedWrite TestStreamAbortReleasesBlockedTLSWrite TestStreamPrematureResultRejected \
+            TestStreamCancelBeforeAcceptWithBlockedWrite TestStreamValidFastReceipt TestStreamWordingByPhase \
+            TestStreamHeldEndAfterValidReceiptIsBounded TestStreamDelayedPrematureReceiptRejected \
+            TestStreamChallengeFreshAndOnlyInEnd TestStreamWrongEchoOrWrongBytes TestStreamKeepaliveHoldsIdleReceiver \
+            TestStreamProgress TestStreamRealPumpRoundTrip TestStreamRealPumpRefusalLeavesStdinUnread \
+            TestStreamRealPumpKilledMidStream TestStreamJudgedStageIsNotOvertakenByEnd TestStreamNoSourceAfterWriteFailure \
+            TestStreamRecvWatchdogReportsWhatWasStaged TestStreamRecvWatchdogHelperKeepsInstalledFile \
+            TestStreamRecvGuardKeepsInstalledDestination \
+            TestValidateStreamPath TestReceiveAnyDispatchesV1Unchanged TestReceiveAnyStreamInstallsUnderRoot \
+            TestReceiveAnyStreamRefusesPathsBeforeAccept TestReceiveAnyStreamWriteFailedBoundedTCP \
+            TestReceiveAnyStreamIdleTCP; do
+            if grep -q "^--- PASS: $t " "$log"; then continue; fi
+            if [[ "$may_skip" == *" $t "* ]] && grep -q "^--- SKIP: $t " "$log"; then continue; fi
+            echo "::error::$t did not PASS on Windows" >&2
+            exit 1
+          done
+          while read -r _ _ name _; do
+            [[ "$may_skip" == *" $name "* ]] || { echo "::error::$name skipped on Windows" >&2; exit 1; }
+          done < <(grep '^--- SKIP: ' "$log" || true)
+      # `push -` in the CLI package, over the ssh stand-in and to a real
+      # loopback `serve` listener (in-process and as a real `serve --once`
+      # process). Two tests may SKIP, each for the reason stated in it:
+      # SIGTERM cannot be sent to one process on Windows, and the old-release
+      # listener test needs privately built old binaries
+      # (RELAYIUM_E2E_OLD_RELAYIUM), which this job does not build. Any other
+      # SKIP fails the job.
+      - name: Windows runtime tests (SSH retirement, stream receiver, serve listener)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/cli-windows-push-stdin.log"
+          go test -count=1 -v -timeout 10m \
+            -run '^(TestPushStdin|TestRecvStreamFile|TestSSH|TestStandinPosixWords|TestE2EPushStdinDaemon|TestE2EServeOnceStream)' \
+            ./cmd/relayium | tee "$log"
+          may_skip=" TestRecvStreamFileHelperSignalRemovesStaging TestE2EPushStdinDaemonOldReleases "
+          for t in TestSSHTransfersDisabled TestSSHRetirementDoesNotConsumeStdin TestPushStdinShapeRefusalsTouchNothing TestPushStdinRefusesATerminal TestRecvStreamFileArgv \
+            TestRecvStreamFileHelperInstalls TestRecvStreamFileHelperRefusesBeforeAccept \
+            TestRecvStreamFileHelperIdleWatchdog TestRecvStreamFileHelperSignalRemovesStaging \
+            TestRecvStreamFileHelperLostReceiptIsReportedOnStderr TestStandinPosixWordsUndoShellQuote \
+            TestE2EPushStdinDaemonLoopback TestE2EPushStdinDaemonRefusals TestPushStdinDaemonPathRefusedBeforeDial \
+            TestPushStdinDaemonListenerRefusesBadPaths TestE2EPushStdinDaemonUnauthorized TestE2EPushStdinDaemonPinMismatch \
+            TestE2EPushStdinDaemonOldPeerFixtures TestE2EServeOnceStream TestE2EPushStdinDaemonStreamCut \
+            TestPushStdinDaemonCancelInProcess TestPushStdinDaemonKeepaliveHoldsIdleListener \
+            TestPushStdinDaemonExactlyOnceInstall TestPushStdinDaemonRefusalsNeverStartThePump; do
+            if grep -q "^--- PASS: $t " "$log"; then continue; fi
+            if [[ "$may_skip" == *" $t "* ]] && grep -q "^--- SKIP: $t " "$log"; then continue; fi
+            echo "::error::$t did not PASS on Windows" >&2
+            exit 1
+          done
+          while read -r _ _ name _; do
+            [[ "$may_skip" == *" $name "* ]] || { echo "::error::$name skipped on Windows" >&2; exit 1; }
+          done < <(grep -E '^ *--- SKIP: ' "$log" || true)
+      - name: go vet (Windows; the inbox send lock)
+        working-directory: server
+        run: go vet ./internal/inboxsend/sendlock
+      # The send lock's Windows half is LockFileEx, and these three tests hold
+      # it from real child processes, so only a Windows runner exercises it.
+      # The same load-bearing PASS grep as above; none of the three may SKIP.
+      - name: Windows runtime tests (inbox send lock)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/cli-windows-sendlock.log"
+          go test -count=1 -v -timeout 2m ./internal/inboxsend/sendlock | tee "$log"
+          for t in TestAnotherProcessHoldingTheLockExcludesThisOne TestAKilledHolderLeavesNoStaleLock \
+            TestTwoHandlesInOneProcessExcludeEachOther; do
+            grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS on Windows" >&2; exit 1; }
+          done
+          if grep '^--- SKIP: ' "$log"; then
+            echo "::error::a send lock test skipped on Windows" >&2
+            exit 1
+          fi
+      # A12: the CLI pairing interop matrix on a real Windows host, by exact
+      # name — CLI↔CLI over link/1 (files, folders, texts, decline, rejected
+      # SAS), send/receive/text/pair over link, the CLI against a Go-authored
+      # app peer, and the old-version pairs against the released 723481c78 CLI
+      # built for Windows here. `cli-go-matrix.sh` drops only the ctrl-C cell
+      # (SIGINT cannot be sent to one process on Windows) and fails on any
+      # other missing PASS, any SKIP but its one reasoned subtest, or a log
+      # without both link roles.
+      - name: Build the released CLI (723481c78) for the old-version pairs (Windows)
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$(scripts/interop/build-old-cli.sh "$(cygpath -u "$RUNNER_TEMP")/relayium-old")"
+          echo "RELAYIUM_OLD_CLI=$old" >> "$GITHUB_ENV"
+      - name: Windows CLI pairing interop matrix (named; old-version pairs included; no SKIP)
+        shell: bash
+        run: bash scripts/interop/cli-go-matrix.sh run windows "$RUNNER_TEMP/cli-matrix-windows.log"
+      # Run 35959733079 printed only the FAIL summary and the log died with the
+      # runner; now the failed tests' output is printed by the step and the
+      # whole log is kept.
+      - name: Keep the Windows CLI matrix log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cli-matrix-windows-log
+          path: ${{ runner.temp }}/cli-matrix-windows.log
+          if-no-files-found: ignore
+          retention-days: 14
 
   # Central runs concurrent goroutines against shared state by design — the GC
   # sweep, the metering worker, the node storage prober — and the failure mode
@@ -225,7 +513,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          # The second file is the nested pion-turn module's (last step), so
+          # its test-only downloads are cached with the rest.
+          cache-dependency-path: |
+            server/go.sum
+            server/third_party/pion-turn/go.sum
       - name: go test -race (every package except account)
         working-directory: server
         # Named explicitly because the last line DEPENDS on word splitting, and
@@ -246,7 +538,87 @@ jobs:
           echo "$PKGS"
           # Word splitting is the point: this is a package list.
           # shellcheck disable=SC2086
-          go test -race -count=1 -timeout 20m $PKGS
+          # The renewal driver tests run in `link-renew` (same pattern).
+          go test -race -count=1 -timeout 20m -skip '^(TestLinkRenew|TestLDRenew)' $PKGS
+      # server/third_party/pion-turn is pion/turn v4.1.4 plus Relayium's
+      # allocation identity patch (see its PATCHES.md), and it is its OWN
+      # module: the `go.mod` there is upstream's, byte for byte. `go list ./...`
+      # above, and every `./...` in `test`, therefore stop at that directory, so
+      # without this step the patched code's own tests — including the ones that
+      # fail on unpatched v4.1.4 — would never run anywhere. The relay node is
+      # built from this copy, so it is race-checked with everything else here,
+      # and vetted here because `test`'s `go vet ./...` cannot see it either.
+      #
+      # `.` and `./internal/...` rather than `./...`: those are the packages the
+      # node links. The rest is upstream's `examples/`, which Relayium does not
+      # build and which upstream's own code already fails `go vet` on. The
+      # module's go.sum is upstream's and verifies its test-only downloads.
+      - name: go vet and go test -race (the pion-turn local copy, a nested module)
+        working-directory: server/third_party/pion-turn
+        shell: bash
+        run: |
+          set -euo pipefail
+          go vet . ./internal/...
+          go test -race -count=1 -timeout 10m . ./internal/...
+
+  # A11 relay-renew/1, end to end: two CLI ends, the real signalling hub and
+  # grant registry, the in-process TURN server with REST auth on every request
+  # and per-allocation byte counters, and (Linux/macOS) a real node's ledger.
+  # These tests are wall-clock bound BY DESIGN: a renewal is only requested
+  # inside a credential's final margin and only proven by moving bytes past the
+  # old deadline, so each one waits out 100-300 s credentials in real time.
+  # Accelerating them further would mean shrinking the product's own margins,
+  # which is what they prove.
+  #
+  # Split from `test` and `race-rest` (run 35959733079: both hit the 10m / 20m
+  # per-package bound inside cmd/relayium with no failed assertion). The
+  # pattern is the one both of those `-skip`; ci-event-policy-test.mjs asserts
+  # the three are the same string, that this job runs it under -race with a
+  # finite -timeout and -count=1, and that it matches every test in
+  # linkrenew*_test.go.
+  #
+  # Under -race as a whole, in one job. Measured locally on 2026-09-24: the 15
+  # tests take 1183s WITHOUT -race, and the per-test times sum to that — they
+  # sleep far more than they compute, so the race build adds little wall clock
+  # (~1190s with -race, same machine) and the hosted runner's CPU factor
+  # (3.66x for account) does not apply to a wait. The 35m package bound is
+  # ~1.8x the measurement, the same margin race-account uses; the 45m job
+  # bound adds checkout, setup and the race build. One job at ~20 min is not
+  # the workflow's critical path (cli-windows is bounded at 50m), so it is not
+  # sharded; splitting would buy latency nobody waits for at the price of a
+  # second partition to keep exact. Both bounds stay finite on purpose:
+  # exceeding either is a hung renewal, not a number to raise.
+  link-renew:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Toolchain version
+        run: go version
+      # The PASS grep is load-bearing, as elsewhere: a renamed test would make
+      # `-run` match less and still exit 0. Every Test in cmd/relayium that
+      # the pattern names must PASS; none may SKIP (the ledger test skips only
+      # under -short).
+      - name: go test -race (A11 relay-renewal driver tests)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/link-renew.log"
+          go test -race -count=1 -v -timeout 35m -run '^(TestLinkRenew|TestLDRenew)' ./cmd/relayium | tee "$log"
+          want="$(grep -hoE '^func (TestLinkRenew|TestLDRenew)[A-Za-z0-9_]*' cmd/relayium/*_test.go | awk '{print $2}')"
+          [ -n "$want" ] || { echo "::error::no renewal tests found in cmd/relayium" >&2; exit 1; }
+          for t in $want; do
+            grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
+          done
+          if grep -E '^ *--- SKIP: ' "$log"; then
+            echo "::error::a renewal test skipped" >&2
+            exit 1
+          fi
 
   # The one lane that runs an OLD server binary against a NEW database.
   #

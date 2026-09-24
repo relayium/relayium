@@ -238,7 +238,7 @@ path: direct</code></pre></div>
       <pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre></section>
       <section class="sheet"><h2>Direct only — free, or it fails</h2>
       <p>The transfer races a direct connection between the two ends. When one can be established — which is the common case for at least one side with a reachable address — the file streams straight across, encrypted, at full speed and at no cost.</p>
-      <p>Relayium CLI send/receive and text are direct-only P2P: they never relay file or message bytes through TURN or any other Relayium server. If the two ends cannot establish a direct connection, the session fails rather than falling back to a relay.</p>
+      <p>Relayium&#39;s CLI send/receive and text modes are direct-only P2P: as they are built today they carry no ICE and no TURN, so if the two ends cannot establish a direct connection the session fails rather than falling back to a relay. That is a property of these modes rather than of Relayium as a whole — the apps and the web page relay a cross-network transfer by design, over ciphertext the relay cannot read.</p>
       <p>If you hit this, the reliable answer is daemon direct between two reachable servers, push over SSH, or a stored link from relayium up.</p>
       <ul><li>Direct connection succeeds → free, full-speed, end-to-end encrypted.</li><li>Both ends can be anywhere geographically — the sender just runs send, and the receiver runs receive with the code it printed.</li></ul></section>
       <section class="sheet"><h2>When it doesn&#39;t work</h2>

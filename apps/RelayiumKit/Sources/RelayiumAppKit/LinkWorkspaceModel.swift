@@ -97,6 +97,33 @@ public enum LinkWorkspaceConnection: Equatable {
     }
 }
 
+/// **Whether an unrequested same-network link is put to the user first.**
+///
+/// Every composition states it; the model's own default is `.prompt`, so a
+/// composition that forgot is the safe one. Only a headless host with no user to
+/// ask — `LinkCounterpart`, and the acceptance hosts built on it — declares
+/// `.automatic`, and it does so by name.
+///
+/// A pairing-code room never prompts, whatever this says: the code IS the
+/// consent, typed or shown on purpose by both people.
+public enum LinkInboundConsent: Equatable, Sendable {
+    /// Hold the ask, publish `inboundAsk`, build nothing until Accept.
+    case prompt
+    /// Admit an unrequested link as soon as the surface is free.
+    case automatic
+}
+
+/// A device asking this one for a link it did not request.
+///
+/// Presentation only: `peerLabel` is the roster's peer-supplied name, never
+/// identity. `id` fences the answer, so an Accept pressed on a prompt that has
+/// since timed out, been withdrawn or been replaced does nothing.
+public struct LinkInboundAsk: Equatable, Identifiable, Sendable {
+    public let id: Int
+    public let peerId: String
+    public let peerLabel: String
+}
+
 /// Why the Workspace's link attempt is over.
 ///
 /// Every case is something the user can act on, and none of them is a guess:
@@ -144,13 +171,13 @@ public enum LinkWorkspaceEnding: Equatable {
 /// A configuration for the same reason `LinkPairingFallbackPolicy` is: two
 /// products read this model and only one of them was changed.
 ///
-/// The paused iOS composer gates Send on `canCompose`, ignores what `send`
-/// returns, and clears its own view-local draft either way. Making the model
-/// refuse globally therefore did not protect that composer — it broke it: the
-/// second message was declined by the model AND wiped by the view, which is a
-/// silent loss where there had been a visible replacement. So the shipped
-/// behaviour stays the default, and only the composition that also fixed its
-/// composer opts out of it.
+/// A composer that gates Send on `canCompose`, ignores what `send` returns and
+/// clears its own draft either way is broken by a global refusal: the second
+/// message is declined by the model AND wiped by the view. So the default stays
+/// `replaceWaiting` for the headless hosts that script sends, and every app
+/// composition whose composer reads `canSendMessage` and honours `send` opts in
+/// to `refuseWhileWaiting` — both macOS link models and, since the iOS composer
+/// moved onto `submitDraft`, both iOS ones (Nearby and Cross-network).
 public enum LinkPendingMessagePolicy: String, Equatable, Sendable {
     /// Replace the waiting message with the new one, and report acceptance.
     /// **The default, and what every existing caller gets.**
@@ -312,7 +339,59 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     ///
     /// One holder means one answer: Leave and Quit ask the same predicate, and a
     /// confirmed teardown clears it exactly once.
-    @Published public var draft: String = ""
+    ///
+    /// Published by hand rather than with `@Published`, for the one writer that
+    /// must NOT publish: `mirrorComposerDraft(_:)`.
+    public var draft: String {
+        get { draftStorage }
+        set {
+            objectWillChange.send()
+            draftStorage = newValue
+        }
+    }
+    private var draftStorage = ""
+
+    /// **Record what an iOS composer's field holds, without publishing.**
+    ///
+    /// This model is observed from the app root down (`RelayiumApp`'s
+    /// `@StateObject`, `RootView`, `NearbyView`), so publishing a keystroke
+    /// re-evaluates the whole app shell around the field being typed in —
+    /// measured: one `RootView` → `NearbyView` → workspace pass per keystroke.
+    /// With that happening on every key, the Nearby composer scrambled typed
+    /// text on the CI iOS 18.5 simulator — "T2b-acceptance-peer-…" arrived as
+    /// "Teptance-peer-…acc", i.e. the caret/selection put back to an earlier
+    /// position mid-typing — in two hosted runs (35877967996, 35888861444), with
+    /// the field bound to `draft` directly and then through a view buffer that
+    /// still mirrored every edit with a publishing write. `main`, whose composer
+    /// kept its text in view `@State` and published nothing per keystroke,
+    /// passed the same path on every run, and so does Cross-network on this
+    /// branch, whose model the app root does not observe.
+    ///
+    /// Nothing is lost by not publishing: the composer re-renders from its own
+    /// `@State`, and every reader of `draft` here (`holdsLocalText`,
+    /// `submitDraft`, `restoreReturnedDraft`, `inboundAskDiscardsLocalText`)
+    /// reads the current value at the moment it is asked.
+    public func mirrorComposerDraft(_ text: String) {
+        draftStorage = text
+    }
+
+    /// **Counts the times the MODEL replaced `draft`, never the times a
+    /// composer edited it.**
+    ///
+    /// The iOS composer edits its own `@State`, mirrors every edit here with
+    /// `mirrorComposerDraft(_:)`, and adopts `draft` back ONLY when this counter
+    /// moves — a send that took the text, a restored hand-back, a new attempt,
+    /// a confirmed discard. Typing never reads the model back, so no published
+    /// value can race it.
+    @Published public private(set) var draftReplacement = 0
+
+    /// The one way the model changes the composer's text. Always counted, even
+    /// to the same value: an edit the composer has not mirrored yet must still
+    /// be told that the model decided what the field holds.
+    private func replaceDraft(with text: String) {
+        draft = text
+        draftReplacement &+= 1
+    }
 
     /// Whether this link holds text a teardown would destroy — the draft, the
     /// transcript, or a message still waiting for a conversation to open.
@@ -336,41 +415,53 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// composer that already holds something.
     @Published public private(set) var returnedDraft: String?
 
-    /// Take the handed-back draft, once. The composer owns it from here.
     /// **Put a returned message back, but only where it can actually land.**
     ///
-    /// The order is the whole of it. This used to consume `returnedDraft` and
-    /// THEN check whether the composer was free — so a user who had started
-    /// typing something new lost the returned text entirely: taken out of the
-    /// model, refused by the destination, and held by nobody.
+    /// The order is the whole of it. An earlier `takeReturnedDraft` consumed
+    /// `returnedDraft` and THEN let the composer decide whether it was free — so
+    /// a user who had started typing something new lost the returned text
+    /// entirely: taken out of the model, refused by the destination, and held by
+    /// nobody. Both Apple composers now own their draft on this model and call
+    /// this instead, and the unconditional variant is gone.
     ///
     /// Refusing is not losing. The text stays in `returnedDraft` and lands the
     /// next time the composer is free, which is what makes both this and a
     /// second send order-safe rather than racing each other.
-    /// **Consume the returned message unconditionally.**
-    ///
-    /// Kept, unchanged, for the paused iOS implementation: its
-    /// `NearbyLinkWorkspaceView` calls this and holds its own view-local draft,
-    /// and this contraction does not touch iOS source or iOS behaviour.
-    ///
-    /// macOS uses `restoreReturnedDraft()` instead, which checks the destination
-    /// BEFORE consuming. The difference matters only for a composer that already
-    /// holds something, and only macOS moved its draft onto this model — so this
-    /// stays the iOS answer and the ordering fix stays the macOS one, rather
-    /// than one of them being changed on the other's behalf.
-    public func takeReturnedDraft() -> String? {
-        defer { returnedDraft = nil }
-        return returnedDraft
-    }
-
     @discardableResult
     public func restoreReturnedDraft() -> Bool {
         guard let returned = returnedDraft else { return false }
         guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        draft = returned
+        replaceDraft(with: returned)
         returnedDraft = nil
         return true
     }
+    /// **A device is asking for a link this side did not request (A23).**
+    ///
+    /// Non-nil only in the same-network room under `.prompt` consent. While it
+    /// is set NOTHING has happened: no admission claim, no transport, no
+    /// surface ownership, no navigation. `acceptInboundAsk` is the only way it
+    /// becomes a link; `declineInboundAsk`, the thirty-second deadline, the
+    /// peer leaving and the socket changing all end it with the peer told
+    /// `busy` (or nothing, when the peer is gone).
+    @Published public private(set) var inboundAsk: LinkInboundAsk?
+
+    /// Whether accepting the pending ask would destroy text on this page.
+    ///
+    /// A new attempt clears the draft, the handed-back message and the
+    /// transcript — the words belong to the peer they were written for — so a
+    /// prompt that can replace an ended page must say so, and Decline must be
+    /// the way to keep them. Live, not snapshotted: the user may type on that
+    /// page while the prompt is up.
+    public var inboundAskDiscardsLocalText: Bool {
+        inboundAsk != nil && holdsLocalText
+    }
+
+    /// See `LinkInboundConsent`. Read on the socket's delivery queue through a
+    /// lock-guarded mirror, so a change applies to the next ask routed.
+    public var inboundConsent: LinkInboundConsent = .prompt {
+        didSet { consent.setPrompts(inboundConsent == .prompt) }
+    }
+
     /// The conversation and the connection, as the attempt projects them.
     @Published public private(set) var textModel: LinkSessionPresentationModel?
     /// The transfer, as the attempt projects it. A separate object, because a
@@ -468,6 +559,18 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// main-actor re-check is what covers that.
     public func setAvailableForInboundLink(_ value: Bool) {
         gate.setAvailable(value)
+        // Something else took the surface while a prompt was up — a legacy
+        // session, or the other tab. Accept could now only be refused, so the
+        // asking peer is told `busy` rather than left to the deadline. One turn
+        // later, not now: a local Connect claims the surface in the same turn
+        // it calls `connect`, and `connect` to the ASKING peer is an accept,
+        // which a decline issued from inside the claim would pre-empt.
+        guard !value, let pending = inboundAsk else { return }
+        Task { @MainActor [weak self] in
+            guard let self, self.inboundAsk?.id == pending.id,
+                  !self.gate.isAvailable else { return }
+            self.declineInboundAsk()
+        }
     }
 
     /// What the advisory gate is answering right now.
@@ -521,6 +624,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     private let capabilities: PeerCapabilityRegistry
     private let admission: LinkAdmission
     private let gate = LinkAcceptanceGate()
+    private let consent = LinkConsentBox()
     private let socketBox = LinkSocketBox()
     /// The registry of the room that is currently routed.
     ///
@@ -805,11 +909,13 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         let gate = self.gate
         let socketBox = self.socketBox
         let active = self.activeCapabilities
+        let consent = self.consent
         active.registry = capabilities
         self.admission = LinkAdmission(
             selfId: { socketBox.selfId },
             supportsLink: { active.supportsLink($0) },
-            canAcceptLink: { gate.accepts($0) })
+            canAcceptLink: { gate.accepts($0) },
+            requiresConsent: { _ in consent.required })
 
         self.session = LinkRoomSession(admission: admission) { [weak self] peerId, role, signal in
             guard let self else {
@@ -832,13 +938,78 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// capability registry at construction and a code room's registry is its
     /// own. One router at a time is the same one-room rule everything else here
     /// obeys; `attach` is the only place one is made.
-    private var router: LinkRoomRouter?
+    private var router: LinkRoomRouter? {
+        // A prompt belongs to the router that raised it. A detached router's
+        // queue may never drain again, so its withdrawal cannot be waited for.
+        didSet { if router !== oldValue { inboundAsk = nil } }
+    }
 
     private func makeRouter(_ capabilities: PeerCapabilityRegistry) -> LinkRoomRouter {
         LinkRoomRouter(admission: admission,
                        capabilities: capabilities,
                        session: session,
-                       scheduler: scheduler)
+                       scheduler: scheduler,
+                       onAsk: { [weak self] source, event in
+                           self?.routerAskChanged(event, from: source)
+                       })
+    }
+
+    // MARK: - the inbound consent prompt (A23)
+
+    private func routerAskChanged(_ event: LinkRoomRouter.AskEvent, from source: LinkRoomRouter) {
+        guard source === router else { return }
+        switch event {
+        case let .raised(promptId, peerId):
+            // Never over a live attempt: the room would already have answered
+            // `busy`, and this is the main-actor half of that rule.
+            guard !connection.isActive else {
+                source.declineAsk(promptId: promptId)
+                return
+            }
+            inboundAsk = LinkInboundAsk(id: promptId, peerId: peerId,
+                                        peerLabel: peerLabelResolver?(peerId) ?? peerId)
+        case let .withdrawn(promptId):
+            if inboundAsk?.id == promptId { inboundAsk = nil }
+        }
+    }
+
+    /// **The user accepted the device that asked.**
+    ///
+    /// The order is the consent: the app's authoritative gate first — it claims
+    /// the surface and navigates to it, which is the move from arrival to
+    /// accept — then a new attempt, which discards whatever text the ended page
+    /// still held (the prompt said so), then the room's claim. A refusal at any
+    /// step answers the peer `busy`; nothing is built for it.
+    public func acceptInboundAsk() {
+        guard let pending = inboundAsk else { return }
+        inboundAsk = nil
+        guard let router else { return }
+        guard !connection.isActive else {
+            router.declineAsk(promptId: pending.id)
+            return
+        }
+        if let shouldAcceptLink, !shouldAcceptLink(pending.peerId) {
+            router.declineAsk(promptId: pending.id)
+            return
+        }
+        beginAttempt(peerLabel: pending.peerLabel)
+        guard router.acceptAsk(promptId: pending.id) else {
+            // The peer withdrew, or the room changed, in the instant between the
+            // prompt and the tap. The surface was already claimed, so the user
+            // is shown that the connection is gone rather than a blank page.
+            session.end()
+            finish(.closed)
+            return
+        }
+        connection = .establishing(sas: nil)
+    }
+
+    /// The user declined. The peer is told `busy`, and the same ask is not put
+    /// to the user again while its own window is open.
+    public func declineInboundAsk() {
+        guard let pending = inboundAsk else { return }
+        inboundAsk = nil
+        router?.declineAsk(promptId: pending.id)
     }
 
     // MARK: - the room's socket
@@ -904,6 +1075,9 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                         awaitingRoomICE: Bool = false) {
         let registry = roomCapabilities ?? capabilities
         activeCapabilities.registry = registry
+        // Consent is a same-network rule. A pairing room supplies its own
+        // registry, and the code both people exchanged is its consent.
+        consent.setSameNetworkRoom(roomCapabilities == nil)
         router?.detach()
         router = makeRouter(registry)
         attached = signaling
@@ -2769,6 +2943,13 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             finish(.roomLost)
             return false
         }
+        // A pending prompt is answered by this Connect: to the device that is
+        // asking it is Accept (`router.ensure` takes the held ask rather than
+        // asking back), and to any other device it is Decline.
+        if let pending = inboundAsk {
+            inboundAsk = nil
+            if pending.peerId != peerId { router?.declineAsk(promptId: pending.id) }
+        }
 
         beginAttempt(peerLabel: peerLabel)
         if !files.isEmpty { armBatch(files: files, sources: sources) }
@@ -2852,6 +3033,14 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         actionError = nil
         verification = .notRequired
         pendingMessage = nil
+        // **The composer's text belongs to the peer it was written for.** A new
+        // attempt is a new peer — the user connecting to someone else, or a
+        // device reaching this one unsolicited from an ended page — and the
+        // transcript above is already dropped for exactly that reason. A draft
+        // or a handed-back message left here would sit in the next peer's
+        // composer one tap from being sent to somebody it was never meant for.
+        replaceDraft(with: "")
+        returnedDraft = nil
         armedBatches = []
         textModel = nil
         fileModel = nil
@@ -3169,6 +3358,30 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         return pendingMessages == .replaceWaiting || pendingMessage == nil
     }
 
+    /// **Send the model-owned `draft`, clearing it only if the lane took it.**
+    ///
+    /// The composer transaction in one place, so a surface cannot re-derive it
+    /// wrongly: trim, ask `send(message:)`, and empty the draft ONLY on
+    /// acceptance. A refusal — a message already waiting under
+    /// `.refuseWhileWaiting`, a link that is not open or not verified — leaves
+    /// every character where the user typed it. A second tap after an accepted
+    /// send finds an empty draft and does nothing, so a double tap cannot send
+    /// twice or replace the first.
+    @discardableResult
+    public func submitDraft() -> Bool {
+        let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return false }
+        guard send(message: body) else { return false }
+        replaceDraft(with: "")
+        return true
+    }
+
+    /// Whether the composer's Send would do anything right now: the same answer
+    /// `submitDraft` gives, asked before the press.
+    public var canSubmitDraft: Bool {
+        canSendMessage && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func flushOrOpenConversation() {
         guard let attempt = attemptBinding, let status = textModel?.textStatus else { return }
         switch status {
@@ -3327,7 +3540,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // Done and rode into the next session, invisible and unasked for. Every
         // piece of model-owned local text goes through this operation now, so a
         // fourth holder would be added here rather than in a view.
-        draft = ""
+        replaceDraft(with: "")
         returnedDraft = nil
         pendingMessage = nil
         if case .ended = connection {
@@ -3621,6 +3834,32 @@ final class LinkAcceptanceGate: @unchecked Sendable {
         lock.lock()
         reserved = peerId
         lock.unlock()
+    }
+}
+
+/// Whether the ROUTED room requires consent for an unrequested link, readable
+/// from the socket's delivery queue where `LinkAdmission` asks it.
+///
+/// Two facts, both owned on the main actor: which room is attached (only the
+/// same-network one prompts) and what the composition declared. Starts at
+/// "prompt, same-network room" — the fail-closed answer — so nothing is
+/// admitted unasked before a composition or `attach` has said otherwise.
+final class LinkConsentBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var prompts = true
+    private var sameNetworkRoom = true
+
+    var required: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return prompts && sameNetworkRoom
+    }
+
+    func setPrompts(_ value: Bool) {
+        lock.lock(); prompts = value; lock.unlock()
+    }
+
+    func setSameNetworkRoom(_ value: Bool) {
+        lock.lock(); sameNetworkRoom = value; lock.unlock()
     }
 }
 

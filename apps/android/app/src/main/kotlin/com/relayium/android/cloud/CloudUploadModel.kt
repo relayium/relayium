@@ -317,6 +317,10 @@ class CloudUploadModel(
             // one leaves a window where a newer pick is issued in between and
             // the older result commits over it.
             if (request != selectionRequest.get()) return@launch
+            // Never over work the user has not finished with (A32 D1): a share
+            // sent to storage mid-upload used to cancel the upload here, and one
+            // arriving on the finished screen dropped an uncopied link.
+            if (!acceptsSelection(_state.value)) return@launch
             generation += 1
             running?.cancel()
             if (files.isEmpty()) {
@@ -344,7 +348,7 @@ class CloudUploadModel(
     fun selectionUnreadable(request: Int) {
         scope.launch(owner) {
             if (request != selectionRequest.get()) return@launch
-            if (_state.value is State.Uploading) return@launch
+            if (!acceptsSelection(_state.value)) return@launch
             generation += 1
             _state.value = State.Failed(CloudFailure(CloudFailure.Kind.UNREADABLE_SELECTION))
         }
@@ -1422,6 +1426,27 @@ class CloudUploadModel(
          * Answers that move nothing are a loop.
          */
         const val MAX_STALLED_APPENDS = 5
+
+        /**
+         * Whether a NEW selection may replace [state] — from the in-app picker
+         * or from a share sent to storage (A32 D1).
+         *
+         * Only where nothing would be lost: nothing chosen yet, a choice not yet
+         * sent, a failure, or an interrupted job with nothing left to resume
+         * (the screen offers the picker there too). Everything else is work the
+         * user has not finished with: an upload staging, verifying or running
+         * would be cancelled, a resumable job's Resume would vanish from the
+         * screen, a job whose outcome is unknown or whose key is still being
+         * filed must never be replaced, and a finished link may not have been
+         * copied yet.
+         */
+        fun acceptsSelection(state: State): Boolean = when (state) {
+            is State.Idle, is State.Selected, is State.Failed -> true
+            is State.Interrupted -> !state.resumable
+            is State.Staging, is State.Verifying, is State.Uploading,
+            is State.Uncertain, is State.Completing, is State.Ready,
+            -> false
+        }
     }
 }
 

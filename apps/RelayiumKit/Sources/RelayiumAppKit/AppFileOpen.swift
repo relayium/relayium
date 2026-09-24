@@ -115,10 +115,19 @@ public final class AppFileOpenCoordinator: ObservableObject {
     /// The selection write is unconditional, for the reason the link path's is:
     /// `AppNavigationModel.select` assigns and nothing else, and a Finder action
     /// that produced no visible response would read as the app ignoring it.
-    public func deliver(_ urls: [URL]) {
+    ///
+    /// **Except over a live session (A32 M3).** `keepsLiveSession` is the
+    /// shell's answer to "is the destination on screen a transfer module whose
+    /// session is live or retained". Then the batch is staged exactly as
+    /// before and the navigation is skipped: a Share-extension draft is
+    /// collected on every activation, so the user coming back to a running LAN
+    /// or cross-network session would otherwise be moved off it by files they
+    /// shared minutes ago. The shell draws an indicator for a batch waiting
+    /// somewhere else, which is the "visible response" in that case.
+    public func deliver(_ urls: [URL], keepsLiveSession: Bool = false) {
         guard !urls.isEmpty else { return }
         let destination = AppRouting.destination(forOpenedFiles: navigation.selection)
-        navigation.select(destination)
+        if !keepsLiveSession { navigation.select(destination) }
         // Merged under the destination decided *now*, and merged only with a
         // batch already addressed to that same destination.
         //
@@ -163,6 +172,32 @@ public final class AppFileOpenCoordinator: ObservableObject {
     public func consume(_ expected: OpenedFiles) {
         guard staged == expected else { return }
         staged = nil
+    }
+
+    /// The last ready account this coordinator has seen, for `accountDidChange`.
+    private var lastReadyAccountID: String?
+
+    /// Observe the signed-in account's identity (A32 M4). Returns true when a
+    /// ready account replaced a DIFFERENT earlier one — the moment nothing the
+    /// previous account chose may carry into the new one — and drops a batch
+    /// still waiting for its pane, which was staged under that previous account.
+    ///
+    /// `nil` (restoring, signed out, signing out) is ignored rather than treated
+    /// as a change. That is what keeps a draft adopted on a cold launch, while
+    /// the session is still being read from the keychain, from being cleared by
+    /// the restore that follows — and what lets the same account signing out and
+    /// back in keep its own selection.
+    ///
+    /// Dropping the batch does not re-offer it: `SharedDraftInbox` still counts
+    /// those drafts as adopted for this session and retires them next launch, and
+    /// the Finder originals of an Open With were never Relayium's to touch.
+    @discardableResult
+    public func accountDidChange(to accountID: String?) -> Bool {
+        guard let accountID else { return false }
+        defer { lastReadyAccountID = accountID }
+        guard let previous = lastReadyAccountID, previous != accountID else { return false }
+        staged = nil
+        return true
     }
 }
 

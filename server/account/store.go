@@ -476,6 +476,25 @@ type UsageEvent struct {
 	Billable     bool
 }
 
+// UploadFinalizeRecord is what a finalize recovery may learn about one
+// session (Store.GetUploadFinalizeRecord), read in one snapshot. It carries no
+// blob key, node, size or verifier: only what decides the answer.
+type UploadFinalizeRecord struct {
+	Purpose      string // the session's purpose, normalized like UploadSessionRow.Purpose
+	Done         bool
+	UnresolvedAt int64
+	// RefusedAt is upload_sessions.finalize_refused_at: when a non-pair
+	// finalize refused this session's object (0 = never recorded).
+	RefusedAt int64
+	// FileID is upload_sessions.finalized_file_id, the object this session's
+	// finalize committed ("" = none committed).
+	FileID string
+	// FileFound: the linked object still exists as this user's object of this
+	// session's purpose on this session's blob. FileExpiresAt is its expiry.
+	FileFound     bool
+	FileExpiresAt int64
+}
+
 // UploadSessionRow is the durable state of one in-progress chunked upload
 // (item #9). The live blob handle is NOT stored — it is reconstructed from
 // NodeID per request via blobFor; the DB replaces the per-session mutex.
@@ -677,6 +696,15 @@ type PairRoomCompletion struct {
 // upload routes turn it into the same 410 a pre-check refusal produces.
 var ErrPairRoomClosed = errors.New("account: pair room is closed")
 
+// ErrUploadSessionReclaimed is returned by a stored-file insert that carries
+// StoredFile.UploadSessionID when, inside the insert's own transaction, that
+// session row no longer exists: a cleanup claim (ClaimUploadSessionCleanup or
+// PurgeDoneUploadSessions) or a pair room's close took it first, and with it
+// the ownership of the blob this object would have pointed at. Nothing was
+// written. It is terminal — the row cannot come back — and the finalize
+// answers it as a server error, keeping the bill for bytes that did move.
+var ErrUploadSessionReclaimed = errors.New("account: upload session was reclaimed by cleanup")
+
 // StoredFile is one zero-knowledge stored-transfer object's lifecycle row. The
 // server holds only ciphertext: EncManifest (encrypted filenames/sizes) and the
 // blob it points at are opaque. It never sees plaintext content, names, or the key.
@@ -726,6 +754,101 @@ type StoredFile struct {
 	// "no verifier" is answered with a distinct status rather than a refusal that
 	// looks like a wrong proof.
 	CompletionVerifier []byte
+	// UploadSessionID is NOT a stored_files column. It is a precondition of
+	// the insert, and only a resumable finalize sets it: the insert lands only
+	// if, inside its own transaction, that session row still exists for this
+	// user and blob as a finalize-claimed tombstone (done, not in recovery, no
+	// object linked and no refusal recorded). Otherwise it is refused with
+	// ErrUploadSessionReclaimed. The same statement records this object's ID
+	// on the session (upload_sessions.finalized_file_id), so the link commits
+	// or rolls back with the object; it is what a finalize recovery reads. ""
+	// — every other writer — inserts exactly as before.
+	//
+	// This is the half of the cleanup ownership rule the insert owns. The
+	// cleanup claim reads stored_files and the insert reads upload_sessions, in
+	// two transactions SQLite's single writer serializes, so whichever commits
+	// second sees the first: a claimed blob is never reported as a live object,
+	// and a live object's blob is never claimed.
+	UploadSessionID string
+	// QuotaCharge is NOT a column and is never read back. It is the object's
+	// daily-quota debit, and CreateStoredFileWithinStorageCaps writes it in the
+	// insert's own transaction: the rolling window is summed, a debit that
+	// would not fit refuses the insert with Reason "quota" (nothing written),
+	// and otherwise the event row is inserted before the object's. Object and
+	// debit therefore commit together or not at all — a crash, a database
+	// failure or any later refusal inside that transaction (a cap, a closed
+	// pair room, a reclaimed session) leaves neither, and there is no refund
+	// for anything to forget.
+	//
+	// nil means "no debit": an own-node upload, and every writer that is not an
+	// upload handler. Only the capped insert honours it; persistStoredFile
+	// refuses a charge on the uncapped door rather than drop it silently.
+	QuotaCharge *UploadQuotaCharge
+	// Operation is NOT a column of stored_files and is never read back. It is
+	// the single-shot upload's Idempotency-Key record, and only
+	// handleUploadFile sets it. The insert's own transaction claims it FIRST —
+	// before the daily-quota charge, the caps and the object — in
+	// upload_operations, whose primary key (user_id, op_key) is the whole of
+	// the exactly-once rule: a key already claimed refuses the insert with
+	// ErrUploadOperationExists and nothing is written (no object, no debit),
+	// and every later refusal or error in the transaction takes the claim with
+	// it. A committed claim therefore always names an object that was created
+	// together with its debit. nil — every other writer — inserts exactly as
+	// before.
+	Operation *UploadOperation
+	// UploadFence is NOT a column and is never read back. It is the
+	// single-shot upload's account-deletion fence, and only handleUploadFile
+	// sets it: the insert's own transaction re-reads the owner's users row
+	// FIRST and refuses with ErrUploadAccountFenced (nothing written) if the
+	// account is gone, pending deletion, or its upload_epoch is no longer
+	// Epoch — which account deletion bumps in the same transaction that
+	// removes the account's objects, key claims and credentials. nil — every
+	// other writer — inserts exactly as before.
+	UploadFence *UploadFence
+}
+
+// UploadFence is the users.upload_epoch value an upload request read while
+// its credential was still valid (see handleUploadFile).
+type UploadFence struct {
+	Epoch int64
+}
+
+// ErrUploadAccountFenced is returned by a stored-file insert carrying
+// StoredFile.UploadFence when the owner's account was deleted (or is being
+// deleted, or was deleted and reactivated) after the request was authorized.
+// Nothing was written.
+var ErrUploadAccountFenced = errors.New("account: upload fenced by account deletion")
+
+// UploadOperation is one committed single-shot upload made under an
+// Idempotency-Key: (UserID, Key) is its identity, FileID the object it
+// created, RequestDigest what the request that created it looked like before
+// its body was read (see uploadOperationDigest). The key is scoped to its
+// user: another account's same key is a different operation.
+type UploadOperation struct {
+	UserID        string
+	Key           string
+	FileID        string
+	RequestDigest []byte
+	CreatedAt     int64
+}
+
+// ErrUploadOperationExists is returned by a stored-file insert carrying
+// StoredFile.Operation whose (user, key) another request already committed.
+// Nothing was written: not the object, not its debit. The caller answers with
+// the committed operation's result instead of a second object.
+var ErrUploadOperationExists = errors.New("account: upload operation key already used")
+
+// UploadQuotaCharge is a daily-quota debit carried into the object insert
+// (StoredFile.QuotaCharge). Event is the upload_events row to write — its
+// Bytes already floored to minBillableBytes by the caller, its UserID the
+// object's own — and the insert is refused when the owner's events since
+// Since plus Event.Bytes would exceed Quota (the same used+bytes > quota test,
+// and the same non-positive-quota-admits-nothing meaning, the rolling window
+// has always had).
+type UploadQuotaCharge struct {
+	Event UploadEvent
+	Since int64
+	Quota int64
 }
 
 // StoredFileWrite is what a stored-file insert ACTUALLY landed — the row's own
@@ -747,9 +870,11 @@ type StoredFile struct {
 // reconstructed. A post-write re-read would reopen the same gap one statement
 // further along.
 type StoredFileWrite struct {
-	// Reason is "" when the row was inserted, and names the cap that refused it
-	// otherwise: "storage" (the owner's plan) or "global" (the disk cap). A
-	// non-empty Reason means NOTHING was written.
+	// Reason is "" when the row was inserted, and names the gate that refused
+	// it otherwise: "quota" (the object's QuotaCharge would not fit the owner's
+	// rolling daily window — decided first, so it outranks both caps), "storage"
+	// (the owner's plan) or "global" (the disk cap). A non-empty Reason means
+	// NOTHING was written: no object and no debit.
 	Reason string
 	// ExpiresAt is the deadline the row carries. For a pair-room object it is the
 	// ROOM's, as its row stood inside this transaction — a sibling's move
@@ -1562,6 +1687,9 @@ type Store interface {
 	// See the multi-instance-state-migration doc in relayium-ops, item #9.
 	CreateUploadSession(ctx context.Context, row UploadSessionRow, maxPerUser int) (ok bool, err error)
 	GetUploadSession(ctx context.Context, id, userID string) (UploadSessionRow, bool, error)
+	// GetUploadFinalizeRecord is the read-only finalize-recovery view of one of
+	// userID's sessions; see SQLiteStore.GetUploadFinalizeRecord.
+	GetUploadFinalizeRecord(ctx context.Context, id, userID string) (UploadFinalizeRecord, bool, error)
 	// CommitUploadProgress records ONE committed append: it advances the session's
 	// offset to the blob's authoritative size (only ever forward, only while the
 	// session is open, never past max_size), adds exactly the bytes that advance
@@ -1607,7 +1735,22 @@ type Store interface {
 	// no record left of what was lost. Together they are all-or-nothing, so a
 	// failure claims nothing and the caller's retry settles it exactly once.
 	ClaimUploadDone(ctx context.Context, id string, now int64) (received, billed int64, ok bool, err error)
+	// DeleteUploadSession deletes a session row and nothing else. No reaper
+	// path calls it: removing the row that owns a blob without handing the blob
+	// to the pending-delete queue in the same transaction is how a blob loses
+	// its last owner (see ClaimUploadSessionCleanup).
 	DeleteUploadSession(ctx context.Context, id string) error
+	// ClaimUploadSessionCleanup takes cleanup ownership of ONE settled terminal
+	// session before anything touches its blob. In one writer transaction it
+	// re-checks eligibility (done, not in recovery, settled, idle since ≤
+	// idleBefore, blob referenced by no stored_files row), queues the blob in
+	// pending_node_deletes with the existing upsert — a hold or a billing
+	// obligation already on that key is kept — and deletes the row. It performs
+	// no blob I/O; GC's drainPending is what deletes the bytes.
+	//
+	// ok=false, err=nil: not eligible, nothing written. err: nothing written,
+	// and the row still owns the blob.
+	ClaimUploadSessionCleanup(ctx context.Context, id string, idleBefore, at int64) (blobKey, nodeID string, ok bool, err error)
 	// ListExpiredOpenUploadSessions returns open sessions idle since ≤ before.
 	// Never a session already in the recovery state (see MarkUploadUnresolved).
 	ListExpiredOpenUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error)
@@ -1615,13 +1758,18 @@ type Store interface {
 	// blob no stored_files row references (a finalize that crashed before persist).
 	//
 	// EXCLUDES rows in the recovery state. Their blob is the only thing that can
-	// still say how many bytes the node accepted, and this pass drops blobs.
+	// still say how many bytes the node accepted, and this pass reclaims blobs.
+	// A candidate list only: the reaper acts through ClaimUploadSessionCleanup,
+	// which re-checks every clause inside its own transaction.
 	ListOrphanDoneUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error)
-	// PurgeDoneUploadSessions deletes finalized rows idle since ≤ before (their
-	// blob is either a live file or already dropped by the orphan pass). Rows
+	// PurgeDoneUploadSessions deletes finalized rows idle since ≤ before, and in
+	// the same transaction queues (enqueued at `at`) the blob of every one that
+	// no stored_files row references — a set-based cleanup claim, so a row the
+	// orphan pass did not get to never takes its blob's only owner with it. A
+	// referenced row's blob belongs to its live object and is not queued. Rows
 	// whose meter is short, and rows in the recovery state, are never purged:
 	// the row is the only record of what an upload accepted.
-	PurgeDoneUploadSessions(ctx context.Context, before int64) error
+	PurgeDoneUploadSessions(ctx context.Context, before, at int64) error
 	// MarkUploadUnresolved moves an abandoned open session into the RECOVERY
 	// state: terminal for the client, but explicitly NOT settled. ok=false ⇒ the
 	// session was claimed by a racing finalize or reaper first.
@@ -1832,7 +1980,7 @@ type Store interface {
 	// period, no user identity retained), then deletes every user-linked row
 	// (identities, sessions, magic_tokens, devices, cli_tokens,
 	// cli_device_auth, usage_events, stored_files, upload_sessions, pair_rooms,
-	// upload_events, user_stats, usage_monthly, email_tokens, node_tokens,
+	// upload_events, upload_operations, user_stats, usage_monthly, email_tokens, node_tokens,
 	// the user's own nodes) before
 	// finally deleting the users row itself. FK-safe delete order (children
 	// before the users parent, PRAGMA foreign_keys=ON). The final users delete
@@ -1859,6 +2007,12 @@ type Store interface {
 	// transaction. Any outcome other than ResetApplied changed nothing and left
 	// the token unspent. The returned string is the token's user id.
 	ResetPasswordWithToken(ctx context.Context, tokenHash string, now int64, passwordHash string) (ResetOutcome, string, error)
+	// VerifyEmailWithToken spends a verify token, drops an unconfirmed
+	// registration password when dropPassword is set, marks the email verified
+	// and inserts sess in ONE transaction. Any outcome other than VerifyApplied,
+	// and any error, changed nothing and left the token unspent. The returned
+	// string is the token's user id.
+	VerifyEmailWithToken(ctx context.Context, tokenHash string, now int64, dropPassword bool, sess Session) (VerifyOutcome, string, error)
 	// ChangePasswordAndRevokeSessions replaces the password, links the "password"
 	// identity when linkSubject is non-empty, and revokes every session except
 	// exceptSessionID (the raw token) in ONE transaction.
@@ -1991,14 +2145,28 @@ type Store interface {
 	// CreateStoredFileWithinStorageCaps atomically enforces the owner (userCap)
 	// and global (globalCap) live-storage caps and inserts the row in one writer
 	// transaction, so concurrent uploads cannot collectively bust a cap. A
-	// non-positive cap disables that check. A StoredFileWrite with a non-empty
-	// Reason ("storage"|"global") names the cap hit and nothing was inserted; a
-	// real error is returned as err (caller fails closed).
+	// non-positive cap disables that check. When f.QuotaCharge is set, the same
+	// transaction first checks and writes that daily-quota debit, so the object
+	// and its debit commit or roll back together. A StoredFileWrite with a
+	// non-empty Reason ("quota"|"storage"|"global") names the gate hit and
+	// nothing — neither object nor debit — was written; a real error is
+	// returned as err (caller fails closed), and it too leaves neither.
 	//
 	// For a pair-room object the same transaction also carries the room's open
 	// precondition (ErrPairRoomClosed if it ended first) and is where the object's
 	// expires_at is DECIDED — see StoredFileWrite.
+	//
+	// When f.Operation is set, its (user, key) claim is written first in that
+	// transaction; a key already committed returns ErrUploadOperationExists
+	// with nothing written. CreateStoredFile routes such an insert through this
+	// transaction too.
 	CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (StoredFileWrite, error)
+	// UploadEpoch reads the account's upload fence value (ErrNotFound for no
+	// such user). See StoredFile.UploadFence.
+	UploadEpoch(ctx context.Context, userID string) (int64, error)
+	// GetUploadOperation reads the committed single-shot upload operation
+	// (userID, key), or ErrNotFound. It never writes.
+	GetUploadOperation(ctx context.Context, userID, key string) (UploadOperation, error)
 	GetStoredFile(ctx context.Context, id string) (StoredFile, error)
 	// GetStoredFileByBlobKey resolves a blob key back to its stored-file row (a
 	// direct-download receipt only carries the blob key). ErrNotFound if absent.
@@ -2162,10 +2330,23 @@ type Store interface {
 	// usage since `since` plus e.Bytes stays within quota, in one transaction, so
 	// concurrent uploads cannot collectively exceed the quota. ok=false means the
 	// reservation was refused (over quota) and nothing was written.
+	//
+	// No upload handler calls it any more: a debit committed on its own, ahead
+	// of its object, is exactly what a crash or a failed refund stranded (A33).
+	// Upload debits travel as StoredFile.QuotaCharge instead. It stays as a
+	// standalone ledger writer for tests and fixtures that seed the window.
 	ReserveUpload(ctx context.Context, e UploadEvent, since, quota int64) (ok bool, err error)
-	// RefundUpload removes a reserved upload event (by id) when a later gate fails,
-	// so the daily quota isn't charged for a file that never landed.
+	// RefundUpload removes an upload event by id. Like ReserveUpload it has no
+	// upload-handler caller: with the debit inside the object's transaction a
+	// refused upload never holds one, and a committed object's debit is never
+	// refunded (it leaves only with the 24h prune).
 	RefundUpload(ctx context.Context, id string) error
+	// PruneUploadEvents drops upload_events rows older than `before`, and in
+	// the same pass ages out upload_operations (Idempotency-Key) rows: a row
+	// whose object still exists is kept; the first pass that finds the object
+	// gone stamps the row with its `before`, and a later pass deletes it once
+	// its own `before` is uploadOperationGoneRetention past that stamp — so a
+	// key keeps answering 410 for at least 24h after its object is gone.
 	PruneUploadEvents(ctx context.Context, before int64) error
 	// PruneDownloadReceipts deletes direct-download dedup rows older than `before`
 	// (a generous margin past any in-flight download) to keep the table bounded.
@@ -2367,6 +2548,9 @@ type Store interface {
 	BumpNodeUpdateAttempts(ctx context.Context, nodeID string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
+	// PrepareRefusedUploadReclaim is a refused finalize's settle-first ownership
+	// step for its blob; see SQLiteStore.PrepareRefusedUploadReclaim.
+	PrepareRefusedUploadReclaim(ctx context.Context, sessionID, blobKey, nodeID string, at int64) (bool, error)
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
 	DeletePendingNodeDelete(ctx context.Context, blobKey, nodeID string) error
 	// MarkPendingNodeDeleteDone stamps the first delete that succeeded for a

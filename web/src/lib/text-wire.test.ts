@@ -204,6 +204,54 @@ describe("text wire", () => {
     expect((got as Error).message).not.toContain("\ufffd");
   });
 
+  it("preserves U+FEFF as content wherever it sits, across successive messages", async () => {
+    const { ka, kb } = await pair();
+    const sender = new TextSender();
+    const receiver = new TextReceiver();
+    const enc = new TextEncoder();
+    // One sender/receiver pair: a decoder that strips a leading BOM only on the
+    // first message, or only when nothing follows it, still fails here.
+    const bodies = [
+      "\ufeff",
+      "\ufeffmessage",
+      "\ufeff\ufeff\ufeffmessage",
+      "mess\ufeffage\ufeff",
+      "\ufeff  \t\u4f60\u597d \ud83c\udf0d\r\n\ufeff",
+      "plain",
+      "\ufeff",
+    ];
+    for (const body of bodies) {
+      const f = await sender.frame(body, ka.textSend);
+      // The sender keeps every U+FEFF: all of EF BB BF is sealed onto the wire.
+      expect(f.length).toBe(TEXT_FRAME_OVERHEAD + enc.encode(body).length);
+      const got = await receiver.feed(f, kb.textRecv);
+      expect([...enc.encode(got)]).toEqual([...enc.encode(body)]);
+      expect(got).toBe(body);
+    }
+  });
+
+  it("still consumes the seq of an authenticated non-UTF-8 message, then opens a BOM message", async () => {
+    const { ka, kb } = await pair();
+    const receiver = new TextReceiver();
+    // Seal each seq exactly once under the text key, framed as TextSender does:
+    // kind byte, big-endian u32 seq, AES-GCM ciphertext.
+    const sealed = async (seq: number, payload: Uint8Array<ArrayBuffer>) => {
+      const ct = await seal(ka.textSend, seq, payload);
+      const f = new Uint8Array(5 + ct.length) as Uint8Array<ArrayBuffer>;
+      f[0] = KIND_TEXT_ENC;
+      new DataView(f.buffer).setUint32(1, seq);
+      f.set(ct, 5);
+      return f;
+    };
+    // Seq 0 authenticates but is not UTF-8 (a lone continuation byte).
+    const bad = await sealed(0, new Uint8Array([0x80]));
+    await expect(receiver.feed(bad, kb.textRecv)).rejects.toThrow(/valid UTF-8/);
+    // Seq 1 carries a leading BOM; it opens only if seq 0 was consumed.
+    const good = await sealed(1, new TextEncoder().encode("\ufeffafter") as Uint8Array<ArrayBuffer>);
+    expect(seqOf(good)).toBe(1);
+    expect(await receiver.feed(good, kb.textRecv)).toBe("\ufeffafter");
+  });
+
   it("rejects a truncated frame, a wrong kind, and a header-only frame", async () => {
     const { kb } = await pair();
     const r = new TextReceiver();

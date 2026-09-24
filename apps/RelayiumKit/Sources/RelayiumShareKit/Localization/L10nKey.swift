@@ -572,8 +572,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case linkConnectToDevice = "link.connectToDevice"
     /// What that one verb will produce, said before it is pressed.
     case linkConnectToDeviceHint = "link.connectToDeviceHint"
-    /// The staged batch travels with the connection rather than after it.
-    case linkConnectCarriesStagedFiles = "link.connectCarriesStagedFiles"
     /// The heading over the conversation on a screen that also lists transfers.
     case linkConversationHeading = "link.conversationHeading"
     /// Nothing has been said yet. An empty transcript with no explanation reads
@@ -651,8 +649,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// sheet and polls `/api/cli/device/*` for an approval. The wording now
     /// names what actually happens.
     ///
-    /// iOS ships the real system button instead (`SignInView`), and this key is
-    /// not rendered there. The macOS app still cannot: a Developer ID build
+    /// iOS ships the real system Apple button (`SignInView`) AND, since A17, the
+    /// same browser device flow under this key, for accounts that have neither
+    /// a password nor an Apple ID. The macOS app still cannot: a Developer ID build
     /// cannot carry `com.apple.developer.applesignin`, so the honest control on
     /// that platform stays a browser sign-in until a Mac App Store track exists.
     case loginBrowserSignIn = "login.browserSignIn"
@@ -1241,6 +1240,27 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// Relayium app on this link, not a browser, so the shared note's
     /// production-host sentence describes a device that cannot be there.
     case nearbyIOSAcceptanceNote = "nearby.iosAcceptanceNote"
+
+    // A23-A25: an unrequested nearby connection asks first. One contiguous block.
+    /// %@ — the asking device's peer-supplied roster label. Title of the prompt.
+    case nearbyIncomingTitle = "nearby.incomingTitle"
+    /// Why to accept only a recognised device, and that files still ask.
+    case nearbyIncomingDetail = "nearby.incomingDetail"
+    /// Shown only when accepting would clear text still on the ended page.
+    case nearbyIncomingDiscardsText = "nearby.incomingDiscardsText"
+    case nearbyIncomingAccept = "nearby.incomingAccept"
+    case nearbyIncomingDecline = "nearby.incomingDecline"
+    // End A23-A25.
+    // A32: files the OS handed over wait instead of displacing a result or a session.
+    /// Shell indicator for a batch staged without navigating, because the
+    /// destination on screen holds a live transfer session.
+    case storedSendFilesWaiting = "storedSend.filesWaiting"
+    /// The indicator's one action: go to the send flow holding the batch.
+    case storedSendFilesWaitingShow = "storedSend.filesWaitingShow"
+    /// Beside a finished link or a failure: the waiting batch joins the next
+    /// selection, never this result.
+    case storedSendFilesWaitingNext = "storedSend.filesWaitingNext"
+    // End A32.
     /// The iOS drop banner. There is no rendezvous to lose here — what dropped
     /// is the local link — so `LanDiscoveryModel` renders this key instead of
     /// `nearbyReconnecting` when `LocalNearbyEnvironment` composed it.
@@ -2179,6 +2199,67 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case helpAccountFailure = "help.account.failure"
     case helpAccountRecovery = "help.account.recovery"
 
+    // MARK: - A20-A21: iOS help (A20) and received Device Inbox files (A21)
+    //
+    // One contiguous block. The iOS help keys are the iOS table in
+    // `HelpPresentation.topic(forIOS:)`; the `inbox.received*` keys are the
+    // Open / Share / Save to Files actions on a received files row.
+    case helpIOSLanPurpose = "help.ios.lan.purpose"
+    case helpIOSLanStep1 = "help.ios.lan.step1"
+    case helpIOSLanStep2 = "help.ios.lan.step2"
+    case helpIOSLanStep3 = "help.ios.lan.step3"
+    case helpIOSLanBoundary = "help.ios.lan.boundary"
+    case helpIOSLanWhere = "help.ios.lan.where"
+    case helpIOSLanFailure = "help.ios.lan.failure"
+    case helpIOSLanRecovery = "help.ios.lan.recovery"
+    case helpIOSCrossPurpose = "help.ios.cross.purpose"
+    case helpIOSCrossStep1 = "help.ios.cross.step1"
+    case helpIOSCrossStep2 = "help.ios.cross.step2"
+    case helpIOSCrossStep3 = "help.ios.cross.step3"
+    case helpIOSCrossBoundary = "help.ios.cross.boundary"
+    case helpIOSCrossWhere = "help.ios.cross.where"
+    case helpIOSCrossFailure = "help.ios.cross.failure"
+    case helpIOSCrossRecovery = "help.ios.cross.recovery"
+    case helpIOSStoredSendPurpose = "help.ios.storedSend.purpose"
+    case helpIOSStoredSendStep1 = "help.ios.storedSend.step1"
+    case helpIOSStoredSendStep2 = "help.ios.storedSend.step2"
+    case helpIOSStoredSendStep3 = "help.ios.storedSend.step3"
+    case helpIOSStoredSendBoundary = "help.ios.storedSend.boundary"
+    case helpIOSStoredSendWhere = "help.ios.storedSend.where"
+    case helpIOSStoredSendFailure = "help.ios.storedSend.failure"
+    case helpIOSStoredSendRecovery = "help.ios.storedSend.recovery"
+    case helpIOSInboxPurpose = "help.ios.inbox.purpose"
+    case helpIOSInboxStep1 = "help.ios.inbox.step1"
+    case helpIOSInboxStep2 = "help.ios.inbox.step2"
+    case helpIOSInboxStep3 = "help.ios.inbox.step3"
+    case helpIOSInboxBoundary = "help.ios.inbox.boundary"
+    case helpIOSInboxWhere = "help.ios.inbox.where"
+    case helpIOSInboxFailure = "help.ios.inbox.failure"
+    case helpIOSInboxRecovery = "help.ios.inbox.recovery"
+    case helpIOSAccountPurpose = "help.ios.account.purpose"
+    case helpIOSAccountStep1 = "help.ios.account.step1"
+    case helpIOSAccountStep2 = "help.ios.account.step2"
+    case helpIOSAccountStep3 = "help.ios.account.step3"
+    case helpIOSAccountBoundary = "help.ios.account.boundary"
+    case helpIOSAccountWhere = "help.ios.account.where"
+    case helpIOSAccountFailure = "help.ios.account.failure"
+    case helpIOSAccountRecovery = "help.ios.account.recovery"
+    case inboxReceivedOpen = "inbox.receivedOpen"
+    case inboxReceivedShare = "inbox.receivedShare"
+    case inboxReceivedSave = "inbox.receivedSave"
+    /// %@ — the received file names.
+    case inboxReceivedOpenLabel = "inbox.receivedOpenLabel"
+    /// %@ — the received file names.
+    case inboxReceivedShareLabel = "inbox.receivedShareLabel"
+    /// %@ — the received file names.
+    case inboxReceivedSaveLabel = "inbox.receivedSaveLabel"
+    case inboxReceivedAllMissing = "inbox.receivedAllMissing"
+    case inboxReceivedSomeMissing = "inbox.receivedSomeMissing"
+    /// %@ — the Files app route to the receive folder.
+    case inboxReceivedFolderNote = "inbox.receivedFolderNote"
+    /// %@ — the Files app route to the receive folder.
+    case inboxReceivedUnavailable = "inbox.receivedUnavailable"
+
     // MARK: - Sending to one of the account's own devices (iOS → Mac/CLI)
     //
     // The rules this whole section is written against:
@@ -2263,6 +2344,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case sendMessageLabel = "send.messageLabel"
     case sendMessagePlaceholder = "send.messagePlaceholder"
     case sendMessageSize = "send.messageSize"
+    // The same bound as what is left or what is over, in exact bytes. The size
+    // line above rounds to one decimal of a KB, so at the limit and one byte
+    // past it both read "64.0 KB of 64.0 KB"; these are what tell them apart.
+    case sendMessageRemaining = "send.messageRemaining"
+    case sendMessageOverLimit = "send.messageOverLimit"
     case sendMessageAction = "send.messageAction"
 
     // Truthful qualifications on a send that IS allowed, said BEFORE the file is
@@ -2394,6 +2480,50 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case inboxCheckNothingNew = "inbox.checkNothingNew"
     case inboxCheckDone = "inbox.checkDone"
     case inboxCheckFailed = "inbox.checkFailed"
+
+    // MARK: - A17-A19 iOS browser sign-in, password reset request, version support (2026-09-23)
+    /// Beside the iOS browser sign-in button: who it is for.
+    case loginBrowserHint = "login.browserHint"
+    /// The device flow is waiting for the approval in the browser sheet.
+    case loginBrowserWaiting = "login.browserWaiting"
+    /// The sign-in form's way to the reset-link request.
+    case loginForgotPassword = "login.forgotPassword"
+    /// Title of the reset-link request sheet.
+    case loginResetTitle = "login.resetTitle"
+    /// What the reset sheet does, and where the reset itself happens.
+    case loginResetBody = "login.resetBody"
+    /// The reset sheet's submit button.
+    case loginResetSend = "login.resetSend"
+    /// A reset-link request in flight.
+    case loginResetSending = "login.resetSending"
+    /// %@ — the address, as typed. Identical whether or not an account uses it: the endpoint never says, and neither may this sentence.
+    case loginResetRequested = "login.resetRequested"
+    /// The Account tab's version card.
+    case versionTitle = "version.title"
+    /// %@ — marketing version; %@ — build number.
+    case versionCurrent = "version.current"
+    /// How this build was installed.
+    case versionChannelAppStore = "version.channelAppStore"
+    /// How this build was installed.
+    case versionChannelTestFlight = "version.channelTestFlight"
+    /// A build no store can update.
+    case versionChannelDevelopment = "version.channelDevelopment"
+    /// No newer build on this installation's channel.
+    case versionStateCurrent = "version.stateCurrent"
+    /// %@ — the newer version this channel can install.
+    case versionStateAvailable = "version.stateAvailable"
+    /// %@ — the newer version this channel can install.
+    case versionStateRecommended = "version.stateRecommended"
+    /// %@ — the newer version this channel can install. A notice, never a lockout.
+    case versionStateRequired = "version.stateRequired"
+    /// The bundle's version could not be read.
+    case versionStateUnknown = "version.stateUnknown"
+    /// Opens the App Store product page.
+    case versionUpdateAppStore = "version.updateAppStore"
+    /// Opens the TestFlight app.
+    case versionUpdateTestFlight = "version.updateTestFlight"
+    /// TestFlight could not be opened.
+    case versionTestFlightUnavailable = "version.testFlightUnavailable"
 }
 
 /// Keys whose value depends on a count.

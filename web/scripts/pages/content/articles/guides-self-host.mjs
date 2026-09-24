@@ -89,7 +89,7 @@ ready`,
       heading: "Add a TURN relay for cross-network transfers",
       body: [
         "Same-network (LAN) transfers and SSH-based push/pull work with nothing extra. Cross-network realtime transfers (two devices behind different NATs) sometimes need a TURN relay to establish a path — the relay only ever sees ciphertext, never your file contents.",
-        "docker-compose.yml has an optional relay profile that starts coturn (the TURN server) and a small Redis instance for relay-byte metering, alongside the main server.",
+        "docker-compose.yml has an optional relay profile that starts coturn (the TURN server) alongside the main server. The profile also starts a small Redis instance, but the server's coturn relay-byte metering through it is currently disabled, so relayed bytes are not counted.",
         "The secret has to reach two different places, and getting that wrong fails silently. coturn receives it through Compose variable interpolation, which resolves from the shell or a project-root .env. The server reads it from its own environment, which means server/.env — and an empty secret disables TURN outright. Set only one of them and you get a running coturn the server never issues credentials for: every container reports healthy, nothing is logged, and strict-NAT transfers keep failing exactly as they did before.",
       ],
       steps: [
@@ -348,7 +348,7 @@ ready`,
       heading: "为跨网络传输加上 TURN 中继",
       body: [
         "同一网络（局域网）的传输，以及基于 SSH 的 push/pull，不需要任何额外配置就能工作。跨网络的实时传输（两台设备各自处于不同的 NAT 之后）有时需要一个 TURN 中继来建立路径——中继全程只能看到密文，绝不会看到文件内容。",
-        "docker-compose.yml 里有一个可选的 relay profile，会在启动主服务器的同时启动 coturn（TURN 服务器）和一个用于中继流量计量的小型 Redis 实例。",
+        "docker-compose.yml 里有一个可选的 relay profile，会在启动主服务器的同时启动 coturn（TURN 服务器）。这个 profile 也会启动一个小型 Redis 实例，但服务器通过它进行的 coturn 中继流量计量目前已停用，中继字节不会被计入。",
         "这个密钥必须送到两个不同的地方，而送错了是不会报错的。coturn 通过 Compose 的变量插值拿到它，插值只从 shell 或项目根目录的 .env 解析。服务端则是从它自己的环境变量里读——也就是 server/.env——而密钥为空就等于彻底关闭 TURN。只设其中一处，你就会得到一个正在运行、服务端却从不为它签发凭据的 coturn：每个容器都报告健康，日志里什么都没有，跨严格 NAT 的传输和加中继之前一样失败。",
       ],
       steps: [

@@ -354,7 +354,11 @@ struct RelayiumApp: App {
         leaving.observe(managing.$needsSignOut)
         _signOut = StateObject(wrappedValue: leaving)
         _upload = StateObject(wrappedValue: uploads)
-        let sending = AppEnvironment.makeSendSelectionModel(upload: uploads, drafts: drafts)
+        // Its arrival ledger lives in the product's own defaults, except in an
+        // acceptance launch, which gets a private suite of its own so a UI run
+        // neither reads nor rewrites which real drafts count as new.
+        let sending = AppEnvironment.makeSendSelectionModel(upload: uploads, drafts: drafts,
+                                                            arrivalDefaults: UITestMode.arrivalDefaults())
         // App-scoped, for the model's whole life, and BEFORE any view exists.
         // A `.task` inside SendView would not do: SwiftUI mounts a TabView's
         // tabs lazily and may tear down an off-screen one, so a user who signs
@@ -535,10 +539,9 @@ struct RelayiumApp: App {
         _discovery = StateObject(wrappedValue: nearby)
         let selecting = DirectSendSelection()
         let modes = DirectModeSelection()
-        // The built-App transfer acceptance starts after selection and is not a
-        // system Files presentation test. Debug-only and a no-op unless its
-        // dedicated direct-selection argument is present.
-        UITestMode.preselectPendingFixture(into: selecting)
+        // No pre-connect preselection any more (A25): a link carries no
+        // pre-connect batch, so the transfer acceptance's fixture is handed to
+        // the OPEN workspace instead — see `UITestMode.linkFixtureSelection`.
         _directSelection = StateObject(wrappedValue: selecting)
         _directModes = StateObject(wrappedValue: modes)
         _linkSelection = StateObject(wrappedValue: DirectSendSelection())
@@ -616,12 +619,16 @@ struct RelayiumApp: App {
         _shell = StateObject(wrappedValue: placement)
 
         // The authoritative gate for an UNSOLICITED link, on the main actor, and
-        // through the SAME `TransferPresence` the legacy admission below uses —
+        // through the SAME `TransferPresence` every outbound session claims —
         // which is what makes "a link session and a legacy session cannot
-        // coexist" structural rather than intended. No `DirectModeSelection.adopt`
-        // here, unlike `AppRouting.claimIncoming`: a link has no lane to adopt,
-        // and writing one would leave the picker's answer describing a session
-        // that has no halves.
+        // coexist" structural rather than intended. No mode is adopted:
+        // a link has no lane to adopt.
+        //
+        // **Asked at ACCEPT, not on arrival (A23).** The model's consent is
+        // `.prompt` by default, so an unrequested link is held behind
+        // `link.inboundAsk` and this runs only when the user taps Accept — which
+        // is why claiming the tab and navigating to it here is the move from
+        // arrival to accept rather than a jump the user never asked for.
         unified.shouldAcceptLink = { peerID in
             guard presenting.beginSession(.nearby,
                                           peerLabel: nearby.label(forPeerID: peerID))
@@ -645,19 +652,19 @@ struct RelayiumApp: App {
         }
         #endif
 
-        let receive = AppEnvironment.makeNearbyReceiveModel(
-            fileModel: files, textModel: texts, discovery: nearby, inboundRoom: room)
-        // Called synchronously as the offer is admitted and BEFORE the responder
-        // is built across an await — which is the only moment this can be done,
-        // because by the time the session is live the mode picker that would fix
-        // a wrong surface is locked. One shared call rather than three writes
-        // here, so a later edit to this file cannot reorder them; `AppRouting`
-        // owns what it does and `AppRoutingTests` drives it.
-        receive.shouldAcceptSession = { kind, peerID in
-            AppRouting.claimIncoming(kind, peerLabel: nearby.label(forPeerID: peerID),
-                                     presence: presenting,
-                                     modes: modes, navigation: routing)
-        }
+        // **Inbound legacy offers are refused, exactly as on macOS (A23, L1).**
+        //
+        // The legacy one-shot wire had no consent step at all on this side: an
+        // offer from an iOS 0.3.x build or a legacy `LocalTransferPeer` was
+        // admitted unasked, and its file lane accepted the manifest itself and
+        // wrote to disk. The listener-only composition answers such an offer
+        // with the tagged `busy` a genuinely busy device sends, before anything
+        // is published, claimed or built — so the peer learns at once instead
+        // of waiting out a watchdog. OUTBOUND legacy to an old peer is
+        // unchanged: it is the user's own Send. An inbound `link/1` is a
+        // different gate on a different frame, and it asks first.
+        let receive = AppEnvironment.makeListeningOnlyNearbyReceiveModel(
+            discovery: nearby, inboundRoom: room)
         _nearbyReceive = StateObject(wrappedValue: receive)
         // Built here, before any view exists, for the same reason the sign-out
         // coordinator is: it acts on a signal that arrives when the surface that
@@ -710,6 +717,13 @@ struct RelayiumApp: App {
         }
     }
 
+    /// The ready Relayium account, for the App Store recovery sweep below.
+    /// `nil` while signed out or still restoring.
+    private var subscriptionAccountID: String? {
+        guard case let .ready(user, _) = session.state else { return nil }
+        return user.id
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView(download: download, upload: upload, send: send,
@@ -749,6 +763,15 @@ struct RelayiumApp: App {
                 .environmentObject(signOut)
                 .environment(\.appleSubscription, appleSubscription)
                 .task { appleSubscription?.startObservingUpdates() }
+                // Each time an account becomes ready — launch restore, sign-in,
+                // or switching back after another account — sweep StoreKit's
+                // unfinished queue under it. A purchase left unfinished because
+                // the account changed while its sheet was open is submitted
+                // here once its own account is back; the update observer above
+                // is already running and will not see it again.
+                .task(id: subscriptionAccountID) {
+                    await appleSubscription?.reconcile(forReadyAccount: subscriptionAccountID)
+                }
                 // The one lifecycle observer, on the scene root rather than on a
                 // tab. What it does with each phase is
                 // `NearbyResidencyCoordinator`'s decision — which includes when
@@ -784,9 +807,11 @@ struct RelayiumApp: App {
                     // lets do that — so what brings a staged draft onto the Send
                     // tab is the user coming back to Relayium, which is this.
                     // The phase is reported and nothing more: whether `.active`
-                    // means "re-read the App Group inbox", and whether
-                    // `.inactive` does, is `SendSelectionModel`'s decision, and
-                    // `SharedDraftAdoptionTests` drives it.
+                    // means "re-read the App Group inbox" — and whether a single
+                    // newly shared draft is then loaded into an empty Send
+                    // screen — is `SendSelectionModel`'s decision, and
+                    // `SharedDraftAdoptionTests`/`SharedDraftArrivalTests`
+                    // drive it. Nothing here or there ever sends.
                     send.phaseChanged(to: lifecycle(phase))
                     // **The Device Inbox receiver is foreground-only, and this
                     // is where that is enforced rather than merely stated.**
@@ -845,7 +870,9 @@ struct RelayiumApp: App {
                     // screen. `onChange` fires on a CHANGE and the scene is
                     // already `.active` when it first appears, so without this a
                     // draft staged before launch would not appear until the app
-                    // had been backgrounded and brought forward again.
+                    // had been backgrounded and brought forward again. On this
+                    // launch the session is usually still restoring; the model
+                    // waits for that and for recovery before judging arrivals.
                     send.phaseChanged(to: .active)
                 }
                 // A Universal Link the OS verified against relayium.com, at the

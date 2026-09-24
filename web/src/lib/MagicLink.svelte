@@ -10,7 +10,7 @@
   // 基础设施。挂载即自动提交会把这道防线原样搬回去——**别这么做**，扫描器执行 JS
   // 的情形并不罕见。
   import { onDestroy, onMount } from "svelte";
-  import { completeMagicLink } from "./auth.svelte";
+  import { completeMagicLink, offerReactivation } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
   import AuthLanding from "./AuthLanding.svelte";
@@ -53,10 +53,11 @@
       return;
     }
     if (res.pendingDeletion && res.reactivateToken) {
-      // 账号处于待删除冻结态：没有会话，但拿到了一枚新的恢复令牌。沿用
-      // Account.svelte 既有的接法（fragment 里读、读完即抹），不另开一条路径。
-      location.hash = `account=pending_deletion&token=${encodeURIComponent(res.reactivateToken)}`;
-      navigate("lan");
+      // 账号处于待删除冻结态：没有会话，但拿到了一枚新的恢复令牌。交给
+      // /account/reactivate 页（只在内存里传，不进 URL）。原来的做法是把令牌写进
+      // 首页的 fragment，但首页不挂载账号控件，没有人读它，恢复入口就丢了。
+      offerReactivation(res.reactivateToken);
+      navigate("account-reactivate");
       return;
     }
     phase = "invalid";

@@ -21,14 +21,14 @@ let target: HTMLDivElement;
 let app: unknown;
 const realFetch = globalThis.fetch;
 
-/** Mount signed out, with `/api/auth/password/login` answering as given. */
-async function mountWithLoginAnswer(status: number, body: unknown) {
+/** Mount signed out, with `path` (the login endpoint by default) answering as given. */
+async function mountWithLoginAnswer(status: number, body: unknown, path = "/api/auth/password/login") {
   globalThis.fetch = vi.fn(async (url: string) => {
     if (url === "/api/auth/methods") {
       return { ok: true, status: 200, json: async () => ({ password: true, google: false, magic: false }) };
     }
-    if (url === "/api/me") return { ok: true, status: 401, json: async () => ({}) };
-    if (url === "/api/auth/password/login") {
+    if (url === "/api/me") return { ok: false, status: 401, json: async () => ({}) };
+    if (url === path) {
       return { ok: status >= 200 && status < 300, status, json: async () => body };
     }
     return { ok: true, status: 200, json: async () => ({}) };
@@ -93,11 +93,60 @@ describe("a refused sign-in says which refusal it was", () => {
     expect(await signIn(dialog)).toBe(messages.en.account.errLogin);
   });
 
-  it("names an account awaiting deletion, using the sentence that already existed", async () => {
-    // `pendingDeletion` was in this catalogue and wired only on the magic-link
-    // path, so a password sign-in read it as a wrong password.
-    const dialog = await mountWithLoginAnswer(403, { error: "account_pending_deletion" });
-    expect(await signIn(dialog)).toBe(messages.en.account.pendingDeletion);
+  it("names an account awaiting deletion and offers the undo, on the server's real answer", async () => {
+    // The login endpoint never sends a 403 for this. A correct password on an
+    // account scheduled for deletion is HTTP 200 with this body and no session
+    // cookie — handlers.go handlePasswordLogin, pinned by the Go test
+    // TestPasswordLoginFrozenWhenPendingDeletion (deletion_test.go).
+    // The previous version of this case mocked a 403 `account_pending_deletion`,
+    // so it passed while the real 200 closed the dialog with nothing said and
+    // threw the reactivate token away.
+    const dialog = await mountWithLoginAnswer(200, {
+      status: "pending_deletion",
+      purgeAfter: 1790000000,
+      reactivateToken: "react-tok-1",
+    });
+    const shown = await signIn(dialog);
+
+    const t = messages.en.account;
+    // Still the sign-in dialog: nobody was signed in.
+    expect(target.querySelector("[role='dialog']")).not.toBeNull();
+    expect(target.textContent).not.toContain(t.signedInAs("someone@example.com"));
+    // Not blamed on the credentials, which were right.
+    expect(shown).not.toBe(t.errLogin);
+    const notice = dialog.querySelector("[data-testid='signin-pending-deletion']");
+    expect(notice?.textContent?.trim()).toBe(t.pendingDeletion);
+
+    // The offer is real: pressing Reactivate spends exactly the token the server handed back.
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const button = [...dialog.querySelectorAll("button")].find((b) => b.textContent?.trim() === t.reactivate);
+    expect(button, "no Reactivate button in the dialog").toBeTruthy();
+    button!.click();
+    for (let i = 0; i < 3; i += 1) {
+      await new Promise((r) => setTimeout(r, 0));
+      flushSync();
+    }
+    const call = fetchMock.mock.calls.find((c) => c[0] === "/api/account/reactivate");
+    expect(call, "Reactivate did not call the endpoint").toBeTruthy();
+    expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ token: "react-tok-1" });
+  });
+
+  it("tells a too-long password to be shorter, not to retry", async () => {
+    // Register answers 400 password_too_long past bcrypt's 72-byte limit
+    // (password.go). Retrying the same password can never work.
+    const dialog = await mountWithLoginAnswer(400, { error: "password_too_long" }, "/api/auth/register");
+    (dialog.querySelectorAll("button.btn-link")[0] as HTMLButtonElement).click(); // "No account? Sign up"
+    flushSync();
+    const shown = await signIn(dialog);
+    expect(shown).toBe(messages.en.account.errTooLong);
+    expect(shown).not.toBe(messages.en.account.errUnrecognised);
+  });
+
+  it("does not point a register refusal at a Reactivate button that is not there", async () => {
+    const dialog = await mountWithLoginAnswer(409, { error: "account_pending_deletion" }, "/api/auth/register");
+    (dialog.querySelectorAll("button.btn-link")[0] as HTMLButtonElement).click();
+    flushSync();
+    expect(await signIn(dialog)).toBe(messages.en.account.errRegisterPendingDeletion);
   });
 
   it("says it does not recognise a code rather than naming the credentials", async () => {

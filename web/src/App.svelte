@@ -37,6 +37,7 @@
   import type { Peer } from "./lib/protocol";
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
+  import { startBrowserThemeColor } from "./lib/browser-theme-color";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, clearOutbox, uploadedRefs, uploadedFingerprint } from "./lib/outbox.svelte";
   import { resetPreupload } from "./lib/preupload.svelte";
@@ -95,6 +96,8 @@
     "verify-email": () => import("./lib/VerifyEmail.svelte"),
     "reset-password": () => import("./lib/ResetPassword.svelte"),
     "magic-link": () => import("./lib/MagicLink.svelte"),
+    "account-delete": () => import("./lib/AccountDeleteConfirm.svelte"),
+    "account-reactivate": () => import("./lib/AccountReactivate.svelte"),
     // 不是路由，是首页折叠线以下那一大块 —— 借用同一个记忆化加载器，省得再写一套。
     "home-sections": () => import("./lib/HomeSections.svelte"),
   } as const;
@@ -908,7 +911,7 @@
     currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me" || currentRoute() === "cli"
     || currentRoute() === "apps" || currentRoute() === "device-inbox"
     || currentRoute() === "pricing" || currentRoute() === "verify-email" || currentRoute() === "reset-password"
-    || currentRoute() === "magic-link"
+    || currentRoute() === "magic-link" || currentRoute() === "account-delete" || currentRoute() === "account-reactivate"
       ? false
       : currentRoute() === "cross"
         ? showTransfer
@@ -935,6 +938,7 @@
   const SHELL_ROUTES = [
     "lan", "cross", "offline", "device-inbox",
     "pricing", "cli", "apps", "me", "verify-email", "reset-password", "magic-link",
+    "account-delete", "account-reactivate",
     "download",
   ] as const;
   const shellRoute = $derived((SHELL_ROUTES as readonly string[]).includes(currentRoute()));
@@ -966,6 +970,10 @@
     document.documentElement.classList.toggle("shell-route", shellRoute);
     return () => document.documentElement.classList.remove("shell-route");
   });
+  // The browser's theme-color follows what that class, the manual theme, the
+  // OS scheme and the width make `body` paint (lib/browser-theme-color.ts).
+  // Synchronous so Svelte keeps the returned teardown.
+  onMount(() => startBrowserThemeColor());
 
   // <head> upkeep, split in two on purpose. The meta/canonical/hreflang block
   // depends only on route + language, but it used to sit in the same effect as
@@ -2696,6 +2704,14 @@
   {:else if currentRoute() === "magic-link"}
     {#await routePage("magic-link") then { default: MagicLink }}
       <MagicLink />
+    {/await}
+  {:else if currentRoute() === "account-delete"}
+    {#await routePage("account-delete") then { default: AccountDeleteConfirm }}
+      <AccountDeleteConfirm />
+    {/await}
+  {:else if currentRoute() === "account-reactivate"}
+    {#await routePage("account-reactivate") then { default: AccountReactivate }}
+      <AccountReactivate />
     {/await}
   {:else}
     {#if notice}

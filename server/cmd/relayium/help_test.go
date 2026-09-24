@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/relayium/relayium/internal/linkrtc"
 )
 
 // A person asking for help should get an answer on stdout and a success exit,
@@ -105,15 +107,22 @@ func TestTopLevelHelpGroupsDirectCommands(t *testing.T) {
 
 // The Inbox is the thing people reach for by mistake when they want two servers
 // to talk. Help must say plainly that it only receives.
-func TestTopLevelHelpMarksInboxReceiveOnly(t *testing.T) {
+func TestTopLevelHelpDescribesBothInboxSides(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	Run([]string{"--help"}, &stdout, &stderr)
 	got := stdout.String()
-	if !strings.Contains(got, "RECEIVE SIDE ONLY") {
-		t.Errorf("top-level help does not mark inbox receive-only:\n%s", got)
+	// This binary has an inbox sender, so the top-level entry must not say
+	// otherwise.
+	for _, stale := range []string{"RECEIVE SIDE ONLY", "no CLI sender"} {
+		if strings.Contains(got, stale) {
+			t.Errorf("top-level help still claims the CLI cannot send (%q):\n%s", stale, got)
+		}
 	}
-	if !strings.Contains(got, "no CLI sender") {
-		t.Errorf("top-level help does not say the sending side is Web/app:\n%s", got)
+	for _, want := range []string{"send files to one of your devices", "devices, send, sent, cancel, retry",
+		"receive", "enable --dir, run, status, pause", "serve + push/sync", "relayium inbox --help"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("top-level help does not mention %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -245,5 +254,106 @@ func TestSyncWithTrailingFlagsStillParses(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "one-way incremental folder mirror") {
 		t.Fatalf("printed help instead of the argument error: %s", stdout.String())
+	}
+}
+
+// A10: `pair` is a public command — in the top-level usage, with its own help
+// — and the developer entry `__link` stays out of every help surface.
+func TestUsageListsPairAndHidesTheDeveloperCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if rc := Run([]string{"--help"}, &stdout, &stderr); rc != 0 {
+		t.Fatalf("--help: rc = %d", rc)
+	}
+	top := stdout.String()
+	if !strings.Contains(top, "relayium pair [code]") {
+		t.Errorf("top-level usage does not list pair:\n%s", top)
+	}
+	if strings.Contains(top, "__link") {
+		t.Errorf("top-level usage mentions the hidden __link")
+	}
+	stdout.Reset()
+	if rc := Run([]string{"pair", "-h"}, &stdout, &stderr); rc != 0 {
+		t.Fatalf("pair -h: rc = %d", rc)
+	}
+	for _, n := range []string{"/send <path>", "/accept", "/decline", "/quit", "Ctrl-C", "exit status",
+		"stdout carries only the other side's messages", "path:", "never overwritten"} {
+		if !strings.Contains(stdout.String(), n) {
+			t.Errorf("pair -h does not explain %q", n)
+		}
+	}
+	if _, ok := commandUsage["__link"]; ok {
+		t.Error("__link must not be a documented command")
+	}
+}
+
+// The relay sentence is a billing statement: it says when the code owner's
+// relay allowance is spent. It must say what linkrtc.ChooseRTCConfig does —
+// relay-only whenever a TURN server was issued, peer to peer otherwise — in
+// every command that can link, and no help may claim a direct-first policy.
+// If the policy changes (A09c ice-direct/1), this test fails until the help
+// changes with it.
+func TestLinkRelayPolicyHelpMatchesTheCode(t *testing.T) {
+	turn := linkrtc.ICEConfig{ICEServers: []linkrtc.ICEServer{
+		{URLs: []string{"stun:stun.example:3478"}},
+		{URLs: []string{"turn:turn.example:3478?transport=udp"}, Username: "1:u", Credential: "p"},
+	}}
+	stunOnly := linkrtc.ICEConfig{ICEServers: []linkrtc.ICEServer{{URLs: []string{"stun:stun.example:3478"}}}}
+	if !linkrtc.ChooseRTCConfig(turn, "").RelayOnly {
+		t.Fatal("the code no longer relays every byte when TURN is issued: rewrite linkRelayPolicy (and this test) to say what it does")
+	}
+	if linkrtc.ChooseRTCConfig(stunOnly, "").RelayOnly {
+		t.Fatal("the code relays without TURN: rewrite linkRelayPolicy")
+	}
+	for _, n := range []string{"whenever the server issues a TURN relay", "every byte through that relay",
+		"even when the two ends could\nreach each other directly", "relay allowance", "Only when no relay is issued"} {
+		if !strings.Contains(linkRelayPolicy, n) {
+			t.Errorf("linkRelayPolicy lost %q", n)
+		}
+	}
+	for _, cmd := range []string{"pair", "send", "receive", "text"} {
+		var stdout, stderr bytes.Buffer
+		if rc := Run([]string{cmd, "-h"}, &stdout, &stderr); rc != 0 {
+			t.Fatalf("%s -h: rc = %d", cmd, rc)
+		}
+		got := stdout.String()
+		if !strings.Contains(got, linkRelayPolicy) {
+			t.Errorf("%s -h does not state the relay policy", cmd)
+		}
+		flat := strings.Join(strings.Fields(got), " ")
+		for _, banned := range []string{"direct when a path exists", "direct when possible", "used when no direct path",
+			"otherwise through a TURN relay", "direct-first"} {
+			if strings.Contains(flat, banned) {
+				t.Errorf("%s -h claims a direct-first policy (%q) the code does not have", cmd, banned)
+			}
+		}
+	}
+}
+
+// Cleanup of an incomplete batch is attempted, not promised: a permission or
+// I/O failure can leave files, and the run then warns by name. The help must
+// say that, not that such a batch "is removed" (Codex r5 #2).
+func TestHelpDoesNotPromiseUnconditionalCleanup(t *testing.T) {
+	for _, cmd := range []string{"pair", "receive"} {
+		var stdout, stderr bytes.Buffer
+		if rc := Run([]string{cmd, "-h"}, &stdout, &stderr); rc != 0 {
+			t.Fatalf("%s -h: rc = %d", cmd, rc)
+		}
+		flat := strings.Join(strings.Fields(stdout.String()), " ")
+		if !strings.Contains(flat, "if that cleanup cannot remove something, a warning names what may be left") {
+			t.Errorf("%s -h does not say a failed cleanup is reported", cmd)
+		}
+		if !strings.Contains(flat, `hidden ".relayium-partial-*" entries may be left`) ||
+			!strings.Contains(flat, "inspected and deleted by hand, after checking their contents") ||
+			!strings.Contains(flat, "folders created for it are left in place") {
+			t.Errorf("%s -h does not explain crash leftovers and left folders", cmd)
+		}
+		if strings.Contains(flat, "safe to") {
+			t.Errorf("%s -h calls the leftovers safe to delete (they can hold another program's file)", cmd)
+		}
+		for _, banned := range []string{"does not complete is removed", "is removed, never reported saved"} {
+			if strings.Contains(flat, banned) {
+				t.Errorf("%s -h promises removal (%q)", cmd, banned)
+			}
+		}
 	}
 }

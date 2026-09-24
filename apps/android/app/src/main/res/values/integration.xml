@@ -55,7 +55,11 @@
     <string name="share_destination_title">Where should it go?</string>
     <string name="share_to_session">Send on the current transfer</string>
     <string name="share_text_to_draft">Put it in the message box</string>
-    <string name="share_to_cloud">Upload to your storage</string>
+    <!-- A32 D2: storage STAGES the share; the upload still needs the user's
+         Upload press on Cloud, where retention and burn-after-read live. -->
+    <string name="share_to_cloud">Prepare an upload to your storage</string>
+    <string name="share_to_cloud_note">Opens Cloud with these selected. Nothing is uploaded until you choose how long to keep them and tap Upload.</string>
+    <string name="share_cloud_busy">Cloud is busy with another upload or is showing a link — finish there first. This stays here.</string>
     <string name="share_to_inbox">Send to one of your devices</string>
     <string name="share_needs_session">Connect to a device first, then come back — this stays here.</string>
     <string name="share_needs_account">Sign in first — this stays here while you do.</string>

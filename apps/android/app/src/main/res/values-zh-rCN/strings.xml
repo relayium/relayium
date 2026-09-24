@@ -20,7 +20,20 @@
     <string name="status_connected">已连接</string>
     <string name="status_verification_code">验证码 %1$s</string>
     <string name="status_verification_hint">可选。只有对方开启了验证，它才会显示这六位数字；显示时两边应当一致。</string>
-    <string name="status_verification_show">显示校验码</string>
+    <string name="status_verification_show">显示验证码</string>
+
+    <string name="verify_toggle">与对方设备核对验证码</string>
+    <string name="verify_toggle_detail">默认关闭。开启后，两台设备会显示相同的六位数字，核对之前不会传输任何内容。</string>
+    <string name="verify_toggle_locked">将用于下一次连接。本次连接结束后可以更改。</string>
+    <string name="verify_how_it_works">验证码是怎么回事</string>
+    <string name="verify_explain_what">开启后，每条新连接在发送或接收任何内容之前都会停下来，等你与对方设备核对这个六位验证码（念出来或并排对照）。核对它可以发现被替换的连接，但只有真的有人去核对才起作用。它不是你输入的配对码。</string>
+    <string name="verify_explain_encryption">这只改变哪些操作要等你确认，从不改变加密本身：密钥在这台手机上生成、绝不发送给 Relayium，中继只承载密文，被篡改的握手一定会失败。</string>
+    <string name="verify_compare_title">核对这串验证码</string>
+    <string name="verify_compare_body">确认对方设备显示的是同样的六位数字。你回答之前，这条连接不会发送或接收任何内容。如果对方没有显示验证码，请在那台设备上也开启验证。</string>
+    <string name="verify_matches">一致</string>
+    <string name="verify_differs">不一致</string>
+    <string name="verify_holding">文件已准备好，确认之前不会发出去。</string>
+    <string name="error_verification_rejected">验证码不一致，连接已结束，没有发送任何内容。请重新连接；如果验证码仍然不一致，请不要继续。</string>
     <string name="relay_note_quota">此账户本月的中继流量已用尽，跨网络会话只有在两台设备能直连时才连得上。下载链接仍然可用。</string>
     <string name="relay_note_unverified">验证邮箱后才能使用跨网络中继。在此之前，只有两台设备能直连时才连得上。</string>
     <string name="relay_note_none">这次会话没有可用的中继，只有两台设备能直连时才连得上。</string>
@@ -184,12 +197,21 @@
     <string name="account_back_to_signin">返回登录</string>
 
     <string name="account_frozen_title">该账户已排入删除计划</string>
-    <string name="account_frozen_body">它将在 %1$s 之后被永久删除，恢复之前无法登录。请使用申请删除时邮件中的恢复链接。</string>
+    <string name="account_frozen_body">它将在 %1$s 之后被永久删除，恢复之前无法登录。请使用确认删除后邮件中的恢复链接。</string>
 
     <string name="account_methods_label">登录方式</string>
     <string name="account_refresh">刷新</string>
     <string name="account_sign_out">退出登录</string>
     <string name="account_retry">重试</string>
+    <string name="account_delete_title">删除账户</string>
+    <string name="account_delete_body">删除账户从一封邮件开始：Relayium 会向 %1$s 发送确认链接。在打开该链接并确认之前，不会删除任何内容。</string>
+    <string name="account_delete_action">删除账户…</string>
+    <string name="account_delete_confirm_title">要删除这个 Relayium 账户吗？</string>
+    <string name="account_delete_confirm_body">Relayium 会通过邮件向 %1$s 发送确认链接。链接一小时内有效；在你打开它并在 relayium.com 上确认之前，不会删除任何内容。确认之后会撤销该账户的登录会话和设备访问权限，抹除服务器上存储的文件和数据，并安排在宽限期结束后永久删除账户。宽限期内，在 relayium.com 重新登录即可恢复账户。删除账户不会取消通过 App Store 购买的订阅；请前往 Apple 管理该订阅。</string>
+    <string name="account_delete_confirm_action">发送确认邮件</string>
+    <string name="account_delete_requesting">正在请求确认邮件…</string>
+    <string name="account_delete_requested">已提交请求。在打开该链接并确认之前，不会删除任何内容。如果 %1$s 一直收不到邮件，请查看垃圾邮件文件夹后再试一次。</string>
+    <string name="account_delete_failed">确认邮件没能请求成功。目前没有删除任何内容。</string>
     <string name="account_stale">这些数据刚才没能刷新，可能不是最新的。</string>
     <string name="account_not_persisted">你已登录，但本机无法保存登录凭据——关闭应用后需要重新登录。</string>
     <string name="account_unavailable">你已登录，但账户信息未能加载。</string>
@@ -412,7 +434,7 @@
     <string name="nearby_connecting_to">正在连接 %1$s…</string>
     <string name="nearby_cannot_link">这台设备使用的是较旧版本的 Relayium。它仍然可以接收，但不支持本应用能发送的全部内容。</string>
     <string name="nearby_incoming_title">%1$s 请求连接</string>
-    <string name="nearby_incoming_detail">只有在你认识这台设备时才接受。传输开始前，你还需要和它核对一组六位数字。</string>
+    <string name="nearby_incoming_detail">只有在你认识这台设备时才接受。开启“与对方设备核对验证码”后，传输开始前你会先和它核对一组六位数字。</string>
     <string name="nearby_accept">接受</string>
     <string name="nearby_decline">拒绝</string>
     <string name="nearby_busy">请先完成当前传输，再开始“附近”。</string>

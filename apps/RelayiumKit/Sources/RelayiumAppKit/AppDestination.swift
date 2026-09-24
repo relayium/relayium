@@ -54,32 +54,6 @@ public enum AppRouting {
         }
     }
 
-    /// Reconcile a macOS inbound-session publication with the surface that may
-    /// present it.
-    ///
-    /// NearbyReceiveModel and the pairing-code panes share the same realtime
-    /// session models. An outbound pairing-code session therefore makes those
-    /// models busy too; even if a stale or incorrect inbound publication
-    /// arrives, it must not move the window away from the surface that already
-    /// owns the session. Claim first, navigate only after that claim succeeds.
-    ///
-    /// This overload keeps macOS's one TransferPresence.mode authority. iOS
-    /// uses the overload below because its picker state lives in
-    /// DirectModeSelection.
-    @MainActor
-    @discardableResult
-    public static func claimIncoming(_ kind: NearbyReceiveKind,
-                                     peerLabel: String? = nil,
-                                     presence: TransferPresence,
-                                     navigation: AppNavigationModel) -> Bool {
-        let destination = destination(forIncoming: kind)
-        let mode: TransferMode = kind == .file ? .files : .text
-        guard presence.beginSession(destination, mode: mode,
-                                    peerLabel: peerLabel) else { return false }
-        navigation.select(destination)
-        return true
-    }
-
     /// Put an already-published macOS inbound session back on screen.
     ///
     /// This is reconstruction, not admission: a closed unique window can be
@@ -140,45 +114,6 @@ public enum AppRouting {
         case .nearby, .pairingCode, .storedSend,
              .storedReceive, .deviceInbox, .account: return .storedSend
         }
-    }
-
-    /// Everything an unsolicited session must settle **synchronously**, in one
-    /// call, before its responder is built.
-    ///
-    /// `NearbyReceiveModel` admits an offer on the socket's own delivery queue
-    /// and then builds the responder across an `await`. Three separate writes in
-    /// a closure at the call site would be three chances for a later edit to
-    /// reorder one of them past that await — and any of them landing late is a
-    /// live session on a surface nobody is looking at, with the picker that
-    /// would fix it already locked because a model is busy.
-    ///
-    /// The three answers are one decision, so they are one function:
-    ///
-    ///  - **who draws it** — refused if any surface already owns a session,
-    ///    including Nearby itself. The latter closes the small window after an
-    ///    outbound tap has claimed Nearby but before its async model has become
-    ///    busy. Nothing at all moves on refusal, because a half-applied claim
-    ///    would navigate away from a transfer to a tab that will not draw one;
-    ///  - **which half of the picker** — the session's own kind, not the user's
-    ///    choice, which is why `DirectModeSelection.adopt` is unconditional;
-    ///  - **which tab** — last, so the shell arrives at a surface that is
-    ///    already configured.
-    ///
-    /// iOS and macOS both call this from pre-responder admission. A rebuilt
-    /// macOS view reconciles the already-live publication separately; it must
-    /// not make new-session admission idempotent.
-    @MainActor
-    @discardableResult
-    public static func claimIncoming(_ kind: NearbyReceiveKind,
-                                     peerLabel: String? = nil,
-                                     presence: TransferPresence,
-                                     modes: DirectModeSelection,
-                                     navigation: AppNavigationModel) -> Bool {
-        let destination = destination(forIncoming: kind)
-        guard presence.beginSession(destination, peerLabel: peerLabel) else { return false }
-        modes.adopt(forIncoming: kind)
-        navigation.select(destination)
-        return true
     }
 }
 

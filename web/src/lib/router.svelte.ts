@@ -7,7 +7,7 @@
 import { parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 import { clearRoom } from "./room.svelte";
 
-export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "apps" | "device-inbox" | "pricing" | "verify-email" | "reset-password" | "magic-link";
+export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "apps" | "device-inbox" | "pricing" | "verify-email" | "reset-password" | "magic-link" | "account-delete" | "account-reactivate";
 
 /** Path of the LAN / same-network transfer page. It is the site root, so this
  *  constant exists to name it rather than to compute it: copy that links the
@@ -52,11 +52,35 @@ export const RESET_PASSWORD_PATH = "/reset-password";
  *  magicLinkPath in server/account/handlers.go. */
 export const MAGIC_PATH = "/magic-link";
 
+/** Account-deletion confirmation landing. The deletion-request email links
+ *  here with ?token=<t>; the page spends it only on a button press. Must match
+ *  RequestAccountDeletion's link in server/account/deletion.go (router.test.ts
+ *  reads that file). */
+export const ACCOUNT_DELETE_PATH = "/account/delete/confirm";
+
+/** Reactivation landing. The "deletion scheduled" and pre-purge reminder emails
+ *  link here with ?token=<t>. Must match reactivateLink in
+ *  server/account/deletion.go (router.test.ts reads that file). */
+export const ACCOUNT_REACTIVATE_PATH = "/account/reactivate";
+
 export { CROSS_PATH };
+
+/** True for the fragment the server's frozen-account OAuth callbacks redirect
+ *  to: `/#account=pending_deletion&token=<t>` (server/account/oauth.go and
+ *  apple_web.go). That lands on "/", where no page used to read it — the home
+ *  route does not mount the account control — so the reactivate offer was
+ *  silently lost. It now opens the reactivation page, which reads and scrubs
+ *  the fragment. */
+export function isReactivateFragment(hash: string): boolean {
+  if (!hash.startsWith("#")) return false;
+  const params = new URLSearchParams(hash.slice(1));
+  return params.get("account") === "pending_deletion" && !!params.get("token");
+}
 
 /** Pure mapping from a location to a route. Safe to unit-test without a DOM. */
 export function routeFromLocation(pathname: string, hash: string): Route {
   if (downloadId(pathname)) return "download";
+  if (isReactivateFragment(hash)) return "account-reactivate";
   if (parseCodeParam(hash)) return "cross";
   if (pathname === CROSS_PATH) return "cross";
   if (pathname === OFFLINE_PATH) return "offline";
@@ -68,6 +92,8 @@ export function routeFromLocation(pathname: string, hash: string): Route {
   if (pathname === VERIFY_EMAIL_PATH) return "verify-email";
   if (pathname === RESET_PASSWORD_PATH) return "reset-password";
   if (pathname === MAGIC_PATH) return "magic-link";
+  if (pathname === ACCOUNT_DELETE_PATH) return "account-delete";
+  if (pathname === ACCOUNT_REACTIVATE_PATH) return "account-reactivate";
   return "lan";
 }
 
@@ -164,6 +190,8 @@ function commitNavigation(r: Route, hash: string): void {
     : r === "verify-email" ? VERIFY_EMAIL_PATH
     : r === "reset-password" ? RESET_PASSWORD_PATH
     : r === "magic-link" ? MAGIC_PATH
+    : r === "account-delete" ? ACCOUNT_DELETE_PATH
+    : r === "account-reactivate" ? ACCOUNT_REACTIVATE_PATH
     : LAN_PATH;
   clearRoom(); // leaving a 2-peer code room rebinds the socket via App's effect
   history.pushState({}, "", pathname + hash);

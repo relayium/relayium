@@ -1818,6 +1818,16 @@ with matching `-turn-secret` / `-turn-urls`.
 
 ## Cross-network relay-byte metering (②b-2)
 
+> **Retired — do not run steps 2-3.** The coturn→Redis ingest behind
+> `-redis-addr` is disabled: it keyed the usage ledger by coturn's session id,
+> which restarts from zero on every coturn restart and is shared across coturn
+> hosts, so a reused id billed one account for another's relay bytes. Setting
+> `-redis-addr` now starts no worker, no Redis subscription and no watchdog; it
+> logs one warning line and coturn relay traffic is not metered. The automated
+> guard is `server/redis_metering_guard_test.go`. Step 1 still applies, and
+> step 1 with `-redis-addr` set must show the same result plus that warning. The
+> text below is kept as history until a re-keyed ingest (F02) replaces it.
+
 Metering is now **anonymous**: ingested relay bytes are recorded as a global total,
 unattributed to any account (realtime relay sessions are authorized by a pairing
 code, not a sign-in). Prerequisites: Redis running; coturn with `redis-statsdb=...`
@@ -2629,3 +2639,14 @@ Manual smoke on a device or emulator: join a live code from another device's
 file and one message in each direction, and cancel one incoming batch — the
 folder must not silently keep partial files. `docs/android-development.md`
 carries the build, scope and CI shape.
+
+### SSH retirement (2026-09-24)
+
+Current source disables CLI SSH transfers. The former real-sshd acceptance cases
+are preserved in Git at `d0c414087`; they are no longer current functionality.
+`TestSSHTransfersDisabled` builds the actual CLI and checks push, stdin push,
+pull, sync/watch and remote-helper rejection before filesystem/network work;
+`TestSSHRetirementDoesNotConsumeStdin` proves input bytes remain unread.
+Linux and Windows Go CI require both named tests to pass. Shared stream/receiver
+engine and daemon-direct acceptance remain active. See
+[retirement and reopening](CLI-SSH-RETIREMENT.md) before restoring SSH support.

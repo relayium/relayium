@@ -343,7 +343,7 @@
 "nearby.resumeReceiving" = "恢复接收";
 "nearby.pauseReceiving" = "暂停接收";
 "nearby.pausedBody" = "这台设备当前不监听附近设备。它仍然可以发送，配对码也照常可用。";
-"nearby.listeningBody" = "只要 Relayium 在运行，同一地址下的设备无需事先询问就能向你发送文件或发起消息会话。共用这个公网地址的任何设备都可以尝试 — 如果你不希望这样，请暂停接收。";
+"nearby.listeningBody" = "只要 Relayium 在运行，同一地址下的设备就可以请求连接。在你接受之前不会建立任何连接，它发送的每一批文件也要等你接受。共用这个公网地址的任何设备都可以发出请求 — 如果不希望被询问，请暂停接收。";
 "nearby.savedToDownloads" = "传入的文件会写入你的「下载」文件夹。";
 "nearby.savedToAppFolder" = "传入的文件保存在 Relayium 自己的文件夹里，可以在「文件」App 中打开。";
 "nearby.a11yReceiving" = "附近接收";
@@ -364,7 +364,7 @@
 "nearby.addFilesHint" = "先在上方添加文件或文件夹，然后发送到那台设备。";
 "nearby.textIntent" = "将打开一个端到端加密的消息会话。Relayium 不存储任何内容。";
 "nearby.startMessageSession" = "发起消息会话";
-"nearby.acceptanceNote" = "在 relayium.com 上，对方仍需自行选择传入文件的保存位置；除非任一设备开启了高级验证（见下方），消息会话会在对方那里直接打开而不弹出提示。只要接收处于开启状态，这台设备也以同样的方式接受附近设备的传入传输。";
+"nearby.acceptanceNote" = "在 relayium.com 上，对方仍需自行选择传入文件的保存位置；除非任一设备开启了高级验证（见下方），消息会话会在对方那里直接打开，不再另行提示。对于并非由你发起的连接，这台设备会先征求你的同意；每一批传入文件在保存前也会再次询问你。";
 "nearby.backToDevices" = "返回附近设备";
 "nearby.leavingClearsHistory" = "离开会清除本次会话的本地消息历史。";
 "nearby.deviceGone" = "那台设备已不在附近。请另选一台。";
@@ -378,8 +378,20 @@
 "nearby.iosSafetySummary" = "同一本地网络上运行 Relayium 的设备。共用网络上可能有陌生人的设备，请自己挑选发给谁。";
 "nearby.iosExplain" = "Relayium 只在本设备已加入的本地网络上查找一个 Bonjour 服务 _relayium._tcp，并在开启接收时发布同一个服务。它不扫描地址，不读取该网络的其他任何信息，也不向这个网络之外的任何地方询问附近有谁。只有运行 Relayium 应用的设备才会出现在这里——网页浏览器不会。在咖啡馆、酒店、办公室这类共用网络上，应答的设备可能属于陌生人。";
 "nearby.iosEmptyRoster" = "还没有其他设备。请在对方设备上打开 Relayium 应用，连接到同一个网络，并让它保持打开。";
-"nearby.iosListeningBody" = "只要本应用处于打开状态，这个网络上的设备无需先征求同意就可以向本设备发送文件或发起消息会话。这个网络上任何运行 Relayium 的设备都可以尝试——如果这不是你想要的，请暂停接收。";
-"nearby.iosAcceptanceNote" = "只要你挑选的那台设备正在接收，它就会直接接受你发送的内容，消息会话也会在对方一侧直接打开，除非任一设备开启了下方的高级验证。只要本设备开启接收并且本应用处于打开状态，它也会以同样方式接受来自这个网络的传入传输。";
+"nearby.iosListeningBody" = "只要本应用处于打开状态，这个网络上的设备就可以请求连接。在你接受之前不会建立任何连接，它发送的每一批文件也要等你接受。这个网络上任何运行 Relayium 的设备都可以发出请求——如果不希望被询问，请暂停接收。";
+"nearby.iosAcceptanceNote" = "你挑选的设备如果运行的是新版 Relayium 应用，会先询问对方是否接受你的连接，你发送的每一批文件也要等对方接受；之后消息会话会直接打开，不再另行提示，除非任一设备开启了下方的高级验证。只要本设备开启接收并且本应用处于打开状态，它也会以同样方式在接受连接前先询问你。";
+/* A23-A25: an unrequested nearby connection asks first. */
+"nearby.incomingTitle" = "%@ 请求连接";
+"nearby.incomingDetail" = "只有在你认识这台设备时才接受。显示的名称由对方设备自行提供，并未经过验证。它发送的每一批文件仍需你接受。";
+"nearby.incomingDiscardsText" = "接受后，本页仍保留的会话记录和未发送的文字将被清除。拒绝则会保留它们。";
+"nearby.incomingAccept" = "接受";
+"nearby.incomingDecline" = "拒绝";
+/* End A23-A25. */
+/* A32: files the OS handed over wait instead of displacing a result or a session. */
+"storedSend.filesWaiting" = "有文件正在等待以链接发送。";
+"storedSend.filesWaitingShow" = "查看";
+"storedSend.filesWaitingNext" = "还有文件在等待，开始下一次发送时会加入。";
+/* End A32. */
 "nearby.iosReconnecting" = "与本地网络的连接已断开，正在重新连接…";
 
 /* MARK: 拖放区、选择器、接收结果、二维码 */
@@ -794,7 +806,6 @@
 "link.interrupted" = "Relayium 离开了屏幕，连接已结束。它只能在两台设备都打开应用时运行。对话已丢失（从未被保存到任何地方），未接收完的内容也已删除。";
 "link.connectToDevice" = "连接";
 "link.connectToDeviceHint" = "建立一条加密连接。可以发送消息，也可以发送任意多个文件或文件夹，无需重新连接。";
-"link.connectCarriesStagedFiles" = "你选择的文件会在核对验证码之后通过这条连接发送。";
 "link.conversationHeading" = "对话";
 "link.conversationEmpty" = "还没有消息。在下方输入即可。";
 "link.savedToAppFolder" = "你接受的文件会保存到「文件」App 中 Relayium 的文件夹。";
@@ -895,6 +906,65 @@
 "help.account.failure" = "本周期的额度用完后，创建配对码和发送链接都会停止工作。同一网络传输，以及用别人创建的配对码连接，都不受影响——两者都不记在你账上。";
 "help.account.recovery" = "等待周期滚动，或更换套餐。无论哪种情况，同一网络传输都照常可用，因为它不经由 Relayium 传输任何字节。";
 
+/* A20-A21 — iOS 五个目的地的帮助（A20），以及设备收件箱已收文件的
+   打开 / 分享 / 存储到「文件」（A21）。 */
+
+"help.ios.lan.purpose" = "向同一本地网络中的设备发送文件、文件夹或消息。不需要账户，服务器上也不会留下任何内容。";
+"help.ios.lan.step1" = "在两台设备上打开 Relayium，连接同一个 Wi-Fi 或本地网络；iOS 询问时，允许访问本地网络。";
+"help.ios.lan.step2" = "从列表中选择另一台设备——Relayium 从不替你选——然后连接，发送文件或消息。";
+"help.ios.lan.step3" = "若已开启高级验证，请先确认两边屏幕显示相同的代码，再发送任何内容。";
+"help.ios.lan.boundary" = "设备只通过这个本地网络上的 Bonjour 互相发现，不会去问 Relayium 的服务器附近有谁。连接在两台设备之间建立并加密，从不经过 Relayium 的中继——所以不占用你的套餐。共享网络中可能有陌生人，发送前请核对名称。";
+"help.ios.lan.where" = "有其他设备请求连接时，Relayium 会显示它的名称，只有你点“接受”后才会连接；之后它发来的每一批文件，也都会等你点“接受”。收到的文件保存在「文件」App 的 Relayium/Received 文件夹中。旧版本的 Relayium 无法向这台设备发送。消息只留在这两台设备上，连接结束即消失。";
+"help.ios.lan.failure" = "另一台设备不在列表里。常见原因：Relayium 的本地网络访问已关闭、其中一台设备连着访客网络或 VPN、路由器隔离了设备，或者另一台设备上没有打开 Relayium。iPhone 和 iPad 上的 Relayium 只在打开时接收。";
+"help.ios.lan.recovery" = "在“设置 › 隐私与安全性 › 本地网络”中打开 Relayium，关闭 VPN，加入同一个网络，并在两台设备上都保持 Relayium 打开。若仍然互相看不到，改用“跨网络”界面的配对码。";
+
+"help.ios.cross.purpose" = "用六位配对码连接任何地方的设备。两台设备不必在同一网络。";
+"help.ios.cross.step1" = "创建配对码，然后把配对码或旁边的链接交给对方。";
+"help.ios.cross.step2" = "在另一台设备的 Relayium 中输入配对码，或打开链接。";
+"help.ios.cross.step3" = "连接后，就在这一条连接上双向发送文件、文件夹和消息。若已开启验证，请先确认两边屏幕显示相同的代码。";
+"help.ios.cross.boundary" = "文件在两台设备之间加密，Relayium 始终没有密钥。创建配对码需要账户，因为连接可能由 Relayium 的中继承载，这些流量记在创建配对码的人账上。加入别人创建的配对码不需要账户。";
+"help.ios.cross.where" = "你接受的文件保存在「文件」App 的 Relayium/Received 文件夹中。消息只留在这两台设备上，连接结束即丢弃。这条路发送的内容不会存储在 Relayium 的服务器上。";
+"help.ios.cross.failure" = "配对码只有几分钟有效期；输错或过期时，对方会被告知配对码无效。连接还需要两台设备都打开 Relayium：App 一离开屏幕，连接就无法继续。";
+"help.ios.cross.recovery" = "新建一个配对码交给对方，并在两台设备上都让 Relayium 留在屏幕上，直到传输完成。内容较大时，改用“发送”——对方可以稍后再取。";
+
+"help.ios.storedSend.purpose" = "把加密后的文件上传一次，分享一个无论这台设备是否开着都能用的链接。";
+"help.ios.storedSend.step1" = "登录，选择文件、文件夹、照片或视频，并决定链接的有效时长。";
+"help.ios.storedSend.step2" = "Relayium 会先在这台设备上加密所有内容，再上传。上传完成前请保持 App 打开。";
+"help.ios.storedSend.step3" = "分享该链接。打开它所需的密钥就在链接之中，绝不会传到 Relayium。";
+"help.ios.storedSend.boundary" = "在任何内容上传之前，文件就已在这台设备上加密。密钥位于链接中 # 之后的部分，浏览器从不会把这一段发给服务器，所以 Relayium 存的是它读不懂的内容。任何拿到完整链接的人都能打开这些文件，所以请把链接本身当作机密。存储的文件计入你套餐的限额。";
+"help.ios.storedSend.where" = "加密后的文件会留在 Relayium 的服务器上，直到链接过期，或你在“账户”界面删除它们——删除会立即让链接失效。若开启了“首次下载后删除”，第一次下载也会删除它们。";
+"help.ios.storedSend.failure" = "离开 Relayium 会暂停上传——上传从不在后台继续。另外，被缩短、被聊天软件重新包装，或复制时漏掉 # 之后那一段的链接都打不开：缺的是密钥，不是文件。";
+"help.ios.storedSend.recovery" = "打开 Relayium 并点“继续上传”：在那之前文件会保留在这台设备上。从“账户”界面重新复制链接，并通过不会改动它的方式发出去。如果已经过期，就重新发送一次文件。";
+
+"help.ios.inbox.purpose" = "你自己已登录的设备可以把文件和消息直接发到这台设备，你也可以从这里发给它们。";
+"help.ios.inbox.step1" = "在这台设备和你的其他设备上登录同一个账户。";
+"help.ios.inbox.step2" = "选择投递是自动保存，还是先等你接受。";
+"help.ios.inbox.step3" = "打开一台设备，查看你们之间的往来，打开或分享它发来的内容，并给它发送文件或消息。";
+"help.ios.inbox.boundary" = "投递是用这台设备自己的密钥加密的，而那把密钥从不离开本机。Relayium 只是保管加密后的投递直到这台设备取走，既读不到里面的内容，也说不出文件叫什么。";
+"help.ios.inbox.where" = "收到的文件保存在「文件」App 的 Relayium/Received 文件夹中，消息留在这台设备上的对话里。尚未取走的投递会在服务器上等待，直到这台设备取走或它过期。";
+"help.ios.inbox.failure" = "Relayium 关闭、在后台，或你已退出登录时，什么都不会到达。在 iPhone 和 iPad 上，它只在打开时接收，也不会给你发通知。";
+"help.ios.inbox.recovery" = "打开 Relayium 并登录同一个账户，等待中的内容就会到达。如果某个投递停止了，这个界面会说明原因和下一步。";
+
+"help.ios.account.purpose" = "你的套餐和本周期的用量、已登录你账户的设备，以及你存储的文件。";
+"help.ios.account.step1" = "创建账户或登录——发送链接、创建配对码和设备收件箱都需要账户。";
+"help.ios.account.step2" = "查看你所用的套餐，以及本周期已用掉多少存储空间和流量。";
+"help.ios.account.step3" = "查看已登录你账户的设备和你存储的文件，并可撤销或删除其中任意一项。";
+"help.ios.account.boundary" = "Relayium 保存的是你的邮箱地址、你用的套餐，以及你存储和传输了多少字节。它从不保存你文件的密钥，所以这个界面上的任何内容——以及 Relayium 数据库里的任何内容——都打不开它们。";
+"help.ios.account.where" = "删除已存储的文件会把它从 Relayium 的服务器上移除，并立刻让它的链接失效。撤销某台设备只会结束那台设备的会话，它已经收到的文件仍留在它上面。";
+"help.ios.account.failure" = "本周期的额度用完后，创建配对码和发送链接都会停止工作。同一网络传输，以及加入别人创建的配对码，都不受影响——两者都不记在你账上。";
+"help.ios.account.recovery" = "等待周期重置，或更换套餐。无论哪种情况，同一网络传输都照常可用，因为它的字节都不经过 Relayium。";
+
+"inbox.receivedOpen" = "打开";
+"inbox.receivedShare" = "分享";
+"inbox.receivedSave" = "存储到「文件」";
+"inbox.receivedOpenLabel" = "打开 %@";
+"inbox.receivedShareLabel" = "分享 %@";
+"inbox.receivedSaveLabel" = "将 %@ 存储到「文件」";
+"inbox.receivedAllMissing" = "这些文件已不在这台设备上，可能已在「文件」App 中被删除或移走。如果还需要，请让发送方重新发送。";
+"inbox.receivedSomeMissing" = "其中一些文件已不在这台设备上。“打开”“分享”和“存储到「文件」”只会使用仍在的那些。";
+"inbox.receivedFolderNote" = "这些文件是放在一个文件夹里送达的。“分享”和“存储到「文件」”交出的是文件本身；文件夹仍留在「文件」App 的 %@ 中。";
+"inbox.receivedUnavailable" = "这些文件现在无法打开。请确认它们仍在「文件」App 的 %@ 中，然后重试。";
+
 /* In-app subscription (Mac App Store build). The purchase surface the App Store
    build renders instead of the direct build's link to the website. Prices are
    never written here: the store's own localized price is substituted in. */
@@ -977,6 +1047,8 @@
 "send.messageLabel" = "要发送的消息";
 "send.messagePlaceholder" = "输入要发送到这台设备的消息";
 "send.messageSize" = "%1$@ / %2$@";
+"send.messageRemaining" = "剩余 %@";
+"send.messageOverLimit" = "超出上限 %@。请缩短消息，或改用文件发送。";
 "send.messageAction" = "发送消息";
 "send.caveatNeedsApproval" = "需要有人在那台设备上确认接收";
 "send.caveatDirectoryNotReady" = "它的接收文件夹需要处理，文件可能会在那里等待";
@@ -1088,3 +1160,26 @@
 "inbox.checkNothingNew" = "暂无新内容。发送方上传完成后，投递才会出现在这里。";
 "inbox.checkDone" = "检查完成。";
 "inbox.checkFailed" = "检查未完成，原因见上方状态。";
+
+/* MARK: A17-A19 iOS browser sign-in, password reset request, version support */
+"login.browserHint" = "账户没有设置密码？请在 relayium.com 登录，并在那里批准这台设备。";
+"login.browserWaiting" = "正在等待你在浏览器中批准这台设备…";
+"login.forgotPassword" = "忘记密码？";
+"login.resetTitle" = "重设密码";
+"login.resetBody" = "输入你用于登录的邮箱地址。我们会发送一个链接，打开后在 relayium.com 上设置新密码。";
+"login.resetSend" = "发送重设链接";
+"login.resetSending" = "正在发送…";
+"login.resetRequested" = "如果 %@ 对应一个账户，重设链接已在发送途中。请在任意设备上打开它并设置新密码，然后回到这里用新密码登录。每个链接只能使用一次且会过期；如果链接已失效，请在这里重新申请。";
+"version.title" = "应用版本";
+"version.current" = "版本 %@（%@）";
+"version.channelAppStore" = "通过 App Store 安装";
+"version.channelTestFlight" = "通过 TestFlight 安装";
+"version.channelDevelopment" = "开发版本——此处不提供更新";
+"version.stateCurrent" = "此安装方式目前没有更新的版本。";
+"version.stateAvailable" = "版本 %@ 已可更新。";
+"version.stateRecommended" = "建议更新到版本 %@。";
+"version.stateRequired" = "此版本已不再受支持。请更新到版本 %@，以便继续与其他 Relayium 应用正常传输。";
+"version.stateUnknown" = "此版本无法读取自身版本号，因此不提供更新。";
+"version.updateAppStore" = "在 App Store 中更新";
+"version.updateTestFlight" = "打开 TestFlight";
+"version.testFlightUnavailable" = "无法打开 TestFlight。请先从 App Store 安装 TestFlight，然后重试。";

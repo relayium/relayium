@@ -587,6 +587,9 @@ export function createRelayRenewal(deps: RelayRenewalDeps): RelayRenewal {
 
   // ── sending ───────────────────────────────────────────────────────────────
 
+  /** The last queued send per link. See `emit`. */
+  const sendTail = new WeakMap<MixedPeerLink, Promise<void>>();
+
   /**
    * Sign and send one renewal signal.
    *
@@ -598,23 +601,45 @@ export function createRelayRenewal(deps: RelayRenewalDeps): RelayRenewal {
    * await the state can move across. It is a predicate rather than an attempt
    * reference so that a committed epoch can keep trickling candidates under it
    * (see `Committed`) while an abandoned attempt still cannot emit anything.
+   *
+   * **Sent in the order emitted, per link.** The mirror of the inbound chain
+   * (see `signalChain`): two signals emitted back to back — `prepare` and then
+   * `ready` — would otherwise go out in whichever order their HMACs finish,
+   * which WebCrypto does not promise. A `ready` that overtakes its `prepare`
+   * reaches a peer with no attempt yet, is dropped as unroutable and never
+   * resent, and an R4 repair then waits out the whole epoch. A server round
+   * trip between the two makes that unlikely; it does not make it impossible.
+   *
+   * So signing starts at once, in parallel, and only the SEND waits its turn
+   * behind the previous emission on the same link. Every fence is read at that
+   * turn, after both awaits. The queue is keyed by link object: a replacement
+   * link starts with its own, so a signature stuck on the old one cannot hold
+   * it up, and whatever the old one still had queued fails `link !== live`.
+   * A turn never rejects — a failed signature or send is logged and costs only
+   * its own signal — so one failure cannot stall the rest of the queue.
    */
   function emit(signal: RenewSignal, alive: () => boolean) {
     const live = link;
     if (!live) return;
     const peerId = live.peerId;
     const payload = renewSignalPayload(signal, deps.selfId(), peerId);
-    void (async () => {
-      let auth: string;
-      try {
-        auth = await signRenewSignal(live, payload);
-      } catch (err) {
+    const signed = signRenewSignal(live, payload).then(
+      (auth): string | null => auth,
+      (err) => {
         console.error("relayium renew sign error", err);
-        return;
+        return null;
+      },
+    );
+    const previous = sendTail.get(live) ?? Promise.resolve();
+    const turn = previous.then(() => signed).then((auth) => {
+      try {
+        if (auth === null || stopped || link !== live || !alive()) return;
+        deps.sendSignal(peerId, { link: true, renew: signal, auth });
+      } catch (err) {
+        console.error("relayium renew send error", err);
       }
-      if (stopped || link !== live || !alive()) return;
-      deps.sendSignal(peerId, { link: true, renew: signal, auth });
-    })();
+    });
+    sendTail.set(live, turn);
   }
 
   /** An abort is the one signal worth sending for an attempt that has already

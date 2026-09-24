@@ -155,6 +155,51 @@ class AccountClientTest {
         assertEquals(AccountFailure.Kind.NETWORK, failureOf(client(offline).logout("rlm_cli_x")))
     }
 
+    // ── account deletion request ────────────────────────────────────────────
+
+    /** A31 (c). The request carries the bearer and NOTHING else: the server reads
+     *  the address off the account, so no body can aim the email elsewhere. */
+    @Test
+    fun `a deletion request is a bodiless bearer POST to the documented path`() = runBlocking {
+        val recorded = mutableListOf<AccountRequest>()
+        val t = object : AccountTransport {
+            override suspend fun send(request: AccountRequest): TransportResult {
+                recorded += request
+                return TransportResult.Answered(AccountResponse(200, """{"status":"sent"}"""))
+            }
+        }
+        assertTrue(client(t).requestAccountDeletion("rlm_cli_x").isSuccess)
+        val request = recorded.single()
+        assertEquals("POST", request.method)
+        assertEquals("api/account/delete/request", request.path)
+        assertEquals("rlm_cli_x", request.bearer)
+        assertNull("no body: the address is the server's to read", request.json)
+    }
+
+    @Test
+    fun `a deletion request maps each documented answer to its own meaning`() = runBlocking {
+        fun answered(status: Int) = FakeTransport().answer("api/account/delete/request", status, "")
+        assertTrue(client(answered(200)).requestAccountDeletion("rlm_cli_x").isSuccess)
+        assertEquals(
+            AccountFailure.Kind.INVALID_CREDENTIALS,
+            failureOf(client(answered(401)).requestAccountDeletion("rlm_cli_x")),
+        )
+        assertEquals(
+            AccountFailure.Kind.RATE_LIMITED,
+            failureOf(client(answered(429)).requestAccountDeletion("rlm_cli_x")),
+        )
+        assertEquals(
+            AccountFailure.Kind.SERVER,
+            failureOf(client(answered(500)).requestAccountDeletion("rlm_cli_x")),
+        )
+        val offline = FakeTransport().fail("api/account/delete/request", TransportResult.Failure.NETWORK)
+        assertEquals(AccountFailure.Kind.NETWORK, failureOf(client(offline).requestAccountDeletion("rlm_cli_x")))
+
+        val none = FakeTransport()
+        assertEquals(AccountFailure.Kind.NOT_SIGNED_IN, failureOf(client(none).requestAccountDeletion("")))
+        assertTrue("an empty bearer costs no round trip", none.calls.isEmpty())
+    }
+
     // ── usage and devices ───────────────────────────────────────────────────
 
     @Test

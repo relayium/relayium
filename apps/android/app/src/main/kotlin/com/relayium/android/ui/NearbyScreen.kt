@@ -64,6 +64,7 @@ internal fun NearbyScreen(
 
     if (!nearby.active) {
         NearbyStartCard(viewModel)
+        VerificationSettingCard(viewModel, locked = false)
         return
     }
 
@@ -247,6 +248,14 @@ internal fun NearbyScreen(
     SecondaryAction(
         label = stringResource(R.string.nearby_stop),
         onClick = viewModel::stopNearby,
+    )
+
+    // Locked while a connection to a device is being made: the controller reads
+    // the preference when that link becomes ready.
+    VerificationSettingCard(
+        viewModel,
+        locked = state.phase == TransferController.Phase.CONNECTING ||
+            state.phase == TransferController.Phase.CONNECTED,
     )
 }
 

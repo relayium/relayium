@@ -92,9 +92,28 @@ class MainActivity : ComponentActivity() {
                 RelayiumApp(viewModel)
             }
         }
-        if (savedInstanceState == null) {
+        if (routesLaunchIntent(restored = savedInstanceState != null, flags = intent?.flags ?: 0)) {
             viewModel.deliverIntent(intent)
         }
+    }
+
+    companion object {
+        /**
+         * Whether `onCreate` should route the intent the Activity was created
+         * with. Two cases must NOT, because in both the intent is not new:
+         *
+         *  - a recreation (`savedInstanceState != null`), see the class doc;
+         *  - a relaunch from Recents (A32 D3). A share that cold-launched this
+         *    `singleTask` Activity became its task's BASE intent. After the user
+         *    discarded it and backed out — which finishes the Activity, since a
+         *    SEND-rooted task is not a launcher root — opening the task from
+         *    Recents creates the Activity afresh with that same base intent and
+         *    `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`, and no saved state. Routing
+         *    it staged the discarded share again (reproduced on an API 36
+         *    emulator, 2026-09-23).
+         */
+        internal fun routesLaunchIntent(restored: Boolean, flags: Int): Boolean =
+            !restored && (flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0
     }
 
     /** `launchMode=singleTask`: a link tapped, or a share sent, while the app is

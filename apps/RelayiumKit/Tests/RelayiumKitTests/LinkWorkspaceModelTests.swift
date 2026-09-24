@@ -148,7 +148,8 @@ final class LinkWorkspaceModelTests: XCTestCase {
                      // before this seam still drives the behaviour it was
                      // written for — and a flipped default fails rather than
                      // quietly re-scoping the whole file.
-                     pendingMessages: LinkPendingMessagePolicy = .replaceWaiting) -> Rig {
+                     pendingMessages: LinkPendingMessagePolicy = .replaceWaiting,
+                     scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler()) -> Rig {
         let capabilities = PeerCapabilityRegistry(linkRoomActive: { roomActive })
         let channel = FakeWebSocketChannel()
         let signaling = SignalingClient(channel: channel, name: "self")
@@ -163,6 +164,7 @@ final class LinkWorkspaceModelTests: XCTestCase {
             requiresVerification: { requiresVerification },
             iceClient: nil,
             pendingMessages: pendingMessages,
+            scheduler: scheduler,
             assemble: { signaling, peerId, role, iceServers, relayOnly, generation,
                         receiveDirectory, admission, initialSignal, _ in
                 let transport = WorkspaceTransport()
@@ -987,51 +989,331 @@ final class LinkWorkspaceModelTests: XCTestCase {
         XCTAssertEqual(rig.transports.count, 1)
     }
 
-    /// The app is the authority on whether an unsolicited link may take the
-    /// Workspace, and a refusal ends it at once rather than leaving the room
-    /// connecting to a link nothing will render.
-    func testAnUnsolicitedLinkTheAppRefusesIsEndedImmediately() async {
-        // This side is "zzz" and the peer is "aaa", so the peer is the smaller
-        // id and therefore the one allowed to offer. The role rule is not a
-        // preference: two offers into one pair of lanes is what it removes.
-        let rig = rig(selfId: "zzz")
-        rig.model.shouldAcceptLink = { _ in false }
-        announceLink(rig, "aaa")
+    // MARK: - 8a. an unrequested link asks first (A23)
 
-        // An offer the room routes: exactly what `LinkRoomRouter` consumes and
-        // `handOff` hands to the assembly.
-        let offer = linkSDPSignal(kind: "offer", sdp: "v=0", commit: nil,
-                                  caps: [TEXT_CAPABILITY, LINK_CAPABILITY])
-        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: offer))
-        await settle()
-
-        XCTAssertEqual(rig.transports.count, 1, "the offer really was routed and assembled")
-        XCTAssertEqual(rig.model.connection, .ended(.unavailable))
-        XCTAssertTrue(rig.transports.allSatisfy { $0.isClosed },
-                      "a refused link must not be left running")
+    /// A link offer from the peer, exactly as the room routes one.
+    private func peerOffer() -> JSONValue {
+        linkSDPSignal(kind: "offer", sdp: "v=0", commit: nil,
+                      caps: [TEXT_CAPABILITY, LINK_CAPABILITY])
     }
 
-    /// The mirror image, and the one that has to keep working: an unsolicited
-    /// link the app ACCEPTS becomes the Workspace's session, labelled from the
-    /// same roster the user was looking at.
-    func testAnUnsolicitedLinkTheAppAcceptsBecomesTheSession() async {
+    private func peerCandidate(_ id: String) -> JSONValue {
+        .object(["link": .bool(true),
+                 "ice": .object(["candidate": .string("candidate:\(id) 1 udp 1 10.0.0.1 1 typ host"),
+                                 "sdpMid": .string("0"),
+                                 "sdpMLineIndex": .number(0)])])
+    }
+
+    /// Every `busy` this side put on the wire, by recipient.
+    private func busied(_ rig: Rig) -> [String] {
+        rig.channel.sent.compactMap { text in
+            guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                  envelope.type == SignalType.signal,
+                  let data = envelope.data, isLinkBusy(data) else { return nil }
+            return envelope.to
+        }
+    }
+
+    private func requested(_ rig: Rig) -> [String] {
+        rig.channel.sent.compactMap { text in
+            guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                  envelope.type == SignalType.signal,
+                  let data = envelope.data, isLinkRequest(data) else { return nil }
+            return envelope.to
+        }
+    }
+
+    private func receivedFiles() -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+    }
+
+    /// The default, stated: a composition that says nothing prompts.
+    func testTheModelPromptsUnlessACompositionDeclaresOtherwise() {
+        XCTAssertEqual(rig().model.inboundConsent, .prompt)
+    }
+
+    /// **Nothing happens for an unrequested link until the user says yes** —
+    /// no claim, no transport, no surface question. The prompt names the peer
+    /// the way the roster did.
+    func testAnUnrequestedOfferRaisesAPromptAndBuildsNothing() async {
         let rig = rig(selfId: "zzz")
+        var surfaceAsked = 0
+        rig.model.shouldAcceptLink = { _ in surfaceAsked += 1; return true }
         rig.model.resolvePeerLabel { _ in "Studio Mac" }
-        rig.model.shouldAcceptLink = { _ in true }
         announceLink(rig, "aaa")
 
-        let offer = linkSDPSignal(kind: "offer", sdp: "v=0", commit: nil,
-                                  caps: [TEXT_CAPABILITY, LINK_CAPABILITY])
-        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: offer))
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerCandidate("c1")))
         await settle()
 
+        XCTAssertEqual(rig.model.inboundAsk?.peerId, "aaa")
+        XCTAssertEqual(rig.model.inboundAsk?.peerLabel, "Studio Mac")
+        XCTAssertTrue(rig.transports.isEmpty, "a transport was built before anybody accepted")
+        XCTAssertEqual(surfaceAsked, 0, "the surface was claimed (and navigated) on arrival")
+        XCTAssertEqual(rig.model.connection, .idle)
+        XCTAssertTrue(busied(rig).isEmpty)
+    }
+
+    /// The mirror image, and the one that has to keep working: an ask the user
+    /// ACCEPTS becomes the Workspace's session, labelled from the same roster
+    /// the user was looking at, with the held offer and its candidate replayed
+    /// to the transport in wire order.
+    func testAnAcceptedAskBecomesTheSessionAndReplaysWhatWasHeld() async {
+        let rig = rig(selfId: "zzz")
+        var surfaceAsked: [String] = []
+        rig.model.resolvePeerLabel { _ in "Studio Mac" }
+        rig.model.shouldAcceptLink = { surfaceAsked.append($0); return true }
+        announceLink(rig, "aaa")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerCandidate("c1")))
+        await settle()
+        rig.model.acceptInboundAsk()
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(surfaceAsked, ["aaa"], "the surface is claimed exactly once, at accept")
         XCTAssertEqual(rig.transports.count, 1)
         XCTAssertTrue(rig.model.connection.isActive)
         XCTAssertEqual(rig.model.peerLabel, "Studio Mac")
+        let routed = rig.transports[0].routed.map(\.signal)
+        XCTAssertEqual(routed.count, 2, "the held offer and its candidate reach the transport")
+        XCTAssertEqual(parseSDP(routed.first ?? .null)?.type, "offer")
+        XCTAssertEqual(parseICE(routed.last ?? .null)?.candidate,
+                       "candidate:c1 1 udp 1 10.0.0.1 1 typ host")
 
         rig.transports[0].publish(identity(peerId: "aaa", role: .responder))
         await settle()
         XCTAssertTrue(rig.model.connection.isOpen)
+    }
+
+    /// The app is still the authority on whether the link may take the
+    /// Workspace. A refusal at accept answers `busy` and builds nothing.
+    func testAnAcceptTheAppRefusesAnswersBusyAndBuildsNothing() async {
+        let rig = rig(selfId: "zzz")
+        rig.model.shouldAcceptLink = { _ in false }
+        announceLink(rig, "aaa")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        await settle()
+        rig.model.acceptInboundAsk()
+        await settle()
+
+        XCTAssertTrue(rig.transports.isEmpty)
+        XCTAssertEqual(rig.model.connection, .idle)
+        XCTAssertEqual(busied(rig), ["aaa"])
+    }
+
+    /// **Decline leaves nothing**: no assembly, no file, a `busy` to the peer —
+    /// and the peer's retry of the same ask inside its window is refused
+    /// without asking the user twice.
+    func testDeclineLeavesNothingAndARetryIsNotAskedAgain() async {
+        let rig = rig()   // "aaa": the peer "zzz" can only request
+        announceLink(rig, "zzz")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+        rig.model.declineInboundAsk()
+        await settle()
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk, "the retry of a declined ask was put to the user again")
+        XCTAssertEqual(busied(rig), ["zzz", "zzz"])
+        XCTAssertTrue(rig.transports.isEmpty)
+        XCTAssertEqual(receivedFiles(), [])
+        XCTAssertEqual(rig.model.connection, .idle)
+    }
+
+    /// **Unanswered is not yes.** The deadline answers `busy`, withdraws the
+    /// prompt and builds nothing — and then the peer may ask afresh.
+    func testTimeoutAnswersBusyWithdrawsThePromptAndBuildsNothing() async {
+        let scheduler = FakeLinkScheduler()
+        let rig = rig(scheduler: scheduler)
+        announceLink(rig, "zzz")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+        scheduler.fireAll()
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(busied(rig), ["zzz"])
+        XCTAssertTrue(rig.transports.isEmpty)
+        XCTAssertEqual(receivedFiles(), [])
+
+        // A timeout is not a decline: a genuinely new ask is asked.
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertEqual(rig.model.inboundAsk?.peerId, "zzz")
+    }
+
+    /// **Never preempt.** A live link, or an attempt holding an armed batch,
+    /// meets an unrequested ask with `busy` — no prompt, no second transport,
+    /// and the armed batch still waits for its own peer.
+    func testAnAskDuringALiveOrArmedAttemptIsBusyAndPreemptsNothing() async {
+        let live = rig()
+        _ = await openLink(live)
+        announceLink(live, "yyy")
+        live.channel.fire(Envelope(type: SignalType.signal, from: "yyy", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNil(live.model.inboundAsk)
+        XCTAssertEqual(busied(live), ["yyy"])
+        XCTAssertEqual(live.transports.count, 1)
+        XCTAssertTrue(live.model.connection.isOpen)
+
+        // Armed: this side ("zzz") can only ASK "aaa", and holds a batch for it.
+        let armed = rig(selfId: "zzz")
+        announceLink(armed, "aaa")
+        announceLink(armed, "bbb")
+        XCTAssertTrue(armed.model.connect(peerId: "aaa", peerLabel: "Studio Mac",
+                                          files: [meta("brief.txt", 8)],
+                                          sources: [source("brief.txt", 8)]))
+        armed.channel.fire(Envelope(type: SignalType.signal, from: "bbb", data: peerOffer()))
+        await settle()
+        XCTAssertNil(armed.model.inboundAsk)
+        XCTAssertEqual(busied(armed), ["bbb"])
+        XCTAssertTrue(armed.transports.isEmpty, "the stranger's offer was built")
+        XCTAssertEqual(armed.model.armedFiles.map(\.name), ["brief.txt"])
+        XCTAssertEqual(armed.model.connection, .requesting)
+    }
+
+    /// **Two asks racing a local Connect never cross peers.** Connecting to a
+    /// third device declines the pending prompt; a second ask during that
+    /// attempt is busy; the only transport is for the device the user chose.
+    func testAsksRacingALocalConnectNeverCrossPeers() async {
+        let rig = rig()   // "aaa" offers to everybody
+        announceLink(rig, "yyy")
+        announceLink(rig, "xxx")
+        announceLink(rig, "zzz")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "yyy", data: linkRequestSignal()))
+        await settle()
+        XCTAssertEqual(rig.model.inboundAsk?.peerId, "yyy")
+
+        XCTAssertTrue(rig.model.connect(peerId: "zzz", peerLabel: "Chosen"))
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "xxx", data: linkRequestSignal()))
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(rig.peers, ["zzz"], "a link was built for a device the user did not choose")
+        XCTAssertEqual(Set(busied(rig)), ["yyy", "xxx"])
+        XCTAssertEqual(rig.model.peerLabel, "Chosen")
+    }
+
+    /// Connect to the device that is asking IS the accept: the held offer is
+    /// adopted, and this side does not ask back.
+    func testConnectToTheAskingDeviceAdoptsItsOffer() async {
+        let rig = rig(selfId: "zzz")   // "aaa" offers; this side could only ask
+        announceLink(rig, "aaa")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+
+        XCTAssertTrue(rig.model.connect(peerId: "aaa", peerLabel: "Studio Mac"))
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(rig.peers, ["aaa"])
+        XCTAssertEqual(requested(rig), [], "this side asked back a peer that had already offered")
+        XCTAssertTrue(busied(rig).isEmpty)
+        XCTAssertEqual(parseSDP(rig.transports[0].routed.first?.signal ?? .null)?.type, "offer")
+    }
+
+    /// The peer going away takes its prompt with it, silently.
+    func testThePeerLeavingWithdrawsThePromptWithoutAnswering() async {
+        let rig = rig()
+        announceLink(rig, "zzz")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+
+        rig.model.roomPeerLeft("zzz")
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertTrue(busied(rig).isEmpty)
+        rig.model.acceptInboundAsk()
+        await settle()
+        XCTAssertTrue(rig.transports.isEmpty, "a withdrawn prompt could still be accepted")
+    }
+
+    /// The socket going away takes the prompt with it too: the peer id meant
+    /// something only in the room that is gone.
+    func testLeavingTheRoomWithdrawsThePrompt() async {
+        let rig = rig()
+        announceLink(rig, "zzz")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+
+        rig.model.roomDidDisconnect()
+        XCTAssertNil(rig.model.inboundAsk)
+    }
+
+    /// **Accepting must not silently drop the user's text.** A prompt that can
+    /// replace an ended page says so; Decline keeps the text, Accept is the
+    /// informed choice that clears it.
+    func testAPromptOverAnEndedPageSaysAcceptDiscardsTheTextAndDeclineKeepsIt() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        let first = await openLink(rig)
+        rig.model.draft = "for the first peer"
+        first.hangUp()
+        await settle()
+        guard case .ended = rig.model.connection else { return XCTFail("the link did not end") }
+
+        announceLink(rig, "yyy")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "yyy", data: linkRequestSignal()))
+        await settle()
+        XCTAssertTrue(rig.model.inboundAskDiscardsLocalText,
+                      "the prompt does not warn that accepting clears the ended page's text")
+
+        rig.model.declineInboundAsk()
+        await settle()
+        XCTAssertEqual(rig.model.draft, "for the first peer", "declining lost the text")
+        XCTAssertFalse(rig.model.inboundAskDiscardsLocalText)
+
+        announceLink(rig, "xxx")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "xxx", data: linkRequestSignal()))
+        await settle()
+        XCTAssertTrue(rig.model.inboundAskDiscardsLocalText)
+        rig.model.acceptInboundAsk()
+        await settle()
+        XCTAssertEqual(rig.model.draft, "", "the accepted peer inherited the previous draft")
+        XCTAssertEqual(rig.peers.last, "xxx")
+    }
+
+    /// An empty ended page has nothing to lose, and the prompt says nothing
+    /// about losing it.
+    func testAPromptOverAnEmptyPageDoesNotWarn() async {
+        let rig = rig()
+        announceLink(rig, "zzz")
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "zzz", data: linkRequestSignal()))
+        await settle()
+        XCTAssertNotNil(rig.model.inboundAsk)
+        XCTAssertFalse(rig.model.inboundAskDiscardsLocalText)
+    }
+
+    /// A composition that declares `.automatic` — the headless hosts — admits
+    /// an unrequested link as it always did, still behind the app's gate.
+    func testAnAutomaticCompositionAdmitsWithoutAPrompt() async {
+        let rig = rig(selfId: "zzz")
+        rig.model.inboundConsent = .automatic
+        rig.model.shouldAcceptLink = { _ in false }
+        announceLink(rig, "aaa")
+
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: peerOffer()))
+        await settle()
+
+        XCTAssertNil(rig.model.inboundAsk)
+        XCTAssertEqual(rig.transports.count, 1, "the offer really was routed and assembled")
+        XCTAssertEqual(rig.model.connection, .ended(.unavailable),
+                       "the app's refusal still ends an automatic admission at once")
+        XCTAssertTrue(rig.transports.allSatisfy { $0.isClosed })
     }
 
     /// Connect from the side that can only ASK, with the surface already claimed
@@ -1444,6 +1726,93 @@ extension LinkWorkspaceModelTests {
         XCTAssertEqual(rig.model.draft, "held")
         XCTAssertNil(rig.model.returnedDraft, "a landed message was not consumed")
     }
+
+    /// **Typing is never told the model replaced the draft; the model's own
+    /// replacements always are.**
+    ///
+    /// The iOS composer edits a view buffer, mirrors each edit into `draft`,
+    /// and re-seeds the buffer only when `draftReplacement` moves. Bound to
+    /// `draft` directly, the field lost and reordered keystrokes on iOS 18
+    /// while a batch published on this model (CI run 35877967996). So the
+    /// counter has to hold still for every composer edit — or a re-seed would
+    /// write a lagging copy back over what is being typed — and move for every
+    /// replacement the model makes, or a sent, restored or discarded draft
+    /// would stay on screen.
+    /// **A keystroke publishes nothing, and is still the draft.**
+    ///
+    /// The app root observes this model, so a publishing keystroke re-rendered
+    /// the whole iOS shell around the field being typed in, and on the CI
+    /// iOS 18.5 simulator that scrambled the typed text in two hosted runs
+    /// (35877967996, 35888861444). The mirror must stay silent — and must still
+    /// be what every reader of `draft` sees, or a Leave, a send or an inbound
+    /// prompt would act on stale text.
+    func testMirroringTheComposerPublishesNothingAndIsStillTheDraft() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        var publishes = 0
+        let watch = rig.model.objectWillChange.sink { _ in publishes += 1 }
+        defer { watch.cancel() }
+
+        for text in ["T", "T2b", "T2b-acc", "T2b-acceptance-peer"] {
+            rig.model.mirrorComposerDraft(text)
+        }
+        XCTAssertEqual(publishes, 0, "a keystroke re-renders every observer of the link")
+        XCTAssertEqual(rig.model.draft, "T2b-acceptance-peer")
+        XCTAssertTrue(rig.model.holdsLocalText,
+                      "a mirrored draft is invisible to the exit's confirmation")
+        XCTAssertTrue(rig.model.canSubmitDraft)
+
+        // The model's own writes still publish: macOS binds its editor to
+        // `draft`, and a send has to reach the field.
+        rig.model.draft = "typed on macOS"
+        XCTAssertEqual(publishes, 1, "the ordinary setter stopped publishing")
+        XCTAssertTrue(rig.model.submitDraft())
+        XCTAssertGreaterThan(publishes, 1, "a sent draft never told its observers")
+        XCTAssertEqual(rig.model.draft, "")
+    }
+
+    func testOnlyTheModelsOwnDraftReplacementsAreCounted() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        var seen = rig.model.draftReplacement
+
+        // Composer edits, including clearing the field by hand: never counted.
+        for text in ["T", "T2", "T2b-", "", "again"] {
+            rig.model.draft = text
+            XCTAssertEqual(rig.model.draftReplacement, seen,
+                           "a keystroke counted as a model replacement: \"\(text)\"")
+        }
+
+        // A send the lane took clears the draft, and the field must hear it.
+        XCTAssertTrue(rig.model.submitDraft())
+        XCTAssertEqual(rig.model.draft, "")
+        XCTAssertGreaterThan(rig.model.draftReplacement, seen,
+                             "a sent draft would stay in the field")
+        seen = rig.model.draftReplacement
+
+        // A refused send changes nothing, so it tells the field nothing.
+        rig.model.draft = "second"
+        XCTAssertFalse(rig.model.submitDraft(), "a second message was taken while one waits")
+        XCTAssertEqual(rig.model.draft, "second")
+        XCTAssertEqual(rig.model.draftReplacement, seen,
+                       "a refused send re-seeded the field")
+
+        // A hand-back restored into a free composer.
+        rig.model.leave()
+        await settle()
+        rig.model.draft = ""
+        XCTAssertTrue(rig.model.restoreReturnedDraft())
+        XCTAssertGreaterThan(rig.model.draftReplacement, seen,
+                             "a restored message would never reach the field")
+        seen = rig.model.draftReplacement
+
+        // A confirmed discard.
+        rig.model.leaveDiscardingLocalText()
+        await settle()
+        XCTAssertEqual(rig.model.draft, "")
+        XCTAssertGreaterThan(rig.model.draftReplacement, seen,
+                             "a discarded draft would stay on screen")
+    }
 }
 
 
@@ -1635,5 +2004,176 @@ extension LinkWorkspaceModelTests {
         guard case .ended = rig.model.connection else {
             return XCTFail("the confirmed discard did not end the live link")
         }
+    }
+}
+
+
+// MARK: - A15/A16: the composer transaction both Apple composers now share
+
+extension LinkWorkspaceModelTests {
+
+    /// **A second message cannot silently replace the first while it waits.**
+    ///
+    /// Reproduced against the shipped iOS composition before this fix: default
+    /// `replaceWaiting`, Send gated on `canCompose`, the view clearing its own
+    /// draft after every `send` — "first" then "second", the peer refuses, and
+    /// the lane hands back "second" while "first" exists nowhere. Under the
+    /// composition iOS now builds (`refuseWhileWaiting` + `submitDraft`) both
+    /// texts survive: the first is held and handed back, the second never
+    /// leaves the field.
+    func testASecondSubmitWhileTheFirstWaitsKeepsBothTexts() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+
+        rig.model.draft = "first"
+        XCTAssertTrue(rig.model.canSubmitDraft)
+        XCTAssertTrue(rig.model.submitDraft(), "the first message was not taken")
+        XCTAssertEqual(rig.model.draft, "", "an accepted message stayed in the field")
+        await settle()
+        XCTAssertTrue(rig.model.isWaitingForConversation)
+
+        rig.model.draft = "second"
+        XCTAssertFalse(rig.model.canSubmitDraft,
+                       "Send is live for a press the model would refuse")
+        XCTAssertFalse(rig.model.submitDraft(), "a second message replaced the waiting one")
+        XCTAssertEqual(rig.model.draft, "second", "the refused message left the field")
+
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+        XCTAssertEqual(rig.model.returnedDraft, "first",
+                       "the first message was lost or replaced")
+        XCTAssertEqual(rig.model.draft, "second")
+        // The field is busy, so the returned text waits rather than overwriting…
+        XCTAssertFalse(rig.model.restoreReturnedDraft())
+        XCTAssertTrue(rig.model.holdsLocalText)
+        // …and lands as soon as the user clears or sends what they typed.
+        rig.model.draft = ""
+        XCTAssertTrue(rig.model.restoreReturnedDraft())
+        XCTAssertEqual(rig.model.draft, "first")
+    }
+
+    /// **A double tap sends once.** The first press takes the message and
+    /// empties the field; the second finds nothing to send, so it can neither
+    /// send a duplicate nor reach the waiting message.
+    func testADoubleTapOnSendSubmitsOnce() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = "only once"
+
+        XCTAssertTrue(rig.model.submitDraft())
+        XCTAssertFalse(rig.model.submitDraft(), "the second tap of a double tap submitted")
+        XCTAssertNil(rig.model.actionError,
+                     "an empty second tap is not an error the user needs to read")
+        await settle()
+
+        // The peer refuses: exactly the one message comes back.
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+        XCTAssertEqual(rig.model.returnedDraft, "only once")
+    }
+
+    /// **A refused send restores nothing because it removed nothing.** Before
+    /// the digits are compared the link accepts no work; the press is refused
+    /// with a reason, and the text — exact, untrimmed — stays in the field.
+    func testASubmitRefusedByTheLinkKeepsTheExactText() async {
+        let rig = rig(requiresVerification: true, pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        XCTAssertTrue(rig.model.isVerificationPending, "the setup is not behind the digits")
+
+        let typed = "  e\u{301} 你好 👩‍👩‍👧 \n"
+        rig.model.draft = typed
+        XCTAssertFalse(rig.model.canSubmitDraft)
+        XCTAssertFalse(rig.model.submitDraft())
+        XCTAssertEqual(Array(rig.model.draft.utf8), Array(typed.utf8),
+                       "a refused send changed the text in the field")
+        XCTAssertNotNil(rig.model.actionError, "the refusal said nothing")
+    }
+
+    /// Whitespace is not a message: nothing is sent and nothing is cleared.
+    func testAWhitespaceDraftIsNotSubmitted() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = " \n\t "
+        XCTAssertFalse(rig.model.canSubmitDraft)
+        XCTAssertFalse(rig.model.submitDraft())
+        XCTAssertEqual(rig.model.draft, " \n\t ")
+        XCTAssertFalse(rig.model.isWaitingForConversation)
+    }
+
+    /// **The draft survives the view that was typing it.** iOS's `TabView`
+    /// tears the workspace view down on a tab switch while the link lives on;
+    /// with the draft on the model a rebuilt view binds to the same text.
+    /// Modelled as what it is: the view goes away and the model does not.
+    func testADraftSurvivesATabSwitchWhileTheLinkStaysOpen() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = "half a thought"
+        // Tab away and back: nothing about that touches the model.
+        XCTAssertEqual(rig.model.draft, "half a thought")
+        XCTAssertTrue(rig.model.connection.isOpen)
+        XCTAssertTrue(rig.model.canSubmitDraft)
+    }
+
+    /// **Text written for one peer never reaches the next peer's composer.**
+    ///
+    /// Reproduced before this fix: `beginAttempt` cleared the transcript but not
+    /// `draft`, so a draft typed to "Studio Mac" sat in the composer of the next
+    /// device's link, one tap from being sent to it.
+    func testADraftDoesNotCrossIntoTheNextPeersSession() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = "meant for Studio Mac"
+        rig.model.leave()
+        await settle()
+
+        announceLink(rig, "yyy")
+        XCTAssertTrue(rig.model.connect(peerId: "yyy", peerLabel: "Someone Else"))
+        await settle()
+
+        XCTAssertEqual(rig.model.draft, "", "the previous peer's draft crossed sessions")
+        XCTAssertNil(rig.model.returnedDraft)
+    }
+
+    /// …nor does a message the previous peer never took, which `finish` hands
+    /// back and which a restore would otherwise put in the new peer's field.
+    func testAHandedBackMessageDoesNotCrossIntoTheNextPeersSession() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = "held for Studio Mac"
+        XCTAssertTrue(rig.model.submitDraft())
+        await settle()
+        rig.model.leave()
+        await settle()
+        XCTAssertEqual(rig.model.returnedDraft, "held for Studio Mac",
+                       "the setup did not reach the state at issue")
+
+        announceLink(rig, "yyy")
+        XCTAssertTrue(rig.model.connect(peerId: "yyy", peerLabel: "Someone Else"))
+        await settle()
+
+        XCTAssertNil(rig.model.returnedDraft,
+                     "a message for the previous peer is waiting to land in this one")
+        XCTAssertFalse(rig.model.restoreReturnedDraft())
+        XCTAssertEqual(rig.model.draft, "")
+    }
+
+    /// The same boundary on the peer's side: an UNSOLICITED link arriving on an
+    /// ended page is a new attempt too, and must not inherit the composer.
+    func testAnUnsolicitedLinkOnAnEndedPageDoesNotInheritTheDraft() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        let first = await openLink(rig)
+        rig.model.draft = "for the first peer"
+        first.hangUp()
+        await settle()
+        guard case .ended = rig.model.connection else {
+            return XCTFail("the first link did not end")
+        }
+        // Still held on the ended page, where Done asks before discarding it.
+        XCTAssertTrue(rig.model.holdsLocalText)
+
+        announceLink(rig, "yyy")
+        XCTAssertTrue(rig.model.connect(peerId: "yyy", peerLabel: "Someone Else"))
+        await settle()
+        XCTAssertEqual(rig.model.draft, "")
     }
 }

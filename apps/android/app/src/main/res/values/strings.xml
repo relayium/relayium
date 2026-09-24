@@ -28,6 +28,21 @@
     <string name="status_verification_code">Verification code %1$s</string>
     <string name="status_verification_hint">Optional. The other device shows these six digits only if verification is turned on there; when it does, they should match.</string>
     <string name="status_verification_show">Show verification code</string>
+
+    <!-- A31 (a): the optional verification-code compare step. Adapted from the
+         Apple copy (verify.*, link.verify*), written for a phone. -->
+    <string name="verify_toggle">Compare verification codes</string>
+    <string name="verify_toggle_detail">Off by default. When on, both devices show the same six digits and nothing moves until you compare them.</string>
+    <string name="verify_toggle_locked">Applies to the next connection. It can be changed when this one ends.</string>
+    <string name="verify_how_it_works">How verification codes work</string>
+    <string name="verify_explain_what">When this is on, every new connection stops before anything is sent or accepted, until you compare the six-digit code with the other device — out loud or side by side. Comparing it detects a substituted connection, but only if someone actually compares. It is not the pairing code you typed in.</string>
+    <string name="verify_explain_encryption">This changes what waits for you, never the encryption: keys are made on this phone and never sent to Relayium, the relay carries only ciphertext, and a tampered handshake always fails.</string>
+    <string name="verify_compare_title">Compare this code</string>
+    <string name="verify_compare_body">Check that the other device shows the same six digits. Nothing is sent or accepted on this connection until you answer. If the other device shows no code, turn on verification there too.</string>
+    <string name="verify_matches">They match</string>
+    <string name="verify_differs">They don\'t match</string>
+    <string name="verify_holding">Your files are staged and will not be sent until you confirm.</string>
+    <string name="error_verification_rejected">The verification codes didn\'t match, so the connection was ended and nothing was sent. Connect again; if the codes still differ, don\'t continue.</string>
     <string name="relay_note_quota">This account has used up this month\'s relay traffic, so a cross-network session can only connect if the two devices can reach each other directly. A stored download link still works.</string>
     <string name="relay_note_unverified">Verify your email address to use the cross-network relay. Until then this session can only connect if the two devices can reach each other directly.</string>
     <string name="relay_note_none">No relay is available for this session, so it can only connect if the two devices can reach each other directly.</string>
@@ -226,12 +241,24 @@
     <string name="account_back_to_signin">Back to sign in</string>
 
     <string name="account_frozen_title">This account is scheduled for deletion</string>
-    <string name="account_frozen_body">It will be permanently removed after %1$s, and cannot sign in until it is restored. Use the restore link in the email sent when the deletion was requested.</string>
+    <string name="account_frozen_body">It will be permanently removed after %1$s, and cannot sign in until it is restored. Use the restore link in the email sent after the deletion was confirmed.</string>
 
     <string name="account_methods_label">Sign-in methods</string>
     <string name="account_refresh">Refresh</string>
     <string name="account_sign_out">Sign out</string>
     <string name="account_retry">Try again</string>
+    <!-- A31 (c): asking for account deletion. Never "deleted" or "sent": the
+         request endpoint answers 200 whether or not an email went, and nothing
+         is removed until the emailed link is opened and confirmed. -->
+    <string name="account_delete_title">Delete account</string>
+    <string name="account_delete_body">Deleting this account starts with an email: Relayium sends a confirmation link to %1$s. Nothing is removed until that link is opened and confirmed.</string>
+    <string name="account_delete_action">Delete account…</string>
+    <string name="account_delete_confirm_title">Delete this Relayium account?</string>
+    <string name="account_delete_confirm_body">Relayium sends a confirmation link by email to %1$s. It works for one hour, and nothing is removed until you open it and confirm on relayium.com. Confirming revokes this account\'s sessions and device access, erases the files and data stored on the server, and schedules permanent deletion after a grace period. During that period you can restore the account by signing in again on relayium.com. Deleting the account does not cancel a subscription bought through the App Store; manage that with Apple.</string>
+    <string name="account_delete_confirm_action">Send the confirmation email</string>
+    <string name="account_delete_requesting">Asking for the confirmation email…</string>
+    <string name="account_delete_requested">Requested. Nothing is removed until the link is opened and confirmed. If no email reaches %1$s, check your spam folder and try again.</string>
+    <string name="account_delete_failed">Couldn\'t ask for the confirmation email. Nothing has been deleted.</string>
     <string name="account_stale">These figures could not be refreshed just now, so they may be out of date.</string>
     <string name="account_not_persisted">You are signed in, but this device could not store the credential — you will have to sign in again after closing the app.</string>
     <string name="account_unavailable">You are signed in, but your account could not be loaded.</string>
@@ -473,7 +500,7 @@
     <string name="nearby_connecting_to">Connecting to %1$s…</string>
     <string name="nearby_cannot_link">This device announced an older version of Relayium. It can still receive, but not everything this app can send.</string>
     <string name="nearby_incoming_title">%1$s wants to connect</string>
-    <string name="nearby_incoming_detail">Accept only if you recognise this device. You will compare a six-digit code with it before anything is sent.</string>
+    <string name="nearby_incoming_detail">Accept only if you recognise this device. With Compare verification codes turned on, you compare a six-digit code with it before anything is sent.</string>
     <string name="nearby_accept">Accept</string>
     <string name="nearby_decline">Decline</string>
     <string name="nearby_busy">Finish the current transfer before starting Nearby.</string>

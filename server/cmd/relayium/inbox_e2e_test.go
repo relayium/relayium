@@ -1,3 +1,9 @@
+//go:build !windows
+
+// Server-only on Windows: this file drives the relay node/account server
+// (account, internal/storage — syscall.Statfs), which is not released for
+// Windows (.goreleaser.yaml). See the cli-windows job in .github/workflows/go.yml.
+
 package main
 
 import (

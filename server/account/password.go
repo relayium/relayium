@@ -32,6 +32,10 @@ var (
 	ErrEmailUnverified = errors.New("account: email not verified")
 	// ErrInvalidToken 表示验证/重置 token 无效或已过期。
 	ErrInvalidToken = errors.New("account: invalid or expired token")
+	// ErrVerifyPasswordMismatch means a non-empty password presented while
+	// verifying an email does not match the registration password. Nothing was
+	// changed and the verify link was NOT spent.
+	ErrVerifyPasswordMismatch = errors.New("account: password does not match the registration password")
 	// ErrInvalidEmail 表示邮箱地址格式不合法。
 	ErrInvalidEmail = errors.New("account: invalid email address")
 )
@@ -170,29 +174,47 @@ func (s *Service) dropUnverifiedPassword(ctx context.Context, userID string) err
 	return nil
 }
 
-// reconcileUnverifiedPassword decides the fate of a password that was set at
+// verifyDropsPassword decides the fate of a password that was set at
 // registration (before the email was ever proven) at the moment the email is
-// verified via its emailed link. A registration password is only trustworthy if
-// the person completing verification KNOWS it — i.e. is the same person who set
-// it. So: if the caller presents the matching password, keep it (the legitimate
-// owner just confirmed it); otherwise DROP it (and the "password" identity),
-// leaving a verified, passwordless account whose real owner sets a password via
-// the first-time-set flow. This closes the pre-hijack variant where an attacker
-// registers victim@email with a known password and the VICTIM, by clicking the
-// verification link, would otherwise activate the attacker's password. Must run
-// BEFORE SetEmailVerified (dropUnverifiedPassword no-ops once verified).
-func (s *Service) reconcileUnverifiedPassword(ctx context.Context, u User, password string) error {
+// verified via its emailed link. It only DECIDES; VerifyEmailWithToken applies
+// the decision in the same transaction that spends the link, so an interruption
+// can never leave the password dropped while the link is spent and the account
+// still unverified.
+//
+// A registration password is only trustworthy if the person completing
+// verification KNOWS it — i.e. is the same person who set it:
+//   - the matching password → keep it (the legitimate owner just confirmed it);
+//   - no password at all ("continue without a password") → drop it, leaving a
+//     verified, passwordless account whose owner sets a password later. This
+//     closes the pre-hijack variant where an attacker registers victim@email
+//     with a known password and the VICTIM, by clicking the link, would
+//     otherwise activate the attacker's password;
+//   - a NON-EMPTY password that does not match → ErrVerifyPasswordMismatch.
+//     A typo must not silently discard the password the user chose; nothing is
+//     changed and the link stays usable. Only the explicit empty-password
+//     choice drops it.
+//
+// An already-verified account keeps its password whatever is presented (the
+// owner proved the address earlier), and a passwordless account has nothing
+// to reconcile.
+func (s *Service) verifyDropsPassword(ctx context.Context, u User, password string) (bool, error) {
+	if u.EmailVerified {
+		return false, nil
+	}
 	_, hash, hasPass, err := s.store.GetCredentials(ctx, u.Email)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !hasPass {
-		return nil // passwordless (magic/OAuth) — nothing to reconcile
+		return false, nil // passwordless (magic/OAuth) — nothing to reconcile
 	}
-	if password != "" && bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil {
-		return nil // the verifier proved they set it → trusted, keep it
+	if password == "" {
+		return true, nil // explicit "continue without a password"
 	}
-	return s.dropUnverifiedPassword(ctx, u.ID)
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil {
+		return false, nil // the verifier proved they set it → trusted, keep it
+	}
+	return false, ErrVerifyPasswordMismatch
 }
 
 // Login 校验邮箱+密码并签发会话。任何失败都返回 ErrBadCredentials。

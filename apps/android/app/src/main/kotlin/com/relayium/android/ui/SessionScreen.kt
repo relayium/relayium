@@ -51,6 +51,11 @@ internal fun SessionScreen(
     pickers: Pickers,
 ) {
     VerificationCard(state, viewModel)
+    // Nothing moves on this link until the codes are answered (A31 a): the file
+    // and message surfaces are not drawn at all, rather than drawn with controls
+    // the controller would refuse. What the peer offered is still there, and is
+    // shown the moment the user confirms.
+    if (state.verification == TransferController.Verification.PENDING) return
     // What this CONNECTION can carry, not what the app can do. A legacy peer
     // opens one generation per connection, so exactly one of these two cards is
     // a working surface and the other has to say why it is not — an enabled
@@ -125,6 +130,50 @@ private fun UnavailableLaneCard(titleRes: Int, bodyRes: Int) {
 
 // ── verification ────────────────────────────────────────────────────────────
 
+/**
+ * The blocking compare step (A31 a), shown only when the user turned
+ * verification on before this link came up. The digits are the whole point, so
+ * they are large and first; the answer is two buttons, and "They don't match"
+ * ends the link without anything having been sent.
+ */
+@Composable
+private fun CompareStep(
+    state: TransferController.State,
+    sas: String,
+    viewModel: TransferViewModel,
+) {
+    Text(
+        text = stringResource(R.string.verify_compare_title),
+        style = MaterialTheme.typography.titleSmall,
+    )
+    Text(
+        text = sas,
+        style = MonospaceDigits.copy(fontSize = MaterialTheme.typography.displaySmall.fontSize),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = sas.toCharArray().joinToString(" ") },
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    )
+    Text(
+        text = stringResource(R.string.verify_compare_body),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    if (state.heldFiles > 0) {
+        InlineMessage(
+            text = stringResource(R.string.verify_holding),
+            tone = MessageTone.NEUTRAL,
+        )
+    }
+    PrimaryAction(
+        label = stringResource(R.string.verify_matches),
+        onClick = { viewModel.confirmSas(state.linkId) },
+    )
+    SecondaryAction(
+        label = stringResource(R.string.verify_differs),
+        onClick = { viewModel.rejectSas(state.linkId) },
+    )
+}
+
 @Composable
 private fun VerificationCard(
     state: TransferController.State,
@@ -168,7 +217,9 @@ private fun VerificationCard(
             // showing, and read as a broken connection. It is still one tap away
             // for anyone who wants to compare, and the hint now says when the
             // other side shows it.
-            state.sas?.let { sas ->
+            if (state.verification == TransferController.Verification.PENDING) {
+                state.sas?.let { sas -> CompareStep(state, sas, viewModel) }
+            } else state.sas?.let { sas ->
                 var showSas by rememberSaveable(state.linkId) { mutableStateOf(false) }
                 if (showSas) {
                     // One line, label and digits together: the former layout

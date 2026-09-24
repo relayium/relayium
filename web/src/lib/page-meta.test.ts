@@ -86,6 +86,8 @@ describe("private route metadata", () => {
     expect(pageMeta("verify-email", m)).toMatchObject({ title: `${m.verifyEmail.title} · Relayium`, canonicalPath: null });
     expect(pageMeta("reset-password", m)).toMatchObject({ title: `${m.resetPassword.title} · Relayium`, canonicalPath: null });
     expect(pageMeta("magic-link", m)).toMatchObject({ title: `${m.magicLink.title} · Relayium`, canonicalPath: null });
+    expect(pageMeta("account-delete", m)).toMatchObject({ title: `${m.accountDelete.title} · Relayium`, canonicalPath: null });
+    expect(pageMeta("account-reactivate", m)).toMatchObject({ title: `${m.accountReactivate.title} · Relayium`, canonicalPath: null });
     expect(pageMeta("me", m)).toMatchObject({ title: `${m.me.title} · Relayium`, canonicalPath: null });
     expect(pageMeta("download", m)).toMatchObject({ title: `${m.download.title} · Relayium`, canonicalPath: null });
   });

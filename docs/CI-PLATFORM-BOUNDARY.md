@@ -169,8 +169,9 @@ change.**
 | `Sources/**`, `Package.swift`, `Package.resolved` | `swift-package.yml`, `macos.yml`, `ios.yml`, `native-web-pairing.yml` |
 | `Tests/RelayiumKitTests/**` (any test, guards included) | `swift-package.yml` |
 | `Tests/Fixtures/device-inbox-manifest-v3-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
-| `Tests/Fixtures/crypto-vectors.json` | `swift-package.yml`, `web.yml` |
-| `Tests/Fixtures/realtime-wire-vectors.json` | `swift-package.yml`, `web.yml` |
+| `Tests/Fixtures/crypto-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
+| `Tests/Fixtures/realtime-wire-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
+| `Tests/Fixtures/link-session-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
 | `Tests/Fixtures/store-wire-vectors.json`, `Tests/Fixtures/account/**` | `swift-package.yml` |
 
 `compat.yml` and `repo-hygiene.yml` are unfiltered and run on **every** row
@@ -203,6 +204,39 @@ every server and web commit — and such claims belong in the Linux checks
 both structurally over the parsed workflows and as a text scan over every
 workflow file on disk, because a workflow the policy does not parse can run
 `swift test` just as well as one it does.
+
+### The Swift<->Go interop classes: forced on both sides
+
+Two package test classes have a Go half: `InboxSealedBoxInteropTests` and
+`InboxCLISenderLiveInteropTests`. The live one builds the real `relayium` CLI,
+starts a real central (`server/internal/inboxlive`, build tag `swiftinterop`)
+and drives the real native `InboxReceiveEngine`. Both **skip** unless
+`RELAYIUM_SWIFT_INTEROP=1`, and a skipped XCTest case exits 0. Until 2026-09-23
+no workflow set it and `go` was not on the hosted macOS `PATH`, so the
+sealed-box proof skipped on every hosted run.
+
+Ownership is split by side, one owner per side:
+
+| Change | Runs the two classes |
+| ------ | -------------------- |
+| `apps/RelayiumKit/**`, `apps/mac/**`, `apps/ios/**` | `swift-package.yml` (whole suite, interop forced) |
+| `server/**`, `scripts/ci/assert-swift-named-execution.mjs`, the lane file | `inbox-swift-interop.yml` (exactly the two classes, forced) |
+
+`swift-package.yml` therefore installs exactly **one** toolchain: `actions/setup-go`
+at a pinned SHA reading `server/go.mod`. `swift-ci-boundary-test.mjs` section 1c′
+requires that toolchain, the forcing env and the named-execution proof together.
+It still bans every other installer, including an unpinned `setup-go`.
+`inbox-swift-interop.yml` watches all of `server/**`, because the live class
+builds the whole CLI and a real account service. A hand-kept list of inbox paths
+was rejected at design review. The lane never watches `apps/**`, and its
+`swift test` is filtered to exactly the two classes (section 1h). A change that
+touches both sides runs the classes twice, which is accepted as rare. Both lanes
+end with `scripts/ci/assert-swift-named-execution.mjs`, which fails unless every
+one of the nine named cases reported `passed` exactly once. Section 1i keeps
+that list equal to the `func test…` names on disk. `ci-event-policy-test.mjs`
+section 6r also requires every path-filtered reusable workflow on disk to be
+registered with the gate and the selector. Before that rule, an unregistered
+lane was caught only if it happened to run `swift test`.
 
 ### The ordered negation, and why order is load-bearing
 
@@ -279,8 +313,20 @@ not macOS lanes. Those workflows name the individual files:
 | ------- | ------- | -------- |
 | `device-inbox-manifest-v3-vectors.json` | `server/internal/inboxmanifest/vectors_test.go` | `go.yml` |
 | `device-inbox-manifest-v3-vectors.json` | `web/src/lib/inbox-manifest.test.ts` | `web.yml` |
+| `crypto-vectors.json` | `server/internal/linkcrypto/vectors_test.go` | `go.yml` |
 | `crypto-vectors.json` | `web/src/lib/caps-vectors.test.ts`, `web/src/lib/text-vectors.test.ts` | `web.yml` |
+| `realtime-wire-vectors.json` | `server/internal/linkwire/vectors_test.go` | `go.yml` |
 | `realtime-wire-vectors.json` | the same two Web suites | `web.yml` |
+| `link-session-vectors.json` | `server/internal/linksession/vectors_test.go` | `go.yml` |
+| `link-session-vectors.json` | `web/src/lib/link-session-vectors.test.ts` (the authority half) | `web.yml` |
+
+The Go reader of `realtime-wire-vectors.json` is the link-wire codec library
+(W-N18 Phase 2a2). No command imports it yet — the CLI still speaks its own
+separate wire — so its vectors prove the codecs and classifiers, not any
+network interoperability. The entries are per-consumer, not a block copied
+between workflows. Every `go.yml` fixture line is mirrored in
+`scripts/release/go-evidence.sh`'s `lane_paths`, which
+`scripts/test/go-evidence-test.sh` compares.
 
 Each of those tests opens the file from disk and asserts its own implementation
 still agrees with the frozen bytes, so the fixture is an input to that suite
@@ -1017,6 +1063,88 @@ neither may come back: they would silently adopt a future Android or Windows
 root, or a future Android or Windows script, into a macOS runner the day
 somebody created it.
 
+### The CLI pairing interop matrix (A12)
+
+`relayium pair` — and `send`/`receive`/`text` routed through link discovery —
+is a fifth independent `link/1` implementation (Pion + `linksession`, in Go).
+Its cross-client cells live in the lanes that already own the other end, so no
+new workflow and no new required context exists for it:
+
+| Cell | Where it runs | Entry point | Evidence level |
+|---|---|---|---|
+| CLI ↔ CLI (both link roles; files, folders, texts, decline, rejected SAS, ctrl-C), `send`/`receive`/`text`/`pair` over link, CLI ↔ Go-authored app peer | `go.yml` `test` (Linux) | `scripts/interop/cli-go-matrix.sh run linux` | loopback (real CLI processes, real hub); the app peer is a MODEL |
+| CLI ↔ released 723481c78 CLI (legacy wire, fast refusal of `pair`) | `go.yml` `test` | the same script, after `scripts/interop/build-old-cli.sh` | loopback |
+| the same named cells on Windows (ctrl-C excepted) | `go.yml` `cli-windows` | `cli-go-matrix.sh run windows` | loopback, real Windows host |
+| CLI ↔ Web (Chromium), both code roles × both link roles, decline and cancel each way | `native-web-pairing.yml` `cli-web` (Linux) | `scripts/interop/cli-web-acceptance.sh` | loopback |
+| CLI ↔ macOS app link workspace, both code roles × both link roles | `native-web-pairing.yml` `pairing` (macOS) | `scripts/interop/cli-mac-acceptance.sh` | loopback, production models headless (not the signed app) |
+| CLI ↔ Android app on an emulator, both link roles, receive-cancel | `android-interop.yml` | `scripts/interop/cli-android-acceptance.sh` | emulator loopback |
+
+The Go cells used to SKIP on every hosted run: a one-commit checkout does not
+contain 723481c78, so `ldOldCLI` skipped each old-version pair. The builder
+fetches that commit (read from `ldOldCommit`, never a second literal), builds
+its CLI from `git archive`, and refuses a binary that knows `__link`; the
+matrix script then requires a `--- PASS:` line per named test, no `--- SKIP:`
+other than the one reasoned subtest it names, no `--- FAIL:`, and both
+`linked with another relayium CLI (…, initiator|responder)` lines in the CLI
+processes' own output.
+
+On a failure the script prints the complete output of every failed top-level
+test (both CLI processes' transcripts) into the step log, and `go.yml` keeps
+the whole `-v` log as the `cli-matrix-linux-log` / `cli-matrix-windows-log`
+artifact. The first Windows run (35959733079) printed only the FAIL summary,
+and its log died with the runner.
+
+That run found two Windows-only problems, neither a skip:
+
+* **A product defect.** `pair`'s `/send` line treated a backslash as a shell
+  escape, so on Windows every native path (`C:\Users\…\a.bin`) became a name
+  that does not exist and the batch was never offered. On Windows the
+  backslash is now kept literally, as cmd.exe and PowerShell keep it; quotes
+  still group a path with spaces. `TestSplitPairPaths` covers both rule sets
+  on every platform.
+* **A fixture that cannot exist on NTFS.**
+  `TestPairPeerNamesAndTextCannotForgeVerification` created sender files whose
+  names contain CR, LF and ESC; Win32 refuses control characters in names, so
+  it failed in 0.00s. On Windows it omits those three files (a Windows sender
+  cannot hold them) and keeps the bidi-override name and every forged line in
+  the message; the receiver's cleaning of control characters is proven on
+  Linux, where the sender can create them.
+
+Each path filter names the interop files its cell reads, one file at a time,
+for the reason given for `native-web-pairing.yml` above: a bare
+`scripts/interop/**` would start a macOS runner for an Android-only script.
+
+The judges are only worth their green if they can say no, and that proof must
+not sit behind any of those filters. `scripts/test/cli-interop-matrix-test.mjs`
+runs in the unfiltered `compat.yml` (`cli-interop-guards`): every oracle and the
+Go-matrix judge is shown a synthetic good round and then each single fault — a
+missing, extra (declined or cancelled) or wrong-bytes file, a skipped or
+renamed named test, one link role only, different SAS digits, a wrong exit —
+and the workflow wiring above is checked and mutated away.
+
+Not covered by any hosted lane, and not claimed: Firefox/WebKit (the e2e
+harness speaks CDP to Chrome only), an iOS simulator cell, a physical device,
+NAT or TURN relay paths, and real WAN — those are release-time (C01/C07).
+
+### The relay-renewal driver tests (A11) have their own job
+
+The `TestLinkRenew*` / `TestLDRenew*` tests in `server/cmd/relayium` drive two
+CLI ends across a relay-credential renewal in REAL time: a renewal is only
+requested inside a credential's final margin and only proven by moving bytes
+past the old deadline, so each test waits out 100-300 s credentials. Together
+they take 1183s locally (the per-test times sum to it: they wait, they do not
+compute), which pushed the package past Go's 10-minute default in `test` and
+past the 20m bound in `race-rest` (run 35959733079, no failed assertion).
+
+`test` and `race-rest` therefore `-skip '^(TestLinkRenew|TestLDRenew)'`, and
+`go.yml` `link-renew` runs exactly that pattern under `-race` (`-timeout 35m`,
+job bound 45m, ~1.8x the measurement) with a PASS line required per matching
+test and no SKIP. `scripts/test/ci-event-policy-test.mjs` asserts the three
+occurrences are the same literal, that no other `-skip` exists in `go.yml`,
+that the pattern names real tests and only in `cmd/relayium`, and that
+`link-renew` stays bounded, `-count=1` and retry-free. Neither the Linux nor
+the Windows CLI matrix names a renewal test (their `-run` lists are exact).
+
 ## Adding a platform: Android, Windows, anything next
 
 A platform root and the workflow that owns it are created **in the same commit**.
@@ -1222,8 +1350,8 @@ is happy with all of it:
   which reports as no check rather than as a red one;
 * the unfiltered `swift test` deleted, filtered, or duplicated back into
   `macos.yml`;
-* one of the four named fixture entries dropped from `go.yml` or `web.yml`, or
-  the four replaced by the directory they live in;
+* one of the six named fixture entries dropped from `go.yml` or `web.yml`, or
+  the six replaced by the directory they live in;
 * a new `macos-15` job landing in a governed *or budget-only* workflow that
   `RUNNER_BUDGETS` covers nowhere;
 * `macos.yml` regaining a `workflow_dispatch`, a `publish` job, a job-level
@@ -1332,6 +1460,8 @@ written.
   sole owner of an unfiltered `swift test`
 * `scripts/test/swift-ci-boundary-test.mjs` — who owns `apps/RelayiumKit/`, in code
 * `.github/workflows/contracts.yml` — the Device Inbox admission contract's lane
+* `.github/workflows/inbox-swift-interop.yml` — the Go side of the Swift<->Go
+  interop classes; `scripts/ci/assert-swift-named-execution.mjs` — their proof
 * `.github/workflows/ops-deploy-contract.yml` — the product↔ops deploy
   contract's lane
 * `scripts/test/contract-ci-policy-test.mjs` — who owns each document in

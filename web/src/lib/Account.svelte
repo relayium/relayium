@@ -5,7 +5,7 @@
     session, refreshSession, logout, localDeviceId,
     googleLoginUrl, appleLoginUrl, requestMagicLink,
     register, passwordLogin, fetchAuthMethods, changePassword, type AuthMethods,
-    resendVerification, forgotPassword, unlinkIdentity,
+    resendVerification, forgotPassword, unlinkIdentity, reactivateAccount,
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { loginIntent } from "./login.svelte";
@@ -69,6 +69,11 @@
   // Referer header. We read it, scrub the fragment from the URL, and offer a
   // one-click reactivate.
   let reactivateToken = $state("");
+  // A password sign-in found the account scheduled for deletion (HTTP 200
+  // pending_deletion). Shown inside the dialog, beside a Reactivate button that
+  // spends `reactivateToken` — the page banner below the dialog is covered by
+  // its backdrop while the dialog is open.
+  let pendingInDialog = $state(false);
   let reactivateBusy = $state(false);
   let reactivateError = $state("");
 
@@ -91,6 +96,7 @@
       error = "";
       registeredEmail = "";
       unverifiedEmail = "";
+      pendingInDialog = false; // the page banner keeps the reactivate offer
       resendDisabled = false;
       resendAck = false;
       forgotBusy = false;
@@ -117,11 +123,22 @@
     if (!res.ok) unlinkErr = res.error === "last_login_method" ? t.account.errLastMethod : t.account.errNetwork;
   }
 
+  // POST /api/auth/password/change (handlers.go handleChangePassword). Nothing
+  // here may fall back to errLogin: the person is already signed in, and "wrong
+  // email or password" is false for every code this endpoint can send except
+  // the one it has its own sentence for.
+  //   401 current password incorrect → errCurrentWrong
+  //   400 password too short          → errTooShort
+  //   400 password_too_long (>72 B)   → errTooLong
+  //   401 text `unauthorized`         → errSessionExpired ("signed_out", see changePassword)
+  //   500 / non-JSON / unknown        → errUnrecognised
   function mapPwError(code?: string): string {
     if (code === "current password incorrect") return t.account.errCurrentWrong;
     if (code === "password too short") return t.account.errTooShort;
+    if (code === "password_too_long") return t.account.errTooLong;
+    if (code === "signed_out") return t.account.errSessionExpired;
     if (code === "network") return t.account.errNetwork;
-    return t.account.errLogin;
+    return t.account.errUnrecognised;
   }
 
   async function onChangePassword() {
@@ -190,18 +207,15 @@
     reactivateBusy = true;
     reactivateError = "";
     try {
-      const res = await fetch("/api/account/reactivate", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: reactivateToken }),
-      });
+      const res = await reactivateAccount(reactivateToken);
       if (!res.ok) {
         reactivateError = t.account.reactivateError;
         return;
       }
       reactivateToken = ""; // consumed — the endpoint also cleared the deletion + set a session cookie
+      pendingInDialog = false;
       await refreshSession();
+      if (session().user) claimDevice();
     } catch {
       reactivateError = t.account.reactivateError;
     } finally {
@@ -283,7 +297,10 @@
     if (code === "too many attempts, try again later") return t.account.errRateLimited;
     if (code === "too many requests") return t.account.errRateLimited;
     if (code === "current password incorrect") return t.account.errCurrentWrong;
-    if (code === "account_pending_deletion") return t.account.pendingDeletion;
+    // Only POST /api/auth/register sends this code (409). Sign-in reports the
+    // same state as a 200 body instead — see the pendingDeletion branch below.
+    if (code === "account_pending_deletion") return t.account.errRegisterPendingDeletion;
+    if (code === "password_too_long") return t.account.errTooLong;
     if (code === "invalid_email") return t.account.errEmailInvalid;
     return t.account.errUnrecognised;
   }
@@ -292,6 +309,7 @@
     if (submitting) return; // guard against double-submit while a request is in flight
     error = "";
     unverifiedEmail = "";
+    pendingInDialog = false;
     if (!email || !password) return;
     submitting = true;
     try {
@@ -313,6 +331,14 @@
           claimDevice();
         } else if (res.unverified) {
           unverifiedEmail = res.email ?? email;
+        } else if (res.pendingDeletion) {
+          // Correct password, account scheduled for deletion: HTTP 200 with no
+          // session and a fresh reactivate token. Say so and offer the undo —
+          // in the dialog, where the person is looking, and in the page banner
+          // that stays after the dialog closes.
+          password = "";
+          pendingInDialog = true;
+          if (res.reactivateToken) reactivateToken = res.reactivateToken;
         } else {
           error = mapError(res.error);
         }
@@ -534,14 +560,24 @@
             </button>
           {/if}
           {#if error}<p class="err">{error}</p>{/if}
-          <button type="submit" class="btn btn-primary" disabled={submitting}>
-            {mode === "register" ? t.account.createAccount : t.account.logInBtn}
-          </button>
-          <button type="button" class="btn-link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; unverifiedEmail = ""; }}>
+          {#if pendingInDialog}
+            <p class="hint" role="status" data-testid="signin-pending-deletion">{t.account.pendingDeletion}</p>
+          {/if}
+          {#if pendingInDialog && reactivateToken}
+            {#if reactivateError}<p class="err">{reactivateError}</p>{/if}
+            <button type="button" class="btn btn-primary" disabled={reactivateBusy} onclick={onReactivate}>
+              {t.account.reactivate}
+            </button>
+          {:else}
+            <button type="submit" class="btn btn-primary" disabled={submitting}>
+              {mode === "register" ? t.account.createAccount : t.account.logInBtn}
+            </button>
+          {/if}
+          <button type="button" class="btn-link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; unverifiedEmail = ""; pendingInDialog = false; }}>
             {mode === "register" ? t.account.toLogin : t.account.toRegister}
           </button>
           {#if mode === "login"}
-            <button type="button" class="btn-link" onclick={() => { mode = "forgot"; error = ""; unverifiedEmail = ""; }}>
+            <button type="button" class="btn-link" onclick={() => { mode = "forgot"; error = ""; unverifiedEmail = ""; pendingInDialog = false; }}>
               {t.account.forgotPasswordLink}
             </button>
           {/if}

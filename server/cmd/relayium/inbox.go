@@ -36,10 +36,21 @@ import (
 // PAUSE IS NOT DISABLE, and the split is deliberate. An operator who wants to
 // stop receiving for an afternoon should not have to revoke a key, terminate the
 // deliveries already queued for them, and re-enrol afterwards.
+//
+// The receive commands above are unchanged by the SENDER commands (devices,
+// send, sent, cancel, retry), which live in inbox_send.go: sending needs only a
+// login and never enrols this machine or touches its receiver state.
 
-const inboxUsage = `relayium inbox — receive files sent to this device
+const inboxUsage = `relayium inbox — send files to your devices, and receive them here
 
 usage:
+  relayium inbox devices                 list your devices and whether you can send to them
+  relayium inbox send --to <device> <path...>
+                                         encrypt and queue files or folders for a device
+  relayium inbox sent [<task-id>]        show deliveries you sent and their state
+  relayium inbox cancel <task-id>        cancel a delivery that is still waiting
+  relayium inbox retry <id>              finish a send that was interrupted
+
   relayium inbox enable --dir <folder>   turn on automatic receive into <folder>
   relayium inbox run                     run the receiver in the foreground
   relayium inbox status                  show local, credential and server state
@@ -48,6 +59,9 @@ usage:
   relayium inbox disable                 clear the server inbox, then delete local keys
   relayium inbox service <kind>          print a service definition for this machine
                                          (systemd-user, systemd-system, launchd, container)
+
+Sending needs only "relayium login": this machine does not have to receive.
+Run "relayium inbox <command> --help" for each command's details.
 
 flags:
   --config-dir D   credential/state directory (default ~/.config/relayium)
@@ -73,6 +87,16 @@ func runInbox(args []string, stdout, stderr io.Writer) int {
 		return runInboxPauseResume(args[1:], false, stdout, stderr)
 	case "service":
 		return runInboxService(args[1:], stdout, stderr)
+	case "devices":
+		return runInboxDevices(args[1:], stdout, stderr)
+	case "send":
+		return runInboxSend(args[1:], stdout, stderr)
+	case "sent":
+		return runInboxSent(args[1:], stdout, stderr)
+	case "cancel":
+		return runInboxCancel(args[1:], stdout, stderr)
+	case "retry":
+		return runInboxRetry(args[1:], stdout, stderr)
 	case "-h", "-help", "--help":
 		fmt.Fprint(stdout, inboxUsage)
 		return 0

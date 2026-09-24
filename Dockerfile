@@ -16,6 +16,9 @@ RUN npm run build
 FROM golang:1.26-alpine AS server
 WORKDIR /src
 COPY server/go.mod server/go.sum ./
+# go.mod replaces github.com/pion/turn/v4 with this local copy, so it must be
+# present before `go mod download` resolves the module graph.
+COPY server/third_party/ ./third_party/
 RUN go mod download
 COPY server/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags='-s -w' -o /out/relayium-server .

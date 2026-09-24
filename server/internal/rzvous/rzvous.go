@@ -20,6 +20,10 @@ type Session struct {
 	conn   *websocket.Conn
 	selfID string
 	peerID string
+	// pending holds signals from the peer that arrived before it was selected
+	// (see Join). RecvSignal returns them first. JoinRoom leaves it empty: its
+	// caller replays Room.Captured itself.
+	pending []json.RawMessage
 }
 
 func (s *Session) SelfID() string { return s.selfID }
@@ -27,7 +31,28 @@ func (s *Session) PeerID() string { return s.peerID }
 
 // Join dials the rendezvous, announces the given nickname, and blocks until
 // exactly one peer shares the room. An empty code joins the LAN room.
+//
+// Join is JoinRoom without a roster hint (its join frame is byte-identical to
+// the one Join always sent) whose captured signals are replayed by the
+// session: the hub debounces rosters, so the peer can learn of us and speak
+// before our roster names it. Those signals are kept under JoinRoom's bounds
+// (ErrCaptureOverflow fails the join rather than dropping any) and the first
+// RecvSignal calls return them, in arrival order, before reading the wire.
+// Dropping them left a CLI waiting forever for a commit it had already
+// received -- including the app's commit that says "not a CLI".
 func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
+	room, err := JoinRoom(ctx, serverURL, code, name, nil)
+	if err != nil {
+		return nil, err
+	}
+	room.Session.pending = room.Captured
+	return room.Session, nil
+}
+
+// dialRendezvous validates the code's shape and opens the WebSocket. Shared by
+// Join and JoinRoom so both refuse an impossible code before any round trip and
+// both explain a refused handshake the same way.
+func dialRendezvous(ctx context.Context, serverURL, code string) (*websocket.Conn, error) {
 	u, err := url.Parse(serverURL)
 	if err != nil {
 		return nil, err
@@ -53,49 +78,7 @@ func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
 	if err != nil {
 		return nil, dialError(err, resp)
 	}
-	s := &Session{conn: conn}
-	var roster []signal.Peer
-	selectPeer := func() bool {
-		// Welcome and roster are separate frames. Do not interpret a roster
-		// until Welcome has identified this connection: under an unlucky write
-		// schedule an empty selfID would make our own roster entry look like the
-		// peer, causing signaling (including the handshake commit) to loop back.
-		if s.selfID == "" || len(roster) == 0 {
-			return false
-		}
-		s.peerID = ""
-		for _, p := range roster {
-			if p.ID != s.selfID {
-				s.peerID = p.ID
-				break
-			}
-		}
-		return s.peerID != ""
-	}
-
-	if err := s.write(ctx, signal.Envelope{Type: signal.TypeJoin, Name: name}); err != nil {
-		conn.Close(websocket.StatusInternalError, "join")
-		return nil, err
-	}
-	for {
-		env, err := s.read(ctx)
-		if err != nil {
-			conn.Close(websocket.StatusInternalError, "handshake")
-			return nil, err
-		}
-		switch env.Type {
-		case signal.TypeWelcome:
-			s.selfID = env.Name
-			if selectPeer() {
-				return s, nil
-			}
-		case signal.TypePeers:
-			roster = env.Peers
-			if selectPeer() {
-				return s, nil
-			}
-		}
-	}
+	return conn, nil
 }
 
 // dialError turns a failed rendezvous handshake into something the user can act
@@ -156,8 +139,15 @@ func (s *Session) SendSignal(ctx context.Context, data json.RawMessage) error {
 }
 
 // RecvSignal returns the payload of the next signal envelope from the peer,
-// skipping roster/presence frames.
+// skipping roster/presence frames. Signals Join kept from before the peer was
+// selected come first.
 func (s *Session) RecvSignal(ctx context.Context) (json.RawMessage, error) {
+	if len(s.pending) > 0 {
+		data := s.pending[0]
+		s.pending[0] = nil
+		s.pending = s.pending[1:]
+		return data, nil
+	}
 	for {
 		env, err := s.read(ctx)
 		if err != nil {
@@ -165,6 +155,44 @@ func (s *Session) RecvSignal(ctx context.Context) (json.RawMessage, error) {
 		}
 		if env.Type == signal.TypeSignal {
 			return env.Data, nil
+		}
+	}
+}
+
+// SendRenew asks the server for relay renewal round `round`, correlated by
+// `rid` (docs/protocol/relay-renew-v1.md §2.1): {"type":"ice-renew",
+// "data":{"round":R,"rid":N}}. It rides THIS session's socket because the
+// server's renewal authority is the admitted connection itself, frozen when
+// the room first held both peers; no other connection can ask for it.
+// A server that predates renewal ignores the frame: the caller treats silence
+// as `unavailable`.
+func (s *Session) SendRenew(ctx context.Context, round, rid uint32) error {
+	data := json.RawMessage(fmt.Sprintf(`{"round":%d,"rid":%d}`, round, rid))
+	return s.write(ctx, signal.Envelope{Type: signal.TypeICERenew, Data: data})
+}
+
+// RecvSignalOrGrant is RecvSignal that also returns the server's `ice-grant`
+// replies (grant=true) instead of skipping them. Signals kept by Join come
+// first, exactly as for RecvSignal; roster and presence frames are skipped.
+// RecvSignal itself is unchanged: a caller that never renews never sees a
+// grant.
+func (s *Session) RecvSignalOrGrant(ctx context.Context) (data json.RawMessage, grant bool, err error) {
+	if len(s.pending) > 0 {
+		data := s.pending[0]
+		s.pending[0] = nil
+		s.pending = s.pending[1:]
+		return data, false, nil
+	}
+	for {
+		env, err := s.read(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		switch env.Type {
+		case signal.TypeSignal:
+			return env.Data, false, nil
+		case signal.TypeICEGrant:
+			return env.Data, true, nil
 		}
 	}
 }

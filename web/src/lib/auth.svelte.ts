@@ -147,19 +147,52 @@ export async function fetchAuthMethods(): Promise<AuthMethods> {
   return { password: true, google: false, apple: false, magic: false };
 }
 
+/**
+ * The result of an endpoint that signs the caller in on success.
+ *
+ * `pendingDeletion` is not an error the server reports as one. The password
+ * login, email verification and password reset handlers all answer an account
+ * that is scheduled for deletion with HTTP **200**
+ * `{"status":"pending_deletion","purgeAfter":…,"reactivateToken":"…"}` and no
+ * session cookie (server/account/handlers.go handlePasswordLogin,
+ * handleVerifyEmail, handleResetPassword; pinned by deletion_test.go). Reading
+ * that 200 as success used to set `user = undefined` and close the dialog with
+ * nothing said, throwing away the one thing the person needed: the token that
+ * undoes the deletion.
+ */
+export interface SignInResult {
+  ok: boolean;
+  pendingDeletion?: boolean;
+  reactivateToken?: string;
+  error?: string;
+}
+
+/** Read a 2xx sign-in answer: a user, or the frozen-account body. Never assigns
+ *  anything but a real user object to the session store. */
+async function readSignedInBody(res: Response): Promise<SignInResult> {
+  let body: { user?: SessionUser; status?: string; reactivateToken?: string } = {};
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    return { ok: false, error: "error" }; // a 200 that is not JSON is not a sign-in
+  }
+  if (body.status === "pending_deletion") {
+    return { ok: false, pendingDeletion: true, reactivateToken: body.reactivateToken ?? "" };
+  }
+  if (!body.user) return { ok: false, error: "error" };
+  user = body.user;
+  return { ok: true };
+}
+
 // Shared shape for endpoints that, on success, receive {user} and set the
 // session cookie — verifyEmail/resetPassword today, passwordLogin below.
 async function postForUser(
   path: string,
   payload: Record<string, string>,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<SignInResult> {
   const res = await apiSend(path, { method: "POST", body: JSON.stringify(payload) });
   if (!res) return { ok: false, error: "network" };
-  if (res.ok) {
-    const body = (await res.json()) as { user: SessionUser };
-    user = body.user;
-    return { ok: true };
-  }
+  if (res.ok) return readSignedInBody(res);
   return { ok: false, error: await errorCode(res) };
 }
 
@@ -195,11 +228,9 @@ export async function register(
 // Flat like RegisterResult — `unverified`/`email` are only populated when the
 // server rejected the login as HTTP 403 email_unverified, distinguishing it
 // from a generic "wrong email/password" (401) so the UI can offer a resend.
-export interface LoginResult {
-  ok: boolean;
+export interface LoginResult extends SignInResult {
   unverified?: boolean;
   email?: string;
-  error?: string;
 }
 
 export async function passwordLogin(email: string, password: string): Promise<LoginResult> {
@@ -208,11 +239,8 @@ export async function passwordLogin(email: string, password: string): Promise<Lo
     body: JSON.stringify({ email, password }),
   });
   if (!res) return { ok: false, error: "network" };
-  if (res.ok) {
-    const body = (await res.json()) as { user: SessionUser };
-    user = body.user;
-    return { ok: true };
-  }
+  // 200 is either a session or the frozen-account body — see SignInResult.
+  if (res.ok) return readSignedInBody(res);
   let payload: { error?: string; email?: string } = {};
   try {
     payload = (await res.json()) as { error?: string; email?: string };
@@ -234,7 +262,7 @@ export async function passwordLogin(email: string, password: string): Promise<Lo
 // chose at signup: presenting it proves they set it, so the server keeps it;
 // verifying without it leaves the account passwordless (the pre-hijack defense —
 // a victim clicking the link can't activate an attacker's registration password).
-export async function verifyEmail(token: string, password = ""): Promise<{ ok: boolean; error?: string }> {
+export async function verifyEmail(token: string, password = ""): Promise<SignInResult> {
   return postForUser("/api/auth/email/verify", { token, password });
 }
 
@@ -286,10 +314,13 @@ export async function forgotPassword(email: string): Promise<void> {
 
 // On success the server sets the session cookie and returns {user}; update
 // the current-user store just like passwordLogin/verifyEmail do.
+// A frozen account comes back as `pendingDeletion` (HTTP 200, no cookie) and
+// the password is NOT changed — handleResetPassword checks the deletion state
+// before it mutates anything.
 export async function resetPassword(
   token: string,
   newPassword: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<SignInResult> {
   return postForUser("/api/auth/password/reset", { token, newPassword });
 }
 
@@ -306,6 +337,68 @@ export async function changePassword(
     if (user) user = { ...user, hasPassword: true };
     return { ok: true };
   }
+  const code = await errorCode(res);
+  // Two different 401s share this endpoint: a JSON `current password incorrect`
+  // from handleChangePassword, and RequireAuth's plain-text `unauthorized` when
+  // the browser session has expired or was revoked. Only the first is about
+  // what the person typed.
+  if (res.status === 401 && code !== "current password incorrect") return { ok: false, error: "signed_out" };
+  return { ok: false, error: code };
+}
+
+/**
+ * Spend an emailed account-deletion link (`/account/delete/confirm?token=…`,
+ * server/account/deletion.go RequestAccountDeletion). **Only ever call this from
+ * a real button press**: mail gateways prefetch links, and a page that confirmed
+ * on load would let a scanner delete somebody's account.
+ *
+ * POST /api/account/delete/confirm answers 200 `{status:"ok"}` both when it
+ * scheduled the deletion and when the account was already scheduled (a second
+ * unused link — the server treats that as an idempotent no-op), and 400
+ * `{error:"invalid_or_expired_token"}` for an expired, already-used or unknown
+ * link. On success every session of the account has been deleted, this
+ * browser's included, so the session store is refreshed to signed-out.
+ */
+export async function confirmAccountDeletion(token: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await apiSend("/api/account/delete/confirm", { method: "POST", body: JSON.stringify({ token }) });
+  if (!res) return { ok: false, error: "network" };
+  if (!res.ok) return { ok: false, error: await errorCode(res) };
+  await refreshSession().catch(() => { user = null; });
+  return { ok: true };
+}
+
+// A reactivate token handed back by a frozen sign-in on another page
+// (MagicLink, VerifyEmail, ResetPassword), waiting for /account/reactivate to
+// pick it up. Memory only: it must not travel in a URL, and the page it is for
+// is one in-app navigation away. Not reactive — the page reads it once, on mount.
+let reactivationOffer = "";
+
+/** Hand a reactivate token to the /account/reactivate page, then navigate there. */
+export function offerReactivation(token: string): void {
+  reactivationOffer = token;
+}
+
+/** Read and clear the pending offer ("" when there is none). */
+export function takeReactivationOffer(): string {
+  const tok = reactivationOffer;
+  reactivationOffer = "";
+  return tok;
+}
+
+/**
+ * Spend a reactivation link (`/account/reactivate?token=…`, deletion.go
+ * reactivateLink) or a reactivate token handed back by a frozen sign-in. Same
+ * rule: a button press only — this call mints a session.
+ *
+ * POST /api/account/reactivate answers 200 with `{user}` and a session cookie
+ * (handleReactivate), and 400 `{error:"invalid_or_expired_token"}` for an
+ * expired or used token AND for an account that is no longer pending deletion
+ * — the server deliberately does not say which.
+ */
+export async function reactivateAccount(token: string): Promise<SignInResult> {
+  const res = await apiSend("/api/account/reactivate", { method: "POST", body: JSON.stringify({ token }) });
+  if (!res) return { ok: false, error: "network" };
+  if (res.ok) return readSignedInBody(res);
   return { ok: false, error: await errorCode(res) };
 }
 

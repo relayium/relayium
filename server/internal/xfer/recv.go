@@ -40,6 +40,18 @@ type RecvOpts struct {
 	// own flag can never widen what this side permits. `serve` and the `__recv`
 	// helper set it; `receive` and `pull` do not.
 	AllowSync bool
+	// CreateDestDir lets Receive create destDir itself (and any missing
+	// parents) when it does not exist yet, the way zero-dependency push's
+	// `mkdir -p` does. It happens once, only after the wire version, the
+	// manifest, any sync request and the no-clobber preflight have all been
+	// accepted, and only for a manifest that names at least one file.
+	//
+	// Like AllowSync it is a property of the local invocation, never of the
+	// peer: destDir is always the local caller's own argument. `receive`,
+	// `pull` and the `__recv` helper set it. `serve` does not, because its
+	// --dir was verified at startup and a directory that has since vanished
+	// may be an unmounted volume that must not be recreated underneath.
+	CreateDestDir bool
 	// Progress, when set, observes each file's body as it arrives. It is the
 	// receiving twin of SendOpts.Progress and is called the same way: from
 	// Receive's own goroutine, one file at a time in manifest order, once per
@@ -64,10 +76,25 @@ type RecvOpts struct {
 // resume state for any partial files already on disk, then writes each file,
 // verifying SHA-256.
 func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
-	var hello Hello
-	if _, err := ReadJSON(rw, &hello); err != nil {
+	hello, _, err := readHello(rw)
+	if err != nil {
 		return Report{}, err
 	}
+	return receiveV1(rw, hello, destDir, opts)
+}
+
+// readHello reads the first frame of a transfer as a Hello, returning its
+// frame type too (the v1 body has never checked it; the stream dispatch in
+// ReceiveAny does).
+func readHello(r io.Reader) (Hello, MsgType, error) {
+	var hello Hello
+	t, err := ReadJSON(r, &hello)
+	return hello, t, err
+}
+
+// receiveV1 is the body of Receive after its Hello was read: the v1 push and
+// sync protocol, exactly as Receive has always run it.
+func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Report, error) {
 	if hello.Version != WireVersion {
 		return Report{}, fmt.Errorf("unsupported wire version %d", hello.Version)
 	}
@@ -115,6 +142,16 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 			} else if !os.IsNotExist(err) {
 				return Report{}, err
 			}
+		}
+	}
+
+	// Every refusal above has had its chance, so this is the first effect the
+	// transfer may have on this filesystem. A failure ends the transfer here,
+	// before any frame goes back: the peer learns only that the stream ended,
+	// and the cause stays on this side's own error output.
+	if opts.CreateDestDir && len(m.Files) > 0 {
+		if err := createDestRoot(destDir); err != nil {
+			return Report{}, err
 		}
 	}
 
@@ -706,6 +743,23 @@ func safeJoin(destDir, rel string) (string, error) {
 		return "", fmt.Errorf("unsafe path in manifest: %q", rel)
 	}
 	return joined, nil
+}
+
+// createDestRoot makes sure destDir exists as a directory (see
+// RecvOpts.CreateDestDir). os.MkdirAll leaves an existing directory, or a
+// symlink the user pointed at one, as it is, and refuses a regular file or a
+// dangling symlink in destDir's place without creating what the link names.
+// Everything below destDir is still created by mkdirAllWithin, whose
+// containment check needs destDir to exist.
+func createDestRoot(destDir string) error {
+	abs, err := filepath.Abs(destDir)
+	if err != nil {
+		return fmt.Errorf("create destination directory: %w", err)
+	}
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return fmt.Errorf("create destination directory: %w", err)
+	}
+	return nil
 }
 
 // mkdirAllWithin creates dir like os.MkdirAll, but first verifies the deepest

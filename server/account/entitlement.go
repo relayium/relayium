@@ -145,8 +145,6 @@ type SourceEvent struct {
 	BillingProductID       string
 	AppleTransactionReason string
 	ApplePurchaseDateMS    int64
-	AppleDispatchPurchase  bool
-	AppleDispatchProductID string
 }
 
 // EffectiveEntitlement is what the users-row projection will be set to.

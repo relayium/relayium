@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
 
+	"github.com/relayium/relayium/internal/linksession"
 	"github.com/relayium/relayium/internal/rzvous"
 	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/xfer"
@@ -95,6 +97,44 @@ var (
 // Whole-session ceiling, same as send/receive: the peer may never arrive.
 const textSessionTimeout = 10 * time.Minute
 
+// crossnetTextDial is the transport `text` runs over: the legacy connection,
+// or a *linkHandle when discovery chose link/1. A var for tests.
+var crossnetTextDial = func(ctx context.Context, code string, f crossFlags, stderr io.Writer) (io.ReadWriteCloser, error) {
+	return crossnetDial(ctx, code, "text", f, stderr, linksession.CmdText, rzvous.ModeText)
+}
+
+// runLinkText is `text` over a link. The contract is today's, carried over:
+//
+//   - interactive (stdin is a terminal): one line per message; piped: all of
+//     stdin, byte for byte, is ONE message (at most 65,536 bytes, refused
+//     whole and unsent when over);
+//   - the peer's messages go to stdout: exact bytes when piped to a
+//     non-terminal, one per line otherwise, and on a terminal rendered safely
+//     ("peer> " per line, controls visible, bidi removed);
+//   - the session ends when both ends have finished their input, or either
+//     leaves, or the whole-session ceiling passes — reaching the ceiling is a
+//     normal end, as it is today.
+//
+// Messages are read only once the link is admitted (after a --verify answer
+// read from the same input), and never when discovery chose the legacy wire.
+func runLinkText(ctx context.Context, h *linkHandle, tty bool, stdout io.Writer) int {
+	d := h.d
+	d.in = textStdin()
+	d.textDone = true
+	u := d.ui
+	u.stdout = stdout
+	u.readsInput = true
+	u.inTTY = tty
+	u.textPiped = !tty
+	u.outTTY = stdoutIsTTY(stdout)
+	u.exact = !tty && !u.outTTY
+	if deadline, ok := ctx.Deadline(); ok {
+		t := time.AfterFunc(time.Until(deadline), func() { d.q.push(ldItem{kind: ldCeiling}) })
+		defer t.Stop()
+	}
+	return h.drive()
+}
+
 func runText(args []string, stdout, stderr io.Writer) int {
 	if wantsHelpFS(textFlagSet(&textFlags{}), args) {
 		fmt.Fprint(stdout, textUsage)
@@ -155,22 +195,33 @@ func runText(args []string, stdout, stderr io.Writer) int {
 	// crossFlags.verify means "prompt to confirm the SAS"; confirmSAS has already
 	// resolved the opt-in against whether there is a terminal to ask.
 	cf := crossFlags{server: f.server, advertise: f.advertise, verify: f.confirmSAS(tty)}
-	conn, err := crossnetConn(ctx, code, "text", cf, stderr, rzvous.ModeText)
+	conn, err := crossnetTextDial(ctx, code, cf, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if h, ok := conn.(*linkHandle); ok {
+		return runLinkText(ctx, h, tty, stdout)
+	}
 	defer conn.Close()
+	lc, ok := conn.(interface {
+		io.ReadWriter
+		deadliner
+	})
+	if !ok {
+		fmt.Fprintln(stderr, "internal error: the message connection has no deadline")
+		return 1
+	}
 
 	// The ceiling covers the whole session -- live reads and writes, not just the
 	// drain -- so a reply that arrives minutes later still lands, and a peer that
 	// stalls mid-session cannot hang us.
 	deadline, _ := ctx.Deadline()
-	if err := installDeadline(conn, deadline); err != nil {
+	if err := installDeadline(lc, deadline); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err := pumpText(conn, textStdin(), stdout, stderr, tty, deadline); err != nil {
+	if err := pumpText(lc, textStdin(), stdout, stderr, tty, deadline); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -388,7 +439,13 @@ func (r *receiver) wait() error {
 //
 // addNewline is true only when interactive: a terminal needs one message per line
 // to stay readable. The piped form adds NOTHING -- exact bytes is its contract.
+//
+// On a terminal the body is never written raw: each of its lines is printed
+// as "peer> <line>" with controls made visible and bidi controls removed, so a
+// message can neither drive the terminal nor forge a line of our own output
+// (the SAS line above all). Off a terminal the bytes are the contract.
 func copyIncoming(stream io.Reader, stdout io.Writer, addNewline bool) error {
+	tty := stdoutIsTTY(stdout)
 	for {
 		body, err := xfer.ReadText(stream)
 		if errors.Is(err, io.EOF) {
@@ -396,6 +453,14 @@ func copyIncoming(stream io.Reader, stdout io.Writer, addNewline bool) error {
 		}
 		if err != nil {
 			return err
+		}
+		if tty {
+			for _, l := range strings.Split(body, "\n") {
+				if _, err := fmt.Fprintf(stdout, "peer> %s\n", peerTextSafe(l)); err != nil {
+					return err
+				}
+			}
+			continue
 		}
 		if _, err := io.WriteString(stdout, body); err != nil {
 			return err

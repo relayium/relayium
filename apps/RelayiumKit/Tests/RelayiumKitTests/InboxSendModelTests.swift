@@ -909,6 +909,66 @@ final class InboxSendModelTests: XCTestCase {
         XCTAssertEqual(transport.purposes, [.deviceTask])
     }
 
+    // MARK: - a message whose staging fails after `sendText` returned (A22)
+
+    /// **Adversarial: the words survive a staging failure the composer never
+    /// saw coming.** `sendText` accepts synchronously and the composer clears
+    /// its field on acceptance; the key-storage refusal lands afterwards. The
+    /// text must come back — to the composer for the same device, once, and
+    /// only into an empty field.
+    func testAMessageWhoseStagingFailsLaterIsHandedBackToItsOwnComposer() async throws {
+        let (model, _) = await signedIn(pendingKeys: UnsavableKeyStore())
+        model.selectTarget(deviceID)
+
+        model.sendText("meet me at 6", token: "bearer")
+        XCTAssertNil(model.refusal, "accepted synchronously, so the composer clears its field")
+        await waitUntil("the late refusal") { model.refusal != nil }
+
+        XCTAssertEqual(model.refusal, .keyStorageFailed)
+        XCTAssertNotNil(model.returnedMessageToken, "nothing tells the composer to look")
+        XCTAssertNil(model.takeReturnedMessage(for: otherDeviceID, composerText: ""),
+                     "another device's composer was handed this device's message")
+        XCTAssertNil(model.takeReturnedMessage(for: deviceID, composerText: "new words"),
+                     "the returned message overwrote text the user had started typing")
+        XCTAssertEqual(model.takeReturnedMessage(for: deviceID, composerText: "  \n"),
+                       "meet me at 6")
+        XCTAssertNil(model.returnedMessageToken)
+        XCTAssertNil(model.takeReturnedMessage(for: deviceID, composerText: ""),
+                     "the same message was handed back twice")
+        XCTAssertEqual(store.deviceSendPlans(for: "acct-1"), [])
+    }
+
+    /// **Adversarial: a returned message never crosses an account.** The words
+    /// were written under one account; the next account's composer — even for
+    /// a device with the same id — must not be handed them.
+    func testAReturnedMessageIsDroppedWhenTheAccountChanges() async throws {
+        let (model, session) = await signedIn(pendingKeys: UnsavableKeyStore())
+        model.selectTarget(deviceID)
+        model.sendText("for acct-1 only", token: "bearer")
+        await waitUntil("the late refusal") { model.refusal != nil }
+        XCTAssertNotNil(model.returnedMessageToken)
+
+        session.send(ready("acct-2"))
+
+        XCTAssertNil(model.returnedMessageToken)
+        XCTAssertNil(model.takeReturnedMessage(for: deviceID, composerText: ""),
+                     "one account's unsent message reached another account's composer")
+    }
+
+    /// A message that staged successfully is not handed back: the durable plan
+    /// owns it, and a second copy in the composer would invite a double send.
+    func testAMessageThatStagedIsNotHandedBack() async throws {
+        let (model, _) = await signedIn()
+        model.selectTarget(deviceID)
+        sender.createOutcomes = [
+            .success(InboxTaskCreation(task: task(idempotencyKey: "recorded"), created: true)),
+        ]
+        model.sendText("delivered", token: "bearer")
+        await waitUntil("the tracked task") { model.items.first?.taskID != nil }
+        XCTAssertNil(model.returnedMessageToken)
+        XCTAssertNil(model.takeReturnedMessage(for: deviceID, composerText: ""))
+    }
+
     /// Both message bounds, measured in UTF-8 bytes, refused before staging.
     func testAMessageOutsideItsBoundsIsRefusedWithItsOwnReason() async throws {
         let (model, _) = await signedIn()

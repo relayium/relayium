@@ -40,6 +40,12 @@ on:
     paths:
       - 'apps/android/**'
       - 'scripts/android-interop-acceptance.sh'
+      # A12: the CLI ↔ Android cell run in the emulator step below.
+      - 'scripts/interop/cli-android-acceptance.sh'
+      - 'scripts/interop/cli-android-peer.mjs'
+      - 'scripts/interop/cli-android-oracle.py'
+      - 'scripts/interop/cli-matrix-plan.py'
+      - 'scripts/interop/cli-process.mjs'
       - 'scripts/lib/local-acceptance.sh'
       # The oracle is a RUNTIME input of the acceptance — the shell invokes it
       # for every round's comparison — so an edit to it must re-run the real
@@ -77,8 +83,9 @@ jobs:
     runs-on: ubuntu-latest
     # An emulator boot plus two application builds plus the rounds themselves.
     # Finite: a wedged boot fails the lane rather than holding a runner for six
-    # hours, and the failure is the truthful result.
-    timeout-minutes: 60
+    # hours, and the failure is the truthful result. 60 before A12 added the
+    # CLI ↔ Android cell (at most eight more paced rounds, APKs reused).
+    timeout-minutes: 85
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
@@ -143,6 +150,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
             ./scripts/android-interop-acceptance.sh
+            RELAYIUM_ANDROID_PREBUILT=1 ./scripts/interop/cli-android-acceptance.sh
             ./scripts/android-ui-acceptance.sh
             ./scripts/android-ui-session-acceptance.sh
             ./scripts/android-update-acceptance.sh

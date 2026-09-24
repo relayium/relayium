@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -71,14 +73,14 @@ func TestReceiveCommandReportsProgress(t *testing.T) {
 	}
 }
 
-func TestPullCommandReportsProgress(t *testing.T) {
+func TestLegacyPullCommandReportsProgress(t *testing.T) {
 	isolatedEnv(t)
 	dst := t.TempDir()
 	conn, errc, big := treeSenderOnAPipe(t)
 	stubSSHDial(t, conn)
 
 	var out, errb bytes.Buffer
-	if rc := Run([]string{"pull", "example.com:/srv/tree", dst}, &out, &errb); rc != 0 {
+	if rc := legacyPull([]string{"example.com:/srv/tree", dst}, &out, &errb); rc != 0 {
 		t.Fatalf("`pull` rc=%d: %s", rc, errb.String())
 	}
 	if serr := <-errc; serr != nil {
@@ -96,20 +98,22 @@ func TestPullCommandReportsProgress(t *testing.T) {
 }
 
 func TestReceiveCommandFailureLeavesOnlyTheError(t *testing.T) {
-	for _, cmd := range []string{"receive", "pull"} {
+	for _, cmd := range []string{"receive", "legacy-pull"} {
 		t.Run(cmd, func(t *testing.T) {
 			isolatedEnv(t)
 			peer, local := net.Pipe()
 			peer.Close() // the peer is gone before the first frame
 			args := []string{"receive", "483920", t.TempDir()}
 			stubCrossnetReceive(t, local)
-			if cmd == "pull" {
+			run := Run
+			if cmd == "legacy-pull" {
+				run = func(args []string, out, errout io.Writer) int { return legacyPull(args[1:], out, errout) }
 				args = []string{"pull", "example.com:/srv/tree", t.TempDir()}
 				stubSSHDial(t, local)
 			}
 
 			var out, errb bytes.Buffer
-			if rc := Run(args, &out, &errb); rc != 1 {
+			if rc := run(args, &out, &errb); rc != 1 {
 				t.Fatalf("`%s` rc=%d, want 1 (stderr %q)", cmd, rc, errb.String())
 			}
 			got := errb.String()
@@ -123,24 +127,23 @@ func TestReceiveCommandFailureLeavesOnlyTheError(t *testing.T) {
 	}
 }
 
-// A completion line is printed when the last byte arrives, which is before the
-// file is verified. A file that then fails must still end the command the way it
-// always did: named in the integrity line, exit 1, nothing installed.
-func TestReceiveCommandStillFailsAFileThatArrivedInFullButDoesNotVerify(t *testing.T) {
-	isolatedEnv(t)
-	dst := t.TempDir()
+// scriptedOneFileSender plays a push sender of one file, path, whose body is
+// body and whose claimed hash is sum, against the pipe end it returns. It ends
+// by reading the receiver's Result, so a per-file failure reaches the command.
+func scriptedOneFileSender(t *testing.T, path string, body []byte, sum string) (conn net.Conn, errc <-chan error) {
+	t.Helper()
 	peer, local := net.Pipe()
 	deadline := time.Now().Add(10 * time.Second)
 	peer.SetDeadline(deadline)
 	local.SetDeadline(deadline)
-	errc := make(chan error, 1)
+	c := make(chan error, 1)
 	go func() {
 		defer peer.Close()
-		errc <- func() error {
+		c <- func() error {
 			if err := xfer.WriteJSON(peer, xfer.MsgHello, xfer.Hello{Version: xfer.WireVersion, Mode: "push"}); err != nil {
 				return err
 			}
-			m := xfer.Manifest{Files: []xfer.FileEntry{{Path: "bad.bin", Size: 6, Mode: 0o644}}}
+			m := xfer.Manifest{Files: []xfer.FileEntry{{Path: path, Size: int64(len(body)), Mode: 0o644}}}
 			if err := xfer.WriteJSON(peer, xfer.MsgManifest, m); err != nil {
 				return err
 			}
@@ -151,10 +154,10 @@ func TestReceiveCommandStillFailsAFileThatArrivedInFullButDoesNotVerify(t *testi
 			if err := xfer.WriteJSON(peer, xfer.MsgFileStart, xfer.FileStart{}); err != nil {
 				return err
 			}
-			if _, err := peer.Write([]byte("secret")); err != nil {
+			if _, err := peer.Write(body); err != nil {
 				return err
 			}
-			if err := xfer.WriteJSON(peer, xfer.MsgFileHash, xfer.FileHash{SHA256: strings.Repeat("0", 64)}); err != nil {
+			if err := xfer.WriteJSON(peer, xfer.MsgFileHash, xfer.FileHash{SHA256: sum}); err != nil {
 				return err
 			}
 			var res xfer.Result
@@ -162,7 +165,17 @@ func TestReceiveCommandStillFailsAFileThatArrivedInFullButDoesNotVerify(t *testi
 			return err
 		}()
 	}()
-	stubCrossnetReceive(t, local)
+	return local, c
+}
+
+// A completion line is printed when the last byte arrives, which is before the
+// file is verified. A file that then fails must still end the command the way it
+// always did: named in the failure line, exit 1, nothing installed.
+func TestReceiveCommandStillFailsAFileThatArrivedInFullButDoesNotVerify(t *testing.T) {
+	isolatedEnv(t)
+	dst := t.TempDir()
+	conn, errc := scriptedOneFileSender(t, "bad.bin", []byte("secret"), strings.Repeat("0", 64))
+	stubCrossnetReceive(t, conn)
 
 	var out, errb bytes.Buffer
 	if rc := Run([]string{"receive", "483920", dst}, &out, &errb); rc != 1 {
@@ -171,7 +184,7 @@ func TestReceiveCommandStillFailsAFileThatArrivedInFullButDoesNotVerify(t *testi
 	if perr := <-errc; perr != nil {
 		t.Fatalf("scripted sender: %v", perr)
 	}
-	const want = "  bad.bin (6 bytes)\n1 file(s) failed integrity check: [bad.bin]\n"
+	const want = "  bad.bin (6 bytes)\n1 file(s) could not be verified or saved: [bad.bin]\n"
 	if errb.String() != want {
 		t.Errorf("stderr = %q\nwant     %q", errb.String(), want)
 	}
@@ -183,6 +196,41 @@ func TestReceiveCommandStillFailsAFileThatArrivedInFullButDoesNotVerify(t *testi
 	}
 	if left, _ := filepath.Glob(filepath.Join(dst, ".relayium-recv-*")); len(left) != 0 {
 		t.Errorf("staging left behind: %v", left)
+	}
+}
+
+// The same per-file failure also covers a file whose hash is right but which
+// could not be saved here. The wire carries no cause, so the line must not claim
+// one: this file's content matched, and "failed integrity check" said it had not.
+// The refusal comes from a symlinked parent directory under the destination; a
+// symlinked leaf would stop the whole push at the no-clobber preflight instead.
+func TestReceiveCommandDoesNotCallAFileItCouldNotSaveAnIntegrityFailure(t *testing.T) {
+	isolatedEnv(t)
+	dst, outside := t.TempDir(), t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dst, "box")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	body := []byte("secret")
+	sum := sha256.Sum256(body)
+	conn, errc := scriptedOneFileSender(t, "box/good.bin", body, hex.EncodeToString(sum[:]))
+	stubCrossnetReceive(t, conn)
+
+	var out, errb bytes.Buffer
+	if rc := Run([]string{"receive", "483920", dst}, &out, &errb); rc != 1 {
+		t.Fatalf("`receive` rc=%d, want 1 (stderr %q)", rc, errb.String())
+	}
+	if perr := <-errc; perr != nil {
+		t.Fatalf("scripted sender: %v", perr)
+	}
+	const want = "1 file(s) could not be verified or saved: [box/good.bin]\n"
+	if errb.String() != want {
+		t.Errorf("stderr = %q\nwant     %q", errb.String(), want)
+	}
+	if out.Len() != 0 {
+		t.Errorf("stdout = %q, want it empty", out.String())
+	}
+	if left, _ := os.ReadDir(outside); len(left) != 0 {
+		t.Errorf("wrote through the symlinked directory: %d entries outside", len(left))
 	}
 }
 
@@ -200,7 +248,7 @@ func TestRecvHelperReportsNoProgress(t *testing.T) {
 	t.Cleanup(func() { helperStdio = old })
 
 	var out, errb bytes.Buffer
-	rc := Run([]string{"__recv", "--", dst}, &out, &errb)
+	rc := runRecv([]string{"--", dst}, &out, &errb)
 	conn.Close()
 	if rc != 0 {
 		t.Fatalf("`__recv` rc=%d: %s", rc, errb.String())

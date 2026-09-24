@@ -167,6 +167,16 @@ func nodeEventHandler(reg *allocRegistry) turn.EventHandler {
 // specific than the signal we already have. Removing it costs nothing and
 // removes the misattribution outright.
 //
+// pion itself had the same address-keyed shape one layer down, where the node
+// cannot route around it: upstream v4.1.4 ended an allocation from its own late
+// relay-reader error or lifetime timer by looking up its 5-tuple, so a reader
+// unwinding after the client had re-allocated from the same source port closed
+// the NEW allocation's relay socket, and the registry — correctly — counted it
+// gone. The node therefore builds pion from server/third_party/pion-turn, v4.1.4
+// plus an identity guard on those two paths; see PATCHES.md there and
+// TestTURNLateReaderOfEndedAllocationCannotEndItsSuccessor. Nothing here depends
+// on the patch beyond that: retirement is still "the relay socket closed".
+//
 // The tradeoff, stated plainly: retirement now depends on pion closing the
 // relay socket. A future pion that ended an allocation while leaving its relay
 // socket open would leave the entry counted as live — but that socket would

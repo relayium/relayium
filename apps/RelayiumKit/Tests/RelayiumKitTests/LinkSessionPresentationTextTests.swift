@@ -547,3 +547,40 @@ final class LinkSessionPresentationTextTests: XCTestCase {
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
     }
 }
+
+
+// MARK: - A16: what a row's Copy puts on the pasteboard
+
+extension LinkSessionPresentationTextTests {
+
+    /// **The body a row copies is the exact UTF-8 the lane delivered.**
+    ///
+    /// Compared as BYTES, because Swift's `String ==` is canonical equivalence:
+    /// "é" precomposed and "e" + U+0301 compare equal as strings while being
+    /// different messages. A normalising, trimming or re-encoding projection
+    /// would pass a string comparison and fail this one.
+    func testAReceivedBodyKeepsItsExactUTF8ForCopy() async {
+        let (bridge, model) = rig()
+        await open(bridge, model)
+
+        let bodies = ["e\u{301}",                  // decomposed
+                      "\u{e9}",                    // precomposed
+                      "你好，世界",
+                      "👩‍👩‍👧‍👦 🇨🇳 👍🏽",
+                      "  leading and trailing  \n"]
+        let log = PublicationLog(model.$textMessages)
+        let arrived = log.expect(bodies.count + 1, "every message arrives", in: self)
+        bridge.publish(.text(.status(.open)))
+        for body in bodies { bridge.publish(.text(.received(body))) }
+        await fulfillment(of: [arrived], timeout: 5)
+
+        XCTAssertEqual(model.textMessages.map { Array($0.body.utf8) },
+                       bodies.map { Array($0.utf8) },
+                       "a row would copy different bytes from the ones received")
+        // And the two canonically-equal rows stay two distinct rows.
+        XCTAssertNotEqual(Array(model.textMessages[0].body.utf8),
+                          Array(model.textMessages[1].body.utf8))
+        XCTAssertEqual(Set(model.textMessages.map(\.id)).count, bodies.count)
+        log.detach()
+    }
+}

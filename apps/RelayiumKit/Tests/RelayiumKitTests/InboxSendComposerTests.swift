@@ -249,3 +249,78 @@ final class InboxSendComposerTests: XCTestCase {
                            canReceiveText: canReceiveText)
     }
 }
+
+
+// MARK: - A22: what is left, or how far over — the line the iOS composer adds
+
+extension InboxSendComposerTests {
+
+    /// **At the limit and one byte past it read differently.** The size line
+    /// rounds to a tenth of a KB, so both say "64.0 KB of 64.0 KB"; the limit
+    /// line is what tells the user that one of them cannot be sent — in exact
+    /// bytes, in both maintained languages.
+    func testTheLimitLineSeparatesExactlyAtTheLimitFromOneByteOver() {
+        let atLimit = InboxTextDraft(String(repeating: "a", count: InboxManifest.maxTextBytes))
+        let oneOver = InboxTextDraft(String(repeating: "a", count: InboxManifest.maxTextBytes + 1))
+        XCTAssertTrue(atLimit.isSendable, "exactly at the limit must be sendable")
+        XCTAssertFalse(oneOver.isSendable, "one byte over must not be sendable")
+
+        for language in [AppLanguage.en, .zh] {
+            XCTAssertEqual(InboxSendPresentation.size(of: atLimit, language: language),
+                           InboxSendPresentation.size(of: oneOver, language: language),
+                           "precondition: the rounded size line cannot tell them apart")
+            let left = InboxSendPresentation.limit(of: atLimit, language: language)
+            let over = InboxSendPresentation.limit(of: oneOver, language: language)
+            XCTAssertNotEqual(left, over, "\(language.rawValue): at-limit and over read the same")
+            XCTAssertEqual(left, L10n.t(.sendMessageRemaining, [L10n.bytes(0, language: language)],
+                                        language: language))
+            XCTAssertEqual(over, L10n.t(.sendMessageOverLimit, [L10n.bytes(1, language: language)],
+                                        language: language))
+            XCTAssertFalse(left.contains("%") || over.contains("%"),
+                           "\(language.rawValue) left a placeholder unfilled")
+        }
+        // The copy is genuinely two languages, not English twice.
+        XCTAssertNotEqual(InboxSendPresentation.limit(of: oneOver, language: .en),
+                          InboxSendPresentation.limit(of: oneOver, language: .zh))
+    }
+
+    /// **Multi-byte text is counted by bytes at the boundary.** 16,384 emoji
+    /// are exactly the limit a character count would call a quarter spent; one
+    /// more combining mark — a byte-heavy code point that adds no character —
+    /// is over.
+    func testEmojiCJKAndCombiningMarksAreCountedInBytesAtTheBoundary() {
+        let emoji = String(repeating: "😀", count: InboxManifest.maxTextBytes / 4)
+        XCTAssertEqual(emoji.count, InboxManifest.maxTextBytes / 4)
+        XCTAssertTrue(InboxTextDraft(emoji).isSendable)
+        XCTAssertEqual(InboxSendPresentation.limit(of: InboxTextDraft(emoji), language: .en),
+                       L10n.t(.sendMessageRemaining, [L10n.bytes(0, language: .en)], language: .en))
+
+        // A combining acute accent is two UTF-8 bytes and folds into the
+        // previous character, so `count` does not move while bytes do.
+        let combined = emoji + "\u{301}"
+        XCTAssertEqual(combined.count, emoji.count, "precondition: no new character")
+        let draft = InboxTextDraft(combined)
+        XCTAssertFalse(draft.isSendable)
+        XCTAssertEqual(draft.overflowBytes, 2)
+
+        // CJK: three bytes per character. 21,845 of them are 65,535 bytes — one
+        // byte left — and one more is two bytes over.
+        let cjk = String(repeating: "字", count: InboxManifest.maxTextBytes / 3)
+        XCTAssertEqual(InboxTextDraft(cjk).byteCount, InboxManifest.maxTextBytes - 1)
+        XCTAssertEqual(InboxSendPresentation.limit(of: InboxTextDraft(cjk), language: .zh),
+                       L10n.t(.sendMessageRemaining, [L10n.bytes(1, language: .zh)], language: .zh))
+        XCTAssertEqual(InboxTextDraft(cjk + "字").overflowBytes, 2)
+    }
+
+    /// **The Inbox bound, not the realtime lane's.** They happen to be the same
+    /// number today; the composer must name the one the Inbox manifest
+    /// declares, so a change to either is a change to the right screen.
+    func testTheComposerBoundIsTheInboxManifests() {
+        XCTAssertEqual(InboxTextDraft(String(repeating: "a", count: InboxManifest.maxTextBytes + 1))
+                        .overflowBytes, 1)
+        XCTAssertEqual(InboxSendPresentation.limit(of: InboxTextDraft(""), language: .en),
+                       L10n.t(.sendMessageRemaining,
+                              [L10n.bytes(Int64(InboxManifest.maxTextBytes), language: .en)],
+                              language: .en))
+    }
+}

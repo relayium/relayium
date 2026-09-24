@@ -330,6 +330,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # The App Store candidate script's contract, driven with `xcodebuild` and
+      # `xcrun` stubs -- what it REFUSES is its whole value. It lives here rather
+      # than on the unfiltered lane because it requires macOS: it exits 2 off
+      # Darwin and reads what it generated with `plutil`. It needs no Xcode
+      # selection, so it runs before that step and costs seconds.
+      - name: the App Store candidate script still refuses what it must
+        run: bash scripts/test/ios-app-store-candidate-test.sh
       # Nothing below this step may compile against the runner image's default
       # Xcode, or against an untested newer major. One shared script, declared
       # in the `env:` block above.

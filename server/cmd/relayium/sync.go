@@ -17,7 +17,6 @@ const syncUsage = `relayium sync — one-way incremental folder mirror
 
 usage:
   relayium sync <src...> relayium://host[:port] [--delete] [--watch]   direct, no SSH/account
-  relayium sync <src...> [user@]host:dest [--delete] [--watch]         over SSH
 
 A relayium:// destination is the direct server-to-server path: the receiver runs
 "relayium serve --dir D" and this mirrors into that directory over a pinned TLS
@@ -29,23 +28,18 @@ skipped, and a partial file resumes.
 
 positional arguments:
   <src...>   directories or files to mirror
-  <dest>     relayium://host[:port], or [user@]host:dest for the SSH path
+  <dest>     relayium://host[:port]
 
 flags:
   --delete         also delete files on the receiver that are gone from the
-                   source. WHO HAS TO AGREE differs by destination:
+                   source. the listener must consent:
 
                    relayium://host — the listener is a separate long-running
                    process someone else started, so it must have been started as
                    "relayium serve --allow-delete". Without that, the delete is
                    ignored and reported back to you; nothing is removed.
 
-                   [user@]host:dest — there is no separate listener to consent:
-                   this starts the receiver over your own SSH session, as you.
-                   No --allow-delete is involved, and passing --delete here does
-                   delete.
-
-                   Either way deletion is confined to the top-level directories
+                   Deletion is confined to the top-level directories
                    this run actually sends — a sibling folder under the
                    receiver's --dir is never touched — and an empty source
                    refuses outright rather than mirroring nothing onto
@@ -81,13 +75,10 @@ flags:
                    once the attempt already running returns. A sync in flight is
                    not cut off mid-transfer, so stopping can take as long as the
                    current transfer does.
-  -i <file>        ssh identity file (SSH destinations)
-  -p <port>        ssh port (SSH destinations)
   --config-dir D   identity/trust directory for relayium:// destinations
                    (default ~/.config/relayium)
 
-Both destinations require relayium on the receiver: sync speaks the native
-protocol and has no tar fallback.
+The destination requires a Relayium listener. SSH destinations are disabled.
 `
 
 // runSync implements `relayium sync <src...> <dest> [--delete] [--watch]`: a
@@ -111,6 +102,10 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	}
 	dest := rest[len(rest)-1]
 	srcs := rest[:len(rest)-1]
+	// Refuse before watch can retry forever or touch the source filesystem.
+	if !strings.HasPrefix(dest, daemonScheme) || f.identity != "" || f.port != 0 {
+		return sshRetired(stderr)
+	}
 
 	once := func() int {
 		return syncOnce(dest, srcs, f, stdout, stderr)

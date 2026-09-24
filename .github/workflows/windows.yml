@@ -451,7 +451,7 @@ jobs:
   # upload. Nothing here needs a secret and nothing here produces a distributable.
   realtime:
     runs-on: windows-latest
-    # The fixture's own budget is 25 minutes and it runs up to 8 rounds, each
+    # The fixture's own budget is 25 minutes and it runs up to 10 rounds, each
     # with its own server, Electron and Chrome. 35 leaves room for the two npm
     # installs, two builds and the Go work in front of it without letting a
     # genuinely hung round run until the runner is killed.

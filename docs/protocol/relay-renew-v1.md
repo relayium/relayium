@@ -829,3 +829,30 @@ And it MUST NOT:
    compatibility. Actual mixed-client, device and network coverage must still
    be stated separately. Existing clients without the capability retain the
    original bounded lifetime.
+6. **The CLI (Go, Pion) restarts ICE break-before-make.** Creating an
+   ICE-restart offer, or applying one, makes pion/ice drop the selected pair
+   and close every local candidate — including the previous TURN allocation —
+   before the new generation has any pair. So on the CLI the old path cannot
+   survive a failed migration, and "a failed epoch keeps the old path" does
+   not hold there. The CLI therefore:
+   - restarts ICE only after both peers are `ready` on the same, locally
+     validated grant and the epoch-0 pin baseline exists; the answering side
+     checks the received offer against the pin before applying it;
+   - ends the link immediately, with an authenticated leave and a truthful
+     line, when an attempt ends without §6.5 commit after its transport
+     restarted, in either role. This includes a Web or app initiator renewing
+     against a CLI responder. The link never stalls silently: the epoch's own
+     timers bound it (30 s ICE window, 60 s hard cap);
+   - keeps every failure before the restart (`denied`, `unavailable`,
+     silence, an old server, an old or idle peer) exactly as §4 describes: the
+     old path and the old deadline stand.
+
+   The deadline still moves only on §6.5 commit. For money this is the
+   conservative direction: the old allocation is released at the restart
+   rather than held alongside the new one. A failed renewal costs the link at
+   most what was left of its final renewal margin. The CLI announces
+   `relay-renew/1` in the `caps` of its link offer and answer (its roster hello
+   is unchanged). It sends local candidates with a `usernameFragment` field,
+   because Pion's candidate strings carry no `ufrag` extension. It takes a
+   candidate's generation, and the selected pair's generation, from the ICE
+   agent's current candidate set. It does not guess.

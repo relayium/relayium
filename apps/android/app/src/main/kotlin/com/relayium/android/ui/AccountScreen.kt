@@ -560,6 +560,80 @@ private fun ReadyCards(ready: AccountState.Ready, viewModel: TransferViewModel) 
 
     PlanCard(ready)
     DevicesCard(viewModel)
+    DeleteAccountCard(ready.user.email, viewModel)
+}
+
+/**
+ * Asking for account deletion (A31 c). Two steps in the app — this button, then
+ * a dialog stating what happens — and a third outside it: the server emails a
+ * confirmation link to the account's own address, and only opening and
+ * confirming that link on relayium.com schedules the deletion.
+ *
+ * The copy may therefore never say "deleted" or "sent": the request endpoint
+ * answers 200 whether or not its throttle let an email go, and nothing is
+ * removed until the link is confirmed.
+ */
+@Composable
+private fun DeleteAccountCard(email: String, viewModel: TransferViewModel) {
+    val deletion by viewModel.account.deletion.collectAsStateWithLifecycle()
+    var confirming by rememberSaveable { mutableStateOf(false) }
+
+    SectionCard(title = stringResource(R.string.account_delete_title)) {
+        Text(
+            text = stringResource(R.string.account_delete_body, email),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        when (val d = deletion) {
+            is RequestState.Sending -> Busy(R.string.account_delete_requesting)
+            is RequestState.Requested ->
+                StatusCard(text = stringResource(R.string.account_delete_requested, email), isError = false)
+            is RequestState.Failed -> {
+                StatusCard(text = stringResource(R.string.account_delete_failed), isError = true)
+                Text(
+                    text = accountErrorMessage(d.failure),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            is RequestState.Idle -> Unit
+        }
+        OutlinedButton(
+            onClick = { confirming = true },
+            enabled = deletion !is RequestState.Sending,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = Metrics.touch),
+        ) {
+            Text(stringResource(R.string.account_delete_action))
+        }
+    }
+
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(stringResource(R.string.account_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.account_delete_confirm_body, email)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        viewModel.account.requestAccountDeletion()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
+                ) {
+                    Text(stringResource(R.string.account_delete_confirm_action))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { confirming = false },
+                    modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
+                ) {
+                    Text(stringResource(R.string.files_cancel))
+                }
+            },
+        )
+    }
 }
 
 /** Every number here is the server's. Nothing is recomputed and nothing is

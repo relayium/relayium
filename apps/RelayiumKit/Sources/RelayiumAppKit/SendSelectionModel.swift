@@ -95,6 +95,14 @@ public final class SendSelectionModel: ObservableObject {
     /// "sign in first" under all five, as though each had been refused.
     @Published public private(set) var sharedDraftRefusal: SharedDraftRefusalNotice?
 
+    /// Told when the app LOADED a draft on its own, and when the scene left the
+    /// foreground. The shell uses the pair to decide whether it may also bring
+    /// the Send tab forward — see `SharedDraftArrivalNavigation`, which decides.
+    /// A subject rather than a published value on purpose: a published value
+    /// replays to every new subscriber, and a replayed "a draft was just
+    /// loaded" is a navigation nobody asked for.
+    public let arrivalSignals = PassthroughSubject<SharedDraftArrivalSignal, Never>()
+
     // MARK: - collaborators
 
     private let upload: CloudUploadModel
@@ -106,6 +114,10 @@ public final class SendSelectionModel: ObservableObject {
     /// shared-draft surface never appears, which is the truthful rendering of
     /// "nothing can arrive here".
     private let drafts: SharedDraftStore?
+    /// Which drafts have already had their one automatic load considered. Nil
+    /// switches automatic loading off entirely — every draft then waits for the
+    /// user's own Use, which is how this model behaved before it existed.
+    let arrivals: SharedDraftArrivalLedger?
     private let fetchConfig: @Sendable () async throws -> ServerConfig
     /// Production sending is account-owned. The opt-out exists only so the
     /// package can exercise resource ownership independently of a session; the
@@ -130,6 +142,23 @@ public final class SendSelectionModel: ObservableObject {
     /// because a read was superseded.
     private var draftGeneration = 0
 
+    /// The scene came forward and the newest inbox listing has not yet been
+    /// judged for a single newly shared draft. Raised ONLY by `.active`, and
+    /// kept across exactly one wait: the session still restoring at launch, and
+    /// the recovery scan the restored account starts. Anything else that
+    /// changes the account lowers it.
+    private var arrivalPending = false
+    /// The account changed in a way that is not the launch restore finishing.
+    /// The newest listing records whatever is new as handled and loads nothing,
+    /// so no draft that arrived under one account — or with nobody signed in —
+    /// is later loaded for another.
+    private var arrivalSuppressPending = false
+    /// `SessionState.restoring`, which `SendAccountContext` deliberately folds
+    /// into "no account". Only the arrival rule needs the difference: a launch
+    /// that is still reading its token is not a signed-out user.
+    private var isRestoringSession = false
+    private var lastAccountContext: SendAccountContext?
+
     private var sessionObservation: AnyCancellable?
     private let configTask = CancellableTaskBox()
 
@@ -153,11 +182,13 @@ public final class SendSelectionModel: ObservableObject {
                 drafts: SharedDraftStore? = nil,
                 fetchConfig: @escaping @Sendable () async throws -> ServerConfig,
                 store: SelectionStore? = nil,
-                enforcesReadyAccount: Bool = true) {
+                enforcesReadyAccount: Bool = true,
+                arrivals: SharedDraftArrivalLedger? = nil) {
         self.upload = upload
         self.access = access
         self.photos = photos
         self.drafts = drafts
+        self.arrivals = drafts == nil ? nil : arrivals
         // Constructed in the body rather than as a default argument:
         // `SelectionStore` is `@MainActor`, and a default argument expression is
         // evaluated in a nonisolated context even when the initializer it
@@ -424,20 +455,36 @@ public final class SendSelectionModel: ObservableObject {
     /// nothing else; whether a phase means "re-read the inbox" is decided HERE,
     /// where `swift test` can drive it.
     ///
+    /// `.active` is also the one moment a newly shared draft may be LOADED
+    /// without a tap — see `settleArrival`, which decides whether it is. It is
+    /// never sent: loading is exactly what Use does, and Send is still the
+    /// user's.
+    ///
     /// `.inactive` deliberately does nothing. It is what the system reports while
     /// a document picker or the app switcher is up, and re-reading there would
-    /// be a disk scan on the way into the picker, every time.
+    /// be a disk scan on the way into the picker, every time. `.background`
+    /// ends any arrival still waiting to be judged: nobody is looking.
     public func phaseChanged(to phase: AppLifecyclePhase) {
-        guard phase == .active else { return }
-        refreshSharedDrafts()
+        switch phase {
+        case .active:
+            if arrivals != nil { arrivalPending = true }
+            refreshSharedDrafts()
+        case .background:
+            arrivalPending = false
+            arrivalSignals.send(.leftForeground)
+        case .inactive:
+            break
+        }
     }
 
     /// Re-read the App Group inbox.
     ///
     /// Called when the scene becomes active, when the Send surface appears, on
     /// every account event, and after anything that adopts, returns or discards
-    /// a draft. It is a pure read: it never adopts, never uploads and never
-    /// deletes a complete draft.
+    /// a draft. It never uploads and never deletes a complete draft, and it
+    /// adopts only through `settleArrival`, which does nothing unless the scene
+    /// has just become active — so the Send surface appearing, an account
+    /// refresh or a Discard can never load a draft by themselves.
     ///
     /// Off the main actor because it stats every staged file of every waiting
     /// draft, and a thousand-file draft would otherwise stall a frame. The
@@ -448,9 +495,11 @@ public final class SendSelectionModel: ObservableObject {
         let g = accountGeneration
         draftGeneration += 1
         let d = draftGeneration
+        let tracksArrivals = arrivals != nil
         Task { [weak self] in
-            let waiting = await Task.detached(priority: .utility) {
-                drafts.drafts().map(SharedDraftSummary.init)
+            let (waiting, present) = await Task.detached(priority: .utility) {
+                (drafts.drafts().map(SharedDraftSummary.init),
+                 tracksArrivals ? SharedDraftArrivalLedger.presentEntries(in: drafts.root) : nil)
             }.value
             // Both generations. The account one catches a sign-out landing
             // during the read; `draftGeneration` catches the ordinary case that
@@ -464,18 +513,85 @@ public final class SendSelectionModel: ObservableObject {
             // concerned: it is already describing the selection, and listing it
             // again would offer the same files twice.
             self.sharedDrafts = waiting.filter { $0.id != self.adoptedDraft?.id }
+            self.settleArrival(listed: waiting.map(\.id), present: present)
         }
     }
 
-    /// Use a waiting draft as the current selection. Always the user's own tap.
+    /// Judge the NEWEST listing for a draft that arrived while the user was
+    /// away, and load it only when that cannot overwrite anything.
     ///
-    /// Nothing about this is automatic. A draft is never adopted on arrival, on
-    /// launch, on sign-in or when the scene becomes active — all of which would
-    /// be this app deciding which of several waiting things the user meant, and
-    /// the wrong answer overwrites a selection they made by hand.
+    /// The order is the design:
+    ///
+    ///  1. A root that cannot be listed and is not provably absent decides
+    ///     nothing — it looks exactly like an empty inbox, and seeding or
+    ///     pruning on it would make every waiting draft new again later.
+    ///  2. The first listing this version ever sees records everything already
+    ///     waiting as handled — every draft DIRECTORY in the root, not only the
+    ///     drafts whose plans happened to read back this time. Those drafts
+    ///     predate it, and nothing says the user wants them now; they stay
+    ///     cards.
+    ///  3. An account change that was not the launch restore finishing records
+    ///     what is new and loads nothing.
+    ///  4. Nothing happens unless the scene has just become active.
+    ///  5. A launch still restoring its session, or the restored account's
+    ///     recovery scan, is waited out — both are this launch, not the user.
+    ///  6. Everything new is recorded BEFORE anything is loaded, so a crash in
+    ///     between leaves a card rather than a draft that reloads every launch.
+    ///  7. Exactly one new draft, a ready account, an empty idle Send screen, no
+    ///     photo import and no work in flight — or nothing is loaded at all and
+    ///     every new draft stays a card for the user to choose.
+    private func settleArrival(listed: [String], present: Set<String>?) {
+        guard let arrivals, let present else { return }
+        arrivals.retain(present: present.union(listed))
+        guard arrivals.isSeeded else {
+            arrivals.seed(SharedDraftArrivalLedger.knownDraftIds(present: present, listed: listed))
+            arrivalPending = false
+            arrivalSuppressPending = false
+            return
+        }
+        let fresh = listed.filter { !arrivals.contains($0) && $0 != adoptedDraft?.id }
+        if arrivalSuppressPending {
+            arrivalSuppressPending = false
+            arrivalPending = false
+            arrivals.record(fresh)
+            return
+        }
+        guard arrivalPending else { return }
+        guard !fresh.isEmpty else { arrivalPending = false; return }
+        if isRestoringSession { return }
+        if case .checkingRecovery = upload.state, let recovery = upload.recoveryTask {
+            // Re-read once recovery has answered: it may retire one of these
+            // drafts into a job it is about to offer, and a listing taken
+            // before that would be judging a draft that is no longer there.
+            // (With no task to wait for, it falls through below and is
+            // refused as busy rather than re-read in a loop.)
+            let g = accountGeneration
+            Task { [weak self] in
+                await recovery.value
+                guard let self, self.arrivalPending, g == self.accountGeneration else { return }
+                self.refreshSharedDrafts()
+            }
+            return
+        }
+        arrivalPending = false
+        arrivals.record(fresh)
+        guard fresh.count == 1, accountUserId != nil, !isImportingPhotos, !upload.isBusy,
+              SharedDraftGate.refusal(hasReadyAccount: true, upload: upload.state) == nil
+        else { return }
+        if adopt(fresh[0], automatic: true) {
+            arrivalSignals.send(.draftLoaded)
+        }
+    }
+
+    /// Use a waiting draft as the current selection — the user's own tap.
+    ///
+    /// The only other way in is `settleArrival`, which loads a single newly
+    /// shared draft when the user comes back to an EMPTY Send screen. Nothing
+    /// ever chooses between several waiting drafts, and nothing replaces a
+    /// selection the user made by hand.
     public func useSharedDraft(_ id: String) {
         sharedDraftRefusal = nil
-        guard let drafts else { return }
+        guard drafts != nil else { return }
         if let refusal = SharedDraftGate.refusal(hasReadyAccount: accountUserId != nil,
                                                  upload: upload.state) {
             // Attached to the draft whose button was pressed. A refusal that
@@ -483,14 +599,27 @@ public final class SendSelectionModel: ObservableObject {
             sharedDraftRefusal = SharedDraftRefusalNotice(draftId: id, reason: refusal)
             return
         }
+        // Chosen by hand, so never a candidate for loading itself again — in
+        // particular not for the next account, after this one hands it back.
+        arrivals?.record([id])
+        adopt(id, automatic: false)
+    }
+
+    /// Make a draft the selection. The caller has already checked the gate.
+    @discardableResult
+    private func adopt(_ id: String, automatic: Bool) -> Bool {
+        guard let drafts else { return false }
         // Read through the store, so what is adopted is a plan that still
         // validates and staging that still matches it. A draft removed by
         // another process, or damaged, simply disappears from the list.
         guard let plan = drafts.draft(id: id),
               let staged = try? drafts.stagedFiles(for: plan) else {
-            selectionError = L10n.t(.errorShareStorageFailed)
+            // An error only for a tap. A draft that vanished between the
+            // listing and an automatic load is not something the user asked
+            // for, and a failure sentence about it would be untrue.
+            if !automatic { selectionError = L10n.t(.errorShareStorageFailed) }
             refreshSharedDrafts()
-            return
+            return false
         }
         supersedeImports()
         // Whatever was selected before goes, INCLUDING another draft — which
@@ -519,11 +648,12 @@ public final class SendSelectionModel: ObservableObject {
             upload.sourceDraftId = nil
             refreshSharedDrafts()
             publishRenderState()
-            return
+            return false
         }
         adoptedDraft = SharedDraftSummary(plan)
         sharedDrafts.removeAll { $0.id == plan.id }
         publishRenderState()
+        return true
     }
 
     /// Delete a waiting draft. Destructive, explicit, and the only thing in this
@@ -538,6 +668,13 @@ public final class SendSelectionModel: ObservableObject {
             clear()
         }
         drafts.discard(id: id)
+        // Only once it is PROVABLY gone. A failed removal — or a parent this
+        // process momentarily may not search, where `fileExists` says false
+        // about a directory that is still there — keeps it handled rather than
+        // letting it come back as new.
+        if SharedDraftArrivalLedger.isProvablyAbsent(drafts.draftURL(id: id)) {
+            arrivals?.forget(id)
+        }
         refreshSharedDrafts()
     }
 
@@ -721,11 +858,42 @@ public final class SendSelectionModel: ObservableObject {
     public func observe<P: Publisher>(_ states: P)
         where P.Output == SessionState, P.Failure == Never {
         sessionObservation = states
-            .map(SendAccountContext.context(for:))
+            // `.restoring` rides alongside rather than inside the context: the
+            // context's shape is public and every other consumer is right to
+            // treat a launch still reading its token as "no account".
+            .map { (SendAccountContext.context(for: $0), $0 == .restoring) }
             // A usage refresh that changes nothing the send screen cares about
             // must not re-fetch the size hint.
-            .removeDuplicates()
-            .sink { [weak self] context in self?.accountContextChanged(context) }
+            .removeDuplicates { $0 == $1 }
+            .sink { [weak self] context, restoring in
+                self?.sessionChanged(context, restoring: restoring)
+            }
+    }
+
+    private func sessionChanged(_ context: SendAccountContext, restoring: Bool) {
+        let first = lastAccountContext == nil
+        let finishedRestoring = isRestoringSession && !restoring
+        isRestoringSession = restoring
+        let contextChanged = context != lastAccountContext
+        lastAccountContext = context
+        // The launch restore landing on an account is this same launch
+        // carrying on, so a draft the user shared before opening the app is
+        // still theirs to have loaded. Every other change of account — signing
+        // in, out, switching — is a boundary: nothing new on the far side of it
+        // is loaded for whoever is on this side.
+        if !first, contextChanged, !(finishedRestoring && context.userId != nil) {
+            arrivalPending = false
+            if arrivals != nil { arrivalSuppressPending = true }
+        }
+        if contextChanged {
+            accountContextChanged(context)
+        } else if finishedRestoring {
+            // A restore that found nobody changes no context, so nothing else
+            // would re-read. Judged now, as signed out: the waiting activation
+            // records what is new and loads nothing, and signing in later is a
+            // boundary of its own.
+            refreshSharedDrafts()
+        }
     }
 
     private func accountContextChanged(_ context: SendAccountContext) {

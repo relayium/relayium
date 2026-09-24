@@ -93,6 +93,14 @@ func recvHS(ctx context.Context, s *Session, want string) (hsMsg, error) {
 	if err != nil {
 		return hsMsg{}, err
 	}
+	return decodeHS(data, want)
+}
+
+// decodeHS classifies one signal payload as a message of this handshake. It is
+// the whole of recvHS's judgement, split out so a payload received earlier (a
+// commit JoinRoom captured, or one a discovery layer already read) is judged
+// by exactly the same rules as one read now.
+func decodeHS(data json.RawMessage, want string) (hsMsg, error) {
 	var m hsMsg
 	// Every message of this handshake is an object with a kind. A payload that is
 	// neither -- including one that does not decode into the shape at all -- came
@@ -116,6 +124,51 @@ func DoHandshake(ctx context.Context, s *Session, id *secure.Identity, localCand
 	if err != nil {
 		return nil, err
 	}
+	if err := sendCommit(ctx, s, id, nonce, mode); err != nil {
+		return nil, err
+	}
+	peerCommitMsg, err := recvHS(ctx, s, "commit")
+	if err != nil {
+		return nil, err
+	}
+	return finishHandshake(ctx, s, id, nonce, localCandidates, peerCommitMsg)
+}
+
+// DoHandshakeFromPeerCommit is DoHandshake for a caller that already holds the
+// peer's first signal: a commit JoinRoom captured before the room view was
+// complete, or one a discovery layer read while deciding which wire the peer
+// speaks. first is judged exactly as DoHandshake judges the commit it reads
+// (ErrPeerNotCLI for a payload without a kind, a quoted error for any other
+// kind, a decode error for a commit that is not base64), and nothing is sent
+// before it passes.
+//
+// The wire is the one DoHandshake speaks, so the peer runs the unchanged
+// DoHandshake: we send our commit, then our reveal, and read the peer's
+// reveal. Commit-before-reveal still holds on both sides -- the peer committed
+// before we revealed (its commit is in hand) and we commit before the peer can
+// reveal (it waits for our commit), so neither side can choose its
+// fingerprint after seeing the other's.
+func DoHandshakeFromPeerCommit(ctx context.Context, s *Session, id *secure.Identity, localCandidates []string, mode string, first json.RawMessage) (*Handshake, error) {
+	peerCommitMsg, err := decodeHS(first, "commit")
+	if err != nil {
+		return nil, err
+	}
+	// Judge the commit's encoding before speaking too: nothing goes on the wire
+	// in answer to a first signal this side is going to refuse.
+	if _, err := base64.StdEncoding.DecodeString(peerCommitMsg.Commit); err != nil {
+		return nil, err
+	}
+	nonce, err := secure.NewNonce()
+	if err != nil {
+		return nil, err
+	}
+	if err := sendCommit(ctx, s, id, nonce, mode); err != nil {
+		return nil, err
+	}
+	return finishHandshake(ctx, s, id, nonce, localCandidates, peerCommitMsg)
+}
+
+func sendCommit(ctx context.Context, s *Session, id *secure.Identity, nonce []byte, mode string) error {
 	commit := secure.Commit(id.Fingerprint, nonce)
 	// ModeFile is sent as an absent field, so a file handshake's commit JSON stays
 	// byte-identical to what every deployed binary already sends and receives.
@@ -123,13 +176,12 @@ func DoHandshake(ctx context.Context, s *Session, id *secure.Identity, localCand
 	if wire == ModeFile {
 		wire = ""
 	}
-	if err := sendHS(ctx, s, hsMsg{Kind: "commit", Commit: base64.StdEncoding.EncodeToString(commit), Mode: wire}); err != nil {
-		return nil, err
-	}
-	peerCommitMsg, err := recvHS(ctx, s, "commit")
-	if err != nil {
-		return nil, err
-	}
+	return sendHS(ctx, s, hsMsg{Kind: "commit", Commit: base64.StdEncoding.EncodeToString(commit), Mode: wire})
+}
+
+// finishHandshake runs everything after both commits are exchanged: reveal,
+// verify the peer's reveal against its commit, pin, derive the SAS.
+func finishHandshake(ctx context.Context, s *Session, id *secure.Identity, nonce []byte, localCandidates []string, peerCommitMsg hsMsg) (*Handshake, error) {
 	peerCommit, err := base64.StdEncoding.DecodeString(peerCommitMsg.Commit)
 	if err != nil {
 		return nil, err

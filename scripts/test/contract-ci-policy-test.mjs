@@ -903,6 +903,22 @@ function gateReachabilityFailures(world) {
 // test would live in a tree whose workflow no longer executes it, and a source
 // change that broke the contract would land green.
 
+// A consumer's suite still runs when its command is the exact `runs` string,
+// or, for `go test ./...`, the same command with one `-skip '<regexp>'` whose
+// regexp cannot match the consumer's own contract test (go.yml skips the
+// real-time renewal tests there and runs them in their own job).
+function runsConsumerSuite(line, consumer) {
+  if (line.includes(consumer.runs)) return true;
+  if (consumer.runs !== "go test ./...") return false;
+  const m = /\bgo test\s+-skip\s+'([^']+)'\s+\.\/\.\.\.(?:\s|$)/.exec(line);
+  if (!m) return false;
+  const name = /-run '\^?([A-Za-z0-9_]+)/.exec(consumer.contractCommand)?.[1];
+  if (!name) return false;
+  let skip;
+  try { skip = new RegExp(m[1]); } catch { return false; }
+  return !skip.test(name);
+}
+
 function owningSuiteFailures(world) {
   const out = [];
   const need = (ok, message) => { if (!ok) out.push(message); };
@@ -916,7 +932,7 @@ function owningSuiteFailures(world) {
     );
     const doc = world.docs.get(consumer.workflow);
     const runsIt = Object.values(doc?.jobs ?? {}).some((job) =>
-      realRunLines(job).some((line) => line.includes(consumer.runs)));
+      realRunLines(job).some((line) => runsConsumerSuite(line, consumer)));
     need(
       runsIt,
       `${consumer.workflow} no longer runs \`${consumer.runs}\`, so it starts for a change to `
@@ -1323,8 +1339,17 @@ const MUTATIONS = [
     // what runs it on an ordinary server change. Break that and a server edit
     // can invalidate the frozen health surface and land green.
     name: "go.yml stops running the suite that contains both Go consumer tests",
-    mutate: (w) => withCommandJob(w, GO, "go test ./...", (job, step) => {
+    mutate: (w) => withCommandJob(w, GO, "go test -skip", (job, step) => {
       step.run = "go build ./...\n";
+    }),
+    expect: /go\.yml no longer runs `go test \.\/\.\.\.`/,
+  },
+  {
+    // go.yml's `-skip` exists for the real-time renewal tests only; widening
+    // it to the contract tests would start the lane and then not run them.
+    name: "go.yml's -skip grows to cover a Go consumer contract test",
+    mutate: (w) => withCommandJob(w, GO, "go test -skip", (job, step) => {
+      step.run = "go test -skip '^(TestLinkRenew|TestLDRenew|TestDeviceInbox|TestOpsDeploy)' ./...\n";
     }),
     expect: /go\.yml no longer runs `go test \.\/\.\.\.`/,
   },

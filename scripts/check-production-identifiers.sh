@@ -15,7 +15,9 @@
 # It scans every git-tracked, non-binary file for three classes of production
 # identifier and fails if any is found:
 #
-#   1. IP literals that look like a real, routable, non-example address.
+#   1. IP literals that look like a real, routable, non-example address
+#      (a few exact file+address upstream test fixtures excepted, see
+#      FIXTURE_IP_EXCEPTIONS).
 #   2. Production filesystem paths (/opt/relayium, /opt/relayium-ops,
 #      /etc/letsencrypt/live/relayium) — these also catch the production
 #      crontab line, which always invokes a script under /opt/relayium.
@@ -90,15 +92,41 @@ ALLOWED_IPS=(
   93.184.216.34                       # example.com
 )
 
+# FIXTURE_IP_EXCEPTIONS: exact "path|ip" pairs for the vendored upstream Pion
+# TURN copy (server/third_party/pion-turn, see its PATCHES.md), whose own test
+# files carry public-looking literals that are pure fixtures — a permission-map
+# key (permission_test.go), the String() format check of the address codecs
+# (peeraddr_test.go, relayedaddr_test.go), and a vnet virtual-network address
+# (server_test.go). None of them is dialled on a real network. The copy is kept
+# byte-identical to upstream and hash-pinned, so the literals are exempted here
+# rather than edited there.
+#
+# Each entry exempts ONE address in ONE file, from this heuristic only: the
+# same address anywhere else, or any other address in these files, is still
+# flagged, and the known-production denylist above, the filesystem paths and
+# the node hostnames below never consult this list. Do not turn an entry into
+# a directory, a glob or a bare IP. scripts/test/production-identifiers-test.sh
+# proves each entry and each of those boundaries.
+PION_TURN="server/third_party/pion-turn"
+FIXTURE_IP_EXCEPTIONS=(
+  "$PION_TURN/internal/client/permission_test.go|7.8.9.10"
+  "$PION_TURN/internal/proto/peeraddr_test.go|111.11.1.2"
+  "$PION_TURN/internal/proto/relayedaddr_test.go|111.11.1.2"
+  "$PION_TURN/server_test.go|1.2.3.5"
+)
+
 say "-- unexpected public IP literals --"
 ip_regex='[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'
 ip_hits="$(git grep -noE "$ip_regex" -- . "$EXCLUDE_SELF" 2>/dev/null || true)"
 
 if [ -n "$ip_hits" ]; then
-  flagged="$(printf '%s\n' "$ip_hits" | awk -F: -v allow="${ALLOWED_IPS[*]}" '
+  flagged="$(printf '%s\n' "$ip_hits" | awk -F: -v allow="${ALLOWED_IPS[*]}" \
+      -v fixtures="${FIXTURE_IP_EXCEPTIONS[*]}" '
     BEGIN {
       n = split(allow, a, " ");
       for (i = 1; i <= n; i++) allowed[a[i]] = 1;
+      n = split(fixtures, f, " ");
+      for (i = 1; i <= n; i++) fixture[f[i]] = 1;       # "path|ip", exact
     }
     {
       # path:line:ip  (ip itself has no colons, so field 3.. is safe to rejoin)
@@ -121,6 +149,7 @@ if [ -n "$ip_hits" ]; then
       if (o[1] == 198 && o[2] == 51  && o[3] == 100) next;     # RFC5737
       if (o[1] == 203 && o[2] == 0   && o[3] == 113) next;     # RFC5737
       if (ip in allowed) next;
+      if (($1 "|" ip) in fixture) next;                        # exact path+ip
 
       print $0;
     }

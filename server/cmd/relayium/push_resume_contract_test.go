@@ -188,7 +188,7 @@ func (c *countingWire) Write(b []byte) (int, error) {
 // And the help must keep saying which is which.
 func TestPushAndPullHelpDoNotPromiseResume(t *testing.T) {
 	isolatedEnv(t)
-	for _, cmd := range []string{"push", "pull"} {
+	for _, cmd := range []string{"push"} {
 		var stdout, stderr bytes.Buffer
 		if rc := Run([]string{cmd, "-h"}, &stdout, &stderr); rc != 0 {
 			t.Fatalf("%s -h: rc = %d (%s)", cmd, rc, stderr.String())

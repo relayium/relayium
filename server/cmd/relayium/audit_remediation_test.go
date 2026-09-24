@@ -128,7 +128,7 @@ func TestReceiveCommandStillAcceptsAnOrdinaryTransfer(t *testing.T) {
 
 // ── AUD-01: `pull` ──────────────────────────────────────────────────────────
 
-func TestPullCommandRefusesARemoteThatAsksToReplace(t *testing.T) {
+func TestLegacyPullCommandRefusesARemoteThatAsksToReplace(t *testing.T) {
 	isolatedEnv(t)
 	dst := t.TempDir()
 	victim := filepath.Join(dst, "victim.txt")
@@ -140,7 +140,7 @@ func TestPullCommandRefusesARemoteThatAsksToReplace(t *testing.T) {
 	stubSSHDial(t, conn)
 
 	var out, errb bytes.Buffer
-	if rc := Run([]string{"pull", "example.com:/srv/data", dst}, &out, &errb); rc == 0 {
+	if rc := legacyPull([]string{"example.com:/srv/data", dst}, &out, &errb); rc == 0 {
 		t.Fatalf("`pull` accepted a replacement requested by the remote host (stderr %q)", errb.String())
 	}
 	<-errc
@@ -152,14 +152,14 @@ func TestPullCommandRefusesARemoteThatAsksToReplace(t *testing.T) {
 	}
 }
 
-func TestPullCommandStillAcceptsAnOrdinaryRemoteSend(t *testing.T) {
+func TestLegacyPullCommandStillAcceptsAnOrdinaryRemoteSend(t *testing.T) {
 	isolatedEnv(t)
 	dst := t.TempDir()
 	conn, errc := peerOnAPipe(t, "hello", xfer.SendOpts{})
 	stubSSHDial(t, conn)
 
 	var out, errb bytes.Buffer
-	if rc := Run([]string{"pull", "example.com:/srv/data", dst}, &out, &errb); rc != 0 {
+	if rc := legacyPull([]string{"example.com:/srv/data", dst}, &out, &errb); rc != 0 {
 		t.Fatalf("`pull` rc=%d: %s", rc, errb.String())
 	}
 	if serr := <-errc; serr != nil {
@@ -187,7 +187,7 @@ func TestRecvHelperStillPerformsAnAuthorizedSync(t *testing.T) {
 	t.Cleanup(func() { helperStdio = old })
 
 	var out, errb bytes.Buffer
-	rc := Run([]string{"__recv", "--", dst}, &out, &errb)
+	rc := runRecv([]string{"--", dst}, &out, &errb)
 	conn.Close()
 	if rc != 0 {
 		t.Fatalf("`__recv` rc=%d: %s", rc, errb.String())

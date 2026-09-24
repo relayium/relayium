@@ -209,13 +209,14 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	// SourceEvent.AppleDispatchPurchase / .AppleDispatchProductID are no longer
-	// set. Resolving a dispatch on transactionReason=="PURCHASE" and an exactly
-	// matching product stranded every restore-after-renewal and every
-	// already-accounted submission; resolution is now ownership convergence in
-	// applyAuthorizedAppleLifecycle. The two fields stay declared in
-	// entitlement.go, which is outside this lease's writable scope, and are
-	// recorded as a follow-up removal.
+	// This handler carries no dispatch-specific flag on the event. Resolving a
+	// dispatch on transactionReason=="PURCHASE" plus a product field only this
+	// handler set stranded every restore-after-renewal, every notification-first
+	// delivery and every already-accounted submission. Resolution is now
+	// ownership convergence in applyAuthorizedAppleLifecycle, which compares the
+	// dispatched product with ev.BillingProductID -- set from the verified
+	// transaction by appleSourceEvent on this path and on the notification path
+	// alike. The former dispatch-only SourceEvent fields have been removed.
 	event := appleSourceEvent(u.ID, tx, product, now)
 	var res SubscriptionApply
 	if renewalState.UserID != "" {

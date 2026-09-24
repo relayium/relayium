@@ -74,6 +74,11 @@ class AccountSession(
     private val _recovery = MutableStateFlow<RequestState>(RequestState.Idle)
     val recovery: StateFlow<RequestState> = _recovery.asStateFlow()
 
+    /** The request for an account-deletion confirmation email. Account-scoped:
+     *  cleared by every session-moving operation. */
+    private val _deletion = MutableStateFlow<RequestState>(RequestState.Idle)
+    val deletion: StateFlow<RequestState> = _deletion.asStateFlow()
+
     private val _devices = MutableStateFlow<DevicesState>(DevicesState.Idle)
     val devices: StateFlow<DevicesState> = _devices.asStateFlow()
 
@@ -147,6 +152,7 @@ class AccountSession(
     private var resendEpoch = 0
     private var recoveryEpoch = 0
     private var devicesEpoch = 0
+    private var deletionEpoch = 0
 
     private val storeLock = Mutex()
 
@@ -487,6 +493,34 @@ class AccountSession(
         finishSignOut(g)
     }
 
+    /**
+     * Ask the server to email this account's deletion confirmation link.
+     *
+     * The second step of a two-step confirmation the SCREEN owns (a destructive
+     * button, then a dialog naming what happens); this is only ever called from
+     * that dialog's affirmative action. It deletes nothing: the server mails a
+     * one-hour link to the account's own address, and only opening and
+     * confirming that link on the website schedules the deletion.
+     *
+     * Pinned to the [Authority] captured here, so an answer landing after a
+     * sign-out or an account switch is dropped rather than shown under the next
+     * account. A press while a request is already in flight is ignored — one
+     * tap, one request.
+     */
+    fun requestAccountDeletion() = launchOwned {
+        val authority = authority() ?: return@launchOwned
+        if (_deletion.value is RequestState.Sending) return@launchOwned
+        deletionEpoch += 1
+        val mine = deletionEpoch
+        _deletion.value = RequestState.Sending
+        val outcome = client.requestAccountDeletion(authority.token)
+        if (mine != deletionEpoch || !isCurrent(authority)) return@launchOwned
+        _deletion.value = outcome.fold(
+            onSuccess = { RequestState.Requested },
+            onFailure = { RequestState.Failed(outcome.failure()) },
+        )
+    }
+
     /** Load this account's device list. */
     fun loadDevices() = launchOwned {
         val authority = authority() ?: run {
@@ -602,6 +636,10 @@ class AccountSession(
         _resend.value = RequestState.Idle
         _recovery.value = RequestState.Idle
         _devices.value = DevicesState.Idle
+        // A deletion request belongs to the account it was made for; a new
+        // epoch also drops an answer still in flight for it.
+        _deletion.value = RequestState.Idle
+        deletionEpoch += 1
         return beginOperation()
     }
 

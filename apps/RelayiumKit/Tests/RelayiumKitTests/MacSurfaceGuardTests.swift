@@ -1177,6 +1177,53 @@ final class MacSurfaceGuardTests: XCTestCase {
                           "the shell navigates before the surface is claimed")
     }
 
+    /// **An unrequested link asks first on macOS too (A23).** The app never
+    /// declares `.automatic`, so the model's `.prompt` default ships; the prompt
+    /// is drawn in place on LAN Transfer and window-wide over any other
+    /// destination, and both answer through the model.
+    func testAnUnrequestedLinkPromptsInPlaceAndWindowWide() throws {
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertFalse(app.contains("inboundConsent"),
+                       "the Mac overrides the prompt an unrequested link must raise")
+        XCTAssertTrue(app.contains(".modifier(InboundLinkAskAlert(link: transferModules.nearby.link,"),
+                      "an ask arriving on another destination is invisible")
+        let pane = try source(named: "Transfer/LanConnectPane.swift")
+        XCTAssertTrue(pane.contains("InboundLinkAskSlot(link: link)"),
+                      "LAN Transfer does not show the device that is asking")
+        let prompt = try source(named: "Transfer/InboundLinkAskPrompt.swift")
+        for call in ["link.acceptInboundAsk()", "link.declineInboundAsk()",
+                     "link.inboundAskDiscardsLocalText", "navigation.selection.macSurface != .lanTransfer"] {
+            XCTAssertTrue(prompt.contains(call), "the prompt lost \(call)")
+        }
+        // Nothing but Accept navigates for an inbound link: the one
+        // `routing.select(.nearby)` in the app is inside the gate Accept runs.
+        XCTAssertEqual(app.components(separatedBy: "routing.select(.nearby)").count - 1, 1)
+    }
+
+    /// **Headless hosts admit unasked, and say so by name (A23).** Every
+    /// acceptance host is built on `LinkCounterpart`, which declares
+    /// `.automatic`; nothing else in the package does.
+    func testOnlyTheHeadlessCounterpartDeclaresAutomaticConsent() throws {
+        let kit = try RepoRoot.directory("apps/RelayiumKit/Sources")
+        let names = try FileManager.default.subpathsOfDirectory(atPath: kit.path)
+            .filter { $0.hasSuffix(".swift") }
+        var declaring: [String] = []
+        for name in names {
+            let text = try String(contentsOf: kit.appendingPathComponent(name), encoding: .utf8)
+                .components(separatedBy: "\n")
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+            if text.contains("inboundConsent = .automatic") { declaring.append(name) }
+        }
+        XCTAssertEqual(declaring, ["RelayiumPeerKit/LinkCounterpart.swift"])
+        for host in ["RelayiumPeerKit/AppReceiverHost.swift", "RelayiumPeerKit/AppPairLinkHost.swift",
+                     "LocalTransferPeer/main.swift"] {
+            let text = try String(contentsOf: kit.appendingPathComponent(host), encoding: .utf8)
+            XCTAssertTrue(text.contains("LinkCounterpart(link: link)"),
+                          "\(host) is a headless host that no longer declares its consent")
+        }
+    }
+
     /// **A reopened window has no session left to re-admit.**
     ///
     /// The shell used to reconcile an unsolicited LEGACY session onto the Nearby
@@ -3951,7 +3998,14 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(all.map { occurrences(of: "fileOpens.$pending", in: $0.text) }.reduce(0, +), 1,
                        "a second subscription would route every batch twice")
         XCTAssertTrue(shell.contains(".onReceive(fileOpens.$pending.compactMap { $0 }) { urls in"))
-        XCTAssertTrue(shell.contains("fileOpenRouting.deliver(urls)"))
+        // A32 M3: delivered with the shell's live-session answer, so a batch
+        // collected over a live transfer session stages without navigating.
+        XCTAssertTrue(shell.contains("fileOpenRouting.deliver(urls, keepsLiveSession: showsLiveSession)"))
+        XCTAssertTrue(shell.contains(
+            "modules.module(for: navigation.selection)?.sessionIsLiveOrRetained ?? false"),
+            "the live-session answer must be the module's own, for the screen on display")
+        XCTAssertTrue(shell.contains(".safeAreaInset(edge: .bottom, spacing: 0) { waitingFilesIndicator }"),
+                      "a batch staged without navigating has no visible indicator")
         // Deferred AND expected, for the `@Published` willSet ordering and the
         // second-batch race the link path's consume documents.
         XCTAssertTrue(shell.contains("Task { @MainActor in fileOpens.consume(urls) }"),
@@ -4029,6 +4083,23 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// The negative half is the load-bearing one, and it is now two negatives: a
     /// pane that read `staged` directly would be a second copy of the busy rule,
     /// and a transfer pane that adopted at all would be the removed side door.
+    /// A32 M2 and M4, as wiring: the pane's store follows the model it
+    /// outlives, and a new account clears what the previous one chose.
+    func testStoredSendSelectionFollowsTheModelAndNeverCrossesAccounts() throws {
+        let upload = try source(named: "UploadPane.swift")
+        XCTAssertTrue(upload.contains(".onAppear { selection.mirror(model.state) }"),
+                      "a rebuilt pane starts with an empty store beside a picked model")
+        XCTAssertTrue(upload.contains(".onChange(of: model.state) { selection.mirror($0) }"),
+                      "the pane's store does not follow a selection the model changed on its own")
+        XCTAssertTrue(upload.contains("if !selection.isEmpty || !model.selectedFiles.isEmpty {"),
+                      "Clear is hidden while the model still holds a selection")
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains("if fileOpenRouting.accountDidChange(to: subscriptionAccountID) {"),
+                      "an account switch is not observed for staged and selected files")
+        XCTAssertTrue(app.contains("uploadModel.forgetSelectionForAccountChange()"),
+                      "an account switch leaves the previous account's selection in place")
+    }
+
     func testOnlyStoredSendAdoptsOpenedFilesAndNobodyReDerivesTheRule() throws {
         let panes = ["UploadPane.swift"]
         for (file, route) in [(lanConnect, "AppDestination.nearby"),
@@ -4065,9 +4136,14 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(text.contains("macTransferRoutes"),
                            "\(name) names a shared transfer staging context again")
         }
+        // A32 M1: "busy" for adoption is "cannot take files now" — a finished
+        // link or a failure refuses too, or `pick` replaces the result.
         XCTAssertTrue(try source(named: "UploadPane.swift").contains(
-            "fileOpenRouting.batch(for: .storedSend, busy: model.isBusy)"),
-            "Stored Send must adopt exactly its own destination")
+            "fileOpenRouting.batch(for: .storedSend, busy: !model.acceptsOpenedFiles)"),
+            "Stored Send must adopt exactly its own destination, and only while choosing")
+        XCTAssertTrue(try source(named: "UploadPane.swift").contains(
+            "FileOpenAdoption(staged: fileOpenRouting.staged, busy: !model.acceptsOpenedFiles)"),
+            "the adoption key must change when Send another or Try again makes room")
 
         // Nobody else touches the coordinator's state, and nobody reads `staged`
         // to decide for themselves.

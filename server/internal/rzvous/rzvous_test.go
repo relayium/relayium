@@ -1,8 +1,10 @@
 package rzvous
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/relayium/relayium/internal/secure"
 	"github.com/relayium/relayium/internal/signal"
 )
 
@@ -179,5 +182,217 @@ func TestJoinPairsTwoPeersAndRelaysSignals(t *testing.T) {
 	}
 	if strings.TrimSpace(string(got)) != `{"hi":1}` {
 		t.Fatalf("relayed data = %s", got)
+	}
+}
+
+// Join keeps what the peer said before the roster named it and replays it
+// through RecvSignal: in arrival order, only from the selected peer, and
+// before anything read off the wire afterwards (CI run 35877948854: a CLI
+// facing an app waited out its deadline for a commit it had already dropped).
+func TestJoinReplaysSignalsThatBeatTheRoster(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	joinFrame := make(chan []byte, 1)
+	base := startScriptedServer(t, func(ctx context.Context, c *websocket.Conn, join []byte) {
+		joinFrame <- join
+		for _, e := range []signal.Envelope{
+			{Type: signal.TypeSignal, From: "peer", Data: json.RawMessage(`{"i":1}`)},
+			{Type: signal.TypeWelcome, Name: "self"},
+			{Type: signal.TypeSignal, From: "gone", Data: json.RawMessage(`{"i":"x"}`)},
+			{Type: signal.TypeSignal, From: "peer", Data: json.RawMessage(`{"i":2}`)},
+			{Type: signal.TypePeers, Peers: []signal.Peer{{ID: "peer"}, {ID: "self"}}},
+			{Type: signal.TypeSignal, From: "peer", Data: json.RawMessage(`{"i":3}`)},
+		} {
+			if writeEnv(ctx, c, e) != nil {
+				return
+			}
+		}
+		_, _, _ = c.Read(ctx)
+	})
+	s, err := Join(ctx, base, "", "c")
+	if err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	defer s.Close()
+	if s.SelfID() != "self" || s.PeerID() != "peer" {
+		t.Fatalf("self %q peer %q", s.SelfID(), s.PeerID())
+	}
+	// The wire is unchanged: Join still sends no hint.
+	want, _ := signal.EncodeEnvelope(signal.Envelope{Type: signal.TypeJoin, Name: "c"})
+	if got := <-joinFrame; !bytes.Equal(got, want) {
+		t.Fatalf("join frame = %s, want %s", got, want)
+	}
+	for _, w := range []string{`{"i":1}`, `{"i":2}`, `{"i":3}`} {
+		got, err := s.RecvSignal(ctx)
+		if err != nil {
+			t.Fatalf("RecvSignal (want %s): %v", w, err)
+		}
+		if string(got) != w {
+			t.Fatalf("RecvSignal = %s, want %s", got, w)
+		}
+	}
+}
+
+// Join holds the early signals under JoinRoom's bounds and fails closed past
+// them rather than silently dropping a frame.
+func TestJoinCaptureOverflowFailsClosed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	closed := make(chan error, 1)
+	base := startScriptedServer(t, func(ctx context.Context, c *websocket.Conn, _ []byte) {
+		_ = writeEnv(ctx, c, signal.Envelope{Type: signal.TypeWelcome, Name: "self"})
+		for i := 0; i <= MaxCapturedFrames; i++ {
+			if err := writeEnv(ctx, c, signal.Envelope{Type: signal.TypeSignal, From: "peer", Data: json.RawMessage(`{}`)}); err != nil {
+				closed <- err
+				return
+			}
+		}
+		_ = writeEnv(ctx, c, signal.Envelope{Type: signal.TypePeers, Peers: []signal.Peer{{ID: "self"}, {ID: "peer"}}})
+		_, _, err := c.Read(ctx)
+		closed <- err
+	})
+	s, err := Join(ctx, base, "", "c")
+	if !errors.Is(err, ErrCaptureOverflow) || s != nil {
+		if s != nil {
+			s.Close()
+		}
+		t.Fatalf("Join = %v, %v; want ErrCaptureOverflow", s, err)
+	}
+	if cerr := <-closed; websocket.CloseStatus(cerr) != websocket.StatusPolicyViolation {
+		t.Fatalf("server saw %v, want a policy-violation close", cerr)
+	}
+}
+
+// CLI to CLI on the real hub, with the race forced: one side's commit reaches
+// the other before the other's roster does. Both sides are the production
+// Join + DoHandshake; before Join kept early signals, the held side waited for
+// a commit it had discarded and the pairing hung.
+func TestJoinHandshakeSurvivesACommitThatBeatsTheRoster(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	hub := startHub(t)
+	held := startRosterHoldingProxy(t, hub)
+	idA, _ := secure.NewIdentity()
+	idB, _ := secure.NewIdentity()
+	type res struct {
+		h   *Handshake
+		err error
+	}
+	aCh := make(chan res, 1)
+	go func() {
+		s, err := Join(ctx, hub, "", "a")
+		if err != nil {
+			aCh <- res{err: err}
+			return
+		}
+		defer s.Close()
+		h, err := DoHandshake(ctx, s, idA, []string{"1.1.1.1:1"}, ModeText)
+		aCh <- res{h, err}
+	}()
+	s, err := Join(ctx, held, "", "b")
+	if err != nil {
+		t.Fatalf("held join: %v", err)
+	}
+	defer s.Close()
+	hb, err := DoHandshake(ctx, s, idB, []string{"2.2.2.2:2"}, ModeText)
+	if err != nil {
+		t.Fatalf("held side: %v", err)
+	}
+	ra := <-aCh
+	if ra.err != nil {
+		t.Fatalf("direct side: %v", ra.err)
+	}
+	if ra.h.SAS != hb.SAS || ra.h.IsServer == hb.IsServer {
+		t.Fatalf("SAS %s/%s, roles %v/%v", ra.h.SAS, hb.SAS, ra.h.IsServer, hb.IsServer)
+	}
+	if hb.PeerFingerprint != idA.Fingerprint || ra.h.PeerFingerprint != idB.Fingerprint {
+		t.Fatal("pinned fingerprints wrong")
+	}
+}
+
+// A11: renewal rides the session's own socket. SendRenew puts exactly
+// {"type":"ice-renew","data":{"round":R,"rid":N}} on the wire (the server's
+// strict parser accepts it and attributes it to THIS connection);
+// RecvSignalOrGrant surfaces the server's ice-grant replies in order with the
+// peer's signals, while RecvSignal keeps skipping them exactly as before.
+func TestRenewRequestAndGrantRideTheSessionSocket(t *testing.T) {
+	hub := signal.NewHub()
+	var seq int32
+	type req struct {
+		room, id string
+		r        signal.RenewRequest
+	}
+	got := make(chan req, 4)
+	handle := signal.ServeWSHooked(hub, func() string { return fmt.Sprintf("peer%d", atomic.AddInt32(&seq, 1)) }, signal.WSHooks{
+		Renew: func(room, id string, r signal.RenewRequest) {
+			got <- req{room, id, r}
+			data, _ := json.Marshal(map[string]any{"status": "unavailable", "round": r.Round, "rid": r.RID})
+			hub.Relay(room, signal.Envelope{Type: signal.TypeICEGrant, To: id, Data: data})
+		},
+	})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		handle(r.Context(), c, "coderoom", 2, "127.0.0.1", false)
+		c.Close(websocket.StatusNormalClosure, "")
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	base := "ws" + strings.TrimPrefix(srv.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	aCh := make(chan *Session, 1)
+	go func() {
+		a, err := Join(ctx, base, "", "alice")
+		if err != nil {
+			t.Errorf("join a: %v", err)
+			return
+		}
+		aCh <- a
+	}()
+	b, err := Join(ctx, base, "", "bob")
+	if err != nil {
+		t.Fatalf("join b: %v", err)
+	}
+	a := <-aCh
+
+	if err := a.SendRenew(ctx, 1, 4294967295); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case r := <-got:
+		if r.id != a.SelfID() || r.r.Round != 1 || r.r.RID != 4294967295 {
+			t.Fatalf("server saw %+v from %s, want round 1 rid 4294967295 from %s", r.r, r.id, a.SelfID())
+		}
+	case <-ctx.Done():
+		t.Fatal("the server never received the ice-renew frame")
+	}
+	// The peer's signal after the grant: both arrive, in order, tagged.
+	if err := b.SendSignal(ctx, json.RawMessage(`{"after":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	data, grant, err := a.RecvSignalOrGrant(ctx)
+	if err != nil || !grant || !strings.Contains(string(data), `"status":"unavailable"`) || !strings.Contains(string(data), `"rid":4294967295`) {
+		t.Fatalf("first frame: grant=%v %s %v", grant, data, err)
+	}
+	data, grant, err = a.RecvSignalOrGrant(ctx)
+	if err != nil || grant || strings.TrimSpace(string(data)) != `{"after":1}` {
+		t.Fatalf("second frame: grant=%v %s %v", grant, data, err)
+	}
+
+	// RecvSignal is unchanged: a grant is skipped, the next signal returned.
+	if err := b.SendRenew(ctx, 2, 9); err != nil {
+		t.Fatal(err)
+	}
+	<-got
+	if err := a.SendSignal(ctx, json.RawMessage(`{"x":2}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := b.RecvSignal(ctx); err != nil || strings.TrimSpace(string(got)) != `{"x":2}` {
+		t.Fatalf("RecvSignal returned %s %v; a grant must be skipped", got, err)
 	}
 }

@@ -74,7 +74,24 @@ repo="$(cd "$here/.." && pwd)"
 # shellcheck source=lib/local-acceptance.sh
 source "$here/lib/local-acceptance.sh"
 
-max_rounds="${RELAYIUM_ANDROID_ROUNDS:-6}"
+# How many pairings to run before giving up on seeing both role assignments.
+# The role is `selfId < peerId` over the hub's random ids (`newID()` is 8 random
+# bytes), so each round is an independent coin flip and N rounds miss a side with
+# probability 2^-(N-1).
+#
+# **Extra rounds are free on a run that would have passed.** The loop breaks as
+# soon as both roles have been seen AND round >= 3, so a raised cap is spent only
+# on runs that are already unlucky — exactly the ones that would otherwise go red
+# with every functional assertion green. That happened on 2026-09-22: six rounds,
+# all six passed, browser responder in all six, lane red. At six the miss rate is
+# 2^-5 (~3%) on a lane that gates merges; at ten it is 2^-9 (~0.2%), for no added
+# wall clock on a green run and about four extra minutes on an unlucky one, well
+# inside the job's 60-minute timeout.
+#
+# This does NOT mask anything: the assertion is unchanged, so a role that is
+# genuinely stuck still fails it — four minutes later. Matches
+# `native-web-pairing-acceptance.sh`, which asserts the same thing.
+max_rounds="${RELAYIUM_ANDROID_ROUNDS:-10}"
 gradle_bin="${RELAYIUM_GRADLE:-$repo/apps/android/gradlew}"
 adb="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}/platform-tools/adb"
 serial="${ANDROID_SERIAL:-}"

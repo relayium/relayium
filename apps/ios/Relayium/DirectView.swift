@@ -235,6 +235,8 @@ struct DirectView: View {
                 case .connect:
                     connectPhase
                 }
+                // A20: last on the page and collapsed — see `IOSHelpCard`.
+                IOSHelpCard(surface: .crossNetworkTransfer)
             }
             .navigationTitle(L10n.t(.navCrossNetworkShort))
             // **Always inline.** "Cross-network" is the widest destination name,

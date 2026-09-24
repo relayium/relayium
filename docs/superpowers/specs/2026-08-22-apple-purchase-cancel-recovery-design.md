@@ -553,6 +553,11 @@ actionable.
    written by nothing and read by nothing.** They remain declared because
    `entitlement.go` is outside this lease's writable scope. Follow-up: remove
    both fields in a lease that may write it.
+   **Status (2026-09-23): done (W-C3).** Both fields and all their test
+   assignments were removed and the stale comments rewritten, with the product
+   check in `applyAuthorizedAppleLifecycle` unchanged. The change is on
+   `work/g34-billing-inert`, awaiting the three-gate review before merge; the
+   merged commit is recorded in the workspace delivery log.
 
 5. **No client can present a capability yet.** This batch is server-only. Until
    macOS `1.3.1` ships the client half, the recovery path exists but is

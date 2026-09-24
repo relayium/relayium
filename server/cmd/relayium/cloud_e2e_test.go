@@ -1,3 +1,9 @@
+//go:build !windows
+
+// Server-only on Windows: this file drives the relay node/account server
+// (account, internal/storage — syscall.Statfs), which is not released for
+// Windows (.goreleaser.yaml). See the cli-windows job in .github/workflows/go.yml.
+
 package main
 
 import (
@@ -9,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -316,5 +323,91 @@ func TestCloudDownResumeE2E(t *testing.T) {
 	}
 	if !bytes.Equal(got, content) {
 		t.Fatalf("resumed content mismatch: got %d bytes, want %d", len(got), len(content))
+	}
+}
+
+// TestCloudDownUnusableRootKeepsOneUseLinkE2E is the W-N27 regression against
+// the real account.Service: a local destination the client cannot use must be
+// refused before /blob, because /blob is what spends a limited link's download.
+// Before the fix a burn link was consumed (and deleted) by a download that then
+// failed locally. After the refusal the same link must still download into a
+// valid missing nested root, and only then be spent.
+func TestCloudDownUnusableRootKeepsOneUseLinkE2E(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink and POSIX permission roots not applicable on Windows")
+	}
+	ts, svc, store := newE2EService(t)
+	ctx := context.Background()
+
+	u, err := store.UpsertUserByEmail(ctx, "root@example.com", "")
+	if err != nil {
+		t.Fatalf("upsert user: %v", err)
+	}
+	c := cloud.NewClient(ts.URL)
+	c.Token = cliToken(t, ts, svc, u.ID)
+
+	src := filepath.Join(t.TempDir(), "payload.txt")
+	const content = "one-use payload"
+	if err := os.WriteFile(src, []byte(content), 0o644); err != nil {
+		t.Fatalf("write src: %v", err)
+	}
+
+	roots := []struct {
+		name  string
+		setup func(t *testing.T) string
+	}{
+		{"dangling symlink root", func(t *testing.T) string {
+			parent := t.TempDir()
+			root := filepath.Join(parent, "root")
+			if err := os.Symlink(filepath.Join(parent, "missing-target"), root); err != nil {
+				t.Fatal(err)
+			}
+			return root
+		}},
+		{"missing root under read-only parent", func(t *testing.T) string {
+			if os.Geteuid() == 0 {
+				t.Skip("root ignores directory write permission")
+			}
+			parent := filepath.Join(t.TempDir(), "readonly")
+			if err := os.Mkdir(parent, 0o555); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+			return filepath.Join(parent, "root")
+		}},
+	}
+	for _, rc := range roots {
+		t.Run(rc.name, func(t *testing.T) {
+			bad := rc.setup(t)
+			id, key, _, err := c.Upload(ctx, []string{src}, cloud.UploadOpts{MaxDownloads: 1})
+			if err != nil {
+				t.Fatalf("upload: %v", err)
+			}
+
+			// Not fatal on the wording, so a run without the fix still goes on
+			// to show whether the refusal spent the link.
+			if _, err := c.Download(ctx, id, key, bad); err == nil {
+				t.Fatal("download into an unusable root should fail")
+			} else if !strings.Contains(err.Error(), "prepare destination") {
+				t.Errorf("unusable root error = %v, want a prepare-destination refusal", err)
+			}
+
+			good := filepath.Join(t.TempDir(), "new", "nested")
+			paths, err := c.Download(ctx, id, key, good)
+			if err != nil {
+				t.Fatalf("one-use link unusable after a local refusal: %v", err)
+			}
+			want := filepath.Join(good, "payload.txt")
+			if len(paths) != 1 || paths[0] != want {
+				t.Fatalf("paths = %v, want [%s]", paths, want)
+			}
+			if got, err := os.ReadFile(want); err != nil || string(got) != content {
+				t.Fatalf("downloaded %q %v, want %q", got, err, content)
+			}
+
+			if _, err := c.Download(ctx, id, key, t.TempDir()); err == nil || !strings.Contains(err.Error(), "not found") {
+				t.Fatalf("next download err = %v, want the server's not-found refusal: the single download is spent", err)
+			}
+		})
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -523,4 +524,275 @@ func TestDownloadWriteFailureDistinctFromDecrypt(t *testing.T) {
 	if !errors.As(err, &pathErr) && !strings.Contains(err.Error(), "write file") {
 		t.Fatalf("expected a write-file error, got: %v", err)
 	}
+}
+
+// countingCloudServer is fakeCloudServer that also counts /blob requests. A
+// /blob request is what claims a download slot on a limited or burn link, so a
+// download refused locally must make none.
+func countingCloudServer(encManifest, blob []byte) (*httptest.Server, *atomic.Int32) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/meta"):
+			writeJSONTest(w, map[string]any{
+				"encManifest": base64.StdEncoding.EncodeToString(encManifest),
+				"size":        len(blob),
+			})
+		case strings.HasSuffix(r.URL.Path, "/blob"):
+			hits.Add(1)
+			_, _ = w.Write(blob)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	return srv, &hits
+}
+
+// TestDownloadCreatesMissingNestedRoot is the W-N27 regression: the
+// caller-selected destination (like `mkdir -p`) may not exist yet. Before the
+// fix the root was only reached lazily on the first decrypted chunk, after
+// /blob had streamed, and failed with "no such file or directory".
+func TestDownloadCreatesMissingNestedRoot(t *testing.T) {
+	raw, err := storecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := []struct {
+		name    string
+		content string
+	}{
+		{"top.txt", "top level bytes"},
+		{"empty.txt", ""},
+		{"sub/x.txt", "nested bytes\x00\xff"},
+		{"sub/deeper/trailing-empty.txt", ""},
+	}
+	encManifest, blob := blobStreamFromFiles(t, raw, files)
+	srv, hits := countingCloudServer(encManifest, blob)
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "a", "b")
+	paths, err := NewClient(srv.URL).Download(context.Background(), "abc", storecrypto.EncodeKey(raw), dest)
+	if err != nil {
+		t.Fatalf("download into a missing nested root: %v", err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("blob requests = %d, want 1", hits.Load())
+	}
+	if len(paths) != len(files) {
+		t.Fatalf("paths = %v", paths)
+	}
+	for i, f := range files {
+		want := filepath.Join(dest, filepath.FromSlash(f.name))
+		if paths[i] != want {
+			t.Fatalf("paths[%d] = %q, want %q", i, paths[i], want)
+		}
+		got, err := os.ReadFile(want)
+		if err != nil {
+			t.Fatalf("read %s: %v", f.name, err)
+		}
+		if string(got) != f.content {
+			t.Fatalf("%s = %q, want %q", f.name, got, f.content)
+		}
+	}
+}
+
+// TestDownloadCreatesMissingRootForZeroByteOnlyManifest covers the other
+// place the missing root used to surface: with no ciphertext frames at all,
+// every file is created by finish() after the stream ends.
+func TestDownloadCreatesMissingRootForZeroByteOnlyManifest(t *testing.T) {
+	raw, err := storecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encManifest, blob := blobStreamFromFiles(t, raw, []struct {
+		name    string
+		content string
+	}{{"only-empty.txt", ""}})
+	srv, _ := countingCloudServer(encManifest, blob)
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "missing")
+	paths, err := NewClient(srv.URL).Download(context.Background(), "abc", storecrypto.EncodeKey(raw), dest)
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	want := filepath.Join(dest, "only-empty.txt")
+	if len(paths) != 1 || paths[0] != want {
+		t.Fatalf("paths = %v", paths)
+	}
+	if fi, err := os.Stat(want); err != nil || !fi.Mode().IsRegular() || fi.Size() != 0 {
+		t.Fatalf("zero-byte file: %v %v", fi, err)
+	}
+}
+
+// TestDownloadRefusalsCreateNoRootAndRequestNoBlob checks that every refusal
+// decided from the key or the manifest happens before the destination root
+// exists and before /blob is requested.
+func TestDownloadRefusalsCreateNoRootAndRequestNoBlob(t *testing.T) {
+	raw, err := storecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	goodManifest, goodBlob := blobStreamFromFiles(t, raw, []struct {
+		name    string
+		content string
+	}{{"hello.txt", "hello world"}})
+
+	wrongKey, err := storecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Authenticated but invalid: ValidateManifest rejects a negative size.
+	invalidManifest, err := storecrypto.SealManifest(raw, []byte(`{"files":[{"name":"a.txt","size":-1}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicateManifest, dupBlob := blobStreamFromFiles(t, raw, []struct {
+		name    string
+		content string
+	}{{"sub/same.txt", "one"}, {"sub/../sub/same.txt", "two"}})
+
+	cases := []struct {
+		name        string
+		encManifest []byte
+		blob        []byte
+		key         []byte
+		wantErr     string
+	}{
+		{"wrong key", goodManifest, goodBlob, wrongKey, "decrypt failed"},
+		{"invalid manifest", invalidManifest, goodBlob, raw, "decrypt failed"},
+		{"duplicate destination", duplicateManifest, dupBlob, raw, "duplicate destination"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, hits := countingCloudServer(tc.encManifest, tc.blob)
+			defer srv.Close()
+			parent := t.TempDir()
+			dest := filepath.Join(parent, "new", "root")
+			_, err := NewClient(srv.URL).Download(context.Background(), "abc", storecrypto.EncodeKey(tc.key), dest)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("err = %v, want it to mention %q", err, tc.wantErr)
+			}
+			if hits.Load() != 0 {
+				t.Fatalf("blob requests = %d, want 0", hits.Load())
+			}
+			if _, err := os.Lstat(filepath.Join(parent, "new")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("refused download created part of the destination: %v", err)
+			}
+		})
+	}
+
+	t.Run("existing file collision", func(t *testing.T) {
+		encManifest, blob := blobStreamFromFiles(t, raw, []struct {
+			name    string
+			content string
+		}{{"sub/new.txt", "new"}, {"existing.txt", "replacement"}})
+		srv, hits := countingCloudServer(encManifest, blob)
+		defer srv.Close()
+		dest := t.TempDir()
+		existing := filepath.Join(dest, "existing.txt")
+		if err := os.WriteFile(existing, []byte("ORIGINAL"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := NewClient(srv.URL).Download(context.Background(), "abc", storecrypto.EncodeKey(raw), dest)
+		if err == nil || !strings.Contains(err.Error(), "destination already exists") {
+			t.Fatalf("err = %v, want a collision refusal", err)
+		}
+		if hits.Load() != 0 {
+			t.Fatalf("blob requests = %d, want 0", hits.Load())
+		}
+		if got, _ := os.ReadFile(existing); string(got) != "ORIGINAL" {
+			t.Fatalf("existing file changed: %q", got)
+		}
+		if _, err := os.Lstat(filepath.Join(dest, "sub")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("collision refusal created a subdirectory: %v", err)
+		}
+	})
+}
+
+// TestDownloadUnusableRootRequestsNoBlob covers roots the local side cannot
+// use. Each must fail before /blob, leave the root exactly as it was, and never
+// write through a dangling symlink to its target.
+func TestDownloadUnusableRootRequestsNoBlob(t *testing.T) {
+	raw, err := storecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encManifest, blob := blobStreamFromFiles(t, raw, []struct {
+		name    string
+		content string
+	}{{"hello.txt", "hello world"}})
+
+	download := func(t *testing.T, dest string) error {
+		t.Helper()
+		srv, hits := countingCloudServer(encManifest, blob)
+		defer srv.Close()
+		_, err := NewClient(srv.URL).Download(context.Background(), "abc", storecrypto.EncodeKey(raw), dest)
+		if err == nil {
+			t.Fatal("expected the unusable root to be refused")
+		}
+		if strings.Contains(err.Error(), "decrypt failed") {
+			t.Fatalf("local root failure reported as decrypt failure: %v", err)
+		}
+		if hits.Load() != 0 {
+			t.Fatalf("blob requests = %d, want 0 (err %v)", hits.Load(), err)
+		}
+		return err
+	}
+
+	t.Run("regular file root", func(t *testing.T) {
+		root := filepath.Join(t.TempDir(), "root")
+		if err := os.WriteFile(root, []byte("ORIGINAL"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		download(t, root)
+		fi, err := os.Lstat(root)
+		if err != nil || !fi.Mode().IsRegular() {
+			t.Fatalf("file root replaced: %v %v", fi, err)
+		}
+		if got, _ := os.ReadFile(root); string(got) != "ORIGINAL" {
+			t.Fatalf("file root changed: %q", got)
+		}
+	})
+
+	t.Run("dangling symlink root", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink-based test not applicable on Windows")
+		}
+		parent := t.TempDir()
+		target := filepath.Join(parent, "target")
+		root := filepath.Join(parent, "root")
+		if err := os.Symlink(target, root); err != nil {
+			t.Fatal(err)
+		}
+		download(t, root)
+		if dst, err := os.Readlink(root); err != nil || dst != target {
+			t.Fatalf("dangling root symlink changed: %q %v", dst, err)
+		}
+		if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("download created the dangling symlink's target: %v", err)
+		}
+	})
+
+	t.Run("missing root under read-only parent", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX permission test not applicable on Windows")
+		}
+		if os.Geteuid() == 0 {
+			t.Skip("root ignores directory write permission")
+		}
+		parent := filepath.Join(t.TempDir(), "readonly")
+		if err := os.Mkdir(parent, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+		root := filepath.Join(parent, "root")
+		err := download(t, root)
+		if !strings.Contains(err.Error(), "prepare destination") {
+			t.Fatalf("err = %v, want a prepare-destination error", err)
+		}
+		if _, err := os.Lstat(root); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("root appeared: %v", err)
+		}
+	})
 }

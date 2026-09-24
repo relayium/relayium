@@ -148,6 +148,11 @@ struct DeviceConversationPage: View {
             // the selection on that answer, which takes the composer away before
             // anything is composed for a device that would refuse it.
             .task { deliveries.refreshTargets(token: session.bearerToken ?? "") }
+            // A message whose local staging failed after `sendText` returned is
+            // handed back by the model; it lands only in an empty composer for
+            // this device, the rule the iOS composer follows.
+            .task(id: deliveries.returnedMessageToken) { restoreReturnedMessage() }
+            .task(id: draftIsBlank) { if draftIsBlank { restoreReturnedMessage() } }
             // The first device this page renders for is not a substitution:
             // seeded here so the NEXT one is compared against something.
             .onAppear { _ = stagedFor.serving(FileDropContext(peerID)) }
@@ -776,6 +781,20 @@ struct DeviceConversationPage: View {
     /// property, not to a card, not to a log. What leaves this view with it is
     /// the model, which hands it to the protected sent-message store and to the
     /// seal, and nothing else.
+    /// Read-only: the message itself is never trimmed (see the Inbox surface
+    /// guard), only asked whether it holds anything but whitespace.
+    private var draftIsBlank: Bool {
+        draft.allSatisfy(\.isWhitespace)
+    }
+
+    /// Put a returned message back, for THIS device only. The model answers nil
+    /// for another device's words or a field that is not empty, and keeps them.
+    private func restoreReturnedMessage() {
+        if let text = deliveries.takeReturnedMessage(for: peerID, composerText: draft) {
+            draft = text
+        }
+    }
+
     private func sendMessage() {
         guard let token = liveToken() else { return }
         deliveries.sendText(draft, token: token)

@@ -5,9 +5,68 @@ of those decisions are enforced automatically, and which are still a human's
 job. It covers GitHub Actions, the Swift packages behind the macOS and iOS
 apps, the Node major that CI runs, and the web lockfile.
 
-The Go module graph is governed by `server/go.mod` and `server/go.sum`, which
-the toolchain already verifies by hash on every build; it is deliberately not
-duplicated here.
+The Go module graph is governed by `server/go.mod` and `server/go.sum`: the
+toolchain checks every downloaded module against `go.sum`, so that graph is
+deliberately not duplicated here. One module is the exception.
+`github.com/pion/turn/v4` is replaced by the directory
+`server/third_party/pion-turn` — upstream v4.1.4 plus a Relayium patch, recorded
+in that directory's `PATCHES.md` — and a directory replace is neither
+downloaded nor listed in `go.sum`, so nothing in the build checks it. Its
+integrity check is a test instead: `TestPionTurnLocalCopyProvenance`
+(`server/cmd/relayium-node`) hashes every file in the copy against
+`RELAYIUM-BASELINE.sha256` (the pristine upstream files) and
+`RELAYIUM-PATCHED.sha256` (the patched and added ones), and pins the go.mod
+`require`/`replace` to the copy. It runs wherever the server tests run — the
+`test` job and `race-rest` in `.github/workflows/go.yml` — not on every
+build. The copy is its own module, which `./...` does not enter, so a separate
+`race-rest` step vets it and runs its tests under `-race`.
+
+## Pion WebRTC stack
+
+`github.com/pion/webrtc/v4` (v4.2.20) is the `link/1` transport, used only by
+`server/internal/linkrtc` in a data-only configuration: no codecs, no
+interceptors, detached DataChannels, mDNS off, and an advertised SCTP
+`max-message-size` of 262 144. It brings `ice/v4`, `sctp`, `datachannel`,
+`sdp/v3`, `srtp/v3`, `rtp`, `rtcp`, `interceptor`, `mdns/v2`, `stun/v4`,
+`turn/v5`, `golang.org/x/net` and `golang.org/x/time` (Pion modules MIT,
+`x/*` BSD-3-Clause), and it raises two modules the patched TURN server also
+uses: `dtls/v3` 3.1.4 → 3.1.8 and `transport/v4` 4.0.2 → 4.1.0. The node's
+TURN lifecycle and identity tests are the regression gate for that shared
+change.
+
+The module now holds two TURN implementations, and only one of them may ever
+serve:
+
+- `github.com/pion/turn/v4` is the patched local copy above — the only TURN
+  server Relayium runs (`relayium-node`). The `replace` has no version on its
+  left side, so it applies to every `turn/v4` version minimal version
+  selection could pick; a dependency that raised the requirement changes the
+  `require` line, and `TestPionTurnLocalCopyProvenance` fails on that.
+- `github.com/pion/turn/v5` is what `pion/ice` uses as a TURN **client**. Its
+  upstream server still deletes allocations by 5-tuple (the defect the v4
+  copy patches), so it must never serve.
+
+`server/internal/deppolicy/pion_boundary_test.go` makes that structural:
+
+1. `go list -deps ./cmd/relayium-node` contains no `pion/webrtc`, `pion/ice`,
+   `pion/sctp`, `pion/datachannel` or `pion/turn/v5` package, and still
+   contains the patched `turn/v4` allocation manager (so the check cannot go
+   vacuous).
+2. An unstripped build of the `relayium` CLI and of a probe main that makes
+   every `linkrtc` entry point reachable links **no symbol** from
+   `turn/v5/internal/server`, `turn/v5/internal/allocation` or the `turn/v5`
+   `Server`, and the probe does link the v5 client and `PeerConnection` (so
+   the check cannot go vacuous). This is a linked-symbol check on purpose: the
+   `turn/v5` root package imports its server packages, so they are in every
+   `linkrtc` user's import graph with zero code linked. The default is the
+   host target; `RELAYIUM_DEPPOLICY_ALL_TARGETS=1` repeats it for the six
+   release targets.
+
+Dependabot's `gomod` groups will propose Pion bumps like any other module;
+these two tests and the provenance test are the reviewable tripwires, and no
+`ignore:` rule is added for them. `govulncheck ./...` covers the Pion modules
+normally — only the directory-replaced `turn/v4` needs the supplemental query
+below.
 
 ## The three layers
 
@@ -52,6 +111,18 @@ and **both block a pull request**. `govulncheck` runs in the `go` job of
 ./...`) and `npm audit --audit-level=high` runs in the `web` job of
 `.github/workflows/web.yml`. A new upstream advisory can therefore turn a pull
 request red without that pull request having changed anything.
+
+`govulncheck ./...` does not cover pion/turn: a directory replace has no
+version, so the scan silently skips it rather than reporting it clean. The next
+step in the same job closes that gap with a supplemental query,
+`govulncheck@v1.6.0 -mode=query -json github.com/pion/turn/v4@<version>`, where
+the version is read from `server/go.mod` (`go list -m`). Query mode exits 0
+even when it finds advisories, so the step parses the JSON stream with `jq`
+and fails on any advisory and on anything short of a well-formed, confirmed
+lookup of exactly that module and version — empty or unparseable output, a
+different scanner version or mode, an unknown message type. It asks about the
+upstream release the copy was taken from; an advisory about code the Relayium
+patch changed would still be reported, and is triaged against `PATCHES.md`.
 
 *Intended architecture, not yet implemented:* this question cannot honestly be
 answered offline — the answer changes without the repository changing, and a

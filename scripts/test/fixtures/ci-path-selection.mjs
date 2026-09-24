@@ -49,7 +49,8 @@
 
 export const PATH_MATRIX = [
   ["server/account/pairroom.go",
-    ["android-interop.yml", "go.yml", "native-web-pairing.yml", "windows.yml"],
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+      "windows.yml"],
     "server-only: none of the three APP lanes may start — not macos.yml, not ios.yml, not "
     + "android.yml. That is a claim about app BUILD AND RELEASE lanes, not about runner "
     + "hardware: native-web-pairing.yml runs on a macOS runner of its own, because an "
@@ -59,13 +60,17 @@ export const PATH_MATRIX = [
     + "transfer, and windows.yml, whose `realtime` job does the same and names `server/**` for "
     + "exactly that reason. So a change here can break any of them with no edit under apps/ at "
     + "all. Android joined this row when its interop lane stopped omitting its own inputs; "
-    + "Windows joined it when its realtime job began compiling and running the real server"],
+    + "Windows joined it when its realtime job began compiling and running the real server. "
+    + "inbox-swift-interop.yml joined it because its live class builds the whole relayium "
+    + "binary and stands up the real account service: every server file is its input, and a "
+    + "hand-kept list of 'inbox' paths was rejected for waiting on an innocent-commit failure"],
   ["server/go.mod",
-    ["android-interop.yml", "go.yml", "native-web-pairing.yml", "windows.yml"],
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+      "windows.yml"],
     "the server module: still not a trigger for macos.yml, ios.yml or android.yml — the app "
     + "build and release lanes — and still an input to every lane that builds this module from "
     + "source: the two acceptances, one of which spends a macOS runner on it, and windows.yml's "
-    + "realtime job alike"],
+    + "realtime job alike, and the narrow Swift<->Go interop lane that builds it on macOS"],
   ["web/src/lib/pair.ts",
     ["android-interop.yml", "native-web-pairing.yml", "web.yml", "windows.yml"],
     "web-only in the sense that matters here: none of macos.yml, ios.yml or android.yml may "
@@ -101,6 +106,10 @@ export const PATH_MATRIX = [
     + "acceptance that compiles it and the package's own suite. The rest of that package's "
     + "ownership, including the `!apps/RelayiumKit/Tests/**` exclusions the three heavy filters "
     + "now carry, is `scripts/test/swift-ci-boundary-test.mjs`"],
+  ["apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json", ["go.yml", "swift-package.yml", "web.yml"],
+    "the W-N18 A08e link-session state-machine vectors: a fixture-only edit must start the Web "
+    + "authority suite and the Go link-session suite, both of which run their real lane machines "
+    + "against it, and the package lane that owns the file — and no heavy Apple or pairing lane"],
   ["scripts/ios-ui-session-acceptance.sh", ["ios.yml"],
     "the iOS built-App acceptance: the workflow that runs it, and only that one. The pairing "
     + "workflow does not source this script, and `scripts/**` is gone from its filter"],
@@ -222,4 +231,56 @@ export const PATH_MATRIX = [
     + "no other governed workflow runs that test. Named one file at a time rather than through "
     + "`docs/**`, which would start the full web suite, the accessibility scan and three "
     + "headless-Chrome journeys for every unrelated document in the repository"],
+  ["server/cmd/relayium/run.go",
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+      "web.yml", "windows.yml"],
+    "a server source file that is ALSO web TEST INPUT. Every lane that compiles and runs this "
+    + "server starts, as for any server file; web.yml starts as well because "
+    + "`web/scripts/pages/cli-backup-integrity-recovery.test.mjs` reads reportExit's failure "
+    + "line out of this file and asserts the SSH backup guide quotes it, and that test runs in "
+    + "web.yml's `npm test` step. Only this one file: server/account/pairroom.go above must "
+    + "still not start web.yml, so `server/cmd/relayium/**` would be the wrong fix. It also "
+    + "starts inbox-swift-interop.yml: it dispatches the `inbox send`/`inbox sent` commands the "
+    + "live Swift interop drives, which is exactly the known input design review refused to omit"],
+  ["server/internal/inboxlive/central_test.go",
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+      "windows.yml"],
+    "the Go half of the live CLI-sender -> native-receiver acceptance. It is build-tagged, so "
+    + "no `go test ./...` lane ever compiles it, but it is under server/** like any server file "
+    + "and starts every lane that watches that tree — among them the one lane that does run it"],
+  ["apps/RelayiumKit/Tests/RelayiumKitTests/InboxCLISenderLiveInteropTests.swift",
+    ["swift-package.yml"],
+    "the Swift half of that acceptance: a package TEST file, so exactly the package lane, which "
+    + "runs it forced. Not inbox-swift-interop.yml — that lane never watches apps/**, or one "
+    + "Swift edit would start two macOS runners — and none of the three heavy Apple/pairing "
+    + "lanes, whose ordered `!apps/RelayiumKit/Tests/**` exclusions keep a test edit off them"],
+  ["scripts/ci/assert-swift-named-execution.mjs", ["inbox-swift-interop.yml"],
+    "the named-execution proof both Swift<->Go interop steps run. It starts the narrow lane that "
+    + "exercises it on a real log; swift-package.yml's four-entry filter deliberately does not "
+    + "grow for it, and the script's own pass/skip/fail/missing cases run on every push in "
+    + "repo-hygiene through scripts/test/swift-ci-boundary-test.mjs"],
+  // ── A12: the CLI pairing interop matrix ──────────────────────────────────
+  ["scripts/interop/cli-process.mjs", ["android-interop.yml", "native-web-pairing.yml"],
+    "the CLI process driver shared by the Android, browser and macOS CLI cells: both lanes that "
+    + "host one of those cells, and not go.yml, whose named Go cells never load it"],
+  ["scripts/interop/cli-go-matrix.sh", ["go.yml"],
+    "the named Go CLI matrix and its judge: exactly the lane whose `test` and `cli-windows` jobs "
+    + "run it. Its forged-log cases run unfiltered in compat.yml, which this matrix excludes"],
+  ["scripts/interop/build-old-cli.sh", ["go.yml"],
+    "builds the released CLI the old-version pairs talk to; only go.yml runs those pairs"],
+  ["scripts/interop/cli-web-acceptance.sh", ["native-web-pairing.yml"],
+    "the CLI ↔ browser cell, hosted by native-web-pairing.yml's `cli-web` job and by nothing "
+    + "else — not web.yml, whose filter it is not an input of"],
+  ["scripts/interop/cli-mac-peer.mjs", ["native-web-pairing.yml"],
+    "the CLI half of the CLI ↔ macOS cell, which runs in `pairing` next to the browser one"],
+  ["scripts/interop/cli-android-acceptance.sh", ["android-interop.yml"],
+    "the CLI ↔ Android emulator cell: the one lane with an emulator. Named one file at a time, "
+    + "so an Android-only script never starts the macOS pairing runner"],
+  ["web/e2e/cli-web-pairing.mjs",
+    ["android-interop.yml", "native-web-pairing.yml", "web.yml", "windows.yml"],
+    "the browser driver of the CLI ↔ Web cell is under web/**, so it starts every lane that "
+    + "watches that tree — the same set as any other web/e2e file, and among them the one that runs it"],
+  ["scripts/test/cli-interop-matrix-test.mjs", [],
+    "the judges' forged-round cases and the wiring checks run in compat.yml, which has no path "
+    + "filter, so no filtered lane may start for them"],
 ];

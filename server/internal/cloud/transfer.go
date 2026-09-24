@@ -654,6 +654,19 @@ func (c *Client) Download(ctx context.Context, id, keyB64Url, destDir string) ([
 	if err := w.prepare(); err != nil {
 		return nil, fmt.Errorf("cloud: prepare destination: %w", err)
 	}
+	// destDir is the caller's own choice, so create it like `mkdir -p` — after
+	// the manifest has been decrypted, validated and preflighted, and before
+	// /blob is requested. Left to openNext, a missing or uncreatable root only
+	// failed once the blob had streamed, which spends a limited link's
+	// download. Manifest-named subdirectories still go through mkdirAllWithin.
+	// Directories created here or below may remain if the transfer later
+	// fails: partial-file cleanup is best-effort and removes files only, not
+	// directories, and nothing here is removed recursively.
+	if len(manifest.Files) > 0 {
+		if err := os.MkdirAll(destDir, 0o755); err != nil {
+			return nil, fmt.Errorf("cloud: prepare destination: %w", err)
+		}
+	}
 	dec := storecrypto.NewDecryptor(key)
 	var written int64
 	defer func() { w.closeAll() }()

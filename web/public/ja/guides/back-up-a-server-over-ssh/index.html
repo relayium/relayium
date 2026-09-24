@@ -252,10 +252,11 @@ sent 2 file(s) (zero-dependency mode)</code></pre></div>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>cron ジョブが固まる、またはログがパスワード入力待ちで終わっている。</dt><dd><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
 # Permission denied (publickey).</code></pre><p>BatchMode=yes は入力を求めずに失敗するので、無言のハングがこの1行に変わります。その鍵の公開鍵をサーバーの ~/.ssh/authorized_keys に追加するか、エージェントがすでに保持している鍵をジョブに指定してください。</p></dd><dt>crontab の行は動いているのにログが空のまま。</dt><dd><pre tabindex="0"><code>command -v relayium
 # /usr/local/bin/relayium</code></pre><p>cron は最小限の PATH で動き、たいてい /usr/local/bin を含みません。そのため relayium が起動する前に行が失敗します。いま確認した絶対パスを crontab のエントリーに書き、&gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 のリダイレクトは残しておいて、次の失敗が見えるようにしてください。</p></dd><dt>中断された夜間の sync が、次の実行でゼロからやり直しになる。</dt><dd><pre tabindex="0"><code>ssh user@your-server command -v relayium
-# （何も表示されない）</code></pre><p>リモートに relayium が無いということです。sync にはフォールバックが無いのでそもそも動かず、push は何も検証しない tar ストリームに落ちて毎回ファイル全体を送り直します。サーバーに入れてください。半端なファイルを次回に続けるのは sync だけで、push と pull はどちらのプロトコルでも再開しません。すでに sync を使っているなら、その待ち受け側の再開を実際に切る --no-resume を渡していないかも確認してください。</p></dd><dt>「N file(s) failed integrity check」と表示され、終了コードが 0 以外になる。</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
-# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+# （何も表示されない）</code></pre><p>リモートに relayium が無いということです。sync にはフォールバックが無いのでそもそも動かず、push は何も検証しない tar ストリームに落ちて毎回ファイル全体を送り直します。サーバーに入れてください。半端なファイルを次回に続けるのは sync だけで、push と pull はどちらのプロトコルでも再開しません。すでに sync を使っているなら、その待ち受け側の再開を実際に切る --no-resume を渡していないかも確認してください。</p></dd><dt>「N file(s) could not be verified or saved」と表示され、終了コードが 0 以外になる。</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
+# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
+# exit status 1
 echo $?
-# 1</code></pre><p>到着時に計算した SHA-256 が送信時のものと一致せず、ネイティブプロトコルは各ファイルをいったん暫定領域に置いてハッシュが一致したときだけ設置します。つまりそのパスはサーバーに書き込まれておらず、向こう側に削除すべきものはありません。同じバッチの他のファイルはすでに設置済みなので、バッチ全体をやり直しても衝突チェックに拒否されます。そのパスだけを push し直してください。それでも繰り返し失敗するなら一度きりの転送エラーではありません。元ファイル（読み取り中に何かが書き込んでいないか）と両端のストレージを調べてください。</p></dd></dl></div></section>
+# 1</code></pre><p>到着時に計算した SHA-256 が送信時のものと一致しなかったか、サーバー上の relayium がファイルを保存・設置できなかった（空き容量不足、権限がない、書き込めない保存先パスなど）かのどちらかで、このメッセージはどちらなのかを区別しません。1 行目はサーバー上の relayium が出力して SSH 経由で転送されたもので、続く exit status 1 はそのリモートプロセスの終了コードです。どちらの場合も、ネイティブプロトコルは各ファイルをいったん暫定領域に置き、ハッシュが一致して保存できたときだけ設置します。つまり今回の転送はそのパスを設置していません。ただし、それは保存先に何も無いことの証明にはなりません（その間に別のプログラムが作成した可能性があります）。このメッセージだけを理由に、受信側に既にあるファイルを削除しないでください。同じバッチの他のファイルがすでに設置されている場合は、バッチ全体をやり直すと衝突チェックに拒否されるので、そのパスだけを本来の保存先に向けて push し直してください。それでも繰り返し失敗するなら一度きりの転送エラーではありません。サーバー側の空き容量・権限・保存先パスを確認し、元ファイル（読み取り中に何かが書き込んでいないか）も調べてください。</p></dd></dl></div></section>
       <h2>よくある質問</h2>
       <h3>ファイルは Relayium のサーバーを経由しますか？</h3>
       <p>いいえ。push と pull はすべて自分の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。</p>

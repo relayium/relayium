@@ -20,7 +20,7 @@ on:
   # `if:` may stand between a pull request and them.
   #
   # It REPLACES this file's own `pull_request:` trigger. Keeping both would run
-  # all fourteen jobs twice for every commit on a branch with an open pull
+  # every job twice for every commit on a branch with an open pull
   # request, once directly and once through the gate;
   # `scripts/test/ci-event-policy-test.mjs` asserts the direct trigger is gone.
   #
@@ -73,6 +73,13 @@ jobs:
       # allowlists — do not delete this step because it "looks like noise."
       - name: Check for production identifiers
         run: scripts/check-production-identifiers.sh
+      # The checker's exact file+address exceptions for the vendored Pion TURN
+      # tests, proved narrow in throwaway git repositories: each exception
+      # passes and is load-bearing, the same address elsewhere or another
+      # address in those files still fails, and the denylist, paths and
+      # hostnames never consult them. Plain bash and git — no node required.
+      - name: production-identifier exceptions stay exact
+        run: bash scripts/test/production-identifiers-test.sh
 
   uninstall-node:
     runs-on: ubuntu-latest
@@ -215,8 +222,24 @@ jobs:
       # there is nothing to install.
       - name: shared Swift package CI ownership boundary
         run: node scripts/test/swift-ci-boundary-test.mjs
+
+  # The repository's own non-Swift policy: document and home-page claims, the
+  # transport-path claim, the App Store packet validators, the acceptance
+  # scratch contract, role-coverage caps and the guard-coverage meta-test.
+  # These grew inside `swift-ci-boundary` because that job was the nearest
+  # unfiltered Node host; they have nothing to do with the Swift package, so
+  # they get their own job and that one keeps its name honest. Same host, same
+  # reasons: this workflow has no path filter, Linux, seconds, no dependencies.
+  repository-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
       # What `README.md`, `apps/README.md` and the macOS readiness manifest may
-      # claim — the other side of the boundary the step above draws.
+      # claim — the other side of the boundary `swift-ci-boundary` draws.
       #
       # These were XCTest cases, and `swift-package.yml` starts on
       # `apps/RelayiumKit/**` alone — deliberately, so that a README edit never
@@ -244,6 +267,48 @@ jobs:
       # filter, Linux, seconds, no dependencies.
       - name: the home page's trust block is still true of this repository
         run: node scripts/test/home-trust-claims-test.mjs
+
+      # How Relayium describes WHICH WIRE a transfer takes, across `server/`,
+      # `README.md`, `docs/` and `web/`. It pins the SHAPE of the claim, not its
+      # truth: the invariant stays absolute, the path fact stays attributed to
+      # the mode, and the retired product-level pledges stay retired. Owned here
+      # for the same reason as the two steps above — a CLI-only commit that
+      # re-absolutised the help text would start no web lane, and this workflow
+      # has no path filter.
+      - name: the transport-path claim is scoped to the mode, not to the product
+        run: node scripts/test/transport-claim-test.mjs
+
+      # The App Store packet's two validators are pure Node over files in this
+      # repository, so they belong on the cheap unfiltered lane rather than in a
+      # macOS job: a metadata or screenshot edit in ANY commit is then checked,
+      # including one that never touches `apps/ios/**`. Both suites are mutation
+      # suites — they prove the validator says no, not merely that today's packet
+      # passes.
+      - name: the App Store metadata validator still refuses a bad packet
+        run: node scripts/test/ios-app-store-metadata-validate-test.mjs
+
+      - name: the App Store screenshot validator still refuses a bad set
+        run: node scripts/test/ios-app-store-screenshots-validate-test.mjs
+
+      # Platform-independent despite testing a SwiftPM argument: `swift` and `go`
+      # are stubs the suite puts on PATH to record their argv, so no toolchain is
+      # involved and ubuntu is the right home.
+      - name: acceptance_build's scratch-path contract holds both ways
+        run: bash scripts/test/local-acceptance-scratch-test.sh
+
+      # The three lanes that assert BOTH link roles were seen — Windows
+      # `realtime`, `native-web-pairing`, `android-interop` — each sit behind
+      # their own path filter, so none of them can see another's round cap. One
+      # was left at 8 when the other two went to 10 and failed on the coin flip
+      # alone. Pure Node over three source files; no dependencies.
+      - name: every role-coverage lane runs the same number of rounds
+        run: node scripts/test/role-coverage-cap-test.mjs
+
+      # And the one that makes the four steps above impossible to forget again.
+      # Every `scripts/test/*-test.{mjs,sh}` must be named by some workflow; the
+      # four above had passed for months while being run by nothing.
+      - name: every policy test is actually run by a workflow
+        run: node scripts/test/ci-guard-coverage-test.mjs
 
   android-policy:
     runs-on: ubuntu-latest

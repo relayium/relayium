@@ -266,8 +266,11 @@ export interface Messages {
     errRateLimited: string;
     errEmailInvalid: string;
     errUnrecognised: string;
+    errTooLong: string; // password_too_long: over bcrypt's 72-byte limit (register / change / reset)
+    errRegisterPendingDeletion: string; // register 409 account_pending_deletion (no reactivate token in that context)
+    errSessionExpired: string; // change-password 401 `unauthorized`: the browser session is gone, not the password wrong
     errNetwork: string; // request never reached the server (offline / fetch threw)
-    pendingDeletion: string; // frozen-account reactivate banner (fragment token)
+    pendingDeletion: string; // frozen-account reactivate banner (fragment token) and the sign-in dialog's pending_deletion notice
     reactivate: string;
     reactivateError: string;
     changePassword: string;
@@ -275,7 +278,7 @@ export interface Messages {
     currentPassword: string;
     newPassword: string;
     confirmPassword: string;
-    pwChanged: string;
+    pwChanged: string; // must stay true: only browser sessions are revoked; app/CLI tokens survive a password change
     errCurrentWrong: string;
     errMismatch: string;
     linkedTitle: string; // heading for the linked-login-methods list
@@ -757,6 +760,8 @@ export interface Messages {
     successBody: string; // token accepted, session cookie set, redirecting home
     noToken: string; // opened without a ?token= param
     invalidTitle: string; // token rejected (expired / already used / malformed)
+    serverError: string; // 500: the link may already be spent with the account verified — never "invalid"
+    errPasswordMismatch: string; // 400 password_mismatch: nothing changed, the link still works
     backHome: string; // link back to the app
   };
   // /reset-password — landing page for the emailed reset link (?token=).
@@ -768,7 +773,8 @@ export interface Messages {
     submitBtn: string;
     successBody: string; // token accepted, new password set, session cookie set, redirecting home
     invalidBody: string; // fuller explanation + prompts a fresh forgot-password request
-    errGeneric: string; // any other server error on submit
+    errGeneric: string; // any other server error on submit (the new password may already be set)
+    pendingDeletion: string; // 200 pending_deletion: password NOT changed, link spent; offer reactivation
     backHome: string; // link back to the app
   };
   // /magic-link 落地页。这一页存在的唯一理由是它需要一次点击——邮件网关的预取
@@ -780,6 +786,38 @@ export interface Messages {
     working: string;
     done: string;
     expired: string;
+    noToken: string;
+    home: string;
+  };
+  // /account/delete/confirm — landing for the emailed deletion link. Spends the
+  // token only on a button press (mail gateways prefetch links). The grace
+  // period is admin-configurable (account_grace_days), so this copy names no
+  // number of days; the "deletion scheduled" email carries the exact date.
+  accountDelete: {
+    title: string;
+    lead: string; // nothing has happened yet
+    consequence: string; // what pressing the button does, truthfully
+    cta: string;
+    working: string;
+    keep: string; // leave without deleting
+    done: string; // 200: scheduled (also when it already was)
+    doneUndo: string; // how to undo during the grace period
+    invalid: string; // 400 invalid_or_expired_token
+    errNetwork: string;
+    errServer: string;
+    noToken: string;
+    home: string;
+  };
+  // /account/reactivate — landing for the emailed reactivation link. One click;
+  // success signs the person in.
+  accountReactivate: {
+    title: string;
+    lead: string;
+    cta: string;
+    working: string;
+    done: string;
+    invalid: string; // 400 invalid_or_expired_token (also: account no longer scheduled)
+    errServer: string;
     noToken: string;
     home: string;
   };

@@ -18,19 +18,101 @@ import (
 // at the bottom of this file are what make every one of them reachable through
 // all three forms.
 
+// linkRelayPolicy states, once for every command that can link, what decides
+// whether the bytes are relayed — which is also what decides whether the code
+// owner's relay allowance is spent. It mirrors linkrtc.ChooseRTCConfig (the
+// Web's chooseRtcConfig): relay-only WHENEVER a TURN relay was issued, with no
+// direct-first attempt, even on one LAN. TestLinkRelayPolicyHelpMatchesTheCode
+// holds the two together; change them together (A09c ice-direct/1 owns any
+// direct-first policy).
+const linkRelayPolicy = `Relay and your allowance: whenever the server issues a TURN relay for the
+code, a link sends every byte through that relay, even when the two ends could
+reach each other directly (on one LAN, too), and relayed traffic counts toward
+the code owner's relay allowance; the relay carries only ciphertext it cannot
+read. Only when no relay is issued (none configured, or the allowance is used
+up) does the link go peer to peer, and then it needs a direct path.`
+
+const pairUsage = `relayium pair — a live, two-way session with another device
+
+usage:
+  relayium pair [code] [--dest DIR] [--accept] [--verify]
+
+Leave the code out to mint one, which requires "relayium login"; the other side
+then runs "relayium pair <code>", or types the code into the Relayium app or the
+web page. Joining with a code someone gave you needs no account. Both devices
+must be online at the same time; this is not a mailbox.
+
+Once linked, the session is end-to-end encrypted: files, folders and messages
+go both ways, as often as you like, until either side leaves. The verification
+code (SAS) is printed on both ends; compare it to rule out a substituted
+endpoint (--verify makes that a required step). The "path:" line says what the
+bytes actually take: "direct" or "lan" (peer to peer), or "relay".
+
+` + linkRelayPolicy + `
+
+In the session, each line you type is sent as a message, except:
+  /send <path>...   send files or folders (quote names with spaces)
+  /accept           save the files the other side offered (into --dest)
+  /decline          refuse them; nothing is written
+  /quit             leave once what you queued has gone
+  //text            send a message that starts with "/"
+  Ctrl-C            leave now: anything still in flight is not delivered
+                    and not saved (and is reported that way)
+
+Received files are only ever created new under --dest: an existing file is
+never overwritten (a new file gets a " (n)" name), nothing is written through a
+symbolic link or outside the directory. When a batch does not complete, its
+files are removed (folders created for it are left in place, and named); if
+that cleanup cannot remove something, a warning names what may be left. After
+a crash, hidden ".relayium-partial-*" entries may be left in --dest: they may
+be inspected and deleted by hand, after checking their contents.
+
+Scripts: stdout carries only the other side's messages (one per line); status,
+prompts, the SAS and errors go to stderr. When stdin is not a terminal, its end
+does not end the session — "/quit", or the other side leaving, does — and
+incoming files are declined unless --accept is given.
+
+exit status: 0 the session ended normally and everything sent was delivered and
+everything accepted was saved; 1 something did not complete or the link could
+not be set up; 2 usage; 130 interrupted (Ctrl-C).
+
+positional arguments:
+  [code]   an existing 6-digit pairing code. Leave it out to mint one.
+
+flags:
+  --dest DIR         directory accepted files are saved into (default ".")
+  --accept           accept every incoming batch without asking
+  --verify           stop and compare the verification code (SAS) before
+                     anything is accepted or sent (needs a terminal)
+  --server URL       Relayium server (self-hosting)
+  --advertise H:P    offer this address as a direct candidate (advanced; it
+                     must really be reachable from the peer)
+`
+
 const sendUsage = `relayium send — send files to a peer over a pairing code
 
 usage:
   relayium send <src...> [code]
 
-Cross-network and direct: a short rendezvous handshake on Relayium's server
-introduces the two ends, then the files travel straight between them. If no
-direct connection can be made (both ends behind strict NAT), the transfer fails
-— the CLI never relays file bytes.
-
 Both machines must be online at the same time; this is not a mailbox. For a
 recipient who is not there right now, use "relayium up" (a stored link) or the
-Device Inbox from the Web or a native app.
+Device Inbox ("relayium inbox send", the Web or a native app).
+
+A short rendezvous on Relayium's server introduces the two ends. With a current
+relayium on the other end ("relayium receive" or "relayium pair"), or a
+Relayium app or the web page, they set up an end-to-end encrypted link. The
+"path:" line says what the bytes took.
+
+` + linkRelayPolicy + `
+
+Against an older relayium CLI, or on a server that predates pairing hints, the
+older CLI pairing is used unchanged: it is direct-only, so without a direct
+path (both ends behind strict NAT) the transfer fails rather than falling back
+to a relay.
+
+The command ends once the receiver has verified and saved the files (exit 0),
+or when they were declined or not delivered (exit 1). Ctrl-C leaves the
+session: the files are then reported as not delivered (exit 130).
 
 positional arguments:
   <src...>   files or directories to send
@@ -51,10 +133,29 @@ const receiveUsage = `relayium receive — receive files sent to a pairing code
 usage:
   relayium receive <code> [destdir]
 
-The other side runs "relayium send" and reads out the 6-digit code. No Relayium
+The other side runs "relayium send" (or "relayium pair", or a Relayium app or
+the web page) and reads out the 6-digit code. No Relayium
 account is needed to receive: the code is the introduction. Both machines must
-be online at the same time, and the bytes travel directly between them — if no
-direct connection can be made, the transfer fails rather than being relayed.
+be online at the same time.
+
+With a current relayium or an app on the other end the files travel over an
+end-to-end encrypted link. The "path:" line says what the bytes took.
+
+` + linkRelayPolicy + `
+
+Against an older relayium CLI, or on a server that predates pairing hints, the
+older CLI pairing is used unchanged, and it is direct-only: without a direct
+path the transfer fails rather than falling back to a relay.
+
+Exactly one batch is accepted into destdir; the command then ends (exit 0 once
+every file is verified and on disk, 1 otherwise). Over a link, files are only
+created new: nothing existing is overwritten (a new file gets a " (n)" name),
+nothing is written through a symbolic link or outside destdir. A batch that
+does not complete — Ctrl-C included (exit 130) — is never reported saved; its
+files are removed (folders created for it are left in place, and named), and
+if that cleanup cannot remove something, a warning names what may be left.
+After a crash, hidden ".relayium-partial-*" entries may be left in destdir:
+they may be inspected and deleted by hand, after checking their contents.
 
 positional arguments:
   <code>      the 6-digit pairing code the sender printed
@@ -72,9 +173,18 @@ const textUsage = `relayium text — ephemeral encrypted messages with a peer
 usage:
   relayium text [code]
 
-Both ends run this command. The session is end-to-end encrypted over a direct
-pinned-TLS connection of its own; Relayium keeps no message body and no
-server-side history. Both machines must be online at the same time.
+Both ends run this command (or one end runs "relayium pair", or uses a Relayium
+app or the web page). The session is end-to-end encrypted; Relayium keeps no
+message body and no server-side history. Both machines must be
+online at the same time. With a current relayium or an app on the other end it
+runs over an end-to-end encrypted link.
+
+` + linkRelayPolicy + `
+
+Against an older relayium CLI, or on a server that predates pairing hints, the
+older CLI pairing is used unchanged, and it is direct-only: with no direct path
+between the two machines the session cannot open, rather than falling back to a
+relay.
 
 positional arguments:
   [code]   an existing 6-digit pairing code. Leave it out to mint one, which
@@ -82,7 +192,11 @@ positional arguments:
 
 One line per message when typing interactively. Pipe stdin to send exact
 multiline content: pbpaste | relayium text 483920. At most 65,536 UTF-8 bytes
-per message — anything larger is a file, so use "relayium send".
+per message — anything larger is a file, so use "relayium send". The other
+side's messages go to stdout (exact bytes when stdout is not a terminal); on a
+terminal each of their lines is shown as "peer> …" with control characters made
+visible. The session ends when both ends have finished, when either leaves, or
+after 10 minutes.
 
 flags:
   --verify           stop and compare the verification code (SAS) before the
@@ -192,10 +306,10 @@ to the server. Anyone with the link can open it in a browser or fetch it with
 This is a hosted, asynchronous stored-link mode: the ciphertext sits in
 Relayium's storage until someone fetches it, so the two ends never have to be
 online together. That is what makes it unlike the pairing-code modes
-("send"/"receive"/"text") and the direct server modes ("push"/"pull"/"sync"
+("send"/"receive"/"text") and the direct server modes ("push"/"sync"
 with "serve"), which move bytes straight between two machines. It is not the
 only CLI mode that involves the server, though — the Device Inbox is hosted and
-asynchronous too; the CLI is only its receive side.
+asynchronous too ("relayium inbox send" and "relayium inbox run").
 
 Because a copy is stored, "up" requires "relayium login" and counts against the
 account's storage cap, traffic allowance, daily quota and retention window,
@@ -274,9 +388,10 @@ Requires "relayium login" and "relayium inbox enable --dir <folder>" first, and
 network access. One worker per state directory; a second exits rather than
 racing the first. SIGINT/SIGTERM stop it cleanly.
 
-RECEIVE SIDE ONLY. There is no CLI command that sends into an inbox — you send
-to one from the Web or a native app. To move files between two of your own
-servers, use "relayium serve" with "relayium push"/"relayium sync".
+This is the receiving side. To send into a device's inbox from the CLI, use
+"relayium inbox send" (the Web and the native apps send too). To move files
+between two of your own servers directly, use "relayium serve" with
+"relayium push"/"relayium sync".
 
 flags:
   --once           drain the queue once and exit instead of staying resident
@@ -397,6 +512,7 @@ var commandUsage = map[string]string{
 	"push":      pushUsage,
 	"pull":      pullUsage,
 	"sync":      syncUsage,
+	"pair":      pairUsage,
 	"send":      sendUsage,
 	"receive":   receiveUsage,
 	"text":      textUsage,
@@ -423,6 +539,11 @@ var inboxCommandUsage = map[string]string{
 	"pause":   inboxPauseUsage,
 	"resume":  inboxResumeUsage,
 	"service": inboxServiceUsage,
+	"devices": inboxDevicesUsage,
+	"send":    inboxSendUsage,
+	"sent":    inboxSentUsage,
+	"cancel":  inboxCancelUsage,
+	"retry":   inboxRetryUsage,
 }
 
 // runHelp implements `relayium help [command [subcommand]]`.

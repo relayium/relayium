@@ -45,6 +45,14 @@ on:
       - 'server/account/files.go'
       - 'server/account/uploads_resumable.go'
       - 'docs/billing-transparency.md'
+      # And one Go SOURCE FILE read as test input, not compiled here.
+      # `web/scripts/pages/cli-backup-integrity-recovery.test.mjs` extracts
+      # reportExit's per-file failure line from it and asserts the SSH backup
+      # guide in all nine locales still quotes that exact line. A reword there
+      # without this suite running leaves the guide quoting a line the CLI no
+      # longer prints. The one file, not `server/cmd/relayium/**`, for the same
+      # reason as the document above.
+      - 'server/cmd/relayium/run.go'
       # And three frozen-bytes FIXTURES, for exactly the same reason and named
       # exactly as narrowly. They live in the Swift package because that is
       # where they were frozen from, but three tests in this suite read them
@@ -54,12 +62,14 @@ on:
       #   web/src/lib/caps-vectors.test.ts    realtime-wire + crypto
       #   web/src/lib/text-vectors.test.ts    realtime-wire + crypto
       #   web/src/lib/inbox-manifest.test.ts  device-inbox-manifest-v3
+      #   web/src/lib/link-session-vectors.test.ts  link-session (W-N18 A08e;
+      #     the Web AUTHORITY half of the state-machine vectors)
       #
       # A fixture regenerated without this suite running leaves those tests
       # passing against bytes nobody re-checked on this side, and the divergence
       # surfaces later against an innocent commit that touched `web/**`.
       #
-      # THREE PATHS, not the `Tests/Fixtures/` tree and not
+      # FOUR PATHS, not the `Tests/Fixtures/` tree and not
       # `apps/RelayiumKit/**`. `store-wire-vectors.json` sits in that same
       # directory and is deliberately absent: no test in this suite reads it —
       # its only Web-side consumer is `web/scripts/check-wire-vectors.mjs`,
@@ -70,6 +80,7 @@ on:
       - 'apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json'
+      - 'apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json'
       - '.github/workflows/web.yml'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
   #
@@ -135,7 +146,22 @@ jobs:
       # the decision explicit instead of dependent on the image contents.
       RELAYIUM_GO_INTEROP: "0"
     steps:
+      # `fetch-tags` is not decoration. `releases.test.mjs`'s tag audits are the
+      # only thing tying the public /releases page to reality, and they are
+      # `skipIf(gitTags() === null)`. A default checkout has no tags, so on this
+      # runner they skipped — indistinguishable from a pass in the summary, and
+      # exactly how `v0.26.0` shipped while /releases still listed `v0.25.1`
+      # with every hosted check green (BACKLOG-TRIAGE W-N15).
+      #
+      # Depth stays 1. The audits read `git for-each-ref refs/tags` and
+      # `git tag --list` — tags, not history — and fetching a tag ref brings its
+      # commit in as a shallow boundary, so `creatordate:short` resolves even for
+      # this repository's 31 LIGHTWEIGHT tags. Measured on a real `--depth=1`
+      # clone with a tags refspec before this was written: 69/69 tags, every date
+      # present. A full clone would work too and is not needed.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-tags: true
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24
@@ -145,7 +171,14 @@ jobs:
       - run: npm run check
       - run: npm test -- --run
       - run: npm run build
-      # Runs immediately after build: the scanner serves web/dist and drives a real
+      # Every executable inline script in the BUILT dist must be one
+      # scripts/pages/csp-inline-scripts-v1.json allows, and every hash there
+      # must still be shipped — the bytes nginx will serve, not the generator's
+      # strings, which csp-headers.test.mjs above already covers. It fails on a
+      # missing dist, a missing generated page or an unknown script type, and
+      # prints each allowed hash with its page count.
+      - run: node scripts/check-csp-inline.mjs dist
+      # Runs after build: the scanner serves web/dist and drives a real
       # headless Chrome, so it needs the freshly built output — an earlier position
       # would scan whatever dist happened to be lying around, or nothing at all.
       # Fails on any axe violation not claimed by e2e/a11y-allowlist.json (empty);

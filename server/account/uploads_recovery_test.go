@@ -44,6 +44,19 @@ type commitThenFailNode struct {
 	// central in the state where it genuinely cannot learn the blob's size while
 	// the bytes are demonstrably on the node's disk.
 	failProbe atomic.Bool
+	// failDelete makes the node refuse DELETEs, so a blob outlives the delete
+	// its owner attempted.
+	failDelete atomic.Bool
+	// ds is the node's disk, for tests that put bytes on it directly (a late
+	// append central never heard about).
+	ds *storage.DiskStore
+}
+
+// heal clears every failure mode.
+func (n *commitThenFailNode) heal() {
+	n.failAfterCommit.Store(false)
+	n.failProbe.Store(false)
+	n.failDelete.Store(false)
 }
 
 func newCommitThenFailNode(t *testing.T) *commitThenFailNode {
@@ -53,7 +66,7 @@ func newCommitThenFailNode(t *testing.T) *commitThenFailNode {
 	if err != nil {
 		t.Fatalf("node disk store: %v", err)
 	}
-	n := &commitThenFailNode{dir: dir}
+	n := &commitThenFailNode{dir: dir, ds: ds}
 	n.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := strings.TrimPrefix(r.URL.Path, "/blob/")
 		switch r.Method {
@@ -94,6 +107,10 @@ func newCommitThenFailNode(t *testing.T) *commitThenFailNode {
 			defer rc.Close()
 			_, _ = io.Copy(w, rc)
 		case http.MethodDelete:
+			if n.failDelete.Load() {
+				http.Error(w, "node refusing deletes", http.StatusServiceUnavailable)
+				return
+			}
 			_ = ds.Delete(r.Context(), key)
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -393,7 +410,7 @@ func TestAnUnreachableBlobIsNeverWrittenOffAgainstTheOffsetWeHappenToKnow(t *tes
 		t.Fatalf("a session whose blob could never be read back is marked settled: %+v", got)
 	}
 	// ...and the purge agrees, however old the row gets.
-	if err := h.store.PurgeDoneUploadSessions(context.Background(), h.now+3650*86400); err != nil {
+	if err := h.store.PurgeDoneUploadSessions(context.Background(), h.now+3650*86400, h.now+3650*86400); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if !h.sessionExists(t, uploadID) {
@@ -423,13 +440,49 @@ func TestAnUnreachableBlobIsBilledExactlyOnceItsNodeReturns(t *testing.T) {
 	if h.sessionExists(t, uploadID) {
 		t.Fatal("a settled session was left behind")
 	}
+	// The reaper hands the settled blob to the pending-delete queue rather than
+	// deleting it itself: the bytes are still on the node, and the queue row owns
+	// them. It carries the claim's residual obligation (a fresh, billable upload
+	// that never became an object: residualOwed), but at a floor of every byte
+	// the recovery just billed — the node holds nothing past it, so settling it
+	// charges nothing more.
+	if got := nodeBlobSize(t, node.dir, sess.BlobKey); got != onNode {
+		t.Fatalf("the blob holds %d bytes before the drain, want the %d it was billed for", got, onNode)
+	}
+	var queued []PendingNodeDelete
+	for _, p := range h.pendingDeletes(t) {
+		if p.BlobKey == sess.BlobKey {
+			queued = append(queued, p)
+		}
+	}
+	if len(queued) != 1 || queued[0].NodeID != sess.NodeID || queued[0].BillUserID != h.userID ||
+		queued[0].BilledThrough != onNode || queued[0].BillMax != sess.MaxSize {
+		t.Fatalf("after the reaper, the blob's queue ownership is %+v, want one obligation for node %s at the settled floor %d",
+			queued, sess.NodeID, onNode)
+	}
+	// GC's drain is what deletes it, and retires the row on the confirmed delete.
+	cleanupDrain(h, h.store, h.now+7*86400)
 	if nodeBlobSize(t, node.dir, sess.BlobKey) != 0 {
 		t.Fatal("the partial blob was not reclaimed once its bytes were accounted for")
+	}
+	for _, p := range h.pendingDeletes(t) {
+		if p.BlobKey == sess.BlobKey {
+			t.Fatalf("the queue row outlived a confirmed delete: %+v", p)
+		}
+	}
+	if got := h.uploadMetered(t); got != onNode {
+		t.Fatalf("the drain moved the bill: %d, want %d", got, onNode)
 	}
 	// Exactly once: a later sweep must not re-bill what is already paid for.
 	h.svc.ReapPendingUploads(h.now + 8*86400)
 	if got := h.uploadMetered(t); got != onNode {
 		t.Fatalf("a later sweep re-billed: %d, want %d", got, onNode)
+	}
+	// ...nor a later drain plus reap, on a queue that no longer names the blob.
+	cleanupDrain(h, h.store, h.now+9*86400)
+	h.svc.ReapPendingUploads(h.now + 9*86400)
+	if got := h.uploadMetered(t); got != onNode {
+		t.Fatalf("a later drain and sweep re-billed: %d, want %d", got, onNode)
 	}
 }
 
@@ -1136,7 +1189,7 @@ func TestPreMigrationFinalizedSessionsAreBackfilledAsSettled(t *testing.T) {
 	if billed, err := st.ReconcileUploadMeter(ctx, row.ID, 2000); err != nil || billed != 0 {
 		t.Fatalf("reconciling a pre-migration row billed %d again (err %v)", billed, err)
 	}
-	if err := st.PurgeDoneUploadSessions(ctx, 1<<40); err != nil {
+	if err := st.PurgeDoneUploadSessions(ctx, 1<<40, 1<<40); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if _, ok, _ := st.GetUploadSession(ctx, row.ID, u.ID); ok {

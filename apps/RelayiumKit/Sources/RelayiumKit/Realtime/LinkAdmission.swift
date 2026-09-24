@@ -25,6 +25,16 @@ public enum LinkAdmissionDecision: Equatable, Sendable {
     case busy
     /// Build a link with this peer in this role.
     case establish(role: Role)
+    /// An UNREQUESTED link that this room will not build until the user says
+    /// yes. The phase is untouched: nothing is claimed, nothing is built, and the
+    /// driver holds the frame behind a prompt. Accepting later is an ordinary
+    /// `admitEstablishment` in this role; declining is an ordinary `busy`.
+    ///
+    /// Returned only where `establish` would otherwise have been returned for an
+    /// idle or failed room — never for the crossing reply to this side's own
+    /// `.requesting`/`.connecting` attempt, which is a link this device already
+    /// chose.
+    case ask(role: Role)
     /// An attempt with this exact peer is already running. Deliberately its own
     /// case rather than `ignore`: same-peer idempotence is a property worth
     /// being able to observe, and it is what stops a crossing request from
@@ -113,6 +123,10 @@ public final class LinkAdmission: @unchecked Sendable {
     private let selfId: () -> String
     private let supportsLink: (String) -> Bool
     private let canAcceptLink: (String) -> Bool
+    /// Whether an unrequested link from this peer must be put to the user
+    /// first. Owner-supplied and evaluated OUTSIDE the lock, exactly like
+    /// `canAcceptLink`, for the same non-recursive-lock reason.
+    private let requiresConsent: (String) -> Bool
 
     private var _phase: LinkPhase = .idle
     /// The role that produced the current link's keys. Both sides keep the
@@ -131,10 +145,12 @@ public final class LinkAdmission: @unchecked Sendable {
 
     public init(selfId: @escaping () -> String,
                 supportsLink: @escaping (String) -> Bool,
-                canAcceptLink: @escaping (String) -> Bool = { _ in true }) {
+                canAcceptLink: @escaping (String) -> Bool = { _ in true },
+                requiresConsent: @escaping (String) -> Bool = { _ in false }) {
         self.selfId = selfId
         self.supportsLink = supportsLink
         self.canAcceptLink = canAcceptLink
+        self.requiresConsent = requiresConsent
     }
 
     public var phase: LinkPhase {
@@ -270,6 +286,9 @@ public final class LinkAdmission: @unchecked Sendable {
             // unsolicited request into an idle room is still the surface's
             // decision.
             let surfaceIsFree = canAcceptLink(from)
+            // Asked here, with nothing held, for the reason above. Its answer
+            // only ever turns an idle-room `establish` into `ask`.
+            let mustAsk = requiresConsent(from)
             lock.lock(); defer { lock.unlock() }
             switch _phase {
             case .open, .interrupted:
@@ -284,7 +303,7 @@ public final class LinkAdmission: @unchecked Sendable {
                 // Nothing was asked for, so this request is unsolicited and the
                 // surface's answer is the whole decision.
                 guard surfaceIsFree else { return .busy }
-                return .establish(role: .initiator)
+                return mustAsk ? .ask(role: .initiator) : .establish(role: .initiator)
             }
         }
 
@@ -317,6 +336,7 @@ public final class LinkAdmission: @unchecked Sendable {
             // refuse is decided in the critical section under it; see the
             // `.requesting` case.
             let surfaceIsFree = canAcceptLink(from)
+            let mustAsk = requiresConsent(from)
             lock.lock(); defer { lock.unlock() }
             // The predicate above is arbitrary owner code running with nothing
             // held, so the world it returns into is not the world it was called
@@ -385,7 +405,7 @@ public final class LinkAdmission: @unchecked Sendable {
                 // Nothing was asked for, so this offer is unsolicited and the
                 // surface's answer is the whole decision.
                 guard surfaceIsFree else { return .busy }
-                return .establish(role: .responder)
+                return mustAsk ? .ask(role: .responder) : .establish(role: .responder)
             }
         }
 

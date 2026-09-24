@@ -54,9 +54,33 @@ struct SignInView: View {
     /// Only the confirmation field is ever focused programmatically — see
     /// `passwordReturn()`. Everything else is the keyboard's own business.
     @FocusState private var confirmFocused: Bool
+    /// The browser device flow (A17), for an account with neither a password
+    /// nor an Apple ID. Built by the iOS factory, which sends no installation
+    /// identifier — see `AppEnvironment.makeIOSBrowserLoginModel`.
+    @StateObject private var browserLogin = AppEnvironment.makeIOSBrowserLoginModel(
+        transport: UITestMode.makeAccountTransport())
+    @State private var presenter = BrowserSignInPresenter()
+    /// The running `begin` loop, so leaving this screen can stop it rather than
+    /// leave it polling a code nobody will approve.
+    @State private var browserTask: Task<Void, Never>?
+    /// The reset-link request sheet (A18).
+    @State private var requestingPasswordReset = false
+
+    /// The approval sheet is up, or its poll loop is running. While it is, the
+    /// other ways in are disabled: two sign-ins racing for one session is the
+    /// state `AccountSession`'s generation exists to resolve, and not starting
+    /// one is better than resolving it.
+    private var browserBusy: Bool {
+        switch browserLogin.state {
+        case .starting, .waiting: return true
+        case .idle, .failed: return false
+        }
+    }
+
+    private var anyBusy: Bool { form.isBusy || browserBusy }
 
     private var canSubmit: Bool {
-        SignInPresentation.canSubmit(mode: mode, draft: draft, isBusy: form.isBusy)
+        SignInPresentation.canSubmit(mode: mode, draft: draft, isBusy: anyBusy)
     }
 
     /// What is typed now beats what the last attempt returned.
@@ -133,7 +157,23 @@ struct SignInView: View {
                 }
             }
             .textFieldStyle(.roundedBorder)
-            .disabled(form.isBusy)
+            .disabled(anyBusy)
+
+            if mode == .signIn {
+                // A18. Sign-in half only: an account being created has no
+                // password to forget. Opens a sheet that ASKS for a reset
+                // email; the reset itself happens on relayium.com.
+                Button(L10n.t(.loginForgotPassword)) {
+                    browserLogin.cancel()
+                    requestingPasswordReset = true
+                }
+                .font(.callout)
+                .textAction()
+                .frame(maxWidth: .infinity, minHeight: Metrics.hitTarget, alignment: .trailing)
+                .contentShape(Rectangle())
+                .disabled(anyBusy)
+                .accessibilityIdentifier("account.forgotPassword")
+            }
 
             if let errorMessage {
                 // In reading order ABOVE the button, not a decoration after it:
@@ -166,6 +206,8 @@ struct SignInView: View {
 
             appleSection
 
+            browserSection
+
             // The way to the other half of this task, and the one control on
             // the screen a finger could miss: a plain button is text at its own
             // intrinsic height, which the system audit measured at 19 points
@@ -186,8 +228,96 @@ struct SignInView: View {
                 .textAction()
                 .frame(minHeight: Metrics.hitTarget)
                 .contentShape(Rectangle())
-                .disabled(form.isBusy)
+                .disabled(anyBusy)
         }
+        // Opens the approval sheet as soon as the model publishes a URL, and
+        // only then: the URL is not known until `/api/cli/device/start` answers.
+        .task(id: browserLogin.lastApprovalURL) {
+            guard case let .waiting(url) = browserLogin.state else { return }
+            presenter.present(url) {
+                // The user closed the sheet: a cancelled login, never an error,
+                // and the poll loop stops rather than waiting out the code.
+                cancelBrowserLogin()
+            }
+        }
+        // Leaving the form (a sign-in landed some other way, the tab went away)
+        // abandons a browser login still in flight. Not while the sheet is up:
+        // that is the one presentation that may briefly take this view off
+        // screen, and it has its own way to cancel.
+        .onDisappear {
+            if !presenter.isPresenting { cancelBrowserLogin() }
+        }
+        .sheet(isPresented: $requestingPasswordReset) {
+            PasswordResetRequestView(initialEmail: draft.email)
+        }
+    }
+
+    /// Browser sign-in (A17): the macOS device flow, in an in-app browser sheet.
+    ///
+    /// For the account that cannot use either control above — no password,
+    /// and not an Apple ID. Below both, and visibly secondary, because it is
+    /// the longest way in: a web page, an approval, and a poll.
+    private var browserSection: some View {
+        VStack(spacing: Metrics.inner) {
+            Text(L10n.t(.loginBrowserHint))
+                .font(.footnote)
+                .foregroundStyle(Palette.supportingLabel)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            switch browserLogin.state {
+            case .starting, .waiting:
+                // One slot: the progress line and its way out, in place of the
+                // button, so a second login cannot start over the first.
+                ProgressView { Text(L10n.t(.loginBrowserWaiting)) }
+                Button(L10n.t(.commonCancel)) { cancelBrowserLogin() }
+                    .font(.callout)
+                    .textAction()
+                    .frame(minHeight: Metrics.hitTarget)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("account.browserSignInCancel")
+            case .idle, .failed:
+                Button { startBrowserLogin() } label: {
+                    Text(L10n.t(.loginBrowserSignIn)).frame(maxWidth: .infinity)
+                }
+                .borderedAction()
+                .controlSize(.large)
+                .disabled(form.isBusy)
+                .accessibilityIdentifier("account.browserSignIn")
+            }
+
+            if case let .failed(message) = browserLogin.state {
+                // Denied, expired, offline or throttled: said, never a
+                // success. `BrowserLoginModel` owns which sentence.
+                InlineMessage(.warning, message)
+            }
+        }
+    }
+
+    private func startBrowserLogin() {
+        // A new attempt supersedes whatever the last one said, on either half.
+        localProblem = nil
+        appleAttempt = nil
+        session.dismissAccountAccessError()
+        browserTask?.cancel()
+        browserTask = Task {
+            await browserLogin.begin { token in
+                // Close the sheet before adopting, so what the user comes back
+                // to is the account, not a browser on /device. `begin` calls
+                // this only for the run still current: a login cancelled while
+                // its poll was in flight never gets here, so a late token
+                // cannot bind (`BrowserLoginModelTests`).
+                presenter.dismiss()
+                Task { await session.adoptBearer(token) }
+            }
+        }
+    }
+
+    private func cancelBrowserLogin() {
+        browserLogin.cancel()
+        browserTask?.cancel()
+        browserTask = nil
+        presenter.dismiss()
     }
 
     /// Sign in with Apple, below the password controls and visibly separated
@@ -247,9 +377,9 @@ struct SignInView: View {
             // floor, and the same visual weight as the primary button above it.
             .frame(minHeight: Metrics.hitTarget)
             .frame(maxWidth: .infinity)
-            .disabled(form.isBusy)
-            .opacity(form.isBusy ? 0.4 : 1)
-            .accessibilityHidden(form.isBusy)
+            .disabled(anyBusy)
+            .opacity(anyBusy ? 0.4 : 1)
+            .accessibilityHidden(anyBusy)
         }
     }
 

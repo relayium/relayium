@@ -39,6 +39,8 @@ export function pageMeta(
   if (route === "verify-email") return { title: `${m.verifyEmail.title} · Relayium`, description: m.verifyEmail.confirmPrompt, canonicalPath: null };
   if (route === "reset-password") return { title: `${m.resetPassword.title} · Relayium`, description: m.resetPassword.lead, canonicalPath: null };
   if (route === "magic-link") return { title: `${m.magicLink.title} · Relayium`, description: m.magicLink.lead, canonicalPath: null };
+  if (route === "account-delete") return { title: `${m.accountDelete.title} · Relayium`, description: m.accountDelete.lead, canonicalPath: null };
+  if (route === "account-reactivate") return { title: `${m.accountReactivate.title} · Relayium`, description: m.accountReactivate.lead, canonicalPath: null };
   if (route === "me") return { title: `${m.me.title} · Relayium`, description: m.me.loginRequired, canonicalPath: null };
   if (route === "download") return { title: `${m.download.title} · Relayium`, description: m.download.loading, canonicalPath: null };
   return { title: m.titleDefault, description: m.descDefault ?? m.titleDefault, canonicalPath: "/" };

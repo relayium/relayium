@@ -321,8 +321,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(selector.contains("\"On My iPhone\", \"On My iPad\""),
                       "the browser-state selector cannot enter on-device storage "
                       + "on both compact and regular-width devices")
-        for picker in ["func testPendingSendNamesTheFileAndItsSizeBeforeTransfer()",
-                       "func testASignedInStoredSendNamesTheFileItWouldUpload()"] {
+        // Nearby's own pre-connect chooser is gone (connect first, A25) — not a
+        // coverage trade, there is no such control to pick through — so its
+        // dedicated picker test became `testNearbyStagesNothingBeforeADeviceIsChosen`
+        // and Stored Send keeps the real-picker coverage.
+        XCTAssertTrue(ui.contains("func testNearbyStagesNothingBeforeADeviceIsChosen()"),
+                      "nothing pins that Nearby stages nothing before a device is chosen")
+        for picker in ["func testASignedInStoredSendNamesTheFileItWouldUpload()"] {
             let body = try XCTUnwrap(ui.components(separatedBy: picker)
                 .dropFirst().first?.components(separatedBy: "\n    /// ").first,
                 "the dedicated real-picker test \(picker) is gone")
@@ -335,31 +340,59 @@ final class IOSSurfaceGuardTests: XCTestCase {
                            + "exercises the picker any more")
         }
 
-        // 9. The built-App transfer gate uses the deterministic seam too. Its
+        // 9. The built-App transfer gate uses a deterministic seam too. Its
         //    subject is the transfer after selection; picker presentation stays
-        //    owned by the two tests above.
+        //    owned by the real-picker test above. **Connect first (A25):** a
+        //    link carries no pre-connect batch, so the fixture is handed to the
+        //    OPEN workspace — through the same `sendChosen` its importer calls,
+        //    once the link accepts work — rather than to a pre-connect selection.
         let local = try RepoRoot.text("apps/ios/RelayiumUITests/LocalSessionUITests.swift")
         let nearbyTransfer = try XCTUnwrap(local.components(
             separatedBy: "func testNearbyLinkTransfersThenDoneReturnsToACleanRoster()")
             .dropFirst().first?.components(separatedBy: "\n    // MARK:").first,
             "the built-App Nearby transfer acceptance is gone")
-        XCTAssertTrue(nearbyTransfer.contains(
-            "--relayium-ui-testing-preselect-direct-fixture"),
+        XCTAssertTrue(nearbyTransfer.contains("--relayium-ui-testing-link-fixture"),
                       "the Nearby transfer gate again depends on Files presenting")
         XCTAssertTrue(nearbyTransfer.contains("\"pendingFile.0\""),
-                      "the Nearby transfer gate no longer proves a file was staged")
+                      "the Nearby transfer gate no longer proves which file was sent")
         XCTAssertFalse(nearbyTransfer.contains("DOC.browsingModeTabBar"),
                        "the Nearby transfer gate duplicates the real-picker tests")
+        XCTAssertFalse(nearbyTransfer.contains("--relayium-ui-testing-preselect"),
+                       "the Nearby transfer gate stages before Connect again")
 
-        XCTAssertTrue(debugHalf.contains(
-            "static func preselectPendingFixture(into selection: DirectSendSelection)"),
-                      "the direct preselection seam no longer targets Nearby's model")
-        XCTAssertTrue(app.contains("UITestMode.preselectPendingFixture(into: selecting)"),
-                      "the app no longer installs the direct preselection seam")
-        XCTAssertTrue(debugHalf.contains("guard preselectsDirectPendingFixture else"),
-                      "the direct seam can run without its dedicated launch argument")
-        XCTAssertFalse(releaseHalf.contains("selection.chooseFiles(.success([url]))"),
-                       "the shipped iOS build can inject a direct file selection")
+        XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-link-fixture"),
+                      "the link-fixture argument is not in the Debug half")
+        XCTAssertTrue(debugHalf.contains("guard suppliesLinkFixture, !linkFixtureSupplied else"),
+                      "the link seam can run without its argument, or more than once")
+        XCTAssertTrue(debugHalf.contains("return .success([url])"),
+                      "the link seam no longer answers with the importer's own result shape")
+        XCTAssertFalse(releaseHalf.contains("--relayium-ui-testing-link-fixture"),
+                       "the shipped iOS build parses the link-fixture argument")
+        XCTAssertTrue(releaseHalf.contains(
+            "static func linkFixtureSelection() -> Result<[URL], Error>? { nil }"),
+                      "the Release half lost its inert link-seam entry point, or it "
+                      + "answers something other than nil")
+        XCTAssertFalse(releaseHalf.contains(".success([url])"),
+                       "the shipped iOS build can hand a file to a link nobody chose it for")
+        // The old pre-connect direct seam is gone with the staging it fed.
+        XCTAssertFalse(mode.contains("preselectPendingFixture(into selection: DirectSendSelection)"),
+                       "the pre-connect direct-selection seam is back")
+        XCTAssertFalse(app.contains("UITestMode.preselectPendingFixture(into: selecting)"),
+                       "the app installs a pre-connect selection again")
+        // Wired once, in the workspace, through the importer's own callback and
+        // only once the link accepts work.
+        let workspace = try code(at: try iosRoot.appendingPathComponent(
+            "NearbyLinkWorkspaceView.swift"))
+        let hook = try XCTUnwrap(workspace.components(
+            separatedBy: ".task(id: link.acceptsWork) {").dropFirst().first?
+            .components(separatedBy: "\n        }").first,
+            "the workspace no longer takes the link fixture when the link accepts work")
+        XCTAssertTrue(hook.contains("guard link.acceptsWork, let fixture = UITestMode.linkFixtureSelection()"),
+                      "the link fixture can reach a link that is not accepting work")
+        XCTAssertTrue(hook.contains("sendChosen(fixture)"),
+                      "the link fixture bypasses the importer's own callback")
+        XCTAssertEqual(workspace.components(separatedBy: "UITestMode.").count - 1, 1,
+                       "the workspace reaches into UITestMode more than once")
     }
 
     /// The refused-link seam, and the coverage it must not quietly replace.
@@ -1331,11 +1364,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let child = parts[1]
         XCTAssertTrue(child.contains("@ObservedObject var text: LinkSessionPresentationModel"),
                       "the child must observe LinkSessionPresentationModel itself")
-        XCTAssertTrue(child.contains("ForEach(text.textMessages)"),
-                      "the message loop must read the model the child observes")
+        // Newest first since A16 — the macOS rule — and still read from the
+        // model the child observes.
+        XCTAssertTrue(child.contains("ForEach(text.textMessagesNewestFirst)"),
+                      "the message loop must read the model the child observes, newest first")
         XCTAssertTrue(child.contains(".linkConversationEmpty"),
                       "the empty state must invalidate with the same observation")
-        XCTAssertFalse(parts[0].contains("ForEach(text.textMessages)"),
+        XCTAssertFalse(parts[0].contains("ForEach(text.textMessages"),
                        "the parent renders the transcript only through the observing child")
         XCTAssertTrue(parts[0].contains("LinkConversationTranscript(text: text)"),
                       "the workspace must render the transcript through the child")
@@ -1362,8 +1397,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let child = parts[1]
         XCTAssertTrue(child.contains("@ObservedObject var files: LinkFilePresentationModel"),
                       "the child must observe LinkFilePresentationModel itself")
-        XCTAssertTrue(child.contains("ForEach(files.batches)"),
-                      "the batch loop must read the model the child observes")
+        XCTAssertTrue(child.contains("ForEach(files.batchesNewestFirst)"),
+                      "the batch loop must read the model the child observes, newest first")
         XCTAssertTrue(child.contains("!files.batches.isEmpty || !link.armedFiles.isEmpty"),
                       "the card's visibility must be decided under the same observation")
         for control in ["LinkBatchCopy.text(for: batch.state)",
@@ -1470,8 +1505,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // said. `StoreKitLinkageTests` reads the whole tree and both Xcode
         // projects instead. The positive iOS ownership and observation wiring
         // is asserted immediately below this test.
+        //
+        // **`BrowserLoginModel` LEFT this list with A17 (2026-09-23)**, for the
+        // reason `CloudUploadModel` left it in R3-C: this is the slice that
+        // ships it. It was banned while iOS had no browser sign-in, which left a
+        // passwordless, non-Apple account with no way in at all (iOS audit O1).
+        // What replaces the ban is narrower and stronger than an absence:
+        // `testBrowserSignInIsTheDeviceFlowInAnInAppSheetWithNoInstallationHint`
+        // pins the ONE construction site (the iOS factory, which sends no
+        // `install_id`), the one presenter, the cancel-on-dismiss wiring and the
+        // single `adoptBearer` hand-off inside the model's current-run callback;
+        // `BrowserLoginModelTests` drives the late-token, cancel and supersede
+        // races against the model itself; and `IOSPrivacyManifestTests` keeps
+        // the no-Device-ID declaration true.
         let deferred = [
-            "BrowserLoginModel",
             "acceptNearby", "NearbyError",
             "UNUserNotificationCenter",
             "NSWorkspace",
@@ -1516,6 +1563,28 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the iOS purchase surface bypasses its distribution policy")
         XCTAssertTrue(account.contains("IOSAppleSubscriptions.channel.showsWebPlanHandoff"),
                       "the iOS web hand-off bypasses its distribution policy")
+    }
+
+    /// **Account readiness sweeps StoreKit's unfinished queue on iOS**, as it
+    /// does on macOS. A purchase left unfinished because the account changed
+    /// while its sheet was open is only submitted when its own account is ready
+    /// again, and the update observer, already running, will not see it again.
+    /// The hook is keyed on the ready account's id so A → B → A re-runs it, and
+    /// its body is the model's own readiness entry point, which
+    /// `AppleSubscriptionModelTests` drives through that same sequence.
+    func testTheIOSAppSweepsUnfinishedTransactionsOnEachReadyAccount() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" }?.text)
+        XCTAssertTrue(app.contains("""
+                guard case let .ready(user, _) = session.state else { return nil }
+                return user.id
+        """), "the readiness id is no longer the ready account's id")
+        XCTAssertEqual(app.components(separatedBy: ".task(id: subscriptionAccountID) {").count - 1, 1,
+                       "account readiness is not observed exactly once at the scene root")
+        let hook = try XCTUnwrap(
+            app.components(separatedBy: ".task(id: subscriptionAccountID) {").dropFirst().first?
+                .components(separatedBy: "}").first)
+        XCTAssertTrue(hook.contains("appleSubscription?.reconcile(forReadyAccount: subscriptionAccountID)"),
+                      "the iOS readiness hook no longer sweeps unfinished transactions")
     }
 
     /// The eight keys whose wording still names a platform, each grouped with
@@ -1923,15 +1992,146 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// A second importer would be a second place an Apple authorization can
     /// start, and the nonce that binds one attempt is `SignInView`'s own state:
     /// an authorization begun anywhere else could not be checked against it.
+    ///
+    /// **One deliberate exception since A17:** `BrowserSignInPresenter.swift`
+    /// imports the framework for `ASWebAuthenticationSession` — the in-app
+    /// browser sheet the device-flow sign-in shows — and for nothing else. It
+    /// may name no Apple ID type, so it still cannot start an Apple
+    /// authorization; the nonce rule above is untouched.
     func testOnlyTheFormImportsAuthenticationServices() throws {
+        let appleID = ["SignInWithAppleButton", "ASAuthorizationAppleID", "ASAuthorizationController",
+                       "ASAuthorization"]
         for (name, text) in try sources() where name != "SignInView.swift" {
-            for symbol in ["AuthenticationServices", "SignInWithAppleButton",
-                           "ASAuthorizationAppleID", "ASAuthorizationController"] {
+            if name == "BrowserSignInPresenter.swift" {
+                for symbol in appleID {
+                    XCTAssertFalse(text.contains(symbol),
+                                   "the browser presenter starts an Apple authorization: \(symbol)")
+                }
+                continue
+            }
+            for symbol in ["AuthenticationServices"] + appleID {
                 XCTAssertFalse(text.contains(symbol), "\(name) starts its own Apple authorization: \(symbol)")
             }
         }
         let form = try XCTUnwrap(try sources().first { $0.name == "SignInView.swift" })
         XCTAssertTrue(form.text.contains("import AuthenticationServices"))
+        let presenter = try XCTUnwrap(try sources().first { $0.name == "BrowserSignInPresenter.swift" })
+        XCTAssertTrue(presenter.text.contains("import AuthenticationServices"))
+    }
+
+    // MARK: - A17 browser sign-in, A18 reset request, A19 version support
+
+    /// **The browser sign-in is the device flow, in an in-app sheet, and it
+    /// sends no installation identifier.**
+    ///
+    /// Each clause is a way it could look finished and not be:
+    ///  - built through `makeBrowserLoginModel`, it would post `install_id` —
+    ///    a device identifier the iOS privacy manifest says this app never sends;
+    ///  - a second `adoptBearer` call site would be a token path outside the
+    ///    model's current-run callback, which is what keeps a late token from a
+    ///    cancelled or superseded run out of the session;
+    ///  - a sheet whose dismissal did not cancel would leave a poll loop
+    ///    running against a code nobody will approve;
+    ///  - `openURL`/Safari would background the app mid-poll and give the user
+    ///    no way back that the app controls.
+    func testBrowserSignInIsTheDeviceFlowInAnInAppSheetWithNoInstallationHint() throws {
+        let all = try sources()
+        let form = try XCTUnwrap(all.first { $0.name == "SignInView.swift" }?.text)
+        let presenter = try XCTUnwrap(all.first { $0.name == "BrowserSignInPresenter.swift" }?.text)
+
+        XCTAssertTrue(form.contains("AppEnvironment.makeIOSBrowserLoginModel("),
+                      "the form must build the iOS (no install_id) browser model")
+        for (name, text) in all {
+            XCTAssertFalse(text.contains("makeBrowserLoginModel("),
+                           "\(name) builds the macOS browser model, which sends install_id")
+            XCTAssertFalse(text.contains("BrowserLoginModel(client:"),
+                           "\(name) builds a browser model around its own client")
+        }
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "makeIOSBrowserLoginModel(").count - 1 }
+                          .reduce(0, +), 1, "one browser sign-in, one owner")
+
+        // The one token hand-off, inside the model's own callback, after the
+        // sheet is closed.
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "session.adoptBearer(").count - 1 }
+                          .reduce(0, +), 1, "a second adoptBearer is a token path outside the model")
+        guard let begin = form.range(of: "await browserLogin.begin { token in"),
+              let dismiss = form.range(of: "presenter.dismiss()", range: begin.upperBound..<form.endIndex),
+              let adopt = form.range(of: "session.adoptBearer(token)", range: begin.upperBound..<form.endIndex)
+        else { return XCTFail("the token no longer reaches the session through begin's callback") }
+        XCTAssertTrue(dismiss.lowerBound < adopt.lowerBound, "close the sheet, then adopt")
+
+        // Closing the sheet cancels; leaving the form cancels unless the sheet is up.
+        XCTAssertTrue(form.contains("presenter.present(url) {"))
+        XCTAssertTrue(form.contains("if !presenter.isPresenting { cancelBrowserLogin() }"))
+        XCTAssertTrue(form.contains("browserLogin.cancel()"))
+        // While the browser flow runs, the other ways in are disabled.
+        XCTAssertTrue(form.contains("private var anyBusy: Bool { form.isBusy || browserBusy }"))
+
+        // The presenter: an authentication session sharing Safari's cookies,
+        // and no other way of opening anything.
+        XCTAssertTrue(presenter.contains("ASWebAuthenticationSession(url: url"))
+        XCTAssertTrue(presenter.contains("prefersEphemeralWebBrowserSession = false"))
+        for webbish in ["openURL", "UIApplication.shared.open", "SFSafariViewController"] {
+            XCTAssertFalse(presenter.contains(webbish), "the presenter hands off to \(webbish)")
+        }
+        for (name, text) in all where !["SignInView.swift", "BrowserSignInPresenter.swift"].contains(name) {
+            XCTAssertFalse(text.contains("ASWebAuthenticationSession"),
+                           "\(name) presents its own web authentication sheet")
+            XCTAssertFalse(text.contains("BrowserSignInPresenter("),
+                           "\(name) owns a second browser presenter")
+        }
+    }
+
+    /// **Forgot password asks for an email, and the website does the reset.**
+    ///
+    /// The app never spends a reset token: no `/api/auth/password/reset` call,
+    /// no token field. Offered only on the sign-in half.
+    func testForgotPasswordOnlyRequestsAResetEmail() throws {
+        let all = try sources()
+        let form = try XCTUnwrap(all.first { $0.name == "SignInView.swift" }?.text)
+        let sheet = try XCTUnwrap(all.first { $0.name == "PasswordResetRequestView.swift" }?.text)
+
+        guard let signInOnly = form.range(of: "if mode == .signIn {"),
+              let link = form.range(of: "Button(L10n.t(.loginForgotPassword))") else {
+            return XCTFail("the sign-in form lost its forgot-password link")
+        }
+        XCTAssertTrue(signInOnly.upperBound <= link.lowerBound)
+        XCTAssertTrue(form.contains("PasswordResetRequestView(initialEmail: draft.email)"))
+        XCTAssertTrue(sheet.contains("AppEnvironment.makePasswordResetRequestModel("))
+        XCTAssertTrue(sheet.contains("await model.request(email: submitted)"))
+        // One sentence for every accepted address.
+        XCTAssertTrue(sheet.contains("case let .requested(address):"))
+        XCTAssertTrue(sheet.contains("L10n.t(.loginResetRequested, [L10n.token(address)])"))
+        XCTAssertTrue(sheet.contains(".onDisappear { model.cancel() }"))
+        for (name, text) in all {
+            for spend in ["password/reset", "resetPassword(", "reset-password?token"] {
+                XCTAssertFalse(text.contains(spend), "\(name) spends a reset token in the app: \(spend)")
+            }
+        }
+    }
+
+    /// **The version card: shown signed in or not, never blocking, and only
+    /// ever pointing at a compiled-in destination.**
+    func testTheVersionCardIsAnonymousNonBlockingAndCompiledIn() throws {
+        let all = try sources()
+        let tab = try XCTUnwrap(all.first { $0.name == "AccountTab.swift" }?.text)
+        let card = try XCTUnwrap(all.first { $0.name == "VersionSupportCard.swift" }?.text)
+
+        // Outside the state switch: every account state shows it.
+        guard let content = tab.range(of: "                content\n                VersionSupportCard(model: versionSupport)")
+        else { return XCTFail("the version card is no longer beside every account state") }
+        XCTAssertFalse(content.isEmpty)
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "makeIOSVersionSupportModel(").count - 1 }
+                          .reduce(0, +), 1)
+        // The only destinations are the compiled ones; the policy names none.
+        XCTAssertTrue(card.contains("openURL(AppEnvironment.iosAppStoreURL)"))
+        XCTAssertTrue(card.contains("openURL(AppEnvironment.iosTestFlightURL)"))
+        XCTAssertFalse(card.contains("URL(string:"), "the card builds a destination of its own")
+        // No lockout anywhere: the iOS state has no blocking notion to read.
+        for (name, text) in all {
+            XCTAssertFalse(text.contains("versionSupport.isBlocked") || text.contains("model.isBlocked"),
+                           "\(name) blocks on the iOS version policy")
+        }
     }
 
     /// Two entitlements, and each is one this app earned.
@@ -2962,8 +3162,59 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // them was pointed somewhere else.
         XCTAssertEqual(app.text.components(separatedBy: "makeSharedDraftStore()").count - 1, 1,
                        "a second draft store would be a second answer to what is waiting")
-        XCTAssertTrue(app.text.contains("makeSendSelectionModel(upload: uploads, drafts: drafts)"),
+        // The call's argument list may grow (its arrival ledger's defaults are
+        // passed after the store — see the next test), so the pin is the call
+        // and the store it carries, not the closing parenthesis.
+        XCTAssertEqual(app.text.components(separatedBy: "makeSendSelectionModel(").count - 1, 1,
+                       "a second send model would be a second judge of what is waiting")
+        XCTAssertTrue(app.text.contains("makeSendSelectionModel(upload: uploads, drafts: drafts,"),
                       "the send model must take the SAME store the upload model retires through")
+    }
+
+    /// The shared-draft arrival ledger remembers which of the drafts waiting in
+    /// the App Group count as new, and an acceptance launch must neither read
+    /// nor rewrite the product's memory of that.
+    ///
+    /// Four halves, each of which fails on its own: the app passes the
+    /// acceptance suite to the ONE send model; the Debug suite is private,
+    /// scoped to an acceptance launch, cleared on entry and not the Device
+    /// Inbox's; the Release answer is nil; and nil means the product's own
+    /// defaults — so a shipped build keeps its memory where it always was.
+    func testUITestLaunchesKeepSharedDraftArrivalsInAPrivateSuite() throws {
+        let all = try sources()
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" }?.text)
+        let mode = try XCTUnwrap(all.first { $0.name == "UITestMode.swift" }?.text)
+        XCTAssertTrue(app.filter { !$0.isWhitespace }.contains(
+            "makeSendSelectionModel(upload:uploads,drafts:drafts,arrivalDefaults:UITestMode.arrivalDefaults())"),
+                      "the send model's arrival ledger is not given the acceptance suite")
+
+        let halves = mode.components(separatedBy: "#else")
+        XCTAssertEqual(halves.count, 2, "UITestMode lost its Debug/Release split")
+        let debugHalf = try XCTUnwrap(halves.first)
+        let releaseHalf = try XCTUnwrap(halves.last)
+        let seam = try XCTUnwrap(debugHalf.components(
+            separatedBy: "static func arrivalDefaults() -> UserDefaults? {")
+            .dropFirst().first?.components(separatedBy: "\n    }").first?
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n"),
+            "the acceptance arrival suite is not in the Debug half")
+        XCTAssertTrue(seam.contains("let suite = \"com.relayium.app.uitest-share-arrivals\""),
+                      "the acceptance arrival suite is not a private namespace of its own")
+        XCTAssertTrue(seam.contains("guard isActive, let defaults = UserDefaults(suiteName: suite)"),
+                      "the arrival suite is reachable outside an acceptance launch")
+        XCTAssertTrue(seam.contains("defaults.removePersistentDomain(forName: suite)"),
+                      "one acceptance run inherits the arrivals another left behind")
+        for forbidden in [".standard", "persistentDefaults", "uitest-inbox", "suiteName: nil"] {
+            XCTAssertFalse(seam.contains(forbidden),
+                           "the acceptance arrival suite reaches a domain it does not own: \(forbidden)")
+        }
+        XCTAssertTrue(releaseHalf.contains("static func arrivalDefaults() -> UserDefaults? { nil }"),
+                      "a shipped build can be pointed at another arrival memory")
+
+        let environment = try code(at: try appKitRoot.appendingPathComponent("AppEnvironment.swift"))
+        XCTAssertTrue(environment.contains("defaults: arrivalDefaults ?? persistentDefaults"),
+                      "without a suite the ledger no longer lives in the product's own defaults")
     }
 
     /// **The share extension's hand-off is the scene becoming active, and it is
@@ -3628,7 +3879,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         for once in ["makeRealtimeModel(", "VerificationPreference(",
                      "DirectModeSelection(",
                      "ForegroundSessionCoordinator(",
-                     "InboundRoom(", "makeNearbyReceiveModel(",
+                     "InboundRoom(", "makeListeningOnlyNearbyReceiveModel(",
                      "makeLinkWorkspaceModel(",
                      "NearbyResidencyCoordinator(", "TransferPresence(", "AppNavigationModel("] {
             XCTAssertEqual(all.map { $0.text.components(separatedBy: once).count - 1 }.reduce(0, +), 1,
@@ -3993,15 +4244,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // text session already was on it: a message received on this device that
         // the user cannot get out of the app is a message they have to retype.
         // Same shape — one write, inside the button that says Copy.
+        // The link transcript joins it for A16: macOS's link rows have had Copy,
+        // and the two must not disagree about how a message leaves a session.
         XCTAssertEqual(holders, ["AccountSummaryView.swift", "DeviceConversationView.swift",
                                  "DirectTextSessionView.swift",
-                                 "DirectView.swift", "SendView.swift"],
+                                 "DirectView.swift", "NearbyLinkWorkspaceView.swift",
+                                 "SendView.swift"],
                        "the pasteboard is reachable from somewhere other than Copy")
         let expectedWrites = [
             "AccountSummaryView.swift": "UIPasteboard.general.string = link",
             "DeviceConversationView.swift": "UIPasteboard.general.string = message.text",
             "DirectTextSessionView.swift": "UIPasteboard.general.string = text",
             "DirectView.swift": "UIPasteboard.general.string = url.absoluteString",
+            "NearbyLinkWorkspaceView.swift": "UIPasteboard.general.string = message.body",
             "SendView.swift": "UIPasteboard.general.string = link",
         ]
         for (name, write) in expectedWrites {
@@ -4591,23 +4846,82 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// An inbound session settles its surface, its mode and its tab in ONE
-    /// synchronous call, before the responder is built.
+    /// **Inbound legacy offers are refused, as on macOS (A23, decision L1).**
     ///
-    /// Three separate writes in a SwiftUI closure could be reordered by a later
-    /// edit, and any interleaving that puts a write after the `await` inside
-    /// `NearbyReceiveModel.accept` loses the race it exists to win.
-    /// `AppRoutingTests` drives the function itself.
-    func testAnIncomingSessionClaimsItsSurfaceThroughTheOneRoutingCall() throws {
+    /// The legacy one-shot wire had no consent step on this side: its file lane
+    /// accepted the manifest itself and wrote to disk. iOS now composes the
+    /// listener-only receive model, which answers such an offer with a tagged
+    /// `busy` before anything is published, claimed or built —
+    /// `NearbyReceiveListenerOnlyTests` drives that. What this pins is that the
+    /// app takes that composition and that no legacy admission handler, and no
+    /// arrival-time navigation for one, is left anywhere in the app.
+    func testTheiOSAppRefusesInboundLegacyOffersThroughTheListenerOnlyModel() throws {
         let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
-        XCTAssertTrue(app.text.contains("receive.shouldAcceptSession = "),
-                      "nothing arbitrates and brings an unsolicited session forward")
-        XCTAssertTrue(app.text.contains("AppRouting.claimIncoming(kind,"),
-                      "the claim must be the one shared call, not three writes in a closure")
-        for (name, text) in try sources() where name != "RelayiumApp.swift" {
+        XCTAssertTrue(app.text.contains("AppEnvironment.makeListeningOnlyNearbyReceiveModel("),
+                      "iOS still composes a receive model that admits legacy offers unasked")
+        XCTAssertFalse(app.text.contains("AppEnvironment.makeNearbyReceiveModel("))
+        for (name, text) in try sources() {
             XCTAssertFalse(text.contains("shouldAcceptSession"),
-                           "\(name) is a second inbound admission handler")
+                           "\(name) installs an inbound legacy admission handler")
+            XCTAssertFalse(text.contains("AppRouting.claimIncoming("),
+                           "\(name) claims and navigates for an inbound legacy session")
         }
+    }
+
+    /// **An unrequested link asks first, and nothing navigates on arrival (A23).**
+    ///
+    ///  - the app never declares `.automatic`, so the model's `.prompt` default
+    ///    is what ships;
+    ///  - the only navigation to LAN Transfer for an inbound link is inside the
+    ///    `shouldAcceptLink` gate, which the model runs at Accept;
+    ///  - the prompt is drawn app-wide in `RootView` and in place on LAN
+    ///    Transfer, and both answer through the model.
+    func testAnUnrequestedLinkPromptsAndNavigatesOnlyOnAccept() throws {
+        let all = try sources()
+        for (name, text) in all {
+            XCTAssertFalse(text.contains("inboundConsent"),
+                           "\(name) overrides the prompt an unrequested link must raise")
+        }
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" }).text
+        let gate = try XCTUnwrap(app.components(separatedBy: "unified.shouldAcceptLink = ")
+            .dropFirst().first)
+        let gateBody = try XCTUnwrap(gate.components(separatedBy: "\n        }\n").first)
+        XCTAssertTrue(gateBody.contains("routing.select(.nearby)"),
+                      "Accept no longer brings LAN Transfer forward")
+        // Outside the gate, the only other `routing.select(.nearby)` is the
+        // DEBUG terminal-screen fixture.
+        let outside = app.replacingOccurrences(of: gateBody, with: "")
+        XCTAssertEqual(outside.components(separatedBy: "routing.select(.nearby)").count - 1, 1,
+                       "something navigates to LAN Transfer on arrival")
+
+        let root = try XCTUnwrap(all.first { $0.name == "RootView.swift" }).text
+        for call in ["link.inboundAsk", "link.acceptInboundAsk()", "link.declineInboundAsk()",
+                     "link.inboundAskDiscardsLocalText"] {
+            XCTAssertTrue(root.contains(call), "the app-wide prompt lost \(call)")
+        }
+        let view = try nearby().text
+        for call in ["link.inboundAsk", "link.acceptInboundAsk()", "link.declineInboundAsk()",
+                     "link.inboundAskDiscardsLocalText"] {
+            XCTAssertTrue(view.contains(call), "the LAN Transfer prompt lost \(call)")
+        }
+    }
+
+    /// **Connect carries nothing (A25).** Files for a link are chosen inside
+    /// the open workspace; the tab passes no pre-connect batch to
+    /// `link.connect`, drops a legacy peer's staged batch once a link is under
+    /// way, and no longer promises that staged files ride the connection.
+    func testNearbyViewPassesNoPreConnectFilesToALink() throws {
+        let view = try nearby().text
+        let connect = try XCTUnwrap(view.components(separatedBy: "link.connect(").dropFirst().first)
+        let arguments = try XCTUnwrap(connect.components(separatedBy: ")").first)
+        XCTAssertFalse(arguments.contains("files:"), "Connect carries a pre-connect batch again")
+        XCTAssertFalse(arguments.contains("sources:"))
+        XCTAssertEqual(view.components(separatedBy: "link.connect(").count - 1, 1)
+        XCTAssertFalse(view.contains("linkConnectCarriesStagedFiles"),
+                       "the tab still promises staged files ride the connection")
+        let after = try XCTUnwrap(view.components(separatedBy: "if link.connect(").dropFirst().first)
+        XCTAssertTrue(after.prefix(120).contains("selection.clear()"),
+                      "a staged legacy batch survives the link and waits for the next device")
     }
 
     func testNearbySessionKeepsItsPeerVisibleAfterTheRosterDisappears() throws {
@@ -4648,8 +4962,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testAWorkspaceExitCannotDiscardLocalTextWithoutConfirmation() throws {
         let source = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
         XCTAssertTrue(source.contains("@State private var confirmingLocalTextDiscard = false"))
-        XCTAssertTrue(source.contains("link.holdsLocalText || !trimmedDraft.isEmpty"),
+        // Every holder is the model's now — the draft included — so the model's
+        // one predicate is the whole answer.
+        XCTAssertTrue(source.contains("link.holdsLocalText"),
                       "the exit does not ask about every holder of local text")
+        XCTAssertFalse(source.contains("@State private var draft"),
+                       "a view-local draft is a holder the model's predicate cannot see")
         let exit = try XCTUnwrap(source.components(
             separatedBy: "private var exit: some View {").dropFirst().first?
             .components(separatedBy: "private var hasTranscript").first)
@@ -6012,4 +6330,136 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the manual account step is declared more than once")
     }
 
+}
+
+
+// MARK: - A15/A16/A22: the iOS composers
+
+extension IOSSurfaceGuardTests {
+
+    /// **Both iOS link compositions refuse a second message while the first
+    /// waits** — Nearby and Cross-network draw the same composer, so they obey
+    /// one rule — and the acceptance fixture answers the production rule.
+    ///
+    /// The shared default stays `replaceWaiting` for the headless hosts; the
+    /// iOS factories opt in, exactly as the macOS ones do.
+    func testBothIOSLinkCompositionsRefuseAWaitingMessage() throws {
+        let env = try code(at: try appKitRoot.appendingPathComponent("AppEnvironment.swift"))
+        // The iOS half of the `#if os(macOS) … #else … #endif` split: macOS has
+        // a general `makeLinkWorkspaceModel` of its own, so the name alone is
+        // not enough.
+        let iOSBranch = try XCTUnwrap(env.components(separatedBy: "\n    #if os(macOS)\n")
+            .dropFirst().first?.components(separatedBy: "\n    #else\n").dropFirst().first?
+            .components(separatedBy: "\n    #endif\n").first,
+            "the iOS half of AppEnvironment moved")
+        for factory in ["makeLinkWorkspaceModel(", "makeCrossNetworkLinkWorkspaceModel("] {
+            let parts = iOSBranch.components(separatedBy: "public static func " + factory)
+            XCTAssertEqual(parts.count, 2, "expected exactly one iOS \(factory)")
+            let body = try XCTUnwrap(parts.dropFirst().first?
+                .components(separatedBy: "public static func ").first,
+                "\(factory) is missing")
+            XCTAssertTrue(body.contains("pendingMessages: .refuseWhileWaiting"),
+                          "iOS \(factory) is on the replace-waiting rule, under which a second "
+                          + "message silently replaces the first")
+        }
+        let fixtures = try code(at: try iosRoot.appendingPathComponent("UITestMode.swift"))
+        XCTAssertEqual(fixtures.components(separatedBy: "pendingMessages: .refuseWhileWaiting").count - 1,
+                       1, "the iOS acceptance link model answers a different rule from production")
+    }
+
+    /// **The iOS link composer is model-owned and transactional.**
+    ///
+    /// The draft is `link.draft`, so a `TabView` teardown cannot take it and a
+    /// new attempt clears it; Send is gated on `canSubmitDraft`, which is false
+    /// while a message waits; and the press goes through `submitDraft`, which
+    /// clears only what the lane took. The old shape — view `@State`, a gate on
+    /// `canCompose`, `send` then an unconditional clear — is each named here,
+    /// because each alone re-opens a loss.
+    func testTheIOSLinkComposerIsModelOwnedAndTransactional() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        XCTAssertFalse(view.contains("@State private var draft"),
+                       "a view-local draft dies with the tab and rides into the next peer")
+        // The field edits a buffer that is mirrored into `link.draft` on every
+        // change and re-seeded only by the model's own replacements. Bound to
+        // `$link.draft` directly, the field lost and reordered keystrokes on
+        // iOS 18 while a batch published on the same model (CI run
+        // 35877967996).
+        XCTAssertFalse(view.contains("text: $link.draft"),
+                       "the field is bound straight to the published draft again")
+        XCTAssertTrue(view.contains("text: $composerText"),
+                      "the composer field has no editing buffer")
+        XCTAssertTrue(view.contains("_composerText = State(initialValue: link.draft)"),
+                      "a rebuilt workspace does not reopen on the model's draft")
+        // Mirrored WITHOUT publishing. The app root observes this model, so a
+        // publishing write re-rendered the whole shell per keystroke, and on
+        // iOS 18 that scrambled typed text (CI runs 35877967996, 35888861444).
+        XCTAssertTrue(view.contains("link.mirrorComposerDraft(text)"),
+                      "an edit is not mirrored into the model-owned draft")
+        XCTAssertFalse(view.contains("link.draft = "),
+                       "the composer writes the draft through its publishing setter")
+        XCTAssertTrue(view.contains(".onChange(of: link.draftReplacement)"),
+                      "the field never learns that the model cleared or restored the draft")
+        XCTAssertFalse(view.contains(".onChange(of: link.draft)"),
+                       "the field re-reads the published draft while it is being typed")
+        // `canSubmitDraft`'s rule, asked of the field: the silent mirror cannot
+        // re-render a gate that reads the model's copy.
+        XCTAssertTrue(view.contains(".disabled(!canSubmitComposerText)"),
+                      "Send is live while a first message is still waiting")
+        XCTAssertTrue(view.contains("link.canSendMessage && !composerIsFree"),
+                      "Send is gated on something other than canSubmitDraft's rule")
+        XCTAssertFalse(view.contains("link.canCompose ||") || view.contains("!link.canCompose"),
+                       "Send is gated on canCompose, which stays true while a message waits")
+        XCTAssertTrue(view.contains("link.submitDraft()"),
+                      "the composer does not use the model's transactional send")
+        XCTAssertFalse(view.contains("link.send(message:"),
+                       "the composer calls send itself and can clear what was refused")
+        XCTAssertFalse(view.contains("takeReturnedDraft"),
+                       "a returned draft is consumed before knowing the field is free")
+        XCTAssertTrue(view.contains(".task(id: composerIsFree) { if composerIsFree { link.restoreReturnedDraft() } }"),
+                      "a returned draft that could not land is never retried")
+    }
+
+    /// **Every link message has its own accessible Copy with feedback.**
+    func testEveryIOSLinkMessageOffersAnAccessibleCopy() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        let child = try XCTUnwrap(view.components(separatedBy: "struct LinkConversationTranscript")
+            .dropFirst().first?.components(separatedBy: "struct LinkTransfersSection").first)
+        XCTAssertTrue(child.contains("UIPasteboard.general.string = message.body"),
+                      "Copy must write the row's own exact body")
+        XCTAssertTrue(child.contains("@State private var copiedMessageID: Int?"),
+                      "the acknowledgement must be keyed by id, never by body")
+        XCTAssertTrue(child.contains("L10n.t(copiedMessageID == message.id ? .commonCopied : .commonCopy)"),
+                      "Copy gives no feedback")
+        XCTAssertTrue(child.contains("TextMessagePresentation.copyActionLabel("),
+                      "Copy's accessible name must carry the sent/received context")
+        XCTAssertTrue(child.contains("!messages.contains(where: { $0.id == copiedMessageID })"),
+                      "an acknowledgement can outlive its row and land on another")
+    }
+
+    /// **The iOS Inbox message composer measures UTF-8 bytes and enforces the
+    /// Inbox bound before the press.** `InboxTextDraft` is macOS's type; the
+    /// bound it applies is `InboxManifest.maxTextBytes`; the field is never
+    /// truncated.
+    func testTheIOSInboxComposerMeasuresBytesAndBoundsBeforeSend() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("DeviceConversationView.swift"))
+        let controls = try XCTUnwrap(view.components(separatedBy: "private func messageControls(")
+            .dropFirst().first?.components(separatedBy: "private var fileControls").first)
+        XCTAssertTrue(controls.contains("let draftSize = InboxTextDraft(draft)"),
+                      "the composer does not measure the draft the way the protocol does")
+        XCTAssertTrue(controls.contains("InboxSendPresentation.size(of: draftSize)"),
+                      "no byte counter beside the field")
+        XCTAssertTrue(controls.contains("InboxSendPresentation.limit(of: draftSize)"),
+                      "no remaining / over-limit line")
+        XCTAssertTrue(controls.contains("!draftSize.isSendable"),
+                      "Send is live for a message the model would refuse as too long")
+        for truncation in ["prefix(", "dropLast(", "draft = String(", "maxTextBytes)"] {
+            XCTAssertFalse(controls.contains(truncation),
+                           "the composer shortens the user's text: \(truncation)")
+        }
+        XCTAssertFalse(controls.contains("TEXT_MAX_BYTES") || controls.contains("LINK_CONSERVATIVE"),
+                       "the Inbox composer is bounded by the realtime lane's limit")
+        // A refusal keeps the text: the clear stays conditional on acceptance.
+        XCTAssertTrue(view.contains("if deliveries.refusal == nil { draft = \"\" }"),
+                      "the composer clears text the model refused")
+    }
 }
