@@ -759,12 +759,14 @@ func TestLinkRenewOverdueDeadlineWakesLoop(t *testing.T) {
 	var holds atomic.Int32
 	var heldUntil atomic.Int64
 	ldHookBeforeWake = func(d *linkDevDriver) {
-		if d.renew == nil || !d.renew.Restarted() {
+		// Only inside the ICE+probe window, and only at its deadline: the
+		// probe (2 s) and observe (0.5 s) cadences are nearer and are left
+		// alone, and an earlier phase's deadline (waiting for the answer)
+		// would race the answer that is already on its way.
+		if d.renew == nil || !d.renew.Probing() {
 			return
 		}
 		at, ok := d.renew.NextDeadline()
-		// The ICE-window / epoch deadlines: the probe (2 s) and observe
-		// (0.5 s) cadences are nearer and are left alone.
 		if !ok || at.Sub(time.Now()) < 5*time.Second {
 			return
 		}
@@ -913,5 +915,92 @@ func TestLinkRenewBusyPrepareDoesNotBreakLegacyRestart(t *testing.T) {
 	}
 	if !strings.Contains(ra.stdout, "b2") || !strings.Contains(rb.stdout, "a2") {
 		t.Error("messages after the recovery were not delivered")
+	}
+}
+
+// ---------------------------------------------------------------- Codex gate-2 round 4
+
+// Busy refusal, then a real recovery about 12 s later, then renewal. The
+// initiator runs a real legacy restart just before its renewal window; its
+// restart answer is held for 12 s (Pion fails a restarted transport left
+// without an answer much longer than that), so the responder's epoch-1
+// prepare is refused while busy (and the responder backs off for a minute). When the
+// answer lands the path recovers and the initiator starts its OWN attempt,
+// which must not reuse the refused epoch (the responder would drop it as
+// stale, and two unanswered prepares would wrongly mark it unsupported for
+// good). The renewal commits on both ends before the original deadline.
+func TestLinkRenewRecoveryAfterBusyRefusalStillRenews(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub := startLinkDevRenewHub(t, lt, 200*time.Second, ldGrantFor(lt, 300*time.Second))
+	var disconnected, refused, released atomic.Int32
+	var mu sync.Mutex
+	var heldAnswer []byte
+	var heldAt time.Time
+	ldHookProgress = func(d *linkDevDriver) {
+		if d.conn == nil || d.conn.Role() != linkrtc.Initiator || d.renew == nil || d.renew.InFlight() {
+			return
+		}
+		at, ok := d.renew.NextDeadline()
+		if ok && time.Until(at) > 0 && time.Until(at) < 6*time.Second && disconnected.CompareAndSwap(0, 1) {
+			d.q.push(ldItem{kind: ldEvent, ev: linkrtc.Event{Kind: linkrtc.EventDisconnected}, ep: d.connEp})
+		}
+		// Release the held restart answer after 12 s, through exactly the
+		// path an arriving signal takes (renewal's filter first, then the
+		// session). The loop runs at least once a second in the window.
+		mu.Lock()
+		held := heldAnswer
+		due := held != nil && time.Since(heldAt) > 12*time.Second
+		if due {
+			heldAnswer = nil
+		}
+		mu.Unlock()
+		if due {
+			released.Store(1)
+			if !d.renewSignal(held) {
+				_ = d.do(d.s.Signal(d.s.Epoch(), d.room.PeerID, held))
+			} else {
+				released.Store(2) // refused by renewal: the recovery cannot complete
+			}
+		}
+	}
+	ldHookSignal = func(d *linkDevDriver, raw []byte) [][]byte {
+		if d.conn == nil || d.conn.Role() != linkrtc.Initiator || disconnected.Load() == 0 {
+			return [][]byte{raw}
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if sig, _, ok := linksession.ParseRenewEnvelope(raw); ok && sig.Type == "prepare" && heldAnswer != nil {
+			refused.Add(1)
+		}
+		if heldAnswer == nil && heldAt.IsZero() && ldUnsignedLinkSDP(raw) {
+			heldAnswer, heldAt = append([]byte(nil), raw...), time.Now()
+			return nil
+		}
+		return [][]byte{raw}
+	}
+	t.Cleanup(func() { ldHookProgress, ldHookSignal = nil, nil })
+	script := func(m1 string) string {
+		// The sleep wakes the loop a few seconds before the renewal window
+		// (about +94 s), where the disconnect is injected.
+		return ldScript(t, "text "+m1, "wait-texts 1", "sleep 89s", "wait-renewed 1")
+	}
+	ra, rb := ldPairUpWithin(t, hub.ldHub,
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", script("a1"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", script("b1"), ldCode}},
+		4*time.Minute)
+	if disconnected.Load() != 1 || refused.Load() == 0 || released.Load() == 0 {
+		t.Fatalf("disconnect %d, prepares during the held restart %d, released %d: the scenario was not produced",
+			disconnected.Load(), refused.Load(), released.Load())
+	}
+	if released.Load() == 2 {
+		t.Error("renewal refused the legacy restart's own answer")
+	}
+	for _, r := range []ldResult{ra, rb} {
+		if r.code != 0 || !strings.Contains(r.stderr, "relay renewal committed round 1") {
+			t.Errorf("no renewal after the busy side recovered\n%s", r)
+		}
+		if strings.Contains(r.stderr, "relay renewal: unsupported") || strings.Contains(r.stderr, "restart-failed") {
+			t.Errorf("a proven peer was marked unsupported, or the recovery failed\n%s", r)
+		}
 	}
 }

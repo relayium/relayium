@@ -1127,3 +1127,61 @@ func TestOutboundAckedMovesOnlyOnRealProgress(t *testing.T) {
 		}
 	}
 }
+
+// Codex r4: a busy side refuses the peer's epoch-1 prepare; the peer backs
+// off. The busy side recovers about 40 s later and starts its own attempt.
+// That attempt must not reuse the refused epoch (the peer would drop it as
+// stale), and the refused-but-VERIFIED prepare proves the peer implements
+// renewal, so silence must never mark it unsupported. Renewal eventually
+// commits on both sides.
+func TestRenewBusyRefusalThenRecoveryCommits(t *testing.T) {
+	for _, busySide := range []int{0, 1} {
+		t.Run(fmt.Sprint("busy-", busySide), func(t *testing.T) {
+			h := newRT(t)
+			h.busy[busySide] = true
+			h.toWindow()
+			h.run(40 * time.Second)
+			if h.sigCount(1-busySide, "abort") == 0 {
+				t.Fatal("the busy side never refused a prepare: the scenario was not produced")
+			}
+			if got := h.e[busySide].epochCounter; got == 0 {
+				t.Errorf("the refused, verified prepare left the busy side's epoch counter at %d", got)
+			}
+			h.busy[busySide] = false
+			h.run(9 * time.Minute)
+			for i := range 2 {
+				if h.e[i].peerUnsupported {
+					t.Errorf("side %d marked a peer that answered with a signed prepare as unsupported", i)
+				}
+				if len(h.commits[i]) != 1 {
+					t.Errorf("side %d commits %v after the busy side recovered", i, h.commits[i])
+				}
+			}
+		})
+	}
+}
+
+// A peer that has PROVEN it implements renewal — here only by a verified
+// prepare this side refused while busy — is never declared unsupported when
+// its later silence is loss: after recovery, this side's prepares are dropped
+// for a while; renewal still commits once they get through.
+func TestRenewProvenPeerSilenceIsNotUnsupported(t *testing.T) {
+	h := newRT(t)
+	h.busy[0] = true
+	h.toWindow()
+	h.run(40 * time.Second)
+	if h.sigCount(1, "abort") == 0 {
+		t.Fatal("no busy refusal: the scenario was not produced")
+	}
+	h.busy[0] = false
+	h.dropSignals[1] = func(s RenewSignal) bool { return s.Type == "prepare" }
+	h.run(40 * time.Second)
+	h.dropSignals[1] = nil
+	h.run(8 * time.Minute)
+	if h.e[0].peerUnsupported {
+		t.Error("a peer proven by a verified prepare was marked unsupported after lost prepares")
+	}
+	if len(h.commits[0]) != 1 || len(h.commits[1]) != 1 {
+		t.Errorf("commits %v %v", h.commits[0], h.commits[1])
+	}
+}

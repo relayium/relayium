@@ -879,9 +879,13 @@ type Renewal struct {
 	committed         *renewCommitted
 	peerAuthenticated bool
 	everRestarted     bool
-	renewalUfrags     map[string]bool
-	requests          map[uint32]*renewRequest
-	broken            bool
+	// peerProven: a verified renewal signal ever arrived from the peer, even
+	// one refused unacted (busy). Unlike peerAuthenticated it confers no
+	// unsigned-SDP lock; it only rules out the "unsupported" verdict.
+	peerProven    bool
+	renewalUfrags map[string]bool
+	requests      map[uint32]*renewRequest
+	broken        bool
 }
 
 // Renewal holds a copy of the link's resumeAuth: every formatter prints the
@@ -951,6 +955,11 @@ func (r *Renewal) InFlight() bool { return r.attempt != nil }
 // Restarted reports an attempt in flight whose transport has already
 // restarted onto the new credential.
 func (r *Renewal) Restarted() bool { return r.attempt != nil && r.attempt.restarted }
+
+// Probing reports an attempt in its ICE+probe window: both of its
+// descriptions are applied and only proof (or that window's deadline) can end
+// it. Read-only; diagnostics and tests.
+func (r *Renewal) Probing() bool { return r.attempt != nil && r.attempt.phase == phProbing }
 
 // Migrated reports that the transport has restarted onto a renewal
 // generation at least once: every later local candidate is renewal's.
@@ -1166,7 +1175,10 @@ func (r *Renewal) fire(a *renewAttempt, name string) {
 	case "epoch", "ready", "offer", "answer", "ice":
 		r.abort(a, renewAbortTimeout)
 	case "prepare":
-		if a.peerResponded || r.peerAuthenticated {
+		// A peer that ever sent a VERIFIED renewal signal implements it: its
+		// silence now (a prepare it dropped as stale, a lost message) is a
+		// timeout, never an "unsupported" verdict for the rest of the link.
+		if a.peerResponded || r.peerAuthenticated || r.peerProven {
 			r.abort(a, renewAbortTimeout)
 			return
 		}
@@ -1602,10 +1614,18 @@ func (r *Renewal) Signal(raw []byte) bool {
 	// arrive after it — would be refused and the recovery would expire.
 	// Verified first, so a forgery gets no reply.
 	if sig.Type == "prepare" && (r.attempt == nil || sig.Epoch > r.attempt.epoch) && r.deps.Busy != nil && r.deps.Busy() {
+		// What the refusal DOES keep (Codex r4): the epoch is spent — the
+		// peer has used it, so a later local attempt must go higher or the
+		// peer drops it as stale — and the peer is PROVEN to implement
+		// renewal, so its later silence is never an "unsupported" verdict.
+		// Neither is the unsigned-SDP lock, which stays unset.
+		r.epochCounter = max(r.epochCounter, sig.Epoch)
+		r.peerProven = true
 		r.emit(RenewSignal{Type: "abort", Epoch: sig.Epoch, Reason: renewAbortUnavailable})
 		return true
 	}
 	r.peerAuthenticated = true
+	r.peerProven = true
 	if a := r.attempt; a != nil && (sig.Type == "prepare" || sig.Epoch == a.epoch) {
 		a.peerResponded = true
 		r.disarm(a, "prepare")
