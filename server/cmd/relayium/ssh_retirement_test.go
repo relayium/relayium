@@ -82,12 +82,14 @@ func TestSSHRetirementDoesNotConsumeStdin(t *testing.T) {
 	if _, err := pw.Write([]byte("untouched")); err != nil {
 		t.Fatal(err)
 	}
+	// A closed writer bounds the read on Windows too, where anonymous pipes
+	// do not support deadlines. Any consumed bytes make ReadFull fail at EOF.
+	if err := pw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	var out, errout bytes.Buffer
 	if code := Run([]string{"push", "-", "host:file"}, &out, &errout); code != 2 {
 		t.Fatalf("exit=%d", code)
-	}
-	if err := pr.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
-		t.Fatal(err)
 	}
 	data := make([]byte, 9)
 	if _, err := io.ReadFull(pr, data); err != nil || string(data) != "untouched" {
