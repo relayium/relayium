@@ -1,7 +1,12 @@
+#!/usr/bin/env node
+// Migrated from web/scripts/pages/send-text-retention.test.mjs with assertions preserved.
+// Root documentation changes do not select web.yml; repo-hygiene.yml runs this
+// dependency-free Node check on main pushes and through merge-gate on PRs. Inputs resolve from this module. Keep this as the sole owner of these tests.
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import article from "./content/articles/howto-send-text-between-devices.mjs";
-import { LANGS } from "./shared.mjs";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import article from "../../web/scripts/pages/content/articles/howto-send-text-between-devices.mjs";
+import { LANGS } from "../../web/scripts/pages/shared.mjs";
 
 const NO_SERVER_HISTORY = {
   en: /Relayium servers keep no message bodies or server-side history/i,
@@ -45,18 +50,18 @@ describe("text guide scopes storage claims to Relayium servers", () => {
       const doc = article.langs[lang];
       const leadAndFaq = [doc.description, ...doc.lead, ...doc.faq.items.map((item) => item.a)].join(" ");
 
-      expect(leadAndFaq).toMatch(NO_SERVER_HISTORY[lang]);
-      expect(leadAndFaq).toMatch(ENDPOINT_RETENTION[lang]);
-      expect(leadAndFaq).not.toMatch(OLD_ABSOLUTE[lang]);
+      assert.match(leadAndFaq, NO_SERVER_HISTORY[lang]);
+      assert.match(leadAndFaq, ENDPOINT_RETENTION[lang]);
+      assert.doesNotMatch(leadAndFaq, OLD_ABSOLUTE[lang]);
     });
   }
 
   it("README distinguishes browser LAN, browser cross-network, and CLI text paths", () => {
-    const readme = readFileSync("../README.md", "utf8");
-    expect(readme).toContain("opens an independent end-to-end encrypted connection");
-    expect(readme).toContain("On a LAN, browser messages move directly");
-    expect(readme).toContain("cross-network browser sessions use TURN that carries only ciphertext");
-    expect(readme).toContain("CLI text is direct-only");
-    expect(readme).not.toContain("a message session\nopens a peer-to-peer connection of its own");
+    const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
+    assert.ok(readme.includes("opens an independent end-to-end encrypted connection"));
+    assert.ok(readme.includes("On a LAN, browser messages move directly"));
+    assert.ok(readme.includes("cross-network browser sessions use TURN that carries only ciphertext"));
+    assert.ok(readme.includes("CLI text is direct-only"));
+    assert.ok(!readme.includes("a message session\nopens a peer-to-peer connection of its own"));
   });
 });

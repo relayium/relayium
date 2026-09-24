@@ -1,3 +1,7 @@
+#!/usr/bin/env node
+// Migrated from web/scripts/pages/app-store-release.test.mjs with assertions preserved.
+// Root documentation changes do not select web.yml; repo-hygiene.yml runs this
+// dependency-free Node check on main pushes and through merge-gate on PRs. Inputs resolve from this module. Keep this as the sole owner of these tests.
 // web/scripts/pages/app-store-release.test.mjs — the Mac App Store release has
 // exactly one authoritative record, and this is the file that keeps it that way.
 // The digits still appear as prose in the two READMEs and on the nine published
@@ -39,17 +43,29 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 
-import releases from "./content/releases.mjs";
-import { LANGS, esc, urlPath } from "./shared.mjs";
+import { LANGS, esc, urlPath } from "../../web/scripts/pages/shared.mjs";
 import {
   readMacAppStoreRelease,
   validateMacAppStoreRelease,
-} from "../macos-release-candidate.mjs";
+} from "../../web/scripts/macos-release-candidate.mjs";
 
-const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../web");
 const repoRoot = resolve(webRoot, "..");
+
+// The page generator deliberately resolves Android metadata from its fixture
+// working directory. Supply that directory only during module initialization,
+// then restore the caller's directory before running any test.
+const callerDirectory = process.cwd();
+let releases;
+try {
+  process.chdir(webRoot);
+  releases = (await import("../../web/scripts/pages/content/releases.mjs")).default;
+} finally {
+  process.chdir(callerDirectory);
+}
 
 const raw = await readFile(resolve(webRoot, "mac-app-store-release.json"), "utf8");
 const record = JSON.parse(raw);
@@ -59,27 +75,26 @@ describe("the canonical Mac App Store release record", () => {
     // `schema` matches `native-client-policy.json`'s convention — a bare integer
     // that a reader compares rather than parses — so a future shape change is a
     // rejection at every consumer instead of a silent misread.
-    expect(record.schema).toBe(1);
-    expect(record.version).toMatch(/^[0-9]+(?:\.[0-9]+){1,2}$/);
-    expect(record.appleId).toMatch(/^[0-9]+$/);
+    assert.equal(record.schema, 1);
+    assert.match(record.version, /^[0-9]+(?:\.[0-9]+){1,2}$/);
+    assert.match(record.appleId, /^[0-9]+$/);
     // ISO-8601 and a real calendar date. `publishedAt` is the day Apple made
     // this version public, which is the only thing that distinguishes "submitted"
     // from "released" — the distinction `apps/README.md` got wrong by describing
     // 1.3.3 (21) as being prepared long after 1.3.8 was live.
-    expect(record.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(new Date(`${record.publishedAt}T00:00:00Z`).toISOString().slice(0, 10))
-      .toBe(record.publishedAt);
+    assert.match(record.publishedAt, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(new Date(`${record.publishedAt}T00:00:00Z`).toISOString().slice(0, 10), record.publishedAt);
     // The URL is not free-form. It is the canonical product page for that Apple
     // ID, so a record whose link and ID disagree names two different products
     // and cannot be used to write either one into a README.
-    expect(record.url).toBe(`https://apps.apple.com/app/id${record.appleId}`);
+    assert.equal(record.url, `https://apps.apple.com/app/id${record.appleId}`);
   });
 
   it("is a JSON object with no trailing surprises", () => {
     // Re-serializing has to reproduce the file. It is committed data a human
     // edits by hand after checking the listing, so the only formatting rule is
     // that it stays the two-space JSON every other manifest here is.
-    expect(raw).toBe(`${JSON.stringify(record, null, 2)}\n`);
+    assert.equal(raw, `${JSON.stringify(record, null, 2)}\n`);
   });
 
   it("is the only App Store record; the direct manifest carries no App Store fields", async () => {
@@ -93,7 +108,7 @@ describe("the canonical Mac App Store release record", () => {
       await readFile(resolve(webRoot, "native-releases.json"), "utf8"),
     );
     const nativeKeys = JSON.stringify(native);
-    expect(nativeKeys).not.toMatch(/appStore|appleId|apps\.apple\.com/i);
+    assert.doesNotMatch(nativeKeys, /appStore|appleId|apps\.apple\.com/i);
     // Deliberately NOT an inequality against the direct version. The two
     // channels are at the same version today — they converged again when Apple
     // published the App Store build on 2026-09-17 — and that is an ordinary,
@@ -101,7 +116,7 @@ describe("the canonical Mac App Store release record", () => {
     // rule and fail the next time they converge; asserting they AGREE would
     // encode the opposite coincidence and fail the moment one channel moves,
     // which is the state the very next macOS candidate is already in.
-    expect(typeof native.macos.version).toBe("string");
+    assert.equal(typeof native.macos.version, "string");
   });
 });
 
@@ -112,19 +127,18 @@ describe("reading the canonical record fails closed", () => {
   const read = (overrides) => validateMacAppStoreRelease({ ...record, ...overrides });
 
   it("accepts the committed record", () => {
-    expect(readMacAppStoreRelease({ repoRoot })).toEqual(record);
+    assert.deepEqual(readMacAppStoreRelease({ repoRoot }), record);
   });
 
   it("refuses a record that is missing entirely", async () => {
     // The repository root, which contains no `web/` — the shape a staged
     // fixture has before someone remembers to copy this file into it. A missing
     // record must not read as "there is no App Store channel to protect".
-    expect(() => readMacAppStoreRelease({ repoRoot: resolve(repoRoot, "web") }))
-      .toThrow(/mac-app-store-release\.json/);
+    assert.throws(() => readMacAppStoreRelease({ repoRoot: resolve(repoRoot, "web") }), /mac-app-store-release\.json/);
   });
 
   it("refuses a schema it was not written for", () => {
-    expect(() => read({ schema: 2 })).toThrow(/schema/);
+    assert.throws(() => read({ schema: 2 }), /schema/);
   });
 
   it("refuses a version that is not a version", () => {
@@ -135,19 +149,19 @@ describe("reading the canonical record fails closed", () => {
     // sees, so the bound is still proven.
     const fourSegments = ["1", "3", "8", "4"].join(".");
     for (const version of ["", "1", fourSegments, "1.3.8-beta", "v1.3.8", "latest", 138, null]) {
-      expect(() => read({ version }), JSON.stringify(version)).toThrow(/version/);
+      assert.throws(() => read({ version }), /version/, JSON.stringify(version));
     }
   });
 
   it("refuses an Apple ID that is not a bare numeric identifier", () => {
     for (const appleId of ["", "id6801142976", 6801142976, null]) {
-      expect(() => read({ appleId }), JSON.stringify(appleId)).toThrow(/Apple ID/);
+      assert.throws(() => read({ appleId }), /Apple ID/, JSON.stringify(appleId));
     }
   });
 
   it("refuses a publication date that is not a real ISO calendar day", () => {
     for (const publishedAt of ["", "2026-8-26", "26/08/2026", "2026-02-30", null]) {
-      expect(() => read({ publishedAt }), JSON.stringify(publishedAt)).toThrow(/publication date/);
+      assert.throws(() => read({ publishedAt }), /publication date/, JSON.stringify(publishedAt));
     }
   });
 
@@ -155,10 +169,8 @@ describe("reading the canonical record fails closed", () => {
     // The most dangerous malformation, because both halves look right on their
     // own: a link that resolves, an ID that is numeric, and a README sentence
     // built from them that sends readers to somebody else's app.
-    expect(() => read({ url: "https://apps.apple.com/app/id123456789" }))
-      .toThrow(/does not address/);
-    expect(() => read({ url: "https://apps.apple.com/us/app/relayium/id6801142976" }))
-      .toThrow(/does not address/);
+    assert.throws(() => read({ url: "https://apps.apple.com/app/id123456789" }), /does not address/);
+    assert.throws(() => read({ url: "https://apps.apple.com/us/app/relayium/id6801142976" }), /does not address/);
   });
 });
 
@@ -177,12 +189,9 @@ describe("the release operator's document agrees with the canonical record", () 
 
   it("states the published version and its publication date as current truth", async () => {
     const text = await flat();
-    expect(text, "the app-record table must name the published version")
-      .toContain(`| Current published version | \`${record.version}\``);
-    expect(text, "the current-state section must say the version is published, not pending")
-      .toContain(`**\`${record.version}\` (build \`38\`) is PUBLISHED on the Mac App Store, public since ${record.publishedAt}.**`);
-    expect(text, "the document must point at the canonical record rather than restate it")
-      .toContain("web/mac-app-store-release.json");
+    assert.ok(text.includes(`| Current published version | \`${record.version}\``), "the app-record table must name the published version");
+    assert.ok(text.includes(`**\`${record.version}\` (build \`38\`) is PUBLISHED on the Mac App Store, public since ${record.publishedAt}.**`), "the current-state section must say the version is published, not pending");
+    assert.ok(text.includes("web/mac-app-store-release.json"), "the document must point at the canonical record rather than restate it");
   });
 
   it("never describes the published version as the next release", async () => {
@@ -193,19 +202,18 @@ describe("the release operator's document agrees with the canonical record", () 
       `(?:next release is|next submission is|about to submit)[^.]{0,80}${record.version.replace(/\./g, "\\.")}`,
       "i",
     );
-    expect(text, "the published version is described as pending").not.toMatch(pattern);
+    assert.doesNotMatch(text, pattern, "the published version is described as pending");
   });
 
   it("leaves no superseded version in the app-record table", async () => {
     // The table is the first thing an operator reads. It said `1.2.0` through
     // six later releases, and nothing failed, because no test read it.
     const table = (await doc).split("## App record")[1]?.split("\n\n### ")[0] ?? "";
-    expect(table, "the app-record table is missing").toContain("Apple ID");
+    assert.ok(table.includes("Apple ID"), "the app-record table is missing");
     const versions = new Set(
       [...table.matchAll(/(?<![0-9.v])[0-9]+\.[0-9]+\.[0-9]+(?![0-9])(?!\.[0-9])/g)].map((m) => m[0]),
     );
-    expect(versions, "the app-record table names a version that is not the published one")
-      .toEqual(new Set([record.version]));
+    assert.deepEqual(versions, new Set([record.version]), "the app-record table names a version that is not the published one");
   });
 });
 
@@ -222,10 +230,8 @@ describe("the committed /releases pages carry the canonical version", () => {
     // that contains it byte for byte cannot be a stale render of an older one.
     for (const lang of LANGS) {
       const bullet = esc(releases.langs[lang].sections[0].bullets[1]);
-      expect(bullet, `${lang}'s source bullet does not name the App Store release`)
-        .toContain(record.version);
-      expect(await html(lang), `${pagePath(lang)} was not regenerated from its source`)
-        .toContain(bullet);
+      assert.ok(bullet.includes(record.version), `${lang}'s source bullet does not name the App Store release`);
+      assert.ok((await html(lang)).includes(bullet), `${pagePath(lang)} was not regenerated from its source`);
     }
   });
 
@@ -250,8 +256,7 @@ describe("the committed /releases pages carry the canonical version", () => {
         // match, exactly as `releaseVersionPattern` decides the same question.
         [...remaining.matchAll(/(?<![0-9.v])[0-9]+\.[0-9]+\.[0-9]+(?![0-9])(?!\.[0-9])/g)].map((m) => m[0]),
       );
-      expect(versions, `${pagePath(lang)} names a superseded App Store version`)
-        .toEqual(new Set([record.version]));
+      assert.deepEqual(versions, new Set([record.version]), `${pagePath(lang)} names a superseded App Store version`);
     }
   });
 });

@@ -1488,7 +1488,7 @@ written.
 
 ### Root product and repository-status claims
 
-`repo-hygiene.yml`'s unfiltered `repository-policy` job owns these two
+`repo-hygiene.yml`'s unfiltered `repository-policy` job owns these
 dependency-free Node suites, formerly under `web/scripts/pages/` in Vitest:
 
 | Check | Inputs |
@@ -1503,3 +1503,11 @@ preserved using Node's strict assertions. Inputs resolve relative to the module,
 so the checks also work when invoked from another directory. The existing
 `ci-guard-coverage-test.mjs` rejects a missing invocation for either suite. Other
 cross-directory Web/Swift claim checks retain their existing ownership.
+
+The same job also owns `send-text-retention-test.mjs` (README and the nine-locale
+text guide), `llms-text-test.mjs` (README, Web index and llms.txt), and
+`app-store-release-test.mjs` (release metadata, operator documentation, release
+content and nine generated release pages). These suites import only repository
+modules and Node built-ins. Their original Web copies are retired with all
+assertions retained. Changes to any input run the owning checks through the
+unfiltered job, including documentation-only changes outside Web selectors.

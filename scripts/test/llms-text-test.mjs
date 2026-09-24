@@ -1,18 +1,22 @@
-import { describe, expect, it } from "vitest";
+#!/usr/bin/env node
+// Migrated from web/scripts/pages/llms-text.test.mjs with assertions preserved.
+// Root documentation changes do not select web.yml; repo-hygiene.yml runs this
+// dependency-free Node check on main pushes and through merge-gate on PRs. Inputs resolve from this module. Keep this as the sole owner of these tests.
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
-const llms = readFileSync(resolve(process.cwd(), "public/llms.txt"), "utf8");
-const homepage = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
-const readme = readFileSync(resolve(process.cwd(), "../README.md"), "utf8");
+const llms = readFileSync(new URL("../../web/public/llms.txt", import.meta.url), "utf8");
+const homepage = readFileSync(new URL("../../web/index.html", import.meta.url), "utf8");
+const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
 
 describe("llms.txt file and ephemeral text product facts", () => {
   it("positions text as online-only, bounded, and not server-stored", () => {
-    expect(llms).toContain("file and online-only ephemeral text transfer");
-    expect(llms).toContain("both devices must be online at the same time");
-    expect(llms).toContain("no offline delivery or server-side message history");
-    expect(llms).toContain("65,536 UTF-8 bytes");
-    expect(llms).toContain("Either endpoint can copy, log, screenshot, or otherwise retain text");
+    assert.ok(llms.includes("file and online-only ephemeral text transfer"));
+    assert.ok(llms.includes("both devices must be online at the same time"));
+    assert.ok(llms.includes("no offline delivery or server-side message history"));
+    assert.ok(llms.includes("65,536 UTF-8 bytes"));
+    assert.ok(llms.includes("Either endpoint can copy, log, screenshot, or otherwise retain text"));
   });
 
   // An answering model reads this file to decide what to tell someone about the
@@ -20,66 +24,66 @@ describe("llms.txt file and ephemeral text product facts", () => {
   // bullet let it describe a surface that stopped existing on 2026-08-10 — one
   // where files and messages are separate flows across networks.
   it("states that a pairing-code room gets the same shared workspace", () => {
-    expect(llms).toContain("Two up-to-date browsers get the same shared workspace here as on the same network");
-    expect(llms).toContain("one end-to-end encrypted connection carrying files and ephemeral text together");
-    expect(llms).toContain("one optional verification code (SAS) rather than one per session");
+    assert.ok(llms.includes("Two up-to-date browsers get the same shared workspace here as on the same network"));
+    assert.ok(llms.includes("one end-to-end encrypted connection carrying files and ephemeral text together"));
+    assert.ok(llms.includes("one optional verification code (SAS) rather than one per session"));
     // Relayed and therefore bounded — relay-deadline.ts derives it from the TURN
     // REST credential, so this is a product fact and not an implementation note.
-    expect(llms).toContain("bounded lifetime derived from the TURN credential");
+    assert.ok(llms.includes("bounded lifetime derived from the TURN credential"));
     // The exact-match capability gate, which is what keeps this from overclaiming.
-    expect(llms).toContain("older browsers, the native apps, the CLI — keep the separate file and text flows");
+    assert.ok(llms.includes("older browsers, the native apps, the CLI — keep the separate file and text flows"));
     // The same-network bullet has to describe the same one surface, or the two
     // bullets teach a reader that the rooms differ in a way they no longer do.
-    expect(llms).toContain("the peer card offers one action, which opens a shared workspace");
-    expect(llms).not.toMatch(/pairing[- ]code[^.]{0,80}(?:older|legacy|separate) (?:controls|surface|flows?)/i);
+    assert.ok(llms.includes("the peer card offers one action, which opens a shared workspace"));
+    assert.doesNotMatch(llms, /pairing[- ]code[^.]{0,80}(?:older|legacy|separate) (?:controls|surface|flows?)/i);
   });
 
   it("states the account boundary for pairing-code creation and joining", () => {
-    expect(llms).toContain("Same-network transfers need no account");
-    expect(llms).toContain("Creating a cross-network file or text pairing code requires sign-in");
-    expect(llms).toContain("joining with a code does not");
+    assert.ok(llms.includes("Same-network transfers need no account"));
+    assert.ok(llms.includes("Creating a cross-network file or text pairing code requires sign-in"));
+    assert.ok(llms.includes("joining with a code does not"));
   });
 
   it("pins pairing-code shape and expiry, and separates it from the SAS", () => {
     // Both are six digits now, so the file cannot rely on "characters vs digits"
     // to tell them apart — it has to say so.
-    expect(llms).toContain("6-digit pairing code");
-    expect(llms).toContain("Codes expire 5 minutes");
-    expect(llms).toContain("six decimal digits (0-9, leading zeros included)");
-    expect(llms).toContain("not the same value as the 6-digit SAS");
-    expect(llms).toContain("6-digit Short Authentication String (SAS)");
+    assert.ok(llms.includes("6-digit pairing code"));
+    assert.ok(llms.includes("Codes expire 5 minutes"));
+    assert.ok(llms.includes("six decimal digits (0-9, leading zeros included)"));
+    assert.ok(llms.includes("not the same value as the 6-digit SAS"));
+    assert.ok(llms.includes("6-digit Short Authentication String (SAS)"));
     // The alphabet and the two TTLs this file has carried before. Any of them
     // reappearing means the format or the window moved and this file was left
     // behind — which is exactly what happened at 5 -> 30 minutes.
-    expect(llms).not.toMatch(/6-character/i);
-    expect(llms).not.toMatch(/ACDEFHJKMNPRTWXY/);
-    expect(llms).not.toMatch(/codes? (?:live|last|expire(?:s)?) (?:15|30) minutes/i);
+    assert.doesNotMatch(llms, /6-character/i);
+    assert.doesNotMatch(llms, /ACDEFHJKMNPRTWXY/);
+    assert.doesNotMatch(llms, /codes? (?:live|last|expire(?:s)?) (?:15|30) minutes/i);
   });
 
   // The SAS is opt-in. A file that describes it as something the product always
   // does would be teaching an LLM to tell users they are protected by a check
   // their browser never showed them.
   it("says the SAS comparison is optional and bounds what turning it off changes", () => {
-    expect(llms).toMatch(/Anti man-in-the-middle \(optional\)/);
-    expect(llms).toContain("it is off by default");
-    expect(llms).toContain("only when a person actually compares the two values");
-    expect(llms).toContain("it never disables commit-then-reveal");
-    expect(llms).toContain("receiving files still asks before anything is saved");
+    assert.match(llms, /Anti man-in-the-middle \(optional\)/);
+    assert.ok(llms.includes("it is off by default"));
+    assert.ok(llms.includes("only when a person actually compares the two values"));
+    assert.ok(llms.includes("it never disables commit-then-reveal"));
+    assert.ok(llms.includes("receiving files still asks before anything is saved"));
   });
 
   it("distinguishes browser TURN ciphertext from direct-only CLI text", () => {
-    expect(llms).toContain("cross-network browser file and text sessions carry end-to-end encrypted ciphertext through TURN by design");
-    expect(llms).toContain("CLI text uses a separate direct-only protocol");
-    expect(llms).toContain("CLI text is direct-only and does not use TURN");
-    expect(llms).not.toMatch(/(?:file|message|realtime) bytes (?:never|do not) touch the server/i);
-    expect(llms).not.toMatch(/all realtime transfers .*need no account/i);
+    assert.ok(llms.includes("cross-network browser file and text sessions carry end-to-end encrypted ciphertext through TURN by design"));
+    assert.ok(llms.includes("CLI text uses a separate direct-only protocol"));
+    assert.ok(llms.includes("CLI text is direct-only and does not use TURN"));
+    assert.doesNotMatch(llms, /(?:file|message|realtime) bytes (?:never|do not) touch the server/i);
+    assert.doesNotMatch(llms, /all realtime transfers .*need no account/i);
   });
 
   it("keeps browser and CLI SAS constructions protocol-specific", () => {
-    expect(llms).toContain("derived from the two X25519 endpoint public keys");
-    expect(llms).toContain("derived from the two pinned TLS certificate fingerprints");
-    expect(llms).toContain("authenticate endpoints rather than proving that no server or TURN relay exists");
-    expect(llms).not.toMatch(/SAS\) is derived from the session keys/i);
+    assert.ok(llms.includes("derived from the two X25519 endpoint public keys"));
+    assert.ok(llms.includes("derived from the two pinned TLS certificate fingerprints"));
+    assert.ok(llms.includes("authenticate endpoints rather than proving that no server or TURN relay exists"));
+    assert.doesNotMatch(llms, /SAS\) is derived from the session keys/i);
   });
 
   // What an answering model tells someone who asks "is Relayium free?" and
@@ -95,37 +99,37 @@ describe("llms.txt file and ephemeral text product facts", () => {
   // self-hostable, no limits — and only the hosted service is bounded. The
   // sentence a model repeats has to draw that line, not erase it.
   it("bounds the hosted service without denying that the software is free", () => {
-    expect(llms).toContain("the software is a free, open-source product");
-    expect(llms).toContain("a free tier, not an unlimited free hosted service");
+    assert.ok(llms.includes("the software is a free, open-source product"));
+    assert.ok(llms.includes("a free tier, not an unlimited free hosted service"));
     // The retired form, which denied the free software along with the free service.
-    expect(llms).not.toContain("there is a free tier, not a free product");
+    assert.ok(!llms.includes("there is a free tier, not a free product"));
     // The unmetered half has to survive too. "It costs money" is as wrong as
     // "it is free" — direct paths genuinely are unmetered, and that is the
     // product's actual position.
-    expect(llms).toContain("Direct transfers cost nothing and are never metered");
+    assert.ok(llms.includes("Direct transfers cost nothing and are never metered"));
     // …and the four limits, stated as four. Calling relay and storage both
     // "monthly allowances" is the systematic error this batch corrected: only
     // traffic is monthly, and storage is live occupancy checked by
     // remainingStorage/CurrentStorage (server/account/plan_enforce.go).
-    expect(llms).toContain("monthly traffic");
-    expect(llms).toMatch(/hosted uploads?,? hosted downloads? and (billable )?relay/i);
-    expect(llms).toMatch(/occupancy and not a monthly total/i);
-    expect(llms).toMatch(/daily upload quota/i);
-    expect(llms).toMatch(/retention window/i);
+    assert.ok(llms.includes("monthly traffic"));
+    assert.match(llms, /hosted uploads?,? hosted downloads? and (billable )?relay/i);
+    assert.match(llms, /occupancy and not a monthly total/i);
+    assert.match(llms, /daily upload quota/i);
+    assert.match(llms, /retention window/i);
     // The shape that would undo it: storage described as a monthly quantity.
-    expect(llms).not.toMatch(/monthly[^.]{0,40}\bstorage\b/i);
-    expect(llms).not.toMatch(/\bstorage\b[^.]{0,30}\bper month\b/i);
+    assert.doesNotMatch(llms, /monthly[^.]{0,40}\bstorage\b/i);
+    assert.doesNotMatch(llms, /\bstorage\b[^.]{0,30}\bper month\b/i);
     for (const tier of ["Plus", "Pro", "Max"]) {
-      expect(llms, `the ${tier} tier is missing`).toContain(tier);
+      assert.ok(llms.includes(tier), `the ${tier} tier is missing`);
     }
     // Figures are deliberately NOT in this file. Plan rows are editable in the
     // admin dashboard, so a number copied here is a number that goes stale
     // without anything failing; /pricing renders the live values.
-    expect(llms).toContain("https://relayium.com/pricing");
-    expect(llms).toContain("do not quote figures from memory");
+    assert.ok(llms.includes("https://relayium.com/pricing"));
+    assert.ok(llms.includes("do not quote figures from memory"));
     // The exact retired sentences, verbatim from the diff that removed them.
-    expect(llms).not.toContain("Price: free.");
-    expect(llms).not.toMatch(/\*\*Is Relayium free\?\*\* Yes\b/);
+    assert.ok(!llms.includes("Price: free."));
+    assert.doesNotMatch(llms, /\*\*Is Relayium free\?\*\* Yes\b/);
   });
 
   // The second half of that same defect, corrected 2026-08-28. Saying the free
@@ -140,12 +144,12 @@ describe("llms.txt file and ephemeral text product facts", () => {
   it("never puts every CLI mode on the unmetered side of the free tier", () => {
     // The retired phrase, verbatim, and the shapes it could come back as. The
     // generalisation is what is wrong, so no wording of it is allowed.
-    expect(llms).not.toContain("every CLI mode");
-    expect(llms).not.toMatch(/\b(every|all|any|each) CLI (mode|command|verb|subcommand)s?\b/i);
-    expect(llms).not.toMatch(/\bthe (whole |entire )?CLI\b[^.]{0,80}\b(is|are|stays?|remains?)\b[^.]{0,40}\b(free|unmetered|direct)\b/i);
+    assert.ok(!llms.includes("every CLI mode"));
+    assert.doesNotMatch(llms, /\b(every|all|any|each) CLI (mode|command|verb|subcommand)s?\b/i);
+    assert.doesNotMatch(llms, /\bthe (whole |entire )?CLI\b[^.]{0,80}\b(is|are|stays?|remains?)\b[^.]{0,40}\b(free|unmetered|direct)\b/i);
     // A generalisation over "modes" that also generalises about cost or path is
     // the same defect with the word CLI dropped.
-    expect(llms).not.toMatch(/\b(every|all) (transfer )?modes?\b[^.]{0,90}\b(direct|unmetered|free|never metered|cost nothing)\b/i);
+    assert.doesNotMatch(llms, /\b(every|all) (transfer )?modes?\b[^.]{0,90}\b(direct|unmetered|free|never metered|cost nothing)\b/i);
 
     // Removing the claim is only half of it. Both places must instead enumerate
     // the modes that really are direct, and both must name `up` as the hosted
@@ -158,21 +162,21 @@ describe("llms.txt file and ephemeral text product facts", () => {
       "pairing-code send/receive",
       "ephemeral text",
     ]) {
-      expect(llms, `the direct-mode enumeration lost ${mode}`).toContain(mode);
+      assert.ok(llms.includes(mode), `the direct-mode enumeration lost ${mode}`);
     }
-    expect(llms).toContain("`relayium up` is deliberately not one of those modes");
-    expect(llms).toContain("`relayium up` is a hosted-storage mode, not a direct one");
+    assert.ok(llms.includes("`relayium up` is deliberately not one of those modes"));
+    assert.ok(llms.includes("`relayium up` is a hosted-storage mode, not a direct one"));
     // Two mentions of the exception, one per corrected passage: the Price bullet
     // and the FAQ answer. A single mention means one of them regressed.
-    expect(llms.match(/`relayium up`/g) ?? []).toHaveLength(3);
+    assert.equal((llms.match(/`relayium up`/g) ?? []).length, 3);
     // And what the exception actually costs the sender, in both passages. It
     // used to be pinned as "plan storage cap and retention window" — two of the
     // four dimensions, which is how the file came to imply storage was monthly.
-    expect(llms).not.toContain("plan storage cap and retention window");
+    assert.ok(!llms.includes("plan storage cap and retention window"));
     // One per corrected passage — the Price bullet and the FAQ answer — each
     // saying `up` is bounded exactly as a browser stored link is.
-    expect(llms.match(/exactly like a stored download link/g) ?? []).toHaveLength(2);
-    expect(llms.match(/all four/g) ?? []).toHaveLength(3);
+    assert.equal((llms.match(/exactly like a stored download link/g) ?? []).length, 2);
+    assert.equal((llms.match(/all four/g) ?? []).length, 3);
   });
 
   // "An account stores only an email and display name" was a data-minimisation
@@ -188,47 +192,47 @@ describe("llms.txt file and ephemeral text product facts", () => {
   // list: this file is not the privacy policy and a copied field list is a
   // second truth that goes stale silently.
   it("does not claim an account holds only an email and a display name", () => {
-    expect(llms).not.toContain("An account stores only an email and display name");
-    expect(llms).not.toMatch(/\baccount\b[^.]{0,60}\bstores? only\b/i);
+    assert.ok(!llms.includes("An account stores only an email and display name"));
+    assert.doesNotMatch(llms, /\baccount\b[^.]{0,60}\bstores? only\b/i);
     // What it says instead: not-only, the categories that actually exist, the
     // categories that do not, and where the authoritative list lives.
-    expect(llms).toMatch(/not just an email and a display name/i);
+    assert.match(llms, /not just an email and a display name/i);
     for (const held of [/sign-in method/i, /sessions/i, /devices/i, /usage and storage/i, /subscription reference/i])
-      expect(llms, `${held} is missing from the account summary`).toMatch(held);
-    expect(llms).toMatch(/never holds card numbers, file contents, filenames or any key/i);
-    expect(llms).toContain("https://relayium.com/privacy");
+      assert.match(llms, held, `${held} is missing from the account summary`);
+    assert.match(llms, /never holds card numbers, file contents, filenames or any key/i);
+    assert.ok(llms.includes("https://relayium.com/privacy"));
   });
 
   it("names both macOS channels and no app for a platform that has none", () => {
-    expect(llms).toContain("a native macOS menu-bar app");
-    expect(llms).toContain("https://apps.apple.com/app/id6801142976");
-    expect(llms).toContain("independently versioned");
-    expect(llms).toContain("their version numbers are not expected to match");
+    assert.ok(llms.includes("a native macOS menu-bar app"));
+    assert.ok(llms.includes("https://apps.apple.com/app/id6801142976"));
+    assert.ok(llms.includes("independently versioned"));
+    assert.ok(llms.includes("their version numbers are not expected to match"));
     // The three that do not exist. `apps/` holds mac/, ios/ and RelayiumKit/;
     // iOS development is paused with no public listing, and there is no Android
     // or Windows target at all. An answer engine that invented one of these
     // would send a reader looking for a download that has never existed.
     // Android left this denial on 2026-09-08: the APK is published, so naming
     // it among the platforms with no app would be the untrue half.
-    expect(llms).toContain("There is no Relayium app for iOS or Windows");
+    assert.ok(llms.includes("There is no Relayium app for iOS or Windows"));
     // …and the answer engines must be told what Android actually gets, with its
     // limits, or the omission reads as a full-featured client.
-    expect(llms).toMatch(/Android app distributed as a direct APK/i);
-    expect(llms).toMatch(/not on Google Play/i);
-    expect(llms).not.toMatch(/\b(?:iOS|Android|Windows)\s+(?:native\s+|desktop\s+)*app\s+(?:is|will be)\b/i);
+    assert.match(llms, /Android app distributed as a direct APK/i);
+    assert.match(llms, /not on Google Play/i);
+    assert.doesNotMatch(llms, /\b(?:iOS|Android|Windows)\s+(?:native\s+|desktop\s+)*app\s+(?:is|will be)\b/i);
   });
 
   it("describes Device Inbox, including the upload-is-not-save boundary", () => {
     // Shipped 2026-08-24 (c63d4c5e) and absent from this file entirely, so an
     // answering model had no way to describe the product's one asynchronous
     // path to a machine the sender owns.
-    expect(llms).toContain("Device Inbox");
-    expect(llms).toContain("https://relayium.com/device-inbox");
-    expect(llms).toContain("sealed to that device's public key");
-    expect(llms).toContain("waits in a queue while the device is offline");
+    assert.ok(llms.includes("Device Inbox"));
+    assert.ok(llms.includes("https://relayium.com/device-inbox"));
+    assert.ok(llms.includes("sealed to that device's public key"));
+    assert.ok(llms.includes("waits in a queue while the device is offline"));
     // The two boundaries the product page is itself required to state.
-    expect(llms).toContain("the server reaching a ciphertext upload is explicitly not the same state");
-    expect(llms).toContain("A public download link can never make a device write to disk");
+    assert.ok(llms.includes("the server reaching a ciphertext upload is explicitly not the same state"));
+    assert.ok(llms.includes("A public download link can never make a device write to disk"));
   });
 
   it("links the pages a reader is sent to for a current figure", () => {
@@ -237,7 +241,7 @@ describe("llms.txt file and ephemeral text product facts", () => {
       "https://relayium.com/releases",
       "https://relayium.com/pricing",
     ]) {
-      expect(llms, `${url} is not linked`).toContain(url);
+      assert.ok(llms.includes(url), `${url} is not linked`);
     }
   });
 
@@ -247,11 +251,11 @@ describe("llms.txt file and ephemeral text product facts", () => {
       ["index.html", homepage],
       ["README.md", readme],
     ]) {
-      expect(copy, `${name}: warning threshold`).toContain("256 MB");
-      expect(copy, `${name}: no stale recommendation`).not.toMatch(/(?:under|about) ~?200 MB/i);
+      assert.ok(copy.includes("256 MB"), `${name}: warning threshold`);
+      assert.doesNotMatch(copy, /(?:under|about) ~?200 MB/i, `${name}: no stale recommendation`);
     }
-    expect(llms).toMatch(/conservative estimate, not a hard limit/i);
-    expect(homepage).toMatch(/conservative estimate, not a hard limit/i);
-    expect(readme).toMatch(/conservative estimate, not a hard limit/i);
+    assert.match(llms, /conservative estimate, not a hard limit/i);
+    assert.match(homepage, /conservative estimate, not a hard limit/i);
+    assert.match(readme, /conservative estimate, not a hard limit/i);
   });
 });

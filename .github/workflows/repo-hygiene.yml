@@ -264,6 +264,13 @@ jobs:
       - name: public repository status matches the release records
         run: node scripts/test/repository-status-test.mjs
 
+      - name: text retention claims stay scoped to the server
+        run: node scripts/test/send-text-retention-test.mjs
+      - name: crawler product facts stay accurate
+        run: node scripts/test/llms-text-test.mjs
+      - name: App Store documents agree with the release record
+        run: node scripts/test/app-store-release-test.mjs
+
       # The home page's trust block ("Every claim here can be checked") makes
       # four statements of fact about things OUTSIDE `web/`: the three LICENSE
       # files, `docs/protocol/`, this repository's release workflow attesting
