@@ -56,18 +56,13 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     private let keys: StoredLinkKeyStore
     private let uploader: CloudUploader
     private let sender: InboxSenderTransport
-    /// The account's own stored-object routes. Unused since the stored-file
-    /// delete of an unbound `device_task` object was removed (the server
-    /// refuses it); retained only so the public initializer is unchanged.
-    private let objects: AccountManagementService
 
     public init(store: PendingUploadStore, keys: StoredLinkKeyStore, uploader: CloudUploader,
-                sender: InboxSenderTransport, objects: AccountManagementService) {
+                sender: InboxSenderTransport) {
         self.store = store
         self.keys = keys
         self.uploader = uploader
         self.sender = sender
-        self.objects = objects
     }
 
     // MARK: - delivering
@@ -335,7 +330,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     /// Once a task exists, central's own delete takes the ciphertext with it.
     /// An object no task owns is left to the server's collector (protocol §27);
     /// no stored-file delete is issued for it.
-    public func discard(_ plan: PendingUploadPlan, token: String) async throws {
+    public func discard(_ plan: PendingUploadPlan) async throws {
         guard plan.effectivePurpose == .deviceTask else { throw InboxSendFailure.notADelivery }
         if let taskID = plan.deviceTaskId, let target = plan.target {
             // Not `try?`. A cancel central refuses leaves a live delivery, and

@@ -1718,8 +1718,7 @@ public enum AppEnvironment {
                                                                       session: session)),
             makeSender: { token in
                 InboxSenderClient(baseURL: baseURL, token: token, session: session)
-            },
-            objects: AccountClient(baseURL: baseURL, session: session))
+            })
     }
 
     /// A local precondition the Device Inbox cannot run without.

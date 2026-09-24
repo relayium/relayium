@@ -1,10 +1,14 @@
+#!/usr/bin/env node
+// Migrated from web/scripts/pages/public-sas-copy.test.mjs with assertions preserved.
+// Root documentation changes do not select web.yml; repo-hygiene.yml runs this
+// dependency-free Node check on main pushes and through merge-gate on PRs. Inputs resolve from this module. Keep this as the sole owner of these tests.
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 
-import en from "../../src/lib/i18n/en.ts";
-import zh from "../../src/lib/i18n/zh.ts";
-import { cli } from "./content/spa-pages.mjs";
+import en from "../../web/src/lib/i18n/en.ts";
+import zh from "../../web/src/lib/i18n/zh.ts";
+import { cli } from "../../web/scripts/pages/content/spa-pages.mjs";
 
 const locales = { en, zh };
 
@@ -49,7 +53,7 @@ describe("public SAS copy", () => {
     for (const [lang, messages] of Object.entries(locales)) {
       const copy = sendReceiveCopy(messages);
       for (const token of cliTokens[lang]) {
-        expect(copy, `${lang}:${token}`).toMatch(token);
+        assert.match(copy, token, `${lang}:${token}`);
       }
     }
   });
@@ -58,23 +62,23 @@ describe("public SAS copy", () => {
     for (const [lang, messages] of Object.entries(locales)) {
       const copy = messages.features.items[2].desc;
       for (const token of browserTokens[lang]) {
-        expect(copy, `${lang}:${token}`).toMatch(token);
+        assert.match(copy, token, `${lang}:${token}`);
       }
     }
   });
 
   it("keeps the crawler CLI copy protocol-specific", () => {
     const copy = shellMode("send / receive");
-    expect(copy).toMatch(/pinned TLS certificate fingerprints/i);
-    expect(copy).toMatch(/rendezvous service/i);
-    expect(copy).toMatch(/not every network hop/i);
+    assert.match(copy, /pinned TLS certificate fingerprints/i);
+    assert.match(copy, /rendezvous service/i);
+    assert.match(copy, /not every network hop/i);
   });
 
   it("keeps README browser and CLI SAS constructions separate", () => {
-    const readme = readFileSync(resolve(process.cwd(), "../README.md"), "utf8");
-    expect(readme).toMatch(/X25519 endpoint public keys/);
-    expect(readme).toMatch(/pinned TLS certificate fingerprints/);
-    expect(readme).toMatch(/detects endpoint impersonation or key substitution/);
+    const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
+    assert.match(readme, /X25519 endpoint public keys/);
+    assert.match(readme, /pinned TLS certificate fingerprints/);
+    assert.match(readme, /detects endpoint impersonation or key substitution/);
   });
 
   it("removes the old English path-wide guarantees and shared derivation", () => {
@@ -82,10 +86,10 @@ describe("public SAS copy", () => {
       sendReceiveCopy(en),
       en.features.items[2].desc,
       shellMode("send / receive"),
-      readFileSync(resolve(process.cwd(), "../README.md"), "utf8"),
+      readFileSync(new URL("../../README.md", import.meta.url), "utf8"),
     ].join("\n");
-    expect(copy).not.toMatch(/derived from the session keys/i);
-    expect(copy).not.toMatch(/rule out (?:an eavesdropping )?(?:a )?MITM|rule out a man-in-the-middle/i);
-    expect(copy).not.toMatch(/cannot MITM as long as users compare the SAS/i);
+    assert.doesNotMatch(copy, /derived from the session keys/i);
+    assert.doesNotMatch(copy, /rule out (?:an eavesdropping )?(?:a )?MITM|rule out a man-in-the-middle/i);
+    assert.doesNotMatch(copy, /cannot MITM as long as users compare the SAS/i);
   });
 });

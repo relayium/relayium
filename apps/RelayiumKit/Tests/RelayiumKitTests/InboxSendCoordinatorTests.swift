@@ -25,7 +25,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
     private var store: PendingUploadStore!
     private var keys: InMemoryStoredLinkKeyStore!
     private var sender: FakeInboxSenderTransport!
-    private var objects: FakeStoredObjectService!
     private var transport: StubTransport!
 
     private let deviceID = "DEVICE0123456789"
@@ -37,12 +36,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
     private var rotatedKeyID = "KEY9999999999abcd"
     private var rotatedPublicKey = ""
 
-    /// `DELETE /api/files/{id}` is the account's share-delete route and the
-    /// server answers 404 for a task-purpose object, so no path may issue it:
-    /// an unbound object is reclaimed by the server's collector (protocol §27).
-    private static let noStoredFileDelete =
-        "no stored-file delete may be attempted for a task-purpose object"
-
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("p3a-coord-\(UUID().uuidString)")
@@ -50,7 +43,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
         store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
         keys = InMemoryStoredLinkKeyStore()
         sender = FakeInboxSenderTransport()
-        objects = FakeStoredObjectService()
         transport = StubTransport()
         transport.finalizeResult = UploadResult(id: "STORED0123456789", expiresAt: 4242)
         devicePublicKey = InboxKeyMaterial.encode(try InboxKeyMaterial.generateKeyPair().publicKey)
@@ -102,7 +94,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
 
     private func coordinator() -> InboxSendCoordinator {
         InboxSendCoordinator(store: store, keys: keys, uploader: CloudUploader(transport: transport),
-                             sender: sender, objects: objects)
+                             sender: sender)
     }
 
     private func selection() throws -> [SelectedFile] {
@@ -158,8 +150,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
         let key = try await keys.key(for: plan.jobId)
         XCTAssertNotNil(key, "the content key must survive an ambiguous outcome",
                         file: file, line: line)
-        XCTAssertEqual(objects.deleted, [], "an ambiguous outcome must release nothing",
-                       file: file, line: line)
     }
 
     // MARK: - the delivery
@@ -225,7 +215,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
         sender.createOutcomes = [created(task())]
         _ = try await coordinator().deliver(plan, token: "bearer")
         try await assertJobIsGone(plan)
-        XCTAssertEqual(objects.deleted, [], "a delivered object belongs to its task now")
     }
 
     /// The crash window. If the task id were written after cleanup, a process
@@ -244,7 +233,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
         sender.createOutcomes = [created(task())]
         let coordinator = InboxSendCoordinator(store: store, keys: observing,
                                                uploader: CloudUploader(transport: transport),
-                                               sender: sender, objects: objects)
+                                               sender: sender)
 
         _ = try await coordinator.deliver(plan, token: "bearer")
 
@@ -294,7 +283,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
         let plan = try await staged()
         let coordinator = InboxSendCoordinator(
             store: store, keys: ReadFailingKeyStore(inner: keys),
-            uploader: CloudUploader(transport: transport), sender: sender, objects: objects)
+            uploader: CloudUploader(transport: transport), sender: sender)
 
         await XCTAssertThrowsErrorAsync(try await coordinator.deliver(plan, token: "bearer")) {
             XCTAssertEqual($0 as? InboxSendFailure, .recoveryStateReadFailed)
@@ -330,7 +319,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
         XCTAssertEqual(sender.creates.count, 1,
                        "a local state-write failure must not enter the create retry loop")
         XCTAssertNil(store.deviceSendPlans(for: "acct-1").first?.deviceTaskId)
-        XCTAssertEqual(objects.deleted, [], "the live task owns the object")
         try await assertJobIsIntact(plan)
     }
 
@@ -376,7 +364,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(caught as? InboxSendFailure, .recoveryStateWriteFailed)
         XCTAssertEqual(sender.creates.count, 0)
-        XCTAssertEqual(objects.deleted, [])
         try await assertJobIsIntact(uploaded)
     }
 
@@ -395,7 +382,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
 
         XCTAssertFalse(result.created)
         XCTAssertEqual(result.task.id, taskID)
-        XCTAssertEqual(objects.deleted, [], "the existing task owns this ciphertext")
         try await assertJobIsGone(plan)
     }
 
@@ -409,7 +395,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
             XCTAssertEqual($0 as? InboxSendFailure, .unknownOutcome)
         }
         XCTAssertEqual(sender.creates.count, 1, "a conflict is evidence, not a retry prompt")
-        XCTAssertEqual(objects.deleted, [])
         try await assertJobIsIntact(plan)
     }
 
@@ -421,7 +406,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
         await XCTAssertThrowsErrorAsync(try await coordinator().deliver(plan, token: "bearer")) {
             XCTAssertEqual($0 as? InboxSendFailure, .unknownOutcome)
         }
-        XCTAssertEqual(objects.deleted, [])
         try await assertJobIsIntact(plan)
     }
 
@@ -470,7 +454,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(result.task.id, taskID)
         XCTAssertFalse(result.created)
-        XCTAssertEqual(objects.deleted, [], "the delivery is real; nothing may be released")
     }
 
     /// The most dangerous branch in the file. Nobody knows whether a delivery
@@ -501,7 +484,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
         await XCTAssertThrowsErrorAsync(try await self.coordinator().deliver(plan, token: "bearer")) {
             XCTAssertEqual($0 as? InboxSendFailure, .unknownOutcome)
         }
-        XCTAssertEqual(objects.deleted, [])
         try await assertJobIsIntact(plan)
     }
 
@@ -634,7 +616,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
             XCTAssertEqual($0 as? InboxSendFailure, .staleTargetKey)
         }
         XCTAssertEqual(sender.creates.count, 2, "no third attempt")
-        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
     }
 
     /// Durability of the budget: a plan that already resealed in a previous
@@ -671,7 +652,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
             try await self.coordinator().deliver(already, token: "bearer")) {
             XCTAssertEqual($0 as? InboxSendFailure, .staleTargetKey)
         }
-        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
         try await assertJobIsGone(already)
     }
 
@@ -737,7 +717,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
         await XCTAssertThrowsErrorAsync(try await self.coordinator().deliver(plan, token: "bearer")) {
             XCTAssertEqual($0 as? InboxSendFailure, .targetMissing)
         }
-        XCTAssertEqual(objects.deleted, [], "nothing was uploaded, so there is nothing to release")
         try await assertJobIsIntact(plan)
         XCTAssertFalse(try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first).retired,
                        "a retryable refusal must not tombstone the job")
@@ -775,7 +754,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
             XCTAssertEqual($0 as? InboxSendFailure, .refused(.autoReceiveDisabled))
         }
         XCTAssertEqual(sender.creates.count, 1, "a definitive no is not retried")
-        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
         try await assertJobIsGone(plan)
     }
 
@@ -789,10 +767,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
         await XCTAssertThrowsErrorAsync(try await self.coordinator().deliver(plan, token: "bearer")) {
             XCTAssertEqual($0 as? InboxSendFailure, .refused(.storedObjectAlreadyBound))
         }
-        XCTAssertEqual(objects.deleted, [], """
-            the object is bound to a task we do not own; releasing it would \
-            destroy somebody else's live delivery to tidy up ours
-            """)
     }
 
     func testAnUnrecognisedDefinitiveRejectionIsReportedByStatusRatherThanGuessed() async throws {
@@ -802,7 +776,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
         await XCTAssertThrowsErrorAsync(try await self.coordinator().deliver(plan, token: "bearer")) {
             XCTAssertEqual($0 as? InboxSendFailure, .rejected(status: 402))
         }
-        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
     }
 
     // MARK: - guards
@@ -832,7 +805,6 @@ final class InboxSendCoordinatorTests: XCTestCase {
             XCTAssertEqual($0 as? InboxSendFailure, .contentKeyMissing)
         }
         XCTAssertEqual(sender.creates.count, 0)
-        XCTAssertEqual(objects.deleted, [], "nothing was uploaded, so there is nothing to release")
         XCTAssertEqual(store.deviceSendPlans(for: "acct-1").map(\.jobId), [plan.jobId])
         XCTAssertTrue(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path),
                       "a lost key is not authority to delete the user's staged files")
@@ -842,10 +814,9 @@ final class InboxSendCoordinatorTests: XCTestCase {
     func testDiscardRemovesTheStagedJobEvenWhenNothingWasEverUploaded() async throws {
         let plan = try await staged()
 
-        try await coordinator().discard(plan, token: "bearer")
+        try await coordinator().discard(plan)
 
         XCTAssertEqual(sender.calls, [], "an un-uploaded job needs no server call to discard")
-        XCTAssertEqual(objects.deleted, [])
         try await assertJobIsGone(plan)
     }
 
@@ -891,9 +862,8 @@ final class InboxSendCoordinatorTests: XCTestCase {
         let plan = try await staged()
         let finalized = try store.markFinalized(plan, storedId: "STORED0123456789")
 
-        try await coordinator().discard(finalized, token: "bearer")
+        try await coordinator().discard(finalized)
 
-        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
         XCTAssertEqual(sender.calls, [], "there is no task to cancel")
         try await assertJobIsGone(plan)
     }
@@ -902,8 +872,40 @@ final class InboxSendCoordinatorTests: XCTestCase {
     /// network not at all.
     func testDiscardingABeforeUploadDeliveryTouchesNothingRemote() async throws {
         let plan = try await staged()
-        try await coordinator().discard(plan, token: "bearer")
-        XCTAssertEqual(objects.deleted, [])
+        try await coordinator().discard(plan)
         try await assertJobIsGone(plan)
     }
+
+    @MainActor
+    func testDiscardCancelsARecordedTaskBeforeRemovingLocalState() async throws {
+        let plan = try await staged()
+        let recorded = try store.setDeviceTask(
+            id: taskID, for: try store.markFinalized(plan, storedId: "STORED0123456789"))
+
+        try await coordinator().discard(recorded)
+
+        XCTAssertEqual(sender.calls, [.cancel(device: deviceID, task: taskID)])
+        try await assertJobIsGone(recorded)
+    }
+
+    @MainActor
+    func testDiscardKeepsARecordedJobWhenCentralRefusesCancellation() async throws {
+        let plan = try await staged()
+        let recorded = try store.setDeviceTask(
+            id: taskID, for: try store.markFinalized(plan, storedId: "STORED0123456789"))
+        sender.cancelError = InboxError.api(status: 409, code: InboxRejection.taskTerminal.rawValue)
+
+        do {
+            try await coordinator().discard(recorded)
+            XCTFail("a refused cancellation must remain a failed discard")
+        } catch {
+            XCTAssertEqual(error as? InboxError,
+                           .api(status: 409, code: InboxRejection.taskTerminal.rawValue))
+        }
+        XCTAssertEqual(sender.calls, [.cancel(device: deviceID, task: taskID)])
+        try await assertJobIsIntact(recorded)
+        XCTAssertEqual(store.deviceSendPlans(for: "acct-1").first?.deviceTaskId, taskID)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path))
+    }
+
 }

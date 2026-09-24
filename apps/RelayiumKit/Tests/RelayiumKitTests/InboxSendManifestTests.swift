@@ -28,7 +28,6 @@ final class InboxSendManifestTests: XCTestCase {
     private var store: PendingUploadStore!
     private var keys: InMemoryStoredLinkKeyStore!
     private var sender: FakeInboxSenderTransport!
-    private var objects: FakeStoredObjectService!
     private var transport: StubTransport!
 
     private let deviceID = "DEVICE0123456789"
@@ -47,7 +46,6 @@ final class InboxSendManifestTests: XCTestCase {
         store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
         keys = InMemoryStoredLinkKeyStore()
         sender = FakeInboxSenderTransport()
-        objects = FakeStoredObjectService()
         transport = StubTransport()
         transport.finalizeResult = UploadResult(id: "STORED0123456789", expiresAt: 4242)
         devicePublicKey = InboxKeyMaterial.encode(try InboxKeyMaterial.generateKeyPair().publicKey)
@@ -90,7 +88,7 @@ final class InboxSendManifestTests: XCTestCase {
 
     private func coordinator() -> InboxSendCoordinator {
         InboxSendCoordinator(store: store, keys: keys, uploader: CloudUploader(transport: transport),
-                             sender: sender, objects: objects)
+                             sender: sender)
     }
 
     private func target(keyID: String? = nil, generation: Int64 = 4) -> PendingUploadTarget {

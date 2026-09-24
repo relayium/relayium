@@ -1511,3 +1511,8 @@ content and nine generated release pages). These suites import only repository
 modules and Node built-ins. Their original Web copies are retired with all
 assertions retained. Changes to any input run the owning checks through the
 unfiltered job, including documentation-only changes outside Web selectors.
+
+`public-sas-copy-test.mjs` also runs in this job: README, maintained English and
+Chinese locale tables, and CLI crawler content share the existing protocol-specific
+SAS assertions. Node 24 strips the locale tables' TypeScript types without Web
+build dependencies. The former Vitest copy is removed.

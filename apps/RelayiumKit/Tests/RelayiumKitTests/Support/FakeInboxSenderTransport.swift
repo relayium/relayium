@@ -151,25 +151,3 @@ final class FakeInboxSenderTransport: InboxSenderTransport, @unchecked Sendable 
         }
     }
 }
-
-/// Records what was deleted, and can refuse. Stands in for the account's own
-/// stored-object routes. The send coordinator must never call the delete — the
-/// server refuses it for a `device_task` object — so tests assert `deleted`
-/// stays empty on every path.
-final class FakeStoredObjectService: AccountManagementService, @unchecked Sendable {
-    private let lock = NSLock()
-    private var _deleted: [String] = []
-    var deleted: [String] { lock.lock(); defer { lock.unlock() }; return _deleted }
-    var deleteError: Error?
-    var deletion: StoredFileDeletion = .deleted
-
-    func listDevices(token: String) async throws -> [AccountDevice] { [] }
-    func deleteDevice(id: String, token: String) async throws {}
-    func listStoredFiles(token: String) async throws -> [StoredFileSummary] { [] }
-
-    func deleteStoredFile(id: String, token: String) async throws -> StoredFileDeletion {
-        lock.lock(); _deleted.append(id); lock.unlock()
-        if let deleteError { throw deleteError }
-        return deletion
-    }
-}

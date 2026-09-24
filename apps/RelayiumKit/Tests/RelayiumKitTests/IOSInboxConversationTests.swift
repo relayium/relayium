@@ -314,8 +314,7 @@ final class IOSInboxConversationTests: XCTestCase {
             // and its focus are both decided before a credential is ever spent,
             // which is the point — a switch has to clear them without any
             // network having been reached.
-            makeSender: { _ in FakeInboxSenderTransport() },
-            objects: AccountClient(baseURL: URL(string: "https://example.invalid")!))
+            makeSender: { _ in FakeInboxSenderTransport() })
     }
 
     /// The binding `DeviceInboxView` installs, as a pure function so the

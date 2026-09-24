@@ -97,9 +97,6 @@ public final class InboxSendModel: ObservableObject {
     /// of use — this model stores no credential and has no property that could
     /// hold one.
     private let makeSender: @Sendable (String) -> InboxSenderTransport
-    /// The account's own stored-object routes, used by the coordinator for
-    /// exactly one thing: returning the quota of a provably unbound object.
-    private let objects: AccountManagementService
     private let sleeper: InboxSleeping
     private let pollSeconds: TimeInterval
 
@@ -224,13 +221,11 @@ public final class InboxSendModel: ObservableObject {
     public init(pending: PendingUploadSupport,
                 uploader: CloudUploader,
                 makeSender: @escaping @Sendable (String) -> InboxSenderTransport,
-                objects: AccountManagementService,
                 sleeper: InboxSleeping = InboxTaskSleeper(),
                 pollSeconds: TimeInterval = 5) {
         self.pending = pending
         self.uploader = uploader
         self.makeSender = makeSender
-        self.objects = objects
         self.sleeper = sleeper
         self.pollSeconds = pollSeconds
     }
@@ -1186,7 +1181,7 @@ public final class InboxSendModel: ObservableObject {
         work[job]?.cancel()
         work[job] = Task { [weak self] in
             do {
-                try await coordinator.discard(plan, token: token)
+                try await coordinator.discard(plan)
                 guard let self, g == self.accountGeneration else { return }
                 self.work[job] = nil
                 self.forget(job)
@@ -1215,6 +1210,6 @@ public final class InboxSendModel: ObservableObject {
 
     private func coordinator(token: String) -> InboxSendCoordinator {
         InboxSendCoordinator(store: pending.store, keys: pending.keys, uploader: uploader,
-                             sender: makeSender(token), objects: objects)
+                             sender: makeSender(token))
     }
 }

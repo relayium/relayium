@@ -29,7 +29,6 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
     private var store: PendingUploadStore!
     private var keys: InMemoryStoredLinkKeyStore!
     private var sender: FakeInboxSenderTransport!
-    private var objects: FakeStoredObjectService!
     private var transport: StubTransport!
 
     private let deviceID = "DEVICE0123456789"
@@ -54,7 +53,6 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
         store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
         keys = InMemoryStoredLinkKeyStore()
         sender = FakeInboxSenderTransport()
-        objects = FakeStoredObjectService()
         transport = StubTransport()
         transport.finalizeResult = UploadResult(id: "STORED0123456789", expiresAt: 4242)
         devicePublicKey = InboxKeyMaterial.encode(try InboxKeyMaterial.generateKeyPair().publicKey)
@@ -90,7 +88,7 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
 
     private func coordinator() -> InboxSendCoordinator {
         InboxSendCoordinator(store: store, keys: keys, uploader: CloudUploader(transport: transport),
-                             sender: sender, objects: objects)
+                             sender: sender)
     }
 
     private func target() -> PendingUploadTarget {
@@ -219,7 +217,7 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
 
         await XCTAssertThrowsErrorAsync(try await InboxSendCoordinator(
             store: store, keys: keys, uploader: CloudUploader(transport: server),
-            sender: sender, objects: objects).deliver(legacy, token: "bearer"), {
+            sender: sender).deliver(legacy, token: "bearer"), {
                 XCTAssertEqual($0 as? InboxSendFailure, .unknownOutcome)
             })
 
@@ -265,7 +263,6 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
         XCTAssertEqual(after.target, plan.target)
         XCTAssertEqual(after.ttl, UploadPurpose.deviceTaskTTLSeconds)
         XCTAssertEqual(after.effectiveDeliveryKind, .file)
-        XCTAssertEqual(objects.deleted, [], "an ambiguous outcome must release nothing")
     }
 
     /// The content key is rotated by the restart, and it has to be: frame 0 is
@@ -403,11 +400,6 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
             the task must bind the object the v2 restart produced, never the v1 \
             one whose key no longer exists
             """)
-        XCTAssertEqual(objects.deleted, [], """
-            the abandoned v1 object is left to central's collector, which \
-            reclaims an unbound device_task object; deleting it here would need \
-            an id this plan no longer carries
-            """)
     }
 
     /// A legacy plan that already names a task is in its tidy-up, not its
@@ -426,10 +418,6 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
         XCTAssertFalse(result.created, "an existing task must be read, never re-created")
         XCTAssertEqual(sender.creates, [], "a second create would be a second delivery")
         XCTAssertEqual(transport.initCount, 0, "bytes the account already paid for were re-sent")
-        XCTAssertEqual(objects.deleted, [], """
-            the object belongs to the task now; deleting it would strand a \
-            delivery central has already promised
-            """)
     }
 
     /// The store's own refusal, stated directly: a plan naming a task cannot be

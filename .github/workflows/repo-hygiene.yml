@@ -264,6 +264,8 @@ jobs:
       - name: public repository status matches the release records
         run: node scripts/test/repository-status-test.mjs
 
+      - name: public SAS claims stay protocol-specific
+        run: node scripts/test/public-sas-copy-test.mjs
       - name: text retention claims stay scoped to the server
         run: node scripts/test/send-text-retention-test.mjs
       - name: crawler product facts stay accurate

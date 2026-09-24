@@ -22,6 +22,18 @@ import XCTest
 ///     would be a promise to a stranger that their file will land here.
 final class InboxSurfaceGuardTests: XCTestCase {
 
+    // With the unused service removed, a disconnected deletion spy proves
+    // nothing. Pin the architectural boundary instead; the coordinator/model
+    // behavior tests still exercise task cancellation and local retention.
+    func testDeviceSendCannotUseTheAccountStoredFileDeleteService() throws {
+        for file in ["InboxSendCoordinator.swift", "InboxSendModel.swift"] {
+            let source = try code(packageRoot.appendingPathComponent("DeviceInbox/" + file))
+            for forbidden in ["AccountManagementService", "AccountClient(", "deleteStoredFile("] {
+                XCTAssertFalse(source.contains(forbidden), "\(file) reintroduced \(forbidden)")
+            }
+        }
+    }
+
     /// `apps/`, discovered rather than counted, and checked for existing.
     private var appsRoot: URL {
         get throws { try RepoRoot.apps() }

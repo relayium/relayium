@@ -40,7 +40,6 @@ final class InboxNavigationAuthorityTests: XCTestCase {
     private var keys: InMemoryStoredLinkKeyStore!
     private var drafts: SharedDraftStore!
     private var store: PendingUploadStore!
-    private var objects: FakeStoredObjectService!
     private var transport: StubTransport!
 
     private let deviceID = "DEVICE0123456789"
@@ -62,7 +61,6 @@ final class InboxNavigationAuthorityTests: XCTestCase {
         keys = InMemoryStoredLinkKeyStore()
         drafts = SharedDraftStore(root: root.appendingPathComponent("SharedDrafts"))
         sender = FakeInboxSenderTransport()
-        objects = FakeStoredObjectService()
         transport = StubTransport()
         devicePublicKey = InboxKeyMaterial.encode(try InboxKeyMaterial.generateKeyPair().publicKey)
         sender.deviceRows = [row(), row(id: otherDeviceID, name: "Kitchen")]
@@ -131,7 +129,7 @@ final class InboxNavigationAuthorityTests: XCTestCase {
             pending: PendingUploadSupport(store: store, keys: keys, drafts: drafts),
             uploader: CloudUploader(transport: transport),
             makeSender: { [sender] _ in sender! },
-            objects: objects, sleeper: NoSleep(), pollSeconds: 0)
+            sleeper: NoSleep(), pollSeconds: 0)
         model.observe(session)
         model.refreshTargets(token: "bearer-\(id)")
         await waitUntil("the device list") { model.directory == .loaded }

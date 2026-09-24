@@ -29,7 +29,6 @@ final class InboxSendModelTests: XCTestCase {
     private var keys: InMemoryStoredLinkKeyStore!
     private var drafts: SharedDraftStore!
     private var sender: FakeInboxSenderTransport!
-    private var objects: FakeStoredObjectService!
     private var transport: StubTransport!
 
     private let deviceID = "DEVICE0123456789"
@@ -48,7 +47,6 @@ final class InboxSendModelTests: XCTestCase {
         keys = InMemoryStoredLinkKeyStore()
         drafts = SharedDraftStore(root: root.appendingPathComponent("SharedDrafts"))
         sender = FakeInboxSenderTransport()
-        objects = FakeStoredObjectService()
         transport = StubTransport()
         transport.finalizeResult = UploadResult(id: "STORED0123456789", expiresAt: 4242)
         devicePublicKey = InboxKeyMaterial.encode(try InboxKeyMaterial.generateKeyPair().publicKey)
@@ -111,7 +109,6 @@ final class InboxSendModelTests: XCTestCase {
             pending: PendingUploadSupport(store: store, keys: pendingKeys ?? keys, drafts: drafts),
             uploader: CloudUploader(transport: transport),
             makeSender: { [sender] _ in sender! },
-            objects: objects,
             sleeper: NoSleep(),
             pollSeconds: 0)
     }
@@ -328,8 +325,6 @@ final class InboxSendModelTests: XCTestCase {
         XCTAssertNotNil(minted.targetWrappedKey,
                         "the randomized sealed box must be durable before the create")
         XCTAssertNil(minted.deviceTaskId, "no task was created")
-        XCTAssertEqual(objects.deleted, [],
-                       "a rejected credential is self-healing and releases nothing")
         let key = try await keys.key(for: minted.jobId)
         XCTAssertNotNil(key)
         XCTAssertEqual(InboxSendActions.offered(for: try XCTUnwrap(model.items.first)),
@@ -597,7 +592,6 @@ final class InboxSendModelTests: XCTestCase {
         let idempotency = try XCTUnwrap(held.createIdempotencyKey)
         XCTAssertNotNil(held.targetWrappedKey,
                         "the randomized sealed box must be durable before any create")
-        XCTAssertEqual(objects.deleted, [], "an ambiguous outcome releases nothing")
         let item = try XCTUnwrap(first.items.first)
         XCTAssertEqual(InboxSendActions.offered(for: item), [.retry, .discard])
         XCTAssertTrue(InboxSendActions.warnsDeliveryMayStillArrive(.discard, for: item),
@@ -747,7 +741,6 @@ final class InboxSendModelTests: XCTestCase {
         XCTAssertNotNil(held.createIdempotencyKey)
         let retained = try await keys.key(for: job)
         XCTAssertNotNil(retained)
-        XCTAssertEqual(objects.deleted, [])
         XCTAssertEqual(InboxSendActions.offered(for: try XCTUnwrap(model.items.first)),
                        [.retry, .discard])
     }
