@@ -92,6 +92,12 @@ const directGracePeriod = 400 * time.Millisecond
 // its own — callers must arrange for ln to be closed (e.g. defer ln.Close())
 // so the internal accept/reaper goroutines can exit.
 func RaceDirect(ctx context.Context, ln net.Listener, peerCandidates []string, dialTimeout time.Duration, preferAccept bool) (net.Conn, error) {
+	var d net.Dialer
+	return raceDirect(ctx, ln, peerCandidates, dialTimeout, preferAccept, d.DialContext)
+}
+
+func raceDirect(ctx context.Context, ln net.Listener, peerCandidates []string, dialTimeout time.Duration, preferAccept bool,
+	dial func(context.Context, string, string) (net.Conn, error)) (net.Conn, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -103,7 +109,7 @@ func RaceDirect(ctx context.Context, ln net.Listener, peerCandidates []string, d
 	// Buffer == producer count, so every send below is non-blocking and can be
 	// unconditional: no send ever needs to race ctx.Done() (which would let a
 	// live winner conn get silently dropped instead of reaped).
-	total := 1 + len(peerCandidates)
+	total := 2
 	results := make(chan result, total)
 
 	go func() {
@@ -111,16 +117,35 @@ func RaceDirect(ctx context.Context, ln net.Listener, peerCandidates []string, d
 		results <- result{c: c, err: err, fromAccept: true}
 	}()
 
-	var d net.Dialer
-	for _, cand := range peerCandidates {
-		cand := cand
-		go func() {
-			dctx, dcancel := context.WithTimeout(ctx, dialTimeout)
-			defer dcancel()
-			c, err := d.DialContext(dctx, "tcp", cand)
-			results <- result{c: c, err: err, fromAccept: false}
-		}()
-	}
+	// Only one outbound TCP connection may succeed. Parallel dials to
+	// different interfaces of the same listener can complete in a different
+	// order from Accept, leaving each peer with a different connection.
+	go func() {
+		var lastErr error
+		for i, cand := range peerCandidates {
+			timeout := dialTimeout
+			if deadline, ok := ctx.Deadline(); ok {
+				// A stale first interface must not consume the whole direct
+				// window before later, reachable interfaces are attempted.
+				share := time.Until(deadline) / time.Duration(len(peerCandidates)-i)
+				if share < timeout {
+					timeout = share
+				}
+			}
+			dctx, dcancel := context.WithTimeout(ctx, timeout)
+			c, err := dial(dctx, "tcp", cand)
+			dcancel()
+			if err == nil {
+				results <- result{c: c}
+				return
+			}
+			lastErr = err
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		results <- result{err: lastErr}
+	}()
 
 	// reap drains the n results not yet consumed, closing any straggler conn
 	// (except the winner). It may block on the acceptor until ln is closed —

@@ -124,6 +124,10 @@ func (s *Session) uploadSpooled(ctx context.Context, j *Journal) error {
 			if ctxErr(err) != nil {
 				return s.spoolKept(j, ClassInterrupted, CodeCancelled, "interrupted while starting the upload.", err)
 			}
+			if statusOf(err) == http.StatusTooManyRequests {
+				return s.spoolKept(j, ClassFailed, CodeQuotaExceeded,
+					"the server refused to start the upload because a usage or concurrency limit was reached (HTTP 429).", err)
+			}
 			if isTransport(err) || statusOf(err) >= 500 {
 				// The server may have opened a session whose id never arrived.
 				// It holds no data (nothing is appended before the id is
@@ -175,6 +179,13 @@ func (s *Session) uploadSpooled(ctx context.Context, j *Journal) error {
 // spoolKept ends a resumable send whose record and local copy stay, so
 // `inbox retry` resumes it.
 func (s *Session) spoolKept(j *Journal, class Class, code, what string, cause error) *Error {
+	if j.Phase == PhasePlanned {
+		e := newErr(class, code, what+fmt.Sprintf(" No file data was uploaded for this send. The local encrypted copy was kept: "+
+			"once the refusal or interruption is resolved, `relayium inbox retry %s` starts the upload from the copy without encrypting again. "+
+			"Nothing will be uploaded again automatically; `relayium inbox retry --discard %s` removes the copy and record.", j.ID, j.ID), cause)
+		e.LocalSendID = j.ID
+		return e
+	}
 	e := newErr(class, code, what+fmt.Sprintf(" Nothing will be uploaded again automatically. The local encrypted copy "+
 		"was kept: `relayium inbox retry %s` continues the upload from it without encrypting again — from where the "+
 		"server's upload stands, while the server still holds it (an upload that receives no data for about an hour "+
@@ -206,14 +217,14 @@ func (s *Session) collectSpools() {
 }
 
 // expireSpooled applies spoolMaxAge to one spooled record under its lock:
-// a record that still needed its copy (planned, uploading) is removed with
-// it; a record past its upload keeps going without the copy it no longer
-// needs. It reports whether the record itself was removed.
+// a planned record is removed with its copy; an uploading record is kept
+// until retry checks the server or the owner discards it. A record past its
+// upload keeps going without the copy it no longer needs. It reports whether the record itself was removed.
 func (s *Session) expireSpooled(j *Journal) bool {
-	if !j.Spooled() || s.now().Sub(time.Unix(j.CreatedAt, 0)) <= spoolMaxAge {
+	if !j.Spooled() || j.Phase == PhaseUploading || s.now().Sub(time.Unix(j.CreatedAt, 0)) <= spoolMaxAge {
 		return false
 	}
-	if has, err := s.store.hasSpool(j.ID); err != nil || (!has && j.Phase != PhasePlanned && j.Phase != PhaseUploading) {
+	if has, err := s.store.hasSpool(j.ID); err != nil || (!has && j.Phase != PhasePlanned) {
 		return false
 	}
 	lk, err := s.store.lock(j.ID)
@@ -227,15 +238,16 @@ func (s *Session) expireSpooled(j *Journal) bool {
 	}
 	when := time.Unix(cur.CreatedAt, 0).UTC().Format(time.RFC3339)
 	switch cur.Phase {
-	case PhasePlanned, PhaseUploading:
+	case PhaseUploading:
+		// Age cannot prove that a continuously active server session is gone.
+		// Retry checks its status; explicit discard can remove the local copy.
+		return false
+	case PhasePlanned:
 		if s.store.remove(cur.ID) != nil {
 			return false
 		}
 		_ = s.store.removeSpool(cur.ID)
 		msg := "removed the local encrypted copy and record of a resumable send from %s (%s); it can no longer be resumed"
-		if cur.Phase == PhaseUploading {
-			msg += ". " + msgOrphanPartial
-		}
 		s.notef(msg, when, cur.ID)
 		return true
 	default:

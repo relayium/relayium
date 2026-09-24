@@ -87,10 +87,11 @@ type LocalSend struct {
 const staleJournalAge = 7 * 24 * time.Hour
 
 // LocalSends lists unfinished local sends and removes records too old to be of
-// use (reported on Notice): any record after staleJournalAge, and a resumable
+// use (reported on Notice): non-uploading records after staleJournalAge, and a resumable
 // send's local encrypted copy after spoolMaxAge (spool.go), together with its
-// record while the record still needed it. Copies no record owns are removed
-// too. It never creates the journal directory.
+// record if still planned. Uploading resumable records and their copies stay
+// until retry resolves the server session or the user discards them. Copies
+// no record owns are removed too. It never creates the journal directory.
 func (s *Session) LocalSends() []LocalSend {
 	ids, err := s.store.ids()
 	if err != nil {
@@ -107,15 +108,33 @@ func (s *Session) LocalSends() []LocalSend {
 		if s.expireSpooled(j) {
 			continue
 		}
-		if s.now().Sub(time.Unix(j.CreatedAt, 0)) > staleJournalAge {
+		if !(j.Spooled() && j.Phase == PhaseUploading) && s.now().Sub(time.Unix(j.CreatedAt, 0)) > staleJournalAge {
 			if lk, lerr := s.store.lock(id); lerr == nil {
-				if s.store.remove(id) == nil && j.Spooled() {
-					_ = s.store.removeSpool(id)
+				// A retry may have advanced a planned record before this lock.
+				// Re-read before deleting so an uploading copy is never orphaned.
+				cur, err := s.store.load(id)
+				if err != nil {
+					lk.release()
+					if !errors.Is(err, errNoJournal) {
+						s.notef("warning: local send record %s is unreadable and was left untouched", id)
+					}
+					continue
 				}
-				lk.release()
-				s.notef("removed the local record of an unfinished send from %s (%s); it can no longer be completed",
-					time.Unix(j.CreatedAt, 0).UTC().Format(time.RFC3339), id)
-				continue
+				j = cur
+				if !(j.Spooled() && j.Phase == PhaseUploading) {
+					err = s.store.remove(id)
+					if err == nil && j.Spooled() {
+						_ = s.store.removeSpool(id)
+					}
+					lk.release()
+					if err == nil {
+						s.notef("removed the local record of an unfinished send from %s (%s); it can no longer be completed",
+							time.Unix(j.CreatedAt, 0).UTC().Format(time.RFC3339), id)
+						continue
+					}
+				} else {
+					lk.release()
+				}
 			}
 		}
 		out = append(out, LocalSend{LocalSendID: id, Phase: j.Phase, TargetDeviceID: j.TargetDeviceID, CreatedAt: j.CreatedAt,

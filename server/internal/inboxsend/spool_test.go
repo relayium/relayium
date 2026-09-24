@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
@@ -664,8 +665,8 @@ func TestOrphanCopiesAreCollectedOnlyUnderTheirLock(t *testing.T) {
 	}
 }
 
-// R11: expiry. A record that still needed its copy goes with it; a record
-// already past its upload loses only the copy and can still be finished.
+// R11 / G34-N8: expiry preserves an uploading record and its copy, even past
+// seven days. A fully uploaded record loses only the copy and still finishes.
 func TestSpooledRecordsExpire(t *testing.T) {
 	fastBackoff(t)
 	w := newWorld(t, 64<<20)
@@ -699,24 +700,37 @@ func TestSpooledRecordsExpire(t *testing.T) {
 	s := w.session()
 	s.now = func() time.Time { return time.Now().Add(spoolMaxAge + time.Minute) }
 	locals := s.LocalSends()
-	if len(locals) != 1 || locals[0].LocalSendID != finalized || !locals[0].Resumable {
+	if len(locals) != 2 {
 		t.Fatalf("locals = %+v", locals)
 	}
-	for _, id := range []string{uploading, finalized} {
+	for _, id := range []string{finalized} {
 		if _, err := os.Lstat(st.spoolPath(id)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("copy of %s not expired", id)
 		}
 	}
-	if !strings.Contains(w.notice.String(), "can no longer be resumed") {
-		t.Fatalf("notice: %s", w.notice.String())
+	if _, err := os.Stat(st.spoolPath(uploading)); err != nil {
+		t.Fatalf("live upload copy lost: %v", err)
 	}
-	// The finalized record needs no copy to finish.
+	// The fully uploaded record can finish without its expired copy.
 	if _, err := w.session().Retry(context.Background(), finalized); err != nil {
-		t.Fatalf("retry of the finalized record: %v", err)
+		t.Fatal(err)
 	}
-	if len(w.tasks()) != 1 {
-		t.Fatal("want exactly one task")
+	s.now = func() time.Time { return time.Now().Add(staleJournalAge + time.Hour) }
+	if len(s.LocalSends()) != 1 {
+		t.Fatal("live upload expired at seven days")
 	}
+	before := hitsOf(w)
+	if _, err := w.session().Retry(context.Background(), uploading); err != nil {
+		t.Fatal(err)
+	}
+	after := hitsOf(w)
+	if after.init != before.init {
+		t.Fatal("resume created another upload")
+	}
+	if len(w.tasks()) != 2 {
+		t.Fatal("want exactly two tasks")
+	}
+
 }
 
 // R12: the record format. A spooled record must carry a consistent copy
@@ -1164,5 +1178,100 @@ func TestRecordLookupIsAnchoredToTheVerifiedConfigHandle(t *testing.T) {
 	}
 	if ents, _ := os.ReadDir(filepath.Join(substitute, journalDirName)); len(ents) != 0 {
 		t.Fatalf("the substitute was touched: %v", ents)
+	}
+}
+
+// G34-N7: a transient session cap must not destroy the only sealed copy.
+func TestResumableInitRateLimitKeepsCopy(t *testing.T) {
+	fastBackoff(t)
+	w := newWorld(t, 4<<20)
+	root := writeTree(t, map[string][]byte{"a.txt": []byte("original")})
+	rule := atInit
+	rule.Action, rule.Code, rule.Times = sendtest.Status, http.StatusTooManyRequests, 2
+	w.env.Faults.Add(&rule)
+	_, e := sendResumable(t, w, context.Background(), filepath.Join(root, "a.txt"))
+	if e == nil || e.LocalSendID == "" {
+		t.Fatalf("missing retained send: %v", e)
+	}
+	j := theRecord(t, w)
+	if j.Phase != PhasePlanned || w.env.QuotaBytes(w.uid) != 0 {
+		t.Fatal("init was counted or advanced")
+	}
+	copyBefore, err := os.ReadFile(newJournalStore(w.cfgDir).spoolPath(j.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rewriteInPlace(t, filepath.Join(root, "a.txt"))
+	_, err = w.session().Retry(context.Background(), j.ID)
+	retryErr := AsError(err)
+	if retryErr == nil || retryErr.Code != CodeQuotaExceeded || retryErr.LocalSendID != j.ID {
+		t.Fatalf("retry must preserve the planned send on 429: %v", err)
+	}
+	retained, err := os.ReadFile(newJournalStore(w.cfgDir).spoolPath(j.ID))
+	if err != nil || !bytes.Equal(copyBefore, retained) {
+		t.Fatal("retry lost or changed ciphertext")
+	}
+	if w.env.QuotaBytes(w.uid) != 0 {
+		t.Fatal("refused init was counted")
+	}
+	res, err := w.session().Retry(context.Background(), j.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := w.receive(res.TaskID)
+	if string(got.files["a.txt"]) != "original" || !bytes.Equal(copyBefore[j.HeaderBytes:], got.blob) {
+		t.Fatal("retry did not use original ciphertext")
+	}
+	if w.env.QuotaBytes(w.uid) != 64<<10 || len(w.tasks()) != 1 {
+		t.Fatal("expected exactly one debit and task")
+	}
+	assertNoSendState(t, w)
+}
+
+// Planned copies still expire with notice; an old planned snapshot must not
+// delete a record that advanced to uploading before cleanup acquired its lock.
+func TestPlannedCopyExpiryAndAdvancedRecord(t *testing.T) {
+	for _, advanced := range []bool{false, true} {
+		t.Run(fmt.Sprint(advanced), func(t *testing.T) {
+			w := newWorld(t, 4<<20)
+			root := writeTree(t, map[string][]byte{"a.txt": []byte("planned")})
+			rule := atInit
+			rule.Action, rule.Code = sendtest.Status, http.StatusTooManyRequests
+			w.env.Faults.Add(&rule)
+			if _, e := sendResumable(t, w, context.Background(), filepath.Join(root, "a.txt")); e == nil {
+				t.Fatal("expected429")
+			}
+			old := theRecord(t, w)
+			st := newJournalStore(w.cfgDir)
+			if advanced {
+				cur := *old
+				cur.Phase, cur.UploadID, cur.ChunkSize = PhaseUploading, "test-upload", 8<<20
+				if err := st.save(&cur); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s := w.session()
+			s.now = func() time.Time { return time.Now().Add(spoolMaxAge + time.Minute) }
+			if removed := s.expireSpooled(old); removed == advanced {
+				t.Fatalf("removed=%v advanced=%v", removed, advanced)
+			}
+			if advanced {
+				cur, err := st.load(old.ID)
+				if err != nil || cur.Phase != PhaseUploading {
+					t.Fatalf("advanced record lost: %+v %v", cur, err)
+				}
+				if _, err := os.Stat(st.spoolPath(old.ID)); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				assertNoSendState(t, w)
+				if !strings.Contains(w.notice.String(), "can no longer be resumed") {
+					t.Fatal("missing expiry notice")
+				}
+			}
+			if w.env.QuotaBytes(w.uid) != 0 || hitsOf(w).patch != 0 {
+				t.Fatal("local expiry performed an upload")
+			}
+		})
 	}
 }

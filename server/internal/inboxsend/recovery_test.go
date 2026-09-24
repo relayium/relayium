@@ -9,6 +9,7 @@ package inboxsend
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -328,6 +329,51 @@ func TestRunningThenDefinitiveLookingAnswerStaysUnknown(t *testing.T) {
 			if w.env.Faults.Hits(sendtest.KeyInit) != 1 || len(w.tasks()) != 0 || w.env.QuotaBytes(w.uid) != quotaBefore {
 				t.Fatalf("inits %d tasks %d quota %d->%d; nothing may be uploaded or counted again",
 					w.env.Faults.Hits(sendtest.KeyInit), len(w.tasks()), quotaBefore, w.env.QuotaBytes(w.uid))
+			}
+		})
+	}
+}
+
+// G34-N6: the empty-blob probe fails after the finalize claim. Stage 0
+// records a terminal failure, including across an interrupted CLI restart.
+func TestEmptyMaterializeFailureResolvesAfterClaim(t *testing.T) {
+	for _, restart := range []bool{false, true} {
+		t.Run(fmt.Sprint(restart), func(t *testing.T) {
+			fastBackoff(t)
+			w, node := newWorldOnNode(t, 4<<20)
+			w.env.Faults.SetObserve(func(kind string) {
+				if kind == sendtest.KeyFinalize {
+					node.SetDown(true)
+				}
+			})
+			ctx := context.Background()
+			if restart {
+				var cancel context.CancelFunc
+				ctx, cancel = cancelAt(w, atFinalize, 0)
+				defer cancel()
+			}
+			root := writeTree(t, map[string][]byte{"empty": {}})
+			_, err := w.session().Send(ctx, SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "empty")}})
+			if restart {
+				j := theRecord(t, w)
+				if j.Phase != PhaseFinalizing {
+					t.Fatal(j.Phase)
+				}
+				node.SetDown(false)
+				_, err = w.session().Retry(context.Background(), j.ID)
+			}
+			e := AsError(err)
+			if e == nil || e.Class != ClassFailed || e.Code != CodeFinalizeRefused {
+				t.Fatalf("want definitive refusal: %v", err)
+			}
+			if w.env.QuotaBytes(w.uid) != 0 || len(w.tasks()) != 0 {
+				t.Fatal("failed materialization counted or queued")
+			}
+			if w.env.Faults.Hits(sendtest.KeyInit) != 1 {
+				t.Fatal("another upload initialized")
+			}
+			if ids, _ := newJournalStore(w.cfgDir).ids(); len(ids) != 0 {
+				t.Fatal("unresolvable record retained")
 			}
 		})
 	}

@@ -130,9 +130,11 @@ What happens when things go wrong:
     receives no data for about an hour is removed — and then the send fails
     rather than being uploaded again. The copy is deleted once the send is
     finished or has failed, with "relayium inbox retry --discard <id>", or
-    once it is older than 24 hours (the next time "relayium inbox sent" or
-    "relayium inbox send --resumable" runs). The encryption key is never written to disk, so a copy
-    alone cannot be read by anyone, including you.
+    once it is older than 24 hours and the upload has not started or has fully
+    uploaded (the next time "relayium inbox sent" or "relayium inbox send
+    --resumable" runs). A stopped partial upload keeps its copy until retry
+    checks the server session or you explicitly discard it. The encryption key
+    is never written to disk, so a copy alone cannot be read by anyone, including you.
   - If the device's receiving key changes while the command runs, the delivery
     is sealed to the new key. After a restart it cannot be, and the send fails
     — or, if an earlier attempt may already have queued it, the outcome is

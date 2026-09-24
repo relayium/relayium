@@ -56,9 +56,8 @@ const (
 // maxSpoolBytes caps one spool. A variable so tests can lower it.
 var maxSpoolBytes int64 = 16 << 30
 
-// spoolMaxAge is when an unfinished spooled record's copy expires. An open
-// upload session is reclaimed by central after about an hour without data, so
-// a copy this old can rarely still be resumed, and it holds disk space.
+// spoolMaxAge expires planned copies and copies no longer needed after upload.
+// Uploading records are exempt: creation age cannot prove server inactivity.
 const spoolMaxAge = 24 * time.Hour
 
 var (

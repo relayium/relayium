@@ -6,6 +6,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/secure"
 )
 
 // TestRaceDirectGlareConverges exercises the both-sides-reachable "glare" case:
@@ -156,5 +158,125 @@ func TestLocalCandidatesIncludesAdvertiseAndExcludesLoopback(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("advertise not included: %v", cands)
+	}
+}
+
+func TestRaceDirectMultipleCandidatesConverge(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		lnA, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lnB, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+		type res struct {
+			c   net.Conn
+			err error
+		}
+		ra := make(chan res, 1)
+		rb := make(chan res, 1)
+		// A is the lower-id TLS server → preferAccept true; B is the higher-id
+		// client → preferAccept false. Both converge on the B-dialed connection.
+		go func() {
+			c, err := RaceDirect(ctx, lnA, []string{lnB.Addr().String(), lnB.Addr().String()}, time.Second, true)
+			ra <- res{c, err}
+		}()
+		go func() {
+			c, err := RaceDirect(ctx, lnB, []string{lnA.Addr().String(), lnA.Addr().String(), lnA.Addr().String(), lnA.Addr().String()}, time.Second, false)
+			rb <- res{c, err}
+		}()
+		a := <-ra
+		b := <-rb
+		if a.err != nil || b.err != nil {
+			t.Fatalf("iter %d: A err=%v B err=%v", i, a.err, b.err)
+		}
+
+		// a and b must be the two ends of ONE TCP connection: round-trip a byte
+		// in both directions. If glare left them on different connections, each
+		// far end is closed and these reads fail/hang.
+		a.c.SetDeadline(time.Now().Add(2 * time.Second))
+		b.c.SetDeadline(time.Now().Add(2 * time.Second))
+		idA, err := secure.NewIdentity()
+		if err != nil {
+			t.Fatal(err)
+		}
+		idB, err := secure.NewIdentity()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tlsA := make(chan res, 1)
+		go func() { c, err := secure.Server(a.c, idA, idB.Fingerprint); tlsA <- res{c, err} }()
+		bc, be := secure.Client(b.c, idB, idA.Fingerprint)
+		ac := <-tlsA
+		if be != nil || ac.err != nil {
+			t.Fatalf("pinned TLS: server %v client %v", ac.err, be)
+		}
+		a.c, b.c = ac.c, bc
+
+		buf := make([]byte, 3)
+		if _, err := a.c.Write([]byte("a2b")); err != nil {
+			t.Fatalf("iter %d: a write: %v", i, err)
+		}
+		if _, err := io.ReadFull(b.c, buf); err != nil || string(buf) != "a2b" {
+			t.Fatalf("iter %d: b read = %q err=%v (conns not paired)", i, buf, err)
+		}
+		if _, err := b.c.Write([]byte("b2a")); err != nil {
+			t.Fatalf("iter %d: b write: %v", i, err)
+		}
+		if _, err := io.ReadFull(a.c, buf); err != nil || string(buf) != "b2a" {
+			t.Fatalf("iter %d: a read = %q err=%v (conns not paired)", i, buf, err)
+		}
+
+		a.c.Close()
+		b.c.Close()
+		lnA.Close()
+		lnB.Close()
+		cancel()
+	}
+}
+
+// Silent early interfaces still leave time to reach a later candidate, without
+// concurrent successful dials to the same listener.
+func TestRaceDirectTriesLaterCandidateWithinWindow(t *testing.T) {
+	peer, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peer.Close()
+	own, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer own.Close()
+	go func() {
+		c, err := peer.Accept()
+		if err == nil {
+			defer c.Close()
+			_, _ = c.Write([]byte("ok"))
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
+	defer cancel()
+	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if addr == "silent" {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		var d net.Dialer
+		return d.DialContext(ctx, network, addr)
+	}
+	c, err := raceDirect(ctx, own, []string{"silent", "silent", peer.Addr().String()}, time.Second, false, dial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	_ = c.SetReadDeadline(time.Now().Add(time.Second))
+	var b [2]byte
+	if _, err := io.ReadFull(c, b[:]); err != nil || string(b[:]) != "ok" {
+		t.Fatalf("late candidate: %q %v", b, err)
 	}
 }
