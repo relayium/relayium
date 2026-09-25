@@ -2618,6 +2618,9 @@ type Store interface {
 	// CreateCLITokenAtEpoch inserts t only while the user's credential_epoch
 	// still equals epoch (false = a password reset/change got there first).
 	CreateCLITokenAtEpoch(ctx context.Context, t CLIToken, epoch int64) (bool, error)
+	// CreateSessionAtEpoch inserts sess only while the user's credential_epoch
+	// still equals epoch (false = a password reset/change got there first).
+	CreateSessionAtEpoch(ctx context.Context, sess Session, epoch int64) (bool, error)
 	// CredentialEpoch / CredentialEpochByEmail read users.credential_epoch
 	// (0 for an unknown address).
 	CredentialEpoch(ctx context.Context, userID string) (int64, error)

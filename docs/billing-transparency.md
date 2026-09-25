@@ -175,7 +175,7 @@ against three separate limits in that handler: the storage cap
 (`s.overStorage`, `account/files.go:359`), the monthly traffic cap
 (`s.overTraffic`, `account/files.go:363`) and the rolling daily quota, whose
 debit is written by the stored file's own insert transaction
-(`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5456`). Only the traffic one is shared with
+(`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5476`). Only the traffic one is shared with
 relay: `currentMonthTraffic` (`account/plan_enforce.go:54-69`) sums
 `usage_monthly` — hosted upload/download — plus billable `usage_events` —
 relay. Storage is occupancy, not throughput, and is not something a relay
@@ -315,7 +315,7 @@ The dimensions actually checked, each fail-closed at write time:
 - **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:344`,
   `remainingDailyQuota`). The debit is checked and written in the **same
   database transaction that inserts the stored file**
-  (`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5456`), so
+  (`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5476`), so
   concurrent uploads can't race past it, and a file that is not stored — a
   refusal by a later cap, a closed pairing room, a database error, a server
   crash mid-upload — never leaves a debit behind; there is no separate
@@ -518,7 +518,7 @@ including the admin-audit prune below — see the residual noted at
 |---|---|---|
 | Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `ListExpiredStoredFiles` + `DeleteStoredFile`, `account/gc.go:129-141` |
 | Rolling daily-quota ledger (`upload_events`) | ~25 hours (a small margin past the 24h window it backs) | `pruneMargin`, `account/gc.go:16`, applied at `account/gc.go:160` |
-| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:5946`), in the same prune as `upload_events` |
+| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:5966`), in the same prune as `upload_events` |
 | Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:20`, applied at `account/gc.go:135` |
 | Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:350`) | `auditRetentionDefault`, `account/gc.go:64`, applied at `account/gc.go:169` |
 | Monthly relay/traffic history (`usage_events`, `usage_periods`, `usage_monthly`) | **Not pruned by age at all** while the account is active — this is the billing history the quota math depends on | No prune call for these tables exists in `GC.sweep`; confirmed by reading the full sweep function |

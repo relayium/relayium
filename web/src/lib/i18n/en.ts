@@ -529,7 +529,7 @@ const en: Messages = {
   resetPassword: {
     title: "Reset your password",
     lead: "Choose a new password for your Relayium account.",
-    signsOutNote: "Resetting your password signs out every browser, app and CLI signed in to this account. Sign in on them again with the new password.",
+    signsOutNote: "Resetting your password signs out every browser, app and CLI signed in to this account. Sign in on them again with the new password; on a command line that receives files, run relayium inbox enable again after signing in.",
     noToken: "This link is invalid.",
     minHint: "At least 8 characters",
     submitBtn: "Reset password",

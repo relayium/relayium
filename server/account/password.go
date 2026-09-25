@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/mail"
 
+	"github.com/relayium/relayium/authx"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -260,12 +261,36 @@ func (s *Service) authenticate(ctx context.Context, email, password string) (str
 	return uid, nil
 }
 
+// Login checks email+password and issues a browser session. The account's
+// credential_epoch is read BEFORE the password is checked and the session is
+// inserted only while it is unchanged: a password reset/change that commits in
+// between revokes every session, and a session minted from the password it just
+// replaced must not appear after it (it could then approve a device-code login
+// and obtain a fresh bearer). Such a login fails as bad credentials.
 func (s *Service) Login(ctx context.Context, email, password string) (Session, error) {
+	epoch, err := s.store.CredentialEpochByEmail(ctx, email)
+	if err != nil {
+		return Session{}, err
+	}
 	uid, err := s.authenticate(ctx, email, password)
 	if err != nil {
 		return Session{}, err
 	}
-	return s.IssueSession(ctx, uid)
+	now := s.now()
+	sess := Session{
+		ID:        authx.RandToken(),
+		UserID:    uid,
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
+	}
+	ok, err := s.store.CreateSessionAtEpoch(ctx, sess, epoch)
+	if err != nil {
+		return Session{}, err
+	}
+	if !ok {
+		return Session{}, ErrBadCredentials
+	}
+	return sess, nil
 }
 
 // ChangePassword sets or changes the authenticated user's password, then revokes

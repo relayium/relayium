@@ -512,7 +512,7 @@ const zh: Messages = {
   resetPassword: {
     title: "重置密码",
     lead: "为你的 Relayium 账号设置一个新密码。",
-    signsOutNote: "重置密码后，此账户在所有浏览器、App 和命令行上的登录都会退出，请用新密码重新登录。",
+    signsOutNote: "重置密码后，此账户在所有浏览器、App 和命令行上的登录都会退出，请用新密码重新登录；用于接收文件的命令行，重新登录后需要再运行一次 relayium inbox enable。",
     noToken: "链接无效。",
     minHint: "至少 8 位字符",
     submitBtn: "重置密码",

@@ -3429,6 +3429,21 @@ func (s *SQLiteStore) CreateSession(ctx context.Context, sess Session) error {
 	return err
 }
 
+// CreateSessionAtEpoch inserts the session only while the user's
+// credential_epoch still equals epoch — one statement, so it is atomic with a
+// concurrent password reset/change (see CreateCLITokenAtEpoch).
+func (s *SQLiteStore) CreateSessionAtEpoch(ctx context.Context, sess Session, epoch int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked)
+		 SELECT ?, ?, ?, ?, 0 WHERE (SELECT credential_epoch FROM users WHERE id = ?) = ?`,
+		authx.HashToken(sess.ID), sess.UserID, sess.CreatedAt, sess.ExpiresAt, sess.UserID, epoch)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
 func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool, error) {
 	var sess Session
 	var revoked int

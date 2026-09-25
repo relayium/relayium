@@ -11,10 +11,15 @@ package account
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/relayium/relayium/authx"
+	"github.com/relayium/relayium/internal/inbox"
 )
 
 const failBearerRevoke = `CREATE TRIGGER inject_fault BEFORE DELETE ON cli_tokens BEGIN SELECT RAISE(ABORT, 'injected fault'); END`
@@ -236,4 +241,167 @@ func TestResetInterruptedAtBearerRevocationAppliesNothing(t *testing.T) {
 	if bearerLive(t, svc, app) || bearerLive(t, svc, cli) {
 		t.Fatal("the retried reset left a bearer live")
 	}
+}
+
+// resetRightAfterPasswordRead is the real store with one change: the first
+// time a login reads the stored password, a password reset commits right after
+// that read — the interleaving a concurrent reset produces. No production code
+// is hooked; the login entry points run unmodified on top of it.
+type resetRightAfterPasswordRead struct {
+	*SQLiteStore
+	once  sync.Once
+	reset func()
+}
+
+func (w *resetRightAfterPasswordRead) GetCredentials(ctx context.Context, email string) (string, string, bool, error) {
+	uid, hash, ok, err := w.SQLiteStore.GetCredentials(ctx, email)
+	w.once.Do(w.reset)
+	return uid, hash, ok, err
+}
+
+func liveSessions(t *testing.T, st *SQLiteStore, userID string) int {
+	t.Helper()
+	var n int
+	if err := st.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE user_id = ? AND revoked = 0`, userID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func raceResetIntoNextPasswordRead(t *testing.T, svc *Service, m *captureMailer) {
+	t.Helper()
+	raw := resetLink(t, svc, m)
+	st := sqliteOf(t, svc)
+	svc.store = &resetRightAfterPasswordRead{SQLiteStore: st, reset: func() {
+		if _, err := svc.ResetPassword(context.Background(), raw, "new-password-2"); err != nil {
+			t.Errorf("racing reset: %v", err)
+		}
+	}}
+}
+
+// Web password login: a session minted from the replaced password would be a
+// live session after the reset, and could approve a device-code login.
+func TestBrowserLoginRacingAResetGetsNoSession(t *testing.T) {
+	ctx := context.Background()
+	svc, m := newTestService(t)
+	u, _, _ := victim(t, svc, m)
+	st := sqliteOf(t, svc)
+	raceResetIntoNextPasswordRead(t, svc, m)
+
+	sess, err := svc.Login(ctx, "victim@example.com", "old-password-1")
+	if !errors.Is(err, ErrBadCredentials) || sess.ID != "" {
+		t.Fatalf("a login that read the old password before the reset got a session: %+v %v", sess, err)
+	}
+	// Only the session the reset itself issued to the person resetting is live.
+	if n := liveSessions(t, st, u.ID); n != 1 {
+		t.Fatalf("%d live sessions after the raced login, want exactly the resetter's", n)
+	}
+}
+
+// Native password login over HTTP, the real handler order.
+func TestNativeLoginRacingAResetGetsNoBearer(t *testing.T) {
+	svc, m := newTestService(t)
+	u, _, _ := victim(t, svc, m)
+	st := sqliteOf(t, svc)
+	before := deviceIDs(t, svc, u.ID)
+	raceResetIntoNextPasswordRead(t, svc, m)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/native/login",
+		strings.NewReader(`{"email":"victim@example.com","password":"old-password-1","deviceName":"attacker"}`))
+	svc.handleNativeLogin(rec, req)
+	if rec.Code != http.StatusUnauthorized || strings.Contains(rec.Body.String(), "rlm_cli_") {
+		t.Fatalf("native login that raced the reset: %d %s", rec.Code, rec.Body.String())
+	}
+	var bearers int
+	if err := st.db.QueryRow(`SELECT COUNT(*) FROM cli_tokens WHERE user_id = ?`, u.ID).Scan(&bearers); err != nil {
+		t.Fatal(err)
+	}
+	if bearers != 0 {
+		t.Fatalf("%d bearers exist after the raced native login, want 0", bearers)
+	}
+	if after := deviceIDs(t, svc, u.ID); len(after) != len(before) {
+		t.Fatal("the refused native login left a device row")
+	}
+}
+
+func TestChangeInterruptedAtBearerRevocationAppliesNothing(t *testing.T) {
+	ctx := context.Background()
+	svc, m := newTestService(t)
+	u, mine, stolen := victim(t, svc, m)
+	app, cli, _, _ := signedInEverywhere(t, svc, u, mine)
+
+	armFault(t, svc, failBearerRevoke)
+	err := svc.ChangePassword(ctx, u, mine.ID, "old-password-1", "new-password-2")
+	disarmFault(t, svc)
+	if err == nil || !strings.Contains(err.Error(), "injected fault") {
+		t.Fatalf("the injected fault must surface, got %v", err)
+	}
+	if !live(t, svc, stolen) || !bearerLive(t, svc, app) || !bearerLive(t, svc, cli) || canLogin(svc, "new-password-2") {
+		t.Fatal("a change that failed at bearer revocation applied part of itself")
+	}
+	if epoch, _ := svc.store.CredentialEpoch(ctx, u.ID); epoch != 0 {
+		t.Fatalf("a failed change bumped credential_epoch to %d", epoch)
+	}
+}
+
+// Revocation keeps what a device received: its row, its Inbox enrolment and
+// key, and the tasks addressed to it (inbox_tasks cascades on device DELETE,
+// which is exactly why revocation must not delete the row).
+func TestPasswordChangeKeepsInboxEnrolmentAndTasks(t *testing.T) {
+	h := newTaskHarness(t)
+	u := h.user(t, "inbox-keep@example.test")
+	target := h.enrolTarget(t, u, "target", inbox.AutoAcceptAuto, true)
+	fileID := h.storedObject(t, u, 64, time.Hour)
+	sender := h.bearer(t, u, "sender")
+	created := h.createTask(t, target.deviceID, createOpts{idem: "keep-1", fileID: fileID,
+		keyID: target.keyID, keyGen: target.keyGen, authMutate: withBearer(sender)})
+	if created.StatusCode != http.StatusCreated {
+		t.Fatalf("create: %d", created.StatusCode)
+	}
+	taskID := decodeJSONBody(t, created)["task"].(map[string]any)["ID"].(string)
+
+	if err := h.store.ChangePasswordAndRevokeSessions(t.Context(), u, "$2a$10$fixture", "", "no-current-session"); err != nil {
+		t.Fatal(err)
+	}
+	var bearers int
+	if err := h.store.db.QueryRow(`SELECT COUNT(*) FROM cli_tokens WHERE device_id = ?`, target.deviceID).Scan(&bearers); err != nil {
+		t.Fatal(err)
+	}
+	if bearers != 0 {
+		t.Fatal("the target device's bearer survived the change")
+	}
+	if ds := deviceIDsOf(t, h.store, u); !ds[target.deviceID] {
+		t.Fatal("the target device row was deleted")
+	}
+	inboxes, err := h.store.ListDeviceInboxes(t.Context(), u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := inboxes[target.deviceID]; !ok {
+		t.Fatal("the Inbox enrolment was deleted")
+	}
+	keys, err := h.store.ActiveDeviceKeys(t.Context(), u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := keys[target.deviceID]; !ok {
+		t.Fatal("the device's Inbox key was deleted")
+	}
+	if _, ok, err := h.store.GetInboxTask(t.Context(), taskID, u, h.nowUnix()); err != nil || !ok {
+		t.Fatalf("the task addressed to the device was deleted: ok=%v err=%v", ok, err)
+	}
+}
+
+func deviceIDsOf(t *testing.T, st *SQLiteStore, userID string) map[string]bool {
+	t.Helper()
+	ds, err := st.ListDevices(context.Background(), userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]bool{}
+	for _, d := range ds {
+		out[d.ID] = true
+	}
+	return out
 }
