@@ -325,9 +325,13 @@ func TestRenewRequestAndGrantRideTheSessionSocket(t *testing.T) {
 	got := make(chan req, 4)
 	handle := signal.ServeWSHooked(hub, func() string { return fmt.Sprintf("peer%d", atomic.AddInt32(&seq, 1)) }, signal.WSHooks{
 		Renew: func(room, id string, r signal.RenewRequest) {
-			got <- req{room, id, r}
 			data, _ := json.Marshal(map[string]any{"status": "unavailable", "round": r.Round, "rid": r.RID})
 			hub.Relay(room, signal.Envelope{Type: signal.TypeICEGrant, To: id, Data: data})
+			// Reported only after Relay returns: the grant frame is then already
+			// written to the requester's socket, so a signal the test sends next
+			// is necessarily queued behind it. Reporting before Relay let the
+			// peer's signal overtake the grant under the race detector.
+			got <- req{room, id, r}
 		},
 	})
 	mux := http.NewServeMux()
@@ -358,7 +362,14 @@ func TestRenewRequestAndGrantRideTheSessionSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("join b: %v", err)
 	}
-	a := <-aCh
+	t.Cleanup(func() { b.Close() })
+	var a *Session
+	select {
+	case a = <-aCh:
+	case <-ctx.Done():
+		t.Fatal("join a never completed")
+	}
+	t.Cleanup(func() { a.Close() })
 
 	if err := a.SendRenew(ctx, 1, 4294967295); err != nil {
 		t.Fatal(err)
@@ -388,7 +399,11 @@ func TestRenewRequestAndGrantRideTheSessionSocket(t *testing.T) {
 	if err := b.SendRenew(ctx, 2, 9); err != nil {
 		t.Fatal(err)
 	}
-	<-got
+	select {
+	case <-got:
+	case <-ctx.Done():
+		t.Fatal("the server never answered the second ice-renew frame")
+	}
 	if err := a.SendSignal(ctx, json.RawMessage(`{"x":2}`)); err != nil {
 		t.Fatal(err)
 	}
