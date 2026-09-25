@@ -586,6 +586,7 @@ func TestTwoConcurrentApprovalsConvergeOnOneRowAndOneLiveBearer(t *testing.T) {
 	}
 
 	const attempts = 6
+	approvingSession := liveSessionHash(t, store, u.ID)
 	raws := make([]string, attempts)
 	var wg sync.WaitGroup
 	errs := make([]error, attempts)
@@ -607,7 +608,7 @@ func TestTwoConcurrentApprovalsConvergeOnOneRowAndOneLiveBearer(t *testing.T) {
 				writer = peer
 			}
 			_, _, ok, approveErr := writer.ApproveAndRegisterDeviceAuth(
-				ctx, "RACE-"+string(rune('A'+i)), u.ID, raws[i],
+				ctx, "RACE-"+string(rune('A'+i)), u.ID, approvingSession, raws[i],
 				"fresh-"+string(rune('a'+i)), int64(100+i))
 			if approveErr != nil {
 				errs[i] = approveErr
@@ -785,7 +786,7 @@ func TestApprovalBindsTheIdentifierTheRequestWasStartedWith(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	got, _, ok, err := store.ApproveAndRegisterDeviceAuth(ctx, "WDJB-MJHT", u.ID, "raw", "bound-device", 2)
+	got, _, ok, err := store.ApproveAndRegisterDeviceAuth(ctx, "WDJB-MJHT", u.ID, liveSessionHash(t, store, u.ID), "raw", "bound-device", 2)
 	if err != nil || !ok {
 		t.Fatalf("approve: ok=%v err=%v", ok, err)
 	}

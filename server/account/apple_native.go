@@ -192,7 +192,15 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 	} else if s.frozenBlocked(w, u) {
 		return
 	}
-	s.finishNativeLogin(w, r, u.ID, "App (Apple)")
+	// Sign in with Apple proves a different credential than the password, so a
+	// reset does not invalidate it; the epoch is read here only so that a reset
+	// committing from now on still revokes the bearer minted below.
+	epoch, err := s.store.CredentialEpoch(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	s.finishNativeLogin(w, r, u.ID, "App (Apple)", epoch)
 }
 
 // frozenBlocked writes the pending-deletion response and reports true when the

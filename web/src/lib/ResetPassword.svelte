@@ -119,6 +119,7 @@
         <input class="ui-input" id="reset-confirm-password" type="password" name="confirm-password" autocomplete="new-password"
                bind:value={confirmPw} />
       </div>
+      <p class="ui-field-hint">{t.resetPassword.signsOutNote}</p>
       {#if error}<p class="err" role="alert">{error}</p>{/if}
       <button type="submit" class="btn btn-primary auth-action" disabled={busy}>{t.resetPassword.submitBtn}</button>
     </form>

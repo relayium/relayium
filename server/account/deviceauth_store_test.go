@@ -18,12 +18,12 @@ func TestDeviceAuthApproveConsumeOnce(t *testing.T) {
 	if err := st.CreateDeviceAuth(ctx, req); err != nil {
 		t.Fatal(err)
 	}
-	_, _, ok, err := st.ApproveAndRegisterDeviceAuth(ctx, "WDJB-MJHT", u.ID, "rlm_cli_raw", "approve-once-device", 2)
+	_, _, ok, err := st.ApproveAndRegisterDeviceAuth(ctx, "WDJB-MJHT", u.ID, liveSessionHash(t, st, u.ID), "rlm_cli_raw", "approve-once-device", 2)
 	if err != nil || !ok {
 		t.Fatalf("approve: %v %v", ok, err)
 	}
 	// second approve on same code must fail (already approved)
-	_, _, ok2, _ := st.ApproveAndRegisterDeviceAuth(ctx, "WDJB-MJHT", u.ID, "rlm_cli_raw", "must-not-exist", 3)
+	_, _, ok2, _ := st.ApproveAndRegisterDeviceAuth(ctx, "WDJB-MJHT", u.ID, liveSessionHash(t, st, u.ID), "rlm_cli_raw", "must-not-exist", 3)
 	if ok2 {
 		t.Fatal("double approve should fail")
 	}
@@ -50,7 +50,7 @@ func TestApproveAndRegisterMakesTheReturnedBearerImmediatelyValid(t *testing.T) 
 		t.Fatal(err)
 	}
 	raw := "rlm_cli_atomic"
-	_, device, ok, err := st.ApproveAndRegisterDeviceAuth(ctx, req.UserCode, u.ID, raw, "atomic-device", 2)
+	_, device, ok, err := st.ApproveAndRegisterDeviceAuth(ctx, req.UserCode, u.ID, liveSessionHash(t, st, u.ID), raw, "atomic-device", 2)
 	if err != nil || !ok {
 		t.Fatalf("approve and register: ok=%v err=%v", ok, err)
 	}
@@ -89,7 +89,7 @@ func TestApproveAndRegisterRollsBackApprovalWhenBearerCannotCommit(t *testing.T)
 	if err := st.CreateDeviceAuth(ctx, req); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok, err := st.ApproveAndRegisterDeviceAuth(ctx, req.UserCode, u.ID, raw, "must-not-exist", 2); err == nil || ok {
+	if _, _, ok, err := st.ApproveAndRegisterDeviceAuth(ctx, req.UserCode, u.ID, liveSessionHash(t, st, u.ID), raw, "must-not-exist", 2); err == nil || ok {
 		t.Fatalf("colliding bearer should refuse the whole transaction: ok=%v err=%v", ok, err)
 	}
 	after, found, err := st.GetDeviceAuthByUserCode(ctx, req.UserCode)
@@ -199,4 +199,18 @@ func TestDeleteCLIDeviceRevokesToken(t *testing.T) {
 	if _, _, ok, err := st.GetCLITokenUser(ctx, authx.HashToken(raw)); err != nil || ok {
 		t.Fatalf("token must be revoked after device delete: ok=%v err=%v", ok, err)
 	}
+}
+
+// liveSessionHash creates a live web session for userID and returns the hash
+// ApproveAndRegisterDeviceAuth checks: an approval is made by a signed-in
+// browser, and the store refuses one whose session is gone.
+func liveSessionHash(t *testing.T, st *SQLiteStore, userID string) string {
+	t.Helper()
+	raw := authx.RandToken()
+	if err := st.CreateSession(context.Background(), Session{
+		ID: raw, UserID: userID, CreatedAt: 1, ExpiresAt: 1 << 40,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return authx.HashToken(raw)
 }

@@ -10,13 +10,21 @@ import (
 	"github.com/relayium/relayium/httpx"
 )
 
+// errCredentialsChanged: a password reset/change committed between this
+// login's credential check and its bearer insert, so no bearer was minted.
+var errCredentialsChanged = errors.New("account: credentials changed during login")
+
 // issueBearer mints a long-lived hashed bearer token ("rlm_cli_…") bound to a
 // fresh device row, for native app / API clients that authenticate with an
 // Authorization: Bearer header instead of a session cookie. It reuses the CLI
 // token table + RequireAuth validation path, so any RequireAuth-mounted
 // endpoint works for these callers unchanged. The raw token is returned once
 // and only its hash is stored.
-func (s *Service) issueBearer(ctx context.Context, userID, deviceName string) (string, error) {
+//
+// epoch is the account's credential_epoch as read BEFORE the caller checked the
+// credential. The insert is refused if a password reset/change has bumped it
+// since, which is what keeps a login racing that reset from outliving it.
+func (s *Service) issueBearer(ctx context.Context, userID, deviceName string, epoch int64) (string, error) {
 	if deviceName == "" {
 		deviceName = "App"
 	}
@@ -28,10 +36,17 @@ func (s *Service) issueBearer(ctx context.Context, userID, deviceName string) (s
 	if err != nil {
 		return "", err
 	}
-	if err := s.store.CreateCLIToken(ctx, CLIToken{
+	ok, err := s.store.CreateCLITokenAtEpoch(ctx, CLIToken{
 		TokenHash: authx.HashToken(raw), UserID: userID, DeviceID: dev.ID, CreatedAt: now,
-	}); err != nil {
+	}, epoch)
+	if err != nil {
 		return "", err
+	}
+	if !ok {
+		// The device row was created for this bearer alone; without it, it is a
+		// nameless "App" nobody signed in on.
+		_ = s.store.DeleteDevice(ctx, dev.ID, userID)
+		return "", errCredentialsChanged
 	}
 	return raw, nil
 }
@@ -54,6 +69,13 @@ func (s *Service) handleNativeLogin(w http.ResponseWriter, r *http.Request) {
 	key := normEmail(in.Email) + "|" + s.clientIP(r)
 	if s.pwLogins.locked(key, s.now()) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
+		return
+	}
+	// Read before the password is checked: a reset/change that commits after
+	// this read makes the bearer insert below refuse (issueBearer).
+	epoch, err := s.store.CredentialEpochByEmail(r.Context(), in.Email)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	uid, err := s.authenticate(r.Context(), in.Email, in.Password)
@@ -80,14 +102,19 @@ func (s *Service) handleNativeLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.pwLogins.reset(key)
-	s.finishNativeLogin(w, r, uid, in.DeviceName)
+	s.finishNativeLogin(w, r, uid, in.DeviceName, epoch)
 }
 
 // finishNativeLogin mints a bearer for an already-authenticated user id and
 // writes {token, user}. Shared by native password login and (when enabled) the
 // native Sign in with Apple handler, so both hand back the same shape.
-func (s *Service) finishNativeLogin(w http.ResponseWriter, r *http.Request, userID, deviceName string) {
-	token, err := s.issueBearer(r.Context(), userID, deviceName)
+func (s *Service) finishNativeLogin(w http.ResponseWriter, r *http.Request, userID, deviceName string, epoch int64) {
+	token, err := s.issueBearer(r.Context(), userID, deviceName, epoch)
+	if errors.Is(err, errCredentialsChanged) {
+		// The password this login proved is no longer the account's password.
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		return
+	}
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

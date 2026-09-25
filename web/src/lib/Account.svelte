@@ -483,6 +483,7 @@
               <label class="field"><span>{t.account.confirmPassword}</span>
                 <input type="password" name="confirm-password" autocomplete="new-password"
                        bind:value={confirmPw} /></label>
+              <p class="hint">{t.account.pwSignsOutNote}</p>
               {#if pwError}<p class="err">{pwError}</p>{/if}
               <button type="submit" class="btn btn-primary" disabled={pwBusy}>
                 {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}

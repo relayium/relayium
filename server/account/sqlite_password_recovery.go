@@ -20,8 +20,8 @@ import (
 // commit leaves the link unspent, so the retry the user is invited to make works.
 
 // ResetPasswordWithToken spends a reset token and, in the same transaction,
-// replaces the password, marks the email verified and revokes EVERY session of
-// the token's user.
+// replaces the password, marks the email verified and revokes EVERY session and
+// every app/CLI bearer of the token's user.
 //
 // ResetTokenInvalid and ResetAccountFrozen both mean nothing was changed and the
 // token was NOT spent. The token is spent by the same conditional UPDATE
@@ -69,6 +69,23 @@ func (s *SQLiteStore) ResetPasswordWithToken(ctx context.Context, tokenHash stri
 		`UPDATE sessions SET revoked = 1 WHERE user_id = ?`, userID); err != nil {
 		return ResetTokenInvalid, "", err
 	}
+	// Every app/CLI bearer goes with the sessions: a reset is how a stolen
+	// device recovers, and a bearer is a full account credential. Browser
+	// sending identities stay — they authenticate nothing without a session
+	// (UserFromAuth refuses rlm_web_), and the sessions are revoked here.
+	// Device rows, their Inbox enrolments and tasks stay: signing in again on
+	// an installation re-binds its row (install_id). An approved but unclaimed
+	// device-code login cannot be claimed any more, because ConsumeDeviceAuth
+	// joins the live cli_tokens row this deletes.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM cli_tokens WHERE user_id = ? AND device_id NOT IN
+		   (SELECT id FROM devices WHERE user_id = ? AND kind = 'browser')`, userID, userID); err != nil {
+		return ResetTokenInvalid, "", err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET credential_epoch = credential_epoch + 1 WHERE id = ?`, userID); err != nil {
+		return ResetTokenInvalid, "", err
+	}
 	if err := tx.Commit(); err != nil {
 		return ResetTokenInvalid, "", err
 	}
@@ -77,7 +94,7 @@ func (s *SQLiteStore) ResetPasswordWithToken(ctx context.Context, tokenHash stri
 
 // ChangePasswordAndRevokeSessions replaces the password, links the "password"
 // identity when linkSubject is non-empty (a first password), and revokes every
-// session except exceptSessionID — all or nothing.
+// session except exceptSessionID and every app/CLI bearer — all or nothing.
 //
 // exceptSessionID is the raw session token; sessions are keyed by its hash, and
 // comparing the raw value would revoke the caller's own session too.
@@ -102,6 +119,23 @@ func (s *SQLiteStore) ChangePasswordAndRevokeSessions(ctx context.Context, userI
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE sessions SET revoked = 1 WHERE user_id = ? AND id <> ?`,
 		userID, authx.HashToken(exceptSessionID)); err != nil {
+		return err
+	}
+	// Every app/CLI bearer goes with the sessions: a reset is how a stolen
+	// device recovers, and a bearer is a full account credential. Browser
+	// sending identities stay — they authenticate nothing without a session
+	// (UserFromAuth refuses rlm_web_), and the sessions are revoked here.
+	// Device rows, their Inbox enrolments and tasks stay: signing in again on
+	// an installation re-binds its row (install_id). An approved but unclaimed
+	// device-code login cannot be claimed any more, because ConsumeDeviceAuth
+	// joins the live cli_tokens row this deletes.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM cli_tokens WHERE user_id = ? AND device_id NOT IN
+		   (SELECT id FROM devices WHERE user_id = ? AND kind = 'browser')`, userID, userID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET credential_epoch = credential_epoch + 1 WHERE id = ?`, userID); err != nil {
 		return err
 	}
 	return tx.Commit()

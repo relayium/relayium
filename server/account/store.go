@@ -14,6 +14,11 @@ const MaxBrowserDevicesPerAccount = 20
 
 var ErrBrowserDeviceLimit = errors.New("account: browser device limit reached")
 
+// ErrApprovingSessionGone: the web session that approved a device-code login
+// was revoked (e.g. by a password reset/change) or expired before the approval
+// committed, so no bearer was minted.
+var ErrApprovingSessionGone = errors.New("account: approving session no longer valid")
+
 // User is an account holder. PII is limited to email + display name.
 type User struct {
 	ID            string
@@ -2600,7 +2605,7 @@ type Store interface {
 	// account-scoped installation row, rotate its bearer, and make the raw token
 	// available to poll. A poll can therefore never observe an approved request
 	// whose bearer has not committed yet.
-	ApproveAndRegisterDeviceAuth(ctx context.Context, userCode, userID, rawToken, newDeviceID string, at int64) (approved ApprovedDeviceAuth, device Device, ok bool, err error)
+	ApproveAndRegisterDeviceAuth(ctx context.Context, userCode, userID, approvingSessionHash, rawToken, newDeviceID string, at int64) (approved ApprovedDeviceAuth, device Device, ok bool, err error)
 	// ConsumeDeviceAuth atomically transitions an approved request to
 	// consumed exactly once, returning the raw one-time token stashed by
 	// ApproveAndRegisterDeviceAuth and blanking pending_token so it never lingers at
@@ -2610,6 +2615,13 @@ type Store interface {
 	DeleteExpiredDeviceAuth(ctx context.Context, now int64) error
 	// cli_tokens (long-lived hashed CLI bearer tokens; prefix "rlm_cli_")
 	CreateCLIToken(ctx context.Context, t CLIToken) error
+	// CreateCLITokenAtEpoch inserts t only while the user's credential_epoch
+	// still equals epoch (false = a password reset/change got there first).
+	CreateCLITokenAtEpoch(ctx context.Context, t CLIToken, epoch int64) (bool, error)
+	// CredentialEpoch / CredentialEpochByEmail read users.credential_epoch
+	// (0 for an unknown address).
+	CredentialEpoch(ctx context.Context, userID string) (int64, error)
+	CredentialEpochByEmail(ctx context.Context, email string) (int64, error)
 	GetCLITokenUser(ctx context.Context, tokenHash string) (userID, deviceID string, ok bool, err error)
 	TouchCLIToken(ctx context.Context, tokenHash string, at int64, clientIP string) error
 	DeleteCLIToken(ctx context.Context, tokenHash string) error

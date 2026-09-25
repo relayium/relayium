@@ -278,7 +278,12 @@ export interface Messages {
     currentPassword: string;
     newPassword: string;
     confirmPassword: string;
-    pwChanged: string; // must stay true: only browser sessions are revoked; app/CLI tokens survive a password change
+    // Both must stay true to server/account/sqlite_password_recovery.go: a change
+    // revokes every other browser session AND every app/CLI bearer; the browser
+    // that made the change stays signed in. A CLI signs in again through a new
+    // device row, so its Device Inbox has to be enabled again.
+    pwSignsOutNote: string; // shown in the form, before the change is made
+    pwChanged: string;
     errCurrentWrong: string;
     errMismatch: string;
     linkedTitle: string; // heading for the linked-login-methods list
@@ -782,6 +787,9 @@ export interface Messages {
     lead: string; // valid-token form introduction
     noToken: string; // opened without a ?token= param
     minHint: string; // client-side password-length hint under the new-password field
+    // What the reset revokes (server/account/sqlite_password_recovery.go): every
+    // session and every app/CLI bearer. Shown in the form, before submitting.
+    signsOutNote: string;
     submitBtn: string;
     successBody: string; // token accepted, new password set, session cookie set, redirecting home
     invalidBody: string; // fuller explanation + prompts a fresh forgot-password request

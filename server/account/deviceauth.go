@@ -243,8 +243,20 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	// double-submitted code fails here having created no DB rows, so it can't
 	// leave a phantom "CLI" device in the user's list or an orphaned cli_token.
 	raw := "rlm_cli_" + authx.RandToken()
+	// RequireSession has already validated this cookie; the store re-checks the
+	// same session inside the approval transaction, because a password
+	// reset/change may have revoked it since.
+	c, err := r.Cookie(sessionCookie)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	_, _, ok, err := s.store.ApproveAndRegisterDeviceAuth(
-		ctx, in.UserCode, u.ID, raw, authx.NewID(), now)
+		ctx, in.UserCode, u.ID, authx.HashToken(c.Value), raw, authx.NewID(), now)
+	if errors.Is(err, ErrApprovingSessionGone) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

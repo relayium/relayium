@@ -473,6 +473,11 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE users ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN purge_after INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN purge_reminder_sent INTEGER NOT NULL DEFAULT 0`,
+		// credential_epoch counts password resets/changes. Both revoke every
+		// app/CLI bearer in the same transaction and bump this; a bearer minted by
+		// a login that read the epoch BEFORE that commit is refused (see
+		// CreateCLITokenAtEpoch), so a login racing a reset cannot outlive it.
+		`ALTER TABLE users ADD COLUMN credential_epoch INTEGER NOT NULL DEFAULT 0`,
 		// device-code CLI login: record the requesting CLI's origin so the
 		// browser approval page can show what it's authorizing (anti-phishing).
 		`ALTER TABLE cli_device_auth ADD COLUMN client_ip TEXT NOT NULL DEFAULT ''`,
@@ -7644,12 +7649,28 @@ func (s *SQLiteStore) GetDeviceAuthByCodeHash(ctx context.Context, hash string) 
 // pending_token cannot become visible to a poll before the matching cli_tokens
 // row exists: SQLite readers see either the state before this transaction or
 // all of it after commit.
-func (s *SQLiteStore) ApproveAndRegisterDeviceAuth(ctx context.Context, userCode, userID, rawToken, newDeviceID string, at int64) (ApprovedDeviceAuth, Device, bool, error) {
+//
+// approvingSessionHash is the hash of the web session that approved. It must
+// still be live inside this transaction: a password reset/change revokes that
+// session and every bearer in one commit, and an approval validated just
+// before it must not mint a bearer just after it.
+func (s *SQLiteStore) ApproveAndRegisterDeviceAuth(ctx context.Context, userCode, userID, approvingSessionHash, rawToken, newDeviceID string, at int64) (ApprovedDeviceAuth, Device, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ApprovedDeviceAuth{}, Device{}, false, err
 	}
 	defer tx.Rollback()
+
+	var live int
+	err = tx.QueryRowContext(ctx,
+		`SELECT 1 FROM sessions WHERE id = ? AND user_id = ? AND revoked = 0 AND expires_at > ?`,
+		approvingSessionHash, userID, at).Scan(&live)
+	if err == sql.ErrNoRows {
+		return ApprovedDeviceAuth{}, Device{}, false, ErrApprovingSessionGone
+	}
+	if err != nil {
+		return ApprovedDeviceAuth{}, Device{}, false, err
+	}
 
 	var approved ApprovedDeviceAuth
 	err = tx.QueryRowContext(ctx,
@@ -7746,6 +7767,42 @@ func (s *SQLiteStore) ConsumeDeviceAuth(ctx context.Context, codeHash string, at
 func (s *SQLiteStore) DeleteExpiredDeviceAuth(ctx context.Context, now int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM cli_device_auth WHERE expires_at < ?`, now)
 	return err
+}
+
+// CredentialEpochByEmail returns the account's credential_epoch, or 0 for an
+// unknown address. A password login reads it before checking the password.
+func (s *SQLiteStore) CredentialEpochByEmail(ctx context.Context, email string) (int64, error) {
+	var epoch int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT credential_epoch FROM users WHERE email = ?`, normEmail(email)).Scan(&epoch)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return epoch, err
+}
+
+// CredentialEpoch returns the account's credential_epoch.
+func (s *SQLiteStore) CredentialEpoch(ctx context.Context, userID string) (int64, error) {
+	var epoch int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT credential_epoch FROM users WHERE id = ?`, userID).Scan(&epoch)
+	return epoch, err
+}
+
+// CreateCLITokenAtEpoch inserts the bearer only while the account's
+// credential_epoch still equals epoch — one statement, so it is atomic with a
+// concurrent password reset/change: either that commit happened first and this
+// inserts nothing (false), or this row exists before it and is revoked by it.
+func (s *SQLiteStore) CreateCLITokenAtEpoch(ctx context.Context, t CLIToken, epoch int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at)
+		 SELECT ?, ?, ?, ?, ? WHERE (SELECT credential_epoch FROM users WHERE id = ?) = ?`,
+		t.TokenHash, t.UserID, t.DeviceID, t.CreatedAt, t.LastSeenAt, t.UserID, epoch)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }
 
 func (s *SQLiteStore) CreateCLIToken(ctx context.Context, t CLIToken) error {

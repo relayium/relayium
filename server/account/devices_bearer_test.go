@@ -53,7 +53,7 @@ func (h *deviceHarness) user(t *testing.T, email string) string {
 // token bound to it, which is exactly what finishNativeLogin does.
 func (h *deviceHarness) bearer(t *testing.T, userID, deviceName string) string {
 	t.Helper()
-	tok, err := h.svc.issueBearer(context.Background(), userID, deviceName)
+	tok, err := issueBearerNow(context.Background(), h.svc, userID, deviceName)
 	if err != nil {
 		t.Fatalf("issue bearer: %v", err)
 	}

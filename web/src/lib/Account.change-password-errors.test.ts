@@ -112,14 +112,32 @@ describe("a refused password change never blames the sign-in credentials", () =>
     expect(shown).not.toBe(messages.en.account.errLogin);
   });
 
-  it("does not claim apps and the CLI were signed out", async () => {
+  // server/account/sqlite_password_recovery.go revokes every other browser
+  // session AND every app/CLI bearer (OA-053 Q2); the browser that changed the
+  // password stays signed in. The copy must say so before and after.
+  it("says before and after that other browsers, apps and the CLI are signed out", async () => {
     const dialog = await mountSignedIn({ status: 200, json: { status: "ok" } });
+    const t = messages.en.account;
+    const opener = [...dialog.querySelectorAll("button")].find((b) => b.textContent?.trim() === t.changePassword);
+    opener!.click();
+    flushSync();
+    expect(dialog.querySelector("form.pwform")?.textContent, "the consequence is shown before submitting").toContain(t.pwSignsOutNote);
+    dialog.querySelector<HTMLButtonElement>("form.pwform .btn-link")!.click(); // close again
+    flushSync();
+
     expect(await changePassword(dialog)).toBe("");
-    const said = dialog.textContent ?? "";
-    expect(said).toContain(messages.en.account.pwChanged);
-    expect(messages.en.account.pwChanged).not.toMatch(/other devices have been signed out/i);
-    expect(messages.en.account.pwChanged).toMatch(/apps and the CLI stay signed in/i);
+    expect(dialog.textContent ?? "").toContain(t.pwChanged);
+    for (const s of [t.pwChanged, t.pwSignsOutNote]) {
+      expect(s).toMatch(/apps? and (the )?CLI/i);
+      expect(s).not.toMatch(/stay signed in until you remove/i);
+    }
+    expect(t.pwSignsOutNote).toMatch(/this browser stays signed in/i);
+    expect(messages.en.resetPassword.signsOutNote).toMatch(/signs out every browser, app and CLI/i);
     await loadLang("zh");
-    expect(messages.zh.account.pwChanged).not.toContain("其他设备已登出");
+    const zh = messages.zh.account;
+    expect(zh.pwChanged).not.toContain("仍保持登录");
+    expect(zh.pwChanged).toContain("App");
+    expect(zh.pwSignsOutNote).toContain("当前这个浏览器保持登录");
+    expect(messages.zh.resetPassword.signsOutNote).toContain("都会退出");
   });
 });

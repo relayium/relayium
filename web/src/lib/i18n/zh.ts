@@ -122,7 +122,8 @@ const zh: Messages = {
     currentPassword: "当前密码",
     newPassword: "新密码",
     confirmPassword: "确认新密码",
-    pwChanged: "密码已更新，其他浏览器已登出；App 和命令行仍保持登录，需在个人中心的「已登录的 App 与 CLI 设备」中移除。",
+    pwSignsOutNote: "修改密码会让此账户在其他浏览器以及所有 App 和命令行上的登录全部退出；当前这个浏览器保持登录。它们用新密码重新登录即可。用于接收文件的命令行，重新登录后需要再运行一次 relayium inbox enable。",
+    pwChanged: "密码已更新。其他浏览器、App 和命令行设备上的登录已全部退出，请用新密码在这些设备上重新登录。",
     errCurrentWrong: "当前密码不正确。",
     errMismatch: "两次输入的新密码不一致。",
     linkedTitle: "登录方式",
@@ -511,6 +512,7 @@ const zh: Messages = {
   resetPassword: {
     title: "重置密码",
     lead: "为你的 Relayium 账号设置一个新密码。",
+    signsOutNote: "重置密码后，此账户在所有浏览器、App 和命令行上的登录都会退出，请用新密码重新登录。",
     noToken: "链接无效。",
     minHint: "至少 8 位字符",
     submitBtn: "重置密码",

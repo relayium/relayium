@@ -59,7 +59,7 @@ func (h *deletionHarness) user(t *testing.T, email string) User {
 // token bound to it.
 func (h *deletionHarness) bearer(t *testing.T, userID, deviceName string) string {
 	t.Helper()
-	tok, err := h.svc.issueBearer(context.Background(), userID, deviceName)
+	tok, err := issueBearerNow(context.Background(), h.svc, userID, deviceName)
 	if err != nil {
 		t.Fatalf("issue bearer: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestBearerRequestThenEmailedTokenConfirmsTheDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	token, err := svc.issueBearer(ctx, u.ID, "Ada's iPhone")
+	token, err := issueBearerNow(ctx, svc, u.ID, "Ada's iPhone")
 	if err != nil {
 		t.Fatalf("issue bearer: %v", err)
 	}

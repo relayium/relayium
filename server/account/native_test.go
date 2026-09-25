@@ -99,7 +99,7 @@ func TestBearerCanReadMeAndUsage(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("lookup user: ok=%v err=%v", ok, err)
 	}
-	token, err := svc.issueBearer(context.Background(), u.ID, "TestApp")
+	token, err := issueBearerNow(context.Background(), svc, u.ID, "TestApp")
 	if err != nil {
 		t.Fatalf("issueBearer: %v", err)
 	}
@@ -159,4 +159,15 @@ func TestUnlinkIdentityGuard(t *testing.T) {
 	if provs, _ := svc.store.ListIdentityProviders(ctx, b.ID); len(provs) != 1 {
 		t.Errorf("google should remain after refused unlink: %v", provs)
 	}
+}
+
+// issueBearerNow mints a bearer at the account's current credential epoch — a
+// fixture for tests that need a signed-in app/CLI and are not about the race
+// between a login and a password reset.
+func issueBearerNow(ctx context.Context, svc *Service, userID, deviceName string) (string, error) {
+	epoch, err := svc.store.CredentialEpoch(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return svc.issueBearer(ctx, userID, deviceName, epoch)
 }

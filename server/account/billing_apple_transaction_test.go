@@ -964,7 +964,7 @@ func TestAppleTransactionUpgradeCannotBeUndoneByReplayingTheActiveCopy(t *testin
 // from RequireAuth's other callers.
 func TestAppleTransactionAcceptsABearerCredential(t *testing.T) {
 	f := newAppleTxFixture(t)
-	token, err := f.svc.issueBearer(context.Background(), f.userID, "Relayium for iOS")
+	token, err := issueBearerNow(context.Background(), f.svc, f.userID, "Relayium for iOS")
 	if err != nil {
 		t.Fatalf("issue bearer: %v", err)
 	}

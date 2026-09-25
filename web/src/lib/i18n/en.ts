@@ -139,7 +139,8 @@ const en: Messages = {
     currentPassword: "Current password",
     newPassword: "New password",
     confirmPassword: "Confirm new password",
-    pwChanged: "Password updated. Other browsers were signed out; apps and the CLI stay signed in until you remove them under “Signed-in apps and CLI devices” in your personal center.",
+    pwSignsOutNote: "Changing your password signs out your other browsers and every app and CLI signed in to this account; this browser stays signed in. They sign in again with the new password. On a command line that receives files, run relayium inbox enable again after signing in.",
+    pwChanged: "Password updated. Your other browsers, apps and CLI devices were signed out; sign in on them again with the new password.",
     errCurrentWrong: "Current password is incorrect.",
     errMismatch: "The new passwords do not match.",
     linkedTitle: "Sign-in methods",
@@ -528,6 +529,7 @@ const en: Messages = {
   resetPassword: {
     title: "Reset your password",
     lead: "Choose a new password for your Relayium account.",
+    signsOutNote: "Resetting your password signs out every browser, app and CLI signed in to this account. Sign in on them again with the new password.",
     noToken: "This link is invalid.",
     minHint: "At least 8 characters",
     submitBtn: "Reset password",
