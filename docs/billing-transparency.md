@@ -175,7 +175,7 @@ against three separate limits in that handler: the storage cap
 (`s.overStorage`, `account/files.go:359`), the monthly traffic cap
 (`s.overTraffic`, `account/files.go:363`) and the rolling daily quota, whose
 debit is written by the stored file's own insert transaction
-(`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5476`). Only the traffic one is shared with
+(`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5511`). Only the traffic one is shared with
 relay: `currentMonthTraffic` (`account/plan_enforce.go:54-69`) sums
 `usage_monthly` — hosted upload/download — plus billable `usage_events` —
 relay. Storage is occupancy, not throughput, and is not something a relay
@@ -315,7 +315,7 @@ The dimensions actually checked, each fail-closed at write time:
 - **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:344`,
   `remainingDailyQuota`). The debit is checked and written in the **same
   database transaction that inserts the stored file**
-  (`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5476`), so
+  (`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5511`), so
   concurrent uploads can't race past it, and a file that is not stored — a
   refusal by a later cap, a closed pairing room, a database error, a server
   crash mid-upload — never leaves a debit behind; there is no separate
@@ -326,16 +326,29 @@ The dimensions actually checked, each fail-closed at write time:
   which stored file that upload already produced (only while that file still
   exists), or why there is none — it expired, was removed, was refused, or is
   still being completed — so it need not upload again
-  (`answerFinalizeRecovery`, `account/uploads_resumable.go`). Asking is a pure
-  read: no debit, no traffic, no refund. It works only while the server still
-  keeps that upload's session record, which is removed about an hour after the
-  upload goes idle; after that, and for an upload completed by a server
-  version that predates this record, the answer cannot confirm the outcome
-  (it reads as not found or as still being completed), and the upload may or
-  may not have been stored and debited. Pairing-room uploads ignore the
-  request and keep their existing answers. Today only the CLI Device Inbox
-  sender asks; an upload the web or a native app repeats after a lost answer
-  is a new upload, debited and metered as one. A
+  (`answerFinalizeRecovery`, `account/uploads_resumable.go:1649`). Asking is a
+  pure read: no debit, no traffic, no refund. It works only while the server
+  still keeps that upload's session record. For a share, and for a Device
+  Inbox upload already attached to a delivery, that record is removed about an
+  hour after the upload goes idle. For a Device Inbox upload not attached to
+  any delivery, the record and the stored file are kept together until the
+  file's own expiry — the retention the upload asked for, capped by the plan,
+  never extended by asking. At that expiry the file can no longer be
+  recovered or sent to a device, and both are then removed by the periodic
+  cleanup, which retries a sweep that fails rather than deleting on a deadline
+  (`recoverableTombstoneSQL`, `account/sqlite.go:4987`;
+  `recoverableTaskObjectSQL`, `account/sqlite.go:5926`). Until then that
+  unattached file is invisible (no link, not in the file list, not deletable
+  by its owner) and still counts toward the account's storage. After the
+  record is gone, and for an upload completed by a server version that
+  predates this record, the answer cannot confirm the outcome (it reads as
+  not found or as still being completed), and the upload may or may not have
+  been stored and debited. Pairing-room uploads ignore the request and keep
+  their existing answers. The CLI Device Inbox sender and the web's share and
+  Device Inbox uploads ask; when the web still cannot confirm the outcome it
+  says so rather than uploading again, and a send the user then repeats is a
+  new upload, debited and metered as one. The native apps do not ask yet: an
+  upload one of them repeats after a lost answer is a new upload. A
   near-empty file still debits a 64 KiB floor
   (`minBillableBytes`, `account/files.go:35` — capping object *count*, not
   just size). An empty object — a batch made only of zero-byte files carries
@@ -518,7 +531,7 @@ including the admin-audit prune below — see the residual noted at
 |---|---|---|
 | Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `ListExpiredStoredFiles` + `DeleteStoredFile`, `account/gc.go:129-141` |
 | Rolling daily-quota ledger (`upload_events`) | ~25 hours (a small margin past the 24h window it backs) | `pruneMargin`, `account/gc.go:16`, applied at `account/gc.go:160` |
-| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:5966`), in the same prune as `upload_events` |
+| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:6025`), in the same prune as `upload_events` |
 | Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:20`, applied at `account/gc.go:135` |
 | Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:350`) | `auditRetentionDefault`, `account/gc.go:64`, applied at `account/gc.go:169` |
 | Monthly relay/traffic history (`usage_events`, `usage_periods`, `usage_monthly`) | **Not pruned by age at all** while the account is active — this is the billing history the quota math depends on | No prune call for these tables exists in `GC.sweep`; confirmed by reading the full sweep function |

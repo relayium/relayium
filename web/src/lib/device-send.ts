@@ -24,6 +24,7 @@
 // already there, rather than by re-uploading it.
 import {
   UploadError,
+  UploadFinalizeError,
   InvalidStoredObjectIdError,
   ManifestPurposeMismatchError,
   uploadFileResumable,
@@ -142,6 +143,14 @@ function failureFor(e: unknown, signal?: AbortSignal): SendFailure {
   // or auth problem — reported as `unknown` rather than guessed at, and never
   // with the offending value.
   if (e instanceof InvalidStoredObjectIdError) return new SendFailure("unknown");
+  // A finalize whose outcome is unknown: the object may exist, no task does.
+  // Its own code, because "nothing was queued — try again" is true but hides
+  // that the first upload may still count. A definitive refusal or an object
+  // that is gone (failed / expired / removed) is simply a send that did not
+  // go through.
+  if (e instanceof UploadFinalizeError) {
+    return new SendFailure(e.outcome === "unconfirmed" ? "upload_unconfirmed" : "unknown");
+  }
   if (e instanceof UploadError) return new SendFailure(httpSendErrorCode(e.status));
   return new SendFailure("network");
 }
@@ -420,7 +429,9 @@ async function deliver(
   // Nothing is issued for an uploaded object that a failed send leaves unbound.
   // `DELETE /api/files/{id}` is the account's share-delete route and the server
   // refuses it (404) for task-purpose objects, so the server's collector is the
-  // reclaim, about an hour after the upload (protocol §27).
+  // reclaim (protocol §27): at the object's own expiry, because a resumable
+  // finalize keeps its unbound object recoverable until then (G34-N5), and
+  // about an hour after the upload for one that has no such record.
   try {
     const uploaded = await uploadFileResumable(
       delivery.payload,

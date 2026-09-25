@@ -91,16 +91,17 @@ describe("pair-room finalize carries a completion verifier", () => {
   });
 
   // A share has no completion lifecycle, and the server refuses a verifier on
-  // one with a 400. Sending an ordinary upload's finalize byte-for-byte as it
-  // always was is what keeps this change additive.
-  it("sends no body at all for a share upload", async () => {
+  // one with a 400. Its finalize carries the finalize-recovery opt-in and
+  // nothing else (W-N12 F-Web): never a verifier, which is what keeps it inside
+  // what the server accepts for this purpose.
+  it("sends only the recovery opt-in, never a verifier, for a share upload", async () => {
     const seen = installFinalizeCapture();
     await uploadFileResumable([file()], { burnAfterRead: false, ttl: 3600 });
     expect(seen.finalized).toBe(true);
-    expect(seen.finalizeBody).toBeUndefined();
+    expect(seen.finalizeBody).toBe('{"recoverFinalized":true}');
   });
 
-  it("sends no body at all for a device-task upload", async () => {
+  it("sends only the recovery opt-in, never a verifier, for a device-task upload", async () => {
     const seen = installFinalizeCapture();
     await uploadFileResumable([file()], {
       burnAfterRead: false,
@@ -113,7 +114,7 @@ describe("pair-room finalize carries a completion verifier", () => {
       // delivery upload reachable at all.
       sealedManifest: new TextEncoder().encode('{"v":2,"items":[{"kind":"file","name":"a.txt","size":3}]}'),
     });
-    expect(seen.finalizeBody).toBeUndefined();
+    expect(seen.finalizeBody).toBe('{"recoverFinalized":true}');
   });
 });
 

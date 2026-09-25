@@ -909,10 +909,22 @@ public endpoint. That is exactly why it needs a sweeper: a share the user can se
 is a share the user can delete, and this one they cannot. Three conditions mean
 no legitimate reader remains, and GC reclaims the row and then the blob:
 
-1. **unbound past the bind grace** (one hour). The sender binds moments after the
-   upload finishes, so an object still unbound an hour later belongs to a send
-   that never happened. Inside the grace it is kept, because the create that
-   would bind it may be in flight;
+1. **unbound past the bind grace** (one hour), **unless it is recoverable**. The
+   sender binds moments after the upload finishes, so an object still unbound an
+   hour later belongs to a send that never happened. Inside the grace it is kept,
+   because the create that would bind it may be in flight. The exception is an
+   object a resumable finalize linked to its upload session: a sender whose
+   finalize answer was lost can still ask for it with `{"recoverFinalized":true}`,
+   so the object and that session record are kept together until the object's
+   own `expires_at` (the requested TTL, clamped by the plan; never extended by a
+   recovery). At `expires_at` it can no longer be recovered or bound to a task,
+   and a later cleanup sweep reclaims both — physical deletion follows expiry, it
+   is not scheduled at that instant, and a failed sweep simply retries. Until that
+   expiry the object stays invisible and keeps counting toward the account's storage and the deployment's volume. An
+   object with no such record — a single-shot upload, one finalized by a server
+   that predates the record, one whose record is gone — keeps the one-hour grace.
+   Binding ends the exception: the session record reverts to its ordinary
+   one-hour idle purge and the object to rules 2 and 3;
 2. **bound to a task that no longer exists** — cancelled by the owner, cascaded
    away with its device, or purged with the account. The task row was the only
    route to the ciphertext;

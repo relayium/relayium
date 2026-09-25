@@ -1,7 +1,7 @@
 <script lang="ts">
   import { copyFeedback } from "./clipboard.svelte";
   import { onMount } from "svelte";
-  import { uploadFileResumable, buildDownloadLink, UploadError } from "./stored-file";
+  import { uploadFileResumable, buildDownloadLink, UploadError, UploadFinalizeError } from "./stored-file";
   import { canShare, share } from "./share";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { maxSizeHint } from "./max-size";
@@ -161,6 +161,9 @@
       if (controller?.signal.aborted) { /* cancelled */ }
       else if (e2 instanceof UploadError && e2.status === 413) err = t.stored.errTooLarge;
       else if (e2 instanceof UploadError && e2.status === 429) err = t.stored.errQuota;
+      // The share may exist without the key this tab held: say so, and never
+      // invite a plain retry that would store and debit it a second time.
+      else if (e2 instanceof UploadFinalizeError && e2.outcome === "unconfirmed") err = t.stored.errUnconfirmed;
       else err = t.stored.errUpload;
     } finally {
       releaseRefresh();

@@ -745,6 +745,9 @@ export interface Messages {
     sendErrEmptyMessage: string;
     sendErrMessageTooLong: string;
     sendErrUnsendableContent: string;
+    // The upload's finalize could not be confirmed, so no task was created. The
+    // object may exist; it is invisible (never in My files) and not deletable.
+    sendErrUploadUnconfirmed: string;
     sendErrUnknown: string;
     // Managing what was queued.
     cancelTask: string;
@@ -1490,6 +1493,9 @@ export interface Messages {
     errTooLarge: string;
     errQuota: string;
     errUpload: string;
+    // The finalize answer never arrived in a form this browser could confirm
+    // (UploadFinalizeError "unconfirmed"): the share may exist, keyless, in My files.
+    errUnconfirmed: string;
     // 提示发送方：这批文件大到接收方的手机浏览器可能下载不了。只提示，不拦上传。
     bigNote: string;
   };

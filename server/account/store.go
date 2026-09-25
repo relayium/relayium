@@ -1780,7 +1780,10 @@ type Store interface {
 	// orphan pass did not get to never takes its blob's only owner with it. A
 	// referenced row's blob belongs to its live object and is not queued. Rows
 	// whose meter is short, and rows in the recovery state, are never purged:
-	// the row is the only record of what an upload accepted.
+	// the row is the only record of what an upload accepted. Nor, until that
+	// object's expires_at (`at` is now), is the finalize record of an unbound,
+	// live Device Inbox object: it is the only way a sender whose answer was
+	// lost can recover the object (recoverableTombstoneSQL, G34-N5).
 	PurgeDoneUploadSessions(ctx context.Context, before, at int64) error
 	// MarkUploadUnresolved moves an abandoned open session into the RECOVERY
 	// state: terminal for the client, but explicitly NOT settled. ok=false ⇒ the

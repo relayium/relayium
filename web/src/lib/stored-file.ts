@@ -150,6 +150,29 @@ export class UploadError extends Error {
   }
 }
 
+/** How a finalize this client sent ended, when it did not end in an object.
+ *
+ *  - `unconfirmed`: the object may or may not exist. The finalize, or a retry of
+ *    it, may have reached the server and its answer was lost, unreadable, or
+ *    one a server that predates finalize recovery gives (a text 409), and the
+ *    bounded retries ran out. The upload may have been stored and debited.
+ *  - `failed`: the server refused this upload at finalize; no object exists.
+ *  - `expired` / `removed`: the object this upload produced existed and is gone.
+ *
+ *  None of them is retried by uploading again: a second upload of an object
+ *  that may already exist is a second object, a second debit and second
+ *  traffic, and only the caller can decide that is what the user wants. */
+export type FinalizeOutcome = "unconfirmed" | "failed" | "expired" | "removed";
+
+/** A resumable upload that reached finalize without producing an object this
+ *  client can hand out. Never followed by the single-shot fallback. */
+export class UploadFinalizeError extends Error {
+  constructor(public outcome: FinalizeOutcome) {
+    super(`upload finalize: ${outcome}`);
+    this.name = "UploadFinalizeError";
+  }
+}
+
 /** A stored-object identifier this client refuses to act on, whoever produced it.
  *
  *  Every such id is interpolated into something where a stray character changes
@@ -396,9 +419,16 @@ const FALLBACK_MAX_CIPHER_BYTES = 64 << 20;
 /** Resumable upload with a safety net: try the chunked flow, but fall back to
  *  the single-shot uploadFile if the chunked endpoints aren't usable — an older
  *  server without /api/uploads, a storage node without PATCH-append support, or
- *  retries exhausted. A real user/quota error (413/429/401) or an abort is NOT
- *  masked: it propagates. This keeps the rollout from ever regressing an upload
- *  that the single POST would have completed.
+ *  chunk retries exhausted. A real user/quota error (413/429/401) or an abort is
+ *  NOT masked: it propagates. This keeps the rollout from ever regressing an
+ *  upload that the single POST would have completed.
+ *
+ *  The fallback ends where finalize begins. Up to the finalize request nothing
+ *  this upload sent can have become an object; from it on, one may exist, and
+ *  a single-shot re-send would be a second object, a second debit and a second
+ *  upload's traffic for a file the user sent once. Every failure from there is
+ *  reported as it is (UploadFinalizeError, UploadError), never retried by
+ *  uploading again.
  *
  *  回落有体积闸门：见 FALLBACK_MAX_CIPHER_BYTES。密文超过它就把原始错误原样抛出，
  *  因为单发路径的 2× 峰值会直接把标签页打崩 —— 报错好过崩溃。 */
@@ -408,10 +438,14 @@ export async function uploadFileResumable(
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
+  const stage: ChunkedStage = { finalizing: false };
   try {
-    return await chunkedUpload(files, opts, onProgress, signal);
+    return await chunkedUpload(files, opts, onProgress, signal, stage);
   } catch (e) {
     if (signal?.aborted) throw e;
+    // The finalize request has been sent: see the doc comment. Checked before
+    // everything else below, so no later clause can reopen the fallback.
+    if (stage.finalizing) throw e;
     // A pre-upload has no fallback at all. The single-shot route refuses
     // purpose=pair_room, so falling through would re-encrypt and re-send every
     // byte to earn a 400 — and, worse, would replace the status the caller has to
@@ -447,6 +481,12 @@ export function uploadBufferPeak(): number {
   return bufferPeak;
 }
 
+/** How far a chunked upload got, read by uploadFileResumable when it fails. */
+interface ChunkedStage {
+  /** Set immediately before the first finalize request is sent. */
+  finalizing: boolean;
+}
+
 /** The chunked flow: init → PATCH each chunk (per-chunk retry re-syncing to the
  *  server's committed offset) → finalize. A transient reset loses only the
  *  current chunk, not the whole upload.
@@ -460,6 +500,7 @@ async function chunkedUpload(
   opts: UploadOptions,
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
+  stage: ChunkedStage = { finalizing: false },
 ): Promise<UploadResult> {
   const sealed = checkedManifest(opts);
   const sk = await generateStoreKey();
@@ -572,20 +613,155 @@ async function chunkedUpload(
   //
   // Sent only for a pair-room upload, because it is refused with 400 on any other
   // purpose: a share's life is its TTL and its download count, and there is
-  // nothing about it for a receiver to end. An ordinary upload's finalize stays
-  // byte-for-byte the request it always was — no body at all — which is what
-  // keeps this additive against a server that predates it.
-  const fin = await uploadJSON(
-    "POST",
-    `/api/uploads/${uploadId}/finalize`,
-    isPairRoom(opts) ? JSON.stringify({ completionVerifier: encodeKey(await completionVerifier(sk.raw)) }) : undefined,
-    signal,
-    true,
-  );
+  // nothing about it for a receiver to end, and a pair-room finalize keeps
+  // exactly the request and the answers it always had.
+  //
+  // Every other finalize opts in to finalize recovery (finalizeRecovering): its
+  // retries are answered from the server's durable record of this upload, so a
+  // lost answer comes back as the SAME object rather than as a 409 this client
+  // could only guess at. The key that encrypted that object is still `sk`, in
+  // this function's memory, so a recovered id is as usable as a first one.
+  let fin: { id: unknown; expiresAt: number };
+  if (isPairRoom(opts)) {
+    const verifier = JSON.stringify({ completionVerifier: encodeKey(await completionVerifier(sk.raw)) });
+    stage.finalizing = true;
+    fin = await uploadJSON("POST", `/api/uploads/${uploadId}/finalize`, verifier, signal, true);
+  } else {
+    stage.finalizing = true;
+    fin = await finalizeRecovering(uploadId, signal);
+  }
   // A second server-chosen id, and not necessarily the one init issued: this is
   // the one the key gets filed under and the /d/<id> the user is handed.
   // Checked before an UploadResult exists.
   return { id: checkedStoredObjectId(fin.id), expiresAt: fin.expiresAt, key: encodeKey(sk.raw) };
+}
+
+/** Requests of one finalize that may reach the server without a usable answer —
+ *  a network failure, a 5xx, a 2xx whose body cannot be read — before the
+ *  outcome is reported `unconfirmed`. Each retry is a recovery read. */
+const FINALIZE_ATTEMPTS = 4;
+/** "Still being completed" answers followed before giving up as `unconfirmed`.
+ *  With the server's Retry-After of 5 s this is about a minute. */
+const FINALIZE_RUNNING_POLLS = 12;
+const FINALIZE_RETRY_AFTER_DEFAULT_MS = 5_000;
+const FINALIZE_RETRY_AFTER_MAX_MS = 30_000;
+
+/** The wait a "running" answer asks for, bounded both ways: a missing or
+ *  unreadable Retry-After is the server's default, and no answer can park the
+ *  upload for longer than FINALIZE_RETRY_AFTER_MAX_MS. */
+function finalizeRetryAfterMs(res: Response): number {
+  const raw = res.headers.get("Retry-After");
+  const secs = raw !== null && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
+  if (!Number.isFinite(secs)) return FINALIZE_RETRY_AFTER_DEFAULT_MS;
+  return Math.min(Math.max(secs * 1000, 1000), FINALIZE_RETRY_AFTER_MAX_MS);
+}
+
+/** A finalize answer this client can act on: a 2xx object body that names an
+ *  id and an expiry. `null` for anything else — unreadable, truncated, or
+ *  missing either field — which is an answer this client did not get.
+ *
+ *  An id that IS present is returned whatever it holds, for the caller's
+ *  checkedStoredObjectId to judge: a server naming an id this client refuses is
+ *  a trust-boundary failure, refused once, not an answer to ask for again. */
+function finalizedObject(body: unknown): { id: unknown; expiresAt: number } | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const b = body as { id?: unknown; expiresAt?: unknown };
+  if (b.id === undefined || typeof b.expiresAt !== "number" || !Number.isFinite(b.expiresAt)) return null;
+  return { id: b.id, expiresAt: b.expiresAt };
+}
+
+/** Finalize a share or Device Inbox upload with `{"recoverFinalized":true}`.
+ *
+ *  Every request is the same opt-in, so the first one is an ordinary finalize
+ *  and every repeat is answered from the server's record of this upload:
+ *
+ *    200 {id, expiresAt[, recovered]}      the object — first or recovered
+ *    409 {"outcome":"running"} + Retry-After   another finalize is committing:
+ *                                             wait and ask again (bounded)
+ *    409 {"outcome":"failed"|"expired"|"removed"}  terminal, as that outcome
+ *    409 text / any other 409               a server without recovery: unconfirmed
+ *    network failure, 5xx, unreadable 2xx   may have committed: ask again
+ *                                             (bounded), then unconfirmed
+ *    any other status                       as UploadError(status) if no earlier
+ *                                             request can have reached the
+ *                                             server and none heard "running",
+ *                                             else unconfirmed
+ *
+ *  It never uploads anything and never gives up into a guess: the only ids it
+ *  returns are ones the server named for this upload. */
+async function finalizeRecovering(uploadId: string, signal?: AbortSignal): Promise<{ id: unknown; expiresAt: number }> {
+  const url = `/api/uploads/${uploadId}/finalize`;
+  const body = JSON.stringify({ recoverFinalized: true });
+  const abort = () => new DOMException("aborted", "AbortError");
+  // Whether an earlier request may have reached the server. Until one has, a
+  // definitive refusal is exactly that; after, it may be answering a finalize
+  // that already committed.
+  let mayHaveCommitted = false;
+  let faults = 0;
+  let polls = 0;
+  const fault = async () => {
+    mayHaveCommitted = true;
+    if (++faults >= FINALIZE_ATTEMPTS) throw new UploadFinalizeError("unconfirmed");
+    await abortableSleep(uploadBackoff(faults), signal);
+  };
+  for (;;) {
+    if (signal?.aborted) throw abort();
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+    } catch {
+      if (signal?.aborted) throw abort();
+      await fault();
+      continue;
+    }
+    if (res.ok) {
+      let answer: unknown;
+      try {
+        answer = await res.json();
+      } catch {
+        if (signal?.aborted) throw abort();
+        answer = undefined; // truncated or not JSON: the object may exist
+      }
+      const obj = finalizedObject(answer);
+      if (obj) return obj;
+      await fault();
+      continue;
+    }
+    if (res.status === 409) {
+      let outcome: unknown;
+      try {
+        const b = (await res.json()) as { error?: unknown; outcome?: unknown } | null;
+        outcome = b?.error === "already_finalized" ? b.outcome : undefined;
+      } catch {
+        if (signal?.aborted) throw abort();
+        outcome = undefined; // the legacy text 409
+      }
+      if (outcome === "failed" || outcome === "expired" || outcome === "removed") {
+        throw new UploadFinalizeError(outcome);
+      }
+      // "running" is proof that a finalize of this upload is in flight and may
+      // commit before the next request lands, so from here a refusal (401, 404,
+      // ...) no longer shows that nothing was stored. Marked before waiting.
+      if (outcome === "running") mayHaveCommitted = true;
+      if (outcome === "running" && ++polls <= FINALIZE_RUNNING_POLLS) {
+        await abortableSleep(finalizeRetryAfterMs(res), signal);
+        continue;
+      }
+      throw new UploadFinalizeError("unconfirmed");
+    }
+    if (res.status >= 500) {
+      await fault();
+      continue;
+    }
+    if (mayHaveCommitted) throw new UploadFinalizeError("unconfirmed");
+    throw new UploadError(res.status);
+  }
 }
 
 /** PATCH `chunk`, which covers ciphertext bytes [start, start+chunk.length), and

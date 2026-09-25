@@ -4951,12 +4951,47 @@ func (s *SQLiteStore) PurgeDoneUploadSessions(ctx context.Context, before, at in
 		   not_before = max(pending_node_deletes.not_before, excluded.not_before)`, at, before); err != nil {
 		return err
 	}
+	// The one tombstone kind the purge keeps past its idle bound: the finalize
+	// record of a Device Inbox object that is still unbound and live
+	// (recoverableTombstoneSQL). The two INSERTs above cannot select it — its
+	// blob is referenced — so only the DELETE needs the exclusion.
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM upload_sessions WHERE `+uploadCleanupEligible, before); err != nil {
+		`DELETE FROM upload_sessions WHERE `+uploadCleanupEligible+`
+		   AND NOT (`+recoverableTombstoneSQL+`)`, before, at); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
+
+// recoverableTombstoneSQL selects, over upload_sessions, the finalize record of
+// a successfully finalized Device Inbox object that is still UNBOUND and not
+// yet expired (OA-053 Q4 / G34-N5). Its one parameter is now.
+//
+// That record is the only thing that can answer a `recoverFinalized` retry
+// with the object's id, and a Device Inbox object is invisible — no file list,
+// no link — so a sender whose finalize answer was lost has no other way back
+// to it. Purging the record at the ordinary idle bound (pendingUploadTTL) left
+// a retry after an hour with only a second upload and a second debit. The
+// record is therefore kept for exactly as long as the object it names: until
+// that object's own expires_at, which the finalize fixed from the plan-clamped
+// TTL and which nothing here extends.
+//
+// The link is matched the way GetUploadFinalizeRecord matches it — this
+// session's own linked object, same user, same blob, same purpose — and the
+// clause turns false the moment any of that stops holding: the object is
+// bound to a task (the sender clearly had the id; the ordinary bound was
+// always enough there), expires, or is deleted by any path. The row is then
+// an ordinary settled tombstone again and the next sweep purges it.
+// recoverableTaskObjectSQL is its twin on the object side, so the object and
+// its record are retained together and released together.
+const recoverableTombstoneSQL = `purpose = 'device_task' AND finalized_file_id <> '' AND EXISTS (
+	    SELECT 1 FROM stored_files f
+	     WHERE f.id = upload_sessions.finalized_file_id
+	       AND f.user_id = upload_sessions.user_id
+	       AND f.blob_key = upload_sessions.blob_key
+	       AND f.purpose = 'device_task'
+	       AND f.inbox_task_id = ''
+	       AND f.expires_at > ?)`
 
 // ClearPassword NULLs the password hash so the account has no usable password
 // credential (GetCredentials/HasPassword then report none).
@@ -5849,10 +5884,17 @@ func (s *SQLiteStore) ListExpiredStoredFiles(ctx context.Context, now int64) ([]
 //
 // The three disjuncts, and why each is safe:
 //
-//   - UNBOUND past the bind grace. The sender uploads and then immediately
-//     binds; an object still unbound an hour later belongs to a send that never
-//     happened. Inside the grace it is kept, because the create that would bind
-//     it may be in flight right now.
+//   - UNBOUND past the bind grace, unless it is recoverable. The sender uploads
+//     and then immediately binds; an object still unbound an hour later belongs
+//     to a send that never happened. Inside the grace it is kept, because the
+//     create that would bind it may be in flight right now. The exception is an
+//     object a resumable finalize linked to its session (recoverableTaskObjectSQL):
+//     a sender whose finalize answer was lost can still ask for it by session
+//     id, so it and its finalize record are kept together until its own
+//     expires_at (OA-053 Q4 / G34-N5), and at expires_at it is reclaimable here
+//     like any other unbound object. An object with no such record — a
+//     single-shot upload, a row from before the link, one whose record is gone
+//     — keeps the bind grace.
 //   - BOUND to a task that is GONE. Nothing can reach the ciphertext: the task
 //     row was the only route to it.
 //   - BOUND to a task that is TERMINAL. saved/expired/revoked/failed_terminal
@@ -5865,17 +5907,34 @@ func (s *SQLiteStore) ListExpiredStoredFiles(ctx context.Context, now int64) ([]
 // the ciphertext is kept, even long past the bind grace. A device that is
 // offline, retrying, backing off or waiting on a person still has a delivery
 // coming, and deleting under it would turn a slow transfer into a lost one.
+//
+// Parameters: now-bindGrace, then now.
 const reclaimableTaskObjectSQL = `purpose = 'device_task' AND (
-	    (inbox_task_id = '' AND created_at <= ?)
+	    (inbox_task_id = '' AND created_at <= ?
+	     AND (expires_at <= ? OR NOT ` + recoverableTaskObjectSQL + `))
 	 OR (inbox_task_id <> '' AND NOT EXISTS (
 	       SELECT 1 FROM inbox_tasks t
 	        WHERE t.id = stored_files.inbox_task_id
 	          AND t.state NOT IN ` + terminalStateSQL + `)))`
 
+// recoverableTaskObjectSQL is true, over stored_files, when a resumable
+// finalize's durable record still links this object: the session whose
+// finalized_file_id names it, for the same user and blob, as a Device Inbox
+// upload. It is the object-side twin of recoverableTombstoneSQL and matches
+// what GetUploadFinalizeRecord accepts as a link, so "kept for recovery" and
+// "recovery would return it" are the same rows.
+const recoverableTaskObjectSQL = `EXISTS (
+	    SELECT 1 FROM upload_sessions s
+	     WHERE s.finalized_file_id = stored_files.id
+	       AND s.user_id = stored_files.user_id
+	       AND s.blob_key = stored_files.blob_key
+	       AND s.purpose = 'device_task'
+	       AND s.done = 1)`
+
 func (s *SQLiteStore) ListReclaimableTaskObjects(ctx context.Context, now, bindGrace int64) ([]StoredFile, error) {
 	rows, err := s.reader().QueryContext(ctx,
 		`SELECT `+storedFileSelectCols+` FROM stored_files WHERE `+reclaimableTaskObjectSQL,
-		now-bindGrace)
+		now-bindGrace, now)
 	if err != nil {
 		return nil, err
 	}
@@ -5893,7 +5952,7 @@ func (s *SQLiteStore) ListReclaimableTaskObjects(ctx context.Context, now, bindG
 
 func (s *SQLiteStore) DeleteTaskObjectIfReclaimable(ctx context.Context, id string, now, bindGrace int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
-		`DELETE FROM stored_files WHERE id = ? AND `+reclaimableTaskObjectSQL, id, now-bindGrace)
+		`DELETE FROM stored_files WHERE id = ? AND `+reclaimableTaskObjectSQL, id, now-bindGrace, now)
 	if err != nil {
 		return false, err
 	}

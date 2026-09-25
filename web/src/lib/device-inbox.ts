@@ -517,6 +517,10 @@ export const SEND_ERROR_CODES = [
   // The names or sizes themselves are ones no receiver would accept, so the
   // manifest could not be sealed. Terminal: a retry rebuilds the same refusal.
   "unsendable_content",
+  // The upload's finalize reached the server but its outcome could not be
+  // confirmed (UploadFinalizeError "unconfirmed"). No task exists; the object
+  // may. Never retried by uploading again on the user's behalf.
+  "upload_unconfirmed",
   "unknown",
 ] as const;
 export type SendErrorCode = (typeof SEND_ERROR_CODES)[number];

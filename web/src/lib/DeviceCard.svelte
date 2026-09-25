@@ -699,6 +699,7 @@
       case "empty_message": return d.sendErrEmptyMessage;
       case "message_too_long": return d.sendErrMessageTooLong;
       case "unsendable_content": return d.sendErrUnsendableContent;
+      case "upload_unconfirmed": return d.sendErrUploadUnconfirmed;
       default: return d.sendErrUnknown;
     }
   }

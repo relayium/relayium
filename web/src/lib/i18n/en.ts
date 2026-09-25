@@ -494,6 +494,7 @@ const en: Messages = {
     sendErrEmptyMessage: "An empty message can't be sent. Nothing was queued.",
     sendErrMessageTooLong: "That message is over the 64 KiB limit. Nothing was queued — shorten it and try again.",
     sendErrUnsendableContent: "This delivery couldn't be prepared: something in it is not a shape any device would accept. Nothing was queued.",
+    sendErrUploadUnconfirmed: "Relayium couldn't confirm that the upload finished, so nothing was queued and nothing will be delivered. The upload may already be stored and counted against today's upload quota, your upload traffic and your storage. It isn't listed anywhere and can't be removed by hand; it is cleaned up automatically after it expires. Sending again uploads it again, and that counts again.",
     sendErrUnknown: "The send didn't go through. Nothing was queued — try again.",
     cancelTask: "Cancel delivery",
     cancelTaskLabel: (name) => `Cancel the delivery to ${name}`,
@@ -1262,6 +1263,7 @@ const en: Messages = {
     errTooLarge: "The file exceeds the single-file size limit.",
     errQuota: "You've exceeded today's upload quota — please try again later.",
     errUpload: "Upload failed, please try again.",
+    errUnconfirmed: "Relayium couldn't confirm that the upload finished. It may already be stored and counted against today's upload quota and your upload traffic — deleting it won't give that back, and uploading again counts again. If it appears under “My files” on your account page without a working link, you can delete it there to free the storage.",
     bigNote: "These files are large: if the recipient opens the link on a phone, or in Firefox or Safari, the browser has to hold the whole file in memory and the download may fail. Suggest Chrome/Edge on a computer, or the command-line tool.",
   },
   download: {

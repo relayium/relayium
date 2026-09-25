@@ -1271,7 +1271,9 @@ func nodeLabelForLog(nodeID string) string {
 // leave the row behind as this upload's tombstone, which is the only thing that
 // can tell a repeated finalize (409) apart from an upload that never existed
 // (404); PurgeDoneUploadSessions collects it once it is idle past
-// pendingUploadTTL. See the fail closure and the tail of this handler.
+// pendingUploadTTL — or, for an unbound Device Inbox object, once that object
+// is bound, expires or is gone (G34-N5). See the fail closure and the tail of
+// this handler.
 func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u User) {
 	sess, ok, err := s.store.GetUploadSession(r.Context(), r.PathValue("uploadId"), u.ID)
 	if err != nil {
@@ -1594,7 +1596,9 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// counts done = 0), its blob is now referenced by a stored_files row so no
 	// cleanup claim can take it (each one re-reads stored_files in its own
 	// transaction), and PurgeDoneUploadSessions collects the row itself once it
-	// is idle past pendingUploadTTL.
+	// is idle past pendingUploadTTL. The one exception is a still-unbound Device
+	// Inbox object's row, kept with the object until it expires so a lost answer
+	// stays recoverable (recoverableTombstoneSQL, G34-N5).
 
 	// The row's own deadline, which for a pre-upload is the room's and never the
 	// session TTL sf still carries. This number is what the sender counts down and
@@ -1630,6 +1634,12 @@ const finalizeRecoveryRetryAfter = "5"
 //	D6 link → object gone                   409 … "outcome":"removed"
 //	D7 no link, refused or unresolved       409 … "outcome":"failed"
 //	D8 no link, no refusal (in flight)      409 … "outcome":"running", Retry-After
+//
+// How long D4 stays answerable is the tombstone's lifetime: pendingUploadTTL of
+// idleness for a share (listed in the owner's files anyway) and for a bound
+// Device Inbox object (its sender already had the id), and the object's own
+// expires_at for an UNBOUND Device Inbox object, whose record and object are
+// kept together for exactly that long (G34-N5). No answer here extends either.
 //
 // D8 converges: the in-flight finalize commits its link (→ D4) or records its
 // refusal (→ D7); one that never returns leaves the tombstone to cleanup, which

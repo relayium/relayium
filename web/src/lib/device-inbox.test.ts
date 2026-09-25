@@ -396,3 +396,25 @@ describe("poll cadence", () => {
     }
   });
 });
+
+// W-N12 F-Web: an Inbox upload whose finalize could not be confirmed is invisible
+// — never listed in My files and not deletable — so its sentence must not send
+// the user there, and must not read as if cancelling or deleting refunds usage.
+describe("upload_unconfirmed copy", () => {
+  it("is a closed code with maintained EN and zh sentences that never point to My files", async () => {
+    const { SEND_ERROR_CODES } = await import("./device-inbox");
+    expect(SEND_ERROR_CODES).toContain("upload_unconfirmed");
+    const en = (await import("./i18n/en")).default;
+    const zh = (await import("./i18n/zh")).default;
+    for (const [lang, m, filesTitle] of [["en", en, en.me.filesTitle], ["zh", zh, zh.me.filesTitle]] as const) {
+      const s = m.deviceInbox.sendErrUploadUnconfirmed;
+      expect(s.length, lang).toBeGreaterThan(0);
+      expect(s, lang).not.toContain(filesTitle);
+      expect(s.toLowerCase(), lang).not.toMatch(/refund|退回/);
+      // Access ends exactly at expiry, but physical cleanup is a periodic sweep
+      // that can lag or retry: no sentence may promise a deletion deadline.
+      expect(s, lang).not.toMatch(/no later than|by its expiry|最迟|到期时会被自动删除/);
+      expect(s, lang).toMatch(/cleaned up automatically after it expires|到期后会被自动清理/);
+    }
+  });
+});

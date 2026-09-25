@@ -552,6 +552,8 @@ describe("failures", () => {
     ["browser_device_limit", "maximum of 20 browsers registered for sending"],
     ["sender_device_required", "registers this browser as a new sender automatically"],
     ["network", "connection dropped"],
+    ["upload_unconfirmed", "couldn't confirm that the upload finished, so nothing was queued"],
+    ["upload_unconfirmed", "Sending again uploads it again, and that counts again."],
     ["unknown", "didn't go through"],
   ])("explains %s in the user's own terms", async (code, expected) => {
     const { SendFailure } = await import("./device-send");

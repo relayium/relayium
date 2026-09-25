@@ -320,12 +320,20 @@ func TestFinalizeRecoveryT1DefaultAnswersAreUnchanged(t *testing.T) {
 			if got := statusProbe(t, h, id); got != http.StatusNotFound {
 				t.Fatalf("status probe of a finalized upload = %d, want 404", got)
 			}
-			// Tombstone lifetime unchanged: idle past the TTL, the purge takes it
-			// and every answer becomes the legacy 404 — with or without the opt-in.
+			// A share's tombstone lifetime is unchanged: idle past the TTL, the
+			// purge takes it and every answer becomes the legacy 404 — with or
+			// without the opt-in. An unbound Device Inbox object's record is kept
+			// with its object until the object expires (G34-N5), and answers as
+			// it did inside the hour; at expiry it goes the same way.
 			reapIdle(h)
+			if purpose == StoredPurposeDeviceTask {
+				wantLegacy409(t, finalizeT(t, h, id, ""))
+				h.now = first.body.ExpiresAt
+				h.svc.ReapPendingUploads(h.now)
+			}
 			wantLegacy404(t, finalizeT(t, h, id, ""))
 			wantLegacy404(t, finalizeT(t, h, id, recoverOptIn))
-			if !h.storedFileExists(t, first.body.ID) {
+			if purpose == StoredPurposeShare && !h.storedFileExists(t, first.body.ID) {
 				t.Fatal("the purge took the object with the tombstone")
 			}
 		})
@@ -675,9 +683,15 @@ func TestFinalizeRecoveryT7FinalizeFirstIsNeverCleaned(t *testing.T) {
 			if q := queuedFor(t, h, key); len(q) != 0 || deletes.n.Load() != 0 || !h.blobExists(t, key) {
 				t.Fatalf("a live object's blob was queued (%+v) or deleted (%d)", q, deletes.n.Load())
 			}
-			// The same reap pass purged the idle tombstone (its lifetime is
-			// unchanged): legacy 404 from here on, and the object is untouched.
-			wantLegacy404(t, finalizeT(t, h, id, recoverOptIn))
+			// The same reap pass purged a share's idle tombstone (its lifetime is
+			// unchanged): legacy 404 from here on, and the object is untouched. An
+			// unbound Device Inbox object's record is kept with the object
+			// (G34-N5), so it still recovers.
+			if purpose == StoredPurposeDeviceTask {
+				wantRecovered(t, finalizeT(t, h, id, recoverOptIn), sf.ID, sf.ExpiresAt)
+			} else {
+				wantLegacy404(t, finalizeT(t, h, id, recoverOptIn))
+			}
 			if n := storedFilesFor(t, h, key); n != 1 {
 				t.Fatalf("%d stored files, want 1", n)
 			}
@@ -744,7 +758,9 @@ func TestFinalizeRecoveryT9ExpiredAndRemovedAreNotReturned(t *testing.T) {
 			wantOutcome(t, finalizeT(t, h, id, recoverOptIn), "expired")
 		}
 	})
-	t.Run("removed_by_the_bind_grace_gc", func(t *testing.T) {
+	t.Run("kept_past_the_bind_grace", func(t *testing.T) {
+		// G34-N5: a linked, unbound task object is no longer reclaimed at the
+		// bind grace; it recovers until its own expiry.
 		h := newRecoveryHarness(t)
 		id, _ := purposeUpload(t, h, StoredPurposeDeviceTask, 900)
 		a := finalizeT(t, h, id, "")
@@ -754,13 +770,38 @@ func TestFinalizeRecoveryT9ExpiredAndRemovedAreNotReturned(t *testing.T) {
 		h.advance(int64(taskObjectBindGrace/time.Second) + 1)
 		(&GC{Store: h.store, Now: func() int64 { return h.now }, Log: log.New(io.Discard, "", 0),
 			BlobFor: h.svc.blobFor}).reclaimTaskObjects(context.Background(), h.now)
+		if !h.storedFileExists(t, a.body.ID) {
+			t.Fatal("a recoverable task object was reclaimed at the bind grace")
+		}
+		wantRecovered(t, finalizeT(t, h, id, recoverOptIn), a.body.ID, a.body.ExpiresAt)
+	})
+	t.Run("removed_by_the_gc_once_its_task_ended", func(t *testing.T) {
+		// The object is gone by an ordinary path while its record remains:
+		// bound to a task that then ended, reclaimed by the GC. Emulated at the
+		// row level (the task-object harness proves the real bind and terminal
+		// report); the record answers "removed", never a new object.
+		h := newRecoveryHarness(t)
+		id, _ := purposeUpload(t, h, StoredPurposeDeviceTask, 900)
+		a := finalizeT(t, h, id, "")
+		if a.status != 200 {
+			t.Fatalf("finalize = %s", a)
+		}
+		if _, err := h.store.db.Exec(`UPDATE stored_files SET inbox_task_id = 'gone-task' WHERE id = ?`, a.body.ID); err != nil {
+			t.Fatal(err)
+		}
+		(&GC{Store: h.store, Now: func() int64 { return h.now }, Log: log.New(io.Discard, "", 0),
+			BlobFor: h.svc.blobFor}).reclaimTaskObjects(context.Background(), h.now)
 		if h.storedFileExists(t, a.body.ID) {
-			t.Fatal("the unbound task object outlived its bind grace")
+			t.Fatal("an object bound to a missing task was not reclaimed")
 		}
 		if !h.sessionExists(t, id) {
 			t.Fatal("setup: the tombstone is gone too")
 		}
+		before := ledgerOf(t, h)
 		wantOutcome(t, finalizeT(t, h, id, recoverOptIn), "removed")
+		if after := ledgerOf(t, h); after != before || after.objects != 0 {
+			t.Fatalf("recovery of a removed object re-created or charged something: %+v -> %+v", before, after)
+		}
 	})
 	t.Run("removed_by_the_owner", func(t *testing.T) {
 		h := newRecoveryHarness(t)
@@ -959,11 +1000,16 @@ func TestFinalizeRecoveryUpgradeAndRollbackCompatibility(t *testing.T) {
 	wantRecovered(t, finalizeT(t, h, newID, recoverOptIn), newLink, sf.ExpiresAt)
 	wantOutcome(t, finalizeT(t, h, rbID, recoverOptIn), "running")
 	wantLegacy409(t, finalizeT(t, h, rbID, ""))
-	// Both end the same way as ever: the purge collects the tombstones and the
-	// objects stay.
+	// The rollback-era record has no link, so it ends the same way as ever: the
+	// purge collects the tombstone and the object stays. The linked record of an
+	// unbound Device Inbox object is kept with it until the object expires
+	// (G34-N5), and is purged then.
 	reapIdle(h)
-	wantLegacy404(t, finalizeT(t, h, newID, recoverOptIn))
+	wantRecovered(t, finalizeT(t, h, newID, recoverOptIn), newLink, sf.ExpiresAt)
 	wantLegacy404(t, finalizeT(t, h, rbID, recoverOptIn))
+	h.now = sf.ExpiresAt
+	h.svc.ReapPendingUploads(h.now)
+	wantLegacy404(t, finalizeT(t, h, newID, recoverOptIn))
 	for _, k := range []string{legacyKey, rbKey} {
 		if n := storedFilesFor(t, h, k); n != 1 {
 			t.Fatalf("object on %s: %d", k, n)

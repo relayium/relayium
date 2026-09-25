@@ -614,6 +614,58 @@ describe("failures and cleanup", () => {
     expect(deletes(), "a dead share-route DELETE was issued").toHaveLength(0);
   });
 
+  // W-N12 F-Web through the Device Inbox caller: the finalize answer is lost,
+  // the retry recovers the SAME object, and the task binds it. One upload, one
+  // create, and the content key the device unseals opens the ciphertext.
+  it("a lost finalize answer is recovered and bound, never uploaded twice", async () => {
+    let finalizes = 0;
+    handlers.push((c) => {
+      if (c.url.endsWith("/finalize")) {
+        finalizes++;
+        expect(String(c.body)).toBe('{"recoverFinalized":true}');
+        if (finalizes === 1) throw new TypeError("network"); // committed; answer lost
+        return json({ id: OBJECT_ID, expiresAt: 1_700_600_000, recovered: true });
+      }
+      return undefined;
+    });
+    const xhr = vi.fn();
+    vi.stubGlobal("XMLHttpRequest", xhr);
+    const task = await sendFilesToDevice(targetSpec(), FILES(), sendOpts());
+    expect(task.ID).toBe(TASK_ID);
+    expect(finalizes).toBe(2);
+    expect(uploadInits()).toHaveLength(1);
+    expect(xhr, "the single-shot fallback re-sent the delivery").not.toHaveBeenCalled();
+    expect(JSON.parse(String(created()!.body)).storedFileId).toBe(OBJECT_ID);
+    expect(new TextDecoder().decode(await payloadPlaintext(contentKeyFromCreate()))).toBe("payroll numbersmore");
+  });
+
+  it("an unconfirmed finalize is its own failure: no task, no second upload", async () => {
+    handlers.push((c) => {
+      if (c.url.endsWith("/finalize")) return new Response("already finalized\n", { status: 409 });
+      return undefined;
+    });
+    const xhr = vi.fn();
+    vi.stubGlobal("XMLHttpRequest", xhr);
+    await expect(sendFilesToDevice(targetSpec(), FILES(), sendOpts())).rejects.toMatchObject({
+      code: "upload_unconfirmed",
+    });
+    expect(uploadInits()).toHaveLength(1);
+    expect(xhr).not.toHaveBeenCalled();
+    expect(created()).toBeUndefined();
+  });
+
+  it("a finalize the server reports failed is a plain failure: no task, no second upload", async () => {
+    handlers.push((c) => {
+      if (c.url.endsWith("/finalize")) return json({ error: "already_finalized", outcome: "failed" }, 409);
+      return undefined;
+    });
+    const xhr = vi.fn();
+    vi.stubGlobal("XMLHttpRequest", xhr);
+    await expect(sendFilesToDevice(targetSpec(), FILES(), sendOpts())).rejects.toMatchObject({ code: "unknown" });
+    expect(xhr).not.toHaveBeenCalled();
+    expect(created()).toBeUndefined();
+  });
+
   it("reports progress through the two sender-local phases", async () => {
     const seen: string[] = [];
     await sendFilesToDevice(

@@ -477,6 +477,7 @@ const zh: Messages = {
     sendErrEmptyMessage: "空消息发不出去。什么都没排队。",
     sendErrMessageTooLong: "这条消息超过了 64 KiB 上限。什么都没排队——删短一些再试。",
     sendErrUnsendableContent: "这次投递没能准备好：其中有任何设备都不会接受的内容形状。什么都没排队。",
+    sendErrUploadUnconfirmed: "Relayium 无法确认这次上传是否完成，所以什么都没排队，也不会投递。这次上传可能已经存下，并已计入今日上传额度、上传流量和存储空间。它不会出现在任何列表里，也无法手动删除，到期后会被自动清理。重新发送会再上传一次，也会再计一次用量。",
     sendErrUnknown: "这次发送没成功。什么都没排队——请重试。",
     cancelTask: "取消投递",
     cancelTaskLabel: (name) => `取消发往 ${name} 的投递`,
@@ -1222,6 +1223,7 @@ const zh: Messages = {
     errTooLarge: "文件超过单文件大小上限。",
     errQuota: "已超过今日上传额度，请稍后再试。",
     errUpload: "上传失败，请重试。",
+    errUnconfirmed: "Relayium 无法确认这次上传是否完成。它可能已经存下，并已计入今日上传额度和上传流量——删除它不会退回这些用量，重新上传也会再计一次。如果它出现在个人中心的“我的文件”里但没有可用的链接，可以在那里删除以释放存储空间。",
     bigNote: "这批文件较大：接收方如果在手机上、或用 Firefox、Safari 打开链接，浏览器必须把整个文件读进内存，下载可能失败。建议对方用电脑上的 Chrome/Edge，或者命令行工具。",
   },
   download: {

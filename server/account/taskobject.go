@@ -71,6 +71,14 @@ const (
 // about to bind, and short enough that a failed send does not hold storage the
 // user cannot see or delete. One hour is the same order as pendingUploadTTL,
 // which bounds the analogous "started an upload and vanished" case.
+//
+// It does not apply to an object a resumable finalize linked to its session
+// (OA-053 Q4 / G34-N5): a sender whose finalize answer was lost can still
+// recover that one by session id, so it and its finalize record are kept until
+// the object's own expires_at — the plan-clamped TTL the upload asked for,
+// never extended. Until then it stays invisible and keeps counting toward the
+// account's storage and the deployment's volume, exactly as it did during the
+// grace; nothing else about it changes. See reclaimableTaskObjectSQL.
 const taskObjectBindGrace = time.Hour
 
 // isValidStoredPurpose reports whether p is a purpose this server understands.

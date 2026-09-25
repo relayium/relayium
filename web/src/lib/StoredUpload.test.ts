@@ -9,6 +9,9 @@ vi.mock("./stored-file", () => ({
   uploadFileResumable: (...a: unknown[]) => uploadFileResumable(...a),
   buildDownloadLink: () => "https://relayium.com/d/abc#k=zzz",
   UploadError: class UploadError extends Error { status = 0; },
+  UploadFinalizeError: class UploadFinalizeError extends Error {
+    constructor(public outcome: string) { super(outcome); }
+  },
 }));
 vi.mock("./upload-keys", () => ({ rememberUploadKey: () => {} }));
 
@@ -141,6 +144,37 @@ describe("StoredUpload × 更新刷新闸门", () => {
 
     expect(target.querySelector(".err, .error"), "确实是失败那条路").not.toBeNull();
     expect(refreshHolds(), "错误路径漏放会让按钮永远是灰的").toBe(0);
+  });
+
+  it("finalize 结果无法确认时，如实说明且不暗示直接重传", async () => {
+    const { UploadFinalizeError } = await import("./stored-file");
+    uploadFileResumable.mockRejectedValue(new UploadFinalizeError("unconfirmed"));
+    await mountUpload();
+    await pick([1024]);
+
+    const err = target.querySelector(".error")?.textContent ?? "";
+    expect(err).toContain("couldn't confirm that the upload finished");
+    expect(err).toContain("My files");
+    // Deleting frees storage only; it never reads as a refund, and a retry is new usage.
+    expect(err).toContain("deleting it won't give that back");
+    expect(err).toContain("uploading again counts again");
+    expect(target.querySelector("input[readonly]"), "no link may be shown for an unconfirmed upload").toBeNull();
+    expect(uploadFileResumable).toHaveBeenCalledTimes(1);
+    expect(refreshHolds()).toBe(0);
+  });
+
+  it("finalize 明确失败（failed/expired/removed）走普通失败文案", async () => {
+    const { UploadFinalizeError } = await import("./stored-file");
+    for (const outcome of ["failed", "expired", "removed"] as const) {
+      uploadFileResumable.mockReset();
+      uploadFileResumable.mockRejectedValue(new UploadFinalizeError(outcome));
+      await mountUpload();
+      await pick([1024]);
+      expect(target.querySelector(".error")?.textContent, outcome).toBe("Upload failed, please try again.");
+      unmount(app as never);
+      app = null;
+      target.remove();
+    }
   });
 
   it("用户取消也释放闸门", async () => {
