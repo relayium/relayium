@@ -377,7 +377,7 @@ const ja = {
     "無料でエンドツーエンド暗号化された Relayium CLI で、SSH・ペアリングコード・デーモン直結によるファイル転送と、両方の端末がオンライン時の一時テキスト送信を始めましょう。",
   updatedLabel: "最終更新",
   lead: [
-    "Relayium CLI はターミナルからファイルと一時テキストを転送する小さな単一バイナリです。エンドツーエンド暗号化、セルフホスト可能、完全無料。サーバーへのファイルコピーやマシン間のビルド送信に加え、URL・コマンド・コード片をファイル化せずそのまま送れます。",
+    "Relayium CLI はターミナルからファイルと一時テキストを転送する小さな単一バイナリです。エンドツーエンド暗号化、セルフホスト可能、AGPL-3.0 ライセンスの無料オープンソース。サーバーへのファイルコピーやマシン間のビルド送信に加え、URL・コマンド・コード片をファイル化せずそのまま送れます。",
     "どの方法を使っても、ファイルのバイトは両端の間を直接移動し、Relayium のサーバーを通過することはありません。本ガイドではインストールから最初の転送までを案内し、その後各モードのより詳しいハウツーへ案内します。",
   ],
   sections: [
@@ -527,7 +527,7 @@ relayium text 483920`,
     items: [
       {
         q: "CLI に料金はかかりますか？",
-        a: "いいえ。CLI は完全に無料です。直接転送されるファイルとテキストのバイトは Relayium のリレーを通らないため、計測するものも支払うものもありません。",
+        a: "CLI 自体は無料のオープンソースで、直結モード（push、pull、デーモン直結、send / receive）は使っても費用がかかりません。これらのファイルとテキストのバイトは Relayium のリレーを通らないため、計測するものがないからです。プランの枠を使うのは up と down で、アカウントの下に置かれる暗号化コピーを書き込み、読み戻します。up は4つの別々の上限に計上されます。月間転送量の枠、同時に保存しておけるデータ量のストレージ上限、プランの保存期間の上限、そして1日あたりのアップロード上限です。down はコピーを読み戻す分が月間転送量の枠に計上されます。有料プランではこれらすべてが引き上げられます。",
       },
       {
         q: "Relayium アカウントは必要ですか？",
@@ -544,7 +544,7 @@ relayium text 483920`,
     ],
   },
   cta: {
-    text: "Relayium CLI をインストールして最初の転送をしましょう。完全無料です。",
+    text: "無料のオープンソース Relayium CLI をインストールして、最初の直接転送をしましょう。",
     button: "CLI を入手",
     href: "/cli",
   },
@@ -557,7 +557,7 @@ const ko = {
     "무료 종단간 암호화 Relayium CLI로 SSH·페어링 코드·데몬 다이렉트 파일 전송과 두 기기가 함께 온라인일 때의 일회성 텍스트 전송을 시작하세요.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "Relayium CLI는 터미널에서 파일과 일회성 텍스트를 옮기는 작은 단일 바이너리입니다 — 종단간 암호화, 자체 호스팅 가능, 완전 무료. 서버로 파일을 복사하거나 기기 사이에 빌드를 보내고, URL·명령·코드 조각을 파일로 저장하지 않고 그대로 전송할 수 있습니다.",
+    "Relayium CLI는 터미널에서 파일과 일회성 텍스트를 옮기는 작은 단일 바이너리입니다 — 종단간 암호화, 자체 호스팅 가능, AGPL-3.0 라이선스의 무료 오픈소스. 서버로 파일을 복사하거나 기기 사이에 빌드를 보내고, URL·명령·코드 조각을 파일로 저장하지 않고 그대로 전송할 수 있습니다.",
     "어떤 방식을 쓰든 파일 데이터는 두 끝 사이에서 직접 이동하며 Relayium 서버를 거치지 않습니다. 이 가이드는 설치와 첫 전송까지 안내한 뒤, 각 모드별로 더 깊은 방법을 다루는 글로 안내합니다.",
   ],
   sections: [
@@ -707,7 +707,7 @@ relayium text 483920`,
     items: [
       {
         q: "CLI 사용에 비용이 드나요?",
-        a: "아니요. CLI는 완전히 무료입니다. 직접 전송되는 파일과 텍스트 데이터는 Relayium 릴레이를 거치지 않으므로 계량할 것도 지불할 것도 없습니다.",
+        a: "CLI 자체는 무료 오픈소스이며, 직접 연결 모드(push, pull, 데몬 다이렉트, send / receive)는 사용해도 비용이 들지 않습니다. 이 파일과 텍스트 데이터는 Relayium 릴레이를 거치지 않으므로 계량할 것이 없습니다. 요금제 한도를 쓰는 명령은 up과 down으로, 계정 아래에 보관되는 암호화 사본을 쓰고 다시 읽어 옵니다. up은 네 가지 별도 한도에 포함됩니다. 월간 트래픽 허용량, 한 번에 저장해 둘 수 있는 양에 대한 저장 용량 한도, 요금제의 보관 기간 상한, 그리고 일일 업로드 한도입니다. down은 사본을 읽어 올 때 월간 트래픽 허용량에 포함됩니다. 유료 요금제는 이 모두를 높여 줍니다.",
       },
       {
         q: "Relayium 계정이 필요한가요?",
@@ -724,7 +724,7 @@ relayium text 483920`,
     ],
   },
   cta: {
-    text: "Relayium CLI를 설치하고 첫 전송을 해보세요 — 완전 무료입니다.",
+    text: "무료 오픈소스 Relayium CLI를 설치하고 첫 직접 전송을 해보세요.",
     button: "CLI 받기",
     href: "/cli",
   },
@@ -887,7 +887,7 @@ relayium text 483920`,
     items: [
       {
         q: "Kostet die CLI etwas?",
-        a: "Nein. Die CLI ist völlig kostenlos. Direkt übertragene Datei- und Textbytes laufen nie über ein Relayium-Relay, also gibt es nichts zu messen und nichts zu bezahlen.",
+        a: "Die CLI selbst ist kostenlos und quelloffen, und die direkten Modi — push, pull, daemon-direct und send / receive — kosten nichts: Diese Datei- und Textbytes laufen nie über ein Relayium-Relay, es gibt also nichts zu messen. Deinen Tarif belasten up und down, die eine verschlüsselte Kopie unter deinem Konto schreiben und zurücklesen. up zählt gegen vier separate Limits — dein monatliches Datenkontingent, das Speicherlimit dafür, wie viel du gleichzeitig gespeichert hältst, die Aufbewahrungsdauer deines Tarifs und ein tägliches Upload-Limit —, und down zählt beim Zurücklesen der Kopie gegen das Datenkontingent; bezahlte Tarife erhöhen sie alle.",
       },
       {
         q: "Brauche ich ein Relayium-Konto?",
@@ -904,7 +904,7 @@ relayium text 483920`,
     ],
   },
   cta: {
-    text: "Installiere die Relayium CLI und mach deine erste Übertragung — völlig kostenlos.",
+    text: "Installiere die kostenlose, quelloffene Relayium CLI und mach deine erste direkte Übertragung.",
     button: "CLI holen",
     href: "/cli",
   },
@@ -1067,7 +1067,7 @@ relayium text 483920`,
     items: [
       {
         q: "La CLI coûte-t-elle quelque chose ?",
-        a: "Non. La CLI est entièrement gratuite. Les octets de fichiers et de texte transférés directement ne passent jamais par un relais Relayium ; il n'y a donc rien à mesurer ni à payer.",
+        a: "La CLI elle-même est gratuite et open source, et les modes directs — push, pull, daemon-direct et send / receive — ne coûtent rien à l'usage : ces octets de fichiers et de texte ne passent jamais par un relais Relayium, il n'y a donc rien à mesurer. Les commandes qui puisent dans votre offre sont up et down, qui écrivent et relisent une copie chiffrée conservée sous votre compte. up compte dans quatre limites distinctes — votre quota de trafic mensuel, la limite de stockage pour ce que vous gardez stocké à la fois, la durée de conservation maximale de votre offre et une limite d'envoi quotidienne — et down compte dans le quota de trafic lorsqu'il relit la copie. Les offres payantes les relèvent toutes.",
       },
       {
         q: "Ai-je besoin d'un compte Relayium ?",
@@ -1084,7 +1084,7 @@ relayium text 483920`,
     ],
   },
   cta: {
-    text: "Installez la CLI Relayium et effectuez votre premier transfert — entièrement gratuit.",
+    text: "Installez la CLI Relayium, gratuite et open source, et effectuez votre premier transfert direct.",
     button: "Obtenir la CLI",
     href: "/cli",
   },
@@ -1247,7 +1247,7 @@ relayium text 483920`,
     items: [
       {
         q: "هل يكلّف CLI أي شيء؟",
-        a: "لا. إن CLI مجاني تمامًا. لا تمر بايتات الملفات والنصوص المنقولة مباشرة عبر مُرحِّل Relayium، فلا شيء لقياسه ولا شيء لدفعه.",
+        a: "إن CLI نفسه مجاني ومفتوح المصدر، والأوضاع المباشرة — push وpull وdaemon direct وsend / receive — لا تكلّف شيئًا: لا تمر بايتات الملفات والنصوص هذه أبدًا عبر مُرحِّل Relayium، فلا يوجد ما يُقاس. أما ما يستهلك من خطتك فهو الأمران up وdown، إذ يكتبان نسخة مشفّرة محفوظة تحت حسابك ويقرآنها. يُحتسب up ضمن أربعة حدود منفصلة — حصة حركة البيانات الشهرية، وحدّ التخزين لما تحتفظ به مُخزَّنًا في آنٍ واحد، ومدة الاحتفاظ القصوى في خطتك، وحدّ رفع يومي — ويُحتسب down ضمن حصة حركة البيانات عند قراءة النسخة. والخطط المدفوعة ترفعها جميعًا.",
       },
       {
         q: "هل أحتاج إلى حساب Relayium؟",
@@ -1264,7 +1264,7 @@ relayium text 483920`,
     ],
   },
   cta: {
-    text: "ثبّت Relayium CLI ونفّذ أول عملية نقل لك — مجاني تمامًا.",
+    text: "ثبّت Relayium CLI المجاني والمفتوح المصدر ونفّذ أول عملية نقل مباشر لك.",
     button: "احصل على CLI",
     href: "/cli",
   },
@@ -1427,7 +1427,7 @@ relayium text 483920`,
     items: [
       {
         q: "¿La CLI cuesta algo?",
-        a: "No. La CLI es completamente gratis. Los bytes de archivos y texto transferidos directamente nunca pasan por un retransmisor de Relayium, así que no hay nada que medir ni pagar.",
+        a: "La CLI en sí es gratis y de código abierto, y los modos directos — push, pull, daemon directo y send / receive — no cuestan nada: esos bytes de archivos y texto nunca pasan por un retransmisor de Relayium, así que no hay nada que medir. Los comandos que consumen tu plan son up y down, que escriben y vuelven a leer una copia cifrada guardada en tu cuenta. up cuenta para cuatro límites distintos — tu franquicia mensual de tráfico, el límite de almacenamiento de lo que guardas a la vez, el periodo de retención máximo de tu plan y un límite de subida diario — y down cuenta para la franquicia de tráfico al leer la copia. Los planes de pago los amplían todos.",
       },
       {
         q: "¿Necesito una cuenta de Relayium?",
@@ -1444,7 +1444,7 @@ relayium text 483920`,
     ],
   },
   cta: {
-    text: "Instala la CLI de Relayium y haz tu primera transferencia — completamente gratis.",
+    text: "Instala la CLI de Relayium, gratis y de código abierto, y haz tu primera transferencia directa.",
     button: "Obtener la CLI",
     href: "/cli",
   },
@@ -1607,7 +1607,7 @@ relayium text 483920`,
     items: [
       {
         q: "A CLI custa alguma coisa?",
-        a: "Não. A CLI é totalmente gratuita. Os bytes de arquivos e texto transferidos diretamente nunca passam por um retransmissor do Relayium, então não há nada a medir nem pagar.",
+        a: "A CLI em si é gratuita e de código aberto, e os modos diretos — push, pull, daemon direto e send / receive — não custam nada: esses bytes de arquivos e texto nunca passam por um retransmissor do Relayium, então não há nada a medir. Os comandos que usam o seu plano são up e down, que gravam e leem de volta uma cópia criptografada guardada na sua conta. O up conta para quatro limites separados — a sua cota mensal de tráfego, o limite de armazenamento do que você mantém guardado ao mesmo tempo, o período de retenção máximo do seu plano e um limite diário de upload — e o down conta para a cota de tráfego ao ler a cópia de volta. Os planos pagos aumentam todos eles.",
       },
       {
         q: "Preciso de uma conta do Relayium?",
@@ -1624,7 +1624,7 @@ relayium text 483920`,
     ],
   },
   cta: {
-    text: "Instale a CLI do Relayium e faça a sua primeira transferência — totalmente gratuita.",
+    text: "Instale a CLI do Relayium, gratuita e de código aberto, e faça a sua primeira transferência direta.",
     button: "Obter a CLI",
     href: "/cli",
   },

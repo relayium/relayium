@@ -280,7 +280,7 @@ const ja = {
       },
       {
         q: "Relayium の CLI は無料ですか？",
-        a: "はい、完全に無料です。有料プランはなく、AGPL-3.0 ライセンスでオープンソース、どのモードでも両端が直接つながります。",
+        a: "CLI は AGPL-3.0 ライセンスのオープンソースで、この比較で扱うモード（push、pull、daemon 直結）は両端を直接つなぎ、計測も料金もありません。Relayium のプランを使う唯一のコマンドは up で、暗号化したコピーをホスト型ストレージに保存します。scp には相当する機能がありません。",
       },
     ],
   },
@@ -375,7 +375,7 @@ const ko = {
       },
       {
         q: "Relayium의 CLI는 무료인가요?",
-        a: "네, 완전히 무료입니다 — 유료 등급이 없고, AGPL-3.0 라이선스로 오픈소스이며, 모든 모드가 양쪽을 직접 연결합니다.",
+        a: "CLI는 AGPL-3.0 라이선스의 오픈소스이며, 이 비교에서 다루는 모드(push, pull, daemon 다이렉트)는 양쪽을 직접 연결하고 계량되는 것도 요금도 없습니다. Relayium 요금제를 쓰는 유일한 명령은 up으로, 암호화된 사본을 호스팅 저장소에 보관합니다. scp에는 이에 해당하는 기능이 없습니다.",
       },
     ],
   },
@@ -470,7 +470,7 @@ const de = {
       },
       {
         q: "Ist Relayiums CLI kostenlos?",
-        a: "Ja, vollständig — keine bezahlte Stufe, AGPL-3.0-lizenziert und quelloffen, und jeder Modus verbindet die beiden Enden direkt.",
+        a: "Die CLI ist AGPL-3.0-lizenziert und quelloffen, und die Modi, um die es in diesem Vergleich geht — push, pull und daemon-direct —, verbinden die beiden Enden direkt, ohne dass etwas gemessen wird oder etwas kostet. Der einzige Befehl, der deinen Relayium-Tarif nutzt, ist up, der eine verschlüsselte Kopie im gehosteten Speicher ablegt; scp hat nichts Vergleichbares.",
       },
     ],
   },
@@ -565,7 +565,7 @@ const fr = {
       },
       {
         q: "La CLI Relayium est-elle gratuite ?",
-        a: "Oui, entièrement — aucun palier payant, sous licence AGPL-3.0 et open source, et chaque mode connecte directement les deux extrémités.",
+        a: "La CLI est sous licence AGPL-3.0 et open source, et les modes dont parle ce comparatif — push, pull et daemon-direct — connectent directement les deux extrémités, sans rien de mesuré ni rien à payer. La seule commande qui puise dans votre offre Relayium est up, qui stocke une copie chiffrée dans le stockage hébergé ; scp n'a pas d'équivalent.",
       },
     ],
   },
@@ -662,7 +662,7 @@ const ar = {
       },
       {
         q: "هل واجهة Relayium السطرية مجانية؟",
-        a: "نعم، بالكامل — لا فئة مدفوعة، مرخّصة بـ AGPL-3.0 ومفتوحة المصدر، وكل وضع يصل الطرفين مباشرةً.",
+        a: "الواجهة السطرية مرخّصة بـ AGPL-3.0 ومفتوحة المصدر، والأوضاع التي تتناولها هذه المقارنة — push وpull وdaemon direct — تصل الطرفين مباشرةً بلا شيء يُقاس ولا شيء يُدفع. والأمر الوحيد الذي يستهلك من خطتك في Relayium هو up، الذي يخزّن نسخة مُشفَّرة في التخزين المُستضاف؛ وليس لدى scp ما يقابله.",
       },
     ],
   },
@@ -759,7 +759,7 @@ const es = {
       },
       {
         q: "¿La CLI de Relayium es gratis?",
-        a: "Sí, por completo: sin nivel de pago, con licencia AGPL-3.0 y de código abierto, y cada modo conecta ambos extremos directamente.",
+        a: "La CLI tiene licencia AGPL-3.0 y es de código abierto, y los modos de los que trata esta comparación — push, pull y daemon directo — conectan ambos extremos directamente, sin nada que se mida ni nada que pagar. El único comando que usa tu plan de Relayium es up, que guarda una copia cifrada en el almacenamiento alojado; scp no tiene equivalente.",
       },
     ],
   },
@@ -856,7 +856,7 @@ const pt = {
       },
       {
         q: "A CLI do Relayium é gratuita?",
-        a: "Sim, totalmente — sem nível pago, licenciada sob AGPL-3.0 e de código aberto, e cada modo conecta as duas pontas diretamente.",
+        a: "A CLI é licenciada sob AGPL-3.0 e de código aberto, e os modos de que trata esta comparação — push, pull e daemon direto — conectam as duas pontas diretamente, sem nada medido e nada a pagar. O único comando que usa o seu plano do Relayium é o up, que guarda uma cópia criptografada no armazenamento hospedado; o scp não tem equivalente.",
       },
     ],
   },

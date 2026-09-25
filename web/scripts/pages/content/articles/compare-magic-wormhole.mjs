@@ -265,7 +265,7 @@ const ja = {
     items: [
       {
         q: "Relayium の CLI は無料ですか？",
-        a: "はい、完全に無料です。有料プランはなく、計測するものもありません。どのモードでも両端が直接つながり、CLI はオープンソースです。",
+        a: "CLI はオープンソースで、直結モード（push、pull、sync、daemon 直結、send / receive）は両端を直接つなぐため、計測するものはありません。唯一の例外は up で、ファイルを Relayium アカウントに保存し、プランのストレージ上限に計上されます。magic-wormhole には相当する機能がありません。",
       },
       {
         q: "アカウントは必要ですか？",
@@ -361,7 +361,7 @@ const ko = {
     items: [
       {
         q: "Relayium의 CLI는 무료인가요?",
-        a: "네, 완전히 무료입니다. 유료 등급이 없고 계량할 것도 없습니다 — 모든 모드가 양쪽을 직접 연결하며, CLI는 오픈소스입니다.",
+        a: "CLI는 오픈소스이며, 직접 연결 모드(push, pull, sync, daemon 다이렉트, send / receive)는 양쪽을 직접 연결하므로 계량할 것이 없습니다. 유일한 예외는 up으로, 파일을 Relayium 계정에 저장하며 요금제의 저장 용량 한도에 포함됩니다. magic-wormhole에는 이에 해당하는 기능이 없습니다.",
       },
       {
         q: "계정이 필요한가요?",
@@ -457,7 +457,7 @@ const de = {
     items: [
       {
         q: "Ist Relayiums CLI kostenlos?",
-        a: "Ja, vollständig. Es gibt keine bezahlte Stufe und nichts zu messen — jeder Modus verbindet die beiden Enden direkt, und die CLI ist quelloffen.",
+        a: "Die CLI ist quelloffen, und ihre direkten Modi — push, pull, sync, daemon-direct und send / receive — verbinden die beiden Enden direkt, es gibt nichts zu messen. Die einzige Ausnahme ist up: Es speichert eine Datei unter deinem Relayium-Konto und zählt gegen das Speicherlimit deines Tarifs; magic-wormhole hat nichts Vergleichbares.",
       },
       {
         q: "Braucht sie ein Konto?",
@@ -553,7 +553,7 @@ const fr = {
     items: [
       {
         q: "La CLI Relayium est-elle gratuite ?",
-        a: "Oui, entièrement. Il n'y a aucun palier payant et rien à mesurer — chaque mode connecte directement les deux extrémités, et la CLI est open source.",
+        a: "La CLI est open source, et ses modes directs — push, pull, sync, daemon-direct et send / receive — connectent directement les deux extrémités, sans rien à mesurer. La seule exception est up, qui stocke un fichier sous votre compte Relayium et compte dans la limite de stockage de votre offre ; magic-wormhole n'a pas d'équivalent.",
       },
       {
         q: "A-t-elle besoin d'un compte ?",
@@ -649,7 +649,7 @@ const ar = {
     items: [
       {
         q: "هل CLI في Relayium مجاني؟",
-        a: "نعم، تمامًا. لا توجد فئة مدفوعة ولا شيء يُقاس — كل وضع يوصل الطرفين مباشرة، و CLI مفتوح المصدر.",
+        a: "الـ CLI مفتوح المصدر، وأوضاعه المباشرة — push وpull وsync وdaemon direct وsend / receive — توصل الطرفين مباشرةً فلا يوجد ما يُقاس. الاستثناء الوحيد هو up، الذي يخزّن ملفًا تحت حسابك في Relayium ويُحتسب ضمن حدّ التخزين في خطتك؛ وليس لدى magic-wormhole ما يقابله.",
       },
       {
         q: "هل يحتاج إلى حساب؟",
@@ -745,7 +745,7 @@ const es = {
     items: [
       {
         q: "¿Es gratis la CLI de Relayium?",
-        a: "Sí, completamente. No hay un nivel de pago ni nada que medir — cada modo conecta los dos extremos directamente, y la CLI es de código abierto.",
+        a: "La CLI es de código abierto, y sus modos directos — push, pull, sync, daemon directo y send / receive — conectan los dos extremos directamente, sin nada que medir. La única excepción es up, que guarda un archivo en tu cuenta de Relayium y cuenta para el límite de almacenamiento de tu plan; magic-wormhole no tiene equivalente.",
       },
       {
         q: "¿Necesita una cuenta?",
@@ -841,7 +841,7 @@ const pt = {
     items: [
       {
         q: "A CLI do Relayium é gratuita?",
-        a: "Sim, completamente. Não há nível pago nem nada a medir — cada modo conecta as duas pontas diretamente, e a CLI é de código aberto.",
+        a: "A CLI é de código aberto, e seus modos diretos — push, pull, sync, daemon direto e send / receive — conectam as duas pontas diretamente, sem nada para medir. A única exceção é o up, que guarda um arquivo na sua conta do Relayium e conta para o limite de armazenamento do seu plano; o magic-wormhole não tem equivalente.",
       },
       {
         q: "Ela precisa de conta?",

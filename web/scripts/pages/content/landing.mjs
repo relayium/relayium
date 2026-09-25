@@ -180,7 +180,7 @@ const ja = {
     items: [
       {
         q: "無料ですか？",
-        a: "無料です。RelayiumはAGPL-3.0ライセンスのオープンソースで、料金は一切かかりません。同じネットワークならリアルタイム転送はログイン不要で、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。受信側はどちらの場合もアカウント不要です。",
+        a: "ソフトウェア自体はAGPL-3.0ライセンスの無料オープンソースで、インストール不要、自分で運用することもできます。relayium.comのホスト型サービスには無料枠がありますが、無制限に無料でホストするものではありません。同じネットワーク内のファイルとテキストのリアルタイム転送は無料でログイン不要、コードでの参加にアカウントは一切要りません。ネットワークをまたぐペアリングコードや保存型ダウンロードリンクの作成にはサインインが必要で、プランの枠を消費します。ホスト型のアップロード・ダウンロードと中継バイトを合算する月間転送量の枠、同時に保存しておける暗号化データ量に対する別のストレージ上限、別の保存期間の上限、別の1日あたりのアップロード上限です。無料アカウントにもそれぞれの枠があり、有料プランではそれらが引き上げられます。",
       },
       {
         q: "ファイルはサーバーにアップロードされますか？",
@@ -285,7 +285,7 @@ const ko = {
     items: [
       {
         q: "무료인가요?",
-        a: "무료입니다. Relayium은 AGPL-3.0 라이선스의 오픈소스이며 비용은 전혀 들지 않습니다. 같은 네트워크에서는 실시간 전송에 로그인이 필요 없고, 네트워크를 넘는 페어링 코드 전송은 보내는 쪽만 로그인하면 됩니다 — 받는 쪽은 어느 경우든 계정이 필요 없습니다.",
+        a: "소프트웨어 자체는 AGPL-3.0 라이선스의 무료 오픈소스이고 설치가 필요 없으며, 직접 운영할 수도 있습니다. relayium.com의 호스팅 서비스는 무제한 무료 호스팅이 아니라 무료 한도를 제공합니다. 같은 네트워크 안의 실시간 파일·텍스트 전송은 무료이고 로그인이 필요 없으며, 코드로 참여할 때는 언제나 계정이 필요 없습니다. 네트워크를 넘는 페어링 코드나 저장 다운로드 링크를 만들려면 로그인이 필요하고, 요금제의 한도를 씁니다. 호스팅 업로드·호스팅 다운로드·중계 바이트를 합산하는 월간 트래픽 허용량, 한 번에 저장해 둘 수 있는 암호화 데이터 양에 대한 별도의 저장 용량 한도, 별도의 보관 기간 한도, 별도의 일일 업로드 한도입니다. 무료 계정에도 각각의 허용량이 있고, 유료 요금제는 이를 높여 줍니다.",
       },
       {
         q: "파일이 서버에 업로드되나요?",
@@ -390,7 +390,7 @@ const de = {
     items: [
       {
         q: "Ist es kostenlos?",
-        a: "Ja. Relayium ist Open Source unter der AGPL-3.0-Lizenz und ohne jede Gebühr nutzbar. Im selben Netz sind Echtzeitübertragungen ohne Anmeldung möglich; für Pairing über Netzwerke hinweg meldet sich nur der Absender an — der Empfänger braucht in beiden Fällen kein Konto.",
+        a: "Die Software ist kostenlos und Open Source unter der AGPL-3.0-Lizenz, ohne Installation, und du kannst sie selbst betreiben. Der gehostete Dienst auf relayium.com hat einen kostenlosen Tarif, kein unbegrenzt kostenloses Hosting. Datei- und Live-Textübertragungen im selben Netz sind kostenlos und brauchen kein Konto, und wer mit einem Code beitritt, braucht nie eines. Das Erstellen eines netzwerkübergreifenden Pairing-Codes oder eines gespeicherten Download-Links erfordert eine Anmeldung und verbraucht die Limits deines Tarifs: ein monatliches Datenkontingent, das gehostete Uploads, gehostete Downloads und weitergeleitete Relay-Bytes zusammen zählt, ein separates Speicherlimit dafür, wie viele verschlüsselte Daten du gleichzeitig gespeichert hältst, eine separate Aufbewahrungsdauer und ein separates tägliches Upload-Limit. Kostenlose Konten erhalten von jedem ein Kontingent; bezahlte Tarife erhöhen sie.",
       },
       {
         q: "Werden meine Dateien auf einen Server hochgeladen?",
@@ -497,7 +497,7 @@ const fr = {
     items: [
       {
         q: "Est-ce gratuit ?",
-        a: "Oui. Relayium est open source sous licence AGPL-3.0 et s'utilise sans aucun frais. Sur le même réseau, les transferts en temps réel ne demandent aucune connexion ; pour s'appairer entre réseaux différents, seul l'expéditeur doit se connecter — le destinataire n'a jamais besoin de compte.",
+        a: "Le logiciel est gratuit et open source (AGPL-3.0), sans installation, et vous pouvez l'héberger vous-même. Le service hébergé sur relayium.com propose une offre gratuite, pas un hébergement gratuit illimité. Les transferts de fichiers et de texte en temps réel sur le même réseau sont gratuits et ne demandent aucun compte, et rejoindre avec un code n'en demande jamais. Créer un code d'appairage entre réseaux ou un lien de téléchargement stocké exige une connexion et puise dans les limites de votre offre : un quota de trafic mensuel qui compte ensemble les envois hébergés, les téléchargements hébergés et les octets relayés, une limite de stockage distincte pour la quantité de données chiffrées que vous gardez stockées à la fois, une durée de conservation distincte et une limite d'envoi quotidienne distincte. Les comptes gratuits disposent d'un quota pour chacune ; les offres payantes les relèvent.",
       },
       {
         q: "Mes fichiers sont-ils téléversés sur un serveur ?",
@@ -604,7 +604,7 @@ const ar = {
     items: [
       {
         q: "هل هو مجاني؟",
-        a: "نعم. Relayium مفتوح المصدر برخصة AGPL-3.0 ويُستخدم دون أي رسوم. على نفس الشبكة لا يتطلب النقل الفوري أي تسجيل دخول؛ وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول — ولا يحتاج المُستقبِل إلى حساب أبدًا.",
+        a: "البرنامج مجاني ومفتوح المصدر (AGPL-3.0)، بلا تثبيت، ويمكنك تشغيله بنفسك. أما الخدمة المُستضافة على relayium.com فتقدّم فئة مجانية، لا استضافة مجانية بلا حدود. نقل الملفات والنصوص الفوري على نفس الشبكة مجاني ولا يتطلب حسابًا، والانضمام برمز لا يتطلب حسابًا أبدًا. إنشاء رمز اقتران عبر الشبكات أو رابط تنزيل مُخزَّن يتطلب تسجيل الدخول ويستهلك حدود خطتك: حصة حركة البيانات الشهرية التي تحتسب الرفع المُستضاف والتنزيل المُستضاف وبايتات الترحيل معًا، وحدّ تخزين منفصل لكمية البيانات المُشفَّرة التي تحتفظ بها مُخزَّنة في آنٍ واحد، ومدة احتفاظ منفصلة، وحدّ رفع يومي منفصل. تحصل الحسابات المجانية على حصة من كلٍّ منها، والخطط المدفوعة ترفعها.",
       },
       {
         q: "هل تُرفع ملفاتي إلى خادم؟",
@@ -711,7 +711,7 @@ const es = {
     items: [
       {
         q: "¿Es gratis?",
-        a: "Sí. Relayium es de código abierto bajo licencia AGPL-3.0 y se usa sin coste alguno. En la misma red, las transferencias en tiempo real no requieren iniciar sesión; para emparejar entre redes distintas solo el remitente debe iniciar sesión — el destinatario nunca necesita cuenta.",
+        a: "El software es gratis y de código abierto (AGPL-3.0), sin instalación, y puedes ejecutarlo tú mismo. El servicio alojado en relayium.com tiene un nivel gratuito, no alojamiento gratuito ilimitado. Las transferencias de archivos y texto en tiempo real en la misma red son gratis y no requieren cuenta, y unirse con un código nunca la requiere. Crear un código de emparejamiento entre redes o un enlace de descarga almacenado requiere iniciar sesión y consume los límites de tu plan: una franquicia mensual de tráfico que suma las subidas alojadas, las descargas alojadas y los bytes retransmitidos, un límite de almacenamiento aparte para cuántos datos cifrados guardas almacenados a la vez, un periodo de retención aparte y un límite de subida diario aparte. Las cuentas gratuitas tienen una franquicia de cada uno; los planes de pago los amplían.",
       },
       {
         q: "¿Se suben mis archivos a un servidor?",
@@ -818,7 +818,7 @@ const pt = {
     items: [
       {
         q: "É gratuito?",
-        a: "Sim. O Relayium é de código aberto sob licença AGPL-3.0 e é usado sem custo algum. Na mesma rede, as transferências em tempo real não exigem login; para emparelhar entre redes diferentes só o remetente precisa fazer login — o destinatário nunca precisa de conta.",
+        a: "O software é gratuito e de código aberto (AGPL-3.0), sem instalação, e você pode executá-lo por conta própria. O serviço hospedado em relayium.com tem um nível gratuito, não hospedagem gratuita ilimitada. Transferências de arquivos e de texto em tempo real na mesma rede são gratuitas e não exigem conta, e entrar com um código nunca exige. Criar um código de emparelhamento entre redes ou um link de download armazenado exige login e consome os limites do seu plano: uma cota mensal de tráfego que soma uploads hospedados, downloads hospedados e bytes retransmitidos, um limite de armazenamento separado para quantos dados criptografados você mantém armazenados ao mesmo tempo, um período de retenção separado e um limite diário de upload separado. Contas gratuitas recebem uma cota de cada; os planos pagos os aumentam.",
       },
       {
         q: "Meus arquivos são enviados para um servidor?",

@@ -446,19 +446,19 @@ enabled`,
 };
 
 const ja = {
-  title: "Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う",
+  title: "Bring Your Own Node：リレー＆ストレージのトラフィックを自分のノードで運ぶ",
   description:
-    "自分で用意したリレー／ストレージノードを、コマンド1つで Relayium アカウントに紐付けます。以降、転送は当社の従量課金サーバーではなく自分のノードを経由するので無料になり、データも自分で管理するハードウェア上にとどまります。",
+    "自分で用意したリレー／ストレージノードを、コマンド1つで Relayium アカウントに紐付けます。ノードが中継したバイトとノードに保存したアップロードは月間転送量の枠を消費しなくなり、データも自分で管理するハードウェア上にとどまります。",
   updatedLabel: "最終更新",
   lead: [
-    "ネットワークをまたぐ転送や保存リンクは、当社にとってコストのかかるリレー帯域とディスクを使うため、無料枠の範囲内で動作し、それを超えると有料になります。それを回避する方法があります。自分のリレー／ストレージノードを立ち上げてアカウントに紐付ければ、転送は当社ではなく自分のノードを経由するようになり、従量課金も請求も一切ありません。",
+    "ネットワークをまたぐ転送や保存リンクは、当社にとってコストのかかるリレー帯域とディスクを使うため、無料枠の範囲内で動作し、それを超えると有料になります。自分のリレー／ストレージノードをアカウントに紐付けると、そのノードが運ぶ分はこの計量から外れます。ノードを経由して中継されたバイトと、ノードに保存したアップロードは、月間転送量の枠に数えられません。ただし、ノードに保存したファイルはストレージ上限には数えられます。それらのファイルのダウンロードはすべて Relayium が中継して計量され、セッションが当社のリレーを最速経路として選んだ場合もその分は計量されます。",
     "これは Relayium サーバー全体をセルフホストするのとは異なります。いつもの relayium.com アカウントと同じアプリをそのまま使い続け、自分のトラフィックを運ぶノードを追加するだけです。このガイドでは、まっさらな Linux マシンからオンラインのノードまで、およそ5分で到達できます。",
   ],
   sections: [
     {
       heading: "なぜ自分のノードを立てるのか",
       body: [
-        "理由は2つあります。1つ目はコストです。自分のノードはリレーとストレージのトラフィックを直接運ぶため、当社の従量課金インフラに一切触れず、請求するものが何もありません。使用量がどれだけ大きくても無料です。",
+        "理由は2つあります。1つ目はコストです。自分のノードが中継するバイトと、ノードに保存したアップロードは月間転送量の枠を消費しません。ただし、それらのファイルはストレージ上限には数えられます。Relayium が自分のノードから中継するダウンロードは引き続き計量され、月間の枠を使い切ると、ネットワークをまたぐ中継は自分のノード上でもリセットまで停止します。",
         "2つ目はコントロールです。リレーされたバイト列や保存されたブロブは、自分で運用し、自分の運用管理下に置いたハードウェア上に存在します。リアルタイム転送は全経路でエンドツーエンド暗号化されたままなので、自分のノードでさえ常に暗号文しか見えません。",
       ],
     },
@@ -500,7 +500,7 @@ const ja = {
           text: "クラウド VPS の場合は、事業者のセキュリティグループでも同じポートを許可してください。ufw だけでは上流で塞がれたままで、しかもノードはその間ずっと健全に見えます。",
         },
         {
-          text: "/me に戻り、ノードがオンラインに変わるのを待ちます——たいてい30秒ほどです。以降、アカウントの転送は自動的にこのノードを優先します。",
+          text: "/me に戻り、ノードがオンラインに変わるのを待ちます——たいてい30秒ほどです。以降、アカウントのアップロードはまずこのノードに保存され、このノードが最速経路のときはネットワークをまたぐセッションもここを経由して中継されます。",
         },
         {
           text: "任意: 「自分のノードだけを中継／保存に使う」をオンにすると、共有インフラへ黙って戻る代わりに転送が失敗するようになります。",
@@ -662,19 +662,19 @@ enabled`,
 };
 
 const ko = {
-  title: "Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기",
+  title: "Bring Your Own Node: 릴레이 및 스토리지 트래픽을 내 노드로 운반하기",
   description:
-    "직접 준비한 릴레이/스토리지 노드를 명령어 하나로 Relayium 계정에 연결하세요. 그러면 전송이 종량제 서버가 아닌 내 노드를 통해 이루어지므로 무료이며, 데이터도 직접 관리하는 하드웨어에 남습니다.",
+    "직접 준비한 릴레이/스토리지 노드를 명령어 하나로 Relayium 계정에 연결하세요. 노드가 중계한 바이트와 노드에 저장한 업로드는 월간 트래픽 허용량을 쓰지 않으며, 데이터도 직접 관리하는 하드웨어에 남습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "네트워크를 넘나드는 전송과 저장된 링크는 당사에 비용이 드는 릴레이 대역폭과 디스크를 사용하므로, 무료 허용량 내에서 동작하고 그 이상은 유료입니다. 이를 우회하는 방법이 있습니다. 직접 릴레이/스토리지 노드를 운영하여 계정에 연결하면, 전송이 당사가 아닌 내 노드를 통해 흐르며 종량 계측도 청구도 전혀 없습니다.",
+    "네트워크를 넘나드는 전송과 저장된 링크는 당사에 비용이 드는 릴레이 대역폭과 디스크를 사용하므로, 무료 허용량 내에서 동작하고 그 이상은 유료입니다. 직접 운영하는 릴레이/스토리지 노드를 계정에 연결하면, 그 노드가 운반하는 부분은 이 계측에서 빠집니다. 노드를 거쳐 중계된 바이트와 노드에 저장된 업로드는 월간 트래픽 허용량에 포함되지 않습니다. 다만 노드에 저장된 파일은 여전히 저장 용량 한도에 포함되며, 그 파일의 모든 다운로드는 Relayium이 중계하므로 계측되고, 세션이 당사 릴레이를 가장 빠른 경로로 고른 경우에도 그 부분은 계측됩니다.",
     "이는 Relayium 서버 전체를 셀프 호스팅하는 것과는 다릅니다. 평소 쓰던 relayium.com 계정과 동일한 앱을 그대로 사용하면서, 트래픽을 운반할 본인 소유의 노드를 추가하는 것뿐입니다. 이 가이드는 새로운 Linux 머신에서 온라인 노드까지 약 5분 만에 안내합니다.",
   ],
   sections: [
     {
       heading: "왜 직접 노드를 운영해야 하나",
       body: [
-        "두 가지 이유가 있습니다. 첫째, 비용입니다. 직접 운영하는 노드는 내 릴레이와 스토리지 트래픽을 직접 운반하므로 당사의 종량제 인프라에 전혀 닿지 않고 청구할 것이 없습니다. 사용량이 아무리 커도 무료입니다.",
+        "두 가지 이유가 있습니다. 첫째, 비용입니다. 내 노드가 중계하는 바이트와 노드에 저장된 업로드는 월간 트래픽 허용량을 쓰지 않습니다. 다만 그 파일은 여전히 저장 용량 한도에 포함됩니다. Relayium이 내 노드에서 중계하는 다운로드는 계속 계측되며, 월간 허용량을 다 쓰면 네트워크를 넘는 중계는 내 노드에서도 초기화될 때까지 멈춥니다.",
         "둘째, 통제권입니다. 릴레이된 바이트와 저장된 블롭은 직접 운영하고 본인의 운영 통제하에 있는 하드웨어에 존재합니다. 실시간 전송은 전 구간에서 종단 간 암호화를 유지하므로, 내 노드조차 항상 암호문만 보게 됩니다.",
       ],
     },
@@ -716,7 +716,7 @@ const ko = {
           text: "클라우드 VPS라면 제공업체의 보안 그룹에서도 같은 포트를 허용하세요. ufw만으로는 상위에서 막힌 채로 남고, 그동안 노드는 계속 정상으로 보입니다.",
         },
         {
-          text: "/me로 돌아가 노드가 온라인으로 바뀌는지 지켜봅니다 — 보통 30초 정도입니다. 그 뒤로 계정의 전송은 자동으로 이 노드를 우선합니다.",
+          text: "/me로 돌아가 노드가 온라인으로 바뀌는지 지켜봅니다 — 보통 30초 정도입니다. 그 뒤로 계정의 업로드는 먼저 이 노드에 저장되고, 이 노드가 가장 빠른 경로일 때는 네트워크를 넘는 세션도 이 노드를 거쳐 중계됩니다.",
         },
         {
           text: "선택: 「중계/저장에 내 노드만 사용」을 켜면 공유 인프라로 조용히 되돌아가는 대신 전송이 실패합니다.",
@@ -878,19 +878,19 @@ enabled`,
 };
 
 const de = {
-  title: "Bring Your Own Node: Relay und Speicher von Relayium kostenlos nutzen",
+  title: "Bring Your Own Node: deinen Relay- und Speicherverkehr über den eigenen Node tragen",
   description:
-    "Binde mit einem einzigen Befehl deinen eigenen Relay-/Speicher-Node an dein Relayium-Konto an. Deine Übertragungen laufen dann über deinen Node — nicht über unsere abrechnungspflichtigen Server —, sind also kostenlos, und die Daten bleiben auf Hardware, die du selbst kontrollierst.",
+    "Binde mit einem einzigen Befehl deinen eigenen Relay-/Speicher-Node an dein Relayium-Konto an. Die Bytes, die er weiterleitet, und die Uploads, die er speichert, verbrauchen dann kein monatliches Datenkontingent mehr, und die Daten bleiben auf Hardware, die du selbst kontrollierst.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Netzübergreifende Übertragungen und gespeicherte Links nutzen Relay-Bandbreite und Speicherplatz, die uns Geld kosten, und laufen daher auf einem kostenlosen Kontingent, das darüber hinaus kostenpflichtig ist. Es gibt einen Ausweg: Betreibe deinen eigenen Relay-/Speicher-Node, binde ihn an dein Konto, und deine Übertragungen fließen über deinen Node statt über unseren — nichts wird gemessen, nichts wird berechnet.",
+    "Netzübergreifende Übertragungen und gespeicherte Links nutzen Relay-Bandbreite und Speicherplatz, die uns Geld kosten, und laufen daher auf einem kostenlosen Kontingent, das darüber hinaus kostenpflichtig ist. Ein eigener Relay-/Speicher-Node, an dein Konto gebunden, nimmt das, was er trägt, aus dieser Abrechnung heraus: Bytes, die über ihn weitergeleitet werden, und Uploads, die auf ihm gespeichert sind, zählen nicht gegen das monatliche Datenkontingent. Auf ihm gespeicherte Dateien zählen aber weiterhin zu deinem Speicherlimit; jeder Download davon wird von Relayium getragen und zählt, ebenso eine Sitzung, die eines unserer Relays als schnellste Route wählt.",
     "Das unterscheidet sich davon, den gesamten Relayium-Server selbst zu hosten. Du verwendest weiterhin dein normales relayium.com-Konto und dieselben Apps; du fügst lediglich einen Node hinzu, der dir gehört und deinen Datenverkehr trägt. Diese Anleitung führt dich in etwa fünf Minuten von einem frischen Linux-Rechner zu einem Online-Node.",
   ],
   sections: [
     {
       heading: "Warum einen eigenen Node betreiben",
       body: [
-        "Zwei Gründe. Erstens die Kosten: Ein Node, der dir gehört, trägt deinen Relay- und Speicherverkehr direkt, berührt also nie unsere abrechnungspflichtige Infrastruktur, und es gibt nichts zu berechnen — deine Nutzung ist kostenlos, egal wie groß.",
+        "Zwei Gründe. Erstens die Kosten: Die Bytes, die dein Node weiterleitet, und die auf ihm gespeicherten Uploads verbrauchen kein monatliches Datenkontingent, auch wenn diese Dateien weiterhin zu deinem Speicherlimit zählen. Downloads, die Relayium von deinem Node trägt, zählen weiterhin, und sobald dein Monatskontingent aufgebraucht ist, pausiert netzübergreifendes Relaying auch auf deinem eigenen Node, bis es zurückgesetzt wird.",
         "Zweitens die Kontrolle: Die weitergeleiteten Bytes und gespeicherten Blobs liegen auf Hardware, die du betreibst, unter deiner eigenen betrieblichen Kontrolle. Echtzeit-Übertragungen bleiben auf dem gesamten Weg Ende-zu-Ende-verschlüsselt, sodass selbst dein eigener Node immer nur Chiffretext sieht.",
       ],
     },
@@ -932,7 +932,7 @@ const de = {
           text: "Auf einem Cloud-VPS erlaub dieselben Ports zusätzlich in der Security Group des Anbieters. Mit ufw allein bleiben sie weiter oben dicht — und der Node sieht die ganze Zeit gesund aus.",
         },
         {
-          text: "Zurück auf /me: warte, bis der Node auf Online springt, meist in etwa 30 Sekunden. Ab da bevorzugen die Übertragungen deines Kontos ihn automatisch.",
+          text: "Zurück auf /me: warte, bis der Node auf Online springt, meist in etwa 30 Sekunden. Ab da landen die Uploads deines Kontos zuerst auf ihm, und deine netzübergreifenden Sitzungen können über ihn weitergeleitet werden, wenn er die schnellste Route ist.",
         },
         {
           text: "Optional: Schalte \"Nur meine eigenen Nodes für Relay/Speicher verwenden\" ein, damit eine Übertragung fehlschlägt, statt still auf unsere geteilte Infrastruktur zurückzufallen.",
@@ -1094,19 +1094,19 @@ enabled`,
 };
 
 const fr = {
-  title: "Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium",
+  title: "Apportez votre propre nœud : acheminez votre trafic de relais et de stockage sur votre matériel",
   description:
-    "Rattachez votre propre nœud de relais/stockage à votre compte Relayium en une seule commande. Vos transferts passent alors par votre nœud — et non par nos serveurs facturés à l'usage —, ils sont donc gratuits, et les données restent sur du matériel que vous contrôlez.",
+    "Rattachez votre propre nœud de relais/stockage à votre compte Relayium en une seule commande. Les octets qu'il relaie et les envois qu'il stocke ne consomment plus votre quota de trafic mensuel, et les données restent sur du matériel que vous contrôlez.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Les transferts inter-réseaux et les liens stockés consomment de la bande passante de relais et de l'espace disque qui nous coûtent de l'argent ; ils fonctionnent donc dans la limite d'un quota gratuit et deviennent payants au-delà. Il existe un moyen de contourner cela : faites tourner votre propre nœud de relais/stockage, rattachez-le à votre compte, et vos transferts passent par votre nœud au lieu du nôtre — rien de mesuré, rien de facturé.",
+    "Les transferts inter-réseaux et les liens stockés consomment de la bande passante de relais et de l'espace disque qui nous coûtent de l'argent ; ils fonctionnent donc dans la limite d'un quota gratuit et deviennent payants au-delà. Votre propre nœud de relais/stockage, rattaché à votre compte, sort de ce décompte ce qu'il achemine : les octets relayés par lui et les envois stockés sur lui ne sont pas comptés dans le quota de trafic mensuel. Les fichiers stockés dessus comptent toujours dans votre limite de stockage ; chaque téléchargement de ces fichiers est acheminé par Relayium et compté, tout comme une session qui choisit l'un de nos relais comme route la plus rapide.",
     "C'est différent d'auto-héberger l'ensemble du serveur Relayium. Vous continuez à utiliser votre compte relayium.com habituel et les mêmes applications ; vous ajoutez simplement un nœud qui vous appartient pour acheminer votre trafic. Ce guide vous mène d'une machine Linux vierge à un nœud en ligne en environ cinq minutes.",
   ],
   sections: [
     {
       heading: "Pourquoi faire tourner votre propre nœud",
       body: [
-        "Deux raisons. D'abord, le coût : un nœud qui vous appartient achemine directement votre trafic de relais et de stockage, il ne touche donc jamais notre infrastructure facturée à l'usage et il n'y a rien à facturer — votre utilisation est gratuite, quelle que soit son ampleur.",
+        "Deux raisons. D'abord, le coût : les octets que votre nœud relaie et les envois stockés dessus ne consomment pas votre quota de trafic mensuel, même si ces fichiers comptent toujours dans votre limite de stockage. Les téléchargements que Relayium achemine depuis votre nœud comptent toujours, et une fois votre quota mensuel épuisé, le relais entre réseaux se met en pause sur votre propre nœud aussi, jusqu'à sa remise à zéro.",
         "Ensuite, le contrôle : les octets relayés et les blobs stockés résident sur du matériel que vous exploitez, sous votre propre contrôle opérationnel. Les transferts en temps réel restent chiffrés de bout en bout sur tout le trajet, de sorte que même votre propre nœud ne voit jamais que du texte chiffré.",
       ],
     },
@@ -1148,7 +1148,7 @@ const fr = {
           text: "Sur un VPS cloud, autorisez aussi les mêmes ports dans le groupe de sécurité du fournisseur. Avec ufw seul ils restent bloqués en amont, et le nœud a l'air parfaitement sain pendant tout ce temps.",
         },
         {
-          text: "De retour sur /me, regardez le nœud passer En ligne — en général en une trentaine de secondes. À partir de là, les transferts de votre compte le préfèrent automatiquement.",
+          text: "De retour sur /me, regardez le nœud passer En ligne — en général en une trentaine de secondes. À partir de là, les envois de votre compte atterrissent d'abord sur lui, et vos sessions entre réseaux peuvent être relayées par lui lorsqu'il est la route la plus rapide.",
         },
         {
           text: "Facultatif : activez « N'utiliser que mes propres nœuds pour le relais et le stockage » pour qu'un transfert échoue au lieu de revenir discrètement sur notre infrastructure partagée.",
@@ -1310,19 +1310,19 @@ enabled`,
 };
 
 const ar = {
-  title: "شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا",
+  title: "شغّل عقدتك الخاصة: احمل حركة الترحيل والتخزين الخاصة بك على عتادك",
   description:
-    "اربط عقدتك للترحيل/التخزين بحساب Relayium بأمر واحد. عندها تمر عمليات النقل عبر عقدتك — لا عبر خوادمنا المحسوبة بالاستهلاك — فتصبح مجانية، وتبقى البيانات على عتاد تتحكم فيه أنت.",
+    "اربط عقدتك للترحيل/التخزين بحساب Relayium بأمر واحد. البايتات التي تُرحّلها والملفات المرفوعة التي تخزّنها لا تستهلك بعد ذلك حصة حركة البيانات الشهرية، وتبقى البيانات على عتاد تتحكم فيه أنت.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "عمليات النقل عبر الشبكات والروابط المُخزَّنة تستهلك عرض نطاق المُرحِّل والقرص، وهذا يكلّفنا مالًا، لذا تعمل ضمن حصة مجانية وتصبح مدفوعة بعد تجاوزها. هناك طريقة لتفادي ذلك: شغّل عقدتك للترحيل/التخزين، اربطها بحسابك، فتتدفق عمليات نقلك عبر عقدتك بدل عقدتنا — لا شيء يُحسَب، ولا شيء يُفوتَر.",
+    "عمليات النقل عبر الشبكات والروابط المُخزَّنة تستهلك عرض نطاق المُرحِّل والقرص، وهذا يكلّفنا مالًا، لذا تعمل ضمن حصة مجانية وتصبح مدفوعة بعد تجاوزها. عقدتك الخاصة للترحيل/التخزين، المرتبطة بحسابك، تُخرج ما تحمله من هذا العدّاد: البايتات المُرحَّلة عبرها والملفات المرفوعة المُخزَّنة عليها لا تُحتسب من حصة حركة البيانات الشهرية. لكن الملفات المُخزَّنة عليها تبقى محتسبة ضمن حدّ التخزين لديك؛ وكل تنزيل لها يحمله Relayium ويُحتسب، وكذلك الجلسة التي تختار أحد مُرحِّلاتنا كأسرع مسار.",
     "هذا يختلف عن الاستضافة الذاتية لخادم Relayium بالكامل. تبقى تستخدم حساب relayium.com المعتاد ونفس التطبيقات؛ أنت فقط تضيف عقدة تملكها لتحمل حركتك. يأخذك هذا الدليل من جهاز Linux جديد إلى عقدة متصلة في نحو خمس دقائق.",
   ],
   sections: [
     {
       heading: "لماذا تشغّل عقدتك الخاصة",
       body: [
-        "سببان. الأول هو التكلفة: عقدة تملكها تحمل حركة مُرحِّلك وتخزينك مباشرة، فلا تلمس أبدًا بنيتنا المحسوبة بالاستهلاك ولا يوجد ما يُفوتَر — استخدامك مجاني مهما كان كبيرًا.",
+        "سببان. الأول هو التكلفة: البايتات التي تُرحّلها عقدتك والملفات المرفوعة المُخزَّنة عليها لا تستهلك حصة حركة البيانات الشهرية، مع أن هذه الملفات تبقى محتسبة ضمن حدّ التخزين لديك. أما التنزيلات التي يحملها Relayium من عقدتك فتبقى محتسبة، وحين تنفد حصتك الشهرية يتوقف الترحيل عبر الشبكات على عقدتك الخاصة أيضًا حتى تُصفَّر الحصة.",
         "الثاني هو التحكم: البايتات المُرحَّلة والكتل المُخزَّنة تعيش على عتاد تشغّله أنت، تحت تحكمك التشغيلي الخاص. يبقى النقل الفوري مشفَّرًا من الطرف إلى الطرف طوال الطريق، لذا حتى عقدتك الخاصة لا ترى سوى نص مُشفَّر.",
       ],
     },
@@ -1364,7 +1364,7 @@ const ar = {
           text: "على VPS سحابي، اسمح بالمنافذ نفسها في مجموعة الأمان لدى المزوّد كذلك. الاكتفاء بـ ufw يتركها مغلقة في الأعلى، والعقدة تبدو سليمة طوال ذلك الوقت.",
         },
         {
-          text: "عد إلى ‎/me‎ وراقب تحوّل العقدة إلى «متصلة» — عادةً خلال ثلاثين ثانية تقريبًا. ومن حينها تفضّلها عمليات النقل في حسابك تلقائيًا.",
+          text: "عد إلى ‎/me‎ وراقب تحوّل العقدة إلى «متصلة» — عادةً خلال ثلاثين ثانية تقريبًا. ومن حينها تُخزَّن الملفات التي يرفعها حسابك عليها أولًا، ويمكن أن تُرحَّل جلساتك عبر الشبكات من خلالها حين تكون أسرع مسار.",
         },
         {
           text: "اختياري: فعّل «استخدام عقدي وحدها للترحيل والتخزين» ليفشل النقل بدل أن يعود بصمت إلى بنيتنا المشتركة.",
@@ -1526,19 +1526,19 @@ enabled`,
 };
 
 const es = {
-  title: "Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis",
+  title: "Usa tu propio nodo: lleva tu tráfico de retransmisión y almacenamiento en tu propio hardware",
   description:
-    "Vincula tu propio nodo de retransmisión/almacenamiento a tu cuenta de Relayium con un solo comando. Tus transferencias pasan entonces por tu nodo — no por nuestros servidores medidos —, así que son gratis, y los datos permanecen en hardware que tú controlas.",
+    "Vincula tu propio nodo de retransmisión/almacenamiento a tu cuenta de Relayium con un solo comando. Los bytes que retransmite y las subidas que almacena dejan de consumir tu franquicia mensual de tráfico, y los datos permanecen en hardware que tú controlas.",
   updatedLabel: "Última actualización",
   lead: [
-    "Las transferencias entre redes y los enlaces almacenados usan ancho de banda de retransmisión y disco que nos cuestan dinero, así que funcionan con una franquicia gratuita y se pagan a partir de ahí. Hay una forma de evitarlo: ejecuta tu propio nodo de retransmisión/almacenamiento, vincúlalo a tu cuenta, y tus transferencias fluyen por tu nodo en lugar del nuestro — nada medido, nada facturado.",
+    "Las transferencias entre redes y los enlaces almacenados usan ancho de banda de retransmisión y disco que nos cuestan dinero, así que funcionan con una franquicia gratuita y se pagan a partir de ahí. Tu propio nodo de retransmisión/almacenamiento, vinculado a tu cuenta, saca de esa medición lo que lleva: los bytes retransmitidos a través de él y las subidas almacenadas en él no cuentan contra la franquicia mensual de tráfico. Los archivos almacenados en él siguen contando para tu límite de almacenamiento; cada descarga de ellos la lleva Relayium y cuenta, igual que una sesión que elige uno de nuestros retransmisores como su ruta más rápida.",
     "Esto es distinto de autoalojar todo el servidor de Relayium. Sigues usando tu cuenta habitual de relayium.com y las mismas aplicaciones; solo estás añadiendo un nodo que es tuyo para que lleve tu tráfico. Esta guía te lleva de una máquina Linux recién instalada a un nodo en línea en unos cinco minutos.",
   ],
   sections: [
     {
       heading: "Por qué ejecutar tu propio nodo",
       body: [
-        "Dos razones. Primero, el coste: un nodo que es tuyo lleva tu tráfico de retransmisión y almacenamiento directamente, así que nunca toca nuestra infraestructura medida y no hay nada que facturar — tu uso es gratis por grande que sea.",
+        "Dos razones. Primero, el coste: los bytes que retransmite tu nodo y las subidas almacenadas en él no consumen tu franquicia mensual de tráfico, aunque esos archivos siguen contando para tu límite de almacenamiento. Las descargas que Relayium lleva desde tu nodo siguen contando, y cuando se agota tu franquicia mensual, la retransmisión entre redes se pausa también en tu propio nodo hasta que se reinicie.",
         "Segundo, el control: los bytes retransmitidos y los blobs almacenados residen en hardware que tú operas, bajo tu propio control operativo. Las transferencias en tiempo real siguen cifradas de extremo a extremo durante todo el trayecto, así que incluso tu propio nodo solo ve texto cifrado.",
       ],
     },
@@ -1580,7 +1580,7 @@ const es = {
           text: "En un VPS en la nube, permite además los mismos puertos en el grupo de seguridad del proveedor. Con ufw a secas siguen bloqueados aguas arriba, y el nodo parece sano todo ese tiempo.",
         },
         {
-          text: "De vuelta en /me, observa cómo el nodo pasa a En línea, normalmente en unos 30 segundos. A partir de ahí las transferencias de tu cuenta lo prefieren automáticamente.",
+          text: "De vuelta en /me, observa cómo el nodo pasa a En línea, normalmente en unos 30 segundos. A partir de ahí las subidas de tu cuenta se guardan primero en él, y tus sesiones entre redes pueden retransmitirse a través de él cuando es la ruta más rápida.",
         },
         {
           text: "Opcional: activa \"Usar solo mis propios nodos para retransmisión/almacenamiento\" para que una transferencia falle en vez de volver en silencio a nuestra infraestructura compartida.",
@@ -1742,19 +1742,19 @@ enabled`,
 };
 
 const pt = {
-  title: "Use seu próprio nó: aproveite o retransmissor e o armazenamento do Relayium de graça",
+  title: "Use seu próprio nó: carregue seu tráfego de retransmissão e armazenamento no seu próprio hardware",
   description:
-    "Vincule seu próprio nó de retransmissão/armazenamento à sua conta do Relayium com um único comando. Suas transferências passam então pelo seu nó — não pelos nossos servidores medidos —, então são gratuitas, e os dados ficam em hardware que você controla.",
+    "Vincule seu próprio nó de retransmissão/armazenamento à sua conta do Relayium com um único comando. Os bytes que ele retransmite e os envios que ele armazena deixam de consumir sua cota mensal de tráfego, e os dados ficam em hardware que você controla.",
   updatedLabel: "Última atualização",
   lead: [
-    "Transferências entre redes e links armazenados usam largura de banda de retransmissão e disco que nos custam dinheiro, então funcionam dentro de uma cota gratuita e são pagas além dela. Há um jeito de contornar isso: rode seu próprio nó de retransmissão/armazenamento, vincule-o à sua conta, e suas transferências fluem pelo seu nó em vez do nosso — nada medido, nada faturado.",
+    "Transferências entre redes e links armazenados usam largura de banda de retransmissão e disco que nos custam dinheiro, então funcionam dentro de uma cota gratuita e são pagas além dela. Seu próprio nó de retransmissão/armazenamento, vinculado à sua conta, tira dessa medição o que ele carrega: bytes retransmitidos por ele e envios armazenados nele não contam contra a cota mensal de tráfego. Os arquivos armazenados nele continuam contando para o seu limite de armazenamento; cada download deles é carregado pelo Relayium e conta, assim como uma sessão que escolhe um dos nossos retransmissores como a rota mais rápida.",
     "Isso é diferente de auto-hospedar o servidor Relayium inteiro. Você continua usando sua conta habitual do relayium.com e os mesmos aplicativos; só está adicionando um nó que é seu para carregar seu tráfego. Este guia leva você de uma máquina Linux recém-instalada a um nó online em cerca de cinco minutos.",
   ],
   sections: [
     {
       heading: "Por que rodar seu próprio nó",
       body: [
-        "Dois motivos. Primeiro, o custo: um nó que é seu carrega seu tráfego de retransmissão e armazenamento diretamente, então nunca toca nossa infraestrutura medida e não há nada a faturar — seu uso é gratuito por maior que seja.",
+        "Dois motivos. Primeiro, o custo: os bytes que seu nó retransmite e os envios armazenados nele não consomem sua cota mensal de tráfego, embora esses arquivos continuem contando para o seu limite de armazenamento. Os downloads que o Relayium carrega a partir do seu nó continuam contando, e quando sua cota mensal se esgota, a retransmissão entre redes pausa também no seu próprio nó até ela zerar.",
         "Segundo, o controle: os bytes retransmitidos e os blobs armazenados residem em hardware que você opera, sob seu próprio controle operacional. As transferências em tempo real permanecem com criptografia de ponta a ponta durante todo o trajeto, então até seu próprio nó só vê texto cifrado.",
       ],
     },
@@ -1796,7 +1796,7 @@ const pt = {
           text: "Num VPS na nuvem, libere as mesmas portas também no grupo de segurança do provedor. Só com o ufw elas continuam bloqueadas mais acima, e o nó parece saudável esse tempo todo.",
         },
         {
-          text: "De volta ao /me, veja o nó virar Online — normalmente em uns 30 segundos. Daí em diante as transferências da sua conta passam a preferi-lo automaticamente.",
+          text: "De volta ao /me, veja o nó virar Online — normalmente em uns 30 segundos. Daí em diante os envios da sua conta vão primeiro para ele, e suas sessões entre redes podem ser retransmitidas por ele quando ele é a rota mais rápida.",
         },
         {
           text: "Opcional: ligue \"Usar somente meus próprios nós para retransmissão/armazenamento\" para que uma transferência falhe em vez de voltar silenciosamente à nossa infraestrutura compartilhada.",

@@ -381,7 +381,7 @@ const ja = {
           {
             symptom: "ダウンロードページが、リクエストが多すぎる、または送信者の今月の転送量を使い切ったと表示する。",
             code: ["https://relayium.com/me   # 今月の使用量は保存だけでなく転送も含む"],
-            fix: "ファイルはまだあります。これは喪失ではなく計量です。数分待てばレート制限は解けますが、月間の転送量を使い切った場合は月替わり、プランの変更、または自分のノードが必要です。その間はリアルタイム転送がこれを完全に回避します。",
+            fix: "ファイルはまだあります。これは喪失ではなく計量です。数分待てばレート制限は解けますが、月間の転送量を使い切った場合は月替わりかプランの変更が必要です。その間も、同じネットワーク上の2台の端末間の転送はこれを完全に回避します。",
           },
         ],
       },
@@ -517,7 +517,7 @@ const ko = {
           {
             symptom: "다운로드 페이지가 요청이 너무 많다거나 보낸 사람의 이번 달 전송량이 다 되었다고 합니다.",
             code: ["https://relayium.com/me   # 이번 달 사용량은 저장뿐 아니라 전송도 포함한다"],
-            fix: "파일은 그대로 있습니다 — 이것은 유실이 아니라 계량입니다. 몇 분 기다리면 속도 제한은 풀리고, 월 전송량을 다 쓴 경우에는 달이 바뀌거나 요금제를 올리거나 자체 노드가 필요하며, 그동안에는 실시간 전송이 이를 완전히 우회합니다.",
+            fix: "파일은 그대로 있습니다 — 이것은 유실이 아니라 계량입니다. 몇 분 기다리면 속도 제한은 풀리고, 월 전송량을 다 쓴 경우에는 달이 바뀌거나 요금제를 올려야 하며, 그동안에는 같은 네트워크에 있는 두 기기 간 전송이 이를 완전히 우회합니다.",
           },
         ],
       },
@@ -653,7 +653,7 @@ const de = {
           {
             symptom: "Die Download-Seite meldet zu viele Anfragen, oder das Monatsvolumen des Senders sei aufgebraucht.",
             code: ["https://relayium.com/me   # die Nutzung dieses Monats umfasst nicht nur Speicher, sondern Transfer"],
-            fix: "Die Datei ist noch da — das ist Abrechnung und kein Verlust. Ein paar Minuten Warten löst ein Ratenlimit; ein aufgebrauchtes Monatsvolumen braucht den Monatswechsel, einen Tarifwechsel oder einen eigenen Node, und in der Zwischenzeit umgeht eine Echtzeitübertragung es vollständig.",
+            fix: "Die Datei ist noch da — das ist Abrechnung und kein Verlust. Ein paar Minuten Warten löst ein Ratenlimit; ein aufgebrauchtes Monatsvolumen braucht den Monatswechsel oder einen Tarifwechsel, und in der Zwischenzeit umgeht eine Übertragung zwischen zwei Geräten im selben Netz es vollständig.",
           },
         ],
       },
@@ -789,7 +789,7 @@ const fr = {
           {
             symptom: "La page de téléchargement signale trop de requêtes, ou que le volume mensuel de l'expéditeur est épuisé.",
             code: ["https://relayium.com/me   # l'utilisation du mois couvre le transfert et pas seulement le stockage"],
-            fix: "Le fichier est toujours là : c'est du décompte, pas une perte. Quelques minutes d'attente lèvent une limitation de débit, tandis qu'un volume mensuel épuisé attend le changement de mois, un changement d'offre ou votre propre nœud, et entre-temps un transfert en temps réel le contourne complètement.",
+            fix: "Le fichier est toujours là : c'est du décompte, pas une perte. Quelques minutes d'attente lèvent une limitation de débit, tandis qu'un volume mensuel épuisé attend le changement de mois ou un changement d'offre, et entre-temps un transfert entre deux appareils du même réseau le contourne complètement.",
           },
         ],
       },
@@ -925,7 +925,7 @@ const ar = {
           {
             symptom: "تقول صفحة التنزيل إن الطلبات كثيرة جدًا، أو إن حصة النقل الشهرية للمُرسِل استُنفدت.",
             code: ["https://relayium.com/me   # «استخدام هذا الشهر» يشمل النقل لا التخزين وحده"],
-            fix: "الملف لا يزال موجودًا — فهذه مسألة قياس لا فقدان. انتظار دقائق يزيل تحديد المعدل، أما حصة النقل الشهرية المستنفدة فتحتاج إلى دخول شهر جديد أو ترقية أو عقدة خاصة بك، وفي الأثناء يتجاوز النقل الفوري ذلك كليًا.",
+            fix: "الملف لا يزال موجودًا — فهذه مسألة قياس لا فقدان. انتظار دقائق يزيل تحديد المعدل، أما حصة النقل الشهرية المستنفدة فتحتاج إلى دخول شهر جديد أو ترقية، وفي الأثناء يتجاوز النقل بين جهازين على نفس الشبكة ذلك كليًا.",
           },
         ],
       },
@@ -1061,7 +1061,7 @@ const es = {
           {
             symptom: "La página de descarga dice que hay demasiadas peticiones, o que la transferencia mensual del remitente está agotada.",
             code: ["https://relayium.com/me   # el uso de este mes cubre la transferencia, no solo el almacenamiento"],
-            fix: "El archivo sigue ahí: esto es medición y no pérdida. Esperar unos minutos levanta un límite de tasa, mientras que una transferencia mensual agotada necesita el cambio de mes, un cambio de plan o tu propio nodo, y entretanto una transferencia en tiempo real lo esquiva por completo.",
+            fix: "El archivo sigue ahí: esto es medición y no pérdida. Esperar unos minutos levanta un límite de tasa, mientras que una transferencia mensual agotada necesita el cambio de mes o un cambio de plan, y entretanto una transferencia entre dos dispositivos de la misma red lo esquiva por completo.",
           },
         ],
       },
@@ -1197,7 +1197,7 @@ const pt = {
           {
             symptom: "A página de download diz que há pedidos demais, ou que a transferência mensal de quem enviou acabou.",
             code: ["https://relayium.com/me   # o uso deste mês cobre transferência, não só armazenamento"],
-            fix: "O arquivo continua lá — isto é medição e não perda. Esperar alguns minutos libera um limite de taxa, enquanto uma transferência mensal esgotada precisa da virada do mês, de uma troca de plano ou do seu próprio nó, e nesse meio-tempo uma transferência em tempo real contorna isso por completo.",
+            fix: "O arquivo continua lá — isto é medição e não perda. Esperar alguns minutos libera um limite de taxa, enquanto uma transferência mensal esgotada precisa da virada do mês ou de uma troca de plano, e nesse meio-tempo uma transferência entre dois dispositivos na mesma rede contorna isso por completo.",
           },
         ],
       },

@@ -388,7 +388,7 @@ const ja = {
           {
             symptom: "今月のリレー通信量を使い切った、とカードに出る。",
             code: ["https://relayium.com/me   # 「今月の使用量」でリレーの残りが分かる"],
-            fix: "割り当てが翌月にリセットされるまで、ネットワークをまたぐブラウザセッションは開始も継続もできません。いま送りたい場合は https://relayium.com/offline-transfer でダウンロードリンクとしてアップロードする、プランを上げる、自分のノードを動かす、のいずれかです。いずれの場合も同一ネットワークの転送は使えます。",
+            fix: "割り当てが翌月にリセットされるまでリレーは提供されないため、ネットワークをまたぐブラウザセッションは2台のコンピューターが直接つながる場合にしか接続できず、ホスト型ストレージへのアップロードも停止します。いま確実にネットワークをまたいで送りたい場合はプランを上げてください。いずれの場合も同一ネットワークの転送は使えます。",
           },
           {
             symptom: "転送が途中で止まり、再開しない。",
@@ -535,7 +535,7 @@ const ko = {
           {
             symptom: "이번 달 릴레이 트래픽을 다 썼다고 카드에 나옵니다.",
             code: ["https://relayium.com/me   # “이번 달 사용량”에 릴레이 잔여량이 보인다"],
-            fix: "할당량이 다음 달에 초기화될 때까지 네트워크를 넘는 브라우저 세션은 시작도 계속도 되지 않습니다. 지금 보내려면 https://relayium.com/offline-transfer 에서 다운로드 링크로 올리거나, 요금제를 올리거나, 자체 노드를 돌리세요. 어느 쪽이든 같은 네트워크 전송은 그대로 됩니다.",
+            fix: "할당량이 다음 달에 초기화될 때까지 릴레이가 제공되지 않으므로, 네트워크를 넘는 브라우저 세션은 두 컴퓨터가 서로 직접 연결될 수 있을 때만 연결되고, 호스팅 스토리지로의 업로드도 멈춥니다. 지금 네트워크를 넘는 전송을 확실히 하려면 요금제를 올리세요. 어느 쪽이든 같은 네트워크 전송은 그대로 됩니다.",
           },
           {
             symptom: "전송이 중간에 멈추고 다시 이어지지 않습니다.",
@@ -682,7 +682,7 @@ const de = {
           {
             symptom: "Auf der Karte steht, das Relay-Volumen dieses Monats sei aufgebraucht.",
             code: ["https://relayium.com/me   # „Nutzung diesen Monat“ zeigt den Rest des Relay-Kontingents"],
-            fix: "Netzübergreifende Browser-Sitzungen können weder starten noch weiterlaufen, bis das Kontingent nächsten Monat zurückgesetzt wird. Um jetzt zu senden, lade die Dateien unter https://relayium.com/offline-transfer als Download-Link hoch, wechsle den Tarif, oder betreib einen eigenen Node; Übertragungen im selben Netz laufen so oder so weiter.",
+            fix: "Bis das Kontingent nächsten Monat zurückgesetzt wird, wird kein Relay angeboten: Eine netzübergreifende Browser-Sitzung verbindet sich nur, wenn die beiden Computer einander direkt erreichen, und Uploads in den gehosteten Speicher pausieren ebenfalls. Damit ein netzübergreifender Versand jetzt sicher durchgeht, wechsle den Tarif; Übertragungen im selben Netz laufen so oder so weiter.",
           },
           {
             symptom: "Die Übertragung bleibt auf halbem Weg stehen und läuft nicht weiter.",
@@ -829,7 +829,7 @@ const fr = {
           {
             symptom: "La carte indique que le trafic de relais du mois est épuisé.",
             code: ["https://relayium.com/me   # l'utilisation du mois montre ce qu'il reste de l'allocation"],
-            fix: "Les sessions de navigateur entre réseaux ne peuvent ni démarrer ni continuer jusqu'à la remise à zéro le mois prochain. Pour envoyer maintenant, déposez les fichiers en lien de téléchargement sur https://relayium.com/offline-transfer, changez d'offre, ou faites tourner votre propre nœud. Les transferts sur le même réseau continuent dans tous les cas.",
+            fix: "Jusqu'à la remise à zéro le mois prochain, aucun relais n'est proposé : une session de navigateur entre réseaux ne se connecte que si les deux ordinateurs peuvent se joindre directement, et les envois vers le stockage hébergé sont suspendus aussi. Pour être sûr qu'un envoi entre réseaux passe maintenant, changez d'offre. Les transferts sur le même réseau continuent dans tous les cas.",
           },
           {
             symptom: "Le transfert s'interrompt à mi-parcours et ne repart pas.",
@@ -976,7 +976,7 @@ const ar = {
           {
             symptom: "تقول البطاقة إن حصة الترحيل لهذا الشهر استُنفدت.",
             code: ["https://relayium.com/me   # «استخدام هذا الشهر» يبيّن ما تبقّى من حصة الترحيل"],
-            fix: "لا يمكن لجلسات المتصفح عبر الشبكات أن تبدأ أو تستمر حتى تُصفَّر الحصة الشهر القادم. وللإرسال الآن ارفع الملفات كرابط تنزيل على https://relayium.com/offline-transfer، أو ارفع الباقة، أو شغّل عقدتك الخاصة؛ ويبقى النقل على نفس الشبكة عاملًا في الحالتين.",
+            fix: "حتى تُصفَّر الحصة الشهر القادم لا يُقدَّم أي مُرحِّل، فلا تتصل جلسة المتصفح عبر الشبكات إلا إذا استطاع الحاسوبان الوصول أحدهما إلى الآخر مباشرة، ويتوقف الرفع إلى التخزين المُستضاف أيضًا. ولضمان نجاح الإرسال عبر الشبكات الآن ارفع الباقة؛ ويبقى النقل على نفس الشبكة عاملًا في الحالتين.",
           },
           {
             symptom: "يتوقف النقل في منتصفه ولا يستأنف.",
@@ -1123,7 +1123,7 @@ const es = {
           {
             symptom: "La tarjeta dice que el tráfico de retransmisión de este mes está agotado.",
             code: ["https://relayium.com/me   # el uso de este mes muestra lo que queda de la asignación"],
-            fix: "Las sesiones de navegador entre redes no pueden empezar ni continuar hasta que la asignación se reinicie el mes que viene. Para enviar ahora, sube los archivos como enlace de descarga en https://relayium.com/offline-transfer, cambia de plan, o levanta tu propio nodo; las transferencias en la misma red siguen funcionando igual.",
+            fix: "Hasta que la asignación se reinicie el mes que viene no se ofrece retransmisión, así que una sesión de navegador entre redes solo conecta si los dos ordenadores pueden alcanzarse directamente, y las subidas al almacenamiento alojado también se pausan. Para asegurarte de que un envío entre redes salga ahora, cambia de plan; las transferencias en la misma red siguen funcionando igual.",
           },
           {
             symptom: "La transferencia se para a mitad y no se reanuda.",
@@ -1270,7 +1270,7 @@ const pt = {
           {
             symptom: "O cartão diz que o tráfego de retransmissão deste mês acabou.",
             code: ["https://relayium.com/me   # o uso deste mês mostra o que sobrou da cota"],
-            fix: "Sessões de navegador entre redes não podem começar nem continuar até a cota zerar no mês que vem. Para enviar agora, suba os arquivos como link de download em https://relayium.com/offline-transfer, mude de plano, ou rode o seu próprio nó; transferências na mesma rede continuam funcionando de qualquer forma.",
+            fix: "Até a cota zerar no mês que vem nenhuma retransmissão é oferecida, então uma sessão de navegador entre redes só conecta se os dois computadores conseguirem se alcançar diretamente, e os envios para o armazenamento hospedado também pausam. Para garantir que um envio entre redes passe agora, mude de plano; transferências na mesma rede continuam funcionando de qualquer forma.",
           },
           {
             symptom: "A transferência para no meio e não recomeça.",

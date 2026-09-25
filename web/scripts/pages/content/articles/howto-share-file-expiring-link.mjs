@@ -371,7 +371,7 @@ const ja = {
           {
             symptom: "ダウンロードページがリクエスト過多、または送信者の今月の転送量を使い切ったと表示する。",
             code: ["https://relayium.com/me   # 今月の使用量は保存だけでなく転送も含む"],
-            fix: "ファイルは無事で、これは計量です。レート制限は数分で解け、月間の転送量を使い切った場合は月替わり、プラン変更、または自分のノードを待ちます。その後にリンクを開けば動きます。何も消費されていないからです。",
+            fix: "ファイルは無事で、これは計量です。レート制限は数分で解け、月間の転送量を使い切った場合は月替わりか、送信者のプラン変更を待ちます。その後にリンクを開けば動きます。何も消費されていないからです。",
           },
           {
             symptom: "ファイルを取り戻したいのに、もうリンクがない。",
@@ -504,7 +504,7 @@ const ko = {
           {
             symptom: "다운로드 페이지가 요청이 너무 많다거나 보낸 사람의 월 전송량이 다 되었다고 합니다.",
             code: ["https://relayium.com/me   # 이번 달 사용량은 저장뿐 아니라 전송도 포함한다"],
-            fix: "파일은 온전하고 이것은 계량입니다. 속도 제한은 몇 분이면 풀리고, 월 전송량을 다 쓴 경우에는 달이 바뀌거나 요금제를 올리거나 자체 노드를 써야 합니다. 그 뒤에 링크를 다시 열면 동작합니다. 아무것도 소비되지 않았기 때문입니다.",
+            fix: "파일은 온전하고 이것은 계량입니다. 속도 제한은 몇 분이면 풀리고, 월 전송량을 다 쓴 경우에는 달이 바뀌거나 보낸 사람이 요금제를 올릴 때까지 기다려야 합니다. 그 뒤에 링크를 다시 열면 동작합니다. 아무것도 소비되지 않았기 때문입니다.",
           },
           {
             symptom: "파일을 되찾아야 하는데 링크가 더 이상 없습니다.",
@@ -644,7 +644,7 @@ const de = {
           {
             symptom: "Die Download-Seite meldet zu viele Anfragen, oder das Monatsvolumen des Senders sei aufgebraucht.",
             code: ["https://relayium.com/me   # die Nutzung dieses Monats umfasst Transfer und Speicher"],
-            fix: "Die Datei ist unversehrt, und das hier ist Abrechnung. Ein Ratenlimit löst sich in wenigen Minuten; ein aufgebrauchtes Monatsvolumen wartet auf den Monat, einen Tarifwechsel oder einen eigenen Node. Den Link danach erneut zu öffnen funktioniert, weil nichts verbraucht wurde.",
+            fix: "Die Datei ist unversehrt, und das hier ist Abrechnung. Ein Ratenlimit löst sich in wenigen Minuten; ein aufgebrauchtes Monatsvolumen wartet auf den Monatswechsel oder darauf, dass der Absender den Tarif wechselt. Den Link danach erneut zu öffnen funktioniert, weil nichts verbraucht wurde.",
           },
           {
             symptom: "Du brauchst die Datei zurück und hast den Link nicht mehr.",
@@ -784,7 +784,7 @@ const fr = {
           {
             symptom: "La page de téléchargement signale trop de requêtes, ou un volume mensuel épuisé chez l'expéditeur.",
             code: ["https://relayium.com/me   # l'utilisation du mois couvre le transfert et le stockage"],
-            fix: "Le fichier est intact et il s'agit de décompte. Une limitation de débit se lève en quelques minutes, tandis qu'un volume mensuel épuisé attend le mois suivant, un changement d'offre ou votre propre nœud. Rouvrir le lien ensuite fonctionne, car rien n'a été consommé.",
+            fix: "Le fichier est intact et il s'agit de décompte. Une limitation de débit se lève en quelques minutes, tandis qu'un volume mensuel épuisé attend le mois suivant ou que l'expéditeur change d'offre. Rouvrir le lien ensuite fonctionne, car rien n'a été consommé.",
           },
           {
             symptom: "Vous avez besoin du fichier et vous n'avez plus le lien.",
@@ -924,7 +924,7 @@ const ar = {
           {
             symptom: "تقول صفحة التنزيل إن الطلبات كثيرة جدًا، أو إن حصة النقل الشهرية للمُرسِل استُنفدت.",
             code: ["https://relayium.com/me   # «استخدام هذا الشهر» يشمل النقل والتخزين"],
-            fix: "الملف سليم وهذه مسألة قياس. يزول تحديد المعدل بعد دقائق، أما حصة النقل الشهرية المستنفدة فتنتظر شهرًا جديدًا أو ترقية أو عقدة خاصة بك. وفتح الرابط بعد ذلك يعمل، لأن لا شيء استُهلك.",
+            fix: "الملف سليم وهذه مسألة قياس. يزول تحديد المعدل بعد دقائق، أما حصة النقل الشهرية المستنفدة فتنتظر شهرًا جديدًا أو ترقية المُرسِل لباقته. وفتح الرابط بعد ذلك يعمل، لأن لا شيء استُهلك.",
           },
           {
             symptom: "تحتاج إلى الملف ولم يبقَ لديك الرابط.",
@@ -1064,7 +1064,7 @@ const es = {
           {
             symptom: "La página de descarga informa de demasiadas peticiones, o de que la transferencia mensual del remitente está agotada.",
             code: ["https://relayium.com/me   # el uso de este mes cubre transferencia y almacenamiento"],
-            fix: "El archivo está intacto y esto es medición. Un límite de tasa se levanta en unos minutos, mientras que una transferencia mensual agotada espera al mes siguiente, a un cambio de plan o a tu propio nodo. Volver a abrir el enlace después funciona, porque no se consumió nada.",
+            fix: "El archivo está intacto y esto es medición. Un límite de tasa se levanta en unos minutos, mientras que una transferencia mensual agotada espera al mes siguiente o a que el remitente cambie de plan. Volver a abrir el enlace después funciona, porque no se consumió nada.",
           },
           {
             symptom: "Necesitas el archivo y ya no tienes el enlace.",
@@ -1204,7 +1204,7 @@ const pt = {
           {
             symptom: "A página de download informa pedidos demais, ou que a transferência mensal de quem enviou acabou.",
             code: ["https://relayium.com/me   # o uso deste mês cobre transferência e armazenamento"],
-            fix: "O arquivo está intacto e isto é medição. Um limite de taxa se solta em alguns minutos, enquanto uma transferência mensal esgotada espera a virada do mês, uma troca de plano ou o seu próprio nó. Reabrir o link depois funciona, porque nada foi consumido.",
+            fix: "O arquivo está intacto e isto é medição. Um limite de taxa se solta em alguns minutos, enquanto uma transferência mensal esgotada espera a virada do mês ou o remetente trocar de plano. Reabrir o link depois funciona, porque nada foi consumido.",
           },
           {
             symptom: "Você precisa do arquivo e não tem mais o link.",

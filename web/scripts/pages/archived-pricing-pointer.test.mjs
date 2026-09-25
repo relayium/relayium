@@ -151,14 +151,29 @@ const PRICE_CLAIM = {
  * cannot turn the coverage assertion below into a test over zero pages. The
  * numbers move only when someone re-runs the scan and says why.
  *
- * Last re-run in this batch: 156 of the 350 archived pages match, i.e. under
+ * Last re-run (W-N47, 2026-09-25): 142 of the 350 archived pages match, i.e. under
  * half the corpus, not most of it. That figure is a property of PRICE_CLAIM
  * above and of nothing else — it is recorded because a bare per-locale table
  * invites a reader to round it up, and the pointer's justification does not
  * depend on the number being large. The unconditional coverage the notice
  * actually ships is asserted by "carries it on every OTHER archived page too".
  */
-const MEASURED = { ja: 22, ko: 11, de: 24, fr: 26, ar: 28, es: 25, pt: 20 };
+// Re-run 2026-09-25 (W-N47), was { ja: 22, ko: 11, de: 24, fr: 26, ar: 28,
+// es: 25, pt: 20 }: the archived own-node guide no longer promises free relay
+// and storage at any volume, so it — and the guides index and related-link
+// pages that quoted its old title — dropped out. Those promises were the error
+// (archived-own-node-claims.test.mjs), not lost coverage.
+// Re-run again 2026-09-25 (W-N47 corpus errata), was { ko: 8, pt: 19 } with
+// the rest unchanged, 145 → 143: the ko rsync, scp and self-hosting pages
+// matched only on "완전히 무료" in the CLI answers that called every mode
+// completely free (archived-product-pricing-claims.test.mjs), so they dropped
+// out; the pt self-hosting answer now says the CLI binary "é gratuito", which
+// the masculine-only pt pattern matches where the old "gratuita" did not.
+// Re-run a third time 2026-09-25 (W-N47 CLI getting-started errata), was
+// { ko: 5 }, 143 → 142: the ko CLI getting-started page matched only on the
+// "완전 무료" / "완전히 무료" lead, FAQ answer and CTA that called the CLI
+// completely free (archived-product-pricing-claims.test.mjs), so it dropped out.
+const MEASURED = { ja: 20, ko: 4, de: 23, fr: 25, ar: 27, es: 23, pt: 20 };
 
 /** A page's prose with the archive notice removed, so it cannot match itself. */
 const withoutNotice = (html) =>

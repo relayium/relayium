@@ -194,7 +194,7 @@ const ja = {
       },
       {
         q: "Relayium は無料ですか？",
-        a: "はい。Relayium は AGPL-3.0 ライセンスの無料オープンソースです。保存型ダウンロードリンクの作成には送信側のサインインが必要です（リンクはアカウントの保存容量枠に計上されます）が、受信側はダウンロードに決してアカウントを必要としません。",
+        a: "ソフトウェアは AGPL-3.0 ライセンスの無料オープンソースで、直結の経路にも料金はかかりません。同じネットワーク内のブラウザ転送と、CLI の SSH 経由の push/pull、sync、daemon 直結、send / receive です。ホスト型サービスには無料枠がありますが、無制限に無料というわけではありません。この記事で扱う保存型ダウンロードリンクは Relayium の暗号化ストレージに保持されるため、送信側のプランのストレージ上限と保存期間を使い、有料プランではその両方が引き上げられます。リンクの作成には送信側のサインインが必要ですが、受信側はダウンロードにアカウントもプランも一切必要ありません。",
       },
     ],
   },
@@ -261,7 +261,7 @@ const ko = {
       },
       {
         q: "Relayium은 무료인가요?",
-        a: "네. Relayium은 AGPL-3.0 라이선스의 무료 오픈소스입니다. 저장형 다운로드 링크를 만들려면 보내는 쪽의 로그인이 필요합니다(링크는 계정의 저장 용량 한도에 포함됩니다). 하지만 받는 쪽은 다운로드에 계정이 전혀 필요하지 않습니다.",
+        a: "소프트웨어는 AGPL-3.0 라이선스의 무료 오픈소스이고, 직접 연결 경로도 비용이 들지 않습니다. 같은 네트워크 안의 브라우저 전송, 그리고 CLI의 SSH 기반 push/pull, sync, daemon 다이렉트, send / receive입니다. 호스팅 서비스는 무제한 무료가 아니라 무료 한도가 있는 방식입니다. 이 글에서 다루는 저장형 다운로드 링크는 Relayium의 암호화 저장소에 보관되므로 보내는 쪽 요금제의 저장 용량 한도와 보관 기간을 쓰며, 유료 요금제는 둘 다 높여 줍니다. 링크를 만들려면 보내는 쪽의 로그인이 필요하지만, 받는 쪽은 다운로드에 계정도 요금제도 전혀 필요하지 않습니다.",
       },
     ],
   },
@@ -328,7 +328,7 @@ const de = {
       },
       {
         q: "Ist Relayium kostenlos?",
-        a: "Ja. Relayium ist kostenlos und quelloffen unter der AGPL-3.0-Lizenz. Das Erstellen eines gespeicherten Download-Links erfordert die Anmeldung des Absenders (Links zählen gegen das Speicherkontingent deines Kontos), aber der Empfänger braucht zum Herunterladen niemals ein Konto.",
+        a: "Die Software ist kostenlos und quelloffen unter der AGPL-3.0-Lizenz, und die direkten Wege kosten nichts: Browser-Übertragungen im selben Netz sowie push/pull über SSH, sync, daemon-direct und send / receive der CLI. Der gehostete Dienst hat einen kostenlosen Tarif, ist aber nicht unbegrenzt kostenlos — ein gespeicherter Download-Link wie der, um den es in diesem Artikel geht, liegt in Relayiums verschlüsseltem Speicher und verbraucht daher das Speicherlimit und die Aufbewahrungsdauer des Tarifs des Absenders; bezahlte Tarife erhöhen beides. Das Erstellen erfordert die Anmeldung des Absenders; der Empfänger braucht zum Herunterladen nie ein Konto oder einen Tarif.",
       },
     ],
   },
@@ -395,7 +395,7 @@ const fr = {
       },
       {
         q: "Relayium est-il gratuit ?",
-        a: "Oui. Relayium est gratuit et open source sous licence AGPL-3.0. Créer un lien de téléchargement stocké exige que l'expéditeur se connecte (les liens comptent dans le quota de stockage de votre compte), mais le destinataire n'a jamais besoin de compte pour télécharger.",
+        a: "Le logiciel est gratuit et open source sous licence AGPL-3.0, et les chemins directs ne coûtent rien : les transferts dans le navigateur sur le même réseau, ainsi que push/pull via SSH, sync, daemon-direct et send / receive de la CLI. Le service hébergé propose une offre gratuite plutôt qu'une gratuité sans limite — un lien de téléchargement stocké comme celui dont parle cet article est conservé dans le stockage chiffré de Relayium, il puise donc dans la limite de stockage et la durée de conservation de l'offre de l'expéditeur, que les offres payantes relèvent toutes les deux. Le créer exige que l'expéditeur se connecte ; le destinataire n'a jamais besoin de compte, ni d'offre, pour télécharger.",
       },
     ],
   },
@@ -462,7 +462,7 @@ const ar = {
       },
       {
         q: "هل Relayium مجاني؟",
-        a: "نعم. Relayium مجاني ومفتوح المصدر بموجب رخصة AGPL-3.0. يتطلب إنشاء رابط تنزيل مُخزَّن تسجيل دخول المُرسِل (تُحتسب الروابط ضمن حصة التخزين في حسابك)، لكن المُستقبِل لا يحتاج إلى حساب أبدًا للتنزيل.",
+        a: "البرنامج مجاني ومفتوح المصدر بموجب رخصة AGPL-3.0، والمسارات المباشرة لا تكلّف شيئًا: النقل عبر المتصفّح على نفس الشبكة، وأوامر push/pull عبر SSH وsync وdaemon direct وsend / receive في CLI. أما الخدمة المُستضافة فلها فئة مجانية لا مجانية بلا حدود — فرابط التنزيل المُخزَّن كالذي يتناوله هذا المقال يُحفَظ في تخزين Relayium المُشفَّر، لذا يستهلك حدّ التخزين ومدة الاحتفاظ في خطة المُرسِل، والخطط المدفوعة ترفع كليهما. يتطلب إنشاؤه تسجيل دخول المُرسِل؛ أما المُستقبِل فلا يحتاج أبدًا إلى حساب أو خطة للتنزيل.",
       },
     ],
   },
@@ -529,7 +529,7 @@ const es = {
       },
       {
         q: "¿Es Relayium gratis?",
-        a: "Sí. Relayium es gratis y de código abierto bajo la licencia AGPL-3.0. Crear un enlace de descarga almacenado requiere que el remitente inicie sesión (los enlaces cuentan para la cuota de almacenamiento de tu cuenta), pero el destinatario nunca necesita cuenta para descargar.",
+        a: "El software es gratis y de código abierto bajo la licencia AGPL-3.0, y los caminos directos no cuestan nada: las transferencias en el navegador dentro de la misma red, y push/pull por SSH, sync, daemon directo y send / receive de la CLI. El servicio alojado tiene un nivel gratuito, no gratuidad sin límite: un enlace de descarga almacenado como el de este artículo se guarda en el almacenamiento cifrado de Relayium, así que consume el límite de almacenamiento y el periodo de retención del plan del remitente, y los planes de pago amplían ambos. Crearlo requiere que el remitente inicie sesión; el destinatario nunca necesita cuenta, ni plan, para descargar.",
       },
     ],
   },
@@ -596,7 +596,7 @@ const pt = {
       },
       {
         q: "O Relayium é gratuito?",
-        a: "Sim. O Relayium é gratuito e de código aberto sob a licença AGPL-3.0. Criar um link de download armazenado exige que o remetente faça login (os links contam para a cota de armazenamento da sua conta), mas o destinatário nunca precisa de conta para baixar.",
+        a: "O software é gratuito e de código aberto sob a licença AGPL-3.0, e os caminhos diretos não custam nada: as transferências no navegador na mesma rede, e o push/pull via SSH, sync, daemon direto e send / receive da CLI. O serviço hospedado tem um nível gratuito, não gratuidade sem limite — um link de download armazenado como o deste artigo fica no armazenamento criptografado do Relayium, então consome o limite de armazenamento e o período de retenção do plano do remetente, e os planos pagos aumentam ambos. Criá-lo exige que o remetente faça login; o destinatário nunca precisa de conta, nem de plano, para baixar.",
       },
     ],
   },
