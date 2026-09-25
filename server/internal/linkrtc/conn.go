@@ -257,7 +257,11 @@ func (c *Conn) RestartICE() error {
 }
 
 // sendLocal creates a description, applies it, and emits it before any local
-// candidate gathered for it.
+// candidate gathered for it. It signals the created description rather than
+// pc.LocalDescription(): Pion fills the latter with whatever candidates were
+// gathered since SetLocalDescription started gathering, so the signalled SDP
+// would carry candidates or not depending on scheduling, and every one of them
+// is trickled again below.
 func (c *Conn) sendLocal(create func() (webrtc.SessionDescription, error)) error {
 	sd, err := create()
 	if err != nil {
@@ -273,14 +277,10 @@ func (c *Conn) sendLocal(create func() (webrtc.SessionDescription, error)) error
 		c.mu.Unlock()
 		return err
 	}
-	local := c.pc.LocalDescription()
-	if local == nil {
-		local = &sd
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.descPending = false
-	d := *local
+	d := sd
 	c.emitLocked(Event{Kind: EventLocalDescription, Description: &d})
 	for i := range c.heldLocal {
 		cand := c.heldLocal[i]
