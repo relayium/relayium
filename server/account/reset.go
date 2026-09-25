@@ -90,7 +90,7 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 	if err != nil {
 		return Session{}, err
 	}
-	outcome, userID, err := s.store.ResetPasswordWithToken(ctx, tokenHash, s.now().Unix(), string(hash))
+	outcome, userID, epoch, err := s.store.ResetPasswordWithToken(ctx, tokenHash, s.now().Unix(), string(hash))
 	if err != nil {
 		return Session{}, err
 	}
@@ -109,8 +109,24 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 		return Session{}, ErrInvalidToken
 	}
 	// Outside the transaction on purpose: if this fails, everything above is
-	// committed and the user signs in with the new password.
-	return s.IssueSession(ctx, userID)
+	// committed and the user signs in with the new password. It is inserted at
+	// the epoch this reset wrote, so a later reset/change that commits first
+	// leaves no session behind it.
+	now := s.now()
+	sess := Session{
+		ID:        authx.RandToken(),
+		UserID:    userID,
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
+	}
+	issued, err := s.store.CreateSessionAtEpoch(ctx, sess, epoch)
+	if err != nil {
+		return Session{}, err
+	}
+	if !issued {
+		return Session{}, ErrCredentialsChanged
+	}
+	return sess, nil
 }
 
 // refuseResetOfFrozenAccount spends the reset link and answers with the

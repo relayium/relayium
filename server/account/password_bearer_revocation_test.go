@@ -361,7 +361,7 @@ func TestPasswordChangeKeepsInboxEnrolmentAndTasks(t *testing.T) {
 	}
 	taskID := decodeJSONBody(t, created)["task"].(map[string]any)["ID"].(string)
 
-	if err := h.store.ChangePasswordAndRevokeSessions(t.Context(), u, "$2a$10$fixture", "", "no-current-session"); err != nil {
+	if err := h.store.ChangePasswordAndRevokeSessions(t.Context(), u, "$2a$10$fixture", "", "no-current-session", 0); err != nil {
 		t.Fatal(err)
 	}
 	var bearers int
@@ -404,4 +404,72 @@ func deviceIDsOf(t *testing.T, st *SQLiteStore, userID string) map[string]bool {
 		out[d.ID] = true
 	}
 	return out
+}
+
+// A change in flight from a session the owner is about to lock out: it has read
+// and verified the old password when the owner's reset commits. Without the
+// epoch condition the change then writes the attacker's password over the
+// reset's, and the attacker signs in again with it.
+func TestChangeRacingAResetCannotOverwriteIt(t *testing.T) {
+	svc, m := newTestService(t)
+	u, _, stolen := victim(t, svc, m)
+	raceResetIntoNextPasswordRead(t, svc, m)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password/change",
+		strings.NewReader(`{"currentPassword":"old-password-1","newPassword":"attacker-password-3"}`))
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: stolen.ID})
+	svc.handleChangePassword(rec, req, u)
+	if rec.Code != http.StatusUnauthorized || strings.TrimSpace(rec.Body.String()) != "unauthorized" {
+		t.Fatalf("a change overtaken by a reset answered %d %q, want 401 unauthorized", rec.Code, rec.Body.String())
+	}
+	if canLogin(svc, "attacker-password-3") {
+		t.Fatal("the change overwrote the password the reset had just set")
+	}
+	if !canLogin(svc, "new-password-2") {
+		t.Fatal("the reset's password no longer works")
+	}
+}
+
+// resetThenAnotherReset commits a second reset right after the first reset's
+// transaction and before the first reset issues its session.
+// (A plain flag, not sync.Once: the second reset runs through this same
+// wrapper, and a re-entrant Once.Do would wait on itself.)
+type resetThenAnotherReset struct {
+	*SQLiteStore
+	fired  bool
+	second func()
+}
+
+func (w *resetThenAnotherReset) ResetPasswordWithToken(ctx context.Context, tokenHash string, now int64, passwordHash string) (ResetOutcome, string, int64, error) {
+	outcome, uid, epoch, err := w.SQLiteStore.ResetPasswordWithToken(ctx, tokenHash, now, passwordHash)
+	if !w.fired {
+		w.fired = true
+		w.second()
+	}
+	return outcome, uid, epoch, err
+}
+
+func TestResetSessionIsNotIssuedPastALaterReset(t *testing.T) {
+	ctx := context.Background()
+	svc, m := newTestService(t)
+	u, _, _ := victim(t, svc, m)
+	st := sqliteOf(t, svc)
+	first := resetLink(t, svc, m)
+	second := resetLink(t, svc, m)
+	var secondSess Session
+	svc.store = &resetThenAnotherReset{SQLiteStore: st, second: func() {
+		var err error
+		if secondSess, err = svc.ResetPassword(ctx, second, "second-password-4"); err != nil {
+			t.Errorf("second reset: %v", err)
+		}
+	}}
+
+	sess, err := svc.ResetPassword(ctx, first, "first-password-3")
+	if !errors.Is(err, ErrCredentialsChanged) || sess.ID != "" {
+		t.Fatalf("the first reset issued a session after a later reset: %+v %v", sess, err)
+	}
+	if n := liveSessions(t, st, u.ID); n != 1 || !live(t, svc, secondSess) {
+		t.Fatalf("%d live sessions, want only the later reset's", n)
+	}
 }

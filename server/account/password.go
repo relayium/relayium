@@ -298,6 +298,12 @@ func (s *Service) Login(ctx context.Context, email, password string) (Session, e
 // must verify; for a passwordless user (Google/magic) it is a first-time set that
 // also links a "password" identity so they can subsequently log in by email+password.
 func (s *Service) ChangePassword(ctx context.Context, u User, currentSessionID, currentPassword, newPassword string) error {
+	// Read before the current password is checked; the change is written only
+	// while it is unchanged (see ChangePasswordAndRevokeSessions).
+	epoch, err := s.store.CredentialEpoch(ctx, u.ID)
+	if err != nil {
+		return err
+	}
 	_, hash, hasPass, err := s.store.GetCredentials(ctx, u.Email)
 	if err != nil {
 		return err
@@ -322,5 +328,5 @@ func (s *Service) ChangePassword(ctx context.Context, u User, currentSessionID, 
 	if !hasPass {
 		linkSubject = normEmail(u.Email)
 	}
-	return s.store.ChangePasswordAndRevokeSessions(ctx, u.ID, string(newHash), linkSubject, currentSessionID)
+	return s.store.ChangePasswordAndRevokeSessions(ctx, u.ID, string(newHash), linkSubject, currentSessionID, epoch)
 }

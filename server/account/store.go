@@ -19,6 +19,11 @@ var ErrBrowserDeviceLimit = errors.New("account: browser device limit reached")
 // committed, so no bearer was minted.
 var ErrApprovingSessionGone = errors.New("account: approving session no longer valid")
 
+// ErrCredentialsChanged: a password reset/change committed after this request
+// read the account's credential_epoch, so the request's authority (the old
+// password, or a session the reset revoked) is gone and nothing was written.
+var ErrCredentialsChanged = errors.New("account: credentials changed by a concurrent reset or change")
+
 // User is an account holder. PII is limited to email + display name.
 type User struct {
 	ID            string
@@ -2011,7 +2016,7 @@ type Store interface {
 	// the email verified and revokes every session of the token's user in ONE
 	// transaction. Any outcome other than ResetApplied changed nothing and left
 	// the token unspent. The returned string is the token's user id.
-	ResetPasswordWithToken(ctx context.Context, tokenHash string, now int64, passwordHash string) (ResetOutcome, string, error)
+	ResetPasswordWithToken(ctx context.Context, tokenHash string, now int64, passwordHash string) (outcome ResetOutcome, userID string, epoch int64, err error)
 	// VerifyEmailWithToken spends a verify token, drops an unconfirmed
 	// registration password when dropPassword is set, marks the email verified
 	// and inserts sess in ONE transaction. Any outcome other than VerifyApplied,
@@ -2021,7 +2026,7 @@ type Store interface {
 	// ChangePasswordAndRevokeSessions replaces the password, links the "password"
 	// identity when linkSubject is non-empty, and revokes every session except
 	// exceptSessionID (the raw token) in ONE transaction.
-	ChangePasswordAndRevokeSessions(ctx context.Context, userID, passwordHash, linkSubject, exceptSessionID string) error
+	ChangePasswordAndRevokeSessions(ctx context.Context, userID, passwordHash, linkSubject, exceptSessionID string, expectEpoch int64) error
 	DeleteSpentEmailTokens(ctx context.Context, now int64) error
 	// devices
 	UpsertDevice(ctx context.Context, d Device) (Device, error)

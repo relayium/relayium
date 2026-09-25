@@ -930,6 +930,10 @@ func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 	}
 	err := s.ChangePassword(r.Context(), u, currentSessionID, in.CurrentPassword, in.NewPassword)
 	switch {
+	case errors.Is(err, ErrCredentialsChanged):
+		// A reset/change committed while this request was in flight and revoked
+		// this session; the web client shows this as "signed out in this browser".
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	case errors.Is(err, ErrBadCredentials):
 		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "current password incorrect"})
 	case errors.Is(err, ErrWeakPassword):

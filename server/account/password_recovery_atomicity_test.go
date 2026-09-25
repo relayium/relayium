@@ -180,7 +180,7 @@ func TestResetTransactionRefusesAnAccountFrozenAfterTheCheck(t *testing.T) {
 	}
 
 	now := svc.now().Unix()
-	outcome, userID, err := st.ResetPasswordWithToken(ctx, tokenHash, now, "replacement-hash-that-must-not-land")
+	outcome, userID, _, err := st.ResetPasswordWithToken(ctx, tokenHash, now, "replacement-hash-that-must-not-land")
 	if err != nil {
 		t.Fatal(err)
 	}

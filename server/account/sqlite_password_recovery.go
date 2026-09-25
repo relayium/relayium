@@ -30,10 +30,10 @@ import (
 // account that entered pending deletion after the service's own check must not
 // have its password replaced, and rolling back here hands the token, still
 // unspent, to the frozen-account path.
-func (s *SQLiteStore) ResetPasswordWithToken(ctx context.Context, tokenHash string, now int64, passwordHash string) (ResetOutcome, string, error) {
+func (s *SQLiteStore) ResetPasswordWithToken(ctx context.Context, tokenHash string, now int64, passwordHash string) (ResetOutcome, string, int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return ResetTokenInvalid, "", err
+		return ResetTokenInvalid, "", 0, err
 	}
 	defer tx.Rollback() // no-op after a successful Commit
 
@@ -42,32 +42,32 @@ func (s *SQLiteStore) ResetPasswordWithToken(ctx context.Context, tokenHash stri
 		 WHERE token_hash = ? AND purpose = 'reset' AND used_at = 0 AND expires_at > ?`,
 		now, tokenHash, now)
 	if err != nil {
-		return ResetTokenInvalid, "", err
+		return ResetTokenInvalid, "", 0, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return ResetTokenInvalid, "", nil
+		return ResetTokenInvalid, "", 0, nil
 	}
 	var userID string
 	if err := tx.QueryRowContext(ctx,
 		`SELECT user_id FROM email_tokens WHERE token_hash = ?`, tokenHash,
 	).Scan(&userID); err != nil {
-		return ResetTokenInvalid, "", err
+		return ResetTokenInvalid, "", 0, err
 	}
 	res, err = tx.ExecContext(ctx,
 		`UPDATE users SET password_hash = ? WHERE id = ? AND deleted_at = 0`, passwordHash, userID)
 	if err != nil {
-		return ResetTokenInvalid, "", err
+		return ResetTokenInvalid, "", 0, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return ResetAccountFrozen, userID, nil
+		return ResetAccountFrozen, userID, 0, nil
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE users SET email_verified = 1 WHERE id = ?`, userID); err != nil {
-		return ResetTokenInvalid, "", err
+		return ResetTokenInvalid, "", 0, err
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE sessions SET revoked = 1 WHERE user_id = ?`, userID); err != nil {
-		return ResetTokenInvalid, "", err
+		return ResetTokenInvalid, "", 0, err
 	}
 	// Every app/CLI bearer goes with the sessions: a reset is how a stolen
 	// device recovers, and a bearer is a full account credential. Browser
@@ -80,16 +80,24 @@ func (s *SQLiteStore) ResetPasswordWithToken(ctx context.Context, tokenHash stri
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM cli_tokens WHERE user_id = ? AND device_id NOT IN
 		   (SELECT id FROM devices WHERE user_id = ? AND kind = 'browser')`, userID, userID); err != nil {
-		return ResetTokenInvalid, "", err
+		return ResetTokenInvalid, "", 0, err
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE users SET credential_epoch = credential_epoch + 1 WHERE id = ?`, userID); err != nil {
-		return ResetTokenInvalid, "", err
+		return ResetTokenInvalid, "", 0, err
+	}
+	// The epoch this reset wrote: the session the service then issues to the
+	// person resetting is inserted only while it is still current, so a second
+	// reset/change committing in between also revokes that session.
+	var epoch int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT credential_epoch FROM users WHERE id = ?`, userID).Scan(&epoch); err != nil {
+		return ResetTokenInvalid, "", 0, err
 	}
 	if err := tx.Commit(); err != nil {
-		return ResetTokenInvalid, "", err
+		return ResetTokenInvalid, "", 0, err
 	}
-	return ResetApplied, userID, nil
+	return ResetApplied, userID, epoch, nil
 }
 
 // ChangePasswordAndRevokeSessions replaces the password, links the "password"
@@ -98,16 +106,27 @@ func (s *SQLiteStore) ResetPasswordWithToken(ctx context.Context, tokenHash stri
 //
 // exceptSessionID is the raw session token; sessions are keyed by its hash, and
 // comparing the raw value would revoke the caller's own session too.
-func (s *SQLiteStore) ChangePasswordAndRevokeSessions(ctx context.Context, userID, passwordHash, linkSubject, exceptSessionID string) error {
+//
+// expectEpoch is the credential_epoch the caller read before verifying the
+// current password. If a reset/change has committed since, the caller's session
+// and old password were revoked by it, and this change must not overwrite that
+// reset's password: nothing is written and ErrCredentialsChanged is returned.
+func (s *SQLiteStore) ChangePasswordAndRevokeSessions(ctx context.Context, userID, passwordHash, linkSubject, exceptSessionID string, expectEpoch int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback() // no-op after a successful Commit
 
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID); err != nil {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE users SET password_hash = ? WHERE id = ? AND credential_epoch = ?`, passwordHash, userID, expectEpoch)
+	if err != nil {
 		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return ErrCredentialsChanged
 	}
 	if linkSubject != "" {
 		if _, err := tx.ExecContext(ctx,
