@@ -94,7 +94,7 @@ const en = {
           {
             symptom: "The card says this month's relay traffic is used up.",
             code: ["https://relayium.com/me   # “This month's usage” shows what is left of the relay allowance"],
-            fix: "Cross-network browser sessions cannot start or continue until the allowance resets next month. To send now, upload the files as a stored download link at https://relayium.com/offline-transfer, upgrade the plan, or run your own node; same-network transfers keep working either way.",
+            fix: "Until the allowance resets next month no relay is offered, so a cross-network browser session connects only if the two computers can reach each other directly, and new stored download links are paused too. To send across networks now, upgrade the plan; same-network transfers keep working either way.",
           },
           {
             symptom: "The transfer stops part way and does not resume.",
@@ -241,7 +241,7 @@ const zh = {
           {
             symptom: "卡片提示本月的中继流量已经用完。",
             code: ["https://relayium.com/me   # 「本月用量」里能看到中继额度还剩多少"],
-            fix: "在额度于下个月重置之前，跨网络的浏览器会话既无法建立也无法继续。想现在就发，可以在 https://relayium.com/offline-transfer 把文件传成一个下载链接、升级套餐，或者自己跑一个节点；无论哪种情况，同网络传输都照常可用。",
+            fix: "在额度于下个月重置之前不再提供中继，跨网络的浏览器会话只有在两台电脑能直接连通时才能连上，新的存储型下载链接也会暂停。想现在就跨网络发送，请升级套餐；无论哪种情况，同网络传输都照常可用。",
           },
           {
             symptom: "传输传到一半停下，而且不再恢复。",

@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>自建节点：免费使用 Relayium 的中继与存储 · Relayium</title>
-    <meta name="description" content="用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。" />
+    <title>自建节点：自己承载中继与存储流量 · Relayium</title>
+    <meta name="description" content="用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。经它中继的字节和存放在它上面的上传不再占用每月流量额度，数据也留在你自己掌控的硬件上。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/guides/bring-your-own-node/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/bring-your-own-node/" />
@@ -21,8 +21,8 @@
     <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="自建节点：免费使用 Relayium 的中继与存储" />
-    <meta property="og:description" content="用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。" />
+    <meta property="og:title" content="自建节点：自己承载中继与存储流量" />
+    <meta property="og:description" content="用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。经它中继的字节和存放在它上面的上传不再占用每月流量额度，数据也留在你自己掌控的硬件上。" />
     <meta property="og:url" content="https://relayium.com/zh/guides/bring-your-own-node/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -31,10 +31,10 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="自建节点：免费使用 Relayium 的中继与存储" />
-    <meta name="twitter:description" content="用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。" />
+    <meta name="twitter:title" content="自建节点：自己承载中继与存储流量" />
+    <meta name="twitter:description" content="用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。经它中继的字节和存放在它上面的上传不再占用每月流量额度，数据也留在你自己掌控的硬件上。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自建节点：免费使用 Relayium 的中继与存储","description":"用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。","inLanguage":"zh-Hans","datePublished":"2026-07-10","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"自建节点：免费使用 Relayium 的中继与存储"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我遇到「relayium-node: command not found」，哪里错了？","acceptedAnswer":{"@type":"Answer","text":"你在安装之前就运行了 relayium-node 二进制。请用账号页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。"}},{"@type":"Question","name":"重启之后节点还会在线吗？","acceptedAnswer":{"@type":"Answer","text":"会。安装脚本注册了一个 systemd 服务，开机自启且设为 Restart=always，所以重启后会自动回来，崩溃也会自愈。无需额外操作。"}},{"@type":"Question","name":"这跟自托管 Relayium 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"自建节点保留你平常的 relayium.com 账号和客户端，只是多接一个你自己的节点来承载流量。自托管则是在你自己的域名上运行整套服务端（账号、Web 应用、信令）——那个见「自托管 Relayium」指南。"}},{"@type":"Question","name":"别人能用我的节点或看到我的数据吗？","acceptedAnswer":{"@type":"Answer","text":"不能。节点通过令牌绑定到你的账号，只承载你账号的流量。实时传输端到端加密，存储的数据块是你的节点也读不了的密文。你的数据和节点配置只为你自己所用。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自建节点：自己承载中继与存储流量","description":"用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。经它中继的字节和存放在它上面的上传不再占用每月流量额度，数据也留在你自己掌控的硬件上。","inLanguage":"zh-Hans","datePublished":"2026-07-10","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"自建节点：自己承载中继与存储流量"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我遇到「relayium-node: command not found」，哪里错了？","acceptedAnswer":{"@type":"Answer","text":"你在安装之前就运行了 relayium-node 二进制。请用账号页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。"}},{"@type":"Question","name":"重启之后节点还会在线吗？","acceptedAnswer":{"@type":"Answer","text":"会。安装脚本注册了一个 systemd 服务，开机自启且设为 Restart=always，所以重启后会自动回来，崩溃也会自愈。无需额外操作。"}},{"@type":"Question","name":"这跟自托管 Relayium 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"自建节点保留你平常的 relayium.com 账号和客户端，只是多接一个你自己的节点来承载流量。自托管则是在你自己的域名上运行整套服务端（账号、Web 应用、信令）——那个见「自托管 Relayium」指南。"}},{"@type":"Question","name":"别人能用我的节点或看到我的数据吗？","acceptedAnswer":{"@type":"Answer","text":"不能。节点通过令牌绑定到你的账号，只承载你账号的流量。实时传输端到端加密，存储的数据块是你的节点也读不了的密文。你的数据和节点配置只为你自己所用。"}}]}]}</script>
     <style>
 :root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
@@ -203,7 +203,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row dest" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row dest" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row dest" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row dest" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row tool" href="/cli">CLI</a><a class="row tool" href="/zh/apps/">应用</a><a class="row tool" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/" aria-current="true">中文</a></nav></div></header>
       <div class="pane"><div class="wrap">
 
-      <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">自建节点：免费使用 Relayium 的中继与存储</span></nav>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">自建节点：自己承载中继与存储流量</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
@@ -212,7 +212,7 @@ ol.steps>li>pre{margin:8px 0 0}
            instead — a labelled <aside>, so it is a complementary landmark rather
            than a navigation one, and the same rule is satisfied either way. -->
       <main>
-      <h1>自建节点：免费使用 Relayium 的中继与存储</h1>
+      <h1>自建节点：自己承载中继与存储流量</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
            bidi algorithm lays those runs out right-to-left inside the Arabic
            page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
@@ -222,17 +222,17 @@ ol.steps>li>pre{margin:8px 0 0}
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-06</bdi></p>
       
-      <p class="lead">跨网络传输和存储型链接会消耗中继带宽和磁盘，这对我们是有成本的，所以它们按免费额度提供、超出后收费。但有个绕过办法：自己搭一个中继/存储节点，绑定到你的账号，之后你的传输就走你自己的节点而不是我们的——不计量、不收费。</p>
+      <p class="lead">跨网络传输和存储型链接会消耗中继带宽和磁盘，这对我们是有成本的，所以它们按免费额度提供、超出后收费。把你自己的中继/存储节点绑定到账号后，它承载的部分就不再计入：经它中继的字节、存放在它上面的上传都不占用每月流量额度。存放的文件仍计入存储上限；这些文件的每次下载都由 Relayium 转发并计入，某次会话若选中我们的中继作为最快线路，那部分也照常计入。</p>
       <p class="lead">这跟「自托管整套 Relayium 服务端」不是一回事。你依然用你平常的 relayium.com 账号、同样的客户端；只是多接了一个你自己名下的节点来承载你的流量。本指南带你从一台全新的 Linux 服务器，到节点上线，大约五分钟。</p>
       <section class="sheet"><h2>为什么要自建节点</h2>
-      <p>两个理由。其一是成本：你自己的节点直接承载你的中继和存储流量，完全不碰我们的计量设施，也就没有任何可计费的东西——无论用量多大都免费。</p>
+      <p>两个理由。其一是成本：你的节点承载的中继和存储流量不占用你的每月流量额度。由 Relayium 从你的节点转发的下载仍会计入；每月额度用尽后，跨网络中继在你自己的节点上也会暂停，直到额度重置。</p>
       <p>其二是掌控：中继的字节和存储的数据块都落在你自己运行的硬件上，由你自己运维。实时传输全程端到端加密，所以即便是你自己的节点，看到的也只是密文。</p></section>
       <section class="sheet"><h2>安装节点并让它上线</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前你需要什么</p><ul><li>一台能从公网访问到的 Linux 服务器——便宜的 VPS 或家里常开的机器都行。amd64 和 arm64 都支持。</li><li>那台服务器的 root 权限，或者 sudo。安装时需要一次；节点本身从不以 root 运行。</li><li>放通入站端口的能力——主机防火墙上要放，云 VPS 还要在服务商的安全组里放。</li><li>一个已登录的 relayium.com 账号。安装命令是在账号页现生成的，里面带着一次性令牌。</li><li>磁盘空间，仅当你希望节点在中继之外还负责存储时才需要。纯中继节点不需要——把 RELAYIUM_NODE_STORAGE_DIR 去掉即可。</li></ul></div>
       <p>按顺序做四件事：生成命令、跑它、放通端口、确认节点上线。全新机器上大约五分钟。</p>
       <ol class="steps" data-block="steps"><li><p>在 relayium.com 登录，打开账号页 /me。</p></li><li><p>滚动到「我的节点」，点「添加节点」。立刻复制那条安装命令——里面的令牌只显示这一次，之后再也拿不到。</p></li><li><p>把它粘到你的服务器上执行。它会下载 relayium-node 二进制、校验校验和、安装到 /usr/local/bin、写好 systemd 服务并启动。</p><pre tabindex="0"><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>确认服务已经起来，并且重启后还会回来。两个答案都重要：active 说明它现在在跑，enabled 才是重启后还在的那个。</p><pre tabindex="0"><code>systemctl is-active relayium-node</code></pre><pre tabindex="0"><code>systemctl is-enabled relayium-node</code></pre></li><li><p>在主机防火墙上放通入站端口。显示「在线」只需要出站访问，但对端要中继和存储，走的是这几个端口。</p><pre tabindex="0"><code>sudo ufw allow 3478/udp        # TURN
 sudo ufw allow 8081/tcp        # storage
-sudo ufw allow 49152:65535/udp # relay</code></pre></li><li><p>如果是云 VPS，还要在服务商的安全组里放通同样的端口。只配 ufw 的话它们在上游依然是封的，而节点全程看着都很健康。</p></li><li><p>回到 /me，看着节点变成「在线」——通常 30 秒左右。从此你账号的传输会自动优先走它。</p></li><li><p>可选：打开「只使用我自己的节点做中继/存储」，这样传输会直接失败，而不是悄悄退回我们的共享设施。</p></li></ol>
+sudo ufw allow 49152:65535/udp # relay</code></pre></li><li><p>如果是云 VPS，还要在服务商的安全组里放通同样的端口。只配 ufw 的话它们在上游依然是封的，而节点全程看着都很健康。</p></li><li><p>回到 /me，看着节点变成「在线」——通常 30 秒左右。从此你账号的上传会优先存到它上面；它是最快线路时，跨网络会话也会经它中继。</p></li><li><p>可选：打开「只使用我自己的节点做中继/存储」，这样传输会直接失败，而不是悄悄退回我们的共享设施。</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">一个正常节点长什么样</p><p>systemd 报告服务同时是 active 和 enabled，并且节点在「我的节点」下显示为在线。光有 active 不够——没有 enabled 的节点下次重启就消失了。</p><pre tabindex="0"><code>$ systemctl is-active relayium-node
 active
 $ systemctl is-enabled relayium-node

@@ -1,7 +1,7 @@
 // web/scripts/pages/content/articles/guides-own-node.mjs
 // "Bring your own node" — attach your own relay/storage node to your relayium.com
-// account so your transfers run through it (free, private) instead of our metered
-// infrastructure. Distinct from guides-self-host.mjs, which runs the WHOLE server
+// account so the relay and storage traffic it carries stays on your hardware and
+// off the monthly traffic allowance. Distinct from guides-self-host.mjs, which runs the WHOLE server
 // stack yourself. English is the master; zh/ja/ko/de/fr keep identical facts.
 // Command/env/port blocks (code) stay English in every language.
 
@@ -14,19 +14,19 @@ const PORTS_CODE = [
 ];
 
 const en = {
-  title: "Bring your own node: use Relayium relay & storage for free",
+  title: "Bring your own node: carry your own relay & storage traffic",
   description:
-    "Attach your own relay/storage node to your Relayium account with one command. Your transfers then run through your node — not our metered servers — so they're free, and the data stays on hardware you control.",
+    "Attach your own relay/storage node to your Relayium account with one command. The bytes it relays and the uploads it stores stop using your monthly traffic allowance, and the data stays on hardware you control.",
   updatedLabel: "Last updated",
   lead: [
-    "Cross-network transfers and stored links use relay bandwidth and disk that cost us money, so they run on a free allowance and are paid past it. There's a way around that: run your own relay/storage node, bind it to your account, and your transfers flow through your node instead of ours — nothing metered, nothing billed.",
+    "Cross-network transfers and stored links use relay bandwidth and disk that cost us money, so they run on a free allowance and are paid past it. Your own relay/storage node, bound to your account, takes what it carries off that meter: bytes relayed through it and uploads stored on it are not counted against the monthly traffic allowance. Files stored on it still count toward your storage cap; every download of them is carried by Relayium and counts, and so does a session that picks one of our relays as its fastest route.",
     "This is different from self-hosting the whole Relayium server. You keep using your normal relayium.com account and the same apps; you're just adding a node you own to carry your traffic. This guide takes you from a fresh Linux box to an online node in about five minutes.",
   ],
   sections: [
     {
       heading: "Why run your own node",
       body: [
-        "Two reasons. First, cost: a node you own carries your relay and storage traffic directly, so it never touches our metered infrastructure and there is nothing to bill — your usage is free no matter how large.",
+        "Two reasons. First, cost: the relay and storage traffic your node carries doesn't use your monthly traffic allowance. Downloads Relayium carries from your node still count, and once your monthly allowance is used up, cross-network relay pauses on your own node too until it resets.",
         "Second, control: the relayed bytes and stored blobs live on hardware you run, under your own operational control. Realtime transfers stay end-to-end encrypted the whole way, so even your own node only ever sees ciphertext.",
       ],
     },
@@ -68,7 +68,7 @@ const en = {
           text: "On a cloud VPS, allow the same ports in the provider's security group as well. ufw alone leaves them blocked upstream, and the node looks healthy the whole time.",
         },
         {
-          text: "Back on /me, watch the node flip to Online — usually within about 30 seconds. From then on your account's transfers prefer it automatically.",
+          text: "Back on /me, watch the node flip to Online — usually within about 30 seconds. From then on your account's uploads land on it first, and your cross-network sessions can relay through it when it is the fastest route.",
         },
         {
           text: "Optional: turn on \"Only use my own nodes for relay/storage\" so a transfer fails rather than quietly falling back to our shared infrastructure.",
@@ -230,19 +230,19 @@ enabled`,
 };
 
 const zh = {
-  title: "自建节点：免费使用 Relayium 的中继与存储",
+  title: "自建节点：自己承载中继与存储流量",
   description:
-    "用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。",
+    "用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。经它中继的字节和存放在它上面的上传不再占用每月流量额度，数据也留在你自己掌控的硬件上。",
   updatedLabel: "最近更新",
   lead: [
-    "跨网络传输和存储型链接会消耗中继带宽和磁盘，这对我们是有成本的，所以它们按免费额度提供、超出后收费。但有个绕过办法：自己搭一个中继/存储节点，绑定到你的账号，之后你的传输就走你自己的节点而不是我们的——不计量、不收费。",
+    "跨网络传输和存储型链接会消耗中继带宽和磁盘，这对我们是有成本的，所以它们按免费额度提供、超出后收费。把你自己的中继/存储节点绑定到账号后，它承载的部分就不再计入：经它中继的字节、存放在它上面的上传都不占用每月流量额度。存放的文件仍计入存储上限；这些文件的每次下载都由 Relayium 转发并计入，某次会话若选中我们的中继作为最快线路，那部分也照常计入。",
     "这跟「自托管整套 Relayium 服务端」不是一回事。你依然用你平常的 relayium.com 账号、同样的客户端；只是多接了一个你自己名下的节点来承载你的流量。本指南带你从一台全新的 Linux 服务器，到节点上线，大约五分钟。",
   ],
   sections: [
     {
       heading: "为什么要自建节点",
       body: [
-        "两个理由。其一是成本：你自己的节点直接承载你的中继和存储流量，完全不碰我们的计量设施，也就没有任何可计费的东西——无论用量多大都免费。",
+        "两个理由。其一是成本：你的节点承载的中继和存储流量不占用你的每月流量额度。由 Relayium 从你的节点转发的下载仍会计入；每月额度用尽后，跨网络中继在你自己的节点上也会暂停，直到额度重置。",
         "其二是掌控：中继的字节和存储的数据块都落在你自己运行的硬件上，由你自己运维。实时传输全程端到端加密，所以即便是你自己的节点，看到的也只是密文。",
       ],
     },
@@ -284,7 +284,7 @@ const zh = {
           text: "如果是云 VPS，还要在服务商的安全组里放通同样的端口。只配 ufw 的话它们在上游依然是封的，而节点全程看着都很健康。",
         },
         {
-          text: "回到 /me，看着节点变成「在线」——通常 30 秒左右。从此你账号的传输会自动优先走它。",
+          text: "回到 /me，看着节点变成「在线」——通常 30 秒左右。从此你账号的上传会优先存到它上面；它是最快线路时，跨网络会话也会经它中继。",
         },
         {
           text: "可选：打开「只使用我自己的节点做中继/存储」，这样传输会直接失败，而不是悄悄退回我们的共享设施。",

@@ -109,7 +109,7 @@ const en = {
           {
             symptom: "The download page says there are too many requests, or that the sender's monthly transfer allowance is used up.",
             code: ["https://relayium.com/me   # this month's usage covers transfer, not just storage"],
-            fix: "The file is still there — this is metering rather than loss. Waiting a few minutes clears a rate limit; an exhausted monthly transfer allowance needs the month to roll over, an upgrade, or your own node, and in the meantime a realtime transfer bypasses it entirely.",
+            fix: "The file is still there — this is metering rather than loss. Waiting a few minutes clears a rate limit; an exhausted monthly transfer allowance needs the month to roll over or an upgrade, and in the meantime a transfer between two devices on the same network bypasses it entirely.",
           },
         ],
       },
@@ -245,7 +245,7 @@ const zh = {
           {
             symptom: "下载页面提示当前请求太多，或者发送方本月的流量额度已经用完。",
             code: ["https://relayium.com/me   # 「本月用量」既包含存储也包含流量"],
-            fix: "文件还在——这是计量问题，不是丢失。等几分钟就能解除限流；而月流量额度用尽则要等到下个月、升级套餐，或者用自己的节点，在此期间实时传输可以完全绕开它。",
+            fix: "文件还在——这是计量问题，不是丢失。等几分钟就能解除限流；而月流量额度用尽则要等到下个月或升级套餐，在此期间同一网络内两台设备之间的传输可以完全绕开它。",
           },
         ],
       },

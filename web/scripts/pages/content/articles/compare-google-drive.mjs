@@ -71,7 +71,7 @@ const en = {
       },
       {
         q: "Is Relayium free?",
-        a: "The software is, and so are same-network transfers. Relayium is open source under the AGPL-3.0 license, with the full protocol and code at github.com/relayium/relayium, and browser transfers on the same network are free with no size limit. Cross-network relay and stored download links draw on limits every account gets: a monthly traffic allowance, and a separate cap on how much you keep stored at once. Paid plans raise both — or run your own node and stay free at any volume.",
+        a: "The software is, and so are same-network transfers. Relayium is open source under the AGPL-3.0 license, with the full protocol and code at github.com/relayium/relayium, and browser transfers on the same network are free with no size limit. Cross-network relay and stored download links draw on limits every account gets: a monthly traffic allowance, and a separate cap on how much you keep stored at once. Paid plans raise both — or run your own node to take the relay and storage traffic it carries off the monthly allowance.",
       },
     ],
   },
@@ -150,7 +150,7 @@ const zh = {
       },
       {
         q: "Relayium 免费吗？",
-        a: "软件免费，同一网络内的传输也免费。Relayium 采用 AGPL-3.0 许可，是开源软件，完整的协议与代码都在 github.com/relayium/relayium；同一网络内的浏览器传输免费，且不限文件大小。跨网络中继与存储下载链接会占用每个账号都有的额度：每月流量额度，以及同时存放的数据量上限，这两项彼此独立。付费套餐两者都更高——你也可以运行自己的节点，在任意用量下保持免费。",
+        a: "软件免费，同一网络内的传输也免费。Relayium 采用 AGPL-3.0 许可，是开源软件，完整的协议与代码都在 github.com/relayium/relayium；同一网络内的浏览器传输免费，且不限文件大小。跨网络中继与存储下载链接会占用每个账号都有的额度：每月流量额度，以及同时存放的数据量上限，这两项彼此独立。付费套餐两者都更高——你也可以运行自己的节点，让它承载的中继与存储流量不再占用每月流量额度。",
       },
     ],
   },

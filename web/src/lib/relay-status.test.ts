@@ -41,7 +41,13 @@ describe("relay status copy", () => {
   // The two paid/gated causes must keep pointing at the action that fixes them,
   // because those are the ones a user cannot resolve by retrying.
   it("keeps the actionable causes actionable in English", () => {
-    expect(relayFailNote(en, "quota")).toMatch(/relay traffic is used up/i);
+    // The relay is withheld because the whole monthly traffic allowance (relay +
+    // hosted transfer) is spent, and a direct path may still connect
+    // (server/account/turn.go) — the note must say both, not "cannot connect".
+    expect(relayFailNote(en, "quota")).toMatch(/traffic allowance is used up/i);
+    expect(relayFailNote(en, "quota")).toMatch(/no direct path/i);
+    expect(relayWarnNote(en, "quota")).toMatch(/direct path/i);
+    expect(relayWarnNote(en, "quota")).not.toMatch(/stored download link|run your own node/i);
     expect(relayFailNote(en, "unverified")).toMatch(/verify your email/i);
     expect(relayFailNote(en, "unavailable")).toMatch(/reload/i);
     expect(relayWarnNote(en, "unavailable")).toMatch(/reload/i);

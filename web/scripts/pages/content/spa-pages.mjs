@@ -16,18 +16,18 @@ export const pricing = {
   // title + " · Relayium", and pricingPage.subtitle) — see the note in shells.mjs.
   title: "Simple, honest pricing · Relayium",
   description:
-    "Same-network file and live-text transfers are always free. Cross-network relay and hosted links draw on your plan's monthly traffic allowance and storage cap; bytes your own node carries do not, though downloads served through Relayium still count.",
+    "Same-network file and live-text transfers are always free. Cross-network relay and hosted links draw on your plan's monthly traffic allowance and storage cap. Relay traffic and uploads your own node carries don't use the traffic allowance, but files stored on it still count toward your storage cap, and downloads served through Relayium still count.",
   hero: {
     h1: "Simple, honest pricing",
     pitch:
-      "Same-network file and live-text transfers are always free. Cross-network relay and hosted links draw on your plan's monthly traffic allowance and storage cap; bytes your own node carries do not, though downloads served through Relayium still count.",
+      "Same-network file and live-text transfers are always free. Cross-network relay and hosted links draw on your plan's monthly traffic allowance and storage cap. Relay traffic and uploads your own node carries don't use the traffic allowance, but files stored on it still count toward your storage cap, and downloads served through Relayium still count.",
     cta: "See the plans",
   },
   how: {
     heading: "Always free",
     steps: [
       "Local network (LAN) transfers — instant, no account needed.",
-      "Direct peer-to-peer CLI transfers — files over your own SSH, daemon-direct, or a pairing code, plus ephemeral text by pairing code — with nothing metered. Minting a send or text code needs an account; joining one never does.",
+      "Direct peer-to-peer CLI transfers — files over your own SSH, daemon-direct, or a pairing code, plus ephemeral text by pairing code — with nothing metered. Minting a send or text code needs an account with traffic allowance left; joining one never does.",
       "End-to-end encrypted: files have no size limit, while live text needs both ends online and leaves no message bodies or server-side history on Relayium servers — each device can still copy or keep what it receives. On direct paths, your files and messages go straight between devices — they never touch our servers.",
     ],
   },
@@ -57,7 +57,7 @@ export const pricing = {
     items: [
       {
         title: "Bring your own node",
-        body: "Relayium is open source. Spin up your own relay + storage node on any machine you control — a VPS, a home server, an old laptop — with a single install command. What your node carries stops using your allowance: bytes relayed through it, and uploads stored on it. Downloads still use your allowance when Relayium carries them — they are free only when your client fetches them straight from your node. You bring the bandwidth; we provide the software.",
+        body: "Relayium is open source. Spin up your own relay + storage node on any machine you control — a VPS, a home server, an old laptop — with a single install command. Bytes relayed through it and uploads stored on it stop using your monthly traffic allowance, though those files still count toward your storage cap, and every download of them is carried by Relayium and counts as usual. You bring the bandwidth; we provide the software.",
       },
     ],
   },
@@ -78,7 +78,7 @@ export const pricing = {
       },
       {
         q: "Can I avoid paying entirely?",
-        a: "Your own node can reduce metered traffic. Relayium is open source, so you can host relay and storage on hardware you control. Bytes relayed through it and uploads stored on it stop counting against your allowance, and a client that fetches a file straight from your node downloads free. Downloads Relayium carries still use your allowance. Add a node from your account page.",
+        a: "Your own node can reduce metered traffic. Relayium is open source, so you can host relay and storage on hardware you control. Bytes relayed through it and uploads stored on it stop counting against your monthly traffic allowance. Files stored on it still count toward your storage cap, and downloads Relayium carries — including every download of those files — still use your allowance. Add a node from your account page.",
       },
       {
         q: "Can I change plans later?",
