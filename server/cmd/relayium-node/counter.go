@@ -3,12 +3,15 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"log"
 	"net"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/relayium/relayium/internal/relayusage"
 	"github.com/relayium/relayium/internal/storage"
 )
 
@@ -165,6 +168,10 @@ type allocEntry struct {
 	// counting those is the diagnostic in stats().
 	joined bool
 	closed bool
+	// picked is the snapshot sequence number that last put this entry in a
+	// heartbeat batch (0 = never). It orders the next selection so a bounded
+	// batch rotates through every entry; see snapshot.
+	picked uint64
 }
 
 // allocRegistry tracks per-allocation byte counters. Entries are keyed by a
@@ -185,6 +192,8 @@ type allocRegistry struct {
 	// diagnostic last reported, so a cumulative total that has not moved is not
 	// re-reported every heartbeat forever. See statsForHeartbeat.
 	loggedRetiredUnjoined int64
+	// snapSeq numbers snapshots, for allocEntry.picked.
+	snapSeq uint64
 }
 
 func newAllocRegistry(lim *limits) *allocRegistry {
@@ -252,8 +261,8 @@ func (r *allocRegistry) created(relayAddr net.Addr, username string) {
 // misattributed. See newTURNServer.
 //
 // Idempotent by construction: an entry that is already closed, or already
-// flushed and evicted by snapshot and so absent from entries, is a no-op. Two
-// Closes therefore decrement activeAllocs once and flush one final byte total.
+// acknowledged and evicted and so absent from entries, is a no-op. Two Closes
+// therefore decrement activeAllocs once and report one final byte total.
 func (r *allocRegistry) markClosed(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -272,8 +281,9 @@ func (r *allocRegistry) markClosed(id string) {
 	if r.byRelay[e.relayKey] == id {
 		delete(r.byRelay, e.relayKey)
 	}
-	// The entry itself survives one more snapshot so its final cumulative byte
-	// total reaches central; snapshot evicts it immediately after.
+	// The entry itself survives until central has acknowledged its final
+	// cumulative byte total (see ack), or, if it was never attributed to a
+	// username and so can never be reported, until the next snapshot.
 }
 
 // activeAllocs is how many relay sockets this node has open RIGHT NOW, which
@@ -282,12 +292,13 @@ func (r *allocRegistry) markClosed(id string) {
 // lose if the build is bad.
 //
 // It counts entries whose socket is still open, which is deliberately NOT the
-// same population as snapshot()'s: snapshot reports a closed allocation one
-// final time (so its last bytes flush) and sendHeartbeat drops samples with no
-// username, so len(usage) means "allocations seen since the last heartbeat" and
-// would over- and under-count live ones at the same time. A separate, honest
-// counter is cheaper than explaining that difference to every future reader of
-// the heartbeat.
+// same population as snapshot()'s: snapshot keeps reporting a closed allocation
+// until central acknowledges its final total (so its last bytes flush, however
+// long central is unreachable), a bounded batch may leave some entries for the
+// next heartbeat, and sendHeartbeat drops samples with no username. len(usage)
+// would therefore over- and under-count live ones at the same time. A separate,
+// honest counter is cheaper than explaining that difference to every future
+// reader of the heartbeat.
 //
 // Because an entry is created in wrap() and retired in the socket's Close(),
 // this counts exactly the relay sockets that are open, and returns to zero once
@@ -325,8 +336,9 @@ func (r *allocRegistry) activeAllocs() int {
 //     (Allocate with EVEN-PORT); before this fix, every one of those probes was
 //     a permanent leak. This is the field that would settle the question the
 //     original incident left open.
-//   - AwaitingFlush is entries retired but still owed their final byte report.
-//     It should be small and transient.
+//   - AwaitingFlush is entries retired but whose final byte report central has
+//     not yet acknowledged. It should be small and transient; it grows for as
+//     long as heartbeats fail, and drains once they succeed again.
 type allocStats struct {
 	Live            int
 	LiveUnjoined    int
@@ -398,18 +410,73 @@ type allocSample struct {
 	AllocID      string
 	Username     string
 	RelayedBytes int64
+	// Final means the sample was taken from a retired entry with no I/O in
+	// flight, so RelayedBytes is the allocation's last cumulative total. Only a
+	// final sample can retire an entry, and only through ack.
+	Final bool
 }
 
-// snapshot returns the current cumulative bytes per allocation and evicts
-// allocations marked closed, reporting them one final time. Closed allocations
-// thus stop refreshing their central recorded_at and the map stays bounded.
+// Heartbeat batch bounds. A heartbeat carries at most this much usage, and
+// whatever does not fit stays in the registry for the next one.
+//
+// They exist because closed allocations are now kept until central
+// acknowledges them, so an outage accumulates them. Sending that backlog in
+// one body would eventually exceed central's limits and fail EVERY heartbeat
+// — live usage included — forever, which is worse than the loss this retention
+// prevents. Each bound is set under the central limit it answers to
+// (account/nodes.go handleNodeHeartbeat):
+//
+//   - maxUsagePerUser: central records at most maxAllocsPerUser (64) entries
+//     per user per heartbeat and answers 200 while silently skipping the rest.
+//     An entry skipped that way would still be acknowledged here and lost, so
+//     the node never sends more than 64 for one user. Grouping uses the same
+//     relayusage parse central uses. The batch is one POST per heartbeat tick,
+//     so this paces a backlog at central's existing per-heartbeat rate rather
+//     than bypassing it.
+//   - maxUsagePerHeartbeat: central logs a possible-forgery warning above
+//     implausibleUsageCount (512) entries in one heartbeat. Staying at or
+//     under it keeps a backlog drain from reading as an attack.
+//   - maxUsageWireBytes: central reads at most 1 MiB of body. The usage array
+//     is held to half of that, measured as the exact JSON it will be encoded
+//     as, leaving the rest for the fixed fields.
+const (
+	maxUsagePerUser      = 64
+	maxUsagePerHeartbeat = 512
+	maxUsageWireBytes    = 512 << 10
+)
+
+// usageUserKey is the account central will attribute username's bytes to, and
+// so the key its per-user cap counts by. Usernames central cannot attribute
+// share the "" key; central skips those without counting them, so capping them
+// here too is merely conservative.
+func usageUserKey(username string) string {
+	userID, _ := relayusage.SplitAttrib(relayusage.TokenFromUsername(username))
+	return userID
+}
+
+// usageWireSize is the number of bytes s adds to the heartbeat's usage array:
+// its exact JSON encoding plus a separating comma.
+func usageWireSize(s allocSample) int {
+	b, err := json.Marshal(usageItem{AllocID: s.AllocID, Username: s.Username, RelayedBytes: s.RelayedBytes})
+	if err != nil {
+		return maxUsageWireBytes // unreachable for these field types; never fits beside others
+	}
+	return len(b) + 1
+}
+
+// snapshot returns the next heartbeat's samples: the current cumulative bytes
+// of a bounded, fair selection of attributed allocations, plus every
+// unattributed one. It does NOT evict an attributed allocation, even a closed
+// one. Only ack does that, once central has acknowledged the final total this
+// returned, so a heartbeat that fails in any way leaves every entry in place
+// to be reported again. Central keeps the maximum cumulative total per
+// alloc_id, so reporting the same final total twice bills it once.
 //
 // A closed entry with in-flight I/O is skipped entirely — neither reported nor
-// evicted — and picked up whole by the next snapshot. See beginIO: its bytes
-// have left the socket but are not in the total yet, so reporting now would
-// publish a final figure short of them and then evict the entry the pending add
-// is about to land in. Skipping rather than reporting-without-evicting is what
-// keeps "exactly one final sample" true.
+// marked final — and picked up whole by a later snapshot. See beginIO: its
+// bytes have left the socket but are not in the total yet, so reporting now
+// would publish a final figure short of them, and an acknowledgement of that
+// figure would evict the entry the pending add is about to land in.
 //
 // The load order below matters and is not incidental: pending is read BEFORE
 // bytes. Both are sequentially consistent atomics and the tally is sequenced
@@ -420,31 +487,125 @@ type allocSample struct {
 // short. That costs one map entry and loses no bytes; a relay conn whose
 // ReadFrom never returns after Close would already have pion's packetHandler
 // goroutine wedged behind it, which is the larger failure.
+//
+// Selection. Attributed entries are ordered by the snapshot that last selected
+// them (never-selected first), then by allocID, and taken in that order within
+// the batch bounds above. An entry passed over keeps its older position, so it
+// is first in line next time: every entry is reported within
+// ceil(entries/limit) heartbeats, live allocations are not starved by a
+// backlog of finals, and the result is deterministic for a given registry.
+//
+// An unattributed entry (no username) is returned but never sent, since
+// central cannot bill it; it costs nothing against the bounds. A closed one
+// can never gain a username (created ignores closed entries), so it is evicted
+// here, as before: it is the GetRandomEvenPort probe socket, and keeping it
+// until an acknowledgement that can never mention it would leak it.
+//
+// Memory. Retention is unbounded by design: dropping a final total to cap
+// memory would silently lose billable bytes. An entry is a few hundred bytes,
+// so even a long outage costs little, and AwaitingFlush in the heartbeat
+// diagnostic shows the backlog. Retention is in memory only: a node restart
+// or update loses every unacknowledged total, exactly as it loses live
+// counters today. A durable spool would be a separate change.
 func (r *allocRegistry) snapshot() []allocSample {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.snapSeq++
 	out := make([]allocSample, 0, len(r.entries))
+	candidates := make([]*allocEntry, 0, len(r.entries))
 	for id, e := range r.entries {
 		if e.closed && atomic.LoadInt64(&e.pending) != 0 {
 			continue
 		}
+		if e.username != "" {
+			candidates = append(candidates, e)
+			continue
+		}
 		out = append(out, allocSample{
+			AllocID:      e.allocID,
+			RelayedBytes: atomic.LoadInt64(&e.bytes),
+			Final:        e.closed,
+		})
+		if e.closed {
+			r.evictLocked(id, e)
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].picked != candidates[j].picked {
+			return candidates[i].picked < candidates[j].picked
+		}
+		return candidates[i].allocID < candidates[j].allocID
+	})
+	perUser := make(map[string]int)
+	var sent, wire int
+	for _, e := range candidates {
+		if sent >= maxUsagePerHeartbeat {
+			break
+		}
+		key := usageUserKey(e.username)
+		if perUser[key] >= maxUsagePerUser {
+			continue
+		}
+		// closed was read under r.mu and pending was loaded as 0 above, before
+		// this load of bytes; see the load-order note.
+		s := allocSample{
 			AllocID:      e.allocID,
 			Username:     e.username,
 			RelayedBytes: atomic.LoadInt64(&e.bytes),
-		})
-		if e.closed {
-			delete(r.entries, id)
-			// markClosed already dropped the index; this guard keeps eviction
-			// self-sufficient if a future path ever sets closed directly, and is
-			// identity-checked so a newer socket that has since taken the key is
-			// not unindexed by this one.
-			if r.byRelay[e.relayKey] == id {
-				delete(r.byRelay, e.relayKey)
-			}
+			Final:        e.closed,
 		}
+		n := usageWireSize(s)
+		if sent > 0 && wire+n > maxUsageWireBytes {
+			continue
+		}
+		wire += n
+		sent++
+		perUser[key]++
+		e.picked = r.snapSeq
+		out = append(out, s)
 	}
 	return out
+}
+
+// ack retires the allocations whose final totals central has acknowledged.
+// sent must be exactly the samples a heartbeat carried, and the caller must
+// have a usable successful response for that heartbeat (see sendHeartbeat).
+//
+// It acts only on Final samples, and evicts an entry only if it is still the
+// closed, quiescent entry that sample described with the same total. So a late
+// or duplicate ack is harmless: a live sample never evicts (the allocation may
+// close later with more bytes), an entry whose total has moved since it was
+// sampled stays to be reported again, and an entry already evicted is absent.
+// allocIDs are unique per socket, so a reused relay port is a different entry
+// that no ack for the old one can name.
+func (r *allocRegistry) ack(sent []allocSample) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, s := range sent {
+		if !s.Final {
+			continue
+		}
+		e := r.entries[s.AllocID]
+		if e == nil || !e.closed || e.username != s.Username {
+			continue
+		}
+		if atomic.LoadInt64(&e.pending) != 0 || atomic.LoadInt64(&e.bytes) != s.RelayedBytes {
+			continue
+		}
+		r.evictLocked(s.AllocID, e)
+	}
+}
+
+// evictLocked removes a retired entry. r.mu must be held.
+func (r *allocRegistry) evictLocked(id string, e *allocEntry) {
+	delete(r.entries, id)
+	// markClosed already dropped the index; this guard keeps eviction
+	// self-sufficient if a future path ever sets closed directly, and is
+	// identity-checked so a newer socket that has since taken the key is not
+	// unindexed by this one.
+	if r.byRelay[e.relayKey] == id {
+		delete(r.byRelay, e.relayKey)
+	}
 }
 
 // blobUsageRefresh is how often the blob-directory size gauge is recomputed.

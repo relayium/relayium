@@ -447,9 +447,10 @@ func run(c config, st nodeState) error {
 }
 
 func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, stateDir string, blobGauge *blobUsage, lim *limits, updateReq *updateRequester) {
-	// Read the live count BEFORE snapshot(), which evicts closed allocations:
-	// either order gives the same answer (activeAllocs ignores closed entries),
-	// but taking it first keeps the two reads from being confused for one.
+	// Read the live count BEFORE snapshot(): either order gives the same answer
+	// (activeAllocs ignores closed entries, including ones still awaiting
+	// acknowledgement), but taking it first keeps the two reads from being
+	// confused for one.
 	active := reg.activeAllocs()
 	// The breakdown behind that number. The fleet's stuck active_transfers
 	// (0/16/28/16/16, never falling) could not be attributed from the node at
@@ -476,12 +477,16 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, 
 	}
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
+	// sent is exactly what this body carries, so that exactly that, and nothing
+	// sampled or changed since, is what a success acknowledges.
+	sent := make([]allocSample, 0, len(samples))
 	var total int64
 	for _, s := range samples {
 		if s.Username == "" {
 			continue // not yet joined to a username; skip until OnAllocationCreated fires
 		}
 		usage = append(usage, usageItem{AllocID: s.AllocID, Username: s.Username, RelayedBytes: s.RelayedBytes})
+		sent = append(sent, s)
 		total += s.RelayedBytes
 	}
 	var storedBytes, storTotal, storFree int64
@@ -502,8 +507,23 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, 
 	}
 	hr, err := rp.heartbeat(body)
 	if err != nil {
+		// Nothing was acknowledged, including when central recorded the body
+		// but the response was lost: every final total stays in the registry
+		// and is sent again, which central's per-alloc_id keep-max absorbs.
 		log.Printf("relayium-node: heartbeat failed (will retry): %v", err)
 		return
+	}
+	// Only a decoded response that says ok acknowledges the final totals this
+	// body carried; anything else leaves them to be sent again. What an ok
+	// means is bounded by central: it answers after attempting every item, and
+	// a per-item ledger write that fails there is logged and still answered
+	// ok, so this acknowledges delivery to central, not that each item was
+	// durably recorded. The batch bounds in counter.go keep central's
+	// per-user cap from being that kind of silent skip.
+	if hr.OK {
+		reg.ack(sent)
+	} else {
+		log.Printf("relayium-node: heartbeat response did not report ok; keeping %d usage report(s) to resend", len(sent))
 	}
 	if lim != nil {
 		lim.sync(hr.RelayedThisMonth, hr.TrafficLimitBytes, hr.DiskLimitBytes)

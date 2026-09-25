@@ -48,7 +48,7 @@ func TestActiveAllocsCountsOnlyLiveAllocations(t *testing.T) {
 	if got := reg.activeAllocs(); got != 1 {
 		t.Fatalf("after one allocation closed: activeAllocs = %d, want 1", got)
 	}
-	if n := len(reg.snapshot()); n != 2 {
+	if n := len(ackedSnapshot(reg)); n != 2 {
 		t.Fatalf("snapshot = %d samples, want 2 (the closed one still flushes) — "+
 			"this is exactly why len(Usage) is not the active count", n)
 	}

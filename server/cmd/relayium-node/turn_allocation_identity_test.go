@@ -220,7 +220,7 @@ func TestTURNLateReaderOfEndedAllocationCannotEndItsSuccessor(t *testing.T) {
 	first := gen.firstRelay(t)
 	<-first.readFailed // #1 is closed; its reader holds the error
 	waitForActiveAllocs(t, reg, 0)
-	reg.snapshot() // flush and evict #1
+	ackedSnapshot(reg) // flush, acknowledge and evict #1
 
 	c.allocate(t)
 	if got := reg.activeAllocs(); got != 1 {
@@ -256,7 +256,7 @@ func TestTURNReaderUnwoundBeforeReuseLeavesSuccessorLive(t *testing.T) {
 	first.release()
 	waitGoroutineExited(t, first.readerGID)
 	waitForActiveAllocs(t, reg, 0)
-	reg.snapshot()
+	ackedSnapshot(reg)
 
 	c.allocate(t)
 	if got := reg.activeAllocs(); got != 1 {

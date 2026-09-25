@@ -31,7 +31,7 @@ func TestRegistrySnapshotAttributes(t *testing.T) {
 	reg.created(relay, "6000:userX.123456")
 	c.WriteTo(make([]byte, 250), &net.UDPAddr{})
 
-	snap := reg.snapshot()
+	snap := ackedSnapshot(reg)
 	if len(snap) != 1 {
 		t.Fatalf("want 1 sample, got %d", len(snap))
 	}
@@ -55,7 +55,7 @@ func TestAllocIDUniquePerAllocation(t *testing.T) {
 	if err := connA.Close(); err != nil {
 		t.Fatalf("close A: %v", err)
 	}
-	first := reg.snapshot() // final flush of A, then evicted
+	first := ackedSnapshot(reg) // final flush of A, then evicted
 	if len(first) != 1 {
 		t.Fatalf("want A reported once, got %d", len(first))
 	}
@@ -64,7 +64,7 @@ func TestAllocIDUniquePerAllocation(t *testing.T) {
 	// Same relay port reused for user B.
 	reg.wrap(fakePC{}, relay)
 	reg.created(relay, "6000:userB.2")
-	second := reg.snapshot()
+	second := ackedSnapshot(reg)
 	if len(second) != 1 {
 		t.Fatalf("want only B live, got %d", len(second))
 	}
@@ -76,8 +76,9 @@ func TestAllocIDUniquePerAllocation(t *testing.T) {
 	}
 }
 
-// I1: a closed allocation is reported exactly once more (final flush) and then
-// evicted, so it stops refreshing central recorded_at and the map stays bounded.
+// I1: a closed allocation is reported once more (final flush) and, once central
+// acknowledges that heartbeat, evicted, so it stops refreshing central
+// recorded_at and the map stays bounded.
 func TestClosedAllocEvictedAfterFinalSnapshot(t *testing.T) {
 	reg := newAllocRegistry(nil)
 	relay := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: 51000}
@@ -88,10 +89,10 @@ func TestClosedAllocEvictedAfterFinalSnapshot(t *testing.T) {
 	if err := c.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	if got := reg.snapshot(); len(got) != 1 || got[0].RelayedBytes != 500 {
+	if got := ackedSnapshot(reg); len(got) != 1 || got[0].RelayedBytes != 500 {
 		t.Fatalf("closed alloc must flush once with final bytes, got %+v", got)
 	}
-	if got := reg.snapshot(); len(got) != 0 {
+	if got := ackedSnapshot(reg); len(got) != 0 {
 		t.Fatalf("closed alloc must be evicted after its final flush, got %d entries", len(got))
 	}
 }
@@ -112,7 +113,7 @@ func TestRegistryConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	var total int64
-	for _, s := range reg.snapshot() {
+	for _, s := range ackedSnapshot(reg) {
 		total += s.RelayedBytes
 	}
 	if total != 8*100*10 {

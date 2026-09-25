@@ -27,8 +27,10 @@ import (
 //	    kind, ever.
 //	L2  Retirement is idempotent: two Closes retire once and flush once.
 //	L3  A retired allocation flushes its final CUMULATIVE byte total exactly
-//	    once and never loses a byte — including when the underlying Close
-//	    errors, and including bytes still in flight when it is retired.
+//	    once per acknowledged heartbeat and never loses a byte — including
+//	    when the underlying Close errors, and including bytes still in flight
+//	    when it is retired. (ackedSnapshot is a SUCCESSFUL heartbeat; what an
+//	    unsuccessful one keeps is heartbeat_ack_test.go's subject.)
 //	L4  Nothing is retired by a client or relay address. A finished allocation
 //	    can never retire the one that reused its addresses.
 //	L5  activeAllocs counts open relay sockets and converges to zero.
@@ -91,11 +93,11 @@ func TestCloseRetiresAllocationWithNoLifecycleCallbackEverFiring(t *testing.T) {
 			"TestEvenPortAllocateLeaksProbeSocketsBeforeTheFix, and of the fleet's "+
 			"active_transfers that only ever rose", got)
 	}
-	snap := reg.snapshot()
+	snap := ackedSnapshot(reg)
 	if len(snap) != 1 || snap[0].RelayedBytes != 700 {
 		t.Fatalf("final flush = %+v, want exactly one sample of 700 bytes", snap)
 	}
-	if got := reg.snapshot(); len(got) != 0 {
+	if got := ackedSnapshot(reg); len(got) != 0 {
 		t.Fatalf("second snapshot = %d samples, want 0 — the retired entry must be evicted "+
 			"after its single final flush", len(got))
 	}
@@ -128,7 +130,7 @@ func TestRetirementIsIdempotent(t *testing.T) {
 			// would double-count nothing (central keeps the max per alloc_id)
 			// but would keep refreshing recorded_at for a dead allocation; zero
 			// would lose the bytes outright.
-			snap := reg.snapshot()
+			snap := ackedSnapshot(reg)
 			if len(snap) != 1 {
 				t.Fatalf("after %d closes: final flush = %d samples, want exactly 1", closes, len(snap))
 			}
@@ -136,7 +138,7 @@ func TestRetirementIsIdempotent(t *testing.T) {
 				t.Fatalf("after %d closes: final sample = %+v, want 250 bytes attributed to "+
 					"6000:userX.1", closes, snap[0])
 			}
-			if got := reg.snapshot(); len(got) != 0 {
+			if got := ackedSnapshot(reg); len(got) != 0 {
 				t.Fatalf("after %d closes: %d samples on the second snapshot, want 0", closes, len(got))
 			}
 			if e, r := indexSizes(reg); e != 0 || r != 0 {
@@ -166,7 +168,7 @@ func TestUnderlyingCloseErrorStillRetiresAndFlushesFinalBytes(t *testing.T) {
 			"not relay through it again, so retiring only on a clean Close would strand the "+
 			"entry and its bytes forever", got)
 	}
-	snap := reg.snapshot()
+	snap := ackedSnapshot(reg)
 	if len(snap) != 1 || snap[0].RelayedBytes != 1234 {
 		t.Fatalf("final flush after a failing Close = %+v, want one sample of 1234 bytes", snap)
 	}
@@ -209,7 +211,7 @@ func TestLateSignalsForARetiredAllocationCannotRetireItsSuccessor(t *testing.T) 
 	handler.OnAllocationCreated(src, dst, "udp", "6000:userA.1", "relayium.test", relay1, 0)
 	first.WriteTo(make([]byte, 100), &net.UDPAddr{})
 	mustClose(t, first)
-	firstFlush := reg.snapshot()
+	firstFlush := ackedSnapshot(reg)
 	if len(firstFlush) != 1 || firstFlush[0].RelayedBytes != 100 {
 		t.Fatalf("first allocation flush = %+v, want one sample of 100 bytes", firstFlush)
 	}
@@ -234,7 +236,7 @@ func TestLateSignalsForARetiredAllocationCannotRetireItsSuccessor(t *testing.T) 
 			"SECOND allocation is live and relaying, and a signal about the first one must not "+
 			"retire it", got)
 	}
-	live := reg.snapshot()
+	live := ackedSnapshot(reg)
 	if len(live) != 1 {
 		t.Fatalf("snapshot = %d samples, want 1 (the live second allocation)", len(live))
 	}
@@ -251,7 +253,7 @@ func TestLateSignalsForARetiredAllocationCannotRetireItsSuccessor(t *testing.T) 
 	if got := reg.activeAllocs(); got != 0 {
 		t.Fatalf("after the second allocation's own Close: activeAllocs = %d, want 0", got)
 	}
-	if got := reg.snapshot(); len(got) != 1 || got[0].RelayedBytes != 300 {
+	if got := ackedSnapshot(reg); len(got) != 1 || got[0].RelayedBytes != 300 {
 		t.Fatalf("second allocation final flush = %+v, want one sample of 300 bytes", got)
 	}
 	if e, r := indexSizes(reg); e != 0 || r != 0 {
@@ -290,13 +292,13 @@ func TestLateCallbackAfterEvictionResurrectsNothing(t *testing.T) {
 	c := reg.wrap(fakePC{}, relay)
 	reg.created(relay, "6000:userL.1")
 	mustClose(t, c)
-	reg.snapshot() // final flush + eviction
+	ackedSnapshot(reg) // final flush + eviction
 
 	reg.created(relay, "6000:userL.1") // late OnAllocationCreated
 	if got := reg.activeAllocs(); got != 0 {
 		t.Fatalf("after a late callback: activeAllocs = %d, want 0", got)
 	}
-	if got := reg.snapshot(); len(got) != 0 {
+	if got := ackedSnapshot(reg); len(got) != 0 {
 		t.Fatalf("after a late callback: %d samples, want 0", len(got))
 	}
 	if e, r := indexSizes(reg); e != 0 || r != 0 {
@@ -378,7 +380,7 @@ func TestFinalSnapshotIncludesBytesStillInFlight(t *testing.T) {
 				// are NOT in the entry's total yet.
 				_ = c.Close()
 				innerLive = reg.activeAllocs()
-				innerSnap = reg.snapshot()
+				innerSnap = ackedSnapshot(reg)
 			}
 			tc.io(c) // fires hz.onIO, then tallies 500
 
@@ -396,7 +398,7 @@ func TestFinalSnapshotIncludesBytesStillInFlight(t *testing.T) {
 			}
 
 			// The next one reports it whole: 250 settled plus the 500 in flight.
-			final := reg.snapshot()
+			final := ackedSnapshot(reg)
 			if len(final) != 1 {
 				t.Fatalf("final flush = %d samples, want exactly 1", len(final))
 			}
@@ -407,9 +409,9 @@ func TestFinalSnapshotIncludesBytesStillInFlight(t *testing.T) {
 				t.Fatalf("final sample = %+v, want it attributed to 6000:userF.1", final[0])
 			}
 			// Still exactly one final sample, not two.
-			if got := reg.snapshot(); len(got) != 0 {
+			if got := ackedSnapshot(reg); len(got) != 0 {
 				t.Fatalf("second snapshot = %d samples, want 0 — the entry must be evicted by "+
-					"the one snapshot that reported it", len(got))
+					"the one acknowledged heartbeat that reported it", len(got))
 			}
 			if e, r := indexSizes(reg); e != 0 || r != 0 {
 				t.Fatalf("entries=%d byRelay=%d, want 0/0", e, r)
@@ -431,7 +433,7 @@ func TestInFlightIODoesNotSuppressALiveAllocationsSample(t *testing.T) {
 	reg.created(relay, "6000:userG.1")
 	c.WriteTo(make([]byte, 600), &net.UDPAddr{})
 
-	hz.onIO = func() { innerSnap = reg.snapshot() } // no Close: the allocation is live
+	hz.onIO = func() { innerSnap = ackedSnapshot(reg) } // no Close: the allocation is live
 	c.ReadFrom(make([]byte, 400))
 
 	if len(innerSnap) != 1 || innerSnap[0].RelayedBytes != 600 {
@@ -442,7 +444,7 @@ func TestInFlightIODoesNotSuppressALiveAllocationsSample(t *testing.T) {
 		t.Fatalf("activeAllocs = %d, want 1", got)
 	}
 	mustClose(t, c)
-	if got := reg.snapshot(); len(got) != 1 || got[0].RelayedBytes != 1000 {
+	if got := ackedSnapshot(reg); len(got) != 1 || got[0].RelayedBytes != 1000 {
 		t.Fatalf("final flush = %+v, want one sample of 1000 bytes", got)
 	}
 }
@@ -470,9 +472,9 @@ func TestConcurrentCloseAndSnapshotLoseNoBytes(t *testing.T) {
 	}
 
 	// One heartbeat goroutine, so "the last sample for this allocID" is a
-	// well-defined observation rather than a race between observers. An entry
-	// is evicted by the very snapshot that reports it while closed, so its last
-	// appearance IS its final flush.
+	// well-defined observation rather than a race between observers. Every
+	// heartbeat here succeeds, so an entry is evicted by the very heartbeat
+	// that reports it while closed, and its last appearance IS its final flush.
 	lastSeen := make(map[string]int64, allocs)
 	samples := make(map[string]int, allocs)
 	stop := make(chan struct{})
@@ -481,7 +483,7 @@ func TestConcurrentCloseAndSnapshotLoseNoBytes(t *testing.T) {
 	go func() {
 		defer beat.Done()
 		for {
-			for _, s := range reg.snapshot() {
+			for _, s := range ackedSnapshot(reg) {
 				lastSeen[s.AllocID] = s.RelayedBytes
 				samples[s.AllocID]++
 			}
@@ -512,7 +514,7 @@ func TestConcurrentCloseAndSnapshotLoseNoBytes(t *testing.T) {
 
 	// Drain whatever the heartbeat did not get to, into the same tally.
 	for range 3 {
-		for _, s := range reg.snapshot() {
+		for _, s := range ackedSnapshot(reg) {
 			lastSeen[s.AllocID] = s.RelayedBytes
 			samples[s.AllocID]++
 		}
@@ -570,14 +572,14 @@ func TestStatsAttributeUnjoinedRelaySockets(t *testing.T) {
 			"from 'real allocations are not being retired'", got)
 	}
 
-	reg.snapshot() // flush the probe
+	ackedSnapshot(reg) // flush the probe
 	if got := reg.stats(); got != (allocStats{Live: 1, RetiredUnjoined: 1}) {
 		t.Fatalf("stats after the flush = %+v, want the live allocation only, with the "+
 			"cumulative retired-unjoined total preserved", got)
 	}
 
 	mustClose(t, joined)
-	reg.snapshot()
+	ackedSnapshot(reg)
 	if got := reg.stats(); got != (allocStats{RetiredUnjoined: 1}) {
 		t.Fatalf("stats once everything is retired = %+v, want an empty registry and a "+
 			"RetiredUnjoined that did NOT count the real allocation", got)
@@ -633,7 +635,7 @@ func TestHeartbeatDiagnosticReportsGrowthNotAConstant(t *testing.T) {
 	// The regression. After the flush nothing is transient any more and the
 	// cumulative total has not moved since it was last logged, so every
 	// subsequent heartbeat must stay silent — not just the next one.
-	reg.snapshot()
+	ackedSnapshot(reg)
 	for i := 0; i < 5; i++ {
 		heartbeat(t, false, "RetiredUnjoined is cumulative: an unchanged total is not news, and "+
 			"reporting it anyway is one log line every ~30s forever")
@@ -648,7 +650,7 @@ func TestHeartbeatDiagnosticReportsGrowthNotAConstant(t *testing.T) {
 	// Growth resumes reporting, carrying the new cumulative total.
 	probe2 := reg.wrap(fakePC{}, relayC)
 	mustClose(t, probe2)
-	reg.snapshot()
+	ackedSnapshot(reg)
 	if st := heartbeat(t, true, "the cumulative total grew, which is the signal the line exists for"); st.RetiredUnjoined != 2 {
 		t.Fatalf("reported RetiredUnjoined = %d, want 2", st.RetiredUnjoined)
 	}
@@ -660,7 +662,7 @@ func TestHeartbeatDiagnosticReportsGrowthNotAConstant(t *testing.T) {
 	if st := heartbeat(t, true, "AwaitingFlush is transient and is reported while present"); st.RetiredUnjoined != 2 {
 		t.Fatalf("retiring an ATTRIBUTED allocation changed RetiredUnjoined to %d, want 2", st.RetiredUnjoined)
 	}
-	reg.snapshot()
+	ackedSnapshot(reg)
 	heartbeat(t, false, "an empty registry with an unchanged cumulative total is quiet again")
 }
 
@@ -701,14 +703,14 @@ func TestRealPionAllocationCloseConvergesToZero(t *testing.T) {
 	waitForRetirementFlushable(t, reg, 1)
 
 	// One final flush, then gone — and no index left behind.
-	snap := reg.snapshot()
+	snap := ackedSnapshot(reg)
 	if len(snap) != 1 {
 		t.Fatalf("final flush = %d samples, want exactly 1", len(snap))
 	}
 	if snap[0].RelayedBytes <= 0 {
 		t.Fatalf("final sample = %+v, want the relayed bytes preserved", snap[0])
 	}
-	if got := reg.snapshot(); len(got) != 0 {
+	if got := ackedSnapshot(reg); len(got) != 0 {
 		t.Fatalf("second snapshot = %d samples, want 0", len(got))
 	}
 	if e, r := indexSizes(reg); e != 0 || r != 0 {
@@ -729,7 +731,7 @@ func TestRealPionSrcAddrReuseAcrossAllocations(t *testing.T) {
 	}
 	c.release(t)
 	waitForActiveAllocs(t, reg, 0)
-	reg.snapshot() // flush and evict the first
+	ackedSnapshot(reg) // flush and evict the first
 
 	// Same client socket, same source port, second allocation.
 	if got := c.allocate(t); got == "" {
@@ -782,10 +784,10 @@ func TestRealPionServerShutdownRetiresEveryAllocation(t *testing.T) {
 	// which is before the packetHandler has unwound. See waitForRetirementFlushable.
 	waitForRetirementFlushable(t, reg, 1)
 
-	if got := reg.snapshot(); len(got) != 1 {
+	if got := ackedSnapshot(reg); len(got) != 1 {
 		t.Fatalf("final flush = %d samples, want exactly 1", len(got))
 	}
-	if got := reg.snapshot(); len(got) != 0 {
+	if got := ackedSnapshot(reg); len(got) != 0 {
 		t.Fatalf("second snapshot = %d samples, want 0", len(got))
 	}
 	if e, r := indexSizes(reg); e != 0 || r != 0 {
