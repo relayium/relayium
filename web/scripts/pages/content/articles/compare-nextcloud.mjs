@@ -76,7 +76,7 @@ const en = {
       },
       {
         q: "Is Relayium free?",
-        a: "The software is free and open source under the AGPL-3.0 license, and same-network transfers cost nothing. Hosted relay and storage run on limits every account gets: a monthly traffic allowance, and a separate cap on how much you keep stored at once, with paid plans above both — or run your own node, and the relay and storage traffic it carries stops using the monthly allowance. Nextcloud's core server software is also free and open source; some hosting and support options from Nextcloud GmbH are paid.",
+        a: "The software is free and open source under the AGPL-3.0 license, and same-network transfers cost nothing. Hosted relay and storage run on limits every account gets: a monthly traffic allowance, and a separate cap on how much you keep stored at once, with paid plans above both — or run your own node, and the bytes it relays and the uploads stored on it stop using the monthly traffic allowance, though those files still count toward the storage cap and downloads Relayium carries still count. Nextcloud's core server software is also free and open source; some hosting and support options from Nextcloud GmbH are paid.",
       },
     ],
   },
@@ -160,7 +160,7 @@ const zh = {
       },
       {
         q: "Relayium 免费吗？",
-        a: "软件是采用 AGPL-3.0 许可的免费开源软件，同一网络内的传输也不收费。托管中继与存储受每个账号都有的两项独立限制约束：每月流量额度，以及同时存放的数据量上限；超出部分由付费套餐覆盖——你也可以运行自己的节点，它承载的中继与存储流量不再占用每月流量额度。Nextcloud 的核心服务端软件同样免费开源；Nextcloud GmbH 提供的部分托管与支持服务是收费的。",
+        a: "软件是采用 AGPL-3.0 许可的免费开源软件，同一网络内的传输也不收费。托管中继与存储受每个账号都有的两项独立限制约束：每月流量额度，以及同时存放的数据量上限；超出部分由付费套餐覆盖——你也可以运行自己的节点，经它中继的字节和存到它上面的上传不再占用每月流量额度，不过这些文件仍计入存储上限，由 Relayium 转发的下载也照常计入。Nextcloud 的核心服务端软件同样免费开源；Nextcloud GmbH 提供的部分托管与支持服务是收费的。",
       },
     ],
   },

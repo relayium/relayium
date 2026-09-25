@@ -73,7 +73,7 @@ const en = {
       },
       {
         q: "Is Relayium free to use instead of a Dropbox plan?",
-        a: "Mostly. The software is free and open source under the AGPL-3.0 license, with the full protocol and code at github.com/relayium/relayium, and browser transfers on the same network are free with no size limit. Cross-network relay and stored download links draw on limits every account gets: a monthly traffic allowance, and a separate cap on how much you keep stored at once. Paid plans raise both, and a node you run yourself takes the relay and storage traffic it carries off the monthly allowance.",
+        a: "Mostly. The software is free and open source under the AGPL-3.0 license, with the full protocol and code at github.com/relayium/relayium, and browser transfers on the same network are free with no size limit. Cross-network relay and stored download links draw on limits every account gets: a monthly traffic allowance, and a separate cap on how much you keep stored at once. Paid plans raise both, and a node you run yourself takes the bytes it relays and the uploads stored on it off the monthly traffic allowance — though those files still count toward the storage cap, and downloads Relayium carries still count.",
       },
     ],
   },
@@ -152,7 +152,7 @@ const zh = {
       },
       {
         q: "用 Relayium 代替 Dropbox 套餐是免费的吗？",
-        a: "大部分是。软件本身采用 AGPL-3.0 许可、免费开源，完整的协议与代码都在 github.com/relayium/relayium，同一网络内的浏览器传输免费，且不限文件大小。跨网络中继与存储下载链接会占用每个账号都有的额度：每月流量额度，以及同时存放的数据量上限，这两项彼此独立。付费套餐两者都更高；运行你自己的节点，它承载的中继与存储流量就不再占用每月流量额度。",
+        a: "大部分是。软件本身采用 AGPL-3.0 许可、免费开源，完整的协议与代码都在 github.com/relayium/relayium，同一网络内的浏览器传输免费，且不限文件大小。跨网络中继与存储下载链接会占用每个账号都有的额度：每月流量额度，以及同时存放的数据量上限，这两项彼此独立。付费套餐两者都更高；运行你自己的节点，经它中继的字节和存到它上面的上传就不再占用每月流量额度——不过这些文件仍计入存储上限，由 Relayium 转发的下载也照常计入。",
       },
     ],
   },

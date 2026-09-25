@@ -18,6 +18,7 @@ import zh from "./i18n/zh";
 
 const contentDir = resolve(import.meta.dirname, "..", "..", "scripts", "pages", "content");
 const pageSources = [
+  resolve(contentDir, "..", "..", "..", "public", "llms.txt"),
   resolve(contentDir, "spa-pages.mjs"),
   ...readdirSync(resolve(contentDir, "articles")).map((f) => resolve(contentDir, "articles", f)),
 ].map((p) => [p, readFileSync(p, "utf8")] as const);
@@ -60,8 +61,11 @@ describe("own-node copy", () => {
     /不计量、不收费/,
     /免费使用 Relayium 的中继/,
     /或者用自己的节点/,
+    /removes the (limits|metering)/i,
+    /relay and storage traffic it carries/i,
+    /它承载的中继与存储流量/,
   ];
-  it.each(pageSources.map(([p, src]) => [p.split("/content/")[1], src]))("%s keeps the corrected own-node claims", (_name, src) => {
+  it.each(pageSources.map(([p, src]) => [p.split("/web/")[1], src]))("%s keeps the corrected own-node claims", (_name, src) => {
     for (const re of banned) expect(src).not.toMatch(re);
   });
 });

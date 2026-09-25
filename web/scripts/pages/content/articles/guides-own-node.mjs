@@ -1,7 +1,7 @@
 // web/scripts/pages/content/articles/guides-own-node.mjs
 // "Bring your own node" — attach your own relay/storage node to your relayium.com
-// account so the relay and storage traffic it carries stays on your hardware and
-// off the monthly traffic allowance. Distinct from guides-self-host.mjs, which runs the WHOLE server
+// account so the bytes it relays and the uploads it stores stay on your hardware and
+// off the monthly traffic allowance (storage cap and proxied downloads still count). Distinct from guides-self-host.mjs, which runs the WHOLE server
 // stack yourself. English is the master; zh/ja/ko/de/fr keep identical facts.
 // Command/env/port blocks (code) stay English in every language.
 
@@ -26,7 +26,7 @@ const en = {
     {
       heading: "Why run your own node",
       body: [
-        "Two reasons. First, cost: the relay and storage traffic your node carries doesn't use your monthly traffic allowance. Downloads Relayium carries from your node still count, and once your monthly allowance is used up, cross-network relay pauses on your own node too until it resets.",
+        "Two reasons. First, cost: the bytes your node relays and the uploads stored on it don't use your monthly traffic allowance, though those files still count toward your storage cap. Downloads Relayium carries from your node still count, and once your monthly allowance is used up, cross-network relay pauses on your own node too until it resets.",
         "Second, control: the relayed bytes and stored blobs live on hardware you run, under your own operational control. Realtime transfers stay end-to-end encrypted the whole way, so even your own node only ever sees ciphertext.",
       ],
     },
@@ -242,7 +242,7 @@ const zh = {
     {
       heading: "为什么要自建节点",
       body: [
-        "两个理由。其一是成本：你的节点承载的中继和存储流量不占用你的每月流量额度。由 Relayium 从你的节点转发的下载仍会计入；每月额度用尽后，跨网络中继在你自己的节点上也会暂停，直到额度重置。",
+        "两个理由。其一是成本：经你的节点中继的字节和存到它上面的上传不占用你的每月流量额度，不过这些文件仍计入存储上限。由 Relayium 从你的节点转发的下载仍会计入；每月额度用尽后，跨网络中继在你自己的节点上也会暂停，直到额度重置。",
         "其二是掌控：中继的字节和存储的数据块都落在你自己运行的硬件上，由你自己运维。实时传输全程端到端加密，所以即便是你自己的节点，看到的也只是密文。",
       ],
     },
