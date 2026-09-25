@@ -4,7 +4,6 @@ package main
 // SSH transfer E2E cases are recoverable from d0c414087. They are not current
 // acceptance evidence. See ssh_retirement_test.go and docs/CLI-SSH-RETIREMENT.md.
 
-
 // `push -` through an SSH STAND-IN, on every platform (the only form the
 // hosted Windows job can run; it runs on macOS/Linux too).
 //

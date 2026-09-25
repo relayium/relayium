@@ -4,7 +4,6 @@ package main
 // SSH transfer E2E cases are recoverable from d0c414087. They are not current
 // acceptance evidence. See ssh_retirement_test.go and docs/CLI-SSH-RETIREMENT.md.
 
-
 // Real-transport end-to-end tests for `relayium push host:path` over SSH.
 //
 // Every other test of the SSH path either checks the argv sshx builds or runs

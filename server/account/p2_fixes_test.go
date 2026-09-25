@@ -44,7 +44,7 @@ func TestArchivePurgeDeletesUsagePeriods(t *testing.T) {
 }
 
 // The canonical_email backfill must run on every boot (not only when the ALTER
-// just succeeded), so a row left with canonical_email='' by a crash between the
+// just succeeded), so a row left with an empty canonical_email by a crash between the
 // ALTER and the backfill is healed on the next start.
 func TestCanonicalBackfillHealsEmptyRowsOnReopen(t *testing.T) {
 	ctx := context.Background()

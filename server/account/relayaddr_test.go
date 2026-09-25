@@ -92,13 +92,13 @@ func TestRelayAddrRejectsUnparseable(t *testing.T) {
 		"",
 		"   ",
 		"turn:",
-		"stun:relay.example:3478",   // not a TURN url
-		"relay.example:3478",        // no scheme
+		"stun:relay.example:3478", // not a TURN url
+		"relay.example:3478",      // no scheme
 		"turn:relay.example:notaport",
 		"turn:relay.example:",
-		"turn:[2001:db8::1",         // unterminated bracket
-		"turn:2001:db8::1:3478",     // bare ipv6, brackets required
-		"turn:[2001:db8::1]junk",    // trailing garbage after the bracket
+		"turn:[2001:db8::1",      // unterminated bracket
+		"turn:2001:db8::1:3478",  // bare ipv6, brackets required
+		"turn:[2001:db8::1]junk", // trailing garbage after the bracket
 	} {
 		if got, ok := relayAddr(in); ok {
 			t.Fatalf("relayAddr(%q) = %q, want not-ok", in, got)

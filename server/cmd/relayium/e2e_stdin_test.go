@@ -6,7 +6,6 @@ package main
 // SSH transfer E2E cases are recoverable from d0c414087. They are not current
 // acceptance evidence. See ssh_retirement_test.go and docs/CLI-SSH-RETIREMENT.md.
 
-
 // `relayium push - host:file` over a REAL OpenSSH client and the private
 // loopback sshd of e2e_test.go (RELAYIUM_E2E_SSH=1; see that file for how the
 // fixture is isolated). The CLI is the built binary; its stdin is handed to it

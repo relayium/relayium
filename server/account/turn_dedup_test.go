@@ -188,7 +188,7 @@ func TestICEKeepsDistinctRelays(t *testing.T) {
 	// written static-config shape relayAddr's docs cite as the motivation for
 	// stripping ?transport=tcp.
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "node-multi-url",
-		URLs: []string{"turn:198.51.100.9:3478", "turn:198.51.100.9:3478?transport=tcp"},
+		URLs:       []string{"turn:198.51.100.9:3478", "turn:198.51.100.9:3478?transport=tcp"},
 		TURNSecret: "s5", CreatedAt: 1, LastSeenAt: now.Unix()})
 
 	cfg := Config{TURNCredTTL: time.Hour, STUNURLs: []string{"stun:stun.l:3478"},
