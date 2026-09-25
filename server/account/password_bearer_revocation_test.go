@@ -541,8 +541,11 @@ func TestReactivationRacingRecoveryAndResetGetsNoSession(t *testing.T) {
 	if !svc.store.(*recoverAndResetFirst).fired {
 		t.Fatalf("the attacker's reactivation never reached the interleaving point: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec.Code == http.StatusOK || strings.Contains(rec.Header().Get("Set-Cookie"), sessionCookie+"=") {
+	if strings.Contains(rec.Header().Get("Set-Cookie"), sessionCookie+"=") {
 		t.Fatalf("the overtaken reactivation came out with a session: %d %q", rec.Code, rec.Header().Get("Set-Cookie"))
+	}
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"invalid_or_expired_token"`) {
+		t.Fatalf("the overtaken reactivation answered %d %s, want 400 invalid_or_expired_token", rec.Code, rec.Body.String())
 	}
 	if n := liveSessions(t, st, u.ID); n != 1 {
 		t.Fatalf("%d live sessions, want only the owner's reset session", n)
