@@ -2031,6 +2031,125 @@ class RelayRenewEngineTest {
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
+    // ── G34-N13: a refused prepare has still spent its epoch ────────────────
+
+    /** Set one of the engine's private gates, standing in for the event
+     *  (a commit) that resets it; the refusal itself runs the real path. */
+    private fun Side.setPrivate(name: String, value: Any) {
+        RelayRenewEngine::class.java.getDeclaredField(name)
+            .apply { isAccessible = true }
+            .set(engine, value)
+    }
+
+    private fun messagesFrom(side: Side): List<RelayRenewWire.Message> =
+        side.sentSignals.mapNotNull { RelayRenewWire.parseEnvelope(it)?.message }
+            .also { side.sentSignals.clear() }
+
+    /**
+     * Refuse B's genuinely signed prepare, clear the refusing condition, replay
+     * the exact same envelope: nothing may start. Then B's next epoch works.
+     */
+    private fun refusedPrepareStaysSpent(refuse: () -> Unit, clear: () -> Unit) {
+        bind()
+        val prepare = signedPrepare(b, epoch = 1)
+        refuse()
+        a.engine.onSignal(prepare)
+        val refusal = messagesFrom(a).single() as RelayRenewWire.Message.Abort
+        assertEquals(1L, refusal.epoch)
+        assertEquals(RelayRenewWire.AbortReason.UNAVAILABLE, refusal.reason)
+        assertEquals(0, a.roundRequestsSeen())
+
+        clear()
+        a.engine.onSignal(prepare)
+        assertEquals("the replayed refused prepare was answered", emptyList<RelayRenewWire.Message>(), messagesFrom(a))
+        assertEquals("the replayed refused prepare asked the server for a round", 0, a.roundRequestsSeen())
+        assertTrue(a.transport.applied.isEmpty())
+        assertNull(a.publishedDeadline)
+
+        a.engine.onSignal(signedPrepare(b, epoch = 2))
+        assertEquals(1, a.roundRequestsSeen())
+        val echo = messagesFrom(a).first() as RelayRenewWire.Message.Prepare
+        assertEquals(2L, echo.epoch)
+    }
+
+    @Test
+    fun `a prepare refused while idle cannot start a round once replayed active`() =
+        refusedPrepareStaysSpent(refuse = { a.active = false }, clear = { a.active = true })
+
+    @Test
+    fun `a prepare refused with no boundary cannot start a round once one is bound`() =
+        refusedPrepareStaysSpent(
+            refuse = { a.engine.bindDeadline(null) },
+            clear = { a.engine.bindDeadline(boundFor(HOUR)) },
+        )
+
+    @Test
+    fun `a prepare refused on a denied round cannot start a round once the denial clears`() =
+        refusedPrepareStaysSpent(
+            refuse = { a.setPrivate("roundDenied", true) },
+            clear = { a.setPrivate("roundDenied", false) },
+        )
+
+    @Test
+    fun `a prepare refused on a spent budget cannot start a round once it resets`() =
+        refusedPrepareStaysSpent(
+            refuse = { a.setPrivate("pregrantAttempts", RelayRenewEngine.MAX_PREGRANT_ATTEMPTS) },
+            clear = { a.setPrivate("pregrantAttempts", 0) },
+        )
+
+    @Test
+    fun `a higher prepare refused during an attempt cannot supersede it once replayed`() {
+        bind()
+        a.engine.onSignal(signedPrepare(b, epoch = 1))
+        assertEquals(1, a.roundRequestsSeen())
+        messagesFrom(a)
+
+        val higher = signedPrepare(b, epoch = 2)
+        a.active = false
+        a.engine.onSignal(higher)
+        val refusal = messagesFrom(a).single() as RelayRenewWire.Message.Abort
+        assertEquals(2L, refusal.epoch)
+
+        a.active = true
+        a.engine.onSignal(higher)
+        assertEquals("the replayed refused prepare was answered", emptyList<RelayRenewWire.Message>(), messagesFrom(a))
+        assertEquals("the replayed refused prepare superseded the attempt", 1, a.roundRequestsSeen())
+
+        // Equal still coalesces; strictly newer still supersedes.
+        a.engine.onSignal(signedPrepare(b, epoch = 1))
+        assertEquals(emptyList<RelayRenewWire.Message>(), messagesFrom(a))
+        assertEquals(1, a.roundRequestsSeen())
+        a.engine.onSignal(signedPrepare(b, epoch = 3))
+        assertEquals(2, a.roundRequestsSeen())
+        assertEquals(3L, (messagesFrom(a).first() as RelayRenewWire.Message.Prepare).epoch)
+    }
+
+    @Test
+    fun `an unauthenticated prepare does not spend its epoch`() {
+        bind()
+        a.active = false
+        val message = RelayRenewWire.Message.Prepare(1)
+        val payload = RelayRenewWire.payload(b.id, b.peer, message)
+        val stranger = Crypto.deriveSession(
+            Crypto.Role.RESPONDER, Crypto.generateKeyPair(), Crypto.generateKeyPair().publicKey,
+        )
+        val forgeries = listOf(
+            RelayRenewWire.envelopeJson(message, "A".repeat(RelayRenewWire.AUTH_LENGTH)),
+            RelayRenewWire.envelopeJson(message, Crypto.signAuth(stranger, payload)),
+            RelayRenewWire.envelopeJson(
+                message,
+                Crypto.signAuth(b.keys, RelayRenewWire.payload(b.id, b.peer, RelayRenewWire.Message.Prepare(2))),
+            ),
+        )
+        for (forged in forgeries) a.engine.onSignal(forged)
+        assertEquals(emptyList<RelayRenewWire.Message>(), messagesFrom(a))
+        assertFalse(a.transport.unsignedLocked)
+
+        a.active = true
+        a.engine.onSignal(signedPrepare(b, epoch = 1))
+        assertEquals("the genuine prepare must still work", 1, a.roundRequestsSeen())
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private fun Side.roundRequestsSeen(): Int = roundsAsked

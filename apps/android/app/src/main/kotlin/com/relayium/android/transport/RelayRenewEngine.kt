@@ -548,16 +548,14 @@ class RelayRenewEngine(private val deps: Deps) {
      * With an attempt in flight: its own epoch, or a `prepare` at a HIGHER one,
      * which is adopted. Both ends then converge on the larger.
      *
-     * With nothing in flight: only a `prepare`, and only STRICTLY above every
-     * epoch this link has already spent.
+     * Otherwise only a `prepare`, and only STRICTLY above every epoch this link
+     * has already spent — including one a refused prepare spent while an
+     * attempt was in flight.
      */
     private fun epochActionable(message: RelayRenewWire.Message): Boolean {
         val isPrepare = message is RelayRenewWire.Message.Prepare
         val a = attempt
-        if (a != null) {
-            if (message.epoch == a.epoch) return true
-            return isPrepare && message.epoch > a.epoch
-        }
+        if (a != null && message.epoch == a.epoch) return true
         if (!isPrepare) return false
         return message.epoch > highestSpentEpoch
     }
@@ -576,6 +574,10 @@ class RelayRenewEngine(private val deps: Deps) {
     }
 
     private fun onPrepare(message: RelayRenewWire.Message.Prepare) {
+        // Verified and actionable: the peer has spent this epoch whether or not
+        // it is refused below. Recorded first, so the same signed prepare
+        // replayed after the refusing condition clears is stale (G34-N13).
+        highestSpentEpoch = maxOf(highestSpentEpoch, message.epoch)
         val existing = attempt
         // Two peers preparing simultaneously at the SAME epoch coalesce into
         // one attempt; there is nothing further to do and nothing to echo.

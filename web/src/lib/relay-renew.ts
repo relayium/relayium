@@ -1370,8 +1370,10 @@ export function createRelayRenewal(deps: RelayRenewalDeps): RelayRenewal {
   function routable(inner: RenewSignal): boolean {
     if (inner.type === "prepare") {
       if (peerUnsupported) return false;
-      // Equal coalesces with the attempt in flight, higher is adopted.
-      if (attempt) return inner.epoch >= attempt.epoch;
+      // Equal coalesces with the attempt in flight; anything else must be
+      // strictly newer than every epoch spent, including one a refused
+      // prepare spent while this attempt ran (then higher is adopted).
+      if (attempt && inner.epoch === attempt.epoch) return true;
       return inner.epoch > epochCounter;
     }
     return attempt !== null && inner.epoch === attempt.epoch;
@@ -1431,6 +1433,10 @@ export function createRelayRenewal(deps: RelayRenewalDeps): RelayRenewal {
   }
 
   function onPrepare(epoch: number) {
+    // Verified and routable: the peer has spent this epoch whether or not it
+    // is refused below. Recorded first, so the same signed prepare replayed
+    // after the refusing condition clears is stale (G34-N13).
+    epochCounter = Math.max(epochCounter, epoch);
     const live = link;
     if (!live?.conn.renew) return;
     // §7.1: joining is consent too, and this side may have none to give right

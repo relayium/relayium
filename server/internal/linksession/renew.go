@@ -1705,6 +1705,11 @@ func (r *Renewal) apply(sig RenewSignal) {
 }
 
 func (r *Renewal) onPrepare(epoch uint32) {
+	// The prepare is verified and routable, so the peer has spent this epoch
+	// whether or not it is refused below: record it first, so the same signed
+	// prepare replayed after the refusing condition clears is stale (G34-N13).
+	// routable() already bounds how far this may move the counter.
+	r.epochCounter = max(r.epochCounter, epoch)
 	if _, ok := r.deps.Bound(); !ok || !r.deps.UserActive() {
 		r.emit(RenewSignal{Type: "abort", Epoch: epoch, Reason: renewAbortUnavailable})
 		return

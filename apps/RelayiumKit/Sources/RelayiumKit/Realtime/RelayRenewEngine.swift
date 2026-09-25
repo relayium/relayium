@@ -525,9 +525,10 @@ public final class RelayRenewEngine {
     private func epochIsActionable(_ message: RelayRenewMessage) -> Bool {
         if case let .prepare(epoch) = message {
             // A prepare is how an attempt STARTS, so it is actionable without
-            // one in flight — but only at an epoch above the current one.
-            // Equal coalesces, which is also actionable.
-            if let attempt { return epoch >= attempt.epoch }
+            // one in flight — but only at an epoch above every one this link
+            // has spent, including one a refused prepare spent while this
+            // attempt ran. Equal coalesces, which is also actionable.
+            if let attempt, epoch == attempt.epoch { return true }
             return epoch > epochCounter
         }
         guard let attempt else { return false }
@@ -551,6 +552,12 @@ public final class RelayRenewEngine {
         //
         // Checked before an attempt is started AND before a higher epoch is
         // adopted, because both are the same act of consent.
+        //
+        // The prepare is verified and actionable, so the peer has spent this
+        // epoch whether or not it is refused: record it first, so the same
+        // signed prepare replayed once this side is active again is stale
+        // (G34-N13). The refusal itself stays silent.
+        epochCounter = Swift.max(epochCounter, epoch)
         guard mayRenewNow() else { return [] }
         // Deliberately NOT gated on `backoffUntilEpoch`. The backoff bounds how
         // fast this side SPENDS the round's epoch budget on its own initiative;

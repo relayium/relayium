@@ -1046,6 +1046,199 @@ describe("epoch replay", () => {
   });
 });
 
+// ── G34-N13: a refused prepare has still spent its epoch ────────────────────
+
+describe("G34-N13: an authenticated prepare this side refused has spent its epoch", () => {
+  /**
+   * The refusal verified the peer's tag and routed the epoch, so the peer has
+   * used that number. Replaying the exact signed prepare after the refusing
+   * condition clears must start nothing — no attempt, no server round, no
+   * deadline change — while the next legitimate epoch still works.
+   */
+  const brief = (s: RenewSignal) => ({ type: s.type, epoch: s.epoch, reason: s.type === "abort" ? s.reason : undefined });
+
+  const gates: { name: string; refuse: (s: Side) => () => void }[] = [
+    { name: "idle", refuse: (s) => { s.userActive = false; return () => { s.userActive = true; }; } },
+    {
+      name: "no deadline",
+      refuse: (s) => {
+        const d = s.deadline;
+        s.deadline = null;
+        return () => { s.deadline = d; };
+      },
+    },
+  ];
+
+  for (const g of gates) {
+    it(`does not let the refused (${g.name}) prepare, replayed later, start a round`, async () => {
+      const clock = scheduler();
+      const p = pair(clock);
+      const b = p.b;
+      const deadline = b.deadline;
+      const prepare = await sealFor(p.a.id, b.id, { type: "prepare", epoch: 1 });
+
+      const clear = g.refuse(b);
+      let from = b.signalLog.length;
+      b.renewal.signal("peer-a", prepare);
+      await clock.flush();
+      expect(signalsSince(b, from).map(brief)).toEqual([{ type: "abort", epoch: 1, reason: "unavailable" }]);
+      expect(b.requests).toHaveLength(0);
+
+      clear();
+      from = b.signalLog.length;
+      b.renewal.signal("peer-a", prepare); // the exact same signed frame
+      await clock.flush();
+      expect(signalsSince(b, from)).toEqual([]);
+      expect(b.requests).toHaveLength(0);
+      expect(b.transport.configs).toHaveLength(0);
+      expect(b.commits).toHaveLength(0);
+      expect(b.deadline).toBe(deadline);
+
+      // The next legitimate epoch is accepted: one attempt, one round request.
+      from = b.signalLog.length;
+      b.renewal.signal("peer-a", await sealFor(p.a.id, b.id, { type: "prepare", epoch: 2 }));
+      await clock.flush();
+      expect(signalsSince(b, from).map(brief)[0]).toEqual({ type: "prepare", epoch: 2, reason: undefined });
+      expect(b.requests).toHaveLength(1);
+      expect(b.renewal.state).not.toBe("unsupported");
+    });
+  }
+
+  it("does not let a prepare refused while an attempt runs supersede it once replayed", async () => {
+    const clock = scheduler();
+    const p = pair(clock);
+    const b = p.b;
+    b.server = () => new Promise<IceGrant | null>(() => {}); // the attempt stays in flight
+    b.renewal.signal("peer-a", await sealFor(p.a.id, b.id, { type: "prepare", epoch: 1 }));
+    await clock.flush();
+    expect(b.requests).toHaveLength(1);
+
+    const higher = await sealFor(p.a.id, b.id, { type: "prepare", epoch: 2 });
+    b.userActive = false;
+    let from = b.signalLog.length;
+    b.renewal.signal("peer-a", higher);
+    await clock.flush();
+    expect(signalsSince(b, from).map(brief)).toEqual([{ type: "abort", epoch: 2, reason: "unavailable" }]);
+
+    b.userActive = true;
+    from = b.signalLog.length;
+    b.renewal.signal("peer-a", higher);
+    await clock.flush();
+    expect(signalsSince(b, from)).toEqual([]);
+    expect(b.requests).toHaveLength(1);
+
+    // Equal to the attempt in flight still coalesces; strictly newer still supersedes.
+    b.renewal.signal("peer-a", await sealFor(p.a.id, b.id, { type: "prepare", epoch: 1 }));
+    await clock.flush();
+    expect(b.requests).toHaveLength(1);
+    from = b.signalLog.length;
+    b.renewal.signal("peer-a", await sealFor(p.a.id, b.id, { type: "prepare", epoch: 3 }));
+    await clock.flush();
+    expect(signalsSince(b, from).map(brief)[0]).toEqual({ type: "prepare", epoch: 3, reason: undefined });
+    expect(b.requests).toHaveLength(2);
+  });
+
+  it("does not let a budget-refused repair prepare start a round once the window opens", async () => {
+    // A peer's early prepare is charged to the installed round's own budget;
+    // once that is spent the prepare is refused. When this side's window opens
+    // the key becomes the NEXT round, whose budget is untouched — the gate
+    // genuinely resets, so only the recorded epoch stops the replay.
+    const clock = scheduler();
+    const p = pair(clock);
+    const a = p.a;
+    await renewBoth(clock, p);
+    await clock.advance(RENEW_POST_COMMIT_ACK_MS + 1000);
+    a.anchor = clock.now();
+    a.deadline = deadlineAt(a.anchor, HOUR); // far from the boundary
+    a.server = async (round, rid) => ({ status: "unavailable", round, rid, reason: "rate" });
+
+    let refused: RenewEnvelope | null = null;
+    let epoch = 500;
+    for (; epoch < 540 && !refused; epoch++) {
+      const prepare = await sealFor(p.b.id, a.id, { type: "prepare", epoch });
+      const asked = a.requests.length;
+      const from = a.signalLog.length;
+      a.renewal.signal("peer-b", prepare);
+      await clock.flush();
+      const said = signalsSince(a, from).map(brief);
+      if (a.requests.length === asked && said.length === 1
+        && said[0].type === "abort" && said[0].epoch === epoch && said[0].reason === "unavailable") {
+        refused = prepare;
+        break;
+      }
+      await clock.advance(RENEW_EPOCH_HARD_CAP_MS + 1000);
+      await p.deliver();
+    }
+    expect(refused).not.toBeNull();
+
+    // This side's own window opens; the next round is grantable.
+    a.server = async (round, rid) => grantFor(round, rid, Math.floor((clock.now() + 3 * HOUR) / 1000));
+    a.anchor = clock.now() - 50 * 60_000;
+    a.deadline = deadlineAt(a.anchor, HOUR);
+    const deadline = a.deadline;
+    const asked = a.requests.length;
+    const configs = a.transport.configs.length;
+    let from = a.signalLog.length;
+    a.renewal.signal("peer-b", refused!);
+    await clock.flush();
+    expect(signalsSince(a, from)).toEqual([]);
+    expect(a.requests).toHaveLength(asked);
+    expect(a.transport.configs).toHaveLength(configs);
+    expect(a.deadline).toBe(deadline);
+
+    from = a.signalLog.length;
+    a.renewal.signal("peer-b", await sealFor(p.b.id, a.id, { type: "prepare", epoch: epoch + 1 }));
+    await clock.flush();
+    expect(signalsSince(a, from).map(brief)[0]).toEqual({ type: "prepare", epoch: epoch + 1, reason: undefined });
+    expect(a.requests).toHaveLength(asked + 1);
+    expect(a.requests[a.requests.length - 1].round).toBe(2);
+  });
+
+  it("does not let a forged prepare spend an epoch", async () => {
+    const clock = scheduler();
+    const p = pair(clock);
+    const b = p.b;
+    b.userActive = false;
+    const genuine = await sealFor(p.a.id, b.id, { type: "prepare", epoch: 1 });
+    const otherKey = await crypto.subtle.importKey(
+      "raw", new Uint8Array(32).fill(9) as Uint8Array<ArrayBuffer>,
+      { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+    );
+    const inner: RenewSignal = { type: "prepare", epoch: 1 };
+    const forgeries: RenewEnvelope[] = [
+      { ...genuine, auth: "A".repeat(44) },
+      { link: true, renew: inner, auth: await signRenew(otherKey, renewSignalPayload(inner, p.a.id, b.id)) },
+      // Genuinely signed, but for epoch 2: the tag does not cover epoch 1.
+      { link: true, renew: inner, auth: (await sealFor(p.a.id, b.id, { type: "prepare", epoch: 2 })).auth },
+    ];
+    const from = b.signalLog.length;
+    for (const f of forgeries) b.renewal.signal("peer-a", f);
+    await clock.flush();
+    expect(signalsSince(b, from)).toEqual([]);
+    expect(b.transport.locked).toBe(false);
+
+    b.userActive = true;
+    b.renewal.signal("peer-a", genuine);
+    await clock.flush();
+    expect(b.requests).toHaveLength(1);
+  });
+
+  it("answers a duplicate refused prepare queued in the same turn only once", async () => {
+    // Routing is re-evaluated when each queued signal is dequeued and again
+    // after its tag verifies, so the first refusal makes the second stale.
+    const clock = scheduler();
+    const p = pair(clock);
+    const b = p.b;
+    b.userActive = false;
+    const prepare = await sealFor(p.a.id, b.id, { type: "prepare", epoch: 1 });
+    const from = b.signalLog.length;
+    b.renewal.signal("peer-a", prepare);
+    b.renewal.signal("peer-a", prepare);
+    await clock.flush();
+    expect(signalsSince(b, from).map(brief)).toEqual([{ type: "abort", epoch: 1, reason: "unavailable" }]);
+  });
+});
+
 // ── glare ───────────────────────────────────────────────────────────────────
 
 describe("two peers preparing at once", () => {
