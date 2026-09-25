@@ -176,7 +176,7 @@ relayium text 483920`,
       },
       {
         q: "Do my files pass through Relayium's servers?",
-        a: "Not with the direct modes. With push, pull, daemon direct and send / receive the file bytes travel directly between the two ends, and only send / receive contacts our servers at all — for a small rendezvous handshake, never the file contents. up is the deliberate exception: it uploads an encrypted copy to your account's storage, which the server holds but cannot read.",
+        a: "Not with the direct modes. With push, pull, daemon direct and send / receive the file bytes travel directly between the two ends, and only send / receive contacts our servers at all — for a small rendezvous handshake, never the file contents. Two modes are the deliberate exceptions, and in both the server holds only ciphertext it cannot read: up uploads an encrypted copy to your account's storage, and Device Inbox — receive-only in the CLI, through relayium inbox — queues an encrypted copy that a browser or native app sent to a machine of your own until that machine downloads it.",
       },
     ],
   },
@@ -359,7 +359,7 @@ relayium text 483920`,
       },
       {
         q: "我的文件会经过 Relayium 的服务器吗？",
-        a: "直连模式不会。用 push、pull、daemon 直连和 send / receive 时，文件字节都在两端之间直接传输；只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。up 是有意为之的例外：它会把加密副本上传到你账号的存储里，服务器只保存密文，无法读取。",
+        a: "直连模式不会。用 push、pull、daemon 直连和 send / receive 时，文件字节都在两端之间直接传输；只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。有两种模式是有意为之的例外，服务器在这两种情况下都只保存无法读取的密文：up 会把加密副本上传到你账号的存储里；设备收件箱（在 CLI 中只有接收侧，即 relayium inbox）则会把浏览器或原生应用发往你自己某台机器的加密副本排队存着，直到那台机器下载取走。",
       },
     ],
   },
@@ -378,7 +378,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "Relayium CLI はターミナルからファイルと一時テキストを転送する小さな単一バイナリです。エンドツーエンド暗号化、セルフホスト可能、AGPL-3.0 ライセンスの無料オープンソース。サーバーへのファイルコピーやマシン間のビルド送信に加え、URL・コマンド・コード片をファイル化せずそのまま送れます。",
-    "どの方法を使っても、ファイルのバイトは両端の間を直接移動し、Relayium のサーバーを通過することはありません。本ガイドではインストールから最初の転送までを案内し、その後各モードのより詳しいハウツーへ案内します。",
+    "直結モード（push、pull、sync、daemon 直結、send / receive、text）では、ファイルのバイトは両端の間を直接移動し、Relayium のサーバーを通過することはありません。up は直結ではありません。暗号化したコピーをアカウントに保存します。本ガイドではインストールから最初の転送までを案内し、その後各モードのより詳しいハウツーへ案内します。",
   ],
   sections: [
     {
@@ -539,7 +539,7 @@ relayium text 483920`,
       },
       {
         q: "自分のファイルは Relayium のサーバーを通過しますか？",
-        a: "いいえ。どのモードでも、ファイルのバイトは両端の間を直接移動します。当社のサーバーに一切触れるのは send / receive だけで、それも小さなランデブーハンドシェイクのためだけです。ファイルの中身は決して含まれません。",
+        a: "直結モードでは通過しません。push、pull、daemon 直結、send / receive では、ファイルのバイトは両端の間を直接移動します。当社のサーバーに一切触れるのは send / receive だけで、それも小さなランデブーハンドシェイクのためだけです。ファイルの中身は決して含まれません。up は異なります。暗号化したコピーをアカウントのストレージにアップロードし、サーバーはそれを保持しますが読むことはできません。",
       },
     ],
   },
@@ -558,7 +558,7 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "Relayium CLI는 터미널에서 파일과 일회성 텍스트를 옮기는 작은 단일 바이너리입니다 — 종단간 암호화, 자체 호스팅 가능, AGPL-3.0 라이선스의 무료 오픈소스. 서버로 파일을 복사하거나 기기 사이에 빌드를 보내고, URL·명령·코드 조각을 파일로 저장하지 않고 그대로 전송할 수 있습니다.",
-    "어떤 방식을 쓰든 파일 데이터는 두 끝 사이에서 직접 이동하며 Relayium 서버를 거치지 않습니다. 이 가이드는 설치와 첫 전송까지 안내한 뒤, 각 모드별로 더 깊은 방법을 다루는 글로 안내합니다.",
+    "직접 연결 모드(push, pull, sync, daemon 다이렉트, send / receive, text)에서는 파일 데이터가 두 끝 사이에서 직접 이동하며 Relayium 서버를 거치지 않습니다. up은 직접 연결이 아닙니다. 암호화된 사본을 계정에 저장합니다. 이 가이드는 설치와 첫 전송까지 안내한 뒤, 각 모드별로 더 깊은 방법을 다루는 글로 안내합니다.",
   ],
   sections: [
     {
@@ -719,7 +719,7 @@ relayium text 483920`,
       },
       {
         q: "제 파일이 Relayium 서버를 거치나요?",
-        a: "아니요. 어떤 모드에서든 파일 데이터는 두 끝 사이에서 직접 이동합니다. 저희 서버에 조금이라도 닿는 것은 send / receive뿐이며, 그마저도 작은 랑데부 핸드셰이크를 위한 것일 뿐 — 파일 내용은 절대 아닙니다.",
+        a: "직접 연결 모드에서는 거치지 않습니다. push, pull, daemon 다이렉트, send / receive에서는 파일 데이터가 두 끝 사이에서 직접 이동합니다. 저희 서버에 조금이라도 닿는 것은 send / receive뿐이며, 그마저도 작은 랑데부 핸드셰이크를 위한 것일 뿐 — 파일 내용은 절대 아닙니다. up은 다릅니다. 암호화된 사본을 계정의 저장소에 업로드하며, 서버는 이를 보관하지만 읽을 수 없습니다.",
       },
     ],
   },
@@ -738,7 +738,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Die Relayium CLI ist ein kleines einzelnes Binary für Dateien und flüchtigen Text im Terminal — Ende-zu-Ende-verschlüsselt, selbst hostbar und kostenlos. Kopiere Dateien auf Server, pushe Builds zwischen Maschinen oder sende URLs, Befehle und Codeausschnitte, ohne sie erst als Datei zu speichern.",
-    "Egal welchen Weg du nutzt, die Dateibytes wandern direkt zwischen den beiden Enden und laufen nie über Relayiums Server. Diese Anleitung bringt dich zur Installation und durch deine erste Übertragung und verweist dich dann auf die ausführlicheren Anleitungen zu jedem Modus.",
+    "In den direkten Modi — push, pull, sync, daemon-direct, send / receive und text — wandern die Dateibytes direkt zwischen den beiden Enden und laufen nie über Relayiums Server. up ist nicht direkt: Es speichert eine verschlüsselte Kopie unter deinem Konto. Diese Anleitung bringt dich zur Installation und durch deine erste Übertragung und verweist dich dann auf die ausführlicheren Anleitungen zu jedem Modus.",
   ],
   sections: [
     {
@@ -899,7 +899,7 @@ relayium text 483920`,
       },
       {
         q: "Laufen meine Dateien über Relayiums Server?",
-        a: "Nein. In jedem Modus wandern die Dateibytes direkt zwischen den beiden Enden. Nur send / receive kontaktiert unsere Server überhaupt, und auch nur für einen kleinen Rendezvous-Handshake — nie für den Dateiinhalt.",
+        a: "In den direkten Modi nicht. Bei push, pull, daemon-direct und send / receive wandern die Dateibytes direkt zwischen den beiden Enden. Nur send / receive kontaktiert unsere Server überhaupt, und auch nur für einen kleinen Rendezvous-Handshake — nie für den Dateiinhalt. up ist anders: Es lädt eine verschlüsselte Kopie in den Speicher deines Kontos hoch, die der Server aufbewahrt, aber nicht lesen kann.",
       },
     ],
   },
@@ -918,7 +918,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "La CLI Relayium est un petit binaire unique pour transférer fichiers et texte éphémère depuis le terminal — chiffré de bout en bout, auto-hébergeable et gratuit. Copiez des fichiers vers un serveur, poussez un build, ou envoyez URL, commandes et code sans les enregistrer d'abord dans un fichier.",
-    "Quelle que soit la méthode utilisée, les octets du fichier voyagent directement entre les deux extrémités et ne passent jamais par les serveurs de Relayium. Ce guide vous installe et vous fait passer votre premier transfert, puis vous oriente vers les guides plus détaillés pour chaque mode.",
+    "Dans les modes directs — push, pull, sync, daemon-direct, send / receive et text —, les octets du fichier voyagent directement entre les deux extrémités et ne passent jamais par les serveurs de Relayium. up n'est pas direct : il stocke une copie chiffrée sous votre compte. Ce guide vous installe et vous fait passer votre premier transfert, puis vous oriente vers les guides plus détaillés pour chaque mode.",
   ],
   sections: [
     {
@@ -1079,7 +1079,7 @@ relayium text 483920`,
       },
       {
         q: "Mes fichiers passent-ils par les serveurs de Relayium ?",
-        a: "Non. Dans tous les modes, les octets du fichier voyagent directement entre les deux extrémités. Seul send / receive contacte nos serveurs, et seulement pour une petite poignée de main de rendez-vous — jamais pour le contenu du fichier.",
+        a: "Pas dans les modes directs. Avec push, pull, daemon-direct et send / receive, les octets du fichier voyagent directement entre les deux extrémités. Seul send / receive contacte nos serveurs, et seulement pour une petite poignée de main de rendez-vous — jamais pour le contenu du fichier. up est différent : il téléverse une copie chiffrée dans le stockage de votre compte, que le serveur conserve sans pouvoir la lire.",
       },
     ],
   },
@@ -1098,7 +1098,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "‏Relayium CLI ملف ثنائي صغير لنقل الملفات والنص المؤقت من الطرفية — مشفّر من الطرف إلى الطرف، قابل للاستضافة الذاتية، ومجاني. انسخ الملفات إلى خادم، أو انقل نسخة بناء، أو أرسل رابطًا أو أمرًا أو مقطع كود دون حفظه أولًا كملف.",
-    "أيًا كانت الطريقة التي تستخدمها بها، تنتقل بايتات الملف مباشرة بين الطرفين ولا تمر أبدًا عبر خوادم Relayium. يوصلك هذا الدليل إلى التثبيت وإتمام أول عملية نقل لك، ثم يوجّهك إلى الأدلة الأعمق لكل وضع.",
+    "في الأوضاع المباشرة — push وpull وsync وdaemon direct وsend / receive وtext — تنتقل بايتات الملف مباشرة بين الطرفين ولا تمر أبدًا عبر خوادم Relayium. أما up فليس مباشرًا: إنه يخزّن نسخة مُشفَّرة تحت حسابك. يوصلك هذا الدليل إلى التثبيت وإتمام أول عملية نقل لك، ثم يوجّهك إلى الأدلة الأعمق لكل وضع.",
   ],
   sections: [
     {
@@ -1259,7 +1259,7 @@ relayium text 483920`,
       },
       {
         q: "هل تمر ملفاتي عبر خوادم Relayium؟",
-        a: "لا. في كل وضع، تنتقل بايتات الملف مباشرة بين الطرفين. وحده send / receive يتصل بخوادمنا أصلًا، ولمصافحة تعارف صغيرة فقط — وليس محتوى الملف أبدًا.",
+        a: "ليس في الأوضاع المباشرة. مع push وpull وdaemon direct وsend / receive تنتقل بايتات الملف مباشرة بين الطرفين. وحده send / receive يتصل بخوادمنا أصلًا، ولمصافحة تعارف صغيرة فقط — وليس محتوى الملف أبدًا. أما up فمختلف: إنه يرفع نسخة مُشفَّرة إلى تخزين حسابك، يحتفظ بها الخادم لكنه لا يستطيع قراءتها.",
       },
     ],
   },
@@ -1278,7 +1278,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "La CLI de Relayium es un pequeño binario para transferir archivos y texto efímero desde la terminal — cifrado de extremo a extremo, autoalojable y gratis. Copia archivos a un servidor, envía una compilación o pasa URL, comandos y código sin guardarlos antes como archivo.",
-    "Sea cual sea la forma en que la uses, los bytes de los archivos viajan directamente entre los dos extremos y nunca pasan por los servidores de Relayium. Esta guía te deja instalado y con tu primera transferencia hecha, y luego te dirige a los tutoriales más detallados de cada modo.",
+    "En los modos directos — push, pull, sync, daemon directo, send / receive y text —, los bytes de los archivos viajan directamente entre los dos extremos y nunca pasan por los servidores de Relayium. up no es directo: guarda una copia cifrada en tu cuenta. Esta guía te deja instalado y con tu primera transferencia hecha, y luego te dirige a los tutoriales más detallados de cada modo.",
   ],
   sections: [
     {
@@ -1439,7 +1439,7 @@ relayium text 483920`,
       },
       {
         q: "¿Mis archivos pasan por los servidores de Relayium?",
-        a: "No. En todos los modos, los bytes de los archivos viajan directamente entre los dos extremos. Solo send / receive contacta con nuestros servidores, y únicamente para un pequeño handshake con el punto de encuentro — nunca el contenido del archivo.",
+        a: "No en los modos directos. Con push, pull, daemon directo y send / receive, los bytes de los archivos viajan directamente entre los dos extremos. Solo send / receive contacta con nuestros servidores, y únicamente para un pequeño handshake con el punto de encuentro — nunca el contenido del archivo. up es distinto: sube una copia cifrada al almacenamiento de tu cuenta, que el servidor guarda pero no puede leer.",
       },
     ],
   },
@@ -1458,7 +1458,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "A CLI do Relayium é um pequeno binário para transferir arquivos e texto efêmero pelo terminal — com criptografia de ponta a ponta, auto-hospedável e gratuito. Copie arquivos para um servidor, envie um build ou passe URLs, comandos e código sem salvar primeiro como arquivo.",
-    "Seja qual for a forma que você usar, os bytes dos arquivos trafegam diretamente entre as duas pontas e nunca passam pelos servidores do Relayium. Este guia deixa você instalado e com a sua primeira transferência feita, e depois aponta para os tutoriais mais aprofundados de cada modo.",
+    "Nos modos diretos — push, pull, sync, daemon direto, send / receive e text —, os bytes dos arquivos trafegam diretamente entre as duas pontas e nunca passam pelos servidores do Relayium. O up não é direto: ele guarda uma cópia criptografada na sua conta. Este guia deixa você instalado e com a sua primeira transferência feita, e depois aponta para os tutoriais mais aprofundados de cada modo.",
   ],
   sections: [
     {
@@ -1619,7 +1619,7 @@ relayium text 483920`,
       },
       {
         q: "Meus arquivos passam pelos servidores do Relayium?",
-        a: "Não. Em todos os modos, os bytes dos arquivos trafegam diretamente entre as duas pontas. Só o send / receive contata os nossos servidores, e apenas para um pequeno handshake de encontro — nunca o conteúdo do arquivo.",
+        a: "Não nos modos diretos. Com push, pull, daemon direto e send / receive, os bytes dos arquivos trafegam diretamente entre as duas pontas. Só o send / receive contata os nossos servidores, e apenas para um pequeno handshake de encontro — nunca o conteúdo do arquivo. O up é diferente: ele envia uma cópia criptografada para o armazenamento da sua conta, que o servidor guarda mas não consegue ler.",
       },
     ],
   },

@@ -607,7 +607,7 @@ ready`,
       heading: "ネットワークをまたぐ転送用に TURN リレーを追加する",
       body: [
         "同一ネットワーク（LAN）の転送や、SSH ベースの push/pull は、追加設定なしで動作します。ネットワークをまたぐリアルタイム転送（それぞれ異なる NAT の背後にある2台のデバイス）は、経路確立のために TURN リレーが必要になることがあります——リレーは常に暗号文しか見ず、ファイルの中身を見ることは決してありません。",
-        "docker-compose.yml には任意の relay プロファイルがあり、メインサーバーと合わせて coturn（TURN サーバー）と、リレーバイト計測用の小さな Redis インスタンスを起動できます。",
+        "docker-compose.yml には任意の relay プロファイルがあり、メインサーバーと合わせて coturn（TURN サーバー）を起動できます。このプロファイルは小さな Redis インスタンスも起動しますが、それを通じたサーバーの coturn リレーバイト計測は現在無効になっており、リレーされたバイトは計上されません。",
         "この秘密鍵は2か所に届ける必要があり、間違えても何のエラーも出ません。coturn は Compose の変数展開で受け取り、その展開はシェルかプロジェクトルートの .env からしか解決されません。サーバーは自分自身の環境変数——つまり server/.env——から読み、秘密鍵が空なら TURN は完全に無効になります。片方だけ設定すると、動いてはいるがサーバーが決して資格情報を発行しない coturn ができあがります。コンテナはすべて健全と報告し、ログには何も出ず、厳しい NAT をまたぐ転送はリレーを追加する前とまったく同じように失敗し続けます。",
       ],
       steps: [
@@ -866,7 +866,7 @@ ready`,
       heading: "네트워크 간 전송을 위한 TURN 릴레이 추가하기",
       body: [
         "같은 네트워크(LAN) 전송과 SSH 기반 push/pull은 별도 설정 없이 동작합니다. 네트워크를 넘나드는 실시간 전송(서로 다른 NAT 뒤에 있는 두 기기)은 경로를 확보하기 위해 TURN 릴레이가 필요할 때가 있습니다 — 릴레이는 언제나 암호문만 볼 뿐, 파일 내용을 보는 일은 결코 없습니다.",
-        "docker-compose.yml에는 선택적인 relay 프로필이 있어, 메인 서버와 함께 coturn(TURN 서버)과 릴레이 바이트 계량용 소형 Redis 인스턴스를 시작할 수 있습니다.",
+        "docker-compose.yml에는 선택적인 relay 프로필이 있어, 메인 서버와 함께 coturn(TURN 서버)을 시작할 수 있습니다. 이 프로필은 소형 Redis 인스턴스도 시작하지만, 이를 통한 서버의 coturn 릴레이 바이트 계량은 현재 비활성화되어 있어 릴레이된 바이트는 집계되지 않습니다.",
         "이 비밀값은 서로 다른 두 곳에 도달해야 하며, 잘못하면 아무 소리 없이 실패합니다. coturn은 Compose 변수 치환으로 받는데, 이 치환은 셸이나 프로젝트 루트의 .env에서만 해석됩니다. 서버는 자신의 환경 — 즉 server/.env — 에서 읽으며, 비밀값이 비어 있으면 TURN이 아예 꺼집니다. 한쪽만 설정하면 돌아가고는 있지만 서버가 자격 증명을 전혀 발급해 주지 않는 coturn이 남습니다. 모든 컨테이너는 정상이라고 보고하고, 로그에는 아무것도 남지 않으며, 엄격한 NAT를 넘는 전송은 릴레이를 추가하기 전과 똑같이 계속 실패합니다.",
       ],
       steps: [
@@ -1125,7 +1125,7 @@ ready`,
       heading: "Ein TURN-Relay für netzwerkübergreifende Übertragungen hinzufügen",
       body: [
         "Übertragungen im selben Netzwerk (LAN) und SSH-basiertes push/pull funktionieren ohne irgendetwas Zusätzliches. Netzwerkübergreifende Echtzeit-Übertragungen (zwei Geräte hinter unterschiedlichen NATs) brauchen manchmal ein TURN-Relay, um einen Pfad herzustellen — das Relay sieht dabei stets nur Chiffretext, niemals deinen Dateiinhalt.",
-        "docker-compose.yml hat ein optionales relay-Profil, das zusammen mit dem Hauptserver coturn (den TURN-Server) und eine kleine Redis-Instanz für die Zählung der Relay-Bytes startet.",
+        "docker-compose.yml hat ein optionales relay-Profil, das zusammen mit dem Hauptserver coturn (den TURN-Server) startet. Das Profil startet auch eine kleine Redis-Instanz, doch die Zählung der coturn-Relay-Bytes durch den Server darüber ist derzeit deaktiviert, weitergeleitete Bytes werden also nicht gezählt.",
         "Das Secret muss an zwei verschiedene Stellen gelangen, und wenn das schiefgeht, scheitert es lautlos. coturn bekommt es über die Variablenersetzung von Compose, die nur aus der Shell oder einer .env im Projektwurzelverzeichnis aufgelöst wird. Der Server liest es aus seiner eigenen Umgebung — also aus server/.env — und ein leeres Secret schaltet TURN vollständig ab. Setzt du nur eines von beiden, läuft ein coturn, für das der Server nie Zugangsdaten ausstellt: Jeder Container meldet sich gesund, im Log steht nichts, und Übertragungen durch strenge NATs scheitern weiter genau wie vorher.",
       ],
       steps: [
@@ -1384,7 +1384,7 @@ ready`,
       heading: "Ajouter un relais TURN pour les transferts entre réseaux",
       body: [
         "Les transferts sur le même réseau (LAN) et le push/pull basé sur SSH fonctionnent sans rien de plus. Les transferts en temps réel entre réseaux différents (deux appareils derrière des NAT différents) nécessitent parfois un relais TURN pour établir un chemin — le relais ne voit jamais que du texte chiffré, jamais le contenu de vos fichiers.",
-        "docker-compose.yml a un profil relay optionnel qui démarre coturn (le serveur TURN) et une petite instance Redis pour la mesure des octets relayés, aux côtés du serveur principal :",
+        "docker-compose.yml a un profil relay optionnel qui démarre coturn (le serveur TURN) aux côtés du serveur principal. Le profil démarre aussi une petite instance Redis, mais la mesure par le serveur des octets relayés par coturn à travers elle est actuellement désactivée : les octets relayés ne sont pas comptés.",
         "Le secret doit parvenir à deux endroits différents, et se tromper échoue sans le moindre bruit. coturn le reçoit par la substitution de variables de Compose, qui ne se résout que depuis le shell ou un .env à la racine du projet. Le serveur, lui, le lit dans son propre environnement — c'est-à-dire server/.env — et un secret vide désactive purement et simplement TURN. Si vous n'en renseignez qu'un seul, vous obtenez un coturn qui tourne mais pour lequel le serveur n'émet jamais d'identifiants : tous les conteneurs se déclarent sains, rien n'est journalisé, et les transferts à travers les NAT stricts continuent d'échouer exactement comme avant.",
       ],
       steps: [
@@ -1643,7 +1643,7 @@ ready`,
       heading: "أضف مُرحِّل TURN لعمليات النقل عبر الشبكات",
       body: [
         "عمليات النقل في الشبكة نفسها (LAN) وpush/pull القائم على SSH تعمل بلا أي إضافة. عمليات النقل الفوري عبر الشبكات (جهازان خلف NAT مختلفين) تحتاج أحيانًا مُرحِّل TURN لإنشاء مسار — لا يرى المُرحِّل سوى نص مُشفَّر أبدًا، لا محتوى ملفاتك.",
-        "لدى docker-compose.yml ملف تعريف relay اختياري يُشغّل coturn (خادم TURN) ونسخة Redis صغيرة لقياس بايتات الترحيل، إلى جانب الخادم الرئيسي:",
+        "لدى docker-compose.yml ملف تعريف relay اختياري يُشغّل coturn (خادم TURN) إلى جانب الخادم الرئيسي. يُشغّل ملف التعريف أيضًا نسخة Redis صغيرة، لكن قياس الخادم لبايتات ترحيل coturn عبرها معطَّل حاليًا، فلا تُحتسب البايتات المُرحَّلة.",
         "ولا بد أن يصل المفتاح السري إلى موضعين مختلفين، والخطأ في ذلك يفشل بلا صوت. يتلقّاه coturn عبر استبدال المتغيرات في Compose، وهو استبدال لا يُحَل إلا من الصدفة أو من ملف ‎.env‎ في جذر المشروع. أما الخادم فيقرأه من بيئته هو — أي من server/.env — والمفتاح الفارغ يعطّل TURN تعطيلًا كاملًا. فإن ضبطت أحدهما فقط، حصلت على coturn يعمل ولا يصدر له الخادم بيانات اعتماد قط: كل الحاويات تُبلِّغ أنها سليمة، ولا شيء يُسجَّل، وتظل عمليات النقل عبر شبكات NAT الصارمة تفشل تمامًا كما كانت قبل إضافة المُرحِّل.",
       ],
       steps: [
@@ -1902,7 +1902,7 @@ ready`,
       heading: "Añade un retransmisor TURN para las transferencias entre redes",
       body: [
         "Las transferencias en la misma red (red local) y el push/pull basado en SSH funcionan sin nada extra. Las transferencias en tiempo real entre redes (dos dispositivos tras NAT distintos) a veces necesitan un retransmisor TURN para establecer una ruta — el retransmisor solo ve texto cifrado, nunca el contenido de tus archivos.",
-        "docker-compose.yml tiene un perfil relay opcional que arranca coturn (el servidor TURN) y una pequeña instancia de Redis para la medición de bytes retransmitidos, junto al servidor principal:",
+        "docker-compose.yml tiene un perfil relay opcional que arranca coturn (el servidor TURN) junto al servidor principal. El perfil también arranca una pequeña instancia de Redis, pero la medición por parte del servidor de los bytes retransmitidos por coturn a través de ella está desactivada actualmente, así que los bytes retransmitidos no se contabilizan.",
         "El secreto tiene que llegar a dos sitios distintos, y equivocarse falla en silencio. coturn lo recibe por la sustitución de variables de Compose, que solo se resuelve desde el shell o desde un .env en la raíz del proyecto. El servidor lo lee de su propio entorno — es decir, de server/.env — y un secreto vacío desactiva TURN por completo. Si solo pones uno de los dos, acabas con un coturn en marcha para el que el servidor nunca emite credenciales: todos los contenedores se declaran sanos, no se registra nada, y las transferencias a través de NAT estrictos siguen fallando exactamente igual que antes.",
       ],
       steps: [
@@ -2161,7 +2161,7 @@ ready`,
       heading: "Adicione um retransmissor TURN para transferências entre redes",
       body: [
         "Transferências na mesma rede (rede local) e o push/pull baseado em SSH funcionam sem nada a mais. Transferências em tempo real entre redes (dois dispositivos atrás de NATs diferentes) às vezes precisam de um retransmissor TURN para estabelecer um caminho — o retransmissor só vê texto cifrado, nunca o conteúdo dos seus arquivos.",
-        "O docker-compose.yml tem um perfil relay opcional que inicia o coturn (o servidor TURN) e uma pequena instância Redis para a medição de bytes retransmitidos, ao lado do servidor principal:",
+        "O docker-compose.yml tem um perfil relay opcional que inicia o coturn (o servidor TURN) ao lado do servidor principal. O perfil também inicia uma pequena instância Redis, mas a medição pelo servidor dos bytes retransmitidos pelo coturn por meio dela está desativada no momento, então os bytes retransmitidos não são contabilizados.",
         "O segredo precisa chegar a dois lugares diferentes, e errar isso falha em silêncio. O coturn o recebe pela substituição de variáveis do Compose, que só é resolvida a partir do shell ou de um .env na raiz do projeto. Já o servidor o lê do próprio ambiente — ou seja, de server/.env — e um segredo vazio desliga o TURN por completo. Se você definir só um dos dois, fica com um coturn rodando para o qual o servidor nunca emite credenciais: todos os contêineres se declaram saudáveis, nada é registrado, e as transferências através de NAT estrito continuam falhando exatamente como antes.",
       ],
       steps: [

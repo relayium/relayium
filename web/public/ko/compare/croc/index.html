@@ -202,7 +202,7 @@ pre code{background:none;padding:0;border-radius:0}
       <p class="lead">croc은 터미널 사이에서 파일을 보내는 가장 사랑받는 도구 중 하나입니다. 짧고 기억하기 쉬운 코드 문구, PAKE 키 교환, 그리고 그것만으로 잘 작동합니다. Relayium CLI도 같은 일을 하려 하며, 만들어진 방식도 비슷합니다 — 무료, 오픈소스, 종단간 암호화되어 있으며 계정은 send가 페어링 코드를 발급할 때만 필요합니다.</p>
       <p class="lead">이 글은 깎아내리려는 것이 아닙니다. croc의 명성은 그럴 만합니다. 이 글은 두 도구가 공유하는 부분, Relayium CLI가 이미 운영 중인 서버와도 통신할 수 있어 더 갖춘 부분, 그리고 croc이 솔직히 더 단순한 선택인 경우를 있는 그대로 비교합니다.</p>
       <section class="sheet"><h2>Relayium과 croc의 공통점</h2>
-      <p>겹치는 부분부터 보면 상당히 많습니다. 둘 다 한 번만 설치하면 되는 작은 단일 바이너리이고, 둘 다 직접 연결로 파일을 옮기는 데 요금이 들지 않으며, 둘 다 관대한 라이선스로 오픈소스이므로 파일과 관련된 모든 코드를 직접 읽어볼 수 있습니다.</p>
+      <p>겹치는 부분부터 보면 상당히 많습니다. 둘 다 한 번만 설치하면 되는 작은 단일 바이너리이고, 둘 다 직접 연결로 파일을 옮기는 데 요금이 들지 않으며, 둘 다 오픈소스(croc은 관대한 MIT 라이선스, Relayium CLI는 AGPL-3.0 라이선스)이므로 파일과 관련된 모든 코드를 직접 읽어볼 수 있습니다.</p>
       <ul><li>양쪽만 아는 짧은 코드만으로 서로를 찾고 키에 합의하기에 충분합니다. croc의 코드는 그 자리에서 정하는 것이고, Relayium의 코드는 로그인한 보내는 쪽을 위해 서버가 발급하며, 받는 쪽은 여전히 계정이 필요 없습니다.</li><li>전송 중 종단간 암호화: 중간의 릴레이나 랑데부 지점은 파일 내용을 절대 볼 수 없습니다.</li><li>중단된 전송은 처음부터가 아니라 이어서 재개할 수 있고, 둘 다 도착한 내용이 보낸 것과 실제로 일치하는지 검증합니다.</li><li>크로스 플랫폼: macOS, Linux, Windows.</li></ul></section>
       <section class="sheet"><h2>시작하기 전에</h2>
       <p>아래는 모두 relayium CLI이므로, 설치하지 않았다면 먼저 설치하세요. macOS나 Linux에서는 명령어 하나로 사전 빌드된 바이너리가 PATH에 등록됩니다:</p>
@@ -224,7 +224,7 @@ pre code{background:none;padding:0;border-radius:0}
       <ul><li>지금 당장 친구에게 파일 하나만 넘기고 싶고, 신경 쓸 것이 가장 적었으면 할 때 — 도달할 서버도 없고, 양쪽 어디에서도 설정할 것이 없습니다.</li><li>엄격한 NAT 뒤에 있어 직접 경로를 열 방법이 없을 때: croc의 릴레이는 어쨌든 암호화된 스트림을 실어 나르므로 전송이 완료됩니다. Relayium의 send / receive는 직접 연결 전용이라 이런 상황에서 실패할 수 있습니다(push/pull이나 도달 가능한 서버로의 데몬 다이렉트는 직접 P2P 홉에 의존하지 않으므로 여전히 작동합니다).</li><li>폴더 미러링도, SSH 통합도, 계속 실행되는 리스너도 필요 없을 때 — croc은 각 쪽에서 즉석 명령어 하나면 충분하고 더 생각할 것이 없습니다.</li><li>이미 croc의 크고 자리잡은 커뮤니티와 오랜 실사용 경험을 신뢰하고 있을 때.</li></ul></section>
       <section class="sheet"><h2>기능 한눈에 비교</h2>
       <p>가장 중요한 차이를 나란히 정리하면:</p>
-      <ul><li>서버와의 대화: Relayium은 SSH 접근(push/pull) 또는 인증서 고정 TLS 데몬을 재사용함. croc은 SSH 통합이 없어 양쪽에 croc을 설치하고 코드 문구를 공유해야 함.</li><li>폴더 동기화: relayium sync는 --delete와 --watch로 증분 미러링을 함. croc은 묶음을 보내고 종료하며 미러나 삭제 개념이 없음.</li><li>직접 경로가 없을 때: croc의 릴레이는 암호화된 스트림을 실어 날라 전송이 여전히 완료됨. Relayium의 send/receive는 직접 연결 전용임.</li><li>검증: 둘 다 종단간 암호화됨. Relayium의 send/receive는 추가로 전송 시작 전 양쪽이 대조하는 짧은 코드를 표시함.</li><li>자체 호스팅: 둘 다 자체 호스팅 가능 — croc의 릴레이는 작은 독립 바이너리이고, Relayium의 서버는 웹 앱도 함께 운영하며, CLI의 send/receive도 --server로 자신의 인스턴스를 가리킬 수 있음.</li><li>라이선스와 비용: 둘 다 AGPL-3.0 라이선스이고, 직접 전송은 둘 다 무료. croc은 계정이 전혀 필요 없고, Relayium은 페어링 코드를 발급하는 send에만 필요함.</li></ul></section>
+      <ul><li>서버와의 대화: Relayium은 SSH 접근(push/pull) 또는 인증서 고정 TLS 데몬을 재사용함. croc은 SSH 통합이 없어 양쪽에 croc을 설치하고 코드 문구를 공유해야 함.</li><li>폴더 동기화: relayium sync는 --delete와 --watch로 증분 미러링을 함. croc은 묶음을 보내고 종료하며 미러나 삭제 개념이 없음.</li><li>직접 경로가 없을 때: croc의 릴레이는 암호화된 스트림을 실어 날라 전송이 여전히 완료됨. Relayium의 send/receive는 직접 연결 전용임.</li><li>검증: 둘 다 종단간 암호화됨. Relayium의 send/receive는 추가로 전송 시작 전 양쪽이 대조하는 짧은 코드를 표시함.</li><li>자체 호스팅: 둘 다 자체 호스팅 가능 — croc의 릴레이는 작은 독립 바이너리이고, Relayium의 서버는 웹 앱도 함께 운영하며, CLI의 send/receive도 --server로 자신의 인스턴스를 가리킬 수 있음.</li><li>라이선스와 비용: croc은 MIT 라이선스, Relayium CLI는 AGPL-3.0 라이선스이고, 직접 전송은 둘 다 무료. croc은 계정이 전혀 필요 없고, Relayium은 페어링 코드를 발급하는 send에만 필요함.</li></ul></section>
       <h2>자주 묻는 질문</h2>
       <h3>Relayium의 CLI는 무료인가요?</h3>
       <p>CLI는 AGPL-3.0 라이선스의 오픈소스이며, 직접 연결 모드(push, pull, sync, daemon 다이렉트, send / receive)는 양쪽을 직접 연결하므로 계량할 것이 없습니다. 유일한 예외는 up으로, 파일을 Relayium 계정에 저장하며 요금제의 저장 용량 한도에 포함됩니다. croc에는 이에 해당하는 기능이 없습니다.</p>
