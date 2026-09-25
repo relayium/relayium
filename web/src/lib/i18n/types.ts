@@ -795,6 +795,10 @@ export interface Messages {
     invalidBody: string; // fuller explanation + prompts a fresh forgot-password request
     errGeneric: string; // any other server error on submit (the new password may already be set)
     pendingDeletion: string; // 200 pending_deletion: password NOT changed, link spent; offer reactivation
+    // 409 credentials_changed: this reset committed and spent the link, but a later
+    // reset/change of the same account finished first, so no session was issued
+    // and the later password is in effect. Never suggests resubmitting this link.
+    credentialsChanged: string;
     backHome: string; // link back to the app
   };
   // /magic-link 落地页。这一页存在的唯一理由是它需要一次点击——邮件网关的预取

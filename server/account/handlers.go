@@ -1184,6 +1184,14 @@ func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, ErrInvalidToken):
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
 		return
+	case errors.Is(err, ErrCredentialsChanged):
+		// This reset committed and spent the link, but another reset or change
+		// committed before its session was issued, so no session is issued and
+		// the later password is the one in effect. Not a server failure: the
+		// page tells the person to sign in with the latest password or request
+		// a new link, never to resubmit this one.
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "credentials_changed"})
+		return
 	case err != nil:
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

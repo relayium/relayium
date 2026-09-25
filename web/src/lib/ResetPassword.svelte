@@ -10,7 +10,7 @@
 
   const t = $derived<Messages>(messages[lang()]);
 
-  type Phase = "boot" | "no-token" | "form" | "success" | "invalid" | "pending-deletion";
+  type Phase = "boot" | "no-token" | "form" | "success" | "invalid" | "pending-deletion" | "credentials-changed";
   let phase = $state<Phase>("boot");
   let token = "";
 
@@ -29,11 +29,12 @@
       : phase === "invalid" ? t.resetPassword.invalidBody
       : phase === "no-token" ? t.resetPassword.noToken
       : phase === "pending-deletion" ? t.resetPassword.pendingDeletion
+      : phase === "credentials-changed" ? t.resetPassword.credentialsChanged
       : "",
   );
   const tone = $derived<"neutral" | "success" | "danger">(
     phase === "success" ? "success"
-      : phase === "invalid" || phase === "no-token" || phase === "pending-deletion" ? "danger"
+      : phase === "invalid" || phase === "no-token" || phase === "pending-deletion" || phase === "credentials-changed" ? "danger"
       : "neutral",
   );
 
@@ -64,6 +65,8 @@
       //   200 {user}                 → success (session cookie set)
       //   200 pending_deletion       → password unchanged, link spent: offer reactivation
       //   400 invalid_token          → invalid
+      //   409 credentials_changed    → link spent, a later reset/change won, no session:
+      //                                sign in with the latest password or request a new link
       //   400 password too short     → errTooShort (link still valid)
       //   400 password_too_long      → errTooLong  (link still valid)
       //   network                    → errNetwork
@@ -76,6 +79,8 @@
         phase = "pending-deletion";
       } else if (res.error === "invalid_token") {
         phase = "invalid";
+      } else if (res.error === "credentials_changed") {
+        phase = "credentials-changed";
       } else if (res.error === "password too short") {
         error = t.account.errTooShort;
       } else if (res.error === "password_too_long") {
@@ -98,7 +103,7 @@
 <AuthLanding title={t.resetPassword.title} {status} {tone}>
   {#if phase === "no-token"}
     <button type="button" class="btn btn-ghost auth-action" onclick={() => navigate("lan")}>{t.resetPassword.backHome}</button>
-  {:else if phase === "invalid"}
+  {:else if phase === "invalid" || phase === "credentials-changed"}
     <button type="button" class="btn btn-ghost auth-action" onclick={() => navigate("lan")}>{t.resetPassword.backHome}</button>
   {:else if phase === "pending-deletion"}
     {#if reactivateToken}

@@ -537,6 +537,7 @@ const en: Messages = {
     invalidBody: "This link is invalid or has expired. Please request a new one.",
     errGeneric: "Something went wrong. Try again — if the link then says it has expired, your new password may already be set, so try logging in with it.",
     pendingDeletion: "Your account is scheduled for deletion, so the password was not changed. Reactivate the account first, then request a new reset link.",
+    credentialsChanged: "This link has been used, but another password reset or change for this account finished right after it. That later password is the one in effect, and you were not signed in. Sign in with the most recent password, or request a new reset link.",
     backHome: "Back to home",
   },
   magicLink: {
