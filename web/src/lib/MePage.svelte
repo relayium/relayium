@@ -20,6 +20,8 @@
   import { type RenameOutcome } from "./DeviceCard.svelte";
   import { DEVICE_REFRESH_MS, parseDeviceInbox } from "./device-inbox";
   import {
+    BROWSER_SENDER_LIMIT,
+    browserSenderIdentities,
     deviceKindLabel,
     deviceRefText,
     deviceSignedInText,
@@ -79,6 +81,10 @@
   // 行的类型、要列哪些 Kind、怎么排序，全在 device-list.ts：/device-inbox 现在渲染
   // 的是同一批行，两个页面对"哪些设备存在"必须只有一个答案。
   let devices = $state<DeviceRow[]>([]);
+  // 发送用的浏览器登记（Kind = "browser"）。和上面同一次 /api/devices 响应、同一个
+  // 会话代号，但单独成一节：它不是登录，也不能当收件目标，吊销那句"要重新登录"
+  // 对它不成立。见 device-list.ts 的 browserSenderIdentities。
+  let browserSenders = $state<DeviceRow[]>([]);
   // 设备请求属于哪一段登录会话。账号切换、登出后再登录同一账号，甚至组件销毁，
   // 都会换一个代号；旧列表/旧吊销请求的迟到响应因此不能改写当前页面。
   let deviceSessionGen = 0;
@@ -96,6 +102,7 @@
       const all: unknown[] = (await res.json()).devices ?? [];
       if (gen !== deviceSessionGen) return;
       devices = supportedDevices(all);
+      browserSenders = browserSenderIdentities(all);
     } catch {
       // Keep the last trustworthy list. Presence may be briefly stale, but an
       // explicit failed refresh is not evidence that the devices disappeared.
@@ -117,17 +124,48 @@
     );
     if (!(await confirmDialog(described))) return;
     if (gen !== deviceSessionGen) return;
+    // 按 ID 摘掉那一行。等确认框期间列表可能已经被重新拉过，所以过滤的是当时
+    // 的 `devices`，不是发起吊销时的那份快照。
+    if (await deleteDeviceRow(d, gen)) devices = devices.filter((x) => x.ID !== d.ID);
+  }
+
+  /** 服务端给每一行浏览器登记起的是同一个固定名 "Web browser"；这个固定名要按
+   *  界面语言显示，被改过名的行照原样显示。 */
+  function browserSenderName(d: DeviceRow): string {
+    return d.Name === "Web browser" || d.Name === "" ? t.me.browserSenderDefaultName : d.Name;
+  }
+  function browserSenderRegisteredText(d: DeviceRow): string {
+    return t.me.browserSenderRegistered(new Date(d.CreatedAt * 1000).toLocaleString(lang()));
+  }
+  function browserSenderLastUsedText(d: DeviceRow): string {
+    if (!d.LastSeenAt) return t.me.browserSenderNotUsed;
+    return t.me.deviceLastUsed(new Date(d.LastSeenAt * 1000).toLocaleString(lang()));
+  }
+
+  /** 移除一条发送登记。行里全都叫 "Web browser"，所以确认框和按钮的可访问名称都带
+   *  ID 尾号和登记时间——和行里显示的是同一批字串。删的始终是那一行的完整 ID。 */
+  async function removeBrowserSender(d: DeviceRow) {
+    const gen = deviceSessionGen;
+    const name = browserSenderName(d);
+    const described = t.me.browserSenderConfirmRemove(name, deviceRefText(d, t), browserSenderRegisteredText(d));
+    if (!(await confirmDialog(described, t.me.browserSenderRemove))) return;
+    if (gen !== deviceSessionGen) return;
+    if (await deleteDeviceRow(d, gen)) browserSenders = browserSenders.filter((x) => x.ID !== d.ID);
+  }
+
+  /** DELETE /api/devices/{id}。只有在请求成功、且仍是发起时那段登录会话时才返回
+   *  true；失败在当前会话里给出提示，旧会话的迟到响应什么都不做。 */
+  async function deleteDeviceRow(d: DeviceRow, gen: number): Promise<boolean> {
     try {
       const res = await fetch(`/api/devices/${encodeURIComponent(d.ID)}`, {
         method: "DELETE", credentials: "include",
       });
-      if (gen !== deviceSessionGen) return;
-      if (!res.ok) { failed(); return; }
-      // 按 ID 摘掉那一行。等确认框期间列表可能已经被重新拉过，所以过滤的是当时
-      // 的 `devices`，不是发起吊销时的那份快照。
-      devices = devices.filter((x) => x.ID !== d.ID);
+      if (gen !== deviceSessionGen) return false;
+      if (!res.ok) { failed(); return false; }
+      return true;
     } catch {
       if (gen === deviceSessionGen) failed();
+      return false;
     }
   }
 
@@ -420,6 +458,7 @@
       loadedFor = uid;
       const deviceGen = ++deviceSessionGen;
       devices = [];
+      browserSenders = [];
       resetDeleteRequest();
       load(deviceGen);
     }
@@ -427,6 +466,7 @@
       loadedFor = "";
       deviceSessionGen++;
       devices = [];
+      browserSenders = [];
       stats = null; files = []; loading = false;
       nodes = []; strict = false; newToken = null; addingNode = false; renamingId = null;
       resetDeleteRequest();
@@ -662,6 +702,38 @@
       {/if}
     </section>
 
+    <section class="browsersenders">
+      <h2>{t.me.browserSendersTitle}</h2>
+      <p class="muted">{t.me.browserSendersIntro}</p>
+      {#if browserSenders.length === 0}
+        <p class="muted">{t.me.browserSendersEmpty}</p>
+      {:else}
+        <p class="muted sendercount">{t.me.browserSendersCount(browserSenders.length, BROWSER_SENDER_LIMIT)}</p>
+        <ul class="senderlist" aria-label={t.me.browserSendersTitle}>
+          {#each browserSenders as d (d.ID)}
+            {@const name = browserSenderName(d)}
+            {@const ref = deviceRefText(d, t)}
+            {@const registered = browserSenderRegisteredText(d)}
+            <li>
+              <div class="senderinfo">
+                <span class="sendername">{name}</span>
+                {#if ref}<span class="senderref">{ref}</span>{/if}
+                <span class="muted">{registered}</span>
+                <span class="muted">{browserSenderLastUsedText(d)}</span>
+                {#if d.LastIP}<span class="muted">{t.me.deviceIP(d.LastIP)}</span>{/if}
+              </div>
+              <button
+                class="chk senderremove"
+                type="button"
+                aria-label={t.me.browserSenderRemoveLabel(name, ref, registered)}
+                onclick={() => removeBrowserSender(d)}
+              >{t.me.browserSenderRemove}</button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+
     <!-- 注销账户。放在最底下并用一条分隔线切开：它和上面那些日常操作不是一类东西，
          不该出现在用户扫一眼就会点到的地方，但也必须真的找得到——法律文本承诺了它。 -->
     <section class="danger-zone">
@@ -685,6 +757,22 @@
 
 <style>
   .accountdevices { margin-top: var(--section-gap); }
+  .browsersenders { margin-top: var(--section-gap); }
+  .sendercount { margin: var(--space-2) 0; }
+  .senderlist { list-style: none; margin: 0; padding: 0; }
+  .senderlist li {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    padding: var(--space-3) 0; border-top: 1px solid var(--border);
+  }
+  .senderinfo { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); min-width: 0; font-size: var(--fs-sm); }
+  /* 名称与 ID 尾号徽章照 DeviceCard 的 .devicename / .deviceref，两节看起来是同一类行。 */
+  .sendername { font-weight: 500; color: var(--text-h); }
+  .senderref {
+    font-family: var(--mono); font-size: var(--fs-xs); color: var(--text);
+    padding: 2px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .chk.senderremove { flex: none; color: var(--danger); border-color: var(--danger-border); }
+  .chk.senderremove:hover:not(:disabled) { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
   /* 列表和行的样式都跟着元素搬进了 DeviceSendList / DeviceCard —— Svelte 的样式是
      按组件作用域的，留在这里的 `.devicelist` 选择器不会命中子组件里的那个 ul。 */
   /* 通往 /cli 上「设备收件箱」那一节的入口。空列表和"一台都没开收件箱"两种状态下

@@ -157,7 +157,8 @@ describe("MePage 的账号设备列表", () => {
   it("浏览器、空 Kind、未知 Kind 都不列", async () => {
     stubFetch();
     const { target, app } = await render();
-    const text = target.textContent ?? "";
+    // 只看 App/CLI 这一节：浏览器发送登记在 /me 上另有一节（MePage.browser-senders.test.ts）。
+    const text = target.querySelector(".accountdevices")?.textContent ?? "";
     expect(text, "浏览器设备不该出现在这个列表里").not.toContain("Chrome");
     expect(text, "Kind 为空的行含义不明，不该给它一个吊销按钮").not.toContain("kindless-row");
     expect(text, "将来才出现的 Kind 这一版说不清楚后果，不该列").not.toContain("future-kind-row");

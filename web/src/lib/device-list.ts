@@ -132,7 +132,32 @@ export function supportedDevices(rows: readonly unknown[]): DeviceRow[] {
   return rows
     .map(normalizeRow)
     .filter((d): d is DeviceRow => d !== null && isSupportedDeviceKind(d.Kind))
-    .sort((a, b) => b.LastSeenAt - a.LastSeenAt || b.CreatedAt - a.CreatedAt);
+    .sort(mostRecentlyUsedFirst);
+}
+
+function mostRecentlyUsedFirst(a: DeviceRow, b: DeviceRow): number {
+  return b.LastSeenAt - a.LastSeenAt || b.CreatedAt - a.CreatedAt;
+}
+
+/** How many browser sending identities central lets one account hold
+ *  (MaxBrowserDevicesPerAccount, server/account/store.go). The 21st browser's
+ *  send is refused with `browser_device_limit` until one is removed. */
+export const BROWSER_SENDER_LIMIT = 20;
+
+/** The account's browser sending identities, most recently used first.
+ *
+ *  Kept apart from `supportedDevices` on purpose. A `browser` row is the
+ *  HttpOnly credential a browser mints for itself the first time it sends
+ *  (POST /api/devices/browser-install) — not a sign-in and never a Device Inbox
+ *  target. Listing it with the App/CLI rows would offer it on /device-inbox as
+ *  somewhere to send to, and put it under a revoke sentence ("has to sign in
+ *  again") that is false for it. Only `browser` counts toward the limit above;
+ *  a kind-less legacy row does not, so it is not listed here either. */
+export function browserSenderIdentities(rows: readonly unknown[]): DeviceRow[] {
+  return rows
+    .map(normalizeRow)
+    .filter((d): d is DeviceRow => d !== null && d.Kind === "browser")
+    .sort(mostRecentlyUsedFirst);
 }
 
 /** How many devices this account has, and how many could actually be sent to.

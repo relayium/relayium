@@ -552,6 +552,18 @@ export interface Messages {
     deviceRenameSave: string;
     deviceRenameCancel: string;
     deviceRenameRejected: string; // 服务端说这个名字不能用（控制字符、方向覆盖、太长）
+    // 发送用的浏览器登记（Kind = "browser"）。它不是登录、也不是收件目标：移除只让
+    // 那个浏览器的下一次发送被拒一次，再发就重新登记。文案不能说"要重新登录"。
+    browserSendersTitle: string;
+    browserSendersIntro: string;
+    browserSendersCount: (used: number, max: number) => string;
+    browserSendersEmpty: string;
+    browserSenderDefaultName: string; // 服务端给每一行起的固定名 "Web browser" 的本地化
+    browserSenderRegistered: (when: string) => string;
+    browserSenderNotUsed: string;
+    browserSenderRemove: string; // 每行都一样的可见按钮文字
+    browserSenderRemoveLabel: (name: string, ref: string, registered: string) => string;
+    browserSenderConfirmRemove: (name: string, ref: string, registered: string) => string;
     deviceRenameFailed: string; // 请求没成功，名字没有变——可以重试
     actionFailed: string; // generic "the request failed" notice for the write actions on this page
     // 账户注销入口。服务端的双重确认流程（POST /api/account/delete/request 只发一封
