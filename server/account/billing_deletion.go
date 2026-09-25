@@ -502,6 +502,10 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 			}
 			progress.Customers = appendUnique(progress.Customers, c)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, false, err
+		}
 		if err := rows.Close(); err != nil {
 			return nil, false, err
 		}
@@ -522,6 +526,10 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 			if attemptSubID != "" {
 				progress.add(BillingDeletionResource{Kind: "subscription", ID: attemptSubID, AttemptID: attemptID, CustomerID: u.StripeCustomerID, Status: "observed"})
 			}
+		}
+		if err := attempts.Err(); err != nil {
+			attempts.Close()
+			return nil, false, err
 		}
 		if err := attempts.Close(); err != nil {
 			return nil, false, err
@@ -790,6 +798,10 @@ func (s *SQLiteStore) AppendStripeActiveAccountDeletionHazard(ctx context.Contex
 		}
 		pendingRows = append(pendingRows, row)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	if err := rows.Close(); err != nil {
 		return err
 	}
@@ -836,6 +848,10 @@ func (s *SQLiteStore) AppendStripeActiveAccountDeletionHazardForCustomer(ctx con
 		}
 		subjects = append(subjects, subject)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return false, err
+	}
 	if err := rows.Close(); err != nil {
 		return false, err
 	}
@@ -858,6 +874,10 @@ func (s *SQLiteStore) AppendStripeActiveAccountDeletionHazardForCustomer(ctx con
 			return false, err
 		}
 		pendingRows = append(pendingRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return false, err
 	}
 	if err := rows.Close(); err != nil {
 		return false, err
@@ -903,6 +923,10 @@ func appendStripeDeletionHazardsTx(ctx context.Context, tx *sql.Tx, userID strin
 			return false, err
 		}
 		all = append(all, v)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return false, err
 	}
 	if err := rows.Close(); err != nil {
 		return false, err
@@ -1138,6 +1162,10 @@ func (s *SQLiteStore) appendStripeCustomerDeletionHazards(ctx context.Context, c
 		}
 		subjects = append(subjects, subject)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	if err := rows.Close(); err != nil {
 		return err
 	}
@@ -1194,6 +1222,10 @@ func (s *SQLiteStore) AppendCanonicalStripePaidInvoiceDeletionHazards(ctx contex
 		}
 		subjects = append(subjects, subject)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	if err := rows.Close(); err != nil {
 		return err
 	}
@@ -1238,6 +1270,10 @@ func (s *SQLiteStore) AppendCanonicalStripePaidInvoiceDeletionHazards(ctx contex
 			continue
 		}
 		matches = append(matches, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
 	}
 	if err := rows.Close(); err != nil {
 		return err

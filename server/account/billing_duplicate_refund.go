@@ -199,6 +199,10 @@ func (s *SQLiteStore) DuplicateRefundBySubscription(ctx context.Context, subscri
 			current.Payments = append(current.Payments, CanonicalStripeInvoicePayment{InvoicePaymentID: invoicePaymentID.String, PaymentType: paymentType.String, PaymentIntentID: paymentIntentID.String, PaymentRecordID: paymentRecordID.String, ChargeID: chargeID.String, AmountPaid: amountPaid.Int64, ChargeAmount: chargeAmount.Int64, PaidAt: paidAt.Int64})
 		}
 	}
+	if err := liabilityRows.Err(); err != nil {
+		liabilityRows.Close()
+		return DuplicateRefundJob{}, false, err
+	}
 	if err := liabilityRows.Close(); err != nil {
 		return DuplicateRefundJob{}, false, err
 	}
@@ -524,6 +528,10 @@ func recordDuplicateRefundFailuresTx(ctx context.Context, tx *sql.Tx, refundID s
 		}
 		jobs = append(jobs, jobID)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return false, err
+	}
 	if err := rows.Close(); err != nil {
 		return false, err
 	}
@@ -836,6 +844,10 @@ func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job Du
 			return err
 		}
 		stored = append(stored, observation)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
 	}
 	if err := rows.Close(); err != nil {
 		return err

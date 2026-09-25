@@ -256,6 +256,10 @@ func recordStripeDeletionRefundFailuresTx(ctx context.Context, tx *sql.Tx, refun
 		}
 		actions = append(actions, id)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	if err := rows.Close(); err != nil {
 		return err
 	}
