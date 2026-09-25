@@ -286,10 +286,16 @@ func TestLanRoomIgnoresHint(t *testing.T) {
 // server-authored on welcome and roster only.
 func TestRelayedSignalCarriesNoHint(t *testing.T) {
 	dial, ctx := wsFixture(t, "c:123456", 2, false)
+	// Ids are handed out when the server's handler for a connection starts, not
+	// when the client's dial returns, so two sockets dialed back to back can be
+	// numbered in either order. A joins and hears its welcome before B is even
+	// dialed, which makes A "p1" and B "p2" — the ids the literal below names.
 	a := dial()
-	b := dial()
 	writeFrame(t, ctx, a, map[string]any{"type": "join", "name": "A"})
+	readRaw(t, ctx, a, TypeWelcome)
+	b := dial()
 	writeFrame(t, ctx, b, map[string]any{"type": "join", "name": "B"})
+	readRaw(t, ctx, b, TypeWelcome)
 	readRosterRaw(t, ctx, a, 2)
 	writeFrame(t, ctx, a, map[string]any{"type": "signal", "to": "p2", "data": map[string]any{"x": 1}, "proto": []string{"link/1"}})
 	if got, want := readRaw(t, ctx, b, TypeSignal), `{"type":"signal","from":"p1","to":"p2","data":{"x":1}}`; got != want {
