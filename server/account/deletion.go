@@ -192,6 +192,16 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
+	// Read before the pending check: a reactivate token can be obtained with the
+	// account's password (a password login of a pending account returns one), so
+	// if this request is overtaken — the owner recovers the account and resets or
+	// changes the password before it finishes — its session must not appear
+	// after that reset. The session below is inserted only at this epoch.
+	epoch, err := s.store.CredentialEpoch(r.Context(), tok.UserID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	u, err := s.store.GetUserByID(r.Context(), tok.UserID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -218,9 +228,21 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	sess, err := s.IssueSession(r.Context(), u.ID)
+	now := s.now()
+	sess := Session{
+		ID:        authx.RandToken(),
+		UserID:    u.ID,
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
+	}
+	issued, err := s.store.CreateSessionAtEpoch(r.Context(), sess, epoch)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !issued {
+		// Overtaken by a reset/change: same generic answer as a spent token.
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
 	s.setSessionCookie(w, sess)

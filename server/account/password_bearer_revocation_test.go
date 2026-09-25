@@ -473,3 +473,78 @@ func TestResetSessionIsNotIssuedPastALaterReset(t *testing.T) {
 		t.Fatalf("%d live sessions, want only the later reset's", n)
 	}
 }
+
+// recoverAndResetFirst runs the owner's own recovery and a password reset right
+// before the attacker's in-flight reactivation clears the pending deletion.
+type recoverAndResetFirst struct {
+	*SQLiteStore
+	fired bool
+	owner func()
+}
+
+func (w *recoverAndResetFirst) ClearAccountDeletion(ctx context.Context, userID string) error {
+	if !w.fired {
+		w.fired = true
+		w.owner()
+	}
+	return w.SQLiteStore.ClearAccountDeletion(ctx, userID)
+}
+
+// reactivateToken mints the token a password login of a pending account hands
+// back (issueReactivateToken), with an explicit hour of validity: this
+// fixture has no grace-days setting, which would make the real one expire at
+// once. What is under test is the interleaving, not the token's lifetime.
+func reactivateToken(t *testing.T, st *SQLiteStore, u User, now int64) string {
+	t.Helper()
+	raw := authx.RandToken()
+	if err := st.CreateEmailToken(context.Background(), EmailToken{
+		TokenHash: authx.HashToken(raw), UserID: u.ID, Email: u.Email,
+		Purpose: "reactivate", CreatedAt: now, ExpiresAt: now + 3600,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func postReactivate(svc *Service, token string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	svc.handleReactivate(rec, httptest.NewRequest(http.MethodPost, "/api/account/reactivate",
+		strings.NewReader(`{"token":"`+token+`"}`)))
+	return rec
+}
+
+// A reactivate token can be had with the account's password. A reactivation
+// already past its pending check when the owner recovers the account and
+// resets the password must not come out with a session.
+func TestReactivationRacingRecoveryAndResetGetsNoSession(t *testing.T) {
+	ctx := context.Background()
+	svc, m := newTestService(t)
+	u, _, _ := victim(t, svc, m)
+	st := sqliteOf(t, svc)
+	now := svc.now().Unix()
+	if err := st.SetAccountDeletion(ctx, u.ID, now, now+30*86400); err != nil {
+		t.Fatal(err)
+	}
+	attackerToken := reactivateToken(t, st, u, now)
+	ownerToken := reactivateToken(t, st, u, now)
+
+	svc.store = &recoverAndResetFirst{SQLiteStore: st, owner: func() {
+		if rec := postReactivate(svc, ownerToken); rec.Code != http.StatusOK {
+			t.Errorf("owner recovery: %d %s", rec.Code, rec.Body.String())
+		}
+		if _, err := svc.ResetPassword(ctx, resetLink(t, svc, m), "new-password-2"); err != nil {
+			t.Errorf("owner reset: %v", err)
+		}
+	}}
+
+	rec := postReactivate(svc, attackerToken)
+	if !svc.store.(*recoverAndResetFirst).fired {
+		t.Fatalf("the attacker's reactivation never reached the interleaving point: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec.Code == http.StatusOK || strings.Contains(rec.Header().Get("Set-Cookie"), sessionCookie+"=") {
+		t.Fatalf("the overtaken reactivation came out with a session: %d %q", rec.Code, rec.Header().Get("Set-Cookie"))
+	}
+	if n := liveSessions(t, st, u.ID); n != 1 {
+		t.Fatalf("%d live sessions, want only the owner's reset session", n)
+	}
+}

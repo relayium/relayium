@@ -21,7 +21,9 @@ var ErrApprovingSessionGone = errors.New("account: approving session no longer v
 
 // ErrCredentialsChanged: a password reset/change committed after this request
 // read the account's credential_epoch, so the request's authority (the old
-// password, or a session the reset revoked) is gone and nothing was written.
+// password, or a session the reset revoked) is gone. From a password change it
+// means nothing was written; from a reset it means the reset itself committed
+// but no session was issued for it (a later reset/change overtook it).
 var ErrCredentialsChanged = errors.New("account: credentials changed by a concurrent reset or change")
 
 // User is an account holder. PII is limited to email + display name.
