@@ -156,9 +156,9 @@ the root [`README.md`](../README.md) for what this release does and does not
 include.
 
 **Two macOS channels, and which one this is.** `1.4.1` is the Developer
-ID/GitHub download above; the same release also goes to internal TestFlight for
-the owner's own testing, which is not a public App Store release and is not an
-external beta. The Mac App Store is an independently versioned track that moves
+ID/GitHub download above. Internal TestFlight builds are separately recorded in
+the submission record below; a direct-download release does not establish that
+the same version is available in TestFlight. The Mac App Store is an independently versioned track that moves
 on Apple's schedule, so it is usually a different number — the one
 [`web/mac-app-store-release.json`](../web/mac-app-store-release.json) records.
 Those two manifests are what each channel actually serves; no sentence here is.
@@ -168,7 +168,7 @@ change, its channel state with the read-back evidence, and the What to Test
 copy for both maintained languages.
 
 **The remaining platforms carry the renewal too, 2026-09-20.** The
-relay-credential renewal macOS shipped as `1.4.1 (39)` went out on the other
+relay-credential renewal shipped by macOS on that date went out on the other
 three channels from source `15466b04`, each through the channel it already had:
 Android `0.2.5 (versionCode 8)` as a public direct-APK pre-release, verified
 byte-identical after download; iOS `0.4.1 (10)` to the existing internal
