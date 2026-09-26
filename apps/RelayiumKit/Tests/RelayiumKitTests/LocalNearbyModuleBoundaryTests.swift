@@ -68,27 +68,9 @@ final class LocalNearbyModuleBoundaryTests: XCTestCase {
                        "the Bonjour service type is spelled somewhere other than its constant")
     }
 
-    /// The iOS built-App harness drives the LINK, and the macOS one still
-    /// drives the hub's code-less room.
-    ///
-    /// A source-text guard because what has to stay opposite is a wiring choice
-    /// made by two shell scripts, which nothing else in this suite observes: iOS
-    /// discovery moved to `_relayium._tcp`, macOS discovery did not.
-    func testTheIOSBuiltAppHarnessDrivesTheLinkAndTheMacOneStillDrivesTheRoom() throws {
-        let ios = try RepoRoot.text("scripts/ios-ui-session-acceptance.sh")
-        XCTAssertTrue(ios.contains("start_peer local-link-peer local-link-peer"),
-                      "the iOS built-App harness no longer starts a local link peer")
-        XCTAssertFalse(ios.contains("start_peer nearby-receiver"),
-                       "the iOS built-App harness is back on the hub's code-less "
-                       + "room, which no shipped iOS build browses")
-
-        let mac = try RepoRoot.text("scripts/macos-ui-session-acceptance.sh")
-        XCTAssertTrue(mac.contains("start_peer nearby-receiver nearby-receiver"),
-                      "the macOS built-App harness left the hub's code-less room, "
-                      + "which is still where macOS discovery joins")
-        XCTAssertFalse(mac.contains("local-link-peer"),
-                       "the macOS harness adopted the iOS-only local link")
-    }
+    // Script-only LAN harness wiring moved to
+    // scripts/test/native-lan-harness-test.mjs (unfiltered Linux CI).
+    // Product discovery/module checks and peer composition remain here.
 
     /// The acceptance peer advertises the product's own capabilities over the
     /// product's own transport and channel.

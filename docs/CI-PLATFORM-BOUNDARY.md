@@ -1531,3 +1531,19 @@ assertions. The unfiltered Linux `repository-policy` job checks the exact app ID
 routable paths and AutoFill association when the Web association file changes.
 Native entitlement and deep-link runtime tests stay in Swift; Web-only changes
 need no additional native build.
+
+### Artwork parity and native LAN harness wiring
+
+The unfiltered Linux `repository-policy` job also owns:
+
+- `icon-artwork-test.mjs`: all four former `AppIconArtworkTests` cases, covering
+  the shared Mac/Web glyph, gradient and stroke, the Mac icon canvas/no-shadow
+  rules and the package's existing executable target set.
+- `native-lan-harness-test.mjs`: the former static script-wiring case from
+  `LocalNearbyModuleBoundaryTests`, retaining iOS local-link and macOS room-path
+  requirements and their forbidden alternatives.
+
+Web-only artwork edits and script-only harness edits now execute these guards.
+The shared text helper preserves Swift's whole-Character matching, including
+combining marks. Native module/runtime tests stay in Swift; this move does not
+add native builds or change the artwork, harnesses or discovery behavior.

@@ -266,6 +266,10 @@ jobs:
 
       - name: iOS collection claims match sending and retained storage
         run: node scripts/test/ios-collection-claims-test.mjs
+      - name: native and Web artwork sources retain the same mark
+        run: node scripts/test/icon-artwork-test.mjs
+      - name: native LAN harnesses use their respective discovery paths
+        run: node scripts/test/native-lan-harness-test.mjs
       - name: Apple site association stays within native routing and AutoFill claims
         run: node scripts/test/apple-site-association-test.mjs
       - name: native claims track Web routes and server aggregate schema
