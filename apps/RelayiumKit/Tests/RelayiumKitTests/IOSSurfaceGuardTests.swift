@@ -2812,68 +2812,9 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// The site's side of the association names this app, for exactly the two
-    /// paths it can act on — and still names the identifier retired builds use.
-    ///
-    /// Since the universal-purchase migration this app IS
-    /// `7PVYUG4YQS.com.relayium.mac`, so the entry that was the Mac app's alone
-    /// is now both apps'. The second entry, `7PVYUG4YQS.com.relayium.app`, is
-    /// the identifier iOS shipped under before the migration; it is kept so
-    /// that development builds already installed on real devices keep routing
-    /// links, and it corresponds to no App Store record this project targets.
-    /// The SOURCE file is out of this batch's scope and unchanged — what is
-    /// asserted here is that it still covers the identifier the app now signs
-    /// as, which the exact-list comparison below already does.
-    ///
-    /// Read here rather than only in the web test because the two halves fail
-    /// separately and silently: an entitlement with no matching `appIDs` entry
-    /// is an app that never receives a link, and an `appIDs` entry with no
-    /// entitlement is a site claiming an app that will not open. Neither shows
-    /// up on the simulator, where the association is not fetched at all.
-    func testTheSiteAssociationNamesThisAppForTheTwoRoutablePaths() throws {
-        let json = try XCTUnwrap(
-            try JSONSerialization.jsonObject(with: try RepoRoot.data(
-                "web/public/.well-known/apple-app-site-association"))
-                as? [String: Any])
-        let applinks = try XCTUnwrap(json["applinks"] as? [String: Any])
-        let details = try XCTUnwrap(applinks["details"] as? [[String: Any]])
-        let appIDs = details.flatMap { ($0["appIDs"] as? [String]) ?? [] }
-        XCTAssertEqual(appIDs, ["7PVYUG4YQS.com.relayium.mac", "7PVYUG4YQS.com.relayium.app"],
-                       "the association no longer names both native app IDs")
-
-        let paths = details.flatMap { detail in
-            ((detail["components"] as? [[String: Any]]) ?? []).compactMap { $0["/"] as? String }
-        }
-        // Unchanged by the share extension, and that is the point: a Share
-        // Extension may not open its containing app, so there is no link for it
-        // to emit and no path for this file to claim on its behalf. The
-        // extension publishes a draft into the App Group and the app re-reads
-        // that inbox when its scene becomes active.
-        XCTAssertEqual(paths, ["/d/*", "/cross-network"],
-                       "the site claims a path parseAppDeepLink cannot route")
-        XCTAssertFalse(paths.contains("/share"),
-                       "a path was claimed for a hand-off iOS cannot perform")
-
-        // `webcredentials` shares the file and is a different permission: the
-        // site allowing password AutoFill for an app.
-        //
-        // The universal-purchase migration changed what this list MEANS without
-        // changing a byte of it, and that is worth stating rather than leaving
-        // for somebody to rediscover. The one entry was written for the Mac app;
-        // this app now signs as the same identifier, so the SITE half of the
-        // AutoFill association now covers iOS too. AutoFill is still off, and
-        // the reason it is off has moved: it is now the ENTITLEMENT half alone.
-        // `Relayium.entitlements` claims `applinks:relayium.com` and no
-        // `webcredentials:relayium.com`, and Apple requires both halves before
-        // AutoFill activates. So the guard that matters after the migration is
-        // the entitlement one — `testTheEntitlementsFileClaimsOnlyAppleSignInAndAppLinks` —
-        // and this assertion's job narrows to catching a SECOND identifier
-        // being added here, which would extend AutoFill to something else.
-        let credentials = try XCTUnwrap(
-            (json["webcredentials"] as? [String: Any])?["apps"] as? [String])
-        XCTAssertEqual(credentials, ["7PVYUG4YQS.com.relayium.mac"],
-                       "the site's AutoFill association changed shape; the app claims no webcredentials entitlement")
-    }
+    // Site association assertions moved to scripts/test/apple-site-association-test.mjs.
+    // Web-only edits select that unfiltered Linux check; native entitlement and
+    // runtime deep-link behavior remain tested here.
 
     /// The bearer is read at the moment of use, only by the surfaces that spend
     /// it and by the app-scoped billing seam that supplies a fresh token to the

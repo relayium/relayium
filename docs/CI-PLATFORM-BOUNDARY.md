@@ -1522,3 +1522,12 @@ and the server activation aggregate schema guard formerly in Swift tests. The
 native runtime CLI URL assertion stays in `HelpPresentationTests`. The aggregate
 parser still matches nested parentheses, top-level columns and the closed stage
 list. Web/server-only edits now execute both source checks in repository-policy.
+
+### Apple site association claims
+
+`scripts/test/apple-site-association-test.mjs` owns the former
+`IOSSurfaceGuardTests.testTheSiteAssociationNamesThisAppForTheTwoRoutablePaths`
+assertions. The unfiltered Linux `repository-policy` job checks the exact app IDs,
+routable paths and AutoFill association when the Web association file changes.
+Native entitlement and deep-link runtime tests stay in Swift; Web-only changes
+need no additional native build.
