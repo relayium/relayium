@@ -132,6 +132,8 @@ project="$repo_root/apps/mac/Relayium.xcodeproj"
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/local-acceptance.sh
 source "$repo_root/scripts/lib/local-acceptance.sh"
+# shellcheck source=lib/ios-physical-device.sh
+source "$repo_root/scripts/lib/ios-physical-device.sh"
 # shellcheck source=lib/macos-ui-test-selection.sh
 source "$repo_root/scripts/lib/macos-ui-test-selection.sh"
 
@@ -263,7 +265,7 @@ run_xcodebuild() {
   shift
   local log="$run_root/$label.log" status=0 pid
 
-  xcodebuild -project "$project" -scheme Relayium \
+  noninteractive xcodebuild -project "$project" -scheme Relayium \
     -destination 'platform=macOS' \
     -derivedDataPath "$derived_data" \
     "$@" \

@@ -1,7 +1,10 @@
-#!/bin/sh
+#!/bin/bash
 set -eu
 
-repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+repo=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+# The launcher execs its command; run it in a child so artifact verification continues.
+# shellcheck source=scripts/lib/ios-physical-device.sh
+source "$repo/scripts/lib/ios-physical-device.sh"
 artifact_root=${1:?usage: build-macos-engineering-candidate.sh /absolute/artifact/root}
 
 case "$artifact_root" in
@@ -31,13 +34,28 @@ fi
 # Never delete a caller path. Every invocation receives a fresh generated
 # directory beneath the marker-guarded artifact root.
 derived=$(mktemp -d "$artifact_root/DerivedData.engineering.XXXXXX")
-xcodebuild \
+( noninteractive xcodebuild \
   -project "$repo/apps/mac/Relayium.xcodeproj" \
   -scheme Relayium \
   -configuration Release \
   -xcconfig "$repo/apps/mac/Engineering/Engineering.xcconfig" \
   -derivedDataPath "$derived" \
-  build
+  build ) &
+build_pid=$!
+# Waiting on an asynchronous child lets Bash run the signal trap immediately.
+# The launcher preserves the child PID; never kill unrelated build processes.
+stop_build() {
+  trap - INT TERM
+  kill -TERM "$build_pid" 2>/dev/null || true
+  wait "$build_pid" 2>/dev/null || true
+  exit "$1"
+}
+trap 'stop_build 130' INT
+trap 'stop_build 143' TERM
+build_status=0
+wait "$build_pid" || build_status=$?
+trap - INT TERM
+[ "$build_status" -eq 0 ] || exit "$build_status"
 
 app="$derived/Build/Products/Release/Relayium.app"
 test -d "$app"
