@@ -1183,3 +1183,8 @@
 "version.updateAppStore" = "在 App Store 中更新";
 "version.updateTestFlight" = "打开 TestFlight";
 "version.testFlightUnavailable" = "无法打开 TestFlight。请先从 App Store 安装 TestFlight，然后重试。";
+
+"send.errorUploadQuota" = "上传超出单个文件大小或存储容量限制。请检查账户限额、释放存储空间或选择较小的文件。文件仍保留在本机。";
+"send.errorUploadDailyQuota" = "上传超出剩余的每日上传额度。请检查账户额度后再试。文件仍保留在本机。";
+"send.errorUploadMonthlyTraffic" = "剩余的每月流量额度不足以完成此次上传。请检查账户额度后再试。文件仍保留在本机。";
+"send.errorUploadRateLimited" = "上传请求过于频繁，请稍后再试。文件仍保留在本机。";

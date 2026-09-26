@@ -1207,3 +1207,8 @@
 "version.updateAppStore" = "Update in the App Store";
 "version.updateTestFlight" = "Open TestFlight";
 "version.testFlightUnavailable" = "Couldn't open TestFlight. Install the TestFlight app from the App Store, then try again.";
+
+"send.errorUploadQuota" = "The upload exceeds a file-size or storage limit. Check your account limits, free up storage or choose smaller files. Your files are still on this device.";
+"send.errorUploadDailyQuota" = "The upload exceeds your remaining daily upload allowance. Check your account allowance before trying again. Your files are still on this device.";
+"send.errorUploadMonthlyTraffic" = "Your remaining monthly traffic allowance is insufficient for this upload. Check your account allowance before trying again. Your files are still on this device.";
+"send.errorUploadRateLimited" = "Too many upload requests. Please wait before trying again. Your files are still on this device.";

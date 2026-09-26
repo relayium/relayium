@@ -11,6 +11,7 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
     /// Throw a network error on the next PATCH, then clear.
     var failNextPatch = false
     var initError: Error?
+    var nextPatchError: Error?
     var finalizeResult = UploadResult(id: "fid", expiresAt: 4242)
     /// Every purpose an init was asked for, in order. The purpose decides the
     /// object's authorization model, so "which one actually left" is an
@@ -34,6 +35,7 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
     func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
                     total: Int, token: String,
                     onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome {
+        if let error = nextPatchError { nextPatchError = nil; throw error }
         if failNextPatch { failNextPatch = false; throw CloudError.network }
         patches.append((from, bytes.count))
         var take = bytes.count

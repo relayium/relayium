@@ -152,6 +152,71 @@ final class InboxSendCoordinatorTests: XCTestCase {
                         file: file, line: line)
     }
 
+
+    func testUploadRefusalsKeepTheirReasonAndTheEntireStagedJob() async throws {
+        let cases: [(CloudError, String, String)] = [
+            (.quota, "storage", "存储"),
+            (.dailyQuota, "daily", "每日"),
+            (.monthlyTraffic, "monthly", "每月"),
+            (.rateLimited, "wait", "稍后"),
+            (.unauthorized, "Sign in", "登录"),
+            (.network, "didn't finish", "没有完成"),
+            (.server(status: 503), "didn't finish", "没有完成"),
+        ]
+        let plan = try await staged()
+        let originalKey = try await keys.key(for: plan.jobId)
+        let originalBytes = try store.sources(for: plan).map { source in var reader = source; return try reader.read(reader.size) }
+        for (refusal, english, chinese) in cases {
+            transport.initError = refusal
+            do {
+                _ = try await coordinator().deliver(plan, token: "bearer")
+                XCTFail("a refused upload must not create a task")
+            } catch let failure as InboxSendFailure {
+                XCTAssertTrue(InboxSendPresentation.text(for: failure, language: .en).contains(english), "\(refusal)")
+                XCTAssertTrue(InboxSendPresentation.text(for: failure, language: .zh).contains(chinese), "\(refusal)")
+            }
+            try await assertJobIsIntact(plan)
+            let held = try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first)
+            XCTAssertEqual(held, plan)
+            let heldKey = try await keys.key(for: plan.jobId)
+            XCTAssertEqual(heldKey, originalKey)
+            XCTAssertEqual(try store.sources(for: held).map { source in var reader = source; return try reader.read(reader.size) }, originalBytes)
+            XCTAssertTrue(sender.creates.isEmpty)
+            XCTAssertTrue(transport.patches.isEmpty)
+        }
+        transport.initError = nil
+        sender.createOutcomes = [created(task())]
+        _ = try await coordinator().deliver(plan, token: "bearer")
+        XCTAssertEqual(sender.creates.count, 1)
+        XCTAssertEqual(transport.initCount, 1)
+    }
+
+    func testQuotaRefusalAfterSessionCreationPreservesSessionAndRetriesWithoutReinit() async throws {
+        let plan = try await staged()
+        let originalKey = try await keys.key(for: plan.jobId)
+        transport.nextPatchError = CloudError.quota
+        do {
+            _ = try await coordinator().deliver(plan, token: "bearer")
+            XCTFail("refused PATCH must not create a task")
+        } catch {
+            XCTAssertEqual(error as? InboxSendFailure, .uploadQuota)
+        }
+        let held = try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first)
+        XCTAssertEqual(held.uploadId, "up1")
+        XCTAssertEqual(held.uploadChunkSize, transport.chunkSize)
+        XCTAssertEqual(held.createIdempotencyKey, plan.createIdempotencyKey)
+        let heldKey = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(heldKey, originalKey)
+        XCTAssertEqual(try store.sources(for: held).map { source in
+            var reader = source; return try reader.read(reader.size)
+        }, [Array("hello device inbox".utf8)])
+        XCTAssertTrue(sender.creates.isEmpty)
+        sender.createOutcomes = [created(task())]
+        _ = try await coordinator().deliver(held, token: "bearer")
+        XCTAssertEqual(transport.initCount, 1, "recovery uses the existing session")
+        XCTAssertEqual(sender.creates.count, 1)
+    }
+
     // MARK: - the delivery
 
     func testAStagedDeliveryUploadsAsADeviceTaskSealsAndCreatesExactlyOneTask() async throws {

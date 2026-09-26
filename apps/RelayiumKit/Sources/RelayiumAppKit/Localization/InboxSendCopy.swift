@@ -82,6 +82,14 @@ public enum InboxSendPresentation {
             return L10n.t(.sendErrorContentKey, language: language)
         case .uploadFailed:
             return L10n.t(.sendErrorUpload, language: language)
+        case .uploadQuota:
+            return L10n.t(.sendErrorUploadQuota, language: language)
+        case .uploadDailyQuota:
+            return L10n.t(.sendErrorUploadDailyQuota, language: language)
+        case .uploadMonthlyTraffic:
+            return L10n.t(.sendErrorUploadMonthlyTraffic, language: language)
+        case .uploadRateLimited:
+            return L10n.t(.sendErrorUploadRateLimited, language: language)
         case .targetMissing:
             return L10n.t(.sendErrorTargetMissing, language: language)
         case .targetUnavailable(let block):

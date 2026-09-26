@@ -509,7 +509,16 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             try Task.checkCancellation()
             // An interrupted upload is resumable by construction: the plan, its
             // session and its staged bytes all survive.
-            throw InboxSendFailure.uploadFailed
+            // Preserve typed refusals for presentation only. Recovery, ownership
+            // and cleanup are identical to an interrupted network upload.
+            switch error as? CloudError {
+            case .quota: throw InboxSendFailure.uploadQuota
+            case .dailyQuota: throw InboxSendFailure.uploadDailyQuota
+            case .monthlyTraffic: throw InboxSendFailure.uploadMonthlyTraffic
+            case .rateLimited: throw InboxSendFailure.uploadRateLimited
+            case .unauthorized: throw InboxSendFailure.notAuthorized
+            default: throw InboxSendFailure.uploadFailed
+            }
         }
     }
 
@@ -654,6 +663,12 @@ public enum InboxSendFailure: Error, Equatable, Sendable {
     case contentKeyMissing
     /// The ciphertext did not finish going up. Resumable: everything is kept.
     case uploadFailed
+    /// The existing transport's 413 classification does not distinguish file
+    /// size from storage capacity, and never proves membership expiry.
+    case uploadQuota
+    case uploadDailyQuota
+    case uploadMonthlyTraffic
+    case uploadRateLimited
     /// The account no longer has this device.
     case targetMissing
     /// The device is still here but may not be sent to, for this named reason.
