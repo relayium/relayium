@@ -1547,3 +1547,12 @@ Web-only artwork edits and script-only harness edits now execute these guards.
 The shared text helper preserves Swift's whole-Character matching, including
 combining marks. Native module/runtime tests stay in Swift; this move does not
 add native builds or change the artwork, harnesses or discovery behavior.
+
+The cross-file environment contract formerly checked by
+`DeviceInboxAcceptanceSeamTests.testTheEnvironmentContractMatchesTheSuitesOwnReader`
+is owned by `scripts/test/inbox-acceptance-environment-test.mjs` in the unfiltered
+`repository-policy` job. It checks the suite's environment reader, all six launcher
+exports and all six suite reads, so launcher-only changes cannot evade the guard.
+The launcher's executable `--self-test` and the remaining Swift acceptance seam
+tests retain their existing owners. Text matching uses the same grapheme-aware
+helper as the artwork and LAN harness guards.

@@ -364,26 +364,8 @@ final class DeviceInboxAcceptanceSeamTests: XCTestCase {
 
     // MARK: - the environment contract and the peer identification
 
-    /// What the launcher exports is what the suite reads, name for name. The
-    /// exact-list half lives in `--self-test`; this is the cross-file half a
-    /// launcher-only scan cannot make.
-    func testTheEnvironmentContractMatchesTheSuitesOwnReader() throws {
-        let launcher = try Self.launcherSource()
-        let suite = try Self.suiteSource()
-        XCTAssertTrue(suite.contains("environment[\"RELAYIUM_DEVICE_INBOX_\\(name)\"]"),
-                      "the suite no longer reads the RELAYIUM_DEVICE_INBOX_ environment")
-        for short in ["TAG", "ROLE", "MESSAGE", "PEER_ID",
-                      "PEER_BUDGET_SECONDS", "DELIVERY_BUDGET_SECONDS"] {
-            XCTAssertTrue(launcher.contains("TEST_RUNNER_RELAYIUM_DEVICE_INBOX_\(short)="),
-                          "the launcher no longer exports \(short)")
-        }
-        for read in ["value(\"TAG\")", "value(\"ROLE\")", "value(\"MESSAGE\")",
-                     "value(\"PEER_ID\")", "\"PEER_BUDGET_SECONDS\"",
-                     "\"DELIVERY_BUDGET_SECONDS\""] {
-            XCTAssertTrue(suite.contains(read),
-                          "the suite no longer reads \(read), so that export is inert")
-        }
-    }
+    // Cross-file environment names are checked on every change by
+    // scripts/test/inbox-acceptance-environment-test.mjs.
 
     /// The peer is matched as the COMPLETE identifier at both ends — ids may
     /// contain dots, so `bar.foo` must never satisfy a run that named `foo` —

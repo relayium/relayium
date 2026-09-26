@@ -270,6 +270,8 @@ jobs:
         run: node scripts/test/icon-artwork-test.mjs
       - name: native LAN harnesses use their respective discovery paths
         run: node scripts/test/native-lan-harness-test.mjs
+      - name: Inbox acceptance environment matches launcher and suite
+        run: node scripts/test/inbox-acceptance-environment-test.mjs
       - name: Apple site association stays within native routing and AutoFill claims
         run: node scripts/test/apple-site-association-test.mjs
       - name: native claims track Web routes and server aggregate schema
