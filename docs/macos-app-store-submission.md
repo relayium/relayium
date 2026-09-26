@@ -166,9 +166,9 @@ the workspace release artifact `artifacts/macos-renewal-release-20260920/`.
   unchanged. The dynamic client-version policy is separately owned (OA-034) and
   was not touched; nothing here claims the dynamic and static policies agree.
 
-**Why `1.4.1` and not `1.4.3`.** Recorded so the choice is not re-litigated:
+**Why `1.4.1` and not `1.5.0`.** Recorded so the choice is not re-litigated:
 `docs/MACOS-RELEASE-POLICY.md` reserves PATCH for a compatible correction and
-MINOR for a backward-compatible user-visible capability, and `1.4.3` was
+MINOR for a backward-compatible user-visible capability, and `1.5.0` was
 considered on that reading. It was classified as a PATCH because what changes
 is the continuity of the cross-network transfer that `1.4.0` already offers —
 a relayed link that used to end at its credential boundary can now carry on
