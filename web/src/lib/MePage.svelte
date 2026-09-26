@@ -10,6 +10,7 @@
   import { buildDownloadLink } from "./stored-file";
   import { copyFeedback } from "./clipboard.svelte";
   import { uploadKey, forgetUploadKey, pruneUploadKeys } from "./upload-keys";
+  import Icon from "./Icon.svelte";
   import WhyAccount from "./WhyAccount.svelte";
   import CommandBlock from "./CommandBlock.svelte";
   import { reveal, countUp } from "./reveal";
@@ -62,7 +63,7 @@
   // Local id→key map for files this browser uploaded, so their share link (whose
   // key the server never holds) can be rebuilt and re-copied from here.
   let fileKeys = $state<Record<string, string>>({});
-  const linkCopy = copyFeedback(); // file id whose "copy link" just fired, for the ✓ state
+  const linkCopy = copyFeedback(); // file id whose "copy link" just fired, for the localized copied state
   // Transient failure notice for the write actions below. Without it a failed
   // request was completely silent: the row simply didn't change and the user had
   // no way to tell a rejected request from one that never left the browser.
@@ -568,14 +569,15 @@
             <li>
               <span class="fid">#{f.id.slice(0, 8)}</span>
               <span class="fsize">{formatSize(f.size)}</span>
-              {#if f.burnAfterRead}<span class="tag burn">🔥 {t.me.burnTag}</span>{/if}
-              <span class="dl">↓ {t.me.downloadsN(f.downloadCount)}</span>
+              {#if f.burnAfterRead}<span class="tag burn"><Icon name="file-download" size={14} /> {t.me.burnTag}</span>{/if}
+              <span class="dl"><Icon name="download" size={14} /> {t.me.downloadsN(f.downloadCount)}</span>
               <span class="exp" class:soon={secLeft < 3600}>
-                ⏳ {t.me.expiresIn(formatRemaining(secLeft, t.download.durUnits))}
+                <Icon name="clock" size={14} /> {t.me.expiresIn(formatRemaining(secLeft, t.download.durUnits))}
               </span>
               {#if fileKeys[f.id]}
                 <button class="linkbtn" class:copied={linkCopy.value === f.id} onclick={() => copyLink(f.id)}>
-                  {linkCopy.value === f.id ? "✓" : "🔗 " + t.me.copyLink}
+                  <Icon name="link" size={14} />
+                  {linkCopy.value === f.id ? t.pair.copied : t.me.copyLink}
                 </button>
               {/if}
               <button class="del" onclick={() => del(f.id)} aria-label={t.me.del}>{t.me.del}</button>
@@ -862,6 +864,7 @@
   .dl { color: var(--text-h); }
   .exp { color: var(--text); margin-inline-start: auto; }
   .exp.soon { color: var(--danger); }
+  .filelist :is(.tag, .dl, .exp, .linkbtn) { display: inline-flex; align-items: center; gap: 4px; }
   .tag.burn { color: var(--accent-fg); }
   .link-hint { margin: 0 0 var(--space-3); font-size: var(--fs-xs); color: var(--text); }
   .linkbtn {
