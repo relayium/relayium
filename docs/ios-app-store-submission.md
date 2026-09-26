@@ -1,5 +1,10 @@
 # iOS App Store and TestFlight submission
 
+## iOS 0.5.0 (11) candidate preparation
+
+Fresh 2026-09-26 provider reading: highest uploaded iOS build10 is 0.4.1 and VALID. The editable public iOS version remains0.4.0, PREPARE_FOR_SUBMISSION and manual release. This source candidate adds browser sign-in, recovery/help and received-file actions, input/draft and LAN consent fixes, and renewal/refusal hardening. No candidate archive or upload is claimed by this version change. Existing universal products and distribution territories are reused.
+
+
 This is the release operator's source of truth for Relayium's iOS App Store
 record. It records verified code and local signing facts separately from App
 Store Connect and production mutations that still require an explicit release

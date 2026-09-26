@@ -1,5 +1,10 @@
 # Android development
 
+## Android 0.3.0 (9) candidate preparation
+
+This source candidate includes verification hold, help, account deletion request, share fixes and transfer/renewal hardening since public preview0.2.5(8). The public APK manifest remains unchanged. Existing direct-APK channel, foreground-only behavior and signing identity are retained; no Google Play release is introduced.
+
+
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of

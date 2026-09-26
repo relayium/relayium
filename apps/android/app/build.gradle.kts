@@ -39,8 +39,10 @@ android {
         // "0.1.10" sorts before "0.1.9" as text — so it must increase
         // monotonically for every published APK, forever.
         // `scripts/test/android-policy-test.mjs` asserts the two move together.
-        versionCode = 8
-        versionName = "0.2.5"
+        // 0.3.0 (9) candidate: verification hold, help, account management,
+        // share fixes and transfer/renewal hardening. Public feed stays 0.2.5.
+        versionCode = 9
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -1,5 +1,10 @@
 # macOS App Store submission
 
+## macOS 1.4.3 (40) candidate preparation
+
+Fresh 2026-09-26 provider reading: highest uploaded macOS build39 is 1.4.1 and VALID. Public Mac App Store remains1.4.0; direct download remains1.4.1. The new source candidate includes LAN admission consent, removable account-isolated share drafts, expired pairing-code replacement, Inbox refusal explanations and purchase/renewal hardening. Apple silicon only. Installation/owner acceptance, signing, notarization and channel publication remain separate gates.
+
+
 This is the release operator's source of truth for Relayium's Mac App Store
 record. It intentionally separates facts that are already fixed in code or App
 Store Connect from declarations that still require the owner, legal review, or
@@ -161,9 +166,9 @@ the workspace release artifact `artifacts/macos-renewal-release-20260920/`.
   unchanged. The dynamic client-version policy is separately owned (OA-034) and
   was not touched; nothing here claims the dynamic and static policies agree.
 
-**Why `1.4.1` and not `1.5.0`.** Recorded so the choice is not re-litigated:
+**Why `1.4.1` and not `1.4.3`.** Recorded so the choice is not re-litigated:
 `docs/MACOS-RELEASE-POLICY.md` reserves PATCH for a compatible correction and
-MINOR for a backward-compatible user-visible capability, and `1.5.0` was
+MINOR for a backward-compatible user-visible capability, and `1.4.3` was
 considered on that reading. It was classified as a PATCH because what changes
 is the continuity of the cross-network transfer that `1.4.0` already offers —
 a relayed link that used to end at its credential boundary can now carry on

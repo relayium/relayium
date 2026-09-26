@@ -60,71 +60,11 @@ final class BundleVersionTests: XCTestCase {
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
         //
-        // `1.4.1 (39)`: the relay-credential renewal release. A cross-network
-        // link that has carried real user activity can now ask for a fresh
-        // relay credential before its deadline, and the deadline moves only
-        // once the connection has verifiably migrated onto the new credential;
-        // the pairing and negotiated-transfer bounds hardening rides with it.
-        // **Build `38` is spent twice over**: it is the build number of the
-        // public Developer ID/GitHub `macos-v1.4.0` DMG AND of the App Store
-        // Connect upload that went to internal TestFlight on 2026-09-16 and
-        // that Apple has since published as the Mac App Store `1.4.0` release
-        // (public 2026-09-17). Newly signed distribution artifacts cannot
-        // answer to a number two public artifacts already answer to, so
-        // this candidate takes `39` and, per the owner's 2026-09-17 preference
-        // for a distinct visible version on every newly distributed candidate,
-        // its own marketing version.
-        //
-        // `1.4.0 (38)`: the same release, with the window chrome fix for the
-        // opaque title bar that covered the toolbar on macOS 15. **Build `37`
-        // is spent**: its Mac App Store package was archived, exported and
-        // validated by Apple but never uploaded, and a changed product cannot
-        // answer to a signed artifact's number.
-        //
-        // `1.4.0 (37)`: the same release, Apple Silicon only. The owner dropped
-        // Intel for both GitHub and TestFlight on 2026-09-16, after build `36`
-        // had already been archived universal for the Mac App Store. That archive
-        // was never exported or uploaded, but it is a signed artifact answering to
-        // `1.4.0 (36)`, so it is abandoned and **build `36` is spent**; the arm64
-        // artifacts take `37`.
-        //
-        // `1.4.0 (36)`: the public release of that preview — universal Developer
-        // ID/GitHub and internal TestFlight. **Build `35` is spent** as the
-        // private arm64 owner-preview package the owner accepted, and newly
-        // signed distribution artifacts cannot answer to it, so the release
-        // takes the next build and keeps the accepted marketing version. The
-        // App Store Connect macOS floor read back on 2026-09-16 was `29`.
-        //
-        // `1.4.0 (35)`: the preview that removes the sidebar's destination
-        // search. `1.3.14 (34)` was the private Device Inbox check-now preview,
-        // so this candidate takes the next build and its own marketing version.
-        //
-        // `1.3.14 (34)`: the Device Inbox check-now preview. `1.3.13 (33)` was
-        // the private all-surface alignment preview, so this candidate takes the
-        // next build and its own marketing version.
-        //
-        // `1.3.13 (33)`: the all-surface alignment preview. Builds `31` and
-        // `32` were the private 1.3.12 UI previews, so the next candidate takes
-        // the next build and its own marketing version rather than a third
-        // artifact answering to `1.3.12`.
-        //
-        // **Build `30` is spent**: it was signed and packaged at
-        // `1.3.11` as a private owner-preview candidate on 2026-09-16, so the
-        // interaction follow-up after it takes the next build and its own
-        // marketing version rather than a second artifact answering to `1.3.11`.
-        //
-        // **`1.3.10 (28)` is spent**, and the marketing version
-        // moves with it rather than only the build. An authenticated App Store
-        // Connect read-back on 2026-09-07 shows build `28` uploaded and `VALID`
-        // on the universal-purchase record, with the `1.3.10` macOS version in
-        // `PENDING_DEVELOPER_RELEASE` — approved and awaiting a manual release.
-        // The Developer ID/GitHub `1.3.10` is separately public. Two artifacts
-        // therefore already answer to `1.3.10` — one public on that channel, one
-        // approved and awaiting release on the App Store — so a candidate that
-        // carries the newer cross-platform navigation work cannot reuse that
-        // number without making the version string stop identifying a build.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.1", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "39", occurrences: 10)
+        // Fresh provider readback on 2026-09-26 confirms build39 was consumed.
+        // The owner selected 1.4.3 (40) for the next candidate. This assertion
+        // does not advance either channel's published version.
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.3", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "40", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon
@@ -191,24 +131,10 @@ final class BundleVersionTests: XCTestCase {
         // App Store version on the record and does not touch the 0.3.1
         // submission or its build.
         //
-        // 0.4.1 carries the relay-credential renewal that 0.4.0 (9) predates:
-        // build 9 was archived from `4d694a9e`, an ancestor of the renewal
-        // commit, so a build from this tree is a product change rather than a
-        // rebuild and takes its own visible version under the same 2026-09-17
-        // preference. It is still not an App Store version on the record. The
-        // 0.3.1 App Store version is separate and, on a 2026-09-20 read-back,
-        // DEVELOPER_REJECTED and still manual; nothing here touches it.
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.4.1", occurrences: 4)
-        //
-        // 9 is consumed: 0.4.0 (9) was archived, exported and uploaded to
-        // internal TestFlight on 2026-09-18 from `4d694a9e` and read back
-        // VALID, so this candidate takes 10. The build number stays monotonic
-        // across version changes — it did not restart for 0.3.2 or 0.4.0 and
-        // does not restart for 0.4.1 — and iOS carries its own pre-release
-        // sequence on the universal-purchase record, independent of macOS,
-        // whose builds reached 39. 10 is a project value here: nothing has
-        // been archived or uploaded under it, and the highest consumed build
-        // must be read back again before it is.
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "10", occurrences: 4)
+        // Fresh provider readback on 2026-09-26 confirms 0.4.1 (10) VALID.
+        // New user workflows take 0.5.0 (11), independent of the Mac sequence.
+        // This is source preparation, not an upload or a public release.
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.0", occurrences: 4)
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "11", occurrences: 4)
     }
 }

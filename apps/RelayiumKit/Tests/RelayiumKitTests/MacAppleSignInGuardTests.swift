@@ -280,46 +280,13 @@ final class MacAppleSignInGuardTests: XCTestCase {
 
     // MARK: - version
 
-    /// This release is 1.4.1, and the App Store review fixes it carries
-    /// forward are still in place.
-    ///
-    /// The version read here is the one the project is BUILT at, which is not
-    /// the same fact as the version Apple is currently serving: `1.3.10`
-    /// (build `28`), released on 2026-09-14, stays the published Mac App Store
-    /// release until a later build is actually submitted and released; before
-    /// that it was `1.3.8`. `1.3.9` is why those are two facts rather than
-    /// one — it was built and consumed build 27 in TestFlight, but was never
-    /// released, so the previous BUILT version moved while the published one
-    /// did not. `1.3.10` then made the gap wider in both directions: it is
-    /// public on the Developer ID/GitHub channel AND, on a 2026-09-07 read-back,
-    /// approved and `PENDING_DEVELOPER_RELEASE` on the Mac App Store, which it
-    /// stayed until it went public on 2026-09-14.
-    /// `web/mac-app-store-release.json` owns that published fact, and
-    /// `MacSurfaceGuardTests` is what reads it. `1.3.11` (build 30), `1.3.12`
-    /// (builds 31 and 32), `1.3.13` (build 33), `1.3.14` (build 34) and
-    /// `1.4.0` (build 35) were private owner-preview candidates only, and
-    /// were neither submitted nor published on either channel. `1.4.0`
-    /// (build 38, Apple silicon only; build 36 was a universal App Store
-    /// archive abandoned unexported, and build 37's App Store package was
-    /// validated but abandoned unuploaded) went public on BOTH channels: the
-    /// Developer ID/GitHub release `macos-v1.4.0` on 2026-09-16, and — after
-    /// the owner submitted and released the build that had gone to internal
-    /// TestFlight — the Mac App Store on 2026-09-17, which is what
-    /// `mac-app-store-release.json` names today. So the gap between the two
-    /// facts is closed at `1.4.0` for the moment, which is an ordinary state
-    /// rather than a rule: it reopens the instant either channel moves.
-    ///
-    /// It reopens here. The project is now BUILT at `1.4.1` (build `39`), the
-    /// relay-credential renewal release, and it is being prepared for GitHub
-    /// and internal TestFlight only. **Nothing answers to `1.4.1` on either
-    /// public channel yet**, so this assertion is deliberately about the
-    /// project file alone; the published-version assertions elsewhere still
-    /// read `1.4.0` out of the two canonical records, and must not be moved to
-    /// follow this one.
-    func testTheReleaseIsVersionOnePointFourPointOne() throws {
+    /// Candidate source identity is separate from published metadata. The owner
+    /// selected 1.4.3 (40); direct download stays 1.4.1 and the Mac App Store
+    /// stays 1.4.0 until verified publication. Preserve the review fixes below.
+    func testTheCandidateIsVersionOnePointFourPointThree() throws {
         let project = projectText
-        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.4.1;"))
-        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.4.0;"),
+        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.4.3;"))
+        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.4.1;"),
                        "a target was left on the previous version")
         // **The App Store review fixes must not come back.** The app is named
         // `Relayium`, never "… for Mac", and the login item is never registered

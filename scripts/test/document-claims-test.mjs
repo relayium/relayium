@@ -326,7 +326,7 @@ const IOS_STATUS_SENTENCE = "iOS development resumed on 2026-09-01 at version 0.
   + "TestFlight builds were used for development acceptance before the earlier pause, and "
   + "neither the iOS app nor its share extension is publicly offered.";
 const ROOT_IOS_STATE = "`apps/ios/` exists in this repository and its development has "
-  + "**resumed**, at version `0.4.1`";
+  + "**resumed**, at version `0.5.0`";
 
 const ban = (doc, shape, needle, why) => ({ kind: "ban", doc, shape, needle, why });
 const need = (doc, shape, needle, why) => ({ kind: "require", doc, shape, needle, why });
@@ -358,7 +358,7 @@ const NEEDLE_CLAIMS = [
   // 2026-09-20 incident turned red with nobody watching.
   need(APPS, "flat", IOS_STATUS_SENTENCE, WHY.iosStatus),
   ban(APPS, "flat", "are engineering builds distributed through internal TestFlight", WHY.iosStatus),
-  need(APPS, "flat", "**In development at 0.4.1 and not public**", WHY.iosStatus),
+  need(APPS, "flat", "**In development at 0.5.0 and not public**", WHY.iosStatus),
   need(APPS, "flat", "**Development resumed 2026-09-01, at version 0.3.0.**", WHY.iosStatus),
   ban(APPS, "flat", "**Development paused", WHY.iosStatus),
   ban(README, "flat", "The iOS app runs its transfer, nearby and account workflows", WHY.iosStatus),
@@ -721,11 +721,11 @@ const realStore = verdict.failures.length === 0 ? JSON.parse(real[APP_STORE]) : 
 const MUTATIONS = [
   // -- the incident, replayed: the document moves and the pin does not
   { name: "INCIDENT: apps/README.md moves the iOS development version without this pin moving",
-    world: () => sub(APPS, "**In development at 0.4.1 and not public**",
+    world: () => sub(APPS, "**In development at 0.5.0 and not public**",
       "**In development at 0.4.2 and not public**"),
-    expect: [`require|${APPS}|flat|**In development at 0.4.1 and not public**`] },
+    expect: [`require|${APPS}|flat|**In development at 0.5.0 and not public**`] },
   { name: "INCIDENT: the root README moves the iOS development version without this pin moving",
-    world: () => sub(README, "at version `0.4.1`", "at version `0.4.2`"),
+    world: () => sub(README, "at version `0.5.0`", "at version `0.4.2`"),
     expect: [`require|${README}|flat|${ROOT_IOS_STATE}`, `require|${README}|deliveryFlat|${ROOT_IOS_STATE}`] },
 
   // -- the records
@@ -824,7 +824,7 @@ const MUTATIONS = [
     world: () => append(README, `${"x".repeat(80)} estimated${"y".repeat(61)}7`),
     refuse: /./ },
   { name: "the iOS status sentence is re-wrapped across lines",
-    world: () => sub(APPS, "**In development at 0.4.1 and not public**", "**In development\nat 0.4.1 and\n   not public**"),
+    world: () => sub(APPS, "**In development at 0.5.0 and not public**", "**In development\nat 0.5.0 and\n   not public**"),
     refuse: /./ },
   { name: "the affirmative Android sentence stays writable",
     world: () => append(README, "The Relayium app for Android is a public preview."),

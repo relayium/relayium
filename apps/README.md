@@ -1,5 +1,9 @@
 # Relayium native apps
 
+Current source candidates: macOS **1.4.3 (40)**, iOS **0.5.0 (11)** and Android
+**0.3.0 (9)**. These are preparation versions; published downloads below remain
+unchanged until the corresponding candidate passes release acceptance.
+
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
   It vends two products. `RelayiumKit` is the transport stack plus the
   `RelayiumAppKit` view-model layer, which both apps link. `RelayiumShareKit` is
@@ -21,7 +25,7 @@
   inside the released 1.4.1 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
-  development at 0.4.1 and not public.** The bundle id is macOS's on purpose:
+  development at 0.5.0 and not public.** The bundle id is macOS's on purpose:
   iOS and macOS are two platforms of ONE universal-purchase App Store record
   (Apple ID `6801142976`), and Apple requires every platform in such a record to
   carry the same Bundle ID. That is also what puts an iOS build in front of the
@@ -78,7 +82,7 @@
   outstanding gap are tracked in `windows/DURABLE-PARITY.md`.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
-  only. **In development at 0.4.1 and not public.** Its identifier is *not*
+  only. **In development at 0.5.0 and not public.** Its identifier is *not*
   `com.relayium.mac.Share` — that is the macOS extension. The target record's
   iOS TestFlight build metadata reports extension application identifier
   `7PVYUG4YQS.com.relayium.mac.ShareIOS`, so that is what this project must
@@ -1193,7 +1197,7 @@ Developer ID identity.
 
 `apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.mac`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
-same local `RelayiumKit` package. **In development at 0.4.1 and not public** —
+same local `RelayiumKit` package. **In development at 0.5.0 and not public** —
 internal TestFlight builds were used for development acceptance before the
 earlier pause, but there is no public App Store listing and the website offers
 no iOS download.
