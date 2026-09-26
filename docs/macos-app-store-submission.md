@@ -1,8 +1,32 @@
 # macOS App Store submission
 
-## macOS 1.4.3 (40) candidate preparation
+## macOS 1.4.3 (40) — direct release published; store candidate not uploaded
 
-Fresh 2026-09-26 provider reading: highest uploaded macOS build39 is 1.4.1 and VALID. Public Mac App Store remains1.4.0; direct download remains1.4.1. The new source candidate includes LAN admission consent, removable account-isolated share drafts, expired pairing-code replacement, Inbox refusal explanations and purchase/renewal hardening. Apple silicon only. Installation/owner acceptance, signing, notarization and channel publication remain separate gates.
+The stable GitHub release [`macos-v1.4.3`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.3)
+was published on 2026-09-26 at 15:33:02 UTC. It contains the Apple silicon
+Developer ID build **1.4.3 (40)** from source `afb04a9175344bebd97c1d21b220b0ced01c033b`.
+The [release workflow](https://github.com/relayium/relayium/actions/runs/36248854029)
+passed its complete macOS gates, Apple notarization, stapling and Gatekeeper
+assessment. Independent mounted-app and Share-extension verification, the
+source-pinned Sparkle signature, and rejection of an altered signature passed.
+The final DMG SHA-256 is
+`1e8fc9db32b848046e01e827c5785f76e4bd52c9a485d0e45c28ce0f4ff8c269`.
+Website deployment is verified separately from GitHub publication.
+
+Changes include LAN admission consent, removable account-isolated share drafts,
+expired pairing-code replacement, actionable Inbox refusal explanations and
+relay-renewal hardening. The direct build does not create an Apple purchase
+model. It remains foreground-oriented; background upload and transfer recovery
+across app restarts are not added by this release. Actual long-transfer,
+network-change and lock/wake results must be recorded separately from CI.
+
+The **1.4.3 (40) store package** has been archived, exported and independently
+verified, but has **not been uploaded**. The 2026-09-26 provider reading still
+records the highest uploaded macOS build as **1.4.1 (39), VALID**; the public Mac
+App Store remains **1.4.0**. StoreKit source reviews passed conditionally on
+actual sandbox cancellation and account-switch recovery evidence. That evidence
+remains required before this store candidate reaches TestFlight or the App Store;
+the direct release does not establish acceptance of those purchase paths.
 
 
 This is the release operator's source of truth for Relayium's Mac App Store
