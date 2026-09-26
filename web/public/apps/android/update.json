@@ -3,14 +3,14 @@
   "android": {
     "available": true,
     "applicationId": "com.relayium.android",
-    "versionCode": 8,
-    "versionName": "0.2.5",
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.2.5/Relayium-0.2.5-8.apk",
-    "sha256": "74547a88053c81d600704b2ec1d04adcbb8fb8e6cfcf4c023d08ba82322fd616",
-    "size": 45947466,
+    "versionCode": 9,
+    "versionName": "0.3.0",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.3.0/Relayium-0.3.0-9.apk",
+    "sha256": "f3377fc8960e06c3b3a65450ffdb394ff22816a056d2475ad505cf265b28ae2f",
+    "size": 46013002,
     "notes": {
-      "en": "Public preview 0.2.5. Cross-network connections can now renew their relay credential. A connection you have actually been using in the last ten minutes can ask for a fresh credential before its deadline instead of ending at it, and the deadline is extended only after the connection has moved onto the new credential and that move has been checked. Both devices need this update, and the account that showed the pairing code still decides: its quota and the relay policy can refuse, and a refusal is reported while the connection keeps the time it already had. This is about staying connected, not speed — no transfer-speed change is claimed or measured. Pairing and transfer limits are now checked explicitly, so a peer that negotiates a limit outside the allowed range is refused; the previous version still pairs normally, it just does not renew. Everything still runs while the app is open, with no background transfer. Direct APK only, not on Google Play, and it contains no Play Services and no Play Billing.",
-      "zh": "公开预览版 0.2.5。跨网络连接现在可以续期中继凭据：最近十分钟内你确实在用的连接，可以在到期前申请一份新的凭据，而不是到点直接结束；只有在连接已经切换到新凭据、并且这次切换通过校验之后，到期时间才会延后。两端设备都需要装这次更新，并且仍由出示配对码那一方的账户决定：该账户的配额和中继策略都可能拒绝，被拒绝时会如实提示，连接保持原有的到期时间。这针对的是连接的持续性，不是速度——没有声称也没有测量任何传输速度变化。配对与传输的上限现在会被明确校验，协商出超出允许范围的上限的对端会被拒绝；上一个版本仍然可以正常配对，只是不会续期。所有功能仍然只在应用打开时运行，没有后台传输。仅以 APK 直接分发，不在 Google Play 上架，不含 Play 服务与 Play 结算。"
+      "en": "Public preview 0.3.0. Adds transfer verification controls, help and an account-deletion request entry, and improves sharing and relay-renewal failure handling. Transfers remain foreground-only. Direct APK distribution; no Google Play, Play Services or Play Billing.",
+      "zh": "公开预览版 0.3.0。新增传输验证选项、帮助和账号删除申请入口，改进系统分享及中继续期失败处理。传输仍需保持应用在前台。仅以 APK 直接分发，不在 Google Play 上架，不含 Play 服务或 Play 结算。"
     }
   }
 }

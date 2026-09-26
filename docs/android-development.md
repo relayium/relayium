@@ -1,15 +1,29 @@
 # Android development
 
-## Android 0.3.0 (9) candidate preparation
-
-This source candidate includes verification hold, help, account deletion request, share fixes and transfer/renewal hardening since public preview0.2.5(8). The public APK manifest remains unchanged. Existing direct-APK channel, foreground-only behavior and signing identity are retained; no Google Play release is introduced.
-
-
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The published build is 0.2.5 (versionCode 8), and it is the source:
-the update feed, the download surface and this tree describe one build.
+any kind. The release manifest selects 0.3.0 (versionCode 9).
+
+### Provenance of the 0.3.0 release
+
+The signed candidate `Relayium-0.3.0-9.apk` was built from
+`e96dc9e6cfbd5abaf22ca241e015a47367557410`. Its SHA-256 is
+`f3377fc8960e06c3b3a65450ffdb394ff22816a056d2475ad505cf265b28ae2f`
+and its size is 46,013,002 bytes. The signing certificate remains
+`ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`.
+The release tag names the subsequent metadata commit; Android runtime inputs
+remain identical to the candidate source. Publication uses the existing GitHub
+pre-release channel and preserves the CLI's repository-wide latest alias.
+
+The owned AOSP emulator passed an upgrade from the published 0.2.5 APK:
+UID and private-file sentinel retained, clean cold launch, and downgrade refused.
+Signature verification rejected a modified APK. These are emulator results;
+physical-device and real-network acceptance of these exact bytes remains pending.
+
+Against 0.2.5, this release adds transfer verification controls, help and an
+account-deletion request entry, and improves sharing and relay-renewal failure
+handling. Transfers still require the app to remain in the foreground.
 
 ### Provenance of the 0.2.5 release — read this before auditing the tag
 
