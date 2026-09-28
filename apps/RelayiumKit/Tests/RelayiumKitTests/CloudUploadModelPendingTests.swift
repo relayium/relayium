@@ -669,6 +669,48 @@ extension CloudUploadModelPendingTests {
         XCTAssertEqual(store.plan(for: "acct-1")?.jobId, live.jobId)
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: protectedRoot.appendingPathComponent(collision.jobId).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.jobURL(for: collision.jobId).path),
+                      "the shared copy of a conflict was deleted (R2)")
+        XCTAssertEqual(forbidden.calls, 0)
+    }
+
+    // M4
+    func testRecoveryKeepsAConflictingSharedCopyAndItsKeyButNeverOffersIt() async throws {
+        let store = makeStore()
+        let keys = InMemoryStoredLinkKeyStore()
+
+        // A retired share and an unreadable entry, each with a protected twin.
+        let retired = try await stagedShare(in: store, keys: keys)
+        _ = try store.markRetired(retired)
+        let unreadable = "SHAREDUNREAD0001"
+        let unreadableDir = sharedRoot.appendingPathComponent(unreadable)
+        try FileManager.default.createDirectory(at: unreadableDir, withIntermediateDirectories: true)
+        try Data("{not a plan".utf8).write(to: unreadableDir.appendingPathComponent("plan.json"))
+        try await keys.save(id: unreadable, keyB64url: Self.hygieneKey)
+        try FileManager.default.createDirectory(at: protectedRoot, withIntermediateDirectories: true)
+        for id in [retired.jobId, unreadable] {
+            try FileManager.default.copyItem(at: sharedRoot.appendingPathComponent(id),
+                                             to: protectedRoot.appendingPathComponent(id))
+        }
+
+        let forbidden = ForbiddenTransport()
+        let model = makeModel(transport: forbidden, store: makeStore(),
+                              pendingKeys: keys, finalKeys: InMemoryStoredLinkKeyStore())
+        model.recoverPendingJob(for: "acct-1")
+        await model.recoveryTask?.value
+
+        for id in [retired.jobId, unreadable] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: sharedRoot.appendingPathComponent(id).path),
+                          "the shared copy of conflict \(id) was deleted (R2)")
+            let key = try await keys.key(for: id)
+            XCTAssertEqual(key, Self.hygieneKey, "the key of conflict \(id) was removed")
+        }
+        // `plan(for:)` offers only a readable, valid, non-retired, unfinalized
+        // share with its staged bytes: the retained copies are neither.
+        guard case .idle = model.state else {
+            return XCTFail("a retained conflicting copy was offered, got \(model.state)")
+        }
+        XCTAssertNil(store.plan(for: "acct-1"))
         XCTAssertEqual(forbidden.calls, 0)
     }
 

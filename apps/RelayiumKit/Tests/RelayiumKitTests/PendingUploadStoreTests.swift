@@ -406,7 +406,9 @@ final class PendingUploadStoreTests: XCTestCase {
 /// non-retired plan whose staged bytes are gone (c) — and only once its own
 /// removal succeeded and the protected sibling does not hold the same id.
 /// Everything else it removes (unreadable, plan-less, newer-version,
-/// mismatched id, finalized share) is never listed.
+/// mismatched id, finalized share) is never listed. An entry whose directory
+/// name the protected sibling root also holds is a conflict (R2): it is neither
+/// removed nor listed, whatever it contains (C1–C5).
 extension PendingUploadStoreTests {
     private var sharedRoot: URL { root.appendingPathComponent("PendingUploads") }
     private var protectedRoot: URL { PendingUploadStore.protectedDeviceRoot(besides: sharedRoot) }
@@ -538,6 +540,101 @@ extension PendingUploadStoreTests {
         XCTAssertEqual(makeStore().sweepIncomplete(), [],
                        "the key is filed by job id; the protected copy still needs it")
         XCTAssertTrue(exists(protectedRoot.appendingPathComponent(plan.jobId)),
+                      "the shared sweep touched the protected root")
+        // C1: R2 — a conflict's shared copy is not deleted either.
+        XCTAssertTrue(exists(store.jobURL(for: plan.jobId)),
+                      "the shared sweep deleted one copy of a conflict (R2)")
+        XCTAssertEqual(makeStore().protectedDeviceStore().ownershipConflicts(), [plan.jobId],
+                       "the retained pair must still be reported as a conflict")
+    }
+
+    /// The entries whose shared copy the sweep would delete, one of each
+    /// failing guard. Returns every entry's shared directory and the ids a
+    /// sweep lists when NO protected twin exists.
+    private func sweepableSharedEntries(
+        in store: PendingUploadStore
+    ) throws -> (dirs: [URL], listedWithoutTwin: [String]) {
+        let unreadable = sharedRoot.appendingPathComponent("SHAREDUNREAD0001")
+        try FileManager.default.createDirectory(at: unreadable, withIntermediateDirectories: true)
+        try Data("{not a plan".utf8).write(to: unreadable.appendingPathComponent("plan.json"))
+        let planless = sharedRoot.appendingPathComponent("SHAREDPLANLESS01")
+        try FileManager.default.createDirectory(at: planless, withIntermediateDirectories: true)
+
+        let newer = try stagedShare(in: store)
+        _ = try store.markRetired(newer)
+        try rewritePlan(store.planURL(for: newer.jobId)) {
+            $0["version"] = PendingUploadPlan.currentVersion + 1
+        }
+
+        let moved = try stagedShare(in: store)
+        _ = try store.markRetired(moved)
+        let mismatched = sharedRoot.appendingPathComponent("SHAREDMISMATCH01")
+        try FileManager.default.moveItem(at: store.jobURL(for: moved.jobId), to: mismatched)
+
+        let stagingGone = try stagedShare(in: store)
+        try FileManager.default.removeItem(at: store.jobURL(for: stagingGone.jobId)
+            .appendingPathComponent("staged/0"))
+
+        let retired = try stagedShare(in: store)
+        _ = try store.markRetired(retired)
+
+        let finalized = try stagedShare(in: store)
+        _ = try store.markFinalized(finalized, storedId: "STOREDSHARE00001")
+
+        let dirs = [unreadable, planless, store.jobURL(for: newer.jobId), mismatched,
+                    store.jobURL(for: stagingGone.jobId), store.jobURL(for: retired.jobId),
+                    store.jobURL(for: finalized.jobId)]
+        return (dirs, [stagingGone.jobId, retired.jobId].sorted())
+    }
+
+    /// Give a shared entry a protected twin: the same directory name, as a copy.
+    private func twinInProtectedRoot(_ shared: URL) throws {
+        try FileManager.default.createDirectory(at: protectedRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: shared,
+                                         to: protectedRoot.appendingPathComponent(shared.lastPathComponent))
+    }
+
+    // C2 + C3 (C1 is the retired entry, also asserted in T7)
+    func testSharedSweepKeepsEveryConflictingEntryWhateverItsPlanSays() throws {
+        let store = makeStore()
+        let (dirs, _) = try sweepableSharedEntries(in: store)
+        for dir in dirs { try twinInProtectedRoot(dir) }
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), [], "a conflicting id was listed for key removal")
+        for dir in dirs {
+            XCTAssertTrue(exists(dir), "\(dir.lastPathComponent): the shared copy of a conflict was deleted (R2)")
+            XCTAssertTrue(exists(protectedRoot.appendingPathComponent(dir.lastPathComponent)),
+                          "\(dir.lastPathComponent): the shared sweep touched the protected root")
+        }
+        XCTAssertEqual(makeStore().protectedDeviceStore().ownershipConflicts(),
+                       dirs.map(\.lastPathComponent).sorted(),
+                       "every retained pair must still be reported as a conflict")
+        XCTAssertNil(store.plan(for: "acct-1"), "a retained conflicting copy was offered")
+    }
+
+    // C4 (control)
+    func testSharedSweepDeletesTheSameEntriesAsBeforeWithoutAProtectedTwin() throws {
+        let store = makeStore()
+        let (dirs, listed) = try sweepableSharedEntries(in: store)
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), listed)
+        for dir in dirs {
+            XCTAssertFalse(exists(dir), "\(dir.lastPathComponent) was not swept as before")
+        }
+    }
+
+    // C5
+    func testSharedSweepDeletesADirectoryWhoseNameIsNotAnIdEvenWithATwinName() throws {
+        // `bad.name` cannot be a StoredObjectID, so no protected job can carry
+        // it and it can never conflict — even when a same-named directory
+        // happens to exist in the protected root.
+        let bad = sharedRoot.appendingPathComponent("bad.name")
+        try FileManager.default.createDirectory(at: bad, withIntermediateDirectories: true)
+        try twinInProtectedRoot(bad)
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), [])
+        XCTAssertFalse(exists(bad), "an entry that cannot conflict was retained")
+        XCTAssertTrue(exists(protectedRoot.appendingPathComponent("bad.name")),
                       "the shared sweep touched the protected root")
     }
 

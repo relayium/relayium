@@ -1426,6 +1426,10 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// mismatched-id entry, and a finalized share, are still deleted exactly
     /// as every released build deletes them, but never listed: the id or the
     /// key's fate is not provable from what is on disk.
+    ///
+    /// Except for a conflict (R2): an entry whose directory name the protected
+    /// sibling root also holds is neither deleted nor listed, whatever its plan
+    /// says — see the shared-root loop below.
     @discardableResult
     public func sweepIncomplete() -> [String] {
         lock.lock()
@@ -1466,10 +1470,27 @@ public final class PendingUploadStore: @unchecked Sendable {
         //    copy of the key that opens the link;
         //  - an unreadable, plan-less, newer-version or mismatched-id entry is
         //    never listed: its id, or what a newer build meant by it, is unproven.
+        //
+        // The one change to the deletion set is R2: a job id present in BOTH
+        // roots is a conflict, and neither copy is deleted, by anyone, until a
+        // person resolves it. The protected store reports the pair from the
+        // directory names alone (`ownershipConflicts`), so the shared copy is
+        // retained whatever it contains — retired, unreadable, plan-less,
+        // newer-version, staging-gone or a finalized share — because deleting
+        // it would silently turn the conflict into sole protected ownership.
+        // The test is on the directory NAME with the same checked-id rule as
+        // `protectedRootHolds`: a name that is not a valid StoredObjectID can
+        // never be a protected job (that root only files checked ids), so it
+        // cannot conflict and is still deleted as before. The protected root's
+        // own copy is never touched by this sweep. Released builds (up to
+        // 1.4.3) still delete such a shared copy at their launch; this build
+        // cannot protect against them.
         var releasedKeys: [String] = []
         let entries = (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
         for entry in entries {
             let name = entry.lastPathComponent
+            // (R2) Conflict: kept and never listed.
+            if protectedRootHolds(jobId: name) { continue }
             let planFile = entry.appendingPathComponent("plan.json")
             // (a) unreadable or plan-less, (b) invalid for this build: removed,
             // never listed.
