@@ -146,12 +146,18 @@ jobs:
   # `device-inbox-e2e`, `mixed-link-e2e`); the rest — check, Vitest, build,
   # a11y, five browser journeys, the Windows downloader — read no server file
   # except the few in `LIGHT_SERVER_INPUTS`. So a change whose lane-selecting
-  # paths are all OTHER server files runs only the Go-running jobs.
+  # paths are all OTHER server files skips the two LIGHT jobs (`test` and
+  # `windows-temporary-downloader`).
   #
-  # Every other job `needs:` this one and runs unless its output is exactly
-  # `'false'`: a helper that fails to answer runs everything, and a failure of
-  # this job fails the lane. Skipped jobs report success to the merge gate, so
-  # the helper fails CLOSED (every uncertainty is light=true server=true) and
+  # Only those two jobs `needs:` this one, and each runs unless the `light`
+  # output is exactly `'false'`: a helper that fails to answer runs them, and a
+  # failure of this job fails the lane. The three Go-running jobs carry NO
+  # `needs:` and NO `if:` — they run whenever this lane is selected, because a
+  # hosted gate that can be skipped is a gate whose green means nothing (the C2
+  # lesson `web/e2e/go-server.test.mjs` pins for mixed-link-e2e). The `server`
+  # output is therefore informational only: it is logged and published, and no
+  # job reads it. Skipped jobs report success to the merge gate, so the helper
+  # fails CLOSED (every uncertainty is light=true) and
   # `scripts/test/web-lane-scope-test.mjs` pins both the helper's answers and
   # this wiring. Pull requests diff the merge commit against the base; `main`
   # pushes diff against `before`; anything else runs everything.
@@ -267,8 +273,6 @@ jobs:
   # tampered box to FAIL, so a harness that silently stopped proving anything is
   # itself a red build.
   sealed-box-interop:
-    needs: scope
-    if: needs.scope.outputs.server != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -296,8 +300,6 @@ jobs:
   # This is the only gate that can show "uploaded is not saved", because it is
   # the only one with a receiver that has genuinely not saved anything yet.
   device-inbox-e2e:
-    needs: scope
-    if: needs.scope.outputs.server != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -337,8 +339,6 @@ jobs:
   # step here starts one — because a suite that needs a human to set up its
   # world is a suite that runs when a human remembers.
   mixed-link-e2e:
-    needs: scope
-    if: needs.scope.outputs.server != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -364,21 +364,21 @@ jobs:
       # Two more real-Chrome suites that no hosted job ran until 2026-09-28
       # (audit D-M1). They need this job's built dist and Go toolchain and
       # nothing heavier, so they share it rather than paying for another
-      # checkout, `npm ci` and build. `!cancelled()` so a mixed-link failure
-      # does not hide their own verdicts. Each takes seconds locally.
+      # checkout, `npm ci` and build. No step-level condition: this job carries no
+      # conditions at all (web/e2e/go-server.test.mjs), so a mixed-link failure
+      # ends the job red before these run: a failure there is already red, and
+      # these two then report after the fix. Each takes seconds locally.
       #
       # Relay renewal: the SHIPPED renewal controller, bundled from source,
       # drives a real ICE restart between two real RTCPeerConnections. It
       # claims nothing about a server or a TURN relay; see the script header.
       - name: relay renewal, real ICE restart (e2e/relay-renewal.mjs)
-        if: ${{ !cancelled() }}
         run: npm run test:e2e:relay-renewal
       # Web Share Target: a multipart share reaches the installed production
       # service worker and the outbox. The scenario needs a server it does not
       # start itself; the wrapper builds one, serves this dist through it with
       # a throwaway database, and tears it down.
       - name: Web Share Target through the production service worker (e2e/share-target.mjs)
-        if: ${{ !cancelled() }}
         working-directory: .
         run: bash scripts/ci/share-target-e2e.sh
 

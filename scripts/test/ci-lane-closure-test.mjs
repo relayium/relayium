@@ -82,7 +82,9 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { CONTROL_FILES, LANES, selectLanes } from "../ci/select-lanes.mjs";
-import { SERVER_JOBS, classify as classifyWebScope } from "../ci/web-lane-scope.mjs";
+import {
+  BILLING_DOC, BILLING_DOC_READER, BILLING_DOC_ROOTS, SERVER_JOBS, classify as classifyWebScope,
+} from "../ci/web-lane-scope.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MANIFEST = "scripts/ci/lane-external-inputs.json";
@@ -567,6 +569,53 @@ export function closureFailures({ workflowsDir } = {}) {
         + `${missed.length > 1 ? ` and ${missed.length - 1} more` : ""} (${why}), but a change to it alone `
         + `classifies light=false in scripts/ci/web-lane-scope.mjs, so those jobs would be skipped; add it `
         + `to LIGHT_SERVER_INPUTS`);
+    }
+  }
+
+  // Declared DYNAMIC READERS: tests whose inputs are named by a document at run
+  // time, so no scan of the test's source can see them. Each entry's document
+  // is read here with the reader's own ROOTS (parsed out of the reader, so a
+  // changed root list cannot drift), and every file it cites must select the
+  // lane — and, in the web lane, classify `light` so the job that runs the
+  // reader is not skipped. Anything unreadable fails.
+  for (const entry of manifest.dynamicReaders ?? []) {
+    const label = `dynamicReaders ${entry.lane} ${entry.reader}`;
+    let readerText;
+    let markdown;
+    try { readerText = read(entry.reader); } catch (err) { failures.push(`${label}: reader unreadable (${err.code ?? err.message})`); continue; }
+    try { markdown = read(entry.document); } catch (err) { failures.push(`${label}: document ${entry.document} unreadable (${err.code ?? err.message})`); continue; }
+    const rootsSource = /const ROOTS = (\[[^\]]*\]);/.exec(readerText)?.[1];
+    let roots = null;
+    try { roots = rootsSource ? JSON.parse(rootsSource) : null; } catch { roots = null; }
+    if (!Array.isArray(roots) || roots.length === 0) {
+      failures.push(`${label}: no parseable \`const ROOTS = [...]\` in the reader, so the files it opens are unknown`);
+      continue;
+    }
+    if (entry.lane === "web") {
+      if (entry.reader !== BILLING_DOC_READER || entry.document !== BILLING_DOC) {
+        failures.push(`${label}: scripts/ci/web-lane-scope.mjs scans ${BILLING_DOC} for ${BILLING_DOC_READER}; the two declarations disagree`);
+      }
+      if (JSON.stringify(roots) !== JSON.stringify(BILLING_DOC_ROOTS)) {
+        failures.push(`${label}: the reader's ROOTS ${JSON.stringify(roots)} differ from web-lane-scope.mjs BILLING_DOC_ROOTS ${JSON.stringify(BILLING_DOC_ROOTS)}`);
+      }
+    }
+    const cited = new Set();
+    for (const match of markdown.matchAll(/`([A-Za-z0-9_/.-]+\.(?:go|ts|mjs|svelte))(?::\d+(?:-\d+)?)?`/g)) {
+      const path = roots.map((root) => (root ? `${root}/${match[1]}` : match[1])).find((c) => tracked.has(c));
+      if (path) cited.add(path);
+    }
+    if (cited.size === 0) { failures.push(`${label}: ${entry.document} resolves to no files at all`); continue; }
+    for (const path of [...cited].sort()) {
+      checked += 1;
+      if (!lanesFor(path).has(entry.lane)) {
+        failures.push(`${entry.lane} reads ${path} (${entry.reader} via ${entry.document}) but a change to it does not select ${entry.lane}`);
+        continue;
+      }
+      if (entry.lane === "web" && path.startsWith("server/")
+        && !classifyWebScope([path], { workflowsDir: webWorkflows }).light) {
+        failures.push(`web job(s) [${entry.jobs.join(", ")}] read ${path} (${entry.reader} via ${entry.document}), but a `
+          + `change to it alone classifies light=false in scripts/ci/web-lane-scope.mjs, so those jobs would be skipped`);
+      }
     }
   }
 

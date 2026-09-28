@@ -5,17 +5,25 @@
 //
 // 1. Rows: a change set → { light, server } from `scripts/ci/web-lane-scope.mjs`.
 // 2. Fail closed: every uncertainty answers light=true server=true.
-// 3. Wiring: web.yml has a `scope` job running the helper; every SERVER_JOBS
-//    job is gated on `server`, every other job on `light`, each with
-//    `!= 'false'` so a missing output runs the job; and no job is ungated.
-// 4. Mutations: a broken classifier and a removed gate must each be reported.
+// 3. Wiring: web.yml has a `scope` job, with no `if:`, running the helper.
+//    Every LIGHT job (anything not in SERVER_JOBS) has `needs: scope` and
+//    `if: needs.scope.outputs.light != 'false'`, so a missing output runs it.
+//    Every Go-running job (SERVER_JOBS) has NO `if:` and NO `needs: scope`: it
+//    runs whenever the lane is selected, because a hosted gate that can be
+//    skipped is a gate whose green means nothing (the C2 lesson
+//    web/e2e/go-server.test.mjs pins for mixed-link-e2e). The helper's
+//    `server` output is informational only; no job reads it.
+// 4. Mutations: a broken classifier, a removed light gate, and a GATED
+//    Go-running job must each be reported.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { LIGHT_SERVER_INPUTS, SERVER_JOBS, classify, decide } from "../ci/web-lane-scope.mjs";
+import {
+  BILLING_DOC, LIGHT_SERVER_INPUTS, SERVER_JOBS, billingDocServerInputs, classify, decide,
+} from "../ci/web-lane-scope.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const failures = [];
@@ -24,18 +32,22 @@ const check = (ok, message) => { if (!ok) failures.push(message); };
 // ── 1. rows ─────────────────────────────────────────────────────────────────
 
 export const ROWS = [
-  [["server/account/pairroom.go"], { light: false, server: true }, "server-only → only the Go-running jobs"],
+  [["server/internal/xfer/endpoint.go"], { light: false, server: true }, "server-only → the light jobs skip; the Go-running jobs always run"],
   [["server/go.mod", "server/internal/xfer/stream.go"], { light: false, server: true }, "several server files, none a light input"],
   [["web/src/lib/pair.ts"], { light: true, server: true }, "web-only → every job"],
-  [["server/account/pairroom.go", "web/src/lib/pair.ts"], { light: true, server: true }, "both → every job"],
+  [["server/internal/xfer/endpoint.go", "web/src/lib/pair.ts"], { light: true, server: true }, "both → every job"],
   [["docs/self-hosting.md"], { light: false, server: false }, "docs-only → none (the lane would not be selected)"],
-  [["docs/self-hosting.md", "server/account/pairroom.go"], { light: false, server: true }, "a non-lane path does not widen a server-only change"],
+  [["docs/self-hosting.md", "server/internal/xfer/endpoint.go"], { light: false, server: true }, "a non-lane path does not widen a server-only change"],
   [["server/account/handlers.go"], { light: true, server: true }, "a server file router.test.ts reads is a light input"],
   [["server/internal/storecrypto/testdata/vector.json"], { light: true, server: true }, "store-crypto interop testdata is a light input"],
   [["server/cmd/relayium/run.go"], { light: true, server: true }, "the CLI failure line the SSH guide quotes"],
   [["docs/billing-transparency.md"], { light: true, server: true }, "a non-server lane input is light"],
   [[".github/workflows/web.yml"], { light: true, server: true }, "the lane's own definition runs everything"],
   [["scripts/ci/web-lane-scope.mjs"], { light: true, server: true }, "this helper's own edit runs everything"],
+  [["server/account/plan_enforce.go"], { light: true, server: true },
+    "a server file docs/billing-transparency.md cites is read by billing-doc-pointers.test.mjs in `test`: all jobs"],
+  [["server/account/sqlite.go"], { light: true, server: true },
+    "the file whose server-only edits moved 24 billing-doc pointers on 2026-09-28"],
 ];
 
 function judge(rows, classifier) {
@@ -85,7 +97,7 @@ for (const [why, env, changed] of [
   check(threw, "a failed git fetch did not throw");
   const paths = changedPaths(env, gitOk(["server/a.go", "web/b.ts"]));
   check(JSON.stringify(paths) === JSON.stringify(["server/a.go", "web/b.ts"]), `the diff parse returned ${JSON.stringify(paths)}`);
-  const server = silent(() => decide(env, { changedPaths: () => ["server/account/pairroom.go"] }));
+  const server = silent(() => decide(env, { changedPaths: () => ["server/internal/xfer/endpoint.go"] }));
   check(JSON.stringify(server) === JSON.stringify({ light: false, server: true }),
     `a server-only pull request decided ${JSON.stringify(server)}`);
 }
@@ -125,15 +137,22 @@ export function wiringProblems(text) {
     }
   }
   for (const job of SERVER_JOBS) if (!jobs.has(job)) problems.push(`SERVER_JOBS names ${job}, which web.yml no longer declares`);
+  const lightGate = "needs.scope.outputs.light != 'false'";
   for (const [name, job] of jobs) {
     if (name === "scope") continue;
-    const output = SERVER_JOBS.includes(name) ? "server" : "light";
-    const want = `needs.scope.outputs.${output} != 'false'`;
-    if (job.if !== want) {
-      problems.push(`web.yml/${name}: \`if: ${job.if ?? "(none)"}\`; want \`if: ${want}\` — `
-        + (output === "light"
-          ? "an ungated light job re-runs the whole web suite on every server-only change"
-          : "a Go-running job gated on `light` skips the server journeys on exactly the server changes they exist for"));
+    if (SERVER_JOBS.includes(name)) {
+      if (job.if !== undefined) {
+        problems.push(`web.yml/${name}: \`if: ${job.if}\` on a Go-running job; it must run whenever the lane `
+          + `is selected — a hosted gate that can be skipped is a gate whose green means nothing`);
+      }
+      if (job.needs !== undefined && /\bscope\b/.test(job.needs)) {
+        problems.push(`web.yml/${name}: \`needs: ${job.needs}\` ties a Go-running job to the scope job; it must not depend on it`);
+      }
+      continue;
+    }
+    if (job.if !== lightGate) {
+      problems.push(`web.yml/${name}: \`if: ${job.if ?? "(none)"}\`; want \`if: ${lightGate}\` — an ungated `
+        + `light job re-runs the whole web suite on every server-only change`);
     }
     if (job.needs !== "scope") problems.push(`web.yml/${name}: \`needs: ${job.needs ?? "(none)"}\`; want \`needs: scope\``);
   }
@@ -153,16 +172,39 @@ let mutations = 0;
   const broken = (paths) => ({ light: paths.some((p) => !p.startsWith("server/")), server: paths.length > 0 && !paths.every((p) => p.startsWith("docs/")) });
   check(judge(ROWS, broken).some((p) => p.includes("server/account/handlers.go")),
     "a classifier that ignores the light server inputs was not caught by the rows");
+  // The document scan bypassed (an empty cited set): the plan_enforce.go row
+  // must catch it — that is the hole a hand-kept list left open.
+  mutations += 1;
+  check(judge(ROWS, (paths) => classify(paths, { billingDocInputs: new Set() }))
+    .some((p) => p.includes("server/account/plan_enforce.go")),
+    "bypassing the billing-document scan was not caught by the rows");
+  // An unreadable document must fail closed, never read as "cites nothing".
+  mutations += 1;
+  {
+    let threw = null;
+    try { billingDocServerInputs({ root: "/nonexistent-relayium-root" }); } catch (err) { threw = err; }
+    check(threw !== null && threw.message.includes(BILLING_DOC), `an unreadable ${BILLING_DOC} did not throw: ${threw}`);
+    const env = { WEB_SCOPE_EVENT: "push", WEB_SCOPE_BEFORE: SHA, WEB_SCOPE_HEAD: OTHER };
+    const got = JSON.stringify(silent(() => decide(env, {
+      changedPaths: () => ["server/internal/xfer/endpoint.go"],
+      docRoot: "/nonexistent-relayium-root",
+    })));
+    check(got === ALL, `an unreadable billing document did not fail closed in decide(): ${got}`);
+  }
   // A classifier that always runs everything: the server-only row must catch it.
   mutations += 1;
-  check(judge(ROWS, () => ({ light: true, server: true })).some((p) => p.includes("pairroom.go")),
+  check(judge(ROWS, () => ({ light: true, server: true })).some((p) => p.includes("endpoint.go")),
     "a classifier that never saves anything was not caught by the rows");
-  // A removed gate on a light job, and a light gate on a server job.
+  // A removed gate on a light job, and a gate or dependency on a Go-running job.
   for (const [name, from, to, expect] of [
     ["the test job's gate removed", "    needs: scope\n    if: needs.scope.outputs.light != 'false'\n    runs-on: ubuntu-latest\n    timeout-minutes: 15",
       "    needs: scope\n    runs-on: ubuntu-latest\n    timeout-minutes: 15", /web\.yml\/test: `if: \(none\)`/],
-    ["mixed-link-e2e gated on light", "  mixed-link-e2e:\n    needs: scope\n    if: needs.scope.outputs.server != 'false'",
-      "  mixed-link-e2e:\n    needs: scope\n    if: needs.scope.outputs.light != 'false'", /web\.yml\/mixed-link-e2e: `if: needs\.scope\.outputs\.light/],
+    ["mixed-link-e2e gated on server", "  mixed-link-e2e:\n    runs-on: ubuntu-latest",
+      "  mixed-link-e2e:\n    needs: scope\n    if: needs.scope.outputs.server != 'false'\n    runs-on: ubuntu-latest",
+      /web\.yml\/mixed-link-e2e: `if: needs\.scope\.outputs\.server != 'false'` on a Go-running job/],
+    ["sealed-box-interop made to wait on scope", "  sealed-box-interop:\n    runs-on: ubuntu-latest",
+      "  sealed-box-interop:\n    needs: scope\n    runs-on: ubuntu-latest",
+      /web\.yml\/sealed-box-interop: `needs: scope` ties a Go-running job/],
   ]) {
     mutations += 1;
     if (!webYml.includes(from)) { check(false, `mutation "${name}" no longer applies`); continue; }
@@ -178,4 +220,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(`web-lane-scope-test: OK (${ROWS.length} change-set rows, 7 fail-closed cases, `
-  + `${webJobs(webYml).size - 1} web.yml jobs gated on scope, ${mutations} mutations each reported)`);
+  + `${webJobs(webYml).size - 1 - SERVER_JOBS.length} light web.yml jobs gated on scope, ${SERVER_JOBS.length} `
+  + `Go-running jobs ungated, ${mutations} mutations each reported)`);

@@ -4,7 +4,8 @@
     "sources: test files a lane's runner collects without any command naming them (Vitest, `go test ./...`), scanned for `../` reads.",
     "declared: reads no text scan can resolve (a Gradle system property, a template literal, `$script_name`). Each must exist and select its lane.",
     "knownGaps: real reads a lane's filter deliberately does not watch. `coveredBy` names a lane that runs the same code on that change and is verified; a gap without it is an open decision, not a pass.",
-    "sourceJobs / sources[].jobs: which of a lane's jobs execute a source (web: light jobs vs SERVER_JOBS of scripts/ci/web-lane-scope.mjs). ignoredReads: scanned reads that are not reads (with the reason); each must still be produced by the scan or it is stale."
+    "sourceJobs / sources[].jobs: which of a lane's jobs execute a source (web: light jobs vs SERVER_JOBS of scripts/ci/web-lane-scope.mjs). ignoredReads: scanned reads that are not reads (with the reason); each must still be produced by the scan or it is stale.",
+    "dynamicReaders: tests whose inputs a DOCUMENT names at run time; the closure test reads the document with the reader's own ROOTS and requires every cited file to select the lane (and, in web, to classify light)."
   ],
   "sources": {
     "web": [
@@ -141,6 +142,17 @@
       "source": "web/scripts/stage-macos-release.test.mjs",
       "path": "server/account/**",
       "why": "`join(webRoot, \"../server/account\")` where webRoot is a temporary fixture directory; the test writes its own catalog there and never opens the repository's server/account"
+    }
+  ],
+  "dynamicReaders": [
+    {
+      "lane": "web",
+      "reader": "web/scripts/pages/billing-doc-pointers.test.mjs",
+      "document": "docs/billing-transparency.md",
+      "jobs": [
+        "test"
+      ],
+      "why": "asserts every `symbol` (`path:line`) pointer in the billing document still lands on its symbol, opening the cited server files; runs in web.yml's light `test` job"
     }
   ]
 }

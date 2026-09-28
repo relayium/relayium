@@ -10,11 +10,16 @@
 // else, and on those the rest of the lane (`npm run check`, the full Vitest
 // suite, the build, the accessibility scan, five browser journeys and a
 // Windows-runner job) re-runs over bytes that did not change. This helper
-// splits the lane in two:
+// answers two questions; web.yml gates on only the first:
 //
-//   * `server` — the Go-running jobs. Needed by ANY change that selects the lane.
-//   * `light`  — everything else. Needed unless every changed path that selects
-//                the lane is a server file those jobs do not read.
+//   * `light`  — the non-Go jobs (`test`, `windows-temporary-downloader`).
+//                Needed unless every changed path that selects the lane is a
+//                server file those jobs do not read. These two jobs are gated.
+//   * `server` — whether the Go-running jobs are needed: any change that
+//                selects the lane. INFORMATIONAL ONLY: those jobs carry no
+//                `if:` and always run when the lane is selected, because a
+//                hosted gate that can be skipped is a gate whose green means
+//                nothing (the C2 lesson web/e2e/go-server.test.mjs pins).
 //
 // "Do not read" is a closed list, `LIGHT_SERVER_INPUTS`: the server files the
 // light jobs open as test input (router.test.ts ← handlers.go, …) or build
@@ -44,7 +49,7 @@
 // reuses so "selects the lane" means one thing.
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -54,7 +59,7 @@ import { compileGlob, matchesFilter, readPushPaths } from "./select-lanes.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const defaultWorkflowsDir = resolve(repoRoot, ".github/workflows");
 
-/** The jobs gated on `server`. Every other job in web.yml is gated on `light`. */
+/** The Go-running jobs: never gated (no `if:`, no `needs: scope`). Every other job in web.yml is gated on `light`. */
 export const SERVER_JOBS = ["sealed-box-interop", "device-inbox-e2e", "mixed-link-e2e"];
 
 /**
@@ -80,6 +85,53 @@ const isServerPath = (path) => path.startsWith("server/");
 const lightServerInput = (path) =>
   LIGHT_SERVER_INPUTS.some((glob) => compileGlob(glob).test(path));
 
+// ── the billing document's server files, read at run time ────────────────────
+//
+// `web/scripts/pages/billing-doc-pointers.test.mjs` (in the light `test` job)
+// opens every server file `docs/billing-transparency.md` points into, to check
+// the pointer still lands on its symbol. Which files those are is decided by
+// the DOCUMENT, so no hand-kept list can follow it: a server-only edit to
+// `account/sqlite.go` moved 24 pointers on 2026-09-28 and, with that file
+// missing from `LIGHT_SERVER_INPUTS`, would have skipped the only check that
+// noticed. So the document is read here, every run, and every server file it
+// cites is a light input.
+//
+// Deliberately WIDER than the test's own pattern: every backticked
+// `path.{go,ts,mjs,svelte}` token, with or without `:line`, not only the
+// `symbol` (`path:line`) pairs the test checks — over-selection costs minutes,
+// under-selection is the defect. Paths resolve through the test's own roots;
+// `scripts/test/ci-lane-closure-test.mjs` fails if these ROOTS stop matching
+// the test's `const ROOTS`.
+
+export const BILLING_DOC = "docs/billing-transparency.md";
+export const BILLING_DOC_READER = "web/scripts/pages/billing-doc-pointers.test.mjs";
+export const BILLING_DOC_ROOTS = ["server", "", "web", "server/account", "server/internal"];
+
+/** Repository paths under server/ that the billing document cites. Throws ScopeAll when unreadable. */
+export function billingDocServerInputs({ root = repoRoot } = {}) {
+  let markdown;
+  try {
+    markdown = readFileSync(resolve(root, BILLING_DOC), "utf8");
+  } catch (err) {
+    throw new ScopeAll(`${BILLING_DOC} could not be read (${err.code ?? err.message}), so the server files `
+      + `its pointer test opens are unknown`);
+  }
+  const inputs = new Set();
+  let cited = 0;
+  for (const match of markdown.matchAll(/`([A-Za-z0-9_/.-]+\.(?:go|ts|mjs|svelte))(?::\d+(?:-\d+)?)?`/g)) {
+    cited += 1;
+    for (const base of BILLING_DOC_ROOTS) {
+      const path = base ? `${base}/${match[1]}` : match[1];
+      if (existsSync(resolve(root, path))) {
+        if (isServerPath(path)) inputs.add(path);
+        break;
+      }
+    }
+  }
+  if (cited === 0) throw new ScopeAll(`${BILLING_DOC} cites no source files; refusing to treat that as "none"`);
+  return inputs;
+}
+
 /**
  * `{ light, server }` for a list of changed paths.
  *
@@ -87,14 +139,15 @@ const lightServerInput = (path) =>
  * some other path, or not at all). One that does needs `server`, and also
  * `light` unless it is a server file outside `LIGHT_SERVER_INPUTS`.
  */
-export function classify(paths, { workflowsDir = defaultWorkflowsDir } = {}) {
+export function classify(paths, { workflowsDir = defaultWorkflowsDir, billingDocInputs, docRoot } = {}) {
   if (!Array.isArray(paths) || paths.length === 0) {
     throw new ScopeAll("no changed paths; an empty diff is not a change set this file can judge");
   }
+  const cited = billingDocInputs ?? billingDocServerInputs(docRoot ? { root: docRoot } : {});
   const patterns = readPushPaths(readFileSync(resolve(workflowsDir, "web.yml"), "utf8"), "web.yml");
   const selecting = paths.filter((path) => matchesFilter(patterns, path));
   return {
-    light: selecting.some((path) => !isServerPath(path) || lightServerInput(path)),
+    light: selecting.some((path) => !isServerPath(path) || lightServerInput(path) || cited.has(path)),
     server: selecting.length > 0,
   };
 }
