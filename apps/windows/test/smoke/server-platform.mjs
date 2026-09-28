@@ -323,7 +323,7 @@ export async function testDiskUsageWithOverlay({
   if (!healthy(compiled)) {
     return { ...compiled, provenance, ok: false, skipped: false, stage: "compile" };
   }
-  const ran = await runOwned(probe, ["-test.run", "TestDiskUsage", "-test.v", "-test.count=1"], {
+  const ran = await runOwned(probe, ["-test.run", "TestDiskUsage|TestDiskStoreCreatesBlobsOnThisPlatform", "-test.v", "-test.count=1"], {
     cwd: join(repoRoot, "server"), env, timeoutMs, label: "diskusage-probe", register,
   });
   return { ...ran, provenance, ok: healthy(ran), skipped: false, stage: "run", compile: compiled.ledger };

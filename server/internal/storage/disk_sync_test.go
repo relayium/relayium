@@ -178,3 +178,30 @@ func TestAppendReportsAFailedFlush(t *testing.T) {
 		t.Fatalf("Append with a failing flush = %v; want the flush error, not success", err)
 	}
 }
+
+// The real directory flush must never fail on the platform the tests run on:
+// a Put into a new shard and an Append at offset 0 (which also flushes the
+// shard directory) both create blobs. On Windows this is what the acceptance
+// fixture's probe compiles and runs before the server build; an fsync of a
+// read-only directory handle there fails with Access is denied and would
+// refuse every upload.
+func TestDiskStoreCreatesBlobsOnThisPlatform(t *testing.T) {
+	prevFile, prevDir := syncFile, syncDir
+	syncFile = func(f *os.File) error { return f.Sync() }
+	syncDir = flushDir
+	t.Cleanup(func() { syncFile, syncDir = prevFile, prevDir })
+	d, err := NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := d.Put(ctx, "aabbccdd", strings.NewReader("abc")); err != nil {
+		t.Fatalf("Put on this platform: %v", err)
+	}
+	if _, err := d.Append(ctx, "aabbccee", 0, strings.NewReader("xy")); err != nil {
+		t.Fatalf("Append at offset 0 on this platform: %v", err)
+	}
+	if _, err := d.Append(ctx, "aabbccff", 0, strings.NewReader("")); err != nil {
+		t.Fatalf("zero-length probe at offset 0 on this platform: %v", err)
+	}
+}

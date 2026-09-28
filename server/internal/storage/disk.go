@@ -53,17 +53,13 @@ type DiskStore struct {
 // matches. Every mutation therefore reaches disk before it is reported.
 var (
 	syncFile = func(f *os.File) error { return f.Sync() }
-	syncDir  = func(dir string) error {
-		f, err := os.Open(dir)
-		if err != nil {
-			return err
-		}
-		serr := f.Sync()
-		if cerr := f.Close(); serr == nil {
-			serr = cerr
-		}
-		return serr
-	}
+	// Directory metadata is flushed by the platform helper: a real fsync of
+	// the directory on Unix, a no-op on Windows, where a directory handle
+	// opened for reading cannot be flushed (FlushFileBuffers needs
+	// GENERIC_WRITE and fails with Access is denied) and NTFS journals
+	// directory metadata itself. This package does not build on Windows in
+	// production; the Windows acceptance fixture is its only consumer there.
+	syncDir = flushDir
 )
 
 // ensureShardDir creates shardDir if needed and, when it had to create it,
