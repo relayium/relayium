@@ -1098,17 +1098,27 @@ func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	if bs, berr := s.blobFor(r.Context(), sf.NodeID); berr == nil {
-		if derr := bs.Delete(r.Context(), sf.BlobKey); derr != nil {
-			// Node unreachable: record the orphan so GC retries; still remove the row.
-			_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())
-		}
-	} else {
-		_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())
-	}
-	if err := s.store.DeleteStoredFile(r.Context(), sf.ID, s.now().Unix()); err != nil {
+	// Row and delete intent in one transaction FIRST: a failure there (or a
+	// store without that transaction, see deleteIntentStore) answers 500 with
+	// the row still owning its blob, never a row gone and a blob that
+	// nothing names (the old order enqueued only on a failed delete and ignored
+	// that enqueue's own error). The physical delete after it is promptness —
+	// detached from the client hanging up, bounded because the node may not
+	// answer — and its success clears the intent; a failure leaves it to GC.
+	now := s.now().Unix()
+	deleted, err := removeStoredFileQueuingBlob(r.Context(), s.store, sf, now)
+	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
+	}
+	if deleted {
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), nodeDeleteTimeout)
+		if bs, berr := s.blobFor(dctx, sf.NodeID); berr == nil {
+			if derr := bs.Delete(dctx, sf.BlobKey); derr == nil {
+				_ = dischargePendingNodeDelete(dctx, s.store, sf.BlobKey, sf.NodeID, now)
+			}
+		}
+		cancel()
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -694,9 +694,17 @@ func TestAClaimedBlobWhoseNodeHangsStaysQueuedUntilItAnswers(t *testing.T) {
 		t.Fatalf("after the reaper: row=%v queue=%+v, want row gone and one queue row",
 			h.sessionExists(t, uploadID), queuedFor(t, h, key))
 	}
-	dctx, cancel := context.WithTimeout(ctx, time.Second)
-	cleanupDrainCtx(dctx, h, h.store, h.now)
-	cancel()
+	// The production path: context.Background(), exactly as main runs GC. The
+	// bound comes from GC's own per-delete timeout (shrunk here so the test is
+	// quick), not from a deadline the test injects and production never has.
+	restore := nodeDeleteTimeout
+	nodeDeleteTimeout = 500 * time.Millisecond
+	t.Cleanup(func() { nodeDeleteTimeout = restore })
+	drainStart := time.Now()
+	cleanupDrain(h, h.store, h.now)
+	if elapsed := time.Since(drainStart); elapsed > 3*time.Second {
+		t.Fatalf("a hung DELETE held the drain for %v; its bound is %v", elapsed, nodeDeleteTimeout)
+	}
 	if elapsed := time.Since(start); elapsed > 8*time.Second {
 		t.Fatalf("a hung DELETE held the sweep for %v", elapsed)
 	}

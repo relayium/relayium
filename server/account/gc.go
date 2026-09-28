@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
+	"sync"
 	"time"
 
 	"github.com/relayium/relayium/internal/inbox"
@@ -124,37 +126,198 @@ func (g *GC) auditRetention() int64 {
 	return g.AuditRetention
 }
 
-func (g *GC) sweep(ctx context.Context) {
-	now := g.Now()
-	expired, err := g.Store.ListExpiredStoredFiles(ctx, now)
-	if err != nil {
-		g.Log.Printf("gc: list expired: %v", err)
+// gcPassBudget bounds each GC pass, and nodeDeleteTimeout each blob delete a
+// pass (or a request's cleanup) sends to a storage node.
+//
+// The sweep is serial and runs from main on context.Background(), so before
+// these existed ONE node that accepted TCP and never answered — a stalled TLS
+// handshake had no timeout at all — froze every pass after the one that
+// reached it: expired files, pending deletes, owed bills, inbox leases,
+// session pruning and the account purge alike, for as long as the node stayed
+// that way. Now a delete gives up after nodeDeleteTimeout, a pass after
+// gcPassBudget, and a node that timed out once is not asked again in the same
+// sweep (see stalledNodes). Nothing a pass leaves undone is lost: every row it
+// did not reach is still listed next sweep, and every blob it could not delete
+// is still queued. Variables so tests can shrink them.
+var (
+	gcPassBudget      = 2 * time.Minute
+	nodeDeleteTimeout = 20 * time.Second
+)
+
+// stalledNodes remembers, for one sweep, the storage nodes whose delete or
+// probe TIMED OUT, so the rest of the sweep skips them instead of paying the
+// timeout once per blob. Without it one hung node holding many queued blobs
+// spends every pass's whole budget and starves the blobs on healthy nodes
+// listed after it. It rides the context, so drainPending and friends called
+// directly (tests, one-off callers) have no memo and ask every time.
+type stalledNodes struct {
+	mu  sync.Mutex
+	ids map[string]bool
+}
+
+type stalledNodesKey struct{}
+
+var errNodeStalled = errors.New("gc: storage node timed out earlier in this sweep")
+
+func withStalledNodes(ctx context.Context) context.Context {
+	return context.WithValue(ctx, stalledNodesKey{}, &stalledNodes{ids: map[string]bool{}})
+}
+
+func nodeStalled(ctx context.Context, nodeID string) bool {
+	sn, _ := ctx.Value(stalledNodesKey{}).(*stalledNodes)
+	if sn == nil || nodeID == "" {
+		return false
+	}
+	sn.mu.Lock()
+	defer sn.mu.Unlock()
+	return sn.ids[nodeID]
+}
+
+// noteNodeErr records nodeID as stalled when err is a timeout that belongs to
+// the node — not the pass's own deadline running out, which says nothing about
+// the node and would wrongly skip it in the passes after.
+func noteNodeErr(ctx context.Context, nodeID string, err error) {
+	sn, _ := ctx.Value(stalledNodesKey{}).(*stalledNodes)
+	if sn == nil || nodeID == "" || err == nil || ctx.Err() != nil || !isTimeout(err) {
 		return
 	}
-	for _, f := range expired {
-		if err := g.deleteBlob(ctx, f.NodeID, f.BlobKey); err != nil {
-			_ = g.Store.EnqueueNodeDelete(ctx, f.BlobKey, f.NodeID, now)
-		}
-		if err := g.Store.DeleteStoredFile(ctx, f.ID, now); err != nil {
-			g.Log.Printf("gc: delete file %s: %v", f.ID, err)
-		}
+	sn.mu.Lock()
+	sn.ids[nodeID] = true
+	sn.mu.Unlock()
+}
+
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
 	}
-	g.reclaimTaskObjects(ctx, now)
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
+// pass runs one GC pass on its own deadline, derived from the sweep's context
+// so cancelling Run still stops it.
+func (g *GC) pass(ctx context.Context, name string, fn func(context.Context)) {
+	pctx, cancel := context.WithTimeout(ctx, gcPassBudget)
+	defer cancel()
+	fn(pctx)
+	if errors.Is(pctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+		g.Log.Printf("gc: %s ran out of its %v budget; what it did not reach is still listed or queued for the next sweep", name, gcPassBudget)
+	}
+}
+
+// deleteIntentStore is what GC's delete passes, the share-delete route and the
+// account-deletion cleanup REQUIRE of their store: removing a row together with
+// its blob's delete intent in one transaction, clearing an intent after a
+// successful delete, and the drain's retry order. SQLiteStore implements it.
+//
+// It is asserted rather than added to Store only because store.go is outside
+// this change; it is not optional. A store without it gets
+// errNoDeleteIntentStore and the caller does nothing destructive — the rows
+// stay, the route answers 500 — rather than falling back to a non-atomic
+// sequence that can either orphan a blob or delete one a surviving row still
+// names. Test wrappers that embed Store forward these methods explicitly
+// (intentForwarding in the tests).
+type deleteIntentStore interface {
+	DeleteStoredFileQueuingBlob(ctx context.Context, id string, now int64) (bool, error)
+	DeleteTaskObjectIfReclaimableQueuingBlob(ctx context.Context, id string, now, bindGrace int64) (bool, error)
+	DischargePendingNodeDelete(ctx context.Context, blobKey, nodeID string, now int64) error
+	MarkPendingNodeDeleteAttempted(ctx context.Context, blobKey, nodeID string) error
+}
+
+var errNoDeleteIntentStore = errors.New("account: store does not implement the transactional delete-intent methods (deleteIntentStore); refusing to delete without them")
+
+func intentStore(st Store) (deleteIntentStore, error) {
+	if q, ok := st.(deleteIntentStore); ok {
+		return q, nil
+	}
+	return nil, errNoDeleteIntentStore
+}
+
+// removeStoredFileQueuingBlob deletes f's row and durably queues its blob for
+// deletion, both or neither. deleted=false with a nil error means the row was
+// already gone. On error the row is still there and still owns its blob.
+func removeStoredFileQueuingBlob(ctx context.Context, st Store, f StoredFile, now int64) (bool, error) {
+	q, err := intentStore(st)
+	if err != nil {
+		return false, err
+	}
+	return q.DeleteStoredFileQueuingBlob(ctx, f.ID, now)
+}
+
+// dischargePendingNodeDelete clears a delete intent whose blob was just deleted
+// (see SQLiteStore.DischargePendingNodeDelete for which rows it leaves).
+func dischargePendingNodeDelete(ctx context.Context, st Store, blobKey, nodeID string, now int64) error {
+	q, err := intentStore(st)
+	if err != nil {
+		return err
+	}
+	return q.DischargePendingNodeDelete(ctx, blobKey, nodeID, now)
+}
+
+func (g *GC) sweep(ctx context.Context) {
+	now := g.Now()
+	ctx = withStalledNodes(ctx)
+	g.pass(ctx, "expired stored files", func(ctx context.Context) { g.expireStoredFiles(ctx, now) })
+	g.pass(ctx, "task-object reclaim", func(ctx context.Context) { g.reclaimTaskObjects(ctx, now) })
 	// Pair rooms: void the ones whose deadline passed with nobody joining, and
 	// drop long-closed rows. A BACKSTOP only — every read and write path voids on
 	// the spot (pairroom.go), so this catches the room nobody touches again and
 	// must never be what makes the five-minute rule true.
 	if g.SweepPairRooms != nil {
-		g.SweepPairRooms(ctx, now)
+		g.pass(ctx, "pair-room sweep", func(ctx context.Context) { g.SweepPairRooms(ctx, now) })
 	}
-	g.drainPending(ctx)
+	g.pass(ctx, "pending-delete drain", g.drainPending)
 	// Bills that could not be written when they became known. Normally a no-op;
 	// when it is not, it is the retry that keeps "every accepted byte is billed"
 	// true across a database that was briefly refusing writes (see UnbilledMeter).
-	g.settleOwedBills(ctx)
+	g.pass(ctx, "owed-bill settle", g.settleOwedBills)
 	if g.ReapSessions != nil {
+		// Takes no context: ReapPendingUploads bounds itself (30 s).
 		g.ReapSessions(now)
 	}
+	g.pass(ctx, "prunes", func(ctx context.Context) { g.prune(ctx, now) })
+	g.pass(ctx, "account deletions", func(ctx context.Context) { g.sweepAccountDeletions(ctx, now) })
+}
+
+// expireStoredFiles deletes every expired stored file. Row and delete intent go
+// in one transaction first, the physical delete after, and a successful delete
+// clears the intent again. Expiry is monotonic, so the row going before the
+// blob is safe; the reverse order used to be paired with an enqueue whose error
+// was ignored, which left an unreachable node's blob with no owner at all.
+func (g *GC) expireStoredFiles(ctx context.Context, now int64) {
+	if _, err := intentStore(g.Store); err != nil {
+		g.Log.Printf("gc: expired stored files: %v", err)
+		return
+	}
+	expired, err := g.Store.ListExpiredStoredFiles(ctx, now)
+	if err != nil {
+		g.Log.Printf("gc: list expired: %v", err)
+		return
+	}
+	for i, f := range expired {
+		if ctx.Err() != nil {
+			g.Log.Printf("gc: out of budget with %d of %d expired file(s) left for the next sweep", len(expired)-i, len(expired))
+			return
+		}
+		deleted, err := removeStoredFileQueuingBlob(ctx, g.Store, f, now)
+		if err != nil {
+			g.Log.Printf("gc: delete file %s: %v", f.ID, err) // row kept; it still owns the blob
+			continue
+		}
+		if !deleted {
+			continue // already removed by whoever owns its blob now
+		}
+		if err := g.deleteBlob(ctx, f.NodeID, f.BlobKey); err == nil {
+			if err := dischargePendingNodeDelete(ctx, g.Store, f.BlobKey, f.NodeID, now); err != nil {
+				g.Log.Printf("gc: clear delete intent %s@%s: %v", f.BlobKey, nodeLabelForLog(f.NodeID), err)
+			}
+		}
+	}
+}
+
+// prune runs the table-bounding passes: ledgers, the audit trail, spent auth
+// rows, and the Device Inbox queue.
+func (g *GC) prune(ctx context.Context, now int64) {
 	if err := g.Store.PruneUploadEvents(ctx, now-pruneMargin); err != nil {
 		g.Log.Printf("gc: prune upload events: %v", err)
 	}
@@ -200,7 +363,6 @@ func (g *GC) sweep(ctx context.Context) {
 	} else if reclaimed != 0 || expired != 0 || pruned != 0 {
 		g.Log.Printf("gc: inbox tasks reclaimed=%d expired=%d pruned=%d", reclaimed, expired, pruned)
 	}
-	g.sweepAccountDeletions(ctx, now)
 }
 
 // sweepAccountDeletions runs the self-deletion lifecycle's two remaining
@@ -266,6 +428,10 @@ func (g *GC) sweepAccountDeletions(ctx context.Context, now int64) {
 // once that row is provably gone. The worst case is a retryable orphan blob, not
 // ciphertext destroyed under a live delivery.
 func (g *GC) reclaimTaskObjects(ctx context.Context, now int64) {
+	if _, err := intentStore(g.Store); err != nil {
+		g.Log.Printf("gc: task-object reclaim: %v", err)
+		return
+	}
 	grace := int64(taskObjectBindGrace / time.Second)
 	objs, err := g.Store.ListReclaimableTaskObjects(ctx, now, grace)
 	if err != nil {
@@ -273,8 +439,12 @@ func (g *GC) reclaimTaskObjects(ctx context.Context, now int64) {
 		return
 	}
 	var reclaimed int
-	for _, f := range objs {
-		ok, err := g.Store.DeleteTaskObjectIfReclaimable(ctx, f.ID, now, grace)
+	for i, f := range objs {
+		if ctx.Err() != nil {
+			g.Log.Printf("gc: out of budget with %d of %d task object(s) left for the next sweep", len(objs)-i, len(objs))
+			break
+		}
+		ok, err := g.deleteTaskObjectQueuingBlob(ctx, f, now, grace)
 		if err != nil {
 			g.Log.Printf("gc: reclaim task object %s: %v", f.ID, err)
 			continue
@@ -283,15 +453,27 @@ func (g *GC) reclaimTaskObjects(ctx context.Context, now int64) {
 			continue // bound to a live delivery again since the list; keep it
 		}
 		reclaimed++
-		if err := g.deleteBlob(ctx, f.NodeID, f.BlobKey); err != nil {
-			// Node unreachable: the existing retry queue owns it from here, the
-			// same as every other orphaned blob in this file.
-			_ = g.Store.EnqueueNodeDelete(ctx, f.BlobKey, f.NodeID, now)
+		// The retry queue already owns the blob (same transaction as the row);
+		// this delete is only promptness, and its success clears that intent.
+		if err := g.deleteBlob(ctx, f.NodeID, f.BlobKey); err == nil {
+			if err := dischargePendingNodeDelete(ctx, g.Store, f.BlobKey, f.NodeID, now); err != nil {
+				g.Log.Printf("gc: clear delete intent %s@%s: %v", f.BlobKey, nodeLabelForLog(f.NodeID), err)
+			}
 		}
 	}
 	if reclaimed != 0 {
 		g.Log.Printf("gc: inbox task objects reclaimed=%d", reclaimed)
 	}
+}
+
+// deleteTaskObjectQueuingBlob deletes a reclaimable task object's row and
+// queues its blob in one transaction (the condition re-checked by the DELETE).
+func (g *GC) deleteTaskObjectQueuingBlob(ctx context.Context, f StoredFile, now, grace int64) (bool, error) {
+	q, err := intentStore(g.Store)
+	if err != nil {
+		return false, err
+	}
+	return q.DeleteTaskObjectIfReclaimableQueuingBlob(ctx, f.ID, now, grace)
 }
 
 // probePendingBlob asks a queued blob how many bytes it really holds, the same
@@ -315,16 +497,33 @@ func (g *GC) probePendingBlob(ctx context.Context, p PendingNodeDelete) (int64, 
 	if bs == nil {
 		return 0, false
 	}
+	if nodeStalled(ctx, p.NodeID) {
+		return 0, false
+	}
 	pctx, cancel := probeContext(ctx)
 	defer cancel()
 	size, err := bs.Append(pctx, p.BlobKey, p.BilledThrough, bytes.NewReader(nil))
 	if err == nil || errors.Is(err, storage.ErrOffsetMismatch) {
 		return size, true
 	}
+	noteNodeErr(ctx, p.NodeID, err)
 	return 0, false
 }
 
+// deleteBlob deletes one blob, bounded by nodeDeleteTimeout (and the pass's own
+// deadline), skipping a node that already timed out in this sweep.
 func (g *GC) deleteBlob(ctx context.Context, nodeID, blobKey string) error {
+	if nodeStalled(ctx, nodeID) {
+		return errNodeStalled
+	}
+	dctx, cancel := context.WithTimeout(ctx, nodeDeleteTimeout)
+	defer cancel()
+	err := g.deleteBlobOn(dctx, nodeID, blobKey)
+	noteNodeErr(ctx, nodeID, err)
+	return err
+}
+
+func (g *GC) deleteBlobOn(ctx context.Context, nodeID, blobKey string) error {
 	if g.BlobFor != nil {
 		bs, err := g.BlobFor(ctx, nodeID)
 		if err != nil {
@@ -362,15 +561,39 @@ func (g *GC) deleteBlob(ctx context.Context, nodeID, blobKey string) error {
 // floor advanced atomically with each billing write), so re-asking every sweep
 // costs a probe and can never double-charge.
 func (g *GC) drainPending(ctx context.Context) {
+	q, err := intentStore(g.Store)
+	if err != nil {
+		g.Log.Printf("gc: pending-delete drain: %v", err)
+		return
+	}
+	// Every row this pass attempts and leaves in place goes to the back of the
+	// retry order (ListPendingNodeDeletes), so the next sweep starts with the
+	// rows this one did not reach. That, not the budget, is what guarantees a
+	// healthy node's blob and a billing obligation are reached however many
+	// stalled nodes sit ahead of them. The stamp is written on a detached,
+	// short context: the attempt that used up the pass's budget must still be
+	// moved back, or it would be first again next sweep.
+	requeue := func(p PendingNodeDelete) {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := q.MarkPendingNodeDeleteAttempted(sctx, p.BlobKey, p.NodeID); err != nil {
+			g.Log.Printf("gc: move pending delete %s@%s back in the retry order: %v", p.BlobKey, nodeLabelForLog(p.NodeID), err)
+		}
+	}
 	pend, err := g.Store.ListPendingNodeDeletes(ctx)
 	if err != nil {
 		g.Log.Printf("gc: list pending node deletes: %v", err)
 		return
 	}
-	for _, p := range pend {
+	for i, p := range pend {
+		if ctx.Err() != nil {
+			g.Log.Printf("gc: out of budget with %d of %d pending delete(s) left for the next sweep", len(pend)-i, len(pend))
+			break // not return: the retirement and the retained-row warning below still run
+		}
 		if p.BillUserID != "" {
 			size, ok := g.probePendingBlob(ctx, p)
 			if !ok {
+				requeue(p)
 				continue // cannot learn the number; keep blob and row, retry next sweep
 			}
 			if to := min(size, p.BillMax); to > p.BilledThrough {
@@ -380,6 +603,7 @@ func (g *GC) drainPending(ctx context.Context) {
 					// destroyed: skip the delete entirely and come back.
 					g.Log.Printf("gc: settle billing for pending blob %s@%s: %v; keeping the blob until the bill lands",
 						p.BlobKey, nodeLabelForLog(p.NodeID), serr)
+					requeue(p)
 					continue
 				}
 				if billed > 0 {
@@ -389,6 +613,7 @@ func (g *GC) drainPending(ctx context.Context) {
 			}
 		}
 		if err := g.deleteBlob(ctx, p.NodeID, p.BlobKey); err != nil {
+			requeue(p)
 			continue // node still unreachable; retry next sweep
 		}
 		if p.NotBefore > g.Now() {
@@ -402,13 +627,23 @@ func (g *GC) drainPending(ctx context.Context) {
 					g.Log.Printf("gc: record that pending delete %s@%s has landed: %v", p.BlobKey, p.NodeID, err)
 				}
 			}
+			requeue(p)
 			continue
 		}
 		if err := g.Store.DeletePendingNodeDelete(ctx, p.BlobKey, p.NodeID); err != nil {
 			g.Log.Printf("gc: clear pending delete %s@%s: %v", p.BlobKey, p.NodeID, err)
+			// Attempted and still in place, like every other branch that keeps
+			// the row: to the back, so it is not first again next sweep.
+			requeue(p)
 		}
 	}
-	retired, retained, err := g.Store.RetirePendingNodeDeletes(ctx, g.Now()-pendingDeleteMaxAge)
+	// On a short detached context, like requeue: the sweeps whose budget a
+	// stalled node used up are exactly the ones whose "never once succeeded"
+	// count must still be reported, and a discharged row is no less retirable
+	// because a stalled one was ahead of it.
+	rctx, rcancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer rcancel()
+	retired, retained, err := g.Store.RetirePendingNodeDeletes(rctx, g.Now()-pendingDeleteMaxAge)
 	if err != nil {
 		g.Log.Printf("gc: retire pending deletes: %v", err)
 	}

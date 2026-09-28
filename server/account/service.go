@@ -359,6 +359,16 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc.allowPrivateNodeURLs = os.Getenv("RELAYIUM_ALLOW_PRIVATE_NODE_URLS") == "true"
 	svc.nodeHTTP = &http.Client{Transport: &http.Transport{
 		ResponseHeaderTimeout: 15 * time.Second,
+		// A hand-built Transport has NO handshake, idle or 100-continue timeout
+		// (http.DefaultTransport sets them; a zero value here means "forever").
+		// Without the first, a node that accepts TCP and never finishes TLS
+		// holds whoever called it — GC's serial sweep included — indefinitely:
+		// the dial timeout has already passed and ResponseHeaderTimeout only
+		// starts once the request is written. storage.pinnedClient clones this
+		// Transport, so fingerprint-pinned nodes inherit all three.
+		TLSHandshakeTimeout:   10 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 		// Block outbound calls to non-public addresses (SSRF via user-supplied
 		// node StorageURL). Dial-time check also defeats DNS rebinding.
 		DialContext: guardedDialContext(svc.allowPrivateNodeURLs),

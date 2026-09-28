@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/relayium/relayium/authx"
 	"github.com/relayium/relayium/httpx"
@@ -91,22 +92,7 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 		return ErrInvalidToken
 	}
 	s.ReconcileBillingCancellations(context.WithoutCancel(ctx))
-	// Blob deletes are best-effort cleanup, not part of the account-state
-	// transaction: a node being unreachable must not block scheduling the
-	// deletion (the orphaned blob is queued for GC's retry instead). Derive
-	// from ctx but strip cancellation so an early-closing HTTP response (or a
-	// deadline sized for the request, not this cleanup fan-out) can't cut the
-	// deletes short — mirrors handleDeleteFile's per-file delete-or-enqueue.
-	cleanupCtx := context.WithoutCancel(ctx)
-	for _, b := range blobs {
-		if bs, berr := s.blobFor(cleanupCtx, b.NodeID); berr == nil {
-			if derr := bs.Delete(cleanupCtx, b.BlobKey); derr != nil {
-				_ = s.store.EnqueueNodeDelete(cleanupCtx, b.BlobKey, b.NodeID, now.Unix())
-			}
-		} else {
-			_ = s.store.EnqueueNodeDelete(cleanupCtx, b.BlobKey, b.NodeID, now.Unix())
-		}
-	}
+	s.reclaimDeletedAccountBlobs(ctx, blobs, now.Unix())
 
 	// The scheduled-deletion email is best-effort: the deletion is genuinely
 	// scheduled and a reactivate token already exists (issued above), plus the
@@ -119,6 +105,45 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 		log.Printf("account deletion: scheduled-email send failed for user %s (deletion still scheduled, purge_after=%d): %v", tok.UserID, purgeAfter, err)
 	}
 	return nil
+}
+
+// accountDeletionReclaimBudget bounds the physical blob deletes that follow a
+// committed account deletion. A variable so tests can shrink it.
+var accountDeletionReclaimBudget = 30 * time.Second
+
+// reclaimDeletedAccountBlobs is the physical, best-effort half of an account
+// deletion. The durable half already happened: CommitAccountDeletion's
+// transaction queued every blob it orphaned in pending_node_deletes (see
+// purgeTransientUserDataTx), so a crash before this loop, an unreachable node
+// or running out of budget costs only promptness — GC's drain owns whatever is
+// left. Each successful delete clears its intent.
+//
+// Blobs on the account's own nodes fail blobFor here, because their node rows
+// went in that same transaction; they were deliberately not queued (the
+// purge's comment says why), so there is nothing to do for them.
+//
+// Detached from the request's cancellation so a client hanging up cannot cut
+// the fan-out short, and bounded both per delete and overall so a node that
+// never answers cannot hold the request.
+func (s *Service) reclaimDeletedAccountBlobs(ctx context.Context, blobs []BlobRef, now int64) {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), accountDeletionReclaimBudget)
+	defer cancel()
+	for i, b := range blobs {
+		if rctx.Err() != nil {
+			log.Printf("account deletion: out of reclaim budget with %d of %d blob(s) left; every one is queued and GC deletes it", len(blobs)-i, len(blobs))
+			return
+		}
+		bs, err := s.blobFor(rctx, b.NodeID)
+		if err != nil {
+			continue
+		}
+		dctx, dcancel := context.WithTimeout(rctx, nodeDeleteTimeout)
+		err = bs.Delete(dctx, b.BlobKey)
+		dcancel()
+		if err == nil {
+			_ = dischargePendingNodeDelete(rctx, s.store, b.BlobKey, b.NodeID, now)
+		}
+	}
 }
 
 // issueReactivateToken mints a fresh "reactivate" email_tokens row for userID,

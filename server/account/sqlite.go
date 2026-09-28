@@ -1065,6 +1065,17 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE pending_node_deletes ADD COLUMN bill_kind INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pending_node_deletes ADD COLUMN bill_max INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pending_node_deletes ADD COLUMN billed_through INTEGER NOT NULL DEFAULT 0`,
+		// The delete queue's retry ORDER, the same device as unbilled_meter's
+		// retry_seq below. 0 = not attempted since it was queued: every existing
+		// row and every INSERT (each names its columns and omits this one, so a
+		// binary that predates it keeps writing 0 and never reads it). An attempt
+		// that leaves the row in place stamps it with the next value of a counter,
+		// moving it behind every row not attempted since. Without it the drain
+		// took rows in table order every sweep, so enough stalled nodes at the
+		// head used up each sweep's budget and the rows behind them — healthy
+		// nodes' blobs and billing obligations alike — were never reached.
+		`ALTER TABLE pending_node_deletes ADD COLUMN retry_seq INTEGER NOT NULL DEFAULT 0`,
+		`CREATE INDEX IF NOT EXISTS idx_pending_node_deletes_retry ON pending_node_deletes(retry_seq, enqueued_at)`,
 		// The owed-bills outbox's retry ORDER. 0 = never attempted, the state
 		// every existing row and every new INSERT (whose column list omits it)
 		// is in; a failed settle stamps the row with the next value of a
@@ -2994,6 +3005,32 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 	if err != nil {
 		return nil, err
 	}
+	// The delete intent for every blob the rows below stop pointing at is
+	// written HERE, in the transaction that deletes those rows, so that no
+	// commit leaves ciphertext with neither a row nor a queue entry naming it.
+	// The caller's physical deletes after commit are only promptness; a crash,
+	// an unreachable node or a request that runs out of budget before them
+	// leaves the queue to GC's drain.
+	//
+	// Blobs on the account's OWN nodes are queued here too, but every queue row
+	// naming one of those nodes — these and any older ones — is dropped further
+	// down, with the nodes themselves. That is DeleteNode's rule (removing a
+	// node ends the responsibilities naming it) applied to the nodes this purge
+	// removes: once their rows and tokens are gone central can neither address
+	// nor authenticate to them, so such a row is a delete that can never be
+	// attempted, warned about on every sweep forever. The ciphertext on them
+	// sits on hardware the user owns and was never deletable from here after
+	// this transaction; the caller's blobFor fails for them, as it always did.
+	//
+	// enqueued_at is wall-clock: the transaction's callers do not pass a clock,
+	// and the column only feeds the age-based retirement of rows already
+	// discharged.
+	at := time.Now().Unix()
+	for _, b := range blobs {
+		if err := enqueueNodeDeleteOn(ctx, tx, b.BlobKey, b.NodeID, at, 0); err != nil {
+			return nil, err
+		}
+	}
 	stmts := []struct {
 		q    string
 		args []any
@@ -3041,6 +3078,9 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		// would keep a user_id after the account is gone.
 		{`DELETE FROM pair_rooms WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM node_tokens WHERE user_id=?`, []any{userID}},
+		// Before the nodes, as DeleteNode does in its own transaction, and after
+		// the enqueue loop at the top: see there for why these rows end here.
+		{`DELETE FROM pending_node_deletes WHERE node_id IN (SELECT id FROM nodes WHERE owner_type='user' AND owner_user_id=?)`, []any{userID}},
 		{`DELETE FROM nodes WHERE owner_type='user' AND owner_user_id=?`, []any{userID}},
 	}
 	for _, st := range stmts {
@@ -3703,10 +3743,15 @@ func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error
 	// approval. Letting an ordinary upsert move it would make the identifier
 	// assignable by any authenticated caller, which is exactly what it must
 	// never be.
+	//
+	// kind is not in it either. It is set once, by whichever path created the
+	// row, and POST /api/devices re-posts an existing id with no kind at all:
+	// letting that overwrite it turned a 'browser' row into a kindless one,
+	// which silently dropped it out of MaxBrowserDevicesPerAccount's count.
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO devices (`+deviceCols+`)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind,
+		 ON CONFLICT(id) DO UPDATE SET name = excluded.name,
 		 last_ip = CASE WHEN excluded.last_ip <> '' THEN excluded.last_ip ELSE devices.last_ip END
 		 WHERE devices.user_id = excluded.user_id`,
 		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt, d.Kind, d.LastIP, d.InstallID)
@@ -6470,6 +6515,11 @@ func (s *SQLiteStore) settleOneUnbilledMeter(ctx context.Context, m UnbilledMete
 		`SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)`, m.UserID).Scan(&exists); err != nil {
 		return false, err
 	}
+	if h := settleOwedAfterClaimHook; h != nil {
+		if err := h(ctx); err != nil {
+			return false, err
+		}
+	}
 	if exists != 0 {
 		if err := recordMeterOn(ctx, tx, m.UserID, m.Kind, m.Bytes, m.At); err != nil {
 			return false, err
@@ -7194,18 +7244,122 @@ func (s *SQLiteStore) EnqueueNodeDelete(ctx context.Context, blobKey, nodeID str
 // node's row alive forever by refreshing it.
 func enqueueNodeDeleteOn(ctx context.Context, ex sqlExecer, blobKey, nodeID string, at, notBefore int64) error {
 	_, err := ex.ExecContext(ctx,
-		`INSERT INTO pending_node_deletes (blob_key, node_id, enqueued_at, not_before) VALUES (?,?,?,?)
+		`INSERT INTO pending_node_deletes (blob_key, node_id, enqueued_at, not_before, retry_seq)
+		 VALUES (?,?,?,?,`+nextRetrySeqSQL+`)
 		 ON CONFLICT(blob_key, node_id) DO UPDATE SET
 		   not_before = max(pending_node_deletes.not_before, excluded.not_before)`,
 		blobKey, nodeID, at, notBefore)
 	return err
 }
 
+// DeleteStoredFileQueuingBlob removes a stored file's row and writes its blob's
+// delete intent in ONE transaction, reading the blob key and node from the row
+// itself. deleted=false means the row was already gone, so whoever removed it
+// owns its blob and nothing is queued.
+//
+// This is what the expiry sweep and the share-delete route use instead of
+// "delete the blob, on failure enqueue and ignore the enqueue's error, delete
+// the row anyway": there a failed enqueue on an unreachable node left
+// ciphertext that no row and no queue entry named. Here either both writes land
+// or neither does, and the row keeps owning its blob until they do. The caller
+// deletes the blob afterwards and, on success, DischargePendingNodeDelete
+// clears the intent — the same order a pair-room close uses.
+func (s *SQLiteStore) DeleteStoredFileQueuingBlob(ctx context.Context, id string, now int64) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var key, node string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT blob_key, COALESCE(node_id, '') FROM stored_files WHERE id = ?`, id).Scan(&key, &node); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	if err := enqueueNodeDeleteOn(ctx, tx, key, node, now, 0); err != nil {
+		return false, err
+	}
+	if err := deleteStoredFileOn(ctx, tx, id, now); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+// DeleteTaskObjectIfReclaimableQueuingBlob is DeleteTaskObjectIfReclaimable
+// with the blob's delete intent written in the same transaction as the
+// conditional row delete, so a reclaimed task object can never be left with its
+// row gone and its blob unqueued. The condition is still re-checked by the
+// DELETE itself; the intent is written only when that DELETE took the row.
+func (s *SQLiteStore) DeleteTaskObjectIfReclaimableQueuingBlob(ctx context.Context, id string, now, bindGrace int64) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var key, node string
+	if err := tx.QueryRowContext(ctx,
+		`DELETE FROM stored_files WHERE id = ? AND `+reclaimableTaskObjectSQL+`
+		 RETURNING blob_key, COALESCE(node_id, '')`, id, now-bindGrace, now).Scan(&key, &node); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	if err := enqueueNodeDeleteOn(ctx, tx, key, node, now, 0); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+// DischargePendingNodeDelete clears a delete intent after its blob's delete
+// SUCCEEDED, but only a row the drain would clear on that same success: one
+// whose hold has passed (not_before <= now) and that carries no billing
+// obligation. A held row stays for the in-flight append it exists for, and an
+// obligated one stays for drainPending, the only path allowed to settle it —
+// both are the drain's to finish, and it re-deletes idempotently.
+func (s *SQLiteStore) DischargePendingNodeDelete(ctx context.Context, blobKey, nodeID string, now int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM pending_node_deletes
+		  WHERE blob_key = ? AND node_id = ? AND not_before <= ? AND bill_user_id = ''`,
+		blobKey, nodeID, now)
+	return err
+}
+
+// nextRetrySeqSQL is the next value of the queue's retry-order counter. Both
+// enqueue helpers stamp a NEW row with it and MarkPendingNodeDeleteAttempted
+// stamps an attempted one, so the drain order is a pure last-touched FIFO: a
+// row goes behind everything touched before it, whether it was just queued or
+// just retried. Were fresh rows left at 0, a steady inflow of them would sort
+// ahead of every retried row — a retried billing obligation included — for as
+// long as the inflow lasted. A re-enqueue of an existing row (ON CONFLICT)
+// keeps its place. Rows written by the set-based purge (PurgeDoneUploadSessions)
+// and by binaries older than this column still arrive with 0 and merely jump
+// the queue once; they are attempted and stamped like any other.
+const nextRetrySeqSQL = `(SELECT COALESCE(MAX(retry_seq), 0) + 1 FROM pending_node_deletes)`
+
+// MarkPendingNodeDeleteAttempted moves a queue row that was just attempted and
+// is staying behind every row not attempted since (see the retry_seq migration).
+// It changes the ORDER the drain takes rows in and nothing else: no
+// responsibility, hold or billing field is touched.
+func (s *SQLiteStore) MarkPendingNodeDeleteAttempted(ctx context.Context, blobKey, nodeID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE pending_node_deletes
+		    SET retry_seq = `+nextRetrySeqSQL+`
+		  WHERE blob_key = ? AND node_id = ?`, blobKey, nodeID)
+	return err
+}
+
+// ListPendingNodeDeletes returns the queue in retry order: rows not attempted
+// since they were queued first (oldest first), then attempted ones, least
+// recently attempted first.
 func (s *SQLiteStore) ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT blob_key, node_id, enqueued_at, not_before, deleted_at,
 		        bill_user_id, bill_kind, bill_max, billed_through
-		   FROM pending_node_deletes`)
+		   FROM pending_node_deletes
+		  ORDER BY retry_seq, enqueued_at, blob_key, node_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -7290,8 +7444,8 @@ func enqueueBilledNodeDeleteOn(ctx context.Context, ex sqlExecer, blobKey, nodeI
 	billUserID string, billKind UsageKind, billMax, billedThrough int64) error {
 	_, err := ex.ExecContext(ctx,
 		`INSERT INTO pending_node_deletes
-		   (blob_key, node_id, enqueued_at, not_before, bill_user_id, bill_kind, bill_max, billed_through)
-		 VALUES (?,?,?,?,?,?,?,?)
+		   (blob_key, node_id, enqueued_at, not_before, bill_user_id, bill_kind, bill_max, billed_through, retry_seq)
+		 VALUES (?,?,?,?,?,?,?,?,`+nextRetrySeqSQL+`)
 		 ON CONFLICT(blob_key, node_id) DO UPDATE SET
 		   not_before     = max(pending_node_deletes.not_before, excluded.not_before),
 		   bill_user_id   = excluded.bill_user_id,
@@ -7456,6 +7610,17 @@ func (s *SQLiteStore) JournalBlobBilling(ctx context.Context, blobKey, nodeID st
 	return s.settleBlobBilling(ctx, blobKey, nodeID, through, at, reason)
 }
 
+// Test seams at the two points inside a settle transaction where a
+// cancellation or failure would matter most: settleBlobAfterMeterHook runs after
+// the meter (or journal) write and before the floor (billed_through) moves;
+// settleOwedAfterClaimHook runs after an owed bill has been claimed (its
+// unbilled_meter row deleted) and before it is metered. A non-nil error aborts
+// the transaction there. Both are nil in production and set only by tests.
+var (
+	settleBlobAfterMeterHook func(ctx context.Context) error
+	settleOwedAfterClaimHook func(ctx context.Context) error
+)
+
 // settleBlobBilling is both discharges' shared body: journalReason == "" bills
 // the meter directly, anything else writes the outbox row instead.
 func (s *SQLiteStore) settleBlobBilling(ctx context.Context, blobKey, nodeID string, through, at int64, journalReason string) (int64, error) {
@@ -7523,6 +7688,11 @@ func (s *SQLiteStore) settleBlobBilling(ctx context.Context, blobKey, nodeID str
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO unbilled_meter (id, user_id, kind, bytes, at, reason) VALUES (?,?,?,?,?,?)`,
 			authx.NewID(), userID, kind, owe, at, journalReason); err != nil {
+			return 0, err
+		}
+	}
+	if h := settleBlobAfterMeterHook; h != nil {
+		if err := h(ctx); err != nil {
 			return 0, err
 		}
 	}
