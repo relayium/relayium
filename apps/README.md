@@ -1,6 +1,6 @@
 # Relayium native apps
 
-macOS **1.4.4 (41)** is published through the direct-download channel. Android
+macOS **1.4.4** is published through the direct-download channel. Android
 **0.3.0 (9)** was published on 2026-09-26 as a public preview APK (GitHub Release
 `android-v0.3.0`). iOS **0.5.0 (11)** remains a source candidate and has not been
 uploaded; its published channel is unchanged. The macOS store candidate is separate

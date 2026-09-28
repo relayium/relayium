@@ -88,7 +88,7 @@ const INPUTS = [...CLAIM_SURFACES, MAC_MANIFEST, APP_STORE];
  * than a shorter green run. Change it in the same commit as the claim you add
  * or retire, and say which in the message.
  */
-const EXPECTED_CLAIMS = 125;
+const EXPECTED_CLAIMS = 126;
 
 // ---------------------------------------------------------------------------
 // 1. Swift string semantics
@@ -607,6 +607,21 @@ function evaluate(world) {
       + `while the sentence described a release five versions old — ${WHY.overstate}`);
   }
 
+  // -- apps/README.md's opening sentence, which the bump must be able to move
+  {
+    const sentence = `macOS **${macVersion}** is published through the direct-download channel.`;
+    const headlines = [...haystack(doc(APPS), "flat")
+      .matchAll(/macOS \*\*([^*]+)\*\* is published through the direct-download channel\./g)]
+      .map((match) => match[1]);
+    claim(`mac-headline|${APPS}`, macVersion !== null && headlines.length === 1 && headlines[0] === macVersion,
+      `${APPS}: must open with exactly one ${sentence} (version from ${MAC_MANIFEST}, no build number); `
+      + `found ${headlines.length === 0 ? "none" : headlines.map((h) => `**${h}**`).join(", ")}. `
+      + "Release 583760be4 bumped every other 1.4.3 in the file and shipped this headline as "
+      + "`1.4.3 (40)` while the manifest said 1.4.4: the bump deliberately never rewrites a "
+      + "\"version (build)\" spelling, because that is how TestFlight and store build records are "
+      + `written, so a headline carrying a build is invisible to it — ${WHY.overstate}`);
+  }
+
   // -- was `testTheReadmeDoesNotListIOSAsADeliveryPlatform`, row-presence half
   claim("row-absent|iOS", haystack(doc(README), "row:iOS") === null,
     `${README}: iOS is back in the delivery-status table — ${WHY.iosRow}`);
@@ -717,6 +732,9 @@ const json = (path, edit) => {
 const append = (path, text) => ({ ...real, [path]: `${real[path]}\n\n${text}\n` });
 
 const realStore = verdict.failures.length === 0 ? JSON.parse(real[APP_STORE]) : {};
+const realMac = verdict.failures.length === 0 ? JSON.parse(real[MAC_MANIFEST]).macos : {};
+const realMacVersion = realMac.version;
+const realMacBuild = realMac.build;
 
 const MUTATIONS = [
   // -- the incident, replayed: the document moves and the pin does not
@@ -727,6 +745,26 @@ const MUTATIONS = [
   { name: "INCIDENT: the root README moves the iOS development version without this pin moving",
     world: () => sub(README, "at version `0.5.0`", "at version `0.4.2`"),
     expect: [`require|${README}|flat|${ROOT_IOS_STATE}`, `require|${README}|deliveryFlat|${ROOT_IOS_STATE}`] },
+
+  { name: "INCIDENT: 583760be4 — the release bump leaves the headline at 1.4.3 (40) while the manifest says 1.4.4",
+    world: () => ({ ...sub(APPS, `macOS **${realMacVersion}** is published`, "macOS **1.4.3 (40)** is published"),
+      [MAC_MANIFEST]: json(MAC_MANIFEST, (v) => {
+        v.macos.version = "1.4.4";
+        v.macos.build = 41;
+        v.macos.downloadUrl = "https://github.com/relayium/relayium/releases/download/macos-v1.4.4/Relayium.dmg";
+      })[MAC_MANIFEST] }),
+    expect: [`mac-headline|${APPS}`] },
+  { name: "the headline names the current version WITH its build, which the next bump cannot move",
+    world: () => sub(APPS, `macOS **${realMacVersion}** is published`,
+      `macOS **${realMacVersion} (${realMacBuild})** is published`),
+    expect: [`mac-headline|${APPS}`] },
+  { name: "the direct-download headline is deleted",
+    world: () => sub(APPS, `macOS **${realMacVersion}** is published through the direct-download channel.`,
+      "macOS is published through the direct-download channel."),
+    expect: [`mac-headline|${APPS}`] },
+  { name: "a second, stale direct-download headline is added",
+    world: () => append(APPS, "macOS **1.4.3** is published through the direct-download channel."),
+    expect: [`mac-headline|${APPS}`] },
 
   // -- the records
   { name: "the macOS manifest is not JSON", world: () => ({ ...real, [MAC_MANIFEST]: "{" }),
@@ -759,7 +797,7 @@ const MUTATIONS = [
       v.macos.version = "99.0.0";
       v.macos.downloadUrl = "https://github.com/relayium/relayium/releases/download/macos-v99.0.0/Relayium.dmg";
     }),
-    expect: [`mac-tag|${README}`, `mac-tag|${APPS}`, `mac-status|${APPS}`] },
+    expect: [`mac-tag|${README}`, `mac-tag|${APPS}`, `mac-status|${APPS}`, `mac-headline|${APPS}`] },
   { name: "the App Store record is not JSON", world: () => ({ ...real, [APP_STORE]: "[" }),
     expect: ["store|decodes", `store-link|${README}`, `store-spans|${APPS}`] },
   { name: "the App Store record loses a field", world: () => json(APP_STORE, (v) => { delete v.publishedAt; }),
@@ -822,6 +860,10 @@ const MUTATIONS = [
     refuse: /./ },
   { name: "a figure 61 characters past the prediction word is outside the window",
     world: () => append(README, `${"x".repeat(80)} estimated${"y".repeat(61)}7`),
+    refuse: /./ },
+  { name: "the direct-download headline is re-wrapped across lines",
+    world: () => sub(APPS, `macOS **${realMacVersion}** is published through the direct-download channel.`,
+      `macOS\n**${realMacVersion}** is\n   published through the direct-download channel.`),
     refuse: /./ },
   { name: "the iOS status sentence is re-wrapped across lines",
     world: () => sub(APPS, "**In development at 0.5.0 and not public**", "**In development\nat 0.5.0 and\n   not public**"),

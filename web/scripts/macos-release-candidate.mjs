@@ -59,6 +59,46 @@ export const RELEASE_DOCS = [
 export const RELEASE_HISTORY_DOC = "web/scripts/pages/content/releases.mjs";
 
 /**
+ * The one document whose opening sentence names the direct-download release,
+ * and the shape that sentence must have for the bump to be able to move it.
+ *
+ * `releaseVersionPattern` deliberately skips every "version (build)" spelling,
+ * because that is how TestFlight and store build records are written and they
+ * are facts about a different artifact. The direct-download headline is
+ * therefore written with the version ONLY — `macOS **1.4.4** is published
+ * through the direct-download channel.` — so the ordinary pattern reaches it.
+ * The 1.4.3 delivery hand-wrote it as `macOS **1.4.3 (40)**`, the 1.4.4 bump
+ * (583760be4) moved every other occurrence and skipped exactly that one, and the
+ * release shipped a headline a version behind until it was corrected by hand.
+ *
+ * Checked on the OUTPUT, like the App Store carve-out: after the rewrite the
+ * document must carry exactly one such headline and it must name `to`. A
+ * headline that grew a build number again, or was reworded so this cannot find
+ * it, is a refusal before anything is published rather than a stale front line
+ * discovered afterwards. `scripts/test/document-claims-test.mjs` holds the same
+ * sentence to `web/native-releases.json` on every push.
+ */
+export const DIRECT_HEADLINE_DOC = "apps/README.md";
+const DIRECT_HEADLINE = /macOS\s+\*\*([^*\n]+)\*\*\s+is\s+published\s+through\s+the\s+direct-download\s+channel\./g;
+
+function assertDirectHeadline(doc, text, to) {
+  const headlines = [...text.matchAll(DIRECT_HEADLINE)].map((match) => match[1]);
+  if (headlines.length !== 1) {
+    throw new Error(
+      `${doc} must open with exactly one "macOS **<version>** is published through the direct-download `
+        + `channel." sentence; found ${headlines.length}`,
+    );
+  }
+  if (headlines[0] !== to) {
+    throw new Error(
+      `${doc}'s direct-download headline names ${headlines[0]}, not ${to}, after the bump. Write it as `
+        + `"macOS **<version>**" with no build number: a "version (build)" spelling is a TestFlight/store `
+        + "record, which the bump deliberately never moves",
+    );
+  }
+}
+
+/**
  * The canonical record of the OTHER published macOS channel.
  *
  * Relayium ships macOS twice, and the two are versioned independently: a
@@ -567,6 +607,7 @@ export async function bumpReleaseDocs({ repoRoot, from, to, docs = RELEASE_DOCS 
       }
     }
     if (APP_STORE_DERIVED_DOCS.includes(doc)) assertAppStoreDerived(doc, before, appStore);
+    if (doc === DIRECT_HEADLINE_DOC) assertDirectHeadline(doc, after, to);
     rewritten.push({ doc, path, after });
   }
   for (const { path, after } of rewritten) {

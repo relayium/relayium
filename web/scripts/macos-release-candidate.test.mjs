@@ -182,6 +182,20 @@ async function claimsByDoc(root) {
   return claims;
 }
 
+/** Whitespace-flattened, so a re-wrapped sentence still reads as one. */
+const flat = (text) => text.replace(/\s+/g, " ");
+
+/** apps/README.md's opening sentence about the direct download. */
+const directHeadline = (version) => `macOS **${version}** is published through the direct-download channel.`;
+
+/** That sentence for `version`, however it is wrapped in the file. */
+const DIRECT_HEADLINE_SOURCE = (version) =>
+  new RegExp(quoteRegExp(directHeadline(version)).replace(/ /g, "\\s+"));
+
+/** Every "version (build)" record naming `version` — TestFlight and store builds. */
+const buildRecords = (text, version) =>
+  text.match(new RegExp(`(?<![0-9.])${quoteRegExp(version)} \\([0-9]+\\)`, "g")) ?? [];
+
 const macTags = (text) => new Set([...text.matchAll(/macos-v[0-9]+(?:\.[0-9]+){1,2}/g)].map((m) => m[0]));
 
 describe("bumping the documents that name the published macOS release", () => {
@@ -223,6 +237,68 @@ describe("bumping the documents that name the published macOS release", () => {
     const text = await readFile(resolve(root, "apps/README.md"), "utf8");
     expect(text).toContain(`**Status: released as ${NEXT}.**`);
     expect(text).not.toContain(`released as ${PUBLISHED}.`);
+  });
+
+  it("moves the direct-download headline, and no \"version (build)\" record beside it", async () => {
+    // apps/README.md opens with the sentence a reader takes as the current
+    // direct download. The 1.4.3 delivery wrote it as `macOS **1.4.3 (40)**`,
+    // and `releaseVersionPattern` deliberately never rewrites "version (build)"
+    // — that is how TestFlight and store build records are spelled — so the
+    // 1.4.4 bump (583760be4) moved every other occurrence and shipped that
+    // headline a release behind. The headline now carries the version only;
+    // this holds the repository's own document to that form AND holds the
+    // protection it must not erode: a TestFlight record naming the published
+    // version with its build, synthesized so it exists in every state the
+    // repository can be in, and the Mac App Store claim.
+    const root = await stagedDocs();
+    const path = resolve(root, "apps/README.md");
+    const staged = await readFile(path, "utf8");
+    expect(flat(staged), "apps/README.md has no direct-download headline in the form the bump moves")
+      .toContain(directHeadline(PUBLISHED));
+    const record = `The \`${PUBLISHED} (${macos.build})\` store build is in internal TestFlight testing.`;
+    await writeFile(path, `${staged}\n${record}\n`, "utf8");
+    const before = await readFile(path, "utf8");
+    const recordsBefore = buildRecords(before, PUBLISHED);
+    const claimsBefore = appStoreClaims(before);
+    expect(recordsBefore.length).toBeGreaterThan(0);
+    expect(claimsBefore.length).toBeGreaterThan(0);
+
+    await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT });
+
+    const after = await readFile(path, "utf8");
+    expect(flat(after), "the direct-download headline did not move").toContain(directHeadline(NEXT));
+    expect(flat(after), "the direct-download headline still names the superseded release")
+      .not.toContain(`macOS **${PUBLISHED}`);
+    expect(buildRecords(after, PUBLISHED), "a \"version (build)\" record followed the bump")
+      .toEqual(recordsBefore);
+    expect(after, "the synthesized TestFlight record was rewritten").toContain(record);
+    expect(buildRecords(after, NEXT), "the bump invented a build record for the new version")
+      .toEqual([]);
+    expect(appStoreClaims(after), "the Mac App Store claim followed the Developer ID bump")
+      .toEqual(claimsBefore);
+  });
+
+  it("refuses a direct-download headline the bump cannot move, and writes nothing", async () => {
+    // The 583760be4 shape — the headline spelled "version (build)" — is exactly
+    // what the pattern is built to skip, so it is refused on the output instead
+    // of shipped stale. A headline reworded out of recognition is refused too:
+    // silence there is how the stale one went unnoticed.
+    for (const replacement of [
+      `macOS **${PUBLISHED} (${macos.build})** is published through the direct-download channel.`,
+      `macOS ${PUBLISHED} is what the direct-download channel serves.`,
+    ]) {
+      const root = await stagedDocs();
+      const path = resolve(root, "apps/README.md");
+      const staged = await readFile(path, "utf8");
+      const edited = staged.replace(DIRECT_HEADLINE_SOURCE(PUBLISHED), replacement);
+      expect(edited, "the staged headline was not replaced").not.toBe(staged);
+      await writeFile(path, edited, "utf8");
+      const readme = await readFile(resolve(root, "README.md"), "utf8");
+      await expect(bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT }))
+        .rejects.toThrow(/apps\/README\.md.*direct-download/);
+      expect(await readFile(resolve(root, "README.md"), "utf8")).toBe(readme);
+      expect(await readFile(path, "utf8")).toBe(edited);
+    }
   });
 
   it("does not rewrite the independently versioned Mac App Store claim", async () => {
