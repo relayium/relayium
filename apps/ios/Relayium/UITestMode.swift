@@ -423,7 +423,23 @@ enum UITestMode {
                 for: .applicationSupportDirectory, in: .userDomainMask,
                 appropriateFor: nil, create: true) else { return nil }
         let root = support.appendingPathComponent("uitest-pending", isDirectory: true)
-        try? FileManager.default.removeItem(at: root)
+        // Both this root and its protected Device Inbox sibling, and the
+        // content key of every job they held. Each staged job's key is written
+        // to the product's keychain namespace (`pending-upload-key:<jobId>`),
+        // not into this directory, so deleting the directory alone left one
+        // orphaned keychain item per job on every run. Keys are named only by
+        // the ids of the directories discarded here — never by enumerating the
+        // keychain, which is shared with the installed app's real uploads. The
+        // directories go synchronously, before any store sees the root; the
+        // keychain deletes run off the main actor. A job id is freshly minted,
+        // so this launch can never stage one whose key these deletes remove.
+        let discarded = PendingUploadTestRootReset.discardRoots(besides: root)
+        if !discarded.isEmpty {
+            Task.detached(priority: .utility) {
+                await PendingUploadTestRootReset.removeKeys(
+                    for: discarded, from: AppEnvironment.makePendingUploadKeyStore())
+            }
+        }
         return root
     }
 
