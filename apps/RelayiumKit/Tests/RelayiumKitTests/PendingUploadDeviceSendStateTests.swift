@@ -334,13 +334,20 @@ final class PendingUploadDeviceSendStateTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path))
     }
 
-    /// The share half of the same sweep, unchanged. This is the regression
-    /// guard on relaxing the rule for deliveries.
+    /// The share half of the same sweep. This is the regression guard on
+    /// relaxing the rule for deliveries: a finalized share is still removed at
+    /// launch — no longer by the synchronous sweep itself (d2), but named for
+    /// the link-key salvage and removed through `purgeFinalizedShare`, which
+    /// `CloudUploadModel.recoverPendingJob` calls once the key is filed.
     func testTheLaunchSweepStillRemovesAFinalizedShare() throws {
         // Shares live in the shared root; its sweep is the one under guard.
         let store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
         let plan = try store.markFinalized(try share(store), storedId: "STORED0123456789")
         store.sweepIncomplete()
+        let named = store.finalizedSharesAwaitingSalvage()
+        XCTAssertEqual(named, [FinalizedShareEntry(jobId: plan.jobId, storedId: "STORED0123456789")],
+                       "a finalized share was treated like a delivery that still has work to do")
+        for entry in named { XCTAssertTrue(store.purgeFinalizedShare(entry)) }
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path))
     }
 }

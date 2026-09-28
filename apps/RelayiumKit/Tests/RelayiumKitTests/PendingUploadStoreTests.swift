@@ -471,15 +471,65 @@ extension PendingUploadStoreTests {
         XCTAssertFalse(exists(sharedRoot.appendingPathComponent(delivery.jobId)))
     }
 
-    // T4
-    func testSharedSweepRemovesAFinalizedShareButNeverListsIt() throws {
+    // T4 (d2): the sweep no longer deletes a finalized share; it is retained
+    // and named for salvage, with the stored-object id its link key belongs to.
+    func testSharedSweepRetainsAFinalizedShareAndNamesItForSalvage() throws {
         let store = makeStore()
         let plan = try stagedShare(in: store)
         _ = try store.markFinalized(plan, storedId: "STOREDSHARE00001")
 
         XCTAssertEqual(makeStore().sweepIncomplete(), [],
                        "a finalized share's pending key may be the only copy of its link key")
-        XCTAssertFalse(exists(store.jobURL(for: plan.jobId)), "the finalized share is still swept")
+        XCTAssertTrue(exists(store.jobURL(for: plan.jobId)),
+                      "the sweep deleted a finalized share before its link key was salvaged")
+        XCTAssertEqual(makeStore().finalizedSharesAwaitingSalvage(),
+                       [FinalizedShareEntry(jobId: plan.jobId, storedId: "STOREDSHARE00001")])
+    }
+
+    // F1: only a readable, valid, non-retired, finalized SHARE is named.
+    func testSalvageListingNamesOnlyFinalizedShares() throws {
+        let store = makeStore()
+        _ = try stagedShare(in: store)                                  // live
+        _ = try store.markRetired(try stagedShare(in: store))           // retired
+        let finalized = try stagedShare(in: store)
+        _ = try store.markFinalized(finalized, storedId: "STOREDSHARE00001")
+        let unreadable = sharedRoot.appendingPathComponent("SHAREDUNREAD0001")
+        try FileManager.default.createDirectory(at: unreadable, withIntermediateDirectories: true)
+        try Data("{not a plan".utf8).write(to: unreadable.appendingPathComponent("plan.json"))
+
+        XCTAssertEqual(makeStore().finalizedSharesAwaitingSalvage(),
+                       [FinalizedShareEntry(jobId: finalized.jobId, storedId: "STOREDSHARE00001")])
+        XCTAssertEqual(makeStore().protectedDeviceStore().finalizedSharesAwaitingSalvage(), [],
+                       "the protected store names nothing for salvage")
+    }
+
+    // F2: the purge revalidates, honours R2, and is idempotent.
+    func testPurgeFinalizedShareRevalidatesAndHonoursR2() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+        _ = try store.markFinalized(plan, storedId: "STOREDSHARE00001")
+        let entry = FinalizedShareEntry(jobId: plan.jobId, storedId: "STOREDSHARE00001")
+
+        XCTAssertFalse(store.purgeFinalizedShare(FinalizedShareEntry(jobId: plan.jobId,
+                                                                     storedId: "STOREDSHARE00002")),
+                       "a stale entry naming a different stored id removed the job")
+        XCTAssertTrue(exists(store.jobURL(for: plan.jobId)))
+
+        let live = try stagedShare(in: store)
+        XCTAssertFalse(store.purgeFinalizedShare(FinalizedShareEntry(jobId: live.jobId,
+                                                                     storedId: "STOREDSHARE00001")),
+                       "a live share was removed as though it were finalized")
+        XCTAssertTrue(exists(store.jobURL(for: live.jobId)))
+
+        try twinInProtectedRoot(store.jobURL(for: plan.jobId))
+        XCTAssertEqual(makeStore().finalizedSharesAwaitingSalvage(), [], "a conflict was named for salvage (R2)")
+        XCTAssertFalse(store.purgeFinalizedShare(entry), "the shared copy of a conflict was purged (R2)")
+        XCTAssertTrue(exists(store.jobURL(for: plan.jobId)))
+
+        try FileManager.default.removeItem(at: protectedRoot.appendingPathComponent(plan.jobId))
+        XCTAssertTrue(store.purgeFinalizedShare(entry))
+        XCTAssertFalse(exists(store.jobURL(for: plan.jobId)))
+        XCTAssertTrue(store.purgeFinalizedShare(entry), "an already-gone directory is a success")
     }
 
     // T5
@@ -587,6 +637,14 @@ extension PendingUploadStoreTests {
         return (dirs, [stagingGone.jobId, retired.jobId].sorted())
     }
 
+    /// The one entry of `sweepableSharedEntries` the sweep itself no longer
+    /// deletes: the finalized share (d2), retained for salvage.
+    private func isFinalizedShare(_ dir: URL) -> Bool {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent("plan.json")),
+              let plan = try? JSONDecoder().decode(PendingUploadPlan.self, from: data) else { return false }
+        return plan.finalizedStoredId != nil && !plan.retired
+    }
+
     /// Give a shared entry a protected twin: the same directory name, as a copy.
     private func twinInProtectedRoot(_ shared: URL) throws {
         try FileManager.default.createDirectory(at: protectedRoot, withIntermediateDirectories: true)
@@ -610,6 +668,8 @@ extension PendingUploadStoreTests {
                        dirs.map(\.lastPathComponent).sorted(),
                        "every retained pair must still be reported as a conflict")
         XCTAssertNil(store.plan(for: "acct-1"), "a retained conflicting copy was offered")
+        XCTAssertEqual(makeStore().finalizedSharesAwaitingSalvage(), [],
+                       "a conflicting finalized share was named for salvage (R2)")
     }
 
     // C4 (control)
@@ -618,9 +678,16 @@ extension PendingUploadStoreTests {
         let (dirs, listed) = try sweepableSharedEntries(in: store)
 
         XCTAssertEqual(makeStore().sweepIncomplete(), listed)
-        for dir in dirs {
+        for dir in dirs where !isFinalizedShare(dir) {
             XCTAssertFalse(exists(dir), "\(dir.lastPathComponent) was not swept as before")
         }
+        let finalized = dirs.filter(isFinalizedShare)
+        XCTAssertEqual(finalized.count, 1, "fixture: exactly one finalized share")
+        for dir in finalized {
+            XCTAssertTrue(exists(dir), "the sweep deleted a finalized share before salvage (d2)")
+        }
+        XCTAssertEqual(makeStore().finalizedSharesAwaitingSalvage().map(\.jobId),
+                       finalized.map(\.lastPathComponent))
     }
 
     // C5

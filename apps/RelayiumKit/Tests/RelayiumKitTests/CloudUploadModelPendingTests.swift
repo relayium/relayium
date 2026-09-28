@@ -654,15 +654,20 @@ extension CloudUploadModelPendingTests {
                                          to: protectedRoot.appendingPathComponent(collision.jobId))
 
         let forbidden = ForbiddenTransport()
+        let linkKeys = InMemoryStoredLinkKeyStore()
         let model = makeModel(transport: forbidden, store: makeStore(),
-                              pendingKeys: keys, finalKeys: InMemoryStoredLinkKeyStore())
+                              pendingKeys: keys, finalKeys: linkKeys)
         model.recoverPendingJob(for: "acct-1")
         await model.recoveryTask?.value
 
-        for id in [live.jobId, finalized.jobId, unreadable, planless, newer.jobId, collision.jobId] {
+        for id in [live.jobId, unreadable, planless, newer.jobId, collision.jobId] {
             let key = try await keys.key(for: id)
             XCTAssertEqual(key, Self.hygieneKey, "the key of \(id) was removed")
         }
+        // The finalized share's pending key goes only because its link key was
+        // salvaged first (S1–S7 below pin that path in detail).
+        let salvaged = try await linkKeys.key(for: "STOREDSHARE00001")
+        XCTAssertEqual(salvaged, Self.hygieneKey, "the finalized share's link key was not salvaged")
         guard case .interrupted = model.state else {
             return XCTFail("the live share must still be offered, got \(model.state)")
         }
@@ -743,6 +748,194 @@ extension CloudUploadModelPendingTests {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path))
         let key = try await keys.key(for: plan.jobId)
         XCTAssertNil(key, "a superseded recovery dropped the ids its sweep released")
+    }
+}
+
+// MARK: - d2 salvage: a finalized share's link key is filed before its job goes
+
+/// `completed()` marks the plan finalized before it saves the stored-link key,
+/// so a crash in between leaves the pending key as the only copy of the key
+/// that opens the link. Recovery files it under the stored-object id — or
+/// proves it already is — before the job directory and the pending key go.
+extension CloudUploadModelPendingTests {
+    private static let storedId = "STOREDSHARE00001"
+    private static let otherKey = encodeStoreKey(Array(repeating: 5, count: 32))
+
+    /// A finalized share in the shared root, its pending key saved unless
+    /// `withPendingKey` is false.
+    private func finalizedShare(in store: PendingUploadStore, keys: StoredLinkKeyStore,
+                                withPendingKey: Bool = true) async throws -> PendingUploadPlan {
+        let plan = try await stagedShare(in: store, keys: keys)
+        _ = try store.markFinalized(plan, storedId: Self.storedId)
+        if !withPendingKey { try await keys.remove(id: plan.jobId) }
+        return plan
+    }
+
+    private func recover(store: PendingUploadStore, pendingKeys: StoredLinkKeyStore,
+                         linkKeys: StoredLinkKeyStore) async -> CloudUploadModel {
+        let model = makeModel(transport: ForbiddenTransport(), store: store,
+                              pendingKeys: pendingKeys, finalKeys: linkKeys)
+        model.recoverPendingJob(for: "acct-1")
+        await model.recoveryTask?.value
+        return model
+    }
+
+    private func dirExists(_ store: PendingUploadStore, _ plan: PendingUploadPlan) -> Bool {
+        FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path)
+    }
+
+    // S1
+    func testRecoverySalvagesTheLinkKeyOfAFinalizedShareBeforeRemovingIt() async throws {
+        let store = makeStore()
+        let keys = InMemoryStoredLinkKeyStore()
+        let linkKeys = InMemoryStoredLinkKeyStore()
+        let plan = try await finalizedShare(in: store, keys: keys)
+
+        let model = await recover(store: makeStore(), pendingKeys: keys, linkKeys: linkKeys)
+
+        let link = try await linkKeys.key(for: Self.storedId)
+        XCTAssertEqual(link, Self.hygieneKey, "the only copy of the link key was not salvaged")
+        XCTAssertFalse(dirExists(store, plan), "the salvaged job was left behind")
+        let pendingKey = try await keys.key(for: plan.jobId)
+        XCTAssertNil(pendingKey, "the dead pending key was left behind")
+        guard case .idle = model.state else { return XCTFail("got \(model.state)") }
+    }
+
+    // S2
+    func testRecoveryRemovesAFinalizedShareWhoseLinkKeyIsAlreadyEqual() async throws {
+        let store = makeStore()
+        let keys = InMemoryStoredLinkKeyStore()
+        let linkKeys = InMemoryStoredLinkKeyStore()
+        let plan = try await finalizedShare(in: store, keys: keys)
+        try await linkKeys.save(id: Self.storedId, keyB64url: Self.hygieneKey)
+
+        _ = await recover(store: makeStore(), pendingKeys: keys, linkKeys: linkKeys)
+
+        let link = try await linkKeys.key(for: Self.storedId)
+        XCTAssertEqual(link, Self.hygieneKey)
+        XCTAssertFalse(dirExists(store, plan))
+        let pendingKey = try await keys.key(for: plan.jobId)
+        XCTAssertNil(pendingKey)
+    }
+
+    // S3
+    func testRecoveryKeepsEverythingWhenTheLinkKeyDiffersFromThePendingKey() async throws {
+        let store = makeStore()
+        let keys = InMemoryStoredLinkKeyStore()
+        let linkKeys = InMemoryStoredLinkKeyStore()
+        let plan = try await finalizedShare(in: store, keys: keys)
+        try await linkKeys.save(id: Self.storedId, keyB64url: Self.otherKey)
+
+        _ = await recover(store: makeStore(), pendingKeys: keys, linkKeys: linkKeys)
+
+        let link = try await linkKeys.key(for: Self.storedId)
+        XCTAssertEqual(link, Self.otherKey, "a differing link key was overwritten")
+        XCTAssertTrue(dirExists(store, plan), "an ambiguous finalized share was deleted")
+        let pendingKey = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(pendingKey, Self.hygieneKey, "an ambiguous pending key was removed")
+        // The surfaced condition, and it holds on every later launch.
+        let outcome = await CloudUploadModel.salvageFinalizedShare(
+            FinalizedShareEntry(jobId: plan.jobId, storedId: Self.storedId),
+            pending: PendingUploadSupport(store: makeStore(), keys: keys), linkKeys: linkKeys)
+        XCTAssertEqual(outcome, .conflict)
+        XCTAssertTrue(dirExists(store, plan))
+    }
+
+    // S4
+    func testAFinalizedShareWithoutAPendingKeyIsStillRemoved() async throws {
+        let store = makeStore()
+        let keys = InMemoryStoredLinkKeyStore()
+        let linkKeys = InMemoryStoredLinkKeyStore()
+        let plan = try await finalizedShare(in: store, keys: keys, withPendingKey: false)
+
+        _ = await recover(store: makeStore(), pendingKeys: keys, linkKeys: linkKeys)
+
+        XCTAssertFalse(dirExists(store, plan), "today's removal of a keyless finalized share changed")
+        let link = try await linkKeys.key(for: Self.storedId)
+        XCTAssertNil(link, "a link key was invented without a pending key")
+    }
+
+    // S5
+    func testAFinalizedShareWithAProtectedTwinIsUntouched() async throws {
+        let store = makeStore()
+        let keys = InMemoryStoredLinkKeyStore()
+        let linkKeys = InMemoryStoredLinkKeyStore()
+        let plan = try await finalizedShare(in: store, keys: keys)
+        try FileManager.default.createDirectory(at: protectedRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: store.jobURL(for: plan.jobId),
+                                         to: protectedRoot.appendingPathComponent(plan.jobId))
+
+        _ = await recover(store: makeStore(), pendingKeys: keys, linkKeys: linkKeys)
+
+        XCTAssertTrue(dirExists(store, plan), "the shared copy of a conflict was deleted (R2)")
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: protectedRoot.appendingPathComponent(plan.jobId).path))
+        let pendingKey = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(pendingKey, Self.hygieneKey, "the id-filed key of a conflict was removed")
+        let link = try await linkKeys.key(for: Self.storedId)
+        XCTAssertNil(link, "a conflict was acted on (R2)")
+    }
+
+    // S6
+    func testSalvageIsIdempotentAcrossAnInterruptedFirstLaunch() async throws {
+        let fm = RemovalFailingFileManager()
+        let store = PendingUploadStore(root: sharedRoot, fileManager: fm)
+        let keys = InMemoryStoredLinkKeyStore()
+        let linkKeys = InMemoryStoredLinkKeyStore()
+        let plan = try await finalizedShare(in: store, keys: keys)
+        fm.failNextRemoval(of: store.jobURL(for: plan.jobId))
+
+        // First launch: the key is filed, the directory refuses to go, so the
+        // pending key — which still names it — stays too.
+        _ = await recover(store: store, pendingKeys: keys, linkKeys: linkKeys)
+        XCTAssertEqual(fm.failures, 1)
+        let firstLink = try await linkKeys.key(for: Self.storedId)
+        XCTAssertEqual(firstLink, Self.hygieneKey)
+        XCTAssertTrue(dirExists(store, plan))
+        let firstPending = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(firstPending, Self.hygieneKey)
+
+        // Second launch finishes it; a third finds nothing to do.
+        _ = await recover(store: store, pendingKeys: keys, linkKeys: linkKeys)
+        _ = await recover(store: store, pendingKeys: keys, linkKeys: linkKeys)
+        let link = try await linkKeys.key(for: Self.storedId)
+        XCTAssertEqual(link, Self.hygieneKey)
+        XCTAssertFalse(dirExists(store, plan))
+        let pendingKey = try await keys.key(for: plan.jobId)
+        XCTAssertNil(pendingKey)
+    }
+
+    // S7
+    func testASupersededRecoveryStillCompletesTheSalvage() async throws {
+        let fm = GatedRemovalFileManager()
+        let store = PendingUploadStore(root: sharedRoot, fileManager: fm)
+        let keys = InMemoryStoredLinkKeyStore()
+        let linkKeys = InMemoryStoredLinkKeyStore()
+        let plan = try await finalizedShare(in: store, keys: keys)
+        // Park the sweep on another entry, so recovery is superseded BEFORE the
+        // salvage has started.
+        let retired = try await stagedShare(in: store, keys: keys)
+        _ = try store.markRetired(retired)
+        fm.gate(store.jobURL(for: retired.jobId))
+
+        let model = makeModel(transport: ForbiddenTransport(), store: store,
+                              pendingKeys: keys, finalKeys: linkKeys)
+        model.recoverPendingJob(for: "acct-1")
+        let recovery = try XCTUnwrap(model.recoveryTask)
+        let reached = await Task.detached { fm.waitUntilEntered(seconds: 30) }.value
+        guard reached else {
+            fm.release.signal()
+            return XCTFail("the sweep never reached the gated removal")
+        }
+        model.cancel()
+        fm.release.signal()
+        await recovery.value
+
+        let link = try await linkKeys.key(for: Self.storedId)
+        XCTAssertEqual(link, Self.hygieneKey, "a superseded recovery abandoned the salvage")
+        XCTAssertFalse(dirExists(store, plan))
+        let pendingKey = try await keys.key(for: plan.jobId)
+        XCTAssertNil(pendingKey)
     }
 }
 

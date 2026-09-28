@@ -1413,7 +1413,9 @@ public final class PendingUploadStore: @unchecked Sendable {
 
     /// Remove what cannot be recovered anyway: job directories with no plan (a
     /// preparation that died part-way), plans this build cannot read, retired
-    /// jobs, and jobs whose object the server already has.
+    /// jobs, and (protected root only) jobs whose object the server already
+    /// has. A shared-root finalized share is retained for salvage instead —
+    /// see `finalizedSharesAwaitingSalvage`.
     ///
     /// Called once at launch. It never touches a directory it cannot explain,
     /// and it is the only thing that deletes a job nobody asked about.
@@ -1437,9 +1439,12 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// id is listed only after this sweep's own removal succeeded, the
     /// directory is confirmed gone, and the protected sibling root does not
     /// hold the same id. An unreadable, plan-less, newer-version or
-    /// mismatched-id entry, and a finalized share, are still deleted exactly
-    /// as every released build deletes them, but never listed: the id or the
-    /// key's fate is not provable from what is on disk.
+    /// mismatched-id entry is still deleted exactly as every released build
+    /// deletes it, but never listed: the id or the key's fate is not provable
+    /// from what is on disk. A finalized share (d2) is neither deleted nor
+    /// listed here: its pending key may be the only copy of the link key, so
+    /// `CloudUploadModel` salvages that key first and then removes the
+    /// directory through `purgeFinalizedShare`.
     ///
     /// Except for a conflict (R2): an entry whose directory name the protected
     /// sibling root also holds is neither deleted nor listed, whatever its plan
@@ -1471,8 +1476,9 @@ public final class PendingUploadStore: @unchecked Sendable {
             return releasedKeys.sorted()
         }
         // The shared root. Which entries are deleted is unchanged from every
-        // released build; the guard is split only so the failing path is known,
-        // because that decides whether the entry's content key may go too.
+        // released build except (d2), which is retained for the async salvage;
+        // the guard is split only so the failing path is known, because that
+        // decides whether the entry's content key may go too.
         //
         // Key invariants (the caller removes exactly what is returned):
         //  - keys are never enumerated; only ids this call itself removed, and
@@ -1532,8 +1538,15 @@ public final class PendingUploadStore: @unchecked Sendable {
                 // (c) Staged bytes gone: nothing can ever resume it.
                 keyIsDead = true
             } else {
-                // (d2) A finalized share: removed, its key never listed.
-                keyIsDead = false
+                // (d2) A finalized share: RETAINED here, never listed. Its
+                // pending key may be the only copy of the key that opens the
+                // link (a crash between `markFinalized` and the stored-link key
+                // save), and once this directory is gone nothing maps the
+                // stored-object id back to the job id. `finalizedSharesAwaitingSalvage`
+                // names it, and the async caller removes it through
+                // `purgeFinalizedShare` only after the stored-link key is
+                // proven present and equal.
+                continue
             }
             do { try fileManager.removeItem(at: entry) } catch { continue }
             if keyIsDead, !fileManager.fileExists(atPath: entry.path),
@@ -1542,6 +1555,51 @@ public final class PendingUploadStore: @unchecked Sendable {
             }
         }
         return releasedKeys.sorted()
+    }
+
+    /// The shared-root finalized shares (d2) the launch sweep retains, each
+    /// with the stored-object id its link key must be filed under.
+    ///
+    /// Listed from the same rules the sweep applies: a directory whose name
+    /// the protected root also holds is a conflict and is never listed (R2);
+    /// only a readable, valid, non-retired SHARE plan with a finalized id is.
+    /// Empty on the protected store, whose own sweep is unchanged.
+    public func finalizedSharesAwaitingSalvage() -> [FinalizedShareEntry] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isProtectedDeviceStore else { return [] }
+        let entries = (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        var shares: [FinalizedShareEntry] = []
+        for entry in entries {
+            let name = entry.lastPathComponent
+            guard !protectedRootHolds(jobId: name),
+                  let share = finalizedShare(jobId: name) else { continue }
+            shares.append(share)
+        }
+        return shares.sorted { $0.jobId < $1.jobId }
+    }
+
+    /// Remove one finalized share's directory, and only if it is still exactly
+    /// the finalized share `entry` names — revalidated under the lock, so a
+    /// directory that changed since it was listed is never removed on the
+    /// strength of the old listing. Honours R2 through `purge(jobId:)`.
+    /// `true` only when the directory is confirmed gone.
+    @discardableResult
+    public func purgeFinalizedShare(_ entry: FinalizedShareEntry) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isProtectedDeviceStore else { return false }
+        let url = jobURL(for: entry.jobId)
+        guard fileManager.fileExists(atPath: url.path) else { return true }
+        guard finalizedShare(jobId: entry.jobId) == entry else { return false }
+        return purge(jobId: entry.jobId)
+    }
+
+    private func finalizedShare(jobId: String) -> FinalizedShareEntry? {
+        guard let plan = currentPlan(jobId: jobId), !plan.retired,
+              plan.effectivePurpose == .share,
+              let storedId = plan.finalizedStoredId else { return nil }
+        return FinalizedShareEntry(jobId: plan.jobId, storedId: storedId)
     }
 
     /// Whether the PROTECTED sibling root holds a job directory with this id.
@@ -1557,6 +1615,19 @@ public final class PendingUploadStore: @unchecked Sendable {
         }
         return fileManager.fileExists(
             atPath: Self.protectedDeviceRoot(besides: root).appendingPathComponent(checked, isDirectory: true).path)
+    }
+}
+
+/// A finalized share the shared-root sweep retained: the job whose pending
+/// key may be the only copy of the link key, and the stored-object id that
+/// key must be filed under before the job may go.
+public struct FinalizedShareEntry: Equatable, Sendable {
+    public let jobId: String
+    public let storedId: String
+
+    public init(jobId: String, storedId: String) {
+        self.jobId = jobId
+        self.storedId = storedId
     }
 }
 

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import RelayiumKit
 import RelayiumShareKit
 
@@ -560,10 +561,11 @@ public final class CloudUploadModel: ObservableObject {
         cleanupWarning = nil
         guard let accountId else { return }
         state = .checkingRecovery
+        let linkKeys = keyStore
         recoveryTask = Task { [weak self] in
             guard let self else { return }
-            let released = await Task.detached(priority: .utility) {
-                pending.store.sweepIncomplete()
+            let (released, finalized) = await Task.detached(priority: .utility) {
+                (pending.store.sweepIncomplete(), pending.store.finalizedSharesAwaitingSalvage())
             }.value
             // The sweep lists only ids whose directory IT removed and whose key
             // nothing can use again (never a finalized share's, never one the
@@ -571,9 +573,19 @@ public final class CloudUploadModel: ObservableObject {
             // BEFORE the generation check — a superseded recovery would
             // otherwise drop the only list naming them — and detached, so
             // cancelling this recovery cannot interrupt it.
-            if !released.isEmpty {
+            //
+            // The finalized shares the sweep retained are salvaged here, under
+            // the same two rules and for a stronger reason: a half-done salvage
+            // interrupted by cancellation is exactly the state it exists to
+            // repair, and a superseded recovery that skipped it would leave the
+            // pending key the only copy of a link key one launch longer.
+            if !released.isEmpty || !finalized.isEmpty {
                 await Task.detached {
                     for id in released { try? await pending.keys.remove(id: id) }
+                    for share in finalized {
+                        _ = await Self.salvageFinalizedShare(share, pending: pending,
+                                                              linkKeys: linkKeys)
+                    }
                 }.value
             }
             guard !Task.isCancelled, g == self.generation,
@@ -641,6 +653,86 @@ public final class CloudUploadModel: ObservableObject {
             self.recoveryTask = nil
         }
     }
+
+    /// What recovery did with one finalized share the launch sweep retained.
+    enum FinalizedShareSalvage: Equatable {
+        /// The stored-link key was missing and was saved from the pending key.
+        case salvaged
+        /// The stored-link key was already there and opens the same object.
+        case alreadyEqual
+        /// No pending key: whatever the link key's fate, this job cannot change
+        /// it. The directory is removed exactly as every earlier build did.
+        case noPendingKey
+        /// The stored-link key exists and is NOT the pending key. Nothing is
+        /// removed and nothing is overwritten: which one opens the link is not
+        /// provable here, and either may be the only copy.
+        case conflict
+        /// A read, save or removal did not complete (a locked Keychain, an
+        /// undeletable file). Everything already done is idempotent; the next
+        /// launch retries from the start.
+        case retained
+    }
+
+    /// Make sure a finalized share's link key is filed under its stored-object
+    /// id BEFORE its job directory — the only thing mapping that id back to the
+    /// pending key — is removed.
+    ///
+    /// `completed()` marks the plan finalized, THEN saves the stored-link key,
+    /// THEN removes the pending key and the directory. A crash or a Keychain
+    /// failure between the first two leaves the pending key as the only copy
+    /// of the key that opens the link. The value `finish` would have written is
+    /// `encodeStoreKey` of the raw key `run` decoded from that very pending
+    /// key (`CloudUploader.resume` returns `encodeStoreKey(key)`), so salvage
+    /// re-encodes it the same way and needs nothing but the pending key.
+    ///
+    /// Order, each step idempotent so a re-run on the next launch is safe:
+    /// read the pending key; read the stored-link key; save it if missing,
+    /// compare it if present; only after that succeeds remove the directory,
+    /// and only after the directory is confirmed gone remove the pending key
+    /// (it names the job, so it stays as long as the job does).
+    nonisolated static func salvageFinalizedShare(_ share: FinalizedShareEntry,
+                                                  pending: PendingUploadSupport,
+                                                  linkKeys: StoredLinkKeyStore) async -> FinalizedShareSalvage {
+        let pendingKey: String?
+        do { pendingKey = try await pending.keys.key(for: share.jobId) }
+        catch { return .retained }
+        guard let pendingKey else {
+            // The pending key is saved after `prepare` and before any upload
+            // session exists, and `completed()` removes it before it purges the
+            // directory. A finalized share without one is therefore the tail of
+            // that cleanup (the purge failed) — the stored-link key was saved
+            // already or its loss predates this launch. Deleting the directory
+            // loses nothing that is still here.
+            return pending.store.purgeFinalizedShare(share) ? .noPendingKey : .retained
+        }
+        // `run` refuses a pending key that does not decode, so no upload was
+        // ever made with one; it is corrupted after the fact and nothing
+        // provable can be filed from it. Kept, like any doubt.
+        guard let raw = try? decodeStoreKey(pendingKey) else { return .retained }
+        let linkKey = encodeStoreKey(raw)
+        let existing: String?
+        do { existing = try await linkKeys.key(for: share.storedId) }
+        catch { return .retained }
+        let outcome: FinalizedShareSalvage
+        if let existing {
+            guard (try? decodeStoreKey(existing)) == raw else {
+                // nonlocalized: an os_log diagnostic, never shown to a user.
+                salvageLog.fault("finalized share kept: its stored-link key differs from its pending key")
+                return .conflict
+            }
+            outcome = .alreadyEqual
+        } else {
+            do { try await linkKeys.save(id: share.storedId, keyB64url: linkKey) }
+            catch { return .retained }
+            outcome = .salvaged
+        }
+        guard pending.store.purgeFinalizedShare(share) else { return .retained }
+        do { try await pending.keys.remove(id: share.jobId) }
+        catch { return .retained }
+        return outcome
+    }
+
+    private nonisolated static let salvageLog = Logger(subsystem: "com.relayium", category: "upload")
 
     /// Forget the job on this screen and remove it from disk. What "Discard"
     /// means, and also what an account leaving means.
