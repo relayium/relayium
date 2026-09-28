@@ -143,6 +143,36 @@ func newID() string {
 	return hex.EncodeToString(b)
 }
 
+// acceptancePeerIDGenerator installs deterministic websocket peer ids only for
+// the repository's loopback acceptance server. Production keeps newID. The
+// three guards are deliberately redundant: this hook controls the link-role
+// ordering and must never be usable by a public or normally configured server.
+func acceptancePeerIDGenerator(raw, addr, mailTransport string, releaseCheck bool) (func() string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return newID, nil
+	}
+	if !loopbackListen(addr) || releaseCheck || mailTransport != mailTransportDevLogLinks {
+		return nil, fmt.Errorf("RELAYIUM_ACCEPTANCE_PEER_IDS requires a loopback listener, RELAYIUM_RELEASE_CHECK=false, and mail transport %q", mailTransportDevLogLinks)
+	}
+	parts := strings.Split(raw, ",")
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		id := strings.TrimSpace(part)
+		decoded, err := hex.DecodeString(id)
+		if err != nil || len(decoded) != 8 {
+			return nil, fmt.Errorf("RELAYIUM_ACCEPTANCE_PEER_IDS entry %q must be exactly 16 hexadecimal characters", id)
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) < 2 {
+		return nil, errors.New("RELAYIUM_ACCEPTANCE_PEER_IDS requires at least two ids")
+	}
+	var next atomic.Uint64
+	return func() string {
+		return ids[(next.Add(1)-1)%uint64(len(ids))]
+	}, nil
+}
+
 // splitURLs parses a comma-separated URL flag, trimming spaces and dropping empties.
 func splitURLs(s string) []string {
 	var out []string
@@ -567,7 +597,11 @@ func main() {
 	// relayed transfer simply runs out its credential and ends truthfully,
 	// exactly as it does today.
 	var grants atomic.Pointer[signal.GrantRegistry]
-	handle := signal.ServeWSHooked(hub, newID, signal.WSHooks{
+	peerIDGenerator, err := acceptancePeerIDGenerator(envStr("RELAYIUM_ACCEPTANCE_PEER_IDS", ""), *addr, *mailTransport, *releaseCheck)
+	if err != nil {
+		log.Fatal(err)
+	}
+	handle := signal.ServeWSHooked(hub, peerIDGenerator, signal.WSHooks{
 		Join: func(room, id string, peers int, members []string) {
 			// The registry verifies both the six digits and this mint's opaque room
 			// generation. An old socket left in a reused code's prior room is inert.

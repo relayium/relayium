@@ -42,12 +42,12 @@
 #
 # ## Both role assignments
 #
-# `linkRole` gives the smaller hub id the offer, and the hub assigns ids per
-# socket at random — so one round exercises one assignment and says nothing about
-# the other. A regression that only appears on one side reads as "fails about
-# half the time", which is how the shipped one was written off. This runs rounds
-# until it has seen the browser as initiator AND as responder, and FAILS if it
-# has not seen both within its bound rather than reporting the half it got.
+# `linkRole` gives the smaller hub id the offer. This acceptance server receives
+# the repeating sequence [high, low, low, high], so the Mac/browser connection
+# order makes the browser initiator in round 1 and responder in round 2. Each
+# round asserts that exact assignment. This keeps both-role coverage while
+# removing the random sampling that could make every functional assertion pass
+# and still leave the job red.
 #
 # ## What a GREEN run does NOT prove, stated so nobody over-reads it
 #
@@ -123,18 +123,11 @@ repo="$(cd "$here/.." && pwd)"
 # shellcheck source=lib/local-acceptance.sh
 source "$here/lib/local-acceptance.sh"
 
-# How many pairings to run before giving up on seeing both role assignments.
-# Each is an independent coin flip on the hub's random ids, so N rounds miss a
-# side with probability 2^-(N-1).
-#
-# Raised from 8 to 10 on 2026-09-22 together with the Android lane, which
-# asserts the same thing and had been left at 6 (a 2^-5 miss rate, ~3%, which is
-# what turned that lane red that day with all six rounds functionally green).
-# **Extra rounds are free on a run that would have passed** — the loop breaks as
-# soon as both roles have been seen AND round >= 3 — so this buys 2^-9 (~0.2%)
-# without moving a green run's wall clock, and masks nothing: the assertion is
-# unchanged, so a role that is genuinely stuck still fails it.
-max_rounds="${RELAYIUM_PAIRING_ROUNDS:-10}"
+# Exactly two pairings cover both assignments. The server-side hook refuses to
+# activate outside the loopback acceptance configuration and production keeps
+# cryptographically random ids.
+max_rounds=2
+acceptance_peer_ids="ffffffffffffffff,0000000000000000,0000000000000000,ffffffffffffffff"
 
 # Deliberately not ASCII-only, and deliberately whitespace-significant. The
 # message rides an AEAD-sealed text frame and the file rides an encrypted
@@ -513,6 +506,10 @@ PY
     compared_sas=1
   fi
   role="$(json_field "$(cat "$browser_judged")" role)"
+  expected_role=initiator
+  [ "$round" -eq 2 ] && expected_role=responder
+  [ "$role" = "$expected_role" ] \
+    || fail "round $round assigned browser role $role, want deterministic $expected_role"
   case "$role" in
     initiator) seen_initiator=1 ;;
     responder) seen_responder=1 ;;

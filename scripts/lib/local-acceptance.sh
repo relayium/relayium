@@ -376,6 +376,7 @@ acceptance_start_server() {
   local static_dir="${acceptance_server_static:-$run_root/no-static}"
   mkdir -p "$run_root/no-static"
   RELAYIUM_RELEASE_CHECK=false \
+    RELAYIUM_ACCEPTANCE_PEER_IDS="${acceptance_peer_ids:-}" \
     "$run_root/relayium-server" \
     -addr "127.0.0.1:$server_port" \
     -db "$run_root/relayium.db" \

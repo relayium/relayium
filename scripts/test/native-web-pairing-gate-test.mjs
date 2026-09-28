@@ -1572,6 +1572,30 @@ check(
   + ` a run that reports the half it happened to get is how the shipped regression was written off`,
 );
 
+// Role coverage must be scheduled, not sampled. The first id in each pair is
+// the Mac's and the second is the browser's: high/low makes the browser the
+// initiator, then low/high makes it the responder. The per-round expectation is
+// what detects any extra websocket consuming the sequence or either client
+// disagreeing about role selection.
+check(
+  acceptanceSource.includes('max_rounds=2')
+  && acceptanceSource.includes('acceptance_peer_ids="ffffffffffffffff,0000000000000000,0000000000000000,ffffffffffffffff"')
+  && acceptanceSource.includes('expected_role=initiator')
+  && acceptanceSource.includes('[ "$round" -eq 2 ] && expected_role=responder')
+  && /\|\|\s*fail "round \$round assigned browser role/.test(acceptanceSource),
+  `${ACCEPTANCE} no longer deterministically schedules and asserts one browser round in each role;`
+  + ` random role sampling can leave every functional assertion green and still fail the lane`,
+);
+
+const acceptanceLibrary = await readFile(
+  resolve(repoRoot, "scripts/lib/local-acceptance.sh"), "utf8",
+);
+check(
+  acceptanceLibrary.includes('RELAYIUM_ACCEPTANCE_PEER_IDS="${acceptance_peer_ids:-}"'),
+  `scripts/lib/local-acceptance.sh no longer passes the deterministic peer-id schedule to the`
+  + ` loopback acceptance server`,
+);
+
 // ── 8. the phase barrier is a barrier ───────────────────────────────────────
 //
 // Three ways to keep the marker above and lose the property it names, none of
