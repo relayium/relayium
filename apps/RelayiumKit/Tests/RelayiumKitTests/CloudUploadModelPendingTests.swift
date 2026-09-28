@@ -550,3 +550,156 @@ final class CloudUploadModelPendingTests: XCTestCase {
         if case .uploading = model.state { XCTFail("a superseded attempt repainted the screen") }
     }
 }
+
+// MARK: - the shared-root sweep releases dead content keys
+
+/// Recovery's launch sweep removes the pending key of every job the sweep
+/// itself removed and listed — a retired share, or one whose staged bytes are
+/// gone — and of no other. Keys are never enumerated.
+extension CloudUploadModelPendingTests {
+    private var sharedRoot: URL { root.appendingPathComponent("PendingUploads") }
+    private var protectedRoot: URL { PendingUploadStore.protectedDeviceRoot(besides: sharedRoot) }
+    private static let hygieneKey = encodeStoreKey(Array(repeating: 4, count: 32))
+
+    private func stagedShare(in store: PendingUploadStore,
+                             keys: StoredLinkKeyStore) async throws -> PendingUploadPlan {
+        let plan = try store.prepare(files: try selection(), accountId: "acct-1",
+                                     burnAfterRead: false, ttl: 3600)
+        try await keys.save(id: plan.jobId, keyB64url: Self.hygieneKey)
+        return plan
+    }
+
+    /// A `FileManager` whose removal of one armed path parks until released,
+    /// so a test can supersede recovery while its sweep is mid-removal.
+    private final class GatedRemovalFileManager: FileManager, @unchecked Sendable {
+        private let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var gated: String?
+
+        /// Blocks the calling thread; call it off the main actor.
+        func waitUntilEntered(seconds: Int) -> Bool {
+            entered.wait(timeout: .now() + .seconds(seconds)) == .success
+        }
+
+        func gate(_ url: URL) {
+            lock.lock(); defer { lock.unlock() }
+            gated = url.standardizedFileURL.path
+        }
+
+        override func removeItem(at url: URL) throws {
+            lock.lock()
+            let hit = gated == url.standardizedFileURL.path
+            if hit { gated = nil }
+            lock.unlock()
+            if hit {
+                entered.signal()
+                release.wait()
+            }
+            try super.removeItem(at: url)
+        }
+    }
+
+    // M1
+    func testRecoveryRemovesTheKeyOfARetiredShareTheSweepRemoved() async throws {
+        let store = makeStore()
+        let keys = InMemoryStoredLinkKeyStore()
+        let plan = try await stagedShare(in: store, keys: keys)
+        _ = try store.markRetired(plan)
+
+        let model = makeModel(transport: ForbiddenTransport(), store: makeStore(),
+                              pendingKeys: keys, finalKeys: InMemoryStoredLinkKeyStore())
+        model.recoverPendingJob(for: "acct-1")
+        await model.recoveryTask?.value
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path))
+        let key = try await keys.key(for: plan.jobId)
+        XCTAssertNil(key, "the swept tombstone's pending key was orphaned")
+    }
+
+    // M2
+    func testRecoveryKeepsTheKeyOfEveryEntryTheSweepDoesNotRelease() async throws {
+        let store = makeStore()
+        let keys = InMemoryStoredLinkKeyStore()
+
+        let live = try await stagedShare(in: store, keys: keys)
+
+        let finalized = try await stagedShare(in: store, keys: keys)
+        _ = try store.markFinalized(finalized, storedId: "STOREDSHARE00001")
+
+        let unreadable = "SHAREDUNREAD0001"
+        let unreadableDir = sharedRoot.appendingPathComponent(unreadable)
+        try FileManager.default.createDirectory(at: unreadableDir, withIntermediateDirectories: true)
+        try Data("{not a plan".utf8).write(to: unreadableDir.appendingPathComponent("plan.json"))
+        try await keys.save(id: unreadable, keyB64url: Self.hygieneKey)
+
+        let planless = "SHAREDPLANLESS01"
+        try FileManager.default.createDirectory(at: sharedRoot.appendingPathComponent(planless),
+                                                withIntermediateDirectories: true)
+        try await keys.save(id: planless, keyB64url: Self.hygieneKey)
+
+        let newer = try await stagedShare(in: store, keys: keys)
+        _ = try store.markRetired(newer)
+        let planFile = store.planURL(for: newer.jobId)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: planFile))
+            as? [String: Any])
+        json["version"] = PendingUploadPlan.currentVersion + 1
+        try JSONSerialization.data(withJSONObject: json).write(to: planFile, options: .atomic)
+
+        // Collision: a retired share whose id the protected root also holds.
+        let collision = try await stagedShare(in: store, keys: keys)
+        _ = try store.markRetired(collision)
+        try FileManager.default.createDirectory(at: protectedRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: store.jobURL(for: collision.jobId),
+                                         to: protectedRoot.appendingPathComponent(collision.jobId))
+
+        let forbidden = ForbiddenTransport()
+        let model = makeModel(transport: forbidden, store: makeStore(),
+                              pendingKeys: keys, finalKeys: InMemoryStoredLinkKeyStore())
+        model.recoverPendingJob(for: "acct-1")
+        await model.recoveryTask?.value
+
+        for id in [live.jobId, finalized.jobId, unreadable, planless, newer.jobId, collision.jobId] {
+            let key = try await keys.key(for: id)
+            XCTAssertEqual(key, Self.hygieneKey, "the key of \(id) was removed")
+        }
+        guard case .interrupted = model.state else {
+            return XCTFail("the live share must still be offered, got \(model.state)")
+        }
+        XCTAssertEqual(store.plan(for: "acct-1")?.jobId, live.jobId)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: protectedRoot.appendingPathComponent(collision.jobId).path))
+        XCTAssertEqual(forbidden.calls, 0)
+    }
+
+    // M3
+    func testASupersededRecoveryStillRemovesTheKeysItsSweepReleased() async throws {
+        let fm = GatedRemovalFileManager()
+        let store = PendingUploadStore(root: sharedRoot, fileManager: fm)
+        let keys = InMemoryStoredLinkKeyStore()
+        let plan = try await stagedShare(in: store, keys: keys)
+        _ = try store.markRetired(plan)
+        fm.gate(store.jobURL(for: plan.jobId))
+
+        let model = makeModel(transport: ForbiddenTransport(), store: store,
+                              pendingKeys: keys, finalKeys: InMemoryStoredLinkKeyStore())
+        model.recoverPendingJob(for: "acct-1")
+        let recovery = try XCTUnwrap(model.recoveryTask)
+
+        // Wait, off the main actor, until the sweep is inside the removal.
+        let reached = await Task.detached { fm.waitUntilEntered(seconds: 30) }.value
+        guard reached else {
+            fm.release.signal()
+            return XCTFail("the sweep never reached the gated removal")
+        }
+        let before = model.currentGeneration
+        model.cancel()                       // cancels recovery and bumps the generation
+        XCTAssertNotEqual(model.currentGeneration, before)
+        fm.release.signal()
+        await recovery.value
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path))
+        let key = try await keys.key(for: plan.jobId)
+        XCTAssertNil(key, "a superseded recovery dropped the ids its sweep released")
+    }
+}

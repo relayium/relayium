@@ -1653,32 +1653,6 @@ extension InboxSendModelTests {
 
 // MARK: - swept tombstones release their content key
 
-/// A `FileManager` whose `removeItem` throws, once per armed path, the way a
-/// real I/O failure would. Everything else is the default manager.
-private final class RemovalFailingFileManager: FileManager, @unchecked Sendable {
-    private let lock = NSLock()
-    private var armed: [String: Int] = [:]
-    private(set) var failures = 0
-
-    func failNextRemoval(of url: URL, times: Int = 1) {
-        lock.lock(); defer { lock.unlock() }
-        armed[url.standardizedFileURL.path, default: 0] += times
-    }
-
-    override func removeItem(at url: URL) throws {
-        lock.lock()
-        let key = url.standardizedFileURL.path
-        if let n = armed[key], n > 0 {
-            armed[key] = n - 1
-            failures += 1
-            lock.unlock()
-            throw CocoaError(.fileWriteUnknown)
-        }
-        lock.unlock()
-        try super.removeItem(at: url)
-    }
-}
-
 /// Key hygiene for the Device Inbox "lost finalize response" follow-up: a
 /// Discard whose directory removal fails keeps its content key (the directory
 /// still names it), and the launch sweep that later removes the retired
@@ -1722,7 +1696,7 @@ extension InboxSendModelTests {
         XCTAssertFalse(dirExists(hygieneProtectedRoot, plan.jobId))
         XCTAssertEqual(store.sweepIncomplete(), [], "a directory already gone is not listed twice")
         XCTAssertEqual(PendingUploadStore(root: hygieneSharedRoot).sweepIncomplete(), [],
-                       "the shared root never lists anything")
+                       "an empty shared root lists nothing")
     }
 
     // (b) store half: a failed removal is not listed; the next successful one is.

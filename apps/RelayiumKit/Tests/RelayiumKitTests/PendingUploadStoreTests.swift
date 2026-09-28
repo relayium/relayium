@@ -397,3 +397,157 @@ final class PendingUploadStoreTests: XCTestCase {
         XCTAssertNil(store.plan(for: "acct-1"))
     }
 }
+
+// MARK: - shared-root sweep: which removed ids release their content key
+
+/// The shared root's launch sweep deletes exactly what every released build
+/// deletes. What it RETURNS is new: the ids whose content key nothing can use
+/// again — a readable, valid retired plan (d1) or a readable, valid,
+/// non-retired plan whose staged bytes are gone (c) — and only once its own
+/// removal succeeded and the protected sibling does not hold the same id.
+/// Everything else it removes (unreadable, plan-less, newer-version,
+/// mismatched id, finalized share) is never listed.
+extension PendingUploadStoreTests {
+    private var sharedRoot: URL { root.appendingPathComponent("PendingUploads") }
+    private var protectedRoot: URL { PendingUploadStore.protectedDeviceRoot(besides: sharedRoot) }
+
+    private func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
+
+    private func stagedShare(in store: PendingUploadStore) throws -> PendingUploadPlan {
+        try store.prepare(files: try selection([(Array("share".utf8), "a.txt")]),
+                          accountId: "acct-1", burnAfterRead: false, ttl: 3600)
+    }
+
+    /// Rewrite one field of an on-disk plan, bypassing the store's validation.
+    private func rewritePlan(_ url: URL, _ edit: (inout [String: Any]) -> Void) throws {
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url))
+            as? [String: Any])
+        edit(&json)
+        try JSONSerialization.data(withJSONObject: json).write(to: url, options: .atomic)
+    }
+
+    // T1
+    func testSharedSweepListsARetiredShareItRemovedOnce() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+        _ = try store.markRetired(plan)
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), [plan.jobId])
+        XCTAssertFalse(exists(store.jobURL(for: plan.jobId)))
+        XCTAssertEqual(makeStore().sweepIncomplete(), [], "a directory already gone is not listed twice")
+    }
+
+    // T2
+    func testSharedSweepListsAShareWhoseStagedBytesAreGone() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+        try FileManager.default.removeItem(at: store.jobURL(for: plan.jobId)
+            .appendingPathComponent("staged/0"))
+        XCTAssertNil(store.plan(for: "acct-1"), "the fixture must be unrecoverable")
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), [plan.jobId])
+        XCTAssertFalse(exists(store.jobURL(for: plan.jobId)))
+    }
+
+    // T3
+    func testSharedSweepListsARetiredLegacyDelivery() throws {
+        // A delivery can only be staged in the protected root; a build up to
+        // 1.4.3 left it in the shared root, so move it there.
+        let protected = makeStore().protectedDeviceStore()
+        let delivery = try protected.prepare(
+            files: try selection([(Array("deliver".utf8), "d.txt")]), accountId: "acct-1",
+            burnAfterRead: false, ttl: UploadPurpose.deviceTaskTTLSeconds,
+            target: PendingUploadTarget(deviceId: "DEVICE0123456789", keyId: "KEY0123456789abcd",
+                                        keyGeneration: 4))
+        _ = try protected.markRetired(delivery)
+        try FileManager.default.createDirectory(at: sharedRoot, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: protected.jobURL(for: delivery.jobId),
+                                         to: sharedRoot.appendingPathComponent(delivery.jobId))
+        XCTAssertFalse(exists(protectedRoot.appendingPathComponent(delivery.jobId)))
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), [delivery.jobId])
+        XCTAssertFalse(exists(sharedRoot.appendingPathComponent(delivery.jobId)))
+    }
+
+    // T4
+    func testSharedSweepRemovesAFinalizedShareButNeverListsIt() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+        _ = try store.markFinalized(plan, storedId: "STOREDSHARE00001")
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), [],
+                       "a finalized share's pending key may be the only copy of its link key")
+        XCTAssertFalse(exists(store.jobURL(for: plan.jobId)), "the finalized share is still swept")
+    }
+
+    // T5
+    func testSharedSweepRemovesUnprovableEntriesButNeverListsThem() throws {
+        let store = makeStore()
+
+        // Unreadable plan and plan-less directory, both with valid ids.
+        let unreadable = sharedRoot.appendingPathComponent("SHAREDUNREAD0001")
+        try FileManager.default.createDirectory(at: unreadable, withIntermediateDirectories: true)
+        try Data("{not a plan".utf8).write(to: unreadable.appendingPathComponent("plan.json"))
+        let planless = sharedRoot.appendingPathComponent("SHAREDPLANLESS01")
+        try FileManager.default.createDirectory(at: planless, withIntermediateDirectories: true)
+
+        // A retired tombstone — the exact shape that IS listed — declaring a
+        // version this build does not know.
+        let newer = try stagedShare(in: store)
+        _ = try store.markRetired(newer)
+        try rewritePlan(store.planURL(for: newer.jobId)) {
+            $0["version"] = PendingUploadPlan.currentVersion + 1
+        }
+
+        // A retired tombstone whose directory name differs from its jobId.
+        let moved = try stagedShare(in: store)
+        _ = try store.markRetired(moved)
+        let mismatched = sharedRoot.appendingPathComponent("SHAREDMISMATCH01")
+        try FileManager.default.moveItem(at: store.jobURL(for: moved.jobId), to: mismatched)
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), [], "an unprovable entry was listed for key removal")
+        for url in [unreadable, planless, store.jobURL(for: newer.jobId), mismatched] {
+            XCTAssertFalse(exists(url), "\(url.lastPathComponent) was not swept as before")
+        }
+    }
+
+    // T6
+    func testSharedSweepDoesNotListAFailedRemovalButListsTheRetry() throws {
+        let fm = RemovalFailingFileManager()
+        let store = PendingUploadStore(root: sharedRoot, fileManager: fm)
+        let plan = try stagedShare(in: store)
+        _ = try store.markRetired(plan)
+        fm.failNextRemoval(of: store.jobURL(for: plan.jobId))
+
+        XCTAssertEqual(store.sweepIncomplete(), [])
+        XCTAssertEqual(fm.failures, 1)
+        XCTAssertTrue(exists(store.jobURL(for: plan.jobId)))
+        XCTAssertEqual(store.sweepIncomplete(), [plan.jobId])
+        XCTAssertFalse(exists(store.jobURL(for: plan.jobId)))
+    }
+
+    // T7
+    func testSharedSweepDoesNotListAnIdTheProtectedRootStillHolds() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+        _ = try store.markRetired(plan)
+        try FileManager.default.createDirectory(at: protectedRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: store.jobURL(for: plan.jobId),
+                                         to: protectedRoot.appendingPathComponent(plan.jobId))
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), [],
+                       "the key is filed by job id; the protected copy still needs it")
+        XCTAssertTrue(exists(protectedRoot.appendingPathComponent(plan.jobId)),
+                      "the shared sweep touched the protected root")
+    }
+
+    // T8
+    func testSharedSweepNeitherRemovesNorListsALiveShare() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+
+        XCTAssertEqual(makeStore().sweepIncomplete(), [])
+        XCTAssertTrue(exists(store.jobURL(for: plan.jobId)))
+        XCTAssertEqual(store.plan(for: "acct-1")?.jobId, plan.jobId)
+    }
+}

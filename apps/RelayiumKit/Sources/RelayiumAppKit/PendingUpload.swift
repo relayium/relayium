@@ -1413,7 +1413,19 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// gone, and the shared root does not hold the same id — the key is filed
     /// by job id, so while any root names the job it belongs to that copy too.
     /// Finalized shares are never listed: their pending key is not this
-    /// sweep's to judge. The shared root returns an empty list.
+    /// sweep's to judge.
+    ///
+    /// The shared root lists the same way, for the two kinds of entry whose
+    /// key nothing can use again: a readable, valid plan that is retired (a
+    /// share's Discard tombstone, or a legacy delivery's), and a readable,
+    /// valid, non-retired plan whose staged bytes are gone (unfinalized, or a
+    /// delivery) — `plan(for:)` can never offer it, so its key is dead. Such an
+    /// id is listed only after this sweep's own removal succeeded, the
+    /// directory is confirmed gone, and the protected sibling root does not
+    /// hold the same id. An unreadable, plan-less, newer-version or
+    /// mismatched-id entry, and a finalized share, are still deleted exactly
+    /// as every released build deletes them, but never listed: the id or the
+    /// key's fate is not provable from what is on disk.
     @discardableResult
     public func sweepIncomplete() -> [String] {
         lock.lock()
@@ -1440,27 +1452,75 @@ public final class PendingUploadStore: @unchecked Sendable {
             }
             return releasedKeys.sorted()
         }
+        // The shared root. Which entries are deleted is unchanged from every
+        // released build; the guard is split only so the failing path is known,
+        // because that decides whether the entry's content key may go too.
+        //
+        // Key invariants (the caller removes exactly what is returned):
+        //  - keys are never enumerated; only ids this call itself removed, and
+        //    confirmed gone, are listed;
+        //  - an id the protected root still holds keeps its key — the key is
+        //    filed by job id alone, so it belongs to that copy too (R2);
+        //  - a finalized share's pending key is never touched: a crash between
+        //    markFinalized and the stored-link key save can leave it the only
+        //    copy of the key that opens the link;
+        //  - an unreadable, plan-less, newer-version or mismatched-id entry is
+        //    never listed: its id, or what a newer build meant by it, is unproven.
+        var releasedKeys: [String] = []
         let entries = (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
         for entry in entries {
+            let name = entry.lastPathComponent
             let planFile = entry.appendingPathComponent("plan.json")
+            // (a) unreadable or plan-less, (b) invalid for this build: removed,
+            // never listed.
             guard let data = try? Data(contentsOf: planFile),
                   let plan = try? JSONDecoder().decode(PendingUploadPlan.self, from: data),
-                  valid(plan, directoryName: entry.lastPathComponent),
-                  !plan.retired,
-                  // A finalized SHARE is finished: the object is on the server,
-                  // the user has the link, and the job is nothing but leftovers.
-                  // A finalized DELIVERY is the opposite — its ciphertext is up
-                  // and its task still has to be created — so sweeping it would
-                  // destroy the one idempotency key that could converge that
-                  // create, and strand paid storage the account cannot see.
-                  plan.finalizedStoredId == nil || plan.effectivePurpose == .deviceTask,
-                  (try? verifyStaging(plan)) != nil
+                  valid(plan, directoryName: name)
             else {
                 try? fileManager.removeItem(at: entry)
                 continue
             }
+            // From here `valid` guarantees plan.jobId == name.
+            let keyIsDead: Bool
+            if plan.retired {
+                // (d1) A Discard tombstone. `markRetired` refuses a finalized
+                // share, and adoption skips retired plans.
+                keyIsDead = true
+            } else if plan.finalizedStoredId == nil || plan.effectivePurpose == .deviceTask {
+                // A finalized SHARE is finished: the object is on the server,
+                // the user has the link, and the job is nothing but leftovers.
+                // A finalized DELIVERY is the opposite — its ciphertext is up
+                // and its task still has to be created — so sweeping it would
+                // destroy the one idempotency key that could converge that
+                // create, and strand paid storage the account cannot see.
+                if (try? verifyStaging(plan)) != nil { continue }
+                // (c) Staged bytes gone: nothing can ever resume it.
+                keyIsDead = true
+            } else {
+                // (d2) A finalized share: removed, its key never listed.
+                keyIsDead = false
+            }
+            do { try fileManager.removeItem(at: entry) } catch { continue }
+            if keyIsDead, !fileManager.fileExists(atPath: entry.path),
+               !protectedRootHolds(jobId: name) {
+                releasedKeys.append(name)
+            }
         }
-        return []
+        return releasedKeys.sorted()
+    }
+
+    /// Whether the PROTECTED sibling root holds a job directory with this id.
+    /// The shared-root mirror of `sharedRootHolds`: the content key is filed by
+    /// job id, not by root, so while the protected root names the job the key
+    /// belongs to that copy too and must not be removed. Meaningful only on the
+    /// shared store (`legacyRoot == nil`); the sibling is derived exactly as
+    /// `PendingUploadSupport` derives the protected store.
+    private func protectedRootHolds(jobId: String) -> Bool {
+        guard legacyRoot == nil, let checked = try? StoredObjectID.checked(jobId), checked == jobId else {
+            return false
+        }
+        return fileManager.fileExists(
+            atPath: Self.protectedDeviceRoot(besides: root).appendingPathComponent(checked, isDirectory: true).path)
     }
 }
 

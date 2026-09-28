@@ -562,9 +562,20 @@ public final class CloudUploadModel: ObservableObject {
         state = .checkingRecovery
         recoveryTask = Task { [weak self] in
             guard let self else { return }
-            await Task.detached(priority: .utility) {
+            let released = await Task.detached(priority: .utility) {
                 pending.store.sweepIncomplete()
             }.value
+            // The sweep lists only ids whose directory IT removed and whose key
+            // nothing can use again (never a finalized share's, never one the
+            // protected root still holds); keys are never enumerated. Removed
+            // BEFORE the generation check — a superseded recovery would
+            // otherwise drop the only list naming them — and detached, so
+            // cancelling this recovery cannot interrupt it.
+            if !released.isEmpty {
+                await Task.detached {
+                    for id in released { try? await pending.keys.remove(id: id) }
+                }.value
+            }
             guard !Task.isCancelled, g == self.generation,
                   self.accountId == accountId else { return }
             guard let plan = pending.store.plan(for: accountId) else {
