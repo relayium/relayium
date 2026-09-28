@@ -441,25 +441,26 @@ final class InboxFinalizeRecoveryLiveTests: XCTestCase {
         try await terminalCase(c, s, plan, expect: .removed)
     }
 
-    /// A finalize whose request never reached central (withheld, connection
-    /// dropped) on every in-attempt try. Returns once attempt 1 has ended.
+    /// A finalize whose request never reached central (connection dropped
+    /// before central saw it) on EVERY try of one attempt. The fault is armed
+    /// once, before the attempt, and retired only after the attempt has
+    /// returned — no polling, no per-request re-arming, no assumption about
+    /// how many requests the attempt makes.
     private func finalizeNeverArrives(_ c: Central, _ s: Sender, _ plan: PendingUploadPlan) async throws {
-        try await control(c, "POST", "/fault/lose-finalize")
-        let attempt = Task { await self.deliver(c, s, plan.jobId) }
-        var released = 0
-        let end = Date().addingTimeInterval(60)
-        while released < 3 {
-            guard Date() < end else { return XCTFail("the in-attempt finalizes never arrived") }
-            if int(try await counts(c), "hitsFinalize") > released {
-                released += 1
-                if released < 3 { try await control(c, "POST", "/fault/lose-finalize") }
-                try await control(c, "POST", "/release")
-            }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        let first = await attempt.value
+        try await control(c, "POST", "/fault/lose-all-finalize")
+        let first = await deliver(c, s, plan.jobId)
+        let report = try await control(c, "POST", "/fault/restore-finalize")
+        let n = try await counts(c)
+        evidence["neverArrived"] = report
+        evidence["neverArrivedAttempt"] = "\(first)"
         XCTAssertEqual(first, .failed(.uploadOutcomeUnknown))
-        do { let v = int(try await counts(c), "storedFiles"); XCTAssertEqual(v, 0) }
+        let intercepted = (report["intercepted"] as? Int) ?? -1
+        XCTAssertGreaterThanOrEqual(intercepted, 1, "no finalize reached the fault")
+        XCTAssertEqual(intercepted, int(n, "hitsFinalize"), "a finalize escaped the fault")
+        XCTAssertEqual(report["doneSessions"] as? Int, 0, "central finalized the session")
+        XCTAssertEqual(report["storedFiles"] as? Int, 0)
+        XCTAssertEqual(report["inboxTasks"] as? Int, 0)
+        XCTAssertEqual(int(n, "storedFiles"), 0)
     }
 
     /// R1, stated as a test: the request never arrived, then central reaped the

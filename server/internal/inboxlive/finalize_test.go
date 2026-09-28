@@ -14,7 +14,8 @@ package inboxlive
 //
 //	POST /fault/drop-finalize?times=N   run the real finalize handler, then hang up (N times)
 //	POST /fault/hold-finalize           run the real handler, withhold the answer until /release
-//	POST /fault/lose-finalize           withhold the request from central entirely until /release
+//	POST /fault/lose-all-finalize       every finalize is dropped before central sees it, until
+//	POST /fault/restore-finalize        retires it and reports how many were intercepted
 //	POST /release                       release every held rule (its connection is then dropped)
 //	POST /fault/pre-recovery            answer finalize as a server without recovery does
 //	POST /fault/earlier-finalize-before?upload=ID&on=patch|finalize
@@ -210,10 +211,53 @@ func TestSwiftLiveFinalizeCentral(t *testing.T) {
 		defer ruleMu.Unlock()
 		held = append(held, env.Faults.Add(finalizeRule(sendtest.HoldResponse, 1)))
 	})
-	ctl.HandleFunc("POST /fault/lose-finalize", func(w http.ResponseWriter, r *http.Request) {
-		ruleMu.Lock()
-		defer ruleMu.Unlock()
-		held = append(held, env.Faults.Add(finalizeRule(sendtest.HoldUnhandled, 1)))
+	// "The finalize never reached central", for a WHOLE attempt: one rule,
+	// armed before the attempt starts and retired only after it has returned,
+	// that hangs up every finalize without handing it to central (it is
+	// released up front, so each request is dropped at once instead of held).
+	// No per-request re-arming, so no request can slip through a gap between
+	// rules. Every finalize the middleware sees while armed is counted, and
+	// the retire answer reports that count plus central's own proof that
+	// nothing was finalized (no done session, no object, no task).
+	var loseMu sync.Mutex
+	var loseRule *sendtest.Rule
+	loseSeen := 0
+	env.Faults.SetObserve(func(kind string) {
+		if kind != sendtest.KeyFinalize {
+			return
+		}
+		loseMu.Lock()
+		if loseRule != nil {
+			loseSeen++
+		}
+		loseMu.Unlock()
+	})
+	ctl.HandleFunc("POST /fault/lose-all-finalize", func(w http.ResponseWriter, r *http.Request) {
+		loseMu.Lock()
+		defer loseMu.Unlock()
+		if loseRule != nil {
+			http.Error(w, "already armed", http.StatusConflict)
+			return
+		}
+		rule := env.Faults.Add(finalizeRule(sendtest.HoldUnhandled, 1<<30))
+		rule.Release()
+		loseRule, loseSeen = rule, 0
+	})
+	ctl.HandleFunc("POST /fault/restore-finalize", func(w http.ResponseWriter, r *http.Request) {
+		loseMu.Lock()
+		defer loseMu.Unlock()
+		if loseRule == nil {
+			http.Error(w, "not armed", http.StatusConflict)
+			return
+		}
+		env.Faults.Retire(loseRule)
+		loseRule = nil
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"intercepted":  loseSeen,
+			"doneSessions": one(`SELECT COUNT(*) FROM upload_sessions WHERE user_id = ? AND done = 1`, uid),
+			"storedFiles":  one(`SELECT COUNT(*) FROM stored_files WHERE user_id = ?`, uid),
+			"inboxTasks":   one(`SELECT COUNT(*) FROM inbox_tasks WHERE user_id = ?`, uid),
+		})
 	})
 	ctl.HandleFunc("POST /release", func(w http.ResponseWriter, r *http.Request) {
 		ruleMu.Lock()
