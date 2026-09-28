@@ -1,38 +1,84 @@
 # macOS App Store submission
 
-## macOS 1.4.4 (41) — candidate prepared in source; not built, uploaded or published
+## macOS 1.4.4 (41) — direct release published; store candidate in internal TestFlight
 
-**Status, 2026-09-28: source preparation only.** The project now carries
-`MARKETING_VERSION` `1.4.4` and `CURRENT_PROJECT_VERSION` `41` on all five
-macOS targets (direct app and Share extension, App Store app and Share
-extension, UI tests), Debug and Release. No signed build, notarization,
-GitHub release, Sparkle item, App Store Connect upload or TestFlight
-configuration of `1.4.4 (41)` exists yet, and nothing in this section claims
-one.
+**Status, 2026-09-28.** `1.4.4 (41)` is built from one source commit,
+`f37a96d9b191ecc78d556553d49472cf98eb51d0`, for both channels. The stable
+GitHub release [`macos-v1.4.4`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.4)
+was published on 2026-09-28 at 06:49:36 UTC with the Developer ID DMG. The App
+Store package is in **internal TestFlight testing**. Website and Sparkle feed
+deployment are verified separately from GitHub publication. Nothing in this
+section claims an external TestFlight build, an App Store submission or a
+StoreKit sandbox result.
 
 - Why a new number: `1.4.3 (40)` is already issued in two channels — the
   public direct release and the internal TestFlight build below — and an
   issued version is never reused for changed content. Provider read-back on
   2026-09-28 found no macOS `1.4.4` pre-release train, no build `41`, no
-  `macos-v1.4.4` tag and no GitHub release of that name.
+  `macos-v1.4.4` tag and no GitHub release of that name before this candidate.
+  Version `1.4.4` and build `41` are now consumed; **the next new distributed
+  macOS candidate must use a marketing version strictly above `1.4.4` and a
+  build number strictly above `41`** — both increase, and neither is reused.
 - What changes: the only runtime change against both `1.4.3 (40)` sources is
   the Device Inbox recovery after a lost finalize response (`0623c7f3f`). A
   send whose finalize answer is lost recovers the same session and object
   instead of starting a second upload; an outcome the client cannot prove is
   shown as unknown and its staged data is kept. The StoreKit and subscription
-  sources are byte-identical to `1.4.3 (40)`.
-- One source for both channels: the Developer ID DMG and the App Store package
-  for `1.4.4 (41)` must both be built from the single version-bump commit that
-  the `macos-v1.4.4` tag will name — not from an earlier or later head. Their
-  bytes differ by channel; their source does not.
-- Unchanged gate: actual StoreKit sandbox acceptance (cancellation and
-  account-switch recovery) is still pending. It continues to block external
-  TestFlight, App Store submission and any public store release of this
-  candidate, exactly as it does for build `40`. An internal-only TestFlight
-  upload of `41` for owner testing is permitted under the same terms as `40`.
-- The public direct/Sparkle version (`1.4.3`) and the public Mac App Store
-  version (`1.4.0`) are unchanged by this preparation. The release workflow
-  updates the published-version surfaces only at actual publication.
+  sources are byte-identical to `1.4.3 (40)`. This is not a claim of
+  exactly-once delivery in every case, and it changes no quota accounting.
+- One source, channel-specific bytes: the DMG and the App Store package were
+  both built from `f37a96d9b`. Their bytes differ by channel; their source does
+  not.
+
+**Internal TestFlight — delivered.**
+
+- Package: `Relayium.pkg`, 19,128,036 bytes, SHA-256
+  `263f5dac72d84ce312a783c1223ad3b456a760bddad16056cc0535d2899e912c`. Before
+  upload it was re-verified: main app and Share extension `1.4.4 (41)`,
+  `arm64` only, distribution-signed, sandboxed, privacy manifest present, no
+  debug build and no Sparkle. Apple's pre-upload validation reported no errors,
+  and the upload reported no errors.
+- App Store Connect records build `2d0433e7-f4f1-4e74-9db9-caf2dbba43e0`,
+  `CFBundleVersion` `41`, uploaded `2026-09-27T22:54:06-07:00` (2026-09-28
+  UTC), minimum macOS `13.0`.
+- Provider read-back after internal configuration, 2026-09-28, taken
+  separately from the configuration helper: processing state `VALID`;
+  `usesNonExemptEncryption` `false`; internal build state `IN_BETA_TESTING` in
+  the internal group `Relayium Internal` only; tester notification off; What
+  to Test notes set for `en-US` and `zh-Hans`. The build is in no external
+  group, no beta review was requested, and its external build state is
+  `READY_FOR_BETA_SUBMISSION` (eligible, not submitted). All seven App Store
+  versions and their selected builds read back unchanged, with macOS `1.4.0`
+  still `READY_FOR_SALE`. Build `40` remains in the same internal group.
+- Still pending: actual StoreKit sandbox acceptance — cancellation and
+  account-switch recovery with the main window open — has not been performed on
+  `40` or `41`. It continues to block external TestFlight, App Store submission
+  and any public store release of this candidate. The What to Test notes say so
+  in both languages and ask the owner to test the new Inbox recovery path.
+
+**Direct (Developer ID) — published.**
+
+- The formal release workflow
+  ([run `36383354042`](https://github.com/relayium/relayium/actions/runs/36383354042))
+  built, signed and notarized `Relayium.dmg` from `f37a96d9b`: 21,306,131
+  bytes, SHA-256
+  `e3c08f260b2fed5bb4f57ae2283ca8999f85f556d6032ebebc017555af933f5a`. Apple
+  notarization `614de9ef-e90c-49c2-9237-c15fd4abdb7d` is `Accepted` with no
+  issues.
+- Independent verification of that exact DMG passed: DMG signature and
+  timestamp, stapled ticket, Gatekeeper; the mounted app and Share extension are
+  `1.4.4 (41)`, `arm64` only and Developer ID-signed; the Sparkle Ed25519
+  signature verifies against the source-pinned key and an altered signature is
+  rejected.
+- Publication: GitHub Release `macos-v1.4.4` is stable (not a draft or
+  pre-release), published 2026-09-28 at 06:49:36 UTC, and its tag names
+  `f37a96d9b`. Its `Relayium.dmg` asset reports the same SHA-256 and size as
+  the verified DMG above; `Relayium.dmg.sha256` and `appcast.xml` are published
+  beside it. The reviewed release metadata reached `main` through pull request
+  #130 after both of its gates passed, and only the publish job was then re-run
+  (run attempt 2), reusing the same notarized DMG — it was not rebuilt.
+
+The public Mac App Store version (`1.4.0`) is unchanged by this candidate.
 
 ## macOS 1.4.3 (40) — direct release published; store candidate in internal TestFlight
 

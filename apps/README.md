@@ -1,6 +1,6 @@
 # Relayium native apps
 
-macOS **1.4.3 (40)** is published through the direct-download channel. Android
+macOS **1.4.4 (41)** is published through the direct-download channel. Android
 **0.3.0 (9)** was published on 2026-09-26 as a public preview APK (GitHub Release
 `android-v0.3.0`). iOS **0.5.0 (11)** remains a source candidate and has not been
 uploaded; its published channel is unchanged. The macOS store candidate is separate
@@ -160,11 +160,12 @@ include.
 **Two macOS channels, and which one this is.** `1.4.4` is the Developer
 ID/GitHub download above. Internal TestFlight builds are separately recorded in
 the submission record below; a direct-download release does not establish that
-the same version is available in TestFlight. The `1.4.3 (40)` store build is in
-internal TestFlight testing (`VALID`, `IN_BETA_TESTING`, internal group only,
-read back on 2026-09-28) as an internal-only candidate: its actual StoreKit
-sandbox purchase acceptance is still pending, and it is not in any external
-group or on the Mac App Store. The Mac App Store is an independently versioned track that moves
+the same version is available in TestFlight. The `1.4.4 (41)` store build is the
+current internal TestFlight candidate (`VALID`, `IN_BETA_TESTING`, internal group
+only, read back on 2026-09-28), built from the same source as the 1.4.4 direct
+download; the earlier `1.4.3 (40)` build remains in that internal group. For both,
+actual StoreKit sandbox purchase acceptance is still pending, and neither is in
+any external group or on the Mac App Store. The Mac App Store is an independently versioned track that moves
 on Apple's schedule, so it is usually a different number — the one
 [`web/mac-app-store-release.json`](../web/mac-app-store-release.json) records.
 Those two manifests are what each channel actually serves; no sentence here is.
