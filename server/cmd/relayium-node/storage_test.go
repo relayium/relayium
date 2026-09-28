@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -448,5 +449,48 @@ func TestDLGuardIsSharedAcrossListeners(t *testing.T) {
 	resp2.Body.Close()
 	if resp2.StatusCode != http.StatusForbidden {
 		t.Fatalf("same token on the other listener = %d, want 403", resp2.StatusCode)
+	}
+}
+
+// Belt and braces: even handed an empty secret, the blob API and the public
+// download route refuse — an empty bearer must not equal an empty secret, and
+// a token MACed with an empty key must not verify.
+func TestEmptyStorageSecretFailsClosed(t *testing.T) {
+	ds, err := storage.NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ds.Put(context.Background(), "k1", strings.NewReader("ciphertext")); err != nil {
+		t.Fatal(err)
+	}
+	blob := httptest.NewServer(newBlobHandler(ds, "", nil, nil, nil, nil))
+	defer blob.Close()
+	dl := httptest.NewServer(newDownloadHandler(ds, "", nil, nil))
+	defer dl.Close()
+
+	do := func(method, url string, hdr map[string]string) int {
+		req, _ := http.NewRequest(method, url, strings.NewReader("x"))
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for _, hdr := range []map[string]string{nil, {"Authorization": "Bearer "}, {"Authorization": ""}} {
+		for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+			if code := do(m, blob.URL+"/blob/k1", hdr); code != http.StatusUnauthorized {
+				t.Errorf("%s /blob with %v on empty secret = %d, want 401", m, hdr, code)
+			}
+		}
+	}
+	forged := dltoken.Sign("", "k1", time.Now().Unix()+60, "n")
+	for _, base := range []string{blob.URL, dl.URL} {
+		if code := do(http.MethodGet, base+"/dl/k1?t="+forged, nil); code != http.StatusForbidden {
+			t.Errorf("GET %s/dl with an empty-key token = %d, want 403", base, code)
+		}
 	}
 }

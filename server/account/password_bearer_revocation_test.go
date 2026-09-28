@@ -456,9 +456,10 @@ func TestResetSessionIsNotIssuedPastALaterReset(t *testing.T) {
 	u, _, _ := victim(t, svc, m)
 	st := sqliteOf(t, svc)
 	first := resetLink(t, svc, m)
-	second := resetLink(t, svc, m)
 	var secondSess Session
 	svc.store = &resetThenAnotherReset{SQLiteStore: st, second: func() {
+		// Requested after the first reset committed: a reset revokes every reset link outstanding at that moment (A-L3).
+		second := resetLink(t, svc, m)
 		var err error
 		if secondSess, err = svc.ResetPassword(ctx, second, "second-password-4"); err != nil {
 			t.Errorf("second reset: %v", err)

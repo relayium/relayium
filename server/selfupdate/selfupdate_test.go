@@ -34,6 +34,11 @@ var embeddedKeyAtStartup string
 func TestMain(m *testing.M) {
 	embeddedKeyAtStartup = releaseSigningPubKeyPEM
 	releaseSigningPubKeyPEM = ""
+	// The legacy download/replace tests serve plain-text "binaries" that cannot
+	// answer `version`. They pin the transport, checksum, signature and rename
+	// behaviour; binary_version_test.go restores the real check and serves
+	// executable stubs to pin the version binding itself.
+	verifyBinaryVersionHook = func(context.Context, string, string) error { return nil }
 	os.Exit(m.Run())
 }
 

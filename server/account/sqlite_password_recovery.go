@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/relayium/relayium/authx"
 )
@@ -82,6 +83,9 @@ func (s *SQLiteStore) ResetPasswordWithToken(ctx context.Context, tokenHash stri
 		   (SELECT id FROM devices WHERE user_id = ? AND kind = 'browser')`, userID, userID); err != nil {
 		return ResetTokenInvalid, "", 0, err
 	}
+	if err := revokeOutstandingLoginLinks(ctx, tx, userID); err != nil {
+		return ResetTokenInvalid, "", 0, err
+	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE users SET credential_epoch = credential_epoch + 1 WHERE id = ?`, userID); err != nil {
 		return ResetTokenInvalid, "", 0, err
@@ -153,9 +157,46 @@ func (s *SQLiteStore) ChangePasswordAndRevokeSessions(ctx context.Context, userI
 		   (SELECT id FROM devices WHERE user_id = ? AND kind = 'browser')`, userID, userID); err != nil {
 		return err
 	}
+	if err := revokeOutstandingLoginLinks(ctx, tx, userID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE users SET credential_epoch = credential_epoch + 1 WHERE id = ?`, userID); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// revokeOutstandingLoginLinks deletes, inside the caller's transaction, every
+// unspent emailed link that would sign someone in as userID or set its
+// password: other 'reset' links and magic sign-in links. A reset or change is
+// how an account is taken back; a second reset link, or a magic link requested
+// before it, would otherwise hand the account straight back to whoever else can
+// still use one, bypassing the new password entirely.
+//
+// magic_tokens has no user_id (it is keyed by the login email — see
+// PurgeTransientUserData), so it is matched on the user's current email, read
+// in this same transaction.
+//
+// Deliberately NOT deleted:
+//   - 'delete' links: they cannot sign anyone in or change a credential. They
+//     confirm an account-deletion request made from a signed-in session and are
+//     a bearer on their own (ConfirmAccountDeletion needs no session), so one
+//     held by someone else could still schedule the account's deletion (undone
+//     by the reactivate link mailed to the account). Dropping them here would
+//     silently cancel a deletion the owner may have asked for; whether a
+//     password change should do that is an open product decision, not a side
+//     effect to add quietly. Pinned by TestPasswordChangeKeepsDeleteLink.
+//   - 'verify' links: they only mark the address verified, which a reset does
+//     anyway.
+//   - 'reactivate' links: they exist only for an account in pending deletion,
+//     where a reset is refused (ResetAccountFrozen) before reaching here.
+func revokeOutstandingLoginLinks(ctx context.Context, tx *sql.Tx, userID string) error {
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM email_tokens WHERE user_id = ? AND purpose = 'reset' AND used_at = 0`, userID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx,
+		`DELETE FROM magic_tokens WHERE used_at = 0 AND email = (SELECT email FROM users WHERE id = ?)`, userID)
+	return err
 }

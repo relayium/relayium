@@ -21,6 +21,13 @@ func statePath(dir string) string { return filepath.Join(dir, "state.json") }
 
 // loadState reads <dir>/state.json, generating and persisting a fresh state
 // (new TURNSecret, empty NodeID) on first run.
+//
+// A state.json written before storageSecret existed decodes with an empty
+// StorageSecret. That empty string is the blob API's bearer and the dltoken
+// HMAC key, so leaving it empty means "Authorization: Bearer " (or a token
+// MACed with an empty key) is accepted. Back-fill it here, persisted before the
+// node serves anything; the node reports it to central on the registration
+// that follows every start, which is how central learns the new secret.
 func loadState(dir string) (nodeState, error) {
 	b, err := os.ReadFile(statePath(dir))
 	if err == nil {
@@ -28,25 +35,43 @@ func loadState(dir string) (nodeState, error) {
 		if jerr := json.Unmarshal(b, &st); jerr != nil {
 			return nodeState{}, jerr
 		}
+		if st.StorageSecret == "" {
+			sk, rerr := randomSecret()
+			if rerr != nil {
+				return nodeState{}, rerr
+			}
+			st.StorageSecret = sk
+			if serr := saveState(dir, st); serr != nil {
+				return nodeState{}, fmt.Errorf("persist back-filled storage secret: %w", serr)
+			}
+		}
 		return st, nil
 	}
 	if !os.IsNotExist(err) {
 		return nodeState{}, err
 	}
-	secret := make([]byte, 32)
-	if _, rerr := rand.Read(secret); rerr != nil {
+	turn, rerr := randomSecret()
+	if rerr != nil {
 		return nodeState{}, rerr
 	}
-	st := nodeState{TURNSecret: hex.EncodeToString(secret)}
-	sk := make([]byte, 32)
-	if _, rerr := rand.Read(sk); rerr != nil {
+	st := nodeState{TURNSecret: turn}
+	if st.StorageSecret, rerr = randomSecret(); rerr != nil {
 		return nodeState{}, rerr
 	}
-	st.StorageSecret = hex.EncodeToString(sk)
 	if serr := saveState(dir, st); serr != nil {
 		return nodeState{}, serr
 	}
 	return st, nil
+}
+
+// randomSecret returns 32 bytes from crypto/rand, hex-encoded — the encoding
+// every node secret in state.json uses.
+func randomSecret() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // loadStateReadOnly reads <dir>/state.json without ever creating anything.

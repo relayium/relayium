@@ -302,6 +302,10 @@ func (s *Service) HandleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c, _ := r.Cookie(adminCookie)
+	if s.stepUpLocked(c.Value) {
+		s.refuseStepUpLocked(w, r, c.Value)
+		return
+	}
 	pending, ok := s.takePending(r.Context(), r.FormValue("confirm_token"), c.Value)
 	if !ok {
 		http.Error(w, "confirmation expired or invalid; go back and try again", http.StatusBadRequest)
@@ -317,9 +321,14 @@ func (s *Service) HandleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	factor, ok := s.verifyStepUpFactor(r, pending)
 	if !ok {
+		if s.stepUpRecordFail(c.Value) {
+			s.refuseStepUpLocked(w, r, c.Value)
+			return
+		}
 		http.Error(w, "second-factor verification failed", http.StatusUnauthorized)
 		return
 	}
+	s.stepUpResetFails(c.Value)
 
 	form := pending.form
 	// One confirmation, one instant. See confirmNowKey: an action whose written

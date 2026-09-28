@@ -52,7 +52,10 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 	authed := func(h func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if subtle.ConstantTimeCompare([]byte(tok), []byte(secret)) != 1 {
+			// Fail closed on an unset secret: "" == "" would otherwise let an
+			// empty (or absent) bearer through. loadState back-fills a legacy
+			// state.json, so this only fires if that ever regresses.
+			if secret == "" || subtle.ConstantTimeCompare([]byte(tok), []byte(secret)) != 1 {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
@@ -183,7 +186,8 @@ func registerDownloadRoutes(mux *http.ServeMux, ds *storage.DiskStore, secret st
 		key := r.PathValue("key")
 		tok := r.URL.Query().Get("t")
 		now := time.Now().Unix()
-		if !dltoken.Verify(secret, key, now, tok) {
+		// An empty secret is an empty HMAC key: anyone could mint a token.
+		if secret == "" || !dltoken.Verify(secret, key, now, tok) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

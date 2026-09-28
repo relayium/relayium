@@ -475,7 +475,16 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 		return o.CurrentVersion, tag, false, err
 	}
 
-	if err := replaceFromArchive(archivePath, o.binaryName(), o.TargetPath); err != nil {
+	// The signature binds the archive to checksums.txt, not to the tag: asset
+	// names carry no version, so a compromised release host can serve an old,
+	// validly signed archive under a NEW tag and walk past the floor and the
+	// downgrade check above (both compare the tag name). For the CLI, ask the
+	// extracted binary itself which version it is before it replaces anything.
+	var verify func(string) error
+	if o.binaryName() == DefaultBinaryName {
+		verify = func(path string) error { return verifyBinaryVersion(ctx, path, tag) }
+	}
+	if err := replaceFromArchive(archivePath, o.binaryName(), o.TargetPath, verify); err != nil {
 		return o.CurrentVersion, tag, false, err
 	}
 	return o.CurrentVersion, tag, true, nil
@@ -628,7 +637,10 @@ func verifyECDSASignature(pub *ecdsa.PublicKey, data, derSig []byte) error {
 // file in targetPath's own directory (same filesystem → atomic rename), makes
 // it executable, and renames it over targetPath. On Unix the rename succeeds
 // even while the old binary is still running.
-func replaceFromArchive(archivePath, entryName, targetPath string) error {
+//
+// verify, when non-nil, runs against the extracted, executable temp file
+// before the rename; an error aborts with targetPath untouched.
+func replaceFromArchive(archivePath, entryName, targetPath string, verify func(string) error) error {
 	dir := filepath.Dir(targetPath)
 	tmpf, err := os.CreateTemp(dir, ".relayium-update-*")
 	if err != nil {
@@ -646,6 +658,11 @@ func replaceFromArchive(archivePath, entryName, targetPath string) error {
 	}
 	if err := os.Chmod(tmpName, 0o755); err != nil {
 		return err
+	}
+	if verify != nil {
+		if err := verify(tmpName); err != nil {
+			return err
+		}
 	}
 	if err := os.Rename(tmpName, targetPath); err != nil {
 		return permHint(targetPath, err)

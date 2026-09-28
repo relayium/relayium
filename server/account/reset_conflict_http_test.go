@@ -71,10 +71,10 @@ func TestResetOverHTTPOvertakenByAnotherResetAnswersConflict(t *testing.T) {
 	u, _, _ := victim(t, svc, m)
 	st := sqliteOf(t, svc)
 	first := resetLink(t, svc, m)
-	second := resetLink(t, svc, m)
 	var winner *httptest.ResponseRecorder
 	hook := &afterResetCommits{SQLiteStore: st, then: func() {
-		winner = postReset(svc, second, "second-password-4")
+		// Requested after the first reset committed: a reset revokes every reset link outstanding at that moment (A-L3).
+		winner = postReset(svc, resetLink(t, svc, m), "second-password-4")
 	}}
 	svc.store = hook
 
