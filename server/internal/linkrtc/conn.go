@@ -284,7 +284,7 @@ func (c *Conn) RestartICE() error {
 func (c *Conn) sendLocal(create func() (webrtc.SessionDescription, error)) error {
 	sd, err := create()
 	if err != nil {
-		return err
+		return normalizePeerConnectionError(err)
 	}
 	c.mu.Lock()
 	c.descPending = true
@@ -294,7 +294,7 @@ func (c *Conn) sendLocal(create func() (webrtc.SessionDescription, error)) error
 		c.descPending = false
 		c.heldLocal = nil
 		c.mu.Unlock()
-		return err
+		return normalizePeerConnectionError(err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -307,6 +307,18 @@ func (c *Conn) sendLocal(create func() (webrtc.SessionDescription, error)) error
 	}
 	c.heldLocal = nil
 	return nil
+}
+
+// normalizePeerConnectionError keeps the transport's public close contract
+// stable across Pion versions. A close racing CreateOffer or
+// SetLocalDescription is reported as an InvalidStateError wrapping
+// webrtc.ErrConnectionClosed; callers must still see ErrClosed so they can let
+// the session publish its own terminal reason.
+func normalizePeerConnectionError(err error) error {
+	if errors.Is(err, webrtc.ErrConnectionClosed) {
+		return ErrClosed
+	}
+	return err
 }
 
 func (c *Conn) onLocalCandidate(cand *webrtc.ICECandidate) {
