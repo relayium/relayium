@@ -89,12 +89,14 @@
     <string name="inbox_sending_stopped">Stopped.</string>
     <string name="inbox_sending_ambiguous">Relayium cannot tell whether this reached the other device. Trying again is safe: the server keeps only one copy of this delivery.</string>
     <string name="inbox_sending_upload_unknown">The upload stopped without an answer, so Relayium cannot tell whether these encrypted bytes reached the server. Sending again would start a separate upload and still would not answer that, so this one cannot safely be retried.</string>
+    <string name="inbox_sending_upload_unsettled">Relayium couldn\'t confirm whether this upload finished, so nothing has been delivered. The server may still hold it; Retry asks again without uploading it twice.</string>
     <string name="inbox_sending_cancel">Stop</string>
     <string name="inbox_sending_retry">Send</string>
     <string name="inbox_sending_discard">Remove</string>
     <string name="inbox_sending_discard_title">Remove this from Outgoing?</string>
     <string name="inbox_sending_discard_body">It will not be sent, and the encrypted copy on this device is deleted now. If part of it was already uploaded, relayium.com discards that on its own within about an hour.</string>
     <string name="inbox_sending_discard_unknown_body">Relayium could not confirm whether this reached relayium.com, so it may still arrive on the other device. Removing it deletes the encrypted copy on this device; after that it cannot be sent again or cancelled from here.</string>
+    <string name="inbox_sending_discard_unsettled_body">Removing gives up recovering this upload. Nothing was delivered to the other device; sending it again counts as a new upload.</string>
     <string name="inbox_sending_discard_keep">Keep it</string>
     <string name="inbox_sending_cancel_delivery">Cancel delivery</string>
     <string name="inbox_sending_cancel_delivery_title">Cancel this delivery?</string>

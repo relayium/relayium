@@ -685,14 +685,9 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                 // shot upload has no identity to converge on and a repeat is a
                 // separate upload that answers nothing. Telling the user to try
                 // again there would be advice that cannot work.
-                if (send.uploadUnknown) {
+                sendUncertaintyNoteRes(send)?.let { note ->
                     Text(
-                        stringResource(R.string.inbox_sending_upload_unknown),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                } else if (send.ambiguous) {
-                    Text(
-                        stringResource(R.string.inbox_sending_ambiguous),
+                        stringResource(note),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -756,19 +751,10 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                     ),
                 )
             },
-            // Three different truths, so three bodies. A delivery that exists is
-            // cancelled at relayium.com first; one that MAY exist cannot be
-            // named, so it may still arrive; otherwise nothing was created and
-            // only whatever was already uploaded is left for the server to drop.
+            // Four different truths, so four bodies: see [sendDiscardBodyRes].
             text = {
                 Text(
-                    stringResource(
-                        when {
-                            delivered -> R.string.inbox_sending_cancel_delivery_body
-                            send.ambiguous -> R.string.inbox_sending_discard_unknown_body
-                            else -> R.string.inbox_sending_discard_body
-                        },
-                    ),
+                    stringResource(sendDiscardBodyRes(send)),
                 )
             },
             confirmButton = {
@@ -791,6 +777,37 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
             },
         )
     }
+}
+
+/**
+ * The note under a row whose outcome is not settled, or null.
+ *
+ * Three unknowns, three texts. An unresolved single-shot upload cannot be
+ * answered by repeating it. An unsettled upload (publish attempted, no object
+ * id) may be held by the server, but no create was ever sent, so nothing can
+ * have been delivered — telling the user it "may have reached the other
+ * device" would be false. Only the remaining ambiguity (a create whose answer
+ * was lost) may have delivered.
+ */
+internal fun sendUncertaintyNoteRes(send: InboxSendStatus): Int? = when {
+    send.uploadUnknown -> R.string.inbox_sending_upload_unknown
+    send.uploadUnsettled -> R.string.inbox_sending_upload_unsettled
+    send.ambiguous -> R.string.inbox_sending_ambiguous
+    else -> null
+}
+
+/**
+ * The discard confirmation body. A delivery that exists is cancelled at
+ * relayium.com first; an unsettled upload delivered nothing but gives up its
+ * recovery; one that MAY exist cannot be named, so it may still arrive;
+ * otherwise nothing was created and only whatever was already uploaded is left
+ * for the server to drop.
+ */
+internal fun sendDiscardBodyRes(send: InboxSendStatus): Int = when {
+    send.phase == InboxSendStatus.Phase.DELIVERED -> R.string.inbox_sending_cancel_delivery_body
+    send.uploadUnsettled -> R.string.inbox_sending_discard_unsettled_body
+    send.ambiguous -> R.string.inbox_sending_discard_unknown_body
+    else -> R.string.inbox_sending_discard_body
 }
 
 @Composable

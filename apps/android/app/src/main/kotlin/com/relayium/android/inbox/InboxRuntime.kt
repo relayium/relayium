@@ -1311,6 +1311,7 @@ class InboxRuntime(
             ambiguous = unavailable == null &&
                 (job.unresolvedCreate || stopped?.ambiguous == true || job.uploadUnsettled),
             uploadUnknown = publishUnknown,
+            uploadUnsettled = unavailable == null && job.uploadUnsettled,
             taskId = job.taskId,
             discardRefused = job.jobId in discardRefused,
         )

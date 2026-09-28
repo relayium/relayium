@@ -370,6 +370,7 @@ class InboxRuntimeTest {
         // generic ambiguity text promises the server keeps one copy, which is
         // true of a create and NOT of a single-shot upload with no identity.
         assertTrue("an unresolved upload must say which unknown it is", send.uploadUnknown)
+        assertTrue("no create was sent, so nothing can have been delivered", send.uploadUnsettled)
     }
 
     /**
@@ -402,6 +403,7 @@ class InboxRuntimeTest {
         val send = w.model.state.value.sends.single { it.jobId == jobId }
         assertTrue(send.ambiguous)
         assertFalse("a create has an identity central converges", send.uploadUnknown)
+        assertFalse("a create was sent: this one may have delivered", send.uploadUnsettled)
     }
 
     /**
@@ -439,6 +441,7 @@ class InboxRuntimeTest {
         assertEquals(InboxSendStatus.Phase.STOPPED, send.phase)
         assertTrue("central may hold the object", send.ambiguous)
         assertFalse("re-asking the session is safe, so the retry stays", send.uploadUnknown)
+        assertTrue("no object id, so no create was ever sent", send.uploadUnsettled)
         assertNull(send.stop)
 
         relaunched.runtime.discardSend(jobId)?.join()
@@ -487,6 +490,7 @@ class InboxRuntimeTest {
         assertEquals(InboxSendStatus.Phase.STOPPED, send.phase)
         assertEquals(InboxSendCoordinator.Result.Reason.UPLOAD_NO_LONGER_STORED, send.stop)
         assertFalse("central's record settled it", send.ambiguous)
+        assertFalse("a definitive outcome is not an unsettled upload", send.uploadUnsettled)
         assertFalse("a retry cannot help", send.stop!!.isRetryable)
 
         // Retrying anyway sends nothing: no upload, no create.

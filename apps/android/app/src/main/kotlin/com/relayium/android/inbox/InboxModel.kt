@@ -444,6 +444,14 @@ data class InboxSendStatus(
      * know" into an action that cannot ever produce an answer.
      */
     val uploadUnknown: Boolean = false,
+    /**
+     * The upload's publish was attempted and never answered with an object id
+     * or a definitive outcome, so central may hold the object — but NO task can
+     * exist: a create needs the object id, which is durable before any create
+     * is sent. A subset of [ambiguous] that must not be told "it may still
+     * arrive"; nothing was delivered.
+     */
+    val uploadUnsettled: Boolean = false,
     val taskId: String? = null,
     /** The user asked to discard this and it could NOT be done — central refused
      *  or was unreachable, or the record could not be removed. Nothing was
