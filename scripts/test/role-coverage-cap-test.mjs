@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// scripts/test/role-coverage-cap-test.mjs — the three lanes that assert BOTH
-// link roles were seen run the same number of rounds, and enough of them.
+// scripts/test/role-coverage-cap-test.mjs — every lane that asserts BOTH link
+// roles either schedules both deterministically or samples enough rounds.
 //
 // ## Why this exists
 //
-// The link role is `selfId < peerId` over the hub's random ids, so every round
-// is an independent coin flip and a lane capped at N rounds misses a role in
+// Where a lane still uses random hub ids, every round is a coin flip and a lane
+// capped at N rounds misses a role in
 // 2^-(N-1) of perfectly healthy runs. W-N19 (2026-09-22) raised two of the three
 // lanes that assert role coverage to 10 and missed the third: the Windows
 // `realtime` fixture kept a hard `Math.min(8, …)` clamp, and on 2026-09-23 run
@@ -22,10 +22,11 @@
 //     the default of `Math.min(<clamp>, Number(process.env.RT_ROUNDS ?? <default>))`,
 //     independently. Lowering either one lowers the effective cap — the clamp
 //     is what actually capped the 2026-09-23 run — so each is its own claim.
-//   - `scripts/native-web-pairing-acceptance.sh` and
-//     `scripts/android-interop-acceptance.sh`: the `${VAR:-<default>}` default.
+//   - `scripts/android-interop-acceptance.sh`: the `${VAR:-<default>}` default.
+//   - `scripts/native-web-pairing-acceptance.sh`: exactly two rounds with
+//     opposite deterministic peer-id orderings and an expected-role assertion.
 //
-// Every parsed number must be equal to every other and at least FLOOR. It does
+// Every statistical cap must be equal to every other and at least FLOOR. It does
 // not check what an environment override can do: the Windows override is
 // downward-only by construction (the clamp), and overrides are diagnostic knobs
 // that no workflow sets.
@@ -78,6 +79,8 @@ const WINDOWS_LOOP = /^\s*for \(let index = 1; index <= MAX_ROUNDS; index \+= 1\
 const shellCap = (v) => new RegExp(`^max_rounds="\\$\\{${v}:-(\\d+)\\}"$`, "gm");
 const SHELL_LOOP = /^while \[ "\$round" -lt "\$max_rounds" \]; do$/gm;
 const SHELL_VARS = { native: "RELAYIUM_PAIRING_ROUNDS", android: "RELAYIUM_ANDROID_ROUNDS" };
+const NATIVE_DETERMINISTIC = /^max_rounds=2$/gm;
+const NATIVE_IDS = /^acceptance_peer_ids="ffffffffffffffff,0000000000000000,0000000000000000,ffffffffffffffff"$/gm;
 
 /** Returns `{ problems: [{ key, message }], caps }`. `key` names the claim, so
  *  a mutation can be required to fail for ITS reason and not merely to fail. */
@@ -100,10 +103,15 @@ function evaluate(w) {
   }
   exactlyOne("windows:loop", w.windows, WINDOWS_LOOP, `${LANES.windows} round loop bounded by MAX_ROUNDS`);
 
-  for (const lane of ["native", "android"]) {
+  for (const lane of ["android"]) {
     const m = exactlyOne(`${lane}:parse`, w[lane], shellCap(SHELL_VARS[lane]), `${LANES[lane]} max_rounds default`);
     if (m) caps.push({ key: `${lane}:default`, value: Number(m[1]) });
     exactlyOne(`${lane}:loop`, w[lane], SHELL_LOOP, `${LANES[lane]} round loop bounded by max_rounds`);
+  }
+  exactlyOne("native:deterministic-rounds", w.native, NATIVE_DETERMINISTIC, `${LANES.native} deterministic two-round declaration`);
+  exactlyOne("native:deterministic-ids", w.native, NATIVE_IDS, `${LANES.native} opposite peer-id schedule`);
+  if (!(w.native ?? "").includes('|| fail "round $round assigned browser role $role, want deterministic $expected_role"')) {
+    problems.push({ key: "native:role-assertion", message: `${LANES.native} no longer fails when a scheduled role is not observed` });
   }
 
   for (const c of caps) {
@@ -125,7 +133,7 @@ const world = realWorld();
 const real = evaluate(world);
 for (const u of unreadable) fail(`cannot read ${u}`);
 for (const p of real.problems) fail(`[${p.key}] ${p.message}`);
-if (real.problems.length === 0 && real.caps.length !== 4) fail(`read ${real.caps.length} caps, expected 4`);
+if (real.problems.length === 0 && real.caps.length !== 3) fail(`read ${real.caps.length} statistical caps, expected 3`);
 
 /** Replace exactly one occurrence in one lane's real text. An anchor that is
  *  absent or ambiguous would make the mutation vacuous, so it throws. */
@@ -143,7 +151,6 @@ const LOW = FLOOR - 2; // below the floor; at 10 this is the 2026-09-23 value, 8
 const HIGH = CAP + 2; // above the live cap, so it differs from the other three
 const winLine = (clamp, dflt) => `Math.min(${clamp}, Number(process.env.RT_ROUNDS ?? ${dflt}))`;
 const WIN_LINE = winLine(CAP, CAP);
-const nativeDefault = (n) => `RELAYIUM_PAIRING_ROUNDS:-${n}}`;
 const androidDefault = (n) => `RELAYIUM_ANDROID_ROUNDS:-${n}}`;
 // Each mutation: the world, and the exact set of problem keys it must produce.
 const MUTATIONS = [
@@ -156,20 +163,16 @@ const MUTATIONS = [
   ["windows clamp raised alone (equality, not only the floor)",
     () => mutate("windows", WIN_LINE, winLine(HIGH, CAP)),
     ["equal"]],
-  ["native default lowered",
-    () => mutate("native", nativeDefault(CAP), nativeDefault(LOW)),
-    ["native:default:floor", "equal"]],
   ["android default lowered",
     () => mutate("android", androidDefault(CAP), androidDefault(LOW)),
     ["android:default:floor", "equal"]],
   ["all four lowered together (equal, but below the floor)",
     () => {
       let w = mutate("windows", WIN_LINE, winLine(LOW, LOW));
-      w = { ...w, native: w.native.replace(nativeDefault(CAP), nativeDefault(LOW)) };
       w = { ...w, android: w.android.replace(androidDefault(CAP), androidDefault(LOW)) };
       return w;
     },
-    ["windows:clamp:floor", "windows:default:floor", "native:default:floor", "android:default:floor"]],
+    ["windows:clamp:floor", "windows:default:floor", "android:default:floor"]],
   ["windows declaration rewritten into a form the parser does not know",
     () => mutate("windows", WIN_LINE, `Number(process.env.RT_ROUNDS ?? ${CAP})`),
     ["windows:parse"]],
@@ -179,9 +182,15 @@ const MUTATIONS = [
   ["windows loop bounded by a literal instead of MAX_ROUNDS",
     () => mutate("windows", "index <= MAX_ROUNDS;", "index <= 8;"),
     ["windows:loop"]],
-  ["native default removed",
-    () => mutate("native", `max_rounds="\${${nativeDefault(CAP)}"`, "max_rounds=\"$RELAYIUM_PAIRING_ROUNDS\""),
-    ["native:parse"]],
+  ["native deterministic schedule removed",
+    () => mutate("native", "max_rounds=2", "max_rounds=3"),
+    ["native:deterministic-rounds"]],
+  ["native peer-id ordering weakened",
+    () => mutate("native", "ffffffffffffffff,0000000000000000,0000000000000000,ffffffffffffffff", "ffffffffffffffff,0000000000000000"),
+    ["native:deterministic-ids"]],
+  ["native expected-role failure removed",
+    () => mutate("native", '|| fail "round $round assigned browser role $role, want deterministic $expected_role"', "|| true"),
+    ["native:role-assertion"]],
   ["android loop bounded by a literal",
     () => mutate("android", `-lt "$max_rounds" ]; do`, `-lt 8 ]; do`),
     ["android:loop"]],
