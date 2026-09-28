@@ -1,6 +1,6 @@
 # macOS App Store submission
 
-## macOS 1.4.3 (40) — direct release published; store candidate not uploaded
+## macOS 1.4.3 (40) — direct release published; store candidate in internal TestFlight
 
 The stable GitHub release [`macos-v1.4.3`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.3)
 was published on 2026-09-26 at 15:33:02 UTC. It contains the Apple silicon
@@ -21,12 +21,45 @@ across app restarts are not added by this release. Actual long-transfer,
 network-change and lock/wake results must be recorded separately from CI.
 
 The **1.4.3 (40) store package** has been archived, exported and independently
-verified, but has **not been uploaded**. The 2026-09-26 provider reading still
-records the highest uploaded macOS build as **1.4.1 (39), VALID**; the public Mac
-App Store remains **1.4.0**. StoreKit source reviews passed conditionally on
-actual sandbox cancellation and account-switch recovery evidence. That evidence
-remains required before this store candidate reaches TestFlight or the App Store;
-the direct release does not establish acceptance of those purchase paths.
+verified. As of the 2026-09-26 provider reading it had **not been uploaded**:
+that reading recorded the highest uploaded macOS build as **1.4.1 (39), VALID**,
+and the public Mac App Store remains **1.4.0**. StoreKit source reviews passed
+conditionally on actual sandbox cancellation and account-switch recovery
+evidence. The direct release does not establish acceptance of those purchase
+paths.
+
+**Update, 2026-09-28 — in internal TestFlight testing; sandbox purchase
+acceptance pending.** Build `40` is an internal-only candidate for the pending
+StoreKit sandbox acceptance below. External and public delivery wait for that
+acceptance.
+
+- Package: `Relayium.pkg`, 19,074,838 bytes, SHA-256
+  `cb45a8b4733c3f251c274a67633fcfa0d2c224ea06e1fb0bde8298f9345ba58a`, built
+  from source `e96dc9e6cfbd5abaf22ca241e015a47367557410`. Before upload it was
+  re-verified: main app and Share extension `arm64` only, distribution-signed,
+  sandboxed, privacy manifest present, no debug build and no Sparkle. Apple's
+  pre-upload validation exited `0`.
+- Upload: Apple's uploader reported `UPLOAD SUCCEEDED with no errors`, exit
+  `0`. App Store Connect records build
+  `99c01052-e868-415e-a92e-c37416f2b9f6`, `CFBundleVersion` `40`, uploaded
+  `2026-09-27T18:44:45-07:00` (2026-09-28 UTC), minimum macOS `13.0`.
+  macOS build number `40` is therefore consumed; **the next new distributed
+  macOS candidate must use a build number strictly above `40`**.
+- Provider read-back after internal configuration, 2026-09-28: processing
+  state `VALID`; `usesNonExemptEncryption` `false`; internal build state
+  `IN_BETA_TESTING`, attached to the internal group `Relayium Internal` only;
+  tester notification off; What to Test notes set for `en-US` and `zh-Hans`.
+  The build is not attached to any external group, no beta review was
+  requested, and its external build state is `READY_FOR_BETA_SUBMISSION`
+  (eligible, not submitted). The App Store version list was identical before
+  and after configuration, with macOS `1.4.0` still `READY_FOR_SALE`.
+- Still pending: actual StoreKit sandbox acceptance — cancellation and
+  account-switch recovery — on this internal build. That evidence continues
+  to block external TestFlight, App Store submission and any public store
+  release of this candidate. Nothing here claims a sandbox result.
+
+The public Mac App Store version (`1.4.0`) and the public direct/Sparkle
+version (`1.4.3`) are unchanged by this upload.
 
 
 This is the release operator's source of truth for Relayium's Mac App Store
