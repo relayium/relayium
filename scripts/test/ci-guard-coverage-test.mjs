@@ -70,6 +70,18 @@
 // and it does not read the step's `shell:`, since each verb names its
 // interpreter.
 //
+// ## And every Web `test:*` script
+//
+// The same failure one level up: `web/package.json` declares a suite as
+// `test:<name>`, and nothing makes a workflow run it. Until 2026-09-28
+// `test:e2e:relay-renewal` and `test:e2e:share-target` were in that state
+// (audit D-M1). So every `test` / `test:*` script there must be invoked by a
+// step's `run:` in the same strict sense as above — an inline
+// `npm run <name>` (or `npm test` for `test`), optionally followed by `-- args`
+// — or by an inline `bash scripts/ci/<wrapper>.sh` step whose wrapper holds
+// that `npm run <name>` on a non-comment line. `NPM_UNWIRED_OK` names the
+// scripts deliberately not run in CI, each with its reason; it is empty today.
+//
 // ## Why it proves itself
 //
 // A scan that found no files, or matched nothing, would be as green as full
@@ -228,6 +240,63 @@ function invocationsOf(name, workflows) {
   return found;
 }
 
+// ── web/package.json test scripts ─────────────────────────────────────────
+
+const WEB_PACKAGE = new URL("web/package.json", root);
+/** `test`/`test:*` scripts deliberately not run by any workflow: name → reason. */
+const NPM_UNWIRED_OK = {};
+
+const webTestScripts = () =>
+  Object.keys(JSON.parse(readFileSync(WEB_PACKAGE, "utf8")).scripts ?? {})
+    .filter((name) => name === "test" || name.startsWith("test:"))
+    .sort();
+
+const escapeRe = (text) => text.replace(/[\\^$.|?*+()[\]{}]/g, "\\$&");
+const npmCall = (name) => new RegExp(
+  name === "test"
+    ? String.raw`^npm (?:test|run test)(?:\s+--(?:\s.*)?)?$`
+    : String.raw`^npm run ${escapeRe(name)}(?:\s+--(?:\s.*)?)?$`,
+);
+const WRAPPER = /^bash\s+(["']?)(?:\.\/)?(scripts\/ci\/[A-Za-z0-9._-]+\.sh)\1$/;
+
+/** `{ workflow, lineNo, line, via? }` for every run of web script `name`. */
+function npmInvocationsOf(name, workflows, readWrapper) {
+  const found = [];
+  const call = npmCall(name);
+  for (const [workflow, body] of Object.entries(workflows)) {
+    for (const { line, lineNo } of runLines(body)) {
+      if (call.test(line)) { found.push({ workflow, lineNo, line }); continue; }
+      const wrapper = WRAPPER.exec(line);
+      if (!wrapper) continue;
+      const text = readWrapper(wrapper[2]);
+      if (text === null) continue;
+      const hit = text.split("\n").map((l) => l.trim())
+        .some((l) => !l.startsWith("#") && call.test(l));
+      if (hit) found.push({ workflow, lineNo, line, via: wrapper[2] });
+    }
+  }
+  return found;
+}
+
+const readRepoFile = (path) => {
+  try { return readFileSync(new URL(path, root), "utf8"); } catch { return null; }
+};
+
+function evaluateNpm(names, workflows, readWrapper = readRepoFile) {
+  const problems = [];
+  if (names.length === 0) problems.push("web/package.json declares no test scripts — this scan proves nothing");
+  for (const name of names) {
+    if (Object.hasOwn(NPM_UNWIRED_OK, name)) continue;
+    if (npmInvocationsOf(name, workflows, readWrapper).length === 0) {
+      problems.push(`web/package.json "${name}": no workflow step runs it (npm run ${name}) — a suite CI never runs is a suite nobody has seen fail`);
+    }
+  }
+  for (const name of Object.keys(NPM_UNWIRED_OK)) {
+    if (!names.includes(name)) problems.push(`NPM_UNWIRED_OK names "${name}", which web/package.json no longer declares`);
+  }
+  return problems;
+}
+
 function evaluate(w) {
   const problems = [];
   if (w.tests.length === 0) {
@@ -246,6 +315,8 @@ const fail = (msg) => { failed++; console.error(`FAIL ${msg}`); };
 
 const world = realWorld();
 for (const p of evaluate(world)) fail(p);
+const npmNames = webTestScripts();
+for (const p of evaluateNpm(npmNames, world.workflows)) fail(p);
 
 // The controls. Each must hold, or this file is decoration.
 let mutations = 0;
@@ -355,6 +426,46 @@ if (failed === 0) {
   mutations++;
   const empty = { ...world, tests: [] };
   if (evaluate(empty).length !== 1) fail("an empty directory passed — the scan would be green having read nothing");
+
+  // The npm half: every real invocation deleted in turn must be reported,
+  // including one reached through a wrapper; an undeclared script and an empty
+  // list must fail; look-alikes must not count.
+  for (const name of npmNames) {
+    const workflows = { ...world.workflows };
+    for (const { workflow, lineNo, line } of npmInvocationsOf(name, world.workflows, readRepoFile)) {
+      const lines = workflows[workflow].split("\n");
+      lines[lineNo - 1] = lines[lineNo - 1].replace(line, "true");
+      workflows[workflow] = lines.join("\n");
+    }
+    mutations++;
+    if (evaluateNpm([name], workflows).length !== 1) fail(`web "${name}": deleting its run step(s) went unnoticed`);
+  }
+  const wrapped = npmNames.find((name) =>
+    npmInvocationsOf(name, world.workflows, readRepoFile).some((hit) => hit.via));
+  mutations++;
+  if (wrapped === undefined) fail("no web test script is reached through a scripts/ci wrapper, so that path is untested");
+  else if (evaluateNpm([wrapped], world.workflows, () => "#!/bin/sh\n# npm run " + wrapped + "\ntrue\n").length !== 1) {
+    fail(`web "${wrapped}": a wrapper that only MENTIONS it in a comment still counted`);
+  }
+  mutations++;
+  if (evaluateNpm([...npmNames, "test:e2e:nobody-runs-this"], world.workflows).length !== 1) {
+    fail("an unwired web test script was not reported");
+  }
+  mutations++;
+  if (evaluateNpm([], world.workflows).length !== 1) fail("an empty web script list passed vacuously");
+  const npmSteps = (line) => `jobs:\n  j:\n    steps:\n      - run: ${line}\n`;
+  for (const [shape, line, want] of [
+    ["plain", "npm run test:a11y", true],
+    ["with -- args", "npm run test:a11y -- --url x", true],
+    ["longer name", "npm run test:a11y-extra", false],
+    ["args without --", "npm run test:a11y extra", false],
+    ["swallowed", "npm run test:a11y || true", false],
+    ["echo", "echo npm run test:a11y", false],
+  ]) {
+    mutations++;
+    const got = npmInvocationsOf("test:a11y", { "f.yml": npmSteps(line) }, () => null).length > 0;
+    if (got !== want) fail(`npm invocation shape "${shape}" was ${got ? "accepted" : "rejected"}`);
+  }
 }
 
 if (failed > 0) {
@@ -362,4 +473,4 @@ if (failed > 0) {
   process.exit(1);
 }
 const invocations = world.tests.reduce((n, t) => n + invocationsOf(t, world.workflows).length, 0);
-console.log(`ok ci-guard-coverage: ${world.tests.length} policy tests, each invoked by a run command (${invocations} invocations across ${Object.keys(world.workflows).length} workflows; static wiring, not proof of execution); ${mutations} controls held`);
+console.log(`ok ci-guard-coverage: ${world.tests.length} policy tests, each invoked by a run command (${invocations} invocations across ${Object.keys(world.workflows).length} workflows; static wiring, not proof of execution); ${npmNames.length} web test scripts, each run by a workflow step; ${mutations} controls held`);

@@ -20,11 +20,14 @@ name: macos
 # GitHub evaluates a `paths:` list per file in order with the LAST match
 # winning, so the package's SOURCE still starts this workflow and the package's
 # own XCTest target and fixtures no longer do. Nothing under
-# `apps/RelayiumKit/Tests/` is compiled by `apps/mac/Relayium.xcodeproj`, read
-# by any release script here, or linked into the signed product — the app
-# targets build the package's library products, not its test target — so a
-# test-only edit used to start this whole workflow, and the `signed-build`
-# lane's `needs:` chain with it, to produce no evidence about the change at all.
+# `apps/RelayiumKit/Tests/` is compiled by `apps/mac/Relayium.xcodeproj` or
+# linked into the signed product — the app targets build the package's library
+# products, not its test target — so a test-only edit used to start this whole
+# workflow, and the `signed-build` lane's `needs:` chain with it, to produce no
+# evidence about the change at all. The ONE exception is the eleven test files
+# `apps/mac/scripts/test-release-readiness.sh` names as release evidence and
+# fails on when missing: those are re-included by name after the exclusion, and
+# `scripts/test/ci-lane-closure-test.mjs` fails if that list and the script drift.
 #
 # That subtree is not unwatched: `.github/workflows/swift-package.yml` owns the
 # package's own suite, has no such exclusion, and runs the repository's one
@@ -82,6 +85,22 @@ on:
       - 'apps/mac/**'
       - 'apps/RelayiumKit/**'
       - '!apps/RelayiumKit/Tests/**'
+      # …and back IN, one file at a time, the package test files the `test`
+      # job's `apps/mac/scripts/test-release-readiness.sh` names as release
+      # evidence and fails on when one is missing. Listed AFTER the exclusion
+      # because the last match wins; a rename of one of these is a macOS
+      # release-gate failure and has to start this lane.
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/RealtimeTextSessionModelTests.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/RealtimeTextFrameTests.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/AccountManagementModelTests.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/AccountManagementClientTests.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/StoredLinkKeyStoreTests.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/CloudUploadModelTests.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/ErrorCopyTests.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/Support/LoginWordingAssertion.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/LocalizationIntegrityTests.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/LocalizedCopyTests.swift'
+      - 'apps/RelayiumKit/Tests/RelayiumKitTests/LocalizationSourceGuardTests.swift'
       - '.github/workflows/macos.yml'
   # Called by `.github/workflows/macos-release.yml` and by
   # `.github/workflows/merge-gate.yml`, and by nothing else. There is
@@ -339,8 +358,17 @@ jobs:
           mkdir -p "$dir"
           ( umask 077; printf '%s' "$PROFILE_BASE64" | base64 --decode > "$dir/relayium.provisionprofile" )
           ( umask 077; printf '%s' "$SHARE_PROFILE_BASE64" | base64 --decode > "$dir/relayium-share.provisionprofile" )
+      # A STEP budget below the job's, and a per-test one inside it, so a hang
+      # ends as a FAILED step with its result bundle on disk rather than as a
+      # job-level timeout, which GitHub reports as `cancelled` and which used
+      # to skip the evidence upload below. Observed shard runs on `main`
+      # (2026-09-28, last 10 runs): 13.2–17.8 min for the whole job; the slowest
+      # single UI test is about a minute. 24 minutes fits both shards' job
+      # budgets (30/35) with room for checkout, signing setup and the upload,
+      # and 300 s per test is five times the slowest observed case.
       - name: Run macOS product-flow UI smoke (${{ matrix.shard }})
         id: ui_smoke
+        timeout-minutes: 24
         env:
           TEST_CLASSES: ${{ matrix.tests }}
         run: |
@@ -357,12 +385,18 @@ jobs:
           xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
             -destination 'platform=macOS' \
             -derivedDataPath "$RUNNER_TEMP/dd-mac-ui-${{ matrix.shard }}" \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 300 \
+            -maximum-test-execution-time-allowance 300 \
             "${only[@]}" test
-      # Kept on success as well as failure: a green run is the one whose
-      # screenshots show the window chrome as shipped. Not when the smoke step
-      # was skipped or cancelled, which leaves no completed result to keep.
+      # Kept on success, on failure AND on cancellation: a green run is the one
+      # whose screenshots show the window chrome as shipped, and a run that was
+      # cancelled — a job-level timeout is reported that way — is exactly the
+      # one whose partial .xcresult is the only evidence of where it hung. Not
+      # when the smoke step never started (`skipped`, or an earlier step
+      # failed), which leaves nothing to keep.
       - name: Upload macOS UI smoke result evidence
-        if: always() && (steps.ui_smoke.outcome == 'success' || steps.ui_smoke.outcome == 'failure')
+        if: always() && contains(fromJSON('["success","failure","cancelled"]'), steps.ui_smoke.outcome)
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -46,13 +46,16 @@ on:
       # Deliberately NOT `apps/RelayiumKit/**` or the whole `Tests/Fixtures/`
       # tree: no other file in that package is an input to any Go test, and
       # either glob would start the entire eight-shard race lane on every Swift
-      # edit. `swift-package.yml` owns the package; these are four files it
+      # edit. `swift-package.yml` owns the package; these are five files it
       # shares. Every line here is mirrored in scripts/release/go-evidence.sh
       # `lane_paths`, which scripts/test/go-evidence-test.sh compares.
       - 'apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json'
+      # `server/internal/linksession/renew_vectors_test.go` reads the relay-renew/1
+      # vectors the same way; this line was missing until 2026-09-28 (audit D-H2).
+      - 'apps/RelayiumKit/Tests/Fixtures/relay-renew-vectors.json'
       # The fuzz campaign's own two files. Neither runs here — the campaign is
       # scheduled, never gating (see .github/workflows/go-fuzz-nightly.yml) —
       # but an edit to either must still start THIS workflow, because that is

@@ -52,9 +52,9 @@ on:
       # compiles, so `web/`'s config chain is what governs how the imported
       # protocol modules are compiled here. This was measured — an earlier
       # attempt to compile them without that chain resolvable failed outright.
-      - web/tsconfig.json
-      - web/tsconfig.app.json
-      - web/tsconfig.node.json
+      # One basename entry for the three (`tsconfig.json`, `.app.json`,
+      # `.node.json`), so a fourth in the chain cannot be added unwatched.
+      - web/tsconfig*
       - web/svelte.config.js
       # The web BUILD inputs. `npm run build` in `web/` is
       # `gen-pages.mjs && vite build`, and `realtime` serves the built bundle.

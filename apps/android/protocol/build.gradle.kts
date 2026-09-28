@@ -52,6 +52,11 @@ tasks.withType<Test>().configureEach {
         // W-N18 A08e: LinkSessionVectorTest reads it; without this line a
         // fixture-only edit leaves :protocol:test UP-TO-DATE and green.
         sharedFixtures.file("link-session-vectors.json"),
+        // RelayRenewVectorTest reads it (Fixtures.kt); the same UP-TO-DATE
+        // hole as the line above until 2026-09-28. scripts/test/
+        // ci-lane-closure-test.mjs now fails on any fixture a test here names
+        // that this list omits.
+        sharedFixtures.file("relay-renew-vectors.json"),
     )
         .withPropertyName("relayiumSharedFixtures")
         .withPathSensitivity(PathSensitivity.RELATIVE)

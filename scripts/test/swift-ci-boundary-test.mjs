@@ -1099,7 +1099,12 @@ function laneFailures(w) {
       + `PAID macOS runner on documentation, server and web commits alike.`,
     );
     if (paths !== null) {
-      const wantPaths = [PACKAGE_SOURCE_GLOB, ...APP_TREE_GLOBS, `.github/workflows/${SWIFT_PACKAGE}`];
+      // Plus exactly one script: the named-execution checker this lane's
+      // interop proof runs on its real `swift test` log. An edit to it changes
+      // this lane's verdict, so it must re-run the lane that executes it
+      // (scripts/test/ci-lane-closure-test.mjs, audit D-H2 2026-09-28) — one
+      // literal file, not the `scripts/**` widening warned against below.
+      const wantPaths = [PACKAGE_SOURCE_GLOB, ...APP_TREE_GLOBS, NAMED_CHECKER, `.github/workflows/${SWIFT_PACKAGE}`];
       need(
         deepEqual(paths, wantPaths),
         `${SWIFT_PACKAGE}'s path filter is ${JSON.stringify(paths)}; want exactly `

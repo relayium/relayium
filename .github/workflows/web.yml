@@ -1,25 +1,29 @@
 name: web
-# The path filter also names the SERVER packages the Device Inbox gates below
-# actually execute. Those two jobs run real Go code — the receiver's sealed-box
-# implementation and a whole live server — so a change to either half can break
-# them, and only listing `web/**` would let a server-side change land with a
-# green board while the cross-implementation contract was already broken.
+# The path filter names the WHOLE SERVER, not the handful of packages it once
+# listed. Three jobs below compile and run real Go code — `sealed-box-interop`
+# drives the receiver's sealed-box implementation, and `device-inbox-e2e` and
+# `mixed-link-e2e` build the entire `relayium` binary and serve this bundle
+# through it — and the Vitest suite reads Go sources as test input
+# (`router.test.ts` ← server/account/handlers.go, `pair-code.test.ts` ←
+# server/internal/signal/pair.go, `AccountLifecycleLandings.test.ts` ←
+# server/account/deletion.go, store-crypto testdata, the macOS release catalog).
+# The surgical list this replaced watched six of those inputs and claimed the
+# rest were "covered by their own workflow"; they were not — go.yml runs none of
+# these jobs — so a server change could land green while the live browser <->
+# server journeys were already broken (audit D-H2, 2026-09-28). All of these are
+# ubuntu jobs except the 10-minute Windows downloader.
 #
-# It names one DOCUMENT for the same reason. `docs/billing-transparency.md` is
-# not built or served here; it is READ, as test input, by
-# `web/scripts/pages/billing-doc-pointers.test.mjs`, which runs inside the
-# `npm test` step below and asserts that every `symbol` (`path:line`) pointer in
-# that document still resolves to the definition it names. The test lives in
-# this suite, so the file it reads has to start this suite: without the entry an
-# edit to the document is merged having never run the only gate that judges it,
-# and the failure surfaces later against an innocent commit that did touch
-# `web/**`.
+# It names DOCUMENTS and non-web files one at a time for the same reason.
+# `docs/billing-transparency.md` is not built or served here; it is READ, as
+# test input, by `web/scripts/pages/billing-doc-pointers.test.mjs`, which runs
+# inside the `npm test` step below. Without the entry an edit to the document is
+# merged having never run the only gate that judges it, and the failure
+# surfaces later against an innocent commit that did touch `web/**`.
 #
-# Deliberately surgical rather than `server/**` or `docs/**`: everything else in
-# the server is covered by its own workflow, and no other document is an input
-# to anything here. Widening either glob would re-run the full web suite, the
-# accessibility scan and three headless-Chrome journeys on every unrelated
-# backend or documentation change. One package, and one document, at a time.
+# `scripts/test/ci-lane-closure-test.mjs` holds this list to what the suite
+# actually reads: every repository file a job here names, or a test here opens
+# through `../`, must select this lane, and `docs/**`/`apps/**` stay one file at
+# a time so an unrelated document or app edit does not buy the full web suite.
 on:
   push:
     # Only `main`, and this trigger is LOAD-BEARING. Branch work is gated by
@@ -38,24 +42,26 @@ on:
     # dangling one, and the gate is the pull-request entry point now.
     paths:
       - 'web/**'
-      - 'server/internal/inbox/**'
-      - 'server/internal/inboxclient/**'
-      - 'server/account/deviceinbox*'
-      - 'server/account/taskobject.go'
-      - 'server/account/files.go'
-      - 'server/account/uploads_resumable.go'
+      # The whole server: see the header. This also covers the Go sources the
+      # suite reads as test input, e.g. server/cmd/relayium/run.go, whose
+      # reportExit failure line `cli-backup-integrity-recovery.test.mjs`
+      # requires the SSH backup guide to quote.
+      - 'server/**'
       - 'docs/billing-transparency.md'
-      # And one Go SOURCE FILE read as test input, not compiled here.
-      # `web/scripts/pages/cli-backup-integrity-recovery.test.mjs` extracts
-      # reportExit's per-file failure line from it and asserts the SSH backup
-      # guide in all nine locales still quotes that exact line. A reword there
-      # without this suite running leaves the guide quoting a line the CLI no
-      # longer prints. The one file, not `server/cmd/relayium/**`, for the same
-      # reason as the document above.
-      - 'server/cmd/relayium/run.go'
-      # And three frozen-bytes FIXTURES, for exactly the same reason and named
+      # The wrapper `mixed-link-e2e` runs the Share Target suite through, and
+      # the helper the `scope` job runs to decide which jobs a change needs.
+      - 'scripts/ci/share-target-e2e.sh'
+      - 'scripts/ci/web-lane-scope.mjs'
+      # Two app files the Web suite reads as test input, one at a time:
+      # `AppsPage.claims.test.ts` asserts the /apps page's share-extension claim
+      # against the macOS Share extension's Info.plist, and
+      # `stage-android-release.test.mjs` asserts the staged Android feed against
+      # the client that parses it.
+      - 'apps/mac/RelayiumShare/Info.plist'
+      - 'apps/android/app/src/main/kotlin/com/relayium/android/update/UpdateFeed.kt'
+      # And frozen-bytes FIXTURES, for exactly the same reason and named
       # exactly as narrowly. They live in the Swift package because that is
-      # where they were frozen from, but three tests in this suite read them
+      # where they were frozen from, but these tests in this suite read them
       # from disk and assert the TypeScript implementation still agrees with
       # those bytes:
       #
@@ -64,12 +70,13 @@ on:
       #   web/src/lib/inbox-manifest.test.ts  device-inbox-manifest-v3
       #   web/src/lib/link-session-vectors.test.ts  link-session (W-N18 A08e;
       #     the Web AUTHORITY half of the state-machine vectors)
+      #   web/src/lib/relay-renew-vectors.test.ts   relay-renew + crypto
       #
       # A fixture regenerated without this suite running leaves those tests
       # passing against bytes nobody re-checked on this side, and the divergence
       # surfaces later against an innocent commit that touched `web/**`.
       #
-      # FOUR PATHS, not the `Tests/Fixtures/` tree and not
+      # FIVE PATHS, not the `Tests/Fixtures/` tree and not
       # `apps/RelayiumKit/**`. `store-wire-vectors.json` sits in that same
       # directory and is deliberately absent: no test in this suite reads it —
       # its only Web-side consumer is `web/scripts/check-wire-vectors.mjs`,
@@ -81,6 +88,7 @@ on:
       - 'apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json'
+      - 'apps/RelayiumKit/Tests/Fixtures/relay-renew-vectors.json'
       - '.github/workflows/web.yml'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
   #
@@ -133,7 +141,43 @@ permissions:
   contents: read
 
 jobs:
+  # Which of the jobs below this change set needs. `server/**` selects this
+  # lane because three jobs run real Go code (`sealed-box-interop`,
+  # `device-inbox-e2e`, `mixed-link-e2e`); the rest — check, Vitest, build,
+  # a11y, five browser journeys, the Windows downloader — read no server file
+  # except the few in `LIGHT_SERVER_INPUTS`. So a change whose lane-selecting
+  # paths are all OTHER server files runs only the Go-running jobs.
+  #
+  # Every other job `needs:` this one and runs unless its output is exactly
+  # `'false'`: a helper that fails to answer runs everything, and a failure of
+  # this job fails the lane. Skipped jobs report success to the merge gate, so
+  # the helper fails CLOSED (every uncertainty is light=true server=true) and
+  # `scripts/test/web-lane-scope-test.mjs` pins both the helper's answers and
+  # this wiring. Pull requests diff the merge commit against the base; `main`
+  # pushes diff against `before`; anything else runs everything.
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      light: ${{ steps.scope.outputs.light }}
+      server: ${{ steps.scope.outputs.server }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Which web-lane jobs this change set needs
+        id: scope
+        env:
+          WEB_SCOPE_EVENT: ${{ github.event_name }}
+          WEB_SCOPE_PR_BASE: ${{ github.event.pull_request.base.sha }}
+          WEB_SCOPE_BEFORE: ${{ github.event.before }}
+          WEB_SCOPE_HEAD: ${{ github.sha }}
+        run: node scripts/ci/web-lane-scope.mjs >> "$GITHUB_OUTPUT"
+
   test:
+    needs: scope
+    if: needs.scope.outputs.light != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -223,6 +267,8 @@ jobs:
   # tampered box to FAIL, so a harness that silently stopped proving anything is
   # itself a red build.
   sealed-box-interop:
+    needs: scope
+    if: needs.scope.outputs.server != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -250,6 +296,8 @@ jobs:
   # This is the only gate that can show "uploaded is not saved", because it is
   # the only one with a receiver that has genuinely not saved anything yet.
   device-inbox-e2e:
+    needs: scope
+    if: needs.scope.outputs.server != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -289,6 +337,8 @@ jobs:
   # step here starts one — because a suite that needs a human to set up its
   # world is a suite that runs when a human remembers.
   mixed-link-e2e:
+    needs: scope
+    if: needs.scope.outputs.server != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -311,8 +361,30 @@ jobs:
       # not an optimization.
       - run: npm run build
       - run: npm run test:e2e:mixed
+      # Two more real-Chrome suites that no hosted job ran until 2026-09-28
+      # (audit D-M1). They need this job's built dist and Go toolchain and
+      # nothing heavier, so they share it rather than paying for another
+      # checkout, `npm ci` and build. `!cancelled()` so a mixed-link failure
+      # does not hide their own verdicts. Each takes seconds locally.
+      #
+      # Relay renewal: the SHIPPED renewal controller, bundled from source,
+      # drives a real ICE restart between two real RTCPeerConnections. It
+      # claims nothing about a server or a TURN relay; see the script header.
+      - name: relay renewal, real ICE restart (e2e/relay-renewal.mjs)
+        if: ${{ !cancelled() }}
+        run: npm run test:e2e:relay-renewal
+      # Web Share Target: a multipart share reaches the installed production
+      # service worker and the outbox. The scenario needs a server it does not
+      # start itself; the wrapper builds one, serves this dist through it with
+      # a throwaway database, and tears it down.
+      - name: Web Share Target through the production service worker (e2e/share-target.mjs)
+        if: ${{ !cancelled() }}
+        working-directory: .
+        run: bash scripts/ci/share-target-e2e.sh
 
   windows-temporary-downloader:
+    needs: scope
+    if: needs.scope.outputs.light != 'false'
     runs-on: windows-latest
     timeout-minutes: 10
     defaults:

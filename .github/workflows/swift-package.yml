@@ -102,6 +102,11 @@ on:
       - 'apps/RelayiumKit/**'
       - 'apps/mac/**'
       - 'apps/ios/**'
+      # The named-execution proof this lane's `swift test` log is judged by.
+      # It decides whether the forced interop classes RAN, so an edit to it is
+      # an edit to this lane's verdict and must re-run the lane that executes
+      # it on a real log — not only its forged-log cases in repo-hygiene.
+      - 'scripts/ci/assert-swift-named-execution.mjs'
       - '.github/workflows/swift-package.yml'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
   #

@@ -77,6 +77,15 @@ on:
       - 'scripts/local-transfer-acceptance.sh'
       - 'scripts/local-transfer-cleanup-test.sh'
       - 'scripts/lib/local-acceptance.sh'
+      # The App Store candidate contract `ios-build` runs first
+      # (`bash scripts/test/ios-app-store-candidate-test.sh`), the script it
+      # drives, and the two inputs it requires to exist and validates: the
+      # metadata validator and the metadata packet. A change to any of them
+      # used to start no conditional lane at all (audit D-H2, 2026-09-28).
+      - 'scripts/test/ios-app-store-candidate-test.sh'
+      - 'scripts/ios-app-store-candidate.sh'
+      - 'scripts/ios-app-store-metadata-validate.mjs'
+      - 'docs/app-store-metadata-ios.json'
       - '.github/workflows/ios.yml'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
   #
@@ -380,9 +389,16 @@ jobs:
   # below is the job that actually executes it; neither job stands in for the
   # other, and `scripts/test/ci-event-policy-test.mjs` sections 6k and 6q hold
   # both.
+  #
+  # Budgets, from the last ten `main` runs (2026-09-28): this job took
+  # 28.1–39.9 min, so the old 45-minute ceiling was within five minutes of an
+  # ordinary slow runner. 55 for the job; 48 for the test step inside it, so a
+  # hang ends as a FAILED step with its result bundle written rather than as a
+  # job timeout (reported `cancelled`); and 300 s per test, five times the
+  # slowest single case observed.
   ios-ui-smoke:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # Nothing below this step may compile against the runner image's default
@@ -392,6 +408,8 @@ jobs:
         timeout-minutes: 10
         run: ${{ env.RELAYIUM_SELECT_XCODE }}
       - name: Run iOS primary-task UI smoke
+        id: ui_smoke
+        timeout-minutes: 48
         run: |
           set -euo pipefail
           device_id="$(xcrun simctl list devices available -j \
@@ -408,9 +426,15 @@ jobs:
             -destination "platform=iOS Simulator,id=$device_id" \
             -derivedDataPath "$RUNNER_TEMP/dd-ios" \
             -resultBundlePath "$RUNNER_TEMP/ios-ui-smoke.xcresult" \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 300 \
+            -maximum-test-execution-time-allowance 300 \
             -only-testing:RelayiumUITests test
+      # On failure AND on cancellation (a job-level timeout reports as
+      # `cancelled`, and `failure()` is false then) — never on success or when
+      # the test step never started.
       - name: Retain UI smoke diagnosis
-        if: failure()
+        if: always() && contains(fromJSON('["failure","cancelled"]'), steps.ui_smoke.outcome)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-ui-smoke-diagnosis
@@ -462,7 +486,11 @@ jobs:
       - name: Select and verify the Xcode 26 upload toolchain
         timeout-minutes: 10
         run: ${{ env.RELAYIUM_SELECT_XCODE }}
+      # 30 of the job's 40 minutes: the last ten `main` runs took 6.8–12.6 min
+      # for the whole job. Same per-test allowance as ios-ui-smoke.
       - name: Run the regular-width adaptive shell on an iPad simulator
+        id: ipad_shell
+        timeout-minutes: 30
         run: |
           set -euo pipefail
           # SORTED, not "the first one the JSON happens to list". The image's
@@ -491,6 +519,9 @@ jobs:
             -destination "platform=iOS Simulator,id=$device_id" \
             -derivedDataPath "$RUNNER_TEMP/dd-ios-ipad" \
             -resultBundlePath "$RUNNER_TEMP/ios-ipad-shell.xcresult" \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 300 \
+            -maximum-test-execution-time-allowance 300 \
             -only-testing:RelayiumUITests/AdaptiveShellUITests test
       - name: Prove the regular-width cases ran rather than skipped
         run: |
@@ -510,7 +541,7 @@ jobs:
                   "so this destination is not a full-width iPad and the job proved nothing.")
           print(f"regular-width shell: {total} case(s), 0 skipped")'
       - name: Retain iPad shell diagnosis
-        if: failure()
+        if: failure() || (always() && steps.ipad_shell.outcome == 'cancelled')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-ipad-shell-diagnosis

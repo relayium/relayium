@@ -94,6 +94,35 @@ jobs:
           xcodebuild -version
           swift --version
           go version
+      # The server's DARWIN-ONLY Go tests. `//go:build darwin` files compile on
+      # no other runner — go.yml runs Linux and Windows only — so until
+      # 2026-09-28 (audit D-M2) they had never run in CI at all. They need a
+      # real macOS filesystem (ACLs that refuse an unlink), not a simulator,
+      # and take seconds; this lane already has the macOS runner, the Go
+      # toolchain and a `server/**` filter.
+      #
+      # Discovered, not listed: every tracked `server/**/*_darwin_test.go` and
+      # every `func Test…` in it, so a new darwin test is run and proved without
+      # an edit here. The proof is by name — `go test` exits 0 over a package
+      # whose darwin file did not compile in, or a test that `t.Skip`s — so each
+      # discovered test must report `--- PASS:` exactly once.
+      - name: Darwin-only Go tests, with a named-execution proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          files="$(git ls-files 'server/*_darwin_test.go')"
+          [ -n "$files" ] || { echo "::error::no server/**/*_darwin_test.go found; this step proves nothing"; exit 1; }
+          pkgs="$(printf '%s\n' "$files" | sed 's#^server/#./#; s#/[^/]*$##' | sort -u)"
+          names="$(printf '%s\n' "$files" | xargs sed -n 's/^func \(Test[A-Za-z0-9_]*\)(t \*testing\.T).*/\1/p' | sort -u)"
+          [ -n "$names" ] || { echo "::error::the darwin test files declare no Test functions"; exit 1; }
+          log="$RUNNER_TEMP/go-darwin.log"
+          # shellcheck disable=SC2086 # one package path per word, by construction
+          (cd server && go test -count=1 -v $pkgs) 2>&1 | tee "$log"
+          for name in $names; do
+            count="$(awk -v want="--- PASS: ${name} (" 'index($0, want) == 1 { n++ } END { print n + 0 }' "$log")"
+            [ "$count" = 1 ] || { echo "::error::$name reported PASS $count time(s), want exactly 1 (skipped, failed or not compiled on darwin)"; exit 1; }
+          done
+          echo "darwin-only Go tests proved by name: $(printf '%s' "$names" | tr '\n' ' ')"
       # ALWAYS filtered, to exactly these two classes, and FORCED: with
       # RELAYIUM_SWIFT_INTEROP=1 a missing prerequisite is a failure, never a
       # skip. `pipefail` so `tee` cannot turn a red `swift test` green.

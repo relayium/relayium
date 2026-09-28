@@ -1,0 +1,146 @@
+{
+  "$comment": [
+    "Read ONLY by scripts/test/ci-lane-closure-test.mjs, never by the merge-gate selector: what a lane watches is still stated once, in its own `on: push: paths:`.",
+    "sources: test files a lane's runner collects without any command naming them (Vitest, `go test ./...`), scanned for `../` reads.",
+    "declared: reads no text scan can resolve (a Gradle system property, a template literal, `$script_name`). Each must exist and select its lane.",
+    "knownGaps: real reads a lane's filter deliberately does not watch. `coveredBy` names a lane that runs the same code on that change and is verified; a gap without it is an open decision, not a pass.",
+    "sourceJobs / sources[].jobs: which of a lane's jobs execute a source (web: light jobs vs SERVER_JOBS of scripts/ci/web-lane-scope.mjs). ignoredReads: scanned reads that are not reads (with the reason); each must still be produced by the scan or it is stale."
+  ],
+  "sources": {
+    "web": [
+      {
+        "glob": "web/src/**/*.test.ts",
+        "jobs": [
+          "test"
+        ]
+      },
+      {
+        "glob": "web/scripts/**/*.test.mjs",
+        "jobs": [
+          "test"
+        ]
+      },
+      {
+        "glob": "web/e2e/**/*.test.mjs",
+        "jobs": [
+          "test"
+        ]
+      }
+    ],
+    "go": [
+      {
+        "glob": "server/**/*_test.go"
+      }
+    ],
+    "windows": [
+      {
+        "glob": "apps/windows/test/**/*.ts"
+      },
+      {
+        "glob": "apps/windows/test/**/*.mjs"
+      }
+    ]
+  },
+  "declared": {
+    "windows": [
+      {
+        "path": "apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json",
+        "reader": "apps/windows/test/unit/protocol-fixtures.test.ts:34 fixture(\"crypto-vectors.json\")"
+      },
+      {
+        "path": "apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json",
+        "reader": "apps/windows/test/unit/protocol-fixtures.test.ts:44 fixture(\"realtime-wire-vectors.json\")"
+      }
+    ],
+    "ios": [
+      {
+        "path": "scripts/ios-app-store-candidate.sh",
+        "reader": "scripts/test/ios-app-store-candidate-test.sh:55 \"$repo_root/scripts/$script_name\""
+      }
+    ],
+    "web": [
+      {
+        "path": "server/account/oauth.go",
+        "reader": "web/src/lib/AccountLifecycleLandings.test.ts:75 `../server/account/${f}` for f of [oauth.go, apple_web.go]",
+        "jobs": [
+          "test"
+        ]
+      },
+      {
+        "path": "server/account/apple_web.go",
+        "reader": "web/src/lib/AccountLifecycleLandings.test.ts:75 `../server/account/${f}` for f of [oauth.go, apple_web.go]",
+        "jobs": [
+          "test"
+        ]
+      }
+    ]
+  },
+  "knownGaps": [
+    {
+      "lane": "android",
+      "glob": "apps/RelayiumKit/Tests/Fixtures/*.json",
+      "coveredBy": "compat",
+      "compatRuns": ":protocol:test",
+      "why": "android.yml's `:protocol:test` opens the shared fixtures, and so does compat.yml's android-protocol job — unfiltered, on every pull request, required by the merge gate. android.yml deliberately names no apps/RelayiumKit path (its header; scripts/test/swift-ci-boundary-test.mjs PARSED). The Gradle half of W-N18 still matters there and is enforced separately below."
+    },
+    {
+      "lane": "windows",
+      "glob": "apps/RelayiumKit/Tests/Fixtures/*.json",
+      "derivedFrom": "web/scripts/check-wire-vectors.mjs",
+      "why": "apps/windows/test/unit reads crypto, realtime-wire and store-wire vectors. Each is held byte-equal to its generator under web/scripts by check-wire-vectors.mjs in the unfiltered compat.yml, so a fixture-only edit fails compat, and a legitimate one changes a web/scripts generator — which windows.yml watches. windows.yml deliberately names no apps/RelayiumKit path (its header)."
+    },
+    {
+      "lane": "contracts",
+      "glob": "web/src/**",
+      "coveredBy": "web",
+      "why": "contracts.yml's web-contract job runs one Vitest file from web/src; the same file runs in web.yml's `npm test`, which every web/src change selects. contracts.yml watches only the contract document on purpose (scripts/test/fixtures/ci-path-selection.mjs, contracts row)."
+    },
+    {
+      "lane": "contracts",
+      "glob": "server/**",
+      "coveredBy": "go",
+      "why": "contracts.yml's go-contract job pins its toolchain with server/go.mod and runs a `go test` that go.yml's `go test ./...` also runs on any server change."
+    },
+    {
+      "lane": "ops-contract",
+      "glob": "server/**",
+      "coveredBy": "go",
+      "why": "ops-deploy-contract.yml's Go consumer lives in server/ and runs inside go.yml's `go test ./...` (ci-path-selection.mjs, ops-deploy-v1 row)."
+    },
+    {
+      "lane": "swift-package",
+      "glob": "server/**",
+      "coveredBy": "inbox-swift-interop",
+      "why": "swift-package.yml sets up Go only for the Swift<->Go interop classes it runs forced; inbox-swift-interop.yml runs exactly those classes, with a named-execution proof, on every server change."
+    },
+    {
+      "lane": "ios",
+      "glob": "server/**",
+      "why": "OPEN: ios.yml's ios-transfer-acceptance builds and runs the whole Go server (scripts/lib/local-acceptance.sh acceptance_build), but PATH_MATRIX row 1 deliberately keeps the 75-minute iOS lane off server-only changes. No other lane runs the iOS built-App acceptance. Revisit: owner accepts iOS runs on server changes, or the acceptance moves to a lane that watches server/**."
+    },
+    {
+      "lane": "macos",
+      "glob": "server/account/*",
+      "why": "OPEN: apps/mac/scripts/test-release-readiness.sh checks that server/account/{auth.go,handlers.go,devices_bearer_test.go} EXIST (evidence list, not content). handlers.go alone had 33 commits in 60 days; watching it would start the paid macOS lane (UI smoke + signed build) on each. A rename/delete fails macos on its next run instead. Revisit: owner accepts the cost, or the evidence check moves to a lane that watches server/**."
+    }
+  ],
+  "sourceJobs": {
+    "web": [
+      {
+        "source": "web/src/lib/device-seal.interop.test.ts",
+        "jobs": [
+          "sealed-box-interop"
+        ],
+        "why": "skipped in the `test` job (RELAYIUM_GO_INTEROP=0); only `npm run test:interop` in sealed-box-interop runs it"
+      }
+    ]
+  },
+  "ignoredReads": [
+    {
+      "lane": "web",
+      "source": "web/scripts/stage-macos-release.test.mjs",
+      "path": "server/account/**",
+      "why": "`join(webRoot, \"../server/account\")` where webRoot is a temporary fixture directory; the test writes its own catalog there and never opens the repository's server/account"
+    }
+  ]
+}
