@@ -220,6 +220,10 @@ public final class InboxSendModel: ObservableObject {
     private var work: [String: Task<Void, Never>] = [:]
     /// The state poll running for one job, if any.
     private var polls: [String: Task<Void, Never>] = [:]
+    /// Removal of the content keys whose retired job directory the latest
+    /// `refreshOutstanding` sweep removed. Chained, so removals from successive
+    /// refreshes run in order. Internal so tests can await it instead of sleeping.
+    private(set) var sweptKeyRemoval: Task<Void, Never>?
 
     public init(pending: PendingUploadSupport,
                 uploader: CloudUploader,
@@ -497,8 +501,18 @@ public final class InboxSendModel: ObservableObject {
         // from neither.
         let adoption = pending.deviceStore.adoptLegacyDeliveries()
         // Finishes a Discard whose directory removal failed earlier. Deletes
-        // only readable retired tombstones; see `sweepIncomplete`.
-        pending.deviceStore.sweepIncomplete()
+        // only readable retired tombstones; see `sweepIncomplete`. The content
+        // key of each tombstone it removed goes with it: after this sweep no
+        // record names that job, so no later release could remove the key.
+        let released = pending.deviceStore.sweepIncomplete()
+        if !released.isEmpty {
+            let keys = pending.keys
+            let previous = sweptKeyRemoval
+            sweptKeyRemoval = Task {
+                await previous?.value
+                for id in released { try? await keys.remove(id: id) }
+            }
+        }
         let conflicts = Set(pending.deviceStore.ownershipConflicts())
             .union(adoption.conflicts)
         if conflicts != ownershipConflictJobIDs { ownershipConflictJobIDs = conflicts }

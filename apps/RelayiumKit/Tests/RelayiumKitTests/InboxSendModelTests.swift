@@ -1650,3 +1650,231 @@ extension InboxSendModelTests {
         XCTAssertEqual(transport.recoveringFinalizes, [])
     }
 }
+
+// MARK: - swept tombstones release their content key
+
+/// A `FileManager` whose `removeItem` throws, once per armed path, the way a
+/// real I/O failure would. Everything else is the default manager.
+private final class RemovalFailingFileManager: FileManager, @unchecked Sendable {
+    private let lock = NSLock()
+    private var armed: [String: Int] = [:]
+    private(set) var failures = 0
+
+    func failNextRemoval(of url: URL, times: Int = 1) {
+        lock.lock(); defer { lock.unlock() }
+        armed[url.standardizedFileURL.path, default: 0] += times
+    }
+
+    override func removeItem(at url: URL) throws {
+        lock.lock()
+        let key = url.standardizedFileURL.path
+        if let n = armed[key], n > 0 {
+            armed[key] = n - 1
+            failures += 1
+            lock.unlock()
+            throw CocoaError(.fileWriteUnknown)
+        }
+        lock.unlock()
+        try super.removeItem(at: url)
+    }
+}
+
+/// Key hygiene for the Device Inbox "lost finalize response" follow-up: a
+/// Discard whose directory removal fails keeps its content key (the directory
+/// still names it), and the launch sweep that later removes the retired
+/// tombstone must remove that key too — nothing names the job afterwards.
+/// Every other kind of entry keeps its key.
+extension InboxSendModelTests {
+    private var hygieneSharedRoot: URL { root.appendingPathComponent("PendingUploads") }
+    private var hygieneProtectedRoot: URL {
+        PendingUploadStore.protectedDeviceRoot(besides: hygieneSharedRoot)
+    }
+    private static let hygieneKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+    private func hygieneStore(_ fm: FileManager) -> PendingUploadStore {
+        PendingUploadStore(root: hygieneSharedRoot, fileManager: fm).protectedDeviceStore()
+    }
+
+    private func stagedDelivery(in store: PendingUploadStore) async throws -> PendingUploadPlan {
+        let plan = try store.prepare(files: try selection(), accountId: "acct-1", burnAfterRead: false,
+                                     ttl: UploadPurpose.deviceTaskTTLSeconds,
+                                     target: PendingUploadTarget(deviceId: deviceID, keyId: keyID,
+                                                                 keyGeneration: 4))
+        try await awaitSave(plan.jobId)
+        return plan
+    }
+
+    private func awaitSave(_ id: String) async throws {
+        try await keys.save(id: id, keyB64url: Self.hygieneKey)
+    }
+
+    private func dirExists(_ root: URL, _ id: String) -> Bool {
+        FileManager.default.fileExists(atPath: root.appendingPathComponent(id).path)
+    }
+
+    // (a) positive, store half: a retired owned tombstone the sweep removes is listed.
+    func testKeyHygieneSweepListsARetiredOwnedTombstoneItRemoved() async throws {
+        let store = hygieneStore(FileManager.default)
+        let plan = try await stagedDelivery(in: store)
+        _ = try store.markRetired(plan)
+
+        XCTAssertEqual(store.sweepIncomplete(), [plan.jobId])
+        XCTAssertFalse(dirExists(hygieneProtectedRoot, plan.jobId))
+        XCTAssertEqual(store.sweepIncomplete(), [], "a directory already gone is not listed twice")
+        XCTAssertEqual(PendingUploadStore(root: hygieneSharedRoot).sweepIncomplete(), [],
+                       "the shared root never lists anything")
+    }
+
+    // (b) store half: a failed removal is not listed; the next successful one is.
+    func testKeyHygieneSweepDoesNotListAFailedRemovalButListsTheRetry() async throws {
+        let fm = RemovalFailingFileManager()
+        let store = hygieneStore(fm)
+        let plan = try await stagedDelivery(in: store)
+        _ = try store.markRetired(plan)
+        fm.failNextRemoval(of: store.jobURL(for: plan.jobId))
+
+        XCTAssertEqual(store.sweepIncomplete(), [])
+        XCTAssertEqual(fm.failures, 1)
+        XCTAssertTrue(dirExists(hygieneProtectedRoot, plan.jobId))
+        XCTAssertEqual(store.sweepIncomplete(), [plan.jobId])
+        XCTAssertFalse(dirExists(hygieneProtectedRoot, plan.jobId))
+    }
+
+    // (a) positive, end to end: a normal Discard removes the key at once.
+    func testKeyHygieneADiscardWhosePurgeSucceedsRemovesTheKey() async throws {
+        let store = hygieneStore(FileManager.default)
+        let plan = try await stagedDelivery(in: store)
+        let coordinator = InboxSendCoordinator(store: store, keys: keys,
+                                               uploader: CloudUploader(transport: transport),
+                                               sender: sender)
+        try await coordinator.discard(plan)
+
+        XCTAssertFalse(dirExists(hygieneProtectedRoot, plan.jobId))
+        let key = try await keys.key(for: plan.jobId)
+        XCTAssertNil(key)
+    }
+
+    // (b) end to end: the traced sequence. Discard's purge fails -> key kept;
+    // the next refresh sweeps the tombstone AND removes the key.
+    func testKeyHygieneAFailedDiscardPurgeKeepsTheKeyUntilTheSweepRemovesBoth() async throws {
+        let fm = RemovalFailingFileManager()
+        let store = hygieneStore(fm)
+        let plan = try await stagedDelivery(in: store)
+        fm.failNextRemoval(of: store.jobURL(for: plan.jobId))
+        let coordinator = InboxSendCoordinator(store: store, keys: keys,
+                                               uploader: CloudUploader(transport: transport),
+                                               sender: sender)
+        try await coordinator.discard(plan)
+
+        XCTAssertEqual(fm.failures, 1)
+        XCTAssertTrue(dirExists(hygieneProtectedRoot, plan.jobId), "the purge was meant to fail")
+        let kept = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(kept, Self.hygieneKey, "a key whose directory still exists was removed")
+
+        supportOverride = PendingUploadSupport(store: store, keys: keys)
+        let (model, _) = await signedIn()
+        await model.sweptKeyRemoval?.value
+
+        XCTAssertFalse(dirExists(hygieneProtectedRoot, plan.jobId))
+        let after = try await keys.key(for: plan.jobId)
+        XCTAssertNil(after, "the swept tombstone's key was orphaned")
+        XCTAssertEqual(model.items, [])
+    }
+
+    // (b) end to end: the sweep's OWN removal fails too -> key kept; the next
+    // refresh that succeeds removes it.
+    func testKeyHygieneASweepWhoseRemovalFailsKeepsTheKeyForTheNextRefresh() async throws {
+        let fm = RemovalFailingFileManager()
+        let store = hygieneStore(fm)
+        let plan = try await stagedDelivery(in: store)
+        _ = try store.markRetired(plan)
+        fm.failNextRemoval(of: store.jobURL(for: plan.jobId))
+
+        supportOverride = PendingUploadSupport(store: store, keys: keys)
+        let (model, _) = await signedIn()
+        await model.sweptKeyRemoval?.value
+        XCTAssertEqual(fm.failures, 1)
+        XCTAssertTrue(dirExists(hygieneProtectedRoot, plan.jobId))
+        let kept = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(kept, Self.hygieneKey)
+
+        model.refreshOutstanding()
+        await model.sweptKeyRemoval?.value
+        XCTAssertFalse(dirExists(hygieneProtectedRoot, plan.jobId))
+        let after = try await keys.key(for: plan.jobId)
+        XCTAssertNil(after)
+    }
+
+    // (c) negative invariants: live, conflicting (retired, R2 shape),
+    // unreadable, plan-less and finalized-share entries all keep their key.
+    func testKeyHygieneTheSweepKeepsTheKeyOfEveryEntryItDoesNotRelease() async throws {
+        let store = hygieneStore(FileManager.default)
+
+        let live = try await stagedDelivery(in: store)
+
+        // Conflict: a retired tombstone whose id the shared root also holds.
+        let conflict = try await stagedDelivery(in: store)
+        _ = try store.markRetired(conflict)
+        try FileManager.default.createDirectory(at: hygieneSharedRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: hygieneProtectedRoot.appendingPathComponent(conflict.jobId),
+                                         to: hygieneSharedRoot.appendingPathComponent(conflict.jobId))
+        XCTAssertEqual(store.ownership(of: conflict.jobId), .conflict)
+
+        // Unreadable plan and plan-less directory, both with valid ids.
+        let unreadable = "HYGIENEUNREAD001"
+        let unreadableDir = hygieneProtectedRoot.appendingPathComponent(unreadable)
+        try FileManager.default.createDirectory(at: unreadableDir, withIntermediateDirectories: true)
+        try Data("{not a plan".utf8).write(to: unreadableDir.appendingPathComponent("plan.json"))
+        try await awaitSave(unreadable)
+        let planless = "HYGIENEPLANLES01"
+        try FileManager.default.createDirectory(at: hygieneProtectedRoot.appendingPathComponent(planless),
+                                                withIntermediateDirectories: true)
+        try await awaitSave(planless)
+
+        // A finalized share in the protected root: removed by the sweep, but
+        // its pending key is not the sweep's to judge.
+        let shareStaging = PendingUploadStore(root: root.appendingPathComponent("share-src"))
+        let share = try shareStaging.prepare(files: try selection(), accountId: "acct-1",
+                                             burnAfterRead: false, ttl: 3600)
+        _ = try shareStaging.markFinalized(share, storedId: "STOREDSHARE00001")
+        try FileManager.default.moveItem(at: shareStaging.jobURL(for: share.jobId),
+                                         to: hygieneProtectedRoot.appendingPathComponent(share.jobId))
+        try await awaitSave(share.jobId)
+
+        supportOverride = PendingUploadSupport(store: store, keys: keys)
+        let (model, _) = await signedIn()
+        await model.sweptKeyRemoval?.value
+
+        XCTAssertNil(model.sweptKeyRemoval, "no key removal should have been scheduled")
+        XCTAssertFalse(dirExists(hygieneProtectedRoot, share.jobId), "the finalized share is still swept")
+        for id in [live.jobId, conflict.jobId, unreadable, planless, share.jobId] {
+            let key = try await keys.key(for: id)
+            XCTAssertEqual(key, Self.hygieneKey, "the key of \(id) was removed")
+        }
+        for id in [live.jobId, conflict.jobId, unreadable, planless] {
+            XCTAssertTrue(dirExists(hygieneProtectedRoot, id), "\(id) was deleted")
+        }
+        XCTAssertTrue(dirExists(hygieneSharedRoot, conflict.jobId), "the conflict's shared copy was deleted")
+    }
+
+    // (c) R2 unchanged: a conflicting job's Discard is refused and keeps both
+    // copies and the key, and the next sweep does not release it either.
+    func testKeyHygieneAConflictDiscardKeepsBothCopiesAndTheKey() async throws {
+        let store = hygieneStore(FileManager.default)
+        let plan = try await stagedDelivery(in: store)
+        try FileManager.default.createDirectory(at: hygieneSharedRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: hygieneProtectedRoot.appendingPathComponent(plan.jobId),
+                                         to: hygieneSharedRoot.appendingPathComponent(plan.jobId))
+        let coordinator = InboxSendCoordinator(store: store, keys: keys,
+                                               uploader: CloudUploader(transport: transport),
+                                               sender: sender)
+        await XCTAssertThrowsErrorAsync(try await coordinator.discard(plan)) {
+            XCTAssertEqual($0 as? InboxSendFailure, .ownershipConflict)
+        }
+        XCTAssertEqual(store.sweepIncomplete(), [])
+        XCTAssertTrue(dirExists(hygieneProtectedRoot, plan.jobId))
+        XCTAssertTrue(dirExists(hygieneSharedRoot, plan.jobId))
+        let key = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(key, Self.hygieneKey)
+    }
+}

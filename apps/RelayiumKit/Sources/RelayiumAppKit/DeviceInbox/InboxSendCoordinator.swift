@@ -762,7 +762,8 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         // The content key LAST, and only once no directory anywhere still
         // names this job: the key is filed by job id, so while either root
         // holds the id it belongs to that copy too. A key left behind by a
-        // failed purge is harmless and is removed by the next release.
+        // failed purge is removed with the retired tombstone by the next
+        // `InboxSendModel.refreshOutstanding` sweep; no later release names it.
         if store.ownership(of: plan.jobId) == .conflict || store.sharedRootHolds(jobId: plan.jobId) {
             throw InboxSendFailure.ownershipConflict
         }

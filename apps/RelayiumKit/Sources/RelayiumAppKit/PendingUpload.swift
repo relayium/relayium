@@ -1403,7 +1403,19 @@ public final class PendingUploadStore: @unchecked Sendable {
     ///
     /// Called once at launch. It never touches a directory it cannot explain,
     /// and it is the only thing that deletes a job nobody asked about.
-    public func sweepIncomplete() {
+    ///
+    /// Returns the job ids of retired Device Inbox tombstones whose directory
+    /// this call actually removed, so the caller can remove their content keys
+    /// (the store holds no key store). This finishes a Discard whose own purge
+    /// failed: once the tombstone is gone nothing could name the job again,
+    /// and its key would be orphaned. A job is listed only when its plan was
+    /// readable, retired and exclusively owned, its directory is confirmed
+    /// gone, and the shared root does not hold the same id — the key is filed
+    /// by job id, so while any root names the job it belongs to that copy too.
+    /// Finalized shares are never listed: their pending key is not this
+    /// sweep's to judge. The shared root returns an empty list.
+    @discardableResult
+    public func sweepIncomplete() -> [String] {
         lock.lock()
         defer { lock.unlock() }
         // The protected root deletes only what a person or a finished job
@@ -1412,15 +1424,21 @@ public final class PendingUploadStore: @unchecked Sendable {
         // newer-version, plan-less or conflicting entry may be the only record
         // of a delivery central already counted, and is always retained.
         if isProtectedDeviceStore {
+            var releasedKeys: [String] = []
             let entries = (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
             for entry in entries {
                 let name = entry.lastPathComponent
                 guard ownership(of: name) == .owned, let plan = currentPlan(jobId: name),
                       plan.retired || (plan.finalizedStoredId != nil && plan.effectivePurpose == .share)
                 else { continue }
-                try? fileManager.removeItem(at: entry)
+                do { try fileManager.removeItem(at: entry) } catch { continue }
+                if plan.retired, plan.jobId == name,
+                   !fileManager.fileExists(atPath: entry.path),
+                   !sharedRootHolds(jobId: name) {
+                    releasedKeys.append(name)
+                }
             }
-            return
+            return releasedKeys.sorted()
         }
         let entries = (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
         for entry in entries {
@@ -1442,6 +1460,7 @@ public final class PendingUploadStore: @unchecked Sendable {
                 continue
             }
         }
+        return []
     }
 }
 
