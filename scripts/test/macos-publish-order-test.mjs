@@ -25,7 +25,8 @@
 //
 //   write phase   every command that can rewrite a tracked file
 //   ---- git add -A ----
-//   judge phase   scope check and web suite, reading the staged bytes only
+//   judge phase   scope check, web suite and document claims, reading the
+//                 staged bytes only
 //   ---- git commit ----
 //   deliver       candidate branch, merge-gate on that SHA, protected-main push
 //   publish       gh release create, last
@@ -214,6 +215,51 @@ const gateWatch = lineRunning("gh run watch", "the candidate gate result");
 const push = lineRunning("$CANDIDATE:main", "the protected-main delivery push");
 
 /**
+ * The document-claims guard, as a line index — held to one exact form.
+ *
+ * `scripts/test/document-claims-test.mjs` derives what `README.md`,
+ * `apps/README.md` and the readiness manifest may claim from
+ * `web/native-releases.json`. `repo-hygiene.yml` runs it on every push, which
+ * for a release is after the metadata reached `main` and after the immutable
+ * release exists: the 1.4.4 release shipped an `apps/README.md` headline naming
+ * the previous version that this guard refuses. So the publish job must run it
+ * on the staged candidate, before the commit.
+ *
+ * Found by an exact `run:` line rather than by a substring, and only among
+ * executable lines. A comment, a step name, an `echo`, an argument that skips
+ * work or a `|| true` all mention the file without running it, and every one of
+ * them would satisfy a substring search (the W-N29 shape that
+ * `ci-guard-coverage-test.mjs` describes). And the step holds nothing but its
+ * name and that command: an `if:` could skip it on the very run that publishes,
+ * and a `continue-on-error:` would turn its "no" into a warning.
+ */
+const CLAIMS_RUN = /^\s*(?:-\s+)?run:\s+node\s+scripts\/test\/document-claims-test\.mjs\s*$/;
+const claims = (() => {
+  const matches = exec.filter((line) => CLAIMS_RUN.test(line.text));
+  if (matches.length !== 1) {
+    failures.push(
+      "expected exactly one publish step whose command is `run: node scripts/test/document-claims-test.mjs`"
+      + ` (the document-claims guard on the release candidate); found ${matches.length}.`
+      + " Without it a candidate whose bumped README.md / apps/README.md disagree with"
+      + " web/native-releases.json is committed, delivered and released before any lane"
+      + " compares them.",
+    );
+    return -1;
+  }
+  return exec.indexOf(matches[0]);
+})();
+if (claims >= 0) {
+  const step = publish[exec[claims].stepIndex];
+  const keys = step.code.filter((line) => line.trim() !== "");
+  check(
+    keys.length === 2 && /^ {6}- name:\s*\S/.test(keys[0]) && CLAIMS_RUN.test(keys[1]),
+    `"${step.name}" must hold only its name and the document-claims command; found:\n`
+    + `${keys.join("\n")}\nAn \`if:\` can skip the guard on the run that publishes and a`
+    + " `continue-on-error:` turns its failure into a warning.",
+  );
+}
+
+/**
  * The archived-locale restore, as a line index — kept in order to assert that
  * there is none.
  *
@@ -272,6 +318,8 @@ before(stage, suite, "the web suite runs before the candidate is staged");
 before(build, suite, "the web build regenerates the pages after the suite has judged them");
 before(scope, commit, "the candidate is committed before its scope is checked");
 before(suite, commit, "the candidate is committed before the web suite has judged it");
+before(stage, claims, "the document claims are checked before the candidate is staged");
+before(claims, commit, "the candidate is committed before its document claims are checked");
 
 // 3. THE boundary. From `git add -A` to `git commit` the job may read and may
 //    not write. This is the assertion that fails for the observed defect, in
@@ -326,8 +374,11 @@ if (build >= 0 && stage >= 0) {
 if (stage >= 0 && suite >= 0 && commit >= 0) {
   for (let i = stage + 1; i < commit; i += 1) {
     // The suite's own invocation is the thing being protected, not a violation
-    // of it; every other line in the window has to be read-only.
-    if (i === suite) continue;
+    // of it; every other line in the window has to be read-only. The
+    // document-claims guard is the one other script allowed here: it is held to
+    // its exact command above, it reads the documents and changes nothing, and
+    // a `git write-tree` comparison after it is asserted below.
+    if (i === suite || i === claims) continue;
     const line = exec[i];
     for (const mutator of MUTATORS) {
       check(
@@ -365,6 +416,16 @@ if (stage >= 0 && suite >= 0 && commit >= 0) {
     "nothing between the web suite and the commit proves the working tree is unchanged;"
     + " expected a git diff --quiet guard",
   );
+  // The same proof after the document-claims guard, whichever side of the suite
+  // it sits on: the commit must carry the tree that guard read.
+  if (claims >= 0 && claims < commit) {
+    const afterClaims = exec.slice(claims + 1, commit).map((line) => line.text).join("\n");
+    check(
+      afterClaims.includes("git write-tree") && afterClaims.includes("git diff --quiet"),
+      "nothing between the document-claims guard and the commit proves the tree it read"
+      + " is the tree committed; expected git write-tree and git diff --quiet guards",
+    );
+  }
 }
 
 // 4. The whole candidate is judged and frozen before anything immutable exists.
@@ -373,6 +434,7 @@ before(syncHistory, create, "the release is created before CLI release history i
 before(suite, create, "the release is created before the web suite runs");
 before(build, create, "the release is created before the web build runs");
 before(scope, create, "the release is created before the candidate scope is checked");
+before(claims, create, "the release is created before the candidate's document claims are checked");
 before(commit, create, "the candidate is not committed before the release is created");
 
 // 5. The frozen candidate is checked on its own SHA before protected main

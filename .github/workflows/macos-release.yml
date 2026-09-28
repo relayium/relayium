@@ -626,6 +626,24 @@ jobs:
           [ "$(git write-tree)" = "$candidate_tree" ] || {
             echo "::error::the staged candidate tree changed during validation"; exit 1; }
           echo "tree=$candidate_tree" >> "$GITHUB_OUTPUT"
+      # Still the JUDGE phase: what `README.md`, `apps/README.md` and the macOS
+      # readiness manifest claim, derived from the manifest this candidate just
+      # moved. `repo-hygiene.yml` runs the same file on every push, but that is
+      # AFTER a push — for a release, after the metadata is on `main` and the
+      # immutable GitHub Release exists. The 1.4.4 release shipped an
+      # `apps/README.md` headline still naming the previous version that this
+      # guard would have refused; here it refuses it while a "no" still costs
+      # nothing.
+      #
+      # Its own step, with the exact command `repo-hygiene.yml` runs, so the one
+      # invocation is what both lanes execute. It reads the working tree, which
+      # the step above staged and hashed; it writes nothing (all its mutations
+      # are in memory), and the freeze step below re-proves the tree unchanged
+      # before committing. No `if:` and no `continue-on-error:` on purpose — a
+      # rerun of an already-delivered release runs it too, and
+      # `scripts/test/macos-publish-order-test.mjs` holds its position and form.
+      - name: Check the candidate's document claims against the manifest
+        run: node scripts/test/document-claims-test.mjs
       # The candidate becomes one commit BEFORE the release exists, so what is
       # pushed afterwards is exactly the tree the suites above judged — no
       # regeneration, no second test run, nothing that can newly fail. The tree
@@ -654,8 +672,8 @@ jobs:
             echo "::error::the release commit does not carry the validated tree"; exit 1; }
           echo "candidate=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       # Delivery starts from a commit that already
-      # passed `npm run check`, the full web suite, the build and the candidate
-      # scope check, so there is no test here that could newly fail against
+      # passed `npm run check`, the full web suite, the build, the candidate
+      # scope check and the document-claims guard, so there is no test here that could newly fail against
       # unstaged sources — which is precisely how run 31931451292 ended up with a
       # permanent release and no metadata behind it.
       #
