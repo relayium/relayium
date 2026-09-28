@@ -98,6 +98,8 @@
     <string name="inbox_stop_queue_full">该设备等待中的投递数量已达服务器上限。</string>
     <string name="inbox_stop_transport">Relayium 未能完成发送。内容没有丢失，请重试。</string>
     <string name="inbox_stop_storage">本设备无法写入发送所需的数据，未发送任何内容。</string>
+    <string name="inbox_stop_upload_not_completed">服务器没有完成这次上传，因此没有送达任何内容。要发送它，请移除这一项并重新发起发送。</string>
+    <string name="inbox_stop_upload_no_longer_stored">这次上传已完成，但已不再保存，因此没有送达任何内容。要发送它，请移除这一项并重新发起发送；新的发送会算作一次新的上传。</string>
 
     <string name="inbox_history_title">历史</string>
     <string name="inbox_history_empty">还没有与其他设备交换过内容。</string>

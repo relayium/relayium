@@ -1,6 +1,8 @@
 package com.relayium.android.inbox
 
 import com.relayium.android.cloud.FakeSecretBox
+import com.relayium.android.cloud.FinalizeOutcome
+import com.relayium.android.cloud.RecordingHttpServer
 import com.relayium.android.cloud.ScriptedDurableFiles
 import com.relayium.protocol.Json
 import com.relayium.protocol.inbox.InboxKeyMaterial
@@ -47,6 +49,11 @@ class InboxSendCoordinatorTest {
     private fun now() = 1_700_000_500L
 
     private fun coordinator() = InboxSendCoordinator(sender, store, uploader, ::now)
+
+    private companion object {
+        /** How many times the user presses Send again in the adversarial cases. */
+        const val RETRIES = 6
+    }
 
     /**
      * A job that has already sent a create whose answer was lost.
@@ -254,6 +261,360 @@ class InboxSendCoordinatorTest {
         coordinator().release(start.jobId, result)
         assertNotNull(store.load(start.jobId))
         assertNull("no object may be recorded", requireNotNull(store.load(start.jobId)).storedFileId)
+    }
+
+    // ── finalize recovery: what a lost finalize answer may and may not do ────
+
+    private val uploadSession = "0123456789abcdef0123456789abcdef"
+    private val objectId = "11112222333344445555666677778888"
+
+    /** A job whose finalize was sent and whose answer never arrived. */
+    private suspend fun finalizeLost(): InboxSendJob =
+        store.save(job().copy(uploadId = uploadSession, finalizeAttempted = true), now())
+
+    /**
+     * A stuck-after-finalize job is UNSETTLED: central may hold a live, billed
+     * object for it. Discarding it must keep the history row and the copy
+     * honest, never report "nothing was created".
+     */
+    @Test
+    fun `discarding a job stuck after finalize is unsettled, not removed`() = runBlocking {
+        val start = finalizeLost()
+        assertEquals(InboxSendCoordinator.Discard.REMOVED_UNSETTLED, coordinator().discard(start.jobId))
+        assertNull("the user's discard still discards", store.load(start.jobId))
+    }
+
+    /** Settled by central's own record: nothing live remains, so it is REMOVED. */
+    @Test
+    fun `discarding a job central answered definitively is removed`() = runBlocking {
+        val start = store.save(finalizeLost().copy(finalizeOutcome = FinalizeOutcome.FAILED), now())
+        assertEquals(InboxSendCoordinator.Discard.REMOVED, coordinator().discard(start.jobId))
+    }
+
+    /** A machine release never deletes a job whose object may be live, whatever
+     *  definitive-looking reason stopped the attempt. */
+    @Test
+    fun `a terminal stop never releases a job whose finalize is unsettled`() = runBlocking {
+        val start = finalizeLost()
+        coordinator().release(
+            start.jobId,
+            InboxSendCoordinator.Result.Stopped(InboxSendCoordinator.Result.Reason.TARGET_INELIGIBLE, ambiguous = false),
+        )
+        assertNotNull(store.load(start.jobId))
+        assertTrue(store.spool(start.jobId).exists())
+    }
+
+    /** A recorded definitive outcome is reported from the record: no upload, no
+     *  create, and the job stays until the user removes it. */
+    @Test
+    fun `a job central answered definitively is reported and never re-sent`() = runBlocking {
+        for ((outcome, reason) in listOf(
+            FinalizeOutcome.FAILED to InboxSendCoordinator.Result.Reason.UPLOAD_NOT_COMPLETED,
+            FinalizeOutcome.EXPIRED to InboxSendCoordinator.Result.Reason.UPLOAD_NO_LONGER_STORED,
+            FinalizeOutcome.REMOVED to InboxSendCoordinator.Result.Reason.UPLOAD_NO_LONGER_STORED,
+        )) {
+            store.release(InboxFixtures.STORED_ID)
+            val start = store.save(finalizeLost().copy(finalizeOutcome = outcome), now())
+            val result = coordinator().deliver(start.jobId) as InboxSendCoordinator.Result.Stopped
+            assertEquals(reason, result.reason)
+            assertFalse(result.ambiguous)
+            assertFalse("a retry cannot help", result.reason.isRetryable)
+            coordinator().release(start.jobId, result)
+            assertNotNull("kept until the user removes it", store.load(start.jobId))
+        }
+        assertEquals(0, uploader.uploads)
+        assertTrue(sender.requests.isEmpty())
+    }
+
+    /** The uploader's definitive answer surfaces as the unavailable stop. */
+    @Test
+    fun `a definitive finalize answer stops as unavailable, not as a transport failure`() = runBlocking {
+        val start = job()
+        uploader.failure = InboxUploadException(ambiguous = false, unavailable = FinalizeOutcome.EXPIRED)
+        val result = coordinator().deliver(start.jobId) as InboxSendCoordinator.Result.Stopped
+        assertEquals(InboxSendCoordinator.Result.Reason.UPLOAD_NO_LONGER_STORED, result.reason)
+        assertFalse(result.ambiguous)
+        assertTrue(sender.requests.isEmpty())
+    }
+
+    /**
+     * A SCRIPTED loopback stand-in for central's resumable protocol. It drops
+     * the answer to the first finalize (it returns without writing and the
+     * socket closes, so the client sees a real transport failure — the
+     * lost-answer case) and answers every later opted-in finalize from
+     * [answer]; a repeat without the opt-in gets the plain-text 409.
+     *
+     * It stores NO object, finalize record, quota debit or traffic ledger, and
+     * its later answers are whatever the test scripts (it does not enforce
+     * that a committed upload cannot later read `failed`). So tests over it
+     * prove CLIENT request behaviour — what this device sends and records —
+     * not central's accounting. Central's side of a lost answer is covered by
+     * the server's own finalize-recovery tests.
+     */
+    private inner class LostAnswerCentral : AutoCloseable {
+        val inits = java.util.concurrent.atomic.AtomicInteger()
+        val patches = java.util.concurrent.atomic.AtomicInteger()
+        val patchedBytes = java.util.concurrent.atomic.AtomicLong()
+        val finalizes = java.util.concurrent.atomic.AtomicInteger()
+
+        /** For finalize #n (1-based, n >= 2): null drops the answer too. */
+        @Volatile var answer: (Int) -> Triple<String, String, List<String>>? = { _ ->
+            Triple("409 Conflict", """{"error":"already_finalized","outcome":"running"}""", listOf("Retry-After: 1"))
+        }
+
+        val server = RecordingHttpServer { request, out: java.io.OutputStream ->
+            when {
+                request.method == "POST" && request.path.endsWith("/finalize") -> {
+                    val n = finalizes.incrementAndGet()
+                    // The first one's answer is lost (nothing is written back;
+                    // this fake records nothing either).
+                    if (n == 1) return@RecordingHttpServer
+                    // Faithful to central: the session is terminal now, and only
+                    // a request that opted in gets an answer from its record.
+                    // Any other repeat is the plain-text 409 it always was.
+                    if (String(request.body) != """{"recoverFinalized":true}""") {
+                        RecordingHttpServer.respond(
+                            out, status = "409 Conflict", contentType = "text/plain; charset=utf-8",
+                            body = "already finalized\n".toByteArray(),
+                        )
+                        return@RecordingHttpServer
+                    }
+                    val (status, body, headers) = answer(n) ?: return@RecordingHttpServer
+                    RecordingHttpServer.respond(out, status = status, body = body.toByteArray(), extraHeaders = headers)
+                }
+                request.method == "POST" && request.path.endsWith("api/uploads") -> {
+                    inits.incrementAndGet()
+                    RecordingHttpServer.respond(
+                        out, body = """{"uploadId":"$uploadSession","chunkSize":262144}""".toByteArray(),
+                    )
+                }
+                request.method == "GET" ->
+                    RecordingHttpServer.respond(out, body = """{"received":0}""".toByteArray())
+                else -> {
+                    patches.incrementAndGet()
+                    patchedBytes.addAndGet(request.body.size.toLong())
+                    val range = request.header("content-range").orEmpty()
+                    val end = range.substringAfter('-').substringBefore('/').toLongOrNull() ?: -1
+                    RecordingHttpServer.respond(out, body = """{"received":${end + 1}}""".toByteArray())
+                }
+            }
+        }
+
+        override fun close() = server.close()
+    }
+
+    private fun realCoordinator(central: LostAnswerCentral) = InboxSendCoordinator(
+        sender, store,
+        CloudInboxUploader(
+            client = com.relayium.android.cloud.CloudClient(central.server.origin, "relayium-test/1"),
+            token = { "rlm_cli_test" },
+            ttlSeconds = 3600,
+            nowSeconds = ::now,
+            sleep = {},
+        ),
+        ::now,
+    )
+
+    /** What must never change across retries: the one ciphertext, under the
+     *  one key. A re-encryption would draw a fresh nonce and change the bytes. */
+    private class Ciphertext(val bytes: ByteArray, val sha: String, val key: ByteArray)
+
+    private suspend fun ciphertext(jobId: String) = Ciphertext(
+        store.spool(jobId).readBytes(),
+        requireNotNull(store.load(jobId)).ciphertextSha256,
+        requireNotNull(store.contentKey(jobId)),
+    )
+
+    private suspend fun assertSameCiphertext(before: Ciphertext, jobId: String) {
+        val now = ciphertext(jobId)
+        assertTrue("the spool is never rewritten", before.bytes.contentEquals(now.bytes))
+        assertEquals("its identity is never re-bound", before.sha, now.sha)
+        assertTrue("the content key is never re-minted", before.key.contentEquals(now.key))
+    }
+
+    /**
+     * ADVERSARIAL (money-moving, client side): the finalize answer is lost, the
+     * user retries again and again while the scripted central cannot yet say
+     * (running / dropped), and then discards.
+     *
+     * What is asserted is the CLIENT's requests and records: a retry never opens
+     * a new session, never re-sends a byte, never re-encrypts, and never
+     * releases the job — any of which would be how this device starts a second
+     * upload of the same delivery. And the discard must not claim "nothing was
+     * created" about a job whose object central may still hold. (Whether
+     * central charged once is central's property, not proven here.)
+     */
+    @Test
+    fun `a lost finalize answer retried many times then discarded sends the upload exactly once`() = runBlocking {
+        val start = job()
+        store.saveEncManifest(start.jobId, byteArrayOf(0x7b, 0x7d))
+        val before = ciphertext(start.jobId)
+        LostAnswerCentral().use { central ->
+            val first = realCoordinator(central).deliver(start.jobId) as InboxSendCoordinator.Result.Stopped
+            assertTrue("a lost answer is uncertain", first.ambiguous)
+            assertEquals(1, central.inits.get())
+            val patchesAfterFirst = central.patches.get()
+            assertTrue(patchesAfterFirst >= 1)
+            assertEquals("every byte sent once", start.ciphertextBytes, central.patchedBytes.get())
+
+            // The user retries. Central keeps answering `running`, or its answer
+            // is lost again.
+            central.answer = { n ->
+                if (n % 5 == 0) null
+                else Triple("409 Conflict", """{"error":"already_finalized","outcome":"running"}""", listOf("Retry-After: 1"))
+            }
+            repeat(RETRIES) {
+                val again = realCoordinator(central).deliver(start.jobId) as InboxSendCoordinator.Result.Stopped
+                assertTrue("still uncertain on retry ${it + 1}", again.ambiguous)
+                assertEquals(InboxSendCoordinator.Result.Reason.TRANSPORT, again.reason)
+                // The runtime's own machine release after every stop.
+                realCoordinator(central).release(start.jobId, again)
+                assertNotNull("an uncertain job is never released", store.load(start.jobId))
+            }
+
+            assertEquals("exactly one initUpload", 1, central.inits.get())
+            assertEquals("zero re-upload of bytes", patchesAfterFirst, central.patches.get())
+            assertEquals(start.ciphertextBytes, central.patchedBytes.get())
+            assertTrue("central was asked again on every retry", central.finalizes.get() > RETRIES)
+            assertTrue("no create without an object", sender.requests.isEmpty())
+            assertSameCiphertext(before, start.jobId)
+            assertTrue(requireNotNull(store.load(start.jobId)).uploadUnsettled)
+
+            assertEquals(
+                "the object may be live: unsettled, never 'nothing was created'",
+                InboxSendCoordinator.Discard.REMOVED_UNSETTLED,
+                realCoordinator(central).discard(start.jobId),
+            )
+            assertEquals("the discard itself sends nothing", 1, central.inits.get())
+        }
+    }
+
+    /**
+     * ADVERSARIAL (money-moving, client side), second half: the same lost
+     * answer and retries, then the scripted central answers `recovered:true`.
+     * The recovered id is the one the create binds — exactly one create request
+     * — and this device never sent the upload twice.
+     */
+    @Test
+    fun `a lost finalize answer recovered after retries sends exactly one create`() = runBlocking {
+        val start = job()
+        store.saveEncManifest(start.jobId, byteArrayOf(0x7b, 0x7d))
+        val before = ciphertext(start.jobId)
+        LostAnswerCentral().use { central ->
+            realCoordinator(central).deliver(start.jobId)
+            val patchesAfterFirst = central.patches.get()
+            repeat(RETRIES) { realCoordinator(central).deliver(start.jobId) }
+            assertTrue(sender.requests.isEmpty())
+
+            central.answer = { _ ->
+                Triple("200 OK", """{"id":"$objectId","expiresAt":1700600000,"recovered":true}""", emptyList())
+            }
+            val delivered = realCoordinator(central).deliver(start.jobId)
+            assertTrue(delivered is InboxSendCoordinator.Result.Delivered)
+            assertEquals("exactly one task", 1, sender.requests.size)
+            assertEquals("bound to the recovered object", objectId, sender.requests.single().storedFileId)
+
+            // And a later attempt reads that task instead of creating again.
+            val again = realCoordinator(central).deliver(start.jobId)
+            assertTrue(again is InboxSendCoordinator.Result.Delivered)
+            assertEquals(1, sender.requests.size)
+
+            assertEquals("exactly one initUpload", 1, central.inits.get())
+            assertEquals("zero re-upload of bytes", patchesAfterFirst, central.patches.get())
+            assertEquals(start.ciphertextBytes, central.patchedBytes.get())
+            assertSameCiphertext(before, start.jobId)
+        }
+    }
+
+    /** A definitive answer after a lost one: recorded, reported, no re-upload,
+     *  no task, and the job's removal is honest (REMOVED — nothing live). */
+    @Test
+    fun `a lost finalize answer that central reports failed is terminal and sends nothing again`() = runBlocking {
+        val start = job()
+        store.saveEncManifest(start.jobId, byteArrayOf(0x7b, 0x7d))
+        LostAnswerCentral().use { central ->
+            realCoordinator(central).deliver(start.jobId)
+            central.answer = { _ ->
+                Triple("409 Conflict", """{"error":"already_finalized","outcome":"failed"}""", emptyList())
+            }
+            val stopped = realCoordinator(central).deliver(start.jobId) as InboxSendCoordinator.Result.Stopped
+            assertEquals(InboxSendCoordinator.Result.Reason.UPLOAD_NOT_COMPLETED, stopped.reason)
+            assertFalse(stopped.ambiguous)
+            assertEquals(FinalizeOutcome.FAILED, requireNotNull(store.load(start.jobId)).finalizeOutcome)
+
+            val asked = central.finalizes.get()
+            val later = realCoordinator(central).deliver(start.jobId) as InboxSendCoordinator.Result.Stopped
+            assertEquals(InboxSendCoordinator.Result.Reason.UPLOAD_NOT_COMPLETED, later.reason)
+            assertEquals("the record answers; central is not asked again", asked, central.finalizes.get())
+            assertEquals(1, central.inits.get())
+            assertTrue(sender.requests.isEmpty())
+            assertEquals(InboxSendCoordinator.Discard.REMOVED, realCoordinator(central).discard(start.jobId))
+        }
+    }
+
+    /** `running` several times, then `failed`, inside one attempt: stopped as
+     *  unavailable with the outcome recorded, and no create request at all. */
+    @Test
+    fun `running answers then failed within one attempt stops as unavailable without a create`() = runBlocking {
+        val start = job()
+        store.saveEncManifest(start.jobId, byteArrayOf(0x7b, 0x7d))
+        LostAnswerCentral().use { central ->
+            realCoordinator(central).deliver(start.jobId)
+            val asked = central.finalizes.get()
+            central.answer = { n ->
+                if (n < asked + 4) {
+                    Triple("409 Conflict", """{"error":"already_finalized","outcome":"running"}""", listOf("Retry-After: 1"))
+                } else {
+                    Triple("409 Conflict", """{"error":"already_finalized","outcome":"failed"}""", emptyList())
+                }
+            }
+            val stopped = realCoordinator(central).deliver(start.jobId) as InboxSendCoordinator.Result.Stopped
+            assertEquals(InboxSendCoordinator.Result.Reason.UPLOAD_NOT_COMPLETED, stopped.reason)
+            assertFalse(stopped.ambiguous)
+            assertEquals(
+                "three running answers, then the failed verdict (four requests)",
+                asked + 4, central.finalizes.get(),
+            )
+            assertEquals(FinalizeOutcome.FAILED, requireNotNull(store.load(start.jobId)).finalizeOutcome)
+            assertTrue("no create without an object", sender.requests.isEmpty())
+            assertEquals(1, central.inits.get())
+        }
+    }
+
+    /**
+     * After the recovered object, the CREATE's answer is lost too. Every later
+     * attempt — including one from a fresh coordinator over the same durable
+     * store, i.e. a relaunch — sends the byte-identical create (same
+     * idempotency key, object, box, key id and generation), and never asks for
+     * the object or uploads again.
+     */
+    @Test
+    fun `a lost create answer after a recovered finalize is replayed byte for byte after a relaunch`() = runBlocking {
+        val start = job()
+        store.saveEncManifest(start.jobId, byteArrayOf(0x7b, 0x7d))
+        LostAnswerCentral().use { central ->
+            realCoordinator(central).deliver(start.jobId)
+            central.answer = { _ ->
+                Triple("200 OK", """{"id":"$objectId","expiresAt":1700600000,"recovered":true}""", emptyList())
+            }
+            sender.createFailure = InboxTransportException(InboxTransportException.Kind.TIMEOUT)
+            val lost = realCoordinator(central).deliver(start.jobId) as InboxSendCoordinator.Result.Stopped
+            assertTrue(lost.ambiguous)
+            assertEquals(objectId, requireNotNull(store.load(start.jobId)).storedFileId)
+            val finalizesAfterRecovery = central.finalizes.get()
+
+            // "Relaunch": a new coordinator (and uploader) over the same store.
+            sender.createFailure = null
+            val delivered = realCoordinator(central).deliver(start.jobId)
+            assertTrue(delivered is InboxSendCoordinator.Result.Delivered)
+
+            val wire = sender.requests.map { com.relayium.protocol.Json.stringify(it.payload()) }
+            assertTrue("the lost attempt sent at least one create", wire.size >= 2)
+            assertEquals("every create is byte-identical", 1, wire.toSet().size)
+            assertEquals(objectId, sender.requests.first().storedFileId)
+            assertEquals("the object is never asked for again", finalizesAfterRecovery, central.finalizes.get())
+            assertEquals(1, central.inits.get())
+        }
     }
 
     // ── the one permitted reseal ────────────────────────────────────────────

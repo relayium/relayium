@@ -189,6 +189,62 @@ class InboxSendPreparerTest {
         )
     }
 
+    /**
+     * `finalizeOutcome` (central's definitive finalize answer) was added without
+     * a version change, like `emptyPublishAttempted`: a record without it must
+     * load as "not heard", a recorded one must survive a reload, and a value
+     * outside the closed set — or one contradicting the rest of the record — is
+     * refused rather than guessed.
+     */
+    @Test
+    fun `the finalize outcome is optional, durable and strictly read`() = runBlocking {
+        val job = preparer().stageFiles(
+            InboxFixtures.OTHER_DEVICE_ID,
+            listOf(BytesSource("a.txt", "one".toByteArray())),
+        )
+        val record = File(File(folder.root, "send"), job.jobId + ".json")
+        fun rewrite(transform: (String) -> String) {
+            val sealed = record.readBytes()
+            val labelLength = sealed[0].toInt() and 0xff
+            val label = String(sealed, 1, labelLength, Charsets.UTF_8)
+            record.writeBytes(
+                secrets.seal(label, transform(plaintextOf(sealed, labelLength)).toByteArray(Charsets.UTF_8)),
+            )
+        }
+
+        // Absent: the record an earlier build wrote.
+        rewrite { it.replace(Regex(",?\\s*\"finalizeOutcome\"\\s*:\\s*null"), "") }
+        record.readBytes().let { sealed ->
+            assertTrue("the aged fixture must not carry it", "finalizeOutcome" !in plaintextOf(sealed, sealed[0].toInt() and 0xff))
+        }
+        assertNull(requireNotNull(store.load(job.jobId)).finalizeOutcome)
+
+        // Recorded, and read back.
+        val answered = store.save(
+            requireNotNull(store.load(job.jobId)).copy(
+                uploadId = "0123456789abcdef0123456789abcdef",
+                finalizeAttempted = true,
+                finalizeOutcome = com.relayium.android.cloud.FinalizeOutcome.EXPIRED,
+            ),
+            1_700_000_600,
+        )
+        assertEquals(
+            com.relayium.android.cloud.FinalizeOutcome.EXPIRED,
+            requireNotNull(store.load(job.jobId)).finalizeOutcome,
+        )
+
+        // A contradictory record never reaches disk: an outcome with an object.
+        val contradiction = runCatching {
+            store.save(answered.copy(storedFileId = "11112222333344445555666677778888"), 1_700_000_700)
+        }.exceptionOrNull()
+        assertTrue("$contradiction", contradiction is InboxSendStoreException)
+
+        // Outside the closed set: refused, not defaulted.
+        rewrite { it.replace("\"finalizeOutcome\":\"expired\"", "\"finalizeOutcome\":\"banana\"") }
+        val refusal = runCatching { store.load(job.jobId) }.exceptionOrNull()
+        assertTrue("$refusal", refusal is InboxSendStoreException)
+    }
+
     /** The JSON inside a `FakeSecretBox` record: `[len][label][plaintext xor 0x5a]`. */
     private fun plaintextOf(sealed: ByteArray, labelLength: Int): String {
         val body = sealed.copyOfRange(1 + labelLength, sealed.size)

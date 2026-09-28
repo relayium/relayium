@@ -1,5 +1,6 @@
 package com.relayium.android.inbox
 
+import com.relayium.android.cloud.FinalizeOutcome
 import com.relayium.protocol.inbox.InboxKeyMaterial
 import com.relayium.protocol.inbox.InboxProtocol
 import com.relayium.protocol.inbox.InboxRejection
@@ -84,7 +85,38 @@ class InboxSendCoordinator(
 
             /** Local durable state could not be written. Nothing was sent. */
             STORAGE,
+
+            /**
+             * Central's record says this upload was refused or never completed
+             * (`outcome=failed`): no object exists and no delivery can arrive.
+             *
+             * Final for this job but NOT [isTerminal]: like RelayiumKit's
+             * `uploadUnavailable`, the job stays until the user discards it, so
+             * the row can say what happened. Nothing re-uploads it; a new send
+             * is a new job.
+             */
+            UPLOAD_NOT_COMPLETED,
+
+            /**
+             * Central's record says this upload completed and its object has
+             * since expired or been removed (`outcome=expired|removed`) before
+             * any task was created for it: no delivery can arrive. Same handling
+             * as [UPLOAD_NOT_COMPLETED].
+             */
+            UPLOAD_NO_LONGER_STORED,
             ;
+
+            /** Whether a Retry of the same job can change anything. */
+            val isRetryable: Boolean
+                get() = this != UPLOAD_NOT_COMPLETED && this != UPLOAD_NO_LONGER_STORED
+
+            companion object {
+                /** The stop for central's definitive finalize outcome. */
+                fun unavailable(outcome: FinalizeOutcome): Reason = when (outcome) {
+                    FinalizeOutcome.FAILED -> UPLOAD_NOT_COMPLETED
+                    FinalizeOutcome.EXPIRED, FinalizeOutcome.REMOVED -> UPLOAD_NO_LONGER_STORED
+                }
+            }
 
             /**
              * Whether this outcome ends the job, as opposed to pausing it.
@@ -150,6 +182,15 @@ class InboxSendCoordinator(
             }
         }
 
+        // Central already answered, definitively, that this job's upload left no
+        // usable object. Nothing is sent: no create can bind an object that does
+        // not exist, and a re-upload would be a second charged upload of a job
+        // the user has been told to discard. Read from the DURABLE record, so a
+        // relaunch reports the same thing without asking the network.
+        job.finalizeOutcome?.let { outcome ->
+            return@withJob Result.Stopped(Result.Reason.unavailable(outcome), job.unresolvedCreate)
+        }
+
         var current = job
         // MONOTONIC. Once any attempt — in this call or an earlier process —
         // has left a create outstanding, every later outcome in this job's life
@@ -182,6 +223,14 @@ class InboxSendCoordinator(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: InboxUploadException) {
+                    // Central's closed `outcome` said no usable object exists.
+                    // The uploader recorded it durably before throwing; the job
+                    // is kept (not terminal) so the row can say so.
+                    e.unavailable?.let { outcome ->
+                        return@withJob Result.Stopped(
+                            Result.Reason.unavailable(outcome), ambiguous || e.ambiguous,
+                        )
+                    }
                     // An ambiguous finalize may have published the object, so
                     // the job is kept exactly as it is: opening a new session
                     // would create a second object the account pays for and
@@ -384,6 +433,12 @@ class InboxSendCoordinator(
                 return@withJob
             } ?: return@withJob
             if (job.taskId != null || job.unresolvedCreate) return@withJob
+            // An upload central may have published (a lost finalize or empty
+            // publish answer, not settled by central's own `outcome`) is never
+            // released by a machine decision, whatever stopped the attempt: the
+            // object may be live, and this record is the only thing that can
+            // still recover it by asking the same session.
+            if (job.uploadUnsettled) return@withJob
             store.release(jobId)
         }
     }
@@ -454,8 +509,14 @@ class InboxSendCoordinator(
                 return@withJob Discard.CANCEL_FAILED
             }
         }
-        val unsettled = taskId == null &&
-            (job.unresolvedCreate || (job.emptyPublishAttempted && job.storedFileId == null))
+        // UNSETTLED is decided by the durable record alone. An outstanding
+        // create may have made a task; an attempted publish (a finalize or the
+        // single-shot empty publish) with no object id and no definitive
+        // central outcome may have left a live, billed object. Either way the
+        // user must not be told "nothing was created" — the history row and a
+        // message's sender copy stay. A job whose finalize central answered
+        // definitively (`finalizeOutcome`) is settled: nothing live remains.
+        val unsettled = taskId == null && (job.unresolvedCreate || job.uploadUnsettled)
         try {
             store.release(jobId)
         } catch (e: CancellationException) {
@@ -627,5 +688,14 @@ interface InboxCiphertextUploader {
 
 /** An upload that did not complete. [ambiguous] is the whole point: it decides
  *  whether the object may be released. */
-class InboxUploadException(val ambiguous: Boolean, cause: Throwable? = null) :
-    RuntimeException("relayium inbox upload: ambiguous=$ambiguous", cause)
+class InboxUploadException(
+    val ambiguous: Boolean,
+    cause: Throwable? = null,
+    /**
+     * Set ONLY when central's recovering finalize answered with a closed
+     * `outcome` (failed / expired / removed): no usable object exists for this
+     * job. Already durable on the job ([InboxSendJob.finalizeOutcome]) when
+     * thrown.
+     */
+    val unavailable: FinalizeOutcome? = null,
+) : RuntimeException("relayium inbox upload: ambiguous=$ambiguous", cause)

@@ -91,6 +91,23 @@ data class InboxSendJob(
      * can name, still billed and still occupying storage until its TTL.
      */
     val emptyPublishAttempted: Boolean = false,
+    /**
+     * Central's DEFINITIVE answer to a recovering finalize of this job's
+     * session: it produced no usable object (`failed`), or the object it
+     * produced has since expired or been removed.
+     *
+     * Only ever written from the server's own `outcome` field
+     * ([com.relayium.android.cloud.FinalizeAnswer.NotCompleted]) — never from a
+     * bare 409, a 404, a status code alone or elapsed time. Written BEFORE the
+     * attempt reports it, so a relaunch still knows.
+     *
+     * Terminal for THIS job: nothing re-uploads it and no create is ever sent
+     * for it (there is no object to bind). The user may discard it and start a
+     * new send, which is a new job and a new upload (protocol §25, "A lost
+     * finalize answer"; RelayiumKit records the same fact as
+     * `PendingDeviceTerminal`). Null for every job that has not heard it.
+     */
+    val finalizeOutcome: com.relayium.android.cloud.FinalizeOutcome? = null,
     /** The object central created, once its identity is known. */
     val storedFileId: String? = null,
     val targetKeyId: String? = null,
@@ -141,6 +158,22 @@ data class InboxSendJob(
     val isCreatable: Boolean
         get() = storedFileId != null && wrappedKey != null &&
             targetKeyId != null && targetKeyGeneration > 0
+
+    /**
+     * Central MAY hold an object for this job that this device cannot name.
+     *
+     * An upload whose publish was attempted — a resumable finalize or the
+     * single-shot empty publish — and that came back with neither an object id
+     * nor central's definitive [finalizeOutcome]. The object may be live (and
+     * billed) on the server, so the job is never released by a machine decision
+     * and never reported as "nothing was created" when the user discards it.
+     *
+     * No TASK can exist for such a job: a create needs [storedFileId], and that
+     * is durable before any create leaves this process.
+     */
+    val uploadUnsettled: Boolean
+        get() = storedFileId == null && finalizeOutcome == null &&
+            (finalizeAttempted || emptyPublishAttempted)
 
     /** No names, no key material: this reaches failure text. */
     override fun toString(): String =
@@ -523,6 +556,15 @@ class InboxSendStore(
         // because a fresh upload and a new sealed box under the same idempotency
         // key is precisely what central refuses as a conflict.
         if (job.unresolvedCreate && !job.isCreatable) unreadable()
+        // A definitive finalize outcome describes a session that was finalized
+        // and left no object this job holds. A record that also names an
+        // object or a task, or never attempted a finalize, contradicts itself.
+        if (job.finalizeOutcome != null &&
+            (!job.finalizeAttempted || job.uploadId == null ||
+                job.storedFileId != null || job.taskId != null)
+        ) {
+            unreadable()
+        }
         when (job.kind) {
             InboxManifestKind.TEXT -> if (job.files.isNotEmpty()) unreadable()
             InboxManifestKind.FILE -> {
@@ -555,6 +597,7 @@ class InboxSendStore(
             "uploadId" to Json.of(job.uploadId.orEmpty()),
             "finalizeAttempted" to Json.of(job.finalizeAttempted),
             "emptyPublishAttempted" to Json.of(job.emptyPublishAttempted),
+            "finalizeOutcome" to (job.finalizeOutcome?.let { Json.of(it.wire) } ?: Json.Null),
             "storedFileId" to Json.of(job.storedFileId.orEmpty()),
             "targetKeyId" to Json.of(job.targetKeyId.orEmpty()),
             "targetKeyGeneration" to Json.of(job.targetKeyGeneration),
@@ -597,6 +640,15 @@ class InboxSendStore(
             // default: code that never had the flag never took the single-shot
             // route, so nothing was ever attempted under it.
             emptyPublishAttempted = optionalBool(root, "emptyPublishAttempted"),
+            // ABSENT or null means "not heard", for the same reason as the flag
+            // above: every record written before this field existed must still
+            // load. A value outside the closed set is refused, never guessed.
+            finalizeOutcome = when (val value = root["finalizeOutcome"]) {
+                null, is Json.Null -> null
+                is Json.Str -> com.relayium.android.cloud.FinalizeOutcome.fromWire(value.value)
+                    ?: unreadable()
+                else -> unreadable()
+            },
             storedFileId = str(root, "storedFileId").ifEmpty { null },
             targetKeyId = str(root, "targetKeyId").ifEmpty { null },
             targetKeyGeneration = whole(root, "targetKeyGeneration"),

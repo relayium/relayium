@@ -3,6 +3,7 @@ package com.relayium.android.inbox
 import com.relayium.android.cloud.CloudClient
 import com.relayium.android.cloud.CloudException
 import com.relayium.android.cloud.CloudFailure
+import com.relayium.android.cloud.FinalizeAnswer
 import com.relayium.android.cloud.StoredUploadPurpose
 import com.relayium.protocol.stored.uploadHeader
 import java.io.File
@@ -10,6 +11,7 @@ import java.io.RandomAccessFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
@@ -44,6 +46,41 @@ import kotlinx.coroutines.withContext
  *    answer is lost may have published the object, so a job carrying that flag
  *    must never open a new session or re-upload — it would create a second
  *    invisible object. It may only ask again.
+ *
+ * ## Asking again, and what the answer may decide
+ *
+ * Every finalize — the first included — carries `{"recoverFinalized":true}`
+ * ([CloudClient.finalizeUploadRecovering]). Against an open session that is an
+ * ordinary finalize; against a session whose earlier finalize committed, a
+ * server with finalize recovery answers from its durable record, so a lost
+ * answer is recoverable instead of permanently uncertain. The mapping
+ * (mirroring RelayiumKit's `CloudUploader.finalizeRecovering`):
+ *
+ *  * 200, fresh or `recovered:true` — the object; its id is recorded and the
+ *    send continues to the create exactly as before;
+ *  * 409 `outcome=running` — a finalize is still in flight: polled, honouring
+ *    `Retry-After`, within a budget of at most 12 `running` answers and 60 s
+ *    of CUMULATIVE polling waits per attempt (the sum of the waits, as in
+ *    RelayiumKit's `FinalizeRecoveryPolicy`; HTTP time is not counted, so an
+ *    attempt can last longer than 60 s), then UNCERTAIN, job kept;
+ *  * 409 `outcome` in failed/expired/removed — DEFINITIVE: recorded durably on
+ *    the job ([InboxSendJob.finalizeOutcome]) and reported as unavailable;
+ *  * 409 without a recognised `outcome` (an older server's plain text) —
+ *    UNCERTAIN, exactly as before recovery existed;
+ *  * anything else — exactly as before (uncertain after a possible send).
+ *
+ * ## Invariants
+ *
+ *  1. A job that has a session never calls `initUpload` again (the session id
+ *     is checked before any init, and a finalize-attempted job returns to
+ *     [finalize] before reading the spool).
+ *  2. Nothing here encrypts: the spool preparation wrote is the only
+ *     ciphertext, re-verified by digest before any append and never rewritten.
+ *  3. Nothing here releases a job. An uncertain answer leaves every recovery
+ *     input on disk; only central's closed `outcome` field is recorded as
+ *     definitive, and only [InboxSendCoordinator] acts on it.
+ *  4. The create's idempotency is untouched: this returns a job with
+ *     [InboxSendJob.storedFileId] set and nothing else changed.
  */
 class CloudInboxUploader(
     private val client: CloudClient,
@@ -51,6 +88,9 @@ class CloudInboxUploader(
     private val ttlSeconds: Int,
     private val nowSeconds: () -> Long,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Waits between `running` polls, in milliseconds. Injectable for tests;
+     *  must honour cancellation. */
+    private val sleep: suspend (Long) -> Unit = { delay(it) },
 ) : InboxCiphertextUploader {
 
     override suspend fun upload(job: InboxSendJob, store: InboxSendStore): InboxSendJob {
@@ -69,11 +109,16 @@ class CloudInboxUploader(
             throw InboxUploadException(ambiguous = true)
         }
 
+        // Central already said, definitively, that this session left no usable
+        // object. Nothing is re-asked and nothing is re-uploaded: a new send is
+        // a new job the user starts (protocol §25).
+        job.finalizeOutcome?.let { throw InboxUploadException(ambiguous = false, unavailable = it) }
+
         val bearer = token() ?: throw InboxUploadException(ambiguous = false)
 
         // A finalize was already attempted and its answer never arrived. The
         // object may exist. Asking again is the ONLY safe move: a new session
-        // would create a second one.
+        // would create a second one (invariant 1).
         if (job.finalizeAttempted) {
             return finalize(job, store, bearer)
         }
@@ -267,13 +312,6 @@ class CloudInboxUploader(
     }
 
     /**
-     * Publish the object, or report honestly that it may already be published.
-     *
-     * `ALREADY_FINALIZED` carries no object id, so it cannot prove this upload
-     * published — and it cannot license a fresh session either. That uncertainty
-     * is kept rather than resolved by guessing.
-     */
-    /**
      * Publish an empty payload as one object, at most once, ever.
      *
      * ## The marker is written before the request, and never cleared
@@ -329,33 +367,84 @@ class CloudInboxUploader(
         }
     }
 
+    /**
+     * Publish the object, or report honestly what central says became of it.
+     *
+     * Always the RECOVERING finalize, first attempt included, so a lost answer
+     * is answered from central's durable record rather than with a bare 409
+     * that can never be resolved. See the type comment for the mapping.
+     */
     private suspend fun finalize(
         job: InboxSendJob,
         store: InboxSendStore,
         bearer: String,
     ): InboxSendJob {
         val uploadId = job.uploadId ?: throw InboxUploadException(ambiguous = false)
-        val result = try {
-            client.finalizeUpload(uploadId, bearer)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: CloudException) {
-            throw when (e.failure.kind) {
-                // Both mean an object may exist that this process cannot name.
-                CloudFailure.Kind.ALREADY_FINALIZED,
-                CloudFailure.Kind.UPLOAD_SESSION_GONE,
-                -> InboxUploadException(ambiguous = true, e)
-                else -> InboxUploadException(ambiguous = true, e)
+        var runningPolls = 0
+        var runningWaitedMs = 0L
+        while (true) {
+            val answer = try {
+                client.finalizeUploadRecovering(uploadId, bearer)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: CloudException) {
+                // Unchanged from before recovery: 404, a transport failure, an
+                // unreadable answer or a refusal after a finalize that may have
+                // committed all leave the object possibly published.
+                throw InboxUploadException(ambiguous = true, e)
+            }
+            when (answer) {
+                is FinalizeAnswer.Completed -> return try {
+                    store.save(job.copy(storedFileId = answer.result.id), nowSeconds())
+                } catch (e: InboxSendStoreException) {
+                    // The object EXISTS and this process cannot record which one.
+                    // Never definitive: a later attempt must not open a second
+                    // session — it re-asks, and a recovering server answers
+                    // with this same object.
+                    throw InboxUploadException(ambiguous = true, e)
+                }
+
+                is FinalizeAnswer.NotCompleted -> {
+                    // DEFINITIVE, and only because central's own record said so.
+                    // Durable BEFORE it is reported, so a relaunch cannot forget
+                    // it and invite a retry. If it cannot be written the outcome
+                    // stays uncertain: the next attempt asks again and central
+                    // answers the same thing from its record.
+                    try {
+                        store.save(job.copy(finalizeOutcome = answer.outcome), nowSeconds())
+                    } catch (e: InboxSendStoreException) {
+                        throw InboxUploadException(ambiguous = true, e)
+                    }
+                    throw InboxUploadException(ambiguous = false, unavailable = answer.outcome)
+                }
+
+                is FinalizeAnswer.Running -> {
+                    // A finalize of this session is still in flight. Waiting is
+                    // the only move: re-asking later converges on its result.
+                    // Bounded, and past the bound UNCERTAIN — never inferred to
+                    // have failed because it took long.
+                    runningPolls += 1
+                    val waitMs = runningWaitMs(answer.retryAfterSeconds)
+                    if (runningPolls >= MAX_RUNNING_POLLS ||
+                        runningWaitedMs + waitMs > RUNNING_BUDGET_MS
+                    ) {
+                        throw InboxUploadException(ambiguous = true)
+                    }
+                    runningWaitedMs += waitMs
+                    sleep(waitMs)
+                }
+
+                // An older server's plain-text 409, or an outcome this build does
+                // not know: exactly the uncertainty `ALREADY_FINALIZED` always was.
+                FinalizeAnswer.UnconfirmedConflict -> throw InboxUploadException(ambiguous = true)
             }
         }
-        return try {
-            store.save(job.copy(storedFileId = result.id), nowSeconds())
-        } catch (e: InboxSendStoreException) {
-            // The object EXISTS and this process cannot record which one. Never
-            // definitive: a later attempt must not open a second session.
-            throw InboxUploadException(ambiguous = true, e)
-        }
     }
+
+    /** The server's `Retry-After`, clamped; its default when absent. */
+    private fun runningWaitMs(hintSeconds: Long?): Long =
+        (hintSeconds ?: RUNNING_POLL_DEFAULT_S)
+            .coerceIn(RUNNING_POLL_MIN_S, RUNNING_POLL_MAX_S) * 1_000L
 
     private companion object {
         /** One append's worth. The server caps what a single PATCH commits, and
@@ -369,5 +458,18 @@ class CloudInboxUploader(
         /** Slack on top of one append per chunk, so an honest server that
          *  commits less than was offered still finishes. */
         const val MIN_APPEND_BUDGET = 16L
+
+        /** `running` polling, with RelayiumKit's `FinalizeRecoveryPolicy`
+         *  numbers: at most this many `running` answers per attempt… */
+        const val MAX_RUNNING_POLLS = 12
+
+        /** …and at most this much CUMULATIVE waiting between them (the sum of
+         *  the waits; HTTP time is not counted, so this is not a bound on how
+         *  long an attempt takes). */
+        const val RUNNING_BUDGET_MS = 60_000L
+
+        const val RUNNING_POLL_DEFAULT_S = 5L
+        const val RUNNING_POLL_MIN_S = 1L
+        const val RUNNING_POLL_MAX_S = 10L
     }
 }

@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -401,6 +402,222 @@ class InboxRuntimeTest {
         val send = w.model.state.value.sends.single { it.jobId == jobId }
         assertTrue(send.ambiguous)
         assertFalse("a create has an identity central converges", send.uploadUnknown)
+    }
+
+    /**
+     * A finalize whose answer was lost is a DURABLE unknown: central may hold a
+     * live, billed object. After a relaunch the row still says so (and keeps
+     * the retry, which only re-asks the same session), and the user's discard
+     * keeps the history row and the message's sender copy instead of claiming
+     * nothing was created.
+     */
+    @Test
+    fun `a send stuck after finalize stays uncertain across a relaunch and its discard stays honest`() = runTest {
+        val shared = folder.newFolder()
+        val w = world(root = shared)
+        w.adopt()
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+        w.services.uploader.failure = InboxUploadException(ambiguous = true)
+        w.runtime.sendText(target, "lost answer")?.join()
+        advanceUntilIdle()
+        val jobId = w.model.state.value.sends.single().jobId
+
+        // The shape a lost finalize answer leaves on disk.
+        val stored = requireNotNull(w.services.sendStore.load(jobId))
+        w.services.sendStore.save(
+            stored.copy(uploadId = "0123456789abcdef0123456789abcdef", finalizeAttempted = true),
+            now(),
+        )
+
+        val relaunched = world(root = shared)
+        relaunched.adopt()
+        relaunched.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val send = relaunched.model.state.value.sends.single { it.jobId == jobId }
+        assertEquals(InboxSendStatus.Phase.STOPPED, send.phase)
+        assertTrue("central may hold the object", send.ambiguous)
+        assertFalse("re-asking the session is safe, so the retry stays", send.uploadUnknown)
+        assertNull(send.stop)
+
+        relaunched.runtime.discardSend(jobId)?.join()
+        advanceUntilIdle()
+        assertTrue(relaunched.services.sendStore.all().isEmpty())
+        assertEquals(
+            "the only trace of a possibly-live upload stays, as stopped",
+            InboxConversationEntry.SentState.STOPPED,
+            relaunched.services.conversations.entries().single { it.id == jobId }.sentState,
+        )
+        assertNotNull("and so does the sender's copy", relaunched.services.outgoing.read(jobId))
+    }
+
+    /**
+     * Central's definitive answer is durable too: after a relaunch the row names
+     * it and withdraws the Send that could not help; removing it is an ordinary
+     * removal, because nothing live remains.
+     */
+    @Test
+    fun `a definitive finalize outcome survives a relaunch and withdraws the retry`() = runTest {
+        val shared = folder.newFolder()
+        val w = world(root = shared)
+        w.adopt()
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+        w.services.uploader.failure = InboxUploadException(ambiguous = true)
+        w.runtime.sendText(target, "expired")?.join()
+        advanceUntilIdle()
+        val jobId = w.model.state.value.sends.single().jobId
+        val stored = requireNotNull(w.services.sendStore.load(jobId))
+        w.services.sendStore.save(
+            stored.copy(
+                uploadId = "0123456789abcdef0123456789abcdef",
+                finalizeAttempted = true,
+                finalizeOutcome = com.relayium.android.cloud.FinalizeOutcome.EXPIRED,
+            ),
+            now(),
+        )
+
+        val relaunched = world(root = shared)
+        relaunched.adopt()
+        relaunched.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val send = relaunched.model.state.value.sends.single { it.jobId == jobId }
+        assertEquals(InboxSendStatus.Phase.STOPPED, send.phase)
+        assertEquals(InboxSendCoordinator.Result.Reason.UPLOAD_NO_LONGER_STORED, send.stop)
+        assertFalse("central's record settled it", send.ambiguous)
+        assertFalse("a retry cannot help", send.stop!!.isRetryable)
+
+        // Retrying anyway sends nothing: no upload, no create.
+        relaunched.runtime.send(jobId)?.join()
+        advanceUntilIdle()
+        assertTrue(relaunched.services.uploader.uploads.isEmpty())
+        assertEquals(0, relaunched.services.server.count("createTask"))
+
+        relaunched.runtime.discardSend(jobId)?.join()
+        advanceUntilIdle()
+        assertTrue(relaunched.services.sendStore.all().isEmpty())
+    }
+
+    /**
+     * The interleaving both reviews found: a previous attempt left an AMBIGUOUS
+     * stop in memory; the next attempt saves central's definitive outcome and
+     * is cancelled before it can report it. The row must show the definitive
+     * stop — not ambiguous, no Retry — rather than both "nothing was delivered"
+     * and "cannot tell whether it arrived".
+     */
+    @Test
+    fun `a definitive outcome saved by a cancelled attempt overrides the previous ambiguous stop`() = runTest {
+        val w = world()
+        w.adopt()
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+        w.services.uploader.failure = InboxUploadException(ambiguous = true)
+        w.runtime.sendText(target, "lost answer")?.join()
+        advanceUntilIdle()
+        val jobId = w.model.state.value.sends.single().jobId
+        val before = w.model.state.value.sends.single()
+        assertTrue("the previous attempt's stop is ambiguous", before.ambiguous)
+        assertEquals(InboxSendCoordinator.Result.Reason.TRANSPORT, before.stop)
+
+        val stored = requireNotNull(w.services.sendStore.load(jobId))
+        w.services.sendStore.save(
+            stored.copy(uploadId = "0123456789abcdef0123456789abcdef", finalizeAttempted = true),
+            now(),
+        )
+
+        // The next attempt records central's `failed` durably — as the real
+        // uploader does before reporting — and is then held, and cancelled.
+        val saved = CompletableDeferred<Unit>()
+        w.services.uploader.during = { job, store ->
+            store.save(
+                requireNotNull(store.load(job.jobId))
+                    .copy(finalizeOutcome = com.relayium.android.cloud.FinalizeOutcome.FAILED),
+                now(),
+            )
+            saved.complete(Unit)
+        }
+        w.services.uploader.gate = CompletableDeferred()
+        val attempt = w.runtime.send(jobId)
+        runCurrent()
+        assertTrue(saved.isCompleted)
+        assertEquals(InboxSendStatus.Phase.SENDING, w.model.state.value.sends.single().phase)
+        w.runtime.cancelSend(jobId)
+        attempt?.join()
+        runCurrent()
+
+        val row = w.model.state.value.sends.single()
+        assertEquals(InboxSendStatus.Phase.STOPPED, row.phase)
+        assertEquals(InboxSendCoordinator.Result.Reason.UPLOAD_NOT_COMPLETED, row.stop)
+        assertFalse("the durable verdict overrides the stale ambiguous stop", row.ambiguous)
+        assertFalse("Retry is withdrawn", row.offersRetry)
+
+        // The attempt slot was released: a new attempt is admitted, answers
+        // from the record, and uploads and creates nothing.
+        w.services.uploader.during = null
+        w.services.uploader.gate = null
+        val uploads = w.services.uploader.uploads.size
+        w.runtime.send(jobId)?.join()
+        advanceUntilIdle()
+        assertEquals(uploads, w.services.uploader.uploads.size)
+        assertEquals(0, w.services.server.count("createTask"))
+        val after = w.model.state.value.sends.single()
+        assertEquals(InboxSendCoordinator.Result.Reason.UPLOAD_NOT_COMPLETED, after.stop)
+        assertFalse(after.ambiguous)
+    }
+
+    /**
+     * Cancelled while the attempt is WAITING (a `running` poll's delay, here a
+     * real coroutine `delay` inside the upload): the durable record is exactly
+     * as it was, the row leaves Sending, and the attempt slot is released — the
+     * next Send is admitted and re-asks.
+     */
+    @Test
+    fun `cancelling during a recovery wait releases the attempt and changes nothing`() = runTest {
+        val w = world()
+        w.adopt()
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+        w.services.uploader.failure = InboxUploadException(ambiguous = true)
+        w.runtime.sendText(target, "wait")?.join()
+        advanceUntilIdle()
+        val jobId = w.model.state.value.sends.single().jobId
+        val lost = w.services.sendStore.save(
+            requireNotNull(w.services.sendStore.load(jobId))
+                .copy(uploadId = "0123456789abcdef0123456789abcdef", finalizeAttempted = true),
+            now(),
+        )
+
+        val waiting = CompletableDeferred<Unit>()
+        w.services.uploader.during = { _, _ ->
+            waiting.complete(Unit)
+            kotlinx.coroutines.delay(10_000)
+        }
+        val attempt = w.runtime.send(jobId)
+        runCurrent()
+        assertTrue(waiting.isCompleted)
+        w.runtime.cancelSend(jobId)
+        attempt?.join()
+        runCurrent()
+
+        val kept = requireNotNull(w.services.sendStore.load(jobId))
+        assertEquals(lost.uploadId, kept.uploadId)
+        assertTrue(kept.finalizeAttempted)
+        assertNull(kept.finalizeOutcome)
+        assertNull(kept.storedFileId)
+        val row = w.model.state.value.sends.single()
+        assertNotEquals(InboxSendStatus.Phase.SENDING, row.phase)
+        assertTrue("still unsettled", row.ambiguous)
+        assertTrue("a re-ask is still offered", row.offersRetry)
+
+        w.services.uploader.during = null
+        val uploads = w.services.uploader.uploads.size
+        w.runtime.send(jobId)?.join()
+        advanceUntilIdle()
+        assertEquals("the slot was released: the next Send ran", uploads + 1, w.services.uploader.uploads.size)
     }
 
     /** A repeat names the durable JOB, so central is never asked to create a

@@ -166,10 +166,15 @@ class FakeCiphertextUploader : InboxCiphertextUploader {
     /** Parked until released, so a test can cancel INSIDE an upload. */
     var gate: CompletableDeferred<Unit>? = null
 
+    /** Runs inside the upload, before [gate]: lets a test perform what a real
+     *  uploader does durably (or wait as it does) before being cancelled. */
+    var during: (suspend (InboxSendJob, InboxSendStore) -> Unit)? = null
+
     private val ordinal = AtomicInteger(0)
 
     override suspend fun upload(job: InboxSendJob, store: InboxSendStore): InboxSendJob {
         uploads.add(job.jobId)
+        during?.invoke(job, store)
         gate?.await()
         failure?.let { failure = null; throw it }
         job.storedFileId?.let { return job }

@@ -107,6 +107,8 @@
     <string name="inbox_stop_queue_full">That device already has as many waiting deliveries as the server will hold.</string>
     <string name="inbox_stop_transport">Relayium could not finish sending. Nothing was lost; try again.</string>
     <string name="inbox_stop_storage">This device could not write what it needs to send. Nothing was sent.</string>
+    <string name="inbox_stop_upload_not_completed">The server didn\'t complete this upload, so nothing was delivered. To send it, remove this one and start a new send.</string>
+    <string name="inbox_stop_upload_no_longer_stored">This upload finished but is no longer stored, so nothing was delivered. To send it, remove this one and start a new send, which counts as a new upload.</string>
 
     <string name="inbox_history_title">History</string>
     <string name="inbox_history_empty">Nothing has been exchanged with your other devices yet.</string>

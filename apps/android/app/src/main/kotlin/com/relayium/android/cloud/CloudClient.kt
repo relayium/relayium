@@ -70,6 +70,56 @@ enum class StoredUploadPurpose(val wire: String) {
     DEVICE_TASK("device_task"),
 }
 
+/**
+ * What central's durable finalize record says about an upload that produced no
+ * usable object. A CLOSED set: any other `outcome` is not an answer this build
+ * acts on (see [FinalizeAnswer.UnconfirmedConflict]).
+ *
+ * Mirrors RelayiumKit's `FinalizeOutcome` and the server's
+ * `answerFinalizeRecovery` (D5-D7).
+ */
+enum class FinalizeOutcome(val wire: String) {
+    /** Central refused or never completed the upload; no object exists. */
+    FAILED("failed"),
+
+    /** The object was stored and has since expired. */
+    EXPIRED("expired"),
+
+    /** The object was stored and has since been removed. */
+    REMOVED("removed"),
+    ;
+
+    companion object {
+        fun fromWire(value: String): FinalizeOutcome? = entries.firstOrNull { it.wire == value }
+    }
+}
+
+/**
+ * One answer to a finalize sent with `{"recoverFinalized":true}`.
+ *
+ * Mirrors RelayiumKit's `FinalizeAnswer` case for case. Only [NotCompleted] is
+ * authoritative about the absence of a usable object, and it is produced ONLY
+ * from the server's own `outcome` field — never from a bare 409, a status code
+ * alone, or elapsed time.
+ */
+sealed interface FinalizeAnswer {
+    /** 200: the object, freshly completed or ([recovered]) read back from the
+     *  session's durable record — nothing was completed or counted again. */
+    data class Completed(val result: StoredUploadResult, val recovered: Boolean) : FinalizeAnswer
+
+    /** 409 with a closed outcome: authoritative about the upload itself. */
+    data class NotCompleted(val outcome: FinalizeOutcome) : FinalizeAnswer
+
+    /** 409 `running`: a finalize of this session is still in flight.
+     *  [retryAfterSeconds] is the server's hint, when it gave a readable one. */
+    data class Running(val retryAfterSeconds: Long?) : FinalizeAnswer
+
+    /** 409 that is not a recovery answer — a server without finalize recovery
+     *  (plain-text 409), or an outcome this build does not know. Says nothing
+     *  about the object. */
+    data object UnconfirmedConflict : FinalizeAnswer
+}
+
 /** A resumable session and the append size the server issued with it. The size
  *  belongs to the SESSION: a later process must persist it rather than guess
  *  today's default. */
@@ -483,6 +533,56 @@ class CloudClient(
             val expiresAt = parsed.whole("expiresAt")
                 ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
             StoredUploadResult(id, expiresAt)
+        }
+
+    /**
+     * `POST /api/uploads/{id}/finalize` with `{"recoverFinalized":true}` — the
+     * Device Inbox sender's finalize, and ONLY that sender's.
+     *
+     * Against an OPEN session this is an ordinary finalize (the server reads the
+     * body before its claim and does nothing else with it). Against a session
+     * that is already terminal, a server with finalize recovery answers from its
+     * durable finalize record instead of a bare 409 (server
+     * `answerFinalizeRecovery`, protocol §25 "A lost finalize answer"), so a
+     * sender whose answer was lost can learn what happened without a second
+     * object. A server that predates recovery ignores the field and answers
+     * exactly as [finalizeUpload] would; its plain-text 409 is
+     * [FinalizeAnswer.UnconfirmedConflict], which the caller treats exactly as
+     * the old `ALREADY_FINALIZED`.
+     *
+     * [finalizeUpload] keeps its exact empty-body request for every share
+     * caller, as RelayiumKit keeps `finalizeUpload` beside
+     * `finalizeUploadRecovering`.
+     */
+    suspend fun finalizeUploadRecovering(uploadId: String, token: String): FinalizeAnswer =
+        withContext(io) {
+            val safe = StoredObjectId.accepted(uploadId)
+                ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+            val request = Request.Builder()
+                .url(base.newBuilder().addPathSegments("api/uploads/$safe/finalize").build())
+                .header("Accept", "application/json")
+                .header("User-Agent", userAgent)
+                .header("Authorization", "Bearer $token")
+                .post(RECOVER_FINALIZED_BODY.toRequestBody(JSON))
+                .build()
+            val call = authed.newCall(request)
+            val (status, text, retryAfter) = try {
+                withCancellation(call) {
+                    call.execute().use { response ->
+                        val body = response.body.byteString(MAX_JSON_BYTES)
+                            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+                        Triple(response.code, body, response.header("Retry-After"))
+                    }
+                }
+            } catch (e: IOException) {
+                coroutineContext.ensureActive()
+                throw CloudException(transportFailure(e))
+            }
+            when (status) {
+                200, 409 -> finalizeAnswer(status, text, retryAfter)
+                404 -> throw CloudException(CloudFailure(CloudFailure.Kind.UPLOAD_SESSION_GONE))
+                else -> throw CloudException(uploadFailure(status, text))
+            }
         }
 
     // ── history ─────────────────────────────────────────────────────────────
@@ -1206,6 +1306,61 @@ class CloudClient(
     }
 
     companion object {
+
+        /** The finalize-recovery opt-in, byte for byte what RelayiumKit sends. */
+        private const val RECOVER_FINALIZED_BODY = "{\"recoverFinalized\":true}"
+
+        private val JSON = "application/json".toMediaType()
+
+        /**
+         * Parse one opted-in finalize answer (200 or 409). Separate from the
+         * transport so the wire contract is testable without a server; mirrors
+         * RelayiumKit's `finalizeAnswer(status:body:retryAfter:)`.
+         *
+         * A 200 this build cannot read is MALFORMED — never an object id, and
+         * never a verdict about the object (the caller keeps it uncertain). A
+         * 409 is a recovery answer only when it is the JSON document
+         * `{"error":"already_finalized","outcome":<closed set>}`; anything else,
+         * including an older server's plain-text 409, is
+         * [FinalizeAnswer.UnconfirmedConflict].
+         */
+        internal fun finalizeAnswer(status: Int, text: String, retryAfter: String?): FinalizeAnswer =
+            when (status) {
+                200 -> {
+                    val parsed = Json.parseOrNull(text) as? Json.Obj
+                        ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+                    val id = (parsed["id"] as? Json.Str)?.value?.let { StoredObjectId.accepted(it) }
+                        ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+                    val expiresAt = parsed.whole("expiresAt")?.takeIf { it > 0 }
+                        ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+                    // Absent is a fresh completion (and every server that
+                    // predates recovery); a present non-boolean is not a
+                    // document this build vouches for.
+                    val recovered = when (val value = parsed["recovered"]) {
+                        null, is Json.Null -> false
+                        is Json.Bool -> value.value
+                        else -> throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+                    }
+                    FinalizeAnswer.Completed(StoredUploadResult(id, expiresAt), recovered)
+                }
+                409 -> {
+                    val parsed = Json.parseOrNull(text) as? Json.Obj
+                    val error = (parsed?.get("error") as? Json.Str)?.value
+                    val outcome = (parsed?.get("outcome") as? Json.Str)?.value
+                    when {
+                        error != "already_finalized" || outcome == null ->
+                            FinalizeAnswer.UnconfirmedConflict
+                        outcome == "running" -> FinalizeAnswer.Running(
+                            retryAfter?.trim()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
+                                ?.toLongOrNull(),
+                        )
+                        else -> FinalizeOutcome.fromWire(outcome)
+                            ?.let { FinalizeAnswer.NotCompleted(it) }
+                            ?: FinalizeAnswer.UnconfirmedConflict
+                    }
+                }
+                else -> throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+            }
 
         /** A metadata or result document. Anything larger is not one. */
         private const val MAX_JSON_BYTES = 256 * 1024L

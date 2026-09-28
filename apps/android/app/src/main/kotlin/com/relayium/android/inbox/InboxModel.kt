@@ -450,6 +450,16 @@ data class InboxSendStatus(
      *  deleted; the row says so rather than looking as if nothing happened. */
     val discardRefused: Boolean = false,
 ) {
+    /**
+     * Whether the row offers Send / Retry. Not while an attempt runs (that row
+     * offers Stop), not for a delivery central holds, not for an unresolved
+     * single-shot upload (a repeat cannot answer it), and not for a stop a
+     * repeat cannot change (central's definitive finalize outcome).
+     */
+    val offersRetry: Boolean
+        get() = phase != Phase.SENDING && phase != Phase.DELIVERED && !uploadUnknown &&
+            stop?.isRetryable != false
+
     /** No names, no bytes: this reaches failure text. */
     override fun toString(): String =
         "InboxSendStatus(job=$jobId, $kind/$phase, files=${names.size})"

@@ -703,9 +703,7 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                             colors = accentOutlinedColors(),
                             modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                         ) { Text(stringResource(R.string.inbox_sending_cancel)) }
-                    } else if (
-                        send.phase != InboxSendStatus.Phase.DELIVERED && !send.uploadUnknown
-                    ) {
+                    } else if (send.offersRetry) {
                         OutlinedButton(
                             onClick = { actions.send(send.jobId) },
                             colors = accentOutlinedColors(),
@@ -821,6 +819,8 @@ private fun stopText(reason: InboxSendCoordinator.Result.Reason): Int = when (re
     InboxSendCoordinator.Result.Reason.QUEUE_FULL -> R.string.inbox_stop_queue_full
     InboxSendCoordinator.Result.Reason.TRANSPORT -> R.string.inbox_stop_transport
     InboxSendCoordinator.Result.Reason.STORAGE -> R.string.inbox_stop_storage
+    InboxSendCoordinator.Result.Reason.UPLOAD_NOT_COMPLETED -> R.string.inbox_stop_upload_not_completed
+    InboxSendCoordinator.Result.Reason.UPLOAD_NO_LONGER_STORED -> R.string.inbox_stop_upload_no_longer_stored
 }
 
 // ── history ─────────────────────────────────────────────────────────────────

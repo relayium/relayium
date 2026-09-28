@@ -7,6 +7,7 @@ import com.relayium.android.cloud.ScriptedDurableFiles
 import com.relayium.protocol.inbox.InboxManifestKind
 import java.io.File
 import java.io.OutputStream
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -291,6 +292,388 @@ class CloudInboxUploaderTest {
                 "the attempt must be recorded so no second session is opened",
                 requireNotNull(store.load(start.jobId)).finalizeAttempted,
             )
+        }
+    }
+
+    // ── finalize recovery (protocol §25, "A lost finalize answer") ──────────
+    //
+    // Every Device Inbox finalize carries `{"recoverFinalized":true}`. A server
+    // with recovery answers a repeat from its durable record; one without it
+    // ignores the field. The mapping mirrors RelayiumKit's
+    // `CloudUploader.finalizeRecovering` and the server's
+    // `answerFinalizeRecovery` (D4-D8).
+
+    /** One scripted finalize reply; `null` from the script drops the answer. */
+    private class Reply(
+        val status: String,
+        val body: String,
+        val headers: List<String> = emptyList(),
+        val contentType: String = "application/json",
+    )
+
+    private val recoveredReply = Reply(
+        "200 OK",
+        """{"id":"11112222333344445555666677778888","expiresAt":1700600000,"recovered":true}""",
+    )
+
+    private fun outcomeReply(outcome: String, vararg headers: String) = Reply(
+        "409 Conflict",
+        """{"error":"already_finalized","outcome":"$outcome"}""",
+        headers.toList(),
+    )
+
+    /** An older server's repeat: text, no outcome. */
+    private val plainConflict =
+        Reply("409 Conflict", "already finalized\n", contentType = "text/plain; charset=utf-8")
+
+    /**
+     * The resumable protocol, with finalize answered by [finalize] given the
+     * 0-based index of the finalize request. Everything else as [server].
+     */
+    private fun recoveryServer(finalize: (Int) -> Reply?): RecordingHttpServer {
+        val finalizes = java.util.concurrent.atomic.AtomicInteger()
+        return RecordingHttpServer { request, out: OutputStream ->
+            if (request.method == "POST" && request.path.endsWith("/finalize")) {
+                val scripted = finalize(finalizes.getAndIncrement()) ?: return@RecordingHttpServer
+                // Faithful to central: a recovery answer (a 409 document or a
+                // `recovered` 200) exists only for a request that opted in.
+                // Without the opt-in a repeat is the plain-text 409.
+                val optedIn = String(request.body) == """{"recoverFinalized":true}"""
+                val recoveryOnly = scripted.status.startsWith("409") || "recovered" in scripted.body
+                val reply = if (recoveryOnly && !optedIn) plainConflict else scripted
+                RecordingHttpServer.respond(
+                    out, status = reply.status, contentType = reply.contentType,
+                    body = reply.body.toByteArray(), extraHeaders = reply.headers,
+                )
+                return@RecordingHttpServer
+            }
+            val body = when {
+                request.method == "POST" && request.path.endsWith("api/uploads") ->
+                    """{"uploadId":"0123456789abcdef0123456789abcdef","chunkSize":262144}"""
+                request.method == "GET" -> """{"received":0}"""
+                else -> {
+                    val range = request.header("content-range").orEmpty()
+                    val end = range.substringAfter('-').substringBefore('/').toLongOrNull() ?: -1
+                    """{"received":${end + 1}}"""
+                }
+            }
+            RecordingHttpServer.respond(out, body = body.toByteArray())
+        }
+    }
+
+    /** Waits the uploader asked for, instead of taking them. */
+    private val slept = java.util.Collections.synchronizedList(ArrayList<Long>())
+
+    private fun recoveringUploader(origin: String) = CloudInboxUploader(
+        client = CloudClient(origin, "relayium-test/1"),
+        token = { "rlm_cli_test" },
+        ttlSeconds = 3600,
+        nowSeconds = ::now,
+        sleep = { slept.add(it) },
+    )
+
+    /** A job whose finalize was sent and whose answer never arrived. */
+    private suspend fun finalizeLost(): InboxSendJob = store.save(
+        job().copy(uploadId = "0123456789abcdef0123456789abcdef", finalizeAttempted = true),
+        now(),
+    )
+
+    private suspend fun uploadFailure(job: InboxSendJob, origin: String): InboxUploadException =
+        try {
+            recoveringUploader(origin).upload(job, store)
+            throw AssertionError("the upload must not succeed")
+        } catch (e: InboxUploadException) {
+            e
+        }
+
+    private fun count(server: RecordingHttpServer, method: String, suffix: String) =
+        server.received.count { it.method == method && it.path.endsWith(suffix) }
+
+    @Test
+    fun `every inbox finalize carries the recovery opt-in, the first one included`() = runBlocking {
+        recoveryServer { Reply("200 OK", """{"id":"11112222333344445555666677778888","expiresAt":1700600000}""") }
+            .use { server ->
+                val done = recoveringUploader(server.origin).upload(job(), store)
+                assertEquals("11112222333344445555666677778888", done.storedFileId)
+                val finalize = server.received.single { it.path.endsWith("/finalize") }
+                assertEquals("""{"recoverFinalized":true}""", String(finalize.body))
+                assertTrue(finalize.header("content-type").orEmpty().startsWith("application/json"))
+                // A fresh 200 without `recovered` is an ordinary completion.
+                assertNull(requireNotNull(store.load(done.jobId)).finalizeOutcome)
+            }
+    }
+
+    @Test
+    fun `a recovered finalize records the object and re-sends nothing`() = runBlocking {
+        recoveryServer { recoveredReply }.use { server ->
+            val start = finalizeLost()
+            val done = recoveringUploader(server.origin).upload(start, store)
+            assertEquals("11112222333344445555666677778888", done.storedFileId)
+            assertEquals(
+                "11112222333344445555666677778888",
+                requireNotNull(store.load(start.jobId)).storedFileId,
+            )
+            assertEquals("no second session", 0, count(server, "POST", "api/uploads"))
+            assertEquals("no byte re-sent", 0, count(server, "PATCH", ""))
+            assertEquals("asked exactly once", 1, count(server, "POST", "/finalize"))
+        }
+    }
+
+    @Test
+    fun `a running finalize honours Retry-After, then converges on the object`() = runBlocking {
+        recoveryServer { i -> if (i < 2) outcomeReply("running", "Retry-After: 3") else recoveredReply }
+            .use { server ->
+                val start = finalizeLost()
+                val done = recoveringUploader(server.origin).upload(start, store)
+                assertEquals("11112222333344445555666677778888", done.storedFileId)
+                assertEquals("each wait is the server's hint", listOf(3_000L, 3_000L), slept.toList())
+                assertEquals(3, count(server, "POST", "/finalize"))
+                assertEquals(0, count(server, "POST", "api/uploads"))
+            }
+    }
+
+    @Test
+    fun `a finalize that keeps running is uncertain and keeps the job`() = runBlocking {
+        recoveryServer { outcomeReply("running", "Retry-After: 3") }.use { server ->
+            val start = finalizeLost()
+            val e = uploadFailure(start, server.origin)
+            assertTrue("still running is not a verdict", e.ambiguous)
+            assertNull(e.unavailable)
+            // Bounded by poll count (12 answers, 11 waits of 3 s = 33 s < 60 s).
+            assertEquals(12, count(server, "POST", "/finalize"))
+            assertEquals(List(11) { 3_000L }, slept.toList())
+            val kept = requireNotNull(store.load(start.jobId))
+            assertNull(kept.storedFileId)
+            assertNull("never inferred from elapsed time", kept.finalizeOutcome)
+            assertTrue(kept.finalizeAttempted)
+            assertTrue(kept.uploadUnsettled)
+            assertEquals(0, count(server, "POST", "api/uploads"))
+            assertEquals(0, count(server, "PATCH", ""))
+        }
+    }
+
+    @Test
+    fun `running waits are clamped and bounded by the total budget`() = runBlocking {
+        // No hint: the 5 s default. A huge hint: clamped to 10 s, and the 60 s
+        // budget ends the polling before the poll count does.
+        recoveryServer { i -> if (i == 0) outcomeReply("running") else outcomeReply("running", "Retry-After: 999") }
+            .use { server ->
+                val e = uploadFailure(finalizeLost(), server.origin)
+                assertTrue(e.ambiguous)
+                assertEquals(listOf(5_000L) + List(5) { 10_000L }, slept.toList())
+                assertTrue("never more than the budget", slept.sum() <= 60_000L)
+            }
+    }
+
+    @Test
+    fun `a definitive outcome is recorded durably and ends the job's uploading`() = runBlocking {
+        for (outcome in listOf("failed", "expired", "removed")) {
+            store.release(InboxFixtures.STORED_ID)
+            recoveryServer { outcomeReply(outcome) }.use { server ->
+                val start = finalizeLost()
+                val e = uploadFailure(start, server.origin)
+                assertFalse("$outcome is central's own verdict", e.ambiguous)
+                assertEquals(outcome, e.unavailable?.wire)
+                val kept = requireNotNull(store.load(start.jobId))
+                assertEquals("durable before it is reported", outcome, kept.finalizeOutcome?.wire)
+                assertNull(kept.storedFileId)
+                assertFalse("settled: nothing live remains", kept.uploadUnsettled)
+
+                // A later attempt asks nobody and re-sends nothing.
+                val before = server.received.size
+                val again = uploadFailure(kept, server.origin)
+                assertFalse(again.ambiguous)
+                assertEquals(outcome, again.unavailable?.wire)
+                assertEquals("no request at all", before, server.received.size)
+                assertEquals(0, count(server, "POST", "api/uploads"))
+                assertEquals(0, count(server, "PATCH", ""))
+            }
+        }
+    }
+
+    @Test
+    fun `a 409 without a recognised outcome keeps today's uncertain stop`() = runBlocking {
+        val shapes = listOf(
+            plainConflict,
+            Reply("409 Conflict", """{"error":"already_finalized"}"""),
+            Reply("409 Conflict", """{"error":"already_finalized","outcome":"banana"}"""),
+            // The outcome counts only inside the recovery document.
+            Reply("409 Conflict", """{"error":"something_else","outcome":"failed"}"""),
+            Reply("409 Conflict", """{"error":"already_finalized","outcome":7}"""),
+        )
+        for (shape in shapes) {
+            store.release(InboxFixtures.STORED_ID)
+            recoveryServer { shape }.use { server ->
+                val start = finalizeLost()
+                val e = uploadFailure(start, server.origin)
+                assertTrue("'${shape.body.trim()}' must stay uncertain", e.ambiguous)
+                assertNull(e.unavailable)
+                val kept = requireNotNull(store.load(start.jobId))
+                assertNull(kept.finalizeOutcome)
+                assertTrue(kept.uploadUnsettled)
+                assertEquals("asked once, not polled", 1, count(server, "POST", "/finalize"))
+                assertTrue(slept.isEmpty())
+            }
+        }
+    }
+
+    /**
+     * An older server ignores the body. Its first finalize answers 200 exactly
+     * as before — recorded — and its repeat is the text 409, which stays the
+     * uncertainty it always was. A 404 (the session collected) likewise.
+     */
+    @Test
+    fun `against a server without recovery the client behaves exactly as before`() = runBlocking {
+        recoveryServer { Reply("200 OK", """{"id":"11112222333344445555666677778888","expiresAt":1700600000}""") }
+            .use { server ->
+                val done = recoveringUploader(server.origin).upload(job(), store)
+                assertEquals("11112222333344445555666677778888", done.storedFileId)
+            }
+        for (reply in listOf(plainConflict, Reply("404 Not Found", "not found\n", contentType = "text/plain"))) {
+            store.release(InboxFixtures.STORED_ID)
+            recoveryServer { reply }.use { server ->
+                val e = uploadFailure(finalizeLost(), server.origin)
+                assertTrue(e.ambiguous)
+                assertNull(e.unavailable)
+                assertNull(requireNotNull(store.load(InboxFixtures.STORED_ID)).finalizeOutcome)
+            }
+        }
+    }
+
+    /**
+     * The definitive outcome could not be written. It must stay UNCERTAIN —
+     * reporting it without the durable record would let a relaunch forget it —
+     * and everything recovery needs stays. The next attempt re-asks the SAME
+     * session, hears the same answer from central's record, and records it.
+     */
+    @Test
+    fun `a definitive outcome that cannot be recorded stays uncertain and is recorded on the next ask`() = runBlocking {
+        recoveryServer { outcomeReply("failed") }.use { server ->
+            val start = finalizeLost()
+            files.failWrites.add(start.jobId + ".json")
+            val e = uploadFailure(start, server.origin)
+            files.failWrites.clear()
+            assertTrue("not recorded, so not reported as definitive", e.ambiguous)
+            assertNull(e.unavailable)
+            val kept = requireNotNull(store.load(start.jobId))
+            assertNull(kept.finalizeOutcome)
+            assertTrue(kept.finalizeAttempted)
+            assertEquals(start.uploadId, kept.uploadId)
+            assertTrue("the spool stays", store.spool(start.jobId).exists())
+            assertNotNull("the sealed manifest stays", store.encManifest(start.jobId))
+
+            val again = uploadFailure(kept, server.origin)
+            assertFalse(again.ambiguous)
+            assertEquals("failed", again.unavailable?.wire)
+            assertEquals("failed", requireNotNull(store.load(start.jobId)).finalizeOutcome?.wire)
+            assertEquals("the same session was asked twice", 2, count(server, "POST", "/finalize"))
+            assertTrue(server.received.filter { it.path.endsWith("/finalize") }.all { it.path.contains(start.uploadId!!) })
+            assertEquals(0, count(server, "POST", "api/uploads"))
+            assertEquals(0, count(server, "PATCH", ""))
+        }
+    }
+
+    /** `running` several times and then a definitive answer, in ONE attempt:
+     *  the outcome is recorded exactly once and nothing else is sent. */
+    @Test
+    fun `running answers then failed within one attempt records the outcome once`() = runBlocking {
+        recoveryServer { i -> if (i < 3) outcomeReply("running", "Retry-After: 2") else outcomeReply("failed") }
+            .use { server ->
+                val start = finalizeLost()
+                val writesBefore = files.writes.count { it == start.jobId + ".json" }
+                val e = uploadFailure(start, server.origin)
+                assertFalse(e.ambiguous)
+                assertEquals("failed", e.unavailable?.wire)
+                assertEquals(listOf(2_000L, 2_000L, 2_000L), slept.toList())
+                assertEquals(4, count(server, "POST", "/finalize"))
+                assertEquals(
+                    "one durable write: the outcome",
+                    writesBefore + 1, files.writes.count { it == start.jobId + ".json" },
+                )
+                assertEquals("failed", requireNotNull(store.load(start.jobId)).finalizeOutcome?.wire)
+                assertEquals(0, count(server, "POST", "api/uploads"))
+                assertEquals(0, count(server, "PATCH", ""))
+            }
+    }
+
+    /** `Retry-After: 0` is clamped UP to the 1 s floor; an HTTP-date (legal
+     *  HTTP, but not the delta-seconds central sends) falls back to the 5 s
+     *  default rather than being misread. */
+    @Test
+    fun `a zero or HTTP-date Retry-After is clamped or defaulted`() = runBlocking {
+        recoveryServer { i ->
+            when (i) {
+                0 -> outcomeReply("running", "Retry-After: 0")
+                1 -> outcomeReply("running", "Retry-After: Wed, 21 Oct 2026 07:28:00 GMT")
+                else -> recoveredReply
+            }
+        }.use { server ->
+            val done = recoveringUploader(server.origin).upload(finalizeLost(), store)
+            assertEquals("11112222333344445555666677778888", done.storedFileId)
+            assertEquals(listOf(1_000L, 5_000L), slept.toList())
+        }
+    }
+
+    /**
+     * Cancelled while WAITING between `running` answers: the record is exactly
+     * as it was (the session, the attempt marker, no outcome, no object), and
+     * nothing more is sent.
+     *
+     * Deterministic, no wall clock: the injectable wait records the requested
+     * millis and then suspends on a gate the test owns and never opens. The
+     * uploader cannot send its next poll until the wait returns, and this wait
+     * only ever ends by cancellation — so the test cancels while the attempt
+     * is provably inside the wait, and exactly one finalize can have been sent.
+     * (A `CompletableDeferred.await` honours cancellation exactly as the
+     * production `delay` does.)
+     */
+    @Test
+    fun `cancelling during a running wait changes nothing and sends nothing more`() = runBlocking {
+        recoveryServer { outcomeReply("running", "Retry-After: 1") }.use { server ->
+            val start = finalizeLost()
+            val requested = kotlinx.coroutines.CompletableDeferred<Long>()
+            val neverOpened = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val uploader = CloudInboxUploader(
+                client = CloudClient(server.origin, "relayium-test/1"),
+                token = { "rlm_cli_test" },
+                ttlSeconds = 3600,
+                nowSeconds = ::now,
+                sleep = { ms -> requested.complete(ms); neverOpened.await() },
+            )
+            val attempt = launch { uploader.upload(start, store) }
+            assertEquals("the server's hint, clamped", 1_000L, kotlinx.coroutines.withTimeout(10_000) { requested.await() })
+            attempt.cancel()
+            attempt.join()
+            assertTrue(attempt.isCancelled)
+            assertFalse("the wait was never released", neverOpened.isCompleted)
+            assertEquals("exactly one finalize was sent", 1, count(server, "POST", "/finalize"))
+            assertEquals(0, count(server, "POST", "api/uploads"))
+            assertEquals(0, count(server, "PATCH", ""))
+            val kept = requireNotNull(store.load(start.jobId))
+            assertEquals(start.uploadId, kept.uploadId)
+            assertTrue(kept.finalizeAttempted)
+            assertNull(kept.finalizeOutcome)
+            assertNull(kept.storedFileId)
+            assertTrue(store.spool(start.jobId).exists())
+        }
+    }
+
+    /** A 200 this build cannot read is never an object id and never a verdict. */
+    @Test
+    fun `an unreadable 200 is uncertain`() = runBlocking {
+        for (body in listOf(
+            """{"id":"11112222333344445555666677778888","expiresAt":0}""",
+            """{"id":"11112222333344445555666677778888","expiresAt":1700600000,"recovered":"yes"}""",
+            """{"expiresAt":1700600000}""",
+        )) {
+            store.release(InboxFixtures.STORED_ID)
+            recoveryServer { Reply("200 OK", body) }.use { server ->
+                val e = uploadFailure(finalizeLost(), server.origin)
+                assertTrue(body, e.ambiguous)
+                val kept = requireNotNull(store.load(InboxFixtures.STORED_ID))
+                assertNull(kept.storedFileId)
+                assertNull(kept.finalizeOutcome)
+            }
         }
     }
 

@@ -701,7 +701,7 @@ class InboxLifecycleTest {
         // unknown before any task exists.
         val job = requireNotNull(w.services.sendStore.load(jobId))
         assertEquals(
-            job.unresolvedCreate || (job.emptyPublishAttempted && job.storedFileId == null),
+            job.unresolvedCreate || job.uploadUnsettled,
             state.ambiguous,
         )
         // The local attempt was cancelled; central was not asked to change.

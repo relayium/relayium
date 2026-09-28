@@ -1276,6 +1276,11 @@ class InboxRuntime(
         // again, when whether it already exists is exactly what nobody knows.
         // The record itself says so, so the surface reads it from there.
         val publishUnknown = job.emptyPublishAttempted && job.storedFileId == null
+        // Central's definitive finalize outcome, from the DURABLE record for the
+        // same reason: after a relaunch the row must still say the upload is
+        // unavailable, not offer a Send that cannot help.
+        val unavailable = job.finalizeOutcome
+            ?.let { InboxSendCoordinator.Result.Reason.unavailable(it) }
         return InboxSendStatus(
             jobId = job.jobId,
             targetDeviceId = job.targetDeviceId,
@@ -1288,14 +1293,23 @@ class InboxRuntime(
                 stopped != null -> InboxSendStatus.Phase.STOPPED
                 // After the in-memory ones, so a live attempt or a stop this
                 // process actually saw still describes itself.
-                publishUnknown -> InboxSendStatus.Phase.STOPPED
+                unavailable != null || job.uploadUnsettled -> InboxSendStatus.Phase.STOPPED
                 else -> InboxSendStatus.Phase.STAGED
             },
-            stop = stopped?.reason,
+            stop = unavailable ?: stopped?.reason,
             // A job that still records an outstanding create is ambiguous
             // whatever the last attempt said, because an EARLIER request may
-            // have created the delivery.
-            ambiguous = job.unresolvedCreate || stopped?.ambiguous == true || publishUnknown,
+            // have created the delivery. Likewise an upload whose publish was
+            // attempted and never answered with an object or a definitive
+            // outcome: central may hold it (a Retry re-asks the same session).
+            //
+            // A DURABLE definitive outcome overrides all of that, including a
+            // stale in-memory stop: an attempt cancelled after the outcome was
+            // saved but before it was reported leaves the previous attempt's
+            // ambiguous stop in [stops], and the row must not then say both
+            // "nothing was delivered" and "cannot tell whether it arrived".
+            ambiguous = unavailable == null &&
+                (job.unresolvedCreate || stopped?.ambiguous == true || job.uploadUnsettled),
             uploadUnknown = publishUnknown,
             taskId = job.taskId,
             discardRefused = job.jobId in discardRefused,
