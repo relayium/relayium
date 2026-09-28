@@ -654,6 +654,18 @@ public final class CloudUploadModel: ObservableObject {
         job = nil
         restorePickedState()
         cleanupWarning = nil
+        // A job id the protected Device Inbox root also holds is a conflict
+        // (R2): neither copy is deleted until a person resolves it, and the
+        // content key is filed by job id, so removing it would strand the
+        // protected copy too. The store refuses the tombstone and the purge;
+        // the key is kept here, and the refusal is said, not reported as a
+        // cleanup that will be retried (the launch sweep keeps it as well).
+        // `plan(for:)` never offers such a job, so this is reached only when
+        // the conflict appeared after the job was already on screen.
+        if pending.store.protectedRootHolds(jobId: plan.jobId) {
+            cleanupWarning = L10n.t(.sendErrorOwnershipConflict)
+            return
+        }
         let cleanupGeneration = generation
         // Record Discard before the asynchronous keychain cleanup begins. A
         // force-quit on the next line must still leave a job the launch sweep

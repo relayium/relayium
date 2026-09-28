@@ -710,9 +710,16 @@ public final class PendingUploadStore: @unchecked Sendable {
         // there, its Discard would delete a delivery the sender still owns.
         // Builds up to 1.4.3 left deliveries in this root until the protected
         // root adopts them, so the filter is load-bearing, not tidiness.
+        //
+        // A job whose id the protected root also holds is a conflict (R2) and
+        // is not offered either: "neither copy is executed", and this surface's
+        // own paths — completion, a missing key, Discard — remove the content
+        // key, which is filed by job id and so belongs to the protected copy
+        // too. The conflict stays visible through the protected store's
+        // `ownershipConflicts`, which judges by directory names alone.
         return plans()
             .filter { $0.accountId == accountId && !$0.retired && $0.finalizedStoredId == nil
-                && $0.effectivePurpose == .share }
+                && $0.effectivePurpose == .share && !protectedRootHolds(jobId: $0.jobId) }
             .sorted { $0.createdAt > $1.createdAt }
             .first { (try? verifyStaging($0)) != nil }
     }
@@ -1351,6 +1358,11 @@ public final class PendingUploadStore: @unchecked Sendable {
               current.finalizedStoredId == nil || current.effectivePurpose == .deviceTask else {
             throw PendingUploadError.stagingMissing
         }
+        // A shared job whose id the protected root also holds is a conflict
+        // (R2): a tombstone is Discard's first step towards deleting the
+        // shared copy, so it is refused as the protected store's own write
+        // gate refuses the same pair.
+        if protectedRootHolds(jobId: current.jobId) { throw PendingUploadError.stagingMissing }
         if injectedFailure(.retired) { throw PendingUploadError.stagingMissing }
         var updated = current
         updated.retired = true
@@ -1387,8 +1399,10 @@ public final class PendingUploadStore: @unchecked Sendable {
         guard fileManager.fileExists(atPath: url.path) else { return true }
         // A protected job whose id also exists in the shared root is a
         // conflict: neither copy is deleted, by anyone, until a person
-        // resolves it (binding: preserve both complete trees).
+        // resolves it (binding: preserve both complete trees). The shared
+        // store refuses the same pair from its side.
         if isProtectedDeviceStore, ownership(of: checked) == .conflict { return false }
+        if protectedRootHolds(jobId: checked) { return false }
         do {
             try fileManager.removeItem(at: url)
             return !fileManager.fileExists(atPath: url.path)
@@ -1535,8 +1549,9 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// job id, not by root, so while the protected root names the job the key
     /// belongs to that copy too and must not be removed. Meaningful only on the
     /// shared store (`legacyRoot == nil`); the sibling is derived exactly as
-    /// `PendingUploadSupport` derives the protected store.
-    private func protectedRootHolds(jobId: String) -> Bool {
+    /// `PendingUploadSupport` derives the protected store. Internal so a caller
+    /// can keep the job's content key when this is true.
+    func protectedRootHolds(jobId: String) -> Bool {
         guard legacyRoot == nil, let checked = try? StoredObjectID.checked(jobId), checked == jobId else {
             return false
         }

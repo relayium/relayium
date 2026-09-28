@@ -745,3 +745,62 @@ extension CloudUploadModelPendingTests {
         XCTAssertNil(key, "a superseded recovery dropped the ids its sweep released")
     }
 }
+
+// MARK: - Discard of a live share that became a conflict (R2)
+
+extension CloudUploadModelPendingTests {
+    /// Recover a live share onto the screen, then optionally give it a
+    /// protected twin — the conflict appearing after the job is displayed, the
+    /// only way Discard can reach one (`plan(for:)` never offers it).
+    private func displayedShare(twin: Bool)
+        async throws -> (CloudUploadModel, PendingUploadPlan, InMemoryStoredLinkKeyStore) {
+        let store = makeStore()
+        let keys = InMemoryStoredLinkKeyStore()
+        let plan = try await stagedShare(in: store, keys: keys)
+        let model = makeModel(transport: ForbiddenTransport(), store: store,
+                              pendingKeys: keys, finalKeys: InMemoryStoredLinkKeyStore())
+        model.recoverPendingJob(for: "acct-1")
+        await model.recoveryTask?.value
+        guard case .interrupted = model.state else {
+            XCTFail("precondition: the live share must be offered, got \(model.state)")
+            return (model, plan, keys)
+        }
+        if twin {
+            try FileManager.default.createDirectory(at: protectedRoot, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: sharedRoot.appendingPathComponent(plan.jobId),
+                                             to: protectedRoot.appendingPathComponent(plan.jobId))
+        }
+        return (model, plan, keys)
+    }
+
+    func testDiscardOfALiveShareWithAProtectedTwinIsRefusedAndKeepsEverything() async throws {
+        let (model, plan, keys) = try await displayedShare(twin: true)
+        let planFile = sharedRoot.appendingPathComponent(plan.jobId).appendingPathComponent("plan.json")
+        let before = try Data(contentsOf: planFile)
+
+        model.discardPendingJob()
+        await model.cleanupTask?.value
+
+        XCTAssertEqual(model.cleanupWarning, L10n.t(.sendErrorOwnershipConflict),
+                       "the refusal was not surfaced")
+        XCTAssertEqual(try Data(contentsOf: planFile), before, "the conflicting shared plan was tombstoned")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: protectedRoot.appendingPathComponent(plan.jobId).path))
+        let key = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(key, Self.hygieneKey, "the id-filed key of a conflict was removed")
+        if case .interrupted = model.state { XCTFail("a refused conflict stayed resumable on screen") }
+        XCTAssertNil(makeStore().plan(for: "acct-1"))
+        XCTAssertEqual(makeStore().protectedDeviceStore().ownershipConflicts(), [plan.jobId])
+    }
+
+    func testDiscardOfALiveShareWithoutATwinStillCleansUp() async throws {
+        let (model, plan, keys) = try await displayedShare(twin: false)
+
+        model.discardPendingJob()
+        await model.cleanupTask?.value
+
+        XCTAssertNil(model.cleanupWarning)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sharedRoot.appendingPathComponent(plan.jobId).path))
+        let key = try await keys.key(for: plan.jobId)
+        XCTAssertNil(key)
+    }
+}

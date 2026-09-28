@@ -648,3 +648,99 @@ extension PendingUploadStoreTests {
         XCTAssertEqual(store.plan(for: "acct-1")?.jobId, plan.jobId)
     }
 }
+
+// MARK: - shared-store mutators honour a live conflict (R2)
+
+/// A LIVE share whose id the protected root also holds is a conflict: the
+/// shared store neither tombstones nor deletes it, and does not offer it for
+/// resume (executing either copy is what R2 forbids, and every resume-surface
+/// path that ends a job removes the id-filed content key). The protected
+/// store's own refusals are unchanged.
+extension PendingUploadStoreTests {
+    private func protectedDelivery(in store: PendingUploadStore) throws -> PendingUploadPlan {
+        try store.prepare(files: try selection([(Array("gift".utf8), "a.txt")]),
+                          accountId: "acct-1", burnAfterRead: false,
+                          ttl: UploadPurpose.deviceTaskTTLSeconds,
+                          target: PendingUploadTarget(deviceId: "DEVICE0123456789", keyId: "KEY0123456789ab",
+                                                      keyGeneration: 4,
+                                                      createIdempotencyKey: "8C1A0F3D-2B45-4C6E-9A17-0000000000AA"))
+    }
+
+    // P1
+    func testSharedPurgeRefusesALiveShareWithAProtectedTwin() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+        let shared = store.jobURL(for: plan.jobId)
+        try twinInProtectedRoot(shared)
+
+        XCTAssertFalse(store.purge(jobId: plan.jobId), "a conflicting shared copy was purged (R2)")
+        XCTAssertFalse(store.purge(plan))
+        XCTAssertTrue(exists(shared))
+        XCTAssertTrue(exists(protectedRoot.appendingPathComponent(plan.jobId)))
+        XCTAssertEqual(makeStore().protectedDeviceStore().ownershipConflicts(), [plan.jobId],
+                       "the live conflict must still be reported")
+    }
+
+    // P1 (control)
+    func testSharedPurgeRemovesALiveShareWithoutAProtectedTwin() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+
+        XCTAssertTrue(store.purge(jobId: plan.jobId))
+        XCTAssertFalse(exists(store.jobURL(for: plan.jobId)))
+    }
+
+    // P2
+    func testSharedMarkRetiredRefusesALiveShareWithAProtectedTwin() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+        let planFile = store.jobURL(for: plan.jobId).appendingPathComponent("plan.json")
+        let before = try Data(contentsOf: planFile)
+        try twinInProtectedRoot(store.jobURL(for: plan.jobId))
+
+        XCTAssertThrowsError(try store.markRetired(plan)) { error in
+            XCTAssertEqual(error as? PendingUploadError, .stagingMissing)
+        }
+        XCTAssertEqual(try Data(contentsOf: planFile), before, "the conflicting plan was rewritten")
+        XCTAssertTrue(exists(store.jobURL(for: plan.jobId)))
+    }
+
+    // P2 (control)
+    func testSharedMarkRetiredTombstonesALiveShareWithoutAProtectedTwin() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+
+        XCTAssertTrue(try store.markRetired(plan).retired)
+        XCTAssertNil(makeStore().plan(for: "acct-1"))
+    }
+
+    // P3
+    func testProtectedPurgeAndRetireOfAnOwnedDeliveryAreUnchanged() throws {
+        let device = makeStore().protectedDeviceStore()
+        let owned = try protectedDelivery(in: device)
+        XCTAssertEqual(device.ownership(of: owned.jobId), .owned)
+        XCTAssertTrue(try device.markRetired(owned).retired)
+        XCTAssertTrue(device.purge(jobId: owned.jobId))
+        XCTAssertFalse(exists(device.jobURL(for: owned.jobId)))
+
+        // And a protected job with a shared twin is still refused from that side.
+        let conflicted = try protectedDelivery(in: device)
+        try FileManager.default.createDirectory(at: sharedRoot.appendingPathComponent(conflicted.jobId),
+                                                withIntermediateDirectories: true)
+        XCTAssertThrowsError(try device.markRetired(conflicted))
+        XCTAssertFalse(device.purge(jobId: conflicted.jobId))
+        XCTAssertTrue(exists(device.jobURL(for: conflicted.jobId)))
+    }
+
+    // P4
+    func testALiveShareWithAProtectedTwinIsNotOfferedForResume() throws {
+        let store = makeStore()
+        let plan = try stagedShare(in: store)
+        XCTAssertEqual(store.plan(for: "acct-1")?.jobId, plan.jobId, "precondition: offered before the twin")
+        try twinInProtectedRoot(store.jobURL(for: plan.jobId))
+
+        XCTAssertNil(makeStore().plan(for: "acct-1"), "a conflicting live share was offered for resume (R2)")
+        XCTAssertEqual(makeStore().sweepIncomplete(), [])
+        XCTAssertTrue(exists(store.jobURL(for: plan.jobId)), "the launch sweep deleted the hidden conflict")
+    }
+}
