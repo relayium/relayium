@@ -1955,6 +1955,12 @@ func validateActivationFunnelSchema(db *sql.DB) error {
 		}
 		columns = append(columns, c)
 	}
+	// A driver failure mid-iteration ends rows.Next early and surfaces only
+	// here; without this check it would be misreported as a column mismatch.
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("activation funnel schema: %w", err)
+	}
 	if err := rows.Close(); err != nil {
 		return fmt.Errorf("activation funnel schema: %w", err)
 	}
