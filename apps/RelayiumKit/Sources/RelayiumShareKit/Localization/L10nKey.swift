@@ -2406,6 +2406,21 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case sendErrorAlreadyBound = "send.errorAlreadyBound"
     case sendErrorObjectUnavailable = "send.errorObjectUnavailable"
     case sendErrorQueueFull = "send.errorQueueFull"
+    /// Whether the UPLOAD finished could not be confirmed. No task was ever
+    /// requested, and nothing will be uploaded again on its own.
+    case sendErrorUploadUnconfirmed = "send.errorUploadUnconfirmed"
+    /// Terminal dispositions: nothing re-uploads these; a new send is the
+    /// user's own decision.
+    case sendErrorUploadNotCompleted = "send.errorUploadNotCompleted"
+    case sendErrorUploadNoLongerStored = "send.errorUploadNoLongerStored"
+    case sendErrorUploadOlderVersion = "send.errorUploadOlderVersion"
+    /// A pre-v2 delivery whose create may have been sent: it may still arrive.
+    case sendErrorUploadOlderVersionMayArrive = "send.errorUploadOlderVersionMayArrive"
+    /// A recorded state this build cannot interpret. Never read as a known one.
+    case sendErrorUploadUnrecognizedState = "send.errorUploadUnrecognizedState"
+    /// The same, where a create may have been sent: it may still arrive.
+    case sendErrorUploadUnrecognizedMayArrive = "send.errorUploadUnrecognizedMayArrive"
+    case sendErrorOwnershipConflict = "send.errorOwnershipConflict"
 
     // Refusals of one user action, decided before a byte moves.
     case sendRefusalNoSelection = "send.refusalNoSelection"

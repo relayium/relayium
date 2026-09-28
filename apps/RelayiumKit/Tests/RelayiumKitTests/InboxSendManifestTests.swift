@@ -43,7 +43,7 @@ final class InboxSendManifestTests: XCTestCase {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("v2-sender-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
+        store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads")).protectedDeviceStore()
         keys = InMemoryStoredLinkKeyStore()
         sender = FakeInboxSenderTransport()
         transport = StubTransport()

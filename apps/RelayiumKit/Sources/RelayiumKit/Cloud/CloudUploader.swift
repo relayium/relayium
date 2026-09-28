@@ -414,6 +414,317 @@ public final class CloudUploader {
     }
 }
 
+// MARK: - Device Inbox: finalize-recoverable upload
+
+/// What the caller's durable record proves about a recorded upload session.
+public enum DeliverySessionProvenance: Equatable, Sendable {
+    /// Opened by this protected sender and persisted with its `uploading`
+    /// phase before any byte moved. No finalize of it has ever been sent: every
+    /// finalize is preceded by a durable `finalizing` phase. Only this state
+    /// may ever re-initialize after a 404.
+    case trustedUploading
+    /// A finalize of this session may have been sent.
+    case finalizing
+    /// A session this sender did not open under its own phase record (a plan
+    /// written by an earlier build). Whether a finalize was ever sent is
+    /// unknown, so it is treated as possibly finalized for its whole life.
+    case unproven
+}
+
+/// A recorded session handed to `resumeRecoverable`.
+public struct DeliverySession: Equatable, Sendable {
+    public let uploadId: String
+    public let chunkSize: Int
+    public let provenance: DeliverySessionProvenance
+
+    public init(uploadId: String, chunkSize: Int, provenance: DeliverySessionProvenance) {
+        self.uploadId = uploadId
+        self.chunkSize = chunkSize
+        self.provenance = provenance
+    }
+}
+
+/// The object a recoverable upload ended with.
+public struct RecoveredUpload: Equatable, Sendable {
+    /// Checked through `StoredObjectID.checked`.
+    public let id: String
+    public let expiresAt: Int64
+    /// The session this object was finalized from. The caller records the id
+    /// only against exactly this session.
+    public let uploadId: String
+    /// Central answered from its record of an EARLIER finalize: nothing was
+    /// completed or counted by this attempt.
+    public let recovered: Bool
+}
+
+/// Why a recoverable upload stopped without an object.
+public enum DeliveryUploadError: Error, Equatable, Sendable {
+    /// Central may or may not hold an object for this session. Nothing may
+    /// re-initialize it; the caller keeps every recovery input.
+    case unconfirmed(DeliveryUnconfirmedReason)
+    /// Central's durable record says the upload produced no usable object.
+    case notCompleted(FinalizeOutcome)
+    /// The caller's durable finalizing phase could not be written, so no
+    /// finalize was sent.
+    case finalizeStateNotRecorded
+    /// The recorded session and central disagree about its bytes.
+    case inconsistentSession
+}
+
+public enum DeliveryUnconfirmedReason: Equatable, Sendable {
+    /// Every allowed attempt ended without a readable answer.
+    case ambiguous
+    /// Central kept answering `running` for longer than the budget.
+    case stillRunning
+    /// 404 after a finalize of this session may have been sent.
+    case notFound
+    /// A 409 that carries no recovery answer (a server without recovery).
+    case unrecognizedConflict
+    /// A refusal of a later request, which says nothing about an earlier one.
+    case refusedAfterSend
+}
+
+/// Bounds for the recoverable finalize. Aligned with the CLI's accepted
+/// `inboxsend.Session.finalize`.
+///
+/// Every bound is a COUNT or a SUM OF WAITS this code chose itself, never an
+/// elapsed wall-clock reading: a clock moved backwards (or a suspended device)
+/// cannot stretch the loop, and the total time spent waiting is at most
+/// `ambiguousAttempts × backoffMax + runningBudget` whatever the clock does.
+public struct FinalizeRecoveryPolicy: Sendable {
+    public var ambiguousAttempts = 3
+    /// Upper bound on the sum of `running` waits.
+    public var runningBudget: TimeInterval = 60
+    /// Upper bound on the number of `running` answers polled.
+    public var runningPolls = 12
+    public var runningPollDefault: TimeInterval = 5
+    public var runningPollMin: TimeInterval = 1
+    public var runningPollMax: TimeInterval = 10
+    public var backoffStep: TimeInterval = 0.5
+    public var backoffMax: TimeInterval = 2
+    /// Injectable for tests; must honour cancellation. Every value passed is
+    /// already clamped to at most `max(runningPollMax, backoffMax)`.
+    public var sleep: @Sendable (TimeInterval) async throws -> Void = { seconds in
+        try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+    }
+
+    public init() {}
+
+    func runningWait(_ hint: Int?) -> TimeInterval {
+        guard let hint else { return min(max(runningPollDefault, runningPollMin), runningPollMax) }
+        return min(max(TimeInterval(hint), runningPollMin), runningPollMax)
+    }
+
+    func backoff(_ attempt: Int) -> TimeInterval {
+        min(max(0, backoffStep * Double(attempt)), backoffMax)
+    }
+}
+
+extension CloudUploader {
+    /// Continue a Device Inbox delivery's upload so that a lost finalize answer
+    /// can never turn into a second object.
+    ///
+    /// Separate from `resume` on purpose: `resume` keeps the share path's
+    /// existing behaviour — including its 404-means-reaped re-init, which can
+    /// duplicate a share object after a lost finalize answer (a known residual,
+    /// B30, not a behaviour this function relies on). Here the caller's durable
+    /// record decides:
+    ///
+    ///  * `onUploadSession` persists a new session (with its trusted phase)
+    ///    before any byte moves;
+    ///  * `onFinalizing` persists "a finalize may have been sent" — a
+    ///    compare-and-set against the caller's durable record — immediately
+    ///    before EVERY finalize request: the first one, each retry, each
+    ///    `running` poll and a recovery probe after a 404, because an opted-in
+    ///    finalize of an open session is a real finalize. If it throws (the job
+    ///    was discarded, retired, changed or cannot be written), that request
+    ///    and every later one is not sent;
+    ///  * a session is re-initialized only when it is `trustedUploading` and
+    ///    central says it no longer exists. Every other doubt ends in
+    ///    `DeliveryUploadError.unconfirmed`, never in a second upload.
+    ///
+    /// Device Inbox only: `purpose` must be `.deviceTask` with a sealed manifest.
+    public func resumeRecoverable(sources: [PlaintextSource], key: [UInt8],
+                                  session: DeliverySession?, purpose: UploadPurpose,
+                                  manifest: UploadManifest, ttl: Int, token: String,
+                                  policy: FinalizeRecoveryPolicy = FinalizeRecoveryPolicy(),
+                                  onUploadSession: (String, Int) throws -> Void,
+                                  onFinalizing: (String) throws -> Void,
+                                  onProgress: @escaping (_ sent: Int, _ total: Int) -> Void)
+        async throws -> RecoveredUpload {
+        guard purpose == .deviceTask, case .sealed = manifest,
+              uploadManifestMatches(purpose: purpose, manifest: manifest) else {
+            throw StoredWireError.invalidManifest
+        }
+        let header = try Self.manifestHeader(key: key, sources: sources, manifest: manifest)
+        let total = try Self.checkedCipherSize(sources.map(\.size))
+
+        func finalize(_ id: String, sent: Bool) async throws -> RecoveredUpload {
+            try await finalizeRecovering(id, sent: sent, policy: policy, token: token,
+                                         beforeEachRequest: {
+                do { try onFinalizing(id) } catch {
+                    throw DeliveryUploadError.finalizeStateNotRecorded
+                }
+            })
+        }
+
+        if let recorded = session {
+            let id = try StoredObjectID.checked(recorded.uploadId)
+            guard validUploadChunkSize(recorded.chunkSize) else { throw CloudError.decoding }
+            var offset: Int?
+            do {
+                try Task.checkCancellation()
+                offset = try await transport.uploadOffset(uploadId: id, token: token)
+            } catch CloudError.notFound {
+                offset = nil
+            }
+            try Task.checkCancellation()
+            if let r = offset, r < 0 || r > total { throw DeliveryUploadError.inconsistentSession }
+
+            switch (recorded.provenance, offset) {
+            case (.trustedUploading, let r?):
+                if r < total {
+                    let enc = try ChunkEncryptor(key: key, sources: sources, resumingAt: r)
+                    try await pump(enc: enc, uploadId: id, chunkSize: recorded.chunkSize,
+                                   from: r, total: total, token: token, onProgress: onProgress)
+                } else {
+                    onProgress(total, total)
+                }
+                return try await finalize(id, sent: false)
+            case (.trustedUploading, nil):
+                break                                // reaped before any finalize: re-init below
+            case (.finalizing, let r?):
+                // Every byte was acknowledged before the phase was written, and
+                // an earlier finalize may still be in flight: never PATCH.
+                guard r == total else { throw DeliveryUploadError.inconsistentSession }
+                onProgress(total, total)
+                return try await finalize(id, sent: true)
+            case (.finalizing, nil):
+                return try await finalize(id, sent: true)
+            case (.unproven, let r?):
+                // Consistent bytes may continue, but the session stays unproven:
+                // an earlier build's finalize may still be in flight, so any
+                // later 404 is never a reason to re-initialize.
+                if r < total {
+                    let enc = try ChunkEncryptor(key: key, sources: sources, resumingAt: r)
+                    try await pump(enc: enc, uploadId: id, chunkSize: recorded.chunkSize,
+                                   from: r, total: total, token: token, onProgress: onProgress)
+                } else {
+                    onProgress(total, total)
+                }
+                return try await finalize(id, sent: true)
+            case (.unproven, nil):
+                return try await finalize(id, sent: true)
+            }
+        }
+
+        // A first session, or a trusted one central reaped before any finalize.
+        // Same key and same manifest: the replacement ciphertext is
+        // byte-identical, so no nonce ever seals different plaintext. (A reaped
+        // session's committed bytes were already metered as monthly traffic;
+        // sending them again meters them again. No second object or daily
+        // debit can result, because the reaped session never finalized.)
+        try Task.checkCancellation()
+        let (issuedId, chunkSize) = try await transport.initUpload(
+            header: header, purpose: purpose, burnAfterRead: false,
+            ttl: ttl, size: total, token: token)
+        guard validUploadChunkSize(chunkSize) else { throw CloudError.decoding }
+        let id = try StoredObjectID.checked(issuedId)
+        try onUploadSession(id, chunkSize)
+        if total > 0 {
+            let enc = try ChunkEncryptor(key: key, sources: sources, resumingAt: 0)
+            try await pump(enc: enc, uploadId: id, chunkSize: chunkSize,
+                           from: 0, total: total, token: token, onProgress: onProgress)
+        } else {
+            onProgress(0, 0)
+        }
+        return try await finalize(id, sent: false)
+    }
+
+    /// The bounded, opted-in finalize. `sent` is true when a finalize of this
+    /// session may already have been sent (by this or an earlier attempt), which
+    /// makes every refusal an answer about THIS request only.
+    private func finalizeRecovering(_ uploadId: String, sent initiallySent: Bool,
+                                    policy: FinalizeRecoveryPolicy, token: String,
+                                    beforeEachRequest: () throws -> Void) async throws -> RecoveredUpload {
+        var sent = initiallySent
+        var ambiguous = 0
+        var runningPolls = 0
+        var runningWaited: TimeInterval = 0
+        while true {
+            try Task.checkCancellation()
+            // The durable phase, re-asserted against the record on disk before
+            // this very request: a job discarded or retired while this loop
+            // slept can never be finalized by it.
+            try beforeEachRequest()
+            try Task.checkCancellation()
+            let answer: FinalizeAnswer
+            do {
+                answer = try await transport.finalizeUploadRecovering(uploadId: uploadId, token: token)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // A cancelled URLSession task surfaces as a network error; it
+                // must end the attempt, not spend a retry.
+                try Task.checkCancellation()
+                let cloud = error as? CloudError
+                switch cloud {
+                case .notFound?:
+                    // With the phase written, a 404 cannot prove anything: the
+                    // record may have been collected after an object existed.
+                    throw DeliveryUploadError.unconfirmed(.notFound)
+                case .unauthorized?, .quota?, .dailyQuota?, .monthlyTraffic?, .rateLimited?:
+                    if sent { throw DeliveryUploadError.unconfirmed(.refusedAfterSend) }
+                    throw error
+                case .server(let status)? where status >= 400 && status < 500:
+                    if sent { throw DeliveryUploadError.unconfirmed(.refusedAfterSend) }
+                    throw error
+                default:
+                    // Transport failure, 5xx, unreadable answer: the request may
+                    // have committed.
+                    sent = true
+                    ambiguous += 1
+                    guard ambiguous < policy.ambiguousAttempts else {
+                        throw DeliveryUploadError.unconfirmed(.ambiguous)
+                    }
+                    try await policy.sleep(policy.backoff(ambiguous))
+                    continue
+                }
+            }
+            switch answer {
+            case .completed(let result, let recovered):
+                guard result.expiresAt > 0,
+                      let id = try? StoredObjectID.checked(result.id) else {
+                    // A 2xx this build refuses to act on: an object may exist.
+                    sent = true
+                    ambiguous += 1
+                    guard ambiguous < policy.ambiguousAttempts else {
+                        throw DeliveryUploadError.unconfirmed(.ambiguous)
+                    }
+                    try await policy.sleep(policy.backoff(ambiguous))
+                    continue
+                }
+                return RecoveredUpload(id: id, expiresAt: result.expiresAt,
+                                       uploadId: uploadId, recovered: recovered)
+            case .notCompleted(let outcome):
+                throw DeliveryUploadError.notCompleted(outcome)
+            case .running(let hint):
+                sent = true
+                runningPolls += 1
+                let wait = policy.runningWait(hint)
+                guard runningPolls < policy.runningPolls,
+                      runningWaited + wait <= policy.runningBudget else {
+                    throw DeliveryUploadError.unconfirmed(.stillRunning)
+                }
+                runningWaited += wait
+                try await policy.sleep(wait)
+            case .unconfirmedConflict:
+                throw DeliveryUploadError.unconfirmed(.unrecognizedConflict)
+            }
+        }
+    }
+}
+
 /// Above this the single-shot path's ~2x peak is worse than reporting the
 /// error: a failed upload beats an app the OS kills mid-transfer.
 public let FALLBACK_MAX_CIPHER_BYTES = 64 << 20

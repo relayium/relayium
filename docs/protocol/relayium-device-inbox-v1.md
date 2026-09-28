@@ -864,6 +864,24 @@ A resumable session persists its purpose, because `finalize` may run on a
 different instance and must not re-derive an authorization-relevant decision from
 a query string it can no longer see.
 
+### A lost finalize answer (sender obligation)
+
+Central commits a finalize — the object and its daily-quota debit — before it
+answers, so a sender that loses the answer and uploads again creates a second
+object and a second debit. A sender MUST therefore treat an upload session
+whose finalize may have been sent as possibly finalized for the rest of its
+life: it records that durably BEFORE the request, sends every Device Inbox
+finalize with `{"recoverFinalized":true}` (a pure read once the session is
+terminal, §27), and never opens a new session for it. `404`, a plain-text
+`409` (a server without recovery), `running` past a bound and unreadable
+answers leave the outcome unknown; `failed`, `expired` and `removed` are
+terminal. Neither ever becomes a new upload of the same job — a new send is a
+new job the user starts. The CLI (`internal/inboxsend`, phase `finalizing`) and
+the macOS/iOS sender (`CloudUploader.resumeRecoverable`, whose per-session phase
+lives in the protected `DeviceInboxSends` root that earlier app builds never
+enumerate) both follow this; a session the native sender did not open itself
+under that phase is never re-initialized after a `404`.
+
 ## 26. Binding
 
 `POST /api/devices/{id}/inbox/tasks` accepts either kind of object. For a

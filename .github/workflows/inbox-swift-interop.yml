@@ -104,7 +104,7 @@ jobs:
           RELAYIUM_SWIFT_INTEROP: '1'
         run: |
           set -o pipefail
-          swift test --filter 'RelayiumKitTests.InboxCLISenderLiveInteropTests' --filter 'RelayiumKitTests.InboxSealedBoxInteropTests' 2>&1 | tee "$RUNNER_TEMP/swift-interop.log"
+          swift test --filter 'RelayiumKitTests.InboxCLISenderLiveInteropTests' --filter 'RelayiumKitTests.InboxSealedBoxInteropTests' --filter 'RelayiumKitTests.InboxFinalizeRecoveryLiveTests' 2>&1 | tee "$RUNNER_TEMP/swift-interop.log"
       - name: Named-execution proof
         run: |
           node scripts/ci/assert-swift-named-execution.mjs "$RUNNER_TEMP/swift-interop.log" \
@@ -116,4 +116,22 @@ jobs:
             InboxSealedBoxInteropTests/testTheGoSenderSealsAKeyThisReceiverOpensAndEveryNearMissFails \
             InboxSealedBoxInteropTests/testTheGoPhaseFailsOnAKeyCentralWouldRefuse \
             InboxSealedBoxInteropTests/testTheSwiftSenderSealsAKeyTheGoReceiverOpens \
-            InboxSealedBoxInteropTests/testTheGoOpenPhaseFailsOnATamperedBoxAndOnTheWrongTarget
+            InboxSealedBoxInteropTests/testTheGoOpenPhaseFailsOnATamperedBoxAndOnTheWrongTarget \
+            InboxFinalizeRecoveryLiveTests/testLiveALostFinalizeAnswerIsRecoveredWithoutASecondObject \
+            InboxFinalizeRecoveryLiveTests/testLiveEveryAnswerLostEndsUnknownAndRetryRecoversOnce \
+            InboxFinalizeRecoveryLiveTests/testLiveProcessKilledAfterCentralCommittedRecoversOnce \
+            InboxFinalizeRecoveryLiveTests/testLivePreRecoveryServerStaysUnknownThroughRecordPurgeAndNeverReuploads \
+            InboxFinalizeRecoveryLiveTests/testLiveAnExpiredObjectIsTerminalAndNothingIsSentAgain \
+            InboxFinalizeRecoveryLiveTests/testLiveARemovedObjectIsTerminal \
+            InboxFinalizeRecoveryLiveTests/testLiveAFinalizeThatNeverArrivedThenReapedStaysUnknownAndIsNeverReuploaded \
+            InboxFinalizeRecoveryLiveTests/testLiveAnUnresolvedReapedSessionIsTerminalFailedAndNotReuploaded \
+            InboxFinalizeRecoveryLiveTests/testLiveCancelledWhileCentralHoldsTheCommittedAnswerRecoversOnce \
+            InboxFinalizeRecoveryLiveTests/testLivePhaseAndObjectRecordWriteFailuresNeverCauseASecondUpload \
+            InboxFinalizeRecoveryLiveTests/testLiveAForeignAccountsBearerUploadsNothingOnEitherAccount \
+            InboxFinalizeRecoveryLiveTests/testLiveAnEarlierBuildsLostFinalizeIsAdoptedAndRecoveredNotReuploaded \
+            InboxFinalizeRecoveryLiveTests/testLiveAnEarlierBuildsSessionWhoseRecordIsGoneStaysUnknownNeverReuploaded \
+            InboxFinalizeRecoveryLiveTests/testLiveAnEarlierFinalizeCommittingDuringAnUnprovenContinuationIsRecoveredNeverReinit \
+            InboxFinalizeRecoveryLiveTests/testLiveAnEarlierFinalizeWinningTheRaceWithTheSendersFinalizeIsRecovered \
+            InboxFinalizeRecoveryLiveTests/testLiveMixedAndAllEmptyManifestsAreUploadedAndCountedOnce \
+            InboxFinalizeRecoveryLiveTests/testLiveTwoConcurrentDeliveriesEachUploadOnceWhenOneAnswerIsLost \
+            InboxFinalizeRecoveryLiveTests/testLiveTheShareUploadStillSendsAPlainFinalize

@@ -24,7 +24,9 @@ import RelayiumKit
 ///    described it is released. The object itself is invisible — no link, no
 ///    list row, no control — and nothing is issued for it: the server refuses
 ///    the share-delete route for task-purpose objects, and its collector
-///    reclaims an unbound one about an hour after the upload (protocol §27). A
+///    reclaims an unbound one — at its expiry while its finalize record still
+///    names it (G34-N5, so a lost finalize answer stays recoverable), otherwise
+///    after the bind grace (protocol §27). A
 ///    send that never uploaded an object releases nothing, because the staged
 ///    copy may be the last one Relayium holds. See `abandon`.
 ///  * an AMBIGUOUS outcome — the request never arrived, or its answer was lost
@@ -56,13 +58,24 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     private let keys: StoredLinkKeyStore
     private let uploader: CloudUploader
     private let sender: InboxSenderTransport
+    /// Bounds of the recoverable finalize; tests shorten the waits.
+    let finalizePolicy: FinalizeRecoveryPolicy
 
-    public init(store: PendingUploadStore, keys: StoredLinkKeyStore, uploader: CloudUploader,
+    /// `store` must be the protected Device Inbox store
+    /// (`PendingUploadSupport.deviceStore`); `deliver` refuses any other.
+    public convenience init(store: PendingUploadStore, keys: StoredLinkKeyStore, uploader: CloudUploader,
                 sender: InboxSenderTransport) {
+        self.init(store: store, keys: keys, uploader: uploader, sender: sender,
+                  finalizePolicy: FinalizeRecoveryPolicy())
+    }
+
+    init(store: PendingUploadStore, keys: StoredLinkKeyStore, uploader: CloudUploader,
+         sender: InboxSenderTransport, finalizePolicy: FinalizeRecoveryPolicy) {
         self.store = store
         self.keys = keys
         self.uploader = uploader
         self.sender = sender
+        self.finalizePolicy = finalizePolicy
     }
 
     // MARK: - delivering
@@ -73,7 +86,24 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                         onProgress: (@Sendable (_ sent: Int, _ total: Int) -> Void)? = nil)
         async throws -> InboxSendResult {
         try Task.checkCancellation()
-        guard plan.effectivePurpose == .deviceTask, let target = plan.target else {
+        guard plan.effectivePurpose == .deviceTask, plan.target != nil else {
+            throw InboxSendFailure.notADelivery
+        }
+        // Ownership before ANY request or write, on every branch. Only the
+        // protected root drives deliveries, and only a job it owns
+        // exclusively: an id that also exists in the shared root is a conflict
+        // neither copy is executed from.
+        guard store.isProtectedDeviceStore else { throw InboxSendFailure.notADelivery }
+        switch store.ownership(of: plan.jobId) {
+        case .owned: break
+        case .conflict: throw InboxSendFailure.ownershipConflict
+        case .missing: throw InboxSendFailure.notADelivery
+        }
+        // Decisions about the upload are made from the plan on DISK, never a
+        // snapshot the caller has been holding: a finalizing phase written by
+        // an attempt that was cancelled a moment ago must be honoured.
+        guard let plan = store.ownedDevicePlan(jobId: plan.jobId),
+              let target = plan.target else {
             throw InboxSendFailure.notADelivery
         }
 
@@ -81,8 +111,56 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         // and died during its own tidy-up. Creating again here is the one thing
         // that must never happen, so this branch reads the delivery rather than
         // making a second one.
+        // A recorded terminal disposition stops EVERY branch — before the
+        // recorded-task tidy-up, before any create, whether or not an object id
+        // is also recorded — with no request of any kind. The one exception is
+        // the disposition this build itself writes for a pre-v2 delivery with a
+        // recorded object (`olderVersion` + object): it keeps its read-only
+        // convergence below, and once that convergence has recorded the task an
+        // earlier build's lost create made (a crash before the tidy-up leaves
+        // `olderVersion` + task), the recorded-task branch finishes it. No other
+        // terminal can gain a task (`setDeviceTask` refuses). A value this build does not recognise is
+        // never read as a known one, and never as permission to continue.
+        if case .terminal(let terminal) = plan.deviceSessionState,
+           !(terminal == .olderVersion && !plan.speaksInboxV2 && plan.finalizedStoredId != nil) {
+            throw InboxSendFailure.uploadUnavailable(InboxUploadUnavailable(terminal, plan: plan))
+        }
+
         if let taskID = plan.deviceTaskId {
             return try await finishRecordedDelivery(plan, target: target, taskID: taskID)
+        }
+
+        // A pre-v2 delivery whose object an earlier build recorded may ALSO
+        // have sent its create and lost the answer, so a delivery may exist.
+        // It is resolved READ-ONLY, every attempt: a positive match on this
+        // job's idempotency key and stored object is recorded and finished; no
+        // match leaves it unknown. Never a create, a re-upload or a key
+        // rotation: the ciphertext is framed for a protocol this build does not
+        // continue.
+        if !plan.speaksInboxV2, plan.finalizedStoredId != nil {
+            return try await convergeLegacyFinalized(plan, target: target)
+        }
+
+        // An upload session this build cannot explain stops here, before the
+        // content key is read and before any request. (Terminal records were
+        // stopped above; a recorded object no longer needs its session.)
+        if plan.finalizedStoredId == nil, case .unknown = plan.deviceSessionState {
+            throw InboxSendFailure.uploadOutcomeUnknown
+        }
+
+        // A pre-v2 delivery with a session but no recorded object has an
+        // unknown upload outcome under framing this build cannot continue. It
+        // is NOT restarted: that would rotate the key and upload a second object
+        // while the first may be counted. No create can have been sent (an
+        // earlier build records the object before any create), so no delivery
+        // can arrive. It stops, retained; a new send is the user's own.
+        if !plan.speaksInboxV2, plan.uploadId != nil {
+            do {
+                try store.recordTerminal(.olderVersion, uploadId: plan.uploadId, for: plan)
+            } catch {
+                throw InboxSendFailure.recoveryStateWriteFailed
+            }
+            throw InboxSendFailure.uploadUnavailable(.olderVersion)
         }
 
         // A delivery staged before this build may already have fed a server
@@ -266,6 +344,34 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         throw InboxSendFailure.unknownOutcome
     }
 
+    /// A pre-v2 delivery that reached a finalized object: look for the task an
+    /// earlier build may have created, and change nothing on central.
+    private func convergeLegacyFinalized(_ plan: PendingUploadPlan,
+                                         target: PendingUploadTarget) async throws
+        -> InboxSendResult {
+        try Task.checkCancellation()
+        if let existing = try? await sender.tasks(targetDeviceID: target.deviceId,
+                                                  limit: Self.convergenceLookupLimit),
+           let found = existing.first(where: {
+               $0.idempotencyKey == target.createIdempotencyKey
+                   && $0.storedFileID == plan.finalizedStoredId
+           }) {
+            try Task.checkCancellation()
+            return try await record(found, created: false, resealed: plan.targetKeyWasResealed,
+                                    plan: plan, target: target)
+        }
+        try Task.checkCancellation()
+        // Absence in a bounded recent-task page is not proof: the delivery may
+        // exist outside it. Recorded as terminal for this build, presented as
+        // "may still arrive", and looked up again on every Retry.
+        do {
+            try store.recordTerminal(.olderVersion, uploadId: plan.uploadId, for: plan)
+        } catch {
+            throw InboxSendFailure.recoveryStateWriteFailed
+        }
+        throw InboxSendFailure.uploadUnavailable(.olderVersionDeliveryUnknown)
+    }
+
     /// A previous attempt created the task and died before finishing cleanup.
     private func finishRecordedDelivery(_ plan: PendingUploadPlan, target: PendingUploadTarget,
                                         taskID: String) async throws
@@ -332,6 +438,10 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     /// no stored-file delete is issued for it.
     public func discard(_ plan: PendingUploadPlan) async throws {
         guard plan.effectivePurpose == .deviceTask else { throw InboxSendFailure.notADelivery }
+        // Ownership BEFORE any request: a job whose id the shared root also
+        // holds is a conflict nobody acts on — no cancel, no key removal, no
+        // tombstone, no deletion — even when a stale in-memory plan asks.
+        try refuseUnlessDiscardable(plan.jobId)
         if let taskID = plan.deviceTaskId, let target = plan.target {
             // Not `try?`. A cancel central refuses leaves a live delivery, and
             // deleting the local record of it would leave the user with a file
@@ -479,36 +589,78 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             try await abandon(plan)
             throw InboxSendFailure.unsendableContent
         }
+        // What the durable record proves about the recorded session decides
+        // everything the uploader may do with it (see `resumeRecoverable`).
+        let recorded: DeliverySession?
+        switch plan.deviceSessionState {
+        case .noSession:
+            recorded = nil
+        case .uploading(let id), .finalizing(let id), .unproven(let id):
+            guard let chunkSize = plan.uploadChunkSize else {
+                throw InboxSendFailure.uploadOutcomeUnknown
+            }
+            let provenance: DeliverySessionProvenance
+            switch plan.deviceSessionState {
+            case .uploading: provenance = .trustedUploading
+            case .finalizing: provenance = .finalizing
+            default: provenance = .unproven
+            }
+            recorded = DeliverySession(uploadId: id, chunkSize: chunkSize, provenance: provenance)
+        case .unknown, .terminal:
+            // Unreachable: `deliver` stops these before the key is read.
+            throw InboxSendFailure.uploadOutcomeUnknown
+        }
+        let outcome: RecoveredUpload
         do {
             let sources = try store.sources(for: plan)
-            let outcome = try await uploader.resume(
-                sources: sources, key: key, uploadId: plan.uploadId,
-                uploadChunkSize: plan.uploadChunkSize,
+            outcome = try await uploader.resumeRecoverable(
+                sources: sources, key: key, session: recorded,
                 // From the durable plan, never inferred: this field decides the
                 // object's authorization model, and a `share` here would publish
                 // the user's delivery as a public link.
                 purpose: plan.effectivePurpose,
                 // Likewise from the plan: the dedicated Device Inbox v2 document,
                 // never the shared Stored-Wire manifest. A reaped session that
-                // re-inits below rebuilds this same value, so the replacement
-                // object carries the same manifest the first one did.
+                // re-inits rebuilds this same value, so the replacement object
+                // carries the same manifest (and the same ciphertext).
                 manifest: manifest,
-                burnAfterRead: plan.burnAfterRead, ttl: plan.ttl, token: token,
+                ttl: plan.ttl, token: token, policy: finalizePolicy,
                 onUploadSession: { [store] id, chunkSize in
-                    // Persisted before bytes move, so a crash cannot orphan a
-                    // server session this device can no longer name.
+                    // Persisted, with its trusted phase, before bytes move.
                     try store.setUploadSession(id: id, chunkSize: chunkSize, for: plan)
                 },
+                onFinalizing: { [store] id in
+                    // Persisted before EVERY finalize request. If this throws,
+                    // no request is sent.
+                    try store.markFinalizing(uploadId: id, for: plan)
+                },
                 onProgress: { sent, total in onProgress?(sent, total) })
-            // The session callback has already written a newer plan than the one
-            // in hand; finalize against that.
-            let latest = store.deviceSendPlans(for: plan.accountId)
-                .first(where: { $0.jobId == plan.jobId }) ?? plan
-            return try store.markFinalized(latest, storedId: outcome.id)
         } catch {
             try Task.checkCancellation()
-            // An interrupted upload is resumable by construction: the plan, its
-            // session and its staged bytes all survive.
+            // A cancellation raised inside the upload (a cancelled sleep or
+            // request) is a cancellation, never an upload failure.
+            if error is CancellationError { throw error }
+            // Nothing below releases anything: the plan, its session, its phase
+            // and its staged bytes all survive every one of these.
+            switch error {
+            case DeliveryUploadError.finalizeStateNotRecorded:
+                throw InboxSendFailure.recoveryStateWriteFailed
+            case DeliveryUploadError.unconfirmed, DeliveryUploadError.inconsistentSession:
+                throw InboxSendFailure.uploadOutcomeUnknown
+            case DeliveryUploadError.notCompleted(let finalizeOutcome):
+                let terminal = PendingDeviceTerminal(finalizeOutcome)
+                let current = store.ownedDevicePlan(jobId: plan.jobId) ?? plan
+                do {
+                    try store.recordTerminal(terminal, uploadId: current.uploadId, for: current)
+                } catch {
+                    // Central's answer is durable on ITS side; the next attempt
+                    // reads the same answer and records it then.
+                    throw InboxSendFailure.recoveryStateWriteFailed
+                }
+                throw InboxSendFailure.uploadUnavailable(InboxUploadUnavailable(terminal, plan: current))
+            default:
+                break
+            }
             // Preserve typed refusals for presentation only. Recovery, ownership
             // and cleanup are identical to an interrupted network upload.
             switch error as? CloudError {
@@ -519,6 +671,17 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             case .unauthorized: throw InboxSendFailure.notAuthorized
             default: throw InboxSendFailure.uploadFailed
             }
+        }
+        // Deliberately OUTSIDE the upload catch. Central has an object; failing
+        // to record it locally is not an interrupted upload, and must never be
+        // reported as one — a Retry of `uploadFailed` is exactly the path that
+        // used to upload everything a second time. The finalizing phase stays
+        // on disk, so the next attempt recovers this same object.
+        do {
+            let latest = store.ownedDevicePlan(jobId: plan.jobId) ?? plan
+            return try store.markFinalized(latest, storedId: outcome.id, uploadId: outcome.uploadId)
+        } catch {
+            throw InboxSendFailure.recoveryStateWriteFailed
         }
     }
 
@@ -583,14 +746,42 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     /// Nothing is issued for the uploaded object, bound or not. `DELETE
     /// /api/files/{id}` is the account's share-delete route and the server
     /// refuses it (404) for task-purpose objects, so an unbound object is
-    /// reclaimed by the server's collector, about an hour after the upload
+    /// reclaimed by the server's collector: at its expiry while its finalize
+    /// record still names it (G34-N5), otherwise after the bind grace
     /// (protocol §27).
     private func release(_ plan: PendingUploadPlan) async throws {
-        try? await keys.remove(id: plan.jobId)
+        // Re-checked here, after whatever suspension preceded this call (a
+        // cancel, a create): a collision that appeared meanwhile stops the
+        // release before it touches the key, the plan or the bytes.
+        try refuseUnlessDiscardable(plan.jobId)
         // The tombstone goes down before the bytes, so a removal that fails
         // cannot turn this job back into outstanding work on the next launch.
+        // Its write is itself refused for a conflicting job.
         let retired = (try? store.markRetired(plan)) ?? plan
-        store.purge(retired)
+        let purged = store.purge(retired)
+        // The content key LAST, and only once no directory anywhere still
+        // names this job: the key is filed by job id, so while either root
+        // holds the id it belongs to that copy too. A key left behind by a
+        // failed purge is harmless and is removed by the next release.
+        if store.ownership(of: plan.jobId) == .conflict || store.sharedRootHolds(jobId: plan.jobId) {
+            throw InboxSendFailure.ownershipConflict
+        }
+        if purged { try? await keys.remove(id: plan.jobId) }
+    }
+
+    /// Throw `ownershipConflict` unless this protected store is the only root
+    /// that could hold the job: it owns it, or the job is already gone from
+    /// both (an idempotent release of work already cleaned up).
+    private func refuseUnlessDiscardable(_ jobId: String) throws {
+        guard store.isProtectedDeviceStore else { throw InboxSendFailure.notADelivery }
+        switch store.ownership(of: jobId) {
+        case .owned:
+            return
+        case .conflict:
+            throw InboxSendFailure.ownershipConflict
+        case .missing:
+            if store.sharedRootHolds(jobId: jobId) { throw InboxSendFailure.ownershipConflict }
+        }
     }
 
     // MARK: - classification
@@ -708,4 +899,65 @@ public enum InboxSendFailure: Error, Equatable, Sendable {
     /// the ciphertext, not the staged bytes, not the content key, and not the
     /// idempotency key the next attempt needs to converge.
     case unknownOutcome
+    /// Whether the UPLOAD finished could not be confirmed. No task was ever
+    /// requested, so no delivery can arrive; nothing was released, and nothing
+    /// will upload these bytes again. Retry only asks central again.
+    case uploadOutcomeUnknown
+    /// Central's record says this upload produced no usable object, or this is
+    /// a pre-v2 delivery that already reached the server. Terminal: nothing
+    /// re-uploads it; the user may discard it and start a new send.
+    case uploadUnavailable(InboxUploadUnavailable)
+    /// The same job exists in the shared and the protected root. Neither copy
+    /// is executed and neither is deleted.
+    case ownershipConflict
+}
+
+/// Why an upload is terminally unusable.
+public enum InboxUploadUnavailable: Equatable, Sendable {
+    /// Central refused or never completed it; no object exists.
+    case notCompleted
+    /// The object was stored and has since expired.
+    case expired
+    /// The object was stored and has since been removed.
+    case removed
+    /// Started by a pre-v2 build and already on the server; no create was ever
+    /// sent, so nothing can arrive.
+    case olderVersion
+    /// Started by a pre-v2 build that recorded its object and may have sent the
+    /// create: a delivery may exist and may still arrive. Retry looks for it,
+    /// read-only; nothing is ever created or uploaded again.
+    case olderVersionDeliveryUnknown
+    /// A recorded disposition this build does not recognise, on a job with no
+    /// recorded object: no create can have been sent.
+    case unrecognized
+    /// A recorded disposition this build does not recognise, on a job that
+    /// also records an object or a task: a create may have been sent, so a
+    /// delivery may exist and may still arrive. Nothing is sent or released.
+    case unrecognizedMayArrive
+
+    /// The presentation of a recorded terminal disposition. `plan` matters for
+    /// `olderVersion`: a pre-v2 plan that recorded an object may have a
+    /// delivery, and must never be described as one that cannot arrive.
+    init(_ terminal: PendingDeviceTerminal, plan: PendingUploadPlan) {
+        switch terminal {
+        case .failed: self = .notCompleted
+        case .expired: self = .expired
+        case .removed: self = .removed
+        case .olderVersion:
+            self = plan.finalizedStoredId == nil ? .olderVersion : .olderVersionDeliveryUnknown
+        case .unrecognized:
+            self = plan.finalizedStoredId == nil && plan.deviceTaskId == nil
+                ? .unrecognized : .unrecognizedMayArrive
+        }
+    }
+}
+
+extension PendingDeviceTerminal {
+    init(_ outcome: FinalizeOutcome) {
+        switch outcome {
+        case .failed: self = .failed
+        case .expired: self = .expired
+        case .removed: self = .removed
+        }
+    }
 }

@@ -254,6 +254,18 @@ export const PATH_MATRIX = [
     + "runs it forced. Not inbox-swift-interop.yml — that lane never watches apps/**, or one "
     + "Swift edit would start two macOS runners — and none of the three heavy Apple/pairing "
     + "lanes, whose ordered `!apps/RelayiumKit/Tests/**` exclusions keep a test edit off them"],
+  ["server/internal/inboxlive/finalize_test.go",
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+      "windows.yml"],
+    "the Go half of the Device Inbox finalize-recovery acceptance: build-tagged like its sibling "
+    + "central_test.go, and under server/** like it, so the same lanes"],
+  ["apps/RelayiumKit/Tests/RelayiumKitTests/InboxFinalizeRecoveryLiveTests.swift",
+    ["swift-package.yml"],
+    "the Swift half of that acceptance: a package TEST file, so exactly the package lane, which "
+    + "runs it forced, as InboxCLISenderLiveInteropTests.swift above"],
+  ["scripts/ci/device-inbox-downgrade-probe.sh", [],
+    "the frozen-build downgrade probe: a mandatory LOCAL gate that builds the package twice, so "
+    + "no path-filtered lane starts on it; repo-hygiene (unfiltered) parses it on every push"],
   ["scripts/ci/assert-swift-named-execution.mjs", ["inbox-swift-interop.yml"],
     "the named-execution proof both Swift<->Go interop steps run. It starts the narrow lane that "
     + "exercises it on a real log; swift-package.yml's four-entry filter deliberately does not "

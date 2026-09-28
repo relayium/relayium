@@ -73,6 +73,75 @@ public protocol ResumableTransport {
                     onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome
     func uploadOffset(uploadId: String, token: String) async throws -> Int
     func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult
+    /// A finalize that carries `{"recoverFinalized":true}`, for the Device Inbox
+    /// sender only (`CloudUploader.resumeRecoverable`). Against a session that
+    /// is already terminal central answers from its durable finalize record
+    /// instead of refusing, so a lost answer can be recovered without a second
+    /// object. Against an OPEN session it is an ordinary finalize — which is why
+    /// the caller persists its finalizing phase before every call.
+    ///
+    /// A requirement with a default: every conformer that predates it inherits
+    /// an implementation that throws, so a test fake that forgot it fails
+    /// closed (the caller reports "could not confirm") rather than inventing an
+    /// object. `finalizeUpload` keeps its exact request for every share caller.
+    func finalizeUploadRecovering(uploadId: String, token: String) async throws -> FinalizeAnswer
+}
+
+extension ResumableTransport {
+    public func finalizeUploadRecovering(uploadId: String, token: String) async throws -> FinalizeAnswer {
+        throw CloudError.server(status: 0)
+    }
+}
+
+/// What central's terminal record says about an upload that did not produce a
+/// usable object. A closed set: anything else is not an answer.
+public enum FinalizeOutcome: String, Equatable, Sendable {
+    /// Central refused or never completed the upload; no object exists.
+    case failed
+    /// The object was stored and has since expired.
+    case expired
+    /// The object was stored and has since been removed.
+    case removed
+}
+
+/// One answer to an opted-in finalize.
+public enum FinalizeAnswer: Equatable {
+    /// 200: the object, freshly completed or (`recovered`) read back from the
+    /// session's durable record — nothing was completed or counted again.
+    case completed(UploadResult, recovered: Bool)
+    /// 409 with a closed outcome: authoritative about the upload itself.
+    case notCompleted(FinalizeOutcome)
+    /// 409 `running`: a finalize of this session is still in flight.
+    /// `retryAfter` is the server's hint in seconds, when it gave a readable one.
+    case running(retryAfter: Int?)
+    /// 409 that is not a recovery answer — a server without finalize recovery,
+    /// or an outcome this build does not know. Says nothing about the object.
+    case unconfirmedConflict
+}
+
+/// Parse one opted-in finalize response. Separate from the transport so the
+/// wire contract is testable without a server.
+func finalizeAnswer(status: Int, body: Data, retryAfter: String?) -> FinalizeAnswer? {
+    switch status {
+    case 200:
+        struct Body: Decodable { let id: String; let expiresAt: Int64; let recovered: Bool? }
+        guard let b = try? JSONDecoder().decode(Body.self, from: body) else { return nil }
+        return .completed(UploadResult(id: b.id, expiresAt: b.expiresAt), recovered: b.recovered ?? false)
+    case 409:
+        struct Body: Decodable { let error: String?; let outcome: String? }
+        guard let b = try? JSONDecoder().decode(Body.self, from: body),
+              b.error == "already_finalized", let raw = b.outcome else {
+            return .unconfirmedConflict
+        }
+        if raw == "running" {
+            let hint = retryAfter.flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            return .running(retryAfter: hint)
+        }
+        guard let outcome = FinalizeOutcome(rawValue: raw) else { return .unconfirmedConflict }
+        return .notCompleted(outcome)
+    default:
+        return nil
+    }
 }
 
 public struct HTTPResumableTransport: ResumableTransport {
@@ -167,6 +236,24 @@ public struct HTTPResumableTransport: ResumableTransport {
             throw CloudError.decoding
         }
         return r
+    }
+
+    public func finalizeUploadRecovering(uploadId: String, token: String) async throws -> FinalizeAnswer {
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/uploads/\(uploadId)/finalize"))
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Data(#"{"recoverFinalized":true}"#.utf8)
+        let (data, http) = try await send(req)
+        switch http.statusCode {
+        case 200, 409:
+            guard let answer = finalizeAnswer(status: http.statusCode, body: data,
+                                              retryAfter: http.value(forHTTPHeaderField: "Retry-After"))
+            else { throw CloudError.decoding }
+            return answer
+        default:
+            throw statusError(http, data)
+        }
     }
 
     private func statusError(_ http: HTTPURLResponse, _ data: Data) -> CloudError {

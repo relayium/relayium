@@ -212,4 +212,22 @@ jobs:
             InboxSealedBoxInteropTests/testTheGoSenderSealsAKeyThisReceiverOpensAndEveryNearMissFails \
             InboxSealedBoxInteropTests/testTheGoPhaseFailsOnAKeyCentralWouldRefuse \
             InboxSealedBoxInteropTests/testTheSwiftSenderSealsAKeyTheGoReceiverOpens \
-            InboxSealedBoxInteropTests/testTheGoOpenPhaseFailsOnATamperedBoxAndOnTheWrongTarget
+            InboxSealedBoxInteropTests/testTheGoOpenPhaseFailsOnATamperedBoxAndOnTheWrongTarget \
+            InboxFinalizeRecoveryLiveTests/testLiveALostFinalizeAnswerIsRecoveredWithoutASecondObject \
+            InboxFinalizeRecoveryLiveTests/testLiveEveryAnswerLostEndsUnknownAndRetryRecoversOnce \
+            InboxFinalizeRecoveryLiveTests/testLiveProcessKilledAfterCentralCommittedRecoversOnce \
+            InboxFinalizeRecoveryLiveTests/testLivePreRecoveryServerStaysUnknownThroughRecordPurgeAndNeverReuploads \
+            InboxFinalizeRecoveryLiveTests/testLiveAnExpiredObjectIsTerminalAndNothingIsSentAgain \
+            InboxFinalizeRecoveryLiveTests/testLiveARemovedObjectIsTerminal \
+            InboxFinalizeRecoveryLiveTests/testLiveAFinalizeThatNeverArrivedThenReapedStaysUnknownAndIsNeverReuploaded \
+            InboxFinalizeRecoveryLiveTests/testLiveAnUnresolvedReapedSessionIsTerminalFailedAndNotReuploaded \
+            InboxFinalizeRecoveryLiveTests/testLiveCancelledWhileCentralHoldsTheCommittedAnswerRecoversOnce \
+            InboxFinalizeRecoveryLiveTests/testLivePhaseAndObjectRecordWriteFailuresNeverCauseASecondUpload \
+            InboxFinalizeRecoveryLiveTests/testLiveAForeignAccountsBearerUploadsNothingOnEitherAccount \
+            InboxFinalizeRecoveryLiveTests/testLiveAnEarlierBuildsLostFinalizeIsAdoptedAndRecoveredNotReuploaded \
+            InboxFinalizeRecoveryLiveTests/testLiveAnEarlierBuildsSessionWhoseRecordIsGoneStaysUnknownNeverReuploaded \
+            InboxFinalizeRecoveryLiveTests/testLiveAnEarlierFinalizeCommittingDuringAnUnprovenContinuationIsRecoveredNeverReinit \
+            InboxFinalizeRecoveryLiveTests/testLiveAnEarlierFinalizeWinningTheRaceWithTheSendersFinalizeIsRecovered \
+            InboxFinalizeRecoveryLiveTests/testLiveMixedAndAllEmptyManifestsAreUploadedAndCountedOnce \
+            InboxFinalizeRecoveryLiveTests/testLiveTwoConcurrentDeliveriesEachUploadOnceWhenOneAnswerIsLost \
+            InboxFinalizeRecoveryLiveTests/testLiveTheShareUploadStillSendsAPlainFinalize

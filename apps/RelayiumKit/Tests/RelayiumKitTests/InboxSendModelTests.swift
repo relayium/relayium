@@ -43,7 +43,7 @@ final class InboxSendModelTests: XCTestCase {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("p3a-model-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
+        store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads")).protectedDeviceStore()
         keys = InMemoryStoredLinkKeyStore()
         drafts = SharedDraftStore(root: root.appendingPathComponent("SharedDrafts"))
         sender = FakeInboxSenderTransport()
@@ -104,9 +104,14 @@ final class InboxSendModelTests: XCTestCase {
         func wake() {}
     }
 
+    /// When set, the model is built from THIS support — the production shape,
+    /// a SHARED store whose protected sibling the model must derive.
+    private var supportOverride: PendingUploadSupport?
+
     private func makeModel(pendingKeys: StoredLinkKeyStore? = nil) -> InboxSendModel {
         InboxSendModel(
-            pending: PendingUploadSupport(store: store, keys: pendingKeys ?? keys, drafts: drafts),
+            pending: supportOverride
+                ?? PendingUploadSupport(store: store, keys: pendingKeys ?? keys, drafts: drafts),
             uploader: CloudUploader(transport: transport),
             makeSender: { [sender] _ in sender! },
             sleeper: NoSleep(),
@@ -1445,5 +1450,203 @@ final class InboxSendModelTests: XCTestCase {
                        "one account's send was announced under another's history")
         XCTAssertFalse(store.deviceSendPlans(for: "acct-1").isEmpty,
                        "leaving an account destroyed its durable plans")
+    }
+}
+
+// MARK: - the protected Device Inbox root
+
+extension InboxSendModelTests {
+    private var sharedRoot: URL { root.appendingPathComponent("PendingUploads") }
+    private var protectedRoot: URL { PendingUploadStore.protectedDeviceRoot(besides: sharedRoot) }
+
+    private func jobDirectories(_ url: URL) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []).sorted()
+    }
+
+    /// Put a delivery where a build up to 1.4.3 leaves one: in the SHARED root,
+    /// with none of the protected root's phase fields.
+    private func legacyLayoutDelivery(uploadId: String? = nil) throws -> String {
+        let staging = PendingUploadStore(root: root.appendingPathComponent("staging-src"))
+            .protectedDeviceStore()
+        var plan = try staging.prepare(files: try selection(), accountId: "acct-1", burnAfterRead: false,
+                                       ttl: UploadPurpose.deviceTaskTTLSeconds,
+                                       target: PendingUploadTarget(deviceId: deviceID, keyId: keyID,
+                                                                   keyGeneration: 4))
+        if let uploadId {
+            plan = try staging.setUploadSession(id: uploadId, chunkSize: 64 * 1024, for: plan)
+        }
+        try FileManager.default.createDirectory(at: sharedRoot, withIntermediateDirectories: true)
+        let destination = sharedRoot.appendingPathComponent(plan.jobId)
+        try FileManager.default.moveItem(at: staging.jobURL(for: plan.jobId), to: destination)
+        let planURL = destination.appendingPathComponent("plan.json")
+        var json = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: planURL))
+            as? [String: Any])
+        json.removeValue(forKey: "sessionPhase")
+        json.removeValue(forKey: "phaseUploadId")
+        try JSONSerialization.data(withJSONObject: json).write(to: planURL, options: .atomic)
+        return plan.jobId
+    }
+
+    /// Production wiring: the model is handed the SHARED store (what
+    /// `AppEnvironment.makePendingUploadSupport` builds) and must stage the
+    /// delivery in the protected sibling — never in the shared root, where an
+    /// earlier build could sweep or re-upload it.
+    func testASendStagesItsDeliveryInTheProtectedRootNeverTheSharedOne() async throws {
+        // The production factory's own derivation (its Keychain key store is
+        // unavailable under `swift test`, so the send below injects the
+        // in-memory one over the same SHARED store shape).
+        let production = AppEnvironment.makePendingUploadSupport(drafts: nil, root: sharedRoot)
+        XCTAssertFalse(production.store.isProtectedDeviceStore)
+        XCTAssertTrue(production.deviceStore.isProtectedDeviceStore)
+        XCTAssertEqual(production.deviceStore.jobURL(for: "J").deletingLastPathComponent().standardizedFileURL,
+                       protectedRoot.standardizedFileURL)
+        supportOverride = PendingUploadSupport(store: PendingUploadStore(root: sharedRoot), keys: keys)
+        let (model, _) = await signedIn()
+        model.selectTarget(deviceID)
+        sender.createOutcomes = []                       // every create ambiguous: the job stays
+
+        model.send(files: try selection(), sourceDraftId: nil, token: "bearer")
+        await waitUntil("the attempt to end") {
+            if case .stopped = model.items.first?.activity { return true }
+            return false
+        }
+
+        XCTAssertEqual(jobDirectories(sharedRoot).filter { (try? StoredObjectID.checked($0)) == $0 }, [],
+                       "a delivery was staged where an earlier build can see it")
+        let owned = PendingUploadStore(root: sharedRoot).protectedDeviceStore()
+        let plan = try XCTUnwrap(owned.deviceSendPlans(for: "acct-1").first)
+        XCTAssertEqual(plan.sessionPhase, "finalizing")
+        XCTAssertEqual(plan.phaseUploadId, plan.uploadId)
+        XCTAssertNil(PendingUploadStore(root: sharedRoot).plan(for: "acct-1"))
+    }
+
+    /// A shared root can never stage a delivery at all.
+    func testTheSharedRootRefusesToStageADelivery() throws {
+        XCTAssertThrowsError(try PendingUploadStore(root: sharedRoot).prepare(
+            files: try selection(), accountId: "acct-1", burnAfterRead: false,
+            ttl: UploadPurpose.deviceTaskTTLSeconds,
+            target: PendingUploadTarget(deviceId: deviceID, keyId: keyID, keyGeneration: 4))) {
+            XCTAssertEqual($0 as? PendingUploadError, .unusableSelection)
+        }
+        XCTAssertEqual(jobDirectories(sharedRoot), [])
+    }
+
+    /// A delivery an earlier build left behind moves — by rename, before it is
+    /// listed — and keeps its session as UNPROVEN.
+    func testAnEarlierBuildsDeliveryIsAdoptedByRenameBeforeItIsListed() async throws {
+        let jobId = try legacyLayoutDelivery(uploadId: "LEGACYSESSION001")
+        let stagedBefore = try FileManager.default.attributesOfItem(
+            atPath: sharedRoot.appendingPathComponent(jobId).appendingPathComponent("staged/0").path)[.systemFileNumber]
+        supportOverride = PendingUploadSupport(store: PendingUploadStore(root: sharedRoot), keys: keys)
+        let (model, _) = await signedIn()
+        model.refreshOutstanding()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sharedRoot.appendingPathComponent(jobId).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: protectedRoot.appendingPathComponent(jobId).path))
+        let stagedAfter = try FileManager.default.attributesOfItem(
+            atPath: protectedRoot.appendingPathComponent(jobId).appendingPathComponent("staged/0").path)[.systemFileNumber]
+        XCTAssertEqual(stagedAfter as? Int, stagedBefore as? Int, "the staged bytes were copied, not moved")
+        XCTAssertEqual(model.items.map(\.id), [jobId])
+        let plan = try XCTUnwrap(PendingUploadStore(root: sharedRoot).protectedDeviceStore()
+            .deviceSendPlans(for: "acct-1").first)
+        XCTAssertEqual(plan.deviceSessionState, .unproven("LEGACYSESSION001"))
+    }
+
+    /// Before adoption, a delivery an earlier build left in the shared root is
+    /// never offered to the stored-link recovery surface (whose Discard would
+    /// delete it), and the shared sweep keeps it.
+    func testTheShareRecoverySurfaceNeverSeesADeliveryInTheSharedRoot() throws {
+        let jobId = try legacyLayoutDelivery(uploadId: "LEGACYSESSION001")
+        let shared = PendingUploadStore(root: sharedRoot)
+        XCTAssertNil(shared.plan(for: "acct-1"), "a delivery was offered as a resumable share upload")
+        shared.sweepIncomplete()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sharedRoot.appendingPathComponent(jobId).path))
+        // Negative half: a real share in the same root IS offered.
+        _ = try shared.prepare(files: try selection(), accountId: "acct-1", burnAfterRead: false, ttl: 3600)
+        XCTAssertEqual(shared.plan(for: "acct-1")?.effectivePurpose, .share)
+    }
+
+    /// The same job id in both roots: reported, shown as neither, executed
+    /// from neither, and neither copy deleted.
+    func testAJobInBothRootsIsAConflictNobodyExecutesOrDeletes() async throws {
+        let jobId = try legacyLayoutDelivery()
+        try FileManager.default.createDirectory(at: protectedRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: sharedRoot.appendingPathComponent(jobId),
+                                         to: protectedRoot.appendingPathComponent(jobId))
+        supportOverride = PendingUploadSupport(store: PendingUploadStore(root: sharedRoot), keys: keys)
+        let (model, _) = await signedIn()
+        model.refreshOutstanding()
+
+        XCTAssertEqual(model.ownershipConflictJobIDs, [jobId])
+        XCTAssertEqual(model.items, [])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sharedRoot.appendingPathComponent(jobId).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: protectedRoot.appendingPathComponent(jobId).path))
+        let device = PendingUploadStore(root: sharedRoot).protectedDeviceStore()
+        XCTAssertEqual(device.ownership(of: jobId), .conflict)
+        XCTAssertNil(device.ownedDevicePlan(jobId: jobId))
+        // Nor can the delivery sender be pointed at either copy.
+        let plan = try JSONDecoder().decode(PendingUploadPlan.self, from: Data(contentsOf:
+            protectedRoot.appendingPathComponent(jobId).appendingPathComponent("plan.json")))
+        let coordinator = InboxSendCoordinator(store: device, keys: keys,
+                                               uploader: CloudUploader(transport: transport),
+                                               sender: sender)
+        await XCTAssertThrowsErrorAsync(try await coordinator.deliver(plan, token: "bearer")) {
+            XCTAssertEqual($0 as? InboxSendFailure, .ownershipConflict)
+        }
+        XCTAssertEqual(transport.initCount, 0)
+    }
+
+    /// R1 blocker 1, model half: an unrecognised terminal beside a recorded
+    /// object is never shown as a plain Send; Discard only, and it warns.
+    func testARelaunchShowsAnUnrecognisedTerminalWithAnObjectAsDiscardOnlyAndWarns() async throws {
+        let plan = try store.prepare(files: try selection(), accountId: "acct-1", burnAfterRead: false,
+                                     ttl: UploadPurpose.deviceTaskTTLSeconds,
+                                     target: PendingUploadTarget(deviceId: deviceID, keyId: keyID,
+                                                                 keyGeneration: 4))
+        let finalized = try store.fixtureFinalized(plan, storedId: "STORED0123456789")
+        let url = store.planURL(for: finalized.jobId)
+        var json = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        json["terminalOutcome"] = "archived-by-a-newer-build"
+        try JSONSerialization.data(withJSONObject: json).write(to: url, options: .atomic)
+        let (model, _) = await signedIn()
+        model.refreshOutstanding()
+
+        let item = try XCTUnwrap(model.items.first { $0.id == plan.jobId })
+        XCTAssertEqual(item.activity, .stopped(.uploadUnavailable(.unrecognizedMayArrive)))
+        XCTAssertEqual(InboxSendActions.offered(for: item), [.discard])
+        XCTAssertTrue(InboxSendActions.warnsDeliveryMayStillArrive(.discard, for: item))
+        XCTAssertEqual(sender.creates, [])
+    }
+
+    /// Relaunch: cards come from the durable record, with no request.
+    func testARelaunchShowsAMarkedPlanAsUnconfirmedAndATerminalOneAsDiscardOnly() async throws {
+        let marked = try store.prepare(files: try selection(), accountId: "acct-1", burnAfterRead: false,
+                                       ttl: UploadPurpose.deviceTaskTTLSeconds,
+                                       target: PendingUploadTarget(deviceId: deviceID, keyId: keyID,
+                                                                   keyGeneration: 4))
+        var m = try store.setUploadSession(id: "SESSIONMARKED001", chunkSize: 64 * 1024, for: marked)
+        m = try store.markFinalizing(uploadId: "SESSIONMARKED001", for: m)
+        let gone = try store.prepare(files: try selection(), accountId: "acct-1", burnAfterRead: false,
+                                     ttl: UploadPurpose.deviceTaskTTLSeconds,
+                                     target: PendingUploadTarget(deviceId: deviceID, keyId: keyID,
+                                                                 keyGeneration: 4))
+        var g = try store.setUploadSession(id: "SESSIONEXPIRED01", chunkSize: 64 * 1024, for: gone)
+        g = try store.markFinalizing(uploadId: "SESSIONEXPIRED01", for: g)
+        try store.recordTerminal(.expired, uploadId: "SESSIONEXPIRED01", for: g)
+        let (model, _) = await signedIn()
+        model.refreshOutstanding()
+
+        let byID = Dictionary(uniqueKeysWithValues: model.items.map { ($0.id, $0) })
+        let unconfirmed = try XCTUnwrap(byID[marked.jobId])
+        XCTAssertEqual(unconfirmed.activity, .stopped(.uploadOutcomeUnknown))
+        XCTAssertEqual(InboxSendActions.offered(for: unconfirmed), [.retry, .discard])
+        XCTAssertFalse(InboxSendActions.warnsDeliveryMayStillArrive(.discard, for: unconfirmed),
+                       "no create was sent, so nothing can arrive")
+        let terminal = try XCTUnwrap(byID[gone.jobId])
+        XCTAssertEqual(terminal.activity, .stopped(.uploadUnavailable(.expired)))
+        XCTAssertEqual(InboxSendActions.offered(for: terminal), [.discard],
+                       "Retry on a terminal upload would re-upload it")
+        XCTAssertEqual(transport.initCount, 0)
+        XCTAssertEqual(transport.recoveringFinalizes, [])
     }
 }

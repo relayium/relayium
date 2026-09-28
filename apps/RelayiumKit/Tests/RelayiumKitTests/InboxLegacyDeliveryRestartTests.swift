@@ -12,18 +12,22 @@ import XCTest
 /// result is an object whose own receiver refuses it as `verify_failed` after
 /// downloading all of it.
 ///
-/// Three properties are asserted here, and the third is the one that makes the
-/// first two safe to have:
+/// Four properties are asserted here:
 ///
-///  1. **A legacy delivery restarts.** New session, new content key, byte zero,
-///     canonical v2 manifest — and the staged copy of the user's file is never
-///     touched, because it may be the last one Relayium holds.
-///  2. **A current delivery resumes.** The restart must not become a tax every
+///  1. **A legacy delivery that never reached the server restarts.** New
+///     content key, byte zero, canonical v2 manifest — and the staged copy of
+///     the user's file is never touched, because it may be the last one
+///     Relayium holds.
+///  2. **A legacy delivery that DID reach the server stops.** Its upload's
+///     outcome is unknown under framing this build does not continue, so it is
+///     neither restarted (a second object, a rotated key) nor resumed. It is
+///     retained, and a new send is the user's own decision.
+///  3. **A legacy delivery with a recorded object is resolved read-only.** Its
+///     create may have landed with the answer lost: a task carrying its
+///     idempotency key and object is recorded; otherwise it may still arrive,
+///     and nothing is ever created or uploaded for it.
+///  4. **A current delivery resumes.** None of this becomes a tax every
 ///     interrupted upload pays.
-///  3. **Nothing duplicates.** The creation-idempotency key survives the
-///     restart, so a legacy plan whose create may already have landed converges
-///     or is refused; it never queues the user's file a second time. A plan that
-///     already names a task is not restarted at all.
 final class InboxLegacyDeliveryRestartTests: XCTestCase {
     private var root: URL!
     private var store: PendingUploadStore!
@@ -50,7 +54,7 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("v2-restart-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
+        store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads")).protectedDeviceStore()
         keys = InMemoryStoredLinkKeyStore()
         sender = FakeInboxSenderTransport()
         transport = StubTransport()
@@ -112,7 +116,12 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
     /// Rewritten as JSON rather than re-encoded, because a plan this build would
     /// never write is exactly what has to be presented to it for reading.
     private func makeLegacy(_ plan: PendingUploadPlan) throws -> PendingUploadPlan {
-        try rewrite(plan.jobId) { $0.removeValue(forKey: "inboxProtocolVersion") }
+        // A pre-v2 build also never wrote the protected root's session phase.
+        try rewrite(plan.jobId) {
+            $0.removeValue(forKey: "inboxProtocolVersion")
+            $0.removeValue(forKey: "sessionPhase")
+            $0.removeValue(forKey: "phaseUploadId")
+        }
         let reloaded = try XCTUnwrap(store.deviceSendPlans(for: "acct-1")
             .first { $0.jobId == plan.jobId }, "a legacy plan must still be readable")
         XCTAssertFalse(reloaded.speaksInboxV2, "the fixture is not a legacy plan")
@@ -132,7 +141,7 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
     }
 
     private func reloaded(_ plan: PendingUploadPlan) throws -> PendingUploadPlan {
-        try XCTUnwrap(PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
+        try XCTUnwrap(PendingUploadStore(root: root.appendingPathComponent("PendingUploads")).protectedDeviceStore()
             .deviceSendPlans(for: "acct-1").first { $0.jobId == plan.jobId },
                       "the job is no longer on disk")
     }
@@ -201,92 +210,65 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
         }, file: file, line: line)
     }
 
-    // MARK: - a legacy delivery restarts
+    // MARK: - a legacy delivery that reached the server stops
 
-    /// The blocking case: a half-uploaded pre-v2 delivery must open a NEW
-    /// session and stream from byte zero, never continue the one whose header is
-    /// the shared manifest.
-    func testALegacyPartialDeliveryRestartsInsteadOfResumingItsV1Session() async throws {
+    /// A half-uploaded pre-v2 delivery: its session may have been finalized by
+    /// the build that opened it. It is neither resumed (v2 frames behind a v1
+    /// frame 0) nor restarted (a second object and a rotated key while the first
+    /// may be counted). It stops, and nothing on the wire moves.
+    func testALegacyPartialDeliveryStopsWithoutTouchingItsSessionOrItsKey() async throws {
         let plan = try await staged()
         try store.setUploadSession(id: legacyUploadID, chunkSize: 64 * 1024, for: plan)
         let legacy = try makeLegacy(plan)
-        // A server that already holds 24 bytes of that session, behind a v1
-        // frame 0. Resuming it is the bug this whole file exists for.
         let server = LegacySessionTransport(legacyUploadID: legacyUploadID, committed: 24)
         ambiguousCreate()
 
         await XCTAssertThrowsErrorAsync(try await InboxSendCoordinator(
             store: store, keys: keys, uploader: CloudUploader(transport: server),
             sender: sender).deliver(legacy, token: "bearer"), {
-                XCTAssertEqual($0 as? InboxSendFailure, .unknownOutcome)
+                XCTAssertEqual($0 as? InboxSendFailure, .uploadUnavailable(.olderVersion))
             })
 
-        XCTAssertEqual(server.initCount, 1, """
-            a legacy delivery must open a fresh session: continuing the recorded \
-            one would put v2 payload frames behind a v1 frame 0
-            """)
-        XCTAssertEqual(server.patches.filter { $0.uploadId == legacyUploadID }, [], """
-            not one byte may be added to the session whose header is the shared \
-            Stored-Wire manifest
-            """)
-        XCTAssertEqual(server.patches.first?.from, 0,
-                       "the restarted ciphertext must start at byte zero")
-        XCTAssertEqual(server.legacyCommitted, 24, "the v1 session was written to")
+        XCTAssertEqual(server.initCount, 0, "a legacy delivery with a session was uploaded again")
+        XCTAssertEqual(server.patches, [], "bytes were added to a session of unknown outcome")
+        XCTAssertEqual(server.legacyCommitted, 24)
+        XCTAssertEqual(sender.creates, [], "no create may follow an unknown upload")
         let after = try reloaded(legacy)
-        XCTAssertTrue(after.speaksInboxV2, "the restart must be durable")
-        XCTAssertEqual(after.uploadId, LegacySessionTransport.freshUploadID,
-                       "the plan must name the session it actually fed")
-        XCTAssertNotEqual(after.uploadId, legacyUploadID)
+        XCTAssertEqual(after.uploadId, legacyUploadID, "the record of the session was dropped")
+        XCTAssertEqual(after.terminalOutcome, "olderVersion")
+        XCTAssertFalse(after.speaksInboxV2, "the legacy plan was silently converted")
+        let key = try await contentKey(of: legacy)
+        XCTAssertEqual(key, legacyContentKey, "the key was rotated for an upload that may exist")
+
+        // And a Retry changes nothing either.
+        await XCTAssertThrowsErrorAsync(try await InboxSendCoordinator(
+            store: store, keys: keys, uploader: CloudUploader(transport: server),
+            sender: sender).deliver(after, token: "bearer"), {
+                XCTAssertEqual($0 as? InboxSendFailure, .uploadUnavailable(.olderVersion))
+            })
+        XCTAssertEqual(server.initCount, 0)
+        XCTAssertEqual(server.patches, [])
     }
 
-    /// The restart is a REWRITE of the ciphertext state and of nothing else. The
-    /// staged bytes are the user's, and after a failed attempt they are still
-    /// exactly what was staged.
-    func testTheRestartKeepsTheStagedBytesTheTargetAndTheIdempotencyKey() async throws {
+    /// Stopping keeps everything that describes the user's intent and bytes.
+    func testAStoppedLegacyDeliveryKeepsTheStagedBytesTheTargetAndTheIdempotencyKey() async throws {
         let plan = try await staged()
         try store.setUploadSession(id: legacyUploadID, chunkSize: 64 * 1024, for: plan)
         let legacy = try makeLegacy(plan)
         ambiguousCreate()
 
-        await deliverExpectingUnknownOutcome(legacy)
+        await XCTAssertThrowsErrorAsync(try await coordinator().deliver(legacy, token: "bearer"), {
+            XCTAssertEqual($0 as? InboxSendFailure, .uploadUnavailable(.olderVersion))
+        })
 
         let after = try reloaded(legacy)
-        XCTAssertEqual(try stagedBytes(after), message, """
-            the staged copy may be the last one Relayium holds; a protocol \
-            cutover must never spend it
-            """)
+        XCTAssertEqual(try stagedBytes(after), message)
         XCTAssertEqual(after.files, plan.files)
-        XCTAssertEqual(after.createIdempotencyKey, idempotencyKey, """
-            a fresh key here would queue the user's file as a SECOND delivery \
-            if the legacy plan's create had already landed
-            """)
+        XCTAssertEqual(after.createIdempotencyKey, idempotencyKey)
         XCTAssertEqual(after.target, plan.target)
         XCTAssertEqual(after.ttl, UploadPurpose.deviceTaskTTLSeconds)
         XCTAssertEqual(after.effectiveDeliveryKind, .file)
-    }
-
-    /// The content key is rotated by the restart, and it has to be: frame 0 is
-    /// sealed at AEAD sequence 0, and the v2 document is not the v1 one. Sealing
-    /// both under one key is nonce reuse, which hands anyone holding the old
-    /// ciphertext both plaintexts and the authentication key.
-    func testTheRestartSealsUnderAKeyThatHasNeverSealedAnything() async throws {
-        let plan = try await staged()
-        try store.setUploadSession(id: legacyUploadID, chunkSize: 64 * 1024, for: plan)
-        let legacy = try makeLegacy(plan)
-        ambiguousCreate()
-
-        await deliverExpectingUnknownOutcome(legacy)
-
-        let rotated = try await contentKey(of: legacy)
-        XCTAssertNotEqual(rotated, legacyContentKey, """
-            re-sealing frame 0 under the key that sealed the v1 header would \
-            reuse sequence 0 for different plaintext
-            """)
-        XCTAssertEqual(rotated.count, 32)
-        // And the document that left is the v2 one, opened with that key.
-        let manifest = try sealedManifest(key: rotated)
-        XCTAssertEqual(manifest.kind, .file)
-        XCTAssertEqual(manifest.items.map(\.name), ["a.txt"])
+        XCTAssertEqual(transport.initCount, 0)
     }
 
     /// A legacy delivery that never opened a session is restarted too — it only
@@ -305,6 +287,9 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
         XCTAssertEqual(try payloadPlaintext(key: key), message,
                        "the payload frames must be the staged bytes, from zero")
         XCTAssertEqual(transport.purposes, [.deviceTask])
+        // Sealed under a key that never sealed the v1 frame 0: re-sealing the
+        // v2 document under the old one would reuse sequence 0.
+        XCTAssertNotEqual(key, legacyContentKey)
     }
 
     // MARK: - a current delivery is untouched
@@ -375,31 +360,68 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
 
     // MARK: - nothing duplicates
 
-    /// The restarted delivery creates ONE task, under the key the legacy plan
-    /// minted, naming the object the restart produced.
-    func testTheRestartedDeliveryCreatesOneTaskUnderTheOriginalKey() async throws {
+    /// A legacy delivery that reached a finished object may have sent its
+    /// create and lost the answer. With no task visible it is NOT re-created or
+    /// re-uploaded: it may still arrive, and says so.
+    func testALegacyFinalizedDeliveryWithNoVisibleTaskMayStillArriveAndIsNeverRecreated() async throws {
         let plan = try await staged()
         try store.setUploadSession(id: legacyUploadID, chunkSize: 64 * 1024, for: plan)
-        // The pre-v2 build got as far as a finished v1 object.
-        try store.markFinalized(plan, storedId: legacyStoredID)
+        try store.fixtureFinalized(plan, storedId: legacyStoredID)
         let legacy = try makeLegacy(plan)
-        sender.createOutcomes = [.success(InboxTaskCreation(task: task(), created: true))]
+        sender.listedTasks = []
+
+        await XCTAssertThrowsErrorAsync(try await coordinator().deliver(legacy, token: "bearer"), {
+            XCTAssertEqual($0 as? InboxSendFailure, .uploadUnavailable(.olderVersionDeliveryUnknown))
+        })
+
+        XCTAssertEqual(sender.creates, [], "a create after a possibly lost create is a second delivery")
+        XCTAssertEqual(transport.initCount, 0, "a finished legacy object was uploaded again")
+        let after = try reloaded(legacy)
+        XCTAssertEqual(after.finalizedStoredId, legacyStoredID)
+        XCTAssertEqual(after.createIdempotencyKey, idempotencyKey)
+        let key = try await contentKey(of: legacy)
+        XCTAssertEqual(key, legacyContentKey)
+        // The card is honest about it: Retry looks again, Discard warns.
+        let item = InboxSendItem(id: after.jobId, fileCount: 1, byteCount: message.count,
+                                 targetDeviceID: deviceID, targetName: nil,
+                                 activity: .stopped(.uploadUnavailable(.olderVersionDeliveryUnknown)),
+                                 taskID: nil, savedAt: 0, expiresAt: 0, isRecoverable: true)
+        XCTAssertEqual(InboxSendActions.offered(for: item), [.retry, .discard])
+        XCTAssertTrue(InboxSendActions.warnsDeliveryMayStillArrive(.discard, for: item))
+    }
+
+    /// The same delivery, where the lost create DID land: the task is found by
+    /// its idempotency key and object, recorded, and the job finishes — still
+    /// without a create or an upload.
+    func testALegacyFinalizedDeliveryConvergesReadOnlyOnTheTaskItsLostCreateMade() async throws {
+        let plan = try await staged()
+        try store.setUploadSession(id: legacyUploadID, chunkSize: 64 * 1024, for: plan)
+        try store.fixtureFinalized(plan, storedId: legacyStoredID)
+        let legacy = try makeLegacy(plan)
+        sender.listedTasks = [task(storedFileID: legacyStoredID)]
 
         let result = try await coordinator().deliver(legacy, token: "bearer")
 
-        XCTAssertTrue(result.created)
-        XCTAssertEqual(sender.creates.count, 1)
-        XCTAssertEqual(sender.createdIdempotencyKeys, [idempotencyKey], """
-            the key survives the restart, so a create the legacy plan may have \
-            already landed converges instead of queueing a second delivery
-            """)
-        XCTAssertEqual(sender.creates, [.create(device: deviceID, idempotencyKey: idempotencyKey,
-                                                storedFile: "STORED0123456789",
-                                                wrappedKey: sender.createdWrappedKeys[0],
-                                                keyID: keyID, keyGeneration: 4)], """
-            the task must bind the object the v2 restart produced, never the v1 \
-            one whose key no longer exists
-            """)
+        XCTAssertFalse(result.created)
+        XCTAssertEqual(result.task.id, taskID)
+        XCTAssertEqual(sender.creates, [])
+        XCTAssertEqual(transport.initCount, 0)
+        XCTAssertNil(store.deviceSendPlans(for: "acct-1").first { $0.jobId == plan.jobId },
+                     "a finished delivery's local remains were kept")
+    }
+
+    /// A task that names ANOTHER object is not this delivery's.
+    func testALegacyFinalizedDeliveryNeverConvergesOntoAnotherObjectsTask() async throws {
+        let plan = try await staged()
+        try store.setUploadSession(id: legacyUploadID, chunkSize: 64 * 1024, for: plan)
+        try store.fixtureFinalized(plan, storedId: legacyStoredID)
+        let legacy = try makeLegacy(plan)
+        sender.listedTasks = [task(storedFileID: "OTHERSTORED01234")]
+
+        await XCTAssertThrowsErrorAsync(try await coordinator().deliver(legacy, token: "bearer"), {
+            XCTAssertEqual($0 as? InboxSendFailure, .uploadUnavailable(.olderVersionDeliveryUnknown))
+        })
+        XCTAssertEqual(sender.creates, [])
     }
 
     /// A legacy plan that already names a task is in its tidy-up, not its
@@ -407,7 +429,7 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
     func testALegacyPlanThatAlreadyNamesATaskIsNeverRestarted() async throws {
         let plan = try await staged()
         try store.setUploadSession(id: legacyUploadID, chunkSize: 64 * 1024, for: plan)
-        try store.markFinalized(plan, storedId: legacyStoredID)
+        try store.fixtureFinalized(plan, storedId: legacyStoredID)
         let recorded = try store.setDeviceTask(id: taskID, for: plan)
         XCTAssertEqual(recorded.deviceTaskId, taskID)
         let legacy = try makeLegacy(recorded)
@@ -425,7 +447,7 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
     func testTheStoreRefusesToRestartAPlanThatNamesATask() async throws {
         let plan = try await staged()
         try store.setUploadSession(id: legacyUploadID, chunkSize: 64 * 1024, for: plan)
-        try store.markFinalized(plan, storedId: legacyStoredID)
+        try store.fixtureFinalized(plan, storedId: legacyStoredID)
         let recorded = try store.setDeviceTask(id: taskID, for: plan)
         let legacy = try makeLegacy(recorded)
 
@@ -450,7 +472,7 @@ final class InboxLegacyDeliveryRestartTests: XCTestCase {
             algorithm: InboxProtocol.keyAlgorithm, targetPublicKey: devicePublicKey,
             contentKey: legacyContentKey)
         try store.setTargetWrappedKey(wrapped, for: plan)
-        try store.markFinalized(plan, storedId: legacyStoredID)
+        try store.fixtureFinalized(plan, storedId: legacyStoredID)
         let legacy = try makeLegacy(plan)
 
         let restarted = try store.restartForInboxV2(legacy)
@@ -543,5 +565,9 @@ final class LegacySessionTransport: ResumableTransport, @unchecked Sendable {
 
     func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult {
         finalizeResult
+    }
+
+    func finalizeUploadRecovering(uploadId: String, token: String) async throws -> FinalizeAnswer {
+        .completed(finalizeResult, recovered: false)
     }
 }

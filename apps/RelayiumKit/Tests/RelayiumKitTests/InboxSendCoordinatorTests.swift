@@ -40,7 +40,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("p3a-coord-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
+        store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads")).protectedDeviceStore()
         keys = InMemoryStoredLinkKeyStore()
         sender = FakeInboxSenderTransport()
         transport = StubTransport()
@@ -286,48 +286,28 @@ final class InboxSendCoordinatorTests: XCTestCase {
     /// that died in between would come back to a plan that looks unsent and
     /// would try to send it again.
     func testTheTaskIdIsPersistedBeforeAnythingIsReleased() async throws {
-        // The content key is the FIRST thing the release touches. A key store
-        // that reads the plan at that instant therefore observes the earliest
-        // moment of the tidy-up, and the task id has to be on disk already.
-        let observing = ObservingKeyStore(inner: keys, onRemove: { [store] in
-            store?.deviceSendPlans(for: "acct-1").first?.deviceTaskId
-        })
-        keys = InMemoryStoredLinkKeyStore()
+        // The tombstone is the FIRST thing the release writes (the content key
+        // is removed last, once no root still names the job). Reading the plan
+        // at that instant observes the earliest moment of the tidy-up, and the
+        // task id has to be on disk already.
         let plan = try await staged()
-        observing.inner = keys
         sender.createOutcomes = [created(task())]
-        let coordinator = InboxSendCoordinator(store: store, keys: observing,
-                                               uploader: CloudUploader(transport: transport),
-                                               sender: sender)
+        var observed: String??
+        let store = self.store!
+        store.writeFailureInjection = { kind in
+            if kind == .retired, observed == nil {
+                observed = store.deviceSendPlans(for: "acct-1").first?.deviceTaskId
+            }
+            return false
+        }
 
-        _ = try await coordinator.deliver(plan, token: "bearer")
+        _ = try await coordinator().deliver(plan, token: "bearer")
 
-        XCTAssertEqual(observing.observed, taskID, """
+        XCTAssertEqual(observed, .some(taskID), """
             written before the tidy-up, so a process that dies mid-cleanup comes \
             back knowing the delivery exists instead of sending it again
             """)
-    }
-
-    private final class ObservingKeyStore: StoredLinkKeyStore, @unchecked Sendable {
-        var inner: InMemoryStoredLinkKeyStore
-        private let onRemove: () -> String?
-        private(set) var observed: String?
-
-        init(inner: InMemoryStoredLinkKeyStore, onRemove: @escaping () -> String?) {
-            self.inner = inner
-            self.onRemove = onRemove
-        }
-
-        func save(id: String, keyB64url: String) async throws {
-            try await inner.save(id: id, keyB64url: keyB64url)
-        }
-
-        func key(for id: String) async throws -> String? { try await inner.key(for: id) }
-
-        func remove(id: String) async throws {
-            if observed == nil { observed = onRemove() }
-            try await inner.remove(id: id)
-        }
+        try await assertJobIsGone(plan)
     }
 
     private final class ReadFailingKeyStore: StoredLinkKeyStore, @unchecked Sendable {
@@ -414,7 +394,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
 
     func testAWrappedKeyWriteFailureStopsBeforeCreateAndKeepsTheJob() async throws {
         let plan = try await staged()
-        let uploaded = try store.markFinalized(plan, storedId: "STORED0123456789")
+        let uploaded = try store.fixtureFinalized(plan, storedId: "STORED0123456789")
         let jobURL = store.jobURL(for: plan.jobId)
         try FileManager.default.setAttributes([.posixPermissions: 0o500],
                                               ofItemAtPath: jobURL.path)
@@ -567,7 +547,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
     /// A relaunch that finds a task id already on disk must never create again.
     func testARelaunchAfterTheTaskWasRecordedFinishesInsteadOfCreatingAgain() async throws {
         let plan = try await staged()
-        let finalized = try store.markFinalized(plan, storedId: "STORED0123456789")
+        let finalized = try store.fixtureFinalized(plan, storedId: "STORED0123456789")
         let recorded = try store.setDeviceTask(id: taskID, for: finalized)
         sender.taskResults = [.success(task(state: .saved))]
 
@@ -585,7 +565,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
     func testARecordedTaskThatCannotBeReadLeavesTheJobIntact() async throws {
         let plan = try await staged()
         let recorded = try store.setDeviceTask(
-            id: taskID, for: try store.markFinalized(plan, storedId: "STORED0123456789"))
+            id: taskID, for: try store.fixtureFinalized(plan, storedId: "STORED0123456789"))
         sender.taskResults = [.failure(InboxError.network)]
 
         await XCTAssertThrowsErrorAsync(try await self.coordinator().deliver(recorded, token: "bearer")) {
@@ -705,7 +685,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
     /// server's collector (protocol §27); no stored-file delete is issued.
     func testASpentBudgetOnAnUploadedDeliveryReleasesTheJobAndIssuesNoStoredFileDelete() async throws {
         let plan = try await staged()
-        let uploaded = try store.markFinalized(plan, storedId: "STORED0123456789")
+        let uploaded = try store.fixtureFinalized(plan, storedId: "STORED0123456789")
         let resealedBox = InboxKeyMaterial.encode(
             [UInt8](repeating: 7, count: InboxProtocol.sealedBoxBytes))
         let already = try store.resealTargetKey(id: rotatedKeyID, generation: 9,
@@ -925,7 +905,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
     /// to the server's collector; no stored-file delete is issued for it.
     func testDiscardingADeliveryBeforeItsTaskExistsReleasesTheJobAndIssuesNoStoredFileDelete() async throws {
         let plan = try await staged()
-        let finalized = try store.markFinalized(plan, storedId: "STORED0123456789")
+        let finalized = try store.fixtureFinalized(plan, storedId: "STORED0123456789")
 
         try await coordinator().discard(finalized)
 
@@ -945,7 +925,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
     func testDiscardCancelsARecordedTaskBeforeRemovingLocalState() async throws {
         let plan = try await staged()
         let recorded = try store.setDeviceTask(
-            id: taskID, for: try store.markFinalized(plan, storedId: "STORED0123456789"))
+            id: taskID, for: try store.fixtureFinalized(plan, storedId: "STORED0123456789"))
 
         try await coordinator().discard(recorded)
 
@@ -957,7 +937,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
     func testDiscardKeepsARecordedJobWhenCentralRefusesCancellation() async throws {
         let plan = try await staged()
         let recorded = try store.setDeviceTask(
-            id: taskID, for: try store.markFinalized(plan, storedId: "STORED0123456789"))
+            id: taskID, for: try store.fixtureFinalized(plan, storedId: "STORED0123456789"))
         sender.cancelError = InboxError.api(status: 409, code: InboxRejection.taskTerminal.rawValue)
 
         do {

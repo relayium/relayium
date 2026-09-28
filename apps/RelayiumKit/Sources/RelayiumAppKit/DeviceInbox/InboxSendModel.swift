@@ -68,6 +68,9 @@ public final class InboxSendModel: ObservableObject {
     @Published public private(set) var refusal: InboxSendRefusal?
     /// An action that left something running after saying it would stop it.
     @Published public private(set) var actionError: InboxSendActionError?
+    /// Jobs present in both the shared and the protected root. Neither copy is
+    /// shown as a send or executed; nothing is deleted.
+    @Published public private(set) var ownershipConflictJobIDs: Set<String> = []
     @Published public private(set) var renamingDeviceIDs: Set<String> = []
     @Published public private(set) var renameFailureDeviceID: String?
     /// **A message whose local staging failed AFTER `sendText` returned, waiting
@@ -487,7 +490,19 @@ public final class InboxSendModel: ObservableObject {
     /// this session is watching. Touches no network.
     public func refreshOutstanding() {
         guard let accountId else { records = [:]; publish(); return }
-        for plan in pending.store.deviceSendPlans(for: accountId) {
+        // Deliveries an earlier build left in the shared root move into the
+        // protected one FIRST — one exclusive rename each, before anything here
+        // can act on them — so no earlier build can re-upload or sweep them
+        // afterwards. A job present in both roots is reported and executed
+        // from neither.
+        let adoption = pending.deviceStore.adoptLegacyDeliveries()
+        // Finishes a Discard whose directory removal failed earlier. Deletes
+        // only readable retired tombstones; see `sweepIncomplete`.
+        pending.deviceStore.sweepIncomplete()
+        let conflicts = Set(pending.deviceStore.ownershipConflicts())
+            .union(adoption.conflicts)
+        if conflicts != ownershipConflictJobIDs { ownershipConflictJobIDs = conflicts }
+        for plan in pending.deviceStore.deviceSendPlans(for: accountId) {
             guard let deviceID = plan.targetDeviceId else { continue }
             if var existing = records[plan.jobId] {
                 // Only the durable half is refreshed. The activity is what the
@@ -497,7 +512,8 @@ public final class InboxSendModel: ObservableObject {
                 records[plan.jobId] = existing
             } else {
                 sequence += 1
-                records[plan.jobId] = Record(plan: plan, result: nil, activity: .staged,
+                records[plan.jobId] = Record(plan: plan, result: nil,
+                                             activity: Self.recoveredActivity(for: plan),
                                              files: Self.manifest(of: plan),
                                              fileCount: plan.files.count,
                                              byteCount: plan.totalBytes,
@@ -516,7 +532,8 @@ public final class InboxSendModel: ObservableObject {
                 // history is actually missing a body — which is what makes a
                 // text send interrupted in that window come back as the message
                 // the user wrote rather than as a permanently empty row.
-                announceSentHistory(plan, state: .staged, accountId: accountId)
+                announceSentHistory(plan, state: Self.sentState(for: Self.recoveredActivity(for: plan)),
+                                    accountId: accountId)
             }
         }
         // A record whose plan is gone AND which this session is not watching is
@@ -600,7 +617,7 @@ public final class InboxSendModel: ObservableObject {
         guard work[Self.stagingKey] == nil else { refusal = .alreadySending; return }
 
         let g = accountGeneration
-        let store = pending.store
+        let store = pending.deviceStore
         let keys = pending.keys
         // Minted HERE, once, and written into the plan before any network work.
         let durableTarget = PendingUploadTarget(target)
@@ -736,7 +753,7 @@ public final class InboxSendModel: ObservableObject {
         guard work[Self.stagingKey] == nil else { refusal = .alreadySending; return }
 
         let g = accountGeneration
-        let store = pending.store
+        let store = pending.deviceStore
         let keys = pending.keys
         let durableTarget = PendingUploadTarget(target)
         stageTextPlaceholder(byteCount: bytes.count, target: targetID)
@@ -949,7 +966,7 @@ public final class InboxSendModel: ObservableObject {
         guard plan.effectiveDeliveryKind == .text, plan.files.count == 1,
               plan.files[0].size >= InboxManifest.minTextBytes,
               plan.files[0].size <= InboxManifest.maxTextBytes,
-              var source = try? pending.store.sources(for: plan).first else { return nil }
+              var source = try? pending.deviceStore.sources(for: plan).first else { return nil }
         var bytes: [UInt8] = []
         bytes.reserveCapacity(plan.files[0].size)
         while bytes.count < plan.files[0].size {
@@ -1008,6 +1025,28 @@ public final class InboxSendModel: ObservableObject {
     /// A resumed plan whose object central already holds reports `creating`
     /// rather than an upload at zero: its bytes are up, and a progress bar that
     /// never moves because there is nothing left to send reads as a stall.
+    /// The card a plan found on disk starts as, read from its durable record
+    /// alone. Touches no network: a plan whose upload may have been finalized,
+    /// or whose record is terminal or unexplainable, says so instead of
+    /// offering a plain Send.
+    static func recoveredActivity(for plan: PendingUploadPlan) -> InboxSendActivity {
+        // Terminal FIRST, whatever else the plan records: an unrecognised
+        // disposition beside a recorded object or task must never read as a
+        // plain Send.
+        if case .terminal(let terminal) = plan.deviceSessionState {
+            return .stopped(.uploadUnavailable(InboxUploadUnavailable(terminal, plan: plan)))
+        }
+        guard plan.deviceTaskId == nil, plan.finalizedStoredId == nil else { return .staged }
+        switch plan.deviceSessionState {
+        case .terminal:
+            return .staged                              // handled above
+        case .finalizing, .unknown:
+            return .stopped(.uploadOutcomeUnknown)
+        case .noSession, .uploading, .unproven:
+            return .staged
+        }
+    }
+
     private func initialActivity(for plan: PendingUploadPlan) -> InboxSendActivity {
         plan.finalizedStoredId == nil ? .uploading(sent: 0, total: plan.totalBytes) : .creating
     }
@@ -1087,7 +1126,7 @@ public final class InboxSendModel: ObservableObject {
 
     private func reloadPlan(for job: String, g: Int) {
         guard g == accountGeneration, var record = records[job], let accountId else { return }
-        record.plan = pending.store.deviceSendPlans(for: accountId)
+        record.plan = pending.deviceStore.deviceSendPlans(for: accountId)
             .first { $0.jobId == job }
         records[job] = record
         publish()
@@ -1209,7 +1248,7 @@ public final class InboxSendModel: ObservableObject {
     }
 
     private func coordinator(token: String) -> InboxSendCoordinator {
-        InboxSendCoordinator(store: pending.store, keys: pending.keys, uploader: uploader,
+        InboxSendCoordinator(store: pending.deviceStore, keys: pending.keys, uploader: uploader,
                              sender: makeSender(token))
     }
 }

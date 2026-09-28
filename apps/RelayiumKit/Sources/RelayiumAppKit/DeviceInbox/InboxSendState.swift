@@ -245,6 +245,15 @@ public enum InboxSendActions {
             // same refusal. Keep the one honest recovery: let the user decide
             // when to discard the preserved local copy.
             return item.isRecoverable ? [.discard] : [.dismiss]
+        case .stopped(.uploadUnavailable(.olderVersionDeliveryUnknown)):
+            // A delivery may exist. Retry only looks for it, read-only.
+            return item.isRecoverable ? [.retry, .discard] : [.dismiss]
+        case .stopped(.uploadUnavailable), .stopped(.ownershipConflict):
+            // Terminal for THIS job: Retry would either repeat the same answer
+            // or — the thing this state exists to prevent — upload again. The
+            // plan and its bytes are kept until the user discards them; a new
+            // send is the user's own, separate decision.
+            return item.isRecoverable ? [.discard] : [.dismiss]
         case .stopped, .unknown:
             // A plan the coordinator released is gone: retrying it would stage
             // nothing and discarding it would delete nothing.
@@ -313,6 +322,11 @@ public enum InboxSendActions {
         if case .unknown = item.activity { return true }
         if case .stopped(.unknownOutcome) = item.activity { return true }
         if case .stopped(.recoveryStateWriteFailed) = item.activity { return true }
+        // A pre-v2 delivery whose create may have been sent before its answer
+        // was lost: discarding stops this device from following it, not the
+        // delivery from arriving.
+        if case .stopped(.uploadUnavailable(.olderVersionDeliveryUnknown)) = item.activity { return true }
+        if case .stopped(.uploadUnavailable(.unrecognizedMayArrive)) = item.activity { return true }
         return false
     }
 }

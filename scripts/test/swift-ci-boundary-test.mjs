@@ -199,7 +199,9 @@ const INTEROP = "inbox-swift-interop.yml";
 const INTEROP_JOB = "swift-live-interop";
 const INTEROP_GATE_JOB = "inbox-swift-interop";
 const INTEROP_ENV = "RELAYIUM_SWIFT_INTEROP";
-const INTEROP_CLASSES = ["InboxCLISenderLiveInteropTests", "InboxSealedBoxInteropTests"];
+const INTEROP_CLASSES = [
+  "InboxCLISenderLiveInteropTests", "InboxSealedBoxInteropTests", "InboxFinalizeRecoveryLiveTests",
+];
 const INTEROP_FILTERS = INTEROP_CLASSES.map((c) => `${SWIFT_TEST_TARGET}.${c}`);
 const INTEROP_PATHS = [
   "server/**",
@@ -219,6 +221,24 @@ const INTEROP_NAMED_CASES = [
   "InboxSealedBoxInteropTests/testTheGoPhaseFailsOnAKeyCentralWouldRefuse",
   "InboxSealedBoxInteropTests/testTheSwiftSenderSealsAKeyTheGoReceiverOpens",
   "InboxSealedBoxInteropTests/testTheGoOpenPhaseFailsOnATamperedBoxAndOnTheWrongTarget",
+  "InboxFinalizeRecoveryLiveTests/testLiveALostFinalizeAnswerIsRecoveredWithoutASecondObject",
+  "InboxFinalizeRecoveryLiveTests/testLiveEveryAnswerLostEndsUnknownAndRetryRecoversOnce",
+  "InboxFinalizeRecoveryLiveTests/testLiveProcessKilledAfterCentralCommittedRecoversOnce",
+  "InboxFinalizeRecoveryLiveTests/testLivePreRecoveryServerStaysUnknownThroughRecordPurgeAndNeverReuploads",
+  "InboxFinalizeRecoveryLiveTests/testLiveAnExpiredObjectIsTerminalAndNothingIsSentAgain",
+  "InboxFinalizeRecoveryLiveTests/testLiveARemovedObjectIsTerminal",
+  "InboxFinalizeRecoveryLiveTests/testLiveAFinalizeThatNeverArrivedThenReapedStaysUnknownAndIsNeverReuploaded",
+  "InboxFinalizeRecoveryLiveTests/testLiveAnUnresolvedReapedSessionIsTerminalFailedAndNotReuploaded",
+  "InboxFinalizeRecoveryLiveTests/testLiveCancelledWhileCentralHoldsTheCommittedAnswerRecoversOnce",
+  "InboxFinalizeRecoveryLiveTests/testLivePhaseAndObjectRecordWriteFailuresNeverCauseASecondUpload",
+  "InboxFinalizeRecoveryLiveTests/testLiveAForeignAccountsBearerUploadsNothingOnEitherAccount",
+  "InboxFinalizeRecoveryLiveTests/testLiveAnEarlierBuildsLostFinalizeIsAdoptedAndRecoveredNotReuploaded",
+  "InboxFinalizeRecoveryLiveTests/testLiveAnEarlierBuildsSessionWhoseRecordIsGoneStaysUnknownNeverReuploaded",
+  "InboxFinalizeRecoveryLiveTests/testLiveAnEarlierFinalizeCommittingDuringAnUnprovenContinuationIsRecoveredNeverReinit",
+  "InboxFinalizeRecoveryLiveTests/testLiveAnEarlierFinalizeWinningTheRaceWithTheSendersFinalizeIsRecovered",
+  "InboxFinalizeRecoveryLiveTests/testLiveMixedAndAllEmptyManifestsAreUploadedAndCountedOnce",
+  "InboxFinalizeRecoveryLiveTests/testLiveTwoConcurrentDeliveriesEachUploadOnceWhenOneAnswerIsLost",
+  "InboxFinalizeRecoveryLiveTests/testLiveTheShareUploadStillSendsAPlainFinalize",
 ];
 /** Where each lane tees its `swift test` output for the proof to read. */
 const INTEROP_LOGS = new Map([[SWIFT_PACKAGE, "swift-test.log"], [INTEROP, "swift-interop.log"]]);

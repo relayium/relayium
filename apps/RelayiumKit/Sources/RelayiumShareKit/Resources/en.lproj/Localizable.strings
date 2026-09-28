@@ -1113,6 +1113,14 @@
 "send.errorAlreadyBound" = "These encrypted files already belong to another delivery.";
 "send.errorObjectUnavailable" = "The encrypted files were no longer available when the delivery was made.";
 "send.errorQueueFull" = "That device already has as many deliveries waiting as it can hold. Let it catch up, then try again.";
+"send.errorUploadUnconfirmed" = "Relayium couldn't confirm whether this upload finished, so nothing has been delivered, and it won't be uploaded again on its own. Try again to check with the server, or discard it.";
+"send.errorUploadNotCompleted" = "The server didn't complete this upload, so nothing was delivered. To send these files, discard this one and start a new send.";
+"send.errorUploadNoLongerStored" = "This upload finished but is no longer stored, so nothing was delivered. To send these files, discard this one and start a new send, which counts as a new upload.";
+"send.errorUploadOlderVersion" = "This send was started by an earlier version of Relayium and can't be finished here. To send these files, discard it and start a new send, which counts as a new upload.";
+"send.errorUploadOlderVersionMayArrive" = "This send was started by an earlier version of Relayium. Its upload finished, but Relayium can't tell whether it was handed to the device, so it may still arrive. It won't be uploaded or sent again. Try again to look for it, or discard it and stop following it here.";
+"send.errorUploadUnrecognizedState" = "This send was saved in a state this version of Relayium doesn't recognize, so it can't tell what happened to the upload. Nothing has been sent again. You can discard it, or keep it for a newer version.";
+"send.errorUploadUnrecognizedMayArrive" = "This send was saved in a state this version of Relayium doesn't recognize. Its upload may already have been handed to the device, so it may still arrive. Nothing has been sent again. You can discard it and stop following it here, or keep it for a newer version.";
+"send.errorOwnershipConflict" = "This send was found in two places on this device, so Relayium won't continue either copy. Nothing has been deleted.";
 "send.refusalNoSelection" = "Choose the files to send first.";
 "send.refusalNoTarget" = "Choose which of your devices to send to.";
 "send.refusalNotSignedIn" = "Sign in to send to your own devices.";

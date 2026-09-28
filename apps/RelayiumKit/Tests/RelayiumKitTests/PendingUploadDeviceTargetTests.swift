@@ -36,7 +36,7 @@ final class PendingUploadDeviceTargetTests: XCTestCase {
     // MARK: - helpers
 
     private func makeStore() -> PendingUploadStore {
-        PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
+        PendingUploadStore(root: root.appendingPathComponent("PendingUploads")).protectedDeviceStore()
     }
 
     private func selection(_ name: String = "a.txt") throws -> [SelectedFile] {
@@ -230,7 +230,7 @@ final class PendingUploadDeviceTargetTests: XCTestCase {
             let plan = try store.prepare(files: try selection(), accountId: "acct-1",
                                          burnAfterRead: false, ttl: 86_400, target: target())
             try rewrite(store, plan.jobId) { $0.removeValue(forKey: missing) }
-            XCTAssertNil(makeStore().plan(for: "acct-1"),
+            XCTAssertNil(makeStore().deviceSendPlans(for: "acct-1").first,
                          "a plan missing \(missing) was offered for recovery")
         }
     }
@@ -254,7 +254,7 @@ final class PendingUploadDeviceTargetTests: XCTestCase {
             let plan = try store.prepare(files: try selection(), accountId: "acct-1",
                                          burnAfterRead: false, ttl: 86_400, target: target())
             try rewrite(store, plan.jobId) { $0[field] = value }
-            XCTAssertNil(makeStore().plan(for: "acct-1"),
+            XCTAssertNil(makeStore().deviceSendPlans(for: "acct-1").first,
                          "\(field)=\(value) was offered for recovery")
         }
     }
@@ -280,7 +280,7 @@ final class PendingUploadDeviceTargetTests: XCTestCase {
         let plan = try store.prepare(files: try selection(), accountId: "acct-1",
                                      burnAfterRead: false, ttl: 86_400, target: target())
         try rewrite(store, plan.jobId) { $0["burnAfterRead"] = true }
-        XCTAssertNil(makeStore().plan(for: "acct-1"))
+        XCTAssertNil(makeStore().deviceSendPlans(for: "acct-1").first)
     }
 
     func testADevicePlanWithAChangedTTLIsRefusedOnRecovery() throws {
@@ -290,7 +290,7 @@ final class PendingUploadDeviceTargetTests: XCTestCase {
                                      ttl: UploadPurpose.deviceTaskTTLSeconds,
                                      target: target())
         try rewrite(store, plan.jobId) { $0["ttl"] = 3_600 }
-        XCTAssertNil(makeStore().plan(for: "acct-1"))
+        XCTAssertNil(makeStore().deviceSendPlans(for: "acct-1").first)
     }
 
     /// A purpose this build does not know is a DECODE failure, not a default.
@@ -301,18 +301,21 @@ final class PendingUploadDeviceTargetTests: XCTestCase {
         let plan = try store.prepare(files: try selection(), accountId: "acct-1",
                                      burnAfterRead: false, ttl: 86_400, target: target())
         try rewrite(store, plan.jobId) { $0["purpose"] = "team_broadcast_v2" }
-        XCTAssertNil(makeStore().plan(for: "acct-1"))
+        XCTAssertNil(makeStore().deviceSendPlans(for: "acct-1").first)
     }
 
-    /// An unrecoverable plan is also swept, so it does not sit on the user's
-    /// disk holding staged copies of their files forever.
-    func testAnIncoherentDevicePlanIsSwept() throws {
+    /// An unrecoverable plan in the PROTECTED root is never executed, and never
+    /// swept either: it may be the only record of a delivery central already
+    /// counted, possibly written by a newer build. (The shared root keeps its
+    /// old sweep for the plans it still owns.)
+    func testAnIncoherentDevicePlanIsRetainedButNeverOffered() throws {
         let store = makeStore()
         let plan = try store.prepare(files: try selection(), accountId: "acct-1",
                                      burnAfterRead: false, ttl: 86_400, target: target())
         try rewrite(store, plan.jobId) { $0.removeValue(forKey: "createIdempotencyKey") }
         makeStore().sweepIncomplete()
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path))
+        XCTAssertNil(makeStore().deviceSendPlans(for: "acct-1").first)
     }
 
     // MARK: - stability across mutations
@@ -344,9 +347,9 @@ final class PendingUploadDeviceTargetTests: XCTestCase {
         XCTAssertEqual(replaced.uploadId, "UPLOAD0000000002")
         try check(replaced, "a replaced upload session")
         // A new store over the same root is what a relaunch sees.
-        try check(makeStore().plan(for: "acct-1"), "a relaunch")
+        try check(makeStore().deviceSendPlans(for: "acct-1").first, "a relaunch")
 
-        let finalized = try store.markFinalized(replaced, storedId: "STORED0123456789")
+        let finalized = try store.fixtureFinalized(replaced, storedId: "STORED0123456789")
         try check(finalized, "finalization")
         try check(makeStore().currentPlanForTesting(jobId: plan.jobId), "a relaunch after finalize")
 
@@ -366,8 +369,10 @@ final class PendingUploadDeviceTargetTests: XCTestCase {
         let store = makeStore()
         _ = try store.prepare(files: try selection(), accountId: "acct-1",
                               burnAfterRead: false, ttl: 86_400, target: target())
-        XCTAssertNotNil(store.plan(for: "acct-1"))
-        XCTAssertNil(store.plan(for: "acct-2"))
+        XCTAssertNotNil(store.deviceSendPlans(for: "acct-1").first)
+        XCTAssertNil(store.deviceSendPlans(for: "acct-2").first)
+        // And a delivery is never offered to the stored-link recovery surface.
+        XCTAssertNil(store.plan(for: "acct-1"))
     }
 }
 

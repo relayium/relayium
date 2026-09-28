@@ -41,7 +41,7 @@ final class PendingUploadDeviceSendStateTests: XCTestCase {
     // MARK: - helpers
 
     private func makeStore() -> PendingUploadStore {
-        PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
+        PendingUploadStore(root: root.appendingPathComponent("PendingUploads")).protectedDeviceStore()
     }
 
     private func selection(_ name: String = "a.txt") throws -> [SelectedFile] {
@@ -66,7 +66,7 @@ final class PendingUploadDeviceSendStateTests: XCTestCase {
                                      burnAfterRead: false,
                                      ttl: UploadPurpose.deviceTaskTTLSeconds,
                                      target: target())
-        return try store.markFinalized(plan, storedId: "STORED0123456789")
+        return try store.fixtureFinalized(plan, storedId: "STORED0123456789")
     }
 
     private func share(_ store: PendingUploadStore) throws -> PendingUploadPlan {
@@ -337,7 +337,8 @@ final class PendingUploadDeviceSendStateTests: XCTestCase {
     /// The share half of the same sweep, unchanged. This is the regression
     /// guard on relaxing the rule for deliveries.
     func testTheLaunchSweepStillRemovesAFinalizedShare() throws {
-        let store = makeStore()
+        // Shares live in the shared root; its sweep is the one under guard.
+        let store = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
         let plan = try store.markFinalized(try share(store), storedId: "STORED0123456789")
         store.sweepIncomplete()
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path))

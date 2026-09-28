@@ -202,6 +202,50 @@ public struct PendingUploadPlan: Codable, Equatable {
     /// unknown `purpose`: it describes framing this build cannot honour.
     public var inboxProtocolVersion: Int?
 
+    /// The phase of `uploadId` as recorded by the protected Device Inbox
+    /// sender: `uploading` (written with the session, before any byte moved)
+    /// or `finalizing` (written before ANY finalize request for it). Stored as
+    /// a string so a value from a newer build is read, never refused — an
+    /// unreadable plan is one a sweep may delete — and it is interpreted
+    /// fail-closed (`deviceSessionState`).
+    ///
+    /// Only written in the protected `DeviceInboxSends` root, which no earlier
+    /// build enumerates, so no earlier build can drop it by re-encoding the plan.
+    public var sessionPhase: String? = nil
+    /// The session `sessionPhase` describes. A phase that names any other
+    /// session describes nothing this plan can prove.
+    public var phaseUploadId: String? = nil
+    /// Central answered, authoritatively, that this upload produced no usable
+    /// object (`failed`, `expired`, `removed`), or this is a pre-v2 delivery
+    /// that already reached the server (`olderVersion`). Terminal: nothing
+    /// re-uploads this plan. A value this build does not know is kept and read
+    /// as "cannot confirm", never as one of the known outcomes.
+    public var terminalOutcome: String? = nil
+
+    /// What this plan's durable record proves about its upload session.
+    public var deviceSessionState: PendingDeviceSessionState {
+        if let raw = terminalOutcome {
+            return .terminal(PendingDeviceTerminal(rawValue: raw) ?? .unrecognized)
+        }
+        switch (uploadId, sessionPhase, phaseUploadId) {
+        case (nil, nil, nil):
+            return .noSession
+        case (nil, _, _):
+            // A phase with no session is a record this build cannot explain.
+            return .unknown
+        case let (id?, nil, nil):
+            // Written by an earlier build (or before this field existed):
+            // whether a finalize was ever sent is not known.
+            return .unproven(id)
+        case let (id?, "uploading", phaseId?) where phaseId == id:
+            return .uploading(id)
+        case let (id?, "finalizing", phaseId?) where phaseId == id:
+            return .finalizing(id)
+        default:
+            return .unknown
+        }
+    }
+
     /// The purpose to act on. Absent means `share`: the only thing a plan
     /// written before this field existed could have been.
     public var effectivePurpose: UploadPurpose { purpose ?? .share }
@@ -289,6 +333,45 @@ public struct PendingUploadTarget: Equatable, Sendable {
     }
 }
 
+/// What a Device Inbox plan's durable record proves about its upload session.
+public enum PendingDeviceSessionState: Equatable, Sendable {
+    case noSession
+    /// Opened and persisted by the protected sender; no finalize ever sent.
+    case uploading(String)
+    /// A finalize of this session may have been sent.
+    case finalizing(String)
+    /// A session recorded without a phase: finalize history unknown.
+    case unproven(String)
+    /// Phase fields this build cannot explain. Fail closed: no request.
+    case unknown
+    case terminal(PendingDeviceTerminal)
+}
+
+/// A terminal disposition recorded in a Device Inbox plan.
+public enum PendingDeviceTerminal: String, Equatable, Sendable {
+    case failed
+    case expired
+    case removed
+    case olderVersion
+    /// A stored value this build does not recognise. Retained, never
+    /// interpreted as a known outcome.
+    case unrecognized
+}
+
+/// The durable writes a test can make fail. Internal: reachable only through
+/// `@testable import`, never by a production caller.
+enum PendingUploadWrite: Equatable {
+    case uploadSession, finalizing, finalized, terminal, retired
+}
+
+/// Why the protected Device Inbox root does not exclusively own a job.
+public enum DeviceSendOwnership: Equatable, Sendable {
+    case owned
+    /// The same job id exists in both roots. Neither copy is executed.
+    case conflict
+    case missing
+}
+
 public enum PendingUploadError: Error, Equatable {
     /// The selection is empty, too large, or carries a name/size this app will
     /// not stage.
@@ -323,9 +406,58 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// bound nobody keeps.
     public private(set) var lastCopyBufferPeak = 0
 
+    /// Set only on a protected Device Inbox store: the shared root its
+    /// deliveries may be migrated OUT of, and the root whose same-named job
+    /// directory makes a job a conflict nobody executes.
+    private let legacyRoot: URL?
+
+    /// Whether this is the protected Device Inbox root (`DeviceInboxSends`).
+    /// Only such a store stages deliveries, records session phases and may be
+    /// driven by `InboxSendCoordinator`.
+    public var isProtectedDeviceStore: Bool { legacyRoot != nil }
+
+    /// Test-only persistence failure injection. Internal on purpose.
+    var writeFailureInjection: ((PendingUploadWrite) -> Bool)?
+
+    /// The shared root. Share jobs live here — and, for builds up to 1.4.3,
+    /// device deliveries too. It never stages a new delivery.
     public init(root: URL, fileManager: FileManager = .default) {
         self.root = root
         self.fileManager = fileManager
+        self.legacyRoot = nil
+    }
+
+    /// The protected Device Inbox root.
+    ///
+    /// A SIBLING of the shared root, never a child: every released build
+    /// enumerates the shared root and deletes any directory in it whose plan it
+    /// cannot read, and none of them enumerates Application Support itself. So
+    /// an earlier build — including the frozen 1.4.3 — can neither sweep,
+    /// rewrite (dropping the phase fields) nor re-upload a delivery here.
+    public init(protectedDeviceRoot: URL, migratingFrom legacyRoot: URL,
+                fileManager: FileManager = .default) {
+        self.root = protectedDeviceRoot
+        self.fileManager = fileManager
+        self.legacyRoot = legacyRoot
+    }
+
+    /// The protected root that belongs beside a shared root. Production's
+    /// `…/PendingUploads` maps to `…/DeviceInboxSends`; any other injected
+    /// root gets its own sibling, so two injected roots never share one.
+    public static func protectedDeviceRoot(besides shared: URL) -> URL {
+        let name = shared.lastPathComponent == "PendingUploads"
+            ? "DeviceInboxSends" : shared.lastPathComponent + ".DeviceInboxSends"
+        return shared.deletingLastPathComponent().appendingPathComponent(name, isDirectory: true)
+    }
+
+    /// The protected Device Inbox store paired with this shared store.
+    public func protectedDeviceStore() -> PendingUploadStore {
+        PendingUploadStore(protectedDeviceRoot: Self.protectedDeviceRoot(besides: root),
+                           migratingFrom: root, fileManager: fileManager)
+    }
+
+    private func injectedFailure(_ write: PendingUploadWrite) -> Bool {
+        writeFailureInjection?(write) ?? false
     }
 
     /// `<Application Support>/PendingUploads`.
@@ -408,6 +540,10 @@ public final class PendingUploadStore: @unchecked Sendable {
         // a target that would not validate on read is one no resume could ever
         // act on, so the job would stage the user's bytes and then be swept.
         if let target {
+            // A delivery is born in the protected root and nowhere else. One
+            // staged in the shared root is one an earlier build could re-upload
+            // or sweep, which is the exact exposure the protected root removes.
+            guard isProtectedDeviceStore else { throw PendingUploadError.unusableSelection }
             guard target.isWellFormed else { throw PendingUploadError.unusableSelection }
             // The server refuses burn-after-read on a task-purpose object
             // rather than rewriting it, so a plan that recorded the pair would
@@ -569,8 +705,14 @@ public final class PendingUploadStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard let accountId, !accountId.isEmpty else { return nil }
+        // SHARE plans only. The recoverable-upload surface resumes what it
+        // finds as a stored link, and a Device Inbox delivery is not one: shown
+        // there, its Discard would delete a delivery the sender still owns.
+        // Builds up to 1.4.3 left deliveries in this root until the protected
+        // root adopts them, so the filter is load-bearing, not tidiness.
         return plans()
-            .filter { $0.accountId == accountId && !$0.retired && $0.finalizedStoredId == nil }
+            .filter { $0.accountId == accountId && !$0.retired && $0.finalizedStoredId == nil
+                && $0.effectivePurpose == .share }
             .sorted { $0.createdAt > $1.createdAt }
             .first { (try? verifyStaging($0)) != nil }
     }
@@ -591,11 +733,136 @@ public final class PendingUploadStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard let accountId, !accountId.isEmpty else { return [] }
+        // Only the protected root answers. A delivery still in the shared root
+        // is not this sender's until `adoptLegacyDeliveries` has moved it, and a
+        // job whose id also exists there is a conflict nobody executes.
+        guard isProtectedDeviceStore else { return [] }
         return plans()
             .filter { $0.accountId == accountId && $0.effectivePurpose == .deviceTask
-                && !$0.retired }
+                && !$0.retired && ownership(of: $0.jobId) == .owned }
             .sorted { $0.createdAt > $1.createdAt }
             .filter { (try? verifyStaging($0)) != nil }
+    }
+
+    /// The current on-disk plan for one job, when this protected store owns it
+    /// exclusively. The coordinator decides from THIS, never from a snapshot a
+    /// caller has been holding.
+    public func ownedDevicePlan(jobId: String) -> PendingUploadPlan? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isProtectedDeviceStore, ownership(of: jobId) == .owned,
+              let plan = currentPlan(jobId: jobId), plan.effectivePurpose == .deviceTask
+        else { return nil }
+        return plan
+    }
+
+    // MARK: - protected root ownership
+
+    /// Whether this protected root exclusively owns a job.
+    public func ownership(of jobId: String) -> DeviceSendOwnership {
+        guard let legacyRoot, let checked = try? StoredObjectID.checked(jobId),
+              checked == jobId else { return .missing }
+        let here = fileManager.fileExists(atPath: jobURL(for: checked).path)
+        let there = fileManager.fileExists(
+            atPath: legacyRoot.appendingPathComponent(checked, isDirectory: true).path)
+        switch (here, there) {
+        case (true, false): return .owned
+        case (true, true): return .conflict
+        default: return .missing
+        }
+    }
+
+    /// Whether the SHARED root holds a job directory with this id. The content
+    /// key is filed by job id, not by root, so while it does, the key belongs
+    /// to that copy too and must not be removed.
+    public func sharedRootHolds(jobId: String) -> Bool {
+        guard let legacyRoot, let checked = try? StoredObjectID.checked(jobId), checked == jobId else {
+            return false
+        }
+        return fileManager.fileExists(atPath: legacyRoot.appendingPathComponent(checked, isDirectory: true).path)
+    }
+
+    /// Job ids present in BOTH roots. Reported, never resolved: choosing
+    /// either copy, or deleting one, could lose the only record of a
+    /// delivery. An ordinary exclusive migration never creates one.
+    public func ownershipConflicts() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let legacyRoot else { return [] }
+        let here = Set((try? fileManager.contentsOfDirectory(atPath: root.path)) ?? [])
+        let there = Set((try? fileManager.contentsOfDirectory(atPath: legacyRoot.path)) ?? [])
+        return here.intersection(there)
+            .filter { (try? StoredObjectID.checked($0)) == $0 }
+            .sorted()
+    }
+
+    /// What one adoption pass did.
+    public struct AdoptionReport: Equatable, Sendable {
+        public var moved: [String] = []
+        /// Same job id in both roots: neither copy moved or executed.
+        public var conflicts: [String] = []
+        /// A delivery that could not be moved this time (I/O), or that carries
+        /// protected-root fields no earlier build writes. Left where it is,
+        /// untouched and unexecuted.
+        public var skipped: [String] = []
+    }
+
+    /// Move every Device Inbox delivery an earlier build left in the shared
+    /// root into this protected root, each by ONE exclusive rename.
+    ///
+    /// The rename is the ownership transfer: before it the shared root owns the
+    /// job (and nothing here acts on it), after it only this root does. It is
+    /// never a copy, so there are never two executable versions of a job, and
+    /// `RENAME_EXCL` refuses to replace anything already here. A move is
+    /// attempted only for a plan that reads, validates and is a delivery;
+    /// everything else in the shared root — shares, unreadable directories,
+    /// retired tombstones — is left exactly as it was for the share store.
+    ///
+    /// Moved plans keep every field they had, including any session: with no
+    /// phase recorded, that session is `unproven` for the rest of its life.
+    @discardableResult
+    public func adoptLegacyDeliveries() -> AdoptionReport {
+        lock.lock()
+        defer { lock.unlock() }
+        var report = AdoptionReport()
+        guard let legacyRoot else { return report }
+        let legacy = PendingUploadStore(root: legacyRoot, fileManager: fileManager)
+        let entries = (try? fileManager.contentsOfDirectory(at: legacyRoot,
+                                                            includingPropertiesForKeys: nil)) ?? []
+        for entry in entries {
+            let name = entry.lastPathComponent
+            guard let plan = legacy.currentPlan(jobId: name),
+                  plan.effectivePurpose == .deviceTask, !plan.retired else { continue }
+            guard plan.sessionPhase == nil, plan.phaseUploadId == nil,
+                  plan.terminalOutcome == nil else {
+                report.skipped.append(name)
+                continue
+            }
+            let destination = jobURL(for: name)
+            if fileManager.fileExists(atPath: destination.path) {
+                report.conflicts.append(name)
+                continue
+            }
+            do {
+                try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+            } catch {
+                report.skipped.append(name)
+                continue
+            }
+            let moved = entry.path.withCString { from in
+                destination.path.withCString { to in
+                    renamex_np(from, to, UInt32(RENAME_EXCL))
+                }
+            }
+            if moved == 0 {
+                report.moved.append(name)
+            } else if errno == EEXIST {
+                report.conflicts.append(name)
+            } else {
+                report.skipped.append(name)
+            }
+        }
+        return report
     }
 
     private func plans() -> [PendingUploadPlan] {
@@ -780,9 +1047,112 @@ public final class PendingUploadStore: @unchecked Sendable {
               !current.retired, current.finalizedStoredId == nil else {
             throw PendingUploadError.stagingMissing
         }
+        let checked = try StoredObjectID.checked(id)
         var updated = current
-        updated.uploadId = try StoredObjectID.checked(id)
+        if isProtectedDeviceStore {
+            // A new session may replace only nothing, or a session this sender
+            // opened and central has reaped before any finalize. Never one a
+            // finalize may have reached, one of unknown history, or a terminal
+            // record: replacing those is how a second object gets made.
+            switch current.deviceSessionState {
+            case .noSession, .uploading: break
+            case .finalizing, .unproven, .unknown, .terminal:
+                throw PendingUploadError.unusableSelection
+            }
+            guard ownership(of: current.jobId) == .owned else { throw PendingUploadError.stagingMissing }
+            if injectedFailure(.uploadSession) { throw PendingUploadError.stagingMissing }
+            // Written in the SAME atomic write as the id, before any byte:
+            // this is the provenance that alone may later justify a re-init.
+            updated.sessionPhase = "uploading"
+            updated.phaseUploadId = checked
+        }
+        updated.uploadId = checked
         updated.uploadChunkSize = chunkSize
+        try write(updated)
+        return updated
+    }
+
+    /// Record that a finalize of `uploadId` may be sent. Called before EVERY
+    /// finalize request — first, retry, or recovery probe — and nothing is
+    /// sent if it throws. Compare-and-set against the plan on disk: it must
+    /// still name exactly this session and must not be finalized, bound to a
+    /// task, terminal or of unknown state. Idempotent for the same session.
+    @discardableResult
+    public func markFinalizing(uploadId: String, for plan: PendingUploadPlan) throws -> PendingUploadPlan {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isProtectedDeviceStore, ownership(of: plan.jobId) == .owned,
+              let current = currentPlan(jobId: plan.jobId), !current.retired,
+              current.effectivePurpose == .deviceTask,
+              current.finalizedStoredId == nil, current.deviceTaskId == nil,
+              current.uploadId == uploadId else {
+            throw PendingUploadError.stagingMissing
+        }
+        switch current.deviceSessionState {
+        case .finalizing(let id) where id == uploadId:
+            return current
+        case .uploading(let id) where id == uploadId, .unproven(let id) where id == uploadId:
+            break
+        default:
+            throw PendingUploadError.unusableSelection
+        }
+        if injectedFailure(.finalizing) { throw PendingUploadError.stagingMissing }
+        var updated = current
+        updated.sessionPhase = "finalizing"
+        updated.phaseUploadId = uploadId
+        try write(updated)
+        return updated
+    }
+
+    /// Record the object central finalized from `uploadId`. Compare-and-set:
+    /// only against the plan whose session that is, or a plan that already
+    /// recorded this same object.
+    @discardableResult
+    public func markFinalized(_ plan: PendingUploadPlan, storedId: String,
+                              uploadId: String) throws -> PendingUploadPlan {
+        lock.lock()
+        defer { lock.unlock() }
+        let checked = try StoredObjectID.checked(storedId)
+        guard isProtectedDeviceStore, ownership(of: plan.jobId) == .owned,
+              let current = currentPlan(jobId: plan.jobId), !current.retired,
+              current.effectivePurpose == .deviceTask, current.terminalOutcome == nil else {
+            throw PendingUploadError.stagingMissing
+        }
+        if let existing = current.finalizedStoredId {
+            guard existing == checked else { throw PendingUploadError.unusableSelection }
+            return current
+        }
+        guard current.uploadId == uploadId else { throw PendingUploadError.unusableSelection }
+        if injectedFailure(.finalized) { throw PendingUploadError.stagingMissing }
+        var updated = current
+        updated.finalizedStoredId = checked
+        try write(updated)
+        return updated
+    }
+
+    /// Record a terminal disposition. Compare-and-set against the session it
+    /// answers (`nil` for a pre-v2 delivery with no session). Session fields
+    /// are KEPT: the record of what was uploaded outlives the disposition.
+    @discardableResult
+    public func recordTerminal(_ outcome: PendingDeviceTerminal, uploadId: String?,
+                               for plan: PendingUploadPlan) throws -> PendingUploadPlan {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isProtectedDeviceStore, outcome != .unrecognized,
+              ownership(of: plan.jobId) == .owned,
+              let current = currentPlan(jobId: plan.jobId), !current.retired,
+              current.effectivePurpose == .deviceTask, current.deviceTaskId == nil,
+              current.finalizedStoredId == nil || outcome == .olderVersion,
+              current.uploadId == uploadId else {
+            throw PendingUploadError.stagingMissing
+        }
+        if let existing = current.terminalOutcome {
+            guard existing == outcome.rawValue else { throw PendingUploadError.unusableSelection }
+            return current
+        }
+        if injectedFailure(.terminal) { throw PendingUploadError.stagingMissing }
+        var updated = current
+        updated.terminalOutcome = outcome.rawValue
         try write(updated)
         return updated
     }
@@ -793,6 +1163,9 @@ public final class PendingUploadStore: @unchecked Sendable {
     public func markFinalized(_ plan: PendingUploadPlan, storedId: String) throws -> PendingUploadPlan {
         lock.lock()
         defer { lock.unlock() }
+        // A delivery records its object only against the session it came
+        // from: `markFinalized(_:storedId:uploadId:)`.
+        guard !isProtectedDeviceStore else { throw PendingUploadError.unusableSelection }
         guard let current = currentPlan(jobId: plan.jobId), !current.retired else {
             throw PendingUploadError.stagingMissing
         }
@@ -824,6 +1197,12 @@ public final class PendingUploadStore: @unchecked Sendable {
         if let existing = current.deviceTaskId {
             guard existing == checked else { throw PendingUploadError.unusableSelection }
             return current
+        }
+        // A terminal job never gains a task. The one exception is this build's
+        // own `olderVersion`, whose read-only convergence records the task an
+        // earlier build's lost create made.
+        if let terminal = current.terminalOutcome, terminal != PendingDeviceTerminal.olderVersion.rawValue {
+            throw PendingUploadError.unusableSelection
         }
         var updated = current
         updated.deviceTaskId = checked
@@ -972,6 +1351,7 @@ public final class PendingUploadStore: @unchecked Sendable {
               current.finalizedStoredId == nil || current.effectivePurpose == .deviceTask else {
             throw PendingUploadError.stagingMissing
         }
+        if injectedFailure(.retired) { throw PendingUploadError.stagingMissing }
         var updated = current
         updated.retired = true
         try write(updated)
@@ -982,6 +1362,11 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// reader sees the old plan or the new one, never a truncated document. It
     /// also handles the first write, when there is no item to replace yet.
     private func write(_ plan: PendingUploadPlan) throws {
+        // A protected job whose id also exists in the shared root is a
+        // conflict: nothing about it is written until a person resolves it.
+        if isProtectedDeviceStore, ownership(of: plan.jobId) == .conflict {
+            throw PendingUploadError.stagingMissing
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(plan)
@@ -1000,6 +1385,10 @@ public final class PendingUploadStore: @unchecked Sendable {
         guard let checked = try? StoredObjectID.checked(jobId) else { return false }
         let url = jobURL(for: checked)
         guard fileManager.fileExists(atPath: url.path) else { return true }
+        // A protected job whose id also exists in the shared root is a
+        // conflict: neither copy is deleted, by anyone, until a person
+        // resolves it (binding: preserve both complete trees).
+        if isProtectedDeviceStore, ownership(of: checked) == .conflict { return false }
         do {
             try fileManager.removeItem(at: url)
             return !fileManager.fileExists(atPath: url.path)
@@ -1017,6 +1406,22 @@ public final class PendingUploadStore: @unchecked Sendable {
     public func sweepIncomplete() {
         lock.lock()
         defer { lock.unlock() }
+        // The protected root deletes only what a person or a finished job
+        // already released: a readable, exclusively owned plan that is retired
+        // (Discard's tombstone) or a finalized share. An unreadable,
+        // newer-version, plan-less or conflicting entry may be the only record
+        // of a delivery central already counted, and is always retained.
+        if isProtectedDeviceStore {
+            let entries = (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+            for entry in entries {
+                let name = entry.lastPathComponent
+                guard ownership(of: name) == .owned, let plan = currentPlan(jobId: name),
+                      plan.retired || (plan.finalizedStoredId != nil && plan.effectivePurpose == .share)
+                else { continue }
+                try? fileManager.removeItem(at: entry)
+            }
+            return
+        }
         let entries = (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
         for entry in entries {
             let planFile = entry.appendingPathComponent("plan.json")
@@ -1064,11 +1469,17 @@ public struct PendingUploadSupport {
     /// retirement happens on whichever context finished the commit, and the
     /// store is lock-guarded for precisely that.
     public let drafts: SharedDraftStore?
+    /// The protected Device Inbox root beside `store`, derived rather than
+    /// passed so that EVERY construction — production, engineering, an
+    /// acceptance root, a peer host — gets one, and no caller can hand the
+    /// delivery sender the shared root by mistake.
+    public let deviceStore: PendingUploadStore
 
     public init(store: PendingUploadStore, keys: StoredLinkKeyStore,
                 drafts: SharedDraftStore? = nil) {
         self.store = store
         self.keys = keys
         self.drafts = drafts
+        self.deviceStore = store.isProtectedDeviceStore ? store : store.protectedDeviceStore()
     }
 }

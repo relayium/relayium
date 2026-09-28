@@ -127,6 +127,30 @@ public enum InboxSendPresentation {
             return L10n.t(.sendErrorNoTask, language: language)
         case .unknownOutcome:
             return L10n.t(.sendStateUnknown, language: language)
+        case .uploadOutcomeUnknown:
+            // Not `sendStateUnknown`: that sentence promises Retry continues
+            // the same delivery, which cannot be promised when central can no
+            // longer say whether this upload finished.
+            return L10n.t(.sendErrorUploadUnconfirmed, language: language)
+        case .uploadUnavailable(let why):
+            switch why {
+            case .notCompleted:
+                return L10n.t(.sendErrorUploadNotCompleted, language: language)
+            case .expired, .removed:
+                return L10n.t(.sendErrorUploadNoLongerStored, language: language)
+            case .olderVersion:
+                return L10n.t(.sendErrorUploadOlderVersion, language: language)
+            case .olderVersionDeliveryUnknown:
+                return L10n.t(.sendErrorUploadOlderVersionMayArrive, language: language)
+            case .unrecognized:
+                // Never the "finished but no longer stored" sentence: nothing
+                // here knows the upload finished.
+                return L10n.t(.sendErrorUploadUnrecognizedState, language: language)
+            case .unrecognizedMayArrive:
+                return L10n.t(.sendErrorUploadUnrecognizedMayArrive, language: language)
+            }
+        case .ownershipConflict:
+            return L10n.t(.sendErrorOwnershipConflict, language: language)
         }
     }
 

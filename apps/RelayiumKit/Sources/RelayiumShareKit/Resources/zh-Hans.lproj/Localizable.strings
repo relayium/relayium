@@ -1090,6 +1090,14 @@
 "send.errorAlreadyBound" = "这些加密文件已经属于另一次投递。";
 "send.errorObjectUnavailable" = "创建投递时，加密文件已不可用。";
 "send.errorQueueFull" = "那台设备等待中的投递已达上限。等它处理完后再试。";
+"send.errorUploadUnconfirmed" = "Relayium 无法确认这次上传是否已完成，因此没有送达任何内容，也不会自动再次上传。可以重试以向服务器再次确认，或者丢弃它。";
+"send.errorUploadNotCompleted" = "服务器没有完成这次上传，因此没有送达任何内容。要发送这些文件，请丢弃这一项并重新发起发送。";
+"send.errorUploadNoLongerStored" = "这次上传已完成，但已不再保存，因此没有送达任何内容。要发送这些文件，请丢弃这一项并重新发起发送；新的发送会算作一次新的上传。";
+"send.errorUploadOlderVersion" = "这次发送由较早版本的 Relayium 开始，无法在这里完成。要发送这些文件，请丢弃它并重新发起发送；新的发送会算作一次新的上传。";
+"send.errorUploadOlderVersionMayArrive" = "这次发送由较早版本的 Relayium 开始。它的上传已完成，但 Relayium 无法判断是否已移交给设备，因此它仍可能送达。它不会被再次上传或发送。可以重试以查找它，或者丢弃它并停止在这里跟踪。";
+"send.errorUploadUnrecognizedState" = "这次发送保存的状态无法被当前版本的 Relayium 识别，因此无法判断上传的结果。没有再次发送任何内容。可以丢弃它，或保留它等待更新的版本。";
+"send.errorUploadUnrecognizedMayArrive" = "这次发送保存的状态无法被当前版本的 Relayium 识别。它的上传可能已移交给设备，因此仍可能送达。没有再次发送任何内容。可以丢弃它并停止在这里跟踪，或保留它等待更新的版本。";
+"send.errorOwnershipConflict" = "在本机的两个位置发现了这次发送，因此 Relayium 不会继续任何一份。没有删除任何内容。";
 "send.refusalNoSelection" = "请先选择要发送的文件。";
 "send.refusalNoTarget" = "请选择要发送到你的哪台设备。";
 "send.refusalNotSignedIn" = "登录后才能发送到你自己的设备。";

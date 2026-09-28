@@ -80,6 +80,12 @@ jobs:
       # hostnames never consult them. Plain bash and git — no node required.
       - name: production-identifier exceptions stay exact
         run: bash scripts/test/production-identifiers-test.sh
+      # The frozen-build Device Inbox downgrade probe is a mandatory LOCAL
+      # evidence gate (it builds the Swift package twice, so no hosted lane
+      # runs it). Its script is still checked here on every push so it cannot
+      # rot unseen; plain bash, nothing to install.
+      - name: Device Inbox downgrade probe script parses
+        run: bash -n scripts/ci/device-inbox-downgrade-probe.sh
 
   uninstall-node:
     runs-on: ubuntu-latest

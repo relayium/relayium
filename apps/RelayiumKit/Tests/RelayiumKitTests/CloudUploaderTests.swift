@@ -35,6 +35,7 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
     func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
                     total: Int, token: String,
                     onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome {
+        if patchAlwaysNotFound { throw CloudError.notFound }
         if let error = nextPatchError { nextPatchError = nil; throw error }
         if failNextPatch { failNextPatch = false; throw CloudError.network }
         patches.append((from, bytes.count))
@@ -44,8 +45,26 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
         return .committed(received: committed.count)
     }
 
-    func uploadOffset(uploadId: String, token: String) async throws -> Int { committed.count }
+    /// When true every PATCH answers 404 (the session was claimed under it).
+    var patchAlwaysNotFound = false
+    /// When true the status read answers 404 (a done or reaped session).
+    var statusNotFound = false
+    func uploadOffset(uploadId: String, token: String) async throws -> Int {
+        if statusNotFound { throw CloudError.notFound }
+        return committed.count
+    }
     func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult { finalizeResult }
+
+    /// Answers for the Device Inbox's opted-in finalize, consumed in order;
+    /// once exhausted every call completes with `finalizeResult`.
+    var recoveringAnswers: [Result<FinalizeAnswer, Error>] = []
+    /// Every opted-in finalize, by session id, in order.
+    private(set) var recoveringFinalizes: [String] = []
+    func finalizeUploadRecovering(uploadId: String, token: String) async throws -> FinalizeAnswer {
+        recoveringFinalizes.append(uploadId)
+        if !recoveringAnswers.isEmpty { return try recoveringAnswers.removeFirst().get() }
+        return .completed(finalizeResult, recovered: false)
+    }
 }
 
 /// Holds every body it is handed, the way URLSession holds a request body for
