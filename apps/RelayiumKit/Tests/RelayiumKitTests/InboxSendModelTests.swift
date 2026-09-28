@@ -1877,4 +1877,34 @@ extension InboxSendModelTests {
         let key = try await keys.key(for: plan.jobId)
         XCTAssertEqual(key, Self.hygieneKey)
     }
+
+    // (c) the newer-version residual: a retired, exclusively owned tombstone —
+    // the exact shape the sweep releases — whose plan declares a version this
+    // build does not understand is neither listed nor deleted, and keeps its key.
+    func testKeyHygieneTheSweepKeepsANewerVersionPlanAndItsKey() async throws {
+        let store = hygieneStore(FileManager.default)
+        let plan = try await stagedDelivery(in: store)
+        _ = try store.markRetired(plan)
+
+        let planFile = store.jobURL(for: plan.jobId).appendingPathComponent("plan.json")
+        var document = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: planFile))
+                                     as? [String: Any])
+        XCTAssertEqual(document["version"] as? Int, PendingUploadPlan.currentVersion)
+        XCTAssertEqual(document["retired"] as? Bool, true, "the fixture must be a real retired tombstone")
+        document["version"] = PendingUploadPlan.currentVersion + 1
+        try JSONSerialization.data(withJSONObject: document).write(to: planFile, options: .atomic)
+        XCTAssertEqual(store.ownership(of: plan.jobId), .owned)
+
+        XCTAssertEqual(store.sweepIncomplete(), [], "a newer-version plan was listed for key removal")
+        XCTAssertTrue(dirExists(hygieneProtectedRoot, plan.jobId), "a newer-version plan was deleted")
+
+        supportOverride = PendingUploadSupport(store: store, keys: keys)
+        let (model, _) = await signedIn()
+        await model.sweptKeyRemoval?.value
+
+        XCTAssertNil(model.sweptKeyRemoval, "no key removal should have been scheduled")
+        XCTAssertTrue(dirExists(hygieneProtectedRoot, plan.jobId), "the refresh sweep deleted it")
+        let key = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(key, Self.hygieneKey, "the newer-version plan's key was removed")
+    }
 }
