@@ -44,6 +44,40 @@ type DiskStore struct {
 	locks [diskLockShards]sync.Mutex
 }
 
+// syncFile and syncDir are the durability seams. Production flushes file data
+// and directory entries to stable storage; tests swap them to observe (or fail)
+// each flush. The database commits upload progress and meter rows durably
+// (WAL, fsynced), so a blob that only sat in the page cache could, after power
+// loss, be shorter than the bytes the database already billed and recorded as
+// received — an unreadable finalized object and a resume offset that no longer
+// matches. Every mutation therefore reaches disk before it is reported.
+var (
+	syncFile = func(f *os.File) error { return f.Sync() }
+	syncDir  = func(dir string) error {
+		f, err := os.Open(dir)
+		if err != nil {
+			return err
+		}
+		serr := f.Sync()
+		if cerr := f.Close(); serr == nil {
+			serr = cerr
+		}
+		return serr
+	}
+)
+
+// ensureShardDir creates shardDir if needed and, when it had to create it,
+// makes the new directory entry durable in the store root.
+func (d *DiskStore) ensureShardDir(shardDir string) error {
+	if _, err := os.Stat(shardDir); err == nil {
+		return nil
+	}
+	if err := os.MkdirAll(shardDir, 0o700); err != nil {
+		return err
+	}
+	return syncDir(d.dir)
+}
+
 func NewDiskStore(dir string) (*DiskStore, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
@@ -140,7 +174,7 @@ func (d *DiskStore) Put(ctx context.Context, key string, r io.Reader) (int64, er
 	l.Lock()
 	defer l.Unlock()
 	shardDir, full := d.paths(key)
-	if err := os.MkdirAll(shardDir, 0o700); err != nil {
+	if err := d.ensureShardDir(shardDir); err != nil {
 		return 0, err
 	}
 	// Write to a temp file in the same dir, then atomically rename, so a
@@ -151,15 +185,25 @@ func (d *DiskStore) Put(ctx context.Context, key string, r io.Reader) (int64, er
 	}
 	tmpName := tmp.Name()
 	n, err := io.Copy(tmp, r)
+	if err == nil {
+		// Data first: a rename that reaches disk before the data would publish a
+		// name for an empty or short object.
+		err = syncFile(tmp)
+	}
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
-		os.Remove(tmpName) // propagate the reader/copy error (e.g. oversize abort)
+		os.Remove(tmpName) // propagate the reader/copy/sync error (e.g. oversize abort)
 		return 0, err
 	}
 	if err := os.Rename(tmpName, full); err != nil {
 		os.Remove(tmpName)
+		return 0, err
+	}
+	// Then the name: until the directory is flushed the rename itself can be
+	// lost, leaving the key missing though the caller was told it was stored.
+	if err := syncDir(shardDir); err != nil {
 		return 0, err
 	}
 	return n, nil
@@ -251,7 +295,7 @@ func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.R
 		return 0, err
 	}
 	shardDir, full := d.paths(key)
-	if err := os.MkdirAll(shardDir, 0o700); err != nil {
+	if err := d.ensureShardDir(shardDir); err != nil {
 		return 0, err
 	}
 	f, err := os.OpenFile(full, os.O_CREATE|os.O_WRONLY, 0o600)
@@ -273,10 +317,24 @@ func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.R
 		return 0, err
 	}
 	n, err := io.Copy(f, ctxReader{ctx: ctx, r: r})
-	if err != nil {
-		return offset + n, err
+	// Flush before the new offset is reported — on the error path too, because
+	// a failed append's committed prefix is still read back (by size) and billed.
+	// One fsync per chunk: chunks are large (up to maxAppendBytes), so this is
+	// one flush per several MiB, not per write. A zero-length append at a
+	// non-zero offset (the size probes) wrote nothing and skips it.
+	if n > 0 || offset == 0 {
+		if serr := syncFile(f); serr != nil && err == nil {
+			err = serr
+		}
 	}
-	return offset + n, nil
+	// offset 0 is where the blob is created; its directory entry must be
+	// durable too, or the whole file can vanish with the bytes already billed.
+	if offset == 0 {
+		if serr := syncDir(shardDir); serr != nil && err == nil {
+			err = serr
+		}
+	}
+	return offset + n, err
 }
 
 func (d *DiskStore) Delete(ctx context.Context, key string) error {

@@ -31,13 +31,47 @@ type SQLiteStore struct {
 	billingHoldSecret []byte
 }
 
-// Ping verifies the live writer connection used by account mutations. It is
-// intentionally small and side-effect free so /readyz can call it frequently.
+// Ping proves the writer connection used by account mutations can take the
+// database write lock right now, not merely that a handle exists: PingContext
+// alone never touches the file, so a read-only or otherwise unwritable database
+// answered "ready" while every mutation failed.
+//
+// It opens a transaction on the writer pool, which the DSN's _txlock=immediate
+// turns into BEGIN IMMEDIATE (the write lock is acquired up front), dirties one
+// page, and rolls it straight back — nothing reaches the file. It stays cheap
+// enough for /readyz to call on every poll. It does NOT prove free disk space
+// or a healthy device: a rolled-back page never leaves the page cache.
+//
+// Bounding: with MaxOpenConns(1) this waits for the single writer connection
+// and then, behind another process's write lock, up to busy_timeout. Both waits
+// honour ctx (database/sql's pool wait, and modernc's interrupt-on-done for the
+// BEGIN), so the caller's deadline — /readyz passes readyzDatabaseTimeout — is
+// the real bound, and a probe that times out behind a long writer reports
+// not-ready rather than blocking. It never deadlocks with the writer: it holds
+// nothing while it waits.
 func (s *SQLiteStore) Ping(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return errors.New("sqlite: store is not open")
 	}
-	return s.db.PingContext(ctx)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	// The write that proves it. BEGIN IMMEDIATE on its own is NOT enough: on a
+	// WAL database whose file SQLite opened read-only it still succeeds, and only
+	// the first page write reports SQLITE_READONLY. Rewriting user_version with
+	// its own value dirties page 1 without touching the schema (so the rollback
+	// forces no schema reparse) and, rolled back, never reaches the WAL or the
+	// file. Read and write share the IMMEDIATE transaction, so nothing can move
+	// the value in between. Nothing in Relayium uses user_version.
+	var v int64
+	if err = tx.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&v); err == nil {
+		_, err = tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d`, v))
+	}
+	if rerr := tx.Rollback(); err == nil {
+		err = rerr
+	}
+	return err
 }
 
 // reader returns the read pool for heavy reads, falling back to the writer

@@ -6,14 +6,18 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"mime"
 	"net/http"
 	"os"
+	ossignal "os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/mdp/qrterminal/v3"
@@ -530,6 +534,9 @@ func main() {
 	// Short external codes resolve to fresh opaque, in-memory room generations.
 	// The registry exists before the WebSocket observer is built, so that
 	// observer can never encounter an uninitialized resolver.
+	// Every background loop runs on bg's context, so a graceful shutdown can stop
+	// them (and briefly wait for them) before the database is closed under them.
+	bg := newBackgroundGroup()
 	pairReg := signal.NewPairRegistry(signal.CodeTTLSeconds, func() int64 { return time.Now().Unix() })
 	// The type assertion inside SetPairCodes is what installs relay attribution
 	// in production, and a failed assertion is SILENT — issuance would simply
@@ -539,7 +546,7 @@ func main() {
 	// does not carry attribution is a compile error rather than a quiet
 	// downgrade discovered from a metering report.
 	var _ account.RelayAttribution = pairReg
-	go pairReg.Run(context.Background(), time.Minute)
+	bg.Go(func(ctx context.Context) { pairReg.Run(ctx, time.Minute) })
 	hub := signal.NewHub()
 	// Pre-upload lifecycle hook. A pairing code whose sender staged files while
 	// waiting has ciphertext bound to it with a five-minute join deadline, and the
@@ -651,12 +658,12 @@ func main() {
 	// LB) leaves them unchanged. See account.PerInstanceThreshold / spec §7.5.
 	div := *rateLimitDivisor
 	pairLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(10, div), time.Minute, func() int64 { return time.Now().Unix() })
-	go pairLimiter.Run(context.Background(), time.Minute)
+	bg.Go(func(ctx context.Context) { pairLimiter.Run(ctx, time.Minute) })
 	// Separate limiter for /ws code-join attempts. The budget and the reasoning
 	// live on wsJoinPerIPPerMinute (wsroute.go), next to the handler that spends
 	// it; it is deliberately the same figure as iceLimiter below.
 	wsCodeLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(wsJoinPerIPPerMinute, div), time.Minute, func() int64 { return time.Now().Unix() })
-	go wsCodeLimiter.Run(context.Background(), time.Minute)
+	bg.Go(func(ctx context.Context) { wsCodeLimiter.Run(ctx, time.Minute) })
 	// Global (non-per-IP) breaker on INVALID pairing-code join attempts: sheds
 	// brute-force load and signals attacks. It never affects valid-code joins —
 	// which is also why it is not a ceiling on guessing (see GuessBreaker).
@@ -667,7 +674,7 @@ func main() {
 	// cap, 5/min/IP — same figure as the /ws request cap so neither endpoint is
 	// the looser path for repeated-request load.
 	iceLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(5, div), time.Minute, func() int64 { return time.Now().Unix() })
-	go iceLimiter.Run(context.Background(), time.Minute)
+	bg.Go(func(ctx context.Context) { iceLimiter.Run(ctx, time.Minute) })
 	// The cross-endpoint cap on how many DIFFERENT codes one address may try.
 	// ONE object, wired into both /ws (below) and /api/ice (SetCodeGuessLimiter):
 	// they are two halves of a single validity oracle, and while each held its own
@@ -677,15 +684,15 @@ func main() {
 	// endpoint its own. Per-process, like every limiter here (see
 	// PerInstanceThreshold for the multi-instance caveat).
 	codeGuessBudget := signal.NewCodeGuessLimiter(account.PerInstanceThreshold(pairingGuessesPerIPPerMinute, div), time.Minute, func() int64 { return time.Now().Unix() })
-	go codeGuessBudget.Run(context.Background(), time.Minute)
+	bg.Go(func(ctx context.Context) { codeGuessBudget.Run(ctx, time.Minute) })
 	// H2a: register endpoint (email-bomb + Sybil surface). 5/min/IP.
 	registerLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(5, div), time.Minute, func() int64 { return time.Now().Unix() })
-	go registerLimiter.Run(context.Background(), time.Minute)
+	bg.Go(func(ctx context.Context) { registerLimiter.Run(ctx, time.Minute) })
 
 	// Admin passkey */begin: 10/min/IP is generous for a human (one begin per
 	// login) yet caps a begin-flood that would otherwise fill the ceremony table.
 	passkeyBeginLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(10, div), time.Minute, func() int64 { return time.Now().Unix() })
-	go passkeyBeginLimiter.Run(context.Background(), time.Minute)
+	bg.Go(func(ctx context.Context) { passkeyBeginLimiter.Run(ctx, time.Minute) })
 
 	// Blob downloads are proxied through central, so bound the per-IP request rate
 	// on the public /api/files/{id}/blob endpoint. 120/min/IP is generous for a
@@ -694,9 +701,16 @@ func main() {
 	// to the file owner) is the primary cap; this is defence-in-depth against a
 	// burst before the eventually-consistent traffic gate reacts.
 	downloadLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(120, div), time.Minute, func() int64 { return time.Now().Unix() })
-	go downloadLimiter.Run(context.Background(), time.Minute)
+	bg.Go(func(ctx context.Context) { downloadLimiter.Run(ctx, time.Minute) })
 
 	store, dbErr := account.OpenSQLite(*dbPath)
+	if dbErr != nil && dbOpenFailureIsFatal(*baseURL) {
+		// A public (https) deployment without its database is not "degraded", it
+		// is broken: accounts, billing and stored transfers are all gone while
+		// the process stays up, so systemd never restarts it. Exit non-zero and
+		// let Restart=on-failure retry. A local/dev run keeps the LAN-only mode.
+		log.Fatalf("open db: %v (base URL %q is a public deployment; refusing to run without the database)", dbErr, *baseURL)
+	}
 	if *billingAppleLegacyList != "" {
 		if dbErr != nil || store == nil {
 			log.Fatal("Apple legacy purchase evidence: database unavailable")
@@ -875,7 +889,7 @@ func main() {
 			BillingHoldSecret:    *billingHoldSecret,
 			ReleaseCheck:         *releaseCheck,
 		})
-		activation := newActivationRecorder(context.Background(), store, time.Now, log.Printf, activationQueueCapacity)
+		activation := newActivationRecorder(bg.ctx, store, time.Now, log.Printf, activationQueueCapacity)
 		activationHook := activationHooks{recorder: activation}
 		observeActivity := activationHook.admitted
 		pairActivity.Store(&observeActivity)
@@ -945,7 +959,7 @@ func main() {
 		// One sweep loop, no timer per grant: it retires grants whose last
 		// credential has expired. Departures are handled synchronously by the
 		// Leave hook, so this only has to catch the lapsed ones.
-		go grantReg.Run(context.Background(), time.Minute)
+		bg.Go(func(ctx context.Context) { grantReg.Run(ctx, time.Minute) })
 
 		// Pre-upload (staging ciphertext against a waiting code) is opt-in and off
 		// by default: turning it on is a standing storage commitment, not a
@@ -997,7 +1011,7 @@ func main() {
 		// this is a map read every fifteen seconds — and a queue that can fill with
 		// no drainer running is worth a great deal more than that. It also keeps
 		// rooms opened before the flag was turned OFF from losing their joins.
-		go acct.RunPairJoinRetries(context.Background(), 15*time.Second)
+		bg.Go(func(ctx context.Context) { acct.RunPairJoinRetries(ctx, 15*time.Second) })
 		acct.SetClientIP(ipx.IP) // H3: trusted-proxy-aware rate-limit keys
 		acct.SetICELimiter(iceLimiter)
 		// The same object the /ws route holds: one distinct-code budget per IP
@@ -1018,7 +1032,7 @@ func main() {
 		appleStore.install(acct)
 		if appleSubscriptionAPI != nil {
 			acct.SetAppleSubscriptionReconciler(appleSubscriptionAPI)
-			go acct.RunAppleSubscriptionReconciler(context.Background(), 15*time.Minute)
+			bg.Go(func(ctx context.Context) { acct.RunAppleSubscriptionReconciler(ctx, 15*time.Minute) })
 		}
 		// Notification retention is account storage maintenance, not blob-storage
 		// maintenance. Keep it outside the stored-transfers branch so deployments
@@ -1029,7 +1043,7 @@ func main() {
 			Now:   func() int64 { return time.Now().Unix() },
 			Log:   log.Default(),
 		}
-		go appleNotificationPruner.Run(context.Background(), 10*time.Minute)
+		bg.Go(func(ctx context.Context) { appleNotificationPruner.Run(ctx, 10*time.Minute) })
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
 		// cross-network rendezvous code needs an account for attribution. The
@@ -1089,7 +1103,7 @@ func main() {
 				SweepPairRooms: acct.SweepPairRooms,
 				AuditRetention: *auditRetentionDays * 86400,
 			}
-			go gc.Run(context.Background(), 10*time.Minute)
+			bg.Go(func(ctx context.Context) { gc.Run(ctx, 10*time.Minute) })
 			// Placement's other precondition. Node liveness comes from the
 			// heartbeat, which travels node→central; blob writes travel
 			// central→node. A node with its blob port shut satisfies the first
@@ -1101,7 +1115,7 @@ func main() {
 				Probe: acct.ProbeNodeStorage,
 				Log:   log.Default(),
 			}
-			go prober.Run(context.Background(), 2*time.Minute)
+			bg.Go(func(ctx context.Context) { prober.Run(ctx, 2*time.Minute) })
 			log.Printf("stored transfers enabled: blobs in %s", *blobDir)
 		}
 		if *releaseCheck {
@@ -1141,7 +1155,7 @@ func main() {
 				},
 				Log: log.Default(),
 			}
-			go checker.Run(context.Background(), time.Hour)
+			bg.Go(func(ctx context.Context) { checker.Run(ctx, time.Hour) })
 		}
 		// The direct coturn->Redis ingest is deliberately inert: see
 		// guardCoturnRedisMetering. The flag stays parseable so an existing
@@ -1157,18 +1171,20 @@ func main() {
 			// leave a canceled user on a paid plan forever. This sweep downgrades any
 			// Stripe-paid user whose subscription no longer exists on Stripe. Webhooks
 			// remain the primary, immediate path; this is the eventual-consistency net.
-			go func() {
+			bg.Go(func(ctx context.Context) {
 				t := time.NewTicker(6 * time.Hour)
 				defer t.Stop()
-				acct.ReconcileStripeSubscriptions(context.Background())
-				acct.ReconcileBillingCancellations(context.Background())
-				acct.ReconcileDuplicateRefunds(context.Background())
-				for range t.C {
-					acct.ReconcileStripeSubscriptions(context.Background())
-					acct.ReconcileBillingCancellations(context.Background())
-					acct.ReconcileDuplicateRefunds(context.Background())
+				for {
+					acct.ReconcileStripeSubscriptions(ctx)
+					acct.ReconcileBillingCancellations(ctx)
+					acct.ReconcileDuplicateRefunds(ctx)
+					select {
+					case <-ctx.Done():
+						return
+					case <-t.C:
+					}
 				}
-			}()
+			})
 		}
 	}
 
@@ -1204,7 +1220,133 @@ func main() {
 	}
 	warnInsecureCookieConfig(*baseURL, *addr)
 	log.Printf("relayium signaling server listening on %s", *addr)
-	log.Fatal(srv.ListenAndServe())
+	stopCtx, stopSignals := ossignal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stopSignals()
+	go func() {
+		// After the first signal, restore default handling: a second SIGTERM or
+		// Ctrl-C kills at once instead of waiting out the drain.
+		<-stopCtx.Done()
+		stopSignals()
+	}()
+	var closeStore func() error
+	if dbErr == nil && store != nil {
+		closeStore = store.Close
+	}
+	if err := serveUntilStopped(stopCtx, srv, bg, closeStore, shutdownDrainTimeout, backgroundStopTimeout, log.Printf); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// shutdownDrainTimeout bounds how long a SIGTERM waits for in-flight HTTP
+// requests (chunk appends, finalizes, webhooks) before their connections are
+// closed. The production unit (relayium-ops deploy/relayium.service) sets no
+// TimeoutStopSec, so systemd's default of 90 s applies before SIGKILL; the
+// drain plus backgroundStopTimeout plus the store close stays well below it.
+// It is deliberately NOT maxAppendLifetime (10 min): a deploy must not wait
+// that long, and an append cut here keeps the bytes it already wrote (they are
+// fsynced; the blob size is the resume authority).
+const shutdownDrainTimeout = 20 * time.Second
+
+// backgroundStopTimeout bounds the wait for background loops to return after
+// their context is cancelled. A loop mid-sweep that ignores its context is
+// abandoned after this, and the store is closed under it.
+const backgroundStopTimeout = 5 * time.Second
+
+// dbOpenFailureIsFatal reports whether a database open failure must end the
+// process. A public deployment (https base URL — the same signal the cookie
+// Secure flag keys on) exits so its supervisor restarts it; a local run keeps
+// the LAN-transfer-only degraded mode.
+func dbOpenFailureIsFatal(baseURL string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(baseURL)), "https://")
+}
+
+// backgroundGroup owns the process's long-running background loops: one
+// cancellable context for all of them and a WaitGroup to wait for them.
+type backgroundGroup struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+}
+
+func newBackgroundGroup() *backgroundGroup {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &backgroundGroup{ctx: ctx, cancel: cancel}
+}
+
+// Go runs f on its own goroutine with the group's context.
+func (b *backgroundGroup) Go(f func(ctx context.Context)) {
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		f(b.ctx)
+	}()
+}
+
+// stop cancels every loop and waits up to timeout for them to return. It
+// reports whether they all did.
+func (b *backgroundGroup) stop(timeout time.Duration) bool {
+	b.cancel()
+	done := make(chan struct{})
+	go func() {
+		b.wg.Wait()
+		close(done)
+	}()
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-done:
+		return true
+	case <-t.C:
+		return false
+	}
+}
+
+// httpServer is the part of *http.Server the shutdown sequence drives.
+type httpServer interface {
+	ListenAndServe() error
+	Shutdown(ctx context.Context) error
+	Close() error
+}
+
+// serveUntilStopped serves until the listener fails or stop is done, then shuts
+// down in dependency order: stop accepting and drain in-flight requests (bounded
+// by drain, then force-closed), cancel and briefly wait for background loops,
+// and finally close the store — exactly once, after nothing should still be
+// writing. A listener failure (port in use, …) is returned for a non-zero exit;
+// a signal-initiated stop returns nil, so a clean shutdown exits 0 even when
+// the drain had to be cut short (that is logged, not escalated: the stop was
+// asked for).
+func serveUntilStopped(stop context.Context, srv httpServer, bg *backgroundGroup, closeStore func() error,
+	drain, bgWait time.Duration, logf func(string, ...any)) error {
+	served := make(chan error, 1)
+	go func() { served <- srv.ListenAndServe() }()
+	select {
+	case err := <-served:
+		// The listener itself failed; nothing was served to drain.
+		bg.cancel()
+		return err
+	case <-stop.Done():
+	}
+	logf("shutdown: signal received; draining in-flight requests for up to %s", drain)
+	ctx, cancel := context.WithTimeout(context.Background(), drain)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logf("shutdown: drain incomplete (%v); closing remaining connections", err)
+		_ = srv.Close()
+	}
+	if err := <-served; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logf("shutdown: server: %v", err)
+	}
+	if !bg.stop(bgWait) {
+		logf("shutdown: background loops still running after %s; closing the store anyway", bgWait)
+	}
+	if closeStore != nil {
+		if err := closeStore(); err != nil {
+			logf("shutdown: close store: %v", err)
+		}
+	}
+	logf("shutdown: complete")
+	return nil
 }
 
 // generateAdminTOTP creates a fresh TOTP secret for the admin dashboard,

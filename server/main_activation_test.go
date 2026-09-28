@@ -242,8 +242,9 @@ func TestMainWiresRelayRenewal(t *testing.T) {
 		// the issuer's own notification.
 		"pairReg.RetainTag,",
 		"pairReg.SetIssuedObserver(grantReg.NoteIssued)",
-		// One sweep loop rather than a timer per grant.
-		"go grantReg.Run(context.Background(), time.Minute)",
+		// One sweep loop rather than a timer per grant, on the background
+		// group so a graceful shutdown stops it.
+		"bg.Go(func(ctx context.Context) { grantReg.Run(ctx, time.Minute) })",
 	} {
 		if !strings.Contains(text, required) {
 			t.Errorf("main renewal wiring lacks %q", required)
