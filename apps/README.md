@@ -1,8 +1,10 @@
 # Relayium native apps
 
-macOS **1.4.3 (40)** is published through the direct-download channel. iOS
-**0.5.0 (11)** and Android **0.3.0 (9)** remain source candidates; their published
-channels are unchanged. The macOS store candidate is separate from the direct release.
+macOS **1.4.3 (40)** is published through the direct-download channel. Android
+**0.3.0 (9)** was published on 2026-09-26 as a public preview APK (GitHub Release
+`android-v0.3.0`). iOS **0.5.0 (11)** remains a source candidate and has not been
+uploaded; its published channel is unchanged. The macOS store candidate is separate
+from the direct release.
 
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
   It vends two products. `RelayiumKit` is the transport stack plus the
