@@ -580,6 +580,34 @@ func TestLinkDevNewToNewWithHints(t *testing.T) {
 	}
 }
 
+// N-0928-13: Pion's selected-pair notification comes from its own
+// goroutine and can arrive after a short session ended; the end that leaves
+// first then never printed its path. Held back 300 ms here, both ends of a
+// `pair` link must still report the selected pair exactly once.
+func TestLinkDevPathReportedDespiteLateNotification(t *testing.T) {
+	ldHookPathNotifyDelay = func() { time.Sleep(300 * time.Millisecond) }
+	t.Cleanup(func() { ldHookPathNotifyDelay = nil })
+	for _, hinted := range []bool{false, true} {
+		t.Run(fmt.Sprintf("serverHints=%t", hinted), func(t *testing.T) {
+			hub := startLinkDevHub(t)
+			via := hub.url
+			if !hinted {
+				via = startLinkDevProxy(t, hub.url, true, false)
+			}
+			ra, rb := ldPairUp(t, hub, "",
+				ldPeer{cmd: "pair", args: []string{ldCode}, via: via},
+				ldPeer{cmd: "pair", args: []string{ldCode}, via: via})
+			ldWantLink(t, "first", ra, hinted)
+			ldWantLink(t, "second", rb, hinted)
+			for _, r := range []ldResult{ra, rb} {
+				if ps := ldPaths(r); len(ps) != 1 || ps[0] == "relay" {
+					t.Errorf("paths %v, want exactly one lan/direct line\n%s", ps, r)
+				}
+			}
+		})
+	}
+}
+
 func ldRole(r ldResult) string {
 	switch {
 	case strings.Contains(r.stderr, "link/1 initiator"):

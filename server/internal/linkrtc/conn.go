@@ -33,6 +33,11 @@ type Conn struct {
 	localMax uint32
 	q        *eventQueue
 
+	// pairNotifyDelay is selectedPairNotifyDelay as it was when the Conn was
+	// made (nil in production); read once so a test resetting the hook never
+	// races a late Pion callback.
+	pairNotifyDelay func()
+
 	// sigMu serialises the signalling-facing calls (Offer, SetRemote, AddICE,
 	// RestartICE) so remote-description state and held candidates are
 	// consistent. It is never held while c.mu is wanted by a Pion callback
@@ -84,6 +89,15 @@ type capturedFrame struct {
 	data []byte
 }
 
+// selectedPairNotifyDelay is a test-only hook, nil in production. When set,
+// it runs inside the OnSelectedCandidatePairChange callback before
+// EventPathChanged is emitted. Pion delivers that notification on its own
+// notifier goroutine, unordered against DTLS/SCTP bring-up, so it can reach
+// the handler after EventLanesOpen or not before the link has already ended;
+// the hook widens that window on purpose so tests can prove that nothing
+// depends on the notification's timing.
+var selectedPairNotifyDelay func()
+
 // NewConn creates the PeerConnection for one link. The initiator creates both
 // lanes now, in tuple order; the responder collects them from the peer. The
 // setup timers (30 s no-progress, 90 s hard cap) start now.
@@ -111,6 +125,8 @@ func newConn(api *webrtc.API, cfg webrtc.Configuration, role Role, handler func(
 		done:          make(chan struct{}),
 		progressSeen:  map[string]bool{},
 		noProgressDur: noProg,
+
+		pairNotifyDelay: selectedPairNotifyDelay,
 	}
 	for i := range c.lowWater {
 		c.lowWater[i] = make(chan struct{}, 1)
@@ -123,6 +139,9 @@ func newConn(api *webrtc.API, cfg webrtc.Configuration, role Role, handler func(
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) { c.collect(dc, false) })
 	if t := pc.SCTP(); t != nil && t.Transport() != nil && t.Transport().ICETransport() != nil {
 		t.Transport().ICETransport().OnSelectedCandidatePairChange(func(p *webrtc.ICECandidatePair) {
+			if c.pairNotifyDelay != nil {
+				c.pairNotifyDelay() // test only: a late Pion notification
+			}
 			c.emit(Event{Kind: EventPathChanged, Path: Classify(p)})
 		})
 	}

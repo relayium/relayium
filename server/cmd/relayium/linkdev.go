@@ -1539,6 +1539,11 @@ var (
 	// ldHookBeforeWake runs on the loop right before the next wake-up is
 	// computed (A11: a pause between the progress tick and the wake).
 	ldHookBeforeWake func(d *linkDevDriver)
+	// ldHookPathNotifyDelay, when set as the transport is made, runs on its
+	// own goroutine before each EventPathChanged reaches the loop: Pion's
+	// selected-pair notification arriving late, after the lanes opened or
+	// after the session ended (N-0928-13).
+	ldHookPathNotifyDelay func()
 )
 
 // ldCutoff closes the transport from any goroutine, once: at the relay
@@ -1756,7 +1761,15 @@ func (d *linkDevDriver) ensureConn(role linkrtc.Role) error {
 	}
 	d.logf("link/1 %s; ice policy=%s servers=%d turn=%t", role, policy, len(wcfg.ICEServers), linkrtc.HasTURNServer(d.choice.ICEServers))
 	ep := d.s.Epoch()
+	pathDelay := ldHookPathNotifyDelay // read once, on the loop
 	conn, err := linkrtc.NewConn(api, wcfg, role, func(ev linkrtc.Event) {
+		if pathDelay != nil && ev.Kind == linkrtc.EventPathChanged {
+			go func() {
+				pathDelay()
+				d.q.push(ldItem{kind: ldEvent, ev: ev, ep: ep})
+			}()
+			return
+		}
 		d.q.push(ldItem{kind: ldEvent, ev: ev, ep: ep})
 	})
 	if err != nil {
@@ -2085,6 +2098,18 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 			d.notice("the peer accepts messages of at most %d bytes; this build needs %d", ev.Budget.MaxFrameBytes, linksession.DefaultMaxFrameBytes)
 			return d.do(d.s.TransportLost(ep))
 		}
+		// Pion reports the selected pair on its own notifier goroutine,
+		// unordered against the lanes, so a short session can end before
+		// EventPathChanged arrives (N-0928-13). Lanes open only over a
+		// selected pair: read it now, so the path is always reported.
+		if d.lastPath == "" && d.conn != nil {
+			if p, err := d.conn.SelectedPath(); err == nil && p.Path != linkrtc.PathUnknown {
+				d.reportPath(p)
+				if p.Path == linkrtc.PathRelay {
+					d.armDeadline()
+				}
+			}
+		}
 		return d.do(d.s.LanesOpen(ep))
 	case linkrtc.EventLaneBad:
 		return d.do(d.s.ChannelBad(ep, ev.Label))
@@ -2109,13 +2134,20 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 		return d.do(d.s.TransportLost(ep))
 	case linkrtc.EventPathChanged:
 		p := ev.Path
-		if p.Path != d.lastPath {
-			d.lastPath = p.Path
-			if d.ui != nil {
-				d.ui.path(p)
-			} else {
-				fmt.Fprintf(d.stderr, "path: %s (selected pair local=%s remote=%s %s)\n", p.Path, p.LocalType, p.RemoteType, p.Protocol)
-			}
+		// A notification that arrives late may describe a pair that is no
+		// longer selected (reported already by the read at EventLanesOpen,
+		// or replaced since). Prefer the pair selected now. Do not wait for
+		// another callback: a replacement callback may itself be late, and
+		// the current read is the authoritative user-visible state.
+		// The relay bound and renewal still see every notification.
+		if d.conn == nil {
+			d.reportPath(p)
+		} else if cur, err := d.conn.SelectedPath(); err == nil && cur.Path != linkrtc.PathUnknown {
+			d.reportPath(cur)
+		} else {
+			// The callback is the best available observation if the transport
+			// can no longer return its selected pair.
+			d.reportPath(p)
 		}
 		if p.Path == linkrtc.PathRelay {
 			d.armDeadline() // a relayed pair is bounded by the credential, whatever the policy
@@ -2125,6 +2157,19 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 		}
 	}
 	return nil
+}
+
+// reportPath prints the "path:" line when the classified path changes.
+func (d *linkDevDriver) reportPath(p linkrtc.PathInfo) {
+	if p.Path == d.lastPath {
+		return
+	}
+	d.lastPath = p.Path
+	if d.ui != nil {
+		d.ui.path(p)
+	} else {
+		fmt.Fprintf(d.stderr, "path: %s (selected pair local=%s remote=%s %s)\n", p.Path, p.LocalType, p.RemoteType, p.Protocol)
+	}
 }
 
 // ---------------------------------------------------------------- progress: script, files, texts, quit

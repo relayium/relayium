@@ -548,3 +548,29 @@ func sdpAttr(sdp, key string) string {
 	}
 	return ""
 }
+
+// N-0928-13: Pion's selected-pair notification can reach the handler after
+// the lanes opened. With that notification held back, LanesOpen still comes
+// first and SelectedPath already names the pair, which is what the link-dev
+// driver reads at LanesOpen so a short session always reports its path.
+func TestSelectedPathKnownAtLanesOpenBeforeLateNotification(t *testing.T) {
+	const hold = 2 * time.Second
+	selectedPairNotifyDelay = func() { time.Sleep(hold) }
+	t.Cleanup(func() { selectedPairNotifyDelay = nil })
+	a, b := newPair(t, pairOpts{})
+	open(t, a, b)
+	for _, p := range []*peer{a, b} {
+		if n := p.count(EventPathChanged); n != 0 {
+			t.Fatalf("%s: PathChanged arrived despite the %v hold; events %v", p.name, hold, p.kinds())
+		}
+		info, err := p.c.SelectedPath()
+		if err != nil || info.Path != PathLAN {
+			t.Fatalf("%s: selected path at LanesOpen %+v err=%v, want lan", p.name, info, err)
+		}
+	}
+	for _, p := range []*peer{a, b} {
+		if ev := p.waitFor(EventPathChanged, hold+5*time.Second); ev.Path.Path != PathLAN {
+			t.Fatalf("%s: late PathChanged %+v, want lan", p.name, ev.Path)
+		}
+	}
+}
