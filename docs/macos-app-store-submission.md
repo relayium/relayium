@@ -1,5 +1,39 @@
 # macOS App Store submission
 
+## macOS 1.4.4 (41) — candidate prepared in source; not built, uploaded or published
+
+**Status, 2026-09-28: source preparation only.** The project now carries
+`MARKETING_VERSION` `1.4.4` and `CURRENT_PROJECT_VERSION` `41` on all five
+macOS targets (direct app and Share extension, App Store app and Share
+extension, UI tests), Debug and Release. No signed build, notarization,
+GitHub release, Sparkle item, App Store Connect upload or TestFlight
+configuration of `1.4.4 (41)` exists yet, and nothing in this section claims
+one.
+
+- Why a new number: `1.4.3 (40)` is already issued in two channels — the
+  public direct release and the internal TestFlight build below — and an
+  issued version is never reused for changed content. Provider read-back on
+  2026-09-28 found no macOS `1.4.4` pre-release train, no build `41`, no
+  `macos-v1.4.4` tag and no GitHub release of that name.
+- What changes: the only runtime change against both `1.4.3 (40)` sources is
+  the Device Inbox recovery after a lost finalize response (`0623c7f3f`). A
+  send whose finalize answer is lost recovers the same session and object
+  instead of starting a second upload; an outcome the client cannot prove is
+  shown as unknown and its staged data is kept. The StoreKit and subscription
+  sources are byte-identical to `1.4.3 (40)`.
+- One source for both channels: the Developer ID DMG and the App Store package
+  for `1.4.4 (41)` must both be built from the single version-bump commit that
+  the `macos-v1.4.4` tag will name — not from an earlier or later head. Their
+  bytes differ by channel; their source does not.
+- Unchanged gate: actual StoreKit sandbox acceptance (cancellation and
+  account-switch recovery) is still pending. It continues to block external
+  TestFlight, App Store submission and any public store release of this
+  candidate, exactly as it does for build `40`. An internal-only TestFlight
+  upload of `41` for owner testing is permitted under the same terms as `40`.
+- The public direct/Sparkle version (`1.4.3`) and the public Mac App Store
+  version (`1.4.0`) are unchanged by this preparation. The release workflow
+  updates the published-version surfaces only at actual publication.
+
 ## macOS 1.4.3 (40) — direct release published; store candidate in internal TestFlight
 
 The stable GitHub release [`macos-v1.4.3`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.3)

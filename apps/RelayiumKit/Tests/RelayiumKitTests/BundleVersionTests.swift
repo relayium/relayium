@@ -60,11 +60,14 @@ final class BundleVersionTests: XCTestCase {
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
         //
-        // Fresh provider readback on 2026-09-26 confirms build39 was consumed.
-        // The owner selected 1.4.3 (40) for the next candidate. This assertion
-        // does not advance either channel's published version.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.3", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "40", occurrences: 10)
+        // Provider readback on 2026-09-28 confirms 1.4.3 (40) was consumed by
+        // both the direct release and internal TestFlight, and that no 1.4.4
+        // train, build 41, tag or release exists. The next candidate is
+        // therefore 1.4.4 (41); an issued version is never reused for changed
+        // content. This assertion does not advance either channel's published
+        // version.
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.4", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "41", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon
