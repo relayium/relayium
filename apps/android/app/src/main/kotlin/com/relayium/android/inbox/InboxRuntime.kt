@@ -169,6 +169,9 @@ class InboxRuntime(
      *  history, because a reason can stop being true. */
     private val stops = ConcurrentHashMap<String, InboxSendCoordinator.Result.Stopped>()
 
+    /** Last server-authoritative state for each outgoing task in this session. */
+    private val sentTasks = ConcurrentHashMap<String, InboxTaskRow>()
+
     /** Jobs whose discard central refused or could not be asked. In memory, like
      *  [stops]: it describes the last thing the user tried, not the delivery. */
     private val discardRefused: MutableSet<String> = ConcurrentHashMap.newKeySet()
@@ -199,6 +202,7 @@ class InboxRuntime(
                 if (authority != null && !model.isCurrent(authority)) return@withLock
                 worker = null
                 stops.clear()
+                sentTasks.clear()
                 attempts.clear()
                 session = if (authority != null && account != null && !bearer.isNullOrEmpty()) {
                     Session(authority, account, bearer)
@@ -475,6 +479,7 @@ class InboxRuntime(
                 continue
             }
             model.ensureCurrent(session.authority)
+            sentTasks[job.jobId] = task
             val state = when {
                 task.state == InboxTaskState.SAVED -> InboxConversationEntry.SentState.SAVED
                 task.isTerminal -> InboxConversationEntry.SentState.STOPPED
@@ -963,6 +968,7 @@ class InboxRuntime(
 
     private fun forget(jobId: String) {
         stops.remove(jobId)
+        sentTasks.remove(jobId)
         discardRefused.remove(jobId)
     }
 
@@ -983,6 +989,7 @@ class InboxRuntime(
             when (result) {
                 is InboxSendCoordinator.Result.Delivered -> {
                     stops.remove(jobId)
+                    sentTasks[jobId] = result.task
                     services.conversations.updateSent(
                         jobId,
                         if (result.task.state == InboxTaskState.SAVED) {
@@ -1313,6 +1320,11 @@ class InboxRuntime(
             uploadUnknown = publishUnknown,
             uploadUnsettled = unavailable == null && job.uploadUnsettled,
             taskId = job.taskId,
+            taskState = sentTasks[job.jobId]?.state,
+            taskError = sentTasks[job.jobId]?.errorCode
+                ?: com.relayium.protocol.inbox.InboxTaskErrorCode.Device(
+                    com.relayium.protocol.inbox.InboxDeviceErrorCode.NONE,
+                ),
             discardRefused = job.jobId in discardRefused,
         )
     }

@@ -2,6 +2,9 @@ package com.relayium.android.inbox
 
 import com.relayium.protocol.inbox.InboxAutoAccept
 import com.relayium.protocol.inbox.InboxManifestKind
+import com.relayium.protocol.inbox.InboxDeviceErrorCode
+import com.relayium.protocol.inbox.InboxTaskErrorCode
+import com.relayium.protocol.inbox.InboxTaskState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -453,6 +456,10 @@ data class InboxSendStatus(
      */
     val uploadUnsettled: Boolean = false,
     val taskId: String? = null,
+    /** Central's last authenticated answer for [taskId]. Null until polled. */
+    val taskState: InboxTaskState? = null,
+    /** Closed protocol reason paired with [taskState]; never server free text. */
+    val taskError: InboxTaskErrorCode = InboxTaskErrorCode.Device(InboxDeviceErrorCode.NONE),
     /** The user asked to discard this and it could NOT be done — central refused
      *  or was unreachable, or the record could not be removed. Nothing was
      *  deleted; the row says so rather than looking as if nothing happened. */
@@ -467,6 +474,16 @@ data class InboxSendStatus(
     val offersRetry: Boolean
         get() = phase != Phase.SENDING && phase != Phase.DELIVERED && !uploadUnknown &&
             stop?.isRetryable != false
+
+    /** Central accepts cancellation only before the receiver owns a live claim. */
+    val offersCancelDelivery: Boolean
+        get() = phase == Phase.DELIVERED && when (taskState) {
+            InboxTaskState.QUEUED, InboxTaskState.NOTIFIED,
+            InboxTaskState.ATTENTION_REQUIRED, InboxTaskState.FAILED_RETRYABLE -> true
+            null, InboxTaskState.DOWNLOADING, InboxTaskState.VERIFYING,
+            InboxTaskState.SAVED, InboxTaskState.EXPIRED, InboxTaskState.REVOKED,
+            InboxTaskState.FAILED_TERMINAL -> false
+        }
 
     /** No names, no bytes: this reaches failure text. */
     override fun toString(): String =

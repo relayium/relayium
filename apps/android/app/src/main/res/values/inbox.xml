@@ -85,7 +85,16 @@
     <string name="inbox_sending_to">To %1$s</string>
     <string name="inbox_sending_staged">Ready to send. Nothing has been sent yet.</string>
     <string name="inbox_sending_active">Sending…</string>
-    <string name="inbox_sending_delivered">Delivered to your account. Waiting for that device to save it.</string>
+    <string name="inbox_sending_unknown">Checking what happened. Nothing is claimed as saved yet.</string>
+    <string name="inbox_sending_queued">Queued for that device. It has not saved anything yet.</string>
+    <string name="inbox_sending_notified">That device has been notified. It has not saved anything yet.</string>
+    <string name="inbox_sending_awaiting_approval">Waiting for approval on that device.</string>
+    <string name="inbox_sending_receiving">That device is receiving the encrypted delivery.</string>
+    <string name="inbox_sending_verifying">That device is verifying the delivery before saving it.</string>
+    <string name="inbox_sending_saved">Saved on that device.</string>
+    <string name="inbox_sending_declined">That device declined the delivery. Nothing was saved.</string>
+    <string name="inbox_sending_failed_retryable">That device could not save it yet and may retry.</string>
+    <string name="inbox_sending_failed_terminal">The delivery ended without being saved.</string>
     <string name="inbox_sending_stopped">Stopped.</string>
     <string name="inbox_sending_ambiguous">Relayium cannot tell whether this reached the other device. Trying again is safe: the server keeps only one copy of this delivery.</string>
     <string name="inbox_sending_upload_unknown">The upload stopped without an answer, so Relayium cannot tell whether these encrypted bytes reached the server. Sending again would start a separate upload and still would not answer that, so this one cannot safely be retried.</string>

@@ -63,6 +63,9 @@ import com.relayium.android.inbox.InboxTargetBlock
 import com.relayium.android.inbox.InboxTargetCaveat
 import com.relayium.protocol.inbox.InboxAutoAccept
 import com.relayium.protocol.inbox.InboxManifestKind
+import com.relayium.protocol.inbox.InboxDeviceErrorCode
+import com.relayium.protocol.inbox.InboxTaskErrorCode
+import com.relayium.protocol.inbox.InboxTaskState
 
 /**
  * The Device Inbox surface: what this device will accept, what it can send to,
@@ -705,25 +708,26 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                             modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                         ) { Text(stringResource(R.string.inbox_sending_retry)) }
                     }
-                    // EVERY state gets a way out. Picking files stages them
-                    // durably and starts sending at once, so without this a send
-                    // the user regretted could only ever be sent; an unknown
-                    // upload and a queued delivery had no control at all.
-                    TextButton(
-                        onClick = { discardingId = send.jobId },
-                        modifier = Modifier
-                            .defaultMinSize(minHeight = Metrics.touch)
-                            .testTag("inbox-send-discard-${send.jobId}"),
-                    ) {
-                        Text(
-                            stringResource(
-                                if (send.phase == InboxSendStatus.Phase.DELIVERED) {
-                                    R.string.inbox_sending_cancel_delivery
-                                } else {
-                                    R.string.inbox_sending_discard
-                                },
-                            ),
-                        )
+                    // A local plan always gets a way out. A server delivery gets
+                    // Cancel only before the receiver owns a live claim; once
+                    // receiving/verifying, central would refuse it.
+                    if (send.phase != InboxSendStatus.Phase.DELIVERED || send.offersCancelDelivery) {
+                        TextButton(
+                            onClick = { discardingId = send.jobId },
+                            modifier = Modifier
+                                .defaultMinSize(minHeight = Metrics.touch)
+                                .testTag("inbox-send-discard-${send.jobId}"),
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (send.phase == InboxSendStatus.Phase.DELIVERED) {
+                                        R.string.inbox_sending_cancel_delivery
+                                    } else {
+                                        R.string.inbox_sending_discard
+                                    },
+                                ),
+                            )
+                        }
                     }
                 }
                 if (send.discardRefused) {
@@ -739,7 +743,9 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
     }
 
     // Gone from the list (sent, settled, already discarded): nothing to confirm.
-    state.sends.firstOrNull { it.jobId == discardingId }?.let { send ->
+    state.sends.firstOrNull { it.jobId == discardingId }
+        ?.takeIf { it.phase != InboxSendStatus.Phase.DELIVERED || it.offersCancelDelivery }
+        ?.let { send ->
         val delivered = send.phase == InboxSendStatus.Phase.DELIVERED
         AlertDialog(
             onDismissRequest = { discardingId = null },
@@ -823,9 +829,32 @@ private fun sendSummary(send: InboxSendStatus): String =
 private fun sendPhaseText(send: InboxSendStatus): String = when (send.phase) {
     InboxSendStatus.Phase.STAGED -> stringResource(R.string.inbox_sending_staged)
     InboxSendStatus.Phase.SENDING -> stringResource(R.string.inbox_sending_active)
-    InboxSendStatus.Phase.DELIVERED -> stringResource(R.string.inbox_sending_delivered)
+    InboxSendStatus.Phase.DELIVERED ->
+        stringResource(deliveryStateText(send.taskState, send.taskError))
     InboxSendStatus.Phase.STOPPED -> send.stop?.let { stringResource(stopText(it)) }
         ?: stringResource(R.string.inbox_sending_stopped)
+}
+
+/** The same closed sender vocabulary used by RelayiumKit's InboxSendPresentation. */
+internal fun deliveryStateText(
+    state: InboxTaskState?,
+    error: InboxTaskErrorCode = InboxTaskErrorCode.Device(InboxDeviceErrorCode.NONE),
+): Int = when {
+    error == InboxTaskErrorCode.Device(InboxDeviceErrorCode.USER_DECLINED) ->
+        R.string.inbox_sending_declined
+    else -> when (state) {
+        null -> R.string.inbox_sending_unknown
+        InboxTaskState.QUEUED -> R.string.inbox_sending_queued
+        InboxTaskState.NOTIFIED -> R.string.inbox_sending_notified
+        InboxTaskState.ATTENTION_REQUIRED -> R.string.inbox_sending_awaiting_approval
+        InboxTaskState.DOWNLOADING -> R.string.inbox_sending_receiving
+        InboxTaskState.VERIFYING -> R.string.inbox_sending_verifying
+        InboxTaskState.SAVED -> R.string.inbox_sending_saved
+        InboxTaskState.REVOKED -> R.string.inbox_sending_declined
+        InboxTaskState.FAILED_RETRYABLE -> R.string.inbox_sending_failed_retryable
+        InboxTaskState.EXPIRED, InboxTaskState.FAILED_TERMINAL ->
+            R.string.inbox_sending_failed_terminal
+    }
 }
 
 private fun stopText(reason: InboxSendCoordinator.Result.Reason): Int = when (reason) {

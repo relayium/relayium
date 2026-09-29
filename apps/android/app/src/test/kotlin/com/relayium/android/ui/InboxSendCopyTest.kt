@@ -3,6 +3,9 @@ package com.relayium.android.ui
 import com.relayium.android.R
 import com.relayium.android.inbox.InboxSendStatus
 import com.relayium.protocol.inbox.InboxManifestKind
+import com.relayium.protocol.inbox.InboxDeviceErrorCode
+import com.relayium.protocol.inbox.InboxTaskErrorCode
+import com.relayium.protocol.inbox.InboxTaskState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -62,5 +65,48 @@ class InboxSendCopyTest {
             R.string.inbox_sending_cancel_delivery_body,
             sendDiscardBodyRes(send(phase = InboxSendStatus.Phase.DELIVERED)),
         )
+    }
+
+    @Test
+    fun `server states use the closed native delivery vocabulary`() {
+        assertEquals(R.string.inbox_sending_unknown, deliveryStateText(null))
+        assertEquals(R.string.inbox_sending_queued, deliveryStateText(InboxTaskState.QUEUED))
+        assertEquals(R.string.inbox_sending_notified, deliveryStateText(InboxTaskState.NOTIFIED))
+        assertEquals(
+            R.string.inbox_sending_awaiting_approval,
+            deliveryStateText(InboxTaskState.ATTENTION_REQUIRED),
+        )
+        assertEquals(R.string.inbox_sending_receiving, deliveryStateText(InboxTaskState.DOWNLOADING))
+        assertEquals(R.string.inbox_sending_verifying, deliveryStateText(InboxTaskState.VERIFYING))
+        assertEquals(R.string.inbox_sending_saved, deliveryStateText(InboxTaskState.SAVED))
+        assertEquals(R.string.inbox_sending_declined, deliveryStateText(InboxTaskState.REVOKED))
+        assertEquals(
+            R.string.inbox_sending_failed_retryable,
+            deliveryStateText(InboxTaskState.FAILED_RETRYABLE),
+        )
+        assertEquals(
+            R.string.inbox_sending_failed_terminal,
+            deliveryStateText(InboxTaskState.FAILED_TERMINAL),
+        )
+        assertEquals(
+            R.string.inbox_sending_declined,
+            deliveryStateText(
+                InboxTaskState.FAILED_TERMINAL,
+                InboxTaskErrorCode.Device(InboxDeviceErrorCode.USER_DECLINED),
+            ),
+        )
+    }
+
+    @Test
+    fun `cancel disappears once the receiver owns a claim`() {
+        fun delivered(state: InboxTaskState?) = send(phase = InboxSendStatus.Phase.DELIVERED)
+            .copy(taskId = "task-1", taskState = state)
+
+        assertEquals(false, delivered(null).offersCancelDelivery)
+        assertEquals(true, delivered(InboxTaskState.QUEUED).offersCancelDelivery)
+        assertEquals(true, delivered(InboxTaskState.ATTENTION_REQUIRED).offersCancelDelivery)
+        assertEquals(false, delivered(InboxTaskState.DOWNLOADING).offersCancelDelivery)
+        assertEquals(false, delivered(InboxTaskState.VERIFYING).offersCancelDelivery)
+        assertEquals(false, delivered(InboxTaskState.SAVED).offersCancelDelivery)
     }
 }
