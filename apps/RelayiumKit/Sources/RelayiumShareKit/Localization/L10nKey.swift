@@ -2402,6 +2402,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case sendErrorRecoveryWrite = "send.errorRecoveryWrite"
     case sendErrorRecoveryRead = "send.errorRecoveryRead"
     case sendErrorNoTask = "send.errorNoTask"
+    case sendErrorNoLongerQueryable = "send.errorNoLongerQueryable"
     case sendErrorConflict = "send.errorConflict"
     case sendErrorAlreadyBound = "send.errorAlreadyBound"
     case sendErrorObjectUnavailable = "send.errorObjectUnavailable"

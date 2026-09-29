@@ -125,6 +125,8 @@ public enum InboxSendPresentation {
             return L10n.t(.sendErrorRecoveryRead, language: language)
         case .noTaskCreated:
             return L10n.t(.sendErrorNoTask, language: language)
+        case .noLongerQueryable:
+            return L10n.t(.sendErrorNoLongerQueryable, language: language)
         case .unknownOutcome:
             return L10n.t(.sendStateUnknown, language: language)
         case .uploadOutcomeUnknown:

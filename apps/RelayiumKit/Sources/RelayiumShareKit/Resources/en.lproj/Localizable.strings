@@ -1109,6 +1109,7 @@
 "send.errorRecoveryWrite" = "This device couldn't record the delivery, so it stopped rather than risk sending it twice. Try again.";
 "send.errorRecoveryRead" = "The key for these files couldn't be read on this device. Unlock the device, then try again.";
 "send.errorNoTask" = "No delivery was created, so nothing is on its way.";
+"send.errorNoLongerQueryable" = "This delivery can no longer be checked. Its final result is unknown.";
 "send.errorConflict" = "This send already produced a delivery. Look for it in the list instead of sending again.";
 "send.errorAlreadyBound" = "These encrypted files already belong to another delivery.";
 "send.errorObjectUnavailable" = "The encrypted files were no longer available when the delivery was made.";

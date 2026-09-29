@@ -1086,6 +1086,7 @@
 "send.errorRecoveryWrite" = "本机无法记录这次投递，因此停止了，以免重复发送。请重试。";
 "send.errorRecoveryRead" = "本机无法读取这些文件的密钥。请解锁设备后重试。";
 "send.errorNoTask" = "没有创建投递，因此没有任何内容在传送。";
+"send.errorNoLongerQueryable" = "已无法查询这项投递，最终结果未知。";
 "send.errorConflict" = "这次发送已经产生了一次投递。请在列表中查找，不要重复发送。";
 "send.errorAlreadyBound" = "这些加密文件已经属于另一次投递。";
 "send.errorObjectUnavailable" = "创建投递时，加密文件已不可用。";

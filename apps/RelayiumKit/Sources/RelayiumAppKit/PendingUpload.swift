@@ -416,6 +416,15 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// driven by `InboxSendCoordinator`.
     public var isProtectedDeviceStore: Bool { legacyRoot != nil }
 
+    /// A sibling owned by the Device Inbox sender for task records that must
+    /// outlive the staged upload. It is intentionally outside the job root:
+    /// successful creation retires that root, while the task still needs to be
+    /// queryable and cancellable after a relaunch.
+    var deviceTrackingRoot: URL {
+        root.deletingLastPathComponent().appendingPathComponent("DeviceInboxTracking",
+                                                                isDirectory: true)
+    }
+
     /// Test-only persistence failure injection. Internal on purpose.
     var writeFailureInjection: ((PendingUploadWrite) -> Bool)?
 

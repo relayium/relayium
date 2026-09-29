@@ -481,7 +481,7 @@ struct RelayiumApp: App {
         // prevent, reintroduced one layer above them.
         delivering.onSentStateChanged = { [weak receiving] accountId, job, state, task in
             receiving?.updateSentHistory(accountID: accountId, jobID: job,
-                                         state: state, taskID: task)
+                                         state: state, taskID: task) ?? false
         }
         // A deleted send stops being DESCRIBED. Nothing about the delivery
         // changes: it keeps running, keeps reporting, keeps its staged bytes,
@@ -489,6 +489,9 @@ struct RelayiumApp: App {
         // a remote recall and this is the line that keeps it from becoming one.
         delivering.isSentHistoryDeleted = { [weak receiving] accountId, job in
             receiving?.isSentHistoryDeleted(accountID: accountId, jobID: job) ?? false
+        }
+        delivering.recoverableSentHistory = { [weak receiving] accountId in
+            receiving?.recoverableSentHistory(accountID: accountId) ?? []
         }
 
         // The conversation composer's staged batch, isolated by the SAME session
