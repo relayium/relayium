@@ -1130,13 +1130,17 @@ public final class InboxController: ObservableObject {
     /// Record what is now known about one outgoing delivery. Never moves it.
     public func updateSentHistory(accountID: String, jobID: String,
                                   state: InboxTimelineEntry.SentState,
-                                  taskID: String? = nil) {
+                                  taskID: String? = nil) -> Bool {
         guard let generation, generation.account.value == accountID,
-              let store = runtime.conversationStore(generation.account) else { return }
+              let store = runtime.conversationStore(generation.account) else { return false }
         do {
             try store.updateSent(jobID: jobID, state: state, taskID: taskID)
             refreshConversations()
-        } catch { conversationStoreIssue = true }
+            return true
+        } catch {
+            conversationStoreIssue = true
+            return false
+        }
     }
 
     /// Whether this Mac's user has deleted this outgoing job's history.
@@ -1149,6 +1153,16 @@ public final class InboxController: ObservableObject {
     public func isSentHistoryDeleted(accountID: String, jobID: String) -> Bool {
         guard let generation, generation.account.value == accountID else { return false }
         return deletedTimelineIDs.contains(InboxTimelineEntry.sentID(jobID: jobID))
+    }
+
+    /// Migration input for sender builds that predate durable task tracking.
+    /// Only nonterminal created rows with a real task id can be reconciled.
+    public func recoverableSentHistory(accountID: String) -> [InboxTimelineEntry] {
+        guard let generation, generation.account.value == accountID else { return [] }
+        return conversations.flatMap(\.entries).filter {
+            $0.direction == .sent && $0.sentState == .created && $0.sentTaskID != nil
+                && !deletedTimelineIDs.contains($0.id)
+        }
     }
 
     /// One received body, read from protected storage.

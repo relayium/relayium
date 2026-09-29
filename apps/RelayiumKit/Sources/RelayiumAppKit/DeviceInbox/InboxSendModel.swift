@@ -160,7 +160,7 @@ public final class InboxSendModel: ObservableObject {
     /// resurrection the tombstones exist to prevent, reintroduced one layer up.
     public var onSentStateChanged: (@MainActor (_ accountId: String, _ jobID: String,
                                                 _ state: InboxTimelineEntry.SentState,
-                                                _ taskID: String?) -> Void)?
+                                                _ taskID: String?) -> Bool)?
 
     /// Whether the user has deleted this job's local history.
     ///
@@ -174,6 +174,11 @@ public final class InboxSendModel: ObservableObject {
     /// host are unchanged.
     public var isSentHistoryDeleted: (@MainActor (_ accountId: String,
                                                  _ jobID: String) -> Bool)?
+
+    /// Created rows written by builds without the dedicated task tracker. Read
+    /// once per refresh as a migration source, never as the runtime store.
+    public var recoverableSentHistory: (@MainActor (_ accountId: String)
+                                        -> [InboxTimelineEntry])?
 
     // MARK: - internal state, rendered by nothing
 
@@ -220,6 +225,7 @@ public final class InboxSendModel: ObservableObject {
     private var work: [String: Task<Void, Never>] = [:]
     /// The state poll running for one job, if any.
     private var polls: [String: Task<Void, Never>] = [:]
+    private let tracking: InboxDeliveryTrackingStore
     /// Removal of the content keys whose retired job directory the latest
     /// `refreshOutstanding` sweep removed. Chained, so removals from successive
     /// refreshes run in order. Internal so tests can await it instead of sleeping.
@@ -235,6 +241,7 @@ public final class InboxSendModel: ObservableObject {
         self.makeSender = makeSender
         self.sleeper = sleeper
         self.pollSeconds = pollSeconds
+        self.tracking = InboxDeliveryTrackingStore(root: pending.deviceStore.deviceTrackingRoot)
     }
 
     // No `deinit` teardown, deliberately. Every task this model starts captures
@@ -355,6 +362,7 @@ public final class InboxSendModel: ObservableObject {
                 let rows = try await sender.devices()
                 guard let self, g == self.accountGeneration else { return }
                 self.adopt(rows)
+                self.resumeTrackedDeliveries(token: token, g: g)
             } catch {
                 guard let self, g == self.accountGeneration else { return }
                 self.directory = .unavailable(Self.directoryFailure(for: error))
@@ -382,6 +390,16 @@ public final class InboxSendModel: ObservableObject {
         // it does not own. The surface returns to the list on its own when the
         // peer has neither a history nor a row — see `openPeer` there.
         publish()
+    }
+
+    private func resumeTrackedDeliveries(token: String, g: Int) {
+        guard g == accountGeneration else { return }
+        for (job, record) in records where record.plan == nil
+            && record.result != nil && !record.activity.isSavedOnTarget {
+            if case .tracking(let state) = record.activity, !state.isTerminal {
+                poll(job: job, token: token, g: g)
+            }
+        }
     }
 
     /// Rename by the server-issued row id. Duplicate labels are deliberately
@@ -516,6 +534,9 @@ public final class InboxSendModel: ObservableObject {
         let conflicts = Set(pending.deviceStore.ownershipConflicts())
             .union(adoption.conflicts)
         if conflicts != ownershipConflictJobIDs { ownershipConflictJobIDs = conflicts }
+        for entry in recoverableSentHistory?(accountId) ?? [] {
+            tracking.migrate(entry, accountID: accountId)
+        }
         for plan in pending.deviceStore.deviceSendPlans(for: accountId) {
             guard let deviceID = plan.targetDeviceId else { continue }
             if var existing = records[plan.jobId] {
@@ -548,6 +569,24 @@ public final class InboxSendModel: ObservableObject {
                 // the user wrote rather than as a permanently empty row.
                 announceSentHistory(plan, state: Self.sentState(for: Self.recoveredActivity(for: plan)),
                                     accountId: accountId)
+            }
+        }
+        // A successful create retires its upload plan, so these records are the
+        // durable authority for tasks still worth querying or cancelling.
+        for tracked in tracking.records(for: accountId).sorted(by: { $0.createdAt < $1.createdAt })
+            where records[tracked.jobID] == nil {
+            sequence += 1
+            let result = InboxSendResult(targetDeviceID: tracked.targetDeviceID,
+                                         task: tracked.task, created: false, resealed: false)
+            records[tracked.jobID] = Record(
+                plan: nil, result: result, activity: .tracking(tracked.state),
+                files: tracked.files.map { FileMeta(name: $0.name, size: $0.size) },
+                fileCount: tracked.fileCount, byteCount: tracked.byteCount,
+                targetDeviceID: tracked.targetDeviceID, sequence: sequence)
+            if tracked.state.isTerminal,
+               announceSentState(job: tracked.jobID, activity: .tracking(tracked.state),
+                                 taskID: tracked.taskID) {
+                tracking.remove(jobID: tracked.jobID, accountID: accountId)
             }
         }
         // A record whose plan is gone AND which this session is not watching is
@@ -1107,25 +1146,45 @@ public final class InboxSendModel: ObservableObject {
         // Every byte is up and the create is what is left. Said out loud,
         // because a bar sitting at 100% with no sentence beside it is the exact
         // place a user concludes the file has arrived.
-        guard total > 0, sent < total else { return set(.creating, for: job, g: g) }
+        guard total > 0, sent < total else {
+            set(.creating, for: job, g: g)
+            return
+        }
         set(.uploading(sent: sent, total: total), for: job, g: g)
     }
 
-    private func set(_ activity: InboxSendActivity, for job: String, g: Int) {
-        guard g == accountGeneration, var record = records[job] else { return }
+    @discardableResult
+    private func set(_ activity: InboxSendActivity, for job: String, g: Int) -> Bool {
+        guard g == accountGeneration, var record = records[job] else { return false }
         record.activity = activity
         records[job] = record
         publish()
-        announceSentState(job: job, activity: activity, taskID: record.result?.task.id)
+        return announceSentState(job: job, activity: activity, taskID: record.result?.task.id)
     }
 
     private func adopt(_ result: InboxSendResult, for job: String, g: Int) {
         guard g == accountGeneration, var record = records[job] else { return }
+        if let accountId {
+            do {
+                try tracking.update(jobID: job, accountID: accountId, task: result.task)
+            } catch {
+                record.activity = .stopped(.recoveryStateWriteFailed)
+                records[job] = record
+                publish()
+                return
+            }
+        }
         record.result = result
         record.activity = .tracking(result.task.state)
         records[job] = record
         publish()
-        announceSentState(job: job, activity: record.activity, taskID: result.task.id)
+        let historyWasWritten = announceSentState(job: job, activity: record.activity,
+                                                  taskID: result.task.id)
+        // History is synchronously updated by the callback above. Only after
+        // that durable truth exists may the runtime tracking record go away.
+        if result.task.isTerminal, historyWasWritten, let accountId {
+            tracking.remove(jobID: job, accountID: accountId)
+        }
     }
 
     /// Report what is now known, and never create a row by doing so.
@@ -1133,9 +1192,9 @@ public final class InboxSendModel: ObservableObject {
     /// The staging placeholder is excluded because it is not a delivery yet and
     /// has no durable identity to report against.
     private func announceSentState(job: String, activity: InboxSendActivity,
-                                   taskID: String?) {
-        guard let onSentStateChanged, let accountId, job != Self.stagingKey else { return }
-        onSentStateChanged(accountId, job, Self.sentState(for: activity), taskID)
+                                   taskID: String?) -> Bool {
+        guard let onSentStateChanged, let accountId, job != Self.stagingKey else { return false }
+        return onSentStateChanged(accountId, job, Self.sentState(for: activity), taskID)
     }
 
     private func reloadPlan(for job: String, g: Int) {
@@ -1166,7 +1225,19 @@ public final class InboxSendModel: ObservableObject {
                 guard !Task.isCancelled, g == self.accountGeneration,
                       let live = self.records[job]?.result else { return }
                 let coordinator = self.coordinator(token: token)
-                guard let task = try? await coordinator.state(of: live) else { continue }
+                let task: InboxTask
+                do {
+                    task = try await coordinator.state(of: live)
+                } catch let error as InboxError where error.status == 404 {
+                    guard g == self.accountGeneration, let accountId = self.accountId else { return }
+                    if self.set(.stopped(.noLongerQueryable), for: job, g: g) {
+                        self.tracking.remove(jobID: job, accountID: accountId)
+                    }
+                    self.polls[job] = nil
+                    return
+                } catch {
+                    continue
+                }
                 guard g == self.accountGeneration else { return }
                 self.adopt(InboxSendResult(targetDeviceID: live.targetDeviceID, task: task,
                                            created: false, resealed: live.resealed),
@@ -1212,6 +1283,9 @@ public final class InboxSendModel: ObservableObject {
             do {
                 try await coordinator.cancel(result)
                 guard let self, g == self.accountGeneration else { return }
+                if let accountId = self.accountId {
+                    self.tracking.remove(jobID: job, accountID: accountId)
+                }
                 self.work[job] = nil
                 self.forget(job)
             } catch {
@@ -1258,11 +1332,13 @@ public final class InboxSendModel: ObservableObject {
         work[job]?.cancel()
         work[job] = nil
         records.removeValue(forKey: job)
+        if let accountId { tracking.remove(jobID: job, accountID: accountId) }
         publish()
     }
 
     private func coordinator(token: String) -> InboxSendCoordinator {
         InboxSendCoordinator(store: pending.deviceStore, keys: pending.keys, uploader: uploader,
-                             sender: makeSender(token))
+                             sender: makeSender(token), finalizePolicy: FinalizeRecoveryPolicy(),
+                             tracking: tracking)
     }
 }

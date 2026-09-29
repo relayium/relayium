@@ -1220,10 +1220,13 @@ enum EndpointBatch {
         // against, reintroduced one layer above the tombstones.
         delivering.onSentStateChanged = { [weak receiving] accountId, job, state, task in
             receiving?.updateSentHistory(accountID: accountId, jobID: job,
-                                         state: state, taskID: task)
+                                         state: state, taskID: task) ?? false
         }
         delivering.isSentHistoryDeleted = { [weak receiving] accountId, job in
             receiving?.isSentHistoryDeleted(accountID: accountId, jobID: job) ?? false
+        }
+        delivering.recoverableSentHistory = { [weak receiving] accountId in
+            receiving?.recoverableSentHistory(accountID: accountId) ?? []
         }
     }
 

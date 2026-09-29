@@ -796,6 +796,123 @@ final class InboxSendModelTests: XCTestCase {
                         .count, 1)
     }
 
+    /// Once create succeeds the upload plan is intentionally gone, but the task
+    /// is not: a new process must restore the same card and cancellation handle
+    /// from the small tracking record, without retaining staged bytes or a key.
+    func testACreatedDeliverySurvivesRelaunchAndCanStillBeCancelled() async throws {
+        let (first, session) = await signedIn()
+        first.selectTarget(deviceID)
+        sender.createOutcomes = [
+            .success(InboxTaskCreation(task: task(idempotencyKey: "tracked"), created: true)),
+        ]
+        sender.taskResults = [.success(task(state: .queued, idempotencyKey: "tracked"))]
+        first.send(files: try selection("reports/q3.txt"), sourceDraftId: nil, token: "bearer")
+        await waitUntil("the created task") { first.items.first?.taskID == self.taskID }
+        let job = try XCTUnwrap(first.items.first?.id)
+        XCTAssertTrue(store.deviceSendPlans(for: "acct-1").isEmpty,
+                      "a successful create kept the upload material")
+        let retainedKey = try await keys.key(for: job)
+        XCTAssertNil(retainedKey, "a successful create kept the content key")
+
+        session.send(.loggedOut)
+        let second = makeModel()
+        let secondSession = CurrentValueSubject<SessionState, Never>(ready())
+        second.observe(secondSession)
+        XCTAssertEqual(second.items.first?.id, job)
+        XCTAssertEqual(second.items.first?.taskID, taskID)
+        XCTAssertEqual(second.items.first?.files.map(\.name), ["reports/q3.txt"])
+        XCTAssertEqual(InboxSendActions.offered(for: try XCTUnwrap(second.items.first)),
+                       [.cancelDelivery])
+
+        second.act(.cancelDelivery, on: job, token: "bearer")
+        await waitUntil("the recovered task cancellation") { second.items.isEmpty }
+        XCTAssertTrue(sender.calls.contains(.cancel(device: deviceID, task: taskID)))
+
+        let tracking = InboxDeliveryTrackingStore(root: store.deviceTrackingRoot)
+        XCTAssertTrue(tracking.records(for: "acct-1").isEmpty,
+                      "accepted cancellation kept a stale tracking record")
+    }
+
+    /// Account scoping is enforced on disk as well as in memory. A second
+    /// account cannot see or cancel the first account's recovered task.
+    func testARecoveredDeliveryNeverCrossesAnAccountSwitch() async throws {
+        let tracking = InboxDeliveryTrackingStore(root: store.deviceTrackingRoot)
+        let plan = try store.prepare(files: try selection(), accountId: "acct-1",
+                                     burnAfterRead: false,
+                                     ttl: UploadPurpose.deviceTaskTTLSeconds,
+                                     target: PendingUploadTarget(deviceId: deviceID, keyId: keyID,
+                                                                 keyGeneration: 4))
+        try tracking.record(task(state: .queued, idempotencyKey: "tracked"), for: plan,
+                            targetDeviceID: deviceID)
+        _ = store.purge((try? store.markRetired(plan)) ?? plan)
+
+        let session = CurrentValueSubject<SessionState, Never>(ready("acct-2"))
+        let model = makeModel()
+        model.observe(session)
+        XCTAssertTrue(model.items.isEmpty)
+        let before = sender.calls.count
+        model.act(.cancelDelivery, on: plan.jobId, token: "bearer-acct-2")
+        XCTAssertEqual(sender.calls.count, before)
+
+        session.send(ready("acct-1"))
+        XCTAssertEqual(model.items.map(\.id), [plan.jobId])
+    }
+
+    /// Builds predating the tracker already wrote the task id into history.
+    /// That row is a one-time migration source, then the dedicated record owns
+    /// runtime recovery; terminal or task-less rows are never guessed into it.
+    func testALegacyCreatedHistoryRowMigratesIntoDedicatedTracking() async throws {
+        let job = "LEGACYJOB012345"
+        let created = InboxTimelineEntry.sent(
+            jobID: job, peerDeviceID: deviceID, peerNameSnapshot: "Studio",
+            kind: .files, at: Date(timeIntervalSince1970: 123), byteCount: 18,
+            files: [.init(name: "report.txt", size: 18)], state: .created, taskID: taskID)
+        let terminal = InboxTimelineEntry.sent(
+            jobID: "TERMINALJOB123", peerDeviceID: deviceID, peerNameSnapshot: "Studio",
+            kind: .files, at: Date(), byteCount: 1,
+            files: [.init(name: "done.txt", size: 1)], state: .saved, taskID: "TASKterminal123")
+        let model = makeModel()
+        model.recoverableSentHistory = { account in account == "acct-1" ? [created, terminal] : [] }
+        model.observe(CurrentValueSubject<SessionState, Never>(ready()))
+
+        XCTAssertEqual(model.items.map(\.id), [job])
+        XCTAssertEqual(model.items.first?.taskID, taskID)
+        XCTAssertEqual(model.items.first?.activity, .tracking(.queued))
+        let tracking = InboxDeliveryTrackingStore(root: store.deviceTrackingRoot)
+        XCTAssertEqual(tracking.records(for: "acct-1").map(\.jobID), [job])
+    }
+
+    /// A 404 after relaunch is absence of an answer, not evidence of delivery or
+    /// cancellation. The card and history say unknown while runtime tracking is
+    /// retired because there is no longer a task endpoint to poll.
+    func testARecoveredTasks404NeverClaimsSavedOrCancelled() async throws {
+        let tracking = InboxDeliveryTrackingStore(root: store.deviceTrackingRoot)
+        let plan = try store.prepare(files: try selection(), accountId: "acct-1",
+                                     burnAfterRead: false,
+                                     ttl: UploadPurpose.deviceTaskTTLSeconds,
+                                     target: PendingUploadTarget(deviceId: deviceID, keyId: keyID,
+                                                                 keyGeneration: 4))
+        try tracking.record(task(state: .queued, idempotencyKey: "tracked"), for: plan,
+                            targetDeviceID: deviceID)
+        _ = store.purge((try? store.markRetired(plan)) ?? plan)
+        sender.taskResults = [.failure(InboxError.api(status: 404, code: "task_not_found"))]
+
+        let model = makeModel()
+        let history = HistoryRecorder()
+        history.install(on: model)
+        model.observe(CurrentValueSubject<SessionState, Never>(ready()))
+        model.refreshTargets(token: "bearer")
+        await waitUntil("the no-longer-queryable result") {
+            model.items.first?.activity == .stopped(.noLongerQueryable)
+        }
+
+        XCTAssertEqual(history.states.last?.state, .stopped)
+        XCTAssertFalse(history.states.contains { $0.state == .saved })
+        XCTAssertTrue(tracking.records(for: "acct-1").isEmpty)
+        XCTAssertEqual(InboxSendPresentation.status(for: try XCTUnwrap(model.items.first).activity),
+                       L10n.t(.sendErrorNoLongerQueryable))
+    }
+
     /// Actions that spend a credential refuse an empty one rather than issuing a
     /// request with no bearer.
     func testAnEmptyCredentialRefusesEveryActionThatWouldSpendOne() async throws {
@@ -1220,6 +1337,7 @@ final class InboxSendModelTests: XCTestCase {
             }
             model.onSentStateChanged = { [weak self] account, job, state, task in
                 self?.states.append((account, job, state, task))
+                return true
             }
             model.isSentHistoryDeleted = { [weak self] _, job in
                 self?.deleted.contains(job) ?? false

@@ -58,6 +58,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     private let keys: StoredLinkKeyStore
     private let uploader: CloudUploader
     private let sender: InboxSenderTransport
+    private let tracking: InboxDeliveryTrackingStore?
     /// Bounds of the recoverable finalize; tests shorten the waits.
     let finalizePolicy: FinalizeRecoveryPolicy
 
@@ -66,16 +67,18 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     public convenience init(store: PendingUploadStore, keys: StoredLinkKeyStore, uploader: CloudUploader,
                 sender: InboxSenderTransport) {
         self.init(store: store, keys: keys, uploader: uploader, sender: sender,
-                  finalizePolicy: FinalizeRecoveryPolicy())
+                  finalizePolicy: FinalizeRecoveryPolicy(), tracking: nil)
     }
 
     init(store: PendingUploadStore, keys: StoredLinkKeyStore, uploader: CloudUploader,
-         sender: InboxSenderTransport, finalizePolicy: FinalizeRecoveryPolicy) {
+         sender: InboxSenderTransport, finalizePolicy: FinalizeRecoveryPolicy,
+         tracking: InboxDeliveryTrackingStore? = nil) {
         self.store = store
         self.keys = keys
         self.uploader = uploader
         self.sender = sender
         self.finalizePolicy = finalizePolicy
+        self.tracking = tracking
     }
 
     // MARK: - delivering
@@ -388,6 +391,11 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         } catch {
             throw InboxSendFailure.unknownOutcome
         }
+        do {
+            try tracking?.record(task, for: plan, targetDeviceID: target.deviceId)
+        } catch {
+            throw InboxSendFailure.recoveryStateWriteFailed
+        }
         try await release(plan)
         return InboxSendResult(targetDeviceID: target.deviceId, task: task, created: false,
                                resealed: plan.targetKeyWasResealed)
@@ -407,6 +415,14 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             // start until its id is durable. Preserve the plan, content key,
             // staged bytes and object ownership so the same idempotency key can
             // converge after local storage becomes writable again.
+            throw InboxSendFailure.recoveryStateWriteFailed
+        }
+        // This record must exist before release removes the plan, staged bytes
+        // and key. A crash on either side therefore leaves at least one durable
+        // authority from which this same task can be recovered.
+        do {
+            try tracking?.record(task, for: recorded, targetDeviceID: target.deviceId)
+        } catch {
             throw InboxSendFailure.recoveryStateWriteFailed
         }
         // Local remains only: the object belongs to the task now.
@@ -896,6 +912,10 @@ public enum InboxSendFailure: Error, Equatable, Sendable {
     /// Central was asked and no task carrying this send's idempotency key
     /// exists. Definitive: the local job has been released.
     case noTaskCreated
+    /// A previously tracked task now returns 404. It may have expired, been
+    /// cancelled elsewhere or been removed; none of those outcomes implies that
+    /// it was saved or cancelled by this device.
+    case noLongerQueryable
     /// Nobody knows whether a delivery exists. NOTHING has been released — not
     /// the ciphertext, not the staged bytes, not the content key, and not the
     /// idempotency key the next attempt needs to converge.
