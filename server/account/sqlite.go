@@ -337,6 +337,7 @@ CREATE TABLE IF NOT EXISTS cli_tokens (
   device_id    TEXT NOT NULL,
   created_at   INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL DEFAULT 0,
+  idle_expires_at INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY(user_id) REFERENCES users(id),
   -- ON DELETE CASCADE makes DELETE /api/devices/{id} (bare DELETE FROM devices)
   -- the CLI-token revocation path: removing a CLI device cascade-deletes its
@@ -1945,6 +1946,14 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		db.Close()
 		return nil, err
 	}
+	// Account bearer idle expiry. Existing credentials get one full idle window
+	// from the upgrade rather than expiring immediately based on an old creation
+	// or last-seen timestamp. A zero deadline written later by an older binary is
+	// claimed on its first authentication by AuthenticateCLIToken.
+	if err := migrateCLITokenIdleExpiry(db, time.Now().Unix()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The transfers table backed the retired share-link mode (one-time
 	// rendezvous tokens). Dropping it is idempotent and safe: tokens lived
 	// at most one hour, so nothing in an existing deployment still needs it.
@@ -2186,6 +2195,31 @@ func migrateEmailVerified(db *sql.DB) error {
 			return err
 		}
 		_, err = tx.ExecContext(context.Background(), `UPDATE users SET email_verified = 1`)
+		return err
+	})
+}
+
+const cliTokenIdleTTLSeconds int64 = 90 * 24 * 60 * 60
+
+// migrateCLITokenIdleExpiry adds the deadline and grants every bearer already
+// present at rollout one complete idle window. The ALTER and backfill share the
+// migrateOnce transaction, so a crash cannot leave legacy rows at zero without
+// also leaving the migration eligible to retry.
+func migrateCLITokenIdleExpiry(db *sql.DB, now int64) error {
+	return migrateOnce(db, "backfill_cli_token_idle_expiry", func(tx *sql.Tx) error {
+		exists, err := columnExistsTx(tx, "cli_tokens", "idle_expires_at")
+		if err != nil {
+			return err
+		}
+		if !exists {
+			if _, err := tx.ExecContext(context.Background(),
+				`ALTER TABLE cli_tokens ADD COLUMN idle_expires_at INTEGER NOT NULL DEFAULT 0`); err != nil {
+				return err
+			}
+		}
+		_, err = tx.ExecContext(context.Background(),
+			`UPDATE cli_tokens SET idle_expires_at = ? WHERE idle_expires_at = 0`,
+			now+cliTokenIdleTTLSeconds)
 		return err
 	})
 }
@@ -3788,8 +3822,8 @@ func (s *SQLiteStore) RegisterBrowserDevice(ctx context.Context, in BrowserDevic
 		return Device{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO cli_tokens
-		(token_hash, user_id, device_id, created_at, last_seen_at) VALUES (?, ?, ?, ?, 0)`,
-		in.TokenHash, in.UserID, in.DeviceID, in.At); err != nil {
+		(token_hash, user_id, device_id, created_at, last_seen_at, idle_expires_at) VALUES (?, ?, ?, ?, 0, ?)`,
+		in.TokenHash, in.UserID, in.DeviceID, in.At, in.At+cliTokenIdleTTLSeconds); err != nil {
 		return Device{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -3862,9 +3896,9 @@ func registerApprovedDeviceTx(ctx context.Context, tx *sql.Tx, in ApprovedDevice
 		return Device{}, err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at)
-		 VALUES (?, ?, ?, ?, 0)`,
-		in.TokenHash, in.UserID, deviceID, in.At); err != nil {
+		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at, idle_expires_at)
+		 VALUES (?, ?, ?, ?, 0, ?)`,
+		in.TokenHash, in.UserID, deviceID, in.At, in.At+cliTokenIdleTTLSeconds); err != nil {
 		return Device{}, err
 	}
 
@@ -8081,9 +8115,10 @@ func (s *SQLiteStore) CredentialEpoch(ctx context.Context, userID string) (int64
 // inserts nothing (false), or this row exists before it and is revoked by it.
 func (s *SQLiteStore) CreateCLITokenAtEpoch(ctx context.Context, t CLIToken, epoch int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at)
-		 SELECT ?, ?, ?, ?, ? WHERE (SELECT credential_epoch FROM users WHERE id = ?) = ?`,
-		t.TokenHash, t.UserID, t.DeviceID, t.CreatedAt, t.LastSeenAt, t.UserID, epoch)
+		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at, idle_expires_at)
+		 SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT credential_epoch FROM users WHERE id = ?) = ?`,
+		t.TokenHash, t.UserID, t.DeviceID, t.CreatedAt, t.LastSeenAt,
+		t.CreatedAt+cliTokenIdleTTLSeconds, t.UserID, epoch)
 	if err != nil {
 		return false, err
 	}
@@ -8093,9 +8128,44 @@ func (s *SQLiteStore) CreateCLITokenAtEpoch(ctx context.Context, t CLIToken, epo
 
 func (s *SQLiteStore) CreateCLIToken(ctx context.Context, t CLIToken) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)`,
-		t.TokenHash, t.UserID, t.DeviceID, t.CreatedAt, t.LastSeenAt)
+		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at, idle_expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		t.TokenHash, t.UserID, t.DeviceID, t.CreatedAt, t.LastSeenAt, t.CreatedAt+cliTokenIdleTTLSeconds)
 	return err
+}
+
+func (s *SQLiteStore) AuthenticateCLIToken(ctx context.Context, tokenHash string, at int64, clientIP string) (string, string, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", "", false, err
+	}
+	defer tx.Rollback()
+
+	var userID, deviceID string
+	err = tx.QueryRowContext(ctx, `SELECT t.user_id, t.device_id
+		FROM cli_tokens t JOIN users u ON u.id = t.user_id
+		WHERE t.token_hash = ? AND u.deleted_at = 0
+		  AND (t.idle_expires_at = 0 OR t.idle_expires_at > ?)`, tokenHash, at).
+		Scan(&userID, &deviceID)
+	if err == sql.ErrNoRows {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE cli_tokens
+		SET last_seen_at = ?, idle_expires_at = ? WHERE token_hash = ?`,
+		at, at+cliTokenIdleTTLSeconds, tokenHash); err != nil {
+		return "", "", false, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE devices
+		SET last_seen_at = ?, last_ip = CASE WHEN ? <> '' THEN ? ELSE last_ip END
+		WHERE id = ? AND user_id = ?`, at, clientIP, clientIP, deviceID, userID); err != nil {
+		return "", "", false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", "", false, err
+	}
+	return userID, deviceID, true, nil
 }
 
 func (s *SQLiteStore) GetCLITokenUser(ctx context.Context, tokenHash string) (string, string, bool, error) {

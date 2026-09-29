@@ -36,7 +36,7 @@ func (s *Service) UserFromAuth(r *http.Request) (User, bool) {
 		return User{}, false
 	}
 	hash := authx.HashToken(raw)
-	uid, _, ok, err := s.store.GetCLITokenUser(r.Context(), hash)
+	uid, _, ok, err := s.store.AuthenticateCLIToken(r.Context(), hash, s.now().Unix(), canonicalDeviceIP(s.clientIP(r)))
 	if err != nil || !ok {
 		return User{}, false
 	}
@@ -47,7 +47,6 @@ func (s *Service) UserFromAuth(r *http.Request) (User, bool) {
 	if gerr != nil || u.DeletedAt != 0 {
 		return User{}, false
 	}
-	_ = s.store.TouchCLIToken(r.Context(), hash, s.now().Unix(), canonicalDeviceIP(s.clientIP(r)))
 	return u, true
 }
 

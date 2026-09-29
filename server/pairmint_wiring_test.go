@@ -44,13 +44,14 @@ func bearerFor(t *testing.T, svc *account.Service, email string) (string, string
 		t.Fatalf("upsert user: %v", err)
 	}
 	raw := "rlm_cli_" + authx.RandToken()
+	createdAt := time.Now().Unix()
 	dev, err := svc.Store().UpsertDevice(ctx, account.Device{
-		ID: authx.NewID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: 1})
+		ID: authx.NewID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: createdAt})
 	if err != nil {
 		t.Fatalf("upsert device: %v", err)
 	}
 	if err := svc.Store().CreateCLIToken(ctx, account.CLIToken{
-		TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
+		TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: createdAt}); err != nil {
 		t.Fatalf("create cli token: %v", err)
 	}
 	return u.ID, raw
