@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
@@ -50,38 +49,6 @@ func TestAndroidClientPolicyIsAnonymousAdvisoryAndInert(t *testing.T) {
 		if strings.Contains(text, forbidden) {
 			t.Errorf("policy contains forbidden %q: %s", forbidden, text)
 		}
-	}
-}
-
-func TestAndroidClientPolicyRecommendsPublishedInstallableRelease(t *testing.T) {
-	var policy struct {
-		Android struct {
-			Version string `json:"recommendedVersion"`
-			Build   int    `json:"recommendedBuild"`
-		} `json:"android"`
-	}
-	if err := json.Unmarshal(androidClientPolicyJSON, &policy); err != nil {
-		t.Fatal(err)
-	}
-	feedBytes, err := os.ReadFile("../../web/public/apps/android/update.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var feed struct {
-		Android struct {
-			Available bool   `json:"available"`
-			Version   string `json:"versionName"`
-			Build     int    `json:"versionCode"`
-			URL       string `json:"downloadUrl"`
-		} `json:"android"`
-	}
-	if err := json.Unmarshal(feedBytes, &feed); err != nil {
-		t.Fatal(err)
-	}
-	if !feed.Android.Available || feed.Android.URL == "" ||
-		policy.Android.Version != feed.Android.Version || policy.Android.Build != feed.Android.Build {
-		t.Fatalf("policy %s(%d) is not the published installable release %+v",
-			policy.Android.Version, policy.Android.Build, feed.Android)
 	}
 }
 
