@@ -118,16 +118,13 @@ func TestChangePasswordSetsForPasswordlessUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	// currentPassword 被忽略；首次设密成功。
-	if err := svc.ChangePassword(ctx, u, "no-session", "", "freshpass12"); err != nil {
-		t.Fatalf("set: %v", err)
+	// A signed-in passwordless account is not enough authority to create a new
+	// login method. The fresh email-proof flow owns that transition.
+	if err := svc.ChangePassword(ctx, u, "no-session", "", "freshpass12"); !errors.Is(err, ErrFreshProofRequired) {
+		t.Fatalf("set without proof: want ErrFreshProofRequired, got %v", err)
 	}
-	// 该账号（Google/魔法用户）邮箱尚未验证，先标记验证再走密码登录路径。
-	if err := svc.store.SetEmailVerified(ctx, u.ID); err != nil {
-		t.Fatalf("verify: %v", err)
-	}
-	if _, err := svc.Login(ctx, "g@example.com", "freshpass12"); err != nil {
-		t.Fatalf("login after set: %v", err)
+	if has, err := svc.store.HasPassword(ctx, u.ID); err != nil || has {
+		t.Fatalf("password after refused direct set: has=%v err=%v", has, err)
 	}
 }
 

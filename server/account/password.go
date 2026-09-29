@@ -3,7 +3,9 @@ package account
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/mail"
+	"time"
 
 	"github.com/relayium/relayium/authx"
 	"golang.org/x/crypto/bcrypt"
@@ -38,8 +40,12 @@ var (
 	// changed and the verify link was NOT spent.
 	ErrVerifyPasswordMismatch = errors.New("account: password does not match the registration password")
 	// ErrInvalidEmail 表示邮箱地址格式不合法。
-	ErrInvalidEmail = errors.New("account: invalid email address")
+	ErrInvalidEmail       = errors.New("account: invalid email address")
+	ErrFreshProofRequired = errors.New("account: fresh email proof required")
+	ErrPasswordAlreadySet = errors.New("account: password already set")
 )
+
+const firstPasswordProofTTL = 5 * time.Minute
 
 // dummyBcryptHash is a valid bcrypt hash at DefaultCost. Login compares against
 // it when the account doesn't exist so the response time matches the
@@ -313,6 +319,9 @@ func (s *Service) ChangePassword(ctx context.Context, u User, currentSessionID, 
 			return ErrBadCredentials
 		}
 	}
+	if !hasPass {
+		return ErrFreshProofRequired
+	}
 	// Same storable-range check as registration and reset, so an unhashable
 	// input gets a usable answer rather than an opaque server error.
 	if err := validateNewPassword(newPassword); err != nil {
@@ -324,9 +333,56 @@ func (s *Service) ChangePassword(ctx context.Context, u User, currentSessionID, 
 	}
 	// One transaction: a change that fails part-way must not leave the new
 	// password live with the other sessions still valid.
-	linkSubject := ""
-	if !hasPass {
-		linkSubject = normEmail(u.Email)
+	return s.store.ChangePasswordAndRevokeSessions(ctx, u.ID, string(newHash), "", currentSessionID, epoch)
+}
+
+func (s *Service) RequestFirstPasswordProof(ctx context.Context, u User) error {
+	_, _, hasPass, err := s.store.GetCredentials(ctx, u.Email)
+	if err != nil {
+		return err
 	}
-	return s.store.ChangePasswordAndRevokeSessions(ctx, u.ID, string(newHash), linkSubject, currentSessionID, epoch)
+	if hasPass {
+		return ErrPasswordAlreadySet
+	}
+	epoch, err := s.store.CredentialEpoch(ctx, u.ID)
+	if err != nil {
+		return err
+	}
+	raw := authx.RandToken()
+	now := s.now()
+	if err := s.store.CreateEmailToken(ctx, EmailToken{
+		TokenHash: authx.HashToken(raw), UserID: u.ID, Email: u.Email,
+		Purpose: "set-password", CredentialEpoch: epoch,
+		CreatedAt: now.Unix(), ExpiresAt: now.Add(firstPasswordProofTTL).Unix(),
+	}); err != nil {
+		return err
+	}
+	return s.mailer.SendFirstPasswordProof(ctx, u.Email,
+		fmt.Sprintf("%s/set-password#token=%s", s.cfg.BaseURL, raw))
+}
+
+func (s *Service) SetFirstPasswordWithProof(ctx context.Context, u User, currentSessionID, rawToken, newPassword string) error {
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
+	}
+	tokenHash := authx.HashToken(rawToken)
+	tok, ok, err := s.store.PeekEmailToken(ctx, tokenHash, "set-password", s.now().Unix())
+	if err != nil {
+		return err
+	}
+	if !ok || tok.UserID != u.ID {
+		return ErrInvalidToken
+	}
+	epoch, err := s.store.CredentialEpoch(ctx, u.ID)
+	if err != nil {
+		return err
+	}
+	if tok.CredentialEpoch != epoch {
+		return ErrCredentialsChanged
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	return s.store.SetFirstPasswordWithProof(ctx, tokenHash, u.ID, string(hash), normEmail(u.Email), currentSessionID, epoch, s.now().Unix())
 }

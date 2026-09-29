@@ -95,6 +95,7 @@
     pricing: () => import("./lib/PricingPage.svelte"),
     "verify-email": () => import("./lib/VerifyEmail.svelte"),
     "reset-password": () => import("./lib/ResetPassword.svelte"),
+    "set-password": () => import("./lib/SetPassword.svelte"),
     "magic-link": () => import("./lib/MagicLink.svelte"),
     "account-delete": () => import("./lib/AccountDeleteConfirm.svelte"),
     "account-reactivate": () => import("./lib/AccountReactivate.svelte"),
@@ -910,7 +911,7 @@
   const surfaceShown = $derived(
     currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me" || currentRoute() === "cli"
     || currentRoute() === "apps" || currentRoute() === "device-inbox"
-    || currentRoute() === "pricing" || currentRoute() === "verify-email" || currentRoute() === "reset-password"
+    || currentRoute() === "pricing" || currentRoute() === "verify-email" || currentRoute() === "reset-password" || currentRoute() === "set-password"
     || currentRoute() === "magic-link" || currentRoute() === "account-delete" || currentRoute() === "account-reactivate"
       ? false
       : currentRoute() === "cross"
@@ -937,7 +938,7 @@
   // independently.
   const SHELL_ROUTES = [
     "lan", "cross", "offline", "device-inbox",
-    "pricing", "cli", "apps", "me", "verify-email", "reset-password", "magic-link",
+    "pricing", "cli", "apps", "me", "verify-email", "reset-password", "set-password", "magic-link",
     "account-delete", "account-reactivate",
     "download",
   ] as const;
@@ -2700,6 +2701,10 @@
   {:else if currentRoute() === "reset-password"}
     {#await routePage("reset-password") then { default: ResetPassword }}
       <ResetPassword />
+    {/await}
+  {:else if currentRoute() === "set-password"}
+    {#await routePage("set-password") then { default: SetPassword }}
+      <SetPassword />
     {/await}
   {:else if currentRoute() === "magic-link"}
     {#await routePage("magic-link") then { default: MagicLink }}

@@ -19,6 +19,7 @@ type Mailer interface {
 	SendMagicLink(ctx context.Context, email, link string) error
 	SendVerifyEmail(ctx context.Context, email, link string) error
 	SendPasswordReset(ctx context.Context, email, link string) error
+	SendFirstPasswordProof(ctx context.Context, email, link string) error
 	// SendAccountDeletionConfirm emails the double-opt-in confirm link for a
 	// self-serve account-deletion request (Task 3). No account state changes
 	// until the link is used.
@@ -138,6 +139,11 @@ func (m *LogMailer) SendVerifyEmail(_ context.Context, email, link string) error
 
 func (m *LogMailer) SendPasswordReset(_ context.Context, email, link string) error {
 	m.logLink("password reset", email, link)
+	return nil
+}
+
+func (m *LogMailer) SendFirstPasswordProof(_ context.Context, email, link string) error {
+	m.logLink("first password proof", email, link)
 	return nil
 }
 
@@ -266,6 +272,12 @@ func (m *SMTPMailer) SendPasswordReset(_ context.Context, email, link string) er
 	return m.send(email, "Reset your Relayium password",
 		"Reset your Relayium password:\n"+link+"\n\nThis link is valid for 1 hour. If you didn't request it, ignore this email and your password stays unchanged.",
 		`<p>Reset your Relayium password:</p><p><a href="`+link+`">Reset password</a></p><p style="color:#666">This link is valid for 1 hour. If you didn't request it, ignore this email and your password stays unchanged.</p>`)
+}
+
+func (m *SMTPMailer) SendFirstPasswordProof(_ context.Context, email, link string) error {
+	return m.send(email, "Confirm your Relayium password setup",
+		"Confirm setting your first Relayium password:\n"+link+"\n\nThis link is valid for 5 minutes and can be used once. If you didn't request it, ignore this email.",
+		`<p>Confirm setting your first Relayium password:</p><p><a href="`+link+`">Set password</a></p><p style="color:#666">This link is valid for 5 minutes and can be used once. If you didn't request it, ignore this email.</p>`)
 }
 
 func (m *SMTPMailer) SendAccountDeletionConfirm(_ context.Context, email, link string) error {

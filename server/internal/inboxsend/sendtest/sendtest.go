@@ -28,9 +28,10 @@ import (
 
 type noopMailer struct{}
 
-func (noopMailer) SendMagicLink(context.Context, string, string) error     { return nil }
-func (noopMailer) SendVerifyEmail(context.Context, string, string) error   { return nil }
-func (noopMailer) SendPasswordReset(context.Context, string, string) error { return nil }
+func (noopMailer) SendMagicLink(context.Context, string, string) error          { return nil }
+func (noopMailer) SendVerifyEmail(context.Context, string, string) error        { return nil }
+func (noopMailer) SendPasswordReset(context.Context, string, string) error      { return nil }
+func (noopMailer) SendFirstPasswordProof(context.Context, string, string) error { return nil }
 func (noopMailer) SendAccountDeletionConfirm(context.Context, string, string) error {
 	return nil
 }

@@ -5,7 +5,7 @@
     session, refreshSession, logout, localDeviceId,
     googleLoginUrl, appleLoginUrl, requestMagicLink,
     register, passwordLogin, fetchAuthMethods, changePassword, type AuthMethods,
-    resendVerification, forgotPassword, unlinkIdentity, reactivateAccount,
+    resendVerification, forgotPassword, unlinkIdentity, reactivateAccount, requestFirstPasswordProof,
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { loginIntent } from "./login.svelte";
@@ -113,6 +113,8 @@
   });
 
   let pwBusy = $state(false);
+  let proofBusy = $state(false);
+  let proofSent = $state(false);
 
   // Linked-login-method management (unlink an OAuth provider).
   let unlinkErr = $state("");
@@ -160,6 +162,15 @@
     } finally {
       pwBusy = false;
     }
+  }
+
+  async function requestPasswordProof() {
+    if (proofBusy) return;
+    proofBusy = true; pwError = "";
+    const res = await requestFirstPasswordProof();
+    proofBusy = false;
+    if (res.ok) proofSent = true;
+    else pwError = mapPwError(res.error);
   }
 
   async function claimDevice() {
@@ -467,7 +478,13 @@
             {/if}
           </div>
 
-          {#if pwOpen}
+          {#if !session().user!.hasPassword}
+            {#if proofSent}<p class="hint" role="status">{t.account.firstPasswordProofSent}</p>{/if}
+            {#if pwError}<p class="err">{pwError}</p>{/if}
+            <button class="btn btn-ghost" disabled={proofBusy} onclick={requestPasswordProof}>
+              {t.account.setPassword}
+            </button>
+          {:else if pwOpen}
             <form class="pwform" onsubmit={(e) => { e.preventDefault(); onChangePassword(); }}>
               <!-- Hidden username so password managers associate the new password with this account. -->
               <input class="sr-only" type="text" name="username" autocomplete="username"

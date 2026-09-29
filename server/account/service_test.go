@@ -51,6 +51,13 @@ func (m *capturingMailer) SendPasswordReset(_ context.Context, _, link string) e
 	m.mu.Unlock()
 	return nil
 }
+func (m *capturingMailer) SendFirstPasswordProof(_ context.Context, _, link string) error {
+	m.mu.Lock()
+	m.lastLink = link
+	m.count++
+	m.mu.Unlock()
+	return nil
+}
 
 func (m *capturingMailer) sends() int {
 	m.mu.Lock()

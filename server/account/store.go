@@ -168,16 +168,17 @@ type MagicToken struct {
 	UsedAt    int64 // 0 = unused
 }
 
-// EmailToken is a one-time verification or password-reset token. Only its hash
-// is stored. Purpose is "verify" or "reset".
+// EmailToken is a one-time email credential. Only its hash is stored. Purpose
+// distinguishes verification, reset, and first-password proofs.
 type EmailToken struct {
-	TokenHash string
-	UserID    string
-	Email     string
-	Purpose   string
-	CreatedAt int64
-	ExpiresAt int64
-	UsedAt    int64 // 0 = unused
+	TokenHash       string
+	UserID          string
+	Email           string
+	Purpose         string
+	CredentialEpoch int64
+	CreatedAt       int64
+	ExpiresAt       int64
+	UsedAt          int64 // 0 = unused
 }
 
 // Device is a browser (later: a CLI) registered under a user. Static registry only;
@@ -2032,6 +2033,7 @@ type Store interface {
 	// identity when linkSubject is non-empty, and revokes every session except
 	// exceptSessionID (the raw token) in ONE transaction.
 	ChangePasswordAndRevokeSessions(ctx context.Context, userID, passwordHash, linkSubject, exceptSessionID string, expectEpoch int64) error
+	SetFirstPasswordWithProof(ctx context.Context, tokenHash, userID, passwordHash, linkSubject, exceptSessionID string, expectEpoch, now int64) error
 	DeleteSpentEmailTokens(ctx context.Context, now int64) error
 	// devices
 	UpsertDevice(ctx context.Context, d Device) (Device, error)

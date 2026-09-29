@@ -346,6 +346,31 @@ export async function changePassword(
   return { ok: false, error: code };
 }
 
+export async function requestFirstPasswordProof(): Promise<{ ok: boolean; error?: string }> {
+  const res = await apiSend("/api/auth/password/set/request", { method: "POST" });
+  if (!res) return { ok: false, error: "network" };
+  if (res.ok) return { ok: true };
+  return { ok: false, error: await errorCode(res) };
+}
+
+export async function setFirstPassword(
+  token: string,
+  newPassword: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await apiSend("/api/auth/password/set/confirm", {
+    method: "POST",
+    body: JSON.stringify({ token, newPassword }),
+  });
+  if (!res) return { ok: false, error: "network" };
+  if (res.ok) {
+    if (user) user = { ...user, hasPassword: true };
+    return { ok: true };
+  }
+  const code = await errorCode(res);
+  if (res.status === 401) return { ok: false, error: "signed_out" };
+  return { ok: false, error: code };
+}
+
 /**
  * Spend an emailed account-deletion link (`/account/delete/confirm?token=…`,
  * server/account/deletion.go RequestAccountDeletion). **Only ever call this from

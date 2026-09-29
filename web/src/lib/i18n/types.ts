@@ -275,6 +275,13 @@ export interface Messages {
     reactivateError: string;
     changePassword: string;
     setPassword: string;
+    firstPasswordProofSent: string;
+    firstPasswordTitle: string;
+    firstPasswordLead: string;
+    firstPasswordSuccess: string;
+    firstPasswordInvalid: string;
+    firstPasswordChanged: string;
+    firstPasswordNoToken: string;
     currentPassword: string;
     newPassword: string;
     confirmPassword: string;

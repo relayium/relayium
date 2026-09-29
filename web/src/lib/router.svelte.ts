@@ -7,7 +7,7 @@
 import { parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 import { clearRoom } from "./room.svelte";
 
-export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "apps" | "device-inbox" | "pricing" | "verify-email" | "reset-password" | "magic-link" | "account-delete" | "account-reactivate";
+export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "apps" | "device-inbox" | "pricing" | "verify-email" | "reset-password" | "set-password" | "magic-link" | "account-delete" | "account-reactivate";
 
 /** Path of the LAN / same-network transfer page. It is the site root, so this
  *  constant exists to name it rather than to compute it: copy that links the
@@ -42,8 +42,9 @@ export const OFFLINE_PATH = "/offline-transfer";
 export const VERIFY_EMAIL_PATH = "/verify-email";
 
 /** Password-reset landing page. The backend's reset email links here with
- *  ?token=<t>; not part of the transfer flows. */
+ *  #token=<t>; not part of the transfer flows. */
 export const RESET_PASSWORD_PATH = "/reset-password";
+export const SET_PASSWORD_PATH = "/set-password";
 
 /** Sign-in-link landing page. The emailed link hits GET /api/auth/magic/verify,
  *  which only redirects here — the token is spent by a POST from this page, on a
@@ -91,6 +92,7 @@ export function routeFromLocation(pathname: string, hash: string): Route {
   if (pathname === PRICING_PATH) return "pricing";
   if (pathname === VERIFY_EMAIL_PATH) return "verify-email";
   if (pathname === RESET_PASSWORD_PATH) return "reset-password";
+  if (pathname === SET_PASSWORD_PATH) return "set-password";
   if (pathname === MAGIC_PATH) return "magic-link";
   if (pathname === ACCOUNT_DELETE_PATH) return "account-delete";
   if (pathname === ACCOUNT_REACTIVATE_PATH) return "account-reactivate";
@@ -189,6 +191,7 @@ function commitNavigation(r: Route, hash: string): void {
     : r === "pricing" ? PRICING_PATH
     : r === "verify-email" ? VERIFY_EMAIL_PATH
     : r === "reset-password" ? RESET_PASSWORD_PATH
+    : r === "set-password" ? SET_PASSWORD_PATH
     : r === "magic-link" ? MAGIC_PATH
     : r === "account-delete" ? ACCOUNT_DELETE_PATH
     : r === "account-reactivate" ? ACCOUNT_REACTIVATE_PATH
