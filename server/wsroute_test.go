@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -41,10 +42,36 @@ func newTestRoute(live string, now func() int64) wsRoute {
 func joinStatus(t *testing.T, h http.HandlerFunc, ip, code string) int {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, "/ws?code="+code, nil)
-	r.RemoteAddr = ip + ":54321"
+	r.RemoteAddr = net.JoinHostPort(ip, "54321")
 	w := httptest.NewRecorder()
 	h(w, r)
 	return w.Code
+}
+
+func TestWSJoinLimiterAggregatesIPv6By64(t *testing.T) {
+	h := newTestRoute("000000", func() int64 { return 1_000 }).handler()
+	for i := 1; i <= wsJoinPerIPPerMinute; i++ {
+		ip := fmt.Sprintf("2001:db8:1234:5678::%x", i)
+		if got := joinStatus(t, h, ip, fmt.Sprintf("%06d", 910_000+i)); got != http.StatusForbidden {
+			t.Fatalf("same-/64 attempt %d: status = %d, want %d", i, got, http.StatusForbidden)
+		}
+	}
+	if got := joinStatus(t, h, "2001:db8:1234:5678::ffff", "919999"); got != http.StatusTooManyRequests {
+		t.Fatalf("rotated address in exhausted /64: status = %d, want %d", got, http.StatusTooManyRequests)
+	}
+	if got := joinStatus(t, h, "2001:db8:1234:5679::1", "919999"); got != http.StatusForbidden {
+		t.Fatalf("different /64: status = %d, want %d", got, http.StatusForbidden)
+	}
+}
+
+func TestWSJoinLimiterMapsIPv4EmbeddedIPv6ToIPv4Budget(t *testing.T) {
+	h := newTestRoute("000000", func() int64 { return 1_000 }).handler()
+	for i := 1; i <= wsJoinPerIPPerMinute; i++ {
+		joinStatus(t, h, "203.0.113.7", fmt.Sprintf("%06d", 920_000+i))
+	}
+	if got := joinStatus(t, h, "::ffff:203.0.113.7", "929999"); got != http.StatusTooManyRequests {
+		t.Fatalf("mapped IPv4 bypassed IPv4 budget: status = %d, want %d", got, http.StatusTooManyRequests)
+	}
 }
 
 func TestWSRouteUsesResolvedGenerationRoom(t *testing.T) {

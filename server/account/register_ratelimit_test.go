@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/signal"
 )
 
 func TestRegisterRateLimited(t *testing.T) {
@@ -44,6 +46,25 @@ func TestRegisterRateLimited(t *testing.T) {
 	}
 	if got := mail.sends(); got != sendsBefore {
 		t.Fatalf("6th (rate-limited) request sent an email: sends went from %d to %d", sendsBefore, got)
+	}
+}
+
+func TestRegisterLimiterUsesIPv6PrefixKey(t *testing.T) {
+	svc := NewService(newTestStore(t), &capturingMailer{}, Config{})
+	ipx := signal.NewIPExtractor(nil)
+	svc.SetClientIP(ipx.IP)
+	svc.SetRateLimitIP(ipx.RateLimitKey)
+	limiter := &fakeLimiter{limit: 10}
+	svc.SetRegisterLimiter(limiter)
+
+	for _, ip := range []string{"2001:db8:55:9::1", "2001:db8:55:9::beef"} {
+		r := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader("{"))
+		r.RemoteAddr = "[" + ip + "]:443"
+		w := httptest.NewRecorder()
+		svc.handleRegister(w, r)
+	}
+	if len(limiter.keys) != 2 || limiter.keys[0] != "2001:db8:55:9::/64" || limiter.keys[1] != limiter.keys[0] {
+		t.Fatalf("register limiter keys = %#v", limiter.keys)
 	}
 }
 

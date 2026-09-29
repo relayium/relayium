@@ -40,3 +40,20 @@ func TestClientIPInjectedExtractorIsUsed(t *testing.T) {
 		t.Fatalf("loopback peer XFF should be trusted: clientIP = %q, want %q", got, "1.2.3.4")
 	}
 }
+
+func TestRateLimitIPIsNormalizedWithoutChangingObservedClientIP(t *testing.T) {
+	svc := NewService(newTestStore(t), &capturingMailer{}, Config{})
+	ipx := signal.NewIPExtractor(nil)
+	svc.SetClientIP(ipx.IP)
+	svc.SetRateLimitIP(ipx.RateLimitKey)
+
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "[::1]:9"
+	r.Header.Set("X-Forwarded-For", "2001:db8:1234:5678::beef")
+	if got := svc.clientIP(r); got != "2001:db8:1234:5678::beef" {
+		t.Fatalf("observed client IP = %q", got)
+	}
+	if got := svc.rateLimitIP(r); got != "2001:db8:1234:5678::/64" {
+		t.Fatalf("rate-limit key = %q", got)
+	}
+}

@@ -285,7 +285,7 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 // the link goes to is read off that user, never off the request, so no caller
 // can aim the email anywhere but at their own account's address.
 func (s *Service) handleDeleteRequest(w http.ResponseWriter, r *http.Request, u User) {
-	key := u.ID + "|" + s.clientIP(r)
+	key := u.ID + "|" + s.rateLimitIP(r)
 	if !s.deleteRequests.locked(key, s.now()) {
 		s.deleteRequests.recordFail(key, s.now())
 		_ = s.RequestAccountDeletion(r.Context(), u.ID, u.Email)
