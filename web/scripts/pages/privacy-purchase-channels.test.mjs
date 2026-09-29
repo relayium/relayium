@@ -60,7 +60,7 @@ import { describe, it, expect } from "vitest";
 import privacy from "./content/legal/privacy.mjs";
 import { MAINTAINED_LANGS, FROZEN_LANGS, LANGS } from "./shared.mjs";
 
-const MAINTAINED_DATE = "2026-09-03";
+const MAINTAINED_DATE = "2026-09-29";
 const FROZEN_DATE = "2026-08-13";
 
 /** Every string in a locale's document, flattened, so a sentence cannot hide
@@ -341,12 +341,12 @@ describe("the native-app section states each platform's device data exactly", ()
 
   const SHARED_FACTS = {
     en: [
-      /Neither registers a push token and neither receives push notifications/,
-      /Neither app tracks you across other apps or websites, and neither contains advertising or third-party analytics SDKs\./,
+      /On macOS and iOS, neither app registers a push token or receives push notifications/,
+      /None of the apps tracks you across other apps or websites, and none contains advertising or third-party analytics SDKs\./,
     ],
     zh: [
-      /两者都不注册推送令牌，也都不接收推送通知/,
-      /两个 App 都不会跨其他 App 或网站追踪你，也都不含广告或第三方分析 SDK。/,
+      /在 macOS 和 iOS 上，两个 App 都不注册推送令牌，也不接收推送通知/,
+      /所有这些 App 都不会跨其他 App 或网站追踪你，也都不含广告或第三方分析 SDK。/,
     ],
   };
 
@@ -411,7 +411,7 @@ describe("the native-app section states each platform's device data exactly", ()
     expect(en).toContain("On macOS");
     expect(en).toContain("On iOS");
 
-    const zh = bulletWith("zh", "本设备在你账号中显示的标签");
+    const zh = bulletWith("zh", "本设备在账号中显示或向对端公布的标签");
     expect(zh, "chinese device-label bullet").toBeTruthy();
     expect(zh).toContain("在 macOS 上");
     expect(zh).toContain("在 iOS 上");

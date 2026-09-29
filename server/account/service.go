@@ -665,6 +665,27 @@ func (s *Service) RunAppleSubscriptionReconciler(ctx context.Context, interval t
 	}
 }
 
+// RunDeviceIPPruner bounds account-device addresses independently of stored
+// transfer GC, which may be disabled on an otherwise healthy account server.
+func (s *Service) RunDeviceIPPruner(ctx context.Context, interval time.Duration) {
+	prune := func() {
+		if err := s.store.PruneExpiredDeviceIPs(ctx, s.now().Unix()); err != nil && ctx.Err() == nil {
+			log.Printf("device IP retention prune: %v", err)
+		}
+	}
+	prune()
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			prune()
+		}
+	}
+}
+
 // Store returns the account data store. Exported so the commercial
 // admin/billing layer (billing.go, admin.go, admin_rollout.go,
 // plan_enforce.go — slated to move to a private repo, see server/ext) can

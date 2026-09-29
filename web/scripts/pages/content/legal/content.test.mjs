@@ -112,3 +112,26 @@ describe("maintained privacy copy discloses the activation aggregate exactly", (
     });
   }
 });
+
+describe("maintained privacy copy closes device and local-data disclosures", () => {
+  const text = (lang) => JSON.stringify(privacy.langs[lang]);
+
+  it("English discloses Android model, local history/keys, clear controls, IP clocks and backups", () => {
+    const value = text("en");
+    for (const fact of [
+      "Build.MODEL", "up to 20 recent realtime transfer entries", "decryption keys",
+      "signing out clears both", "cleared after 30 days", "requests without a valid IP do not extend it",
+      "Clear data", "Android cloud backup and device-to-device migration",
+      "Encrypted database backups", "do not rewrite historical backups",
+    ]) expect(value).toContain(fact);
+  });
+
+  it("Chinese discloses the same facts", () => {
+    const value = text("zh");
+    for (const fact of [
+      "Build.MODEL", "最近最多 20 条实时传输记录", "暂存链接密钥", "退出登录会同时清除",
+      "30 天后清除", "没有有效 IP 的请求不会延长", "清除数据", "Android 云备份和设备间迁移",
+      "加密数据库备份", "不会就地改写历史备份",
+    ]) expect(value).toContain(fact);
+  });
+});

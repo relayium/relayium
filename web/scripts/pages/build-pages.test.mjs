@@ -75,7 +75,7 @@ describe("localized legal URLs are dated from their own locale", () => {
     // These are the two dates that must actually appear, and the split between
     // them is the whole point of the fix.
     for (const lang of MAINTAINED_LANGS) {
-      expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-09-03");
+      expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-09-29");
     }
     for (const lang of FROZEN_LANGS) {
       expect(dated.get(`https://relayium.com${urlPath("privacy", lang)}`), lang).toBe("2026-08-13");

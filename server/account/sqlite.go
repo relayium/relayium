@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS devices (
   created_at   INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL DEFAULT 0,
   last_ip      TEXT NOT NULL DEFAULT '',
+  last_ip_observed_at INTEGER NOT NULL DEFAULT 0,
   -- Client-generated installation lookup hint (43-char RawURLEncoding of 32
   -- random bytes). '' for every browser row, every CLI and every pre-1.1.3 app.
   -- Never a credential and never returned by an API: see Device.InstallID and
@@ -1954,6 +1955,10 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		db.Close()
 		return nil, err
 	}
+	if err := migrateDeviceIPRetention(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The transfers table backed the retired share-link mode (one-time
 	// rendezvous tokens). Dropping it is idempotent and safe: tokens lived
 	// at most one hour, so nothing in an existing deployment still needs it.
@@ -2200,6 +2205,29 @@ func migrateEmailVerified(db *sql.DB) error {
 }
 
 const cliTokenIdleTTLSeconds int64 = 90 * 24 * 60 * 60
+const deviceIPRetentionSeconds int64 = 30 * 24 * 60 * 60
+
+// migrateDeviceIPRetention adds an independent observation clock and clears
+// every legacy address once. last_seen_at is not an observation timestamp:
+// requests without a valid address may move it. A zero timestamp written by an
+// old binary during a rolling deploy is cleared by the ordinary pruner.
+func migrateDeviceIPRetention(db *sql.DB) error {
+	return migrateOnce(db, "clear_legacy_device_ips", func(tx *sql.Tx) error {
+		exists, err := columnExistsTx(tx, "devices", "last_ip_observed_at")
+		if err != nil {
+			return err
+		}
+		if !exists {
+			if _, err := tx.ExecContext(context.Background(),
+				`ALTER TABLE devices ADD COLUMN last_ip_observed_at INTEGER NOT NULL DEFAULT 0`); err != nil {
+				return err
+			}
+		}
+		_, err = tx.ExecContext(context.Background(),
+			`UPDATE devices SET last_ip = '', last_ip_observed_at = 0 WHERE last_ip <> '' OR last_ip_observed_at <> 0`)
+		return err
+	})
+}
 
 // migrateCLITokenIdleExpiry adds the deadline and grants every bearer already
 // present at rollout one complete idle window. The ALTER and backfill share the
@@ -3763,13 +3791,13 @@ func (s *SQLiteStore) DeleteSpentEmailTokens(ctx context.Context, now int64) err
 	return err
 }
 
-const deviceCols = `id, user_id, name, created_at, last_seen_at, kind, last_ip, install_id`
+const deviceCols = `id, user_id, name, created_at, last_seen_at, kind, last_ip, last_ip_observed_at, install_id`
 
 // scanDevice keeps the column order of deviceCols and its readers in one place;
 // adding a column to that list without adding it here is a compile error rather
 // than a silently shifted field.
 func scanDevice(sc rowScanner, d *Device) error {
-	return sc.Scan(&d.ID, &d.UserID, &d.Name, &d.CreatedAt, &d.LastSeenAt, &d.Kind, &d.LastIP, &d.InstallID)
+	return sc.Scan(&d.ID, &d.UserID, &d.Name, &d.CreatedAt, &d.LastSeenAt, &d.Kind, &d.LastIP, &d.LastIPObservedAt, &d.InstallID)
 }
 
 func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error) {
@@ -3786,11 +3814,12 @@ func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error
 	// which silently dropped it out of MaxBrowserDevicesPerAccount's count.
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO devices (`+deviceCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET name = excluded.name,
-		 last_ip = CASE WHEN excluded.last_ip <> '' THEN excluded.last_ip ELSE devices.last_ip END
+		 last_ip = CASE WHEN excluded.last_ip <> '' THEN excluded.last_ip ELSE devices.last_ip END,
+		 last_ip_observed_at = CASE WHEN excluded.last_ip <> '' THEN excluded.last_ip_observed_at ELSE devices.last_ip_observed_at END
 		 WHERE devices.user_id = excluded.user_id`,
-		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt, d.Kind, d.LastIP, d.InstallID)
+		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt, d.Kind, d.LastIP, d.LastIPObservedAt, d.InstallID)
 	if err != nil {
 		return Device{}, err
 	}
@@ -3816,9 +3845,9 @@ func (s *SQLiteStore) RegisterBrowserDevice(ctx context.Context, in BrowserDevic
 		return Device{}, ErrBrowserDeviceLimit
 	}
 	d := Device{ID: in.DeviceID, UserID: in.UserID, Name: in.Name, Kind: "browser",
-		CreatedAt: in.At, LastIP: in.LastIP}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO devices (`+deviceCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		d.ID, d.UserID, d.Name, d.CreatedAt, 0, d.Kind, d.LastIP, ""); err != nil {
+		CreatedAt: in.At, LastIP: in.LastIP, LastIPObservedAt: observedAt(in.LastIP, in.At)}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO devices (`+deviceCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		d.ID, d.UserID, d.Name, d.CreatedAt, 0, d.Kind, d.LastIP, d.LastIPObservedAt, ""); err != nil {
 		return Device{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO cli_tokens
@@ -3872,16 +3901,16 @@ func registerApprovedDeviceTx(ctx context.Context, tx *sql.Tx, in ApprovedDevice
 		// the creation time belong to the owner and to the row's history.
 		if in.LastIP != "" {
 			if _, err := tx.ExecContext(ctx,
-				`UPDATE devices SET last_ip = ? WHERE id = ? AND user_id = ?`,
-				in.LastIP, deviceID, in.UserID); err != nil {
+				`UPDATE devices SET last_ip = ?, last_ip_observed_at = ? WHERE id = ? AND user_id = ?`,
+				in.LastIP, in.At, deviceID, in.UserID); err != nil {
 				return Device{}, err
 			}
 		}
 	} else {
 		deviceID = in.NewDeviceID
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO devices (`+deviceCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			deviceID, in.UserID, in.Name, in.At, 0, in.Kind, in.LastIP, in.InstallID); err != nil {
+			`INSERT INTO devices (`+deviceCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			deviceID, in.UserID, in.Name, in.At, 0, in.Kind, in.LastIP, observedAt(in.LastIP, in.At), in.InstallID); err != nil {
 			return Device{}, err
 		}
 	}
@@ -3927,6 +3956,23 @@ func (s *SQLiteStore) ListDevices(ctx context.Context, userID string) ([]Device,
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+func observedAt(ip string, at int64) int64 {
+	if ip == "" {
+		return 0
+	}
+	return at
+}
+
+// PruneExpiredDeviceIPs removes only the identification hint and its clock.
+// Device identity, credentials, enrolment and last-seen history are untouched.
+func (s *SQLiteStore) PruneExpiredDeviceIPs(ctx context.Context, now int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE devices
+		SET last_ip = '', last_ip_observed_at = 0
+		WHERE last_ip <> '' AND (last_ip_observed_at = 0 OR last_ip_observed_at <= ?)`,
+		now-deviceIPRetentionSeconds)
+	return err
 }
 
 func (s *SQLiteStore) RenameDevice(ctx context.Context, id, userID, name string) error {
@@ -8158,8 +8204,10 @@ func (s *SQLiteStore) AuthenticateCLIToken(ctx context.Context, tokenHash string
 		return "", "", false, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE devices
-		SET last_seen_at = ?, last_ip = CASE WHEN ? <> '' THEN ? ELSE last_ip END
-		WHERE id = ? AND user_id = ?`, at, clientIP, clientIP, deviceID, userID); err != nil {
+		SET last_seen_at = ?,
+		    last_ip = CASE WHEN ? <> '' THEN ? ELSE last_ip END,
+		    last_ip_observed_at = CASE WHEN ? <> '' THEN ? ELSE last_ip_observed_at END
+		WHERE id = ? AND user_id = ?`, at, clientIP, clientIP, clientIP, at, deviceID, userID); err != nil {
 		return "", "", false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -8196,9 +8244,11 @@ func (s *SQLiteStore) TouchCLIToken(ctx context.Context, tokenHash string, at in
 	// row was touched, so My Devices truthfully but unhelpfully said “Never
 	// used” forever. A blank/invalid IP must not erase the last good hint.
 	if _, err := tx.ExecContext(ctx, `UPDATE devices
-		SET last_seen_at = ?, last_ip = CASE WHEN ? <> '' THEN ? ELSE last_ip END
+		SET last_seen_at = ?,
+		    last_ip = CASE WHEN ? <> '' THEN ? ELSE last_ip END,
+		    last_ip_observed_at = CASE WHEN ? <> '' THEN ? ELSE last_ip_observed_at END
 		WHERE id = (SELECT device_id FROM cli_tokens WHERE token_hash = ?)`,
-		at, clientIP, clientIP, tokenHash); err != nil {
+		at, clientIP, clientIP, clientIP, at, tokenHash); err != nil {
 		return err
 	}
 	return tx.Commit()

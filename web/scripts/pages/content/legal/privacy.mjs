@@ -4,7 +4,7 @@ const en = {
   description:
     "How Relayium handles files and ephemeral text: content is end-to-end encrypted, live message bodies are never stored by Relayium, and stored download links keep files zero-knowledge encrypted.",
   updatedLabel: "Last updated",
-  updated: "2026-09-03",
+  updated: "2026-09-29",
   otherDocLabel: "Terms of Service",
   lead: [
     "Relayium is built so that your files and ephemeral text stay yours. Local browser sessions are direct; cross-network browser sessions may carry end-to-end encrypted ciphertext through TURN; CLI text is direct-only; and stored download links hold only zero-knowledge encrypted file ciphertext.",
@@ -26,7 +26,7 @@ const en = {
         "Your email address and a display name.",
         "Which sign-in method you used (Sign in with Apple, Google, an email magic link, or email + password). Magic-link tokens are stored only as a hash, never in clear text; if you set a password, we store only its bcrypt hash, never the password itself. If you use Sign in with Apple with Apple's private email relay, we only ever see that relay address.",
         "A login session, kept in a secure, httpOnly cookie.",
-        "Devices you register, as a random device id and a device name (e.g. your platform name).",
+        "Devices you register, as a random device id and a device name (e.g. your platform name). For an authenticated app, browser installation or CLI, we also keep only its last valid server-observed public IP as an account-visible identification hint. A valid observation replaces the previous address and starts its own clock; requests without a valid IP do not extend it. The address is cleared after 30 days. A separate short-lived device-approval record shows the requesting IP while you decide whether to approve that login, and administrator changes carry the administrator IP in the security audit trail (kept for up to two years by default).",
       ],
     },
     {
@@ -71,7 +71,7 @@ const en = {
     {
       heading: "Cookies and local storage",
       body: [
-        "We use one session cookie to keep you signed in. In your browser's local storage we keep a random device id so a device you registered can be recognized. We do not use advertising or tracking cookies.",
+        "We use one session cookie to keep you signed in. In your browser's local storage we keep a random device id so a device you registered can be recognized; up to 20 recent realtime transfer entries (file name, size, direction, peer name and time) when local history is enabled; and the decryption keys needed to copy links you created back from My Files in that same browser. None of this browser-local history or key material is synced to the server. The history panel can clear its entries or turn recording off, and signing out clears both transfer history and stored-link keys. Clearing this site's browser data also removes them, after which a lost download-link key cannot be recovered by us. We do not use advertising or tracking cookies.",
       ],
     },
     {
@@ -97,20 +97,20 @@ const en = {
       ],
     },
     {
-      heading: "The Relayium apps for macOS and iOS",
+      heading: "The Relayium apps for Android, macOS and iOS",
       body: [
-        "Our native apps handle a little device-level data that the website does not, and the two platforms do not handle the same data. Each item below says which platform it describes.",
+        "Our native apps handle a little device-level data that the website does not, and the platforms do not handle the same data. Each item below says which platform it describes.",
       ],
       bullets: [
-        "The label this device carries in your account. On macOS the app reads the computer name from your Mac's Sharing settings and uses it as that label — sent with an email-and-password sign-in so your account can tell your devices apart and you can sign one out, and announced to the other devices in the room when you pair over the same network. macOS often seeds that name from your full name, so renaming the Mac changes what is sent. On iOS the label is generic and is never a name you chose: the app reads the hardware model and sends the device family — \"iPhone\", \"iPad\" or \"iPod touch\" — and nothing else, in those same two places. No personal name reaches us from an iPhone or iPad this way.",
+        "The label this device carries in your account or announces to a peer. Android reads the manufacturer-provided Build.MODEL string (for example a marketed phone model) and uses it for sign-in and nearby/realtime discovery; it may therefore be more specific than just \"Android\". On macOS the app reads the computer name from your Mac's Sharing settings and uses it as that label — sent with an email-and-password sign-in so your account can tell your devices apart and you can sign one out, and announced to the other devices in the room when you pair over the same network. macOS often seeds that name from your full name, so renaming the Mac changes what is sent. On iOS the label is generic and is never a name you chose: the app reads the hardware model and sends the device family — \"iPhone\", \"iPad\" or \"iPod touch\" — and nothing else, in those same two places. No personal name reaches us from an iPhone or iPad this way.",
         "An installation identifier, on macOS only. It is 32 random bytes the app generates on that Mac and keeps in its keychain, sent when you sign in through your browser so that signing back in returns to the device entry this Mac already has instead of adding another. It is random and never derived from your hardware — no serial number, MAC address, or hostname — so it identifies an installation and nothing about the machine. The iOS app has no browser sign-in to continue, so it generates no such identifier: today it sends us no installation identifier and no identifier read from the device itself. The random device id in your account's device list is one we issue for your account, as described above, and is not derived from your phone.",
-        "What these apps do not do. Neither registers a push token and neither receives push notifications: on macOS, a finished transfer or a new inbox delivery is announced by macOS on that Mac itself, and those banners deliberately carry no file names, links, or codes, while the iOS app has no push capability and registers nothing with Apple's push service. The iOS app asks for the camera for one purpose — reading the pairing QR code another device is showing, so you do not have to type its join code by hand — and that happens entirely on your device: the picture and the code in it are used on the spot to join that pairing, and nothing the camera sees is stored by the app or sent to us as camera data. The macOS app asks for no camera access at all, and neither app has access to your photo library: when you pick photos to send on iOS, the system's own picker runs outside the app and hands it only the items you chose. Neither app tracks you across other apps or websites, and neither contains advertising or third-party analytics SDKs.",
+        "Local app data and what these apps do not do. On Android, Device Inbox keeps received files and messages, its local history, and the private keys needed to open them inside Relayium's app-private storage. Deleting a history entry removes that device's local entry; Android Settings › Apps › Relayium › Storage › Clear data, or uninstalling Relayium, removes all of those app-private copies and keys. A copy you explicitly saved elsewhere is separate. Relayium excludes this app-private Inbox data from Android cloud backup and device-to-device migration. On macOS and iOS, neither app registers a push token or receives push notifications: on macOS, a finished transfer or a new inbox delivery is announced by macOS on that Mac itself, and those banners deliberately carry no file names, links, or codes, while the iOS app has no push capability and registers nothing with Apple's push service. The iOS app asks for the camera for one purpose — reading the pairing QR code another device is showing, so you do not have to type its join code by hand — and that happens entirely on your device: the picture and the code in it are used on the spot to join that pairing, and nothing the camera sees is stored by the app or sent to us as camera data. The macOS app asks for no camera access at all, and neither Apple app has access to your photo library: when you pick photos to send on iOS, the system's own picker runs outside the app and hands it only the items you chose. None of the apps tracks you across other apps or websites, and none contains advertising or third-party analytics SDKs.",
       ],
     },
     {
       heading: "Data retention and deletion",
       body: [
-        "Account data is kept while your account exists. You can delete your account and its data at any time from your account settings, in the app or on the web. Deletion starts a 30-day grace period during which you can undo it by signing back in; after that, your account and personal data are permanently removed. Aggregate usage counters we must keep for billing and abuse-prevention are anonymized so they are no longer linked to you.",
+        "Account data is kept while your account exists, subject to the shorter device-IP rule above. You can delete your account and its data at any time from your account settings, in the app or on the web. Deletion starts a 30-day grace period during which you can undo it by signing back in; after that, your live account and personal data are permanently removed. Aggregate usage counters we must keep for billing and abuse-prevention are anonymized so they are no longer linked to you. Encrypted database backups can still contain an older copy until their bounded backup rotation expires; we do not rewrite historical backups in place, and a restored backup is subject to the same deletion and retention cleanup before it is returned to service.",
       ],
     },
     {
@@ -143,7 +143,7 @@ const zh = {
   description:
     "Relayium 如何处理文件与临时文本：内容采用端到端加密，Relayium 不存储实时消息正文，暂存下载链接中的文件保持零知识加密。",
   updatedLabel: "最后更新",
-  updated: "2026-09-03",
+  updated: "2026-09-29",
   otherDocLabel: "服务条款",
   lead: [
     "Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 文本仅直连；暂存下载链接只保存零知识加密的文件密文。",
@@ -163,7 +163,7 @@ const zh = {
         "你的邮箱地址和显示名。",
         "你使用的登录方式（通过 Apple 登录、Google、邮箱魔法链接，或邮箱+密码）。魔法链接令牌只以哈希形式存储，绝不明文保存；如果你设置了密码，我们只存储其 bcrypt 哈希值，绝不存储密码本身。如果你使用「通过 Apple 登录」并选择 Apple 的私密邮件转发，我们只会看到该转发地址。",
         "登录会话，保存在安全的 httpOnly cookie 中。",
-        "你注册的设备，以一个随机设备 id 和设备名（例如你的平台名称）的形式。",
+        "你注册的设备，以一个随机设备 id 和设备名（例如你的平台名称）的形式。对于已认证的 App、浏览器安装或 CLI，我们还只保留服务器最后一次有效观察到的公网 IP，作为仅账号本人可见的设备识别提示。新的有效观察会替换旧地址并启动独立计时；没有有效 IP 的请求不会延长该时间。地址会在 30 天后清除。另有一条短期设备授权记录，会在你决定是否批准登录时显示请求端 IP；管理员操作则把管理员 IP 写入安全审计记录（默认最长保留两年）。",
       ],
     },
     {
@@ -203,7 +203,7 @@ const zh = {
     {
       heading: "Cookie 与本地存储",
       body: [
-        "我们使用一个会话 cookie 来保持你的登录状态。在你浏览器的本地存储中，我们保存一个随机设备 id，以便识别你注册过的设备。我们不使用广告或追踪 cookie。",
+        "我们使用一个会话 cookie 来保持你的登录状态。浏览器本地存储会保存：一个用于识别已注册设备的随机设备 id；启用本机历史时最近最多 20 条实时传输记录（文件名、大小、方向、对端名称和时间）；以及让你能在同一浏览器的「我的文件」中重新复制自己所建链接的解密密钥。这些本机历史和密钥材料都不会同步到服务器。历史面板可以清空记录或关闭记录功能；退出登录会同时清除传输历史和暂存链接密钥。清除本站的浏览器数据也会移除它们，此后遗失的下载链接密钥无法由我们恢复。我们不使用广告或追踪 cookie。",
       ],
     },
     {
@@ -229,20 +229,20 @@ const zh = {
       ],
     },
     {
-      heading: "macOS 与 iOS 上的 Relayium App",
+      heading: "Android、macOS 与 iOS 上的 Relayium App",
       body: [
-        "我们的原生 App 会处理少量网站不涉及的设备级数据，而且两个平台处理的数据并不相同。下面每一条都写明它描述的是哪个平台。",
+        "我们的原生 App 会处理少量网站不涉及的设备级数据，而且各平台处理的数据并不相同。下面每一条都写明它描述的是哪个平台。",
       ],
       bullets: [
-        "本设备在你账号中显示的标签。在 macOS 上，App 会读取 Mac「共享」设置中的电脑名称并作为该标签——使用邮箱与密码登录时随请求发送，便于你在账号中区分各台设备并注销其中一台；在同一网络配对时，也会公布给同一房间内的其他设备。macOS 通常会以你的全名生成该名称，因此重命名这台 Mac 就会改变发送出去的内容。在 iOS 上，这个标签是通用的，绝不会是你自己起的名字：App 读取硬件型号后只发送设备族——「iPhone」「iPad」或「iPod touch」——除此之外别无内容，发送场合与上述两处相同。因此不会有任何个人姓名经由这条路径从 iPhone 或 iPad 到达我们。",
+        "本设备在账号中显示或向对端公布的标签。Android 会读取厂商提供的 Build.MODEL 字符串（例如市场销售时的手机型号），并把它用于登录及附近/实时发现，因此它可能比笼统的「Android」更具体。在 macOS 上，App 会读取 Mac「共享」设置中的电脑名称并作为该标签——使用邮箱与密码登录时随请求发送，便于你在账号中区分各台设备并注销其中一台；在同一网络配对时，也会公布给同一房间内的其他设备。macOS 通常会以你的全名生成该名称，因此重命名这台 Mac 就会改变发送出去的内容。在 iOS 上，这个标签是通用的，绝不会是你自己起的名字：App 读取硬件型号后只发送设备族——「iPhone」「iPad」或「iPod touch」——除此之外别无内容，发送场合与上述两处相同。因此不会有任何个人姓名经由这条路径从 iPhone 或 iPad 到达我们。",
         "安装标识符，仅限 macOS。它是 App 在那台 Mac 上生成的 32 字节随机值，保存在本机钥匙串中，通过浏览器登录时发送，使你重新登录后回到这台 Mac 已有的设备条目，而不是新增一条。它是随机的，绝不由硬件推导——不含序列号、MAC 地址或主机名——因此它只标识某一次安装，而不透露这台机器的任何信息。iOS App 没有需要接续的浏览器登录流程，因此不会生成这样的标识符：目前它既不向我们发送安装标识符，也不发送任何从设备本身读取的标识符。你账号设备列表中的随机设备 id 是我们为你的账号签发的（见上文），并非由你的手机推导而来。",
-        "这些 App 不做的事。两者都不注册推送令牌，也都不接收推送通知：在 macOS 上，传输完成或收件箱有新投递，都由 macOS 在那台 Mac 本地提示，且这些横幅刻意不含文件名、链接或配对码；而 iOS App 根本不具备推送能力，也不会向 Apple 的推送服务注册任何东西。iOS App 申请摄像头只有一个用途——读取另一台设备正在显示的配对二维码，免得你手动输入加入码——而且这完全发生在你的设备上：画面及其中的配对码当场用于加入这次配对，摄像头看到的任何内容都不会被 App 保存，也不会作为摄像头数据发送给我们。macOS App 完全不申请摄像头权限；两个 App 也都没有你相册的访问权限：在 iOS 上选择要发送的照片时，是系统自带的选择器在 App 之外运行，只把你选中的项目交给 App。两个 App 都不会跨其他 App 或网站追踪你，也都不含广告或第三方分析 SDK。",
+        "本地 App 数据，以及这些 App 不做的事。在 Android 上，「设备收件箱」会把收到的文件和消息、本地历史记录，以及打开它们所需的私钥保存在 Relayium 的 App 私有存储中。删除一条历史记录会移除该设备上的本地条目；在 Android「设置 › 应用 › Relayium › 存储」中选择「清除数据」，或卸载 Relayium，会移除这些 App 私有副本和密钥。你明确另存到其他位置的副本不受影响。Relayium 会把这些 App 私有收件箱数据排除在 Android 云备份和设备间迁移之外。在 macOS 和 iOS 上，两个 App 都不注册推送令牌，也不接收推送通知：在 macOS 上，传输完成或收件箱有新投递，都由 macOS 在那台 Mac 本地提示，且这些横幅刻意不含文件名、链接或配对码；而 iOS App 根本不具备推送能力，也不会向 Apple 的推送服务注册任何东西。iOS App 申请摄像头只有一个用途——读取另一台设备正在显示的配对二维码，免得你手动输入加入码——而且这完全发生在你的设备上：画面及其中的配对码当场用于加入这次配对，摄像头看到的任何内容都不会被 App 保存，也不会作为摄像头数据发送给我们。macOS App 完全不申请摄像头权限；两个 Apple 平台的 App 也都没有你相册的访问权限：在 iOS 上选择要发送的照片时，是系统自带的选择器在 App 之外运行，只把你选中的项目交给 App。所有这些 App 都不会跨其他 App 或网站追踪你，也都不含广告或第三方分析 SDK。",
       ],
     },
     {
       heading: "数据保留与删除",
       body: [
-        "账号数据在你的账号存在期间保留。你可以随时在账号设置中（网页或 App 内）删除你的账号及其数据。删除会进入 30 天宽限期，期间你可重新登录撤销；之后你的账号及个人数据将被永久移除。因计费和防滥用而必须保留的汇总用量计数会被匿名化，不再与你关联。",
+        "账号数据会在账号存在期间保留，但设备 IP 适用上文更短的期限。你可以随时在账号设置中（网页或 App 内）删除你的账号及其数据。删除会进入 30 天宽限期，期间你可重新登录撤销；之后在线数据库中的账号及个人数据将被永久移除。因计费和防滥用而必须保留的汇总用量计数会被匿名化，不再与你关联。加密数据库备份仍可能保有较旧副本，直至其有界的备份轮转期结束；我们不会就地改写历史备份，而恢复出的备份必须先执行同样的删除与保留期清理，才能重新投入服务。",
       ],
     },
     {
