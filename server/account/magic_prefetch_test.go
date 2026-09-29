@@ -42,7 +42,7 @@ func TestMailGatewayPrefetchDoesNotBurnTheLoginLink(t *testing.T) {
 				t.Fatal("the prefetch received a session cookie — a live login handed to a third-party scanner")
 			}
 		}
-		if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, magicLinkPath+"?token=") {
+		if loc := resp.Header.Get("Location"); loc != magicLinkPath+"#token="+token {
 			t.Fatalf("prefetch %d redirected to %q, want the SPA page", n, loc)
 		}
 	}
@@ -98,5 +98,8 @@ func TestMagicGetIsNotAValidityOracle(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("a bogus token got %d — the GET must answer identically for valid and invalid tokens", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != magicLinkPath+"#token=totally-made-up" {
+		t.Fatalf("legacy GET kept the credential in a request URL: Location=%q", got)
 	}
 }

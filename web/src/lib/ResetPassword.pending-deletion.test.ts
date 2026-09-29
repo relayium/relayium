@@ -27,7 +27,7 @@ let target: HTMLDivElement;
 
 beforeEach(async () => {
   await loadLang("en");
-  history.replaceState(null, "", "/reset-password?token=reset-tok");
+  history.replaceState(null, "", "/reset-password#token=reset-tok");
   document.body.innerHTML = "";
 });
 afterEach(() => {

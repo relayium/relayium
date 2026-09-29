@@ -22,13 +22,14 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("email verification landing", () => {
   it("scrubs the token, names one task, keeps a persistent password label, and waits for an explicit action", async () => {
-    history.replaceState(null, "", "/verify-email?token=verify-token");
+    history.replaceState(null, "", "/verify-email#token=verify-token");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const { target, app } = render(VerifyEmail);
     await settle();
 
     expect(location.search).toBe("");
+    expect(location.hash).toBe("");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(target.querySelectorAll("h1")).toHaveLength(1);
     expect(target.querySelector("h1")?.textContent).toBe("Verify your email");
@@ -40,7 +41,7 @@ describe("email verification landing", () => {
   });
 
   it("keeps passwordless verification behind its explicit secondary action", async () => {
-    history.replaceState(null, "", "/verify-email?token=verify-token");
+    history.replaceState(null, "", "/verify-email#token=verify-token");
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
       new Response(JSON.stringify({ error: "invalid_or_expired_token" }), { status: 400 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -60,13 +61,14 @@ describe("email verification landing", () => {
 
 describe("password reset landing", () => {
   it("scrubs but does not spend the token on mount and exposes two labelled password fields", async () => {
-    history.replaceState(null, "", "/reset-password?token=reset-token");
+    history.replaceState(null, "", "/reset-password#token=reset-token");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const { target, app } = render(ResetPassword);
     await settle();
 
     expect(location.search).toBe("");
+    expect(location.hash).toBe("");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(target.querySelectorAll("h1")).toHaveLength(1);
     expect(target.querySelector("h1")?.textContent).toBe("Reset your password");
@@ -77,7 +79,7 @@ describe("password reset landing", () => {
   });
 
   it("reports local validation as an alert without spending the token", async () => {
-    history.replaceState(null, "", "/reset-password?token=reset-token");
+    history.replaceState(null, "", "/reset-password#token=reset-token");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const { target, app } = render(ResetPassword);

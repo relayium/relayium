@@ -111,7 +111,7 @@ func (m *capturingMailer) SendAccountDeleted(_ context.Context, _ string) error 
 }
 
 // lastDeleteToken extracts the raw token from the last captured
-// account-deletion confirm link ("...?token=<raw>"), failing the test if none
+// account-deletion confirm link ("...#token=<raw>"), failing the test if none
 // was sent or the link has no token param.
 func (m *capturingMailer) lastDeleteToken(t *testing.T) string {
 	t.Helper()

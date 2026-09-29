@@ -18,7 +18,7 @@ func newTestService(t *testing.T) (*Service, *captureMailer) {
 	return svc, m
 }
 
-// tokenFromLink extracts the ?token= value from a captured link.
+// tokenFromLink extracts the #token= value from a captured link.
 func tokenFromLink(t *testing.T, link string) string {
 	t.Helper()
 	i := strings.Index(link, "token=")
@@ -38,7 +38,7 @@ func TestRegisterSendsVerifyAndNoLoginUntilVerified(t *testing.T) {
 	if u.EmailVerified {
 		t.Fatal("registered user must start unverified")
 	}
-	if !strings.Contains(m.verify, "/verify-email?token=") {
+	if !strings.Contains(m.verify, "/verify-email#token=") {
 		t.Fatalf("verify link not sent, got %q", m.verify)
 	}
 	// login blocked while unverified

@@ -223,7 +223,7 @@ acceptance_register_second_account() {
   # with it would confirm the wrong registration and then fail much later, as a
   # sign-in refusal for an account that was never verified.
   local before token
-  before="$(grep -o 'verify-email?token=[0-9a-f]*' "$run_root/server.log" | sort -u || true)"
+  before="$(grep -oE 'verify-email[?#]token=[0-9a-f]*' "$run_root/server.log" | sort -u || true)"
   printf '{"email":"%s","password":"%s"}' "$second_email" "$second_password" \
     >"$run_root/register2.json"
   curl -sf --max-time 20 -X POST "$origin/api/auth/register" \
@@ -232,7 +232,7 @@ acceptance_register_second_account() {
   local waited=0
   token=""
   while [ "$waited" -lt 100 ]; do
-    token="$(grep -o 'verify-email?token=[0-9a-f]*' "$run_root/server.log" | sort -u \
+    token="$(grep -oE 'verify-email[?#]token=[0-9a-f]*' "$run_root/server.log" | sort -u \
       | grep -vxF "${before:-__none__}" | tail -1 | cut -d= -f2 || true)"
     [ -n "$token" ] && break
     sleep 0.2

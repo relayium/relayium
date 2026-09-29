@@ -10,7 +10,7 @@ import { loadLang } from "./i18n.svelte";
 // 一步（"让用户少点一次"）。
 beforeEach(async () => {
   await loadLang("en");
-  history.replaceState(null, "", "/magic-link?token=tok-123");
+  history.replaceState(null, "", "/magic-link#token=tok-123");
   document.body.innerHTML = "";
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -47,6 +47,7 @@ describe("MagicLink 页面", () => {
     const { app } = render();
     await new Promise((r) => setTimeout(r, 0));
     expect(location.search).toBe("");
+    expect(location.hash).toBe("");
     unmount(app);
   });
 
@@ -65,6 +66,20 @@ describe("MagicLink 页面", () => {
     const init = call![1]!;
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ token: "tok-123" });
+    unmount(app);
+  });
+
+  it("兼容旧 query 链接并在请求前清除它", async () => {
+    history.replaceState(null, "", "/magic-link?token=legacy-token");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify({ status: "ok" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { target, app } = render();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(location.href).not.toContain("legacy-token");
+    await clickSignIn(target);
+    const call = fetchMock.mock.calls.find((c) => c[0] === "/api/auth/magic/verify")!;
+    expect(JSON.parse(call[1]!.body as string)).toEqual({ token: "legacy-token" });
     unmount(app);
   });
 

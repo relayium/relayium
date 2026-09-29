@@ -1,6 +1,6 @@
 <script lang="ts">
   // Landing page for the emailed account-deletion link:
-  // /account/delete/confirm?token=<t> (server/account/deletion.go
+  // /account/delete/confirm#token=<t> (server/account/deletion.go
   // RequestAccountDeletion builds it; the path is pinned by router.test.ts).
   //
   // It needs a click, and that is the point of the page. Mail gateways
@@ -36,7 +36,8 @@
   );
 
   onMount(() => {
-    const tok = new URLSearchParams(location.search).get("token");
+    const tok = new URLSearchParams(location.hash.slice(1)).get("token")
+      || new URLSearchParams(location.search).get("token");
     // Scrub the token from the address bar at once: left there it lands in
     // history and leaks through Referer on the next navigation. It is kept in
     // memory only. Same as /verify-email, /reset-password and /magic-link.

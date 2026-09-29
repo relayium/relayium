@@ -1020,7 +1020,7 @@ round_account() {
   # `grep -m1` rather than `grep | head`: under `pipefail` the head closing the
   # pipe can take grep down with SIGPIPE and turn a working read intermittent.
   local verify_token
-  verify_token="$(grep -o -m1 'verify-email?token=[0-9a-f]*' "$round_dir/server.log" | cut -d= -f2)"
+  verify_token="$(grep -oE -m1 'verify-email[?#]token=[0-9a-f]*' "$round_dir/server.log" | cut -d= -f2)"
   [ -n "$verify_token" ] || fail "the round-$round server logged no verification token"
   # The password is CONFIRMED in this call; a registration password that is not
   # makes every later login a 401 that looks like a bad credential.

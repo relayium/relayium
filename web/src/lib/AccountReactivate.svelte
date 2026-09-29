@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Landing page for the emailed reactivation link: /account/reactivate?token=<t>
+  // Landing page for the emailed reactivation link: /account/reactivate#token=<t>
   // (server/account/deletion.go reactivateLink — sent with the "deletion
   // scheduled" email and the pre-purge reminder). The path is pinned by
   // router.test.ts.
@@ -10,7 +10,7 @@
   import { onDestroy, onMount } from "svelte";
   import { reactivateAccount, takeReactivationOffer } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
-  import { navigate, isReactivateFragment, ACCOUNT_REACTIVATE_PATH } from "./router.svelte";
+  import { navigate, ACCOUNT_REACTIVATE_PATH } from "./router.svelte";
   import AuthLanding from "./AuthLanding.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
@@ -37,14 +37,14 @@
 
   onMount(() => {
     // Three ways in, one token:
-    //   ?token=<t>                          the emailed link
+    //   #token=<t>                          the emailed link
+    //   ?token=<t>                          a legacy emailed link
     //   #account=pending_deletion&token=<t> the frozen-account OAuth redirect to "/"
     //   takeReactivationOffer()             a frozen sign-in on another page
     //                                       (magic link, verify email, reset)
     const fromQuery = new URLSearchParams(location.search).get("token");
-    const fromFragment = isReactivateFragment(location.hash)
-      ? new URLSearchParams(location.hash.slice(1)).get("token")
-      : null;
+    const fragmentParams = new URLSearchParams(location.hash.slice(1));
+    const fromFragment = fragmentParams.get("token");
     const offered = takeReactivationOffer();
     const tok = fromQuery || fromFragment || offered;
     // Scrub the token from the address bar at once (history, Referer). Kept in

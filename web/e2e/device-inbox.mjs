@@ -174,7 +174,7 @@ async function createAccount(serverLog) {
   const token = await until(
     "the verification link to appear in the server log",
     () => {
-      const m = new RegExp(`verify email for ${email}: \\S*[?&]token=([A-Za-z0-9_%-]+)`).exec(serverLog());
+      const m = new RegExp(`verify email for ${email}: \\S*[?#&]token=([A-Za-z0-9_%-]+)`).exec(serverLog());
       return m ? decodeURIComponent(m[1]) : null;
     },
     30_000,

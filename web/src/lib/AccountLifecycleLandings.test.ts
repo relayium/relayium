@@ -59,13 +59,13 @@ afterEach(() => {
 describe("routes exist for the links the server mails", () => {
   it("the delete-confirm path is the one RequestAccountDeletion builds", () => {
     const go = readFileSync(resolve(process.cwd(), "../server/account/deletion.go"), "utf8");
-    expect(go).toContain(`"%s${ACCOUNT_DELETE_PATH}?token=%s"`);
+    expect(go).toContain(`"%s${ACCOUNT_DELETE_PATH}#token=%s"`);
     expect(routeFromLocation(ACCOUNT_DELETE_PATH, "")).toBe("account-delete");
   });
 
   it("the reactivate path is the one reactivateLink builds", () => {
     const go = readFileSync(resolve(process.cwd(), "../server/account/deletion.go"), "utf8");
-    expect(go).toContain(`"%s${ACCOUNT_REACTIVATE_PATH}?token=%s"`);
+    expect(go).toContain(`"%s${ACCOUNT_REACTIVATE_PATH}#token=%s"`);
     expect(routeFromLocation(ACCOUNT_REACTIVATE_PATH, "")).toBe("account-reactivate");
   });
 
@@ -82,7 +82,7 @@ describe("routes exist for the links the server mails", () => {
 });
 
 describe("/account/delete/confirm", () => {
-  beforeEach(() => history.replaceState(null, "", `${ACCOUNT_DELETE_PATH}?token=del-tok`));
+  beforeEach(() => history.replaceState(null, "", `${ACCOUNT_DELETE_PATH}#token=del-tok`));
 
   it("does nothing on load: no request until the button is pressed", async () => {
     const fetchMock = vi.fn();
@@ -100,6 +100,7 @@ describe("/account/delete/confirm", () => {
     render(AccountDeleteConfirm);
     await settle();
     expect(location.search).toBe("");
+    expect(location.hash).toBe("");
     expect(location.pathname).toBe(ACCOUNT_DELETE_PATH);
   });
 
@@ -170,7 +171,7 @@ describe("/account/delete/confirm", () => {
 });
 
 describe("/account/reactivate", () => {
-  beforeEach(() => history.replaceState(null, "", `${ACCOUNT_REACTIVATE_PATH}?token=re-tok`));
+  beforeEach(() => history.replaceState(null, "", `${ACCOUNT_REACTIVATE_PATH}#token=re-tok`));
 
   it("does nothing on load: no request until the button is pressed", async () => {
     const fetchMock = vi.fn();
@@ -179,6 +180,7 @@ describe("/account/reactivate", () => {
     await settle();
     expect(fetchMock, "the page reactivated (and minted a session) on load").not.toHaveBeenCalled();
     expect(location.search).toBe("");
+    expect(location.hash).toBe("");
     expect(status()).toBe(messages.en.accountReactivate.lead);
   });
 

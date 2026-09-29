@@ -24,7 +24,7 @@ async function settle(n = 3) {
 const mounted: unknown[] = [];
 
 beforeEach(() => {
-  history.replaceState(null, "", "/reset-password?token=reset-tok");
+  history.replaceState(null, "", "/reset-password#token=reset-tok");
   document.body.innerHTML = "";
 });
 afterEach(async () => {

@@ -24,7 +24,7 @@ let target: HTMLDivElement;
 
 beforeEach(async () => {
   await loadLang("en");
-  history.replaceState(null, "", "/verify-email?token=verify-tok");
+  history.replaceState(null, "", "/verify-email#token=verify-tok");
   document.body.innerHTML = "";
 });
 afterEach(() => {

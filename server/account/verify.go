@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 
 	"github.com/relayium/relayium/authx"
 )
@@ -24,7 +23,7 @@ func (s *Service) SendVerifyEmail(ctx context.Context, u User) error {
 	if err := s.store.CreateEmailToken(ctx, tok); err != nil {
 		return err
 	}
-	link := fmt.Sprintf("%s/verify-email?token=%s", s.cfg.BaseURL, url.QueryEscape(raw))
+	link := fmt.Sprintf("%s/verify-email#token=%s", s.cfg.BaseURL, raw)
 	return s.mailer.SendVerifyEmail(ctx, u.Email, link)
 }
 

@@ -589,7 +589,7 @@ async function runRound(root, bin, index, plan, guardianBin) {
     const email = `rt-${randomBytes(4).toString("hex")}@example.invalid`;
     const password = randomBytes(24).toString("hex");
     await call("POST", "/api/auth/register", { email, password });
-    const verifyToken = /verify-email\?token=([0-9a-f]+)/.exec(await readTail(logPath, LOG_BUDGET_BYTES))?.[1];
+    const verifyToken = /verify-email[?#]token=([0-9a-f]+)/.exec(await readTail(logPath, LOG_BUDGET_BYTES))?.[1];
     if (!verifyToken) return { ok: false, why: "the synthetic account was never verifiable", roundChildren };
     await call("POST", "/api/auth/email/verify", { token: verifyToken, password });
     const login = await call("POST", "/api/auth/native/login", { email, password, deviceName: "windows-realtime" });

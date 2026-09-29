@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/relayium/relayium/authx"
@@ -34,7 +33,7 @@ func (s *Service) RequestAccountDeletion(ctx context.Context, userID, email stri
 	if err := s.store.CreateEmailToken(ctx, tok); err != nil {
 		return err
 	}
-	link := fmt.Sprintf("%s/account/delete/confirm?token=%s", s.cfg.BaseURL, url.QueryEscape(raw))
+	link := fmt.Sprintf("%s/account/delete/confirm#token=%s", s.cfg.BaseURL, raw)
 	return s.mailer.SendAccountDeletionConfirm(ctx, email, link)
 }
 
@@ -173,7 +172,7 @@ func (s *Service) issueReactivateToken(ctx context.Context, userID, email string
 
 // reactivateLink builds the reactivation URL for a raw reactivate token.
 func (s *Service) reactivateLink(raw string) string {
-	return fmt.Sprintf("%s/account/reactivate?token=%s", s.cfg.BaseURL, url.QueryEscape(raw))
+	return fmt.Sprintf("%s/account/reactivate#token=%s", s.cfg.BaseURL, raw)
 }
 
 // IssueReactivateLink mints a fresh reactivate token for userID/email and

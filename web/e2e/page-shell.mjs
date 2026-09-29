@@ -119,7 +119,7 @@ async function unsupportedLayoutScenario(browser, base) {
  * verifies presentation, URL scrubbing, private head metadata and responsive
  * geometry; component tests own the request/security transitions. */
 async function authLandingScenario(browser, base) {
-  const tab = await newTab(browser, base + "/magic-link?token=e2e-presentation-only");
+  const tab = await newTab(browser, base + "/magic-link#token=e2e-presentation-only");
   await setWideViewport(tab);
   await tab.waitFor("!!document.querySelector('.auth-card h1')", "magic-link trust surface");
   const magic = await tab.evaluate(`(() => ({
@@ -146,7 +146,7 @@ async function authLandingScenario(browser, base) {
     ["verify-email", ["verify-password"]],
     ["reset-password", ["reset-new-password", "reset-confirm-password"]],
   ]) {
-    await tab.evaluate(`location.href = ${JSON.stringify(`${base}/${route}?token=e2e-presentation-only`)}`);
+    await tab.evaluate(`location.href = ${JSON.stringify(`${base}/${route}#token=e2e-presentation-only`)}`);
     await tab.waitFor(`location.pathname === '/${route}' && !!document.querySelector('.auth-card h1')`, `${route} trust surface`);
     const state = await tab.evaluate(`(() => ({
       search: location.search,

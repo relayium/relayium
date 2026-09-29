@@ -531,7 +531,7 @@ acceptance_create_account() {
   # closing the pipe can take grep down with SIGPIPE, which turns a working read
   # into an intermittent failure.
   local verify_token
-  verify_token="$(grep -o -m1 'verify-email?token=[0-9a-f]*' "$run_root/server.log" \
+  verify_token="$(grep -oE -m1 'verify-email[?#]token=[0-9a-f]*' "$run_root/server.log" \
     | cut -d= -f2)"
   [ -n "$verify_token" ] || fail "the server did not log a verification token"
 
