@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/mail"
-	"net/url"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -41,7 +40,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 	if err := s.store.CreateEmailToken(ctx, tok); err != nil {
 		return err
 	}
-	link := fmt.Sprintf("%s/reset-password?token=%s", s.cfg.BaseURL, url.QueryEscape(raw))
+	link := fmt.Sprintf("%s/reset-password#token=%s", s.cfg.BaseURL, raw)
 	return s.mailer.SendPasswordReset(ctx, email, link)
 }
 

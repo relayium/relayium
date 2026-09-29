@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"net/mail"
-	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -810,7 +809,10 @@ func (s *Service) RequestMagicLink(ctx context.Context, email string) error {
 	if err := s.store.CreateMagicToken(ctx, tok); err != nil {
 		return err
 	}
-	link := fmt.Sprintf("%s/api/auth/magic/verify?token=%s", s.cfg.BaseURL, url.QueryEscape(raw))
+	// Fragments are never sent in HTTP request targets, so reverse proxies and
+	// upstream error logs cannot record this bearer credential. The SPA redeems
+	// it explicitly with POST after a user click.
+	link := fmt.Sprintf("%s%s#token=%s", s.cfg.BaseURL, magicLinkPath, raw)
 	return s.mailer.SendMagicLink(ctx, email, link)
 }
 

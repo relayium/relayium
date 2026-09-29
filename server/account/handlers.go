@@ -580,9 +580,10 @@ func (s *Service) handleMagicRequest(w http.ResponseWriter, r *http.Request) {
 // 而后者会把这个端点变成令牌有效性预言机。让 POST 去判，GET 一律照转。
 func (s *Service) handleMagicVerifyRedirect(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
-	// 令牌留在 query 里：SPA 挂载时会 replaceState 把它从 URL 抹掉（与 /verify-email、
-	// /reset-password 同一套做法）。
-	http.Redirect(w, r, magicLinkPath+"?token="+url.QueryEscape(token), http.StatusFound)
+	// Compatibility for links issued before fragment delivery: move the token
+	// into the redirect fragment. Browsers do not send fragments to the server,
+	// so the follow-up request and any upstream error log contain only the path.
+	http.Redirect(w, r, magicLinkPath+"#token="+url.QueryEscape(token), http.StatusFound)
 }
 
 // magicLinkPath 是承接邮件链接的 SPA 路由。必须与 web/src/lib/router.svelte.ts 的

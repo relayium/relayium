@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Landing page for the emailed verification link: /verify-email?token=<t>.
+  // Landing page for the emailed verification link: /verify-email#token=<t>.
   // On success the server has already set the session cookie (verifyEmail's
   // postForUser updates auth.svelte's session store too), so this page just
   // shows a brief confirmation and hands off to the app home.
@@ -93,9 +93,9 @@
   }
 
   onMount(() => {
-    const tok = new URLSearchParams(location.search).get("token");
-    // Strip the token from the URL so it doesn't linger in browser history or
-    // leak via the Referer header on a later navigation.
+    const tok = new URLSearchParams(location.hash.slice(1)).get("token")
+      || new URLSearchParams(location.search).get("token");
+    // Strip either the current fragment form or a legacy query form at once.
     if (tok) history.replaceState(null, "", location.pathname);
     if (!tok) { phase = "no-token"; return; }
     token = tok;

@@ -660,7 +660,7 @@ anon() { # anon <method> <path> [json-body] — no session
 # logs it instead.
 token_from_log() {
   local log=$1 path=$2 tok
-  tok="$(grep -o "${path}?token=[0-9a-f]*" "$log" | tail -1 | cut -d= -f2)"
+  tok="$(grep -oE "${path}[?#]token=[0-9a-f]*" "$log" | tail -1 | cut -d= -f2)"
   [ -n "$tok" ] || {
     printf '%s: no %s token in %s; log follows\n' "$ME" "$path" "$log" >&2
     sed -e 's/^/    | /' "$log" >&2
@@ -836,7 +836,7 @@ for email in "$EMAIL_A" "$EMAIL_B"; do
   # Matched on the line that names THIS address, so the two accounts' tokens
   # cannot be swapped by log ordering.
   tok="$(grep "verify email for $email:" "$STAGE_LOG" \
-        | grep -o 'verify-email?token=[0-9a-f]*' | tail -1 | cut -d= -f2)"
+        | grep -oE 'verify-email[?#]token=[0-9a-f]*' | tail -1 | cut -d= -f2)"
   [ -n "$tok" ] || {
     sed -e 's/^/    | /' "$STAGE_LOG" >&2
     fail "stage 1: no verification token logged for $email"

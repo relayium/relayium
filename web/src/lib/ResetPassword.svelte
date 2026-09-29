@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Landing page for the emailed password-reset link: /reset-password?token=<t>.
+  // Landing page for the emailed password-reset link: /reset-password#token=<t>.
   // Unlike VerifyEmail, the token is only spent on submit (not on mount) — the
   // page just shows the new-password form until the user commits.
   import { onDestroy, onMount } from "svelte";
@@ -46,7 +46,8 @@
   }
 
   onMount(() => {
-    token = new URLSearchParams(location.search).get("token") ?? "";
+    token = new URLSearchParams(location.hash.slice(1)).get("token")
+      || new URLSearchParams(location.search).get("token") || "";
     // Strip the token from the URL so it doesn't linger in browser history or
     // leak via the Referer header on a later navigation (it's kept in memory).
     if (token) history.replaceState(null, "", location.pathname);

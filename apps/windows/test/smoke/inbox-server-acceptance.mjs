@@ -452,7 +452,7 @@ async function main() {
     };
 
     await call("POST", "/api/auth/register", { email, password });
-    const verifyToken = /verify-email\?token=([0-9a-f]+)/.exec(await readTail(logPath, LOG_BUDGET_BYTES))?.[1];
+    const verifyToken = /verify-email[?#]token=([0-9a-f]+)/.exec(await readTail(logPath, LOG_BUDGET_BYTES))?.[1];
     step("synthetic account verified", Boolean(verifyToken));
     if (!verifyToken) return;
     await call("POST", "/api/auth/email/verify", { token: verifyToken, password });
