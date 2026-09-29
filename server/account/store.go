@@ -194,6 +194,9 @@ type Device struct {
 	// visible only to the owning account as an identification hint. It may be a
 	// NAT or VPN address, so the UI must not present it as a precise location.
 	LastIP string
+	// LastIPObservedAt is the independent retention clock for LastIP. It is
+	// internal metadata and is never emitted by deviceView.
+	LastIPObservedAt int64 `json:"-"`
 	// Kind distinguishes the device's platform: "" / "browser" (default) or
 	// "cli" for a device registered via the device-code CLI login flow.
 	Kind string
@@ -2040,6 +2043,7 @@ type Store interface {
 	UpsertDevice(ctx context.Context, d Device) (Device, error)
 	RegisterBrowserDevice(ctx context.Context, in BrowserDeviceRegistration) (Device, error)
 	ListDevices(ctx context.Context, userID string) ([]Device, error)
+	PruneExpiredDeviceIPs(ctx context.Context, now int64) error
 	RenameDevice(ctx context.Context, id, userID, name string) error
 	DeleteDevice(ctx context.Context, id, userID string) error
 	// Device Inbox enrolment (Phase 1A). Every method is scoped by userID as

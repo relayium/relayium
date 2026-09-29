@@ -923,6 +923,9 @@ func main() {
 			BillingHoldSecret:    *billingHoldSecret,
 			ReleaseCheck:         *releaseCheck,
 		})
+		// Device-IP retention is an account privacy obligation, not a stored-file
+		// feature, so it runs even if blob storage (and its GC) is disabled.
+		bg.Go(func(ctx context.Context) { acct.RunDeviceIPPruner(ctx, time.Minute) })
 		activation := newActivationRecorder(bg.ctx, store, time.Now, log.Printf, activationQueueCapacity)
 		activationHook := activationHooks{recorder: activation}
 		observeActivity := activationHook.admitted

@@ -333,6 +333,12 @@ type deviceView struct {
 }
 
 func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request, u User) {
+	// Apply the boundary before reading, so an address is never account-visible
+	// after 30 days even between background sweeps.
+	if err := s.store.PruneExpiredDeviceIPs(r.Context(), s.now().Unix()); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	ds, err := s.store.ListDevices(r.Context(), u.ID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)

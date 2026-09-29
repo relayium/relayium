@@ -62,7 +62,7 @@ describe("legal pages describe temporary text accurately", () => {
       // same maintained copy. The seven frozen translations keep the date their
       // prose was last actually true for.
       expect(privacy.langs[lang].updated).toBe(
-        MAINTAINED_LANGS.includes(lang) ? "2026-09-03" : "2026-08-13",
+        MAINTAINED_LANGS.includes(lang) ? "2026-09-29" : "2026-08-13",
       );
       expect(all).toMatch(TEXT_WORD[lang]);
       expect(all).toMatch(ONLINE_WORD[lang]);
