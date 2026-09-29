@@ -123,6 +123,7 @@ const SWIFT_PACKAGE_JOB = "swift-test";
 const APP_TREE_GLOBS = ["apps/mac/**", "apps/ios/**"];
 const MACOS = "macos.yml";
 const IOS = "ios.yml";
+const IOS_TRANSFER_INTEROP = "ios-transfer-interop.yml";
 const NWP = "native-web-pairing.yml";
 const GO = "go.yml";
 const WEB = "web.yml";
@@ -299,7 +300,7 @@ const SELF_TIMEOUT_MAX = 5;
  * the list still matches what is on disk.
  */
 const PARSED = [
-  SWIFT_PACKAGE, MACOS, IOS, NWP, GO, WEB, CONTRACTS, OPS_DEPLOY_CONTRACT, "compat.yml", SELF_HOST,
+  SWIFT_PACKAGE, MACOS, IOS, IOS_TRANSFER_INTEROP, NWP, GO, WEB, CONTRACTS, OPS_DEPLOY_CONTRACT, "compat.yml", SELF_HOST,
   // The Android platform's two filtered lanes. Neither may watch a Swift path:
   // `apps/RelayiumKit` is Apple-shared and the Android protocol conformance
   // that reads its frozen fixtures runs in the UNFILTERED `compat.yml`, which
@@ -323,7 +324,7 @@ const PARSED = [
  *
  * `swift-package.yml` is deliberately absent — it is the one that must start.
  */
-const HEAVY_CONSUMERS = [MACOS, IOS, NWP];
+const HEAVY_CONSUMERS = [MACOS, IOS, IOS_TRANSFER_INTEROP, NWP];
 
 /**
  * The fixtures inside the excluded subtree that OTHER languages read, the file
@@ -451,17 +452,17 @@ const FIXTURE_TREE_GLOBS = [
  * written out rather than derived.
  */
 const OWNERSHIP = [
-  [`${SWIFT_PACKAGE_DIR}/Sources/RelayiumKit/Crypto/SealedBox.swift`, [IOS, MACOS, NWP, SWIFT_PACKAGE],
+  [`${SWIFT_PACKAGE_DIR}/Sources/RelayiumKit/Crypto/SealedBox.swift`, [IOS, IOS_TRANSFER_INTEROP, MACOS, NWP, SWIFT_PACKAGE],
     "SHARED source. Every Apple consumer compiles it, the pairing acceptance links it, and the "
     + "package's own suite covers it. The Tests negation must not reach this file"],
-  [`${SWIFT_PACKAGE_DIR}/Sources/RelayiumAppKit/LinkWorkspaceModel.swift`, [IOS, MACOS, NWP, SWIFT_PACKAGE],
+  [`${SWIFT_PACKAGE_DIR}/Sources/RelayiumAppKit/LinkWorkspaceModel.swift`, [IOS, IOS_TRANSFER_INTEROP, MACOS, NWP, SWIFT_PACKAGE],
     "the same, one product deeper: the macOS app is SwiftUI over `RelayiumAppKit`, and the "
     + "pairing acceptance's `LocalTransferPeer` is this model assembled by `AppEnvironment`. A "
     + "second Sources sample, so the row above cannot be satisfied by a filter that happens to "
     + "name one directory"],
-  [`${SWIFT_PACKAGE_DIR}/Package.swift`, [IOS, MACOS, NWP, SWIFT_PACKAGE],
+  [`${SWIFT_PACKAGE_DIR}/Package.swift`, [IOS, IOS_TRANSFER_INTEROP, MACOS, NWP, SWIFT_PACKAGE],
     "the manifest: products, targets and dependencies. Every Apple consumer resolves against it"],
-  [`${SWIFT_PACKAGE_DIR}/Package.resolved`, [IOS, MACOS, NWP, SWIFT_PACKAGE],
+  [`${SWIFT_PACKAGE_DIR}/Package.resolved`, [IOS, IOS_TRANSFER_INTEROP, MACOS, NWP, SWIFT_PACKAGE],
     "the pinned dependency graph — a WebRTC or Sodium bump changes what every consumer links, "
     + "and it is exactly the change that compiles in one app and not the other"],
   [`${PACKAGE_TEST_DIR}/AeadTests.swift`, [SWIFT_PACKAGE],
@@ -515,7 +516,7 @@ const MIXED_DIFFS = [
       `${SWIFT_PACKAGE_DIR}/Sources/RelayiumKit/Crypto/SealedBox.swift`,
       `${PACKAGE_TEST_DIR}/SealedBoxTests.swift`,
     ],
-    want: [IOS, MACOS, NWP, SWIFT_PACKAGE].sort(),
+    want: [IOS, IOS_TRANSFER_INTEROP, MACOS, NWP, SWIFT_PACKAGE].sort(),
     why: "one matching file is enough to start a workflow, so the source half still starts every "
       + "Apple consumer. A test written beside a source change must never make that change "
       + "cheaper to merge",
@@ -2193,7 +2194,7 @@ const MUTATIONS = [
       "scripts/lib/local-acceptance.sh",
       `.github/workflows/${NWP}`,
     ]),
-    expect: /SealedBox\.swift" starts \[ios\.yml, macos\.yml, swift-package\.yml\]/,
+    expect: /SealedBox\.swift" starts \[ios-transfer-interop\.yml, ios\.yml, macos\.yml, swift-package\.yml\]/,
   },
   {
     // The back door: the negation stays, and a later positive re-includes what

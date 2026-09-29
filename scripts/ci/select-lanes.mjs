@@ -100,6 +100,7 @@ export const LANES = [
   { id: "go", workflow: "go.yml" },
   { id: "macos", workflow: "macos.yml" },
   { id: "ios", workflow: "ios.yml" },
+  { id: "ios-transfer-interop", workflow: "ios-transfer-interop.yml" },
   { id: "android", workflow: "android.yml" },
   { id: "android-interop", workflow: "android-interop.yml" },
   { id: "windows", workflow: "windows.yml" },

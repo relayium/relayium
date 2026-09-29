@@ -1,0 +1,98 @@
+name: ios-transfer-interop
+
+# The built-App transfer acceptance compiles and launches the Go server before
+# driving an unsigned simulator app. Its dependency set is therefore wider
+# than the iOS build/UI lane. Keeping it separate lets server changes prove the
+# boundary immediately without starting every iOS job.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/**'
+      - 'apps/ios/**'
+      - 'apps/RelayiumKit/**'
+      - '!apps/RelayiumKit/Tests/**'
+      - 'scripts/ios-ui-session-acceptance.sh'
+      - 'scripts/local-transfer-acceptance.sh'
+      - 'scripts/local-transfer-cleanup-test.sh'
+      - 'scripts/lib/local-acceptance.sh'
+      - '.github/workflows/ios-transfer-interop.yml'
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-transfer-interop-lane-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ios-transfer-acceptance:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Select a stable Xcode 26 toolchain
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          selected=''
+          selected_version=''
+          for app in /Applications/Xcode*.app; do
+            developer="$app/Contents/Developer"
+            binary="$developer/usr/bin/xcodebuild"
+            [ -x "$binary" ] || continue
+            report="$(DEVELOPER_DIR="$developer" "$binary" -version 2>/dev/null || true)"
+            version="$(printf '%s\n' "$report" | awk '/^Xcode / { print $2; exit }')"
+            case "$(printf '%s' "$version:$app:$report" | tr '[:upper:]' '[:lower:]')" in
+              26.*:*beta*|26.*:*preview*|26.*:*seed*) continue ;;
+              26.*)
+                if [ -z "$selected_version" ] || [ "$(printf '%s\n%s\n' "$selected_version" "$version" | sort -V | tail -n 1)" = "$version" ]; then
+                  selected="$developer"
+                  selected_version="$version"
+                fi
+                ;;
+            esac
+          done
+          if [ -z "$selected" ]; then
+            echo "::error::no stable Xcode 26 toolchain is installed"
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$selected" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$selected" xcodebuild -version
+          sdk="$(DEVELOPER_DIR="$selected" xcrun --sdk iphoneos --show-sdk-version)"
+          if [ "${sdk%%.*}" -lt 26 ]; then
+            echo "::error::iphoneos SDK $sdk is below required major 26"
+            exit 1
+          fi
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Go toolchain version
+        run: go version
+      - name: Build acceptance app (unsigned, iOS Simulator)
+        run: |
+          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd-ios" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Run local transfer and built-App session acceptance
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          scripts/local-transfer-acceptance.sh
+          scripts/local-transfer-cleanup-test.sh
+          RELAYIUM_ACCEPTANCE_DERIVED_DATA="$RUNNER_TEMP/dd-ios" \
+            scripts/ios-ui-session-acceptance.sh
+      - name: Retain acceptance diagnosis
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-session-acceptance-diagnosis
+          path: ${{ runner.temp }}/relayium-acceptance-*/**/*.log
+          retention-days: 7
+          if-no-files-found: ignore

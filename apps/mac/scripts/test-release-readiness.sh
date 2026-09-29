@@ -2,6 +2,12 @@
 
 set -Eeuo pipefail
 
+mode="${1:-}"
+if [ "$mode" != "" ] && [ "$mode" != "--files-only" ]; then
+  echo "usage: $0 [--files-only]" >&2
+  exit 2
+fi
+
 script_dir="$(cd "$(dirname "$0")" && pwd -P)"
 repo_root="$(cd "$script_dir/../../.." && pwd -P)"
 checker="$script_dir/check-release-readiness.mjs"
@@ -137,6 +143,15 @@ for lproj in "${frozen_lprojs[@]}"; do
     exit 1
   fi
 done
+
+# Everything above is portable, read-only repository evidence. Run that part on
+# the cheap, unfiltered Linux policy lane so a renamed evidence file fails on
+# the commit that renamed it. The rest intentionally stays a macOS release-time
+# check: it reads plists with PlistBuddy and exercises manifest mutations.
+if [ "$mode" = "--files-only" ]; then
+  echo "macOS release-readiness evidence files exist"
+  exit 0
+fi
 
 # And every Mac BUNDLE has to declare exactly the same two.
 #

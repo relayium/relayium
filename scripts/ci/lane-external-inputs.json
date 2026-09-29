@@ -113,16 +113,6 @@
       "glob": "server/**",
       "coveredBy": "inbox-swift-interop",
       "why": "swift-package.yml sets up Go only for the Swift<->Go interop classes it runs forced; inbox-swift-interop.yml runs exactly those classes, with a named-execution proof, on every server change."
-    },
-    {
-      "lane": "ios",
-      "glob": "server/**",
-      "why": "OPEN: ios.yml's ios-transfer-acceptance builds and runs the whole Go server (scripts/lib/local-acceptance.sh acceptance_build), but PATH_MATRIX row 1 deliberately keeps the 75-minute iOS lane off server-only changes. No other lane runs the iOS built-App acceptance. Revisit: owner accepts iOS runs on server changes, or the acceptance moves to a lane that watches server/**."
-    },
-    {
-      "lane": "macos",
-      "glob": "server/account/*",
-      "why": "OPEN: apps/mac/scripts/test-release-readiness.sh checks that server/account/{auth.go,handlers.go,devices_bearer_test.go} EXIST (evidence list, not content). handlers.go alone had 33 commits in 60 days; watching it would start the paid macOS lane (UI smoke + signed build) on each. A rename/delete fails macos on its next run instead. Revisit: owner accepts the cost, or the evidence check moves to a lane that watches server/**."
     }
   ],
   "sourceJobs": {

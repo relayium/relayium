@@ -718,7 +718,7 @@ always present and judges what the lanes actually did.
 
 | | |
 |---|---|
-| Conditional lanes | `web`, `go`, `macos`, `ios`, `swift-package`, `native-web-pairing`, `contracts`, `ops-contract` |
+| Conditional lanes | `web`, `go`, `macos`, `ios`, `ios-transfer-interop`, `android`, `android-interop`, `windows`, `swift-package`, `inbox-swift-interop`, `native-web-pairing`, `contracts`, `ops-contract` |
 | Unconditional lanes | `repo-hygiene` (no `if:`; it hosts the guards every change must pass) and `compat` (no `if:` and no `paths:` filter either; it hosts the wire-compatibility contract every platform must pass) |
 | Called *and* still directly triggered | none. `compat` was the only one, for one migration step, and its direct `pull_request:` came out once protection stopped requiring the bare `wire-vectors`. See the staged migration below |
 | Never called | `release.yml`, `auto-release.yml`, `account-race-nightly.yml`, `go-fuzz-nightly.yml`, `macos-release.yml` |
@@ -745,6 +745,15 @@ of the four permitted pattern shapes, or when the change touches a **control
 file** (`merge-gate.yml`, `select-lanes.mjs`, or the shared path-selection
 fixture). A pull request that edits the gate therefore buys a full macOS run.
 That is the honest price and it is deliberate.
+
+`ios-transfer-interop.yml` is intentionally separate from `ios.yml`. The former
+builds one unsigned simulator app, compiles and launches the real Go server, and
+runs the local-transfer, cleanup and built-App session acceptances. It watches
+`server/**`, the iOS app, the shared Swift package sources/manifests and the
+scripts it executes. The latter owns the ordinary iOS compile and UI matrix and
+does **not** watch `server/**`. A server-only change therefore buys one bounded
+macOS interop job, not the whole iOS lane, while a break at the Swift↔Go
+boundary is detected on the breaking commit instead of the next iOS change.
 
 **The rule the aggregate enforces is two-way, not a whitelist.** A plain
 `success|skipped` whitelist passes a lane that *was* selected and then got
@@ -784,7 +793,7 @@ calls would land in one group under one `github.run_id` — and with
 `cancel-in-progress` true on a pull request they would actively cancel each
 other, leaving the aggregate to judge cancelled runs. Each converted lane
 therefore carries a literal prefix nothing else uses (`web-lane`, `go-lane`,
-`macos-ci`, `ios-lane`, `swift-package-lane`, `native-web-pairing-lane`,
+`macos-ci`, `ios-lane`, `ios-transfer-interop-lane`, `swift-package-lane`, `native-web-pairing-lane`,
 `contracts-lane`, `ops-deploy-contract-lane`, `repo-hygiene-lane`,
 `merge-gate`), and §2 asserts both the literals and that no two files resolve to
 the same one.
@@ -1296,7 +1305,7 @@ uses.
 
 The **suffix** is repository-wide and has no exceptions. The **prefix** is a
 literal in every file the merge gate calls, plus the gate and the release
-workflow: `web-lane`, `go-lane`, `macos-ci`, `ios-lane`, `swift-package-lane`,
+workflow: `web-lane`, `go-lane`, `macos-ci`, `ios-lane`, `ios-transfer-interop-lane`, `swift-package-lane`,
 `native-web-pairing-lane`, `contracts-lane`, `ops-deploy-contract-lane`,
 `repo-hygiene-lane`, `merge-gate`, `macos-release`, `compat-lane`. `compat.yml`
 briefly carried a literal **stem** plus an entry-point discriminator, because it
@@ -1418,6 +1427,14 @@ policies do — the change that breaks them selects no other lane:
   `main` was red for a day. **Editing one of those documents now fails here, on
   Linux, on the same push.** When a claim legitimately changes, change it in that
   file; it proves each claim can fail with its own mutations.
+* `apps/mac/scripts/test-release-readiness.sh --files-only` checks the manifest
+  and every source, test, catalog and frozen-localization artifact named as
+  release evidence using portable Linux tools. It runs in the same unfiltered
+  `repository-policy` job, so deleting or renaming evidence no longer starts the
+  full macOS signing/UI lane merely to discover a missing file. The macOS-only
+  plist/project and manifest-mutation half is re-run without `--files-only` in
+  `macos-release.yml` before an actual notarization, credential validation or
+  release-metadata staging action proceeds.
 * `scripts/test/checks-green-test.sh` and `scripts/test/go-evidence-test.sh`
   exercise the two gates `auto-release.yml` applies before it tags `main`: every
   check run on HEAD is green (all pages, `total_count` reconciled, unreadable

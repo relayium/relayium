@@ -37,17 +37,14 @@ name: ios
 #                        one commit — still starts this workflow, because the
 #                        source file remains a positive match and one match is
 #                        enough.
-#   scripts/...          the three acceptance runs below and the isolation
-#                        library they are built from, named one file at a time
-#                        rather than as `scripts/**` so a Go-shard or
-#                        release-script edit does not start an iOS runner
+#   scripts/...          iOS UI tests and release-candidate guards below,
+#                        named one file at a time rather than as `scripts/**`.
+#                        Built-App transfer acceptance has its own dependency-
+#                        complete lane, including `server/**`.
 #
-# `server/**` is deliberately ABSENT even though the acceptance step compiles a
-# throwaway server from it: this workflow is the iOS gate, not a server gate,
-# and `go.yml` owns server changes. The consequence is recorded honestly — a
-# server change that breaks the local acceptance is caught by the next iOS-side
-# change rather than at once. That is the pre-existing behaviour of the job in
-# `macos.yml`, preserved rather than silently widened.
+# `server/**` is deliberately absent: the narrow `ios-transfer-interop.yml`
+# lane owns the server-backed built-App acceptance without buying this entire
+# iOS build/UI matrix for every server commit.
 on:
   push:
     # Only `main`, and this trigger is LOAD-BEARING. Branch work is gated by
@@ -73,10 +70,6 @@ on:
       - 'apps/ios/**'
       - 'apps/RelayiumKit/**'
       - '!apps/RelayiumKit/Tests/**'
-      - 'scripts/ios-ui-session-acceptance.sh'
-      - 'scripts/local-transfer-acceptance.sh'
-      - 'scripts/local-transfer-cleanup-test.sh'
-      - 'scripts/lib/local-acceptance.sh'
       # The App Store candidate contract `ios-build` runs first
       # (`bash scripts/test/ios-app-store-candidate-test.sh`), the script it
       # drives, and the two inputs it requires to exist and validates: the
@@ -548,47 +541,3 @@ jobs:
           path: ${{ runner.temp }}/ios-ipad-shell.xcresult
           retention-days: 7
           if-no-files-found: error
-
-  ios-transfer-acceptance:
-    runs-on: macos-15
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      # Nothing below this step may compile against the runner image's default
-      # Xcode, or against an untested newer major. One shared script, declared
-      # in the `env:` block above.
-      - name: Select and verify the Xcode 26 upload toolchain
-        timeout-minutes: 10
-        run: ${{ env.RELAYIUM_SELECT_XCODE }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
-      - name: Go toolchain version
-        run: go version
-      # Populate the same DerivedData directory the built-App acceptance uses.
-      # DerivedData is intentionally rebuilt on this runner instead of crossing
-      # runner boundaries as a large, path-sensitive artifact.
-      - name: Build acceptance app (unsigned, iOS Simulator)
-        run: |
-          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$RUNNER_TEMP/dd-ios" \
-            CODE_SIGNING_ALLOWED=NO build
-      - name: Run local transfer and built-App session acceptance
-        env:
-          TMPDIR: ${{ runner.temp }}
-        run: |
-          set -euo pipefail
-          scripts/local-transfer-acceptance.sh
-          scripts/local-transfer-cleanup-test.sh
-          RELAYIUM_ACCEPTANCE_DERIVED_DATA="$RUNNER_TEMP/dd-ios" \
-            scripts/ios-ui-session-acceptance.sh
-      - name: Retain acceptance diagnosis
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ios-session-acceptance-diagnosis
-          path: ${{ runner.temp }}/relayium-acceptance-*/**/*.log
-          retention-days: 7
-          if-no-files-found: ignore

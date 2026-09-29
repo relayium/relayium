@@ -24,10 +24,9 @@ name: macos
 # linked into the signed product — the app targets build the package's library
 # products, not its test target — so a test-only edit used to start this whole
 # workflow, and the `signed-build` lane's `needs:` chain with it, to produce no
-# evidence about the change at all. The ONE exception is the eleven test files
-# `apps/mac/scripts/test-release-readiness.sh` names as release evidence and
-# fails on when missing: those are re-included by name after the exclusion, and
-# `scripts/test/ci-lane-closure-test.mjs` fails if that list and the script drift.
+# evidence about the change at all. Release-readiness file existence now runs
+# on the unfiltered Linux repository-policy gate, while the complete check is
+# repeated by the manual release workflow.
 #
 # That subtree is not unwatched: `.github/workflows/swift-package.yml` owns the
 # package's own suite, has no such exclusion, and runs the repository's one
@@ -85,22 +84,6 @@ on:
       - 'apps/mac/**'
       - 'apps/RelayiumKit/**'
       - '!apps/RelayiumKit/Tests/**'
-      # …and back IN, one file at a time, the package test files the `test`
-      # job's `apps/mac/scripts/test-release-readiness.sh` names as release
-      # evidence and fails on when one is missing. Listed AFTER the exclusion
-      # because the last match wins; a rename of one of these is a macOS
-      # release-gate failure and has to start this lane.
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/RealtimeTextSessionModelTests.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/RealtimeTextFrameTests.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/AccountManagementModelTests.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/AccountManagementClientTests.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/StoredLinkKeyStoreTests.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/CloudUploadModelTests.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/ErrorCopyTests.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/Support/LoginWordingAssertion.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/LocalizationIntegrityTests.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/LocalizedCopyTests.swift'
-      - 'apps/RelayiumKit/Tests/RelayiumKitTests/LocalizationSourceGuardTests.swift'
       - '.github/workflows/macos.yml'
   # Called by `.github/workflows/macos-release.yml` and by
   # `.github/workflows/merge-gate.yml`, and by nothing else. There is
@@ -305,7 +288,6 @@ jobs:
           apps/mac/scripts/test-package-dmg.sh
           apps/mac/scripts/test-resign-sparkle.sh
           apps/mac/scripts/test-notarize-dmg.sh
-          apps/mac/scripts/test-release-readiness.sh
 
   # Needs the signing certificate, so it cannot run where secrets are
   # unavailable. This repository is public: a fork's pull request cannot read
