@@ -48,6 +48,7 @@ import com.relayium.android.storage.ProviderOps
 import com.relayium.android.storage.ReceiveStore
 import java.io.File
 import com.relayium.android.update.UpdateChecker
+import com.relayium.android.update.AndroidPolicyAdvisor
 import com.relayium.android.update.UpdateEndpoint
 import com.relayium.protocol.FileMeta
 import com.relayium.protocol.JoinInput
@@ -131,6 +132,8 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
      * [com.relayium.android.ui.RelayiumApp].
      */
     val updates: UpdateChecker
+
+    private val updatePolicy: AndroidPolicyAdvisor
 
     /** The feed this instance ACTUALLY reads, resolved once. Exposed for the
      *  same fail-closed reason as [backendOrigin]: the acceptance asserts the
@@ -406,6 +409,13 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
                     ?: "en"
             },
             openUrl = { url -> openInBrowser(app, url) },
+        )
+        updatePolicy = AndroidPolicyAdvisor(
+            scope = viewModelScope,
+            source = RealDeps.updateSource(),
+            updates = updates,
+            installedBuild = BuildConfig.VERSION_CODE,
+            nowMillis = { android.os.SystemClock.elapsedRealtime() },
         )
 
         // ONE dispatcher owns every account state transition (see
@@ -1442,6 +1452,7 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
     /** The Activity is on screen. */
     fun hostStarted() {
         applyPresence(presence.onStart())
+        updatePolicy.foreground()
     }
 
     /**

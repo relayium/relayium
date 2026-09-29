@@ -914,10 +914,9 @@ private fun JoinScreen(
 /**
  * The installed version, a manual check, and whatever the last check said.
  *
- * No automatic check runs here. `LaunchedEffect` is deliberately absent: the
- * only thing that starts a check is the button, which is what "manual" means
- * and what keeps this app free of any background network behaviour it would
- * then have to describe.
+ * The lifecycle-owned policy advisor may populate an installable update card;
+ * this composable starts no network work. The button remains a full manual
+ * check, including truthful success and failure feedback.
  */
 @Composable
 private fun UpdateRow(viewModel: TransferViewModel) {

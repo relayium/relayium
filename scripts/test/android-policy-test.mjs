@@ -118,6 +118,29 @@ for (const relative of REQUIRED) {
     + `ABOUT it, so a rename that is not reflected here turns every rule below into a check `
     + `that matches nothing and passes.`);
 }
+
+// ── advisory policy recommends only the published direct APK ───────────────
+//
+// This is a cross-surface repository contract rather than a Go unit test. A Go
+// test that reads the Web feed makes every feed-only edit depend on the full Go
+// lane; this lightweight policy gate is selected for both server and Android
+// publication inputs and keeps that dependency explicit without adding runner
+// cost.
+const androidClientPolicy = JSON.parse(readFileSync(
+  resolve(repoRoot, "server/account/android_client_policy.json"), "utf8",
+));
+const androidReleaseFeed = JSON.parse(readFileSync(
+  resolve(repoRoot, "web/public/apps/android/update.json"), "utf8",
+));
+check(
+  androidReleaseFeed?.android?.available === true
+    && typeof androidReleaseFeed.android.downloadUrl === "string"
+    && androidReleaseFeed.android.downloadUrl.length > 0
+    && androidClientPolicy?.android?.recommendedVersion === androidReleaseFeed.android.versionName
+    && androidClientPolicy?.android?.recommendedBuild === androidReleaseFeed.android.versionCode,
+  "server/account/android_client_policy.json does not recommend the exact published, "
+    + "installable version/build in web/public/apps/android/update.json.",
+);
 // ── recoverable uploads: the facts no Kotlin test can assert about itself ────
 //
 // A resumable upload leaves the user's ciphertext, its content key and their

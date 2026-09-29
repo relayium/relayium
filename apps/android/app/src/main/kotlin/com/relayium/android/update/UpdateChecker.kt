@@ -8,7 +8,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * The manual update check, as a state machine.
+ * The update check, as a state machine. Manual checks report every outcome;
+ * lifecycle advisory checks publish only an exact, installable update.
  *
  * Deliberately Android-free — no `Context`, no `Intent`, no resources — so
  * every rule below is exercised by ordinary JVM unit tests: the version
@@ -17,9 +18,8 @@ import kotlinx.coroutines.launch
  *
  * ## What it will not do
  *
- * * It never polls. There is no timer, no worker, no lifecycle observer; the
- *   only thing that starts a check is [check], and the only thing that calls
- *   [check] is a button the user pressed.
+ * * It never polls or schedules itself. [AndroidPolicyAdvisor] may request a
+ *   bounded foreground recommendation check; [check] remains user initiated.
  * * It never installs. [download] hands a URL to the system browser and stops
  *   there; the user downloads it and the system installer asks them to confirm.
  *   That is why this app needs no `REQUEST_INSTALL_PACKAGES`.
@@ -93,6 +93,7 @@ class UpdateChecker(
     val browserMissingUrl: StateFlow<String?> = _browserMissingUrl.asStateFlow()
 
     private var job: Job? = null
+    private var advisoryInFlight = false
 
     /**
      * Generation guard.
@@ -115,14 +116,40 @@ class UpdateChecker(
      * layout.
      */
     fun check() {
-        if (job?.isActive == true) return
+        startCheck(recommendation = null)
+    }
+
+    /** Silent advisory check. It can publish only the exact installable release
+     * named by policy; every other answer leaves the existing manual UI alone. */
+    fun checkRecommendation(versionName: String, versionCode: Int) {
+        startCheck(recommendation = versionName to versionCode)
+    }
+
+    private fun startCheck(recommendation: Pair<String, Int>?) {
+        if (job?.isActive == true) {
+            if (recommendation != null || !advisoryInFlight) return
+            // A visible manual action wins over silent foreground work.
+            generation++
+            job?.cancel()
+        }
         val mine = ++generation
-        _browserMissingUrl.value = null
-        _state.value = UpdateUi.Checking
+        advisoryInFlight = recommendation != null
+        if (recommendation == null) {
+            _browserMissingUrl.value = null
+            _state.value = UpdateUi.Checking
+        }
         job = scope.launch {
             val result = source.fetch(feedUrl)
             if (generation != mine) return@launch
-            _state.value = interpret(result)
+            val interpreted = interpret(result)
+            if (recommendation == null) {
+                _state.value = interpreted
+            } else if (interpreted is UpdateUi.Available &&
+                interpreted.versionName == recommendation.first &&
+                interpreted.versionCode == recommendation.second
+            ) {
+                _state.value = interpreted
+            }
         }
     }
 
@@ -132,6 +159,7 @@ class UpdateChecker(
         generation++
         job?.cancel()
         job = null
+        advisoryInFlight = false
         _state.value = UpdateUi.Idle
     }
 
@@ -171,6 +199,7 @@ class UpdateChecker(
         generation++
         job?.cancel()
         job = null
+        advisoryInFlight = false
         _browserMissingUrl.value = null
         _state.value = UpdateUi.Idle
     }
