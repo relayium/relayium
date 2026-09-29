@@ -87,6 +87,8 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 	mux.HandleFunc("POST /api/auth/password/login", s.handlePasswordLogin)
 	mux.HandleFunc("POST /api/auth/password/change", s.RequireSession(s.handleChangePassword))
+	mux.HandleFunc("POST /api/auth/password/set/request", s.RequireSession(s.handleFirstPasswordProofRequest))
+	mux.HandleFunc("POST /api/auth/password/set/confirm", s.RequireSession(s.handleFirstPasswordProofConfirm))
 	mux.HandleFunc("POST /api/auth/email/verify", s.handleEmailVerify)
 	mux.HandleFunc("POST /api/auth/email/resend", s.handleResendVerification)
 	mux.HandleFunc("POST /api/auth/password/forgot", s.handleForgotPassword)
@@ -931,12 +933,62 @@ func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 	}
 	err := s.ChangePassword(r.Context(), u, currentSessionID, in.CurrentPassword, in.NewPassword)
 	switch {
+	case errors.Is(err, ErrFreshProofRequired):
+		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "fresh_proof_required"})
 	case errors.Is(err, ErrCredentialsChanged):
 		// A reset/change committed while this request was in flight and revoked
 		// this session; the web client shows this as "signed out in this browser".
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	case errors.Is(err, ErrBadCredentials):
 		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "current password incorrect"})
+	case errors.Is(err, ErrWeakPassword):
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+	case errors.Is(err, ErrPasswordTooLong):
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password_too_long"})
+	case err != nil:
+		http.Error(w, "server error", http.StatusInternalServerError)
+	default:
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
+func (s *Service) handleFirstPasswordProofRequest(w http.ResponseWriter, r *http.Request, u User) {
+	key := u.ID + "|" + s.rateLimitIP(r)
+	if s.resetRequests.locked(key, s.now()) {
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
+	s.resetRequests.recordFail(key, s.now())
+	err := s.RequestFirstPasswordProof(r.Context(), u)
+	switch {
+	case errors.Is(err, ErrPasswordAlreadySet):
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "password_already_set"})
+	case err != nil:
+		http.Error(w, "server error", http.StatusInternalServerError)
+	default:
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
+func (s *Service) handleFirstPasswordProofConfirm(w http.ResponseWriter, r *http.Request, u User) {
+	var in struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.Token == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	currentSessionID := ""
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		currentSessionID = c.Value
+	}
+	err := s.SetFirstPasswordWithProof(r.Context(), u, currentSessionID, in.Token, in.NewPassword)
+	switch {
+	case errors.Is(err, ErrInvalidToken):
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
+	case errors.Is(err, ErrCredentialsChanged):
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "credentials_changed"})
 	case errors.Is(err, ErrWeakPassword):
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
 	case errors.Is(err, ErrPasswordTooLong):

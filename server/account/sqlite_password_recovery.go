@@ -167,6 +167,56 @@ func (s *SQLiteStore) ChangePasswordAndRevokeSessions(ctx context.Context, userI
 	return tx.Commit()
 }
 
+// SetFirstPasswordWithProof atomically consumes a fresh email proof and creates
+// the first password. Every guard is inside this transaction so replay,
+// cross-account use, expiry, an existing password, or an epoch race changes
+// nothing and leaves no partially linked credential.
+func (s *SQLiteStore) SetFirstPasswordWithProof(ctx context.Context, tokenHash, userID, passwordHash, linkSubject, exceptSessionID string, expectEpoch, now int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE email_tokens SET used_at = ?
+		WHERE token_hash = ? AND purpose = 'set-password' AND user_id = ?
+		AND credential_epoch = ? AND used_at = 0 AND expires_at > ?`,
+		now, tokenHash, userID, expectEpoch, now)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return ErrInvalidToken
+	}
+	res, err = tx.ExecContext(ctx, `UPDATE users SET password_hash = ?
+		WHERE id = ? AND password_hash IS NULL AND credential_epoch = ? AND deleted_at = 0`, passwordHash, userID, expectEpoch)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return ErrCredentialsChanged
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO identities (provider, subject, user_id) VALUES ('password', ?, ?)`, linkSubject, userID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET revoked = 1 WHERE user_id = ? AND id <> ?`, userID, authx.HashToken(exceptSessionID)); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM cli_tokens WHERE user_id = ? AND device_id NOT IN (SELECT id FROM devices WHERE user_id = ? AND kind = 'browser')`, userID, userID); err != nil {
+		return err
+	}
+	if err := revokeOutstandingLoginLinks(ctx, tx, userID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET credential_epoch = credential_epoch + 1 WHERE id = ?`, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // revokeOutstandingLoginLinks deletes, inside the caller's transaction, every
 // unspent emailed link that would sign someone in as userID or set its
 // password: other 'reset' links and magic sign-in links. A reset or change is

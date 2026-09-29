@@ -241,7 +241,7 @@ func TestChangePasswordInterruptedAtRevocationAppliesNothing(t *testing.T) {
 
 func TestFirstPasswordInterruptedAtIdentityLinkAppliesNothing(t *testing.T) {
 	ctx := context.Background()
-	svc, _ := newTestService(t)
+	svc, mail := newTestService(t)
 	st := sqliteOf(t, svc)
 	u, err := st.UpsertUserByEmail(ctx, "victim@example.com", "Victim")
 	if err != nil {
@@ -258,9 +258,13 @@ func TestFirstPasswordInterruptedAtIdentityLinkAppliesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := svc.RequestFirstPasswordProof(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	proof := tokenFromLink(t, mail.firstPassword)
 
 	armFault(t, svc, failIdentityLink)
-	err = svc.ChangePassword(ctx, u, mine.ID, "", "first-password-1")
+	err = svc.SetFirstPasswordWithProof(ctx, u, mine.ID, proof, "first-password-1")
 	disarmFault(t, svc)
 	if err == nil || !strings.Contains(err.Error(), "injected fault") {
 		t.Fatalf("the injected fault must surface to the caller, got %v", err)
@@ -268,8 +272,8 @@ func TestFirstPasswordInterruptedAtIdentityLinkAppliesNothing(t *testing.T) {
 	if canLogin(svc, "first-password-1") {
 		t.Fatal("a failed first-password set left the password live")
 	}
-	// Still a first-time set on retry: no current password is asked for.
-	if err := svc.ChangePassword(ctx, u, mine.ID, "", "first-password-1"); err != nil {
+	// The transaction rolled back proof consumption too, so the same link can retry.
+	if err := svc.SetFirstPasswordWithProof(ctx, u, mine.ID, proof, "first-password-1"); err != nil {
 		t.Fatalf("retrying the first-password set must work: %v", err)
 	}
 	providers, err := st.ListIdentityProviders(ctx, u.ID)

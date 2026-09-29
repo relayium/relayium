@@ -36,6 +36,7 @@ func logMailerCalls(m *LogMailer, email, link string) []func() error {
 		func() error { return m.SendMagicLink(ctx, email, link) },
 		func() error { return m.SendVerifyEmail(ctx, email, link) },
 		func() error { return m.SendPasswordReset(ctx, email, link) },
+		func() error { return m.SendFirstPasswordProof(ctx, email, link) },
 		func() error { return m.SendAccountDeletionConfirm(ctx, email, link) },
 		func() error { return m.SendAccountDeletionScheduled(ctx, email, 1700000000, link) },
 		func() error { return m.SendAccountDeletionReminder(ctx, email, 1700000000, link) },
@@ -263,7 +264,7 @@ func TestLinkPath(t *testing.T) {
 
 // captureMailer records the most recent link per kind for assertions.
 type captureMailer struct {
-	magic, verify, reset                 string
+	magic, verify, reset, firstPassword  string
 	deleteConfirm, deletionScheduledLink string
 	deletionReminderLink                 string
 	accountDeletedCount                  int
@@ -279,6 +280,10 @@ func (m *captureMailer) SendVerifyEmail(_ context.Context, _, link string) error
 }
 func (m *captureMailer) SendPasswordReset(_ context.Context, _, link string) error {
 	m.reset = link
+	return nil
+}
+func (m *captureMailer) SendFirstPasswordProof(_ context.Context, _, link string) error {
+	m.firstPassword = link
 	return nil
 }
 func (m *captureMailer) SendAccountDeletionConfirm(_ context.Context, _, link string) error {

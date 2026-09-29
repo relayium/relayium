@@ -246,6 +246,7 @@ CREATE TABLE IF NOT EXISTS email_tokens (
   user_id    TEXT NOT NULL REFERENCES users(id),
   email      TEXT NOT NULL,
   purpose    TEXT NOT NULL,
+  credential_epoch INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   used_at    INTEGER NOT NULL DEFAULT 0
@@ -512,6 +513,7 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// a login that read the epoch BEFORE that commit is refused (see
 		// CreateCLITokenAtEpoch), so a login racing a reset cannot outlive it.
 		`ALTER TABLE users ADD COLUMN credential_epoch INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE email_tokens ADD COLUMN credential_epoch INTEGER NOT NULL DEFAULT 0`,
 		// device-code CLI login: record the requesting CLI's origin so the
 		// browser approval page can show what it's authorizing (anti-phishing).
 		`ALTER TABLE cli_device_auth ADD COLUMN client_ip TEXT NOT NULL DEFAULT ''`,
@@ -3607,17 +3609,17 @@ func (s *SQLiteStore) DeleteSpentMagicTokens(ctx context.Context, now int64) err
 
 func (s *SQLiteStore) CreateEmailToken(ctx context.Context, t EmailToken) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, created_at, expires_at, used_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 0)`,
-		t.TokenHash, t.UserID, normEmail(t.Email), t.Purpose, t.CreatedAt, t.ExpiresAt)
+		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, credential_epoch, created_at, expires_at, used_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+		t.TokenHash, t.UserID, normEmail(t.Email), t.Purpose, t.CredentialEpoch, t.CreatedAt, t.ExpiresAt)
 	return err
 }
 
 func (s *SQLiteStore) PeekEmailToken(ctx context.Context, tokenHash, purpose string, now int64) (EmailToken, bool, error) {
 	var t EmailToken
-	err := s.reader().QueryRowContext(ctx, `SELECT token_hash,user_id,email,purpose,created_at,expires_at,used_at
+	err := s.reader().QueryRowContext(ctx, `SELECT token_hash,user_id,email,purpose,credential_epoch,created_at,expires_at,used_at
  FROM email_tokens WHERE token_hash=? AND purpose=? AND used_at=0 AND expires_at>?`, tokenHash, purpose, now).
-		Scan(&t.TokenHash, &t.UserID, &t.Email, &t.Purpose, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
+		Scan(&t.TokenHash, &t.UserID, &t.Email, &t.Purpose, &t.CredentialEpoch, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
 	if err == sql.ErrNoRows {
 		return EmailToken{}, false, nil
 	}
@@ -3637,9 +3639,9 @@ func (s *SQLiteStore) UseEmailToken(ctx context.Context, tokenHash, purpose stri
 	}
 	var t EmailToken
 	err = s.db.QueryRowContext(ctx,
-		`SELECT token_hash, user_id, email, purpose, created_at, expires_at, used_at
+		`SELECT token_hash, user_id, email, purpose, credential_epoch, created_at, expires_at, used_at
 		   FROM email_tokens WHERE token_hash = ?`, tokenHash,
-	).Scan(&t.TokenHash, &t.UserID, &t.Email, &t.Purpose, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
+	).Scan(&t.TokenHash, &t.UserID, &t.Email, &t.Purpose, &t.CredentialEpoch, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
 	return t, err == nil, err
 }
 

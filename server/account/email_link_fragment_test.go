@@ -29,13 +29,21 @@ func TestAllEmailCredentialLinksUseFragments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	passwordless, err := svc.store.UpsertUserByEmail(ctx, "passwordless-links@example.com", "Passwordless")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RequestFirstPasswordProof(ctx, passwordless); err != nil {
+		t.Fatal(err)
+	}
 
 	links := map[string]string{
-		"verify":     mail.verify,
-		"magic":      mail.magic,
-		"reset":      mail.reset,
-		"delete":     mail.deleteConfirm,
-		"reactivate": reactivate,
+		"verify":       mail.verify,
+		"magic":        mail.magic,
+		"reset":        mail.reset,
+		"set-password": mail.firstPassword,
+		"delete":       mail.deleteConfirm,
+		"reactivate":   reactivate,
 	}
 	for kind, link := range links {
 		t.Run(kind, func(t *testing.T) {
