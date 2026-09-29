@@ -67,17 +67,17 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	// 不同候选码预算（见 signal.CodeGuessLimiter），后者才是"一个 IP 一分钟能试几个
 	// 码"的真实上限。码空间是 10^6（6 位十进制数字，见 signal.CodeLen），TTL 5 分钟
 	// （见 signal.CodeTTLSeconds）。
-	// s.clientIP is resolved inside each guard rather than once up front: tests
-	// build a bare &Service{} with no clientIP and no limiters, and an
+	// s.rateLimitIP is resolved inside each guard rather than once up front: tests
+	// build a bare &Service{} with no resolver and no limiters, and an
 	// unconditional call would nil-panic on them.
-	if s.iceLimiter != nil && !s.iceLimiter.Allow(s.clientIP(r)) {
+	if s.iceLimiter != nil && !s.iceLimiter.Allow(s.rateLimitIP(r)) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
 	}
 	servers := s.stunServers()
 	code := r.URL.Query().Get("code")
 	// 空码是 LAN 请求（只要 STUN），不是对配对码的猜测，不记账也不拦。
-	if code != "" && s.codeGuesses != nil && !s.codeGuesses.AllowCode(s.clientIP(r), code) {
+	if code != "" && s.codeGuesses != nil && !s.codeGuesses.AllowCode(s.rateLimitIP(r), code) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
 	}

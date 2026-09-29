@@ -202,11 +202,15 @@ type Service struct {
 	// SetPairCodeOwner gets; production wires the registry (SetPairCodes) and so
 	// always issues tag-shaped tokens. See signal/attrib.go.
 	relayAttrib RelayAttribution
-	// clientIP resolves the request's rate-limit key IP. Defaults to the
+	// clientIP resolves the exact observed client address. Defaults to the
 	// package clientIP (trusts XFF's left entry — legacy behavior kept so
 	// existing tests are unchanged); main.go injects signal.IPExtractor.IP,
 	// which only trusts XFF from configured/loopback proxies (H3).
 	clientIP func(*http.Request) string
+	// rateLimitIP resolves the normalized key for abuse throttles. It is kept
+	// separate from clientIP so audit rows, device last-IP fields, download
+	// limits, and other observation/storage paths retain the exact address.
+	rateLimitIP func(*http.Request) string
 	// iceLimiter is /api/ice's own REQUEST cap per IP (H1: brute-forcing the
 	// 6-digit pairing code would steal a victim's TURN credentials). It bounds
 	// requests, not distinct codes, so repeating one code is not free load.
@@ -352,6 +356,7 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	}
 	svc.adminPasskeyLogins = newLoginThrottle(maxFails)
 	svc.clientIP = httpx.ClientIP
+	svc.rateLimitIP = httpx.ClientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	svc.exchangeAppleCode = svc.realExchangeAppleCode
 	svc.exchangeAppleNativeCode = svc.realExchangeAppleNativeCode
@@ -468,12 +473,22 @@ type RelayAttribution interface {
 // for tests that build the two halves separately.
 func (s *Service) SetRelayAttribution(a RelayAttribution) { s.relayAttrib = a }
 
-// SetClientIP overrides how per-IP rate-limit keys are derived. main.go
-// injects the trusted-proxy-aware signal.IPExtractor.IP so a forged
-// X-Forwarded-For from an untrusted peer can't dodge the throttles (H3).
+// SetClientIP overrides exact client-address resolution. For compatibility
+// with tests and embedders that configure only this older hook, it also sets
+// the rate-limit resolver; production replaces that second resolver with the
+// normalized IPExtractor.RateLimitKey immediately afterwards.
 func (s *Service) SetClientIP(fn func(*http.Request) string) {
 	if fn != nil {
 		s.clientIP = fn
+		s.rateLimitIP = fn
+	}
+}
+
+// SetRateLimitIP overrides the key used by pairing and authentication abuse
+// throttles without changing the exact client address stored or audited.
+func (s *Service) SetRateLimitIP(fn func(*http.Request) string) {
+	if fn != nil {
+		s.rateLimitIP = fn
 	}
 }
 
@@ -711,7 +726,7 @@ func (s *Service) AdminLoginReset(ip string)       { s.adminLogins.reset(ip) }
 // passkeyBeginAllowed reports whether this IP may start another passkey ceremony,
 // writing a 429 and returning false when the per-IP begin budget is exhausted.
 func (s *Service) passkeyBeginAllowed(w http.ResponseWriter, r *http.Request) bool {
-	if s.passkeyBeginLimiter != nil && !s.passkeyBeginLimiter.Allow(s.clientIP(r)) {
+	if s.passkeyBeginLimiter != nil && !s.passkeyBeginLimiter.Allow(s.rateLimitIP(r)) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
 		return false
 	}

@@ -727,7 +727,7 @@ func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok 
 }
 
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
-	ip := s.clientIP(r)
+	ip := s.rateLimitIP(r)
 	if s.AdminLoginLocked(ip) {
 		s.renderAdminLogin(w, r, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试",
 			s.AdminPasskeyCount(r.Context()) > 0)

@@ -6,10 +6,14 @@ import (
 )
 
 // fakeLimiter is a minimal test double for the rateLimiter interface.
-type fakeLimiter struct{ n, limit int }
+type fakeLimiter struct {
+	n, limit int
+	keys     []string
+}
 
-func (f *fakeLimiter) Allow(string) bool {
+func (f *fakeLimiter) Allow(key string) bool {
 	f.n++
+	f.keys = append(f.keys, key)
 	return f.n <= f.limit
 }
 

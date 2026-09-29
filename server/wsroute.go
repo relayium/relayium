@@ -97,16 +97,17 @@ func (rt wsRoute) handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
 		clientIP := rt.ipx.IP(r)
+		rateLimitKey := signal.RateLimitKey(clientIP)
 		// Two caps, in cheapest-first order. The request cap keeps a flood of
 		// (even identical) code-bearing requests off the rest of the handler; the
 		// shared guess budget is what actually bounds how many DIFFERENT codes
 		// this address gets to try, counting /api/ice's attempts too, so the two
 		// validity oracles cannot be added together for double the guesses.
-		if code != "" && !rt.reqLimiter.Allow(clientIP) {
+		if code != "" && !rt.reqLimiter.Allow(rateLimitKey) {
 			http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
 			return
 		}
-		if code != "" && rt.guessBudget != nil && !rt.guessBudget.AllowCode(clientIP, code) {
+		if code != "" && rt.guessBudget != nil && !rt.guessBudget.AllowCode(rateLimitKey, code) {
 			http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
 			return
 		}

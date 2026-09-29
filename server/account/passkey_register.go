@@ -21,7 +21,7 @@ func (s *Service) HandleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 	if !s.passkeyBeginAllowed(w, r) {
 		return
 	}
-	ip := s.clientIP(r)
+	ip := s.rateLimitIP(r)
 	// Step-up really is a password+TOTP check, so its failures belong in the
 	// adminLogins bucket rather than the passkey-login one.
 	if s.adminLogins.locked(ip, s.now()) {

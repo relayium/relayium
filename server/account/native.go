@@ -66,7 +66,7 @@ func (s *Service) handleNativeLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	key := normEmail(in.Email) + "|" + s.clientIP(r)
+	key := normEmail(in.Email) + "|" + s.rateLimitIP(r)
 	if s.pwLogins.locked(key, s.now()) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
 		return

@@ -103,6 +103,29 @@ func (x *IPExtractor) IP(r *http.Request) string {
 	return direct
 }
 
+// RateLimitKey returns the stable per-client key used by public abuse
+// throttles. IPv4 remains per-address. IPv6 is grouped by /64 so rotating an
+// interface identifier does not mint a fresh budget. Parse failures collapse
+// to one fail-safe key instead of letting attacker-controlled spellings create
+// unbounded independent budgets.
+func RateLimitKey(ip string) string {
+	parsed := net.ParseIP(strings.TrimSpace(ip))
+	if parsed == nil {
+		return "invalid-ip"
+	}
+	if v4 := parsed.To4(); v4 != nil {
+		return v4.String()
+	}
+	return parsed.Mask(net.CIDRMask(64, 128)).String() + "/64"
+}
+
+// RateLimitKey resolves the trusted client address before normalizing it. It
+// intentionally remains separate from RoomKey: LAN grouping keeps its exact
+// existing public-IP behavior.
+func (x *IPExtractor) RateLimitKey(r *http.Request) string {
+	return RateLimitKey(x.IP(r))
+}
+
 // RoomKey groups clients sharing a public IP into one room (pseudo-LAN discovery).
 func (x *IPExtractor) RoomKey(r *http.Request) string {
 	return x.IP(r)

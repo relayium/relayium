@@ -126,3 +126,32 @@ func TestIPStillIgnoresForwardedForFromPublicPeer(t *testing.T) {
 		t.Fatalf("public peer XFF must stay ignored, got %q", got)
 	}
 }
+
+func TestRateLimitKeyNormalizesAddressFamilies(t *testing.T) {
+	tests := map[string]string{
+		"203.0.113.7":              "203.0.113.7",
+		"::ffff:203.0.113.7":       "203.0.113.7",
+		"2001:db8:1234:5678::1":    "2001:db8:1234:5678::/64",
+		"2001:db8:1234:5678::abcd": "2001:db8:1234:5678::/64",
+		"2001:db8:1234:5679::1":    "2001:db8:1234:5679::/64",
+		"":                         "invalid-ip",
+		"not-an-address":           "invalid-ip",
+	}
+	for input, want := range tests {
+		if got := RateLimitKey(input); got != want {
+			t.Errorf("RateLimitKey(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestRateLimitKeyUsesTrustedProxyResultWithoutChangingRoomKey(t *testing.T) {
+	x := NewIPExtractor(nil)
+	r := &http.Request{RemoteAddr: "[::1]:443", Header: http.Header{}}
+	r.Header.Set("X-Forwarded-For", "2001:db8:1234:5678::beef")
+	if got := x.RateLimitKey(r); got != "2001:db8:1234:5678::/64" {
+		t.Fatalf("RateLimitKey = %q", got)
+	}
+	if got := x.RoomKey(r); got != "2001:db8:1234:5678::beef" {
+		t.Fatalf("RoomKey changed to %q", got)
+	}
+}

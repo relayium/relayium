@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -50,6 +51,7 @@ func newJointGuessHarness(t *testing.T, live string, now func() int64) *jointGue
 
 	svc := newPairTestService(t)
 	svc.SetClientIP(ipx.IP)
+	svc.SetRateLimitIP(ipx.RateLimitKey)
 	svc.SetICELimiter(&countingLimiter{limit: 100})
 	svc.SetCodeGuessLimiter(budget) // the SAME object the /ws route holds
 
@@ -69,7 +71,7 @@ func (c *countingLimiter) Allow(string) bool {
 
 func (h *jointGuessHarness) joinWS(ip, code string) int {
 	r := httptest.NewRequest(http.MethodGet, "/ws?code="+code, nil)
-	r.RemoteAddr = ip + ":54321"
+	r.RemoteAddr = net.JoinHostPort(ip, "54321")
 	w := httptest.NewRecorder()
 	h.ws(w, r)
 	return w.Code
@@ -81,10 +83,30 @@ func (h *jointGuessHarness) askICE(ip, code string) int {
 		url += "?code=" + code
 	}
 	r := httptest.NewRequest(http.MethodGet, url, nil)
-	r.RemoteAddr = ip + ":54321"
+	r.RemoteAddr = net.JoinHostPort(ip, "54321")
 	w := httptest.NewRecorder()
 	h.api.ServeHTTP(w, r)
 	return w.Code
+}
+
+func TestPairingGuessBudgetSharesIPv6PrefixAcrossWSAndICE(t *testing.T) {
+	h := newJointGuessHarness(t, "000000", func() int64 { return 1_000 })
+	for i := 1; i <= 3; i++ {
+		if got := h.askICE(fmt.Sprintf("2001:db8:42:7::%x", i), fmt.Sprintf("%06d", 930_000+i)); got != http.StatusOK {
+			t.Fatalf("/api/ice candidate %d: status = %d", i, got)
+		}
+	}
+	for i := 4; i <= 5; i++ {
+		if got := h.joinWS(fmt.Sprintf("2001:db8:42:7::%x", i), fmt.Sprintf("%06d", 930_000+i)); got != http.StatusForbidden {
+			t.Fatalf("/ws candidate %d: status = %d", i, got)
+		}
+	}
+	if got := h.askICE("2001:db8:42:7::ffff", "939999"); got != http.StatusTooManyRequests {
+		t.Fatalf("same-/64 rotation bypassed shared budget: status = %d", got)
+	}
+	if got := h.joinWS("2001:db8:42:8::1", "939999"); got != http.StatusForbidden {
+		t.Fatalf("different /64 did not retain an independent budget: status = %d", got)
+	}
 }
 
 // The gap this closes: /ws and /api/ice each answer whether a code is live, and

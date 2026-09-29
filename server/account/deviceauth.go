@@ -52,7 +52,7 @@ func genUserCode() string {
 func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 	// Unauthenticated by design (first call the CLI ever makes), so without a
 	// throttle an anonymous caller can mint cli_device_auth rows without bound.
-	if s.registerLimiter != nil && !s.registerLimiter.Allow(s.clientIP(r)) {
+	if s.registerLimiter != nil && !s.registerLimiter.Allow(s.rateLimitIP(r)) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
 	}

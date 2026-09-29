@@ -549,8 +549,8 @@ func main() {
 	}
 
 	// X-Forwarded-For is only trusted from configured reverse proxies; otherwise
-	// the direct peer IP is authoritative (see signal.IPExtractor). This value
-	// keys the pairing-code rate limits and the LAN room grouping.
+	// the direct peer IP is authoritative (see signal.IPExtractor). LAN grouping
+	// uses that exact value; abuse limits derive an IPv4-address or IPv6-/64 key.
 	trustedNets, err := parseTrustedProxies(*trustedProxies)
 	if err != nil {
 		log.Fatalf("%v", err)
@@ -1046,7 +1046,8 @@ func main() {
 		// no drainer running is worth a great deal more than that. It also keeps
 		// rooms opened before the flag was turned OFF from losing their joins.
 		bg.Go(func(ctx context.Context) { acct.RunPairJoinRetries(ctx, 15*time.Second) })
-		acct.SetClientIP(ipx.IP) // H3: trusted-proxy-aware rate-limit keys
+		acct.SetClientIP(ipx.IP) // H3: trusted-proxy-aware observed client IP
+		acct.SetRateLimitIP(ipx.RateLimitKey)
 		acct.SetICELimiter(iceLimiter)
 		// The same object the /ws route holds: one distinct-code budget per IP
 		// across both validity oracles, not one per endpoint.

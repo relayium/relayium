@@ -238,7 +238,7 @@ func (s *Service) HandleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Re
 	if !s.passkeyBeginAllowed(w, r) {
 		return
 	}
-	ip := s.clientIP(r)
+	ip := s.rateLimitIP(r)
 	if s.adminPasskeyLogins.locked(ip, s.now()) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
 		return
@@ -265,7 +265,7 @@ func (s *Service) HandleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Service) HandleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
-	ip := s.clientIP(r)
+	ip := s.rateLimitIP(r)
 	if s.adminPasskeyLogins.locked(ip, s.now()) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
 		return
