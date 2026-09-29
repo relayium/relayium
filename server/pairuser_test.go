@@ -40,11 +40,12 @@ func TestPairUserAcceptsCLIBearer(t *testing.T) {
 		t.Fatalf("upsert user: %v", err)
 	}
 	raw := "rlm_cli_" + authx.RandToken()
-	dev, err := svc.Store().UpsertDevice(ctx, account.Device{ID: authx.NewID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: 1})
+	createdAt := time.Now().Unix()
+	dev, err := svc.Store().UpsertDevice(ctx, account.Device{ID: authx.NewID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: createdAt})
 	if err != nil {
 		t.Fatalf("upsert device: %v", err)
 	}
-	if err := svc.Store().CreateCLIToken(ctx, account.CLIToken{TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
+	if err := svc.Store().CreateCLIToken(ctx, account.CLIToken{TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: createdAt}); err != nil {
 		t.Fatalf("create cli token: %v", err)
 	}
 

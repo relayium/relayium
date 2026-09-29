@@ -465,9 +465,10 @@ type ApprovedDeviceRegistration struct {
 	At        int64
 }
 
-// CLIToken is a long-lived hashed bearer credential minted at the end of a
-// device-code CLI login flow. Only its hash is stored; the raw token is shown
-// to the CLI once (via ConsumeDeviceAuth's pending_token handoff).
+// CLIToken is a hashed bearer credential minted at the end of a device-code
+// CLI login flow. It remains valid while used within each 90-day idle window.
+// Only its hash is stored; the raw token is shown to the CLI once (via
+// ConsumeDeviceAuth's pending_token handoff).
 type CLIToken struct {
 	TokenHash  string
 	UserID     string
@@ -2637,6 +2638,9 @@ type Store interface {
 	// (0 for an unknown address).
 	CredentialEpoch(ctx context.Context, userID string) (int64, error)
 	CredentialEpochByEmail(ctx context.Context, email string) (int64, error)
+	// AuthenticateCLIToken atomically accepts and renews a non-expired account
+	// bearer. It rejects frozen accounts and never mutates an expired token.
+	AuthenticateCLIToken(ctx context.Context, tokenHash string, at int64, clientIP string) (userID, deviceID string, ok bool, err error)
 	GetCLITokenUser(ctx context.Context, tokenHash string) (userID, deviceID string, ok bool, err error)
 	TouchCLIToken(ctx context.Context, tokenHash string, at int64, clientIP string) error
 	DeleteCLIToken(ctx context.Context, tokenHash string) error

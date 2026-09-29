@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/relayium/relayium/authx"
 )
@@ -31,6 +32,7 @@ func TestCanonicalDeviceIPRejectsAnythingButOneAddress(t *testing.T) {
 // RequireAuth once files.go is switched over.
 func TestRequireAuthBearer(t *testing.T) {
 	s, _ := newTestService(t)
+	s.now = func() time.Time { return time.Unix(2, 0) }
 	ctx := context.Background()
 	u, err := s.store.UpsertUserByEmail(ctx, "bearer@example.com", "")
 	if err != nil {
@@ -159,6 +161,7 @@ func TestBearerLogoutRevokesPresentedToken(t *testing.T) {
 // cli_tokens row, and only this guard stops it from minting.
 func TestUserFromAuthResolvesBothCredentials(t *testing.T) {
 	s, _ := newTestService(t)
+	s.now = func() time.Time { return time.Unix(2, 0) }
 	ctx := context.Background()
 	u, err := s.store.UpsertUserByEmail(ctx, "resolve@example.com", "")
 	if err != nil {
