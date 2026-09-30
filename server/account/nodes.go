@@ -1284,9 +1284,14 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// pairs whose buckets have drained — including pairs whose node has gone
 	// quiet — and prune idle rows that owe nothing. Bounded to
 	// relayAttribSettlePairs pairs per heartbeat.
-	if _, _, err := s.store.SettleRelayAttribBudget(r.Context(), now, relayAttribBudget, relayAttribSettlePairs); err != nil {
+	if drained, _, err := s.store.SettleRelayAttribBudget(r.Context(), now, relayAttribBudget, relayAttribSettlePairs); err != nil {
 		log.Printf("node %s heartbeat: settle attribution budget failed: %v", req.NodeID, err)
+	} else if drained > 0 {
+		log.Printf("relay attribution: recorded %d previously owed bytes (upkeep on node %s heartbeat)", drained, req.NodeID)
 	}
+	// Owed bytes of EARLIER reports this heartbeat's own entries recorded, per
+	// user; logged, and kept out of the per-heartbeat implausibility sum.
+	drainedFor := map[string]int64{}
 	// 单次心跳给单个用户记了多少（用于下面的异常告警）。
 	attributed := map[string]int64{}
 	// 单次心跳给单个用户记了多少**条**。这是限幅真正的刀口，见 maxAllocsPerUser。
@@ -1363,11 +1368,18 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 			log.Printf("WARNING: node %s exceeded the relay attribution budget for user %s (%d B/s, %ds window) — %d bytes deferred, %d dropped over the owed cap (possible forged attribution; see A-M8)",
 				req.NodeID, userID, relayAttribRatePerSec, relayAttribWindowSecs, res.Deferred, res.Dropped)
 		}
-		// Only bytes the ledger actually recorded count toward the
+		// Only bytes this heartbeat's reports recorded count toward the
 		// implausibility warning: a refused report (ErrUsageAllocOwnerMismatch)
 		// or deferred/dropped bytes billed nobody (yet), and must not name
-		// their would-be victim as having been billed.
-		attributed[userID] += res.Recorded + res.Drained
+		// their would-be victim as having been billed. Drained owed bytes
+		// belong to earlier reports and are logged separately below.
+		attributed[userID] += res.Recorded
+		drainedFor[userID] += res.Drained
+	}
+	for userID, n := range drainedFor {
+		if n > 0 {
+			log.Printf("relay attribution: node %s recorded %d previously owed bytes for user %s", req.NodeID, n, userID)
+		}
 	}
 	warnImplausibleAttribution(req.NodeID, len(req.Usage), attributed)
 	httpx.WriteJSON(w, http.StatusOK, nodeHeartbeatResp{

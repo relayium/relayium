@@ -859,3 +859,217 @@ func TestA_M8UserNodeStaysOwnerOnlyAndBudgeted(t *testing.T) {
 		t.Fatalf("BYO owner recorded %d, want held to the bucket %d", got, a_m8Capacity)
 	}
 }
+
+// ---- Round 4 ----
+
+// a_m8Owe makes (node, user) owe a full bucket through the store directly (no
+// heartbeat, so no upkeep runs): one byte a day before `at`, then the alloc's
+// per-alloc maximum at `at`, which the drained bucket takes one capacity of and
+// defers one capacity of.
+func (e *a_m8Env) a_m8Owe(node, user, alloc string, at int64, billable bool) {
+	e.t.Helper()
+	ctx := context.Background()
+	for _, r := range []struct{ at, bytes int64 }{{at - 86400, 1}, {at, maxAllocRelayBytes}} {
+		if _, err := e.st.RecordNodeUsage(ctx, UsageEvent{AllocID: alloc, Token: "t", UserID: user, RelayedBytes: r.bytes,
+			RecordedAt: r.at, NodeID: node, Billable: billable}, relayAttribBudget); err != nil {
+			e.t.Fatal(err)
+		}
+	}
+	if e.owed(node, user) != a_m8Capacity {
+		e.t.Fatalf("setup: pair owes %d, want %d", e.owed(node, user), a_m8Capacity)
+	}
+}
+
+// Codex round 3 finding 2: an older binary accepted any alloc id, so a legacy
+// usage_periods row may already sit under the synthetic drain id and belong to
+// someone else (or be non-billable). The drain must not add to it: the bytes
+// stay owed, the legacy row is untouched, and it is logged once.
+func TestA_M8DrainNeverAddsToAForeignLegacyRow(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		foreign  bool // legacy row belongs to another user
+		billable int  // legacy row's billable
+	}{{"another user", true, 1}, {"same user, not billable", false, 0}} {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := a_m8CaptureLog(t)
+			e := newA_M8Env(t)
+			node, other := e.fleetNode(), e.fleetNode()
+			victim := e.user("victim@a-m8.test")
+			owner := victim
+			if tc.foreign {
+				owner = e.user("legacy@a-m8.test")
+			}
+			at := a_m8Base
+			if _, err := e.st.db.Exec(`INSERT INTO usage_periods (alloc_id, period, user_id, node_id, billable, bytes) VALUES (?, ?, ?, ?, ?, 5)`,
+				relayAttribOwedAllocID(node, victim), periodOf(at), owner, node, tc.billable); err != nil {
+				t.Fatal(err)
+			}
+			e.a_m8Owe(node, victim, "big", at, true)
+			for step := int64(1); step <= 3; step++ {
+				e.set(at + step*relayAttribWindowSecs)
+				e.heartbeat(other, nil)
+			}
+			var uid string
+			var bill, n int64
+			if err := e.st.db.QueryRow(`SELECT user_id, billable, bytes FROM usage_periods WHERE alloc_id=?`,
+				relayAttribOwedAllocID(node, victim)).Scan(&uid, &bill, &n); err != nil {
+				t.Fatal(err)
+			}
+			if uid != owner || bill != int64(tc.billable) || n != 5 {
+				t.Fatalf("legacy row changed: user %s billable %d bytes %d", uid, bill, n)
+			}
+			if got := e.owed(node, victim); got != a_m8Capacity {
+				t.Fatalf("blocked owed bytes %d, want kept at %d", got, a_m8Capacity)
+			}
+			if c := strings.Count(logs.String(), "belongs to another owner"); c != 1 {
+				t.Fatalf("blocked drain logged %d times, want once:\n%s", c, logs)
+			}
+			relayAttribOwedBlocked.Delete(relayAttribOwedAllocID(node, victim) + "@" + periodOf(at))
+		})
+	}
+}
+
+// Owed bytes relayed in September and drained in October count in September
+// — through the real readers: the monthly quota (UserRelayedSince), the node
+// cap (NodeRelayedSince), the admin monthly metric and the lifetime display —
+// for a billable fleet node and a non-billable BYO node.
+func TestA_M8SeptemberOwedDrainedInOctoberCountsInSeptember(t *testing.T) {
+	for _, byo := range []bool{false, true} {
+		t.Run(fmt.Sprintf("byo=%v", byo), func(t *testing.T) {
+			a_m8CaptureLog(t)
+			e := newA_M8Env(t)
+			ctx := context.Background()
+			user := e.user("month@a-m8.test")
+			node := e.fleetNode()
+			if byo {
+				n, err := e.st.UpsertNode(ctx, Node{OwnerType: "user", OwnerUserID: user, URLs: []string{"turn:y:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
+				if err != nil {
+					t.Fatal(err)
+				}
+				node = n.ID
+			}
+			sepStart, _ := monthRange("202609")
+			octStart, _ := monthRange("202610")
+			deferAt := octStart - 3600 // Sep 30 23:00 UTC
+			e.a_m8Owe(node, user, "big", deferAt, !byo)
+			quiet := e.fleetNode()
+			e.set(octStart + 3600) // Oct 1 01:00: bucket long drained
+			e.heartbeat(quiet, nil)
+			if e.owed(node, user) != 0 {
+				t.Fatalf("owed not drained in October")
+			}
+			all := 1 + 2*a_m8Capacity
+			billable := all
+			if byo {
+				billable = 0
+			}
+			if q, _ := e.st.UserRelayedSince(ctx, user, octStart); q != 0 {
+				t.Fatalf("October quota counts %d of September's owed bytes", q)
+			}
+			if q, _ := e.st.UserRelayedSince(ctx, user, sepStart); q != billable {
+				t.Fatalf("September quota %d, want %d", q, billable)
+			}
+			if m, _ := e.st.NodeRelayedSince(ctx, octStart); m[node] != 0 {
+				t.Fatalf("October node cap counts %d", m[node])
+			}
+			if m, _ := e.st.NodeRelayedSince(ctx, sepStart); m[node] != all {
+				t.Fatalf("node relayed since September %d, want %d", m[node], all)
+			}
+			if am, err := e.st.AdminMetrics(ctx, "202609", octStart+3600); err != nil || am.RelayBytes != all {
+				t.Fatalf("admin September relay %d (%v), want %d", am.RelayBytes, err, all)
+			}
+			if am, _ := e.st.AdminMetrics(ctx, "202610", octStart+3600); am.RelayBytes != 0 {
+				t.Fatalf("admin October relay %d, want 0", am.RelayBytes)
+			}
+			if tot, _ := e.st.UserUsageTotal(ctx, user); tot != all {
+				t.Fatalf("lifetime display %d, want recorded bytes only %d", tot, all)
+			}
+		})
+	}
+}
+
+// The lifetime display counts recorded bytes only: a flood whose bytes are
+// partly owed and partly dropped does not show the unrecorded part.
+func TestA_M8LifetimeDisplayExcludesUnrecordedBytes(t *testing.T) {
+	a_m8CaptureLog(t)
+	e := newA_M8Env(t)
+	node := e.fleetNode()
+	user := e.user("display@a-m8.test")
+	for i := 0; i < 8; i++ {
+		e.heartbeat(node, forgedBatch(fmt.Sprintf("d%d", i), user))
+	}
+	if tot, _ := e.st.UserUsageTotal(context.Background(), user); tot != a_m8Capacity {
+		t.Fatalf("lifetime display %d, want recorded %d", tot, a_m8Capacity)
+	}
+}
+
+// More pairs owe than one upkeep reaches (relayAttribSettlePairs): each
+// heartbeat's upkeep makes progress, and all of them drain within
+// ceil(pairs/64) heartbeats.
+func TestA_M8UpkeepProgressesBeyondItsPerHeartbeatBound(t *testing.T) {
+	a_m8CaptureLog(t)
+	e := newA_M8Env(t)
+	node, quiet := e.fleetNode(), e.fleetNode()
+	const pairs = relayAttribSettlePairs + 6
+	users := make([]string, pairs)
+	for i := range users {
+		users[i] = e.user(fmt.Sprintf("p%d@a-m8.test", i))
+		e.a_m8Owe(node, users[i], fmt.Sprintf("big%d", i), a_m8Base, true)
+	}
+	owing := func() int {
+		var n int
+		if err := e.st.db.QueryRow(`SELECT COUNT(*) FROM relay_attrib_budget WHERE owed > 0`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	e.set(a_m8Base + 2*relayAttribWindowSecs)
+	e.heartbeat(quiet, nil)
+	if n := owing(); n != pairs-relayAttribSettlePairs {
+		t.Fatalf("after one upkeep %d pairs owe, want %d", n, pairs-relayAttribSettlePairs)
+	}
+	e.set(a_m8Base + 2*relayAttribWindowSecs + 30)
+	e.heartbeat(quiet, nil)
+	if n := owing(); n != 0 {
+		t.Fatalf("after two upkeeps %d pairs still owe", n)
+	}
+	for _, u := range users {
+		if got := e.recorded(u, node); got != 1+2*a_m8Capacity {
+			t.Fatalf("pair %s recorded %d, want %d", u, got, 1+2*a_m8Capacity)
+		}
+	}
+}
+
+// FIFO inside a pair's own charge, for a pair the upkeep does not reach this
+// heartbeat (64 older owing pairs come first): its September owed bytes are
+// recorded before its new October report, so October's quota is not charged
+// ahead of September's backlog.
+func TestA_M8PairOutsideUpkeepDrainsOwedBeforeNewBytes(t *testing.T) {
+	a_m8CaptureLog(t)
+	e := newA_M8Env(t)
+	ctx := context.Background()
+	node := e.fleetNode()
+	octStart, _ := monthRange("202610")
+	t1 := octStart - 4*3600 // Sep 30 20:00
+	for i := 0; i < relayAttribSettlePairs; i++ {
+		e.a_m8Owe(node, e.user(fmt.Sprintf("o%d@a-m8.test", i)), fmt.Sprintf("ob%d", i), t1, true)
+	}
+	p := e.user("fifo@a-m8.test")
+	e.a_m8Owe(node, p, "pbig", t1+10, true) // most recently touched: last in upkeep order
+	e.set(octStart + 1800)
+	e.heartbeat(node, []nodeUsage{{AllocID: "pnew", Username: a_m8Username(p), RelayedBytes: 1 << 30}})
+	if q, _ := e.st.UserRelayedSince(ctx, p, octStart); q != 0 {
+		t.Fatalf("October recorded %d of the new report ahead of September's owed backlog", q)
+	}
+	sepStart, _ := monthRange("202609")
+	if q, _ := e.st.UserRelayedSince(ctx, p, sepStart); q != 1+2*a_m8Capacity {
+		t.Fatalf("September recorded %d, want the backlog drained first %d", q, 1+2*a_m8Capacity)
+	}
+	var octOwed int64
+	if err := e.st.db.QueryRow(`SELECT COALESCE(SUM(bytes),0) FROM relay_attrib_owed WHERE user_id=? AND period='202610'`, p).Scan(&octOwed); err != nil {
+		t.Fatal(err)
+	}
+	if octOwed != 1<<30 {
+		t.Fatalf("new October bytes owed %d, want %d", octOwed, 1<<30)
+	}
+}

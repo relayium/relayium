@@ -4313,13 +4313,23 @@ func saveRelayAttribRowTx(ctx context.Context, tx *sql.Tx, nodeID, userID string
 	return err
 }
 
+// relayAttribOwedBlocked remembers which (synthetic alloc id, period) rows
+// have already been logged as blocked, so the log fires once per row per
+// process rather than on every heartbeat's upkeep.
+var relayAttribOwedBlocked sync.Map
+
 // drainRelayAttribOwedTx moves up to `limit` owed bytes of (nodeID, userID)
 // into usage_periods, oldest period first, each into the period its bytes
-// were relayed in, and returns how many it moved.
-func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID string, limit int64) (int64, error) {
-	if limit <= 0 {
-		return 0, nil
-	}
+// were relayed in. It returns how many it moved and whether the pair's owed
+// rows are now exhausted.
+//
+// The target row is (relayAttribOwedAllocID, period). An older binary accepted
+// arbitrary alloc ids, so a legacy row under that id may exist and belong to
+// someone else; the upsert adds only to a row whose user_id, node_id and
+// billable all match. On a mismatch nothing is written, the bytes stay owed
+// (user-favourable: never attributed to anyone else, never lost), draining
+// stops for this pair, and it is logged once.
+func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID string, limit int64) (moved int64, exhausted bool, err error) {
 	type owedRow struct {
 		period   string
 		billable int
@@ -4329,34 +4339,49 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 		`SELECT period, billable, bytes FROM relay_attrib_owed WHERE node_id = ? AND user_id = ? ORDER BY period`,
 		nodeID, userID)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	var owed []owedRow
 	for rows.Next() {
 		var o owedRow
 		if err := rows.Scan(&o.period, &o.billable, &o.bytes); err != nil {
 			rows.Close()
-			return 0, err
+			return 0, false, err
 		}
 		owed = append(owed, o)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	var moved int64
+	allocID := relayAttribOwedAllocID(nodeID, userID)
 	for _, o := range owed {
 		if moved >= limit {
-			break
+			return moved, false, nil
 		}
 		take := min(max(o.bytes, 0), limit-moved)
 		if take > 0 {
-			if _, err := tx.ExecContext(ctx,
+			res, err := tx.ExecContext(ctx,
 				`INSERT INTO usage_periods (alloc_id, period, user_id, node_id, billable, bytes)
 				 VALUES (?, ?, ?, ?, ?, ?)
-				 ON CONFLICT(alloc_id, period) DO UPDATE SET bytes = bytes + excluded.bytes`,
-				relayAttribOwedAllocID(nodeID, userID), o.period, userID, nullStr(nodeID), o.billable, take); err != nil {
-				return 0, err
+				 ON CONFLICT(alloc_id, period) DO UPDATE SET bytes = bytes + excluded.bytes
+				 WHERE usage_periods.user_id = excluded.user_id
+				   AND usage_periods.node_id IS excluded.node_id
+				   AND usage_periods.billable = excluded.billable`,
+				allocID, o.period, userID, nullStr(nodeID), o.billable, take)
+			if err != nil {
+				return 0, false, err
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return 0, false, err
+			}
+			if n == 0 {
+				if _, seen := relayAttribOwedBlocked.LoadOrStore(allocID+"@"+o.period, true); !seen {
+					log.Printf("WARNING: relay attribution: usage_periods row %s/%s belongs to another owner; %d owed bytes for node %s user %s kept owed (A-M8)",
+						allocID, o.period, o.bytes, nodeID, userID)
+				}
+				return moved, false, nil
 			}
 		}
 		if take >= o.bytes {
@@ -4365,11 +4390,12 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 			_, err = tx.ExecContext(ctx, `UPDATE relay_attrib_owed SET bytes = bytes - ? WHERE node_id = ? AND user_id = ? AND period = ?`, take, nodeID, userID, o.period)
 		}
 		if err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		moved += max(take, 0)
 	}
-	return moved, nil
+	// Every row was consumed; moved < limit means nothing is left to owe.
+	return moved, moved < limit, nil
 }
 
 // chargeRelayAttribTx charges a report's delta bytes to the (nodeID, userID)
@@ -4393,13 +4419,12 @@ func chargeRelayAttribTx(ctx context.Context, tx *sql.Tx, nodeID, userID string,
 		return c, err
 	}
 	if r.owed > 0 {
-		want := min(r.owed, capacity-r.level)
-		d, err := drainRelayAttribOwedTx(ctx, tx, nodeID, userID, want)
+		d, exhausted, err := drainRelayAttribOwedTx(ctx, tx, nodeID, userID, min(r.owed, capacity-r.level))
 		if err != nil {
 			return c, err
 		}
 		r.owed -= d
-		if d < want { // the owed rows ran out: nothing is left to owe
+		if exhausted { // the owed rows ran out: nothing is left to owe
 			r.owed = 0
 		}
 		r.level += d
@@ -4472,13 +4497,12 @@ func (s *SQLiteStore) SettleRelayAttribBudget(ctx context.Context, now int64, b 
 		if err != nil {
 			return 0, 0, err
 		}
-		want := min(r.owed, capacity-r.level)
-		d, err := drainRelayAttribOwedTx(ctx, tx, p.node, p.user, want)
+		d, exhausted, err := drainRelayAttribOwedTx(ctx, tx, p.node, p.user, min(r.owed, capacity-r.level))
 		if err != nil {
 			return 0, 0, err
 		}
 		r.owed -= d
-		if d < want {
+		if exhausted {
 			r.owed = 0
 		}
 		r.level += d
@@ -4498,10 +4522,16 @@ func (s *SQLiteStore) SettleRelayAttribBudget(ctx context.Context, now int64, b 
 	return drained, pruned, tx.Commit()
 }
 
+// UserUsageTotal is a user's lifetime relayed bytes for the /usage and /stats
+// displays: every usage_periods byte attributed to them, billable or not. It
+// reads the recorded per-period deltas rather than usage_events' per-alloc
+// high-water marks, because since A-M8 a high-water can include bytes the
+// attribution budget deferred (not recorded yet) or dropped (never recorded);
+// the display must match what quota and caps count.
 func (s *SQLiteStore) UserUsageTotal(ctx context.Context, userID string) (int64, error) {
 	var total sql.NullInt64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT SUM(relayed_bytes) FROM usage_events WHERE user_id = ?`, userID,
+		`SELECT SUM(bytes) FROM usage_periods WHERE user_id = ?`, userID,
 	).Scan(&total)
 	if err != nil {
 		return 0, err
