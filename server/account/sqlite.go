@@ -1898,6 +1898,16 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		// prefix makes the "how many machine rows are there" pre-check an index
 		// seek, and at/id carry the newest-first ordering the cap needs.
 		`CREATE INDEX IF NOT EXISTS idx_admin_audit_machine ON admin_audit(auth, at DESC, id DESC)`,
+		// N-0930-7: "does anything still name this node" (retireOrDeleteNodeTx,
+		// DeleteFleetNode, NodeIDReuseState on every register of an unknown id,
+		// the per-row correlated probes of PurgeRetiredNodes on every GC sweep,
+		// NodeDeleteBlockers on every fleet-panel render) looks rows up by
+		// node_id. upload_sessions had no index on it and pending_node_deletes
+		// only the (blob_key, node_id) primary key, whose leading column is the
+		// wrong one, so each probe was a full-table scan. stored_files already
+		// has idx_stored_files_node.
+		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_node ON upload_sessions(node_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_pending_node_deletes_node ON pending_node_deletes(node_id)`,
 		// idx_nodes_owner_type(owner_type) is now a strict prefix of
 		// idx_nodes_byo_rank(owner_type, removed_at, draining DESC,
 		// last_seen_at DESC, id ASC): any lookup the single-column index could
