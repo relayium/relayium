@@ -55,7 +55,7 @@ import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 
 import cliBackupSsh from "./content/articles/cli-backup-server-ssh.mjs";
-import { LANGS } from "./shared.mjs";
+import { FROZEN_LANGS } from "./shared.mjs";
 
 /**
  * reportExit's per-file failure format, e.g. "%d file(s) could not be verified
@@ -277,18 +277,18 @@ function recoveryComplaints(lang, fix) {
   return bad;
 }
 
-describe("the SSH backup guide's integrity-failure recovery", () => {
-  it("has exactly one integrity-failure item in each of the nine locales", () => {
+describe("the archived SSH backup guide's integrity-failure recovery", () => {
+  it("preserves exactly one integrity-failure item in each frozen locale", () => {
     // Guards the guard. If the item is renamed, moved or dropped, every rule
     // below would pass over an empty string instead of failing.
-    for (const lang of LANGS) {
+    for (const lang of FROZEN_LANGS) {
       expect(integrityItems(cliBackupSsh.langs[lang]), `${lang}: integrity item missing or duplicated`).toHaveLength(1);
     }
   });
 
-  it("gives the cause and recovery accurately in all nine locales", () => {
+  it("gives the cause and recovery accurately in all frozen locales", () => {
     const bad = [];
-    for (const lang of LANGS) bad.push(...recoveryComplaints(lang, integrityItems(cliBackupSsh.langs[lang])[0].fix));
+    for (const lang of FROZEN_LANGS) bad.push(...recoveryComplaints(lang, integrityItems(cliBackupSsh.langs[lang])[0].fix));
     expect(bad).toEqual([]);
   });
 
@@ -296,7 +296,7 @@ describe("the SSH backup guide's integrity-failure recovery", () => {
     const line = formatLine(FORMAT);
     const symptom = FORMAT.replace("%d", "N").split(": %v")[0];
     const bad = [];
-    for (const lang of LANGS) {
+    for (const lang of FROZEN_LANGS) {
       const item = integrityItems(cliBackupSsh.langs[lang])[0];
       if (!item.symptom.includes(symptom)) bad.push(`${lang}: symptom does not quote "${symptom}"`);
       const out = item.code.join("\n").split("\n").filter((l) => l.startsWith("# ")).map((l) => l.slice(2));
@@ -379,7 +379,7 @@ describe("the SSH backup guide's integrity-failure recovery", () => {
     // The locator is a code-block substring, so it would silently pick up a
     // second item if one were added elsewhere in this document. Pinned to the
     // section that owns it.
-    const owning = (cliBackupSsh.langs.en.sections || []).filter((s) =>
+    const owning = (cliBackupSsh.langs.ja.sections || []).filter((s) =>
       (s.troubleshooting?.items || []).some((i) => (i.code || []).join("\n").includes(FAILURE_OUTPUT)),
     );
     expect(owning).toHaveLength(1);

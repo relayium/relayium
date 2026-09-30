@@ -833,9 +833,46 @@ const pt = {
   relatedHeading: "Continue lendo",
 };
 
+const currentEn = {
+  title: "Relayium vs rsync: daemon-direct mirroring compared",
+  description: "Compare rsync with Relayium's current relayium:// sync: transport, trust, change detection, resume, deletion and account requirements.",
+  updatedLabel: "Last updated",
+  lead: ["rsync is a mature general-purpose synchronizer. Relayium sync is a narrower one-way mirror to a relayium serve listener over pinned TLS.", "Relayium's SSH transport is retired: current sync accepts relayium:// destinations only, with no -i or -p flags."],
+  sections: [
+    { heading: "What each command does", code: ["rsync -a --delete ./photos/ user@server:backups/photos/", "relayium sync ./photos relayium://server.example --delete --watch"], body: ["rsync commonly travels over SSH and has a rich option set. Relayium sync uses its native daemon-direct protocol, skips unchanged files by size and modification time, verifies transferred files and can continue partial files across runs."] },
+    { heading: "Trust and deletion", bullets: ["Relayium serve accepts only authorized sender fingerprints and pins the listener on first contact.", "Relayium --delete is ignored unless the listener was started with --allow-delete.", "Neither mirror is a versioned backup; snapshots or another history layer are still needed."] },
+    { heading: "Choose deliberately", bullets: ["Use rsync for its mature filtering, remote-shell ecosystem and broad interoperability.", "Use Relayium when the native authorized listener, the same CLI's pairing/Cloud modes, or its explicit receiver consent model is valuable."] },
+  ],
+  faq: { heading: "Frequently asked questions", items: [
+    { q: "Does Relayium sync use SSH?", a: "No. It accepts relayium:// destinations only." },
+    { q: "Does it need an account?", a: "No. Daemon-direct serve, push and sync do not use a Relayium account." },
+    { q: "Is it a backup?", a: "No. It is a current-state one-way mirror and keeps no historical versions." },
+  ] },
+  cta: { text: "Try daemon-direct sync on machines you manage.", button: "Get the CLI", href: "/cli" },
+  relatedHeading: "Keep reading",
+};
+const currentZh = {
+  title: "Relayium 与 rsync：daemon 直连镜像对比",
+  description: "比较 rsync 与 Relayium 当前 relayium:// sync 的传输、信任、变更判断、续传、删除和账号要求。",
+  updatedLabel: "最近更新",
+  lead: ["rsync 是成熟的通用同步工具。Relayium sync 的范围更窄：通过证书固定 TLS 向 relayium serve 监听端做单向镜像。", "Relayium 的 SSH 传输已退役：当前 sync 只接受 relayium:// 目标，也没有 -i 或 -p 参数。"],
+  sections: [
+    { heading: "两条命令分别做什么", code: ["rsync -a --delete ./photos/ user@server:backups/photos/", "relayium sync ./photos relayium://server.example --delete --watch"], body: ["rsync 通常走 SSH，选项十分丰富。Relayium sync 使用原生 daemon 直连协议，按大小与修改时间跳过未变文件，校验真正传输的文件，并能跨运行继续半截文件。"] },
+    { heading: "信任与删除", bullets: ["Relayium serve 只接受已授权的发送端指纹，并在首次连接时固定监听端。", "除非监听端以 --allow-delete 启动，否则 Relayium --delete 会被忽略。", "两者都不是带版本的备份；仍需快照或其他历史层。"] },
+    { heading: "有意识地选择", bullets: ["需要成熟的过滤、远程 shell 生态与广泛兼容性时用 rsync。", "重视原生授权监听器、同一 CLI 的配对/云端模式或接收端显式同意删除时用 Relayium。"] },
+  ],
+  faq: { heading: "常见问题", items: [
+    { q: "Relayium sync 使用 SSH 吗？", a: "不使用，只接受 relayium:// 目标。" },
+    { q: "需要账号吗？", a: "不需要。daemon 直连的 serve、push 与 sync 都不使用 Relayium 账号。" },
+    { q: "它是备份吗？", a: "不是。它是当前状态的单向镜像，不保留历史版本。" },
+  ] },
+  cta: { text: "在你管理的机器上试用 daemon 直连 sync。", button: "获取 CLI", href: "/cli" },
+  relatedHeading: "继续阅读",
+};
+
 export default {
   slug: "compare/rsync",
   published: "2026-07-09",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
+  langs: withInstall({ en: currentEn, zh: currentZh, ja, ko, de, fr, ar, es, pt }),
 };

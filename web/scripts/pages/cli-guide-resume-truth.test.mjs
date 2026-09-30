@@ -298,7 +298,7 @@ describe("a scheduled push never runs twice into the same destination", () => {
   it("fails when a scheduled push goes back to a fixed destination", () => {
     // Mutation proof, on the exact regression: the line these guides shipped.
     const mutated = JSON.parse(
-      JSON.stringify(GUIDES["howto-automate-server-backups"].langs.en).replaceAll("/$(date +\\\\%F)/", "/"),
+      JSON.stringify(GUIDES["howto-automate-server-backups"].langs.ja).replaceAll("/$(date +\\\\%F)/", "/"),
     );
     const pushes = cronCommands(mutated).filter((c) => /\brelayium\s+push\b/.test(c));
     expect(pushes.length).toBeGreaterThan(0);

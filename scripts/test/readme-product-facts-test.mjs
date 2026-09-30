@@ -169,7 +169,7 @@ describe("README product facts", () => {
     assert.ok(prose.includes("only for a tiny rendezvous handshake (never the content)"));
     // And the direct modes still have to be enumerable, or "not free" replaces
     // one wrong claim with another.
-    for (const mode of ["`push`/`pull`", "`sync`", "daemon-direct", "`send`/`receive`", "`text`"]) {
+    for (const mode of ["`push`/`sync`", "daemon-direct", "`send`/`receive`", "`text`"]) {
       assert.ok(prose.includes(mode), `the direct-mode list lost ${mode}`);
     }
   });

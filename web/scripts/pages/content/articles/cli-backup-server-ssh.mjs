@@ -1625,9 +1625,70 @@ echo $?
   relatedHeading: "Continue lendo",
 };
 
+const currentEn = {
+  title: "Migrate an old SSH backup command to Relayium daemon-direct",
+  description: "SSH transport, relayium pull, -i and -p are retired. Replace old server copy commands with serve plus relayium:// push or sync.",
+  updatedLabel: "Last updated",
+  lead: [
+    "This URL used to document Relayium's SSH transport. That transport is retired: current push and sync accept relayium:// destinations only, and relayium pull is unavailable.",
+    "For an off-host copy on a machine you manage, run relayium serve on the receiver and push or sync directly over pinned TLS. This is a current-state copy, not a versioned backup.",
+  ],
+  sections: [
+    { heading: "Prepare the receiving server", prereqs: { label: "What you need", items: ["Relayium installed on both the sending and receiving machines.", "A reachable TCP port (9031 by default) restricted to the sender.", "An existing receive directory writable by the listener account."] }, steps: [
+      { text: "Create the directory that will receive the copy.", code: ["mkdir -p ~/backups"] },
+      { text: "On the sender, print the fingerprint that the receiver will authorize.", code: ["relayium id"] },
+      { text: "On the receiver, authorize that fingerprint. Use the same --config-dir here and when starting serve.", code: ["relayium authorize <sender-fingerprint>"] },
+      { text: "Start the receiver on the intended interface.", code: ["relayium serve --dir ~/backups --bind 10.0.0.12"] },
+    ], success: { label: "What a ready receiver looks like", body: ["serve reports the bound address, receive directory and receiver fingerprint, then stays running for authorized pushes."], code: ["relayium serve: listening on 10.0.0.12:9031, receiving into /home/you/backups (fingerprint 5c1d9f04…)"] }, bullets: ["Use the same --config-dir for authorize and serve.", "For unattended use, pre-authorize the sender; an unknown sender is rejected when no terminal can prompt."] },
+    { heading: "Send one copy or maintain a mirror", body: ["Use push for a collision-safe one-time copy and sync for a repeated one-way mirror."], code: ["relayium push ./photos relayium://server.example", "relayium sync ./photos relayium://server.example --watch"], bullets: ["push never overwrites and does not resume.", "sync skips files by size and modification time and continues partial files across runs.", "sync --delete requires the listener's explicit --allow-delete consent."] },
+    { heading: "Replace old scripts safely", body: ["Remove host:path destinations, relayium pull, -i and -p from Relayium commands. SSH remains a separate administration tool, but it is not a Relayium data transport."], bullets: ["Use snapshots or another history-preserving backup layer if you need older versions.", "A scheduled mirror carries source deletions or corruption over on its next run; keep independent history.", "Log scheduled sync output and alert on non-zero exits.", "Restrict the listener with --bind and a firewall."], troubleshooting: { label: "Troubleshooting", items: [
+      { symptom: "The sender is rejected as unauthorized", code: ["relayium id"], fix: "Authorize that exact sender fingerprint on the receiver, using the same --config-dir that the serve process uses." },
+      { symptom: "The listener exits before binding", code: ["test -d ~/backups && test -w ~/backups"], fix: "Create ~/backups and grant the listener account write access to that exact directory, then start relayium serve again." },
+      { symptom: "The sender cannot reach the listener", code: ["curl -v telnet://10.0.0.12:9031"], fix: "Check the --bind address and allow TCP 9031 from the sender in both the host firewall and cloud firewall." },
+      { symptom: "A transfer exits non-zero", code: ["relayium sync ./photos relayium://server.example"], fix: "Read the reported path and error, correct permissions or capacity, and rerun sync; completed files are skipped by size and modification time." },
+    ] } },
+  ],
+  faq: { heading: "Frequently asked questions", items: [
+    { q: "Can I keep using the old SSH syntax?", a: "Not with the current CLI. It rejects SSH destinations before transferring bytes." },
+    { q: "How do I restore files?", a: "Relayium has no current pull command. Restore from the receiver using your normal administrative access or initiate a new daemon-direct transfer in the opposite direction." },
+    { q: "Is sync a backup?", a: "It is a current-state mirror. It keeps no history, and --delete deliberately propagates deletions." },
+  ] },
+  cta: { text: "Move your server copy job to daemon-direct.", button: "Get the CLI", href: "/cli" },
+  relatedHeading: "Keep reading",
+};
+
+const currentZh = {
+  title: "把旧 SSH 备份命令迁移到 Relayium daemon 直连",
+  description: "SSH 传输、relayium pull、-i 与 -p 已退役。用 serve 加 relayium:// push 或 sync 替换旧服务器复制命令。",
+  updatedLabel: "最近更新",
+  lead: ["这个网址过去介绍 Relayium 的 SSH 传输。该传输已经退役：当前 push 与 sync 只接受 relayium:// 目标，relayium pull 不可用。", "要在自己管理的机器上保留异地副本，请在接收端运行 relayium serve，再通过证书固定 TLS 直接 push 或 sync。它保存的是当前状态，不是带版本历史的备份。"],
+  sections: [
+    { heading: "准备接收服务器", prereqs: { label: "你需要准备", items: ["发送端和接收端两台机器都已经安装 Relayium。", "一个仅向发送端开放的可达 TCP 端口（默认 9031）。", "一个已经存在、监听进程账户可以写入的接收目录。"] }, steps: [
+      { text: "创建用于接收副本的目录。", code: ["mkdir -p ~/backups"] },
+      { text: "在发送端输出需要由接收端授权的指纹。", code: ["relayium id"] },
+      { text: "在接收端授权该指纹；这里与启动 serve 时必须使用同一个 --config-dir。", code: ["relayium authorize <sender-fingerprint>"] },
+      { text: "让接收端在预期网络接口上启动监听。", code: ["relayium serve --dir ~/backups --bind 10.0.0.12"] },
+    ], success: { label: "接收端就绪时会看到", body: ["serve 会报告监听地址、接收目录和接收端指纹，然后持续等待已授权发送端。"], code: ["relayium serve: listening on 10.0.0.12:9031, receiving into /home/you/backups (fingerprint 5c1d9f04…)"] }, bullets: ["authorize 与 serve 使用同一个 --config-dir。", "无人值守时要提前授权；没有终端可询问时，未知发送端会被拒绝。"] },
+    { heading: "发送一次副本或持续镜像", body: ["一次性、拒绝冲突的复制用 push；反复运行的单向镜像用 sync。"], code: ["relayium push ./photos relayium://server.example", "relayium sync ./photos relayium://server.example --watch"], bullets: ["push 不覆盖，也不续传。", "sync 按大小与修改时间跳过文件，并能跨运行继续半截文件。", "sync --delete 还需要监听端显式启用 --allow-delete。"] },
+    { heading: "安全替换旧脚本", body: ["从 Relayium 命令中移除 host:path 目标、relayium pull、-i 与 -p。SSH 仍可独立用于系统管理，但不再是 Relayium 的数据传输通道。"], bullets: ["需要旧版本恢复能力时，另加快照或保留历史的备份工具。", "定时镜像会在下次运行时把源端删除或损坏同步过去，因此要保留独立历史。", "记录定时 sync 的输出，并对非零退出报警。", "用 --bind 与防火墙限制监听端。"], troubleshooting: { label: "故障排查", items: [
+      { symptom: "发送端因未授权而被拒绝", code: ["relayium id"], fix: "在接收端授权这个发送端的准确指纹，并确保使用与 serve 进程相同的 --config-dir。" },
+      { symptom: "监听端在绑定端口前退出", code: ["test -d ~/backups && test -w ~/backups"], fix: "创建 ~/backups，让监听进程账户能够写入这个准确目录，然后重新启动 relayium serve。" },
+      { symptom: "发送端无法连接监听端", code: ["curl -v telnet://10.0.0.12:9031"], fix: "检查 --bind 地址，并在主机与云防火墙中仅允许发送端访问 TCP 9031。" },
+      { symptom: "传输以非零状态退出", code: ["relayium sync ./photos relayium://server.example"], fix: "根据报告的路径和错误修正权限或容量，再运行 sync；已完成文件会按大小和修改时间跳过。" },
+    ] } },
+  ],
+  faq: { heading: "常见问题", items: [
+    { q: "还能继续用旧 SSH 语法吗？", a: "当前 CLI 不行。它会在传输任何字节之前拒绝 SSH 目标。" },
+    { q: "怎样恢复文件？", a: "Relayium 当前没有 pull 命令。请用普通管理通道从接收端恢复，或反向发起一次新的 daemon 直连传输。" },
+    { q: "sync 是备份吗？", a: "它是当前状态的镜像，不保留历史；--delete 还会有意传播删除。" },
+  ] },
+  cta: { text: "把服务器复制任务迁移到 daemon 直连。", button: "获取 CLI", href: "/cli" },
+  relatedHeading: "继续阅读",
+};
+
 export default {
   slug: "guides/back-up-a-server-over-ssh",
   published: "2026-07-08",
   updated: "2026-09-01",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
+  langs: withInstall({ en: currentEn, zh: currentZh, ja, ko, de, fr, ar, es, pt }),
 };

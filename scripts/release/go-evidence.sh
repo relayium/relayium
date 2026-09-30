@@ -169,6 +169,9 @@ lane_paths() {
 server
 scripts/go-race-shard.go
 scripts/test/db-rollback-harness.sh
+scripts/test/cli-public-truth-test.sh
+README.md
+web/public/llms.txt
 apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json
 apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json
 apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json
