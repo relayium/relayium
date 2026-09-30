@@ -41,7 +41,7 @@ import cliSyncLargeFolder from "./content/articles/cli-sync-large-folder.mjs";
 import compareSnapdrop from "./content/articles/compare-snapdrop.mjs";
 import { buildArticlePages } from "./build-pages.mjs";
 import { renderArticlePage } from "./article-template.mjs";
-import { LANGS } from "./shared.mjs";
+import { LANGS, MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 import { THEME_SCRIPT } from "./page-chrome.mjs";
 
 // The exact six this batch covers. Named rather than globbed: `cli-*` would also
@@ -235,9 +235,12 @@ function validate(name, lang, doc, enDoc) {
 describe("the six CLI guides are runnable tutorials in all nine locales", () => {
   it("carries prerequisites, an ordered procedure, a success signal and troubleshooting", () => {
     const bad = [];
-    for (const [name, article] of Object.entries(TUTORIALS))
-      for (const lang of LANGS)
+    for (const [name, article] of Object.entries(TUTORIALS)) {
+      for (const lang of MAINTAINED_LANGS)
         bad.push(...validate(name, lang, article.langs[lang], lang === "en" ? null : article.langs.en));
+      for (const lang of FROZEN_LANGS)
+        bad.push(...validate(name, lang, article.langs[lang], lang === FROZEN_LANGS[0] ? null : article.langs[FROZEN_LANGS[0]]));
+    }
     expect(bad).toEqual([]);
   });
 
@@ -805,23 +808,22 @@ describe("the sync guide scopes SHA-256 to what it actually sent", () => {
   });
 });
 
-describe("a working ssh is a prerequisite, not a promise that push will succeed", () => {
-  it("scopes the ssh check to connection and authentication, in all nine locales", () => {
+describe("the maintained getting-started guide uses daemon-direct, not retired SSH transport", () => {
+  it("removes the SSH prerequisite from both maintained locales", () => {
     const bad = [];
-    for (const lang of LANGS)
-      bad.push(
-        ...sshPrereqComplaints(`cli-getting-started[${lang}]`, cliGettingStarted.langs[lang], {
-          english: lang === "en",
-        }),
-      );
+    for (const lang of MAINTAINED_LANGS) {
+      const commands = codeText(cliGettingStarted.langs[lang]);
+      if (commands.includes(SSH_CHECK)) bad.push(`${lang}: retained the SSH prerequisite`);
+      if (!commands.includes("relayium push ./photos relayium://receiver.example")) bad.push(`${lang}: missing daemon-direct push`);
+    }
     expect(bad).toEqual([]);
   });
 
-  it("never tells the English page that a working ssh is a working push", () => {
+  it("renders the daemon-direct destination and no retired SSH destination", () => {
     const page = buildArticlePages([cliGettingStarted]).find((p) => p.path.startsWith("guides/"));
     expect(page, "the English page must exist to be checked").toBeTruthy();
-    expect(page.html, `${page.path}: ssh success sold as push success`).not.toMatch(SSH_PROVES_PUSH);
-    expect(page.html, `${page.path}: the destination is never named`).toContain(PUSH_DEST);
+    expect(page.html).toContain("relayium://receiver.example");
+    expect(page.html).not.toContain(PUSH_DEST);
   });
 });
 
@@ -1246,23 +1248,8 @@ describe("the structural guard fails when a tutorial regresses", () => {
     expect(hashScopeComplaints("x", doc).join("\n")).toMatch(/SHA-256 claim\(s\) left to scope/);
   });
 
-  // ── and the ssh-prerequisite guard ────────────────────────────────────────
-  it("catches the ssh check going back to promising a working push", () => {
-    const doc = gs();
-    sshCheckStep(doc).text =
-      "Check you can already reach the server the ordinary way. push reuses exactly this access, so if ssh works, push works.";
-    const bad = sshPrereqComplaints("x", doc, { english: true }).join("\n");
-    expect(bad).toMatch(/sells a working ssh as a working push/);
-    expect(bad).toMatch(/never names user@your-server:backups\//);
-    expect(bad).toMatch(/never says push can still fail/);
-  });
-
-  it("catches a locale that kept the short, wrong version of that step", () => {
-    const doc = JSON.parse(JSON.stringify(cliGettingStarted.langs.de));
-    sshCheckStep(doc).text =
-      "Prüf, ob du den Server auf dem gewohnten Weg schon erreichst. push nutzt genau diesen Zugang wieder: klappt ssh, klappt push.";
-    expect(sshPrereqComplaints("x", doc).join("\n")).toMatch(/never names user@your-server:backups\//);
-  });
+  // Retired SSH transport is guarded by cli-public-truth-test.sh against both
+  // candidate help and generated maintained-language pages.
 
   // ── and the firewall, failure-class and PID-certainty guards ──────────────
   it("catches the firewall rule going back to opening 9031 to the world", () => {

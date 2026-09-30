@@ -868,9 +868,47 @@ const pt = {
   relatedHeading: "Continue lendo",
 };
 
+const currentEn = {
+  title: "Relayium vs scp: daemon-direct and pairing-code transfer compared with SSH",
+  description: "scp remains the SSH copy tool. Relayium's current CLI uses pinned-TLS daemon-direct, pairing codes, Device Inbox or encrypted Cloud links instead of SSH transport.",
+  updatedLabel: "Last updated",
+  lead: ["scp is the straightforward choice when you already want SSH file copy. Relayium no longer wraps SSH: SSH destinations, pull, -i and -p are retired.", "Choose Relayium when pinned-TLS server transfer, pairing without SSH access, asynchronous encrypted delivery or one-way daemon-direct mirroring fits the task."],
+  sections: [
+    { heading: "The practical difference", body: ["scp copies through SSH. Relayium push and sync connect only to a relayium serve listener at a relayium:// address; send/receive uses a short pairing code between two online CLIs."], code: ["scp -r ./photos user@server:backups/", "relayium push ./photos relayium://server.example", "relayium sync ./photos relayium://server.example --watch"] },
+    { heading: "Use scp when", bullets: ["SSH is already the required trust and network boundary.", "You want an ad-hoc copy with no additional listener.", "You need to copy from the remote machine with ordinary SSH syntax; Relayium pull is unavailable."] },
+    { heading: "Use Relayium when", bullets: ["You manage both machines and want an explicitly authorized pinned-TLS listener.", "You want incremental one-way sync with cross-run partial-file continuation.", "You need pairing-code transfer without granting SSH access, or encrypted hosted delivery to an offline recipient."] },
+  ],
+  faq: { heading: "Frequently asked questions", items: [
+    { q: "Does Relayium still use SSH?", a: "No. Current push and sync accept relayium:// only; pull, -i and -p are retired." },
+    { q: "Does Relayium need an account?", a: "Daemon-direct push/sync does not. Minting a send/text code and uploading with up do; joining with a code or downloading a link does not." },
+    { q: "Which is free?", a: "Both tools are free software. Relayium direct paths have no per-transfer charge; hosted paths consume plan allowances, which is usage accounting rather than a separate transfer fee." },
+  ] },
+  cta: { text: "Choose the transport that matches your trust boundary.", button: "Get the CLI", href: "/cli" },
+  relatedHeading: "Keep reading",
+};
+
+const currentZh = {
+  title: "Relayium 与 scp：daemon 直连、配对码传输和 SSH 的对比",
+  description: "scp 仍是 SSH 复制工具。Relayium 当前 CLI 使用证书固定的 daemon 直连、配对码、设备收件箱或加密云端链接，不再使用 SSH 传输。",
+  updatedLabel: "最近更新",
+  lead: ["如果你本来就要通过 SSH 复制文件，scp 是直接选择。Relayium 不再封装 SSH：SSH 目标、pull、-i 与 -p 均已退役。", "需要证书固定的服务器传输、无需 SSH 权限的配对、异步加密投递或单向 daemon 镜像时，再选择 Relayium。"],
+  sections: [
+    { heading: "实际区别", body: ["scp 通过 SSH 复制。Relayium push 与 sync 只连接 relayium:// 地址上的 relayium serve 监听端；send/receive 用短配对码连接两台在线 CLI。"], code: ["scp -r ./photos user@server:backups/", "relayium push ./photos relayium://server.example", "relayium sync ./photos relayium://server.example --watch"] },
+    { heading: "适合用 scp 的情况", bullets: ["SSH 本来就是要求的信任与网络边界。", "你要一次临时复制，不想再运行监听器。", "你需要用普通 SSH 语法从远端复制；Relayium pull 已不可用。"] },
+    { heading: "适合用 Relayium 的情况", bullets: ["你管理两台机器，并希望使用显式授权、证书固定 TLS 的监听端。", "你要增量单向 sync，并允许跨运行继续半截文件。", "你要在不授予 SSH 权限的情况下配对传输，或向离线接收方发送加密托管文件。"] },
+  ],
+  faq: { heading: "常见问题", items: [
+    { q: "Relayium 还使用 SSH 吗？", a: "不使用。当前 push 与 sync 只接受 relayium://；pull、-i 与 -p 已退役。" },
+    { q: "Relayium 需要账号吗？", a: "daemon 直连 push/sync 不需要。生成 send/text 配对码与用 up 上传需要；用码加入或用链接下载不需要。" },
+    { q: "哪个免费？", a: "两者都是自由软件。Relayium 直连路径不按次收费；托管路径占用套餐额度，这表示用量记账，不是另外收取传输费。" },
+  ] },
+  cta: { text: "按你的信任边界选择传输方式。", button: "获取 CLI", href: "/cli" },
+  relatedHeading: "继续阅读",
+};
+
 export default {
   slug: "compare/scp",
   published: "2026-07-09",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
+  langs: withInstall({ en: currentEn, zh: currentZh, ja, ko, de, fr, ar, es, pt }),
 };

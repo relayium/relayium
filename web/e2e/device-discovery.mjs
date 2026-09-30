@@ -148,10 +148,10 @@ async function checkCliPage(browser, base, view) {
   );
   // The accepted connectivity/ownership taxonomy: offline-capable first (Cloud,
   // Device Inbox), then both-ends-online (text, send / receive), then machines
-  // you administer (push / pull, serve, sync). Each value is the command surface
+  // you administer (serve, sync). Each value is the command surface
   // itself, which is why they are not translated — see the note on the localized
   // check below.
-  const expected = ["Cloud", "Device Inbox", "text", "send / receive", "push / pull", "serve", "sync"];
+  const expected = ["Cloud", "Device Inbox", "text", "send / receive", "serve", "sync"];
   if (JSON.stringify(order) !== JSON.stringify(expected)) {
     throw new Error(`${view.id}: CLI mode order is ${JSON.stringify(order)}, expected ${JSON.stringify(expected)}`);
   }
@@ -166,7 +166,7 @@ async function checkCliPage(browser, base, view) {
     // 这一段是翻译出来的，不是写死的英文。
     //
     // 查的是**引导句**，不是标题。标题现在是模式名本身（Device Inbox、serve、
-    // push / pull）——那是命令表面，按设计在每种语言里都保持原样：翻译过的模式名
+    // serve / sync）——那是命令表面，按设计在每种语言里都保持原样：翻译过的模式名
     // 会把读者引向一条不存在的命令。所以"这一节到底翻没翻"只能由散文来回答。
     const lead = await tab.evaluate(`document.querySelector("#device-inbox .lead")?.textContent ?? ""`);
     if (!/[\u4e00-\u9fff]/.test(lead)) {

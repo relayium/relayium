@@ -153,6 +153,12 @@ export const PATH_MATRIX = [
   ["scripts/go-race-shard.go", ["go.yml"],
     "a Go helper: it used to start the macOS signing lane through `scripts/**`, and then the "
     + "macOS pairing runner through the same glob in the pairing filter. Both are gone"],
+  ["scripts/test/cli-public-truth-test.sh", ["go.yml"],
+    "the Go lane runs this candidate-binary/public-truth gate, so its own edit must select that lane"],
+  ["README.md", ["go.yml"],
+    "the candidate-binary/public-truth gate reads the README's maintained CLI claims"],
+  ["web/public/llms.txt", ["android-interop.yml", "go.yml", "native-web-pairing.yml", "web.yml"],
+    "the Go candidate-truth gate reads this crawler source; the Web and browser-backed interop lanes retain their existing web/public coverage"],
   ["scripts/list-go-fuzz-targets.sh", ["go.yml"],
     "the fuzz campaign's discovery script. It never runs on a pull request — the campaign is "
     + "scheduled — but it enumerates the Go module, so an edit to it must start the workflow "

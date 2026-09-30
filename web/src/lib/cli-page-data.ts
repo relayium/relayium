@@ -54,7 +54,7 @@ export const SECTIONS = [
 
 export type SectionKey = (typeof SECTIONS)[number]["key"];
 
-// ── The seven modes ──────────────────────────────────────────────────────────
+// ── The six modes ────────────────────────────────────────────────────────────
 //
 // `name` is the command surface, so it is code-native in every language: a
 // reader who translates "send / receive" gets a command that does not exist.
@@ -67,7 +67,6 @@ export const CLI_MODES = [
   { key: "inbox", id: "device-inbox", name: "Device Inbox", cmd: "relayium inbox enable --dir ~/inbox" },
   { key: "text", id: "text", name: "text", cmd: "relayium text [code]" },
   { key: "sendReceive", id: "send-receive", name: "send / receive", cmd: "relayium send … / relayium receive <code>" },
-  { key: "pushPull", id: "push-pull", name: "push / pull", cmd: "relayium push … user@host:path" },
   { key: "serve", id: "serve", name: "serve", cmd: "relayium serve --dir ~/inbox" },
   { key: "sync", id: "sync", name: "sync", cmd: "relayium sync ./site relayium://host" },
 ] as const;
@@ -84,7 +83,7 @@ export type ModeKey = (typeof CLI_MODES)[number]["key"];
 export const TASK_BRANCHES = [
   { key: "offline", modes: ["cloud", "inbox"] },
   { key: "bothOnline", modes: ["text", "sendReceive"] },
-  { key: "managed", modes: ["pushPull", "serve", "sync"] },
+  { key: "managed", modes: ["serve", "sync"] },
 ] as const;
 
 export type TaskKey = (typeof TASK_BRANCHES)[number]["key"];
@@ -127,9 +126,7 @@ export const FLAG_ROWS = [
   { key: "port", flag: "--port <n>", who: "serve" },
   { key: "once", flag: "--once", who: "serve · inbox run" },
   { key: "allowDelete", flag: "--allow-delete", who: "serve" },
-  { key: "noResume", flag: "--no-resume", who: "serve · push · pull" },
-  { key: "identity", flag: "-i <file>", who: "push · pull · sync" },
-  { key: "sshPort", flag: "-p <n>", who: "push · pull · sync" },
+  { key: "noResume", flag: "--no-resume", who: "serve · push" },
   { key: "delete", flag: "--delete", who: "sync" },
   { key: "watch", flag: "--watch", who: "sync" },
   { key: "verify", flag: "--verify", who: "send · receive · text" },
@@ -159,7 +156,7 @@ export type TrustFileKey = (typeof TRUST_FILES)[number]["key"];
 
 // ── Guides ───────────────────────────────────────────────────────────────────
 //
-// The nine CLI guides, and all nine of them. The authority is
+// The eight current CLI guides, and all eight of them. The authority is
 // web/scripts/pages/content/cli-articles.mjs (CLI_ARTICLES), which reads the
 // slugs off the article documents themselves; scripts/pages/cli-shell.test.mjs
 // asserts this list is exactly that set, so a renamed or added article cannot
@@ -175,14 +172,13 @@ export const GUIDE_GROUPS = [
   { key: "start", guides: ["terminal", "receiveFromCli"] },
   { key: "offline", guides: ["cloudAsync", "deviceInboxServer"] },
   { key: "bothOnline", guides: ["sendToSomeone"] },
-  { key: "managed", guides: ["backupSsh", "serverToServer", "syncLargeFolder", "automateBackups"] },
+  { key: "managed", guides: ["serverToServer", "syncLargeFolder", "automateBackups"] },
 ] as const;
 
 export type GuideGroupKey = (typeof GUIDE_GROUPS)[number]["key"];
 
 export const GUIDES = [
   { key: "terminal", slug: "guides/transfer-files-from-terminal" },
-  { key: "backupSsh", slug: "guides/back-up-a-server-over-ssh" },
   { key: "sendToSomeone", slug: "guides/send-a-file-to-someone" },
   { key: "serverToServer", slug: "guides/server-to-server-transfers" },
   { key: "syncLargeFolder", slug: "guides/sync-a-large-folder-between-servers" },
@@ -226,7 +222,6 @@ export const MODE_GUIDE = {
   inbox: "deviceInboxServer",
   text: "terminal",
   sendReceive: "sendToSomeone",
-  pushPull: "backupSsh",
   serve: "serverToServer",
   sync: "syncLargeFolder",
 } as const satisfies Record<ModeKey, GuideKey>;
@@ -349,18 +344,6 @@ relayium send ./file.zip
 
 # receiver — no account needed
 relayium receive 483920 ./downloads`,
-  },
-  {
-    key: "pushPull",
-    name: "relayium push / pull · SSH",
-    code: `# push a folder to a server you can SSH into
-relayium push ./photos user@host:backups/
-
-# pull it back
-relayium pull user@host:backups/ ./restore
-
-# pick an SSH key / port
-relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@host:backups/`,
   },
   {
     key: "serveListen",

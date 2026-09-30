@@ -161,9 +161,9 @@ describe("按任务选择", () => {
   });
 });
 
-// ── 七种模式 ────────────────────────────────────────────────────────────────
+// ── 六种模式 ────────────────────────────────────────────────────────────────
 describe("模式区块", () => {
-  it("恰好七个，按被采纳的顺序，名字是命令本身", async () => {
+  it("恰好六个，按被采纳的顺序，名字是命令本身", async () => {
     const target = await render();
     const rendered = [...target.querySelectorAll("[data-cli-mode]")].map((n) =>
       n.getAttribute("data-cli-mode"),
@@ -173,7 +173,6 @@ describe("模式区块", () => {
       "Device Inbox",
       "text",
       "send / receive",
-      "push / pull",
       "serve",
       "sync",
     ]);
@@ -190,7 +189,7 @@ describe("模式区块", () => {
     expect(CLI_MODES.find((m) => m.key === "inbox")!.id).toBe("device-inbox");
   });
 
-  it("对比表覆盖七种模式 × 四个维度，没有空格子", async () => {
+  it("对比表覆盖六种模式 × 四个维度，没有空格子", async () => {
     const target = await render();
     const rows = [...target.querySelectorAll("#modes table tbody tr")];
     expect(rows).toHaveLength(CLI_MODES.length);
@@ -209,18 +208,17 @@ describe("模式区块", () => {
 // ── 模式 → 指南 ─────────────────────────────────────────────────────────────
 //
 // 每个模式区块结尾恰好一条通往它自己那篇教程的链接。之前只有 Device Inbox 有一条
-// 手写的，其余六个都在最后一个命令块处断掉：读者刚知道 sync 存在，接下来只能一路
-// 滚过剩下的模式、再从九篇里挑对一篇。写在页面标记里的链接就是会被一行一行漏掉，
+// 手写的，其余五个都在最后一个命令块处断掉：读者刚知道 sync 存在，接下来只能一路
+// 滚过剩下的模式、再从八篇里挑对一篇。写在页面标记里的链接就是会被一行一行漏掉，
 // 所以配对是**数据**（MODE_GUIDE），由 ModeSection 统一渲染。
 describe("模式 → 指南", () => {
-  it("就是被采纳的那张映射表，七个模式一个不多一个不少", () => {
+  it("就是被采纳的那张映射表，六个模式一个不多一个不少", () => {
     expect(Object.keys(MODE_GUIDE).sort()).toEqual([...CLI_MODES.map((m) => m.key)].sort());
     expect(MODE_GUIDE).toEqual({
       cloud: "cloudAsync",
       inbox: "deviceInboxServer",
       text: "terminal",
       sendReceive: "sendToSomeone",
-      pushPull: "backupSsh",
       serve: "serverToServer",
       sync: "syncLargeFolder",
     });
@@ -349,16 +347,16 @@ describe("模式行末箭头", () => {
   });
 });
 
-// ── 九篇指南 ────────────────────────────────────────────────────────────────
+// ── 八篇指南 ────────────────────────────────────────────────────────────────
 describe("指南", () => {
   // GUIDES 与权威 slug 集合（cli-articles.mjs 的 CLI_ARTICLES）之间的锁在
   // scripts/pages/cli-shell.test.mjs —— 那边同时能导入两侧，而 tsconfig.app 只
   // 收 src/，从这里跨出去导入 .mjs 会把它拖进类型检查程序。
 
-  it("九条全部渲染，全部带结尾斜杠", async () => {
+  it("八条全部渲染，全部带结尾斜杠", async () => {
     const target = await render();
     const links = [...target.querySelectorAll("#guides a")] as HTMLAnchorElement[];
-    expect(links).toHaveLength(9);
+    expect(links).toHaveLength(8);
     for (const g of GUIDES) {
       const href = `/${g.slug}/`;
       const link = links.find((a) => a.getAttribute("href") === href);
@@ -387,7 +385,7 @@ describe("复制控件", () => {
   it("每一个命令块都渲染出来了，数量和数据一致", async () => {
     const target = await render();
     const buttons = [...target.querySelectorAll("button.copy")];
-    expect(COMMAND_BLOCKS).toHaveLength(17);
+    expect(COMMAND_BLOCKS).toHaveLength(16);
     expect(buttons).toHaveLength(COMMAND_BLOCKS.length);
   });
 
@@ -619,12 +617,11 @@ describe("产品事实", () => {
   it("不再有跨模式的通用续传 / SHA-256 承诺", async () => {
     const target = await render();
     const text = target.textContent ?? "";
-    // 这一句曾经在页面上，对所有模式都成立地写着。两半都不真：tar 退化路径什么都
-    // 不校验，而续传根本不是一个跨模式的统一属性。
+    // 这一句曾经在页面上，把各模式不同的保证压成了一个不真实的通用承诺。
     expect(text).not.toMatch(/Every file is verified end-to-end with SHA-256/i);
     expect(text).not.toMatch(/an interrupted transfer resumes from where it stopped/i);
     // 取而代之的是分模式的说法。
-    expect(text).toMatch(/tar fallback/i);
+    expect(text).toMatch(/Verification is per-mode/i);
   });
 
   // 第一次修正把通用承诺换成了"Resume is a sync feature"——那是**另一句错话**。
@@ -650,11 +647,13 @@ describe("产品事实", () => {
     );
   });
 
-  it("push/pull 的冲突与 --no-resume 语义是对的", async () => {
+  it("已退役的 SSH/pull 命令和参数不再作为当前能力出现", async () => {
     const target = await render();
-    const text = target.querySelector("#push-pull")!.textContent ?? "";
-    expect(text).toMatch(/refused by the collision check/i);
-    expect(text).toMatch(/--no-resume is accepted here and does nothing/i);
+    const text = target.textContent ?? "";
+    expect(target.querySelector("#push-pull")).toBeNull();
+    expect(text).not.toMatch(/relayium pull|SSH identity|SSH port/i);
+    expect(FLAG_ROWS.map((f) => f.flag)).not.toContain("-i <file>");
+    expect(FLAG_ROWS.map((f) => f.flag)).not.toContain("-p <n>");
   });
 
   it("sync 说的是 size+mtime，而不是校验和比对", async () => {

@@ -52,7 +52,7 @@ import howEncryption from "./content/articles/guides-how-encryption-works.mjs";
 import isItSafe from "./content/articles/guides-is-it-safe.mjs";
 import compareSnapdrop from "./content/articles/compare-snapdrop.mjs";
 import { buildArticlePages } from "./build-pages.mjs";
-import { LANGS } from "./shared.mjs";
+import { LANGS, MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 
 /** Set up something. The reader ends with a thing running that was not before. */
 const PROCEDURAL = {
@@ -220,9 +220,10 @@ describe("the eight guides of the third batch carry their class's tutorial block
     const bad = [];
     for (const [name, article] of Object.entries(BATCH)) {
       const explainer = name in EXPLAINER;
-      for (const lang of LANGS) {
+      for (const lang of MAINTAINED_LANGS)
         bad.push(...validate(name, lang, article.langs[lang], lang === "en" ? null : article.langs.en, { explainer }));
-      }
+      for (const lang of FROZEN_LANGS)
+        bad.push(...validate(name, lang, article.langs[lang], lang === FROZEN_LANGS[0] ? null : article.langs[FROZEN_LANGS[0]], { explainer }));
     }
     expect(bad).toEqual([]);
   });

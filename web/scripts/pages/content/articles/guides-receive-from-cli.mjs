@@ -1,16 +1,16 @@
 // web/scripts/pages/content/articles/guides-receive-from-cli.mjs
-// Guide: the receiving side of the Relayium CLI — receive, serve, and pull.
+// Guide: the receiving side of the Relayium CLI — receive, serve, and down.
 // English is the master; zh/ja/ko/de/fr follow the same structure and facts.
 // Command blocks (code) stay English in every language.
 
 const en = {
   title: "Receive files from the command line",
   description:
-    "Three ways to receive a file with the Relayium CLI: receive a cross-network pairing-code send, serve as a listening drop box for daemon-direct pushes, or pull from a server you can already ssh into. Free, no account.",
+    "Three ways to receive a file with the Relayium CLI: receive a pairing-code send, serve as a daemon-direct listener, or download a stored encrypted link with down.",
   updatedLabel: "Last updated",
   lead: [
     "Sending is only half the story — sooner or later you're on the receiving end: a colleague wants to hand you a file across the internet, one of your own machines wants to hand off to another, or you want to reach out and grab something from a server you administer. The Relayium CLI covers all three with a different command for each, and none of them need an account.",
-    "Pick receive when someone else is pushing to you by pairing code, serve when you want a standing inbox that trusted machines can push to any time, and pull when you're the one reaching out to a server you can already ssh into.",
+    "Pick receive when someone else sends by pairing code, serve when trusted machines push directly to a listener you manage, and down when the sender gave you a stored encrypted link and may already be offline.",
   ],
   sections: [
     {
@@ -21,7 +21,7 @@ const en = {
       bullets: [
         "relayium receive <code> [destdir] — someone sends to you across networks using a pairing code their CLI minted and passed to you out of band. Direct peer-to-peer, with a SAS code you can compare.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — this machine listens for daemon-direct relayium:// pushes, on port 9031 by default.",
-        "relayium pull [user@]host:src <dest> — you reach out over SSH to a server you can already log into and fetch files back.",
+        "relayium down <link> [destdir] — fetch and decrypt a stored link; no account is needed to download.",
       ],
     },
     {
@@ -122,29 +122,29 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
     },
     {
-      heading: "pull: reach out and fetch from a server you can ssh into",
+      heading: "down: fetch a stored encrypted link",
       steps: [
         {
-          text: "Confirm the remote actually has the CLI. pull runs relayium on the far end, and unlike push there is no tar fallback, so a missing binary fails the whole command.",
-          code: ["ssh user@host command -v relayium"],
+          text: "Copy the complete link, including its #k= fragment. That fragment holds the only decryption key and is never sent to Relayium's server.",
+          code: ["relayium down '<complete-link-with-#k-fragment>' ./local-dest"],
         },
         {
-          text: "If it is missing, install it there first.",
-          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+          text: "Choose an existing writable destination directory, or create it before downloading.",
+          code: ["mkdir -p ./local-dest"],
         },
         {
-          text: "Pull the files back over your existing SSH access. -i and -p behave like ssh's own.",
-          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+          text: "Run down with the complete link. The recipient does not sign in.",
+          code: ["relayium down '<complete-link-with-#k-fragment>' ./local-dest"],
         },
       ],
       body: [
-        "pull is the mirror of push: instead of waiting for someone to send you something, you reach out over your existing SSH access and fetch files back.",
+        "down retrieves ciphertext held by Relayium, decrypts it locally and verifies it before installing the output.",
       ],
-      code: ["relayium pull user@host:/path/to/files ./local-dest"],
+      code: ["relayium down '<complete-link-with-#k-fragment>' ./local-dest"],
       bullets: [
-        "Unlike push, pull always needs relayium already installed on the remote — there's no tar fallback for pulling from a bare server. If the remote doesn't have it yet, install it there first with curl -fsSL https://relayium.com/install.sh | sh.",
-        "Every file is verified with a per-file SHA-256 check. pull does not resume: it refuses a destination that already exists, up front and before anything is fetched, so an interrupted pull is finished by fetching the missing paths, or by relayium sync in the same direction. --no-resume is accepted here and does nothing.",
-        "-i and -p behave like ssh's own -i/-p, for a specific identity file or port.",
+        "The server receives the URL before # but never the fragment containing the decryption key.",
+        "down reconnects and continues within the same invocation, up to five attempts. If that invocation ultimately fails, it deletes the partial output; a later run starts over.",
+        "SSH destinations, relayium pull, -i and -p are retired in the current CLI.",
       ],
     },
     {
@@ -176,15 +176,15 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
               `relayium receive 483920
 # no direct connection to the peer (both ends behind strict NAT?): …`,
             ],
-            fix: "The CLI pairing path is direct-only by design: when no direct route exists it fails rather than routing your file through a relay. Nothing on your side fixes that. Ask the sender for a relayium up download link instead, or, between machines you both control, use daemon-direct or push over SSH.",
+            fix: "The CLI pairing path is direct-only by design: when no direct route exists it fails rather than routing your file through a relay. Ask the sender for a relayium up download link instead, or use daemon-direct between reachable machines you control.",
           },
           {
-            symptom: "pull fails immediately, complaining that relayium was not found.",
+            symptom: "down says the link is invalid or cannot decrypt the file.",
             code: [
-              `ssh user@host command -v relayium
-# (no output)`,
+              `relayium down '<link-without-fragment>' ./downloads
+# invalid link or missing key`,
             ],
-            fix: "pull runs relayium on the remote — it is the sender in that exchange — and there is no tar fallback the way push has one. Install the CLI on the remote first, then re-run the pull.",
+            fix: "Copy the whole link again, including #k=. The fragment is the only decryption key; the server cannot reconstruct it if it was omitted.",
           },
           {
             symptom: "A machine pushes to your serve listener and is rejected without ever prompting you.",
@@ -202,7 +202,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "Do I need an account to receive files?",
-        a: "No. All three — relayium receive, relayium serve, and relayium pull — are completely free and need no Relayium account on your side. The one sign-in anywhere is the sender's in receive mode, so their CLI can mint the pairing code.",
+        a: "receive and serve need no account on your side, and down needs only the link. The sender signs in to mint a receive pairing code or create a stored link. Hosted storage consumes the sender's plan allowance, which is usage accounting rather than a per-transfer charge.",
       },
       {
         q: "Does relayium receive interoperate with the browser's pairing code?",
@@ -233,11 +233,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 const zh = {
   title: "在命令行接收文件",
   description:
-    "用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收 daemon 直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。",
+    "用 Relayium CLI 接收文件的三种方式：receive 接收配对码发送，serve 监听 daemon 直连推送，或者用 down 下载托管的加密链接。",
   updatedLabel: "最近更新",
   lead: [
     "发送只是故事的一半——迟早你也会是接收方：同事想跨网络给你一个文件，你自己的一台机器想把东西交给另一台，或者你想主动从你管理的服务器上取点东西回来。Relayium CLI 用三个不同的命令覆盖这三种情形，而且都不需要账号。",
-    "对方用配对码推给你时用 receive；想要一个常驻收件箱、让受信任的机器随时可以推送过来时用 serve；而你主动去连接一台已能 SSH 登录的服务器取文件时用 pull。",
+    "对方用配对码发送时用 receive；受信任机器向你管理的监听端直推时用 serve；发送方给了托管加密链接、而且可能已经离线时用 down。",
   ],
   sections: [
     {
@@ -246,7 +246,7 @@ const zh = {
       bullets: [
         "relayium receive <code> [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，并给出一段可供核对的 SAS 码。",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听 daemon 直连的 relayium:// 推送，默认端口 9031。",
-        "relayium pull [user@]host:src <dest> ——你主动通过 SSH 连接到一台你已能登录的服务器，把文件取回来。",
+        "relayium down <link> [destdir] ——下载并解密托管链接；下载端不需要账号。",
       ],
     },
     {
@@ -347,29 +347,29 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
     },
     {
-      heading: "pull：主动从你能 SSH 登录的服务器取文件",
+      heading: "down：下载托管的加密链接",
       steps: [
         {
-          text: "先确认远端真的装了 CLI。pull 是在远端执行 relayium 的，而且不像 push 那样有 tar 兜底，二进制缺失会让整条命令失败。",
-          code: ["ssh user@host command -v relayium"],
+          text: "复制完整链接，包括 #k= 片段。该片段含唯一解密密钥，从不会发送给 Relayium 服务器。",
+          code: ["relayium down '<complete-link-with-#k-fragment>' ./local-dest"],
         },
         {
-          text: "如果没有，先在远端装上。",
-          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+          text: "选择一个已存在且可写的目标目录，或先创建它。",
+          code: ["mkdir -p ./local-dest"],
         },
         {
-          text: "用你已有的 SSH 访问把文件拉回来。-i 和 -p 的行为与 ssh 自身一致。",
-          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+          text: "用完整链接运行 down。接收方不需要登录。",
+          code: ["relayium down '<complete-link-with-#k-fragment>' ./local-dest"],
         },
       ],
       body: [
-        "pull 是 push 的镜像：不是等别人发东西给你，而是你通过已有的 SSH 权限主动连过去，把文件取回来。",
+        "down 会取回 Relayium 保存的密文，在本地解密并校验后再安装输出。",
       ],
-      code: ["relayium pull user@host:/path/to/files ./local-dest"],
+      code: ["relayium down '<complete-link-with-#k-fragment>' ./local-dest"],
       bullets: [
-        "和 push 不同，pull 始终需要远程已经装有 relayium——从裸机服务器 pull 没有 tar 兜底方案。如果远程还没装，先在那边用 curl -fsSL https://relayium.com/install.sh | sh 安装。",
-        "每个文件都会做逐文件 SHA-256 校验。pull 不续传：它在移动任何字节之前就会拒绝已存在的目标，所以中断之后要么把缺失的路径再取一次，要么在同一方向上改用 relayium sync。--no-resume 在这里能被接受，但什么也不做。",
-        "-i 和 -p 的行为和 ssh 自己的 -i/-p 一样，用于指定身份文件或端口。",
+        "服务器会收到 # 之前的 URL，但永远收不到片段里的解密密钥。",
+        "down 会在同一次调用内自动重连，最多五次；如果最终失败，会删除半截输出，之后重新运行会从头开始。",
+        "当前 CLI 中，SSH 目标、relayium pull、-i 与 -p 已退役。",
       ],
     },
     {
@@ -401,15 +401,15 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
               `relayium receive 483920
 # no direct connection to the peer (both ends behind strict NAT?): …`,
             ],
-            fix: "CLI 的配对码路径按设计只走直连：找不到直连路径时它宁可失败，也不会把你的文件绕经中继。这在你这边无解。让发送方改用 relayium up 下载链接；如果两台机器都归你控制，那就用 daemon 直连或走 SSH 的 push。",
+            fix: "CLI 的配对码路径按设计只走直连：找不到直连路径时会失败，不会让文件绕经中继。让发送方改用 relayium up 下载链接；如果两台机器都归你控制，就用 daemon 直连。",
           },
           {
-            symptom: "pull 立刻失败，提示找不到 relayium。",
+            symptom: "down 提示链接无效或无法解密。",
             code: [
-              `ssh user@host command -v relayium
-# (no output)`,
+              `relayium down '<link-without-fragment>' ./downloads
+# invalid link or missing key`,
             ],
-            fix: "pull 是在远端执行 relayium 的——在那次交换里远端才是发送方——而且它没有 push 那样的 tar 兜底。先在远端装好 CLI，再重跑 pull。",
+            fix: "重新复制完整链接，包括 #k=。该片段是唯一解密密钥；缺失后服务器无法补回。",
           },
           {
             symptom: "有机器推送到你的 serve 监听器，被拒绝了，而且从头到尾没问过你。",
@@ -427,7 +427,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "接收文件需要账号吗？",
-        a: "不需要。三种方式——relayium receive、relayium serve、relayium pull——都完全免费，你这一端不需要 Relayium 账号。整个过程里唯一需要登录的，是 receive 模式下的发送方，好让发送端的 CLI 生成配对码。",
+        a: "receive 与 serve 在你这一端不需要账号，down 只需要链接。发送方生成 receive 配对码或托管链接时需要登录。托管存储会占用发送方套餐额度，这表示用量记账，不是按次收费。",
       },
       {
         q: "relayium receive 和浏览器的配对码互通吗？",
@@ -2040,6 +2040,43 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     href: "/cli",
   },
   relatedHeading: "Continue lendo",
+};
+
+const currentEn = {
+  title: "Receive files from the command line",
+  description: "Receive with a pairing code, an authorized daemon-direct listener, Device Inbox or a Cloud link. The current CLI has no pull command.",
+  updatedLabel: "Last updated",
+  lead: ["The right receive path depends on whether both ends are online and whether you manage the receiving machine.", "relayium pull and SSH destinations are retired. A current CLI receives through receive, serve, inbox, or down."],
+  sections: [
+    { heading: "Receive from another online CLI", body: ["The sender mints a five-minute code and you join without an account."], code: ["relayium receive 483920 ./downloads"], bullets: ["Both ends must stay online.", "The transfer is direct-only and fails rather than falling back to a relay.", "Use --verify to stop and compare the SAS derived from pinned TLS certificate fingerprints."] },
+    { heading: "Run a listener on a machine you manage", body: ["Authorize the sender fingerprint and run serve in an existing writable directory."], code: ["relayium authorize <sender-fingerprint>", "relayium serve --dir ~/inbox"], bullets: ["The sender uses relayium push ... relayium://host.", "Use the same --config-dir for authorize and serve.", "No Relayium account or SSH transport is involved."] },
+    { heading: "Receive while this machine is offline", body: ["Use Device Inbox for a named device, or relayium down for a stored encrypted link."], code: ["relayium inbox enable --dir ~/inbox", "relayium down '<link>' ./downloads"], bullets: ["Device Inbox requires the same account on the sending and receiving sides.", "down needs only the link and no account."] },
+  ],
+  faq: { heading: "Frequently asked questions", items: [
+    { q: "Can I pull from an SSH server?", a: "Not with the current Relayium CLI. relayium pull, SSH destinations, -i and -p are retired." },
+    { q: "Which receive modes need an account?", a: "Device Inbox does. Joining receive with a code and using down do not; daemon-direct serve does not." },
+    { q: "Can receive fall back to a relay?", a: "CLI pairing-code receive is direct-only. Use Cloud or Device Inbox when asynchronous hosted delivery is required." },
+  ] },
+  cta: { text: "Choose the receive path that matches availability.", button: "Get the CLI", href: "/cli" },
+  relatedHeading: "Keep reading",
+};
+const currentZh = {
+  title: "从命令行接收文件",
+  description: "通过配对码、已授权的 daemon 监听器、设备收件箱或云端链接接收。当前 CLI 没有 pull 命令。",
+  updatedLabel: "最近更新",
+  lead: ["选择哪种接收路径，取决于两端是否同时在线，以及你是否管理接收机器。", "relayium pull 与 SSH 目标已退役。当前 CLI 通过 receive、serve、inbox 或 down 接收。"],
+  sections: [
+    { heading: "从另一台在线 CLI 接收", body: ["发送方生成一个五分钟有效的码，你无需账号即可加入。"], code: ["relayium receive 483920 ./downloads"], bullets: ["两端必须保持在线。", "传输只走直连，失败时不会回退到中继。", "用 --verify 停下来比对由固定 TLS 证书指纹生成的 SAS。"] },
+    { heading: "在自管机器上运行监听器", body: ["授权发送端指纹，并在已经存在且可写的目录中运行 serve。"], code: ["relayium authorize <sender-fingerprint>", "relayium serve --dir ~/inbox"], bullets: ["发送端使用 relayium push ... relayium://host。", "authorize 与 serve 使用同一个 --config-dir。", "不需要 Relayium 账号，也不走 SSH 传输。"] },
+    { heading: "机器离线时接收", body: ["给命名设备使用设备收件箱，或用 relayium down 下载托管的加密链接。"], code: ["relayium inbox enable --dir ~/inbox", "relayium down '<link>' ./downloads"], bullets: ["设备收件箱要求发送端与接收端使用同一个账号。", "down 只需要链接，不需要账号。"] },
+  ],
+  faq: { heading: "常见问题", items: [
+    { q: "可以从 SSH 服务器 pull 吗？", a: "当前 Relayium CLI 不可以。relayium pull、SSH 目标、-i 与 -p 已退役。" },
+    { q: "哪些接收模式需要账号？", a: "设备收件箱需要。用码加入 receive、用 down 下载、daemon 直连 serve 都不需要。" },
+    { q: "receive 会回退到中继吗？", a: "CLI 配对码 receive 只走直连。需要异步托管投递时，请用云端或设备收件箱。" },
+  ] },
+  cta: { text: "按在线状态选择接收路径。", button: "获取 CLI", href: "/cli" },
+  relatedHeading: "继续阅读",
 };
 
 export default {
