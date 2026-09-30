@@ -98,6 +98,7 @@ func TestPurgeTransientUserDataReclaimsEveryUploadSessionBlob(t *testing.T) {
 	// One session per state, spread across central and user-node placement.
 	newUploadSession(t, st, "s-open", u.ID, "up-open", "", "open")
 	newUploadSession(t, st, "s-done", u.ID, "up-done", "node-1", "done")
+	am3EnsureNode(t, st, "node-2", "user", u.ID) // session creation's node fence
 	newUploadSession(t, st, "s-unresolved", u.ID, "up-unresolved", "node-2", "unresolved")
 	// A finalize that persisted its stored_file and died before dropping its
 	// session: two rows, ONE blob. It must be reclaimed exactly once — handing it
@@ -189,6 +190,7 @@ func TestArchiveAndPurgeUserLeavesNoUploadSessionsStandalone(t *testing.T) {
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "hard-purge-uploads@example.com", "")
 	newUploadSession(t, st, "hp-open", u.ID, "hp-blob-open", "", "open")
+	am3EnsureNode(t, st, "node-9", "user", u.ID) // session creation's node fence
 	newUploadSession(t, st, "hp-unresolved", u.ID, "hp-blob-unresolved", "node-9", "unresolved")
 
 	// Due for the hard purge (ArchiveAndPurgeUser refuses an account that isn't).
@@ -324,7 +326,13 @@ func TestConfirmAccountDeletionQueuesPartialBlobsOnAnUnreachableNode(t *testing.
 
 	// A session placed on a node that no longer exists — a BYO node deregistered
 	// (or simply unreachable) while one of its owner's uploads was in flight.
+	// Session creation is fenced on the node row (A-M3), so the ghost is made the
+	// way it can still exist: a row from before the fence whose node row is gone.
+	am3EnsureNode(t, h.store, "ghost-node", "user", h.userID)
 	newUploadSession(t, h.store, "ghost-session", h.userID, "ghost-blob", "ghost-node", "unresolved")
+	if _, err := h.store.db.ExecContext(ctx, `DELETE FROM nodes WHERE id = 'ghost-node'`); err != nil {
+		t.Fatal(err)
+	}
 
 	h.confirmDeletion(t)
 

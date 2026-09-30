@@ -21,6 +21,15 @@ var ErrNodeHasStoredFiles = errors.New("account: node still holds stored files")
 // persist). Nothing was written; see insertStoredFileOn's node fence.
 var ErrStoredFileNodeGone = errors.New("account: the object's storage node was deleted")
 
+// ErrNodeHasUploadSessions is returned by DeleteNode (a user deleting their own
+// node) while upload_sessions rows still name the node: their blobs are
+// reachable only through the node row. See SQLiteStore.DeleteNode.
+var ErrNodeHasUploadSessions = errors.New("account: node still has upload sessions")
+
+// ErrNodeOwnerMismatch is returned by UpsertNode when the id already belongs to
+// a different owner: the upsert never rewrites a node's owner.
+var ErrNodeOwnerMismatch = errors.New("account: node id belongs to another owner")
+
 // NodeRegisterOutcome is RegisterNode's admission decision.
 type NodeRegisterOutcome int
 
@@ -2486,6 +2495,10 @@ type Store interface {
 	// dismissal without touching the result.
 	SetReleaseCheckDismissed(ctx context.Context, tag string, at int64) error
 	// relay nodes (self-reporting fleet telemetry)
+	// UpsertNode inserts a node or updates a same-owner row. It never rewrites
+	// an existing row's owner: an id of another owner returns
+	// ErrNodeOwnerMismatch and changes nothing (A-M3). Registration itself goes
+	// through RegisterNode.
 	UpsertNode(ctx context.Context, n Node) (Node, error)
 	// TouchNode records a heartbeat. activeTransfers is the node's live
 	// in-flight allocation count (see Node.ActiveTransfers) and, like the three

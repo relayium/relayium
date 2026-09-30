@@ -325,6 +325,13 @@
     if (!(await confirmDialog(t.me.confirmDelNode))) return;
     try {
       const res = await fetch(`/api/nodes/${id}`, { method: "DELETE", credentials: "include" });
+      if (res.status === 409) {
+        // The server keeps a node while uploads still use it (their data is
+        // reachable only through it); say so instead of a generic failure.
+        actionErr = t.me.delNodeBusy ?? t.me.actionFailed;
+        setTimeout(() => (actionErr = ""), 5000);
+        return;
+      }
       if (!res.ok) { failed(); return; }
       nodes = nodes.filter((n) => n.id !== id);
     } catch {

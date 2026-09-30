@@ -4914,6 +4914,19 @@ func (s *SQLiteStore) CreateUploadSession(ctx context.Context, r UploadSessionRo
 	if open >= maxPerUser {
 		return false, nil
 	}
+	// A-M3 round 3 node fence: a node-backed session is created only while its
+	// node row exists, decided in this transaction, so a node deleted between
+	// placement and here cannot acquire a session (whose blob would then be
+	// reachable by nothing). Nothing has been written to the node yet.
+	if r.NodeID != "" {
+		var exists int
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM nodes WHERE id = ?)`, r.NodeID).Scan(&exists); err != nil {
+			return false, err
+		}
+		if exists == 0 {
+			return false, ErrStoredFileNodeGone
+		}
+	}
 	if _, err := tx.ExecContext(ctx,
 		// The ONLY writer of residualFresh, and true by construction rather
 		// than by assumption: the key is a fresh random token, and no stored
@@ -7345,17 +7358,22 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if err != nil {
 		return Node{}, err
 	}
-	_, err = s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
 		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
-		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
 		   version=excluded.version, last_seen_at=excluded.last_seen_at,
 		   storage_url=excluded.storage_url, storage_secret=excluded.storage_secret,
 		   storage_fp=excluded.storage_fp,
 		   storage_enabled=excluded.storage_enabled, storage_total=excluded.storage_total,
-		   storage_free=excluded.storage_free, download_url=excluded.download_url`,
+		   storage_free=excluded.storage_free, download_url=excluded.download_url
+		 WHERE nodes.owner_type = excluded.owner_type
+		   AND COALESCE(nodes.owner_user_id, '') = COALESCE(excluded.owner_user_id, '')`,
+		// A-M3: the owner is never rewritten. A conflicting row of another
+		// owner makes the upsert a no-op, reported as ErrNodeOwnerMismatch
+		// below — this is the takeover the register path refuses, and it must
+		// not come back through a future caller of this method.
 		// label, the update_* columns, draining, removed_at and active_transfers are
 		// intentionally set only on INSERT (label seeded from the token name;
 		// update_* owned by the rollout state machine; draining owned by the
@@ -7374,6 +7392,11 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		n.ActiveTransfers, b2i(n.StorageUnreachable), n.StorageProbedAt)
 	if err != nil {
 		return Node{}, err
+	}
+	if affected, err := res.RowsAffected(); err != nil {
+		return Node{}, err
+	} else if affected == 0 {
+		return Node{}, ErrNodeOwnerMismatch
 	}
 	return n, nil
 }
@@ -7662,6 +7685,34 @@ func (s *SQLiteStore) DeleteNode(ctx context.Context, id, ownerUserID string) er
 	}
 	defer tx.Rollback() // no-op after a successful Commit
 
+	// Ownership first, so a non-owner or a missing id stays ErrNotFound and
+	// learns nothing about the node's uploads.
+	var owned int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM nodes WHERE id = ? AND owner_user_id = ?`, id, ownerUserID).Scan(&owned); err != nil {
+		return err
+	}
+	if owned == 0 {
+		return ErrNotFound
+	}
+	// A-M3 round 3: refuse while any upload_sessions row names the node, as
+	// DeleteFleetNode does. A session's blob is reachable only through this
+	// node row — the finalize-refusal reclaim, the reaper and GC all resolve
+	// storage by node id — so deleting the row under an open, finalizing or
+	// not-yet-purged session would strand its ciphertext on the machine for
+	// good (and the stored-file insert fence would refuse its finalize).
+	// Checked in this IMMEDIATE transaction; CreateUploadSession fences on the
+	// node row in its own, so no session can appear for a node deleted here.
+	// Finished sessions are purged about an hour after they go idle
+	// (PurgeDoneUploadSessions), after which the delete goes through.
+	var sessions int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM upload_sessions WHERE node_id = ?)`, id).Scan(&sessions); err != nil {
+		return err
+	}
+	if sessions != 0 {
+		return ErrNodeHasUploadSessions
+	}
 	// Tombstone first, from the very row about to be deleted (same owner
 	// scope), so the id is retired iff the delete below lands: an ErrNotFound
 	// return rolls this back with it. See node_tombstones.
@@ -8070,7 +8121,7 @@ func (s *SQLiteStore) RegisterNode(ctx context.Context, n Node, userNodeCap int)
 		// The same columns UpsertNode's ON CONFLICT branch updates, and only
 		// those: label, update_*, draining, removed_at, active_transfers and the
 		// prober's columns stay the row's own.
-		if _, err := tx.ExecContext(ctx,
+		if res, err := tx.ExecContext(ctx,
 			`UPDATE nodes SET
 			   region=?, urls=?, turn_secret=?, version=?, last_seen_at=?,
 			   storage_url=?, storage_secret=?, storage_fp=?,
@@ -8081,6 +8132,12 @@ func (s *SQLiteStore) RegisterNode(ctx context.Context, n Node, userNodeCap int)
 			b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree, n.DownloadURL,
 			n.ID, p.OwnerType, p.OwnerUserID); err != nil {
 			return NodeRegistration{}, err
+		} else if affected, err := res.RowsAffected(); err != nil {
+			return NodeRegistration{}, err
+		} else if affected != 1 {
+			// The row was read in this same transaction; anything but exactly
+			// one updated row is an invariant failure, not a registration.
+			return NodeRegistration{}, fmt.Errorf("register node %s: update matched %d rows, want 1", n.ID, affected)
 		}
 		saved := p
 		saved.Region, saved.URLs, saved.TURNSecret, saved.Version, saved.LastSeenAt = n.Region, n.URLs, n.TURNSecret, n.Version, n.LastSeenAt

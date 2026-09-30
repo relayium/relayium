@@ -735,10 +735,8 @@ func TestUpdateCheckByoHaltReasonIsGenericToTheNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.UpsertNode(ctx, Node{
-		ID: snaps[1].ID, OwnerType: "user", OwnerUserID: u2.ID, URLs: []string{"turn:x:3478"}, TURNSecret: "s",
-		Version: "v0.8.0", CreatedAt: 1, LastSeenAt: tNow,
-	}); err != nil {
+	// A direct row edit: UpsertNode never rewrites an owner (A-M3).
+	if _, err := st.db.ExecContext(ctx, `UPDATE nodes SET owner_user_id = ? WHERE id = ?`, u2.ID, snaps[1].ID); err != nil {
 		t.Fatal(err)
 	}
 	// Command every node for this rollout, then report two of them failed --

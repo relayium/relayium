@@ -111,6 +111,9 @@ type adminNodeView struct {
 	// uninstall question): a node can be safe to uninstall and still not
 	// deletable until GC has collected its expired rows.
 	DeleteBlockers int
+	// DeleteBlockersUnknown is set when the blocker count could not be read;
+	// the panel then shows an error instead of a delete button.
+	DeleteBlockersUnknown bool
 	// Removed is set once the node has told central it was being uninstalled
 	// (Node.RemovedAt). The row is kept for audit, but the machine is gone: it
 	// is out of placement, out of ICE and never receives a download redirect.
@@ -989,7 +992,12 @@ func (s *Service) buildAdminFleetData(r *http.Request, data adminHomeData) (admi
 		allNodes = rows
 		data.Nodes = nodeViews(rows, monthly, fileCounts, s.Now(), st)
 		if blockers, err := s.Store().NodeDeleteBlockers(r.Context()); err != nil {
+			// Unknown is not zero: without the count the panel cannot say the
+			// node is deletable, so it offers no delete button at all.
 			log.Printf("admin: NodeDeleteBlockers failed: %v", err)
+			for i := range data.Nodes {
+				data.Nodes[i].DeleteBlockersUnknown = true
+			}
 		} else {
 			for i := range data.Nodes {
 				data.Nodes[i].DeleteBlockers = blockers[data.Nodes[i].ID]

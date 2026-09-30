@@ -527,6 +527,10 @@ export interface Messages {
     nodeUnreachable: string; // probe failed — node not reachable from central
     delNode: string; // remove-node button
     confirmDelNode: string; // confirm() before removing a node
+    // Shown when the server refuses a node removal (409) because uploads still
+    // use the node. Optional so frozen archive locales need no entry; the page
+    // falls back to actionFailed.
+    delNodeBusy?: string;
     copyLink: string; // copy the rebuilt share link for a stored file (key held locally)
     linkHint: string; // note: links are recoverable only on the browser that uploaded
     // 账号级、可吊销的持令牌设备。GET /api/devices 返回两类：CLI（relayium login）
