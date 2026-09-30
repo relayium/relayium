@@ -729,6 +729,41 @@ func TestCreateTaskConvergesOnARetriedIdempotencyKey(t *testing.T) {
 	}
 }
 
+// A create replayed after the task's TTL converges on the stored task AND leaves
+// that task persisted as expired. The expiry is written by the shared
+// expireLoadedInboxTask helper, which commits the transaction itself; this pins
+// that the replay path's early return does not silently roll that write back.
+func TestExpiredCreateReplayPersistsTheExpiry(t *testing.T) {
+	h := newTaskHarness(t)
+	u := h.user(t, "idem-expired@example.test")
+	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
+	task := h.queueTask(t, tg, "idem-expired-1")
+	taskID := task["ID"].(string)
+	existing, err := scanInboxTask(h.store.db.QueryRow(
+		`SELECT `+inboxTaskCols+` FROM inbox_tasks WHERE id = ?`, taskID))
+	if err != nil {
+		t.Fatalf("load task: %v", err)
+	}
+	replay := existing
+	replay.CreatedAt = existing.ExpiresAt + 1
+	got, created, err := h.store.CreateInboxTask(context.Background(), replay)
+	if err != nil || created {
+		t.Fatalf("expired replay: created=%t err=%v, want converged", created, err)
+	}
+	if got.ID != taskID || got.State != inbox.TaskExpired {
+		t.Fatalf("expired replay returned %s in %s, want %s expired", got.ID, got.State, taskID)
+	}
+	var state string
+	var terminalAt int64
+	if err := h.store.db.QueryRow(`SELECT state, terminal_at FROM inbox_tasks WHERE id = ?`, taskID).
+		Scan(&state, &terminalAt); err != nil {
+		t.Fatalf("reread: %v", err)
+	}
+	if state != inbox.TaskExpired || terminalAt != replay.CreatedAt {
+		t.Fatalf("persisted state=%s terminal_at=%d, want expired at %d", state, terminalAt, replay.CreatedAt)
+	}
+}
+
 func TestReusingAnIdempotencyKeyForADifferentTaskIsRefused(t *testing.T) {
 	h := newTaskHarness(t)
 	u := h.user(t, "idemconf@example.test")
@@ -1489,6 +1524,47 @@ func TestFailedRetryableServesItsBackoffBeforeBeingClaimableAgain(t *testing.T) 
 	h.advance(inbox.TaskRetryBaseBackoff + time.Second)
 	if got, _ := h.claimOne(t, tg); got["ID"] != task["ID"] {
 		t.Fatalf("claimed %v after the backoff, want the failed task", got["ID"])
+	}
+}
+
+// A requeued retry belongs to whoever claims it next. The worker that reported
+// failed_retryable kept its token only so its own retried report converges;
+// once central returns the task to the pool, that token must stop matching, or
+// the old worker could drive the task back to downloading without a claim —
+// no attempt counted, no lease handed out by the claim path.
+func TestRequeuedRetryRejectsThePreviousClaimToken(t *testing.T) {
+	h := newTaskHarness(t)
+	u := h.user(t, "requeue-stale@example.test")
+	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
+	task := h.queueTask(t, tg, "requeue-stale-1")
+	taskID := task["ID"].(string)
+	_, oldToken := h.claimOne(t, tg)
+	if resp := h.report(t, tg, taskID, oldToken, inbox.TaskFailedRetryable, inbox.TaskErrDownloadFailed, false); resp.StatusCode != 200 {
+		t.Fatalf("report failed_retryable: got %d, want 200", resp.StatusCode)
+	}
+	h.advance(inbox.TaskRetryBaseBackoff + time.Second)
+	// A pending poll requeues the due retry (and marks it notified) without
+	// claiming it, so no new token has been minted yet.
+	if resp := h.do(t, "GET", "/api/devices/"+tg.deviceID+"/inbox/pending", withBearer(tg.token)); resp.StatusCode != 200 {
+		t.Fatalf("pending: got %d, want 200", resp.StatusCode)
+	}
+	if got := h.taskState(t, tg, taskID)["State"]; got != inbox.TaskNotified {
+		t.Fatalf("state after requeue = %v, want %s", got, inbox.TaskNotified)
+	}
+	resp := h.report(t, tg, taskID, oldToken, inbox.TaskDownloading, "", false)
+	if resp.StatusCode != http.StatusConflict || apiErrorCode(t, resp) != "stale_claim" {
+		t.Fatalf("old token on a requeued task: got %d, want 409 stale_claim", resp.StatusCode)
+	}
+	if got := h.taskState(t, tg, taskID)["State"]; got != inbox.TaskNotified {
+		t.Fatalf("state after stale report = %v, want %s (unchanged)", got, inbox.TaskNotified)
+	}
+	// The proper path still works: a fresh claim leases it and counts an attempt.
+	got, newToken := h.claimOne(t, tg)
+	if got["ID"] != taskID || newToken == oldToken {
+		t.Fatalf("re-claim returned %v with token reuse=%t", got["ID"], newToken == oldToken)
+	}
+	if a := got["Attempts"]; a != float64(2) {
+		t.Fatalf("attempts after re-claim = %v, want 2", a)
 	}
 }
 

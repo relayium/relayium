@@ -135,10 +135,13 @@ func (s *SQLiteStore) CreateInboxTask(ctx context.Context, t InboxTask) (InboxTa
 		if !sameInboxTaskRequest(existing, t) {
 			return InboxTask{}, false, ErrIdempotencyKeyConflict
 		}
-		if expired, err := expireLoadedInboxTask(ctx, tx, &existing, t.CreatedAt); err != nil {
+		// A replay past the TTL reports the truthful terminal state.
+		// expireLoadedInboxTask commits the transaction itself when it writes
+		// the expiry; otherwise this path wrote nothing and the deferred
+		// Rollback just releases a read-only transaction. Either way the
+		// replay converges on the stored task.
+		if _, err := expireLoadedInboxTask(ctx, tx, &existing, t.CreatedAt); err != nil {
 			return InboxTask{}, false, err
-		} else if expired {
-			return existing, false, nil
 		}
 		return existing, false, nil
 	case !errors.Is(err, sql.ErrNoRows):
@@ -1090,8 +1093,16 @@ func expireDueInboxTasks(ctx context.Context, tx *sql.Tx, deviceID, userID strin
 // error_code is deliberately preserved: until the task is actually leased again
 // the last failure is still the truthful explanation of why nothing has landed.
 // The claim clears it at the moment work genuinely restarts.
+//
+// claim_token_hash IS cleared, exactly as the lease reclaim and accept paths
+// clear it when a task returns to the claimable pool. failed_retryable keeps the
+// last claimant's hash (so that claimant's retried report converges), but once
+// the task is queued again that worker no longer holds it: left in place, its
+// old token would still match and could move the requeued task straight back to
+// downloading without a claim — skipping the attempt count and taking a lease
+// no claim handed out.
 func requeueDueRetries(ctx context.Context, tx *sql.Tx, deviceID, userID string, now int64) error {
-	q := `UPDATE inbox_tasks SET state = ?, updated_at = ?
+	q := `UPDATE inbox_tasks SET state = ?, claim_token_hash = '', updated_at = ?
 	       WHERE state = ? AND next_attempt_at <= ? AND expires_at > ?
 	         AND target_device_id = ? AND user_id = ?`
 	_, err := tx.ExecContext(ctx, q, inbox.TaskQueued, now,
