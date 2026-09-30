@@ -137,7 +137,9 @@ func (s *Service) handleInboxTaskBlob(w http.ResponseWriter, r *http.Request, u 
 	} else {
 		w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	}
-	n, _ := io.Copy(w, rc)
+	// Exactly the committed bytes, and so exactly what is metered: see the
+	// same bound in handleFileBlob.
+	n, _ := io.Copy(w, io.LimitReader(rc, sf.Size-start))
 	if n > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = s.store.AddDownloadStat(ctx, sf.UserID, n)

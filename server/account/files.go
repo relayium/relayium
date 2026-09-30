@@ -916,8 +916,20 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	}
-	n, err := io.Copy(w, rc)
-	complete := err == nil && n == sf.Size-start
+	// Serve exactly the committed bytes, never what happens to lie past them
+	// on storage. A blob longer than sf.Size (a late append after the
+	// terminal finalize) would otherwise overrun Content-Length: net/http
+	// rejects the whole Write that crosses it (ErrContentLength, nothing of
+	// that chunk sent), so the client got a truncated body, a complete
+	// download never burned its burn-after-read file, and n — the bytes
+	// metered below — under-reported what left the server; on the sendfile
+	// path the excess instead went onto the wire and was metered. Bounding
+	// the source makes a complete delivery exactly sf.Size-start bytes; a
+	// short blob still ends early (err == nil, n short) and a client abort
+	// still errors, so both stay incomplete as before.
+	want := sf.Size - start
+	n, err := io.Copy(w, io.LimitReader(rc, want))
+	complete := err == nil && n == want
 
 	// Meter/stat the OWNER for the bytes THIS request actually egressed — whether
 	// or not the transfer completed — never the downloader (no downloader identity
