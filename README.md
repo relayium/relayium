@@ -97,7 +97,7 @@ is **how seriously we take end-to-end encryption**:
 ## Features
 
 - 🔒 **End-to-end encrypted** — per-transfer ephemeral X25519 keys → AES-256-GCM per chunk. Keys never leave the two devices.
-- 🛡️ **Optional SAS verification code** — turn on *advanced verification* (off by default) and both browsers show a six-digit code derived from the X25519 endpoint public keys; the CLI shows one derived from the pinned TLS certificate fingerprints (`--verify` stops for it). Matching it out of band detects endpoint impersonation or key substitution — when someone actually compares it. It is a different value from the six-digit pairing code, and the encryption never depends on it: commit-then-reveal and AEAD integrity fail closed either way.
+- 🛡️ **Optional SAS verification code** — turn on *advanced verification* (off by default) and both browsers show a six-digit code derived from the X25519 endpoint public keys; the published CLI (v0.26.0) shows one derived from the pinned TLS certificate fingerprints (`--verify` stops for it); from the next CLI release candidate, a pairing-code session's code is derived from the keys the two ends exchanged, and only the older CLI-to-CLI pairing keeps the fingerprint construction. Matching it out of band detects endpoint impersonation or key substitution — when someone actually compares it. It is a different value from the six-digit pairing code, and the encryption never depends on it: commit-then-reveal and AEAD integrity fail closed either way.
 - 📡 **Private paths, stated precisely** — on a LAN, realtime file bytes flow directly over WebRTC. Cross-network browser sessions use a TURN relay by design, but it carries only end-to-end encrypted ciphertext; in the published CLI (v0.26.0) the CLI's transfer modes are direct-only apart from `up`/`down`, which deliberately use the same hosted encrypted storage as a browser stored link. From the next CLI release candidate, pairing-code sessions (`send`/`receive`, `text`, `pair`) go through that same ciphertext-only TURN relay whenever the server issues one. Stored download links are encrypted in your browser first, and the server holds only ciphertext it has no key for (see [docs/billing-transparency.md](docs/billing-transparency.md)).
 - 📦 **Multi-file batches** (up to 1,000) — streamed straight to disk where supported; other browsers may buffer in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
@@ -254,8 +254,10 @@ handshake and an optional short code two humans can compare out of band.
 - **Threat model:** the signaling server may passively observe or try to impersonate either endpoint; the
   network may be eavesdropped. The server can read **no file or message content**, and — when advanced
   verification is on and a person actually compares them — a browser SAS compared out of band detects
-  X25519 endpoint-key substitution. The CLI uses a separate SAS derived from the two pinned TLS
-  certificate fingerprints (`--verify`) to detect endpoint impersonation during rendezvous. With the
+  X25519 endpoint-key substitution. The published CLI (v0.26.0) uses a separate SAS derived from the two pinned TLS
+  certificate fingerprints (`--verify`) to detect endpoint impersonation during rendezvous; from the next
+  CLI release candidate a pairing-code session's SAS is derived from the exchanged keys, and only the
+  older CLI-to-CLI pairing keeps the fingerprint SAS. With the
   comparison off, the residual exposure is precisely that: an active substitution of the signalling
   endpoints goes unnoticed by the humans. It buys the attacker nothing against a passive server, and the
   commit-then-reveal check that bounds it still runs unconditionally.

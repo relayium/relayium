@@ -128,6 +128,18 @@
   },
   "ignoredReads": [
     {
+      "lane": "go",
+      "source": "web/src/lib/i18n/en.ts",
+      "path": "web/src/lib/i18n/types.ts",
+      "why": "en.ts's `import type` of the locale shape. go.yml reaches en.ts only through scripts/test/cli-public-truth-test.sh, which greps its text; the type file is never opened by that gate"
+    },
+    {
+      "lane": "go",
+      "source": "web/src/lib/i18n/zh.ts",
+      "path": "web/src/lib/i18n/types.ts",
+      "why": "zh.ts's `import type` of the locale shape; same as the en.ts entry above"
+    },
+    {
       "lane": "web",
       "source": "web/scripts/stage-macos-release.test.mjs",
       "path": "server/account/**",
