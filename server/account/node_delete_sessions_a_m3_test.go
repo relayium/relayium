@@ -420,7 +420,7 @@ func TestA_M3_UpsertNodeRefusesOwnerChange(t *testing.T) {
 		{ID: n.ID, OwnerType: "user", OwnerUserID: u2.ID},
 		{ID: n.ID, OwnerType: "fleet"},
 	} {
-		other.URLs, other.TURNSecret, other.CreatedAt, other.LastSeenAt = []string{"turn:6.6.6.6:3478"}, "evil", 2, 2
+		other.URLs, other.TURNSecret, other.CreatedAt, other.LastSeenAt = []string{"turn:203.0.113.66:3478"}, "evil", 2, 2
 		if _, err := st.UpsertNode(ctx, other); !errors.Is(err, ErrNodeOwnerMismatch) {
 			t.Fatalf("upsert as %s/%s: want ErrNodeOwnerMismatch, got %v", other.OwnerType, other.OwnerUserID, err)
 		}

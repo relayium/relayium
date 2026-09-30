@@ -130,18 +130,19 @@ expect_fail() {
 
 go_line() { printf '\tassert.Equal(t, "%s", x)' "$1"; }
 
-# --- the exception list is exactly the four reviewed pairs -------------------
+# --- the exception list is exactly the five reviewed pairs -------------------
 actual_entries="$(sed -n '/^FIXTURE_IP_EXCEPTIONS=(/,/^)/p' "$checker" | sed -n 's/^  "\(.*\)"$/\1/p')"
 expected_entries="$(printf '%s\n' \
   "\$PION_TURN/internal/client/permission_test.go|$PERM_IP" \
   "\$PION_TURN/internal/proto/peeraddr_test.go|$CODEC_IP" \
   "\$PION_TURN/internal/proto/relayedaddr_test.go|$CODEC_IP" \
-  "\$PION_TURN/server_test.go|$VNET_IP")"
+  "\$PION_TURN/server_test.go|$VNET_IP" \
+  "server/account/ssrfguard_t4_test.go|$(ip 198 20 0 1)")"
 if [ "$actual_entries" = "$expected_entries" ] \
    && grep -qx 'PION_TURN="server/third_party/pion-turn"' "$checker"; then
-  ok "FIXTURE_IP_EXCEPTIONS holds exactly the four reviewed path|ip pairs"
+  ok "FIXTURE_IP_EXCEPTIONS holds exactly the five reviewed path|ip pairs"
 else
-  bad "FIXTURE_IP_EXCEPTIONS holds exactly the four reviewed path|ip pairs" \
+  bad "FIXTURE_IP_EXCEPTIONS holds exactly the five reviewed path|ip pairs" \
       "got: $actual_entries"
 fi
 
