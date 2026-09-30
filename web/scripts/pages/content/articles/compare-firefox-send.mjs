@@ -173,7 +173,7 @@ const ja = {
       heading: "リンク共有を超えて：リアルタイム転送、CLI、セルフホスト",
       body: [
         "Firefox Send は非同期の暗号化リンク共有という一つのことしかしませんでしたが、Relayium の保存モードはその範囲をカバーします。Relayium はサーバー側に内容を保存しないブラウザのリアルタイム転送も提供します。同一 LAN では端末同士が直接接続し、ネットワークをまたぐセッションは設計上 TURN リレーを使います。TURN はエンドツーエンド暗号化された暗号文を運びますが、平文を読んだり復号したりできません。同一 LAN では双方ともアカウント不要で、ネットワークをまたぐ場合はペアリングコードの作成者がサインインし、参加者はアカウント不要です。",
-        "より多くの制御を望む人向けに、Relayium は無料でオープンソースの CLI（SSH 経由の push/pull、ネットワークをまたぐ send/receive、フォルダ同期）と、自分で運用できるセルフホスト型サーバーも提供します。どちらも Firefox Send にはなかったものです。プロジェクト全体は AGPL-3.0 ライセンスで GitHub 上にオープンソース公開されています。",
+        "より多くの制御を望む人向けに、Relayium は無料でオープンソースの CLI（デーモン直結の push/sync、ネットワークをまたぐ send/receive、フォルダ同期）と、自分で運用できるセルフホスト型サーバーも提供します。どちらも Firefox Send にはなかったものです。プロジェクト全体は AGPL-3.0 ライセンスで GitHub 上にオープンソース公開されています。",
       ],
     },
   ],
@@ -194,7 +194,7 @@ const ja = {
       },
       {
         q: "Relayium は無料ですか？",
-        a: "ソフトウェアは AGPL-3.0 ライセンスの無料オープンソースで、直結の経路にも料金はかかりません。同じネットワーク内のブラウザ転送と、CLI の SSH 経由の push/pull、sync、daemon 直結、send / receive です。ホスト型サービスには無料枠がありますが、無制限に無料というわけではありません。この記事で扱う保存型ダウンロードリンクは Relayium の暗号化ストレージに保持されるため、送信側のプランのストレージ上限と保存期間を使い、有料プランではその両方が引き上げられます。リンクの作成には送信側のサインインが必要ですが、受信側はダウンロードにアカウントもプランも一切必要ありません。",
+        a: "ソフトウェアは AGPL-3.0 ライセンスの無料オープンソースで、どの経路にも転送ごとの料金はかかりません。同じネットワーク内のブラウザ転送と CLI のデーモン直結 push/sync は枠を使わず、中継された CLI の send / receive はコードを発行したアカウントの月間転送量の枠に計上されます。ホスト型サービスには無料枠がありますが、無制限に無料というわけではありません。この記事で扱う保存型ダウンロードリンクは Relayium の暗号化ストレージに保持されるため、送信側のプランのストレージ上限と保存期間を使い、有料プランではその両方が引き上げられます。リンクの作成には送信側のサインインが必要ですが、受信側はダウンロードにアカウントもプランも一切必要ありません。",
       },
     ],
   },
@@ -240,7 +240,7 @@ const ko = {
       heading: "링크 공유를 넘어서: 실시간 전송, CLI, 셀프호스팅",
       body: [
         "Firefox Send는 비동기 암호화 링크 공유라는 한 가지만 했으며, Relayium의 저장 모드가 그 영역을 커버합니다. Relayium은 서버 측에 콘텐츠를 저장하지 않는 브라우저 실시간 전송도 제공합니다. 같은 LAN에서는 기기끼리 직접 연결하고, 네트워크를 넘는 세션은 설계상 TURN 릴레이를 사용합니다. TURN은 종단간 암호화된 암호문을 운반하지만 평문을 읽거나 복호화할 수 없습니다. 같은 LAN에서는 양쪽 모두 계정이 필요 없고, 네트워크를 넘을 때는 페어링 코드 생성자가 로그인하며 참가자는 계정이 필요 없습니다.",
-        "더 많은 제어를 원하는 사람들을 위해 Relayium은 무료 오픈소스 CLI(SSH를 통한 push/pull, 네트워크를 넘나드는 send/receive, 폴더 동기화)와 직접 운영할 수 있는 셀프호스팅 서버도 제공합니다. 둘 다 Firefox Send에는 없던 것입니다. 프로젝트 전체는 AGPL-3.0 라이선스로 GitHub에 오픈소스로 공개되어 있습니다.",
+        "더 많은 제어를 원하는 사람들을 위해 Relayium은 무료 오픈소스 CLI(데몬 다이렉트 push/sync, 네트워크를 넘나드는 send/receive, 폴더 동기화)와 직접 운영할 수 있는 셀프호스팅 서버도 제공합니다. 둘 다 Firefox Send에는 없던 것입니다. 프로젝트 전체는 AGPL-3.0 라이선스로 GitHub에 오픈소스로 공개되어 있습니다.",
       ],
     },
   ],
@@ -261,7 +261,7 @@ const ko = {
       },
       {
         q: "Relayium은 무료인가요?",
-        a: "소프트웨어는 AGPL-3.0 라이선스의 무료 오픈소스이고, 직접 연결 경로도 비용이 들지 않습니다. 같은 네트워크 안의 브라우저 전송, 그리고 CLI의 SSH 기반 push/pull, sync, daemon 다이렉트, send / receive입니다. 호스팅 서비스는 무제한 무료가 아니라 무료 한도가 있는 방식입니다. 이 글에서 다루는 저장형 다운로드 링크는 Relayium의 암호화 저장소에 보관되므로 보내는 쪽 요금제의 저장 용량 한도와 보관 기간을 쓰며, 유료 요금제는 둘 다 높여 줍니다. 링크를 만들려면 보내는 쪽의 로그인이 필요하지만, 받는 쪽은 다운로드에 계정도 요금제도 전혀 필요하지 않습니다.",
+        a: "소프트웨어는 AGPL-3.0 라이선스의 무료 오픈소스이고, 어떤 경로에도 전송별 요금은 없습니다. 같은 네트워크 안의 브라우저 전송과 CLI의 데몬 다이렉트 push/sync는 한도를 쓰지 않고, 릴레이된 CLI send / receive는 코드를 발급한 계정의 월간 전송량 한도에 집계됩니다. 호스팅 서비스는 무제한 무료가 아니라 무료 한도가 있는 방식입니다. 이 글에서 다루는 저장형 다운로드 링크는 Relayium의 암호화 저장소에 보관되므로 보내는 쪽 요금제의 저장 용량 한도와 보관 기간을 쓰며, 유료 요금제는 둘 다 높여 줍니다. 링크를 만들려면 보내는 쪽의 로그인이 필요하지만, 받는 쪽은 다운로드에 계정도 요금제도 전혀 필요하지 않습니다.",
       },
     ],
   },
@@ -307,7 +307,7 @@ const de = {
       heading: "Mehr als Link-Teilen: Echtzeitübertragung, eine CLI und selbst hosten",
       body: [
         "Firefox Send konnte immer nur eines — asynchrones, verschlüsseltes Link-Teilen —, und Relayiums Speichermodus deckt das ab. Relayium bietet außerdem Echtzeitübertragung im Browser ohne serverseitige Inhaltsspeicherung: Im selben LAN verbinden sich die Geräte direkt, über Netzwerkgrenzen hinweg nutzt die Sitzung konstruktionsbedingt ein TURN-Relay. TURN transportiert Ende-zu-Ende-verschlüsselten Chiffretext, kann den Klartext aber weder lesen noch entschlüsseln. Im selben LAN braucht keine Seite ein Konto; über Netzwerkgrenzen hinweg meldet sich der Ersteller des Pairing-Codes an, der Beitretende braucht kein Konto.",
-        "Für alle, die mehr Kontrolle wollen, bietet Relayium außerdem eine kostenlose, quelloffene CLI (push/pull über SSH, netzwerkübergreifendes send/receive, Ordnersynchronisation) und einen selbst hostbaren Server, den du selbst betreiben kannst — nichts davon hatte Firefox Send je. Das ganze Projekt ist AGPL-3.0-lizenziert und quelloffen auf GitHub.",
+        "Für alle, die mehr Kontrolle wollen, bietet Relayium außerdem eine kostenlose, quelloffene CLI (daemon-direct push/sync, netzwerkübergreifendes send/receive, Ordnersynchronisation) und einen selbst hostbaren Server, den du selbst betreiben kannst — nichts davon hatte Firefox Send je. Das ganze Projekt ist AGPL-3.0-lizenziert und quelloffen auf GitHub.",
       ],
     },
   ],
@@ -328,7 +328,7 @@ const de = {
       },
       {
         q: "Ist Relayium kostenlos?",
-        a: "Die Software ist kostenlos und quelloffen unter der AGPL-3.0-Lizenz, und die direkten Wege kosten nichts: Browser-Übertragungen im selben Netz sowie push/pull über SSH, sync, daemon-direct und send / receive der CLI. Der gehostete Dienst hat einen kostenlosen Tarif, ist aber nicht unbegrenzt kostenlos — ein gespeicherter Download-Link wie der, um den es in diesem Artikel geht, liegt in Relayiums verschlüsseltem Speicher und verbraucht daher das Speicherlimit und die Aufbewahrungsdauer des Tarifs des Absenders; bezahlte Tarife erhöhen beides. Das Erstellen erfordert die Anmeldung des Absenders; der Empfänger braucht zum Herunterladen nie ein Konto oder einen Tarif.",
+        a: "Die Software ist kostenlos und quelloffen unter der AGPL-3.0-Lizenz, und kein Weg kostet eine Gebühr pro Übertragung: Browser-Übertragungen im selben Netz und daemon-direct push/sync der CLI verbrauchen kein Kontingent, während ein weitergeleitetes send / receive der CLI zum monatlichen Datenvolumen des Kontos zählt, das den Code erzeugt hat. Der gehostete Dienst hat einen kostenlosen Tarif, ist aber nicht unbegrenzt kostenlos — ein gespeicherter Download-Link wie der, um den es in diesem Artikel geht, liegt in Relayiums verschlüsseltem Speicher und verbraucht daher das Speicherlimit und die Aufbewahrungsdauer des Tarifs des Absenders; bezahlte Tarife erhöhen beides. Das Erstellen erfordert die Anmeldung des Absenders; der Empfänger braucht zum Herunterladen nie ein Konto oder einen Tarif.",
       },
     ],
   },
@@ -374,7 +374,7 @@ const fr = {
       heading: "Au-delà du partage de liens : transfert en temps réel, CLI et auto-hébergement",
       body: [
         "Firefox Send ne faisait qu'une seule chose — le partage de liens chiffrés asynchrone — et le mode stocké de Relayium couvre ce terrain. Relayium propose aussi le transfert en temps réel dans le navigateur sans stockage du contenu côté serveur : sur le même LAN, les appareils se connectent directement ; entre réseaux, la session utilise TURN par conception. TURN transporte le chiffré de bout en bout, mais ne peut ni lire ni déchiffrer le contenu en clair. Sur le même LAN, aucun compte n'est requis ; entre réseaux, la personne qui crée le code d'appairage se connecte et celle qui rejoint n'a pas besoin de compte.",
-        "Pour ceux qui veulent plus de contrôle, Relayium propose aussi une CLI gratuite et open source (push/pull via SSH, send/receive entre réseaux, synchronisation de dossiers) et un serveur auto-hébergeable que vous pouvez faire tourner vous-même — rien de tout cela n'a jamais existé chez Firefox Send. L'ensemble du projet est sous licence AGPL-3.0 et open source sur GitHub.",
+        "Pour ceux qui veulent plus de contrôle, Relayium propose aussi une CLI gratuite et open source (push/sync en daemon-direct, send/receive entre réseaux, synchronisation de dossiers) et un serveur auto-hébergeable que vous pouvez faire tourner vous-même — rien de tout cela n'a jamais existé chez Firefox Send. L'ensemble du projet est sous licence AGPL-3.0 et open source sur GitHub.",
       ],
     },
   ],
@@ -395,7 +395,7 @@ const fr = {
       },
       {
         q: "Relayium est-il gratuit ?",
-        a: "Le logiciel est gratuit et open source sous licence AGPL-3.0, et les chemins directs ne coûtent rien : les transferts dans le navigateur sur le même réseau, ainsi que push/pull via SSH, sync, daemon-direct et send / receive de la CLI. Le service hébergé propose une offre gratuite plutôt qu'une gratuité sans limite — un lien de téléchargement stocké comme celui dont parle cet article est conservé dans le stockage chiffré de Relayium, il puise donc dans la limite de stockage et la durée de conservation de l'offre de l'expéditeur, que les offres payantes relèvent toutes les deux. Le créer exige que l'expéditeur se connecte ; le destinataire n'a jamais besoin de compte, ni d'offre, pour télécharger.",
+        a: "Le logiciel est gratuit et open source sous licence AGPL-3.0, et aucun chemin n'entraîne de frais par transfert : les transferts dans le navigateur sur le même réseau et le push/sync en daemon-direct de la CLI ne consomment aucun quota, tandis qu'un send / receive relayé de la CLI est décompté du quota mensuel de trafic du compte qui a généré le code. Le service hébergé propose une offre gratuite plutôt qu'une gratuité sans limite — un lien de téléchargement stocké comme celui dont parle cet article est conservé dans le stockage chiffré de Relayium, il puise donc dans la limite de stockage et la durée de conservation de l'offre de l'expéditeur, que les offres payantes relèvent toutes les deux. Le créer exige que l'expéditeur se connecte ; le destinataire n'a jamais besoin de compte, ni d'offre, pour télécharger.",
       },
     ],
   },
@@ -441,7 +441,7 @@ const ar = {
       heading: "أبعد من مشاركة الروابط: النقل الفوري، وواجهة سطر الأوامر، والاستضافة الذاتية",
       body: [
         "لم يفعل Firefox Send سوى شيء واحد — مشاركة روابط مشفّرة غير متزامنة — ووضع Relayium المُخزَّن يغطي تلك الأرضية. ويقدّم Relayium أيضًا نقلًا فوريًا في المتصفح من دون تخزين المحتوى على الخادم: تتصل الأجهزة مباشرةً على شبكة LAN نفسها، بينما تستخدم الجلسات عبر الشبكات مُرحِّل TURN بحكم التصميم. يحمل TURN النص المشفَّر من الطرف إلى الطرف، لكنه لا يستطيع قراءة المحتوى الصريح أو فك تشفيره. لا يحتاج الطرفان إلى حساب على شبكة LAN نفسها؛ وعبر الشبكات يسجّل منشئ رمز الاقتران الدخول، ولا يحتاج المنضم إلى حساب.",
-        "لمن يريدون مزيدًا من التحكم، يوفّر Relayium أيضًا واجهة سطر أوامر CLI مجانية ومفتوحة المصدر (push/pull عبر SSH، وإرسال/استقبال عبر الشبكات، ومزامنة المجلدات) وخادمًا قابلًا للاستضافة الذاتية يمكنك تشغيله بنفسك — ولم يكن أيٌّ من هذا موجودًا في Firefox Send قط. المشروع بأكمله مرخّص بموجب AGPL-3.0 ومفتوح المصدر على GitHub.",
+        "لمن يريدون مزيدًا من التحكم، يوفّر Relayium أيضًا واجهة سطر أوامر CLI مجانية ومفتوحة المصدر (push/sync عبر daemon direct، وإرسال/استقبال عبر الشبكات، ومزامنة المجلدات) وخادمًا قابلًا للاستضافة الذاتية يمكنك تشغيله بنفسك — ولم يكن أيٌّ من هذا موجودًا في Firefox Send قط. المشروع بأكمله مرخّص بموجب AGPL-3.0 ومفتوح المصدر على GitHub.",
       ],
     },
   ],
@@ -462,7 +462,7 @@ const ar = {
       },
       {
         q: "هل Relayium مجاني؟",
-        a: "البرنامج مجاني ومفتوح المصدر بموجب رخصة AGPL-3.0، والمسارات المباشرة لا تكلّف شيئًا: النقل عبر المتصفّح على نفس الشبكة، وأوامر push/pull عبر SSH وsync وdaemon direct وsend / receive في CLI. أما الخدمة المُستضافة فلها فئة مجانية لا مجانية بلا حدود — فرابط التنزيل المُخزَّن كالذي يتناوله هذا المقال يُحفَظ في تخزين Relayium المُشفَّر، لذا يستهلك حدّ التخزين ومدة الاحتفاظ في خطة المُرسِل، والخطط المدفوعة ترفع كليهما. يتطلب إنشاؤه تسجيل دخول المُرسِل؛ أما المُستقبِل فلا يحتاج أبدًا إلى حساب أو خطة للتنزيل.",
+        a: "البرنامج مجاني ومفتوح المصدر بموجب رخصة AGPL-3.0، ولا يفرض أي مسار رسومًا على كل عملية نقل: فالنقل عبر المتصفّح على نفس الشبكة وpush/sync عبر daemon direct في CLI لا يستهلكان أي حصة، بينما يُحتسب send / receive المُرحَّل في CLI ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز. أما الخدمة المُستضافة فلها فئة مجانية لا مجانية بلا حدود — فرابط التنزيل المُخزَّن كالذي يتناوله هذا المقال يُحفَظ في تخزين Relayium المُشفَّر، لذا يستهلك حدّ التخزين ومدة الاحتفاظ في خطة المُرسِل، والخطط المدفوعة ترفع كليهما. يتطلب إنشاؤه تسجيل دخول المُرسِل؛ أما المُستقبِل فلا يحتاج أبدًا إلى حساب أو خطة للتنزيل.",
       },
     ],
   },
@@ -508,7 +508,7 @@ const es = {
       heading: "Más allá de compartir enlaces: transferencia en tiempo real, una CLI y autoalojamiento",
       body: [
         "Firefox Send solo hizo una cosa —compartir enlaces cifrados de forma asíncrona— y el modo almacenado de Relayium cubre ese terreno. Relayium también ofrece transferencia en tiempo real en el navegador sin almacenar contenido en el servidor: en la misma LAN los dispositivos se conectan directamente; entre redes, la sesión usa TURN por diseño. TURN transporta texto cifrado de extremo a extremo, pero no puede leer ni descifrar el contenido en claro. En la misma LAN ninguna parte necesita cuenta; entre redes, quien crea el código de emparejamiento inicia sesión y quien se une no necesita una cuenta.",
-        "Para quienes quieren más control, Relayium también incluye una CLI gratuita y de código abierto (push/pull por SSH, envío/recepción entre redes, sincronización de carpetas) y un servidor autoalojable que puedes ejecutar tú mismo, nada de lo cual tuvo nunca Firefox Send. Todo el proyecto está bajo licencia AGPL-3.0 y es de código abierto en GitHub.",
+        "Para quienes quieren más control, Relayium también incluye una CLI gratuita y de código abierto (push/sync con daemon directo, envío/recepción entre redes, sincronización de carpetas) y un servidor autoalojable que puedes ejecutar tú mismo, nada de lo cual tuvo nunca Firefox Send. Todo el proyecto está bajo licencia AGPL-3.0 y es de código abierto en GitHub.",
       ],
     },
   ],
@@ -529,7 +529,7 @@ const es = {
       },
       {
         q: "¿Es Relayium gratis?",
-        a: "El software es gratis y de código abierto bajo la licencia AGPL-3.0, y los caminos directos no cuestan nada: las transferencias en el navegador dentro de la misma red, y push/pull por SSH, sync, daemon directo y send / receive de la CLI. El servicio alojado tiene un nivel gratuito, no gratuidad sin límite: un enlace de descarga almacenado como el de este artículo se guarda en el almacenamiento cifrado de Relayium, así que consume el límite de almacenamiento y el periodo de retención del plan del remitente, y los planes de pago amplían ambos. Crearlo requiere que el remitente inicie sesión; el destinatario nunca necesita cuenta, ni plan, para descargar.",
+        a: "El software es gratis y de código abierto bajo la licencia AGPL-3.0, y ningún camino tiene cargo por transferencia: las transferencias en el navegador dentro de la misma red y el push/sync con daemon directo de la CLI no consumen cuota, mientras que un send / receive retransmitido de la CLI cuenta para la cuota mensual de tráfico de la cuenta que generó el código. El servicio alojado tiene un nivel gratuito, no gratuidad sin límite: un enlace de descarga almacenado como el de este artículo se guarda en el almacenamiento cifrado de Relayium, así que consume el límite de almacenamiento y el periodo de retención del plan del remitente, y los planes de pago amplían ambos. Crearlo requiere que el remitente inicie sesión; el destinatario nunca necesita cuenta, ni plan, para descargar.",
       },
     ],
   },
@@ -575,7 +575,7 @@ const pt = {
       heading: "Além do compartilhamento de links: transferência em tempo real, uma CLI e auto-hospedagem",
       body: [
         "O Firefox Send só fez uma coisa — compartilhamento de links criptografados de forma assíncrona — e o modo armazenado do Relayium cobre esse terreno. O Relayium também oferece transferência em tempo real no navegador sem armazenar conteúdo no servidor: na mesma LAN os dispositivos se conectam diretamente; entre redes, a sessão usa TURN por projeto. O TURN transporta texto cifrado de ponta a ponta, mas não consegue ler nem descriptografar o conteúdo em claro. Na mesma LAN nenhum dos lados precisa de conta; entre redes, quem cria o código de emparelhamento faz login e quem participa não precisa de conta.",
-        "Para quem quer mais controle, o Relayium também traz uma CLI gratuita e de código aberto (push/pull por SSH, envio/recebimento entre redes, sincronização de pastas) e um servidor auto-hospedável que você mesmo pode rodar — nada disso o Firefox Send jamais teve. Todo o projeto é licenciado sob AGPL-3.0 e de código aberto no GitHub.",
+        "Para quem quer mais controle, o Relayium também traz uma CLI gratuita e de código aberto (push/sync com daemon direto, envio/recebimento entre redes, sincronização de pastas) e um servidor auto-hospedável que você mesmo pode rodar — nada disso o Firefox Send jamais teve. Todo o projeto é licenciado sob AGPL-3.0 e de código aberto no GitHub.",
       ],
     },
   ],
@@ -596,7 +596,7 @@ const pt = {
       },
       {
         q: "O Relayium é gratuito?",
-        a: "O software é gratuito e de código aberto sob a licença AGPL-3.0, e os caminhos diretos não custam nada: as transferências no navegador na mesma rede, e o push/pull via SSH, sync, daemon direto e send / receive da CLI. O serviço hospedado tem um nível gratuito, não gratuidade sem limite — um link de download armazenado como o deste artigo fica no armazenamento criptografado do Relayium, então consome o limite de armazenamento e o período de retenção do plano do remetente, e os planos pagos aumentam ambos. Criá-lo exige que o remetente faça login; o destinatário nunca precisa de conta, nem de plano, para baixar.",
+        a: "O software é gratuito e de código aberto sob a licença AGPL-3.0, e nenhum caminho tem cobrança por transferência: as transferências no navegador na mesma rede e o push/sync com daemon direto da CLI não consomem cota, enquanto um send / receive retransmitido da CLI conta para a cota mensal de tráfego da conta que gerou o código. O serviço hospedado tem um nível gratuito, não gratuidade sem limite — um link de download armazenado como o deste artigo fica no armazenamento criptografado do Relayium, então consome o limite de armazenamento e o período de retenção do plano do remetente, e os planos pagos aumentam ambos. Criá-lo exige que o remetente faça login; o destinatário nunca precisa de conta, nem de plano, para baixar.",
       },
     ],
   },

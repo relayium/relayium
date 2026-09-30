@@ -196,7 +196,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "rsync が 1996 年からフォルダーをミラーリングしてきたのには理由があります。双方向の同期、ローリングチェックサムでファイル内部の変化したバイトだけを転送する差分アルゴリズム、そしてあらゆるケースに対応する数十年分のフラグです。すでに SSH アクセスがあり rsync を知っているなら、これを上回るのは非常に困難です。",
-    "Relayium の sync コマンドはもっと狭い範囲、つまり一方向の増分ミラーだけをカバーしますが、rsync が前提とする一つのステップ、SSH のセットアップを省きます。すでにある SSH の上で動かすこともできますし、SSH サーバーなしで2台のマシンを直接つなぐこともできます。本記事はこの2つを正直に比較します。sync は rsync の完全な代替ではなく、FAQ でもそれをはっきり述べます。",
+    "Relayium の sync コマンドはもっと狭い範囲、つまり一方向の増分ミラーだけをカバーしますが、rsync が前提とする一つのステップ、SSH のセットアップを省きます。SSH サーバーなしで2台のマシンを直接つなぎます（以前の SSH 経由の sync は廃止されました）。本記事はこの2つを正直に比較します。sync は rsync の完全な代替ではなく、FAQ でもそれをはっきり述べます。",
   ],
   sections: [
     {
@@ -210,10 +210,10 @@ const ja = {
       heading: "Relayium sync のやり方",
       body: [
         "relayium sync <ソース...> <宛先> [--delete] [--watch] は一方向の増分ミラーです。各ファイルのサイズと更新時刻を比較し、すでに一致するものはスキップし、残りを送ります。",
-        "2つの転送方式で動きます。user@host:/dest を指定すると SSH 経由で動きますが、リモートにあらかじめ relayium がインストールされている必要があります。push と違い、sync に tar フォールバックはありません。代わりに relayium://host[:port] を指定すると SSH を完全に省けます。証明書ピンニング付きの TLS 1.3 接続で、相手のマシンで動く relayium serve リスナーに直接つながり、そのマシンのフィンガープリントで認証されます（一度承認すれば以後は記憶されます）。この2つ目の経路こそが本当の利点です。sshd の設定も SSH 鍵の管理も不要で、relayium がインストールされた2台のマシンと、間で開いたポートさえあればよいのです。",
+        "動作するのはデーモン直結です。relayium://host[:port] を指定すると SSH を完全に省けます。証明書ピンニング付きの TLS 1.3 接続で、相手のマシンで動く relayium serve リスナーに直接つながり、そのマシンのフィンガープリントで認証されます（一度承認すれば以後は記憶されます）。sshd の設定も SSH 鍵の管理も不要で、relayium がインストールされた2台のマシンと、間で開いたポートさえあればよいのです。以前あった user@host:/dest 形式の SSH 経由の sync は廃止され、現在の CLI では「SSH transfers are currently disabled」と表示して拒否されます。",
       ],
       code: [
-        `relayium sync ./photos user@host:/backup/photos       # SSH 経由`,
+        "relayium serve --dir /backup/photos                   # 受信側のマシンで",
         `relayium sync ./photos relayium://203.0.113.9:9031    # デーモン直結、SSH 不要`,
       ],
     },
@@ -244,7 +244,7 @@ const ja = {
         "一方向のみ：sync がミラーするのはソース→宛先だけです。rsync はどちらの方向にも動きます。",
         "差分転送なし：sync は変化したファイルを丸ごと再送します。rsync のローリングチェックサムは変化したブロックだけを送ります。",
         "オプションが少ない：rsync にはフィルタリング、圧縮、スナップショットのための数十年分のフラグがあります。sync にあるのは --delete と --watch だけです。",
-        "Relayium sync が勝る点：SSH サーバー不要（デーモン直結）、フィンガープリント認証を伴う証明書ピンニング付き TLS、--watch によるリアルタイム再同期、そして直結モード（sync、push/pull、デーモン直結）は無料で計測されるものもなく、sync 自体にアカウントは一切不要です。",
+        "Relayium sync が勝る点：SSH サーバー不要（デーモン直結）、フィンガープリント認証を伴う証明書ピンニング付き TLS、--watch によるリアルタイム再同期、そして直結モード（デーモン直結の sync と push）は無料で計測されるものもなく、sync 自体にアカウントは一切不要です。",
       ],
     },
   ],
@@ -257,7 +257,7 @@ const ja = {
       },
       {
         q: "sync に SSH サーバーは必要ですか？",
-        a: "いいえ。デーモン直結（relayium://host:port）は SSH を完全に省きます。証明書ピンニング付きの TLS 接続で、受信側のフィンガープリントによって認証され、一度承認すれば以後は記憶されます。SSH 経由（user@host:path）を選ぶこともできますが、リモートに relayium がインストールされている必要があり、push と違って sync に tar フォールバックはありません。",
+        a: "いいえ。デーモン直結（relayium://host:port）は SSH を完全に省きます。証明書ピンニング付きの TLS 接続で、受信側のフィンガープリントによって認証され、一度承認すれば以後は記憶されます。以前の SSH 経由（user@host:path）の sync は廃止されました。",
       },
       {
         q: "sync はソース側で削除したファイルを削除しますか？",
@@ -269,7 +269,7 @@ const ja = {
       },
       {
         q: "これは無料ですか？",
-        a: "この比較で扱う範囲については、はい。Relayium CLI は無料でオープンソースで、sync、push/pull、デーモン直結は直接転送のため、計測されるものはなく、アカウントも不要です。send はサーバーがペアリングコードを発行するためにアカウントが必要です。ホスト型ストレージを使うのはクラウドの up だけで、そこにはプランのストレージ上限が適用されます。",
+        a: "この比較で扱う範囲については、はい。Relayium CLI は無料でオープンソースで、デーモン直結の sync と push は直接転送のため、計測されるものはなく、アカウントも不要です。send はサーバーがペアリングコードを発行するためにアカウントが必要です。ホスト型ストレージを使うのはクラウドの up だけで、そこにはプランのストレージ上限が適用されます。",
       },
     ],
   },
@@ -288,7 +288,7 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "rsync가 1996년부터 폴더를 미러링해 온 데는 이유가 있습니다. 양방향 동기화, 롤링 체크섬으로 파일 내부에서 실제로 바뀐 바이트만 전송하는 델타 알고리즘, 그리고 온갖 예외 상황을 다루는 수십 년치 플래그입니다. 이미 SSH 접근 권한이 있고 rsync를 잘 안다면, 이를 능가하기는 매우 어렵습니다.",
-    "Relayium의 sync 명령은 더 좁은 범위, 즉 단방향 증분 미러만 다루지만, rsync가 이미 되어 있다고 가정하는 한 단계, 즉 SSH 설정을 없애줍니다. 이미 SSH가 있다면 그 위에서 동작하고, 없다면 SSH 서버 없이 두 기기를 직접 연결합니다. 이 글은 둘을 정직하게 비교합니다. sync는 rsync의 완전한 대체품이 아니며, FAQ에서도 이를 분명히 밝힙니다.",
+    "Relayium의 sync 명령은 더 좁은 범위, 즉 단방향 증분 미러만 다루지만, rsync가 이미 되어 있다고 가정하는 한 단계, 즉 SSH 설정을 없애줍니다. SSH 서버 없이 두 기기를 직접 연결합니다(예전의 SSH를 통한 sync는 폐지되었습니다). 이 글은 둘을 정직하게 비교합니다. sync는 rsync의 완전한 대체품이 아니며, FAQ에서도 이를 분명히 밝힙니다.",
   ],
   sections: [
     {
@@ -302,10 +302,10 @@ const ko = {
       heading: "Relayium sync의 방식",
       body: [
         "relayium sync <소스...> <대상> [--delete] [--watch]는 단방향 증분 미러입니다. 각 파일의 크기와 수정 시각을 비교해 이미 일치하는 것은 건너뛰고 나머지만 보냅니다.",
-        "두 가지 전송 방식으로 동작합니다. user@host:/dest를 가리키면 SSH로 동작하지만, 원격에 이미 relayium이 설치되어 있어야 합니다. push와 달리 sync에는 tar 폴백이 없습니다. 대신 relayium://host[:port]를 가리키면 SSH를 완전히 건너뜁니다. 인증서 고정 TLS 1.3 연결로 상대 기기에서 실행 중인 relayium serve 리스너에 직접 연결되며, 그 기기의 핑거프린트로 인증됩니다(한 번 승인하면 이후로는 기억됩니다). 이 두 번째 경로가 진짜 편리한 부분입니다. sshd를 설정할 필요도, SSH 키를 관리할 필요도 없이, relayium이 설치된 두 기기와 그 사이의 열린 포트 하나만 있으면 됩니다.",
+        "데몬 다이렉트로 동작합니다. relayium://host[:port]를 가리키면 SSH를 완전히 건너뜁니다. 인증서 고정 TLS 1.3 연결로 상대 기기에서 실행 중인 relayium serve 리스너에 직접 연결되며, 그 기기의 핑거프린트로 인증됩니다(한 번 승인하면 이후로는 기억됩니다). sshd를 설정할 필요도, SSH 키를 관리할 필요도 없이, relayium이 설치된 두 기기와 그 사이의 열린 포트 하나만 있으면 됩니다. 예전의 user@host:/dest 형식 SSH 기반 sync는 폐지되었으며, 현재 CLI는 “SSH transfers are currently disabled”라는 메시지와 함께 거부합니다.",
       ],
       code: [
-        `relayium sync ./photos user@host:/backup/photos       # SSH 경유`,
+        "relayium serve --dir /backup/photos                   # 받는 기기에서",
         `relayium sync ./photos relayium://203.0.113.9:9031    # 데몬 다이렉트, SSH 불필요`,
       ],
     },
@@ -336,7 +336,7 @@ const ko = {
         "단방향뿐: sync는 소스 → 대상만 미러링합니다. rsync는 어느 방향으로든 동작합니다.",
         "델타 전송 없음: sync는 바뀐 파일을 통째로 다시 보냅니다. rsync의 롤링 체크섬은 바뀐 블록만 보냅니다.",
         "옵션이 더 적음: rsync는 필터링, 압축, 스냅샷을 위한 수십 년치 플래그를 갖고 있습니다. sync에는 --delete와 --watch뿐입니다.",
-        "Relayium sync가 이기는 지점: SSH 서버 불필요(데몬 다이렉트), 핑거프린트 인증이 붙은 인증서 고정 TLS, --watch를 통한 실시간 재동기화, 그리고 직접 연결 모드(sync, push/pull, 데몬 다이렉트)는 무료이며 계량되는 것이 없습니다. sync 자체는 계정이 전혀 필요 없습니다.",
+        "Relayium sync가 이기는 지점: SSH 서버 불필요(데몬 다이렉트), 핑거프린트 인증이 붙은 인증서 고정 TLS, --watch를 통한 실시간 재동기화, 그리고 직접 연결 모드(데몬 다이렉트 sync와 push)는 무료이며 계량되는 것이 없습니다. sync 자체는 계정이 전혀 필요 없습니다.",
       ],
     },
   ],
@@ -349,7 +349,7 @@ const ko = {
       },
       {
         q: "sync에 SSH 서버가 필요한가요?",
-        a: "아니요. 데몬 다이렉트(relayium://host:port)는 SSH를 완전히 건너뜁니다. 인증서 고정 TLS 연결로, 받는 쪽의 핑거프린트로 인증되며, 한 번 승인하면 이후로는 기억됩니다. SSH(user@host:path)를 통해서도 동작할 수 있지만 원격에 relayium이 설치되어 있어야 하며, push와 달리 sync에는 tar 폴백이 없습니다.",
+        a: "아니요. 데몬 다이렉트(relayium://host:port)는 SSH를 완전히 건너뜁니다. 인증서 고정 TLS 연결로, 받는 쪽의 핑거프린트로 인증되며, 한 번 승인하면 이후로는 기억됩니다. 예전의 SSH(user@host:path)를 통한 sync는 폐지되었습니다.",
       },
       {
         q: "sync가 소스에서 지운 파일을 삭제하나요?",
@@ -361,7 +361,7 @@ const ko = {
       },
       {
         q: "무료인가요?",
-        a: "이 비교가 다루는 범위에서는 그렇습니다. Relayium CLI는 무료 오픈소스이고, sync, push/pull, 데몬 다이렉트는 직접 전송이라 계량되는 것도 없고 계정도 필요 없습니다. send는 서버가 페어링 코드를 발급해야 하므로 계정이 필요합니다. 호스팅 저장소를 쓰는 것은 클라우드 up뿐이며, 여기에는 요금제의 저장 용량 한도가 적용됩니다.",
+        a: "이 비교가 다루는 범위에서는 그렇습니다. Relayium CLI는 무료 오픈소스이고, 데몬 다이렉트 sync와 push는 직접 전송이라 계량되는 것도 없고 계정도 필요 없습니다. send는 서버가 페어링 코드를 발급해야 하므로 계정이 필요합니다. 호스팅 저장소를 쓰는 것은 클라우드 up뿐이며, 여기에는 요금제의 저장 용량 한도가 적용됩니다.",
       },
     ],
   },
@@ -380,7 +380,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "rsync spiegelt seit 1996 Ordner, und das aus gutem Grund: bidirektionale Synchronisation, ein Delta-Algorithmus mit Rolling-Checksum, der nur die tatsächlich veränderten Bytes innerhalb einer Datei überträgt, und Jahrzehnte an Flags für jeden Grenzfall. Wenn du schon SSH-Zugang hast und rsync kennst, ist es sehr schwer zu schlagen.",
-    "Relayiums sync-Befehl deckt eine engere Aufgabe ab — einen einseitigen inkrementellen Spiegel —, entfernt aber einen Schritt, den rsync als bereits erledigt voraussetzt: das Einrichten von SSH. sync läuft über SSH, falls vorhanden, oder verbindet zwei Maschinen direkt, ganz ohne SSH-Server. Dieser Artikel vergleicht beide ehrlich: sync ist kein vollständiger Ersatz für rsync, und die FAQ sagt das unumwunden.",
+    "Relayiums sync-Befehl deckt eine engere Aufgabe ab — einen einseitigen inkrementellen Spiegel —, entfernt aber einen Schritt, den rsync als bereits erledigt voraussetzt: das Einrichten von SSH. sync verbindet zwei Maschinen direkt, ganz ohne SSH-Server (sync über SSH ist eingestellt). Dieser Artikel vergleicht beide ehrlich: sync ist kein vollständiger Ersatz für rsync, und die FAQ sagt das unumwunden.",
   ],
   sections: [
     {
@@ -394,10 +394,10 @@ const de = {
       heading: "Was Relayium sync stattdessen macht",
       body: [
         "relayium sync <Quelle...> <Ziel> [--delete] [--watch] ist ein einseitiger inkrementeller Spiegel: Er vergleicht Größe und Änderungszeit jeder Datei, überspringt, was schon übereinstimmt, und sendet den Rest.",
-        "Es funktioniert über zwei Transportwege. Zeigst du auf user@host:/dest, läuft es über SSH — relayium muss dafür aber schon auf der Gegenseite installiert sein; anders als bei push gibt es für sync keinen tar-Fallback. Zeigst du stattdessen auf relayium://host[:port], wird SSH komplett übersprungen: eine TLS-1.3-Verbindung mit Pinning direkt zu einem relayium serve-Listener auf der anderen Maschine, authentifiziert über deren Fingerprint (einmal genehmigt, danach gemerkt). Dieser zweite Weg ist der eigentliche Komfort: kein sshd einzurichten, keine SSH-Schlüssel zu verwalten — nur zwei Maschinen mit installiertem relayium und einem offenen Port dazwischen.",
+        "Es läuft über daemon-direct. Zeigst du auf relayium://host[:port], wird SSH komplett übersprungen: eine TLS-1.3-Verbindung mit Pinning direkt zu einem relayium serve-Listener auf der anderen Maschine, authentifiziert über deren Fingerprint (einmal genehmigt, danach gemerkt). Kein sshd einzurichten, keine SSH-Schlüssel zu verwalten — nur zwei Maschinen mit installiertem relayium und einem offenen Port dazwischen. Das frühere sync über SSH zu einem Ziel user@host:/dest ist eingestellt; die aktuelle CLI lehnt es mit „SSH transfers are currently disabled“ ab.",
       ],
       code: [
-        `relayium sync ./photos user@host:/backup/photos       # über SSH`,
+        "relayium serve --dir /backup/photos                   # auf dem Empfänger",
         `relayium sync ./photos relayium://203.0.113.9:9031    # daemon-direct, ohne SSH`,
       ],
     },
@@ -428,7 +428,7 @@ const de = {
         "Nur einseitig: sync spiegelt Quelle → Ziel; rsync kann in beide Richtungen.",
         "Kein Delta-Transfer: sync sendet eine veränderte Datei komplett neu; rsyncs Rolling-Checksum sendet nur veränderte Blöcke.",
         "Weniger Optionen: rsync hat Jahrzehnte an Flags für Filterung, Kompression und Snapshots; sync hat --delete und --watch.",
-        "Wo Relayium sync gewinnt: kein SSH-Server nötig (daemon-direct), TLS mit Pinning und Fingerprint-Authentifizierung, Echtzeit-Resync mit --watch, und die direkten Modi — sync, push/pull und daemon-direct — sind kostenlos, ohne dass etwas gemessen wird; sync selbst braucht überhaupt kein Konto.",
+        "Wo Relayium sync gewinnt: kein SSH-Server nötig (daemon-direct), TLS mit Pinning und Fingerprint-Authentifizierung, Echtzeit-Resync mit --watch, und die direkten Modi — sync und push per daemon-direct — sind kostenlos, ohne dass etwas gemessen wird; sync selbst braucht überhaupt kein Konto.",
       ],
     },
   ],
@@ -441,7 +441,7 @@ const de = {
       },
       {
         q: "Braucht sync einen SSH-Server?",
-        a: "Nein. daemon-direct (relayium://host:port) überspringt SSH komplett: eine TLS-Verbindung mit Pinning, authentifiziert über den Fingerprint des Empfängers, einmal genehmigt und danach gemerkt. Du kannst auch über SSH gehen (user@host:path), dann muss relayium aber auf der Gegenseite installiert sein — und anders als bei push gibt es für sync keinen tar-Fallback.",
+        a: "Nein. daemon-direct (relayium://host:port) überspringt SSH komplett: eine TLS-Verbindung mit Pinning, authentifiziert über den Fingerprint des Empfängers, einmal genehmigt und danach gemerkt. Das frühere sync über SSH (user@host:path) ist eingestellt.",
       },
       {
         q: "Löscht sync Dateien, die ich aus der Quelle entfernt habe?",
@@ -453,7 +453,7 @@ const de = {
       },
       {
         q: "Ist das kostenlos?",
-        a: "Für alles, was dieser Vergleich abdeckt, ja. Die Relayium-CLI ist kostenlos und quelloffen, und sync, push/pull und daemon-direct sind direkte Übertragungen, bei denen nichts gemessen wird und kein Konto nötig ist. send braucht ein Konto, damit der Server seinen Pairing-Code erzeugen kann. Nur Cloud-up nutzt gehosteten Speicher, und dort gilt das Speicherlimit deines Tarifs.",
+        a: "Für alles, was dieser Vergleich abdeckt, ja. Die Relayium-CLI ist kostenlos und quelloffen, und sync und push per daemon-direct sind direkte Übertragungen, bei denen nichts gemessen wird und kein Konto nötig ist. send braucht ein Konto, damit der Server seinen Pairing-Code erzeugen kann. Nur Cloud-up nutzt gehosteten Speicher, und dort gilt das Speicherlimit deines Tarifs.",
       },
     ],
   },
@@ -472,7 +472,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "rsync reflète des dossiers depuis 1996, et ce n'est pas un hasard : synchronisation bidirectionnelle, un algorithme de transfert différentiel à somme de contrôle glissante qui ne transmet que les octets réellement modifiés à l'intérieur d'un fichier, et des décennies d'options pour chaque cas particulier. Si vous avez déjà un accès SSH et connaissez rsync, il est très difficile à surpasser.",
-    "La commande sync de Relayium couvre une tâche plus étroite — un miroir incrémental à sens unique — mais elle supprime une étape que rsync suppose déjà faite : la configuration de SSH. Elle fonctionne par SSH si vous en avez déjà un, ou connecte directement deux machines sans aucun serveur SSH. Cet article compare les deux honnêtement : sync n'est pas un remplacement complet de rsync, et la FAQ le dit clairement.",
+    "La commande sync de Relayium couvre une tâche plus étroite — un miroir incrémental à sens unique — mais elle supprime une étape que rsync suppose déjà faite : la configuration de SSH. Elle connecte directement deux machines sans aucun serveur SSH (le sync via SSH est retiré). Cet article compare les deux honnêtement : sync n'est pas un remplacement complet de rsync, et la FAQ le dit clairement.",
   ],
   sections: [
     {
@@ -486,10 +486,10 @@ const fr = {
       heading: "Ce que fait Relayium sync à la place",
       body: [
         "relayium sync <sources...> <destination> [--delete] [--watch] est un miroir incrémental à sens unique : il compare la taille et la date de modification de chaque fichier, ignore ce qui correspond déjà, et envoie le reste.",
-        "Il fonctionne via deux transports. Pointez-le vers user@host:/dest et il passe par SSH — mais relayium doit déjà être installé sur la machine distante ; contrairement à push, sync n'a pas de repli tar. Pointez-le plutôt vers relayium://host[:port] et il se passe entièrement de SSH : une connexion TLS 1.3 avec épinglage directement vers un processus relayium serve à l'écoute sur l'autre machine, authentifiée par l'empreinte de cette machine (approuvée une fois, mémorisée ensuite). C'est cette seconde voie qui apporte le vrai confort : pas de sshd à configurer, pas de clés SSH à gérer — juste deux machines avec relayium installé et un port ouvert entre elles.",
+        "Il fonctionne en daemon-direct. Pointez-le vers relayium://host[:port] et il se passe entièrement de SSH : une connexion TLS 1.3 avec épinglage directement vers un processus relayium serve à l'écoute sur l'autre machine, authentifiée par l'empreinte de cette machine (approuvée une fois, mémorisée ensuite). Pas de sshd à configurer, pas de clés SSH à gérer — juste deux machines avec relayium installé et un port ouvert entre elles. L'ancien sync via SSH vers une destination user@host:/dest est retiré ; la CLI actuelle le refuse avec « SSH transfers are currently disabled ».",
       ],
       code: [
-        `relayium sync ./photos user@host:/backup/photos       # via SSH`,
+        "relayium serve --dir /backup/photos                   # sur la machine réceptrice",
         `relayium sync ./photos relayium://203.0.113.9:9031    # daemon-direct, sans SSH`,
       ],
     },
@@ -520,7 +520,7 @@ const fr = {
         "Sens unique seulement : sync reflète la source vers la destination ; rsync peut aller dans les deux sens.",
         "Pas de transfert différentiel : sync retransmet un fichier modifié en entier ; la somme de contrôle glissante de rsync n'envoie que les blocs modifiés.",
         "Moins d'options : rsync a des décennies d'options pour le filtrage, la compression et les instantanés ; sync n'a que --delete et --watch.",
-        "Là où Relayium sync l'emporte : pas de serveur SSH requis (daemon-direct), TLS avec épinglage et authentification par empreinte, resynchronisation en temps réel avec --watch, et les modes directs — sync, push/pull et daemon-direct — sont gratuits, sans rien de mesuré ; sync lui-même ne demande aucun compte.",
+        "Là où Relayium sync l'emporte : pas de serveur SSH requis (daemon-direct), TLS avec épinglage et authentification par empreinte, resynchronisation en temps réel avec --watch, et les modes directs — sync et push en daemon-direct — sont gratuits, sans rien de mesuré ; sync lui-même ne demande aucun compte.",
       ],
     },
   ],
@@ -533,7 +533,7 @@ const fr = {
       },
       {
         q: "sync a-t-il besoin d'un serveur SSH ?",
-        a: "Non. Le mode daemon-direct (relayium://host:port) se passe entièrement de SSH : une connexion TLS avec épinglage, authentifiée par l'empreinte du récepteur, approuvée une fois puis mémorisée. Vous pouvez aussi passer par SSH (user@host:path), mais relayium doit alors être installé sur la machine distante — et contrairement à push, sync n'a pas de repli tar.",
+        a: "Non. Le mode daemon-direct (relayium://host:port) se passe entièrement de SSH : une connexion TLS avec épinglage, authentifiée par l'empreinte du récepteur, approuvée une fois puis mémorisée. L'ancien sync via SSH (user@host:path) est retiré.",
       },
       {
         q: "sync supprime-t-il les fichiers que j'ai retirés de la source ?",
@@ -545,7 +545,7 @@ const fr = {
       },
       {
         q: "Est-ce gratuit ?",
-        a: "Pour tout ce que couvre ce comparatif, oui. La CLI Relayium est gratuite et open source, et sync, push/pull et daemon-direct sont des transferts directs, sans rien de mesuré et sans compte requis. send en demande un pour que le serveur puisse générer son code d'appairage. Seul le up cloud touche au stockage hébergé, où s'applique la limite de stockage de votre offre.",
+        a: "Pour tout ce que couvre ce comparatif, oui. La CLI Relayium est gratuite et open source, et sync et push en daemon-direct sont des transferts directs, sans rien de mesuré et sans compte requis. send en demande un pour que le serveur puisse générer son code d'appairage. Seul le up cloud touche au stockage hébergé, où s'applique la limite de stockage de votre offre.",
       },
     ],
   },
@@ -564,7 +564,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "يعكس rsync المجلدات منذ عام 1996 لسبب وجيه: مزامنة ثنائية الاتجاه، وخوارزمية دلتا بمجموع تحقّق متدحرج تنقل فقط البايتات التي تغيّرت فعلًا داخل الملف، وعقود من الأعلام لكل حالة حافّة. إن كان لديك أصلًا وصول SSH وتعرف rsync، فمن الصعب جدًا التفوّق عليه.",
-    "يغطّي أمر sync في Relayium مهمة أضيق — مرآة تزايدية أحادية الاتجاه — لكنه يزيل خطوة يفترض rsync أنك أنجزتها أصلًا: إعداد SSH. يعمل فوق SSH إن كان لديك، أو يصل جهازين مباشرة دون أي خادم SSH إطلاقًا. يقارن هذا المقال الاثنين بصدق؛ فليس sync بديلًا كاملًا عن rsync، والأسئلة الشائعة تقول ذلك بوضوح.",
+    "يغطّي أمر sync في Relayium مهمة أضيق — مرآة تزايدية أحادية الاتجاه — لكنه يزيل خطوة يفترض rsync أنك أنجزتها أصلًا: إعداد SSH. يصل جهازين مباشرة دون أي خادم SSH إطلاقًا (أما sync عبر SSH فقد أُوقف). يقارن هذا المقال الاثنين بصدق؛ فليس sync بديلًا كاملًا عن rsync، والأسئلة الشائعة تقول ذلك بوضوح.",
   ],
   sections: [
     {
@@ -578,10 +578,10 @@ const ar = {
       heading: "ما يفعله Relayium sync بدلًا من ذلك",
       body: [
         "إن ‎relayium sync <src...> <dest> [--delete] [--watch]‎ مرآة تزايدية أحادية الاتجاه: يقارن حجم كل ملف ووقت تعديله، ويتخطّى ما يطابق أصلًا، ويرسل الباقي.",
-        "يعمل عبر نقلين. وجّهه إلى ‎user@host:/dest‎ فيعمل فوق SSH — لكن يجب أن يكون relayium مثبَّتًا أصلًا على الطرف البعيد؛ وخلافًا لـ push، لا يوجد رجوع إلى tar في sync. وجّهه بدلًا من ذلك إلى ‎relayium://host[:port]‎ فيتخطّى SSH كليًا: اتصال TLS 1.3 مثبَّت مباشرة إلى مستمع relayium serve على الجهاز الآخر، مُصادَق عليه ببصمة ذلك الجهاز (يُوافَق عليها مرة، وتُذكَر بعد ذلك). هذا المسار الثاني هو الراحة الحقيقية: لا sshd لإعداده، ولا مفاتيح SSH لإدارتها — فقط جهازان عليهما relayium ومنفذ مفتوح بينهما.",
+        "يعمل عبر daemon direct. وجّهه إلى ‎relayium://host[:port]‎ فيتخطّى SSH كليًا: اتصال TLS 1.3 مثبَّت مباشرة إلى مستمع relayium serve على الجهاز الآخر، مُصادَق عليه ببصمة ذلك الجهاز (يُوافَق عليها مرة، وتُذكَر بعد ذلك). لا sshd لإعداده، ولا مفاتيح SSH لإدارتها — فقط جهازان عليهما relayium ومنفذ مفتوح بينهما. أما sync القديم عبر SSH إلى وجهة ‎user@host:/dest‎ فقد أُوقف، ويرفضه CLI الحالي برسالة «SSH transfers are currently disabled».",
       ],
       code: [
-        `relayium sync ./photos user@host:/backup/photos       # عبر SSH`,
+        "relayium serve --dir /backup/photos                   # على جهاز الاستقبال",
         `relayium sync ./photos relayium://203.0.113.9:9031    # daemon direct، بلا SSH`,
       ],
     },
@@ -612,7 +612,7 @@ const ar = {
         "أحادي الاتجاه فقط: يعكس sync من المصدر ← الوجهة؛ أما rsync فيمكنه الذهاب في أيّ اتجاه.",
         "لا نقل بالدلتا: يعيد sync إرسال الملف المتغيّر كاملًا؛ أما مجموع التحقّق المتدحرج في rsync فيرسل الكتل المتغيّرة فقط.",
         "خيارات أقل: يملك rsync عقودًا من الأعلام للترشيح والضغط وأخذ اللقطات؛ أما sync فلديه ‎--delete‎ و‎--watch‎.",
-        "أين يتفوّق Relayium sync: لا حاجة إلى خادم SSH (daemon direct)، وTLS مثبَّت بمصادقة بالبصمة، وإعادة مزامنة فورية بـ ‎--watch‎، والأوضاع المباشرة — sync وpush/pull وdaemon direct — مجانية بلا شيء يُقاس؛ وsync نفسه لا يحتاج حسابًا إطلاقًا.",
+        "أين يتفوّق Relayium sync: لا حاجة إلى خادم SSH (daemon direct)، وTLS مثبَّت بمصادقة بالبصمة، وإعادة مزامنة فورية بـ ‎--watch‎، والأوضاع المباشرة — sync وpush عبر daemon direct — مجانية بلا شيء يُقاس؛ وsync نفسه لا يحتاج حسابًا إطلاقًا.",
       ],
     },
   ],
@@ -625,7 +625,7 @@ const ar = {
       },
       {
         q: "هل يحتاج sync إلى خادم SSH؟",
-        a: "لا. يتخطّى daemon direct (‎relayium://host:port‎) SSH كليًا: اتصال TLS مثبَّت، مُصادَق عليه ببصمة المُستقبِل، يُوافَق عليها مرة وتُذكَر بعد ذلك. يمكنك أيضًا المرور عبر SSH (user@host:path)، لكن يجب أن يكون relayium مثبَّتًا على الطرف البعيد لذلك — وخلافًا لـ push، لا يوجد رجوع إلى tar في sync.",
+        a: "لا. يتخطّى daemon direct (‎relayium://host:port‎) SSH كليًا: اتصال TLS مثبَّت، مُصادَق عليه ببصمة المُستقبِل، يُوافَق عليها مرة وتُذكَر بعد ذلك. أما sync القديم عبر SSH ‏(user@host:path) فقد أُوقف.",
       },
       {
         q: "هل يحذف sync الملفات التي أزلتها من المصدر؟",
@@ -637,7 +637,7 @@ const ar = {
       },
       {
         q: "هل هو مجاني؟",
-        a: "بالنسبة لكل ما تغطيه هذه المقارنة، نعم. إن CLI في Relayium مجاني ومفتوح المصدر، وsync وpush/pull وdaemon direct عمليات نقل مباشرة لا يُقاس فيها شيء ولا تحتاج إلى حساب. يحتاج send إلى حساب كي يُصدر الخادم رمز الاقتران. ولا يستخدم التخزين المُستضاف إلا up السحابي، وهناك ينطبق حدّ التخزين في خطتك.",
+        a: "بالنسبة لكل ما تغطيه هذه المقارنة، نعم. إن CLI في Relayium مجاني ومفتوح المصدر، وsync وpush عبر daemon direct عمليات نقل مباشرة لا يُقاس فيها شيء ولا تحتاج إلى حساب. يحتاج send إلى حساب كي يُصدر الخادم رمز الاقتران. ولا يستخدم التخزين المُستضاف إلا up السحابي، وهناك ينطبق حدّ التخزين في خطتك.",
       },
     ],
   },
@@ -656,7 +656,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "rsync refleja carpetas desde 1996 por una razón: sincronización bidireccional, un algoritmo de delta con suma de comprobación rodante que transfiere solo los bytes que realmente cambiaron dentro de un archivo, y décadas de opciones para cada caso límite. Si ya tienes acceso SSH y conoces rsync, es muy difícil de superar.",
-    "El comando sync de Relayium cubre un trabajo más estrecho — un espejo incremental de un solo sentido — pero elimina un paso que rsync da por hecho que ya has realizado: configurar SSH. Se ejecuta sobre SSH si ya lo tienes, o conecta dos máquinas directamente sin ningún servidor SSH. Este artículo compara ambos con honestidad; sync no es un reemplazo completo de rsync, y las preguntas frecuentes lo dicen claramente.",
+    "El comando sync de Relayium cubre un trabajo más estrecho — un espejo incremental de un solo sentido — pero elimina un paso que rsync da por hecho que ya has realizado: configurar SSH. Conecta dos máquinas directamente sin ningún servidor SSH (el sync por SSH está retirado). Este artículo compara ambos con honestidad; sync no es un reemplazo completo de rsync, y las preguntas frecuentes lo dicen claramente.",
   ],
   sections: [
     {
@@ -670,10 +670,10 @@ const es = {
       heading: "Lo que hace Relayium sync en su lugar",
       body: [
         "relayium sync <src...> <dest> [--delete] [--watch] es un espejo incremental de un solo sentido: compara el tamaño y la hora de modificación de cada archivo, omite lo que ya coincide y envía el resto.",
-        "Funciona sobre dos transportes. Apúntalo a user@host:/dest y se ejecuta sobre SSH — pero relayium ya debe estar instalado en el remoto; a diferencia de push, no hay respaldo tar para sync. Apúntalo en cambio a relayium://host[:port] y se salta SSH por completo: una conexión TLS 1.3 con anclaje directamente a un proceso a la escucha relayium serve en la otra máquina, autenticada por la huella de esa máquina (aprobada una vez, recordada después). Esa segunda vía es la verdadera comodidad: ningún sshd que configurar, ninguna clave SSH que gestionar — solo dos máquinas con relayium instalado y un puerto abierto entre ellas.",
+        "Funciona con daemon directo. Apúntalo a relayium://host[:port] y se salta SSH por completo: una conexión TLS 1.3 con anclaje directamente a un proceso a la escucha relayium serve en la otra máquina, autenticada por la huella de esa máquina (aprobada una vez, recordada después). Ningún sshd que configurar, ninguna clave SSH que gestionar: solo dos máquinas con relayium instalado y un puerto abierto entre ellas. El antiguo sync por SSH a un destino user@host:/dest está retirado; la CLI actual lo rechaza con «SSH transfers are currently disabled».",
       ],
       code: [
-        `relayium sync ./photos user@host:/backup/photos       # por SSH`,
+        "relayium serve --dir /backup/photos                   # en la máquina receptora",
         `relayium sync ./photos relayium://203.0.113.9:9031    # daemon directo, sin SSH`,
       ],
     },
@@ -704,7 +704,7 @@ const es = {
         "Solo un sentido: sync refleja origen → destino; rsync puede ir en cualquier dirección.",
         "Sin transferencia delta: sync reenvía entero un archivo cambiado; la suma de comprobación rodante de rsync envía solo los bloques cambiados.",
         "Menos opciones: rsync tiene décadas de opciones para filtrar, comprimir y hacer instantáneas; sync tiene --delete y --watch.",
-        "Dónde gana Relayium sync: no requiere servidor SSH (daemon directo), TLS con anclaje y autenticación por huella, resincronización en tiempo real con --watch, y los modos directos — sync, push/pull y daemon directo — son gratis, sin nada que se mida; sync en sí no necesita cuenta alguna.",
+        "Dónde gana Relayium sync: no requiere servidor SSH (daemon directo), TLS con anclaje y autenticación por huella, resincronización en tiempo real con --watch, y los modos directos — sync y push con daemon directo — son gratis, sin nada que se mida; sync en sí no necesita cuenta alguna.",
       ],
     },
   ],
@@ -717,7 +717,7 @@ const es = {
       },
       {
         q: "¿sync necesita un servidor SSH?",
-        a: "No. El daemon directo (relayium://host:port) se salta SSH por completo: una conexión TLS con anclaje, autenticada por la huella del receptor, aprobada una vez y recordada después. También puedes ir sobre SSH (user@host:path), pero relayium debe estar instalado en el remoto para eso — y a diferencia de push, no hay respaldo tar para sync.",
+        a: "No. El daemon directo (relayium://host:port) se salta SSH por completo: una conexión TLS con anclaje, autenticada por la huella del receptor, aprobada una vez y recordada después. El antiguo sync por SSH (user@host:path) está retirado.",
       },
       {
         q: "¿sync elimina los archivos que quité del origen?",
@@ -729,7 +729,7 @@ const es = {
       },
       {
         q: "¿Es gratis?",
-        a: "Para todo lo que cubre esta comparación, sí. La CLI de Relayium es gratis y de código abierto, y sync, push/pull y daemon directo son transferencias directas sin nada que se mida y sin necesidad de cuenta. send necesita una cuenta para que el servidor pueda generar su código de emparejamiento. Solo el up en la nube usa el almacenamiento alojado, donde se aplica el límite de almacenamiento de tu plan.",
+        a: "Para todo lo que cubre esta comparación, sí. La CLI de Relayium es gratis y de código abierto, y sync y push con daemon directo son transferencias directas sin nada que se mida y sin necesidad de cuenta. send necesita una cuenta para que el servidor pueda generar su código de emparejamiento. Solo el up en la nube usa el almacenamiento alojado, donde se aplica el límite de almacenamiento de tu plan.",
       },
     ],
   },
@@ -748,7 +748,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "O rsync espelha pastas desde 1996 por um motivo: sincronização bidirecional, um algoritmo de delta com soma de verificação rolante que transfere apenas os bytes que de fato mudaram dentro de um arquivo, e décadas de flags para cada caso extremo. Se você já tem acesso SSH e conhece o rsync, é muito difícil superá-lo.",
-    "O comando sync do Relayium cobre um trabalho mais estreito — um espelho incremental de sentido único — mas remove uma etapa que o rsync presume que você já fez: configurar o SSH. Ele roda sobre SSH se você já tiver, ou conecta duas máquinas diretamente sem nenhum servidor SSH. Este artigo compara os dois com honestidade; o sync não é um substituto completo do rsync, e as perguntas frequentes dizem isso claramente.",
+    "O comando sync do Relayium cobre um trabalho mais estreito — um espelho incremental de sentido único — mas remove uma etapa que o rsync presume que você já fez: configurar o SSH. Ele conecta duas máquinas diretamente sem nenhum servidor SSH (o sync por SSH foi descontinuado). Este artigo compara os dois com honestidade; o sync não é um substituto completo do rsync, e as perguntas frequentes dizem isso claramente.",
   ],
   sections: [
     {
@@ -762,10 +762,10 @@ const pt = {
       heading: "O que o Relayium sync faz em vez disso",
       body: [
         "relayium sync <src...> <dest> [--delete] [--watch] é um espelho incremental de sentido único: ele compara o tamanho e a hora de modificação de cada arquivo, pula o que já corresponde e envia o resto.",
-        "Ele funciona sobre dois transportes. Aponte-o para user@host:/dest e ele roda sobre SSH — mas o relayium já precisa estar instalado no remoto; diferente do push, não há recurso de reserva tar para o sync. Aponte-o em vez disso para relayium://host[:port] e ele pula o SSH inteiramente: uma conexão TLS 1.3 com fixação diretamente a um processo relayium serve à escuta na outra máquina, autenticada pela impressão digital dessa máquina (aprovada uma vez, lembrada depois). Essa segunda via é a real conveniência: nenhum sshd para configurar, nenhuma chave SSH para gerenciar — apenas duas máquinas com o relayium instalado e uma porta aberta entre elas.",
+        "Ele funciona com daemon direto. Aponte-o para relayium://host[:port] e ele pula o SSH inteiramente: uma conexão TLS 1.3 com fixação diretamente a um processo relayium serve à escuta na outra máquina, autenticada pela impressão digital dessa máquina (aprovada uma vez, lembrada depois). Nenhum sshd para configurar, nenhuma chave SSH para gerenciar — apenas duas máquinas com o relayium instalado e uma porta aberta entre elas. O antigo sync por SSH para um destino user@host:/dest foi descontinuado; a CLI atual o recusa com “SSH transfers are currently disabled”.",
       ],
       code: [
-        `relayium sync ./photos user@host:/backup/photos       # por SSH`,
+        "relayium serve --dir /backup/photos                   # na máquina de destino",
         `relayium sync ./photos relayium://203.0.113.9:9031    # daemon direto, sem SSH`,
       ],
     },
@@ -796,7 +796,7 @@ const pt = {
         "Apenas sentido único: o sync espelha origem → destino; o rsync pode ir em qualquer direção.",
         "Sem transferência delta: o sync reenvia inteiro um arquivo alterado; a soma de verificação rolante do rsync envia apenas os blocos alterados.",
         "Menos opções: o rsync tem décadas de flags para filtragem, compressão e snapshots; o sync tem --delete e --watch.",
-        "Onde o Relayium sync vence: não exige servidor SSH (daemon direto), TLS com fixação e autenticação por impressão digital, ressincronização em tempo real com --watch, e os modos diretos — sync, push/pull e daemon direto — são gratuitos, sem nada medido; o sync em si não precisa de conta alguma.",
+        "Onde o Relayium sync vence: não exige servidor SSH (daemon direto), TLS com fixação e autenticação por impressão digital, ressincronização em tempo real com --watch, e os modos diretos — sync e push com daemon direto — são gratuitos, sem nada medido; o sync em si não precisa de conta alguma.",
       ],
     },
   ],
@@ -809,7 +809,7 @@ const pt = {
       },
       {
         q: "O sync precisa de um servidor SSH?",
-        a: "Não. O daemon direto (relayium://host:port) pula o SSH inteiramente: uma conexão TLS com fixação, autenticada pela impressão digital do receptor, aprovada uma vez e lembrada depois. Você também pode ir por SSH (user@host:path), mas o relayium precisa estar instalado no remoto para isso — e diferente do push, não há recurso de reserva tar para o sync.",
+        a: "Não. O daemon direto (relayium://host:port) pula o SSH inteiramente: uma conexão TLS com fixação, autenticada pela impressão digital do receptor, aprovada uma vez e lembrada depois. O antigo sync por SSH (user@host:path) foi descontinuado.",
       },
       {
         q: "O sync exclui os arquivos que removi da origem?",
@@ -821,7 +821,7 @@ const pt = {
       },
       {
         q: "É gratuito?",
-        a: "Para tudo o que esta comparação cobre, sim. A CLI do Relayium é gratuita e de código aberto, e sync, push/pull e daemon direto são transferências diretas, sem nada medido e sem precisar de conta. O send precisa de uma conta para que o servidor possa gerar o seu código de emparelhamento. Só o up na nuvem usa o armazenamento hospedado, onde vale o limite de armazenamento do seu plano.",
+        a: "Para tudo o que esta comparação cobre, sim. A CLI do Relayium é gratuita e de código aberto, e sync e push com daemon direto são transferências diretas, sem nada medido e sem precisar de conta. O send precisa de uma conta para que o servidor possa gerar o seu código de emparelhamento. Só o up na nuvem usa o armazenamento hospedado, onde vale o limite de armazenamento do seu plano.",
       },
     ],
   },

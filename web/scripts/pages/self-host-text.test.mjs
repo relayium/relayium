@@ -62,19 +62,26 @@ const ONLINE = {
   pt: /permanecer online/i,
 };
 
-// Maintained en/zh (2026-09-30, help.go linkRelayPolicy): CLI text uses the
-// server's TURN relay whenever one is issued for the code, and connects peer
-// to peer otherwise. The frozen locales keep the archived "does not use" text.
+// help.go linkRelayPolicy (2026-09-30): CLI text uses the server's TURN relay
+// whenever one is issued for the code, and connects peer to peer otherwise.
+// Maintained en/zh state it directly; the seven frozen locales carry the same
+// fact as a translated archived erratum (DECISION-LOG 2026-09-30 item 2), in
+// place of the retired "CLI text does not use TURN" sentence (TEXT_NO_TURN_OLD).
 const NO_TURN = {
   en: /whenever your server issues a TURN relay for the code the session goes through it, and otherwise the two terminals connect peer to peer/i,
   zh: /只要你的服务器为这个码签发了 TURN 中继，会话就经它传输，否则两个终端点对点连接/,
-  ja: /使いません/,
-  ko: /사용하지 않습니다/,
-  de: /nutzt nicht/i,
-  fr: /n'utilise pas/i,
-  ar: /لا يستخدم/,
-  es: /no usa/i,
-  pt: /não usa/i,
+  ja: /TURN リレーを発行した場合、セッションはそのリレーを通り、そうでなければ2台の端末が P2P で直接つながります/,
+  ko: /TURN 릴레이를 발급하면 세션은 그 릴레이를 거치고, 그렇지 않으면 두 터미널이 P2P로 직접 연결됩니다/,
+  de: /ein TURN-Relay aus, läuft die Sitzung darüber, sonst verbinden sich die beiden Terminals direkt per P2P/,
+  fr: /relais TURN pour le code, la session y passe, sinon les deux terminaux se connectent directement en P2P/,
+  ar: /مُرحِّل TURN للرمز مرّت الجلسة عبره، وإلا اتصلت الطرفيتان مباشرةً عبر P2P/,
+  es: /retransmisor TURN para el código, la sesión pasa por él y, si no, los dos terminales se conectan directamente por P2P/,
+  pt: /retransmissor TURN para o código, a sessão passa por ele e, senão, os dois terminais se conectam diretamente por P2P/,
+};
+// The archived sentence each frozen locale shipped, which must not come back.
+const TEXT_NO_TURN_OLD = {
+  ja: /CLI text は直結専用/, ko: /CLI text는 직접 연결 전용/, de: /CLI text ist rein direkt/, fr: /Le text de la CLI est exclusivement direct/,
+  ar: /text في CLI مباشر فقط/, es: /text en la CLI es solo directo/, pt: /text na CLI é apenas direto/,
 };
 
 const TEXT_WORD = {
@@ -140,6 +147,7 @@ describe("self-hosting guide documents CLI text against a custom server", () => 
       expect(prose).not.toMatch(OLD_ABSOLUTE[lang]);
       expect(prose).toMatch(ONLINE[lang]);
       expect(prose).toMatch(NO_TURN[lang]);
+      if (TEXT_NO_TURN_OLD[lang]) expect(prose).not.toMatch(TEXT_NO_TURN_OLD[lang]);
 
       const faq = doc.faq.items.map((item) => item.a).join(" ");
       expect(faq).toContain("text");

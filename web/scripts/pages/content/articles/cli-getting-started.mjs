@@ -372,11 +372,11 @@ relayium text 483920`,
 const ja = {
   title: "Relayium CLI でターミナルからファイルとテキストを転送する",
   description:
-    "無料でエンドツーエンド暗号化された Relayium CLI で、SSH・ペアリングコード・デーモン直結によるファイル転送と、両方の端末がオンライン時の一時テキスト送信を始めましょう。",
+    "無料でエンドツーエンド暗号化された Relayium CLI で、ペアリングコードやデーモン直結によるファイル転送と、両方の端末がオンライン時の一時テキスト送信を始めましょう。",
   updatedLabel: "最終更新",
   lead: [
     "Relayium CLI はターミナルからファイルと一時テキストを転送する小さな単一バイナリです。エンドツーエンド暗号化、セルフホスト可能、AGPL-3.0 ライセンスの無料オープンソース。サーバーへのファイルコピーやマシン間のビルド送信に加え、URL・コマンド・コード片をファイル化せずそのまま送れます。",
-    "直結モード（push、pull、sync、daemon 直結、send / receive、text）では、ファイルのバイトは両端の間を直接移動し、Relayium のサーバーを通過することはありません。up は直結ではありません。暗号化したコピーをアカウントに保存します。本ガイドではインストールから最初の転送までを案内し、その後各モードのより詳しいハウツーへ案内します。",
+    "デーモン直結（relayium serve と push または sync）では、ファイルのバイトは自分の2台のマシンの間を直接移動し、Relayium のサーバーを通過しないため、何も計測されません。ペアリングコードによるセッション（send / receive、text、pair）はエンドツーエンドで暗号化されていますが、サーバーがそのコードにリレーを発行した場合はすべてのバイトがその暗号化リレーを通り、コードを発行したアカウントの月間転送量の枠に計上されます。up は直結ではありません。暗号化したコピーをアカウントに保存します。本ガイドではインストールから最初の転送までを案内し、その後各モードのより詳しいハウツーへ案内します。",
   ],
   sections: [
     {
@@ -387,7 +387,7 @@ const ja = {
           "端末のある macOS、Linux、Windows のいずれかのマシン。ビルド済みバイナリは3つとも x86-64 と arm64 を用意しています。",
           "macOS と Linux の1行インストールに使う curl。curl --version がバージョンを表示します。Windows ではリリースページから .zip をダウンロードしてください。",
           "書き込めるインストール先ディレクトリ。スクリプトは書き込める場合は /usr/local/bin を、そうでなければ ~/.local/bin を使い、最後の数行でどちらを選んだかを表示します。",
-          "push、pull、デーモン直結にはこれ以外は不要です。無料の Relayium アカウントが要るのは、send や text でペアリングコードを発行するときと、up でアップロードするときだけです。",
+          "デーモン直結の push と sync にはこれ以外は不要です。無料の Relayium アカウントが要るのは、send、text、pair でペアリングコードを発行するとき、up でアップロードするとき、そして Device Inbox を使うときだけです。",
         ],
       },
       body: [
@@ -403,10 +403,10 @@ const ja = {
     {
       heading: "ファイルを移動する3つの方法",
       body: [
-        "Relayium には3つの転送方法があります。3つの異なるツールを覚える必要はなく、相手先の場所に応じて選ぶだけです。いずれも同じ転送エンジンを共有し、運ぶ各ファイルを SHA-256 ハッシュで検証します。共有していないのは再開です。半端なファイルを次回の実行で続けるのは sync で、push、pull、send、receive はまったく再開しません。",
+        "Relayium には3つの転送方法があります。3つの異なるツールを覚える必要はなく、相手先の場所に応じて選ぶだけです。いずれも同じ転送エンジンを共有し、運ぶ各ファイルを SHA-256 ハッシュで検証します。共有していないのは再開です。半端なファイルを次回の実行で続けるのは sync で、push、send、receive はまったく再開しません。",
       ],
       bullets: [
-        "push / pull：すでに SSH でログインできるサーバーへ。バイトは SSH 接続上を流れます。Relayium アカウントは不要です。",
+        "up / down（クラウド）：相手がオフラインでも構いません。up はこのマシンで暗号化して暗号文だけをアカウントにアップロードし、リンクを表示します。down はそのリンクで別のマシンから取得・復号します。以前ここにあった SSH 経由の push / pull は廃止されました。",
         "send / receive：送信側の CLI が発行する短いペアリングコードを使って、ネットワークをまたいで他の人へ（relayium login で一度サインインするだけ。受信側は不要です）。発行したコードの有効期限は5分なので、その間に受信側のマシンでコマンドを実行してください。",
         cliDirectFacts.ja,
         "serve + push relayium://（デーモン直結）：自分が所有する2台のサーバー間で、証明書ピンニング付き TLS 上を直接。リレーなし、SSH なし、コードなし。",
@@ -429,7 +429,7 @@ const ja = {
     {
       heading: "最初の転送",
       body: [
-        "最も手早く試せるのは、SSH でログインできるサーバーへフォルダをコピーすることです。Relayium は既存の SSH アクセスを使うので、リモート側で設定することは何もなく、アカウント作成も不要です：",
+        "最も手早く試せるのは、自分で管理するマシンへフォルダをコピーすることです。そこで Relayium のリスナーを起動し、この送信側を承認すれば、アカウントなしで直接転送できます：",
       ],
       steps: [
         {
@@ -437,35 +437,31 @@ const ja = {
           code: ["relayium version"],
         },
         {
-          text: "普段どおりの方法でそのサーバーに届くことを確認します。push はまさにそのアクセスを再利用するので、ssh が通れば接続と認証という前提条件は満たせます。ただし転送そのものの成功を約束するものではなく、push には user@your-server:backups/ への書き込み権限と空き容量も必要です。",
-          code: ["ssh user@your-server true"],
+          text: "受信側でディレクトリを作成し、送信側のフィンガープリントを承認してリスナーを起動します。authorize と serve には同じ --config-dir を使う必要があります。",
+          code: ["mkdir -p ~/inbox && relayium authorize <sender-fingerprint> && relayium serve --dir ~/inbox"],
         },
         {
-          text: "フォルダーを push します。最後の引数は host:path で、リモートだと示すのはコロンです。末尾のスラッシュは「このディレクトリの中へ」を意味します。",
-          code: ["relayium push ./photos user@your-server:backups/"],
+          text: "リスナーの relayium:// アドレスへフォルダを push します。",
+          code: ["relayium push ./photos relayium://receiver.example"],
         },
         {
-          text: "思ったところにファイルが届いたか確認します。push ./photos は宛先の下に photos/ を再現するので、フォルダー名もそのまま付いてきます。",
-          code: ["ssh user@your-server ls backups/photos"],
+          text: "受信側のマシンで、リスナーの --dir の下に photos/ が現れたことを確認します。",
+          code: ["find ~/inbox/photos -maxdepth 1 -type f"],
         },
       ],
       success: {
         label: "成功したときの表示",
         body: [
-          "相手側に relayium があれば、push は完了したファイルごとに1行を表示して終了コード 0 で終わります。素のサーバー相手なら代わりに tar ストリームの要約行が出ます。どちらも成功です。",
+          "push は完了したファイルごとに1行を表示し、リスナーがバッチを検証して設置すると終了コード 0 で終わります。",
         ],
         code: [
-          `relayium push ./photos user@your-server:backups/
-  photos/IMG_0413.jpg (2314518 bytes)
-  photos/IMG_0414.jpg (1998233 bytes)
-echo $?
-# 0`,
+          "relayium push ./photos relayium://receiver.example\n  photos/IMG_0413.jpg (2314518 bytes)\n  photos/IMG_0414.jpg (1998233 bytes)\necho $?\n# 0",
         ],
       },
       bullets: [
-        "リモートにも relayium がインストールされていれば、push はネイティブプロトコルを使います。送信前にバッチ全体の衝突チェックを行い、各ファイルを SHA-256 で検証して暫定領域に置いてから設置します。それでも再開はしません。中断後にやり直すと、すでに届いたファイルが存在するため拒否されます。再開が必要なら relayium sync を使ってください。",
-        "リモートに relayium がなければ、push は単純な tar ストリームにフォールバックするため、relayium が入っていない素の状態のサーバーでも動作します。このフォールバックは push だけの機能です。",
-        "同じファイルを次のコマンドで取り戻せます：relayium pull user@your-server:backups/ ./restore。pull は常にリモートの relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。",
+        "push は送信前にバッチ全体の衝突チェックを行い、各ファイルを SHA-256 で検証して暫定領域に置いてから設置します。再開はしません。中断されうる実行には relayium sync を使ってください。",
+        "リスナーには到達可能である必要があり、この送信側のフィンガープリントをあらかじめ承認している必要があります。",
+        "SSH の宛先、relayium pull、-i と -p は廃止されました。逆方向に転送するには、このマシンで serve を実行し、もう一方のマシンから新たにデーモン直結の push を行ってください。",
       ],
     },
     {
@@ -485,20 +481,18 @@ echo $?
             fix: "バイナリは入っていますが、その置き場所が PATH にありません。スクリプトの最後の数行が使ったディレクトリを示し、追加すべき export PATH の行をそのまま表示します。それを実行し、新しいシェルを開いて relayium version をもう一度試してください。",
           },
           {
-            symptom: "push が即座に「push destination must be remote (host:path)」で終了する。",
+            symptom: "push が「SSH transfers are currently disabled」と表示する。",
             code: [
-              `relayium push ./photos user@your-server backups/
-# push destination must be remote (host:path)`,
+              "relayium push ./photos <retired-ssh-destination>\n# SSH transfers are currently disabled",
             ],
-            fix: "宛先からコロンが落ちたため、relayium がローカルパスとして読みました。scp と同じ書き方で、ホストとパスの間に空白を入れずに書いてください：user@your-server:backups/",
+            fix: "コマンドが廃止された SSH 形式の宛先を使っています。受信側で relayium serve を起動し、代わりに relayium://receiver を宛先にしてください。",
           },
           {
-            symptom: "push は通るサーバーで pull だけ失敗する。",
+            symptom: "リスナーが送信側を未承認として拒否する。",
             code: [
-              `ssh user@your-server command -v relayium
-# （何も表示されない）`,
+              "relayium id\n# sha256:...",
             ],
-            fix: "pull に tar フォールバックはありません。この向きではリモートが送信側になるため、あちらに relayium が必要です。同じ1行のコマンドでサーバーに入れてから pull をやり直してください。",
+            fix: "受信側で、serve と同じ --config-dir を指定して relayium authorize <sender-fingerprint> を実行してください。動作中のリスナーは次の接続時に新しい承認を読み込みます。",
           },
           {
             symptom: "同じコードに2台が参加し、片方が「the other side is running `relayium text`, not `relayium send`/`relayium receive`」と表示する。",
@@ -515,8 +509,8 @@ relayium text 483920`,
     {
       heading: "無料、そして設計上プライベート",
       body: [
-        "支払うものは何もありません。上記の3つの方法のうちサインインが要るのは send / receive モードの送信側だけで、CLI がペアリングコードを発行できるようにするためです（クラウドの up もファイルを保存するためにアカウントを使います）。CLI は両端を直接つなぐため、ファイルが中間のサーバーにアップロードされることは決してありません。Relayium が触れるのは、send / receive モードでの小さなランデブーハンドシェイクだけで、両端を引き合わせるために使われ、ファイル自体は決して含まれません。",
-        "すべての転送はエンドツーエンドで暗号化され、ネイティブプロトコルでは実行が転送した各ファイルが到着時に SHA-256 ハッシュで検証されます（例外は依存なしの tar フォールバックで、ファイル単位では何も検証しません）。再開はそれより狭い話です。relayium sync は半端なファイルを次回の実行で続け、relayium down は始まった実行の中で再接続して続けますが、push、pull、send、receive はまったく再開しません。macOS、Linux、Windows で動作し、全体がオープンソースでセルフホスト可能です。",
+        "転送ごとの料金はありません。デーモン直結の push/sync は自分の2台のマシンの間で内容を直接運び、Relayium のサーバーを通らず、アカウントも不要です。send / receive でサインインが要るのはコードを発行する側だけです（クラウドの up もファイルを保存するためにアカウントを使います）。サーバーがそのコードにリレーを発行した場合、すべてのバイトはその暗号化リレーを、リレーが読めない暗号文として通り、コードを発行したアカウントの月間転送量の枠に計上されます。枠の消費は利用量の計上であって、転送ごとの課金ではありません。",
+        "すべての転送はエンドツーエンドで暗号化され、実行が転送した各ファイルは到着時に SHA-256 ハッシュで検証されます。再開はそれより狭い話です。relayium sync は半端なファイルを次回の実行で続け、relayium down は始まった実行の中で再接続して続けますが、push、send、receive はまったく再開しません。macOS、Linux、Windows で動作し、全体がオープンソースでセルフホスト可能です。",
       ],
     },
   ],
@@ -525,11 +519,11 @@ relayium text 483920`,
     items: [
       {
         q: "CLI に料金はかかりますか？",
-        a: "CLI 自体は無料のオープンソースで、直結モード（push、pull、デーモン直結、send / receive）は使っても費用がかかりません。これらのファイルとテキストのバイトは Relayium のリレーを通らないため、計測するものがないからです。プランの枠を使うのは up と down で、アカウントの下に置かれる暗号化コピーを書き込み、読み戻します。up は4つの別々の上限に計上されます。月間転送量の枠、同時に保存しておけるデータ量のストレージ上限、プランの保存期間の上限、そして1日あたりのアップロード上限です。down はコピーを読み戻す分が月間転送量の枠に計上されます。有料プランではこれらすべてが引き上げられます。",
+        a: "CLI 自体は無料のオープンソースで、デーモン直結の push/sync は使っても費用がかかりません。そのバイトは Relayium のサーバーを通らないため、計測するものがないからです。send / receive と text は中継されたときに計測されます。サーバーがそのコードにリレーを発行した場合、中継されたバイトはコードを発行したアカウントの月間転送量の枠に計上されます。プランの枠を使うのは up と down で、アカウントの下に置かれる暗号化コピーを書き込み、読み戻します。up は4つの別々の上限に計上されます。月間転送量の枠、同時に保存しておけるデータ量のストレージ上限、プランの保存期間の上限、そして1日あたりのアップロード上限です。down はコピーを読み戻す分が月間転送量の枠に計上されます。有料プランではこれらすべてが引き上げられます。",
       },
       {
         q: "Relayium アカウントは必要ですか？",
-        a: "send または text でペアリングコードを発行するときと、クラウドの up で必要です。push / pull とデーモン直結には不要です。サーバーはログイン済みアカウントにだけコードを発行するため、作成側は一度 relayium login を実行します。渡されたコードで参加する側はログイン不要で、receive 側もサインインしません。",
+        a: "send、text、pair でペアリングコードを発行するとき、クラウドの up、そして Device Inbox で必要です。デーモン直結の push/sync には不要です。サーバーはログイン済みアカウントにだけコードを発行するため、作成側は一度 relayium login を実行します。渡されたコードで参加する側はログイン不要で、receive 側もサインインしません。",
       },
       {
         q: "どのオペレーティングシステムに対応していますか？",
@@ -537,7 +531,7 @@ relayium text 483920`,
       },
       {
         q: "自分のファイルは Relayium のサーバーを通過しますか？",
-        a: "直結モードでは通過しません。push、pull、daemon 直結、send / receive では、ファイルのバイトは両端の間を直接移動します。当社のサーバーに一切触れるのは send / receive だけで、それも小さなランデブーハンドシェイクのためだけです。ファイルの中身は決して含まれません。up は異なります。暗号化したコピーをアカウントのストレージにアップロードし、サーバーはそれを保持しますが読むことはできません。",
+        a: "デーモン直結の push/sync では通過しません。ファイルのバイトは自分の2台のマシンの間を直接移動します。send / receive と text は小さなランデブーハンドシェイクのために当社のサーバーに接続し、サーバーがそのコードに TURN リレーを発行した場合は、セッションのすべてのバイトがそのリレーを通ります。リレーが読めないエンドツーエンド暗号化された暗号文として運ばれ、コードを発行したアカウントの月間転送量の枠に計上され、保存されることはありません。up は異なります。暗号化したコピーをアカウントのストレージにアップロードし、サーバーはそれを保持しますが読むことはできません。",
       },
     ],
   },
@@ -552,11 +546,11 @@ relayium text 483920`,
 const ko = {
   title: "Relayium CLI로 터미널에서 파일과 텍스트 전송하기",
   description:
-    "무료 종단간 암호화 Relayium CLI로 SSH·페어링 코드·데몬 다이렉트 파일 전송과 두 기기가 함께 온라인일 때의 일회성 텍스트 전송을 시작하세요.",
+    "무료 종단간 암호화 Relayium CLI로 페어링 코드·데몬 다이렉트 파일 전송과 두 기기가 함께 온라인일 때의 일회성 텍스트 전송을 시작하세요.",
   updatedLabel: "마지막 업데이트",
   lead: [
     "Relayium CLI는 터미널에서 파일과 일회성 텍스트를 옮기는 작은 단일 바이너리입니다 — 종단간 암호화, 자체 호스팅 가능, AGPL-3.0 라이선스의 무료 오픈소스. 서버로 파일을 복사하거나 기기 사이에 빌드를 보내고, URL·명령·코드 조각을 파일로 저장하지 않고 그대로 전송할 수 있습니다.",
-    "직접 연결 모드(push, pull, sync, daemon 다이렉트, send / receive, text)에서는 파일 데이터가 두 끝 사이에서 직접 이동하며 Relayium 서버를 거치지 않습니다. up은 직접 연결이 아닙니다. 암호화된 사본을 계정에 저장합니다. 이 가이드는 설치와 첫 전송까지 안내한 뒤, 각 모드별로 더 깊은 방법을 다루는 글로 안내합니다.",
+    "데몬 다이렉트(relayium serve와 push 또는 sync)에서는 파일 데이터가 내 두 기기 사이에서 직접 이동하며 Relayium 서버를 거치지 않으므로 아무것도 계량되지 않습니다. 페어링 코드 세션(send / receive, text, pair)은 종단간 암호화되지만, 서버가 해당 코드에 릴레이를 발급하면 모든 바이트가 그 암호화된 릴레이를 거치며 코드를 발급한 계정의 월간 전송량 한도에 집계됩니다. up은 직접 연결이 아닙니다. 암호화된 사본을 계정에 저장합니다. 이 가이드는 설치와 첫 전송까지 안내한 뒤, 각 모드별로 더 깊은 방법을 다루는 글로 안내합니다.",
   ],
   sections: [
     {
@@ -567,7 +561,7 @@ const ko = {
           "터미널이 있는 macOS, Linux 또는 Windows 기기. 사전 빌드된 바이너리는 세 운영체제 모두에서 x86-64와 arm64를 지원합니다.",
           "macOS와 Linux의 한 줄 설치에 쓰이는 curl. curl --version 이 버전을 출력합니다. Windows에서는 릴리스 페이지에서 .zip을 내려받으세요.",
           "쓰기 가능한 설치 디렉터리. 스크립트는 쓸 수 있으면 /usr/local/bin을, 아니면 ~/.local/bin을 사용하고, 마지막 줄에서 어느 쪽을 골랐는지 알려 줍니다.",
-          "push, pull, 데몬 다이렉트에는 그 밖에 필요한 것이 없습니다. 무료 Relayium 계정이 필요한 것은 send나 text로 페어링 코드를 발급할 때, 그리고 up으로 올릴 때뿐입니다.",
+          "데몬 다이렉트 push와 sync에는 그 밖에 필요한 것이 없습니다. 무료 Relayium 계정이 필요한 것은 send, text, pair로 페어링 코드를 발급할 때, up으로 올릴 때, 그리고 Device Inbox를 쓸 때뿐입니다.",
         ],
       },
       body: [
@@ -583,10 +577,10 @@ const ko = {
     {
       heading: "파일을 옮기는 세 가지 방식",
       body: [
-        "Relayium은 세 가지 방식으로 파일을 옮깁니다. 세 가지 다른 도구를 배울 필요 없이, 상대가 어디에 있는지에 따라 고르기만 하면 됩니다 — 모두 동일한 전송 엔진을 공유하며 옮기는 각 파일을 SHA-256 해시로 검증합니다. 공유하지 않는 것은 재개입니다: 부분 파일을 다음 실행에서 이어가는 것은 sync이고, push, pull, send, receive는 전혀 재개하지 않습니다.",
+        "Relayium은 세 가지 방식으로 파일을 옮깁니다. 세 가지 다른 도구를 배울 필요 없이, 상대가 어디에 있는지에 따라 고르기만 하면 됩니다 — 모두 동일한 전송 엔진을 공유하며 옮기는 각 파일을 SHA-256 해시로 검증합니다. 공유하지 않는 것은 재개입니다: 부분 파일을 다음 실행에서 이어가는 것은 sync이고, push, send, receive는 전혀 재개하지 않습니다.",
       ],
       bullets: [
-        "push / pull — 이미 SSH로 접속 가능한 서버로. 데이터는 SSH 연결을 통해 오가며, Relayium 계정이 필요 없습니다.",
+        "up / down(클라우드) — 상대가 오프라인이어도 됩니다. up은 이 기기에서 암호화해 암호문만 계정에 올리고 링크를 표시하며, down은 그 링크로 다른 기기에서 가져와 복호화합니다. 예전에 여기 있던 SSH 기반 push / pull은 폐지되었습니다.",
         "send / receive — 보내는 쪽 CLI가 발급하는 짧은 페어링 코드를 사용해 네트워크를 넘어 다른 사람에게(relayium login으로 한 번만 로그인하면 되고, 받는 쪽은 로그인하지 않습니다). 발급된 코드는 5분 동안만 유효하니, 그 안에 받는 쪽 머신에서 명령을 실행하세요.",
         cliDirectFacts.ko,
         "serve + push relayium://(데몬 다이렉트) — 직접 소유한 두 서버 사이에서, 인증서 고정 TLS를 통해 곧바로. 중계도, SSH도, 코드도 필요 없습니다.",
@@ -609,7 +603,7 @@ const ko = {
     {
       heading: "첫 전송",
       body: [
-        "가장 빠르게 시도해 볼 수 있는 것은 SSH로 접속 가능한 서버로 폴더를 복사하는 것입니다. Relayium은 기존 SSH 접근 권한을 사용하므로 원격지에서 설정할 것이 없고 계정을 만들 필요도 없습니다:",
+        "가장 빠르게 시도해 볼 수 있는 것은 직접 관리하는 기기로 폴더를 복사하는 것입니다. 그 기기에서 Relayium 리스너를 실행하고 이 보내는 쪽을 승인하면, 계정 없이 직접 전송할 수 있습니다:",
       ],
       steps: [
         {
@@ -617,35 +611,31 @@ const ko = {
           code: ["relayium version"],
         },
         {
-          text: "평소 방식으로 그 서버에 닿는지 확인합니다. push는 바로 그 접근을 그대로 쓰므로, ssh가 되면 연결과 인증이라는 전제 조건은 충족됩니다. 다만 전송 자체의 성공을 약속하지는 않으며, push에는 user@your-server:backups/에 대한 쓰기 권한과 여유 공간도 필요합니다.",
-          code: ["ssh user@your-server true"],
+          text: "받는 쪽에서 디렉터리를 만들고, 보내는 쪽의 지문을 승인한 뒤 리스너를 시작합니다. authorize와 serve는 같은 --config-dir를 써야 합니다.",
+          code: ["mkdir -p ~/inbox && relayium authorize <sender-fingerprint> && relayium serve --dir ~/inbox"],
         },
         {
-          text: "폴더를 push합니다. 마지막 인자는 host:path이고, 원격임을 표시하는 것은 콜론입니다. 끝의 슬래시는 “이 디렉터리 안으로”라는 뜻입니다.",
-          code: ["relayium push ./photos user@your-server:backups/"],
+          text: "리스너의 relayium:// 주소로 폴더를 push합니다.",
+          code: ["relayium push ./photos relayium://receiver.example"],
         },
         {
-          text: "파일이 기대한 곳에 도착했는지 확인합니다. push ./photos 는 목적지 아래에 photos/ 를 그대로 재현하므로 폴더 이름이 함께 따라옵니다.",
-          code: ["ssh user@your-server ls backups/photos"],
+          text: "받는 기기에서 리스너의 --dir 아래에 photos/가 생겼는지 확인합니다.",
+          code: ["find ~/inbox/photos -maxdepth 1 -type f"],
         },
       ],
       success: {
         label: "성공했을 때 보이는 것",
         body: [
-          "원격에 relayium이 있으면 push는 완료된 파일마다 한 줄을 출력하고 0으로 종료합니다. 아무것도 없는 서버를 상대로는 tar 스트림 요약 줄이 대신 나옵니다 — 둘 다 성공입니다.",
+          "push는 완료된 파일마다 한 줄을 표시하고, 리스너가 배치를 검증하고 설치하면 종료 코드 0으로 끝납니다.",
         ],
         code: [
-          `relayium push ./photos user@your-server:backups/
-  photos/IMG_0413.jpg (2314518 bytes)
-  photos/IMG_0414.jpg (1998233 bytes)
-echo $?
-# 0`,
+          "relayium push ./photos relayium://receiver.example\n  photos/IMG_0413.jpg (2314518 bytes)\n  photos/IMG_0414.jpg (1998233 bytes)\necho $?\n# 0",
         ],
       },
       bullets: [
-        "원격지에도 relayium이 설치되어 있으면 push는 네이티브 프로토콜을 사용합니다: 바이트를 보내기 전에 배치의 충돌을 검사하고, 각 파일을 SHA-256으로 검증한 뒤 스테이징했다가 설치합니다. 그래도 재개하지는 않습니다 — 중단된 뒤 다시 실행하면 이미 도착한 파일이 존재하므로 거부됩니다. 그것이 필요하면 relayium sync를 쓰세요.",
-        "원격지에 relayium이 없으면 push는 일반 tar 스트림으로 대체되므로, 아무것도 설치되지 않은 서버에서도 동작합니다 — 이 대체 방식은 push에서만 제공됩니다.",
-        "다음 명령어로 같은 파일을 다시 가져올 수 있습니다: relayium pull user@your-server:backups/ ./restore — pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요.",
+        "push는 보내기 전에 배치의 충돌을 검사하고, 각 파일을 SHA-256으로 검증한 뒤 스테이징했다가 설치합니다. 재개는 하지 않으므로, 중단될 수 있는 실행에는 relayium sync를 쓰세요.",
+        "리스너는 도달 가능해야 하며, 이 보내는 쪽의 지문을 미리 승인해 두어야 합니다.",
+        "SSH 대상, relayium pull, -i와 -p는 폐지되었습니다. 반대 방향으로 전송하려면 이 기기에서 serve를 실행하고 다른 기기에서 새 데몬 다이렉트 push를 시작하세요.",
       ],
     },
     {
@@ -665,20 +655,18 @@ echo $?
             fix: "바이너리는 설치됐지만 그 디렉터리가 PATH에 없습니다. 스크립트의 마지막 줄들이 사용한 디렉터리를 알려 주고 추가할 export PATH 줄을 그대로 출력합니다. 그것을 실행한 뒤 새 셸을 열고 relayium version 을 다시 시도하세요.",
           },
           {
-            symptom: "push가 곧바로 “push destination must be remote (host:path)”를 내고 끝납니다.",
+            symptom: "push가 “SSH transfers are currently disabled”를 표시합니다.",
             code: [
-              `relayium push ./photos user@your-server backups/
-# push destination must be remote (host:path)`,
+              "relayium push ./photos <retired-ssh-destination>\n# SSH transfers are currently disabled",
             ],
-            fix: "목적지에서 콜론이 빠져 relayium이 로컬 경로로 읽었습니다. scp 방식으로, 호스트와 경로 사이에 공백 없이 쓰세요: user@your-server:backups/",
+            fix: "명령이 폐지된 SSH 형식의 대상을 쓰고 있습니다. 받는 쪽에서 relayium serve를 시작하고 대신 relayium://receiver를 대상으로 쓰세요.",
           },
           {
-            symptom: "push는 잘 되던 서버에서 pull만 실패합니다.",
+            symptom: "리스너가 보내는 쪽을 승인되지 않았다며 거부합니다.",
             code: [
-              `ssh user@your-server command -v relayium
-# (아무것도 출력되지 않음)`,
+              "relayium id\n# sha256:...",
             ],
-            fix: "pull에는 tar 대체 방식이 없습니다. 이 방향에서는 원격이 보내는 쪽이라 거기에 relayium이 있어야 합니다. 같은 한 줄 명령으로 서버에 설치한 뒤 pull을 다시 실행하세요.",
+            fix: "받는 쪽에서 serve와 같은 --config-dir로 relayium authorize <sender-fingerprint>를 실행하세요. 실행 중인 리스너는 다음 연결 때 새 승인을 읽어 들입니다.",
           },
           {
             symptom: "두 기기가 같은 코드에 들어갔는데 한쪽이 “the other side is running `relayium text`, not `relayium send`/`relayium receive`”를 출력합니다.",
@@ -695,8 +683,8 @@ relayium text 483920`,
     {
       heading: "무료이며, 설계상 프라이버시를 지킵니다",
       body: [
-        "지불할 것은 없습니다. 위 세 가지 방식 중 로그인이 필요한 곳은 send / receive 모드의 보내는 쪽뿐이며, CLI가 페어링 코드를 발급할 수 있도록 하기 위해서입니다(클라우드 up도 파일을 저장하기 위해 계정을 사용합니다). CLI는 두 끝을 직접 연결하므로 파일이 중간의 서버에 업로드되는 일은 결코 없습니다. Relayium이 유일하게 관여하는 것은 send / receive 모드에서 두 끝을 소개하는 데 쓰이는 아주 작은 랑데부 핸드셰이크뿐입니다. 파일 자체는 절대 포함되지 않습니다.",
-        "모든 전송은 종단간 암호화되고, 네이티브 프로토콜에서는 한 번의 실행이 전송한 모든 파일이 도착 시 SHA-256 해시로 검증됩니다 — 의존성 없는 tar 대체 방식만 예외이며 파일별로 아무것도 검증하지 않습니다. 재개는 그보다 좁습니다: relayium sync는 부분 파일을 다음 실행에서 이어가고, relayium down은 시작된 실행 안에서 다시 연결해 이어가지만, push, pull, send, receive는 전혀 재개하지 않습니다. macOS, Linux, Windows에서 동작하며, 전체가 오픈소스이고 자체 호스팅이 가능합니다.",
+        "전송별 요금은 없습니다. 데몬 다이렉트 push/sync는 내 두 기기 사이에서 내용을 직접 옮기며 Relayium 서버를 거치지 않고 계정도 필요 없습니다. send / receive에서 로그인이 필요한 쪽은 코드를 발급하는 쪽뿐입니다(클라우드 up도 파일을 저장하기 위해 계정을 사용합니다). 서버가 해당 코드에 릴레이를 발급하면 모든 바이트가 릴레이가 읽을 수 없는 암호문으로 그 암호화된 릴레이를 거치며, 코드를 발급한 계정의 월간 전송량 한도에 집계됩니다. 한도 사용은 사용량 집계일 뿐 전송별 과금이 아닙니다.",
+        "모든 전송은 종단간 암호화되고, 한 번의 실행이 전송한 모든 파일은 도착 시 SHA-256 해시로 검증됩니다. 재개는 그보다 좁습니다: relayium sync는 부분 파일을 다음 실행에서 이어가고, relayium down은 시작된 실행 안에서 다시 연결해 이어가지만, push, send, receive는 전혀 재개하지 않습니다. macOS, Linux, Windows에서 동작하며, 전체가 오픈소스이고 자체 호스팅이 가능합니다.",
       ],
     },
   ],
@@ -705,11 +693,11 @@ relayium text 483920`,
     items: [
       {
         q: "CLI 사용에 비용이 드나요?",
-        a: "CLI 자체는 무료 오픈소스이며, 직접 연결 모드(push, pull, 데몬 다이렉트, send / receive)는 사용해도 비용이 들지 않습니다. 이 파일과 텍스트 데이터는 Relayium 릴레이를 거치지 않으므로 계량할 것이 없습니다. 요금제 한도를 쓰는 명령은 up과 down으로, 계정 아래에 보관되는 암호화 사본을 쓰고 다시 읽어 옵니다. up은 네 가지 별도 한도에 포함됩니다. 월간 트래픽 허용량, 한 번에 저장해 둘 수 있는 양에 대한 저장 용량 한도, 요금제의 보관 기간 상한, 그리고 일일 업로드 한도입니다. down은 사본을 읽어 올 때 월간 트래픽 허용량에 포함됩니다. 유료 요금제는 이 모두를 높여 줍니다.",
+        a: "CLI 자체는 무료 오픈소스이며, 직접 연결 모드인 데몬 다이렉트 push/sync는 사용해도 비용이 들지 않습니다. 그 데이터는 Relayium 서버를 거치지 않으므로 계량할 것이 없습니다. send / receive와 text는 릴레이될 때 계량됩니다. 서버가 해당 코드에 릴레이를 발급하면, 릴레이된 바이트는 코드를 발급한 계정의 월간 전송량 한도에 집계됩니다. 요금제 한도를 쓰는 명령은 up과 down으로, 계정 아래에 보관되는 암호화 사본을 쓰고 다시 읽어 옵니다. up은 네 가지 별도 한도에 포함됩니다. 월간 트래픽 허용량, 한 번에 저장해 둘 수 있는 양에 대한 저장 용량 한도, 요금제의 보관 기간 상한, 그리고 일일 업로드 한도입니다. down은 사본을 읽어 올 때 월간 트래픽 허용량에 포함됩니다. 유료 요금제는 이 모두를 높여 줍니다.",
       },
       {
         q: "Relayium 계정이 필요한가요?",
-        a: "send 또는 text로 페어링 코드를 발급할 때와 클라우드 up에 필요합니다. push / pull과 데몬 다이렉트에는 계정이 필요 없습니다. 서버는 로그인된 계정에만 코드를 발급하므로 생성 측이 relayium login을 한 번 실행합니다. 전달받은 코드로 참여하는 쪽과 receive 수신자는 로그인하지 않습니다.",
+        a: "send, text, pair로 페어링 코드를 발급할 때, 클라우드 up, 그리고 Device Inbox에 필요합니다. 데몬 다이렉트 push/sync에는 계정이 필요 없습니다. 서버는 로그인된 계정에만 코드를 발급하므로 생성 측이 relayium login을 한 번 실행합니다. 전달받은 코드로 참여하는 쪽과 receive 수신자는 로그인하지 않습니다.",
       },
       {
         q: "어떤 운영체제를 지원하나요?",
@@ -717,7 +705,7 @@ relayium text 483920`,
       },
       {
         q: "제 파일이 Relayium 서버를 거치나요?",
-        a: "직접 연결 모드에서는 거치지 않습니다. push, pull, daemon 다이렉트, send / receive에서는 파일 데이터가 두 끝 사이에서 직접 이동합니다. 저희 서버에 조금이라도 닿는 것은 send / receive뿐이며, 그마저도 작은 랑데부 핸드셰이크를 위한 것일 뿐 — 파일 내용은 절대 아닙니다. up은 다릅니다. 암호화된 사본을 계정의 저장소에 업로드하며, 서버는 이를 보관하지만 읽을 수 없습니다.",
+        a: "데몬 다이렉트 push/sync에서는 거치지 않습니다. 파일 데이터가 내 두 기기 사이에서 직접 이동합니다. send / receive와 text는 작은 랑데부 핸드셰이크를 위해 저희 서버에 연결하며, 서버가 해당 코드에 TURN 릴레이를 발급하면 세션의 모든 바이트가 그 릴레이를 거칩니다 — 릴레이가 읽을 수 없는 종단간 암호화된 암호문으로, 코드를 발급한 계정의 월간 전송량 한도에 집계되며 저장되지 않습니다. up은 다릅니다. 암호화된 사본을 계정의 저장소에 업로드하며, 서버는 이를 보관하지만 읽을 수 없습니다.",
       },
     ],
   },
@@ -732,11 +720,11 @@ relayium text 483920`,
 const de = {
   title: "Dateien und Text mit der Relayium CLI vom Terminal übertragen",
   description:
-    "Nutze die kostenlose, Ende-zu-Ende-verschlüsselte Relayium CLI für Dateien über SSH, Pairing-Code oder daemon-direct — und für flüchtigen Text, solange beide Rechner online sind.",
+    "Nutze die kostenlose, Ende-zu-Ende-verschlüsselte Relayium CLI für Dateien per Pairing-Code oder daemon-direct — und für flüchtigen Text, solange beide Rechner online sind.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Die Relayium CLI ist ein kleines einzelnes Binary für Dateien und flüchtigen Text im Terminal — Ende-zu-Ende-verschlüsselt, selbst hostbar und kostenlos. Kopiere Dateien auf Server, pushe Builds zwischen Maschinen oder sende URLs, Befehle und Codeausschnitte, ohne sie erst als Datei zu speichern.",
-    "In den direkten Modi — push, pull, sync, daemon-direct, send / receive und text — wandern die Dateibytes direkt zwischen den beiden Enden und laufen nie über Relayiums Server. up ist nicht direkt: Es speichert eine verschlüsselte Kopie unter deinem Konto. Diese Anleitung bringt dich zur Installation und durch deine erste Übertragung und verweist dich dann auf die ausführlicheren Anleitungen zu jedem Modus.",
+    "Bei daemon-direct — relayium serve mit push oder sync — wandern die Dateibytes direkt zwischen deinen beiden Rechnern und laufen nie über Relayiums Server, daher wird nichts gezählt. Die Pairing-Code-Sitzungen (send / receive, text und pair) sind Ende-zu-Ende-verschlüsselt, doch sobald der Server für den Code ein Relay ausstellt, läuft jedes Byte über dieses verschlüsselte Relay und zählt zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat. up ist nicht direkt: Es speichert eine verschlüsselte Kopie unter deinem Konto. Diese Anleitung bringt dich zur Installation und durch deine erste Übertragung und verweist dich dann auf die ausführlicheren Anleitungen zu jedem Modus.",
   ],
   sections: [
     {
@@ -747,7 +735,7 @@ const de = {
           "Einen Rechner mit Terminal unter macOS, Linux oder Windows. Vorgebaute Binaries gibt es für alle drei, jeweils für x86-64 und arm64.",
           "curl für die Ein-Zeilen-Installation unter macOS und Linux — curl --version gibt eine Version aus. Unter Windows lädst du stattdessen das .zip von der Releases-Seite.",
           "Ein beschreibbares Installationsverzeichnis. Das Skript nimmt /usr/local/bin, wenn es dort schreiben darf, sonst ~/.local/bin, und seine letzten Zeilen nennen das gewählte.",
-          "Für push, pull und daemon-direct sonst nichts. Ein kostenloses Relayium-Konto brauchen nur das Erzeugen eines Pairing-Codes mit send oder text und das Hochladen mit up.",
+          "Für daemon-direct push und sync sonst nichts. Ein kostenloses Relayium-Konto brauchen nur das Erzeugen eines Pairing-Codes mit send, text oder pair, das Hochladen mit up und die Device Inbox.",
         ],
       },
       body: [
@@ -763,10 +751,10 @@ const de = {
     {
       heading: "Die drei Wege, Dateien zu bewegen",
       body: [
-        "Relayium bewegt Dateien auf drei Arten. Du wählst danach, wo sich die Gegenstelle befindet, nicht indem du drei verschiedene Werkzeuge lernst — sie teilen sich eine Übertragungs-Engine, die jede bewegte Datei per SHA-256-Hash prüft. Was sie sich nicht teilen, ist das Fortsetzen: sync ist der Modus, der eine Teildatei in einem späteren Lauf weiterführt, und push, pull, send und receive setzen gar nicht fort.",
+        "Relayium bewegt Dateien auf drei Arten. Du wählst danach, wo sich die Gegenstelle befindet, nicht indem du drei verschiedene Werkzeuge lernst — sie teilen sich eine Übertragungs-Engine, die jede bewegte Datei per SHA-256-Hash prüft. Was sie sich nicht teilen, ist das Fortsetzen: sync ist der Modus, der eine Teildatei in einem späteren Lauf weiterführt, und push, send und receive setzen gar nicht fort.",
       ],
       bullets: [
-        "push / pull — zu einem Server, in den du dich bereits per SSH einloggen kannst. Die Bytes laufen über deine SSH-Verbindung; kein Relayium-Konto nötig.",
+        "up / down (Cloud) — die Gegenstelle darf offline sein. up verschlüsselt auf diesem Rechner, lädt nur den Chiffretext unter dein Konto hoch und gibt einen Link aus; down holt und entschlüsselt ihn mit dem Link auf einem anderen Rechner. Das früher hier genannte push / pull über SSH ist eingestellt.",
         "send / receive — an eine andere Person netzwerkübergreifend, mit einem kurzen Pairing-Code, den die CLI des Absenders erzeugt (einmalig mit relayium login anmelden; der Empfänger nie). Ein erzeugter Code gilt fünf Minuten — starte den Befehl auf der empfangenden Maschine in diesem Fenster.",
         cliDirectFacts.de,
         "serve + push relayium:// (daemon-direct) — direkt zwischen zwei Servern, die dir gehören, über TLS mit Pinning. Kein Relay, kein SSH, kein Code.",
@@ -789,7 +777,7 @@ const de = {
     {
       heading: "Deine erste Übertragung",
       body: [
-        "Am schnellsten lässt sich ausprobieren, einen Ordner auf einen Server zu kopieren, in den du dich per SSH einloggen kannst. Relayium nutzt deinen bestehenden SSH-Zugang, es gibt also nichts auf der Gegenseite zu konfigurieren und kein Konto anzulegen:",
+        "Am schnellsten lässt sich ausprobieren, einen Ordner auf einen Rechner zu kopieren, den du verwaltest. Starte dort einen Relayium-Listener, autorisiere diesen Absender und übertrage direkt, ganz ohne Konto:",
       ],
       steps: [
         {
@@ -797,35 +785,31 @@ const de = {
           code: ["relayium version"],
         },
         {
-          text: "Prüf, ob du den Server auf dem gewohnten Weg schon erreichst. push nutzt genau diesen Zugang wieder: klappt ssh, ist die Voraussetzung Verbindung und Authentifizierung erfüllt. Ein Versprechen für die Übertragung selbst ist das nicht — dafür braucht push weiterhin Schreibrechte und freien Platz unter user@your-server:backups/.",
-          code: ["ssh user@your-server true"],
+          text: "Lege auf dem Empfänger das Verzeichnis an, autorisiere den Fingerabdruck des Absenders und starte den Listener. authorize und serve müssen dasselbe --config-dir verwenden.",
+          code: ["mkdir -p ~/inbox && relayium authorize <sender-fingerprint> && relayium serve --dir ~/inbox"],
         },
         {
-          text: "Schieb den Ordner hoch. Das letzte Argument ist host:path — der Doppelpunkt macht es zur Gegenstelle, und ein Schrägstrich am Ende heißt „in dieses Verzeichnis hinein“.",
-          code: ["relayium push ./photos user@your-server:backups/"],
+          text: "Pushe den Ordner an die relayium://-Adresse des Listeners.",
+          code: ["relayium push ./photos relayium://receiver.example"],
         },
         {
-          text: "Prüf, ob die Dateien dort gelandet sind, wo du sie erwartest. push ./photos legt photos/ unter dem Ziel wieder an, der Ordnername kommt also mit.",
-          code: ["ssh user@your-server ls backups/photos"],
+          text: "Prüfe auf dem empfangenden Rechner, dass photos/ unter dem --dir des Listeners erschienen ist.",
+          code: ["find ~/inbox/photos -maxdepth 1 -type f"],
         },
       ],
       success: {
         label: "So sieht ein erfolgreicher Lauf aus",
         body: [
-          "Liegt relayium auf der Gegenseite, gibt push eine Zeile pro fertiger Datei aus und endet mit 0. Gegen einen nackten Server erscheint stattdessen die tar-Stream-Zusammenfassung — beides ist Erfolg.",
+          "push gibt pro abgeschlossener Datei eine Zeile aus und endet mit 0, nachdem der Listener den Stapel geprüft und installiert hat.",
         ],
         code: [
-          `relayium push ./photos user@your-server:backups/
-  photos/IMG_0413.jpg (2314518 bytes)
-  photos/IMG_0414.jpg (1998233 bytes)
-echo $?
-# 0`,
+          "relayium push ./photos relayium://receiver.example\n  photos/IMG_0413.jpg (2314518 bytes)\n  photos/IMG_0414.jpg (1998233 bytes)\necho $?\n# 0",
         ],
       },
       bullets: [
-        "Ist relayium auch auf der Gegenseite installiert, nutzt push das native Protokoll: Der Stapel wird auf Kollisionen geprüft, bevor ein Byte fließt, und jede Datei wird per SHA-256 verifiziert und zwischengelagert, bevor sie installiert wird. Fortgesetzt wird trotzdem nicht — ein erneuter Lauf nach einem Abbruch wird abgelehnt, weil die gelandeten Dateien nun existieren. Nimm relayium sync, wo du das brauchst.",
-        "Ist relayium dort nicht installiert, fällt push auf einen einfachen tar-Stream zurück, sodass es auch auf einem nackten Server funktioniert — dieser Fallback existiert nur bei push.",
-        "Hole dieselben Dateien mit folgendem Befehl zurück: relayium pull user@your-server:backups/ ./restore — pull braucht immer relayium auf der Gegenseite (keinen tar-Fallback), installiere es dort also zuerst.",
+        "push prüft den Stapel vor dem Senden auf Kollisionen, verifiziert jede Datei per SHA-256 und lagert sie vor der Installation zwischen. Fortgesetzt wird nicht; nimm relayium sync, wenn ein Lauf unterbrochen werden kann.",
+        "Der Listener muss erreichbar sein und den Fingerabdruck dieses Absenders bereits autorisiert haben.",
+        "SSH-Ziele, relayium pull, -i und -p sind eingestellt. Für die Gegenrichtung starte serve auf diesem Rechner und beginne vom anderen aus einen neuen daemon-direct-push.",
       ],
     },
     {
@@ -845,20 +829,18 @@ echo $?
             fix: "Das Binary ist installiert, sein Verzeichnis liegt aber nicht im PATH. Die letzten Zeilen des Skripts nennen das verwendete Verzeichnis und geben die passende export-PATH-Zeile aus; führ sie aus, öffne eine neue Shell und probier relayium version noch einmal.",
           },
           {
-            symptom: "push endet sofort mit „push destination must be remote (host:path)“.",
+            symptom: "push meldet „SSH transfers are currently disabled“.",
             code: [
-              `relayium push ./photos user@your-server backups/
-# push destination must be remote (host:path)`,
+              "relayium push ./photos <retired-ssh-destination>\n# SSH transfers are currently disabled",
             ],
-            fix: "Dem Ziel fehlt der Doppelpunkt, also hat relayium es als lokalen Pfad gelesen. Schreib es scp-artig, ohne Leerzeichen zwischen Host und Pfad: user@your-server:backups/",
+            fix: "Der Befehl nutzt die eingestellte SSH-Zielform. Starte relayium serve auf dem Empfänger und nimm stattdessen relayium://receiver als Ziel.",
           },
           {
-            symptom: "pull scheitert an einem Server, gegen den push problemlos lief.",
+            symptom: "Der Listener lehnt den Absender als nicht autorisiert ab.",
             code: [
-              `ssh user@your-server command -v relayium
-# (gibt nichts aus)`,
+              "relayium id\n# sha256:...",
             ],
-            fix: "pull hat keinen tar-Fallback, denn in dieser Richtung ist die Gegenseite der Sender — dort muss relayium installiert sein. Installier es mit demselben Ein-Zeilen-Befehl auf dem Server und wiederhol das pull.",
+            fix: "Führe auf dem Empfänger relayium authorize <sender-fingerprint> mit demselben --config-dir aus, das serve nutzt. Ein laufender Listener liest die neue Autorisierung bei der nächsten Verbindung.",
           },
           {
             symptom: "Zwei Rechner treten demselben Code bei und einer gibt „the other side is running `relayium text`, not `relayium send`/`relayium receive`“ aus.",
@@ -875,8 +857,8 @@ relayium text 483920`,
     {
       heading: "Kostenlos und von Grund auf privat",
       body: [
-        "Es gibt nichts zu bezahlen. Von den drei Wegen oben erfordert nur der Absender im send-/receive-Modus eine Anmeldung, damit dessen CLI einen Pairing-Code erzeugen kann (auch Cloud-up nutzt dein Konto, um die Datei zu speichern). Die CLI verbindet die beiden Enden direkt, sodass deine Dateien nie auf einen Server dazwischen hochgeladen werden — das Einzige, was Relayium jemals berührt, ist ein winziger Rendezvous-Handshake im send-/receive-Modus, der die beiden Enden einander vorstellt, niemals die Datei selbst.",
-        "Jede Übertragung ist Ende-zu-Ende verschlüsselt, und im nativen Protokoll wird jede Datei, die ein Lauf überträgt, bei Ankunft mit einem SHA-256-Hash geprüft — die Ausnahme ist der abhängigkeitsfreie tar-Fallback, der je Datei nichts prüft. Fortsetzen ist enger gefasst: relayium sync führt eine Teildatei in einem späteren Lauf weiter, relayium down verbindet sich innerhalb des laufenden Vorgangs neu und macht dort weiter, und push, pull, send und receive setzen gar nicht fort. Sie läuft unter macOS, Linux und Windows, und das Ganze ist Open Source und selbst hostbar.",
+        "Es gibt keine Gebühr pro Übertragung. daemon-direct push/sync bewegt Inhalte direkt zwischen deinen beiden Rechnern, nie über Relayiums Server, und braucht kein Konto. Bei send / receive meldet sich nur die Seite an, die den Code erzeugt (auch Cloud-up nutzt dein Konto, um die Datei zu speichern). Sobald der Server für den Code ein Relay ausstellt, läuft jedes Byte als Chiffretext, den das Relay nicht lesen kann, über dieses verschlüsselte Relay und zählt zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat. Das Verbrauchen eines Kontingents ist Nutzungserfassung, keine Gebühr pro Übertragung.",
+        "Jede Übertragung ist Ende-zu-Ende verschlüsselt, und jede Datei, die ein Lauf überträgt, wird bei Ankunft mit einem SHA-256-Hash geprüft. Fortsetzen ist enger gefasst: relayium sync führt eine Teildatei in einem späteren Lauf weiter, relayium down verbindet sich innerhalb des laufenden Vorgangs neu und macht dort weiter, und push, send und receive setzen gar nicht fort. Sie läuft unter macOS, Linux und Windows, und das Ganze ist Open Source und selbst hostbar.",
       ],
     },
   ],
@@ -885,11 +867,11 @@ relayium text 483920`,
     items: [
       {
         q: "Kostet die CLI etwas?",
-        a: "Die CLI selbst ist kostenlos und quelloffen, und die direkten Modi — push, pull, daemon-direct und send / receive — kosten nichts: Diese Datei- und Textbytes laufen nie über ein Relayium-Relay, es gibt also nichts zu messen. Deinen Tarif belasten up und down, die eine verschlüsselte Kopie unter deinem Konto schreiben und zurücklesen. up zählt gegen vier separate Limits — dein monatliches Datenkontingent, das Speicherlimit dafür, wie viel du gleichzeitig gespeichert hältst, die Aufbewahrungsdauer deines Tarifs und ein tägliches Upload-Limit —, und down zählt beim Zurücklesen der Kopie gegen das Datenkontingent; bezahlte Tarife erhöhen sie alle.",
+        a: "Die CLI selbst ist kostenlos und quelloffen, und der direkte Modus daemon-direct push/sync kostet nichts: Diese Bytes laufen nie über Relayiums Server, es gibt also nichts zu messen. send / receive und text werden gezählt, wenn sie weitergeleitet werden: Sobald der Server für den Code ein Relay ausstellt, zählen die weitergeleiteten Bytes zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat. Deinen Tarif belasten außerdem up und down, die eine verschlüsselte Kopie unter deinem Konto schreiben und zurücklesen. up zählt gegen vier separate Limits — dein monatliches Datenkontingent, das Speicherlimit dafür, wie viel du gleichzeitig gespeichert hältst, die Aufbewahrungsdauer deines Tarifs und ein tägliches Upload-Limit —, und down zählt beim Zurücklesen der Kopie gegen das Datenkontingent; bezahlte Tarife erhöhen sie alle.",
       },
       {
         q: "Brauche ich ein Relayium-Konto?",
-        a: "Zum Erzeugen eines Pairing-Codes mit send oder text und für Cloud-up. push / pull und daemon-direct brauchen kein Konto. Der Server erzeugt Codes nur für angemeldete Konten, daher führt die erstellende Seite einmal relayium login aus. Wer mit einem erhaltenen Code beitritt, braucht keine Anmeldung; auch receive meldet sich nie an.",
+        a: "Zum Erzeugen eines Pairing-Codes mit send, text oder pair, für Cloud-up und für die Device Inbox. daemon-direct push/sync braucht kein Konto. Der Server erzeugt Codes nur für angemeldete Konten, daher führt die erstellende Seite einmal relayium login aus. Wer mit einem erhaltenen Code beitritt, braucht keine Anmeldung; auch receive meldet sich nie an.",
       },
       {
         q: "Welche Betriebssysteme werden unterstützt?",
@@ -897,7 +879,7 @@ relayium text 483920`,
       },
       {
         q: "Laufen meine Dateien über Relayiums Server?",
-        a: "In den direkten Modi nicht. Bei push, pull, daemon-direct und send / receive wandern die Dateibytes direkt zwischen den beiden Enden. Nur send / receive kontaktiert unsere Server überhaupt, und auch nur für einen kleinen Rendezvous-Handshake — nie für den Dateiinhalt. up ist anders: Es lädt eine verschlüsselte Kopie in den Speicher deines Kontos hoch, die der Server aufbewahrt, aber nicht lesen kann.",
+        a: "Bei daemon-direct push/sync nicht: Die Dateibytes wandern direkt zwischen deinen beiden Rechnern. send / receive und text kontaktieren unsere Server für einen kleinen Rendezvous-Handshake, und sobald der Server für den Code ein TURN-Relay ausstellt, läuft jedes Byte der Sitzung über dieses Relay — als Ende-zu-Ende-verschlüsselter Chiffretext, den es nicht lesen kann, gezählt zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat, und nie gespeichert. up ist anders: Es lädt eine verschlüsselte Kopie in den Speicher deines Kontos hoch, die der Server aufbewahrt, aber nicht lesen kann.",
       },
     ],
   },
@@ -912,11 +894,11 @@ relayium text 483920`,
 const fr = {
   title: "Transférer fichiers et texte depuis le terminal avec la CLI Relayium",
   description:
-    "Utilisez la CLI Relayium gratuite et chiffrée de bout en bout pour les fichiers via SSH, code d'appairage ou daemon-direct — et le texte éphémère quand les deux machines sont en ligne.",
+    "Utilisez la CLI Relayium gratuite et chiffrée de bout en bout pour les fichiers par code d'appairage ou daemon-direct — et le texte éphémère quand les deux machines sont en ligne.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "La CLI Relayium est un petit binaire unique pour transférer fichiers et texte éphémère depuis le terminal — chiffré de bout en bout, auto-hébergeable et gratuit. Copiez des fichiers vers un serveur, poussez un build, ou envoyez URL, commandes et code sans les enregistrer d'abord dans un fichier.",
-    "Dans les modes directs — push, pull, sync, daemon-direct, send / receive et text —, les octets du fichier voyagent directement entre les deux extrémités et ne passent jamais par les serveurs de Relayium. up n'est pas direct : il stocke une copie chiffrée sous votre compte. Ce guide vous installe et vous fait passer votre premier transfert, puis vous oriente vers les guides plus détaillés pour chaque mode.",
+    "En daemon-direct — relayium serve avec push ou sync —, les octets du fichier voyagent directement entre vos deux machines et ne passent jamais par les serveurs de Relayium : rien n'est décompté. Les sessions à code d'appairage (send / receive, text et pair) sont chiffrées de bout en bout, mais dès que le serveur attribue un relais pour le code, chaque octet passe par ce relais chiffré et est décompté du quota mensuel de trafic du compte qui a généré le code. up n'est pas direct : il stocke une copie chiffrée sous votre compte. Ce guide vous installe et vous fait passer votre premier transfert, puis vous oriente vers les guides plus détaillés pour chaque mode.",
   ],
   sections: [
     {
@@ -927,7 +909,7 @@ const fr = {
           "Une machine macOS, Linux ou Windows avec un terminal. Des binaires précompilés couvrent x86-64 et arm64 sur les trois.",
           "curl, pour l'installation en une ligne sous macOS et Linux — curl --version affiche une version. Sous Windows, téléchargez plutôt le .zip depuis la page des releases.",
           "Un répertoire d'installation accessible en écriture. Le script prend /usr/local/bin s'il peut y écrire, sinon ~/.local/bin, et ses dernières lignes nomment celui qu'il a retenu.",
-          "Rien d'autre pour push, pull ou daemon-direct. Seuls la génération d'un code d'appairage avec send ou text, et l'envoi avec up, demandent un compte Relayium gratuit.",
+          "Rien d'autre pour push ou sync en daemon-direct. Seuls la génération d'un code d'appairage avec send, text ou pair, l'envoi avec up et la Device Inbox demandent un compte Relayium gratuit.",
         ],
       },
       body: [
@@ -943,10 +925,10 @@ const fr = {
     {
       heading: "Les trois façons de déplacer des fichiers",
       body: [
-        "Relayium déplace les fichiers de trois façons. Vous choisissez selon où se trouve l'autre bout, sans avoir à apprendre trois outils différents — ils partagent un seul moteur de transfert, qui vérifie chaque fichier déplacé par une empreinte SHA-256. Ce qu'ils ne partagent pas, c'est la reprise : sync est le mode qui poursuit un fichier partiel lors d'une exécution ultérieure, et push, pull, send et receive ne reprennent pas du tout.",
+        "Relayium déplace les fichiers de trois façons. Vous choisissez selon où se trouve l'autre bout, sans avoir à apprendre trois outils différents — ils partagent un seul moteur de transfert, qui vérifie chaque fichier déplacé par une empreinte SHA-256. Ce qu'ils ne partagent pas, c'est la reprise : sync est le mode qui poursuit un fichier partiel lors d'une exécution ultérieure, et push, send et receive ne reprennent pas du tout.",
       ],
       bullets: [
-        "push / pull — vers un serveur où vous pouvez déjà vous connecter en SSH. Les octets transitent par votre connexion SSH ; aucun compte Relayium requis.",
+        "up / down (cloud) — l'autre bout peut être hors ligne. up chiffre sur cette machine, téléverse seulement le texte chiffré sous votre compte et affiche un lien ; down le récupère et le déchiffre ailleurs avec ce lien. Le push / pull via SSH qui figurait ici est retiré.",
         "send / receive — vers une autre personne entre réseaux différents, avec un court code d'appairage que la CLI de l'expéditeur génère (connectez-vous une fois avec relayium login ; le destinataire, jamais). Un code émis est valable cinq minutes : lancez la commande sur la machine réceptrice dans ce délai.",
         cliDirectFacts.fr,
         "serve + push relayium:// (daemon-direct) — directement entre deux serveurs qui vous appartiennent, via TLS avec épinglage. Pas de relais, pas de SSH, pas de code.",
@@ -969,7 +951,7 @@ const fr = {
     {
       heading: "Votre premier transfert",
       body: [
-        "Le plus rapide à essayer est de copier un dossier vers un serveur où vous pouvez vous connecter en SSH. Relayium utilise votre accès SSH existant, il n'y a donc rien à configurer côté distant et aucun compte à créer :",
+        "Le plus rapide à essayer est de copier un dossier vers une machine que vous gérez. Lancez-y un écouteur Relayium, autorisez cet expéditeur et transférez directement, sans compte :",
       ],
       steps: [
         {
@@ -977,35 +959,31 @@ const fr = {
           code: ["relayium version"],
         },
         {
-          text: "Vérifiez que vous atteignez déjà le serveur par la voie habituelle. push réutilise exactement cet accès, donc un ssh qui passe remplit le prérequis de connexion et d'authentification — ce n'est pas une promesse sur le transfert lui-même, qui exige encore le droit d'écriture et de la place libre sur user@your-server:backups/.",
-          code: ["ssh user@your-server true"],
+          text: "Sur le destinataire, créez le répertoire, autorisez l'empreinte de l'expéditeur et démarrez l'écouteur. authorize et serve doivent utiliser le même --config-dir.",
+          code: ["mkdir -p ~/inbox && relayium authorize <sender-fingerprint> && relayium serve --dir ~/inbox"],
         },
         {
-          text: "Poussez le dossier. Le dernier argument est host:path, et c'est le deux-points qui le marque comme distant. Une barre oblique finale signifie « à l'intérieur de ce répertoire ».",
-          code: ["relayium push ./photos user@your-server:backups/"],
+          text: "Poussez le dossier vers l'adresse relayium:// de l'écouteur.",
+          code: ["relayium push ./photos relayium://receiver.example"],
         },
         {
-          text: "Vérifiez que les fichiers sont arrivés là où vous les attendiez. push ./photos recrée photos/ sous la destination, le nom du dossier suit donc.",
-          code: ["ssh user@your-server ls backups/photos"],
+          text: "Sur la machine destinataire, vérifiez que photos/ est apparu sous le --dir de l'écouteur.",
+          code: ["find ~/inbox/photos -maxdepth 1 -type f"],
         },
       ],
       success: {
         label: "À quoi ressemble une exécution réussie",
         body: [
-          "Avec relayium en face, push affiche une ligne par fichier terminé et se termine par 0. Face à un serveur nu, il affiche à la place le résumé du flux tar : les deux sont des succès.",
+          "push affiche une ligne par fichier terminé et se termine avec 0 une fois que l'écouteur a vérifié et installé le lot.",
         ],
         code: [
-          `relayium push ./photos user@your-server:backups/
-  photos/IMG_0413.jpg (2314518 bytes)
-  photos/IMG_0414.jpg (1998233 bytes)
-echo $?
-# 0`,
+          "relayium push ./photos relayium://receiver.example\n  photos/IMG_0413.jpg (2314518 bytes)\n  photos/IMG_0414.jpg (1998233 bytes)\necho $?\n# 0",
         ],
       },
       bullets: [
-        "Si relayium est aussi installé sur la machine distante, push utilise le protocole natif : le lot est contrôlé pour les collisions avant le moindre octet, et chaque fichier est vérifié par SHA-256 et mis en zone d'attente avant d'être installé. Il ne reprend toujours pas — relancer après une coupure est refusé, car les fichiers arrivés existent désormais. Utilisez relayium sync là où vous en avez besoin.",
-        "Sinon, push bascule sur un simple flux tar, ce qui fonctionne donc même sur un serveur nu — ce repli n'existe que pour push.",
-        "Récupérez les mêmes fichiers avec : relayium pull user@your-server:backups/ ./restore — pull a toujours besoin de relayium sur la machine distante (aucun repli tar), installez-le donc là-bas au préalable.",
+        "push contrôle les collisions du lot avant l'envoi, vérifie chaque fichier par SHA-256 et le met en zone d'attente avant de l'installer. Il ne reprend pas ; utilisez relayium sync quand une exécution peut être interrompue.",
+        "L'écouteur doit être joignable et avoir déjà autorisé l'empreinte de cet expéditeur.",
+        "Les destinations SSH, relayium pull, -i et -p sont retirés. Pour transférer dans l'autre sens, lancez serve sur cette machine et démarrez un nouveau push daemon-direct depuis l'autre.",
       ],
     },
     {
@@ -1025,20 +1003,18 @@ echo $?
             fix: "Le binaire est installé, mais son répertoire n'est pas dans votre PATH. Les dernières lignes du script nomment le répertoire retenu et affichent la ligne export PATH exacte à ajouter. Exécutez-la, ouvrez un nouveau shell et relancez relayium version.",
           },
           {
-            symptom: "push se termine aussitôt sur « push destination must be remote (host:path) ».",
+            symptom: "push affiche « SSH transfers are currently disabled ».",
             code: [
-              `relayium push ./photos user@your-server backups/
-# push destination must be remote (host:path)`,
+              "relayium push ./photos <retired-ssh-destination>\n# SSH transfers are currently disabled",
             ],
-            fix: "Le deux-points a disparu de la destination, donc relayium l'a lue comme un chemin local. Écrivez-la à la manière de scp, sans espace entre l'hôte et le chemin : user@your-server:backups/",
+            fix: "La commande utilise la forme de destination SSH retirée. Lancez relayium serve sur le destinataire et utilisez plutôt relayium://receiver.",
           },
           {
-            symptom: "pull échoue sur un serveur où push fonctionnait très bien.",
+            symptom: "L'écouteur refuse l'expéditeur comme non autorisé.",
             code: [
-              `ssh user@your-server command -v relayium
-# (n'affiche rien)`,
+              "relayium id\n# sha256:...",
             ],
-            fix: "pull n'a aucun repli tar, car dans ce sens c'est la machine distante qui émet : relayium doit y être installé. Installez-le sur le serveur avec la même commande d'une ligne, puis relancez le pull.",
+            fix: "Exécutez relayium authorize <sender-fingerprint> sur le destinataire avec le même --config-dir que serve. Un écouteur en cours d'exécution lit la nouvelle autorisation à la connexion suivante.",
           },
           {
             symptom: "Deux machines rejoignent le même code et l'une affiche « the other side is running `relayium text`, not `relayium send`/`relayium receive` ».",
@@ -1055,8 +1031,8 @@ relayium text 483920`,
     {
       heading: "Gratuit, et privé par conception",
       body: [
-        "Il n'y a rien à payer. Parmi les trois méthodes ci-dessus, la seule connexion est celle de l'expéditeur en mode send / receive, pour que sa CLI puisse générer un code d'appairage (le up cloud utilise aussi votre compte, pour stocker le fichier). La CLI connecte les deux extrémités directement, si bien que vos fichiers ne sont jamais téléversés vers un serveur intermédiaire — la seule chose que Relayium touche jamais est une petite poignée de main de rendez-vous en mode send / receive, utilisée pour présenter les deux extrémités l'une à l'autre, jamais le fichier lui-même.",
-        "Chaque transfert est chiffré de bout en bout, et sur le protocole natif chaque fichier transféré par une exécution est vérifié par une empreinte SHA-256 à l'arrivée — le repli tar sans dépendance fait exception et ne vérifie rien fichier par fichier. La reprise est plus étroite que le reste : relayium sync poursuit un fichier partiel lors d'une exécution ultérieure, relayium down se reconnecte et poursuit à l'intérieur de l'exécution qui l'a lancé, et push, pull, send et receive ne reprennent pas du tout. Cela fonctionne sous macOS, Linux et Windows, et l'ensemble est open source et auto-hébergeable.",
+        "Il n'y a aucun frais par transfert. push/sync en daemon-direct déplace le contenu directement entre vos deux machines, jamais par les serveurs de Relayium, et ne demande aucun compte. Avec send / receive, seul le côté qui génère le code se connecte (le up cloud utilise aussi votre compte, pour stocker le fichier). Dès que le serveur attribue un relais pour le code, chaque octet passe par ce relais chiffré, sous forme de texte chiffré qu'il ne peut pas lire, et est décompté du quota mensuel de trafic du compte qui a généré le code. Consommer un quota relève de la comptabilisation de l'usage, pas d'un paiement par transfert.",
+        "Chaque transfert est chiffré de bout en bout, et chaque fichier transféré par une exécution est vérifié par une empreinte SHA-256 à l'arrivée. La reprise est plus étroite que le reste : relayium sync poursuit un fichier partiel lors d'une exécution ultérieure, relayium down se reconnecte et poursuit à l'intérieur de l'exécution qui l'a lancé, et push, send et receive ne reprennent pas du tout. Cela fonctionne sous macOS, Linux et Windows, et l'ensemble est open source et auto-hébergeable.",
       ],
     },
   ],
@@ -1065,11 +1041,11 @@ relayium text 483920`,
     items: [
       {
         q: "La CLI coûte-t-elle quelque chose ?",
-        a: "La CLI elle-même est gratuite et open source, et les modes directs — push, pull, daemon-direct et send / receive — ne coûtent rien à l'usage : ces octets de fichiers et de texte ne passent jamais par un relais Relayium, il n'y a donc rien à mesurer. Les commandes qui puisent dans votre offre sont up et down, qui écrivent et relisent une copie chiffrée conservée sous votre compte. up compte dans quatre limites distinctes — votre quota de trafic mensuel, la limite de stockage pour ce que vous gardez stocké à la fois, la durée de conservation maximale de votre offre et une limite d'envoi quotidienne — et down compte dans le quota de trafic lorsqu'il relit la copie. Les offres payantes les relèvent toutes.",
+        a: "La CLI elle-même est gratuite et open source, et push/sync en daemon-direct ne coûte rien à l'usage : ces octets ne passent jamais par les serveurs de Relayium, il n'y a donc rien à mesurer. send / receive et text sont décomptés lorsqu'ils sont relayés : dès que le serveur attribue un relais pour le code, les octets relayés sont décomptés du quota mensuel de trafic du compte qui a généré le code. Puisent aussi dans votre offre up et down, qui écrivent et relisent une copie chiffrée conservée sous votre compte. up compte dans quatre limites distinctes — votre quota de trafic mensuel, la limite de stockage pour ce que vous gardez stocké à la fois, la durée de conservation maximale de votre offre et une limite d'envoi quotidienne — et down compte dans le quota de trafic lorsqu'il relit la copie. Les offres payantes les relèvent toutes.",
       },
       {
         q: "Ai-je besoin d'un compte Relayium ?",
-        a: "Pour créer un code d'appairage avec send ou text, et pour le up cloud. push / pull et daemon-direct ne nécessitent aucun compte. Le serveur ne crée des codes que pour un compte connecté : le créateur lance donc relayium login une fois. Rejoindre avec un code reçu ne demande aucune connexion ; receive non plus.",
+        a: "Pour créer un code d'appairage avec send, text ou pair, pour le up cloud et pour la Device Inbox. push/sync en daemon-direct ne nécessite aucun compte. Le serveur ne crée des codes que pour un compte connecté : le créateur lance donc relayium login une fois. Rejoindre avec un code reçu ne demande aucune connexion ; receive non plus.",
       },
       {
         q: "Quels systèmes d'exploitation sont pris en charge ?",
@@ -1077,7 +1053,7 @@ relayium text 483920`,
       },
       {
         q: "Mes fichiers passent-ils par les serveurs de Relayium ?",
-        a: "Pas dans les modes directs. Avec push, pull, daemon-direct et send / receive, les octets du fichier voyagent directement entre les deux extrémités. Seul send / receive contacte nos serveurs, et seulement pour une petite poignée de main de rendez-vous — jamais pour le contenu du fichier. up est différent : il téléverse une copie chiffrée dans le stockage de votre compte, que le serveur conserve sans pouvoir la lire.",
+        a: "Pas avec push/sync en daemon-direct : les octets du fichier voyagent directement entre vos deux machines. send / receive et text contactent nos serveurs pour une petite poignée de main de rendez-vous, et dès que le serveur attribue un relais TURN pour le code, chaque octet de la session passe par ce relais — sous forme de texte chiffré de bout en bout qu'il ne peut pas lire, décompté du quota mensuel de trafic du compte qui a généré le code, et jamais stocké. up est différent : il téléverse une copie chiffrée dans le stockage de votre compte, que le serveur conserve sans pouvoir la lire.",
       },
     ],
   },
@@ -1092,11 +1068,11 @@ relayium text 483920`,
 const ar = {
   title: "انقل الملفات والنصوص من الطرفية باستخدام Relayium CLI",
   description:
-    "استخدم Relayium CLI المجاني والمشفّر من الطرف إلى الطرف لنقل الملفات عبر SSH أو رمز اقتران أو daemon direct، ولإرسال نص مؤقت حين يكون الجهازان متصلين.",
+    "استخدم Relayium CLI المجاني والمشفّر من الطرف إلى الطرف لنقل الملفات عبر رمز اقتران أو daemon direct، ولإرسال نص مؤقت حين يكون الجهازان متصلين.",
   updatedLabel: "آخر تحديث",
   lead: [
     "‏Relayium CLI ملف ثنائي صغير لنقل الملفات والنص المؤقت من الطرفية — مشفّر من الطرف إلى الطرف، قابل للاستضافة الذاتية، ومجاني. انسخ الملفات إلى خادم، أو انقل نسخة بناء، أو أرسل رابطًا أو أمرًا أو مقطع كود دون حفظه أولًا كملف.",
-    "في الأوضاع المباشرة — push وpull وsync وdaemon direct وsend / receive وtext — تنتقل بايتات الملف مباشرة بين الطرفين ولا تمر أبدًا عبر خوادم Relayium. أما up فليس مباشرًا: إنه يخزّن نسخة مُشفَّرة تحت حسابك. يوصلك هذا الدليل إلى التثبيت وإتمام أول عملية نقل لك، ثم يوجّهك إلى الأدلة الأعمق لكل وضع.",
+    "في daemon direct — أي relayium serve مع push أو sync — تنتقل بايتات الملف مباشرة بين جهازيك ولا تمر أبدًا عبر خوادم Relayium، فلا يُحتسب شيء. أما جلسات رمز الاقتران (send / receive وtext وpair) فمشفّرة من الطرف إلى الطرف، لكن كلما أصدر الخادم مُرحِّلًا للرمز مرّ كل بايت عبر هذا المُرحِّل المُشفَّر واحتُسب ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز. أما up فليس مباشرًا: إنه يخزّن نسخة مُشفَّرة تحت حسابك. يوصلك هذا الدليل إلى التثبيت وإتمام أول عملية نقل لك، ثم يوجّهك إلى الأدلة الأعمق لكل وضع.",
   ],
   sections: [
     {
@@ -1107,7 +1083,7 @@ const ar = {
           "جهاز فيه طرفية يعمل بنظام macOS أو Linux أو Windows. تغطي الملفات الثنائية مُسبقة البناء معماريتَي x86-64 وarm64 على الأنظمة الثلاثة.",
           "الأداة curl من أجل التثبيت بسطر واحد على macOS وLinux، ويطبع curl --version رقم الإصدار. أما على Windows فنزّل ملف zip. من صفحة الإصدارات.",
           "مجلد تثبيت قابل للكتابة. يستخدم السكربت المسار /usr/local/bin إن كان يستطيع الكتابة فيه، وإلا فالمسار ~/.local/bin، وتذكر أسطره الأخيرة أيّهما اختار.",
-          "ولا شيء غير ذلك من أجل push وpull وdaemon direct. أما الحساب المجاني على Relayium فلا يلزم إلا لإصدار رمز اقتران عبر send أو text، وللرفع عبر up.",
+          "ولا شيء غير ذلك من أجل push وsync عبر daemon direct. أما الحساب المجاني على Relayium فلا يلزم إلا لإصدار رمز اقتران عبر send أو text أو pair، وللرفع عبر up، ولاستخدام Device Inbox.",
         ],
       },
       body: [
@@ -1123,10 +1099,10 @@ const ar = {
     {
       heading: "الطرق الثلاث التي ينقل بها الملفات",
       body: [
-        "‏Relayium ينقل الملفات بثلاث طرق. تختار حسب موقع الطرف الآخر، لا بتعلّم ثلاث أدوات مختلفة — فجميعها تتشارك محرك نقل واحدًا يتحقق من كل ملف ينقله بتجزئة SHA-256. وما لا تتشاركه هو الاستئناف: sync هو الوضع الذي يُكمل ملفًا جزئيًا في تشغيل لاحق، أما push وpull وsend وreceive فلا تستأنف إطلاقًا.",
+        "‏Relayium ينقل الملفات بثلاث طرق. تختار حسب موقع الطرف الآخر، لا بتعلّم ثلاث أدوات مختلفة — فجميعها تتشارك محرك نقل واحدًا يتحقق من كل ملف ينقله بتجزئة SHA-256. وما لا تتشاركه هو الاستئناف: sync هو الوضع الذي يُكمل ملفًا جزئيًا في تشغيل لاحق، أما push وsend وreceive فلا تستأنف إطلاقًا.",
       ],
       bullets: [
-        "‏push / pull — إلى خادم يمكنك بالفعل الدخول إليه عبر SSH. تنتقل البايتات عبر اتصال SSH لديك؛ بدون حساب Relayium.",
+        "‏up / down (السحابة) — يمكن أن يكون الطرف الآخر غير متصل. يشفّر up على هذا الجهاز ويرفع النص المُشفَّر فقط إلى حسابك ويطبع رابطًا، ويجلبه down ويفك تشفيره على جهاز آخر بالرابط. أما push / pull عبر SSH الذي كان مذكورًا هنا فقد أُوقف.",
         "‏send / receive — إلى شخص آخر عبر الشبكات، باستخدام رمز اقتران قصير تُصدره واجهة CLI لدى المُرسِل (سجِّل الدخول مرة واحدة عبر relayium login؛ أما المُستقبِل فلا يسجّل الدخول أبدًا). والرمز المُولَّد صالح خمس دقائق، فشغِّل الأمر على الجهاز المُستقبِل خلال هذه المدة.",
         cliDirectFacts.ar,
         "‏serve + push relayium:// (daemon direct) — مباشرة بين خادمين تملكهما، عبر TLS مثبَّت. بدون مُرحِّل، بدون SSH، بدون رمز.",
@@ -1149,7 +1125,7 @@ const ar = {
     {
       heading: "أول عملية نقل لك",
       body: [
-        "أسرع شيء يمكنك تجربته هو نسخ مجلد إلى خادم يمكنك الدخول إليه عبر SSH. يستخدم Relayium وصول SSH الموجود لديك، فلا شيء لتهيئته على الطرف البعيد ولا حساب لإنشائه:",
+        "أسرع شيء يمكنك تجربته هو نسخ مجلد إلى جهاز تديره. شغّل هناك مستمع Relayium، واعتمد هذا المُرسِل، ثم انقل مباشرة دون حساب:",
       ],
       steps: [
         {
@@ -1157,35 +1133,31 @@ const ar = {
           code: ["relayium version"],
         },
         {
-          text: "تأكّد من أنك تصل إلى الخادم أصلًا بالطريقة المعتادة. يعيد push استخدام هذا الوصول نفسه، فنجاح ssh يستوفي شرط الاتصال والمصادقة. لكنه ليس وعدًا بنجاح النقل نفسه، إذ يظل push بحاجة إلى صلاحية الكتابة ومساحة كافية في user@your-server:backups/.",
-          code: ["ssh user@your-server true"],
+          text: "على جهاز الاستقبال، أنشئ المجلد واعتمد بصمة المُرسِل وشغّل المستمع. يجب أن يستخدم authorize وserve قيمة --config-dir نفسها.",
+          code: ["mkdir -p ~/inbox && relayium authorize <sender-fingerprint> && relayium serve --dir ~/inbox"],
         },
         {
-          text: "ادفع المجلد. المُعامِل الأخير هو host:path، والنقطتان هما ما يجعله بعيدًا، والشرطة المائلة في النهاية تعني «إلى داخل هذا المجلد».",
-          code: ["relayium push ./photos user@your-server:backups/"],
+          text: "ادفع المجلد بـ push إلى عنوان relayium:// الخاص بالمستمع.",
+          code: ["relayium push ./photos relayium://receiver.example"],
         },
         {
-          text: "تأكّد من وصول الملفات إلى حيث توقّعت. يعيد push ./photos بناء المجلد photos تحت الوجهة، فيأتي اسم المجلد معه.",
-          code: ["ssh user@your-server ls backups/photos"],
+          text: "تأكّد على جهاز الاستقبال من ظهور photos/ تحت مجلد --dir الخاص بالمستمع.",
+          code: ["find ~/inbox/photos -maxdepth 1 -type f"],
         },
       ],
       success: {
         label: "كيف يبدو التشغيل الناجح",
         body: [
-          "إن كان relayium على الطرف البعيد، يطبع push سطرًا لكل ملف اكتمل وينتهي بالرمز 0. وأمام خادم عارٍ يطبع بدلًا من ذلك سطر ملخّص بث tar، وكلاهما نجاح.",
+          "يطبع push سطرًا لكل ملف مكتمل، وينتهي برمز 0 بعد أن يتحقق المستمع من الدفعة ويثبّتها.",
         ],
         code: [
-          `relayium push ./photos user@your-server:backups/
-  photos/IMG_0413.jpg (2314518 bytes)
-  photos/IMG_0414.jpg (1998233 bytes)
-echo $?
-# 0`,
+          "relayium push ./photos relayium://receiver.example\n  photos/IMG_0413.jpg (2314518 bytes)\n  photos/IMG_0414.jpg (1998233 bytes)\necho $?\n# 0",
         ],
       },
       bullets: [
-        "إذا كان relayium مثبّتًا على الطرف البعيد أيضًا، يستخدم push البروتوكول الأصلي: تُفحَص الدفعة بحثًا عن التعارضات قبل إرسال أي بايت، ويُتحقَّق من كل ملف بـ SHA-256 ويوضع في منطقة مؤقتة قبل تثبيته. ومع ذلك لا يستأنف — فإعادة التشغيل بعد انقطاع تُرفَض لأن الملفات التي وصلت صارت موجودة. استخدم relayium sync حيث تحتاج ذلك.",
-        "يتراجع push إلى بث tar بسيط عندما لا يكون relayium على الطرف البعيد، فيعمل حتى مع خادم عارٍ — وهذا التراجع خاص بـ push وحده.",
-        "استرجع الملفات نفسها بـ: relayium pull user@your-server:backups/ ./restore — يحتاج pull دائمًا إلى relayium على الطرف البعيد (لا يملك تراجع tar)، فثبّته هناك أولًا.",
+        "يفحص push الدفعة بحثًا عن التعارضات قبل الإرسال، ويتحقق من كل ملف بـ SHA-256 ويضعه في منطقة مؤقتة قبل تثبيته. ولا يستأنف؛ استخدم relayium sync حين قد ينقطع التشغيل.",
+        "يجب أن يكون المستمع قابلًا للوصول، وأن يكون قد اعتمد بصمة هذا المُرسِل مسبقًا.",
+        "أُوقفت وجهات SSH وrelayium pull والخياران -i و-p. للنقل في الاتجاه المعاكس، شغّل serve على هذا الجهاز وابدأ push جديدًا عبر daemon direct من الجهاز الآخر.",
       ],
     },
     {
@@ -1205,20 +1177,18 @@ echo $?
             fix: "الملف الثنائي مثبَّت، لكن مجلده ليس ضمن PATH لديك. تذكر أسطر السكربت الأخيرة المجلد الذي استُخدم وتطبع سطر export PATH المطلوب إضافته بالضبط؛ نفّذه، ثم افتح صَدَفة جديدة وجرّب relayium version من جديد.",
           },
           {
-            symptom: "ينتهي push فورًا برسالة «push destination must be remote (host:path)».",
+            symptom: "يطبع push الرسالة «SSH transfers are currently disabled».",
             code: [
-              `relayium push ./photos user@your-server backups/
-# push destination must be remote (host:path)`,
+              "relayium push ./photos <retired-ssh-destination>\n# SSH transfers are currently disabled",
             ],
-            fix: "سقطت النقطتان من الوجهة، فقرأها relayium مسارًا محليًا. اكتبها على طريقة scp، بلا مسافة بين المضيف والمسار: user@your-server:backups/",
+            fix: "يستخدم الأمر صيغة وجهة SSH الموقوفة. شغّل relayium serve على جهاز الاستقبال واستخدم relayium://receiver بدلًا منها.",
           },
           {
-            symptom: "يفشل pull على خادم كان push يعمل معه بلا مشكلة.",
+            symptom: "يرفض المستمع المُرسِل لأنه غير معتمد.",
             code: [
-              `ssh user@your-server command -v relayium
-# (لا يطبع شيئًا)`,
+              "relayium id\n# sha256:...",
             ],
-            fix: "لا يملك pull تراجعًا إلى tar، لأن الطرف البعيد هو المُرسِل في هذا الاتجاه، فلا بد من وجود relayium هناك. ثبّته على الخادم بالأمر ذي السطر الواحد نفسه ثم أعِد تشغيل pull.",
+            fix: "شغّل relayium authorize <sender-fingerprint>‎ على جهاز الاستقبال بقيمة --config-dir نفسها التي يستخدمها serve. يقرأ المستمع العامل الاعتماد الجديد عند الاتصال التالي.",
           },
           {
             symptom: "ينضم جهازان إلى الرمز نفسه فيطبع أحدهما «the other side is running `relayium text`, not `relayium send`/`relayium receive`».",
@@ -1235,8 +1205,8 @@ relayium text 483920`,
     {
       heading: "مجاني، وخاص بحكم التصميم",
       body: [
-        "لا شيء تدفعه. ومن بين الطرق الثلاث أعلاه، تسجيل الدخول الوحيد هو تسجيل المُرسِل في وضع send / receive، كي تتمكن واجهة CLI لديه من إصدار رمز اقتران (كما يستخدم up السحابي حسابك أيضًا، لتخزين الملف). يصل CLI بين الطرفين مباشرة، فلا تُرفع ملفاتك أبدًا إلى خادم في الوسط — الشيء الوحيد الذي يلمس Relayium على الإطلاق هو مصافحة تعارف صغيرة جدًا في وضع send / receive، تُستخدم للتعريف بين الطرفين، وليست الملف نفسه أبدًا.",
-        "كل عملية نقل مشفّرة من الطرف إلى الطرف، وعلى البروتوكول الأصلي يُتحقق من كل ملف ينقله التشغيل بتجزئة SHA-256 عند الوصول — والاستثناء هو تراجع tar بلا اعتماديات، فهو لا يتحقق من شيء لكل ملف. أما الاستئناف فأضيق من ذلك: يُكمل relayium sync ملفًا جزئيًا في تشغيل لاحق، ويعيد relayium down الاتصال ويُكمل داخل التشغيل نفسه، بينما لا تستأنف push وpull وsend وreceive إطلاقًا. يعمل على macOS وLinux وWindows، والمشروع كله مفتوح المصدر وقابل للاستضافة الذاتية.",
+        "لا توجد رسوم لكل عملية نقل. ينقل push/sync عبر daemon direct المحتوى مباشرة بين جهازيك، دون المرور بخوادم Relayium، ولا يحتاج إلى حساب. وفي send / receive لا يسجّل الدخول إلا الطرف الذي يُصدر الرمز (كما يستخدم up السحابي حسابك أيضًا، لتخزين الملف). وكلما أصدر الخادم مُرحِّلًا للرمز، مرّ كل بايت عبر هذا المُرحِّل المُشفَّر نصًا مُشفَّرًا لا يستطيع قراءته، واحتُسب ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز. واستهلاك الحصة هو احتساب للاستخدام، لا رسم على كل عملية نقل.",
+        "كل عملية نقل مشفّرة من الطرف إلى الطرف، ويُتحقق من كل ملف ينقله التشغيل بتجزئة SHA-256 عند الوصول. أما الاستئناف فأضيق من ذلك: يُكمل relayium sync ملفًا جزئيًا في تشغيل لاحق، ويعيد relayium down الاتصال ويُكمل داخل التشغيل نفسه، بينما لا تستأنف push وsend وreceive إطلاقًا. يعمل على macOS وLinux وWindows، والمشروع كله مفتوح المصدر وقابل للاستضافة الذاتية.",
       ],
     },
   ],
@@ -1245,11 +1215,11 @@ relayium text 483920`,
     items: [
       {
         q: "هل يكلّف CLI أي شيء؟",
-        a: "إن CLI نفسه مجاني ومفتوح المصدر، والأوضاع المباشرة — push وpull وdaemon direct وsend / receive — لا تكلّف شيئًا: لا تمر بايتات الملفات والنصوص هذه أبدًا عبر مُرحِّل Relayium، فلا يوجد ما يُقاس. أما ما يستهلك من خطتك فهو الأمران up وdown، إذ يكتبان نسخة مشفّرة محفوظة تحت حسابك ويقرآنها. يُحتسب up ضمن أربعة حدود منفصلة — حصة حركة البيانات الشهرية، وحدّ التخزين لما تحتفظ به مُخزَّنًا في آنٍ واحد، ومدة الاحتفاظ القصوى في خطتك، وحدّ رفع يومي — ويُحتسب down ضمن حصة حركة البيانات عند قراءة النسخة. والخطط المدفوعة ترفعها جميعًا.",
+        a: "إن CLI نفسه مجاني ومفتوح المصدر، ولا تكلّف الأوضاع المباشرة — push/sync عبر daemon direct — شيئًا: لا تمر هذه البايتات أبدًا عبر خوادم Relayium، فلا يوجد ما يُقاس. أما send / receive وtext فتُحتسب حين تُرحَّل: كلما أصدر الخادم مُرحِّلًا للرمز، احتُسبت البايتات المُرحَّلة ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز. ويستهلك من خطتك كذلك الأمران up وdown، إذ يكتبان نسخة مشفّرة محفوظة تحت حسابك ويقرآنها. يُحتسب up ضمن أربعة حدود منفصلة — حصة حركة البيانات الشهرية، وحدّ التخزين لما تحتفظ به مُخزَّنًا في آنٍ واحد، ومدة الاحتفاظ القصوى في خطتك، وحدّ رفع يومي — ويُحتسب down ضمن حصة حركة البيانات عند قراءة النسخة. والخطط المدفوعة ترفعها جميعًا.",
       },
       {
         q: "هل أحتاج إلى حساب Relayium؟",
-        a: "لإصدار رمز اقتران عبر send أو text، ولـ up السحابي. لا يحتاج push / pull ولا daemon direct إلى حساب. لا يصدر الخادم الرموز إلا لحساب مسجّل الدخول، لذا يشغّل منشئ الرمز relayium login مرة واحدة. أما الانضمام برمز مستلَم وreceive فلا يحتاجان إلى تسجيل دخول.",
+        a: "لإصدار رمز اقتران عبر send أو text أو pair، ولـ up السحابي، ولـ Device Inbox. لا يحتاج push/sync عبر daemon direct إلى حساب. لا يصدر الخادم الرموز إلا لحساب مسجّل الدخول، لذا يشغّل منشئ الرمز relayium login مرة واحدة. أما الانضمام برمز مستلَم وreceive فلا يحتاجان إلى تسجيل دخول.",
       },
       {
         q: "ما أنظمة التشغيل المدعومة؟",
@@ -1257,7 +1227,7 @@ relayium text 483920`,
       },
       {
         q: "هل تمر ملفاتي عبر خوادم Relayium؟",
-        a: "ليس في الأوضاع المباشرة. مع push وpull وdaemon direct وsend / receive تنتقل بايتات الملف مباشرة بين الطرفين. وحده send / receive يتصل بخوادمنا أصلًا، ولمصافحة تعارف صغيرة فقط — وليس محتوى الملف أبدًا. أما up فمختلف: إنه يرفع نسخة مُشفَّرة إلى تخزين حسابك، يحتفظ بها الخادم لكنه لا يستطيع قراءتها.",
+        a: "ليس مع push/sync عبر daemon direct: تنتقل بايتات الملف مباشرة بين جهازيك. يتصل send / receive وtext بخوادمنا لمصافحة تعارف صغيرة، وكلما أصدر الخادم مُرحِّل TURN للرمز مرّ كل بايت من الجلسة عبر هذا المُرحِّل — نصًا مُشفَّرًا من الطرف إلى الطرف لا يستطيع قراءته، يُحتسب ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز، ولا يُخزَّن أبدًا. أما up فمختلف: إنه يرفع نسخة مُشفَّرة إلى تخزين حسابك، يحتفظ بها الخادم لكنه لا يستطيع قراءتها.",
       },
     ],
   },
@@ -1272,11 +1242,11 @@ relayium text 483920`,
 const es = {
   title: "Transfiere archivos y texto desde la terminal con la CLI de Relayium",
   description:
-    "Usa la CLI de Relayium, gratis y cifrada de extremo a extremo, para archivos por SSH, código de emparejamiento o daemon directo, y texto efímero mientras ambas máquinas están conectadas.",
+    "Usa la CLI de Relayium, gratis y cifrada de extremo a extremo, para archivos por código de emparejamiento o daemon directo, y texto efímero mientras ambas máquinas están conectadas.",
   updatedLabel: "Última actualización",
   lead: [
     "La CLI de Relayium es un pequeño binario para transferir archivos y texto efímero desde la terminal — cifrado de extremo a extremo, autoalojable y gratis. Copia archivos a un servidor, envía una compilación o pasa URL, comandos y código sin guardarlos antes como archivo.",
-    "En los modos directos — push, pull, sync, daemon directo, send / receive y text —, los bytes de los archivos viajan directamente entre los dos extremos y nunca pasan por los servidores de Relayium. up no es directo: guarda una copia cifrada en tu cuenta. Esta guía te deja instalado y con tu primera transferencia hecha, y luego te dirige a los tutoriales más detallados de cada modo.",
+    "En daemon directo — relayium serve con push o sync —, los bytes de los archivos viajan directamente entre tus dos máquinas y nunca pasan por los servidores de Relayium, así que no se contabiliza nada. Las sesiones con código de emparejamiento (send / receive, text y pair) están cifradas de extremo a extremo, pero siempre que el servidor emite un retransmisor para el código, cada byte pasa por ese retransmisor cifrado y cuenta para la cuota mensual de tráfico de la cuenta que generó el código. up no es directo: guarda una copia cifrada en tu cuenta. Esta guía te deja instalado y con tu primera transferencia hecha, y luego te dirige a los tutoriales más detallados de cada modo.",
   ],
   sections: [
     {
@@ -1287,7 +1257,7 @@ const es = {
           "Un ordenador con terminal en macOS, Linux o Windows. Hay binarios precompilados para los tres, tanto en x86-64 como en arm64.",
           "curl, para la instalación de una línea en macOS y Linux: curl --version imprime una versión. En Windows, descarga en su lugar el .zip de la página de releases.",
           "Un directorio de instalación con permiso de escritura. El script usa /usr/local/bin cuando puede escribir ahí y ~/.local/bin en caso contrario, y sus últimas líneas dicen cuál eligió.",
-          "Nada más para push, pull o daemon directo. Solo generar un código de emparejamiento con send o text, y subir con up, necesitan una cuenta gratuita de Relayium.",
+          "Nada más para push o sync con daemon directo. Solo generar un código de emparejamiento con send, text o pair, subir con up y usar la Device Inbox necesitan una cuenta gratuita de Relayium.",
         ],
       },
       body: [
@@ -1303,10 +1273,10 @@ const es = {
     {
       heading: "Las tres formas en que mueve archivos",
       body: [
-        "Relayium mueve archivos de tres maneras. Eliges según dónde esté el otro extremo, no aprendiendo tres herramientas distintas — todas comparten un mismo motor de transferencia, que verifica cada archivo que mueve con un hash SHA-256. Lo que no comparten es la reanudación: sync es el modo que continúa un archivo parcial en una ejecución posterior, y push, pull, send y receive no reanudan en absoluto.",
+        "Relayium mueve archivos de tres maneras. Eliges según dónde esté el otro extremo, no aprendiendo tres herramientas distintas — todas comparten un mismo motor de transferencia, que verifica cada archivo que mueve con un hash SHA-256. Lo que no comparten es la reanudación: sync es el modo que continúa un archivo parcial en una ejecución posterior, y push, send y receive no reanudan en absoluto.",
       ],
       bullets: [
-        "push / pull — a un servidor al que ya puedes entrar por SSH. Los bytes viajan por tu conexión SSH; sin cuenta de Relayium.",
+        "up / down (nube) — el otro extremo puede estar desconectado. up cifra en esta máquina, sube solo el texto cifrado a tu cuenta e imprime un enlace; down lo descarga y descifra en otra máquina con ese enlace. El push / pull por SSH que figuraba aquí está retirado.",
         "send / receive — a otra persona entre redes, usando un código de emparejamiento corto que genera la CLI de quien envía (inicia sesión una vez con relayium login; quien recibe, nunca). Un código emitido vale cinco minutos, así que lanza el comando en la máquina receptora dentro de ese margen.",
         cliDirectFacts.es,
         "serve + push relayium:// (daemon directo) — directamente entre dos servidores que posees, sobre TLS con anclaje. Sin retransmisor, sin SSH, sin código.",
@@ -1329,7 +1299,7 @@ const es = {
     {
       heading: "Tu primera transferencia",
       body: [
-        "Lo más rápido para probar es copiar una carpeta a un servidor al que puedas entrar por SSH. Relayium usa tu acceso SSH existente, así que no hay nada que configurar en el remoto ni cuenta que crear:",
+        "Lo más rápido para probar es copiar una carpeta a una máquina que administres. Ejecuta allí un receptor de Relayium, autoriza a este remitente y transfiere directamente, sin cuenta:",
       ],
       steps: [
         {
@@ -1337,35 +1307,31 @@ const es = {
           code: ["relayium version"],
         },
         {
-          text: "Comprueba que ya llegas al servidor por la vía de siempre. push reutiliza exactamente ese acceso, así que un ssh correcto cumple el requisito de conexión y autenticación. No es una promesa sobre la transferencia en sí: push todavía necesita permiso de escritura y espacio libre en user@your-server:backups/.",
-          code: ["ssh user@your-server true"],
+          text: "En el receptor, crea el directorio, autoriza la huella del remitente e inicia el receptor. authorize y serve deben usar el mismo --config-dir.",
+          code: ["mkdir -p ~/inbox && relayium authorize <sender-fingerprint> && relayium serve --dir ~/inbox"],
         },
         {
-          text: "Empuja la carpeta. El último argumento es host:path, y son los dos puntos lo que lo marca como remoto. La barra final significa «dentro de este directorio».",
-          code: ["relayium push ./photos user@your-server:backups/"],
+          text: "Haz push de la carpeta a la dirección relayium:// del receptor.",
+          code: ["relayium push ./photos relayium://receiver.example"],
         },
         {
-          text: "Comprueba que los archivos llegaron donde esperabas. push ./photos recrea photos/ bajo el destino, así que el nombre de la carpeta viaja con ellos.",
-          code: ["ssh user@your-server ls backups/photos"],
+          text: "En la máquina receptora, confirma que photos/ apareció bajo el --dir del receptor.",
+          code: ["find ~/inbox/photos -maxdepth 1 -type f"],
         },
       ],
       success: {
         label: "Cómo se ve una ejecución correcta",
         body: [
-          "Con relayium en el otro extremo, push imprime una línea por archivo terminado y sale con 0. Contra un servidor sin nada instalado imprime en su lugar el resumen del flujo tar: ambos son éxito.",
+          "push imprime una línea por cada archivo completado y termina con 0 después de que el receptor verifica e instala el lote.",
         ],
         code: [
-          `relayium push ./photos user@your-server:backups/
-  photos/IMG_0413.jpg (2314518 bytes)
-  photos/IMG_0414.jpg (1998233 bytes)
-echo $?
-# 0`,
+          "relayium push ./photos relayium://receiver.example\n  photos/IMG_0413.jpg (2314518 bytes)\n  photos/IMG_0414.jpg (1998233 bytes)\necho $?\n# 0",
         ],
       },
       bullets: [
-        "Si relayium también está instalado en el remoto, push usa el protocolo nativo: se comprueba el lote en busca de colisiones antes de enviar un solo byte, y cada archivo se verifica por SHA-256 y se coloca en un área temporal antes de instalarlo. Aun así no reanuda: volver a lanzarlo tras una interrupción se rechaza, porque los archivos que llegaron ya existen. Usa relayium sync donde necesites eso.",
-        "push recurre a un simple flujo tar cuando relayium no está en el remoto, así que funciona incluso contra un servidor sin nada instalado — esa alternativa es solo para push.",
-        "Recupera los mismos archivos con: relayium pull user@your-server:backups/ ./restore — pull siempre necesita relayium en el remoto (no tiene alternativa con tar), así que instálalo allí primero.",
+        "push comprueba las colisiones del lote antes de enviar, verifica cada archivo por SHA-256 y lo coloca en un área temporal antes de instalarlo. No reanuda; usa relayium sync cuando una ejecución pueda interrumpirse.",
+        "El receptor debe ser alcanzable y haber autorizado ya la huella de este remitente.",
+        "Los destinos SSH, relayium pull, -i y -p están retirados. Para transferir en sentido contrario, ejecuta serve en esta máquina e inicia un nuevo push con daemon directo desde la otra.",
       ],
     },
     {
@@ -1385,20 +1351,18 @@ echo $?
             fix: "El binario está instalado, pero su directorio no está en tu PATH. Las últimas líneas del script nombran el directorio que usó e imprimen la línea export PATH exacta que hay que añadir; ejecútala, abre un shell nuevo y prueba otra vez relayium version.",
           },
           {
-            symptom: "push termina de inmediato con «push destination must be remote (host:path)».",
+            symptom: "push muestra «SSH transfers are currently disabled».",
             code: [
-              `relayium push ./photos user@your-server backups/
-# push destination must be remote (host:path)`,
+              "relayium push ./photos <retired-ssh-destination>\n# SSH transfers are currently disabled",
             ],
-            fix: "Al destino le faltan los dos puntos, así que relayium lo leyó como una ruta local. Escríbelo al estilo de scp, sin espacio entre el host y la ruta: user@your-server:backups/",
+            fix: "El comando usa la forma de destino SSH retirada. Inicia relayium serve en el receptor y usa relayium://receiver en su lugar.",
           },
           {
-            symptom: "pull falla contra un servidor con el que push funcionaba sin problemas.",
+            symptom: "El receptor rechaza al remitente por no estar autorizado.",
             code: [
-              `ssh user@your-server command -v relayium
-# (no imprime nada)`,
+              "relayium id\n# sha256:...",
             ],
-            fix: "pull no tiene alternativa con tar, porque en ese sentido el remoto es quien envía: necesita relayium instalado allí. Instálalo en el servidor con el mismo comando de una línea y repite el pull.",
+            fix: "Ejecuta relayium authorize <sender-fingerprint> en el receptor con el mismo --config-dir que usa serve. Un receptor en marcha lee la nueva autorización en la siguiente conexión.",
           },
           {
             symptom: "Dos máquinas entran en el mismo código y una imprime «the other side is running `relayium text`, not `relayium send`/`relayium receive`».",
@@ -1415,8 +1379,8 @@ relayium text 483920`,
     {
       heading: "Gratis, y privado por diseño",
       body: [
-        "No hay nada que pagar. De las tres formas de arriba, el único inicio de sesión es el de quien envía en modo send / receive, para que su CLI pueda generar un código de emparejamiento (el up en la nube también usa tu cuenta, para guardar el archivo). La CLI conecta los dos extremos directamente, así que tus archivos nunca se suben a un servidor intermedio — lo único que toca a Relayium en algún momento es un diminuto handshake con el punto de encuentro en el modo send / receive, usado para presentar a los dos extremos, nunca el archivo en sí.",
-        "Cada transferencia está cifrada de extremo a extremo, y en el protocolo nativo cada archivo que transfiere una ejecución se verifica con un hash SHA-256 al llegar — la excepción es la alternativa con tar sin dependencias, que no verifica nada archivo por archivo. La reanudación es más estrecha que el resto: relayium sync continúa un archivo parcial en una ejecución posterior, relayium down se reconecta y continúa dentro de la ejecución que lo inició, y push, pull, send y receive no reanudan en absoluto. Funciona en macOS, Linux y Windows, y todo el proyecto es de código abierto y autoalojable.",
+        "No hay cargo por transferencia. push/sync con daemon directo mueve el contenido directamente entre tus dos máquinas, nunca por los servidores de Relayium, y no necesita cuenta. Con send / receive solo inicia sesión el lado que genera el código (el up en la nube también usa tu cuenta, para guardar el archivo). Siempre que el servidor emite un retransmisor para el código, cada byte pasa por ese retransmisor cifrado, como texto cifrado que no puede leer, y cuenta para la cuota mensual de tráfico de la cuenta que generó el código. Consumir una cuota es contabilizar el uso, no un cargo por transferencia.",
+        "Cada transferencia está cifrada de extremo a extremo, y cada archivo que transfiere una ejecución se verifica con un hash SHA-256 al llegar. La reanudación es más estrecha que el resto: relayium sync continúa un archivo parcial en una ejecución posterior, relayium down se reconecta y continúa dentro de la ejecución que lo inició, y push, send y receive no reanudan en absoluto. Funciona en macOS, Linux y Windows, y todo el proyecto es de código abierto y autoalojable.",
       ],
     },
   ],
@@ -1425,11 +1389,11 @@ relayium text 483920`,
     items: [
       {
         q: "¿La CLI cuesta algo?",
-        a: "La CLI en sí es gratis y de código abierto, y los modos directos — push, pull, daemon directo y send / receive — no cuestan nada: esos bytes de archivos y texto nunca pasan por un retransmisor de Relayium, así que no hay nada que medir. Los comandos que consumen tu plan son up y down, que escriben y vuelven a leer una copia cifrada guardada en tu cuenta. up cuenta para cuatro límites distintos — tu franquicia mensual de tráfico, el límite de almacenamiento de lo que guardas a la vez, el periodo de retención máximo de tu plan y un límite de subida diario — y down cuenta para la franquicia de tráfico al leer la copia. Los planes de pago los amplían todos.",
+        a: "La CLI en sí es gratis y de código abierto, y push/sync con daemon directo no cuesta nada: esos bytes nunca pasan por los servidores de Relayium, así que no hay nada que medir. send / receive y text se contabilizan cuando se retransmiten: siempre que el servidor emite un retransmisor para el código, los bytes retransmitidos cuentan para la cuota mensual de tráfico de la cuenta que generó el código. También consumen tu plan up y down, que escriben y vuelven a leer una copia cifrada guardada en tu cuenta. up cuenta para cuatro límites distintos — tu franquicia mensual de tráfico, el límite de almacenamiento de lo que guardas a la vez, el periodo de retención máximo de tu plan y un límite de subida diario — y down cuenta para la franquicia de tráfico al leer la copia. Los planes de pago los amplían todos.",
       },
       {
         q: "¿Necesito una cuenta de Relayium?",
-        a: "Para generar un código de emparejamiento con send o text, y para el up en la nube. push / pull y daemon directo no requieren cuenta. El servidor solo genera códigos para una cuenta con sesión iniciada, así que quien lo crea ejecuta relayium login una vez. Unirse con un código recibido y usar receive no requiere iniciar sesión.",
+        a: "Para generar un código de emparejamiento con send, text o pair, para el up en la nube y para la Device Inbox. push/sync con daemon directo no requiere cuenta. El servidor solo genera códigos para una cuenta con sesión iniciada, así que quien lo crea ejecuta relayium login una vez. Unirse con un código recibido y usar receive no requiere iniciar sesión.",
       },
       {
         q: "¿Qué sistemas operativos son compatibles?",
@@ -1437,7 +1401,7 @@ relayium text 483920`,
       },
       {
         q: "¿Mis archivos pasan por los servidores de Relayium?",
-        a: "No en los modos directos. Con push, pull, daemon directo y send / receive, los bytes de los archivos viajan directamente entre los dos extremos. Solo send / receive contacta con nuestros servidores, y únicamente para un pequeño handshake con el punto de encuentro — nunca el contenido del archivo. up es distinto: sube una copia cifrada al almacenamiento de tu cuenta, que el servidor guarda pero no puede leer.",
+        a: "No con push/sync con daemon directo: los bytes de los archivos viajan directamente entre tus dos máquinas. send / receive y text contactan con nuestros servidores para un pequeño handshake con el punto de encuentro, y siempre que el servidor emite un retransmisor TURN para el código, cada byte de la sesión pasa por ese retransmisor — como texto cifrado de extremo a extremo que no puede leer, contabilizado en la cuota mensual de tráfico de la cuenta que generó el código, y nunca guardado. up es distinto: sube una copia cifrada al almacenamiento de tu cuenta, que el servidor guarda pero no puede leer.",
       },
     ],
   },
@@ -1452,11 +1416,11 @@ relayium text 483920`,
 const pt = {
   title: "Transfira arquivos e texto pelo terminal com a CLI do Relayium",
   description:
-    "Use a CLI do Relayium, gratuita e com criptografia de ponta a ponta, para arquivos por SSH, código de emparelhamento ou daemon direto, e texto efêmero enquanto as duas máquinas estão online.",
+    "Use a CLI do Relayium, gratuita e com criptografia de ponta a ponta, para arquivos por código de emparelhamento ou daemon direto, e texto efêmero enquanto as duas máquinas estão online.",
   updatedLabel: "Última atualização",
   lead: [
     "A CLI do Relayium é um pequeno binário para transferir arquivos e texto efêmero pelo terminal — com criptografia de ponta a ponta, auto-hospedável e gratuito. Copie arquivos para um servidor, envie um build ou passe URLs, comandos e código sem salvar primeiro como arquivo.",
-    "Nos modos diretos — push, pull, sync, daemon direto, send / receive e text —, os bytes dos arquivos trafegam diretamente entre as duas pontas e nunca passam pelos servidores do Relayium. O up não é direto: ele guarda uma cópia criptografada na sua conta. Este guia deixa você instalado e com a sua primeira transferência feita, e depois aponta para os tutoriais mais aprofundados de cada modo.",
+    "No daemon direto — relayium serve com push ou sync —, os bytes dos arquivos trafegam diretamente entre as suas duas máquinas e nunca passam pelos servidores do Relayium, então nada é contabilizado. As sessões com código de pareamento (send / receive, text e pair) têm criptografia de ponta a ponta, mas sempre que o servidor emite um retransmissor para o código, cada byte passa por esse retransmissor criptografado e conta para a cota mensal de tráfego da conta que gerou o código. O up não é direto: ele guarda uma cópia criptografada na sua conta. Este guia deixa você instalado e com a sua primeira transferência feita, e depois aponta para os tutoriais mais aprofundados de cada modo.",
   ],
   sections: [
     {
@@ -1467,7 +1431,7 @@ const pt = {
           "Uma máquina com terminal no macOS, Linux ou Windows. Há binários pré-compilados para os três, em x86-64 e arm64.",
           "curl, para a instalação de uma linha no macOS e no Linux: curl --version imprime uma versão. No Windows, baixe o .zip na página de releases.",
           "Um diretório de instalação com permissão de escrita. O script usa /usr/local/bin quando consegue escrever ali e ~/.local/bin caso contrário, e as últimas linhas dizem qual foi escolhido.",
-          "Nada mais para push, pull ou daemon direto. Só gerar um código de emparelhamento com send ou text, e subir com up, precisam de uma conta gratuita do Relayium.",
+          "Nada mais para push ou sync com daemon direto. Só gerar um código de pareamento com send, text ou pair, subir com up e usar a Device Inbox precisam de uma conta gratuita do Relayium.",
         ],
       },
       body: [
@@ -1483,10 +1447,10 @@ const pt = {
     {
       heading: "As três formas de mover arquivos",
       body: [
-        "O Relayium move arquivos de três formas. Você escolhe pela localização da outra ponta, não aprendendo três ferramentas diferentes — todas compartilham um único motor de transferência, que verifica cada arquivo que move com um hash SHA-256. O que elas não compartilham é a retomada: o sync é o modo que continua um arquivo parcial em uma execução posterior, e push, pull, send e receive não retomam nada.",
+        "O Relayium move arquivos de três formas. Você escolhe pela localização da outra ponta, não aprendendo três ferramentas diferentes — todas compartilham um único motor de transferência, que verifica cada arquivo que move com um hash SHA-256. O que elas não compartilham é a retomada: o sync é o modo que continua um arquivo parcial em uma execução posterior, e push, send e receive não retomam nada.",
       ],
       bullets: [
-        "push / pull — para um servidor no qual você já consegue entrar por SSH. Os bytes trafegam pela sua conexão SSH; sem conta do Relayium.",
+        "up / down (nuvem) — a outra ponta pode estar offline. O up criptografa nesta máquina, envia só o texto cifrado para a sua conta e mostra um link; o down busca e descriptografa em outra máquina com esse link. O push / pull por SSH que aparecia aqui foi descontinuado.",
         "send / receive — para outra pessoa entre redes, usando um código de emparelhamento curto que a CLI de quem envia gera (faça login uma vez com relayium login; quem recebe, nunca). Um código emitido vale cinco minutos, então rode o comando na máquina que recebe dentro desse prazo.",
         cliDirectFacts.pt,
         "serve + push relayium:// (daemon direto) — direto entre dois servidores que você possui, sobre TLS com fixação. Sem retransmissor, sem SSH, sem código.",
@@ -1509,7 +1473,7 @@ const pt = {
     {
       heading: "Sua primeira transferência",
       body: [
-        "O mais rápido para experimentar é copiar uma pasta para um servidor no qual você consiga entrar por SSH. O Relayium usa o seu acesso SSH existente, então não há nada a configurar no remoto e nenhuma conta a criar:",
+        "O mais rápido para experimentar é copiar uma pasta para uma máquina que você administra. Rode lá um receptor do Relayium, autorize este remetente e transfira diretamente, sem conta:",
       ],
       steps: [
         {
@@ -1517,35 +1481,31 @@ const pt = {
           code: ["relayium version"],
         },
         {
-          text: "Confira se você já alcança o servidor do jeito de sempre. O push reaproveita exatamente esse acesso, então um ssh bem-sucedido cumpre o pré-requisito de conexão e autenticação. Isso não é uma promessa sobre a transferência em si: o push ainda precisa de permissão de escrita e espaço livre em user@your-server:backups/.",
-          code: ["ssh user@your-server true"],
+          text: "No destino, crie o diretório, autorize a impressão digital do remetente e inicie o receptor. authorize e serve precisam usar o mesmo --config-dir.",
+          code: ["mkdir -p ~/inbox && relayium authorize <sender-fingerprint> && relayium serve --dir ~/inbox"],
         },
         {
-          text: "Empurre a pasta. O último argumento é host:path, e são os dois-pontos que o marcam como remoto. A barra no fim significa “para dentro deste diretório”.",
-          code: ["relayium push ./photos user@your-server:backups/"],
+          text: "Faça push da pasta para o endereço relayium:// do receptor.",
+          code: ["relayium push ./photos relayium://receiver.example"],
         },
         {
-          text: "Confira se os arquivos chegaram onde você esperava. push ./photos recria photos/ sob o destino, então o nome da pasta vai junto.",
-          code: ["ssh user@your-server ls backups/photos"],
+          text: "Na máquina de destino, confirme que photos/ apareceu sob o --dir do receptor.",
+          code: ["find ~/inbox/photos -maxdepth 1 -type f"],
         },
       ],
       success: {
         label: "Como é uma execução bem-sucedida",
         body: [
-          "Com o relayium do outro lado, o push imprime uma linha por arquivo concluído e sai com 0. Contra um servidor sem nada instalado ele imprime o resumo do fluxo tar: os dois são sucesso.",
+          "O push mostra uma linha por arquivo concluído e termina com 0 depois que o receptor verifica e instala o lote.",
         ],
         code: [
-          `relayium push ./photos user@your-server:backups/
-  photos/IMG_0413.jpg (2314518 bytes)
-  photos/IMG_0414.jpg (1998233 bytes)
-echo $?
-# 0`,
+          "relayium push ./photos relayium://receiver.example\n  photos/IMG_0413.jpg (2314518 bytes)\n  photos/IMG_0414.jpg (1998233 bytes)\necho $?\n# 0",
         ],
       },
       bullets: [
-        "Se o relayium também estiver instalado no remoto, o push usa o protocolo nativo: o lote é checado por colisões antes de qualquer byte sair, e cada arquivo é verificado por SHA-256 e preparado em área temporária antes de ser instalado. Ainda assim ele não retoma — repetir a execução depois de uma interrupção é recusado, porque os arquivos que chegaram agora existem. Use o relayium sync onde você precisar disso.",
-        "O push recorre a um simples fluxo tar quando o relayium não está no remoto, então funciona até contra um servidor sem nada instalado — essa alternativa é só do push.",
-        "Traga os mesmos arquivos de volta com: relayium pull user@your-server:backups/ ./restore — o pull sempre precisa do relayium no remoto (ele não tem alternativa com tar), então instale-o lá primeiro.",
+        "O push checa colisões no lote antes de enviar, verifica cada arquivo por SHA-256 e o prepara em área temporária antes de instalá-lo. Ele não retoma; use o relayium sync quando uma execução puder ser interrompida.",
+        "O receptor precisa estar acessível e já ter autorizado a impressão digital deste remetente.",
+        "Destinos SSH, relayium pull, -i e -p foram descontinuados. Para transferir no sentido contrário, rode serve nesta máquina e inicie um novo push com daemon direto a partir da outra.",
       ],
     },
     {
@@ -1565,20 +1525,18 @@ echo $?
             fix: "O binário está instalado, mas o diretório dele não está no seu PATH. As últimas linhas do script dizem qual diretório foi usado e imprimem a linha export PATH exata a acrescentar; rode-a, abra um shell novo e tente relayium version de novo.",
           },
           {
-            symptom: "O push termina na hora com “push destination must be remote (host:path)”.",
+            symptom: "O push mostra “SSH transfers are currently disabled”.",
             code: [
-              `relayium push ./photos user@your-server backups/
-# push destination must be remote (host:path)`,
+              "relayium push ./photos <retired-ssh-destination>\n# SSH transfers are currently disabled",
             ],
-            fix: "O destino perdeu os dois-pontos, então o relayium leu como caminho local. Escreva no estilo do scp, sem espaço entre o host e o caminho: user@your-server:backups/",
+            fix: "O comando usa a forma de destino SSH descontinuada. Inicie relayium serve no destino e use relayium://receiver no lugar dela.",
           },
           {
-            symptom: "O pull falha num servidor com o qual o push funcionava bem.",
+            symptom: "O receptor recusa o remetente como não autorizado.",
             code: [
-              `ssh user@your-server command -v relayium
-# (não imprime nada)`,
+              "relayium id\n# sha256:...",
             ],
-            fix: "O pull não tem alternativa com tar, porque nesse sentido quem envia é o remoto: ele precisa do relayium instalado lá. Instale no servidor com o mesmo comando de uma linha e repita o pull.",
+            fix: "Rode relayium authorize <sender-fingerprint> no destino com o mesmo --config-dir usado pelo serve. Um receptor em execução lê a nova autorização na próxima conexão.",
           },
           {
             symptom: "Duas máquinas entram no mesmo código e uma imprime “the other side is running `relayium text`, not `relayium send`/`relayium receive`”.",
@@ -1595,8 +1553,8 @@ relayium text 483920`,
     {
       heading: "Gratuito, e privado por decisão de projeto",
       body: [
-        "Não há nada a pagar. Das três formas acima, o único login é o de quem envia no modo send / receive, para que a CLI dele possa gerar um código de emparelhamento (o up na nuvem também usa a sua conta, para guardar o arquivo). A CLI conecta as duas pontas diretamente, então seus arquivos nunca são enviados para um servidor no meio — a única coisa que toca o Relayium em algum momento é um minúsculo handshake de encontro no modo send / receive, usado para apresentar as duas pontas uma à outra, nunca o arquivo em si.",
-        "Cada transferência é criptografada de ponta a ponta, e no protocolo nativo cada arquivo que uma execução transfere é verificado com um hash SHA-256 na chegada — a exceção é a alternativa com tar sem dependências, que não verifica nada arquivo por arquivo. A retomada é mais estreita que o resto: o relayium sync continua um arquivo parcial em uma execução posterior, o relayium down reconecta e continua dentro da execução que o iniciou, e push, pull, send e receive não retomam nada. Ela roda no macOS, no Linux e no Windows, e o projeto inteiro é de código aberto e auto-hospedável.",
+        "Não há cobrança por transferência. O push/sync com daemon direto move o conteúdo diretamente entre as suas duas máquinas, nunca pelos servidores do Relayium, e não precisa de conta. No send / receive, só o lado que gera o código faz login (o up na nuvem também usa a sua conta, para guardar o arquivo). Sempre que o servidor emite um retransmissor para o código, cada byte passa por esse retransmissor criptografado, como texto cifrado que ele não consegue ler, e conta para a cota mensal de tráfego da conta que gerou o código. Consumir uma cota é contabilizar o uso, não uma cobrança por transferência.",
+        "Cada transferência é criptografada de ponta a ponta, e cada arquivo que uma execução transfere é verificado com um hash SHA-256 na chegada. A retomada é mais estreita que o resto: o relayium sync continua um arquivo parcial em uma execução posterior, o relayium down reconecta e continua dentro da execução que o iniciou, e push, send e receive não retomam nada. Ela roda no macOS, no Linux e no Windows, e o projeto inteiro é de código aberto e auto-hospedável.",
       ],
     },
   ],
@@ -1605,11 +1563,11 @@ relayium text 483920`,
     items: [
       {
         q: "A CLI custa alguma coisa?",
-        a: "A CLI em si é gratuita e de código aberto, e os modos diretos — push, pull, daemon direto e send / receive — não custam nada: esses bytes de arquivos e texto nunca passam por um retransmissor do Relayium, então não há nada a medir. Os comandos que usam o seu plano são up e down, que gravam e leem de volta uma cópia criptografada guardada na sua conta. O up conta para quatro limites separados — a sua cota mensal de tráfego, o limite de armazenamento do que você mantém guardado ao mesmo tempo, o período de retenção máximo do seu plano e um limite diário de upload — e o down conta para a cota de tráfego ao ler a cópia de volta. Os planos pagos aumentam todos eles.",
+        a: "A CLI em si é gratuita e de código aberto, e o push/sync com daemon direto não custa nada: esses bytes nunca passam pelos servidores do Relayium, então não há nada a medir. send / receive e text são contabilizados quando retransmitidos: sempre que o servidor emite um retransmissor para o código, os bytes retransmitidos contam para a cota mensal de tráfego da conta que gerou o código. Também usam o seu plano o up e o down, que gravam e leem de volta uma cópia criptografada guardada na sua conta. O up conta para quatro limites separados — a sua cota mensal de tráfego, o limite de armazenamento do que você mantém guardado ao mesmo tempo, o período de retenção máximo do seu plano e um limite diário de upload — e o down conta para a cota de tráfego ao ler a cópia de volta. Os planos pagos aumentam todos eles.",
       },
       {
         q: "Preciso de uma conta do Relayium?",
-        a: "Para gerar um código de emparelhamento com send ou text, e para o up na nuvem. push / pull e daemon direto não exigem conta. O servidor só gera códigos para uma conta logada, então quem cria roda relayium login uma vez. Entrar com um código recebido e usar receive não requer login.",
+        a: "Para gerar um código de pareamento com send, text ou pair, para o up na nuvem e para a Device Inbox. push/sync com daemon direto não exige conta. O servidor só gera códigos para uma conta logada, então quem cria roda relayium login uma vez. Entrar com um código recebido e usar receive não requer login.",
       },
       {
         q: "Quais sistemas operacionais são compatíveis?",
@@ -1617,7 +1575,7 @@ relayium text 483920`,
       },
       {
         q: "Meus arquivos passam pelos servidores do Relayium?",
-        a: "Não nos modos diretos. Com push, pull, daemon direto e send / receive, os bytes dos arquivos trafegam diretamente entre as duas pontas. Só o send / receive contata os nossos servidores, e apenas para um pequeno handshake de encontro — nunca o conteúdo do arquivo. O up é diferente: ele envia uma cópia criptografada para o armazenamento da sua conta, que o servidor guarda mas não consegue ler.",
+        a: "Não com push/sync com daemon direto: os bytes dos arquivos trafegam diretamente entre as suas duas máquinas. send / receive e text contatam os nossos servidores para um pequeno handshake de encontro, e sempre que o servidor emite um retransmissor TURN para o código, cada byte da sessão passa por esse retransmissor — como texto cifrado de ponta a ponta que ele não consegue ler, contabilizado na cota mensal de tráfego da conta que gerou o código, e nunca guardado. O up é diferente: ele envia uma cópia criptografada para o armazenamento da sua conta, que o servidor guarda mas não consegue ler.",
       },
     ],
   },

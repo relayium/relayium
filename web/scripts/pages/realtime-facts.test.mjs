@@ -58,6 +58,18 @@ const NO_RELAY_FAILS = {
   zh: /只有在没有签发中继时[^。]*点对点[^。]*会话就会失败/,
 };
 
+const FROZEN_RELAY = {
+  ja: /TURN リレーを発行した場合/, ko: /TURN 릴레이를 발급하면/, de: /TURN-Relay, sobald der Server/,
+  fr: /relais TURN chiffré dès que le serveur/, ar: /مُرحِّل TURN مُشفَّر كلما أصدر الخادم/,
+  es: /retransmisor TURN cifrado siempre que el servidor/, pt: /retransmissor TURN criptografado sempre que o servidor/,
+};
+const FROZEN_METERED = {
+  ja: /コードを発行したアカウントの月間転送量の枠/, ko: /코드를 발급한 계정의 월간 전송량 한도/,
+  de: /monatlichen Datenvolumen des Kontos, das den Code erzeugt hat/, fr: /quota mensuel de trafic du compte qui a généré le code/,
+  ar: /حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز/, es: /cuota mensual de tráfico de la cuenta que generó el código/,
+  pt: /cota mensal de tráfego da conta que gerou o código/,
+};
+
 describe("shared browser protocol facts", () => {
   it("has one complete composition in every shipped language", () => {
     expect(Object.keys(pairingFacts)).toEqual(LANGS);
@@ -98,9 +110,13 @@ describe("shared browser protocol facts", () => {
         expect(cliDirectFacts[lang]).toMatch(METERED[lang]);
         expect(cliDirectFacts[lang]).toMatch(NO_RELAY_FAILS[lang]);
       } else {
-        // Frozen archived translations keep the retired wording (reported to
-        // the owner; not translated as ordinary acceptance work).
-        expect(cliDirectFacts[lang]).toMatch(DIRECT[lang]);
+        // Frozen archived translations carry the same policy as a translated
+        // erratum (DECISION-LOG 2026-09-30 item 2): the retired direct-only
+        // wording is gone, and relay-when-issued, the metering and the
+        // no-relay failure are stated in the locale's own words.
+        expect(cliDirectFacts[lang]).not.toMatch(DIRECT[lang]);
+        expect(cliDirectFacts[lang]).toMatch(FROZEN_RELAY[lang]);
+        expect(cliDirectFacts[lang]).toMatch(FROZEN_METERED[lang]);
         expect(cliDirectFacts[lang]).toMatch(FAILS[lang]);
       }
     }

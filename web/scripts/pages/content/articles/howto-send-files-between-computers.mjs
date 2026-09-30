@@ -383,7 +383,7 @@ const ja = {
           {
             symptom: "リレーは確認済みアカウントにのみ発行される、とカードに出る。",
             code: ["https://relayium.com/cross-network   # ペアリングカードが拒否の理由を示す"],
-            fix: "送信側のメールアドレスがまだ確認されていません。アカウントパネルを開き、Relayium から届いたメールでアドレスを確認し、新しいペアリングコードを作成してください。すでに拒否された古いコードが後からリレーを受け取ることはありません。同一ネットワークの転送と CLI はこの影響を受けません。",
+            fix: "送信側のメールアドレスがまだ確認されていません。アカウントパネルを開き、Relayium から届いたメールでアドレスを確認し、新しいペアリングコードを作成してください。すでに拒否された古いコードが後からリレーを受け取ることはありません。同一ネットワークの転送と CLI のデーモン直結 push/sync はこの影響を受けません。",
           },
           {
             symptom: "今月のリレー通信量を使い切った、とカードに出る。",
@@ -530,7 +530,7 @@ const ko = {
           {
             symptom: "릴레이는 인증된 계정에만 발급된다고 카드에 나옵니다.",
             code: ["https://relayium.com/cross-network   # 페어링 카드가 거절 이유를 알려준다"],
-            fix: "보내는 쪽 이메일 주소가 아직 인증되지 않았습니다. 계정 패널을 열어 Relayium이 보낸 메일로 주소를 인증한 다음 새 페어링 코드를 만드세요. 이미 거절된 코드가 나중에 릴레이를 받지는 못합니다. 같은 네트워크 전송과 CLI는 이 영향을 받지 않습니다.",
+            fix: "보내는 쪽 이메일 주소가 아직 인증되지 않았습니다. 계정 패널을 열어 Relayium이 보낸 메일로 주소를 인증한 다음 새 페어링 코드를 만드세요. 이미 거절된 코드가 나중에 릴레이를 받지는 못합니다. 같은 네트워크 전송과 CLI의 데몬 다이렉트 push/sync는 이 영향을 받지 않습니다.",
           },
           {
             symptom: "이번 달 릴레이 트래픽을 다 썼다고 카드에 나옵니다.",
@@ -677,7 +677,7 @@ const de = {
           {
             symptom: "Auf der Karte steht, ein Relay gehe nur an bestätigte Konten.",
             code: ["https://relayium.com/cross-network   # die Pairing-Karte nennt den Grund der Absage"],
-            fix: "Die E-Mail-Adresse der sendenden Seite ist noch nicht bestätigt. Öffne den Kontobereich, bestätige die Adresse über die Mail von Relayium und erzeuge dann einen neuen Pairing-Code — der alte holt sich kein Relay mehr, das ihm schon verweigert wurde. Übertragungen im selben Netz und die CLI sind davon unberührt.",
+            fix: "Die E-Mail-Adresse der sendenden Seite ist noch nicht bestätigt. Öffne den Kontobereich, bestätige die Adresse über die Mail von Relayium und erzeuge dann einen neuen Pairing-Code — der alte holt sich kein Relay mehr, das ihm schon verweigert wurde. Übertragungen im selben Netz und daemon-direct push/sync der CLI sind davon unberührt.",
           },
           {
             symptom: "Auf der Karte steht, das Relay-Volumen dieses Monats sei aufgebraucht.",
@@ -824,7 +824,7 @@ const fr = {
           {
             symptom: "La carte indique que le relais n'est délivré qu'aux comptes vérifiés.",
             code: ["https://relayium.com/cross-network   # la carte d'appairage nomme la raison du refus"],
-            fix: "L'adresse e-mail de l'expéditeur n'est pas encore vérifiée. Ouvrez le panneau du compte, vérifiez l'adresse via le message envoyé par Relayium, puis créez un nouveau code d'appairage, car l'ancien ne récupérera pas un relais qui lui a déjà été refusé. Les transferts sur le même réseau et la CLI n'en dépendent pas.",
+            fix: "L'adresse e-mail de l'expéditeur n'est pas encore vérifiée. Ouvrez le panneau du compte, vérifiez l'adresse via le message envoyé par Relayium, puis créez un nouveau code d'appairage, car l'ancien ne récupérera pas un relais qui lui a déjà été refusé. Les transferts sur le même réseau et le push/sync en daemon-direct de la CLI n'en dépendent pas.",
           },
           {
             symptom: "La carte indique que le trafic de relais du mois est épuisé.",
@@ -971,7 +971,7 @@ const ar = {
           {
             symptom: "تقول البطاقة إن المُرحِّل لا يُمنَح إلا للحسابات الموثَّقة.",
             code: ["https://relayium.com/cross-network   # بطاقة الاقتران تسمّي سبب الرفض"],
-            fix: "بريد الطرف المُرسِل لم يُوثَّق بعد. افتح لوحة الحساب، ووثِّق العنوان من الرسالة التي أرسلها Relayium، ثم أنشِئ رمز اقتران جديدًا — فالرمز القديم لن يلتقط مُرحِّلًا سبق أن رُفض له. ولا يتأثر بهذا النقل على نفس الشبكة ولا سطر الأوامر.",
+            fix: "بريد الطرف المُرسِل لم يُوثَّق بعد. افتح لوحة الحساب، ووثِّق العنوان من الرسالة التي أرسلها Relayium، ثم أنشِئ رمز اقتران جديدًا — فالرمز القديم لن يلتقط مُرحِّلًا سبق أن رُفض له. ولا يتأثر بهذا النقل على نفس الشبكة ولا push/sync عبر daemon direct في سطر الأوامر.",
           },
           {
             symptom: "تقول البطاقة إن حصة الترحيل لهذا الشهر استُنفدت.",
@@ -1118,7 +1118,7 @@ const es = {
           {
             symptom: "La tarjeta dice que el retransmisor solo se entrega a cuentas verificadas.",
             code: ["https://relayium.com/cross-network   # la tarjeta de emparejamiento nombra el motivo del rechazo"],
-            fix: "La dirección de correo de quien envía aún no está verificada. Abre el panel de la cuenta, verifícala con el mensaje que envió Relayium y crea después un código nuevo, porque el antiguo no recogerá un retransmisor que ya se le denegó. Las transferencias en la misma red y la CLI no dependen de esto.",
+            fix: "La dirección de correo de quien envía aún no está verificada. Abre el panel de la cuenta, verifícala con el mensaje que envió Relayium y crea después un código nuevo, porque el antiguo no recogerá un retransmisor que ya se le denegó. Las transferencias en la misma red y el push/sync con daemon directo de la CLI no dependen de esto.",
           },
           {
             symptom: "La tarjeta dice que el tráfico de retransmisión de este mes está agotado.",
@@ -1265,7 +1265,7 @@ const pt = {
           {
             symptom: "O cartão diz que o retransmissor só é entregue a contas verificadas.",
             code: ["https://relayium.com/cross-network   # o cartão de emparelhamento nomeia o motivo da recusa"],
-            fix: "O e-mail de quem envia ainda não foi verificado. Abra o painel da conta, verifique o endereço pela mensagem que o Relayium mandou e crie então um código novo, porque o antigo não vai pegar um retransmissor que já lhe foi negado. Transferências na mesma rede e a CLI não dependem disso.",
+            fix: "O e-mail de quem envia ainda não foi verificado. Abra o painel da conta, verifique o endereço pela mensagem que o Relayium mandou e crie então um código novo, porque o antigo não vai pegar um retransmissor que já lhe foi negado. Transferências na mesma rede e o push/sync com daemon direto da CLI não dependem disso.",
           },
           {
             symptom: "O cartão diz que o tráfego de retransmissão deste mês acabou.",

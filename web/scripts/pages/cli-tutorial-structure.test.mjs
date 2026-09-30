@@ -56,6 +56,16 @@ const TUTORIALS = {
   "cli-sync-large-folder": cliSyncLargeFolder,
 };
 
+// The archived translations of the SSH backup guide are no longer tutorials.
+// The whole page taught the retired SSH transport, so on 2026-09-30 its seven
+// frozen locales became a short translated historical notice (DECISION-LOG
+// 2026-09-30 item 2; archived-fact-errata.test.mjs pins the notice). Every rule
+// below still holds for its maintained en/zh migration tutorial, and for all
+// nine locales of the other five guides; retiredComplaints() replaces the
+// tutorial contract for these seven documents only.
+const RETIRED_IN_ARCHIVE = new Set(["cli-backup-server-ssh"]);
+const isRetired = (name, lang) => RETIRED_IN_ARCHIVE.has(name) && FROZEN_LANGS.includes(lang);
+
 const sections = (doc) => doc.sections || [];
 const withPrereqs = (doc) => sections(doc).filter((s) => s.prereqs);
 const withSteps = (doc) => sections(doc).filter((s) => s.steps?.length);
@@ -135,6 +145,26 @@ const VAGUE = [
 // "1." but the machine sees a paragraph, and inserting a step in the middle
 // renumbers nothing. Covers the Latin, CJK and Arabic separators the corpus uses.
 const TYPED_NUMBER = /^\s*[(（]?\d+\s*[.)．、）:：]/;
+
+/**
+ * What a retired archived guide must be instead of a tutorial: no procedure,
+ * no troubleshooting, and no code block that runs the retired transport — an
+ * SSH destination (user@host:path), relayium pull, or -i / -p on a Relayium
+ * command. It must still say, in its lead, what the current CLI prints.
+ */
+function retiredComplaints(name, lang, doc) {
+  const at = `${name}[${lang}]`;
+  const bad = [];
+  if (withSteps(doc).length) bad.push(`${at}: a retired archived guide still carries a procedure`);
+  if (withTrouble(doc).length) bad.push(`${at}: a retired archived guide still carries troubleshooting`);
+  for (const block of sections(doc).flatMap(sectionCode)) {
+    if (/\S+@\S+:|\brelayium\s+pull\b|\brelayium\s+(?:push|sync)\b[^\n]*\s-[ip]\s/.test(block))
+      bad.push(`${at}: runnable retired SSH command ${JSON.stringify(block)}`);
+  }
+  if (!(doc.lead || []).join(" ").includes("SSH transfers are currently disabled"))
+    bad.push(`${at}: the notice does not quote the refusal`);
+  return bad;
+}
 
 /**
  * The structural contract, as a list of complaints. Returned rather than
@@ -239,9 +269,20 @@ describe("the six CLI guides are runnable tutorials in all nine locales", () => 
       for (const lang of MAINTAINED_LANGS)
         bad.push(...validate(name, lang, article.langs[lang], lang === "en" ? null : article.langs.en));
       for (const lang of FROZEN_LANGS)
-        bad.push(...validate(name, lang, article.langs[lang], lang === FROZEN_LANGS[0] ? null : article.langs[FROZEN_LANGS[0]]));
+        bad.push(...(isRetired(name, lang)
+          ? retiredComplaints(name, lang, article.langs[lang])
+          : validate(name, lang, article.langs[lang], lang === FROZEN_LANGS[0] ? null : article.langs[FROZEN_LANGS[0]])));
     }
     expect(bad).toEqual([]);
+  });
+
+  it("keeps a retired archived guide free of runnable SSH procedure", () => {
+    // Mutation proof: the retirement contract has to reject the page it replaced.
+    const shipped = {
+      title: "x", lead: ["x"],
+      sections: [{ heading: "x", steps: [{ text: "x", code: ["relayium push ./photos user@your-server:backups/"] }] }],
+    };
+    expect(retiredComplaints("cli-backup-server-ssh", "ja", shipped).length).toBeGreaterThan(0);
   });
 
   it("covers all six articles and all nine locales, not a subset", () => {
@@ -249,8 +290,9 @@ describe("the six CLI guides are runnable tutorials in all nine locales", () => 
     // turn every assertion above green by checking nothing.
     expect(Object.keys(TUTORIALS)).toHaveLength(6);
     expect(LANGS).toHaveLength(9);
-    for (const article of Object.values(TUTORIALS))
-      for (const lang of LANGS) expect(article.langs[lang]?.sections?.length ?? 0).toBeGreaterThan(3);
+    for (const [name, article] of Object.entries(TUTORIALS))
+      for (const lang of LANGS)
+        expect(article.langs[lang]?.sections?.length ?? 0).toBeGreaterThan(isRetired(name, lang) ? 0 : 3);
   });
 });
 
@@ -909,7 +951,12 @@ describe("the listener is stopped by recorded PID, without pretending a PID cann
 });
 
 describe("the tutorial blocks reach the page with the right semantics", () => {
-  const pages = Object.values(TUTORIALS).flatMap((a) => buildArticlePages([a]));
+  // Rendered tutorial pages: every page of the six guides except the seven
+  // retired archived translations of the SSH backup guide (RETIRED_IN_ARCHIVE).
+  const retiredPaths = new Set(FROZEN_LANGS.map((l) => `${l}/${TUTORIALS["cli-backup-server-ssh"].slug}/index.html`));
+  const pages = Object.values(TUTORIALS)
+    .flatMap((a) => buildArticlePages([a]))
+    .filter((p) => !retiredPaths.has(p.path));
 
   it("renders the procedure as an <ol>, never a <ul> and never typed numerals", () => {
     for (const page of pages) {
@@ -958,7 +1005,8 @@ describe("the tutorial blocks reach the page with the right semantics", () => {
 
   it("keeps the RTL page on logical properties and one main landmark", () => {
     const ar = pages.filter((p) => p.path.startsWith("ar/"));
-    expect(ar.length).toBe(6);
+    // Five, not six: the Arabic SSH backup guide is a retired archive notice.
+    expect(ar.length).toBe(5);
     for (const page of ar) {
       expect(page.html).toContain('dir="rtl"');
       expect(page.html.split("<main>").length - 1).toBe(1);

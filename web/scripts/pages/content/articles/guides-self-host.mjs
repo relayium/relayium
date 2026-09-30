@@ -606,7 +606,7 @@ ready`,
     {
       heading: "ネットワークをまたぐ転送用に TURN リレーを追加する",
       body: [
-        "同一ネットワーク（LAN）の転送や、SSH ベースの push/pull は、追加設定なしで動作します。ネットワークをまたぐリアルタイム転送（それぞれ異なる NAT の背後にある2台のデバイス）は、経路確立のために TURN リレーが必要になることがあります——リレーは常に暗号文しか見ず、ファイルの中身を見ることは決してありません。",
+        "同一ネットワーク（LAN）の転送や、デーモン直結の push/sync は、追加設定なしで動作します。ネットワークをまたぐリアルタイム転送（それぞれ異なる NAT の背後にある2台のデバイス）は、経路確立のために TURN リレーが必要になることがあり、CLI のペアリングコードによるセッション（send / receive、text、pair）も、自分のサーバーがそのコードにリレーを発行した場合はそれを通ります——リレーは常に暗号文しか見ず、ファイルの中身を見ることは決してありません。",
         "docker-compose.yml には任意の relay プロファイルがあり、メインサーバーと合わせて coturn（TURN サーバー）を起動できます。このプロファイルは小さな Redis インスタンスも起動しますが、それを通じたサーバーの coturn リレーバイト計測は現在無効になっており、リレーされたバイトは計上されません。",
         "この秘密鍵は2か所に届ける必要があり、間違えても何のエラーも出ません。coturn は Compose の変数展開で受け取り、その展開はシェルかプロジェクトルートの .env からしか解決されません。サーバーは自分自身の環境変数——つまり server/.env——から読み、秘密鍵が空なら TURN は完全に無効になります。片方だけ設定すると、動いてはいるがサーバーが決して資格情報を発行しない coturn ができあがります。コンテナはすべて健全と報告し、ログには何も出ず、厳しい NAT をまたぐ転送はリレーを追加する前とまったく同じように失敗し続けます。",
       ],
@@ -697,8 +697,8 @@ you@example.com (https://your-domain)`,
       },
       bullets: [
         "どちらのサーバーを使っても CLI は無料です——--server はペアリングコードのハンドシェイク先を変更するだけです。send または text をコードなしで実行するとそのサーバーでコードを発行し、クラウドの up もそのサーバー上のアカウントに保存するため、先に relayium login --server https://your-domain でサインインしてください。自分のサーバーに向けた up は自分のディスクに自分の上限で保存し、relayium.com に向けた場合はホスト型ストレージとプランの枠を使います。receive、down、表示されたコードで参加する text はログイン不要です。",
-        "text の両端は同時にオンラインである必要があります。メッセージは独立したエンドツーエンド暗号化 P2P 直結セッションを使います。CLI text は直結専用で、ブラウザ版の TURN リレーは使いません。Relayium もセルフホストしたサーバーもメッセージ本文やサーバー側の履歴を保存しませんが、どちらの端末または受信者も受信後のテキストをコピーまたは保持できます。",
-        "push/pull（自分の SSH 経由）や、serve とデーモン直結の push relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。",
+        "text の両端は同時にオンラインである必要があります。メッセージはエンドツーエンドで暗号化されます。自分のサーバーがそのコードに TURN リレーを発行した場合、セッションはそのリレーを通り、そうでなければ2台の端末が P2P で直接つながります。Relayium もセルフホストしたサーバーもメッセージ本文やサーバー側の履歴を保存しませんが、どちらの端末または受信者も受信後のテキストをコピーまたは保持できます。",
+        "serve とデーモン直結の push/sync relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。以前の SSH 経由の push/pull は廃止されました。",
       ],
     },
     {
@@ -758,11 +758,11 @@ you@example.com (https://your-domain)`,
     items: [
       {
         q: "TURN を設定する必要はありますか？",
-        a: "ネットワークをまたぐリアルタイム転送を厳しい NAT 越しでも機能させたい場合にのみ必要です。同一ネットワークの転送、SSH ベースの push/pull、デーモン直結はいずれも TURN なしで動作します——TURN はネットワークをまたぐペアリングコード経路での NAT 越え専用です。",
+        a: "ネットワークをまたぐリアルタイム転送を厳しい NAT 越しでも機能させたい場合にのみ必要です。対象はブラウザのセッションと、CLI のペアリングコードによるセッション（send / receive、text、pair）で、後者は自分のサーバーがリレーを発行すればそれを通り、そうでなければ直接の経路が必要です。同一ネットワークの転送とデーモン直結の push/sync は TURN なしで動作します。",
       },
       {
         q: "セルフホストしても CLI は無料のままですか？",
-        a: "はい。relayium.com に接続しても自分で運用するサーバーに接続しても、CLI のバイナリは無料でオープンソースです。--server は接続先を自分のインスタンスに向けるだけで、直結モードはどちらでも計測されません。違いが出るのはストレージです。自分のサーバーに向けた up は自分のディスクと自分の上限を使い、relayium.com に向けた up はアカウントのプランのストレージ上限に縛られます。コードなしの send または text でコードを発行するときと、up でファイルを保存するときは、指し先サーバーのアカウントが必要です。receive、down、表示されたコードで参加する text はログイン不要です。",
+        a: "はい。relayium.com に接続しても自分で運用するサーバーに接続しても、CLI のバイナリは無料でオープンソースです。--server は接続先を自分のインスタンスに向けるだけで、デーモン直結の push/sync はどちらでも計測されません。relayium.com に向けた場合、中継されたペアリングコードのセッションはコードを発行したアカウントの月間転送量の枠に計上されます。違いが出るのはストレージです。自分のサーバーに向けた up は自分のディスクと自分の上限を使い、relayium.com に向けた up はアカウントのプランのストレージ上限に縛られます。コードなしの send または text でコードを発行するときと、up でファイルを保存するときは、指し先サーバーのアカウントが必要です。receive、down、表示されたコードで参加する text はログイン不要です。",
       },
       {
         q: "自分のドメインと TLS 証明書を使えますか？",
@@ -865,7 +865,7 @@ ready`,
     {
       heading: "네트워크 간 전송을 위한 TURN 릴레이 추가하기",
       body: [
-        "같은 네트워크(LAN) 전송과 SSH 기반 push/pull은 별도 설정 없이 동작합니다. 네트워크를 넘나드는 실시간 전송(서로 다른 NAT 뒤에 있는 두 기기)은 경로를 확보하기 위해 TURN 릴레이가 필요할 때가 있습니다 — 릴레이는 언제나 암호문만 볼 뿐, 파일 내용을 보는 일은 결코 없습니다.",
+        "같은 네트워크(LAN) 전송과 데몬 다이렉트 push/sync는 별도 설정 없이 동작합니다. 네트워크를 넘나드는 실시간 전송(서로 다른 NAT 뒤에 있는 두 기기)은 경로를 확보하기 위해 TURN 릴레이가 필요할 때가 있으며, CLI의 페어링 코드 세션(send / receive, text, pair)도 내 서버가 해당 코드에 릴레이를 발급하면 그것을 거칩니다 — 릴레이는 언제나 암호문만 볼 뿐, 파일 내용을 보는 일은 결코 없습니다.",
         "docker-compose.yml에는 선택적인 relay 프로필이 있어, 메인 서버와 함께 coturn(TURN 서버)을 시작할 수 있습니다. 이 프로필은 소형 Redis 인스턴스도 시작하지만, 이를 통한 서버의 coturn 릴레이 바이트 계량은 현재 비활성화되어 있어 릴레이된 바이트는 집계되지 않습니다.",
         "이 비밀값은 서로 다른 두 곳에 도달해야 하며, 잘못하면 아무 소리 없이 실패합니다. coturn은 Compose 변수 치환으로 받는데, 이 치환은 셸이나 프로젝트 루트의 .env에서만 해석됩니다. 서버는 자신의 환경 — 즉 server/.env — 에서 읽으며, 비밀값이 비어 있으면 TURN이 아예 꺼집니다. 한쪽만 설정하면 돌아가고는 있지만 서버가 자격 증명을 전혀 발급해 주지 않는 coturn이 남습니다. 모든 컨테이너는 정상이라고 보고하고, 로그에는 아무것도 남지 않으며, 엄격한 NAT를 넘는 전송은 릴레이를 추가하기 전과 똑같이 계속 실패합니다.",
       ],
@@ -956,8 +956,8 @@ you@example.com (https://your-domain)`,
       },
       bullets: [
         "어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크 서버만 바꿉니다. send나 text를 코드 없이 실행하면 그 서버에서 코드를 발급하고, 클라우드 up도 그 서버 계정에 저장하므로 먼저 relayium login --server https://your-domain으로 로그인하세요. 자신의 서버를 가리키면 up은 자신의 디스크에 자신의 한도로 저장하고, relayium.com을 가리키면 호스팅 저장소와 요금제의 허용량을 씁니다. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다.",
-        "text 양쪽은 동시에 온라인이어야 합니다. 메시지는 별도의 종단간 암호화 P2P 직접 연결 세션을 사용합니다. CLI text는 직접 연결 전용이며 브라우저의 TURN 릴레이를 사용하지 않습니다. Relayium과 자체 호스팅 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만, 어느 터미널이나 수신자든 받은 텍스트를 복사하거나 보관할 수 있습니다.",
-        "push/pull(자신의 SSH를 통한)과 serve + 데몬 다이렉트의 push relayium://host는 자체 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.",
+        "text 양쪽은 동시에 온라인이어야 합니다. 메시지는 종단간 암호화됩니다. 내 서버가 해당 코드에 TURN 릴레이를 발급하면 세션은 그 릴레이를 거치고, 그렇지 않으면 두 터미널이 P2P로 직접 연결됩니다. Relayium과 자체 호스팅 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만, 어느 터미널이나 수신자든 받은 텍스트를 복사하거나 보관할 수 있습니다.",
+        "serve와 데몬 다이렉트 push/sync relayium://host는 자체 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다. 예전의 SSH 기반 push/pull은 폐지되었습니다.",
       ],
     },
     {
@@ -1017,11 +1017,11 @@ you@example.com (https://your-domain)`,
     items: [
       {
         q: "TURN을 설정해야 하나요?",
-        a: "네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 같은 네트워크 전송, SSH 기반 push/pull, 데몬 다이렉트는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다.",
+        a: "네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 대상은 브라우저 세션과 CLI의 페어링 코드 세션(send / receive, text, pair)이며, 후자는 내 서버가 릴레이를 발급하면 그것을 거치고 그렇지 않으면 직접 경로가 필요합니다. 같은 네트워크 전송과 데몬 다이렉트 push/sync는 TURN 없이 동작합니다.",
       },
       {
         q: "자체 호스팅해도 CLI는 여전히 무료인가요?",
-        a: "네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI 바이너리는 무료 오픈소스입니다. --server는 자신의 인스턴스를 가리키게 할 뿐이며, 직접 연결 모드는 어느 쪽이든 계량되지 않습니다. 차이는 저장소에 있습니다. 자신의 서버를 향한 up은 자신의 디스크와 자신의 한도를 쓰고, relayium.com을 향한 up은 계정 요금제의 저장 용량 한도를 따릅니다. 코드 없는 send나 text로 코드를 발급할 때와 up으로 파일을 저장할 때는 대상 서버 계정이 필요합니다. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다.",
+        a: "네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI 바이너리는 무료 오픈소스입니다. --server는 자신의 인스턴스를 가리키게 할 뿐이며, 데몬 다이렉트 push/sync는 어느 쪽이든 계량되지 않습니다. relayium.com을 향할 때는 릴레이된 페어링 코드 세션이 코드를 발급한 계정의 월간 전송량 한도에 집계됩니다. 차이는 저장소에 있습니다. 자신의 서버를 향한 up은 자신의 디스크와 자신의 한도를 쓰고, relayium.com을 향한 up은 계정 요금제의 저장 용량 한도를 따릅니다. 코드 없는 send나 text로 코드를 발급할 때와 up으로 파일을 저장할 때는 대상 서버 계정이 필요합니다. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다.",
       },
       {
         q: "자신의 도메인과 TLS 인증서를 쓸 수 있나요?",
@@ -1124,7 +1124,7 @@ ready`,
     {
       heading: "Ein TURN-Relay für netzwerkübergreifende Übertragungen hinzufügen",
       body: [
-        "Übertragungen im selben Netzwerk (LAN) und SSH-basiertes push/pull funktionieren ohne irgendetwas Zusätzliches. Netzwerkübergreifende Echtzeit-Übertragungen (zwei Geräte hinter unterschiedlichen NATs) brauchen manchmal ein TURN-Relay, um einen Pfad herzustellen — das Relay sieht dabei stets nur Chiffretext, niemals deinen Dateiinhalt.",
+        "Übertragungen im selben Netzwerk (LAN) und daemon-direct push/sync funktionieren ohne irgendetwas Zusätzliches. Netzwerkübergreifende Echtzeit-Übertragungen (zwei Geräte hinter unterschiedlichen NATs) brauchen manchmal ein TURN-Relay, um einen Pfad herzustellen, und die Pairing-Code-Sitzungen der CLI (send / receive, text und pair) laufen darüber, sobald dein Server für den Code eines ausstellt — das Relay sieht dabei stets nur Chiffretext, niemals deinen Dateiinhalt.",
         "docker-compose.yml hat ein optionales relay-Profil, das zusammen mit dem Hauptserver coturn (den TURN-Server) startet. Das Profil startet auch eine kleine Redis-Instanz, doch die Zählung der coturn-Relay-Bytes durch den Server darüber ist derzeit deaktiviert, weitergeleitete Bytes werden also nicht gezählt.",
         "Das Secret muss an zwei verschiedene Stellen gelangen, und wenn das schiefgeht, scheitert es lautlos. coturn bekommt es über die Variablenersetzung von Compose, die nur aus der Shell oder einer .env im Projektwurzelverzeichnis aufgelöst wird. Der Server liest es aus seiner eigenen Umgebung — also aus server/.env — und ein leeres Secret schaltet TURN vollständig ab. Setzt du nur eines von beiden, läuft ein coturn, für das der Server nie Zugangsdaten ausstellt: Jeder Container meldet sich gesund, im Log steht nichts, und Übertragungen durch strenge NATs scheitern weiter genau wie vorher.",
       ],
@@ -1215,8 +1215,8 @@ you@example.com (https://your-domain)`,
       },
       bullets: [
         "Egal welchen Server sie nutzt, die CLI ist kostenlos — --server ändert nur den Rendezvous-Server. send oder text ohne Code erzeugen dort einen Code, und Cloud-up speichert unter einem Konto auf ihm; melde dich daher zuerst mit relayium login --server https://your-domain an. Auf deinen eigenen Server gerichtet speichert up auf deiner eigenen Festplatte unter deinen eigenen Limits; auf relayium.com gerichtet nutzt es gehosteten Speicher und das Kontingent deines Tarifs. receive, down und text mit dem ausgegebenen Code brauchen keine Anmeldung.",
-        "Beide text-Gegenstellen müssen gleichzeitig online bleiben. Nachrichten laufen über eine eigene Ende-zu-Ende-verschlüsselte direkte P2P-Sitzung. CLI text ist rein direkt und nutzt nicht das TURN-Relay der Web-App. Weder Relayium noch dein selbst gehosteter Server speichern Nachrichteninhalte oder einen serverseitigen Verlauf; beide Terminals beziehungsweise der Empfänger können empfangenen Text jedoch kopieren oder aufbewahren.",
-        "push/pull (über dein eigenes SSH) sowie serve + daemon-direct push relayium://host berühren relayium.com überhaupt nicht, selbst gehostet oder nicht — sie verbinden sich direkt mit der von dir angegebenen Gegenstelle.",
+        "Beide text-Gegenstellen müssen gleichzeitig online bleiben. Nachrichten sind Ende-zu-Ende verschlüsselt; stellt dein Server für den Code ein TURN-Relay aus, läuft die Sitzung darüber, sonst verbinden sich die beiden Terminals direkt per P2P. Weder Relayium noch dein selbst gehosteter Server speichern Nachrichteninhalte oder einen serverseitigen Verlauf; beide Terminals beziehungsweise der Empfänger können empfangenen Text jedoch kopieren oder aufbewahren.",
+        "serve + daemon-direct push/sync relayium://host berühren relayium.com überhaupt nicht, selbst gehostet oder nicht — sie verbinden sich direkt mit der von dir angegebenen Gegenstelle. Das frühere push/pull über SSH ist eingestellt.",
       ],
     },
     {
@@ -1276,11 +1276,11 @@ you@example.com (https://your-domain)`,
     items: [
       {
         q: "Muss ich TURN einrichten?",
-        a: "Nur, wenn netzwerkübergreifende Echtzeit-Übertragungen auch durch strenge NATs funktionieren sollen. Übertragungen im selben Netzwerk, SSH-basiertes push/pull und daemon-direct funktionieren alle ohne TURN — TURN dient ausschließlich der NAT-Traversal auf dem netzwerkübergreifenden Pairing-Code-Pfad.",
+        a: "Nur, wenn netzwerkübergreifende Echtzeit-Übertragungen auch durch strenge NATs funktionieren sollen: Browser-Sitzungen und die Pairing-Code-Sitzungen der CLI (send / receive, text und pair), die über das Relay laufen, sobald dein Server eines ausstellt, und sonst einen direkten Weg brauchen. Übertragungen im selben Netzwerk und daemon-direct push/sync funktionieren ohne TURN.",
       },
       {
         q: "Ist die CLI immer noch kostenlos, wenn ich selbst hoste?",
-        a: "Ja. Das CLI-Binary ist kostenlos und quelloffen, ob es mit relayium.com oder mit deinem eigenen Server spricht — --server richtet es nur auf deine Instanz aus, und die direkten Modi bleiben in beiden Fällen ungemessen. Beim Speicher liegt der Unterschied: up gegen deinen eigenen Server nutzt deine eigene Festplatte und deine eigenen Limits, up gegen relayium.com ist an das Speicherlimit des Tarifs deines Kontos gebunden. Ein Konto auf dem Zielserver brauchen send oder text ohne Code zum Erzeugen eines Codes sowie up zum Speichern einer Datei. receive, down und text mit dem ausgegebenen Code brauchen keine Anmeldung.",
+        a: "Ja. Das CLI-Binary ist kostenlos und quelloffen, ob es mit relayium.com oder mit deinem eigenen Server spricht — --server richtet es nur auf deine Instanz aus, und daemon-direct push/sync bleibt in beiden Fällen ungemessen; gegen relayium.com zählen weitergeleitete Pairing-Code-Sitzungen zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat. Beim Speicher liegt der Unterschied: up gegen deinen eigenen Server nutzt deine eigene Festplatte und deine eigenen Limits, up gegen relayium.com ist an das Speicherlimit des Tarifs deines Kontos gebunden. Ein Konto auf dem Zielserver brauchen send oder text ohne Code zum Erzeugen eines Codes sowie up zum Speichern einer Datei. receive, down und text mit dem ausgegebenen Code brauchen keine Anmeldung.",
       },
       {
         q: "Kann ich meine eigene Domain und ein eigenes TLS-Zertifikat verwenden?",
@@ -1383,7 +1383,7 @@ ready`,
     {
       heading: "Ajouter un relais TURN pour les transferts entre réseaux",
       body: [
-        "Les transferts sur le même réseau (LAN) et le push/pull basé sur SSH fonctionnent sans rien de plus. Les transferts en temps réel entre réseaux différents (deux appareils derrière des NAT différents) nécessitent parfois un relais TURN pour établir un chemin — le relais ne voit jamais que du texte chiffré, jamais le contenu de vos fichiers.",
+        "Les transferts sur le même réseau (LAN) et le push/sync en daemon-direct fonctionnent sans rien de plus. Les transferts en temps réel entre réseaux différents (deux appareils derrière des NAT différents) nécessitent parfois un relais TURN pour établir un chemin, et les sessions à code d'appairage de la CLI (send / receive, text et pair) y passent dès que votre serveur en attribue un pour le code — le relais ne voit jamais que du texte chiffré, jamais le contenu de vos fichiers.",
         "docker-compose.yml a un profil relay optionnel qui démarre coturn (le serveur TURN) aux côtés du serveur principal. Le profil démarre aussi une petite instance Redis, mais la mesure par le serveur des octets relayés par coturn à travers elle est actuellement désactivée : les octets relayés ne sont pas comptés.",
         "Le secret doit parvenir à deux endroits différents, et se tromper échoue sans le moindre bruit. coturn le reçoit par la substitution de variables de Compose, qui ne se résout que depuis le shell ou un .env à la racine du projet. Le serveur, lui, le lit dans son propre environnement — c'est-à-dire server/.env — et un secret vide désactive purement et simplement TURN. Si vous n'en renseignez qu'un seul, vous obtenez un coturn qui tourne mais pour lequel le serveur n'émet jamais d'identifiants : tous les conteneurs se déclarent sains, rien n'est journalisé, et les transferts à travers les NAT stricts continuent d'échouer exactement comme avant.",
       ],
@@ -1474,8 +1474,8 @@ you@example.com (https://your-domain)`,
       },
       bullets: [
         "Quel que soit le serveur utilisé, la CLI est gratuite — --server ne change que le serveur de rendez-vous. send ou text sans code y génèrent un code, et up y stocke sous un compte ; connectez-vous donc d'abord avec relayium login --server https://your-domain. Pointé vers votre propre serveur, up stocke sur votre propre disque selon vos propres limites ; pointé vers relayium.com, il utilise le stockage hébergé et le quota de votre offre. receive, down et text avec le code affiché ne nécessitent aucune connexion.",
-        "Les deux extrémités de text doivent rester en ligne. Les messages utilisent leur propre session P2P directe chiffrée de bout en bout. Le text de la CLI est exclusivement direct et n'utilise pas le relais TURN de l'appli web. Ni Relayium ni votre serveur auto-hébergé ne stockent le corps des messages ou un historique côté serveur, mais chaque terminal ou destinataire peut copier ou conserver le texte après réception.",
-        "push/pull (via votre propre SSH) ainsi que serve + le push daemon-direct relayium://host ne touchent jamais relayium.com, auto-hébergé ou non — ils se connectent directement à la machine distante que vous indiquez.",
+        "Les deux extrémités de text doivent rester en ligne. Les messages sont chiffrés de bout en bout ; dès que votre serveur attribue un relais TURN pour le code, la session y passe, sinon les deux terminaux se connectent directement en P2P. Ni Relayium ni votre serveur auto-hébergé ne stockent le corps des messages ou un historique côté serveur, mais chaque terminal ou destinataire peut copier ou conserver le texte après réception.",
+        "serve + le push/sync daemon-direct relayium://host ne touchent jamais relayium.com, auto-hébergé ou non — ils se connectent directement à la machine distante que vous indiquez. L'ancien push/pull via SSH est retiré.",
       ],
     },
     {
@@ -1535,11 +1535,11 @@ you@example.com (https://your-domain)`,
     items: [
       {
         q: "Dois-je configurer TURN ?",
-        a: "Seulement si vous voulez que les transferts en temps réel entre réseaux différents fonctionnent à travers des NAT stricts. Les transferts sur le même réseau, le push/pull basé sur SSH et le daemon-direct fonctionnent tous sans TURN — TURN sert uniquement au NAT traversal sur le chemin du code d'appairage entre réseaux différents.",
+        a: "Seulement si vous voulez que les transferts en temps réel entre réseaux différents fonctionnent à travers des NAT stricts : les sessions du navigateur et les sessions à code d'appairage de la CLI (send / receive, text et pair), qui passent par le relais dès que votre serveur en attribue un et ont sinon besoin d'un chemin direct. Les transferts sur le même réseau et le push/sync en daemon-direct fonctionnent sans TURN.",
       },
       {
         q: "La CLI reste-t-elle gratuite si je m'auto-héberge ?",
-        a: "Oui. Le binaire de la CLI est gratuit et open source, qu'il parle à relayium.com ou à un serveur que vous faites tourner vous-même — --server le fait seulement pointer vers votre instance, et les modes directs restent non mesurés dans les deux cas. C'est le stockage qui diffère : up vers votre propre serveur utilise votre propre disque et vos propres limites, tandis que up vers relayium.com est borné par la limite de stockage de l'offre de votre compte. Un compte sur le serveur visé est requis par send ou text sans code pour en générer un, et par up pour stocker un fichier. receive, down et text avec le code affiché ne nécessitent aucune connexion.",
+        a: "Oui. Le binaire de la CLI est gratuit et open source, qu'il parle à relayium.com ou à un serveur que vous faites tourner vous-même — --server le fait seulement pointer vers votre instance, et le push/sync en daemon-direct reste non mesuré dans les deux cas ; vers relayium.com, les sessions à code d'appairage relayées sont décomptées du quota mensuel de trafic du compte qui a généré le code. C'est le stockage qui diffère : up vers votre propre serveur utilise votre propre disque et vos propres limites, tandis que up vers relayium.com est borné par la limite de stockage de l'offre de votre compte. Un compte sur le serveur visé est requis par send ou text sans code pour en générer un, et par up pour stocker un fichier. receive, down et text avec le code affiché ne nécessitent aucune connexion.",
       },
       {
         q: "Puis-je utiliser mon propre domaine et mon propre certificat TLS ?",
@@ -1642,7 +1642,7 @@ ready`,
     {
       heading: "أضف مُرحِّل TURN لعمليات النقل عبر الشبكات",
       body: [
-        "عمليات النقل في الشبكة نفسها (LAN) وpush/pull القائم على SSH تعمل بلا أي إضافة. عمليات النقل الفوري عبر الشبكات (جهازان خلف NAT مختلفين) تحتاج أحيانًا مُرحِّل TURN لإنشاء مسار — لا يرى المُرحِّل سوى نص مُشفَّر أبدًا، لا محتوى ملفاتك.",
+        "عمليات النقل في الشبكة نفسها (LAN) وpush/sync عبر daemon direct تعمل بلا أي إضافة. عمليات النقل الفوري عبر الشبكات (جهازان خلف NAT مختلفين) تحتاج أحيانًا مُرحِّل TURN لإنشاء مسار، وتمر عبره جلسات رمز الاقتران في CLI ‏(send / receive وtext وpair) كلما أصدر خادمك مُرحِّلًا للرمز — لا يرى المُرحِّل سوى نص مُشفَّر أبدًا، لا محتوى ملفاتك.",
         "لدى docker-compose.yml ملف تعريف relay اختياري يُشغّل coturn (خادم TURN) إلى جانب الخادم الرئيسي. يُشغّل ملف التعريف أيضًا نسخة Redis صغيرة، لكن قياس الخادم لبايتات ترحيل coturn عبرها معطَّل حاليًا، فلا تُحتسب البايتات المُرحَّلة.",
         "ولا بد أن يصل المفتاح السري إلى موضعين مختلفين، والخطأ في ذلك يفشل بلا صوت. يتلقّاه coturn عبر استبدال المتغيرات في Compose، وهو استبدال لا يُحَل إلا من الصدفة أو من ملف ‎.env‎ في جذر المشروع. أما الخادم فيقرأه من بيئته هو — أي من server/.env — والمفتاح الفارغ يعطّل TURN تعطيلًا كاملًا. فإن ضبطت أحدهما فقط، حصلت على coturn يعمل ولا يصدر له الخادم بيانات اعتماد قط: كل الحاويات تُبلِّغ أنها سليمة، ولا شيء يُسجَّل، وتظل عمليات النقل عبر شبكات NAT الصارمة تفشل تمامًا كما كانت قبل إضافة المُرحِّل.",
       ],
@@ -1733,8 +1733,8 @@ you@example.com (https://your-domain)`,
       },
       bullets: [
         "الـ CLI مجاني في كلتا الحالتين — ‎--server‎ يغيّر خادم التعارف فقط. يصدر send أو text بلا رمز رمزًا من ذلك الخادم، ويخزّن up السحابي تحت حساب عليه، لذا سجّل الدخول أولًا بـ ‎relayium login --server https://your-domain‎. عند توجيهه إلى خادمك، يخزّن up على قرصك ضمن حدودك أنت؛ وعند توجيهه إلى relayium.com يستخدم التخزين المُستضاف وحصة خطتك. أما receive وdown وtext مع الرمز المطبوع فلا تحتاج إلى تسجيل دخول.",
-        "يجب أن يبقى طرفا text متصلين معًا. تستخدم الرسائل جلسة P2P مباشرة مستقلة ومشفّرة من الطرف إلى الطرف. text في CLI مباشر فقط ولا يستخدم مُرحِّل TURN الخاص بتطبيق الويب. لا تخزّن Relayium ولا خادمك المستضاف ذاتيًا متون الرسائل أو سجلًا على الخادم، لكن يمكن لأي طرفية أو مستلم نسخ النص أو الاحتفاظ به بعد استلامه.",
-        "‏push/pull (عبر SSH الخاص بك) وserve + دفع daemon direct عبر push relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده.",
+        "يجب أن يبقى طرفا text متصلين معًا. الرسائل مشفّرة من الطرف إلى الطرف؛ وكلما أصدر خادمك مُرحِّل TURN للرمز مرّت الجلسة عبره، وإلا اتصلت الطرفيتان مباشرةً عبر P2P. لا تخزّن Relayium ولا خادمك المستضاف ذاتيًا متون الرسائل أو سجلًا على الخادم، لكن يمكن لأي طرفية أو مستلم نسخ النص أو الاحتفاظ به بعد استلامه.",
+        "‏serve + push/sync عبر daemon direct إلى relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده. أما push/pull القديم عبر SSH فقد أُوقف.",
       ],
     },
     {
@@ -1794,11 +1794,11 @@ you@example.com (https://your-domain)`,
     items: [
       {
         q: "هل أحتاج إلى إعداد TURN؟",
-        a: "فقط إن أردت أن تعمل عمليات النقل الفوري عبر الشبكات عبر أنواع NAT الصارمة. عمليات النقل في الشبكة نفسها، وpush/pull القائم على SSH، وdaemon direct، جميعها تعمل بدونه — TURN مخصّص بحتًا لاجتياز NAT على مسار رمز الاقتران عبر الشبكات.",
+        a: "فقط إن أردت أن تعمل عمليات النقل الفوري عبر الشبكات عبر أنواع NAT الصارمة: جلسات المتصفّح، وجلسات رمز الاقتران في CLI ‏(send / receive وtext وpair) التي تمر عبر المُرحِّل كلما أصدره خادمك وتحتاج إلى مسار مباشر في غير ذلك. أما النقل في الشبكة نفسها وpush/sync عبر daemon direct فيعملان بدون TURN.",
       },
       {
         q: "هل يبقى الـ CLI مجانيًا إن استضفتُ ذاتيًا؟",
-        a: "نعم. الملف التنفيذي للـ CLI مجاني ومفتوح المصدر سواء تواصل مع relayium.com أو مع خادم تشغّله بنفسك — ‎--server‎ يوجّهه إلى نسختك فقط، وتبقى الأوضاع المباشرة بلا قياس في الحالتين. أما الفرق ففي التخزين: up إلى خادمك يستخدم قرصك وحدودك أنت، بينما up إلى relayium.com يخضع لحدّ التخزين في خطة حسابك. يحتاج send أو text بلا رمز إلى حساب على الخادم المستهدف لإصدار رمز، ويحتاجه up لتخزين ملف. أما receive وdown وtext مع الرمز المطبوع فلا تحتاج إلى تسجيل دخول.",
+        a: "نعم. الملف التنفيذي للـ CLI مجاني ومفتوح المصدر سواء تواصل مع relayium.com أو مع خادم تشغّله بنفسك — ‎--server‎ يوجّهه إلى نسختك فقط، ويبقى push/sync عبر daemon direct بلا قياس في الحالتين؛ ومع relayium.com تُحتسب جلسات رمز الاقتران المُرحَّلة ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز. أما الفرق ففي التخزين: up إلى خادمك يستخدم قرصك وحدودك أنت، بينما up إلى relayium.com يخضع لحدّ التخزين في خطة حسابك. يحتاج send أو text بلا رمز إلى حساب على الخادم المستهدف لإصدار رمز، ويحتاجه up لتخزين ملف. أما receive وdown وtext مع الرمز المطبوع فلا تحتاج إلى تسجيل دخول.",
       },
       {
         q: "هل يمكنني استخدام نطاقي الخاص وشهادة TLS خاصة بي؟",
@@ -1901,7 +1901,7 @@ ready`,
     {
       heading: "Añade un retransmisor TURN para las transferencias entre redes",
       body: [
-        "Las transferencias en la misma red (red local) y el push/pull basado en SSH funcionan sin nada extra. Las transferencias en tiempo real entre redes (dos dispositivos tras NAT distintos) a veces necesitan un retransmisor TURN para establecer una ruta — el retransmisor solo ve texto cifrado, nunca el contenido de tus archivos.",
+        "Las transferencias en la misma red (red local) y el push/sync con daemon directo funcionan sin nada extra. Las transferencias en tiempo real entre redes (dos dispositivos tras NAT distintos) a veces necesitan un retransmisor TURN para establecer una ruta, y las sesiones con código de emparejamiento de la CLI (send / receive, text y pair) pasan por él siempre que tu servidor emite uno para el código — el retransmisor solo ve texto cifrado, nunca el contenido de tus archivos.",
         "docker-compose.yml tiene un perfil relay opcional que arranca coturn (el servidor TURN) junto al servidor principal. El perfil también arranca una pequeña instancia de Redis, pero la medición por parte del servidor de los bytes retransmitidos por coturn a través de ella está desactivada actualmente, así que los bytes retransmitidos no se contabilizan.",
         "El secreto tiene que llegar a dos sitios distintos, y equivocarse falla en silencio. coturn lo recibe por la sustitución de variables de Compose, que solo se resuelve desde el shell o desde un .env en la raíz del proyecto. El servidor lo lee de su propio entorno — es decir, de server/.env — y un secreto vacío desactiva TURN por completo. Si solo pones uno de los dos, acabas con un coturn en marcha para el que el servidor nunca emite credenciales: todos los contenedores se declaran sanos, no se registra nada, y las transferencias a través de NAT estrictos siguen fallando exactamente igual que antes.",
       ],
@@ -1992,8 +1992,8 @@ you@example.com (https://your-domain)`,
       },
       bullets: [
         "La CLI es gratis en cualquier caso — --server solo cambia el servidor de punto de encuentro. send o text sin código generan uno allí, y up guarda bajo una cuenta en ese servidor, así que inicia sesión primero con relayium login --server https://your-domain. Apuntado a tu propio servidor, up guarda en tu propio disco con tus propios límites; apuntado a relayium.com, usa el almacenamiento alojado y la cuota de tu plan. receive, down y text con el código impreso no necesitan iniciar sesión.",
-        "Ambos extremos de text deben permanecer en línea. Los mensajes usan su propia sesión P2P directa cifrada de extremo a extremo. text en la CLI es solo directo y no usa el relé TURN de la app web. Ni Relayium ni tu servidor autoalojado guardan el cuerpo de los mensajes ni un historial del servidor, pero cualquiera de los terminales o el destinatario puede copiar o conservar el texto después de recibirlo.",
-        "push/pull (por tu propio SSH) y serve + el push daemon directo relayium://host no tocan relayium.com en absoluto, te autoalojes o no — se conectan directamente al remoto que indiques.",
+        "Ambos extremos de text deben permanecer en línea. Los mensajes van cifrados de extremo a extremo; siempre que tu servidor emite un retransmisor TURN para el código, la sesión pasa por él y, si no, los dos terminales se conectan directamente por P2P. Ni Relayium ni tu servidor autoalojado guardan el cuerpo de los mensajes ni un historial del servidor, pero cualquiera de los terminales o el destinatario puede copiar o conservar el texto después de recibirlo.",
+        "serve + el push/sync daemon directo relayium://host no tocan relayium.com en absoluto, te autoalojes o no — se conectan directamente al remoto que indiques. El antiguo push/pull por SSH está retirado.",
       ],
     },
     {
@@ -2053,11 +2053,11 @@ you@example.com (https://your-domain)`,
     items: [
       {
         q: "¿Necesito configurar TURN?",
-        a: "Solo si quieres que las transferencias en tiempo real entre redes funcionen a través de NAT estrictos. Las transferencias en la misma red, el push/pull basado en SSH y el daemon directo funcionan todos sin él — TURN sirve puramente para el recorrido de NAT en la ruta del código de emparejamiento entre redes.",
+        a: "Solo si quieres que las transferencias en tiempo real entre redes funcionen a través de NAT estrictos: las sesiones del navegador y las sesiones con código de emparejamiento de la CLI (send / receive, text y pair), que pasan por el retransmisor siempre que tu servidor emite uno y, si no, necesitan una ruta directa. Las transferencias en la misma red y el push/sync con daemon directo funcionan sin TURN.",
       },
       {
         q: "¿La CLI sigue siendo gratis si me autoalojo?",
-        a: "Sí. El binario de la CLI es gratis y de código abierto tanto si habla con relayium.com como con un servidor que ejecutas tú mismo — --server solo lo apunta a tu instancia, y los modos directos siguen sin medirse en ambos casos. Lo que cambia es el almacenamiento: up contra tu propio servidor usa tu propio disco y tus propios límites, mientras que up contra relayium.com está sujeto al límite de almacenamiento del plan de tu cuenta. send o text sin código necesitan una cuenta en el servidor de destino para generar uno, y up la necesita para guardar un archivo. receive, down y text con el código impreso no requieren iniciar sesión.",
+        a: "Sí. El binario de la CLI es gratis y de código abierto tanto si habla con relayium.com como con un servidor que ejecutas tú mismo — --server solo lo apunta a tu instancia, y el push/sync con daemon directo sigue sin medirse en ambos casos; contra relayium.com, las sesiones con código de emparejamiento retransmitidas cuentan para la cuota mensual de tráfico de la cuenta que generó el código. Lo que cambia es el almacenamiento: up contra tu propio servidor usa tu propio disco y tus propios límites, mientras que up contra relayium.com está sujeto al límite de almacenamiento del plan de tu cuenta. send o text sin código necesitan una cuenta en el servidor de destino para generar uno, y up la necesita para guardar un archivo. receive, down y text con el código impreso no requieren iniciar sesión.",
       },
       {
         q: "¿Puedo usar mi propio dominio y certificado TLS?",
@@ -2160,7 +2160,7 @@ ready`,
     {
       heading: "Adicione um retransmissor TURN para transferências entre redes",
       body: [
-        "Transferências na mesma rede (rede local) e o push/pull baseado em SSH funcionam sem nada a mais. Transferências em tempo real entre redes (dois dispositivos atrás de NATs diferentes) às vezes precisam de um retransmissor TURN para estabelecer um caminho — o retransmissor só vê texto cifrado, nunca o conteúdo dos seus arquivos.",
+        "Transferências na mesma rede (rede local) e o push/sync com daemon direto funcionam sem nada a mais. Transferências em tempo real entre redes (dois dispositivos atrás de NATs diferentes) às vezes precisam de um retransmissor TURN para estabelecer um caminho, e as sessões com código de pareamento da CLI (send / receive, text e pair) passam por ele sempre que o seu servidor emite um para o código — o retransmissor só vê texto cifrado, nunca o conteúdo dos seus arquivos.",
         "O docker-compose.yml tem um perfil relay opcional que inicia o coturn (o servidor TURN) ao lado do servidor principal. O perfil também inicia uma pequena instância Redis, mas a medição pelo servidor dos bytes retransmitidos pelo coturn por meio dela está desativada no momento, então os bytes retransmitidos não são contabilizados.",
         "O segredo precisa chegar a dois lugares diferentes, e errar isso falha em silêncio. O coturn o recebe pela substituição de variáveis do Compose, que só é resolvida a partir do shell ou de um .env na raiz do projeto. Já o servidor o lê do próprio ambiente — ou seja, de server/.env — e um segredo vazio desliga o TURN por completo. Se você definir só um dos dois, fica com um coturn rodando para o qual o servidor nunca emite credenciais: todos os contêineres se declaram saudáveis, nada é registrado, e as transferências através de NAT estrito continuam falhando exatamente como antes.",
       ],
@@ -2251,8 +2251,8 @@ you@example.com (https://your-domain)`,
       },
       bullets: [
         "A CLI é gratuita em qualquer dos casos — --server apenas muda o servidor de encontro. send ou text sem código geram um código nele, e up guarda sob uma conta nesse servidor, então entre primeiro com relayium login --server https://your-domain. Apontado para o seu próprio servidor, o up guarda no seu próprio disco sob os seus próprios limites; apontado para relayium.com, usa o armazenamento hospedado e a cota do seu plano. receive, down e text com o código impresso não precisam de login.",
-        "As duas pontas de text precisam permanecer online. As mensagens usam uma sessão P2P direta própria, criptografada de ponta a ponta. text na CLI é apenas direto e não usa o retransmissor TURN do app web. Nem o Relayium nem o servidor auto-hospedado armazenam o corpo das mensagens ou um histórico no servidor, mas qualquer terminal ou destinatário pode copiar ou guardar o texto depois de recebê-lo.",
-        "push/pull (pelo seu próprio SSH) e serve + o push daemon direto relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.",
+        "As duas pontas de text precisam permanecer online. As mensagens têm criptografia de ponta a ponta; sempre que o seu servidor emite um retransmissor TURN para o código, a sessão passa por ele e, senão, os dois terminais se conectam diretamente por P2P. Nem o Relayium nem o servidor auto-hospedado armazenam o corpo das mensagens ou um histórico no servidor, mas qualquer terminal ou destinatário pode copiar ou guardar o texto depois de recebê-lo.",
+        "serve + o push/sync daemon direto relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar. O antigo push/pull por SSH foi descontinuado.",
       ],
     },
     {
@@ -2312,11 +2312,11 @@ you@example.com (https://your-domain)`,
     items: [
       {
         q: "Preciso configurar o TURN?",
-        a: "Só se você quiser que as transferências em tempo real entre redes funcionem através de NATs rígidos. Transferências na mesma rede, o push/pull baseado em SSH e o daemon direto funcionam todos sem ele — o TURN serve puramente para a travessia de NAT no caminho do código de emparelhamento entre redes.",
+        a: "Só se você quiser que as transferências em tempo real entre redes funcionem através de NATs rígidos: as sessões do navegador e as sessões com código de pareamento da CLI (send / receive, text e pair), que passam pelo retransmissor sempre que o seu servidor emite um e, senão, precisam de um caminho direto. Transferências na mesma rede e o push/sync com daemon direto funcionam sem TURN.",
       },
       {
         q: "A CLI continua gratuita se eu auto-hospedar?",
-        a: "Sim. O binário da CLI é gratuito e de código aberto, fale ele com relayium.com ou com um servidor que você mesmo executa — --server apenas o aponta para a sua instância, e os modos diretos continuam sem medição em ambos os casos. O que muda é o armazenamento: up contra o seu próprio servidor usa o seu próprio disco e os seus próprios limites, enquanto up contra relayium.com fica sujeito ao limite de armazenamento do plano da sua conta. send ou text sem código precisam de uma conta no servidor de destino para gerar um, e up precisa dela para guardar um arquivo. receive, down e text com o código impresso não exigem login.",
+        a: "Sim. O binário da CLI é gratuito e de código aberto, fale ele com relayium.com ou com um servidor que você mesmo executa — --server apenas o aponta para a sua instância, e o push/sync com daemon direto continua sem medição em ambos os casos; contra relayium.com, as sessões com código de pareamento retransmitidas contam para a cota mensal de tráfego da conta que gerou o código. O que muda é o armazenamento: up contra o seu próprio servidor usa o seu próprio disco e os seus próprios limites, enquanto up contra relayium.com fica sujeito ao limite de armazenamento do plano da sua conta. send ou text sem código precisam de uma conta no servidor de destino para gerar um, e up precisa dela para guardar um arquivo. receive, down e text com o código impresso não exigem login.",
       },
       {
         q: "Posso usar meu próprio domínio e certificado TLS?",

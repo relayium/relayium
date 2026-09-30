@@ -321,11 +321,11 @@ Code: 483920   (valid 5 minutes)`,
 const ja = {
   title: "Relayium CLI でネットワークを越えて誰かにファイルを送る",
   description:
-    "relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料。ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。",
+    "relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを移動します。エンドツーエンドで暗号化され、任意で SAS コードを照合できます。サーバーがそのコードにリレーを発行した場合、ファイルは暗号文としてそのリレーを通り、コードを発行したアカウントの月間転送量の枠に計上されます。",
   updatedLabel: "最終更新",
   lead: [
-    "相手のマシンが自分のものではなく SSH でログインできないこともあります。別のオフィスの同僚へのファイル、クライアント向けのビルド、遠方の友人へのアーカイブ。relayium send と receive は、送信時に CLI が発行する短いペアリングコードだけを使って、ネットワークを越えてそれを二人の間で直接移動させます。",
-    "接続は P2P で、エンドツーエンドに暗号化されています。二つの端を引き合わせるためのごく小さなランデブーハンドシェイクだけが Relayium を経由し、ファイルのバイトは決して経由しません。",
+    "相手のマシンが自分のものではなく SSH でログインできないこともあります。別のオフィスの同僚へのファイル、クライアント向けのビルド、遠方の友人へのアーカイブ。relayium send と receive は、送信時に CLI が発行する短いペアリングコードだけを使って、ネットワークを越えてそれを二人の間で移動させます。",
+    "セッションはエンドツーエンドで暗号化されています。Relayium のサーバー上の短いランデブーが二つの端を引き合わせ、サーバーがそのコードに TURN リレーを発行した場合、ファイルのバイトはリレーが読めない暗号文としてそのリレーを通り、コードを発行したアカウントの月間転送量の枠に計上されます。",
   ],
   sections: [
     {
@@ -333,9 +333,9 @@ const ja = {
       prereqs: {
         label: "必要なもの",
         items: [
-          "両方のマシンに CLI。それぞれの端末で relayium version がバージョン文字列を表示します。シェルが「command not found」と返すなら、そのマシンにはまだ入っていません。",
+          "送信側のマシンに CLI。relayium version がバージョン文字列を表示します。シェルが「command not found」と返すなら、まだ入っていません。相手側も CLI を使えますが、Relayium のアプリやウェブページにコードを入力しても参加できます。",
           "サインイン済みの送信側。relayium whoami がアカウントのメールアドレスを表示します。ペアリングコードの発行には先に relayium login が要ります。受信側のマシンは最後までサインインしません。",
-          "二人が同時に端末の前にいること。コードの寿命は5分なので、発行する前にタイミングを合わせてください。",
+          "二人が同時にオンラインであること。コードの寿命は5分なので、発行する前にタイミングを合わせてください。",
           "6桁の数字を帯域外で伝える手段。通話でも、チャットの窓でも、同じ部屋にいるならそのままでも構いません。",
         ],
       },
@@ -380,7 +380,7 @@ path: direct`,
       bullets: [
         "コードは 6 桁の十進数字です。0-9 のいずれも現れ、先頭が 0 になることもあります。そして発行から 5 分で失効します。",
         "コードは合流するための共有シークレットにすぎません。ランデブー先以外の誰にも送られず、二つの端を引き合わせるためだけに使われます。",
-        "両端とも CLI である必要があります。ブラウザは CLI のペアリングコードに参加できません。相手がブラウザしか持っていない場合は、代わりに relayium up を使ってください。ダウンロードリンクが得られます。",
+        "相手側は CLI でなくても構いません。relayium receive、relayium pair、Relayium のアプリ、ウェブページのどれでもこのコードに参加できます。相手が今オンラインでないなら、relayium up でダウンロードリンクを作ってください。",
       ],
     },
     {
@@ -392,15 +392,15 @@ path: direct`,
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "直接接続のみ：無料、さもなくば失敗",
+      heading: "リレーか P2P か、そして何に計上されるか",
       body: [
-        "転送は二つの端の間で直接接続の確立を競います。確立できれば（少なくとも一方に到達可能なアドレスがある一般的なケースでは）、ファイルはそのまま暗号化された状態で全速力かつ無料で流れます。",
+        "path の行を見れば、バイトがどちらを通ったかが分かります。relay か、P2P を示す direct / lan です。どちらの場合もファイルはエンドツーエンドで暗号化され、転送ごとの料金もありません。中継されたバイトは、コードを発行したアカウントの月間転送量の枠に利用量として計上されます。",
         cliDirectFacts.ja,
-        "この状況に当たった場合、確実な方法は到達可能な2台のサーバー間でのデーモン直結、SSH 経由の push、または relayium up で作る保存リンクです。",
+        "転送がつながらない場合、確実な方法は relayium up で作る保存リンクか、自分で運用する到達可能な2台のサーバー間での relayium serve と push / sync です。後者は直結で、計測されません。",
       ],
       bullets: [
-        "直接接続が成功 → 無料、全速力、エンドツーエンドで暗号化。",
-        "両端は地理的にどこにあっても構いません。送信側は send を実行するだけ、受信側はそれが表示したコードで receive を実行します。",
+        "リレーが発行された → すべてのバイトが暗号化リレーを通り、コードを発行したアカウントの月間転送量の枠に計上されます。",
+        "リレーが発行されない → 直接の経路があれば両端は P2P でつながり、なければセッションは失敗します。",
       ],
     },
     {
@@ -439,7 +439,7 @@ Code: 483920   (valid 5 minutes)`,
               `relayium send ./release.zip
 # no direct connection to the peer (both ends behind strict NAT?): …`,
             ],
-            fix: "どちらの端も相手に届かず、CLI にはファイルのバイトを通すリレー経路が設計上ありません。片方を到達可能なアドレスを持つネットワーク（サーバー、あるいはスマートフォンのテザリング）へ移すか、relayium up でアップロードしてダウンロードリンクを渡してください。",
+            fix: "片方の端が古い relayium で、そのペアリングは直結専用のため、どちらの端も相手に届きませんでした。両端を更新してください。現在の relayium は、サーバーがそのコードにリレーを発行すれば暗号化リレーを通ります。それ以外の場合は、片方を到達可能なアドレスを持つネットワーク（サーバー、あるいはスマートフォンのテザリング）へ移すか、relayium up でアップロードしてダウンロードリンクを渡してください。",
           },
         ],
       },
@@ -454,11 +454,11 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "ファイルはどこかにアップロードされますか？",
-        a: "いいえ。ファイルは二人の間で直接ストリーミングされ、エンドツーエンドで暗号化されます。二つの端を引き合わせるためのごく小さなランデブーハンドシェイクだけが Relayium を経由し、ファイルは決して経由しません。",
+        a: "保存はされません。ファイルは二人の間でストリーミングされ、エンドツーエンドで暗号化されます。Relayium のサーバー上の小さなランデブーハンドシェイクが二つの端を引き合わせ、サーバーがそのコードに TURN リレーを発行した場合、ファイルのバイトはリレーが読めない暗号文としてそのリレーを通ります。コードを発行したアカウントの月間転送量の枠に計上され、保持されることはありません。",
       },
       {
         q: "接続できない場合はどうなりますか？",
-        a: "両端が厳格な NAT の内側にあり到達可能なアドレスがない場合、直接接続は確立できず転送は失敗します。CLI は設計上リレーへのフォールバックを持ちません。直接の経路が使えない場合は、到達可能な2台のサーバー間でのデーモン直結、または SSH 経由の push を使ってください。",
+        a: "サーバーがそのコードにリレーを発行すれば、セッションはリレーを通るので、厳格な NAT でも止まりません。リレーが発行されないとき（リレーが設定されていない、またはコードを発行したアカウントの枠を使い切ったとき）は両端に直接の経路が必要で、なければ転送は失敗します。その場合は relayium up で作る保存リンクか、自分で運用する到達可能な2台のサーバー間での relayium serve と push / sync を使ってください。",
       },
       {
         q: "相手が本当に正しい人物だとどうやって分かりますか？",
@@ -467,7 +467,7 @@ Code: 483920   (valid 5 minutes)`,
     ],
   },
   cta: {
-    text: "次のファイルを、別のネットワークにいる相手へ直接送りましょう。エンドツーエンドで暗号化され、しかも無料です。",
+    text: "次のファイルを、別のネットワークにいる相手へ送りましょう。エンドツーエンドで暗号化され、転送ごとの料金はかかりません。",
     button: "CLI を入手する",
     href: "/cli",
   },
@@ -477,11 +477,11 @@ Code: 483920   (valid 5 minutes)`,
 const ko = {
   title: "Relayium CLI로 네트워크를 넘어 상대에게 파일 보내기",
   description:
-    "relayium send와 receive를 사용해, 짧은 페어링 코드 하나로 서로 다른 네트워크에 있는 두 사람 사이에서 파일을 직접 옮기세요. 종단간 암호화되고 SAS 코드로 검증되며 무료입니다. 파일은 두 사람 사이를 곧장 오가며, 저희 서버를 절대 거치지 않습니다.",
+    "relayium send와 receive를 사용해, 짧은 페어링 코드 하나로 서로 다른 네트워크에 있는 두 사람 사이에서 파일을 옮기세요. 종단간 암호화되고 SAS 코드로 선택적으로 검증할 수 있습니다. 서버가 해당 코드에 릴레이를 발급하면 파일은 암호문으로 그 릴레이를 거치며, 코드를 발급한 계정의 월간 전송량 한도에 집계됩니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "때로는 상대의 컴퓨터가 내 것이 아니어서 SSH로 접속할 수 없을 때가 있습니다. 다른 사무실 동료에게 줄 파일, 고객에게 줄 빌드, 먼 곳의 친구에게 줄 아카이브. relayium send와 receive는 보낼 때 CLI가 발급하는 짧은 페어링 코드 하나만으로 네트워크를 넘어 그것을 두 사람 사이에 직접 옮깁니다.",
-    "연결은 P2P이며 종단간 암호화됩니다. 두 끝을 서로 소개하기 위한 아주 작은 랑데부 핸드셰이크만 Relayium을 거치며, 파일 바이트는 결코 거치지 않습니다.",
+    "때로는 상대의 컴퓨터가 내 것이 아니어서 SSH로 접속할 수 없을 때가 있습니다. 다른 사무실 동료에게 줄 파일, 고객에게 줄 빌드, 먼 곳의 친구에게 줄 아카이브. relayium send와 receive는 보낼 때 CLI가 발급하는 짧은 페어링 코드 하나만으로 네트워크를 넘어 그것을 두 사람 사이에 옮깁니다.",
+    "세션은 종단간 암호화됩니다. Relayium 서버의 짧은 랑데부가 두 끝을 서로 소개하며, 서버가 해당 코드에 TURN 릴레이를 발급하면 파일 바이트는 릴레이가 읽을 수 없는 암호문으로 그 릴레이를 거치고, 코드를 발급한 계정의 월간 전송량 한도에 집계됩니다.",
   ],
   sections: [
     {
@@ -489,9 +489,9 @@ const ko = {
       prereqs: {
         label: "필요한 것",
         items: [
-          "두 기기 모두에 설치된 CLI. 각 터미널에서 relayium version 이 버전 문자열을 출력합니다. 셸이 “command not found”를 돌려주면 그 기기에는 아직 없는 것입니다.",
+          "보내는 기기에 설치된 CLI. relayium version 이 버전 문자열을 출력합니다. 셸이 “command not found”를 돌려주면 아직 없는 것입니다. 상대도 CLI를 쓸 수 있고, Relayium 앱이나 웹 페이지에 코드를 입력해 참여할 수도 있습니다.",
           "로그인된 보내는 쪽. relayium whoami 가 계정 이메일을 출력합니다. 페어링 코드를 발급하려면 먼저 relayium login 이 필요합니다. 받는 쪽 기기는 끝까지 로그인하지 않습니다.",
-          "두 사람이 같은 시간에 터미널 앞에 있을 것. 코드의 수명은 5분이므로 발급하기 전에 시점을 맞추세요.",
+          "두 사람이 같은 시간에 온라인일 것. 코드의 수명은 5분이므로 발급하기 전에 시점을 맞추세요.",
           "여섯 자리 숫자를 대역 외로 전할 수단 — 통화, 채팅 창, 아니면 두 사람이 함께 있는 그 방.",
         ],
       },
@@ -536,7 +536,7 @@ path: direct`,
       bullets: [
         "코드는 6자리 십진 숫자입니다. 0-9 어느 것이든 나올 수 있고 앞자리가 0일 수도 있습니다. 그리고 발급된 지 5분이 지나면 만료됩니다.",
         "이 코드는 만남을 위한 공유 비밀일 뿐입니다. 랑데부 서버 외에는 누구에게도 전송되지 않으며, 오직 두 끝을 서로 소개하는 데만 쓰입니다.",
-        "양쪽 모두 CLI여야 합니다. 브라우저는 CLI 페어링 코드에 참여할 수 없습니다. 상대에게 브라우저밖에 없다면 대신 relayium up을 쓰세요. 다운로드 링크가 나옵니다.",
+        "상대가 꼭 CLI일 필요는 없습니다. relayium receive, relayium pair, Relayium 앱, 웹 페이지 모두 이 코드에 참여할 수 있습니다. 상대가 지금 온라인이 아니라면 relayium up으로 다운로드 링크를 만드세요.",
       ],
     },
     {
@@ -548,15 +548,15 @@ path: direct`,
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "직접 연결만 — 무료가 아니면 실패",
+      heading: "릴레이인가 P2P인가, 그리고 무엇에 집계되는가",
       body: [
-        "전송은 두 끝 사이의 직접 연결 수립을 경쟁적으로 시도합니다. 연결이 이루어지면(적어도 한쪽에 도달 가능한 주소가 있는 일반적인 경우) 파일은 암호화된 채로 곧장 전속력으로, 비용 없이 흐릅니다.",
+        "path 줄을 보면 바이트가 어느 길로 갔는지 알 수 있습니다. relay, 또는 P2P를 뜻하는 direct / lan입니다. 어느 쪽이든 파일은 종단간 암호화되고 전송별 요금도 없습니다. 릴레이된 바이트는 코드를 발급한 계정의 월간 전송량 한도에 사용량으로 집계됩니다.",
         cliDirectFacts.ko,
-        "이런 상황이라면 확실한 방법은 도달 가능한 두 서버 사이의 데몬 다이렉트, SSH를 통한 push, 또는 relayium up으로 만드는 저장 링크입니다.",
+        "전송이 연결되지 않는다면 확실한 방법은 relayium up으로 만드는 저장 링크, 또는 직접 운영하는 도달 가능한 두 서버 사이의 relayium serve와 push / sync입니다. 후자는 직접 연결이며 계량되지 않습니다.",
       ],
       bullets: [
-        "직접 연결 성공 → 무료, 전속력, 종단간 암호화.",
-        "양쪽은 지리적으로 어디에나 있을 수 있습니다. 보내는 쪽은 send를 실행하기만 하고, 받는 쪽은 거기서 출력된 코드로 receive를 실행합니다.",
+        "릴레이 발급됨 → 모든 바이트가 암호화된 릴레이를 거치며, 코드를 발급한 계정의 월간 전송량 한도에 집계됩니다.",
+        "릴레이 발급 안 됨 → 직접 경로가 있으면 두 끝이 P2P로 연결되고, 없으면 세션이 실패합니다.",
       ],
     },
     {
@@ -595,7 +595,7 @@ Code: 483920   (valid 5 minutes)`,
               `relayium send ./release.zip
 # no direct connection to the peer (both ends behind strict NAT?): …`,
             ],
-            fix: "양쪽 어느 쪽도 상대에 닿지 못했고, CLI에는 파일 바이트를 위한 릴레이 경로가 설계상 없습니다. 한쪽을 도달 가능한 주소가 있는 네트워크 — 서버나 휴대폰 핫스팟 — 로 옮기거나, relayium up 으로 올린 뒤 다운로드 링크를 건네세요.",
+            fix: "한쪽이 페어링이 직접 연결 전용인 이전 relayium이어서, 양쪽 어느 쪽도 상대에 닿지 못했습니다. 양쪽을 업데이트하세요. 현재 relayium은 서버가 해당 코드에 릴레이를 발급하면 암호화된 릴레이를 거칩니다. 그 밖의 경우에는 한쪽을 도달 가능한 주소가 있는 네트워크 — 서버나 휴대폰 핫스팟 — 로 옮기거나, relayium up 으로 올린 뒤 다운로드 링크를 건네세요.",
           },
         ],
       },
@@ -610,11 +610,11 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "파일이 어딘가에 업로드되나요?",
-        a: "아니요. 파일은 두 사람 사이에서 직접 스트리밍되며 종단간 암호화됩니다. 두 끝을 서로 소개하기 위한 아주 작은 랑데부 핸드셰이크만 Relayium을 거치며, 파일은 절대 거치지 않습니다.",
+        a: "저장되지 않습니다. 파일은 두 사람 사이에서 스트리밍되며 종단간 암호화됩니다. Relayium 서버의 작은 랑데부 핸드셰이크가 두 끝을 소개하며, 서버가 해당 코드에 TURN 릴레이를 발급하면 파일 바이트는 릴레이가 읽을 수 없는 암호문으로 그 릴레이를 거칩니다. 코드를 발급한 계정의 월간 전송량 한도에 집계되며, 보관되지 않습니다.",
       },
       {
         q: "연결이 안 되면 어떻게 되나요?",
-        a: "양쪽 모두 엄격한 NAT 뒤에 있고 도달 가능한 주소가 없다면 직접 연결을 만들 수 없어 전송이 실패합니다. CLI는 설계상 릴레이 폴백이 없습니다. 직접 경로를 쓸 수 없을 때는 도달 가능한 두 서버 사이의 데몬 다이렉트나, SSH를 통한 push를 사용하세요.",
+        a: "서버가 해당 코드에 릴레이를 발급하면 세션이 릴레이를 거치므로 엄격한 NAT에도 막히지 않습니다. 릴레이가 발급되지 않을 때(릴레이가 구성되지 않았거나 코드를 발급한 계정의 한도를 모두 쓴 경우)는 두 끝에 직접 경로가 필요하며, 없으면 전송이 실패합니다. 그때는 relayium up으로 만드는 저장 링크나, 직접 운영하는 도달 가능한 두 서버 사이의 relayium serve와 push / sync를 사용하세요.",
       },
       {
         q: "상대가 정말 맞는 사람인지 어떻게 알 수 있나요?",
@@ -623,7 +623,7 @@ Code: 483920   (valid 5 minutes)`,
     ],
   },
   cta: {
-    text: "다음 파일을 다른 네트워크에 있는 상대에게 직접 보내세요. 종단간 암호화되고 무료입니다.",
+    text: "다음 파일을 다른 네트워크에 있는 상대에게 보내세요. 종단간 암호화되며 전송별 요금은 없습니다.",
     button: "CLI 받기",
     href: "/cli",
   },
@@ -633,11 +633,11 @@ Code: 483920   (valid 5 minutes)`,
 const de = {
   title: "Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden",
   description:
-    "Nutze relayium send und receive, um eine Datei mithilfe eines kurzen Pairing-Codes direkt zwischen zwei Personen in unterschiedlichen Netzwerken zu bewegen. Ende-zu-Ende verschlüsselt, mit einem optionalen SAS-Code zum Vergleichen und kostenlos — die Datei geht direkt zwischen euch hin und her, nie über unsere Server.",
+    "Nutze relayium send und receive, um eine Datei mithilfe eines kurzen Pairing-Codes zwischen zwei Personen in unterschiedlichen Netzwerken zu bewegen. Ende-zu-Ende verschlüsselt, mit einem optionalen SAS-Code zum Vergleichen. Stellt der Server für den Code ein Relay aus, läuft die Datei als Chiffretext darüber und zählt zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Manchmal ist die andere Maschine nicht deine eigene und du kannst dich nicht per SSH einloggen — eine Datei für eine Kollegin in einem anderen Büro, ein Build für einen Kunden, ein Archiv für einen Freund am anderen Ende des Landes. relayium send und receive bewegen sie über Netzwerke hinweg direkt zwischen euch beiden, nur mit einem kurzen Pairing-Code, den deine CLI beim Senden erzeugt.",
-    "Die Verbindung ist Peer-to-Peer und Ende-zu-Ende verschlüsselt. Nur ein winziger Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen; die Dateibytes nie.",
+    "Manchmal ist die andere Maschine nicht deine eigene und du kannst dich nicht per SSH einloggen — eine Datei für eine Kollegin in einem anderen Büro, ein Build für einen Kunden, ein Archiv für einen Freund am anderen Ende des Landes. relayium send und receive bewegen sie über Netzwerke hinweg zwischen euch beiden, nur mit einem kurzen Pairing-Code, den deine CLI beim Senden erzeugt.",
+    "Die Sitzung ist Ende-zu-Ende verschlüsselt. Ein kurzes Rendezvous auf dem Relayium-Server stellt die beiden Enden einander vor; stellt der Server für den Code ein TURN-Relay aus, laufen die Dateibytes danach als Chiffretext, den das Relay nicht lesen kann, darüber und zählen zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat.",
   ],
   sections: [
     {
@@ -645,9 +645,9 @@ const de = {
       prereqs: {
         label: "Was du brauchst",
         items: [
-          "Die CLI auf beiden Rechnern. relayium version gibt auf jedem eine Versionsnummer aus; antwortet die Shell mit „command not found“, ist sie dort noch nicht installiert.",
+          "Die CLI auf dem sendenden Rechner. relayium version gibt eine Versionsnummer aus; antwortet die Shell mit „command not found“, ist sie noch nicht installiert. Die Gegenseite kann ebenfalls die CLI nutzen oder den Code in eine Relayium-App oder die Webseite eingeben.",
           "Einen angemeldeten Absender. relayium whoami gibt die Konto-E-Mail aus; das Erzeugen eines Pairing-Codes setzt relayium login voraus. Der empfangende Rechner meldet sich nie an.",
-          "Euch beide gleichzeitig am Terminal. Der Code lebt fünf Minuten, stimmt den Moment also ab, bevor du einen erzeugst.",
+          "Euch beide gleichzeitig online. Der Code lebt fünf Minuten, stimmt den Moment also ab, bevor du einen erzeugst.",
           "Einen Weg, sechs Ziffern außerhalb des Kanals zu übermitteln — ein Anruf, ein Chatfenster, oder der Raum, in dem ihr beide sitzt.",
         ],
       },
@@ -692,7 +692,7 @@ path: direct`,
       bullets: [
         "Der Code besteht aus 6 Dezimalziffern — jede von 0-9, führende Nullen eingeschlossen — und läuft 5 Minuten nach dem Erzeugen ab.",
         "Der Code ist nur ein gemeinsames Geheimnis zum Treffen; er wird an niemanden außer der Rendezvous-Stelle gesendet und stellt nur die beiden Enden einander vor.",
-        "Beide Enden müssen die CLI sein — ein Browser kann einem CLI-Pairing-Code nicht beitreten. Du sendest an jemanden, der nur einen Browser hat? Nimm stattdessen relayium up, das gibt dir einen Download-Link.",
+        "Die Gegenseite muss nicht die CLI sein: relayium receive, relayium pair, eine Relayium-App oder die Webseite können dem Code beitreten. Ist die Person gerade nicht online? Nimm relayium up für einen Download-Link.",
       ],
     },
     {
@@ -704,15 +704,15 @@ path: direct`,
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "Nur direkt — kostenlos, sonst schlägt es fehl",
+      heading: "Relay oder Peer-to-Peer — und worauf es angerechnet wird",
       body: [
-        "Die Übertragung versucht, eine direkte Verbindung zwischen den beiden Enden herzustellen. Gelingt das — der übliche Fall, wenn wenigstens eine Seite eine erreichbare Adresse hat —, fließt die Datei verschlüsselt direkt hindurch, mit voller Geschwindigkeit und ohne Kosten.",
+        "Die path-Zeile zeigt, welchen Weg die Bytes genommen haben: relay oder, für Peer-to-Peer, direct / lan. So oder so ist die Datei Ende-zu-Ende verschlüsselt, und so oder so gibt es keine Gebühr pro Übertragung — weitergeleitete Bytes werden als Nutzung auf das monatliche Datenvolumen des Kontos angerechnet, das den Code erzeugt hat.",
         cliDirectFacts.de,
-        "Falls das passiert, ist die verlässliche Antwort daemon-direct zwischen zwei erreichbaren Servern, push über SSH oder ein gespeicherter Link aus relayium up.",
+        "Kommt keine Verbindung zustande, sind die verlässlichen Antworten ein gespeicherter Link aus relayium up oder relayium serve mit push / sync zwischen zwei erreichbaren Servern, die du betreibst — dieser Weg ist direkt und wird nicht gezählt.",
       ],
       bullets: [
-        "Direkte Verbindung gelingt → kostenlos, volle Geschwindigkeit, Ende-zu-Ende verschlüsselt.",
-        "Beide Enden können geografisch überall sein — der Absender führt einfach send aus, der Empfänger receive mit dem Code, den es ausgegeben hat.",
+        "Relay ausgestellt → jedes Byte läuft über das verschlüsselte Relay und zählt zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat.",
+        "Kein Relay ausgestellt → die beiden Enden verbinden sich per Peer-to-Peer, wenn ein direkter Weg existiert; sonst schlägt die Sitzung fehl.",
       ],
     },
     {
@@ -751,7 +751,7 @@ Code: 483920   (valid 5 minutes)`,
               `relayium send ./release.zip
 # no direct connection to the peer (both ends behind strict NAT?): …`,
             ],
-            fix: "Keine der beiden Seiten hat die andere erreicht, und die CLI hat von Grund auf keinen Relay-Weg für Dateibytes. Bring ein Ende in ein Netz mit erreichbarer Adresse — einen Server oder einen Handy-Hotspot — oder lade die Datei mit relayium up hoch und gib stattdessen den Download-Link weiter.",
+            fix: "Ein Ende nutzt ein älteres relayium, dessen Pairing nur direkt verbindet, und keine Seite hat die andere erreicht. Aktualisiere beide Enden: Ein aktuelles relayium läuft über das verschlüsselte Relay, sobald der Server für den Code eines ausstellt. Sonst bring ein Ende in ein Netz mit erreichbarer Adresse — einen Server oder einen Handy-Hotspot — oder lade die Datei mit relayium up hoch und gib stattdessen den Download-Link weiter.",
           },
         ],
       },
@@ -766,11 +766,11 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "Wird die Datei irgendwohin hochgeladen?",
-        a: "Nein. Die Datei fließt direkt zwischen euch beiden, Ende-zu-Ende verschlüsselt. Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die Enden einander vorzustellen — die Datei nie.",
+        a: "Gespeichert wird sie nicht. Die Datei fließt zwischen euch beiden, Ende-zu-Ende verschlüsselt. Ein kleiner Rendezvous-Handshake auf dem Relayium-Server stellt die Enden einander vor, und stellt der Server für den Code ein TURN-Relay aus, laufen die Dateibytes als Chiffretext, den es nicht lesen kann, darüber — gezählt zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat, und nie aufbewahrt.",
       },
       {
         q: "Was, wenn wir keine Verbindung herstellen können?",
-        a: "Stehen beide Enden hinter strengem NAT ohne erreichbare Adresse, kann die direkte Verbindung nicht hergestellt werden und die Übertragung schlägt fehl — die CLI hat absichtlich kein Relay-Fallback. Nutzt daemon-direct zwischen zwei erreichbaren Servern oder push über SSH, wenn kein direkter Pfad verfügbar ist.",
+        a: "Stellt der Server für den Code ein Relay aus, läuft die Sitzung darüber, und strenges NAT hält sie nicht auf. Wird keines ausgestellt — keines ist konfiguriert oder das Kontingent des erzeugenden Kontos ist aufgebraucht —, brauchen die beiden Enden einen direkten Weg, und ohne ihn schlägt die Übertragung fehl. Nutzt dann einen gespeicherten Link aus relayium up oder relayium serve mit push / sync zwischen zwei erreichbaren Servern, die ihr betreibt.",
       },
       {
         q: "Woher weiß ich, dass wirklich die richtige Person am anderen Ende ist?",
@@ -779,7 +779,7 @@ Code: 483920   (valid 5 minutes)`,
     ],
   },
   cta: {
-    text: "Schicke deine nächste Datei direkt an jemanden in einem anderen Netzwerk — Ende-zu-Ende verschlüsselt und kostenlos.",
+    text: "Schicke deine nächste Datei an jemanden in einem anderen Netzwerk — Ende-zu-Ende verschlüsselt, ohne Gebühr pro Übertragung.",
     button: "CLI holen",
     href: "/cli",
   },
@@ -789,11 +789,11 @@ Code: 483920   (valid 5 minutes)`,
 const fr = {
   title: "Envoyer un fichier à quelqu'un à travers les réseaux avec la CLI Relayium",
   description:
-    "Utilisez relayium send et receive pour déplacer un fichier directement entre deux personnes sur des réseaux différents, à l'aide d'un court code d'appairage. Chiffré de bout en bout, avec un code SAS facultatif à comparer, et gratuit — le fichier va tout droit entre vous, jamais via nos serveurs.",
+    "Utilisez relayium send et receive pour déplacer un fichier entre deux personnes sur des réseaux différents, à l'aide d'un court code d'appairage. Chiffré de bout en bout, avec un code SAS facultatif à comparer. Dès que le serveur attribue un relais pour le code, le fichier y passe sous forme chiffrée et est décompté du quota mensuel de trafic du compte qui a généré le code.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Parfois l'autre machine n'est pas la vôtre et vous ne pouvez pas vous y connecter en SSH — un fichier pour un collègue dans un autre bureau, un build pour un client, une archive pour un ami à l'autre bout du pays. relayium send et receive le déplacent directement entre vous deux à travers les réseaux, en utilisant seulement un court code d'appairage que votre CLI génère au moment de l'envoi.",
-    "La connexion est pair-à-pair et chiffrée de bout en bout. Seule une minuscule poignée de main de rendez-vous passe par Relayium pour présenter les deux extrémités ; les octets du fichier, eux, jamais.",
+    "Parfois l'autre machine n'est pas la vôtre et vous ne pouvez pas vous y connecter en SSH — un fichier pour un collègue dans un autre bureau, un build pour un client, une archive pour un ami à l'autre bout du pays. relayium send et receive le déplacent entre vous deux à travers les réseaux, en utilisant seulement un court code d'appairage que votre CLI génère au moment de l'envoi.",
+    "La session est chiffrée de bout en bout. Un court rendez-vous sur le serveur de Relayium présente les deux extrémités ; dès que le serveur attribue un relais TURN pour le code, les octets du fichier passent par ce relais sous forme de texte chiffré qu'il ne peut pas lire, et sont décomptés du quota mensuel de trafic du compte qui a généré le code.",
   ],
   sections: [
     {
@@ -801,9 +801,9 @@ const fr = {
       prereqs: {
         label: "Ce qu'il vous faut",
         items: [
-          "La CLI sur les deux machines. relayium version affiche un numéro de version sur chacune. Si le shell répond « command not found », elle n'y est pas encore installée.",
+          "La CLI sur la machine qui envoie. relayium version affiche un numéro de version ; si le shell répond « command not found », elle n'est pas encore installée. L'autre bout peut aussi utiliser la CLI, ou saisir le code dans une application Relayium ou sur la page web.",
           "Un expéditeur connecté. relayium whoami affiche l'adresse e-mail du compte, et générer un code d'appairage exige d'abord relayium login. La machine réceptrice ne se connecte jamais.",
-          "Vous deux devant un terminal au même moment. Le code vit cinq minutes, alors convenez de l'instant avant d'en générer un.",
+          "Vous deux en ligne au même moment. Le code vit cinq minutes, alors convenez de l'instant avant d'en générer un.",
           "Un moyen de dicter six chiffres hors bande — un appel, une fenêtre de chat, ou la pièce où vous vous trouvez tous les deux.",
         ],
       },
@@ -848,7 +848,7 @@ path: direct`,
       bullets: [
         "Le code fait 6 chiffres décimaux — n'importe lequel de 0 à 9, zéros initiaux compris — et il expire 5 minutes après sa génération.",
         "Le code n'est qu'un secret partagé pour se retrouver ; il n'est envoyé à personne d'autre qu'au point de rendez-vous, et il ne sert qu'à présenter les deux extrémités.",
-        "Les deux extrémités doivent être la CLI — un navigateur ne peut pas rejoindre un code d'appairage CLI. Vous envoyez à quelqu'un qui n'a qu'un navigateur ? Utilisez plutôt relayium up, qui vous donne un lien de téléchargement.",
+        "L'autre bout n'a pas besoin d'être la CLI : relayium receive, relayium pair, une application Relayium ou la page web peuvent rejoindre le code. La personne n'est pas en ligne en ce moment ? Utilisez relayium up pour obtenir un lien de téléchargement.",
       ],
     },
     {
@@ -860,15 +860,15 @@ path: direct`,
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "Direct uniquement — gratuit, sinon ça échoue",
+      heading: "Relais ou pair-à-pair — et sur quoi c'est décompté",
       body: [
-        "Le transfert tente d'établir en priorité une connexion directe entre les deux extrémités. Quand elle peut être établie — le cas courant dès qu'au moins un côté a une adresse joignable —, le fichier passe tout droit, chiffré, à pleine vitesse et sans frais.",
+        "La ligne path indique le chemin pris par les octets : relay, ou direct / lan pour le pair-à-pair. Dans les deux cas le fichier est chiffré de bout en bout, et dans les deux cas il n'y a aucun frais par transfert — les octets relayés sont comptabilisés comme usage sur le quota mensuel de trafic du compte qui a généré le code.",
         cliDirectFacts.fr,
-        "Si cela vous arrive, la réponse fiable est le daemon-direct entre deux serveurs joignables, le push via SSH ou un lien stocké créé avec relayium up.",
+        "Si un transfert ne parvient pas à se connecter, les réponses fiables sont un lien stocké créé avec relayium up, ou relayium serve avec push / sync entre deux serveurs joignables que vous exploitez — ce chemin est direct et non décompté.",
       ],
       bullets: [
-        "Connexion directe réussie → gratuit, pleine vitesse, chiffré de bout en bout.",
-        "Les deux extrémités peuvent être n'importe où géographiquement — l'expéditeur lance simplement send, et le destinataire lance receive avec le code affiché.",
+        "Relais attribué → chaque octet passe par le relais chiffré et est décompté du quota mensuel de trafic du compte qui a généré le code.",
+        "Aucun relais attribué → les deux extrémités se connectent en pair-à-pair s'il existe un chemin direct ; sinon la session échoue.",
       ],
     },
     {
@@ -907,7 +907,7 @@ Code: 483920   (valid 5 minutes)`,
               `relayium send ./release.zip
 # no direct connection to the peer (both ends behind strict NAT?): …`,
             ],
-            fix: "Aucune des deux extrémités n'a pu atteindre l'autre, et la CLI n'a, par conception, aucune voie de relais pour les octets d'un fichier. Déplacez une extrémité vers un réseau doté d'une adresse joignable — un serveur, ou un partage de connexion mobile — ou téléversez le fichier avec relayium up et transmettez plutôt le lien de téléchargement.",
+            fix: "Une extrémité utilise un ancien relayium dont l'appairage est uniquement direct, et aucune n'a pu atteindre l'autre. Mettez les deux à jour : un relayium actuel passe par le relais chiffré dès que le serveur en attribue un pour le code. Sinon, déplacez une extrémité vers un réseau doté d'une adresse joignable — un serveur, ou un partage de connexion mobile — ou téléversez le fichier avec relayium up et transmettez plutôt le lien de téléchargement.",
           },
         ],
       },
@@ -922,11 +922,11 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "Le fichier est-il envoyé quelque part ?",
-        a: "Non. Le fichier circule directement entre vous deux, chiffré de bout en bout. Seule une petite poignée de main de rendez-vous passe par Relayium pour présenter les extrémités — jamais le fichier.",
+        a: "Il n'est pas stocké. Le fichier circule entre vous deux, chiffré de bout en bout. Une petite poignée de main de rendez-vous sur le serveur de Relayium présente les extrémités, et dès que le serveur attribue un relais TURN pour le code, les octets du fichier passent par ce relais sous forme de texte chiffré qu'il ne peut pas lire — décomptés du quota mensuel de trafic du compte qui a généré le code, et jamais conservés.",
       },
       {
         q: "Que se passe-t-il si nous ne pouvons pas nous connecter ?",
-        a: "Si les deux extrémités sont derrière un NAT strict sans adresse joignable, la connexion directe ne peut pas être établie et le transfert échoue — la CLI n'a volontairement aucun repli par relais. Utilisez le daemon-direct entre deux serveurs joignables, ou le push via SSH, quand aucun chemin direct n'est disponible.",
+        a: "Dès que le serveur attribue un relais pour le code, la session y passe, et un NAT strict ne l'arrête pas. Quand aucun relais n'est attribué — aucun n'est configuré, ou le quota du compte qui a généré le code est épuisé —, les deux extrémités ont besoin d'un chemin direct, et sans lui le transfert échoue. Utilisez alors un lien stocké créé avec relayium up, ou relayium serve avec push / sync entre deux serveurs joignables que vous exploitez.",
       },
       {
         q: "Comment savoir que c'est vraiment la bonne personne en face ?",
@@ -935,7 +935,7 @@ Code: 483920   (valid 5 minutes)`,
     ],
   },
   cta: {
-    text: "Envoyez votre prochain fichier directement à quelqu'un sur un autre réseau — chiffré de bout en bout, et gratuit.",
+    text: "Envoyez votre prochain fichier à quelqu'un sur un autre réseau — chiffré de bout en bout, sans frais par transfert.",
     button: "Obtenir la CLI",
     href: "/cli",
   },
@@ -945,11 +945,11 @@ Code: 483920   (valid 5 minutes)`,
 const ar = {
   title: "إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)",
   description:
-    "استخدم relayium send وreceive لنقل ملف مباشرةً بين شخصين على شبكتين مختلفتين، بالاعتماد على رمز اقتران قصير. مُشفَّر من الطرف إلى الطرف، ويُتحقَّق منه برمز SAS، ومجاني — يذهب الملف مباشرةً بينكما، ولا يمر أبدًا عبر خوادمنا.",
+    "استخدم relayium send وreceive لنقل ملف بين شخصين على شبكتين مختلفتين، بالاعتماد على رمز اقتران قصير. مُشفَّر من الطرف إلى الطرف، مع رمز SAS اختياري للمقارنة. وكلما أصدر الخادم مُرحِّلًا للرمز، مرّ الملف عبره نصًا مُشفَّرًا واحتُسب ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "أحيانًا لا يكون الجهاز الآخر جهازك ولا يمكنك الدخول إليه عبر SSH — ملف لزميل في مكتب آخر، أو نسخة بناء لعميل، أو أرشيف لصديق في الطرف الآخر من البلاد. يقوم relayium send وreceive بنقله مباشرةً بينكما عبر الشبكات، بالاعتماد فقط على رمز اقتران قصير تُصدره واجهة CLI لديك عند الإرسال.",
-    "الاتصال من الند للند (P2P) ومُشفَّر من الطرف إلى الطرف. لا يمر عبر Relayium سوى مصافحة تعارف ضئيلة للغاية تُعرِّف الطرفين ببعضهما؛ أما بايتات الملف فلا تمر أبدًا.",
+    "أحيانًا لا يكون الجهاز الآخر جهازك ولا يمكنك الدخول إليه عبر SSH — ملف لزميل في مكتب آخر، أو نسخة بناء لعميل، أو أرشيف لصديق في الطرف الآخر من البلاد. يقوم relayium send وreceive بنقله بينكما عبر الشبكات، بالاعتماد فقط على رمز اقتران قصير تُصدره واجهة CLI لديك عند الإرسال.",
+    "الجلسة مُشفَّرة من الطرف إلى الطرف. يعرّف لقاء قصير على خادم Relayium الطرفين ببعضهما، وكلما أصدر الخادم مُرحِّل TURN للرمز مرّت بايتات الملف بعد ذلك عبر هذا المُرحِّل نصًا مُشفَّرًا لا يستطيع قراءته، واحتُسبت ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز.",
   ],
   sections: [
     {
@@ -957,9 +957,9 @@ const ar = {
       prereqs: {
         label: "ما تحتاج إليه",
         items: [
-          "واجهة CLI على الجهازين معًا. يطبع relayium version سطر إصدار على كلٍّ منهما، وإذا ردَّت الصَدفة بـ «command not found» فهي لم تُثبَّت هناك بعد.",
+          "واجهة CLI على جهاز الإرسال. يطبع relayium version سطر إصدار، وإذا ردَّت الصَدفة بـ «command not found» فهي لم تُثبَّت بعد. ويمكن للطرف الآخر استخدام CLI أيضًا، أو إدخال الرمز في تطبيق Relayium أو صفحة الويب.",
           "مُرسِل مُسجَّل الدخول. يطبع relayium whoami بريد الحساب، وإصدار رمز اقتران يستلزم relayium login أولًا. أما جهاز الاستقبال فلا يسجّل الدخول إطلاقًا.",
-          "وجودكما معًا أمام الطرفية في الوقت نفسه. عمر الرمز خمس دقائق، فاتفقا على اللحظة قبل إصداره.",
+          "أن تكونا متصلين في الوقت نفسه. عمر الرمز خمس دقائق، فاتفقا على اللحظة قبل إصداره.",
           "وسيلة لنقل ستة أرقام خارج القناة — مكالمة، أو نافذة محادثة، أو الغرفة التي تجلسان فيها معًا.",
         ],
       },
@@ -1004,7 +1004,7 @@ path: direct`,
       bullets: [
         "الرمز مكوَّن من 6 أرقام عشرية — أي رقم من 0 إلى 9، بما في ذلك الأصفار في المقدمة — وينتهي مفعوله بعد 5 دقائق من إصداره.",
         "الرمز مجرد سر مشترك للقاء؛ لا يُرسَل إلى أحد سوى نقطة التعارف، وهو يُعرِّف الطرفين ببعضهما فقط.",
-        "يجب أن يكون الطرفان كلاهما على واجهة CLI — فالمتصفح لا يستطيع الانضمام إلى رمز اقتران خاص بـ CLI. هل تُرسِل إلى شخص لا يملك سوى متصفح؟ استخدم relayium up بدلًا من ذلك، فهو يعطيك رابط تنزيل.",
+        "لا يلزم أن يكون الطرف الآخر واجهة CLI: يمكن لـ relayium receive أو relayium pair أو تطبيق Relayium أو صفحة الويب الانضمام إلى الرمز. هل الشخص غير متصل الآن؟ استخدم relayium up للحصول على رابط تنزيل.",
       ],
     },
     {
@@ -1016,15 +1016,15 @@ path: direct`,
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "مباشر فقط — مجاني، أو يفشل",
+      heading: "مُرحِّل أم من نظير إلى نظير — وعلى ماذا يُحتسب",
       body: [
-        "يتسابق النقل على إنشاء اتصال مباشر بين الطرفين. حين يمكن إنشاؤه — وهي الحالة الشائعة ما دام لأحد الطرفين على الأقل عنوان يمكن الوصول إليه — يتدفق الملف مباشرةً، مُشفَّرًا، بأقصى سرعة وبلا تكلفة.",
+        "يخبرك سطر path بالطريق الذي سلكته البايتات: relay، أو direct / lan للاتصال من نظير إلى نظير. وفي الحالتين يكون الملف مُشفَّرًا من الطرف إلى الطرف، ولا توجد رسوم لكل عملية نقل — فالبايتات المُرحَّلة تُحتسب استخدامًا ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز.",
         cliDirectFacts.ar,
-        "إن واجهت هذا، فالحل الموثوق هو daemon direct بين خادمين يمكن الوصول إليهما، أو push عبر SSH، أو رابط مخزّن تنشئه بأمر relayium up.",
+        "إن تعذّر اتصال النقل، فالحلول الموثوقة هي رابط مخزّن تنشئه بأمر relayium up، أو relayium serve مع push / sync بين خادمين يمكن الوصول إليهما تديرهما — وهذا المسار مباشر ولا يُحتسب.",
       ],
       bullets: [
-        "نجاح الاتصال المباشر ← مجاني، بأقصى سرعة، مُشفَّر من الطرف إلى الطرف.",
-        "يمكن أن يكون الطرفان في أي مكان جغرافيًا — يكفي أن يشغّل المُرسِل send، وأن يشغّل المُستقبِل receive بالرمز الذي طُبع.",
+        "صدر مُرحِّل ← يمر كل بايت عبر المُرحِّل المُشفَّر ويُحتسب ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز.",
+        "لم يصدر مُرحِّل ← يتصل الطرفان من نظير إلى نظير إن وُجد مسار مباشر، وإلا فشلت الجلسة.",
       ],
     },
     {
@@ -1063,7 +1063,7 @@ Code: 483920   (valid 5 minutes)`,
               `relayium send ./release.zip
 # no direct connection to the peer (both ends behind strict NAT?): …`,
             ],
-            fix: "لم يستطع أي من الطرفين الوصول إلى الآخر، ولا تملك واجهة CLI أي مسار عبر مُرحِّل لبايتات الملفات، وهذا بحكم التصميم. انقل أحد الطرفين إلى شبكة ذات عنوان يمكن الوصول إليه — خادم، أو نقطة اتصال من الهاتف — أو ارفع الملف بـ relayium up ومرِّر رابط التنزيل بدلًا من ذلك.",
+            fix: "يستخدم أحد الطرفين إصدارًا أقدم من relayium اقترانه مباشر فقط، ولم يستطع أي منهما الوصول إلى الآخر. حدّث الطرفين: فالإصدار الحالي من relayium يمر عبر المُرحِّل المُشفَّر كلما أصدر الخادم مُرحِّلًا للرمز. وإلا فانقل أحد الطرفين إلى شبكة ذات عنوان يمكن الوصول إليه — خادم، أو نقطة اتصال من الهاتف — أو ارفع الملف بـ relayium up ومرِّر رابط التنزيل بدلًا من ذلك.",
           },
         ],
       },
@@ -1078,11 +1078,11 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "هل يُرفَع الملف إلى أي مكان؟",
-        a: "لا. يتدفق الملف مباشرةً بينكما، مُشفَّرًا من الطرف إلى الطرف. لا يمر عبر Relayium سوى مصافحة تعارف صغيرة لتعريف الطرفين — أما الملف فلا يمر أبدًا.",
+        a: "لا يُخزَّن. يتدفق الملف بينكما، مُشفَّرًا من الطرف إلى الطرف. تعرّف مصافحة تعارف صغيرة على خادم Relayium الطرفين ببعضهما، وكلما أصدر الخادم مُرحِّل TURN للرمز مرّت بايتات الملف عبره نصًا مُشفَّرًا لا يستطيع قراءته — تُحتسب ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز، ولا يُحتفظ بها أبدًا.",
       },
       {
         q: "ماذا لو تعذَّر علينا الاتصال؟",
-        a: "إذا كان الطرفان خلف NAT صارم بلا عنوان يمكن الوصول إليه، فلا يمكن إنشاء الاتصال المباشر ويفشل النقل — فواجهة CLI لا تملك احتياطيًا عبر مُرحِّل، وهذا بحكم التصميم. استخدم daemon direct بين خادمين يمكن الوصول إليهما، أو push عبر SSH، حين لا يتوفر مسار مباشر.",
+        a: "كلما أصدر الخادم مُرحِّلًا للرمز مرّت الجلسة عبره، فلا يوقفها NAT الصارم. وحين لا يُصدَر مُرحِّل — لم يُهيَّأ مُرحِّل، أو نفدت حصة الحساب الذي أنشأ الرمز — يحتاج الطرفان إلى مسار مباشر، ويفشل النقل من دونه. عندها استخدم رابطًا مخزّنًا من relayium up، أو relayium serve مع push / sync بين خادمين يمكن الوصول إليهما تديرهما.",
       },
       {
         q: "كيف أعرف أنه فعلًا الشخص الصحيح على الطرف الآخر؟",
@@ -1091,7 +1091,7 @@ Code: 483920   (valid 5 minutes)`,
     ],
   },
   cta: {
-    text: "أرسِل ملفك التالي مباشرةً إلى شخص على شبكة أخرى — مُشفَّرًا من الطرف إلى الطرف، ومجانًا.",
+    text: "أرسِل ملفك التالي إلى شخص على شبكة أخرى — مُشفَّرًا من الطرف إلى الطرف، دون رسوم لكل عملية نقل.",
     button: "احصل على CLI",
     href: "/cli",
   },
@@ -1101,11 +1101,11 @@ Code: 483920   (valid 5 minutes)`,
 const es = {
   title: "Enviar un archivo a alguien entre redes con la CLI de Relayium",
   description:
-    "Usa relayium send y receive para mover un archivo directamente entre dos personas en redes distintas, con un breve código de emparejamiento. Cifrado de extremo a extremo, con un código SAS opcional para comparar y gratis: el archivo va directo entre los dos extremos, nunca a través de nuestros servidores.",
+    "Usa relayium send y receive para mover un archivo entre dos personas en redes distintas, con un breve código de emparejamiento. Cifrado de extremo a extremo, con un código SAS opcional para comparar. Siempre que el servidor emite un retransmisor para el código, el archivo pasa por él cifrado y cuenta para la cuota mensual de tráfico de la cuenta que generó el código.",
   updatedLabel: "Última actualización",
   lead: [
-    "A veces la otra máquina no es tuya y no puedes entrar por SSH: un archivo para un colega en otra oficina, una compilación para un cliente, un archivo comprimido para un amigo al otro lado del país. relayium send y receive lo mueven directamente entre las dos partes, entre redes, usando solo un código de emparejamiento corto que tu CLI genera al enviar.",
-    "La conexión es de igual a igual y cifrada de extremo a extremo. Solo un pequeñísimo handshake con el punto de encuentro pasa por Relayium para presentar los dos extremos; los bytes del archivo nunca lo hacen.",
+    "A veces la otra máquina no es tuya y no puedes entrar por SSH: un archivo para un colega en otra oficina, una compilación para un cliente, un archivo comprimido para un amigo al otro lado del país. relayium send y receive lo mueven entre las dos partes, entre redes, usando solo un código de emparejamiento corto que tu CLI genera al enviar.",
+    "La sesión está cifrada de extremo a extremo. Un breve encuentro en el servidor de Relayium presenta a los dos extremos; siempre que el servidor emite un retransmisor TURN para el código, los bytes del archivo pasan por él como texto cifrado que no puede leer y cuentan para la cuota mensual de tráfico de la cuenta que generó el código.",
   ],
   sections: [
     {
@@ -1113,9 +1113,9 @@ const es = {
       prereqs: {
         label: "Lo que necesitas",
         items: [
-          "La CLI en las dos máquinas. relayium version imprime una versión en cada una; si el shell responde «command not found», ahí todavía no está instalada.",
+          "La CLI en la máquina que envía. relayium version imprime una versión; si el shell responde «command not found», todavía no está instalada. El otro extremo también puede usar la CLI, o escribir el código en una app de Relayium o en la página web.",
           "Un remitente con la sesión iniciada. relayium whoami imprime el correo de la cuenta, y generar un código de emparejamiento exige antes relayium login. La máquina receptora no inicia sesión en ningún momento.",
-          "Las dos partes ante un terminal a la vez. El código vive cinco minutos, así que conviene acordar el momento antes de generarlo.",
+          "Las dos partes conectadas a la vez. El código vive cinco minutos, así que conviene acordar el momento antes de generarlo.",
           "Una forma de dictar seis dígitos fuera de banda: una llamada, una ventana de chat o la propia habitación cuando las dos personas están juntas.",
         ],
       },
@@ -1160,7 +1160,7 @@ path: direct`,
       bullets: [
         "El código tiene 6 dígitos decimales —cualquiera de 0 a 9, ceros iniciales incluidos— y caduca 5 minutos después de generarse.",
         "El código es solo un secreto compartido para encontrarse; no se envía a nadie más que al punto de encuentro, y solo sirve para presentar los dos extremos.",
-        "Ambos extremos tienen que ser la CLI: un navegador no puede unirse a un código de emparejamiento de la CLI. ¿Envías a alguien que solo tiene navegador? Usa relayium up, que te da un enlace de descarga.",
+        "El otro extremo no tiene que ser la CLI: relayium receive, relayium pair, una app de Relayium o la página web pueden unirse al código. ¿La otra persona no está conectada ahora? Usa relayium up para obtener un enlace de descarga.",
       ],
     },
     {
@@ -1172,15 +1172,15 @@ path: direct`,
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "Solo directo: gratis, o falla",
+      heading: "Retransmisor o de igual a igual, y a qué cuenta",
       body: [
-        "La transferencia compite por establecer una conexión directa entre los dos extremos. Cuando se puede establecer —lo habitual cuando al menos un lado tiene una dirección alcanzable— el archivo fluye directo, cifrado, a máxima velocidad y sin coste.",
+        "La línea path te dice por dónde fueron los bytes: relay, o direct / lan para de igual a igual. En ambos casos el archivo va cifrado de extremo a extremo y no hay cargo por transferencia: los bytes retransmitidos se contabilizan como uso en la cuota mensual de tráfico de la cuenta que generó el código.",
         cliDirectFacts.es,
-        "Si te ocurre esto, la respuesta fiable es daemon directo entre dos servidores alcanzables, push por SSH o un enlace almacenado creado con relayium up.",
+        "Si una transferencia no logra conectar, las respuestas fiables son un enlace almacenado creado con relayium up, o relayium serve con push / sync entre dos servidores alcanzables que administres; esa ruta es directa y no se contabiliza.",
       ],
       bullets: [
-        "La conexión directa tiene éxito → gratis, a máxima velocidad, cifrada de extremo a extremo.",
-        "Ambos extremos pueden estar en cualquier lugar geográficamente; quien envía solo ejecuta send, y quien recibe ejecuta receive con el código que se imprimió.",
+        "Retransmisor emitido → cada byte pasa por el retransmisor cifrado y cuenta para la cuota mensual de tráfico de la cuenta que generó el código.",
+        "Sin retransmisor → los dos extremos se conectan de igual a igual si existe una ruta directa; si no, la sesión falla.",
       ],
     },
     {
@@ -1219,7 +1219,7 @@ Code: 483920   (valid 5 minutes)`,
               `relayium send ./release.zip
 # no direct connection to the peer (both ends behind strict NAT?): …`,
             ],
-            fix: "Ningún extremo pudo alcanzar al otro, y la CLI no tiene, por diseño, ninguna vía de retransmisor para los bytes de un archivo. Mueve un extremo a una red con dirección alcanzable —un servidor, o el punto de acceso del móvil— o sube el archivo con relayium up y pasa el enlace de descarga en su lugar.",
+            fix: "Un extremo usa un relayium antiguo cuyo emparejamiento es solo directo, y ninguno pudo alcanzar al otro. Actualiza ambos extremos: un relayium actual pasa por el retransmisor cifrado siempre que el servidor emite uno para el código. Si no, mueve un extremo a una red con dirección alcanzable —un servidor, o el punto de acceso del móvil— o sube el archivo con relayium up y pasa el enlace de descarga en su lugar.",
           },
         ],
       },
@@ -1234,11 +1234,11 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "¿Se sube el archivo a algún sitio?",
-        a: "No. El archivo fluye directamente entre las dos partes, cifrado de extremo a extremo. Solo un pequeño handshake con el punto de encuentro pasa por Relayium para presentar los extremos; el archivo nunca.",
+        a: "No se guarda. El archivo fluye entre las dos partes, cifrado de extremo a extremo. Un pequeño handshake en el servidor de Relayium presenta a los extremos, y siempre que el servidor emite un retransmisor TURN para el código, los bytes del archivo pasan por él como texto cifrado que no puede leer: se contabilizan en la cuota mensual de tráfico de la cuenta que generó el código y nunca se conservan.",
       },
       {
         q: "¿Y si no podemos conectarnos?",
-        a: "Si ambos extremos están detrás de un NAT estricto sin dirección alcanzable, no se puede establecer la conexión directa y la transferencia falla: la CLI no tiene respaldo por retransmisor, por diseño. Usa daemon directo entre dos servidores alcanzables, o push por SSH, cuando no haya una ruta directa disponible.",
+        a: "Siempre que el servidor emite un retransmisor para el código, la sesión pasa por él, así que un NAT estricto no la detiene. Cuando no se emite ninguno —no hay ninguno configurado o la cuota de la cuenta que generó el código está agotada—, los dos extremos necesitan una ruta directa, y sin ella la transferencia falla. Usa entonces un enlace almacenado de relayium up, o relayium serve con push / sync entre dos servidores alcanzables que administres.",
       },
       {
         q: "¿Cómo sé que de verdad es la persona correcta al otro lado?",
@@ -1247,7 +1247,7 @@ Code: 483920   (valid 5 minutes)`,
     ],
   },
   cta: {
-    text: "Envía tu próximo archivo directamente a alguien en otra red: cifrado de extremo a extremo y gratis.",
+    text: "Envía tu próximo archivo a alguien en otra red: cifrado de extremo a extremo y sin cargo por transferencia.",
     button: "Obtener la CLI",
     href: "/cli",
   },
@@ -1257,11 +1257,11 @@ Code: 483920   (valid 5 minutes)`,
 const pt = {
   title: "Enviar um arquivo para alguém entre redes com a CLI do Relayium",
   description:
-    "Use relayium send e receive para mover um arquivo diretamente entre duas pessoas em redes diferentes, com um código de emparelhamento curto. Com criptografia de ponta a ponta, com um código SAS opcional para comparar e gratuito: o arquivo vai direto entre as duas pontas, nunca através dos nossos servidores.",
+    "Use relayium send e receive para mover um arquivo entre duas pessoas em redes diferentes, com um código de pareamento curto. Com criptografia de ponta a ponta e um código SAS opcional para comparar. Sempre que o servidor emite um retransmissor para o código, o arquivo passa por ele cifrado e conta para a cota mensal de tráfego da conta que gerou o código.",
   updatedLabel: "Última atualização",
   lead: [
-    "Às vezes a outra máquina não é sua e você não consegue entrar por SSH: um arquivo para um colega em outro escritório, um build para um cliente, um arquivo compactado para um amigo do outro lado do país. relayium send e receive o movem diretamente entre as duas partes, entre redes, usando apenas um código de emparelhamento curto que a sua CLI gera na hora de enviar.",
-    "A conexão é ponto a ponto e com criptografia de ponta a ponta. Apenas um pequeníssimo handshake de encontro passa pelo Relayium para apresentar as duas pontas; os bytes do arquivo nunca passam.",
+    "Às vezes a outra máquina não é sua e você não consegue entrar por SSH: um arquivo para um colega em outro escritório, um build para um cliente, um arquivo compactado para um amigo do outro lado do país. relayium send e receive o movem entre as duas partes, entre redes, usando apenas um código de pareamento curto que a sua CLI gera na hora de enviar.",
+    "A sessão tem criptografia de ponta a ponta. Um breve encontro no servidor do Relayium apresenta as duas pontas; sempre que o servidor emite um retransmissor TURN para o código, os bytes do arquivo passam por ele como texto cifrado que ele não consegue ler e contam para a cota mensal de tráfego da conta que gerou o código.",
   ],
   sections: [
     {
@@ -1269,9 +1269,9 @@ const pt = {
       prereqs: {
         label: "O que você precisa",
         items: [
-          "A CLI nas duas máquinas. relayium version imprime uma versão em cada uma; se o shell responder “command not found”, ela ainda não está instalada ali.",
+          "A CLI na máquina que envia. relayium version imprime uma versão; se o shell responder “command not found”, ela ainda não está instalada. A outra ponta também pode usar a CLI, ou digitar o código em um app do Relayium ou na página web.",
           "Quem envia com login feito. relayium whoami imprime o e-mail da conta, e gerar um código de emparelhamento exige antes relayium login. A máquina que recebe não faz login em momento algum.",
-          "As duas pessoas diante de um terminal ao mesmo tempo. O código vive cinco minutos, então combine o momento antes de gerar um.",
+          "As duas pessoas online ao mesmo tempo. O código vive cinco minutos, então combine o momento antes de gerar um.",
           "Um jeito de ditar seis dígitos fora de banda: uma ligação, uma janela de chat ou a própria sala, quando as duas pessoas estão juntas.",
         ],
       },
@@ -1316,7 +1316,7 @@ path: direct`,
       bullets: [
         "O código tem 6 dígitos decimais — qualquer um de 0 a 9, zeros à esquerda incluídos — e expira 5 minutos depois de gerado.",
         "O código é apenas um segredo compartilhado para se encontrar; não é enviado a ninguém além do ponto de encontro, e serve apenas para apresentar as duas pontas.",
-        "As duas pontas precisam ser a CLI — um navegador não consegue entrar em um código de emparelhamento da CLI. Vai enviar para alguém que só tem navegador? Use relayium up, que devolve um link de download.",
+        "A outra ponta não precisa ser a CLI: relayium receive, relayium pair, um app do Relayium ou a página web podem entrar no código. A pessoa não está online agora? Use relayium up para ter um link de download.",
       ],
     },
     {
@@ -1328,15 +1328,15 @@ path: direct`,
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "Somente direto: gratuito, ou falha",
+      heading: "Retransmissor ou ponto a ponto — e para o que conta",
       body: [
-        "A transferência disputa o estabelecimento de uma conexão direta entre as duas pontas. Quando ela pode ser estabelecida — o caso comum quando pelo menos um lado tem um endereço alcançável — o arquivo flui direto, criptografado, na velocidade máxima e sem custo.",
+        "A linha path mostra por onde os bytes foram: relay, ou direct / lan para ponto a ponto. Nos dois casos o arquivo tem criptografia de ponta a ponta e não há cobrança por transferência — os bytes retransmitidos são contabilizados como uso na cota mensal de tráfego da conta que gerou o código.",
         cliDirectFacts.pt,
-        "Se isso acontecer, a resposta confiável é daemon direto entre dois servidores alcançáveis, push por SSH ou um link armazenado criado com relayium up.",
+        "Se uma transferência não conseguir conectar, as respostas confiáveis são um link armazenado criado com relayium up, ou relayium serve com push / sync entre dois servidores alcançáveis que você administra — esse caminho é direto e não é contabilizado.",
       ],
       bullets: [
-        "A conexão direta é bem-sucedida → gratuita, na velocidade máxima, com criptografia de ponta a ponta.",
-        "Ambas as pontas podem estar em qualquer lugar geograficamente — quem envia só roda send, e quem recebe roda receive com o código que apareceu.",
+        "Retransmissor emitido → cada byte passa pelo retransmissor criptografado e conta para a cota mensal de tráfego da conta que gerou o código.",
+        "Nenhum retransmissor emitido → as duas pontas se conectam ponto a ponto se houver um caminho direto; senão, a sessão falha.",
       ],
     },
     {
@@ -1375,7 +1375,7 @@ Code: 483920   (valid 5 minutes)`,
               `relayium send ./release.zip
 # no direct connection to the peer (both ends behind strict NAT?): …`,
             ],
-            fix: "Nenhuma das pontas conseguiu alcançar a outra, e a CLI não tem, por decisão de projeto, nenhum caminho por retransmissor para os bytes de um arquivo. Leve uma das pontas para uma rede com endereço alcançável — um servidor, ou o roteamento do celular — ou suba o arquivo com relayium up e repasse o link de download.",
+            fix: "Uma das pontas usa um relayium antigo cujo pareamento é só direto, e nenhuma conseguiu alcançar a outra. Atualize as duas pontas: um relayium atual passa pelo retransmissor criptografado sempre que o servidor emite um para o código. Senão, leve uma das pontas para uma rede com endereço alcançável — um servidor, ou o roteamento do celular — ou suba o arquivo com relayium up e repasse o link de download.",
           },
         ],
       },
@@ -1390,11 +1390,11 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "O arquivo é enviado para algum lugar?",
-        a: "Não. O arquivo flui diretamente entre as duas partes, com criptografia de ponta a ponta. Apenas um pequeno handshake de encontro passa pelo Relayium para apresentar as pontas — nunca o arquivo.",
+        a: "Ele não é guardado. O arquivo flui entre as duas partes, com criptografia de ponta a ponta. Um pequeno handshake no servidor do Relayium apresenta as pontas, e sempre que o servidor emite um retransmissor TURN para o código, os bytes do arquivo passam por ele como texto cifrado que ele não consegue ler — contabilizados na cota mensal de tráfego da conta que gerou o código, e nunca mantidos.",
       },
       {
         q: "E se não conseguirmos conectar?",
-        a: "Se ambas as pontas estiverem atrás de um NAT estrito sem endereço alcançável, a conexão direta não pode ser feita e a transferência falha — a CLI não tem retorno por retransmissor, por decisão de projeto. Use daemon direto entre dois servidores alcançáveis, ou push por SSH, quando não houver um caminho direto disponível.",
+        a: "Sempre que o servidor emite um retransmissor para o código, a sessão passa por ele, então um NAT estrito não a impede. Quando nenhum é emitido — nenhum está configurado ou a cota da conta que gerou o código se esgotou —, as duas pontas precisam de um caminho direto, e sem ele a transferência falha. Use então um link armazenado do relayium up, ou relayium serve com push / sync entre dois servidores alcançáveis que você administra.",
       },
       {
         q: "Como sei que é mesmo a pessoa certa do outro lado?",
@@ -1403,7 +1403,7 @@ Code: 483920   (valid 5 minutes)`,
     ],
   },
   cta: {
-    text: "Envie seu próximo arquivo diretamente para alguém em outra rede — com criptografia de ponta a ponta e gratuito.",
+    text: "Envie seu próximo arquivo para alguém em outra rede — com criptografia de ponta a ponta e sem cobrança por transferência.",
     button: "Obter a CLI",
     href: "/cli",
   },

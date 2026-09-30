@@ -173,7 +173,14 @@ const PRICE_CLAIM = {
 // { ko: 5 }, 143 → 142: the ko CLI getting-started page matched only on the
 // "완전 무료" / "완전히 무료" lead, FAQ answer and CTA that called the CLI
 // completely free (archived-product-pricing-claims.test.mjs), so it dropped out.
-const MEASURED = { ja: 20, ko: 4, de: 23, fr: 25, ar: 27, es: 23, pt: 20 };
+// Re-run 2026-09-30 (archived CLI errata, DECISION-LOG 2026-09-30 item 2),
+// was { ja: 20, ko: 4, de: 23, fr: 25, ar: 27, es: 23, pt: 20 }, 142 → 116:
+// the send-to-someone and receive-from-cli guides stopped calling pairing-code
+// transfers free (a relayed session counts toward the code owner's allowance),
+// the SSH backup guide and the scp comparison became short historical notices
+// with no price wording, and the ko croc / magic-wormhole CTAs dropped
+// "완전 무료". Each was a false free claim or a retired page, not lost coverage.
+const MEASURED = { ja: 16, ko: 1, de: 19, fr: 21, ar: 23, es: 19, pt: 17 };
 
 /** A page's prose with the archive notice removed, so it cannot match itself. */
 const withoutNotice = (html) =>
