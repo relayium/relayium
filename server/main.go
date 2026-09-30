@@ -415,6 +415,13 @@ func main() {
 	_ = flag.Int64("relay-monthly-free", envInt64("RELAYIUM_RELAY_MONTHLY_FREE", 0),
 		"deprecated: superseded by per-plan monthly traffic quota; accepted but ignored")
 	flag.Parse()
+	if *stripeSecretKey != "" && *stripeWebhookSecret == "" {
+		// Not fatal: checkout and the portal still work, and every webhook is
+		// refused (VerifyWebhook fails closed on an empty secret) rather than
+		// accepted with an HMAC anyone can compute. Paid state then only
+		// converges through the reconcile sweep, so say so loudly.
+		log.Printf("⚠ RELAYIUM_STRIPE_WEBHOOK_SECRET is empty while Stripe billing is enabled: every Stripe webhook will be refused")
+	}
 	if *stripeSecretKey != "" && *stripePortalConfig == "" {
 		log.Fatal("RELAYIUM_STRIPE_PORTAL_CONFIG is required when Stripe billing is enabled")
 	}

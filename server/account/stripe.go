@@ -162,6 +162,10 @@ type stripeClient struct {
 // NewStripeClient builds the real Biller. secretKey/webhookSecret/portalConfig
 // come from RELAYIUM_STRIPE_{SECRET_KEY,WEBHOOK_SECRET,PORTAL_CONFIG}. Portal
 // creation fails closed when its dedicated configuration is absent.
+// ErrWebhookSecretUnset is returned by VerifyWebhook when the client was built
+// without a webhook signing secret. Every webhook is then refused.
+var ErrWebhookSecretUnset = errors.New("stripe webhook: signing secret not configured")
+
 func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClient {
 	return &stripeClient{
 		secretKey:     secretKey,
@@ -320,6 +324,13 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		return WebhookEvent{}, errors.New("stripe webhook: timestamp outside tolerance")
 	}
 
+	// An empty signing secret is a misconfiguration, not a key: an HMAC with
+	// the empty key is computable by anyone, so accepting it would let a forged
+	// checkout/subscription/refund event through. A genuine Stripe signature
+	// never matches the empty key either, so refusing here loses nothing.
+	if c.webhookSecret == "" {
+		return WebhookEvent{}, ErrWebhookSecretUnset
+	}
 	signedPayload := strconv.FormatInt(ts, 10) + "." + string(payload)
 	mac := hmac.New(sha256.New, []byte(c.webhookSecret))
 	mac.Write([]byte(signedPayload))
