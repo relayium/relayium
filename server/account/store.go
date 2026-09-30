@@ -1883,6 +1883,11 @@ type Store interface {
 	// false = the row changed (or vanished) since it was observed and nothing
 	// was written.
 	ApplyStripeReconcileDowngrade(ctx context.Context, observed SubscriptionSource, endedAt, now int64) (bool, error)
+	// ApplyStripeSourceIfUnchanged binds and/or applies a Stripe lifecycle
+	// event only if the user's Stripe source row is still exactly what the
+	// caller observed before fetching its Stripe evidence (see the SQLite
+	// implementation). Unchanged=false: nothing written; re-observe, re-fetch.
+	ApplyStripeSourceIfUnchanged(ctx context.Context, in StripeSourceWrite) (StripeSourceWriteResult, error)
 	BillingAuthority(ctx context.Context, userID string) (BillingAuthority, bool, error)
 	// GetSubscriptionSource returns one provider's recorded state for a user.
 	GetSubscriptionSource(ctx context.Context, userID, provider string) (SubscriptionSource, bool, error)

@@ -86,6 +86,10 @@ func TestBM3WebhookCanceledReplayAtEndedSecondGrantsNothing(t *testing.T) {
 			t.Fatalf("%s replay: status %d", typ, code)
 		}
 		bm3AssertFree(t, store, u.ID, typ+" replay of the canceled subscription at created == ended_at")
+		// Fable: adoption binds only a LIVE subscription.
+		if users, src := bm3Binding(t, store, u.ID); users != "" || src != "" {
+			t.Fatalf("%s replay re-bound the canceled subscription as canonical: users=%q source=%q", typ, users, src)
+		}
 	}
 }
 

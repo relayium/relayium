@@ -554,6 +554,7 @@ func (c *stripeClient) canonicalSubscription(ctx context.Context, subID string) 
 	}
 	var sub struct {
 		ID               string `json:"id"`
+		Customer         string `json:"customer"`
 		Status           string `json:"status"`
 		CurrentPeriodEnd int64  `json:"current_period_end"`
 		Metadata         struct {
@@ -572,7 +573,7 @@ func (c *stripeClient) canonicalSubscription(ctx context.Context, subID string) 
 	if err := json.Unmarshal(body, &sub); err != nil {
 		return SubscriptionInfo{}, false, err
 	}
-	info := SubscriptionInfo{ID: sub.ID, Status: sub.Status, CurrentPeriodEnd: sub.CurrentPeriodEnd, BillingAttemptID: sub.Metadata.BillingAttemptID, MetadataUserID: sub.Metadata.UserID}
+	info := SubscriptionInfo{ID: sub.ID, CustomerID: sub.Customer, Status: sub.Status, CurrentPeriodEnd: sub.CurrentPeriodEnd, BillingAttemptID: sub.Metadata.BillingAttemptID, MetadataUserID: sub.Metadata.UserID}
 	if len(sub.Items.Data) > 0 {
 		info.PriceID = sub.Items.Data[0].Price.ID
 		if info.CurrentPeriodEnd == 0 {
@@ -629,6 +630,7 @@ func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInp
 // rest. Created is the Stripe subscription creation time (the "earliest" key).
 type SubscriptionInfo struct {
 	ID               string
+	CustomerID       string
 	Created          int64
 	PriceID          string
 	Status           string
@@ -703,15 +705,17 @@ func (c *stripeClient) ListSubscriptionEvidence(ctx context.Context, customerID 
 			Object *string `json:"object"`
 			Data   *[]struct {
 				ID               string `json:"id"`
+				Customer         string `json:"customer"`
 				Status           string `json:"status"`
 				Created          int64  `json:"created"`
-				EndedAt          int64  `json:"ended_at"`
+				EndedAt          int64  `json:"ended_at"` // null until the subscription has ended
 				CurrentPeriodEnd int64  `json:"current_period_end"`
 				Items            struct {
 					Data []struct {
 						Price struct {
 							ID string `json:"id"`
 						} `json:"price"`
+						CurrentPeriodEnd int64 `json:"current_period_end"`
 					} `json:"data"`
 				} `json:"items"`
 			} `json:"data"`
@@ -724,9 +728,16 @@ func (c *stripeClient) ListSubscriptionEvidence(ctx context.Context, customerID 
 			return SubscriptionEvidence{}, errors.New("stripe: list subscriptions: response is not a complete list object")
 		}
 		data := *list.Data
+		// Every field a decision consumes must be present: identity and status
+		// for all of them; for a LIVE one also the creation time (the dedup keeps
+		// the earliest) and a price (the tier it pays for — a live subscription
+		// with no price would otherwise map to free and downgrade its payer).
 		for _, s := range data {
-			if s.ID == "" || !knownStripeSubStatus(s.Status) {
-				return SubscriptionEvidence{}, fmt.Errorf("stripe: list subscriptions: malformed subscription (id %q, status %q)", s.ID, s.Status)
+			if s.ID == "" || !knownStripeSubStatus(s.Status) || s.Customer != customerID {
+				return SubscriptionEvidence{}, fmt.Errorf("stripe: list subscriptions: malformed subscription (id %q, status %q, customer %q)", s.ID, s.Status, s.Customer)
+			}
+			if liveSubStatus(s.Status) && (s.Created <= 0 || len(s.Items.Data) == 0 || s.Items.Data[0].Price.ID == "") {
+				return SubscriptionEvidence{}, fmt.Errorf("stripe: list subscriptions: live subscription %s lacks created or price", s.ID)
 			}
 		}
 		for _, s := range data {
@@ -736,13 +747,13 @@ func (c *stripeClient) ListSubscriptionEvidence(ctx context.Context, customerID 
 				}
 				continue
 			}
-			price := ""
-			if len(s.Items.Data) > 0 {
-				price = s.Items.Data[0].Price.ID
+			periodEnd := s.CurrentPeriodEnd
+			if periodEnd == 0 {
+				periodEnd = s.Items.Data[0].CurrentPeriodEnd // item-level on current API versions
 			}
 			out.Live = append(out.Live, SubscriptionInfo{
-				ID: s.ID, Created: s.Created, PriceID: price,
-				Status: s.Status, CurrentPeriodEnd: s.CurrentPeriodEnd,
+				ID: s.ID, CustomerID: s.Customer, Created: s.Created, PriceID: s.Items.Data[0].Price.ID,
+				Status: s.Status, CurrentPeriodEnd: periodEnd,
 			})
 		}
 		if !*list.HasMore {

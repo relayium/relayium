@@ -533,7 +533,7 @@ func TestWebhookPanicAfterClaimIsFailedAndCanonicalRetryConverges(t *testing.T) 
 	}
 
 	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"id":"sub_panic","status":"active","current_period_end":5000,"items":{"data":[{"price":{"id":"price_pro_m"}}]}}`)
+		fmt.Fprint(w, `{"id":"sub_panic","customer":"cus_panic","status":"active","current_period_end":5000,"items":{"data":[{"price":{"id":"price_pro_m"}}]}}`)
 	}))
 	defer stripe.Close()
 	client.base = stripe.URL

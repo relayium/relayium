@@ -39,6 +39,8 @@ type bm3Stripe struct {
 	raw      map[string]string     // customer -> literal 200 body to serve instead of a list
 	objects  map[string]bm3Object  // subscription id -> what GET /v1/subscriptions/{id} returns
 	rawObj   map[string]string     // subscription id -> literal 200 body for GET /v1/subscriptions/{id}
+	onGet    map[string]func()     // subscription id -> ONE-SHOT hook run after the object is read, before it is sent
+	gets     map[string]int        // subscription id -> retrieve count
 }
 
 // bm3Object is one subscription as Stripe's retrieve endpoint reports it NOW
@@ -50,13 +52,21 @@ type bm3Object struct {
 
 func newBM3Stripe(t *testing.T) (*bm3Stripe, *stripeClient) {
 	t.Helper()
-	f := &bm3Stripe{pages: map[string][][]bm3Sub{}, hasMore: map[string]bool{}, fail: map[string]int{}, onList: map[string]func(){}, endless: map[string]bool{}, requests: map[string][]string{}, raw: map[string]string{}, objects: map[string]bm3Object{}, rawObj: map[string]string{}}
+	f := &bm3Stripe{pages: map[string][][]bm3Sub{}, hasMore: map[string]bool{}, fail: map[string]int{}, onList: map[string]func(){}, endless: map[string]bool{}, requests: map[string][]string{}, raw: map[string]string{}, objects: map[string]bm3Object{}, rawObj: map[string]string{}, onGet: map[string]func(){}, gets: map[string]int{}}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if id, ok := strings.CutPrefix(r.URL.Path, "/v1/subscriptions/"); ok && r.Method == http.MethodGet {
 			f.mu.Lock()
 			obj, found := f.objects[id]
 			rawObj, haveRawObj := f.rawObj[id]
+			hook := f.onGet[id]
+			delete(f.onGet, id)
+			f.gets[id]++
 			f.mu.Unlock()
+			if hook != nil {
+				// The response below is what Stripe said BEFORE the hook: the
+				// webhook holds that evidence while the hook's writes land.
+				hook()
+			}
 			if haveRawObj {
 				w.Header().Set("Content-Type", "application/json")
 				io.WriteString(w, rawObj)
@@ -101,7 +111,7 @@ func newBM3Stripe(t *testing.T) (*bm3Stripe, *stripeClient) {
 		}
 		if endless && status == 0 {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"object":"list","data":[{"id":"sub_e_%d","status":"canceled","created":1}],"has_more":true}`, n)
+			fmt.Fprintf(w, `{"object":"list","data":[{"id":"sub_e_%d","customer":%q,"status":"canceled","created":1}],"has_more":true}`, n, cus)
 			return
 		}
 		idx := 0
@@ -123,11 +133,12 @@ func newBM3Stripe(t *testing.T) (*bm3Stripe, *stripeClient) {
 			} `json:"price"`
 		}
 		type sub struct {
-			ID      string `json:"id"`
-			Status  string `json:"status"`
-			Created int64  `json:"created"`
-			EndedAt int64  `json:"ended_at,omitempty"`
-			Items   struct {
+			ID       string `json:"id"`
+			Customer string `json:"customer"`
+			Status   string `json:"status"`
+			Created  int64  `json:"created"`
+			EndedAt  int64  `json:"ended_at,omitempty"`
+			Items    struct {
 				Data []item `json:"data"`
 			} `json:"items"`
 		}
@@ -138,7 +149,7 @@ func newBM3Stripe(t *testing.T) (*bm3Stripe, *stripeClient) {
 		}{Object: "list", Data: []sub{}}
 		if idx < len(pages) {
 			for _, s := range pages[idx] {
-				v := sub{ID: s.ID, Status: s.Status, Created: s.Created, EndedAt: s.EndedAt}
+				v := sub{ID: s.ID, Customer: cus, Status: s.Status, Created: s.Created, EndedAt: s.EndedAt}
 				var it item
 				it.Price.ID = s.Price
 				v.Items.Data = []item{it}
@@ -540,7 +551,7 @@ func TestBM3EvidenceLatestEndedAtSpansPages(t *testing.T) {
 	fake, client := newBM3Stripe(t)
 	fake.pages["cus_ev"] = [][]bm3Sub{
 		{{ID: "sub_a", Status: "canceled", Created: 50, EndedAt: 300}},
-		{{ID: "sub_live", Status: "active", Created: 10, EndedAt: 999999}, {ID: "sub_b", Status: "incomplete_expired", Created: 5, EndedAt: 700}},
+		{{ID: "sub_live", Status: "active", Price: "price_plus", Created: 10, EndedAt: 999999}, {ID: "sub_b", Status: "incomplete_expired", Created: 5, EndedAt: 700}},
 	}
 	ev, err := client.ListSubscriptionEvidence(context.Background(), "cus_ev")
 	if err != nil {

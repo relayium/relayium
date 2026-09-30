@@ -890,27 +890,42 @@ const maxWebhookBodyBytes = 1 << 20
 // and is robust to out-of-order / redelivered events. Caller must have already
 // excluded admin-comped users (plan_source=admin) — those never take a webhook.
 //
+// Every write is conditional on the Stripe source row still being `obs`, the
+// copy the caller read BEFORE this call fetched its evidence (the live list):
+// if the reconcile sweep or another webhook wrote the row meanwhile, the list
+// may be older than what is stored, so nothing more is written and the caller
+// re-observes and retries (see ApplyStripeSourceIfUnchanged).
+//
 // Returns:
-//   - (true, nil)  → reconciled; caller writes 200.
-//   - (false, nil) → the Stripe list call failed; caller falls back to the
-//     single-event path rather than dropping the webhook.
-//   - (false, err) → a store write failed; caller 500s so Stripe retries.
-func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated int64) (bool, error) {
+//   - (true, false, nil)  → reconciled; caller writes 200.
+//   - (false, false, nil) → the Stripe list call failed; caller falls back to
+//     the single-event path rather than dropping the webhook.
+//   - (false, true, nil)  → the row moved under us; caller re-observes/retries.
+//   - (false, _, err)     → a store write failed; caller 500s so Stripe retries.
+func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated int64, obs SubscriptionSource, obsExists bool) (bool, bool, error) {
 	subs, err := s.biller.ListActiveSubscriptions(ctx, u.StripeCustomerID)
 	if err != nil {
 		log.Printf("billing: reconcile list subs failed for user %s: %v (falling back to per-event)", u.ID, err)
-		return false, nil
+		return false, false, nil
 	}
+	now := s.Now().Unix()
 	if len(subs) == 0 {
 		// No live subscription remains → free (a cancellation, or all lapsed).
-		s.clearCanonicalSubscription(ctx, u.ID)
-		if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", s.Now().Unix(), evCreated); err != nil {
-			return false, err
+		clear := ""
+		res, err := s.Store().ApplyStripeSourceIfUnchanged(ctx, StripeSourceWrite{
+			UserID: u.ID, Observed: obs, ObservedExists: obsExists, Bind: &clear,
+			Event: &SourceEvent{UserID: u.ID, Provider: ProviderStripe, PlanID: "free", Status: "canceled", EventAt: evCreated, Now: now},
+		})
+		if err != nil {
+			return false, false, err
+		}
+		if !res.Unchanged {
+			return false, true, nil
 		}
 		if u.ScheduledPlanID != "" {
 			_ = s.Store().SetScheduledPlan(ctx, u.ID, "", "")
 		}
-		return true, nil
+		return true, false, nil
 	}
 	// Canonical = earliest created (tie-break by id so the winner is deterministic).
 	canonical := subs[0]
@@ -927,9 +942,16 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 	// already reaped this customer's real ones on the strength of that choice.
 	// 500 → Stripe redelivers, and the conflict stays visible in its dashboard
 	// rather than being ACKed into silence.
-	if err := s.Store().SetUserStripeSubscription(ctx, u.ID, canonical.ID); err != nil {
+	bind := canonical.ID
+	bound, err := s.Store().ApplyStripeSourceIfUnchanged(ctx, StripeSourceWrite{
+		UserID: u.ID, Observed: obs, ObservedExists: obsExists, Bind: &bind,
+	})
+	if err != nil {
 		log.Printf("billing: reconcile could not adopt canonical subscription %s for user %s: %v (no cancel/refund performed)", canonical.ID, u.ID, err)
-		return false, err
+		return false, false, err
+	}
+	if !bound.Unchanged {
+		return false, true, nil // nothing destructive has happened yet
 	}
 	// Every duplicate becomes a durable cancellation/refund responsibility before
 	// the provider is mutated. A failure is returned so Stripe retries; the
@@ -939,24 +961,38 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 			continue
 		}
 		if err := s.reconcileDuplicateSubscription(ctx, u, canonical.ID, sub.ID); err != nil {
-			return false, err
+			return false, false, err
 		}
 		log.Printf("billing: reconciled duplicate subscription %s for user %s (kept earliest %s)", sub.ID, u.ID, canonical.ID)
 	}
 	// Drive plan/status from the canonical subscription (not this event's sub).
+	// A plan lookup that FAILS is not "unmapped price → free": it is unknown,
+	// and must not downgrade the payer.
 	planID, cycle := "free", ""
-	if p, ok, perr := s.Store().PlanByStripePrice(ctx, canonical.PriceID); perr == nil && ok {
+	p, ok, perr := s.Store().PlanByStripePrice(ctx, canonical.PriceID)
+	if perr != nil {
+		return false, false, perr
+	}
+	if ok {
 		planID = p.ID
 		cycle = cycleOfPrice(p, canonical.PriceID)
 	}
-	if err := s.Store().SetUserSubscription(ctx, u.ID, planID, canonical.Status, canonical.CurrentPeriodEnd, "stripe", cycle, s.Now().Unix(), evCreated); err != nil {
-		return false, err
+	res, err := s.Store().ApplyStripeSourceIfUnchanged(ctx, StripeSourceWrite{
+		UserID: u.ID, Observed: bound.After, ObservedExists: bound.AfterExists,
+		Event: &SourceEvent{UserID: u.ID, Provider: ProviderStripe, PlanID: planID, Status: canonical.Status,
+			Cycle: cycle, PeriodEnd: canonical.CurrentPeriodEnd, EventAt: evCreated, Now: now},
+	})
+	if err != nil {
+		return false, false, err
+	}
+	if !res.Unchanged {
+		return false, true, nil // duplicates are reaped; the retry recomputes the plan
 	}
 	if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID &&
 		(u.ScheduledCycle == "" || cycle == u.ScheduledCycle) {
 		_ = s.Store().SetScheduledPlan(ctx, u.ID, "", "")
 	}
-	return true, nil
+	return true, false, nil
 }
 
 // ReconcileStripeSubscriptions is the periodic safety net for a MISSED
@@ -1304,34 +1340,29 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	refresh := ev.Type == "customer.subscription.created" || ev.Type == "customer.subscription.updated" ||
 		ev.Type == "invoice.paid" || ev.Type == "invoice.payment_failed" || ev.Type == "invoice.payment_action_required"
+	// early is the Stripe source row of the customer's account as it stood
+	// BEFORE the canonical retrieve below. The subscription branch writes only
+	// if that row is still unchanged at write time (see stripeObservation).
+	var early stripeObservation
 	if refresh {
-		if client, ok := s.biller.(*stripeClient); ok {
-			info, missing, err := client.canonicalSubscription(ctx, ev.SubscriptionID)
-			if err != nil {
+		if s.canonicalRefreshEnabled() && ev.CustomerID != "" {
+			if pre, ok, err := s.Store().GetUserByStripeCustomer(ctx, ev.CustomerID); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
+			} else if ok {
+				if early, err = s.observeStripeSource(ctx, pre.ID); err != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
 			}
-			if missing {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			// With refresh on, the event's own payload is never the evidence: it
-			// may be a late retry or a dashboard resend describing a state Stripe
-			// has since left (a canceled, unpaid or paused subscription's old
-			// `active`). A 200 that is not this subscription, or carries no
-			// status we understand, is therefore not a reason to fall back to the
-			// payload — it is unknown evidence, and Stripe must redeliver.
-			if client.canonicalWebhookRefresh && ev.SubscriptionID != "" &&
-				(info.ID != ev.SubscriptionID || !knownStripeSubStatus(info.Status)) {
-				log.Printf("billing: canonical refresh of subscription %s returned an unusable object (id %q, status %q)", ev.SubscriptionID, info.ID, info.Status)
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
-			}
-			if info.ID != "" {
-				ev.SubscriptionID, ev.PriceID, ev.Status, ev.CurrentPeriodEnd = info.ID, info.PriceID, info.Status, info.CurrentPeriodEnd
-				ev.MetadataBillingAttemptID = info.BillingAttemptID
-				ev.MetadataUserID = info.MetadataUserID
-			}
+		}
+		switch s.refreshSubscriptionEvent(ctx, &ev) {
+		case refreshFailed:
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		case refreshGone:
+			w.WriteHeader(http.StatusOK)
+			return
 		}
 		ev.Type = "customer.subscription.updated"
 	}
@@ -1516,92 +1547,48 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if s.subEventIsStale(ctx, w, u.ID, ev.Created) {
 			return
 		}
-		// Resolve what THIS event says Stripe is billing, before the admin branch:
-		// an admin-comped account still has its Stripe subscription recorded on
-		// Stripe's own source row, so if the comp is ever lifted the fallback is
-		// real state rather than a guess.
-		planID := "free"
-		cycle := ""
-		if ev.Status == "active" || ev.Status == "trialing" {
-			if p, ok, err := s.Store().PlanByStripePrice(ctx, ev.PriceID); err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
-			} else if ok {
-				planID = p.ID
-				cycle = cycleOfPrice(p, ev.PriceID)
-			}
-		}
-		if ev.Status == "past_due" {
-			planID, cycle = u.PlanID, u.BillingCycle
-		}
-		if u.PlanSource == "admin" {
-			// Admin comp wins: the projection records status/end for visibility
-			// and leaves plan_id alone (see resolveEffective's first rule), so a
-			// webhook still cannot change a plan out from under an admin grant.
-			// The dedup/reconcile path below is skipped for the same reason it
-			// always was: reconcileSubscriptions cancels and refunds real
-			// subscriptions, and a comped account is not its responsibility.
-			if err := s.applyStripeLifecycle(ctx, u.ID, planID, cycle, ev); err != nil {
+		// Every write below is conditional on the Stripe source row being what
+		// it was BEFORE this event's Stripe evidence was fetched. The early
+		// observation qualifies only for the account it was taken for; any
+		// other case (metadata-bound account, a lost race) observes afresh and
+		// then re-fetches, so the evidence is always newer than the observation.
+		obs := early
+		for attempt := 0; ; attempt++ {
+			if attempt >= maxStripeApplyAttempts {
+				log.Printf("billing: Stripe state for user %s kept moving during event %s; leaving it for redelivery", u.ID, ev.EventID)
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		// Double-checkout dedup, done SURGICALLY so the common path makes no Stripe
-		// call: only when a DIFFERENT subscription id than the recorded canonical
-		// shows up (a second checkout opened a second subscription) do we reconcile
-		// from live Stripe state — keep the earliest, cancel+refund the rest. An
-		// event for the canonical (or the first-ever subscription) takes the normal
-		// per-event path below.
-		if u.StripeSubscriptionID != "" && ev.SubscriptionID != "" && ev.SubscriptionID != u.StripeSubscriptionID {
-			if done, err := s.reconcileSubscriptions(ctx, u, ev.Created); err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
-			} else if done {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			// Fall through to per-event logic if the Stripe list failed.
-		} else if u.StripeSubscriptionID == "" && ev.SubscriptionID != "" {
-			// First subscription seen → adopt it as canonical (no Stripe call).
-			//
-			// Adoption is where ownership is ENFORCED, so it fails closed and the
-			// grant below does not happen. A subscription already bound to another
-			// account cannot be allowed to justify this account's tier: that is a
-			// free paid plan, and one that can never be canceled or refunded
-			// against the user holding it. 500 rather than a 200 ACK — retrying
-			// will not resolve a genuine conflict, but it keeps the event visible
-			// as a failing delivery in Stripe instead of silently discarding the
-			// only signal that two accounts disagree about one subscription. The
-			// reconcile sweep is the backstop once Stripe gives up retrying.
-			if err := s.Store().SetUserStripeSubscription(ctx, u.ID, ev.SubscriptionID); err != nil {
-				if errors.Is(err, ErrExternalSubscriptionOwned) {
-					log.Printf("billing: refusing to adopt subscription %s for user %s: it is already owned by another account", ev.SubscriptionID, u.ID)
-				} else {
-					log.Printf("billing: adopting canonical subscription %s for user %s failed: %v", ev.SubscriptionID, u.ID, err)
+			if attempt > 0 || obs.userID != u.ID {
+				if attempt > 0 {
+					fresh, err := s.Store().GetUserByID(ctx, u.ID)
+					if err != nil {
+						http.Error(w, "server error", http.StatusInternalServerError)
+						return
+					}
+					u = fresh
 				}
-				http.Error(w, "server error", http.StatusInternalServerError)
+				var err error
+				if obs, err = s.observeStripeSource(ctx, u.ID); err != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
+				switch s.refreshSubscriptionEvent(ctx, &ev) {
+				case refreshFailed:
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				case refreshGone:
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+			}
+			switch s.applySubscriptionEvent(ctx, w, u, ev, obs) {
+			case applyDone:
 				return
+			case applyRetry:
+				continue
 			}
 		}
-		if err := s.applyStripeLifecycle(ctx, u.ID, planID, cycle, ev); err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
-		}
-		// A pending downgrade has landed once BOTH the tier and the cycle reach what
-		// we scheduled — clear the UI hint. Matching the tier alone was wrong for a
-		// same-tier cycle downgrade (yearly→monthly on one plan): scheduled_plan_id
-		// equals the current tier, so the intermediate schedule-creation event
-		// (price still the old cycle) matched and cleared the marker seconds after
-		// it was set, wedging later in-app plan changes at 500. Requiring the cycle
-		// to match too defers the clear to the real period-end transition. A ''
-		// scheduled cycle is a legacy row → fall back to tier-only. Best-effort.
-		if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID &&
-			(u.ScheduledCycle == "" || cycle == u.ScheduledCycle) {
-			_ = s.Store().SetScheduledPlan(ctx, u.ID, "", "")
-		}
-		w.WriteHeader(http.StatusOK)
 
 	case "customer.subscription.deleted":
 		u, ok, err := s.Store().GetUserByStripeCustomer(ctx, ev.CustomerID)
@@ -1669,6 +1656,210 @@ func checkoutDeletionObservation(ev WebhookEvent) BillingDeletionResource {
 		r.AsyncSuccessAt = ev.Created
 	}
 	return r
+}
+
+// stripeObservation is a user's Stripe source row as read at one instant
+// (exists=false: no row). userID="" means nothing was observed.
+type stripeObservation struct {
+	userID string
+	row    SubscriptionSource
+	exists bool
+}
+
+func (s *Service) observeStripeSource(ctx context.Context, userID string) (stripeObservation, error) {
+	row, ok, err := s.Store().GetSubscriptionSource(ctx, userID, ProviderStripe)
+	if err != nil {
+		return stripeObservation{}, err
+	}
+	return stripeObservation{userID: userID, row: row, exists: ok}, nil
+}
+
+// maxStripeApplyAttempts bounds how often one webhook re-observes and
+// re-fetches when its conditional write keeps losing to concurrent writers
+// (several events for one new subscription arrive together). Past it the
+// event is left to Stripe's own redelivery.
+const maxStripeApplyAttempts = 3
+
+func (s *Service) canonicalRefreshEnabled() bool {
+	client, ok := s.biller.(*stripeClient)
+	return ok && client.canonicalWebhookRefresh
+}
+
+type refreshOutcome int
+
+const (
+	refreshOK     refreshOutcome = iota
+	refreshGone                  // ACK 200, apply nothing
+	refreshFailed                // 500, apply nothing; Stripe redelivers
+)
+
+// refreshSubscriptionEvent replaces a subscription/invoice event's claims
+// with Stripe's CURRENT subscription object. With refresh on the event's own
+// payload is never the evidence: it may be a late retry or a dashboard resend
+// describing a state Stripe has since left (a canceled, unpaid or paused
+// subscription's old `active`). Evidence that is partial is therefore unknown
+// (refreshFailed), never a reason to fall back to the payload:
+//   - the object must be this subscription, for this event's customer, with a
+//     documented status;
+//   - an active/trialing object must name the price it pays for — without one
+//     the tier would resolve to free and downgrade a payer.
+//
+// An event that names no subscription at all is refreshGone: it carries no
+// canonical evidence, and no redelivery can change that, so it is ACKed and
+// ignored exactly like the subscription-less invoice branch (a 5xx would only
+// buy three days of futile retries). A retrieve 404 is refreshGone too.
+func (s *Service) refreshSubscriptionEvent(ctx context.Context, ev *WebhookEvent) refreshOutcome {
+	if !s.canonicalRefreshEnabled() {
+		return refreshOK
+	}
+	client := s.biller.(*stripeClient)
+	if ev.SubscriptionID == "" {
+		log.Printf("billing: ignoring %s event %s: it names no subscription", ev.Type, ev.EventID)
+		return refreshGone
+	}
+	info, missing, err := client.canonicalSubscription(ctx, ev.SubscriptionID)
+	if err != nil {
+		return refreshFailed
+	}
+	if missing {
+		return refreshGone
+	}
+	unusable := info.ID != ev.SubscriptionID || !knownStripeSubStatus(info.Status) ||
+		info.CustomerID == "" || (ev.CustomerID != "" && info.CustomerID != ev.CustomerID) ||
+		((info.Status == "active" || info.Status == "trialing") && info.PriceID == "")
+	if unusable {
+		log.Printf("billing: canonical refresh of subscription %s returned an unusable object (id %q, customer %q, status %q, price %q)", ev.SubscriptionID, info.ID, info.CustomerID, info.Status, info.PriceID)
+		return refreshFailed
+	}
+	ev.SubscriptionID, ev.CustomerID, ev.PriceID, ev.Status, ev.CurrentPeriodEnd = info.ID, info.CustomerID, info.PriceID, info.Status, info.CurrentPeriodEnd
+	ev.MetadataBillingAttemptID = info.BillingAttemptID
+	ev.MetadataUserID = info.MetadataUserID
+	return refreshOK
+}
+
+type applyOutcome int
+
+const (
+	applyDone  applyOutcome = iota // response written
+	applyRetry                     // the row moved: re-observe, re-fetch, retry
+)
+
+// applySubscriptionEvent decides and writes one (refreshed) subscription
+// event for account u, conditional on obs. It writes the HTTP response itself
+// unless it returns applyRetry.
+func (s *Service) applySubscriptionEvent(ctx context.Context, w http.ResponseWriter, u User, ev WebhookEvent, obs stripeObservation) applyOutcome {
+	// Resolve what THIS event says Stripe is billing, before the admin branch:
+	// an admin-comped account still has its Stripe subscription recorded on
+	// Stripe's own source row, so if the comp is ever lifted the fallback is
+	// real state rather than a guess.
+	planID := "free"
+	cycle := ""
+	if ev.Status == "active" || ev.Status == "trialing" {
+		if p, ok, err := s.Store().PlanByStripePrice(ctx, ev.PriceID); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return applyDone
+		} else if ok {
+			planID = p.ID
+			cycle = cycleOfPrice(p, ev.PriceID)
+		}
+	}
+	if ev.Status == "past_due" {
+		planID, cycle = u.PlanID, u.BillingCycle
+	}
+	if u.PlanSource == "admin" {
+		// Admin comp wins: the projection records status/end for visibility
+		// and leaves plan_id alone (see resolveEffective's first rule), so a
+		// webhook still cannot change a plan out from under an admin grant.
+		// The dedup/reconcile path below is skipped for the same reason it
+		// always was: reconcileSubscriptions cancels and refunds real
+		// subscriptions, and a comped account is not its responsibility.
+		if err := s.applyStripeLifecycle(ctx, u.ID, planID, cycle, ev); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return applyDone
+		}
+		w.WriteHeader(http.StatusOK)
+		return applyDone
+	}
+	// Double-checkout dedup, done SURGICALLY so the common path makes no Stripe
+	// call: only when a DIFFERENT subscription id than the recorded canonical
+	// shows up (a second checkout opened a second subscription) do we reconcile
+	// from live Stripe state — keep the earliest, cancel+refund the rest. An
+	// event for the canonical (or the first-ever subscription) takes the normal
+	// per-event path below.
+	var bind *string
+	externalID := ev.SubscriptionID
+	if u.StripeSubscriptionID != "" && ev.SubscriptionID != "" && ev.SubscriptionID != u.StripeSubscriptionID {
+		done, lost, err := s.reconcileSubscriptions(ctx, u, ev.Created, obs.row, obs.exists)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return applyDone
+		}
+		if lost {
+			return applyRetry
+		}
+		if done {
+			w.WriteHeader(http.StatusOK)
+			return applyDone
+		}
+		// Fall through to per-event logic if the Stripe list failed.
+	} else if u.StripeSubscriptionID == "" && ev.SubscriptionID != "" {
+		// First subscription seen → adopt it as canonical (no Stripe call) —
+		// but only a LIVE one. A canceled/unpaid/paused subscription pays for
+		// nothing, and binding it would make it the account's canonical
+		// subscription (e.g. a replayed event for the subscription the sweep
+		// just unbound). Its state is still recorded, unbound.
+		//
+		// Adoption is where ownership is ENFORCED, so it fails closed and the
+		// grant does not happen. A subscription already bound to another
+		// account cannot be allowed to justify this account's tier: that is a
+		// free paid plan, and one that can never be canceled or refunded
+		// against the user holding it. 500 rather than a 200 ACK — retrying
+		// will not resolve a genuine conflict, but it keeps the event visible
+		// as a failing delivery in Stripe instead of silently discarding the
+		// only signal that two accounts disagree about one subscription. The
+		// reconcile sweep is the backstop once Stripe gives up retrying.
+		if liveSubStatus(ev.Status) {
+			id := ev.SubscriptionID
+			bind = &id
+		} else {
+			externalID = ""
+		}
+	}
+	res, err := s.Store().ApplyStripeSourceIfUnchanged(ctx, StripeSourceWrite{
+		UserID: u.ID, Observed: obs.row, ObservedExists: obs.exists, Bind: bind,
+		Event: &SourceEvent{
+			UserID: u.ID, Provider: ProviderStripe, PlanID: planID, Status: ev.Status,
+			Cycle: cycle, PeriodEnd: ev.CurrentPeriodEnd, ExternalID: externalID,
+			EventAt: ev.Created, Now: s.Now().Unix(), BillingAttemptID: ev.MetadataBillingAttemptID,
+			BillingProductID: ev.PriceID,
+		},
+	})
+	if err != nil {
+		if bind != nil && errors.Is(err, ErrExternalSubscriptionOwned) {
+			log.Printf("billing: refusing to adopt subscription %s for user %s: it is already owned by another account", ev.SubscriptionID, u.ID)
+		} else if bind != nil {
+			log.Printf("billing: adopting canonical subscription %s for user %s failed: %v", ev.SubscriptionID, u.ID, err)
+		}
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return applyDone
+	}
+	if !res.Unchanged {
+		return applyRetry
+	}
+	// A pending downgrade has landed once BOTH the tier and the cycle reach what
+	// we scheduled — clear the UI hint. Matching the tier alone was wrong for a
+	// same-tier cycle downgrade (yearly→monthly on one plan): scheduled_plan_id
+	// equals the current tier, so the intermediate schedule-creation event
+	// (price still the old cycle) matched and cleared the marker seconds after
+	// it was set, wedging later in-app plan changes at 500. Requiring the cycle
+	// to match too defers the clear to the real period-end transition. A ''
+	// scheduled cycle is a legacy row → fall back to tier-only. Best-effort.
+	if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID &&
+		(u.ScheduledCycle == "" || cycle == u.ScheduledCycle) {
+		_ = s.Store().SetScheduledPlan(ctx, u.ID, "", "")
+	}
+	w.WriteHeader(http.StatusOK)
+	return applyDone
 }
 
 func (s *Service) applyStripeLifecycle(ctx context.Context, userID, planID, cycle string, ev WebhookEvent) error {
