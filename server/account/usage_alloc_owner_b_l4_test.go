@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -210,9 +211,15 @@ func TestB_L4HeartbeatSkipsAMismatchedAllocAndRecordsTheRest(t *testing.T) {
 		t.Fatalf("victim's billed relay = %d, want 1000 + 700", q)
 	}
 
-	// Control: an ACCEPTED report of the same size still warns, so the check
-	// above is not passing because the capture or the warning is dead.
-	out = send([]nodeUsage{{AllocID: "big", Username: "9999:" + victim.ID + ".code", RelayedBytes: 200 << 30}})
+	// Control: ACCEPTED reports whose RECORDED bytes exceed the threshold
+	// still warn, so the check above is not passing because the capture or the
+	// warning is dead. (The warning counts recorded bytes — A-M8 — and one
+	// fresh alloc records at most maxFirstReportBytes, so it takes many.)
+	var big []nodeUsage
+	for i := 0; i < maxAllocsPerUser; i++ {
+		big = append(big, nodeUsage{AllocID: fmt.Sprintf("big%d", i), Username: "9999:" + victim.ID + ".code", RelayedBytes: 200 << 30})
+	}
+	out = send(big)
 	if !strings.Contains(out, "WARNING") || !strings.Contains(out, "attributed") || !strings.Contains(out, victim.ID) {
 		t.Fatalf("an accepted implausible report did not warn: %q", out)
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -149,12 +150,12 @@ CREATE TABLE IF NOT EXISTS usage_events (
   recorded_at   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_events(user_id);
--- A-M8: per-(node, user) relay-attribution budget, a leaky bucket (see
--- ReserveRelayAttribution). level is the bytes in the bucket as of updated_at.
--- Deliberately no REFERENCES users(id): a row must never block an account
--- purge. A row is deleted once it has been idle for a full window, when its
--- level has necessarily drained to 0, so a user id outlives its last relay
--- attribution here by at most that window.
+-- A-M8: per-(node, user) relay-attribution budget, a leaky bucket charged
+-- inside RecordNodeUsage's transaction. level is the bytes in the bucket as of
+-- updated_at. No REFERENCES users(id) so a row can never block a delete; it is
+-- removed instead by both account purges (purgeTransientUserDataTx,
+-- ArchiveAndPurgeUser) and, once idle for a full window (its level has then
+-- drained to 0), by PruneRelayAttribBudget, which every heartbeat runs.
 CREATE TABLE IF NOT EXISTS relay_attrib_budget (
   node_id        TEXT    NOT NULL,
   user_id        TEXT    NOT NULL,
@@ -3137,6 +3138,8 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		{`DELETE FROM devices WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM magic_tokens WHERE email=(SELECT email FROM users WHERE id=?)`, []any{userID}},
 		{`DELETE FROM stored_files WHERE user_id=?`, []any{userID}},
+		// A-M8 relay-attribution budget rows name the user; no FK, so explicit.
+		{`DELETE FROM relay_attrib_budget WHERE user_id=?`, []any{userID}},
 		// Their Idempotency-Key claims name those objects and carry the user_id;
 		// with the objects gone there is nothing left for a key to answer with.
 		{`DELETE FROM upload_operations WHERE user_id=?`, []any{userID}},
@@ -3318,6 +3321,8 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// contradicting the "no user_id retained" privacy model, and leak an
 		// unbounded orphan row per deleted account.
 		{`DELETE FROM usage_periods WHERE user_id=?`, []any{userID}},
+		// A-M8 relay-attribution budget rows name the user; no FK, so explicit.
+		{`DELETE FROM relay_attrib_budget WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM stored_files WHERE user_id=?`, []any{userID}},
 		// Upload sessions, in every state, for the same reason as in
 		// PurgeTransientUserData — and repeated here for the reason this whole
@@ -4052,7 +4057,46 @@ const (
 // continue with their other allocations.
 var ErrUsageAllocOwnerMismatch = errors.New("account: usage report does not match the allocation's recorded owner")
 
-// RecordUsage records an allocation's relayed bytes. The reported cumulative is
+// ErrUsageNegativeBytes refuses a report with a negative cumulative byte
+// count. No relay counter can go below zero; accepting one would let a later
+// report's increment be computed against it (A-M8).
+var ErrUsageNegativeBytes = errors.New("account: usage report has negative relayed bytes")
+
+// RecordUsage records an allocation's relayed bytes with no attribution
+// budget (central coturn metering and direct callers). See recordUsage.
+func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
+	_, err := s.recordUsage(ctx, e, nil)
+	return err
+}
+
+// RecordNodeUsage is RecordUsage for a node heartbeat entry: the same ledger
+// write, additionally held to the (e.NodeID, e.UserID) relay-attribution
+// budget b in the same transaction (A-M8).
+func (s *SQLiteStore) RecordNodeUsage(ctx context.Context, e UsageEvent, b RelayAttribBudget) (UsageRecordResult, error) {
+	if b.RatePerSec <= 0 || b.WindowSecs <= 0 {
+		return UsageRecordResult{}, errors.New("account: relay attribution budget needs a positive rate and window")
+	}
+	return s.recordUsage(ctx, e, &b)
+}
+
+// satAdd and satMul are non-negative saturating arithmetic: every operand in
+// recordUsage is clamped to >= 0 first, so the only failure is overflow
+// upward, which saturates at MaxInt64 instead of wrapping negative.
+func satAdd(a, b int64) int64 {
+	if a > math.MaxInt64-b {
+		return math.MaxInt64
+	}
+	return a + b
+}
+
+func satMul(a, b int64) int64 {
+	if a != 0 && b > math.MaxInt64/a {
+		return math.MaxInt64
+	}
+	return a * b
+}
+
+// recordUsage records an allocation's relayed bytes. The reported cumulative is
 // clamped to physically-plausible bounds — monotonic, capped by (a) an absolute
 // per-allocation ceiling and (b) the prior total plus maxRelayBytesPerSec ×
 // time-since-last-report + slack (workstream A) — and the resulting increment is
@@ -4070,10 +4114,29 @@ var ErrUsageAllocOwnerMismatch = errors.New("account: usage report does not matc
 // compared NULL-safely: a report without a node (central coturn metering)
 // matches only a row stored without one, the same "" ⇔ NULL mapping nullStr
 // writes.
-func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
+//
+// With a budget (A-M8) the increment is further capped by what the
+// (node_id, user_id) leaky bucket can take right now, and the bucket is
+// charged exactly the increment recorded — in this same transaction, so there
+// is no reservation to refund and nothing another transaction can interleave
+// with. The owner check runs first, so a refused report never touches the
+// bucket; and a report for a user id that does not exist fails the
+// usage_events foreign key and rolls the bucket write back with it.
+// Concurrent duplicate reports of one alloc are fail-safe: they serialize on
+// the writer lock, the second sees the first's high-water, and the bucket is
+// charged only for bytes that actually advanced it.
+//
+// Negative reports are refused (ErrUsageNegativeBytes), and a negative
+// high-water left by an older binary is treated as 0, so no subtraction here
+// can wrap.
+func (s *SQLiteStore) recordUsage(ctx context.Context, e UsageEvent, b *RelayAttribBudget) (UsageRecordResult, error) {
+	var res UsageRecordResult
+	if e.RelayedBytes < 0 {
+		return res, ErrUsageNegativeBytes
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return res, err
 	}
 	defer tx.Rollback()
 
@@ -4088,11 +4151,14 @@ func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 	case sql.ErrNoRows:
 		exists = false
 	default:
-		return err
+		return res, err
 	}
 	if exists && (ownerUser != e.UserID || ownerNode.String != e.NodeID) {
 		// Nothing written: the deferred Rollback ends the read transaction.
-		return ErrUsageAllocOwnerMismatch
+		return res, ErrUsageAllocOwnerMismatch
+	}
+	if prev < 0 {
+		prev = 0
 	}
 
 	// Clamp the reported cumulative.
@@ -4101,7 +4167,11 @@ func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 		newCum = maxAllocRelayBytes
 	}
 	if exists {
-		if budget := prev + int64(maxRelayBytesPerSec)*(e.RecordedAt-prevRec) + int64(relayReportSlack); newCum > budget {
+		elapsed := e.RecordedAt - prevRec
+		if elapsed < 0 {
+			elapsed = 0
+		}
+		if budget := satAdd(satAdd(prev, satMul(int64(maxRelayBytesPerSec), elapsed)), int64(relayReportSlack)); newCum > budget {
 			newCum = budget
 		}
 		if newCum < prev { // monotonic: never lower on a stale/backwards report
@@ -4113,20 +4183,43 @@ func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 		// malicious node a ~2TiB first-report attribution on a fresh alloc_id.
 		newCum = maxFirstReportBytes
 	}
-	delta := newCum - prev
+	delta := newCum - prev // both in [0, maxAllocRelayBytes]
+
+	if b != nil && delta > 0 {
+		withheld, warn, err := chargeRelayAttribTx(ctx, tx, e.NodeID, e.UserID, e.RecordedAt, delta, *b)
+		if err != nil {
+			return res, err
+		}
+		delta -= withheld
+		newCum = prev + delta
+		res.Withheld, res.Warn = withheld, warn
+	}
+	res.Recorded = delta
+	// recorded_at is the per-alloc rate clamp's anchor. When the budget
+	// withheld bytes, move it back by the time those bytes need at the
+	// per-alloc rate (never before the previous anchor), so a re-sent report
+	// can catch them up once the bucket drains instead of being held to
+	// slack + rate x (time since this write).
+	recAt := e.RecordedAt
+	if res.Withheld > 0 {
+		recAt -= (res.Withheld + int64(maxRelayBytesPerSec) - 1) / int64(maxRelayBytesPerSec)
+		if exists && recAt < prevRec {
+			recAt = prevRec
+		}
+	}
 
 	if exists {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE usage_events SET relayed_bytes = ?, recorded_at = ? WHERE alloc_id = ?`,
-			newCum, e.RecordedAt, e.AllocID); err != nil {
-			return err
+			newCum, recAt, e.AllocID); err != nil {
+			return UsageRecordResult{}, err
 		}
 	} else {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at, node_id, billable)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			e.AllocID, e.Token, e.UserID, newCum, e.RecordedAt, nullStr(e.NodeID), b2i(e.Billable)); err != nil {
-			return err
+			e.AllocID, e.Token, e.UserID, newCum, recAt, nullStr(e.NodeID), b2i(e.Billable)); err != nil {
+			return UsageRecordResult{}, err
 		}
 	}
 
@@ -4137,10 +4230,69 @@ func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 			 VALUES (?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(alloc_id, period) DO UPDATE SET bytes = bytes + excluded.bytes`,
 			e.AllocID, periodOf(e.RecordedAt), e.UserID, nullStr(e.NodeID), b2i(e.Billable), delta); err != nil {
-			return err
+			return UsageRecordResult{}, err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return UsageRecordResult{}, err
+	}
+	return res, nil
+}
+
+// chargeRelayAttribTx charges up to delta bytes to the (nodeID, userID) leaky
+// bucket inside the caller's transaction and returns how much of delta it
+// could NOT take. The bucket drains at b.RatePerSec by wall-clock time (elapsed
+// clamped to [0, b.WindowSecs]; a backwards clock drains nothing) and holds at
+// most b.RatePerSec × b.WindowSecs; level is kept within [0, capacity] even if
+// a stored row is out of range. warn is true at most once per window per pair,
+// on a charge that withheld bytes.
+func chargeRelayAttribTx(ctx context.Context, tx *sql.Tx, nodeID, userID string, now, delta int64, b RelayAttribBudget) (withheld int64, warn bool, err error) {
+	capacity := satMul(b.RatePerSec, b.WindowSecs)
+	var level, updatedAt, lastWarned int64
+	exists := true
+	switch err := tx.QueryRowContext(ctx,
+		`SELECT level, updated_at, last_warned_at FROM relay_attrib_budget WHERE node_id = ? AND user_id = ?`,
+		nodeID, userID).Scan(&level, &updatedAt, &lastWarned); err {
+	case nil:
+	case sql.ErrNoRows:
+		exists = false
+	default:
+		return 0, false, err
+	}
+	if exists {
+		elapsed := min(max(now-updatedAt, 0), b.WindowSecs)
+		level = min(max(level, 0), capacity)
+		level = max(level-satMul(b.RatePerSec, elapsed), 0)
+	} else {
+		level, updatedAt = 0, now
+	}
+	granted := min(delta, capacity-level) // capacity-level in [0, capacity]
+	withheld = delta - granted
+	level += granted
+	if withheld > 0 && (!exists || now-lastWarned >= b.WindowSecs) {
+		warn = true
+		lastWarned = now
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO relay_attrib_budget (node_id, user_id, level, updated_at, last_warned_at)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(node_id, user_id) DO UPDATE SET
+		   level = excluded.level, updated_at = excluded.updated_at, last_warned_at = excluded.last_warned_at`,
+		nodeID, userID, level, max(now, updatedAt), lastWarned); err != nil {
+		return 0, false, err
+	}
+	return withheld, warn, nil
+}
+
+// PruneRelayAttribBudget deletes budget rows untouched since before idleBefore.
+// Called once per heartbeat with idleBefore = now - window: such a row has
+// drained to 0 by then, so deleting it changes no budget. Indexed range delete.
+func (s *SQLiteStore) PruneRelayAttribBudget(ctx context.Context, idleBefore int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM relay_attrib_budget WHERE updated_at < ?`, idleBefore)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (s *SQLiteStore) UserUsageTotal(ctx context.Context, userID string) (int64, error) {
@@ -4187,136 +4339,6 @@ func (s *SQLiteStore) NodeRelayedSince(ctx context.Context, since int64) (map[st
 		out[id] = total
 	}
 	return out, rows.Err()
-}
-
-// ReserveRelayAttribution is the store half of the A-M8 per-(node, user)
-// relay-attribution budget. In one write transaction it
-//
-//  1. prunes rows idle for a full window (their level has drained to 0, so
-//     dropping them changes no budget);
-//  2. reads the alloc's recorded high-water (Prev) — in the same transaction
-//     as the bucket, so concurrent heartbeats serialize on the writer lock and
-//     cannot both spend the same headroom;
-//  3. drains the bucket by RatePerSec x (Now - updated_at), elapsed clamped to
-//     [0, WindowSecs] (a backwards clock drains nothing, a far-forward one
-//     cannot overflow), and grants min(Reported - Prev, capacity - level).
-//
-// It is keyed by wall-clock time, not by heartbeat count: a node that
-// heartbeats ten times faster earns no more budget, only smaller grants.
-func (s *SQLiteStore) ReserveRelayAttribution(ctx context.Context, r RelayAttribReserve) (RelayAttribGrant, error) {
-	var g RelayAttribGrant
-	if r.RatePerSec <= 0 || r.WindowSecs <= 0 {
-		return g, errors.New("account: relay attribution budget needs a positive rate and window")
-	}
-	capacity := r.RatePerSec * r.WindowSecs
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return g, err
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM relay_attrib_budget WHERE updated_at < ?`, r.Now-r.WindowSecs); err != nil {
-		return g, err
-	}
-	switch err := tx.QueryRowContext(ctx,
-		`SELECT relayed_bytes FROM usage_events WHERE alloc_id = ?`, r.AllocID).Scan(&g.Prev); err {
-	case nil, sql.ErrNoRows:
-	default:
-		return g, err
-	}
-	if r.Reported > g.Prev {
-		g.Wanted = r.Reported - g.Prev
-	}
-	if g.Wanted == 0 {
-		// Nothing new to attribute (a re-sent final, or a stale report):
-		// the bucket is not touched.
-		return g, tx.Commit()
-	}
-
-	var level, updatedAt, lastWarned int64
-	exists := true
-	switch err := tx.QueryRowContext(ctx,
-		`SELECT level, updated_at, last_warned_at FROM relay_attrib_budget WHERE node_id = ? AND user_id = ?`,
-		r.NodeID, r.UserID).Scan(&level, &updatedAt, &lastWarned); err {
-	case nil:
-	case sql.ErrNoRows:
-		exists = false
-	default:
-		return g, err
-	}
-	if exists {
-		elapsed := r.Now - updatedAt
-		if elapsed < 0 {
-			elapsed = 0
-		}
-		if elapsed > r.WindowSecs {
-			elapsed = r.WindowSecs
-		}
-		level -= r.RatePerSec * elapsed
-		if level < 0 {
-			level = 0
-		}
-	}
-	if avail := capacity - level; avail > 0 {
-		g.Granted = min(g.Wanted, avail)
-	}
-	level += g.Granted
-	if g.Granted < g.Wanted && (!exists || r.Now-lastWarned >= r.WindowSecs) {
-		g.Warn = true
-		lastWarned = r.Now
-	}
-	stamp := max(r.Now, updatedAt)
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO relay_attrib_budget (node_id, user_id, level, updated_at, last_warned_at)
-		 VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT(node_id, user_id) DO UPDATE SET
-		   level = excluded.level, updated_at = excluded.updated_at, last_warned_at = excluded.last_warned_at`,
-		r.NodeID, r.UserID, level, stamp, lastWarned); err != nil {
-		return g, err
-	}
-	return g, tx.Commit()
-}
-
-// SettleRelayAttribution refunds the part of a grant RecordUsage did not
-// record. What was recorded is read back from the ledger: the alloc's
-// high-water minus g.Prev when the alloc belongs to (r.UserID, r.NodeID), and
-// nothing when it belongs to someone else (RecordUsage refused it) or does not
-// exist (the write failed). The used part is capped at the grant, so a
-// concurrent writer to the same alloc can only make the refund smaller — the
-// budget errs toward recording less, never more.
-func (s *SQLiteStore) SettleRelayAttribution(ctx context.Context, r RelayAttribReserve, g RelayAttribGrant) error {
-	if g.Granted <= 0 {
-		return nil
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var after int64
-	var owner string
-	var node sql.NullString
-	used := int64(0)
-	switch err := tx.QueryRowContext(ctx,
-		`SELECT relayed_bytes, user_id, node_id FROM usage_events WHERE alloc_id = ?`, r.AllocID).
-		Scan(&after, &owner, &node); err {
-	case nil:
-		if owner == r.UserID && node.String == r.NodeID && after > g.Prev {
-			used = min(after-g.Prev, g.Granted)
-		}
-	case sql.ErrNoRows:
-	default:
-		return err
-	}
-	if refund := g.Granted - used; refund > 0 {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE relay_attrib_budget SET level = MAX(0, level - ?) WHERE node_id = ? AND user_id = ?`,
-			refund, r.NodeID, r.UserID); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
 }
 
 func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash string) error {

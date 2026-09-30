@@ -80,6 +80,9 @@ type nodeRegisterResp struct {
 }
 
 type nodeHeartbeatResp struct {
+	// OK is false when the relay-attribution budget withheld any usage entry's
+	// bytes (A-M8), so a node that acknowledges final totals only on OK keeps
+	// and resends them. Everything else in the response is valid either way.
 	OK                bool `json:"ok"`
 	HeartbeatInterval int  `json:"heartbeatInterval"`
 	nodeLimits
@@ -1224,6 +1227,15 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "nodeID required"})
 		return
 	}
+	// A relay counter is never negative, so a negative cumulative is not a
+	// report but an attempt to make a later increment wrap (A-M8). Refused
+	// before any side effect; RecordUsage refuses it too.
+	for _, u := range req.Usage {
+		if u.RelayedBytes < 0 {
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "negative relayedBytes"})
+			return
+		}
+	}
 	// A node unknown to us (DB reset / never registered) is told to re-register
 	// with 410 Gone.
 	node, known, err := s.store.GetNode(r.Context(), req.NodeID)
@@ -1271,6 +1283,18 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
+	// Budget rows idle for a full window have drained to 0; dropping them
+	// changes no budget and bounds how long a user id stays in the table.
+	// Once per heartbeat (one indexed delete), not per entry.
+	if _, err := s.store.PruneRelayAttribBudget(r.Context(), now-relayAttribWindowSecs); err != nil {
+		log.Printf("node %s heartbeat: prune attribution budget failed: %v", req.NodeID, err)
+	}
+	// withheld: some entry's bytes were refused by the attribution budget. The
+	// response then says OK:false, which a node that retains unacknowledged
+	// finals (relay.go: only hr.OK acks) takes as "resend everything", so a
+	// closed allocation's withheld bytes are retried as the bucket drains
+	// instead of being evicted. Re-sending is safe: the ledger is keep-max.
+	withheld := false
 	// 单次心跳给单个用户记了多少（用于下面的异常告警）。
 	attributed := map[string]int64{}
 	// 单次心跳给单个用户记了多少**条**。这是限幅真正的刀口，见 maxAllocsPerUser。
@@ -1330,35 +1354,35 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		entries[userID]++
-		// Per-(node, user) attribution budget (A-M8), across heartbeats: the
-		// clamps above bound one heartbeat and RecordUsage bounds one alloc,
-		// but neither bounds fresh alloc ids over many heartbeats. See
-		// relayAttribRatePerSec. A budget read that fails records nothing for
-		// this entry: the node re-sends a live alloc's cumulative next time.
-		reported, grant, err := s.withinRelayAttribBudget(r.Context(), req.NodeID, userID, u, now)
+		// Per-(node, user) attribution budget (A-M8), across heartbeats and in
+		// the ledger write's own transaction: the clamps above bound one
+		// heartbeat and the per-alloc clamps one alloc, but neither bounds
+		// fresh alloc ids over many heartbeats. See relayAttribRatePerSec.
+		res, err := s.store.RecordNodeUsage(r.Context(), UsageEvent{
+			AllocID: u.AllocID, Token: attrib, UserID: userID, RelayedBytes: u.RelayedBytes,
+			RecordedAt: now, NodeID: req.NodeID, Billable: billable,
+		}, RelayAttribBudget{RatePerSec: relayAttribRatePerSec, WindowSecs: relayAttribWindowSecs})
 		if err != nil {
-			log.Printf("node %s heartbeat: attribution budget for alloc %s failed: %v", req.NodeID, u.AllocID, err)
+			// Log-and-continue: one bad alloc must not drop the rest.
+			log.Printf("node %s heartbeat: record alloc %s failed: %v", req.NodeID, u.AllocID, err)
 			continue
 		}
-		recErr := s.store.RecordUsage(r.Context(), UsageEvent{
-			AllocID: u.AllocID, Token: attrib, UserID: userID, RelayedBytes: reported,
-			RecordedAt: now, NodeID: req.NodeID, Billable: billable,
-		})
-		// Return whatever the ledger did not take — also on error or refusal.
-		s.settleRelayAttrib(r.Context(), req.NodeID, userID, u, now, grant)
-		if recErr != nil {
-			// Log-and-continue: one bad alloc must not drop the rest.
-			log.Printf("node %s heartbeat: record alloc %s failed: %v", req.NodeID, u.AllocID, recErr)
-		} else if u.RelayedBytes > 0 {
-			// Only a report the ledger accepted counts toward the implausibility
-			// warning: a refused one (e.g. ErrUsageAllocOwnerMismatch) billed
-			// nobody, and must not name its would-be victim as having been billed.
-			attributed[userID] += u.RelayedBytes
+		if res.Withheld > 0 {
+			withheld = true
 		}
+		if res.Warn {
+			log.Printf("WARNING: node %s exceeded the relay attribution budget for user %s (%d B/s, %ds window) — bytes withheld (possible forged attribution; see A-M8)",
+				req.NodeID, userID, relayAttribRatePerSec, relayAttribWindowSecs)
+		}
+		// Only bytes the ledger actually recorded count toward the
+		// implausibility warning: a refused report (ErrUsageAllocOwnerMismatch)
+		// or a withheld one billed nobody, and must not name its would-be victim
+		// as having been billed.
+		attributed[userID] += res.Recorded
 	}
 	warnImplausibleAttribution(req.NodeID, len(req.Usage), attributed)
 	httpx.WriteJSON(w, http.StatusOK, nodeHeartbeatResp{
-		OK: true, HeartbeatInterval: nodeHeartbeatInterval,
+		OK: !withheld, HeartbeatInterval: nodeHeartbeatInterval,
 		nodeLimits:     s.nodeLimitsFor(r.Context(), node),
 		UpdateCheckNow: s.fleetFastUpdateHint(r.Context(), node, now),
 	})
@@ -1419,96 +1443,59 @@ func (s *Service) SetNodeDraining(ctx context.Context, nodeID string, on bool) e
 // The threat: a heartbeat names, per usage entry, the account an allocation's
 // relayed bytes are billed to, and central cannot verify that for a token it
 // does not know (attributionRefused). The existing bounds are per heartbeat
-// (maxAllocsPerUser) and per alloc (RecordUsage: first report <=
-// maxFirstReportBytes, then <= maxRelayBytesPerSec x elapsed + slack). Neither
-// bounds a stream of heartbeats that each mint fresh alloc ids: with unlimited
-// heartbeats a leaked fleet token could put 64 x ~3.25 GiB on a victim's
-// monthly quota per request. This budget closes the multiplier: whatever the
+// (maxAllocsPerUser) and per alloc (first report <= maxFirstReportBytes, then
+// <= maxRelayBytesPerSec x elapsed + a per-report slack). Neither bounds a
+// stream of heartbeats: fresh alloc ids, or the same alloc re-reported many
+// times a second for its slack, let a leaked fleet token put unbounded bytes on
+// a victim's monthly quota. This budget closes the multiplier: whatever the
 // alloc ids and heartbeat cadence, one node can add at most
-// relayAttribRatePerSec x wall-clock time (plus one window of burst) to one
-// user.
+// relayAttribRatePerSec x wall-clock time, plus one bucket of burst, to one
+// user. It is charged inside the ledger write's transaction
+// (SQLiteStore.recordUsage), for exactly the bytes recorded.
 //
-// Rate. maxRelayBytesPerSec (25 MiB/s) is already the ledger's plausible rate
-// for ONE allocation — RecordUsage records an alloc no faster, apart from its
-// per-report slack (which, with unlimited heartbeats, was itself a multiplier
-// this budget also closes). A user's
-// relay through one node is a handful of allocations at once: one transfer
-// holds one or two (both peers may relay through the same node), and a user
-// can run a few transfers across their devices concurrently. relayAttribAllocs
-// = 8 allows four concurrent double-relayed transfers each at the per-alloc
-// ceiling, i.e. 200 MiB/s (~1.7 Gbit/s) — close to everything a 1 Gbit/s node
-// can count for ALL its users together (it counts bytes in and out). A real
-// user through one node does not reach it; a forger is held to it.
+// Rate. maxRelayBytesPerSec (25 MiB/s) is the ledger's plausible rate for ONE
+// allocation. One transfer holds one or two (both peers may relay through the
+// same node), and a user can run a few transfers across their devices at once.
+// relayAttribAllocs = 8 allows four concurrent double-relayed transfers each at
+// the per-alloc ceiling: 200 MiB/s (~1.7 Gbit/s), about everything a 1 Gbit/s
+// node can count for all its users together (it counts bytes in and out).
+// Nothing ENFORCES that a user stays below it; it is a plausibility bound, and
+// sustained real use above it is under-counted (see Loss).
 //
-// Window. The bucket holds relayAttribWindowSecs (10 min) at that rate, ~117
-// GiB. That is the burst available after an idle stretch, and what makes the
-// budget safe for a node's catch-up after an outage: a user relaying at the
-// full per-alloc rate (25 MiB/s) throughout fits one window for about 80
-// minutes offline. Past that, a LIVE alloc's withheld part is re-reported
-// cumulatively and recorded as the bucket and RecordUsage's per-alloc clamp
-// allow, while an already-closed alloc's final total can be cut — where
-// RecordUsage's first-report clamp already under-counts long offline transfers
-// today. So legitimate bytes are dropped only past > 8 allocs at the per-alloc
-// ceiling sustained, or > ~80 minutes offline at it.
+// Capacity. The bucket holds relayAttribWindowSecs (60 min) at that rate, ~703
+// GiB, so the whole plausible load — 8 allocs at the ceiling — catching up
+// together after a reporting outage of up to 60 minutes fits in one heartbeat.
 // Faster heartbeats do not help a forger: the bucket drains by wall-clock
-// seconds, not by heartbeats.
+// seconds, not by heartbeats. The larger bucket is a larger one-off burst per
+// (node, user); the sustained rate is unchanged.
 //
-// Direction. Bytes over budget are NOT recorded (user-favourable: an
-// under-count, never an over-count), and at most one WARNING is logged per
-// (node, user) per window, naming both ids and nothing about the transfer.
-// The state lives in SQLite (relay_attrib_budget), so a restart does not
-// refill it, the single writer lock serializes concurrent heartbeats (one
-// central process today; SQLite also serializes several), and each test's
-// store starts empty.
+// Loss. Bytes over budget are NOT recorded then (user-favourable: an
+// under-count, never an over-count). The heartbeat answers OK:false whenever
+// any entry was withheld; a node that retains unacknowledged final totals
+// resends them, and they are recorded as the bucket drains (keep-max makes the
+// re-send idempotent). A node binary that evicts closed allocations without
+// waiting for an acknowledgement (every released node up to v0.26.0) loses a
+// withheld CLOSED allocation's remainder; a live allocation's is re-reported
+// cumulatively either way. So legitimate loss needs > 8 allocs at the ceiling
+// sustained, or an outage > 60 min at that full load, AND an evicting node.
 //
-// Scope: every node, fleet or BYO; a BYO node may already only attribute to
-// its own owner (non-billable), and it is exempt from nothing.
+// Logging: at most one WARNING per (node, user) per window, naming both ids and
+// nothing about the transfer. State lives in SQLite (relay_attrib_budget): a
+// restart does not refill it; both account purges delete a user's rows, and
+// every heartbeat prunes rows idle for a full window.
+//
+// Scope: every node, fleet or BYO; a BYO node may already only attribute to its
+// own owner (non-billable), and it is exempt from nothing.
 //
 // What it is NOT: a fix for forged attribution itself. A fleet-token holder can
 // still put up to relayAttribRatePerSec per fleet node on a victim — enough to
-// exhaust a monthly quota within minutes. Only a verifiable (signed) tag
-// closes that; see attributionRefused.
+// exhaust a monthly quota within minutes. Only a verifiable (signed) tag closes
+// that; see attributionRefused.
 const (
 	relayAttribAllocs     = 8
 	relayAttribRatePerSec = int64(relayAttribAllocs) * maxRelayBytesPerSec
-	relayAttribWindowSecs = 600
+	relayAttribWindowSecs = 3600
 )
-
-// withinRelayAttribBudget reserves budget for one usage entry and returns the
-// cumulative to hand RecordUsage: the report itself when it fits, else the
-// alloc's recorded high-water plus the grant. RecordUsage is monotonic and
-// keep-max, so passing a smaller cumulative can only record less, and a live
-// alloc whose bytes were withheld is re-reported (cumulatively) next time.
-func (s *Service) withinRelayAttribBudget(ctx context.Context, nodeID, userID string, u nodeUsage, now int64) (int64, RelayAttribGrant, error) {
-	g, err := s.store.ReserveRelayAttribution(ctx, relayAttribReq(nodeID, userID, u, now))
-	if err != nil {
-		return 0, g, err
-	}
-	if g.Warn {
-		log.Printf("WARNING: node %s exceeded the relay attribution budget for user %s (%d B/s over %ds) — %d reported bytes withheld (possible forged attribution; see A-M8)",
-			nodeID, userID, relayAttribRatePerSec, relayAttribWindowSecs, g.Wanted-g.Granted)
-	}
-	if g.Granted < g.Wanted {
-		return g.Prev + g.Granted, g, nil
-	}
-	return u.RelayedBytes, g, nil
-}
-
-// settleRelayAttrib returns the unrecorded part of a grant to the bucket. A
-// failure only leaves less budget than there should be — user-favourable — so
-// it is logged, not propagated.
-func (s *Service) settleRelayAttrib(ctx context.Context, nodeID, userID string, u nodeUsage, now int64, g RelayAttribGrant) {
-	if err := s.store.SettleRelayAttribution(ctx, relayAttribReq(nodeID, userID, u, now), g); err != nil {
-		log.Printf("node %s heartbeat: settle attribution budget for alloc %s failed: %v", nodeID, u.AllocID, err)
-	}
-}
-
-func relayAttribReq(nodeID, userID string, u nodeUsage, now int64) RelayAttribReserve {
-	return RelayAttribReserve{
-		NodeID: nodeID, UserID: userID, AllocID: u.AllocID, Reported: u.RelayedBytes, Now: now,
-		RatePerSec: relayAttribRatePerSec, WindowSecs: relayAttribWindowSecs,
-	}
-}
 
 // maxAllocsPerUser 是单次心跳里、单个节点能为**同一个用户**记账的分配条数上限。
 //

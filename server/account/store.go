@@ -493,30 +493,22 @@ type UsageEvent struct {
 	Billable     bool
 }
 
-// RelayAttribReserve asks for relay-attribution budget for one heartbeat usage
-// entry (A-M8): Reported is the entry's cumulative bytes, Now the heartbeat
-// time, and RatePerSec/WindowSecs the per-(node,user) budget policy, owned by
-// the caller (see relayAttribRatePerSec in nodes.go).
-type RelayAttribReserve struct {
-	NodeID     string
-	UserID     string
-	AllocID    string
-	Reported   int64
-	Now        int64
+// RelayAttribBudget is the per-(node, user) relay-attribution policy the
+// caller holds a heartbeat entry to (A-M8): a leaky bucket that drains at
+// RatePerSec and holds RatePerSec x WindowSecs. See relayAttribRatePerSec.
+type RelayAttribBudget struct {
 	RatePerSec int64
 	WindowSecs int64
 }
 
-// RelayAttribGrant is ReserveRelayAttribution's answer. Prev is the alloc's
-// recorded high-water (0 when absent), Wanted the increment the report asked
-// for (Reported - Prev, never negative), Granted how much of it the budget
-// allows. Warn is true at most once per (node,user) per WindowSecs, on a grant
-// short of Wanted, so the caller logs an exhausted budget without flooding.
-type RelayAttribGrant struct {
-	Prev    int64
-	Wanted  int64
-	Granted int64
-	Warn    bool
+// UsageRecordResult is what RecordNodeUsage did: Recorded is the increment
+// written to the ledger, Withheld the part of the (otherwise accepted)
+// increment the budget refused, and Warn is true at most once per (node,
+// user) per window, on a report that had bytes withheld.
+type UsageRecordResult struct {
+	Recorded int64
+	Withheld int64
+	Warn     bool
 }
 
 // UploadFinalizeRecord is what a finalize recovery may learn about one
@@ -2187,17 +2179,12 @@ type Store interface {
 	// NodeRelayedSince sums relayed bytes per node for usage since `since`
 	// (per-node monthly traffic cap), keyed by node id.
 	NodeRelayedSince(ctx context.Context, since int64) (map[string]int64, error)
-	// ReserveRelayAttribution takes up to (r.Reported - the alloc's recorded
-	// high-water) bytes out of the (r.NodeID, r.UserID) relay-attribution
-	// budget, a leaky bucket that drains at r.RatePerSec and holds at most
-	// r.RatePerSec x r.WindowSecs (A-M8). It returns the alloc's high-water as
-	// read inside the same transaction and the grant. The caller records at
-	// most Prev + Granted and then settles the unused part.
-	ReserveRelayAttribution(ctx context.Context, r RelayAttribReserve) (RelayAttribGrant, error)
-	// SettleRelayAttribution returns to the bucket whatever part of a grant
-	// the ledger did not actually record (RecordUsage clamped harder, refused
-	// the alloc, or failed). A no-op for a zero grant.
-	SettleRelayAttribution(ctx context.Context, r RelayAttribReserve, g RelayAttribGrant) error
+	// RecordNodeUsage is RecordUsage for a node heartbeat entry, additionally
+	// holding the recorded increment to the (e.NodeID, e.UserID) relay-
+	// attribution budget b in the same transaction (A-M8).
+	RecordNodeUsage(ctx context.Context, e UsageEvent, b RelayAttribBudget) (UsageRecordResult, error)
+	// PruneRelayAttribBudget deletes budget rows idle since before idleBefore.
+	PruneRelayAttribBudget(ctx context.Context, idleBefore int64) (int64, error)
 	// admin (read-only)
 	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
 	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)
