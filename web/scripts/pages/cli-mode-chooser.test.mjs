@@ -235,6 +235,7 @@ describe("the getting-started chooser covers all six modes", () => {
       // article contradicting itself.
       const all = JSON.stringify(cliGettingStarted.langs[lang]);
       expect(all).not.toMatch(lang === "en" ? /\bthree (?:ways|direct ways|modes)\b/i : /三种(?:方式|传输方式|直连方式)|三者之中/);
+      expect(all).not.toMatch(/push \/ pull/i);
     });
 
     it(`${lang}: adds no blanket verification or resume promise`, () => {

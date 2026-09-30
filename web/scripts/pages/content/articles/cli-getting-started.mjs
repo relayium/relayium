@@ -153,7 +153,7 @@ relayium text 483920`,
     {
       heading: "Free, and private by design",
       body: [
-        "There is nothing to pay for the direct modes above: push / pull, daemon direct, send / receive and text move their bytes straight between the two ends, and sync uses those same transports. Among them the only sign-in is the one that mints a pairing code, for send or for text. The CLI connects the two ends directly, so your files are never uploaded to a server in the middle — the only thing that ever touches Relayium is a tiny rendezvous handshake in send / receive and in text, used to introduce the two ends, never the file itself. The two modes that go through your account work differently: Cloud up stores an encrypted copy under your account, so it needs a sign-in and counts against your plan's monthly traffic allowance, its storage cap, its retention ceiling and its daily upload quota; Device Inbox queues an encrypted task for a machine of your own, and both ends have to be signed in to the same account.",
+        "There is no per-transfer charge for the direct modes above: daemon-direct push/sync, send / receive and text move content between the two ends. Among them the only sign-in is the one that mints a pairing code, for send or for text. The pairing modes contact Relayium only for a tiny rendezvous handshake, never for the content. The two modes that go through your account work differently: Cloud up stores an encrypted copy under your account, so it needs a sign-in and consumes the plan's monthly traffic allowance, storage cap, retention ceiling and daily upload quota; Device Inbox queues an encrypted task for a machine of your own, and both ends have to be signed in to the same account. Consuming an allowance is usage accounting, not a per-transfer charge.",
         "Every direct file transfer is encrypted end to end and verifies each transferred file with SHA-256. Resume is narrower: relayium sync continues a partial file on a later run, relayium down reconnects within the run that started it, and push, send and receive do not resume. It runs on macOS, Linux and Windows, and is open source and self-hostable.",
       ],
     },
@@ -335,7 +335,7 @@ relayium text 483920`,
     {
       heading: "免费，且从设计上保护隐私",
       body: [
-        "上面的直连模式都不收费：push / pull、daemon 直连、send / receive 与 text 的字节都在两端之间直接传输，sync 也走同样的传输通道。它们当中唯一需要登录的，是为 send 或 text 生成配对码的那一端。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 与 text 模式下一次很小的会合握手，用来牵线搭桥，绝不是文件本身。走你账号的那两种模式则不同：云端 up 把加密副本存放在你的账号下，所以需要登录，并会占用套餐的每月流量额度、存储上限、留存时长与每日上传额度；设备收件箱会为你自己的一台机器排入一个加密任务，两端都必须登录同一个账号。",
+        "上面的直连模式都不按次收费：daemon 直连 push/sync、send / receive 与 text 都在两端之间传内容。它们当中唯一需要登录的，是为 send 或 text 生成配对码的那一端；配对模式只会联系 Relayium 做一次很小的会合握手，绝不传内容。走你账号的两种模式则不同：云端 up 把加密副本存放在账号下，因此会占用套餐的每月流量额度、存储上限、留存时长与每日上传额度；设备收件箱会为你自己的机器排入加密任务，两端都必须登录同一账号。占用额度表示计入用量，不等于按次收费。",
         "每次直连文件传输都端到端加密，并对真正传输的文件做 SHA-256 校验。续传范围更窄：relayium sync 会在下一次运行接着传半截文件，relayium down 会在发起下载的同一次运行内重连，而 push、send、receive 不续传。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。",
       ],
     },
