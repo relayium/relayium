@@ -705,13 +705,29 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// deleted_at (A-M3): a node its owner (DeleteNode) or an admin
 		// (DeleteFleetNode) deleted while cleanup still needed its endpoint —
 		// queued node deletes, upload sessions or objects still naming it. The
-		// row is RETIRED instead of removed: removed_at is set too, so it is out
-		// of placement, ICE, downloads and the rollout, and every listing hides
-		// it, but blobFor still resolves its storage endpoint so GC, the reaper
-		// and pair-room voids can finish reclaiming the ciphertext. Its owner
-		// re-registering the id brings it back as a new live node; anyone else
-		// is refused (RegisterNode). 0 = not deleted. Additive: an older binary
-		// ignores it and simply shows the row as uninstalled.
+		// row is RETIRED instead of removed: removed_at is set too, and every
+		// pool query (StorageNodes, UserStorageNodes, OnlineNodes, UserNodes,
+		// NodesByOwnerType) and every listing ALSO requires deleted_at = 0, so it
+		// is out of placement, ICE, the rollout and the panels. It never gets a
+		// direct-download 302, but blobFor still resolves its storage endpoint:
+		// that is what lets GC, the reaper and pair-room voids finish reclaiming
+		// the ciphertext, and it also means files already on a still-running
+		// retired node keep downloading through central's proxy until they
+		// expire and GC reclaims them — the same as a removed (deregistered)
+		// node. Its owner re-registering the id brings it back as a new live
+		// node; anyone else is refused (RegisterNode). GC removes the row once no
+		// queued delete, upload session or stored object names it any more
+		// (PurgeRetiredNodes); the tombstone keeps the id refused. 0 = not
+		// deleted.
+		//
+		// ROLLBACK BOUNDARY: the column is additive and an older binary opens the
+		// database, but it does not know about retirement. Its admin "restore"
+		// clears removed_at on a retired row (harmless for pools here, which also
+		// test deleted_at, but not under the old binary itself), and its node
+		// delete hard-deletes a retired row and its queued deletes. Do not run an
+		// older central binary against a database on which nodes have been
+		// retired; if a rollback is unavoidable, treat rows with deleted_at != 0
+		// as deleted (do not restore them) until this version is back.
 		`ALTER TABLE nodes ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0`,
 		// active_transfers is the node's live load signal: how many relay
 		// allocations it is currently serving, as of its last heartbeat. It exists
@@ -3130,13 +3146,18 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 	//
 	// Blobs on the account's OWN nodes are queued here too, but every queue row
 	// naming one of those nodes — these and any older ones — is dropped further
-	// down, with the nodes themselves. That is DeleteNode's rule (removing a
-	// node ends the responsibilities naming it) applied to the nodes this purge
-	// removes: once their rows and tokens are gone central can neither address
-	// nor authenticate to them, so such a row is a delete that can never be
-	// attempted, warned about on every sweep forever. The ciphertext on them
-	// sits on hardware the user owns and was never deletable from here after
-	// this transaction; the caller's blobFor fails for them, as it always did.
+	// down, with the nodes themselves (retired rows included). This is the
+	// ACCOUNT-DELETION EXCEPTION to the node-delete rule: DeleteNode and
+	// DeleteFleetNode keep a node's queued deletes and retire its row so GC can
+	// still reach the machine (A-M3, retireOrDeleteNodeTx), but an account
+	// deletion removes the account's nodes outright. It is safe here and only
+	// here: placement puts only the owner's own uploads on their own node, and
+	// any billing obligation those rows carried was forgiven above in this same
+	// transaction, so what is left is the departing user's own ciphertext on
+	// hardware they own — as it always was. Once the rows and tokens are gone
+	// central can neither address nor authenticate to those nodes, so a kept
+	// row would be a delete that can never be attempted, warned about on every
+	// sweep forever; the caller's blobFor fails for them, as it always did.
 	//
 	// enqueued_at is wall-clock: the transaction's callers do not pass a clock,
 	// and the column only feeds the age-based retirement of rows already
@@ -7498,7 +7519,7 @@ func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([
 	// so this SQL, usableBytes and storableBytes can never fall out of sync.
 	query := fmt.Sprintf(
 		`SELECT `+nodeCols+` FROM nodes
-		   WHERE owner_type='fleet' AND storage_enabled=1 AND draining=0 AND removed_at=0
+		   WHERE owner_type='fleet' AND storage_enabled=1 AND draining=0 AND removed_at=0 AND deleted_at=0
 		     AND storage_unreachable=0 AND last_seen_at >= ? AND storage_free * %d / %d >= ?
 		     AND (disk_limit_bytes = 0 OR disk_limit_bytes - stored_bytes >= ?)
 		     AND (storage_total = 0 OR storage_free * %d >= storage_total)
@@ -7513,7 +7534,7 @@ func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([
 // still looks online while the machine is on its way out.
 func (s *SQLiteStore) OnlineNodes(ctx context.Context, since int64) ([]Node, error) {
 	return s.queryNodes(ctx,
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='fleet' AND removed_at=0 AND last_seen_at >= ? ORDER BY last_seen_at DESC`, since)
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='fleet' AND removed_at=0 AND deleted_at=0 AND last_seen_at >= ? ORDER BY last_seen_at DESC`, since)
 }
 
 func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
@@ -7662,7 +7683,7 @@ func (s *SQLiteStore) ListByoNodes(ctx context.Context, q AdminByoNodeQuery) ([]
 // is how a user sees what became of their node.
 func (s *SQLiteStore) UserNodes(ctx context.Context, userID string, since int64) ([]Node, error) {
 	return s.queryNodes(ctx,
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND removed_at=0 AND last_seen_at >= ? ORDER BY last_seen_at DESC`,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND removed_at=0 AND deleted_at=0 AND last_seen_at >= ? ORDER BY last_seen_at DESC`,
 		userID, since)
 }
 
@@ -7682,7 +7703,7 @@ func (s *SQLiteStore) UserStorageNodes(ctx context.Context, userID string, since
 	// Spliced from volumeReserveDen (not a literal) so the two SQL sites and
 	// storableBytes stay one definition; the request input stays on `?`.
 	query := fmt.Sprintf(
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND draining=0 AND removed_at=0 AND storage_free >= ?
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND draining=0 AND removed_at=0 AND deleted_at=0 AND storage_free >= ?
 		   AND storage_unreachable=0
 		   AND (storage_total = 0 OR storage_free * %d >= storage_total) ORDER BY last_seen_at DESC`, volumeReserveDen)
 	return s.queryNodes(ctx, query, userID, since, minFree)
@@ -7726,7 +7747,9 @@ func (s *SQLiteStore) DeleteNode(ctx context.Context, id, ownerUserID string) er
 // set, storage URL/secret kept) so GC, the upload reaper, refused-finalize
 // reclaim and pair-room voids keep resolving it through blobFor and finish
 // reclaiming the ciphertext, with their billing settled exactly as for any
-// other node. Otherwise nothing will ever look the node up again and the row
+// other node. Objects already on it stay downloadable through the proxy until
+// they expire (see the deleted_at migration comment); PurgeRetiredNodes removes
+// the row once nothing names it. Otherwise nothing will ever look the node up again and the row
 // is removed. Its queued deletes are never dropped here: a delete used to take
 // them with it, and with them the only record that the ciphertext was still
 // on the machine.
@@ -8087,6 +8110,23 @@ func (s *SQLiteStore) NodeDeleteBlockers(ctx context.Context) (map[string]int, e
 	return out, rows.Err()
 }
 
+// PurgeRetiredNodes: see Store.PurgeRetiredNodes. One statement, so the
+// "nothing names it" test and the delete are atomic against a writer adding a
+// reference (every such writer is itself fenced on deleted_at = 0 or runs in a
+// transaction that read the row, and SQLite's single writer serializes them).
+// The tombstone was written when the node was deleted and is kept.
+func (s *SQLiteStore) PurgeRetiredNodes(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM nodes WHERE deleted_at != 0
+		   AND NOT EXISTS (SELECT 1 FROM pending_node_deletes p WHERE p.node_id = nodes.id)
+		   AND NOT EXISTS (SELECT 1 FROM upload_sessions u WHERE u.node_id = nodes.id)
+		   AND NOT EXISTS (SELECT 1 FROM stored_files f WHERE f.node_id = nodes.id)`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // CountLiveUserNodes: see Store.CountLiveUserNodes.
 func (s *SQLiteStore) CountLiveUserNodes(ctx context.Context, userID string) (int, error) {
 	return countLiveUserNodesOn(ctx, s.db, userID)
@@ -8095,7 +8135,7 @@ func (s *SQLiteStore) CountLiveUserNodes(ctx context.Context, userID string) (in
 func countLiveUserNodesOn(ctx context.Context, q nodeRowQueryer, userID string) (int, error) {
 	var n int
 	err := q.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM nodes WHERE owner_type = 'user' AND owner_user_id = ? AND removed_at = 0`,
+		`SELECT COUNT(*) FROM nodes WHERE owner_type = 'user' AND owner_user_id = ? AND removed_at = 0 AND deleted_at = 0`,
 		userID).Scan(&n)
 	return n, err
 }

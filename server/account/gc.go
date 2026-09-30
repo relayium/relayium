@@ -353,6 +353,15 @@ func (g *GC) prune(ctx context.Context, now int64) {
 	if err := g.Store.PurgeExpiredAdminSessions(ctx, now); err != nil {
 		g.Log.Printf("gc: purge expired admin sessions: %v", err)
 	}
+	// Retired nodes (A-M3): a deleted node's row is kept only while a queued
+	// delete, upload session or stored object still needs its storage endpoint.
+	// Once the drain, the reaper and expiry have taken all of them, the row goes;
+	// its tombstone keeps the id refused to anyone else.
+	if n, err := g.Store.PurgeRetiredNodes(ctx); err != nil {
+		g.Log.Printf("gc: purge retired nodes: %v", err)
+	} else if n != 0 {
+		g.Log.Printf("gc: purged %d retired node row(s)", n)
+	}
 	// Device Inbox queue: reclaim leases whose claimant died, expire tasks past
 	// the TTL they inherited from their Stored Object, and drop terminal rows
 	// past retention. The claim path reclaims its own device's stale leases too,

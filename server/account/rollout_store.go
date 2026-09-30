@@ -605,7 +605,7 @@ func (s *SQLiteStore) AdvanceByoBatch(ctx context.Context, track, expectTargetVe
 // track on "silent since update started" and wait for an operator.
 func (s *SQLiteStore) NodesByOwnerType(ctx context.Context, ownerType string) ([]Node, error) {
 	return s.queryNodes(ctx,
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type = ? AND removed_at = 0 ORDER BY id`, ownerType)
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type = ? AND removed_at = 0 AND deleted_at = 0 ORDER BY id`, ownerType)
 }
 
 // CommandNodeUpdate records that central has just told a node to self-update.

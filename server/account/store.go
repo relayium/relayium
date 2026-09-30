@@ -2611,6 +2611,10 @@ type Store interface {
 	// upload_sessions row. Nodes with none are absent. For the admin panel, so
 	// what it shows matches what delete will accept.
 	NodeDeleteBlockers(ctx context.Context) (map[string]int, error)
+	// PurgeRetiredNodes removes retired node rows (deleted_at != 0) that no
+	// pending_node_deletes, upload_sessions or stored_files row names any more,
+	// and reports how many. Their tombstones stay (A-M3).
+	PurgeRetiredNodes(ctx context.Context) (int64, error)
 	// CountLiveUserNodes counts a user's owner_type='user' nodes that are not
 	// deregistered (removed_at = 0) — the population the BYO rollout governs and
 	// the per-user registration cap (maxLiveNodesPerUser) is checked against.

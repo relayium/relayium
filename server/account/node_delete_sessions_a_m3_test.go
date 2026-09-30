@@ -498,3 +498,101 @@ func TestA_M3_ReviveOfRetiredNodeIsCapped(t *testing.T) {
 		t.Fatal("a refused revive still revived the node")
 	}
 }
+
+// Round 5: every pool query tests deleted_at itself, so a retired row can never
+// re-enter placement, ICE or the rollout even if removed_at is cleared under it
+// (an older binary's "restore", which does not know about retirement).
+func TestA_M3_RetiredNodeNeverReentersAPool(t *testing.T) {
+	_, st, u1, _ := am3Service(t)
+	ctx := context.Background()
+	now := time.Now().Unix()
+	user := am4rOwnNode(t, st, u1.ID, "https://u.example", now)
+	fleet, err := st.UpsertNode(ctx, Node{ID: authx.NewID(), OwnerType: "fleet", URLs: []string{"turn:x:3478"},
+		TURNSecret: "t", StorageEnabled: true, StorageURL: "https://f.example", StorageSecret: "ss",
+		StorageFree: 100 << 30, CreatedAt: 1, LastSeenAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{user.ID, fleet.ID} {
+		if err := st.EnqueueNodeDelete(ctx, "am5-"+id[:6], id, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.DeleteNode(ctx, user.ID, u1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteFleetNode(ctx, fleet.ID); err != nil {
+		t.Fatal(err)
+	}
+	// What an older binary's restore does: clear removed_at, ignore deleted_at.
+	if _, err := st.db.ExecContext(ctx, `UPDATE nodes SET removed_at = 0 WHERE id IN (?, ?)`, user.ID, fleet.ID); err != nil {
+		t.Fatal(err)
+	}
+	check := func(what string, nodes []Node, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+		for _, n := range nodes {
+			if n.ID == user.ID || n.ID == fleet.ID {
+				t.Fatalf("%s returned the retired node %s", what, n.ID)
+			}
+		}
+	}
+	since := now - 60
+	a, err := st.StorageNodes(ctx, since, 0)
+	check("StorageNodes", a, err)
+	b, err := st.UserStorageNodes(ctx, u1.ID, since, 0)
+	check("UserStorageNodes", b, err)
+	c, err := st.OnlineNodes(ctx, since)
+	check("OnlineNodes", c, err)
+	d, err := st.UserNodes(ctx, u1.ID, since)
+	check("UserNodes", d, err)
+	e, err := st.NodesByOwnerType(ctx, "user")
+	check("NodesByOwnerType(user)", e, err)
+	f, err := st.NodesByOwnerType(ctx, "fleet")
+	check("NodesByOwnerType(fleet)", f, err)
+	if n, err := st.CountLiveUserNodes(ctx, u1.ID); err != nil || n != 0 {
+		t.Fatalf("CountLiveUserNodes counts the retired node: %d %v", n, err)
+	}
+}
+
+// Round 5: GC removes a retired row once nothing names it any more; until then
+// it stays. The tombstone keeps the id refused to anyone else afterwards, and
+// the owner can still bring it back.
+func TestA_M3_GCRemovesARetiredNodeOnceNothingNamesIt(t *testing.T) {
+	s, st, u1, _ := am3Service(t)
+	ctx := context.Background()
+	reg := am3Register(t, s, "owner-token", authx.NewID())
+	if reg.Code != http.StatusOK {
+		t.Fatalf("register: %d %q", reg.Code, reg.Error)
+	}
+	if err := st.EnqueueNodeDelete(ctx, "am5-gc", reg.NodeID, 1); err != nil {
+		t.Fatal(err)
+	}
+	live := am4rOwnNode(t, st, u1.ID, "https://live.example", 1) // a live node is never touched
+	if err := st.DeleteNode(ctx, reg.NodeID, u1.ID); err != nil {
+		t.Fatal(err)
+	}
+	g := &GC{Store: st, Now: func() int64 { return tNow }, Log: log.New(io.Discard, "", 0)}
+	g.prune(ctx, tNow)
+	if exists, d, _ := am4rDeletedAt(t, st, reg.NodeID); !exists || d == 0 {
+		t.Fatal("GC removed a retired node whose queued delete still needs it")
+	}
+	if _, err := st.db.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE node_id = ?`, reg.NodeID); err != nil {
+		t.Fatal(err) // stands in for the drain discharging it
+	}
+	g.prune(ctx, tNow)
+	if exists, _, _ := am4rDeletedAt(t, st, reg.NodeID); exists {
+		t.Fatal("GC left a retired node that nothing names any more")
+	}
+	if _, ok, _ := st.GetNode(ctx, live.ID); !ok {
+		t.Fatal("GC removed a live node")
+	}
+	if got := am3Register(t, s, "attacker-token", reg.NodeID); got.Code != http.StatusForbidden || got.Reason != nodeRegisterCodeRetired {
+		t.Fatalf("another user after GC removed the row: %d code=%q, want 403 %q", got.Code, got.Reason, nodeRegisterCodeRetired)
+	}
+	if got := am3Register(t, s, "owner-token", reg.NodeID); got.Code != http.StatusOK {
+		t.Fatalf("owner after GC removed the row: %d %q", got.Code, got.Error)
+	}
+}
