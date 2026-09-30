@@ -510,7 +510,7 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	if track == "fleet" {
 		resp.Eligible, resp.Reason, err = s.updateCheckFleet(ctx, tr, snaps, node, now)
 	} else {
-		resp.Eligible, resp.Reason, err = s.updateCheckByo(ctx, tr, snaps, node, now)
+		resp.Eligible, resp.Reason, err = s.updateCheckByo(ctx, tr, snaps, nodeOwners(all), node, now)
 	}
 	if err != nil {
 		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
@@ -794,8 +794,11 @@ func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps [
 // updateCheckByo runs the byo state machine and persists whatever it decided.
 // Unlike the fleet track it commands a whole batch at once, so the answer to
 // the asking node is "were you in that batch".
-func (s *Service) updateCheckByo(ctx context.Context, tr RolloutTrack, snaps []NodeSnapshot, node Node, now int64) (bool, string, error) {
-	action, eligible, reason := decideByo(tr, snaps, now)
+//
+// owners (node ID -> owner user ID, see nodeOwners) makes the halt check count
+// failures per account rather than per node (A-M4; see decideByoOwned).
+func (s *Service) updateCheckByo(ctx context.Context, tr RolloutTrack, snaps []NodeSnapshot, owners map[string]string, node Node, now int64) (bool, string, error) {
+	action, eligible, reason := decideByoOwned(tr, snaps, owners, now)
 	switch action {
 	case "halt":
 		// Conditional on the track still being 'rolling' — see the fleet path:
@@ -925,6 +928,18 @@ func nodeSnapshot(n Node) NodeSnapshot {
 	}
 }
 
+// nodeOwners maps each node's ID to its owner user ID (empty for fleet nodes),
+// the owner key decideByoOwned counts BYO failures by. Kept beside
+// nodeSnapshots rather than inside NodeSnapshot so the fleet state machine's
+// input is unchanged.
+func nodeOwners(nodes []Node) map[string]string {
+	out := make(map[string]string, len(nodes))
+	for _, n := range nodes {
+		out[n.ID] = n.OwnerUserID
+	}
+	return out
+}
+
 func nodeSnapshots(nodes []Node) []NodeSnapshot {
 	out := make([]NodeSnapshot, 0, len(nodes))
 	for _, n := range nodes {
@@ -1045,6 +1060,21 @@ func (s *Service) nodeOwner(r *http.Request) (ownerType, ownerUserID string, ok 
 	return "", "", false
 }
 
+// Distinct machine-readable codes for register refusals (A-M3/A-M4), sent
+// beside the human-readable "error" string.
+const (
+	nodeRegisterCodeRetired    = "node_id_retired"
+	nodeRegisterCodeReferenced = "node_id_referenced"
+	nodeRegisterCodeLimit      = "node_limit_reached"
+)
+
+// maxLiveNodesPerUser caps an account's live (not deregistered) BYO nodes at
+// registration of a new id. It equals maxNodeTokensPerUser: a token binds to
+// one node, so an honest account never needs more nodes than tokens. No plan
+// or entitlement defines a node limit today; if one is added, it replaces
+// this constant here.
+const maxLiveNodesPerUser = maxNodeTokensPerUser
+
 // containsCap reports whether caps includes want.
 func containsCap(caps []string, want string) bool {
 	for _, c := range caps {
@@ -1104,6 +1134,39 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid node id"})
 			return
 		}
+		if !found {
+			// A-M3: "unknown" is not the same as "new". A hard-deleted node's
+			// id has no row, yet files, upload sessions or queued GC deletes
+			// may still be addressed to it, and fleet ids are public (/api/ice)
+			// — so a DIFFERENT owner registering it would receive other users'
+			// ciphertext download and delete traffic. Refuse an id deleted by
+			// another owner (tombstoned), or one stored data still names with
+			// no tombstone to say whose it was (a deletion from before
+			// tombstones existed). The SAME owner re-registering its own
+			// deleted machine is let through as a new node (and counts against
+			// the A-M4 cap below), so deleting a node never leaves the machine
+			// crash-looping on a refused register. Otherwise the machine can
+			// register as a new node by dropping nodeID from its state.json.
+			reuse, rerr := s.store.NodeIDReuseState(r.Context(), req.NodeID, ownerType, ownerUserID)
+			if rerr != nil {
+				httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+				return
+			}
+			switch reuse {
+			case NodeIDTombstoned:
+				httpx.WriteJSON(w, http.StatusForbidden, map[string]string{
+					"error": "node id was deleted by another owner and cannot be registered; remove nodeID from state.json to register as a new node",
+					"code":  nodeRegisterCodeRetired,
+				})
+				return
+			case NodeIDReferenced:
+				httpx.WriteJSON(w, http.StatusForbidden, map[string]string{
+					"error": "node id is still referenced by stored data of a removed node; remove nodeID from state.json to register as a new node",
+					"code":  nodeRegisterCodeReferenced,
+				})
+				return
+			}
+		}
 		if found {
 			existing, existingFound = e, true
 			mismatch := existing.OwnerType != ownerType ||
@@ -1130,6 +1193,26 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 			if existing.RemovedAt != 0 {
 				log.Printf("node %s: WARNING — registering a node id that was deregistered (uninstalled) at %d; it will run but stays excluded from placement, ICE and downloads until an admin restores it in the Relayium panel", req.NodeID, existing.RemovedAt)
 			}
+		}
+	}
+	// A-M4: cap how many live BYO nodes one account can have. Node ids are
+	// client-chosen and the BYO rollout's canary order is a hash of the id, so
+	// an unbounded population lets one user grind ids into the canary batch.
+	// Only a NEW id is counted against the cap (an empty id, or one with no
+	// row): re-registering a node the user already has always passes, so an
+	// account that is over the cap today keeps every node it has.
+	if ownerType == "user" && !existingFound {
+		live, cerr := s.store.CountLiveUserNodes(r.Context(), ownerUserID)
+		if cerr != nil {
+			httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+			return
+		}
+		if live >= maxLiveNodesPerUser {
+			httpx.WriteJSON(w, http.StatusForbidden, map[string]string{
+				"error": fmt.Sprintf("node limit reached: an account can have at most %d active nodes; delete or uninstall one first", maxLiveNodesPerUser),
+				"code":  nodeRegisterCodeLimit,
+			})
+			return
 		}
 	}
 	// Pin ratchet: once a node has reported a TLS fingerprint, a re-register must

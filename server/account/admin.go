@@ -1591,13 +1591,27 @@ func (s *Service) handleAdminMarkNodeRemoved(w http.ResponseWriter, r *http.Requ
 }
 
 // handleAdminDeleteNode deletes an official (fleet) node.
+//
+// A-M3: the delete is refused (409) while stored files still point at the
+// node — deleting it would leave them resolving against an id nobody owns —
+// and a successful delete tombstones the id so no other owner can ever
+// register it (the fleet itself may bring the machine back as a new node). The normal way to retire a machine is drain → wait until its file
+// count reaches 0 → uninstall (deregistration marks it removed); delete is only
+// for clearing out a row that no longer carries anything.
 func (s *Service) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if err := s.Store().DeleteFleetNode(r.Context(), r.PathValue("id")); err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		switch {
+		case errors.Is(err, ErrNodeHasStoredFiles):
+			http.Error(w, "this node still holds stored files: drain it and wait until its file count is 0 (expired files must also be collected) before deleting it", http.StatusConflict)
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		default:
+			http.Error(w, "server error", http.StatusInternalServerError)
+		}
 		return
 	}
 	http.Redirect(w, r, "/admin/fleet", http.StatusFound)

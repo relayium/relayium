@@ -325,6 +325,19 @@ CREATE TABLE IF NOT EXISTS pending_node_deletes (
   billed_through INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (blob_key, node_id)
 );
+-- node_tombstones: every node id ever hard-deleted (DeleteNode /
+-- DeleteFleetNode write it in the SAME transaction as the DELETE). The
+-- register handler refuses a not-found id listed here unless the registrant is
+-- the recorded owner, so a deleted node's id -- fleet ids are public via
+-- /api/ice -- can never be claimed by someone else and receive the download/GC
+-- traffic still addressed to it (A-M3); its own owner may bring it back.
+-- Additive: an older binary never reads it.
+CREATE TABLE IF NOT EXISTS node_tombstones (
+  id            TEXT PRIMARY KEY,
+  owner_type    TEXT NOT NULL DEFAULT '',
+  owner_user_id TEXT NOT NULL DEFAULT '',
+  deleted_at    INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS node_tokens (
   id           TEXT PRIMARY KEY,
   token_hash   TEXT NOT NULL UNIQUE,
@@ -7624,6 +7637,12 @@ func (s *SQLiteStore) DeleteNode(ctx context.Context, id, ownerUserID string) er
 	}
 	defer tx.Rollback() // no-op after a successful Commit
 
+	// Tombstone first, from the very row about to be deleted (same owner
+	// scope), so the id is retired iff the delete below lands: an ErrNotFound
+	// return rolls this back with it. See node_tombstones.
+	if err := tombstoneNodeTx(ctx, tx, `id = ? AND owner_user_id = ?`, id, ownerUserID); err != nil {
+		return err
+	}
 	// Owner-scoped: only delete a node this user owns.
 	res, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND owner_user_id = ?`, id, ownerUserID)
 	if err != nil {
@@ -7814,6 +7833,32 @@ func (s *SQLiteStore) DeleteFleetNode(ctx context.Context, id string) error {
 	}
 	defer tx.Rollback() // no-op after a successful Commit
 
+	// Existence first, so a user node id or a missing id stays ErrNotFound
+	// rather than disclosing whether files point at it.
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM nodes WHERE id = ? AND owner_type = 'fleet'`, id).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return ErrNotFound
+	}
+	// A-M3: refuse while any stored_files row -- live or expired-but-not-yet-
+	// collected -- still names the node. Deleting the row would leave those
+	// files resolving (blobFor) and GC-deleting against an id nobody owns. The
+	// check runs inside this IMMEDIATE transaction, so no placement can slip a
+	// new row in between it and the DELETE.
+	var files int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM stored_files WHERE node_id = ?)`, id).Scan(&files); err != nil {
+		return err
+	}
+	if files != 0 {
+		return ErrNodeHasStoredFiles
+	}
+	if err := tombstoneNodeTx(ctx, tx, `id = ? AND owner_type = 'fleet'`, id); err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND owner_type = 'fleet'`, id)
 	if err != nil {
 		return err
@@ -7825,6 +7870,82 @@ func (s *SQLiteStore) DeleteFleetNode(ctx context.Context, id string) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// tombstoneNodeTx records the node row(s) matching where (a predicate over the
+// nodes table) in node_tombstones, inside the caller's delete transaction. An
+// id already tombstoned keeps its first record.
+func tombstoneNodeTx(ctx context.Context, tx *sql.Tx, where string, args ...any) error {
+	_, err := tx.ExecContext(ctx,
+		`INSERT INTO node_tombstones (id, owner_type, owner_user_id, deleted_at)
+		 SELECT id, owner_type, COALESCE(owner_user_id, ''), CAST(strftime('%s','now') AS INTEGER)
+		   FROM nodes WHERE `+where+`
+		 ON CONFLICT(id) DO NOTHING`, args...)
+	return err
+}
+
+// NodeIDReuseState: see Store.NodeIDReuseState. Read on the writer pool so a
+// tombstone committed a moment ago is never missed by a lagging reader.
+//
+// Why a same-owner tombstone is allowed even while rows still reference the id:
+// placement only ever puts a blob on a node of the right owner class — a user
+// node receives only its OWNER's uploads (placeUpload -> UserStorageNodes), a
+// fleet node only fleet placement (StorageNodes, owner_type='fleet') — so every
+// row that can still name the id was addressed to that same owner's machine.
+// Letting that owner re-register it routes the traffic back to the machine it
+// was always meant for (the blobs may well still be on its disk); nobody else
+// is exposed. Without a tombstone the owner is unknown, so a reference refuses
+// everyone.
+func (s *SQLiteStore) NodeIDReuseState(ctx context.Context, id, ownerType, ownerUserID string) (NodeIDReuse, error) {
+	var tombType, tombUser sql.NullString
+	var ref int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT (SELECT owner_type FROM node_tombstones WHERE id = ?),
+		        (SELECT owner_user_id FROM node_tombstones WHERE id = ?),
+		        EXISTS(SELECT 1 FROM stored_files WHERE node_id = ?)
+		     OR EXISTS(SELECT 1 FROM upload_sessions WHERE node_id = ?)
+		     OR EXISTS(SELECT 1 FROM pending_node_deletes WHERE node_id = ?)`,
+		id, id, id, id, id).Scan(&tombType, &tombUser, &ref)
+	if err != nil {
+		return NodeIDFresh, err
+	}
+	if tombType.Valid {
+		if sameNodeOwner(tombType.String, tombUser.String, ownerType, ownerUserID) {
+			return NodeIDFresh, nil
+		}
+		return NodeIDTombstoned, nil
+	}
+	if ref != 0 {
+		return NodeIDReferenced, nil
+	}
+	return NodeIDFresh, nil
+}
+
+// sameNodeOwner reports whether a registrant (ownerType, ownerUserID) is the
+// owner a tombstone recorded: fleet matches fleet (the fleet is one operator,
+// whichever fleet credential it presents); a user node matches only the same,
+// non-empty user id. Mirrors the register handler's ownership guard for live
+// rows.
+func sameNodeOwner(tombType, tombUser, ownerType, ownerUserID string) bool {
+	if tombType != ownerType {
+		return false
+	}
+	switch ownerType {
+	case "fleet":
+		return true
+	case "user":
+		return ownerUserID != "" && tombUser == ownerUserID
+	}
+	return false
+}
+
+// CountLiveUserNodes: see Store.CountLiveUserNodes.
+func (s *SQLiteStore) CountLiveUserNodes(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM nodes WHERE owner_type = 'user' AND owner_user_id = ? AND removed_at = 0`,
+		userID).Scan(&n)
+	return n, err
 }
 
 func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]Node, error) {

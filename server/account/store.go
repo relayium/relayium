@@ -10,6 +10,27 @@ import (
 // Postgres swap need only touch sqlite.go.
 var ErrNotFound = errors.New("account: not found")
 
+// ErrNodeHasStoredFiles is returned by DeleteFleetNode while stored_files rows
+// still name the node: deleting it would leave those files pointing at an id
+// nobody owns (A-M3). Drain the node and wait for its files to expire and be
+// collected first.
+var ErrNodeHasStoredFiles = errors.New("account: node still holds stored files")
+
+// NodeIDReuse classifies an unregistered node id; see Store.NodeIDReuseState.
+type NodeIDReuse int
+
+const (
+	// NodeIDFresh: registrable — never deleted and unreferenced, or deleted by
+	// the registrant itself.
+	NodeIDFresh NodeIDReuse = iota
+	// NodeIDTombstoned: the id was hard-deleted by a DIFFERENT owner than the
+	// registrant; it can never be taken over.
+	NodeIDTombstoned
+	// NodeIDReferenced: no tombstone, but stored data still names the id, so
+	// whoever registered it would receive traffic meant for the old node.
+	NodeIDReferenced
+)
+
 const MaxBrowserDevicesPerAccount = 20
 
 var ErrBrowserDeviceLimit = errors.New("account: browser device limit reached")
@@ -2465,7 +2486,8 @@ type Store interface {
 	// DeleteNode removes a user-owned node, scoped to its owner: only a node
 	// with owner_user_id == ownerUserID is deleted, so a non-owner's call and a
 	// missing id are indistinguishable (both ErrNotFound). Also clears the
-	// node's pending_node_deletes entries.
+	// node's pending_node_deletes entries, and tombstones the id in the same
+	// transaction so no other owner can ever register it (A-M3).
 	DeleteNode(ctx context.Context, id, ownerUserID string) error
 	// SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
 	SetNodeLimits(ctx context.Context, nodeID string, trafficLimit, diskLimit int64) error
@@ -2514,7 +2536,26 @@ type Store interface {
 	// storage (node_id unset) — the app server's own disk fallback.
 	CentralStoredBytes(ctx context.Context) (int64, error)
 	// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'.
+	// It refuses (ErrNodeHasStoredFiles) while any stored_files row still names
+	// the node, and records the id in node_tombstones in the same transaction as
+	// the delete, so no other owner can ever register the id (A-M3).
 	DeleteFleetNode(ctx context.Context, id string) error
+	// NodeIDReuseState classifies a node id that has NO row in nodes, for a
+	// register by (ownerType, ownerUserID) — see A-M3:
+	//   - tombstoned (hard-deleted by DeleteNode/DeleteFleetNode) by the SAME
+	//     owner (fleet: owner_type fleet; user: same user id) -> NodeIDFresh:
+	//     the owner may bring its own machine back as a new node;
+	//   - tombstoned by a different owner -> NodeIDTombstoned;
+	//   - no tombstone, but a stored_files, upload_sessions or
+	//     pending_node_deletes row still names it (a deletion from before
+	//     tombstones existed, whose owner is therefore unknown) ->
+	//     NodeIDReferenced, for every registrant;
+	//   - otherwise NodeIDFresh.
+	NodeIDReuseState(ctx context.Context, id, ownerType, ownerUserID string) (NodeIDReuse, error)
+	// CountLiveUserNodes counts a user's owner_type='user' nodes that are not
+	// deregistered (removed_at = 0) — the population the BYO rollout governs and
+	// the per-user registration cap (maxLiveNodesPerUser) is checked against.
+	CountLiveUserNodes(ctx context.Context, userID string) (int, error)
 	// node_rollout (Part 2: automatic node update rollout state machine).
 	// GetRolloutTrack returns ok=false if the track has no persisted state yet
 	// (a fresh DB, or a track that has never had a rollout started).
