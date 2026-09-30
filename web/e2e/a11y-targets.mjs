@@ -119,6 +119,45 @@ export const TARGETS = [
     viewport: MOBILE, scheme: "dark", fixture: ME_ROUTES,
     note: "同一块界面的深色令牌与窄屏布局" },
 
+  // ── Stored-link page and the mailed account landings (audit 2026-09-28) ──
+  // /offline-transfer had no target. Signed out it is a sign-in prompt over the
+  // marketing sections; signed in it is the upload widget itself (burn/TTL rows,
+  // drop zone, file input), which only exists once the session has landed — so
+  // that cell waits on the widget's options, not on the page shell.
+  { id: "spa/offline-transfer/signed-out", url: "/offline-transfer", ready: ".offlinepage .signin",
+    viewport: DESKTOP, scheme: "light",
+    note: "stored download-link page, signed out: sign-in prompt, how-it-works and FAQ" },
+  { id: "spa/offline-transfer/signed-in", url: "/offline-transfer", ready: ".offlinepage .stored .opts",
+    viewport: MOBILE, scheme: "dark", fixture: ME_ROUTES,
+    note: "the upload widget (settings rows, drop zone) in dark tokens at 390px" },
+  // The five landings the server's emails link to. Each reads its token from
+  // the fragment and does nothing until a button is pressed, so a dummy token
+  // reaches the actionable state with no backend at all. Every ready selector
+  // is the control that exists only in that state — the "no token" branch of
+  // the same page has none of them.
+  { id: "spa/magic-link/confirm", url: "/magic-link#token=a11y", ready: ".auth-page .btn-primary.auth-action",
+    viewport: DESKTOP, scheme: "light", note: "magic-link sign-in confirmation" },
+  { id: "spa/verify-email/confirm", url: "/verify-email#token=a11y", ready: ".auth-page form.auth-form",
+    viewport: DESKTOP, scheme: "light", note: "email verification: password confirm form" },
+  { id: "spa/reset-password/form", url: "/reset-password#token=a11y", ready: ".auth-page form.auth-form",
+    viewport: MOBILE, scheme: "dark", note: "password reset form, dark tokens at 390px" },
+  { id: "spa/account-delete/confirm", url: "/account/delete/confirm#token=a11y",
+    ready: '.auth-page [data-testid="delete-consequence"]', viewport: DESKTOP, scheme: "light",
+    note: "account deletion confirmation: consequence text and the destructive button" },
+  { id: "spa/account-reactivate/confirm", url: "/account/reactivate#token=a11y",
+    ready: ".auth-page .btn-primary.auth-action", viewport: DESKTOP, scheme: "dark",
+    note: "account reactivation confirmation, dark tokens" },
+  // Simplified Chinese is the other maintained language, and every SPA cell
+  // above renders English. `?lang=` selects the table for this load only (it
+  // is not saved), so these cells cannot leak Chinese into later targets.
+  { id: "spa/landing/zh", url: "/?lang=zh", ready: "#home-text-title", viewport: MOBILE, scheme: "light",
+    note: "zh-Hans home page, including the lazy below-the-fold sections" },
+  { id: "spa/offline-transfer/zh", url: "/offline-transfer?lang=zh", ready: ".offlinepage .signin",
+    viewport: DESKTOP, scheme: "dark", note: "zh-Hans stored-link page, dark tokens" },
+  { id: "spa/account-delete/zh", url: "/account/delete/confirm?lang=zh#token=a11y",
+    ready: '.auth-page [data-testid="delete-consequence"]', viewport: DESKTOP, scheme: "light",
+    note: "zh-Hans destructive confirmation copy" },
+
   // ── 两个动态决策态 ─────────────────────────────────────────────────────
   // 真正的"同意/验证"决策态需要两个 peer 和一台信令服务器，那是 mixed-link /
   // code-room 上的事。这里取的是账户弹窗的两种会话：登出态的登录表单，和已登录

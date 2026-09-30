@@ -110,9 +110,9 @@ function evaluate(w) {
   // 6-8. The user-facing surfaces, in both maintained languages.
   claim("readme|mode-scoped", has(w.readme, "This mode is direct-only: with no direct path"),
     "README's send/receive bullet no longer scopes the limit to the mode");
-  claim("cli-page|en-mode-scoped", has(w.en, "This mode is direct-only, so if both ends are behind strict NAT"),
+  claim("cli-page|en-mode-scoped", has(w.en, "the older CLI-to-CLI pairing is used unchanged: it needs a direct path and fails rather than falling back to a relay"),
     "/cli's English note no longer scopes the limit to the mode");
-  claim("cli-page|zh-mode-scoped", has(w.zh, "这个模式只走直连"),
+  claim("cli-page|zh-mode-scoped", has(w.zh, "会原样使用旧的 CLI 对 CLI 配对：它需要一条直连路径，找不到时传输失败，而不是回落到中继"),
     "/cli's Simplified Chinese note no longer scopes the limit to the mode");
 
   // 9. The invariant stays absolute, and stays separate from the path fact.
@@ -150,8 +150,8 @@ const MUTATIONS = {
   "help|names-the-relayed-path": (w) => ({ ...w, help: w.help.replace("whenever the server issues a TURN relay for the\ncode, a link sends every byte through that relay", "a link behaves differently") }),
   "crossnet|comment-mode-scoped": (w) => ({ ...w, crossnet: w.crossnet.replace("This wire is direct-only: it races a direct connection", "The CLI is direct-only: it races a direct connection") }),
   "readme|mode-scoped": (w) => ({ ...w, readme: w.readme.replace("This mode is direct-only: with no direct path", "There is no relay: with no direct path") }),
-  "cli-page|en-mode-scoped": (w) => ({ ...w, en: w.en.replace("This mode is direct-only, so if both ends are behind strict NAT", "The CLI is direct-only, so if both ends are behind strict NAT") }),
-  "cli-page|zh-mode-scoped": (w) => ({ ...w, zh: w.zh.replace("这个模式只走直连", "CLI 只走直连") }),
+  "cli-page|en-mode-scoped": (w) => ({ ...w, en: w.en.replace("the older CLI-to-CLI pairing is used unchanged: it needs a direct path and fails rather than falling back to a relay", "the CLI needs a direct path and fails rather than falling back to a relay") }),
+  "cli-page|zh-mode-scoped": (w) => ({ ...w, zh: w.zh.replace("会原样使用旧的 CLI 对 CLI 配对：它需要一条直连路径，找不到时传输失败，而不是回落到中继", "CLI 需要一条直连路径，找不到时传输失败，而不是回落到中继") }),
   "billing|invariant-separate": (w) => ({ ...w, billing: w.billing.replace("no path lets relayium.com read a file", "relayium.com cannot meter a direct transfer") }),
   "all|no-retired-pledge": (w) => ({ ...w, readme: `${w.readme}\n\nthe CLI never relays file bytes\n` }),
 };

@@ -56,26 +56,87 @@ afterEach(() => {
   history.replaceState(null, "", "/");
 });
 
+// The links are built in Go, so these cases read the Go source — but not with a
+// bare `toContain` over the whole file, which a comment, a dead constant or a
+// test fixture would satisfy just as well as the real builder. Each case pulls
+// the format out of the ONE statement that builds the mailed link, inside the
+// function that builds it, expands it the way fmt.Sprintf / the redirect would,
+// and then feeds that exact URL to the SPA: the router must land on the right
+// page, and the page must POST the token the server put in the link.
+const goSource = (file: string) =>
+  readFileSync(resolve(process.cwd(), `../server/account/${file}`), "utf8");
+
+/** Body of a top-level Go func (from its signature to the closing brace at column 0). */
+function goFunc(src: string, signature: RegExp): string {
+  const m = signature.exec(src);
+  expect(m, `Go function ${signature} not found`).not.toBeNull();
+  const rest = src.slice(m!.index);
+  const close = rest.indexOf("\n}\n");
+  expect(close, `end of ${signature} not found`).toBeGreaterThan(0);
+  return rest.slice(0, close + 2);
+}
+
+/** The URL the given builder mails for `token`, expanded from its Sprintf format. */
+function mailedLink(body: string, token: string): URL {
+  const m = /fmt\.Sprintf\("%s(\/[^"#%]*)#token=%s", s\.cfg\.BaseURL, raw\)/.exec(body);
+  expect(m, "builder no longer formats %s<path>#token=%s from BaseURL and the raw token").not.toBeNull();
+  return new URL(`https://relayium.test${m![1]}#token=${token}`);
+}
+
+/** Open `url` in the SPA, press the page's button, and return the token it POSTed. */
+async function postedToken(
+  url: URL,
+  component: typeof AccountDeleteConfirm,
+  cta: string,
+  reply: Response,
+): Promise<unknown> {
+  history.replaceState(null, "", url.pathname + url.hash);
+  const fetchMock = vi.fn(async () => reply);
+  vi.stubGlobal("fetch", fetchMock);
+  render(component);
+  await settle();
+  button(cta)!.click();
+  await settle();
+  const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit] | undefined;
+  expect(call, "the page sent nothing").toBeTruthy();
+  return JSON.parse(call![1].body as string).token;
+}
+
 describe("routes exist for the links the server mails", () => {
-  it("the delete-confirm path is the one RequestAccountDeletion builds", () => {
-    const go = readFileSync(resolve(process.cwd(), "../server/account/deletion.go"), "utf8");
-    expect(go).toContain(`"%s${ACCOUNT_DELETE_PATH}#token=%s"`);
-    expect(routeFromLocation(ACCOUNT_DELETE_PATH, "")).toBe("account-delete");
+  it("the link RequestAccountDeletion mails opens the delete page and spends its token", async () => {
+    const body = goFunc(goSource("deletion.go"), /^func \(s \*Service\) RequestAccountDeletion\(/m);
+    const url = mailedLink(body, "mailed-del-tok");
+    // …and that link is the one actually handed to the mailer, not a stray value.
+    expect(body).toMatch(/link := fmt\.Sprintf\([^\n]*\)\n\treturn s\.mailer\.SendAccountDeletionConfirm\(ctx, email, link\)/);
+    expect(url.pathname).toBe(ACCOUNT_DELETE_PATH);
+    expect(routeFromLocation(url.pathname, url.hash)).toBe("account-delete");
+    expect(await postedToken(url, AccountDeleteConfirm, messages.en.accountDelete.cta, json(200, { status: "ok" })))
+      .toBe("mailed-del-tok");
   });
 
-  it("the reactivate path is the one reactivateLink builds", () => {
-    const go = readFileSync(resolve(process.cwd(), "../server/account/deletion.go"), "utf8");
-    expect(go).toContain(`"%s${ACCOUNT_REACTIVATE_PATH}#token=%s"`);
-    expect(routeFromLocation(ACCOUNT_REACTIVATE_PATH, "")).toBe("account-reactivate");
+  it("the link reactivateLink builds opens the reactivate page and spends its token", async () => {
+    const body = goFunc(goSource("deletion.go"), /^func \(s \*Service\) reactivateLink\(raw string\) string \{/m);
+    const url = mailedLink(body, "mailed-re-tok");
+    expect(body).toMatch(/\n\treturn fmt\.Sprintf\(/); // the formatted value IS the return value
+    expect(url.pathname).toBe(ACCOUNT_REACTIVATE_PATH);
+    expect(routeFromLocation(url.pathname, url.hash)).toBe("account-reactivate");
+    expect(await postedToken(
+      url, AccountReactivate, messages.en.accountReactivate.cta,
+      json(200, { user: { id: "u1", email: "back@example.com" } }),
+    )).toBe("mailed-re-tok");
   });
 
   it("the frozen-account OAuth redirect fragment opens the reactivation page", () => {
     // oauth.go / apple_web.go redirect a frozen account to "/#account=pending_deletion&token=…".
+    // Matched as the redirect statement itself, with the token query-escaped
+    // onto the end — the only shape routeFromLocation is then asked about.
     for (const f of ["oauth.go", "apple_web.go"]) {
-      const go = readFileSync(resolve(process.cwd(), `../server/account/${f}`), "utf8");
-      expect(go, f).toContain(`"/#account=pending_deletion&token="`);
+      const m = /http\.Redirect\(w, r, "(\/#account=pending_deletion&token=)"\+url\.QueryEscape\(raw\), http\.StatusFound\)/
+        .exec(goSource(f));
+      expect(m, `${f}: frozen-account redirect not found`).not.toBeNull();
+      const target = new URL(`https://relayium.test${m![1]}${encodeURIComponent("frag/tok+=")}`);
+      expect(routeFromLocation(target.pathname, target.hash), f).toBe("account-reactivate");
     }
-    expect(routeFromLocation("/", "#account=pending_deletion&token=abc")).toBe("account-reactivate");
     expect(isReactivateFragment("#account=pending_deletion")).toBe(false); // no token, nothing to offer
     expect(routeFromLocation("/", "#compare")).toBe("lan");
   });

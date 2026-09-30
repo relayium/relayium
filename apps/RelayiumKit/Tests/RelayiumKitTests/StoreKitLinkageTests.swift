@@ -413,11 +413,22 @@ final class StoreKitLinkageTests: XCTestCase {
         let appStore = try plist("RelayiumAppStore/Info.plist")
         let direct = try plist("Relayium/Info.plist")
 
-        let sparkleKeys = ["SUFeedURL", "SUPublicEDKey", "SUEnableInstallerLauncherService"]
+        let sparkleKeys = ["SUFeedURL", "SUPublicEDKey", "SUEnableInstallerLauncherService",
+                           "SUVerifyUpdateBeforeExtraction"]
         for key in sparkleKeys {
             XCTAssertNil(appStore[key], "the App Store Info.plist carries \(key)")
             XCTAssertNotNil(direct[key], "the direct Info.plist lost \(key)")
         }
+        // A-L10 (DECISION-LOG 2026-09-30): the EdDSA signature over the
+        // downloaded archive is checked BEFORE Sparkle extracts it. With the
+        // pinned Sparkle 2.9.4 a Developer-ID-signed DMG (our package form)
+        // keeps the key-rotation fallback, so rotation stays possible.
+        XCTAssertEqual(direct["SUVerifyUpdateBeforeExtraction"] as? Bool, true,
+                       "the direct build extracts an update before verifying it")
+        // `SURequireSignedFeed` stays absent until the release pipeline signs
+        // the final appcast after staging rewrites it.
+        XCTAssertNil(direct["SURequireSignedFeed"],
+                     "a signed feed is required but the release pipeline does not sign the feed")
         // Same app otherwise: same declared languages, same document types, same
         // category. A user installing one after the other must not find a
         // different product.

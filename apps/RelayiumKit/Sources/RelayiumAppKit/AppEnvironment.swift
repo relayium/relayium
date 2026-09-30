@@ -1744,13 +1744,19 @@ public enum AppEnvironment {
     /// staged job survives a launch by design — that is what makes a cancelled
     /// upload resumable — which also means it survives from one acceptance run
     /// into the next unless the runs are given separate roots.
+    /// `keys` exists for the same reason: an acceptance launch passes an
+    /// in-memory store, so its staged jobs' content keys never reach the
+    /// product's keychain namespace, which the installed app's real pending
+    /// uploads share. A shipped launch passes nil and gets that namespace.
     public static func makePendingUploadSupport(drafts: SharedDraftStore?,
-                                                root: URL? = nil) -> PendingUploadSupport {
+                                                root: URL? = nil,
+                                                keys: StoredLinkKeyStore? = nil)
+        -> PendingUploadSupport {
         let defaultRoot = isEngineeringCandidate
             ? applicationSupportRoot(create: false)!.appendingPathComponent("PendingUploads", isDirectory: true)
             : PendingUploadStore.defaultRoot()
         return PendingUploadSupport(store: PendingUploadStore(root: root ?? defaultRoot),
-                             keys: makePendingUploadKeyStore(),
+                             keys: keys ?? makePendingUploadKeyStore(),
                              drafts: drafts)
     }
 

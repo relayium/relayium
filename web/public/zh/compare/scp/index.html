@@ -204,7 +204,7 @@ pre code{background:none;padding:0;border-radius:0}
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
       <section class="sheet"><h2>实际区别</h2>
-      <p>scp 通过 SSH 复制。Relayium push 与 sync 只连接 relayium:// 地址上的 relayium serve 监听端；send/receive 用短配对码连接两台在线 CLI。</p>
+      <p>scp 通过 SSH 复制。Relayium push 与 sync 只连接 relayium:// 地址上的 relayium serve 监听端；send/receive 用短配对码连接两台在线设备——CLI、Relayium 应用或网页均可。</p>
       <pre tabindex="0"><code>scp -r ./photos user@server:backups/</code></pre>
       <pre tabindex="0"><code>relayium push ./photos relayium://server.example</code></pre>
       <pre tabindex="0"><code>relayium sync ./photos relayium://server.example --watch</code></pre></section>

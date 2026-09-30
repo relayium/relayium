@@ -32,6 +32,7 @@ func TestDownloadReceiptSettlesNothingForAKnownFile(t *testing.T) {
 	s := nodeService(t, "fleet-secret")
 	ctx := context.Background()
 	owner, _ := s.store.UpsertUserByEmail(ctx, "recv@example.com", "")
+	am3EnsureNode(t, s.store.(*SQLiteStore), "fleetnode", "fleet", "") // the insert's node fence
 	if err := s.store.CreateStoredFile(ctx, StoredFile{
 		ID: "f", UserID: owner.ID, BlobKey: "bk", EncManifest: []byte("m"), Size: 200,
 		NodeID: "fleetnode", CreatedAt: 1, ExpiresAt: 1 << 40,

@@ -125,8 +125,12 @@ if [ -n "$RELEASE_PUBKEY" ]; then
     else
       err "release signature not found — refusing to install (set RELAYIUM_ALLOW_UNSIGNED=1 to override)"
     fi
+  elif [ "${RELAYIUM_ALLOW_UNSIGNED:-}" = "1" ]; then
+    echo "WARNING: openssl not found; verifying checksum only (RELAYIUM_ALLOW_UNSIGNED=1)." >&2
   else
-    echo "Note: openssl not found; verifying checksum only." >&2
+    # Fail closed: without openssl the release signature cannot be checked, and a
+    # checksum alone does not protect against a tampered checksums.txt.
+    err "openssl not found, so the release signature cannot be verified — install openssl and retry (or set RELAYIUM_ALLOW_UNSIGNED=1 to install with checksum-only verification)"
   fi
 fi
 

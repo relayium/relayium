@@ -903,3 +903,222 @@ func backfillSubscriptionSources(ctx context.Context, db *sql.DB) error {
 		           WHERE s.user_id = u.id AND s.provider = 'stripe')`)
 	return err
 }
+
+// ApplyStripeReconcileDowngrade is the reconcile sweep's missed-cancellation
+// write: Stripe's source row goes to free/canceled and the canonical
+// subscription binding is cleared — but ONLY if that row is still exactly
+// `observed`, the copy the sweep read BEFORE it asked Stripe for the customer's
+// live subscriptions. Any write to the row in between (a webhook granting a new
+// subscription, a renewal, a deletion already applied) changes at least one
+// compared column and turns this into a no-op reporting false, so a webhook
+// that lands while the sweep is deciding always wins over the sweep's older
+// evidence.
+//
+// The downgrade is stamped on Stripe's clock, never the local one:
+// max(observed.EventAt, endedAt), where endedAt is the latest ended_at of the
+// customer's ended subscriptions from the same Stripe list that showed nothing
+// live (0 = none reported). applySourceTx drops only events STRICTLY older than
+// the stored clock, so:
+//
+//   - every subscription in that list had ended by the time Stripe answered,
+//     so any event Stripe creates AFTER the answer — a re-subscription, a
+//     reactivation — has created >= endedAt (whole seconds) and still applies,
+//     however soon after the sweep it lands and however far the local clock
+//     runs ahead;
+//   - an event created BEFORE endedAt describes a subscription state the same
+//     list already shows as superseded (nothing live). Such an event arriving
+//     late — a delayed retry or a manual dashboard resend of an `active` update
+//     from before the cancellation — would re-grant a paid tier nobody is
+//     paying for; the endedAt stamp makes it stale instead.
+//
+// observed.EventAt is the floor so the stamp never moves the clock backwards
+// (the upsert keeps it monotonic anyway). With no ended_at available the stamp
+// is exactly observed.EventAt, which rejects nothing that was not already
+// rejected before the sweep.
+//
+// The check, the binding clear and the source write are one transaction on the
+// single write connection, so nothing can interleave between them.
+func (s *SQLiteStore) ApplyStripeReconcileDowngrade(ctx context.Context, observed SubscriptionSource, endedAt, now int64) (bool, error) {
+	if observed.UserID == "" || observed.Provider != ProviderStripe {
+		return false, ErrBillingAuthorityConflict
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if _, err := acquireBillingAuthorityTx(ctx, tx, BillingAuthorityRequest{UserID: observed.UserID, Provider: ProviderStripe, Now: now}); err != nil {
+		return false, err
+	}
+	current, err := scanSubscriptionSource(tx.QueryRowContext(ctx,
+		`SELECT `+subscriptionSourceCols+` FROM subscription_sources WHERE user_id = ? AND provider = ?`,
+		observed.UserID, ProviderStripe))
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if current != observed {
+		return false, nil // the row moved after the sweep's evidence was taken
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET stripe_subscription_id = '' WHERE id = ?`, observed.UserID); err != nil {
+		return false, err
+	}
+	if err := bindExternalSubscriptionTx(ctx, tx, observed.UserID, ProviderStripe, ""); err != nil {
+		return false, err
+	}
+	stamp := observed.EventAt
+	if endedAt > stamp {
+		stamp = endedAt
+	}
+	res, err := applySourceTx(ctx, tx, SourceEvent{
+		UserID: observed.UserID, Provider: ProviderStripe, PlanID: "free", Status: "canceled",
+		EventAt: stamp, Now: now,
+	})
+	if err != nil {
+		return false, err
+	}
+	if !res.Applied {
+		return false, nil // rolled back: the binding clear above is discarded too
+	}
+	return true, tx.Commit()
+}
+
+// StripeSourceWrite is one conditional write to a user's Stripe source row:
+// optionally (re)binding the canonical subscription id, optionally applying a
+// lifecycle event — both only if the row is still exactly what the caller
+// observed BEFORE it fetched the Stripe evidence the write is based on.
+type StripeSourceWrite struct {
+	UserID string
+	// Observed / ObservedExists are the row as read before the evidence was
+	// fetched (ObservedExists=false: there was no Stripe row).
+	Observed       SubscriptionSource
+	ObservedExists bool
+	// Bind, when non-nil, sets users.stripe_subscription_id and the source
+	// row's external id to *Bind ("" clears). Ownership is enforced exactly as
+	// SetUserStripeSubscription does (ErrExternalSubscriptionOwned).
+	Bind *string
+	// Event, when non-nil, is applied through applySourceTx (the same rules as
+	// ApplyAuthorizedStripeLifecycle, including purchase-attempt convergence).
+	// If it is dropped as stale, NOTHING commits — a Bind in the same write
+	// is rolled back with it, so a stale event can never leave a binding
+	// behind for somebody else's entitlement.
+	Event *SourceEvent
+	// ExpectUser, when set, extends the comparison to the users-row fields the
+	// caller DECIDED on (which path to take: adopt, dedup or admin), so a
+	// decision taken from a users snapshot older than the write cannot land.
+	ExpectUser         bool
+	UserSubscriptionID string
+	UserPlanSource     string
+	// Now stamps the authority check when there is no Event (bind-only).
+	Now int64
+}
+
+// StripeSourceWriteResult reports a conditional write.
+type StripeSourceWriteResult struct {
+	// Unchanged is false when the row no longer matched the observation;
+	// nothing was written and the caller must re-observe and re-fetch.
+	Unchanged bool
+	// Apply is the event's result (Applied=false: dropped as stale).
+	Apply SubscriptionApply
+	// After / AfterExists are the row as committed, so a caller can chain a
+	// second conditional write on top of its own first one.
+	After       SubscriptionSource
+	AfterExists bool
+}
+
+// ApplyStripeSourceIfUnchanged is the webhook's counterpart of
+// ApplyStripeReconcileDowngrade. A webhook fetches Stripe's canonical state and
+// then writes it; if anything else wrote this user's Stripe row in between —
+// the reconcile sweep committing a downgrade from newer evidence, or another
+// webhook — the fetched state may be older than what is stored, and Stripe's
+// whole-second clocks cannot order the two (the strict "<" replay guard lets an
+// equal-second write through). So the write happens only if the row is still
+// the one observed before the fetch; otherwise nothing is written and the
+// caller re-observes and re-fetches. Check and writes are one transaction on
+// the single write connection.
+func (s *SQLiteStore) ApplyStripeSourceIfUnchanged(ctx context.Context, in StripeSourceWrite) (StripeSourceWriteResult, error) {
+	if in.UserID == "" || (in.ObservedExists && (in.Observed.UserID != in.UserID || in.Observed.Provider != ProviderStripe)) ||
+		(in.Event != nil && (in.Event.UserID != in.UserID || in.Event.Provider != ProviderStripe)) {
+		return StripeSourceWriteResult{}, ErrBillingAuthorityConflict
+	}
+	now := in.Now
+	if in.Event != nil {
+		now = in.Event.Now
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return StripeSourceWriteResult{}, err
+	}
+	defer tx.Rollback()
+	authority, err := acquireBillingAuthorityTx(ctx, tx, BillingAuthorityRequest{UserID: in.UserID, Provider: ProviderStripe, Now: now})
+	if err != nil {
+		return StripeSourceWriteResult{}, err
+	}
+	current, exists, err := stripeSourceRowTx(ctx, tx, in.UserID)
+	if err != nil {
+		return StripeSourceWriteResult{}, err
+	}
+	if exists != in.ObservedExists || (exists && current != in.Observed) {
+		return StripeSourceWriteResult{}, nil // moved since the evidence was fetched
+	}
+	if in.ExpectUser {
+		var subID, planSource string
+		if err := tx.QueryRowContext(ctx, `SELECT stripe_subscription_id, plan_source FROM users WHERE id = ?`, in.UserID).
+			Scan(&subID, &planSource); err != nil {
+			return StripeSourceWriteResult{}, err
+		}
+		if subID != in.UserSubscriptionID || planSource != in.UserPlanSource {
+			return StripeSourceWriteResult{}, nil // the decision's users snapshot is stale
+		}
+	}
+	if in.Bind != nil {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE users SET stripe_subscription_id = ? WHERE id = ?`, *in.Bind, in.UserID); err != nil {
+			return StripeSourceWriteResult{}, err
+		}
+		if err := bindExternalSubscriptionTx(ctx, tx, in.UserID, ProviderStripe, *in.Bind); err != nil {
+			return StripeSourceWriteResult{}, err
+		}
+	}
+	out := StripeSourceWriteResult{Unchanged: true}
+	if in.Event != nil {
+		ev := *in.Event
+		res, err := applySourceTx(ctx, tx, ev)
+		if err != nil {
+			return StripeSourceWriteResult{}, err
+		}
+		if !res.Applied {
+			// Stale: roll back everything, including a Bind above.
+			return StripeSourceWriteResult{Unchanged: true, Apply: res, After: current, AfterExists: exists}, nil
+		}
+		// Same attempt convergence as ApplyAuthorizedStripeLifecycle.
+		if stripeAttemptMayConverge(ev.Status) && ev.BillingAttemptID != "" && ev.ExternalID != "" {
+			if _, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts
+ SET state='resolved', provider_subscription_id=CASE WHEN provider_subscription_id='' THEN ? ELSE provider_subscription_id END
+ WHERE id=? AND user_id=? AND epoch=? AND provider=? AND state='dispatched'
+   AND provider_session_id<>''
+   AND (provider_subscription_id='' OR provider_subscription_id=?)
+   AND (?='' OR product_id=?)`, ev.ExternalID, ev.BillingAttemptID, ev.UserID, authority.Epoch, ProviderStripe, ev.ExternalID, ev.BillingProductID, ev.BillingProductID); err != nil {
+				return StripeSourceWriteResult{}, err
+			}
+		}
+		out.Apply = res
+	}
+	if out.After, out.AfterExists, err = stripeSourceRowTx(ctx, tx, in.UserID); err != nil {
+		return StripeSourceWriteResult{}, err
+	}
+	return out, tx.Commit()
+}
+
+func stripeSourceRowTx(ctx context.Context, tx *sql.Tx, userID string) (SubscriptionSource, bool, error) {
+	row, err := scanSubscriptionSource(tx.QueryRowContext(ctx,
+		`SELECT `+subscriptionSourceCols+` FROM subscription_sources WHERE user_id = ? AND provider = ?`,
+		userID, ProviderStripe))
+	if err == sql.ErrNoRows {
+		return SubscriptionSource{}, false, nil
+	}
+	return row, err == nil, err
+}

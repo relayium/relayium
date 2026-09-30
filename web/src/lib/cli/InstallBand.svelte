@@ -33,6 +33,9 @@
         title={COMMANDS.install.name}
         {...copyProps(cli.copy, COMMANDS.install.name)}
       />
+      <!-- install.sh fails closed without openssl (it cannot check the release
+           signature then); RELAYIUM_ALLOW_UNSIGNED=1 is the explicit opt-out. -->
+      <p class="note">{cli.installVerifyNote}</p>
     </div>
 
     <div class="windows">
@@ -160,6 +163,7 @@
      held to a readable line by their 349px column; at the band's full width
      they would run past 110 characters. */
   .alt,
+  .posix .note,
   .windows p {
     max-inline-size: 62ch;
   }

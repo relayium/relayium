@@ -14,8 +14,11 @@ import (
 
 // H2 guard. The direct coturn->Redis ingest keys the usage ledger by coturn's
 // raw session id, which restarts from zero on every coturn restart and is
-// shared across coturn hosts, so enabling it would add one user's relay bytes
-// to another user's bill. Setting -redis-addr must therefore start nothing:
+// shared across coturn hosts. Since B-L4, RecordUsage refuses a report whose
+// user or node does not own the id, so a reused id no longer bills another
+// user; the later allocation would instead go unmetered (or, for the same
+// user, be undercounted by keep-max). The ingest stays disabled until the
+// re-keyed ingest (F02) replaces it. Setting -redis-addr must therefore start nothing:
 // no worker, no Redis subscription, no watchdog. It must also not crash the
 // server. These tests pin that.
 

@@ -7,7 +7,7 @@ const en = {
   updated: "2026-09-29",
   otherDocLabel: "Terms of Service",
   lead: [
-    "Relayium is built so that your files and ephemeral text stay yours. Local browser sessions are direct; cross-network browser sessions may carry end-to-end encrypted ciphertext through TURN; CLI text is direct-only; and stored download links hold only zero-knowledge encrypted file ciphertext.",
+    "Relayium is built so that your files and ephemeral text stay yours. Local browser sessions are direct; cross-network browser sessions may carry end-to-end encrypted ciphertext through TURN; CLI pairing-code sessions do so whenever the server issues a relay for the code; and stored download links hold only zero-knowledge encrypted file ciphertext.",
     "This page explains the little data the service does handle, and the data it deliberately never sees.",
   ],
   sections: [
@@ -53,7 +53,7 @@ const en = {
     {
       heading: "Cross-network relay (TURN)",
       body: [
-        "Cross-network browser file and text sessions use a TURN server by design. TURN carries only end-to-end encrypted ciphertext and transport metadata. We attribute relayed-byte totals and timestamps to the code creator's account for quotas and abuse prevention, without inspecting message or file plaintext. CLI text is direct-only and does not use or count against TURN. Live text requires both participants to be online; Relayium provides no offline delivery or server-side message history, though either endpoint may copy or retain what it receives.",
+        "Cross-network browser file and text sessions use a TURN server by design. TURN carries only end-to-end encrypted ciphertext and transport metadata. We attribute relayed-byte totals and timestamps to the code creator's account for quotas and abuse prevention, without inspecting message or file plaintext. CLI pairing-code sessions (files, text and pair) use TURN whenever the server issues a relay for the code, and their relayed bytes are attributed the same way. Live text requires both participants to be online; Relayium provides no offline delivery or server-side message history, though either endpoint may copy or retain what it receives.",
       ],
     },
     {
@@ -146,7 +146,7 @@ const zh = {
   updated: "2026-09-29",
   otherDocLabel: "服务条款",
   lead: [
-    "Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 文本仅直连；暂存下载链接只保存零知识加密的文件密文。",
+    "Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 配对码会话在服务器为该码签发中继时也是如此；暂存下载链接只保存零知识加密的文件密文。",
     "本页说明本服务确实会处理的少量数据，以及它刻意从不接触的数据。",
   ],
   sections: [
@@ -185,7 +185,7 @@ const zh = {
     {
       heading: "跨网络中继（TURN）",
       body: [
-        "浏览器的跨网络文件与文本会话按设计使用 TURN。TURN 只承载端到端加密的密文和传输元数据。为执行配额并防止滥用，我们把中继字节总量与时间戳归属到配对码创建端的账号，但不检查消息或文件明文。CLI 文本仅直连，不使用 TURN，也不计入 TURN 用量。实时文本要求双方同时在线；Relayium 不提供离线投递或服务器端消息历史，但任一端都可能复制或保留收到的内容。",
+        "浏览器的跨网络文件与文本会话按设计使用 TURN。TURN 只承载端到端加密的密文和传输元数据。为执行配额并防止滥用，我们把中继字节总量与时间戳归属到配对码创建端的账号，但不检查消息或文件明文。CLI 配对码会话（文件、文本和 pair）在服务器为该码签发中继时使用 TURN，其中继字节按同样方式归属。实时文本要求双方同时在线；Relayium 不提供离线投递或服务器端消息历史，但任一端都可能复制或保留收到的内容。",
       ],
     },
     {
@@ -276,7 +276,7 @@ const ja = {
   updated: "2026-08-13",
   otherDocLabel: "利用規約",
   lead: [
-    "Relayium はファイルと一時テキストがお客様のものであり続けるよう設計されています。ブラウザのローカルセッションは直接接続し、ネットワークをまたぐブラウザセッションは TURN 経由でエンドツーエンド暗号化された暗号文を運ぶ場合があります。CLI テキストは直接接続のみで、一時保存リンクにはゼロ知識暗号化されたファイル暗号文だけが保存されます。",
+    "Relayium はファイルと一時テキストがお客様のものであり続けるよう設計されています。ブラウザのローカルセッションは直接接続し、ネットワークをまたぐブラウザセッションは TURN 経由でエンドツーエンド暗号化された暗号文を運ぶ場合があります。CLI のペアリングコードによるセッションも、サーバーがそのコードにリレーを発行した場合は同様で、一時保存リンクにはゼロ知識暗号化されたファイル暗号文だけが保存されます。",
     "このページでは、本サービスが実際に扱う少量のデータと、意図的に取得しないデータについて説明します。",
   ],
   sections: [
@@ -322,7 +322,7 @@ const ja = {
     {
       heading: "クロスネットワーク中継（TURN）",
       body: [
-        "ブラウザのクロスネットワークのファイルおよびテキストセッションは設計上 TURN を使用します。TURN が運ぶのはエンドツーエンド暗号化された暗号文と転送メタデータのみです。クォータと不正利用防止のため、中継バイト合計とタイムスタンプをコード作成者のアカウントに関連付けますが、メッセージやファイルの平文は検査しません。CLI テキストは直接接続のみで TURN を使用せず、TURN 使用量にも算入されません。ライブテキストには双方のオンラインが必要で、Relayium はオフライン配信やサーバー側履歴を提供しませんが、各端末は受信内容をコピーまたは保持できます。",
+        "ブラウザのクロスネットワークのファイルおよびテキストセッションは設計上 TURN を使用します。TURN が運ぶのはエンドツーエンド暗号化された暗号文と転送メタデータのみです。クォータと不正利用防止のため、中継バイト合計とタイムスタンプをコード作成者のアカウントに関連付けますが、メッセージやファイルの平文は検査しません。CLI のペアリングコードによるセッション（ファイル、テキスト、pair）は、サーバーがそのコードにリレーを発行した場合に TURN を使用し、その中継バイトも同じ方法で関連付けられます。ライブテキストには双方のオンラインが必要で、Relayium はオフライン配信やサーバー側履歴を提供しませんが、各端末は受信内容をコピーまたは保持できます。",
       ],
     },
     {
@@ -415,7 +415,7 @@ const ko = {
   updated: "2026-08-13",
   otherDocLabel: "이용약관",
   lead: [
-    "Relayium은 파일과 임시 텍스트가 사용자의 것으로 남도록 설계되었습니다. 브라우저의 로컬 세션은 직접 연결되고, 네트워크 간 브라우저 세션은 TURN을 통해 종단간 암호화된 암호문을 전송할 수 있습니다. CLI 텍스트는 직접 연결만 사용하며, 임시 다운로드 링크에는 영지식 암호화된 파일 암호문만 저장됩니다.",
+    "Relayium은 파일과 임시 텍스트가 사용자의 것으로 남도록 설계되었습니다. 브라우저의 로컬 세션은 직접 연결되고, 네트워크 간 브라우저 세션은 TURN을 통해 종단간 암호화된 암호문을 전송할 수 있습니다. CLI 페어링 코드 세션도 서버가 해당 코드에 릴레이를 발급하면 마찬가지이며, 임시 다운로드 링크에는 영지식 암호화된 파일 암호문만 저장됩니다.",
     "이 페이지에서는 서비스가 실제로 처리하는 소량의 데이터와 의도적으로 수집하지 않는 데이터를 설명합니다.",
   ],
   sections: [
@@ -461,7 +461,7 @@ const ko = {
     {
       heading: "크로스 네트워크 릴레이(TURN)",
       body: [
-        "브라우저의 네트워크 간 파일 및 텍스트 세션은 설계상 TURN을 사용합니다. TURN은 종단간 암호화된 암호문과 전송 메타데이터만 운반합니다. 할당량 적용과 남용 방지를 위해 중계 바이트 합계와 타임스탬프를 코드 생성자의 계정에 연결하지만, 메시지나 파일 평문은 검사하지 않습니다. CLI 텍스트는 직접 연결만 사용하며 TURN을 사용하거나 TURN 사용량에 포함되지 않습니다. 실시간 텍스트에는 양쪽이 동시에 온라인이어야 하며 Relayium은 오프라인 전송이나 서버 측 메시지 기록을 제공하지 않지만, 각 엔드포인트는 받은 내용을 복사하거나 보관할 수 있습니다.",
+        "브라우저의 네트워크 간 파일 및 텍스트 세션은 설계상 TURN을 사용합니다. TURN은 종단간 암호화된 암호문과 전송 메타데이터만 운반합니다. 할당량 적용과 남용 방지를 위해 중계 바이트 합계와 타임스탬프를 코드 생성자의 계정에 연결하지만, 메시지나 파일 평문은 검사하지 않습니다. CLI 페어링 코드 세션(파일, 텍스트, pair)은 서버가 해당 코드에 릴레이를 발급하면 TURN을 사용하며, 그 중계 바이트도 같은 방식으로 연결됩니다. 실시간 텍스트에는 양쪽이 동시에 온라인이어야 하며 Relayium은 오프라인 전송이나 서버 측 메시지 기록을 제공하지 않지만, 각 엔드포인트는 받은 내용을 복사하거나 보관할 수 있습니다.",
       ],
     },
     {
@@ -554,7 +554,7 @@ const de = {
   updated: "2026-08-13",
   otherDocLabel: "Nutzungsbedingungen",
   lead: [
-    "Relayium ist so konzipiert, dass Ihre Dateien und temporären Texte Ihnen gehören. Lokale Browsersitzungen sind direkt; netzwerkübergreifende Browsersitzungen können Ende-zu-Ende-verschlüsselten Chiffretext über TURN übertragen; CLI-Text ist ausschließlich direkt; Download-Links speichern nur Zero-Knowledge-verschlüsselten Datei-Chiffretext.",
+    "Relayium ist so konzipiert, dass Ihre Dateien und temporären Texte Ihnen gehören. Lokale Browsersitzungen sind direkt; netzwerkübergreifende Browsersitzungen können Ende-zu-Ende-verschlüsselten Chiffretext über TURN übertragen; Pairing-Code-Sitzungen der CLI ebenso, sobald der Server für den Code ein Relay ausstellt; Download-Links speichern nur Zero-Knowledge-verschlüsselten Datei-Chiffretext.",
     "Diese Seite erläutert, mit welchen wenigen Daten der Dienst tatsächlich umgeht und welche Daten er bewusst nie einsieht.",
   ],
   sections: [
@@ -600,7 +600,7 @@ const de = {
     {
       heading: "Netzwerkübergreifende Weiterleitung (TURN)",
       body: [
-        "Netzwerkübergreifende Datei- und Textsitzungen im Browser verwenden konstruktionsbedingt TURN. TURN transportiert nur Ende-zu-Ende-verschlüsselten Chiffretext und Transportmetadaten. Für Kontingente und Missbrauchsschutz ordnen wir Gesamtzahl und Zeitstempel der weitergeleiteten Bytes dem Konto der Code-Erstellung zu, ohne Nachrichten- oder Datei-Klartext zu prüfen. CLI-Text ist ausschließlich direkt, verwendet kein TURN und zählt nicht zur TURN-Nutzung. Live-Text setzt voraus, dass beide Seiten online sind; Relayium bietet keine Offline-Zustellung oder serverseitige Nachrichtenhistorie, aber beide Endpunkte können empfangene Inhalte kopieren oder behalten.",
+        "Netzwerkübergreifende Datei- und Textsitzungen im Browser verwenden konstruktionsbedingt TURN. TURN transportiert nur Ende-zu-Ende-verschlüsselten Chiffretext und Transportmetadaten. Für Kontingente und Missbrauchsschutz ordnen wir Gesamtzahl und Zeitstempel der weitergeleiteten Bytes dem Konto der Code-Erstellung zu, ohne Nachrichten- oder Datei-Klartext zu prüfen. Pairing-Code-Sitzungen der CLI (Dateien, Text und pair) verwenden TURN, sobald der Server für den Code ein Relay ausstellt, und ihre weitergeleiteten Bytes werden auf dieselbe Weise zugeordnet. Live-Text setzt voraus, dass beide Seiten online sind; Relayium bietet keine Offline-Zustellung oder serverseitige Nachrichtenhistorie, aber beide Endpunkte können empfangene Inhalte kopieren oder behalten.",
       ],
     },
     {
@@ -693,7 +693,7 @@ const fr = {
   updated: "2026-08-13",
   otherDocLabel: "Conditions d'utilisation",
   lead: [
-    "Relayium est conçu pour que vos fichiers et textes éphémères restent les vôtres. Les sessions locales du navigateur sont directes ; les sessions inter-réseaux du navigateur peuvent transporter du chiffré de bout en bout via TURN ; le texte CLI est uniquement direct ; les liens de téléchargement ne stockent que du chiffré de fichier à divulgation nulle.",
+    "Relayium est conçu pour que vos fichiers et textes éphémères restent les vôtres. Les sessions locales du navigateur sont directes ; les sessions inter-réseaux du navigateur peuvent transporter du chiffré de bout en bout via TURN ; les sessions CLI à code d'appairage aussi, dès que le serveur attribue un relais pour le code ; les liens de téléchargement ne stockent que du chiffré de fichier à divulgation nulle.",
     "Cette page explique les quelques données que le service traite effectivement, et celles qu'il ne voit délibérément jamais.",
   ],
   sections: [
@@ -739,7 +739,7 @@ const fr = {
     {
       heading: "Relais inter-réseau (TURN)",
       body: [
-        "Les sessions de fichiers et de texte inter-réseaux du navigateur utilisent TURN par conception. TURN ne transporte que du chiffré de bout en bout et des métadonnées de transport. Pour les quotas et la prévention des abus, nous associons le total d'octets relayés et les horodatages au compte du créateur du code, sans inspecter le texte clair des messages ou fichiers. Le texte CLI est uniquement direct, n'utilise pas TURN et ne compte pas dans son usage. Le texte en direct exige que les deux personnes soient en ligne ; Relayium ne fournit ni livraison hors ligne ni historique serveur, mais chaque terminal peut copier ou conserver ce qu'il reçoit.",
+        "Les sessions de fichiers et de texte inter-réseaux du navigateur utilisent TURN par conception. TURN ne transporte que du chiffré de bout en bout et des métadonnées de transport. Pour les quotas et la prévention des abus, nous associons le total d'octets relayés et les horodatages au compte du créateur du code, sans inspecter le texte clair des messages ou fichiers. Les sessions CLI à code d'appairage (fichiers, texte et pair) utilisent TURN dès que le serveur attribue un relais pour le code, et leurs octets relayés sont associés de la même manière. Le texte en direct exige que les deux personnes soient en ligne ; Relayium ne fournit ni livraison hors ligne ni historique serveur, mais chaque terminal peut copier ou conserver ce qu'il reçoit.",
       ],
     },
     {
@@ -832,7 +832,7 @@ const ar = {
   updated: "2026-08-13",
   otherDocLabel: "شروط الخدمة",
   lead: [
-    "صُمِّمت Relayium بحيث تظل ملفاتك ونصوصك المؤقتة مِلكًا لك. جلسات المتصفح المحلية مباشرة؛ وقد تحمل جلسات المتصفح عبر الشبكات نصًا مُشفَّرًا من الطرف إلى الطرف عبر TURN؛ ونص CLI مباشر فقط؛ ولا تحتفظ روابط التنزيل إلا بنص ملفات مُشفَّر بمعرفة صفرية.",
+    "صُمِّمت Relayium بحيث تظل ملفاتك ونصوصك المؤقتة مِلكًا لك. جلسات المتصفح المحلية مباشرة؛ وقد تحمل جلسات المتصفح عبر الشبكات نصًا مُشفَّرًا من الطرف إلى الطرف عبر TURN؛ وكذلك جلسات رمز الاقتران في CLI كلما أصدر الخادم مُرحِّلًا للرمز؛ ولا تحتفظ روابط التنزيل إلا بنص ملفات مُشفَّر بمعرفة صفرية.",
     "توضّح هذه الصفحة البيانات القليلة التي تتعامل معها الخدمة فعلًا، والبيانات التي لا تراها عن قصد أبدًا.",
   ],
   sections: [
@@ -878,7 +878,7 @@ const ar = {
     {
       heading: "المُرحِّل عبر الشبكات (TURN)",
       body: [
-        "تستخدم جلسات الملفات والنص عبر الشبكات في المتصفح TURN بحكم التصميم. لا يحمل TURN سوى النص المُشفَّر من الطرف إلى الطرف وبيانات النقل الوصفية. ولأغراض الحصص ومنع الإساءة، نربط إجمالي البايتات المُرحَّلة وطوابعها الزمنية بحساب منشئ الرمز، من دون فحص النص الصريح للرسائل أو الملفات. نص CLI مباشر فقط ولا يستخدم TURN أو يُحتسب ضمنه. يتطلب النص المباشر اتصال الطرفين بالإنترنت؛ ولا توفر Relayium تسليمًا دون اتصال أو سجل رسائل على الخادم، لكن يمكن لأي طرف نسخ ما يستلمه أو الاحتفاظ به.",
+        "تستخدم جلسات الملفات والنص عبر الشبكات في المتصفح TURN بحكم التصميم. لا يحمل TURN سوى النص المُشفَّر من الطرف إلى الطرف وبيانات النقل الوصفية. ولأغراض الحصص ومنع الإساءة، نربط إجمالي البايتات المُرحَّلة وطوابعها الزمنية بحساب منشئ الرمز، من دون فحص النص الصريح للرسائل أو الملفات. تستخدم جلسات رمز الاقتران في CLI ‏(الملفات والنص وpair) TURN كلما أصدر الخادم مُرحِّلًا للرمز، وتُربط بايتاتها المُرحَّلة بالطريقة نفسها. يتطلب النص المباشر اتصال الطرفين بالإنترنت؛ ولا توفر Relayium تسليمًا دون اتصال أو سجل رسائل على الخادم، لكن يمكن لأي طرف نسخ ما يستلمه أو الاحتفاظ به.",
       ],
     },
     {
@@ -971,7 +971,7 @@ const es = {
   updated: "2026-08-13",
   otherDocLabel: "Términos del servicio",
   lead: [
-    "Relayium está diseñado para que tus archivos y textos efímeros sigan siendo tuyos. Las sesiones locales del navegador son directas; las sesiones entre redes pueden transportar texto cifrado de extremo a extremo por TURN; el texto CLI es solo directo; y los enlaces de descarga solo almacenan archivos cifrados con conocimiento cero.",
+    "Relayium está diseñado para que tus archivos y textos efímeros sigan siendo tuyos. Las sesiones locales del navegador son directas; las sesiones entre redes pueden transportar texto cifrado de extremo a extremo por TURN; las sesiones con código de emparejamiento de la CLI también, siempre que el servidor emite un retransmisor para el código; y los enlaces de descarga solo almacenan archivos cifrados con conocimiento cero.",
     "Esta página explica los pocos datos que el servicio sí gestiona, y los datos que deliberadamente nunca ve.",
   ],
   sections: [
@@ -1017,7 +1017,7 @@ const es = {
     {
       heading: "Retransmisión entre redes (TURN)",
       body: [
-        "Las sesiones de archivos y texto entre redes del navegador usan TURN por diseño. TURN solo transporta texto cifrado de extremo a extremo y metadatos de transporte. Para las cuotas y la prevención de abusos, asociamos el total de bytes retransmitidos y sus marcas de tiempo a la cuenta que creó el código, sin inspeccionar el texto claro de mensajes o archivos. El texto CLI es solo directo, no usa TURN ni cuenta en su consumo. El texto en directo requiere que ambas partes estén conectadas; Relayium no ofrece entrega sin conexión ni historial de mensajes en el servidor, aunque cada extremo puede copiar o conservar lo recibido.",
+        "Las sesiones de archivos y texto entre redes del navegador usan TURN por diseño. TURN solo transporta texto cifrado de extremo a extremo y metadatos de transporte. Para las cuotas y la prevención de abusos, asociamos el total de bytes retransmitidos y sus marcas de tiempo a la cuenta que creó el código, sin inspeccionar el texto claro de mensajes o archivos. Las sesiones con código de emparejamiento de la CLI (archivos, texto y pair) usan TURN siempre que el servidor emite un retransmisor para el código, y sus bytes retransmitidos se asocian de la misma manera. El texto en directo requiere que ambas partes estén conectadas; Relayium no ofrece entrega sin conexión ni historial de mensajes en el servidor, aunque cada extremo puede copiar o conservar lo recibido.",
       ],
     },
     {
@@ -1110,7 +1110,7 @@ const pt = {
   updated: "2026-08-13",
   otherDocLabel: "Termos de Serviço",
   lead: [
-    "A Relayium foi criada para que seus arquivos e textos temporários continuem sendo seus. As sessões locais do navegador são diretas; sessões entre redes podem transportar texto cifrado de ponta a ponta por TURN; o texto da CLI é somente direto; e os links de download guardam apenas arquivos cifrados com conhecimento zero.",
+    "A Relayium foi criada para que seus arquivos e textos temporários continuem sendo seus. As sessões locais do navegador são diretas; sessões entre redes podem transportar texto cifrado de ponta a ponta por TURN; as sessões com código de pareamento da CLI também, sempre que o servidor emite um retransmissor para o código; e os links de download guardam apenas arquivos cifrados com conhecimento zero.",
     "Esta página explica os poucos dados que o serviço de fato processa e os dados que ele deliberadamente nunca vê.",
   ],
   sections: [
@@ -1156,7 +1156,7 @@ const pt = {
     {
       heading: "Retransmissão entre redes (TURN)",
       body: [
-        "As sessões de arquivos e texto entre redes no navegador usam TURN por projeto. O TURN transporta apenas texto cifrado de ponta a ponta e metadados de transporte. Para cotas e prevenção de abusos, associamos o total de bytes retransmitidos e os horários à conta de quem criou o código, sem inspecionar o texto claro de mensagens ou arquivos. O texto da CLI é somente direto, não usa TURN nem conta em seu uso. O texto ao vivo exige que ambas as partes estejam online; a Relayium não oferece entrega offline nem histórico no servidor, embora qualquer ponta possa copiar ou guardar o que recebeu.",
+        "As sessões de arquivos e texto entre redes no navegador usam TURN por projeto. O TURN transporta apenas texto cifrado de ponta a ponta e metadados de transporte. Para cotas e prevenção de abusos, associamos o total de bytes retransmitidos e os horários à conta de quem criou o código, sem inspecionar o texto claro de mensagens ou arquivos. As sessões com código de pareamento da CLI (arquivos, texto e pair) usam TURN sempre que o servidor emite um retransmissor para o código, e seus bytes retransmitidos são associados da mesma forma. O texto ao vivo exige que ambas as partes estejam online; a Relayium não oferece entrega offline nem histórico no servidor, embora qualquer ponta possa copiar ou guardar o que recebeu.",
       ],
     },
     {

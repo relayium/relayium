@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Relayium vs magic-wormhole: direct-only pairing and managed listeners · Relayium</title>
+    <title>Relayium vs magic-wormhole: relayed pairing and managed listeners · Relayium</title>
     <meta name="description" content="Compare Relayium CLI pairing, daemon-direct and hosted delivery with magic-wormhole&#39;s code workflow and relay-assisted reachability." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/compare/magic-wormhole/" />
@@ -21,7 +21,7 @@
     <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="Relayium vs magic-wormhole: direct-only pairing and managed listeners" />
+    <meta property="og:title" content="Relayium vs magic-wormhole: relayed pairing and managed listeners" />
     <meta property="og:description" content="Compare Relayium CLI pairing, daemon-direct and hosted delivery with magic-wormhole&#39;s code workflow and relay-assisted reachability." />
     <meta property="og:url" content="https://relayium.com/compare/magic-wormhole/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
@@ -31,10 +31,10 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Relayium vs magic-wormhole: direct-only pairing and managed listeners" />
+    <meta name="twitter:title" content="Relayium vs magic-wormhole: relayed pairing and managed listeners" />
     <meta name="twitter:description" content="Compare Relayium CLI pairing, daemon-direct and hosted delivery with magic-wormhole&#39;s code workflow and relay-assisted reachability." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs magic-wormhole: direct-only pairing and managed listeners","description":"Compare Relayium CLI pairing, daemon-direct and hosted delivery with magic-wormhole's code workflow and relay-assisted reachability.","inLanguage":"en","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/compare/magic-wormhole/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs magic-wormhole: direct-only pairing and managed listeners"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Which works behind strict NAT?","acceptedAnswer":{"@type":"Answer","text":"magic-wormhole's relay can preserve reachability. Relayium CLI pairing is direct-only; use Cloud or Device Inbox when hosted asynchronous delivery is acceptable."}},{"@type":"Question","name":"Does Relayium use SSH for servers?","acceptedAnswer":{"@type":"Answer","text":"No. Current server transfer uses relayium serve and relayium:// over pinned TLS."}},{"@type":"Question","name":"Does Relayium require an account?","acceptedAnswer":{"@type":"Answer","text":"Minting a send code and uploading with up do. Joining with a code, downloading a link and daemon-direct push/sync do not."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs magic-wormhole: relayed pairing and managed listeners","description":"Compare Relayium CLI pairing, daemon-direct and hosted delivery with magic-wormhole's code workflow and relay-assisted reachability.","inLanguage":"en","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/compare/magic-wormhole/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs magic-wormhole: relayed pairing and managed listeners"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Which works behind strict NAT?","acceptedAnswer":{"@type":"Answer","text":"Both, while a relay is available. magic-wormhole's relay can preserve reachability; Relayium CLI pairing goes through its encrypted relay whenever the server issues one, counted toward the minting account's monthly allowance. When no relay is issued it needs a direct path; use Cloud or Device Inbox when hosted asynchronous delivery is acceptable."}},{"@type":"Question","name":"Does Relayium use SSH for servers?","acceptedAnswer":{"@type":"Answer","text":"No. Current server transfer uses relayium serve and relayium:// over pinned TLS."}},{"@type":"Question","name":"Does Relayium require an account?","acceptedAnswer":{"@type":"Answer","text":"Minting a send code and uploading with up do. Joining with a code, downloading a link and daemon-direct push/sync do not."}}]}]}</script>
     <style>
 :root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
@@ -178,7 +178,7 @@ pre code{background:none;padding:0;border-radius:0}
       <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Main"><span class="rail-group">Live transfer</span><a class="row dest" href="/">LAN</a><a class="row dest" href="/cross-network" aria-label="Cross-network transfer">Cross-network</a><span class="rail-group">Links</span><a class="row dest" href="/offline-transfer" aria-label="Share a link">Share</a><span class="rail-group">Your devices</span><a class="row dest" href="/device-inbox" aria-label="Device Inbox">Inbox</a><span class="rail-group">Downloads and tools</span><a class="row tool" href="/cli">CLI</a><a class="row tool" href="/apps">Apps</a><a class="row tool" href="/pricing">Pricing</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/compare/magic-wormhole/" aria-current="true">English</a><a href="/zh/compare/magic-wormhole/">中文</a></nav></div></header>
       <div class="pane"><div class="wrap">
 
-      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs magic-wormhole: direct-only pairing and managed listeners</span></nav>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs magic-wormhole: relayed pairing and managed listeners</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
@@ -187,7 +187,7 @@ pre code{background:none;padding:0;border-radius:0}
            instead — a labelled <aside>, so it is a complementary landmark rather
            than a navigation one, and the same rule is satisfied either way. -->
       <main>
-      <h1>Relayium vs magic-wormhole: direct-only pairing and managed listeners</h1>
+      <h1>Relayium vs magic-wormhole: relayed pairing and managed listeners</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
            bidi algorithm lays those runs out right-to-left inside the Arabic
            page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
@@ -197,29 +197,29 @@ pre code{background:none;padding:0;border-radius:0}
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-07-12</bdi></p>
       
-      <p class="lead">Both tools can transfer with a short code. magic-wormhole can use its Transit Relay; Relayium CLI send/receive is direct-only and fails rather than falling back to a relay when no direct path exists.</p>
+      <p class="lead">Both tools can transfer with a short code, and both can relay. magic-wormhole can use its Transit Relay; Relayium CLI send/receive goes through an encrypted TURN relay whenever the server issues one for the code, and those relayed bytes count toward the monthly traffic allowance of the account that minted it.</p>
       <p class="lead">Relayium also provides authorized daemon-direct push/sync for reachable machines you manage, plus encrypted Cloud or Device Inbox delivery when a recipient may be offline. SSH transport and pull are retired.</p>
       <section class="sheet"><h2>Before you start</h2>
       <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul></section>
       <section class="sheet"><h2>Pair two online terminals</h2>
-      <p>Relayium send mints a six-digit code for five minutes. The optional SAS is derived from pinned TLS certificate fingerprints; comparing it authenticates the endpoints and detects rendezvous service impersonation, but does not prove every network hop.</p>
+      <p>Relayium send mints a six-digit code for five minutes; the other end can be relayium receive, a Relayium app or the web page. The optional SAS is derived from the keys the two ends exchanged; comparing it authenticates the endpoints and detects rendezvous service impersonation, but does not prove every network hop.</p>
       <pre tabindex="0"><code>relayium send ./archive.zip</code></pre>
       <pre tabindex="0"><code>relayium receive 483920</code></pre></section>
       <section class="sheet"><h2>Reachability is the main tradeoff</h2>
-      <ul><li>magic-wormhole can relay encrypted bytes when direct connection fails.</li><li>Relayium CLI send/receive never relays; use it when direct-only is acceptable.</li><li>For reachable servers you manage, run relayium serve and use relayium:// push or sync.</li></ul></section>
+      <ul><li>magic-wormhole can relay encrypted bytes when direct connection fails.</li><li>Relayium CLI send/receive relays whenever the server issues a relay for the code — even when a direct path exists — metered to the minting account&#39;s monthly traffic allowance; with no relay issued (for example that allowance is used up) it needs a direct path.</li><li>For reachable servers you manage, run relayium serve and use relayium:// push or sync.</li></ul></section>
       <section class="sheet"><h2>Offline delivery</h2>
       <p>Relayium up stores client-side-encrypted ciphertext and prints a link; Device Inbox queues encrypted data for one of your devices. These hosted paths consume plan allowances, which is usage accounting rather than a per-transfer charge.</p></section>
       <h2>Frequently asked questions</h2>
       <h3>Which works behind strict NAT?</h3>
-      <p>magic-wormhole&#39;s relay can preserve reachability. Relayium CLI pairing is direct-only; use Cloud or Device Inbox when hosted asynchronous delivery is acceptable.</p>
+      <p>Both, while a relay is available. magic-wormhole&#39;s relay can preserve reachability; Relayium CLI pairing goes through its encrypted relay whenever the server issues one, counted toward the minting account&#39;s monthly allowance. When no relay is issued it needs a direct path; use Cloud or Device Inbox when hosted asynchronous delivery is acceptable.</p>
       <h3>Does Relayium use SSH for servers?</h3>
       <p>No. Current server transfer uses relayium serve and relayium:// over pinned TLS.</p>
       <h3>Does Relayium require an account?</h3>
       <p>Minting a send code and uploading with up do. Joining with a code, downloading a link and daemon-direct push/sync do not.</p>
       <div class="ctacard">
-        <p>Choose direct-only, relay-assisted, or asynchronous delivery deliberately.</p>
+        <p>Choose relayed pairing, daemon-direct, or asynchronous delivery deliberately.</p>
         <a class="cta" href="/cli">Get the CLI</a>
       </div>
       <h2>Keep reading</h2>

@@ -6096,7 +6096,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                      "management.isBusy(row: row.id)", "management.revoke(device, scope: scope)",
                      "management.delete(file, scope: scope)", "management.clear(scope:",
                      "management.dismissKeyCleanupWarning()",
-                     "AccountRefreshDecision.next", "NSPasteboard.general.setString",
+                     "AccountRefreshDecision.next", "copyCapabilityLink(link)",
                      "session.refresh()", "AccountScope(accountId: user.id"] {
             XCTAssertTrue(account.contains(kept), "AccountView lost \(kept)")
         }

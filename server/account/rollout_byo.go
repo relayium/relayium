@@ -127,7 +127,9 @@ const (
 //     CURRENT stage count, on both sides of the fraction (see
 //     byoCommandedByThisStage). If both the rate exceeds
 //     byoFailureRate and the absolute count clears byoFailureFloor -> halt
-//     with a reason.
+//     with a reason. Via decideByoOwned (the endpoint's entry point) both
+//     counts are of distinct OWNERS, not nodes, so one account cannot halt
+//     the track alone (A-M4).
 //  6. ByoBatch == 0 means no batch has opened for this rollout yet: open the
 //     first one IMMEDIATELY, without waiting out a window. The window gates
 //     transitions BETWEEN batches; making a fresh track sit through 6h of
@@ -152,6 +154,25 @@ const (
 //     returned for another sweep (one per byoBatchWindow, since the caller
 //     restamps StageStartedAt) rather than being retried in a hot loop.
 func decideByo(tr RolloutTrack, nodes []NodeSnapshot, now int64) (action string, eligible []string, reason string) {
+	return decideByoOwned(tr, nodes, nil, now)
+}
+
+// decideByoOwned is decideByo with the failure check (step 5) counted per
+// OWNER rather than per node (A-M4). owners maps node ID -> owner user ID; a
+// node absent from it (or with an empty owner) is its own owner, so a nil map
+// reproduces decideByo's per-node accounting exactly.
+//
+// Why per owner: node ids are client-chosen and batch order is
+// fleetHash(ID, target), so one account can grind many ids into the canary
+// batch, have them report "failed", and halt the BYO track for everybody. Per
+// owner, both sides of the fraction count distinct accounts: the numerator is
+// how many owners had at least one failure, the denominator how many owners
+// had at least one node commanded by this stage. Several failing nodes of one
+// user therefore count once, and since byoFailureFloor is 2 a single account
+// can never halt the track alone -- while two distinct accounts failing still
+// halt under the unchanged rate/floor thresholds. Batch ordering, membership,
+// the window and completion are untouched; only the halt arithmetic changes.
+func decideByoOwned(tr RolloutTrack, nodes []NodeSnapshot, owners map[string]string, now int64) (action string, eligible []string, reason string) {
 	if tr.Status != "rolling" {
 		return "wait", nil, ""
 	}
@@ -203,25 +224,38 @@ func decideByo(tr RolloutTrack, nodes []NodeSnapshot, now int64) (action string,
 	// on nodes by a rollout that is long over are counted against this one and
 	// two permanently-dead machines can wedge the track forever. With
 	// tr.ByoBatch == 0 the prefix is empty and there is nothing to judge.
+	//
+	// Counted per OWNER (see decideByoOwned): commandedOwners/failedOwners are
+	// the distinct owners behind the commanded/failed nodes; the node counts
+	// are kept only for the admin-facing reason.
 	batchPrefix := ordered[:pctCount(len(ordered), tr.ByoBatch)]
-	var commanded []NodeSnapshot
+	ownerOf := func(n NodeSnapshot) string {
+		if o := owners[n.ID]; o != "" {
+			return "user:" + o
+		}
+		return "node:" + n.ID
+	}
+	commandedOwners := map[string]bool{}
+	failedOwners := map[string]bool{}
+	commandedNodes, failedNodes := 0, 0
 	for _, n := range batchPrefix {
-		if byoCommandedByThisStage(n, tr) {
-			commanded = append(commanded, n)
+		if !byoCommandedByThisStage(n, tr) {
+			continue
 		}
-	}
-	failed := 0
-	for _, n := range commanded {
+		commandedNodes++
+		commandedOwners[ownerOf(n)] = true
 		if byoResultIsFailure(n, tr) {
-			failed++
+			failedNodes++
+			failedOwners[ownerOf(n)] = true
 		}
 	}
-	if len(commanded) > 0 && failed >= byoFailureFloor {
-		rate := float64(failed) / float64(len(commanded))
+	failed, commanded := len(failedOwners), len(commandedOwners)
+	if commanded > 0 && failed >= byoFailureFloor {
+		rate := float64(failed) / float64(commanded)
 		if rate > byoFailureRate {
 			return "halt", nil, fmt.Sprintf(
-				"byo rollout: %d/%d nodes in the %d%% batch failed or rolled back (%.0f%% > %.0f%% threshold)",
-				failed, len(commanded), tr.ByoBatch, rate*100, byoFailureRate*100)
+				"byo rollout: %d/%d owners (%d/%d nodes) in the %d%% batch failed or rolled back (%.0f%% > %.0f%% threshold)",
+				failed, commanded, failedNodes, commandedNodes, tr.ByoBatch, rate*100, byoFailureRate*100)
 		}
 	}
 

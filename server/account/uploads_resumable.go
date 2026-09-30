@@ -548,6 +548,17 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		writePairRoomError(w, errPairRoomOver)
 		return
 	}
+	if errors.Is(err, ErrStoredFileNodeGone) {
+		// The node placement chose was deleted before the session could be
+		// created (A-M3 node fence); nothing was written. Same answer as the
+		// placement refusals above: the storage node is not available.
+		if billable {
+			http.Error(w, "storage node unavailable — try again", http.StatusServiceUnavailable)
+		} else {
+			http.Error(w, "your storage node is offline", http.StatusServiceUnavailable)
+		}
+		return
+	}
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -1465,7 +1476,26 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		// answer — is the account over its allowance as things stand — and it is
 		// the same test as before per-append metering, since used_now equals
 		// used_before + size.
-		if over, err := s.overTraffic(r.Context(), u.ID, 0); err == nil && over {
+		//
+		// A read error fails CLOSED here, exactly like the daily-quota read below
+		// (B-L2): this is the last traffic gate an upload passes, so admitting on
+		// an unanswered question would store an object the allowance may not
+		// cover. The refusal goes through the same fail as the over-limit one:
+		// no object and no daily-quota debit; the tombstone stays; a non-pair
+		// session's blob is reclaimed settle-first (queued with any residual
+		// obligation, billed durably, then deleted — see reclaimRefusedUpload),
+		// while a pair-room session's blob is left to the room's void or the
+		// orphan pass. The bytes that moved stay metered, as for that refusal.
+		// The upload init pre-check stays fail-open on purpose (an availability
+		// trade-off) and this gate is its backstop for upload admission only; the
+		// download gates are separate, also fail-open, and not backed by this.
+		over, err := s.overTraffic(r.Context(), u.ID, 0)
+		if err != nil {
+			log.Printf("upload finalize %s: reading the monthly traffic allowance: %v; refusing", sess.ID, err)
+			fail("server error", http.StatusInternalServerError)
+			return
+		}
+		if over {
 			fail("monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
 			return
 		}

@@ -38,7 +38,7 @@ const en = {
       body: [
         "LocalSend is local-network only by design — it has no way to reach a device on a different network or across the internet. Relayium adds that: create a pairing code (or share the join link it generates), and the other side connects from anywhere. In the browser, that cross-network hop deliberately runs over an encrypted TURN relay rather than hunting for a direct route — relay-only ICE brings the connection up in a second or two, instead of burning around 20 seconds on cross-NAT direct-candidate checks that would almost always fail anyway.",
         "Creating a cross-network pairing code requires the sender to sign in; the person receiving never needs an account. Every realtime transfer — LAN or cross-network — is encrypted end-to-end at the application layer: an X25519 key exchange derives a key used for AES-256-GCM, and matching the 6-digit SAS code out of band confirms that the endpoint public keys were not replaced, detecting a signaling service or TURN relay impersonating an endpoint. The SAS check does not prove that TURN is absent from the network path; on cross-network browser transfers, the relay still carries only ciphertext and cannot read a byte of your file. Each file is also verified with a SHA-256 hash. Same-network transfers connect straight between the two devices.",
-        "For anyone scripting transfers to a server, there's also a CLI — daemon-direct push/sync and send/receive by pairing code — something a LAN-only app doesn't offer. These CLI paths connect directly; they never use a relay.",
+        "For anyone scripting transfers to a server, there's also a CLI — daemon-direct push/sync and send/receive by pairing code — something a LAN-only app doesn't offer. push/sync connect your machines directly and never use a relay; send/receive goes through the encrypted relay whenever the server issues one for the code, counted toward the monthly traffic allowance of the account that minted it.",
       ],
     },
     {
@@ -52,7 +52,7 @@ const en = {
       body: ["The differences that matter most, side by side:"],
       bullets: [
         "Install: LocalSend needs an app on every device; Relayium's same-network mode needs nothing beyond a browser.",
-        "Network reach: LocalSend is local-network only; Relayium also connects across different networks with a pairing code — in the browser that hop runs over an encrypted relay, while the CLI connects directly.",
+        "Network reach: LocalSend is local-network only; Relayium also connects across different networks with a pairing code — in the browser that hop runs over an encrypted relay, and the CLI's pairing-code sessions use that relay too whenever the server issues one.",
         "Encryption: LocalSend secures its local transport; Relayium adds an independent application-layer X25519 + AES-256-GCM channel with a SAS verification code, even on the LAN.",
         "Accounts: LocalSend never needs one; Relayium's LAN mode needs none either — only the side that creates the pairing code signs in, and only to create it.",
         "Automation: Relayium ships a CLI for daemon-direct push/sync and an always-on receive service; LocalSend is app-only.",
@@ -126,7 +126,7 @@ const zh = {
       body: [
         "LocalSend 在设计上只面向局域网——它没有办法连到不同网络或跨互联网的设备。Relayium 补上了这一块：创建一个配对码（或分享它生成的加入链接），对方就能从任何地方连接进来。在浏览器里，这条跨网络通道是刻意走加密 TURN 中继的，而不是先去碰运气试直连：把 ICE 限定为 relay-only，连接一两秒就能建立，省下大约 20 秒——那段时间本来会耗在几乎注定失败的跨 NAT 直连候选探测上。",
         "创建跨网络配对码需要发送方登录；接收方始终无需账号。每一次实时传输——无论局域网还是跨网络——都在应用层做端到端加密：X25519 密钥交换协商出用于 AES-256-GCM 的密钥，双方通过带外方式核对相同的 6 位 SAS 校验码，可以确认端点公钥未被替换，并检测冒充端点的信令服务或 TURN 端点。SAS 校验并不能证明 TURN 不在网络路径上；浏览器跨网络传输仍会经过中继，但中继只承载密文，读不到文件里的任何一个字节。每个文件还会用 SHA-256 做校验。同一网络内的传输是两台设备直连。",
-        "如果你需要把传输写进脚本发往服务器，Relayium 还提供命令行工具——通过 daemon 直连做 push/sync、用配对码 send/receive——这些都是纯局域网应用做不到的。这些命令行路径始终直连，从不走中继。",
+        "如果你需要把传输写进脚本发往服务器，Relayium 还提供命令行工具——通过 daemon 直连做 push/sync、用配对码 send/receive——这些都是纯局域网应用做不到的。push/sync 在你的机器之间直连，从不走中继；send/receive 只要服务器为这个码签发了加密中继，就经它传输，并计入生成配对码那个账号的每月流量额度。",
       ],
     },
     {
@@ -140,7 +140,7 @@ const zh = {
       body: ["把最关键的差别并排列出："],
       bullets: [
         "安装：LocalSend 需要在每台设备上装应用；Relayium 的同网络模式除了浏览器什么都不需要。",
-        "网络覆盖：LocalSend 只能在局域网内使用；Relayium 还能用配对码连接不同网络——浏览器里这一跳走的是加密中继，命令行工具则始终直连。",
+        "网络覆盖：LocalSend 只能在局域网内使用；Relayium 还能用配对码连接不同网络——浏览器里这一跳走的是加密中继，命令行工具的配对码会话在服务器签发中继时也走这条中继。",
         "加密：LocalSend 保护的是本地传输通道；Relayium 即便在局域网内也会额外加一层独立的应用层 X25519 + AES-256-GCM 通道，并带 SAS 校验码。",
         "账号：LocalSend 从不需要账号；Relayium 的局域网模式同样无需账号——只有创建配对码的一方需要登录，而且仅为创建配对码。",
         "自动化：Relayium 提供命令行工具支持 daemon 直连 push/sync 和常驻接收服务；LocalSend 只有应用形态。",
@@ -214,7 +214,7 @@ const ja = {
       body: [
         "LocalSend は設計上ローカルネットワーク限定です。異なるネットワークやインターネット越しの端末に届く手段がありません。Relayium はこれを補います。ペアリングコード（またはそれが生成する参加リンク）を作れば、相手はどこからでも接続できます。ブラウザでは、このネットワークをまたぐ経路は直接ルートを探しにいくのではなく、あえて暗号化された TURN リレー経由で運ばれます。ICE を relay 限定にすることで、ほぼ確実に失敗する NAT 越えの直接候補チェックに約20秒を費やす代わりに、1〜2秒で接続が確立します。",
         "ネットワークをまたぐペアリングコードの作成には送信側のサインインが必要です。受信側はアカウント不要です。LAN でもネットワークをまたぐ場合でも、すべてのリアルタイム転送はアプリケーション層でエンドツーエンド暗号化されます。X25519 の鍵交換で AES-256-GCM 用の鍵を導出し、両端末が帯域外で同じ6桁の SAS コードを照合することで、エンドポイントの公開鍵が置き換えられていないことを確認し、シグナリングサービスや TURN エンドポイントによるなりすましを検出できます。SAS の照合は TURN がネットワーク経路上にないことを証明するものではありません。ブラウザのネットワーク間転送では引き続きリレーを経由しますが、リレーが運ぶのは暗号文だけなので、ファイルの中身は1バイトも読めません。各ファイルは SHA-256 ハッシュでも検証されます。同一ネットワーク内の転送は2台の端末が直接つながります。",
-        "サーバーへの転送をスクリプト化したい人向けに CLI もあります。SSH またはデーモン直結での push/pull、フォルダの増分同期、ペアリングコードによる送受信は、LAN 専用アプリにはできないことです。CLI は常に直接接続で、リレーは一切使いません。",
+        "サーバーへの転送をスクリプト化したい人向けに CLI もあります。デーモン直結での push/sync、フォルダの増分同期、ペアリングコードによる送受信は、LAN 専用アプリにはできないことです。push/sync は自分のマシン同士を直接つなぎ、リレーは使いません。send/receive は、サーバーがそのコードにリレーを発行した場合は暗号化リレーを通り、コードを発行したアカウントの月間転送量の枠に計上されます。",
       ],
     },
     {
@@ -228,10 +228,10 @@ const ja = {
       body: ["最も重要な違いを並べて示します。"],
       bullets: [
         "インストール：LocalSend は各端末にアプリが必要です。Relayium の同一ネットワークモードはブラウザ以外に何も要りません。",
-        "ネットワークの到達範囲：LocalSend はローカルネットワーク限定です。Relayium はペアリングコードで異なるネットワークにも接続でき、ブラウザではその区間は暗号化されたリレー経由、CLI は常に直接接続です。",
+        "ネットワークの到達範囲：LocalSend はローカルネットワーク限定です。Relayium はペアリングコードで異なるネットワークにも接続でき、ブラウザではその区間は暗号化されたリレー経由、CLI のペアリングコードによるセッションも、サーバーがリレーを発行した場合はそのリレーを使います。",
         "暗号化：LocalSend はローカル転送そのものを保護します。Relayium は LAN 内でも独立したアプリケーション層の X25519 + AES-256-GCM チャネルと SAS 検証コードを追加します。",
         "アカウント：LocalSend は決して不要です。Relayium の LAN モードも同様に不要で、ペアリングコードを作る側だけが、作成のためにサインインします。",
-        "自動化：Relayium は SSH push/pull、増分同期、常駐の受信サービス向けの CLI を提供します。LocalSend はアプリのみです。",
+        "自動化：Relayium は デーモン直結の push/sync、増分同期、常駐の受信サービス向けの CLI を提供します。LocalSend はアプリのみです。",
       ],
     },
   ],
@@ -302,7 +302,7 @@ const ko = {
       body: [
         "LocalSend는 설계상 로컬 네트워크 전용입니다 — 다른 네트워크나 인터넷 너머의 기기에 닿을 방법이 없습니다. Relayium은 이를 더합니다. 페어링 코드(또는 그것이 생성하는 참여 링크)를 만들면 상대는 어디서든 연결할 수 있습니다. 브라우저에서 이 네트워크 간 경로는 직접 경로를 찾아 헤매는 대신 일부러 암호화된 TURN 릴레이를 거칩니다. ICE를 릴레이 전용으로 고정하면, 거의 실패할 수밖에 없는 NAT 너머 직접 후보 검사에 약 20초를 쓰는 대신 1~2초 만에 연결이 올라옵니다.",
         "네트워크를 넘나드는 페어링 코드를 만들려면 보내는 쪽의 로그인이 필요합니다. 받는 쪽은 계정이 전혀 필요 없습니다. LAN이든 네트워크를 넘나들든 모든 실시간 전송은 애플리케이션 계층에서 종단간 암호화됩니다. X25519 키 교환으로 AES-256-GCM에 쓸 키를 유도하며, 양쪽 기기가 대역 외에서 동일한 6자리 SAS 코드를 비교하면 엔드포인트 공개 키가 바뀌지 않았음을 확인하고 엔드포인트를 사칭하는 시그널링 서비스나 TURN 엔드포인트를 탐지할 수 있습니다. SAS 확인은 TURN이 네트워크 경로에 없다는 사실을 증명하지 않습니다. 브라우저의 네트워크 간 전송은 여전히 릴레이를 거치지만 릴레이는 암호문만 전달하므로 파일 내용은 한 바이트도 읽지 못합니다. 각 파일은 SHA-256 해시로도 검증됩니다. 같은 네트워크의 전송은 두 기기가 곧바로 연결됩니다.",
-        "서버로의 전송을 스크립트화하려는 사람을 위한 CLI도 있습니다 — SSH 또는 데몬 다이렉트로 push/pull, 폴더 증분 동기화, 페어링 코드로 송수신 — LAN 전용 앱에는 없는 기능입니다. CLI는 항상 직접 연결하며 릴레이를 쓰지 않습니다.",
+        "서버로의 전송을 스크립트화하려는 사람을 위한 CLI도 있습니다 — 데몬 다이렉트 push/sync, 폴더 증분 동기화, 페어링 코드로 송수신 — LAN 전용 앱에는 없는 기능입니다. push/sync는 내 기기끼리 직접 연결하며 릴레이를 쓰지 않고, send/receive는 서버가 해당 코드에 릴레이를 발급하면 암호화된 릴레이를 거치며 코드를 발급한 계정의 월간 전송량 한도에 집계됩니다.",
       ],
     },
     {
@@ -316,10 +316,10 @@ const ko = {
       body: ["가장 중요한 차이를 나란히 정리하면:"],
       bullets: [
         "설치: LocalSend는 모든 기기에 앱이 필요함. Relayium의 동일 네트워크 모드는 브라우저 외에 아무것도 필요 없음.",
-        "네트워크 도달 범위: LocalSend는 로컬 네트워크 전용임. Relayium은 페어링 코드로 다른 네트워크에도 연결됨 — 브라우저에서는 그 구간이 암호화된 릴레이를 거치고, CLI는 항상 직접 연결함.",
+        "네트워크 도달 범위: LocalSend는 로컬 네트워크 전용임. Relayium은 페어링 코드로 다른 네트워크에도 연결됨 — 브라우저에서는 그 구간이 암호화된 릴레이를 거치고, CLI의 페어링 코드 세션도 서버가 릴레이를 발급하면 그 릴레이를 사용함.",
         "암호화: LocalSend는 로컬 전송 자체를 보호함. Relayium은 LAN에서도 독립적인 애플리케이션 계층 X25519 + AES-256-GCM 채널과 SAS 검증 코드를 추가함.",
         "계정: LocalSend는 절대 필요 없음. Relayium의 LAN 모드도 마찬가지 — 페어링 코드를 만드는 쪽만, 코드를 만들기 위해 로그인함.",
-        "자동화: Relayium은 SSH push/pull, 증분 동기화, 상시 수신 서비스를 위한 CLI를 제공함. LocalSend는 앱뿐임.",
+        "자동화: Relayium은 데몬 다이렉트 push/sync, 증분 동기화, 상시 수신 서비스를 위한 CLI를 제공함. LocalSend는 앱뿐임.",
       ],
     },
   ],
@@ -390,7 +390,7 @@ const de = {
       body: [
         "LocalSend ist von Grund auf nur fürs lokale Netz gedacht — es gibt keine Möglichkeit, ein Gerät in einem anderen Netzwerk oder über das Internet zu erreichen. Relayium fügt das hinzu: Erstelle einen Pairing-Code (oder teile den daraus erzeugten Beitrittslink), und die Gegenseite verbindet sich von überall. Im Browser läuft dieser netzwerkübergreifende Weg bewusst über ein verschlüsseltes TURN-Relay, statt nach einer Direktverbindung zu suchen: Auf reines Relay-ICE festgelegt, steht die Verbindung in ein bis zwei Sekunden, statt rund 20 Sekunden für Direktkandidaten-Prüfungen über NAT-Grenzen hinweg zu verbrauchen, die ohnehin fast immer scheitern.",
         "Für einen netzwerkübergreifenden Pairing-Code muss sich der Absender anmelden; die empfangende Person braucht nie ein Konto. Jede Echtzeitübertragung — im LAN oder netzwerkübergreifend — ist auf Anwendungsebene Ende-zu-Ende-verschlüsselt: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM ab. Wenn beide Seiten den sechsstelligen SAS-Code über einen separaten Kanal abgleichen, bestätigt das, dass die öffentlichen Schlüssel der Endpunkte nicht ersetzt wurden, und erkennt einen Signalisierungsdienst oder TURN-Endpunkt, der sich als Gegenstelle ausgibt. Die SAS-Prüfung beweist nicht, dass TURN außerhalb des Netzwerkpfads liegt; bei netzwerkübergreifenden Browserübertragungen trägt das Relay weiterhin ausschließlich Chiffretext und kann kein Byte deiner Datei lesen. Jede Datei wird außerdem per SHA-256-Hash geprüft. Übertragungen im selben Netz laufen direkt zwischen den beiden Geräten.",
-        "Für alle, die Übertragungen zu einem Server skripten wollen, gibt es außerdem eine CLI — push/pull über SSH oder daemon-direct, inkrementelle Ordnersynchronisation und Senden/Empfangen per Pairing-Code — etwas, das eine reine LAN-App nicht bietet. Die CLI verbindet sich immer direkt und nutzt nie ein Relay.",
+        "Für alle, die Übertragungen zu einem Server skripten wollen, gibt es außerdem eine CLI — push/sync per daemon-direct, inkrementelle Ordnersynchronisation und Senden/Empfangen per Pairing-Code — etwas, das eine reine LAN-App nicht bietet. push/sync verbindet deine Rechner direkt und nutzt nie ein Relay; send/receive läuft über das verschlüsselte Relay, sobald der Server für den Code eines ausstellt, gezählt zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat.",
       ],
     },
     {
@@ -404,10 +404,10 @@ const de = {
       body: ["Die wichtigsten Unterschiede nebeneinander:"],
       bullets: [
         "Installation: LocalSend braucht eine App auf jedem Gerät; Relayiums Modus im selben Netz braucht nichts außer einem Browser.",
-        "Netzwerkreichweite: LocalSend ist rein lokal; Relayium verbindet auch über verschiedene Netzwerke hinweg per Pairing-Code — im Browser läuft diese Strecke über ein verschlüsseltes Relay, die CLI verbindet immer direkt.",
+        "Netzwerkreichweite: LocalSend ist rein lokal; Relayium verbindet auch über verschiedene Netzwerke hinweg per Pairing-Code — im Browser läuft diese Strecke über ein verschlüsseltes Relay, die Pairing-Code-Sitzungen der CLI nutzen dieses Relay ebenfalls, sobald der Server eines ausstellt.",
         "Verschlüsselung: LocalSend sichert seinen lokalen Transport; Relayium fügt selbst im LAN einen unabhängigen Kanal auf Anwendungsebene mit X25519 + AES-256-GCM und einem SAS-Verifizierungscode hinzu.",
         "Konten: LocalSend braucht nie eines; Relayiums LAN-Modus ebenso wenig — nur wer den Pairing-Code erstellt, meldet sich an, und auch nur dafür.",
-        "Automatisierung: Relayium bietet eine CLI für SSH-push/pull, inkrementelle Synchronisation und einen dauerhaften Empfangsdienst; LocalSend gibt es nur als App.",
+        "Automatisierung: Relayium bietet eine CLI für daemon-direct push/sync, inkrementelle Synchronisation und einen dauerhaften Empfangsdienst; LocalSend gibt es nur als App.",
       ],
     },
   ],
@@ -478,7 +478,7 @@ const fr = {
       body: [
         "LocalSend est conçu uniquement pour le réseau local — il n'a aucun moyen d'atteindre un appareil sur un autre réseau ou via internet. Relayium ajoute cela : créez un code d'appairage (ou partagez le lien de participation qu'il génère), et l'autre côté se connecte depuis n'importe où. Dans le navigateur, ce trajet entre réseaux passe volontairement par un relais TURN chiffré au lieu de chercher une route directe : en forçant un ICE en relais seul, la connexion s'établit en une ou deux secondes au lieu de consacrer une vingtaine de secondes à des tests de candidats directs à travers les NAT, qui échouent presque toujours.",
         "Créer un code d'appairage entre réseaux exige que l'expéditeur se connecte ; le destinataire n'a jamais besoin de compte. Chaque transfert en temps réel — sur le réseau local ou entre réseaux — est chiffré de bout en bout au niveau applicatif : un échange de clés X25519 dérive une clé utilisée pour AES-256-GCM. La comparaison hors bande du même code SAS à 6 chiffres confirme que les clés publiques des terminaux n'ont pas été remplacées et détecte un service de signalisation ou un terminal TURN qui usurperait l'autre partie. Cette vérification SAS ne prouve pas que TURN est absent du trajet réseau ; lors d'un transfert entre réseaux dans le navigateur, le relais continue de ne transporter que du texte chiffré et ne peut pas lire un seul octet de votre fichier. Chaque fichier est aussi vérifié par une empreinte SHA-256. Les transferts sur le même réseau relient les deux appareils en direct.",
-        "Pour qui veut scripter des transferts vers un serveur, il existe aussi une CLI — push/pull via SSH ou en daemon-direct, synchronisation incrémentale de dossiers, envoi/réception par code d'appairage — ce qu'une application limitée au réseau local n'offre pas. La CLI, elle, se connecte toujours en direct et n'utilise jamais de relais.",
+        "Pour qui veut scripter des transferts vers un serveur, il existe aussi une CLI — push/sync en daemon-direct, synchronisation incrémentale de dossiers, envoi/réception par code d'appairage — ce qu'une application limitée au réseau local n'offre pas. push/sync connecte vos machines en direct et n'utilise jamais de relais ; send/receive passe par le relais chiffré dès que le serveur en attribue un pour le code, décompté du quota mensuel de trafic du compte qui a généré le code.",
       ],
     },
     {
@@ -492,10 +492,10 @@ const fr = {
       body: ["Les différences qui comptent le plus, côte à côte :"],
       bullets: [
         "Installation : LocalSend nécessite une application sur chaque appareil ; le mode même réseau de Relayium ne nécessite rien d'autre qu'un navigateur.",
-        "Portée réseau : LocalSend est limité au réseau local ; Relayium se connecte aussi entre réseaux différents via un code d'appairage — dans le navigateur, ce trajet passe par un relais chiffré, tandis que la CLI se connecte toujours en direct.",
+        "Portée réseau : LocalSend est limité au réseau local ; Relayium se connecte aussi entre réseaux différents via un code d'appairage — dans le navigateur, ce trajet passe par un relais chiffré, et les sessions à code d'appairage de la CLI utilisent aussi ce relais dès que le serveur en attribue un.",
         "Chiffrement : LocalSend sécurise son transport local ; Relayium ajoute, même sur le réseau local, un canal indépendant au niveau applicatif en X25519 + AES-256-GCM avec un code de vérification SAS.",
         "Comptes : LocalSend n'en demande jamais ; le mode réseau local de Relayium non plus — seule la personne qui crée le code d'appairage se connecte, et uniquement pour le créer.",
-        "Automatisation : Relayium propose une CLI pour push/pull SSH, synchronisation incrémentale et un service de réception permanent ; LocalSend n'existe qu'en application.",
+        "Automatisation : Relayium propose une CLI pour push/sync en daemon-direct, synchronisation incrémentale et un service de réception permanent ; LocalSend n'existe qu'en application.",
       ],
     },
   ],
@@ -566,7 +566,7 @@ const ar = {
       body: [
         "LocalSend مخصص للشبكة المحلية فقط بحكم التصميم — ليس لديه أي وسيلة للوصول إلى جهاز على شبكة مختلفة أو عبر الإنترنت. يضيف Relayium ذلك: أنشئ رمز اقتران (أو شارك رابط الانضمام الذي يولّده)، فيتصل الطرف الآخر من أي مكان. وفي المتصفح يمرّ هذا المسار العابر للشبكات عمدًا عبر مُرحِّل TURN مشفّر بدل البحث عن مسار مباشر: فقصر ICE على المُرحِّل وحده يرفع الاتصال خلال ثانية أو ثانيتين، بدل إنفاق نحو 20 ثانية على فحص مرشّحات الاتصال المباشر عبر NAT التي تفشل غالبًا على أي حال.",
         "يتطلب إنشاء رمز اقتران عبر الشبكات تسجيل دخول المُرسِل؛ أما الشخص المُستقبِل فلا يحتاج إلى حساب أبدًا. كل عملية نقل فوري — على الشبكة المحلية أو عبر الشبكات — مشفّرة من الطرف إلى الطرف على مستوى التطبيق: يشتقّ تبادل مفاتيح X25519 مفتاحًا يُستخدم لـ AES-256-GCM. تؤكد مطابقة رمز SAS نفسه المكوّن من 6 أرقام عبر قناة خارجية أن المفاتيح العامة للطرفين لم تُستبدل، وتكشف خدمة إشارات أو نقطة نهاية TURN تنتحل هوية الطرف الآخر. لا يثبت تحقق SAS أن TURN غير موجود في مسار الشبكة؛ ففي عمليات النقل عبر الشبكات في المتصفح يظل المُرحِّل يحمل النص المُشفَّر فقط ولا يستطيع قراءة بايت واحد من ملفك. ويُتحقَّق أيضًا من كل ملف بتجزئة SHA-256. عمليات النقل على نفس الشبكة تصل الجهازين مباشرةً.",
-        "لأي شخص يكتب سكربتات لنقل الملفات إلى خادم، توجد أيضًا واجهة سطر أوامر — push/pull عبر SSH أو عبر daemon direct، ومزامنة تزايدية للمجلدات، وإرسال/استقبال برمز اقتران — وهو ما لا يقدّمه تطبيق مقتصر على الشبكة المحلية. وواجهة سطر الأوامر تتصل دائمًا اتصالًا مباشرًا ولا تستخدم مُرحِّلًا أبدًا.",
+        "لأي شخص يكتب سكربتات لنقل الملفات إلى خادم، توجد أيضًا واجهة سطر أوامر — push/sync عبر daemon direct، ومزامنة تزايدية للمجلدات، وإرسال/استقبال برمز اقتران — وهو ما لا يقدّمه تطبيق مقتصر على الشبكة المحلية. يصل push/sync بين أجهزتك مباشرةً ولا يستخدم مُرحِّلًا أبدًا، أما send/receive فيمر عبر المُرحِّل المُشفَّر كلما أصدر الخادم مُرحِّلًا للرمز، ويُحتسب ضمن حصة حركة البيانات الشهرية للحساب الذي أنشأ الرمز.",
       ],
     },
     {
@@ -580,10 +580,10 @@ const ar = {
       body: ["الفروق الأهمّ، جنبًا إلى جنب:"],
       bullets: [
         "التثبيت: يحتاج LocalSend إلى تطبيق على كل جهاز؛ أما وضع نفس الشبكة في Relayium فلا يحتاج إلى شيء سوى المتصفح.",
-        "مدى الشبكة: LocalSend مخصص للشبكة المحلية فقط؛ أما Relayium فيتصل أيضًا عبر الشبكات المختلفة برمز اقتران — وفي المتصفح يمرّ هذا المسار عبر مُرحِّل مشفّر، بينما تتصل واجهة سطر الأوامر مباشرةً دائمًا.",
+        "مدى الشبكة: LocalSend مخصص للشبكة المحلية فقط؛ أما Relayium فيتصل أيضًا عبر الشبكات المختلفة برمز اقتران — وفي المتصفح يمرّ هذا المسار عبر مُرحِّل مشفّر، وتستخدم جلسات رمز الاقتران في واجهة سطر الأوامر هذا المُرحِّل أيضًا كلما أصدره الخادم.",
         "التشفير: يؤمّن LocalSend ناقله المحلي؛ أما Relayium فيضيف قناة مستقلة على مستوى التطبيق بـ X25519 + AES-256-GCM مع رمز تحقق SAS، حتى على الشبكة المحلية.",
         "الحسابات: LocalSend لا يحتاج إلى حساب أبدًا؛ ووضع الشبكة المحلية في Relayium كذلك لا يحتاج إليه — الطرف الذي ينشئ رمز الاقتران وحده يسجّل الدخول، ولإنشائه فقط.",
-        "الأتمتة: يوفّر Relayium واجهة سطر أوامر لـ push/pull عبر SSH، والمزامنة التزايدية، وخدمة استقبال دائمة التشغيل؛ أما LocalSend فتطبيق فقط.",
+        "الأتمتة: يوفّر Relayium واجهة سطر أوامر لـ push/sync عبر daemon direct، والمزامنة التزايدية، وخدمة استقبال دائمة التشغيل؛ أما LocalSend فتطبيق فقط.",
       ],
     },
   ],
@@ -654,7 +654,7 @@ const es = {
       body: [
         "LocalSend es solo para red local por diseño: no tiene forma de alcanzar un dispositivo en una red distinta o a través de internet. Relayium añade eso: crea un código de emparejamiento (o comparte el enlace de acceso que genera) y el otro lado se conecta desde cualquier parte. En el navegador, ese trayecto entre redes pasa a propósito por un retransmisor TURN cifrado en lugar de buscar una ruta directa: forzar un ICE solo de retransmisión levanta la conexión en uno o dos segundos, en vez de gastar unos 20 segundos en comprobaciones de candidatos directos a través de NAT que casi siempre fracasan.",
         "Crear un código de emparejamiento entre redes requiere que el remitente inicie sesión; la persona que recibe nunca necesita cuenta. Cada transferencia en tiempo real —en red local o entre redes— está cifrada de extremo a extremo en la capa de aplicación: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM. Comparar fuera de banda el mismo código SAS de 6 dígitos confirma que las claves públicas de los extremos no fueron sustituidas y detecta a un servicio de señalización o extremo TURN que suplante a la otra parte. La comprobación SAS no demuestra que TURN esté fuera de la ruta de red; en las transferencias entre redes del navegador, el retransmisor sigue transportando solo texto cifrado y no puede leer ni un byte de tu archivo. Cada archivo también se verifica con un hash SHA-256. Las transferencias en la misma red conectan directamente los dos dispositivos.",
-        "Para quien quiera automatizar transferencias hacia un servidor, también hay una CLI —push/pull por SSH o daemon directo, sincronización incremental de carpetas y envío/recepción por código de emparejamiento—, algo que una aplicación solo de red local no ofrece. La CLI siempre se conecta de forma directa y nunca usa un retransmisor.",
+        "Para quien quiera automatizar transferencias hacia un servidor, también hay una CLI —push/sync con daemon directo, sincronización incremental de carpetas y envío/recepción por código de emparejamiento—, algo que una aplicación solo de red local no ofrece. push/sync conecta tus máquinas directamente y nunca usa un retransmisor; send/receive pasa por el retransmisor cifrado siempre que el servidor emite uno para el código, contabilizado en la cuota mensual de tráfico de la cuenta que generó el código.",
       ],
     },
     {
@@ -668,10 +668,10 @@ const es = {
       body: ["Las diferencias que más importan, una al lado de la otra:"],
       bullets: [
         "Instalación: LocalSend necesita una aplicación en cada dispositivo; el modo de misma red de Relayium no necesita nada más que un navegador.",
-        "Alcance de red: LocalSend es solo de red local; Relayium también conecta entre redes distintas con un código de emparejamiento: en el navegador ese trayecto va por un retransmisor cifrado, mientras que la CLI conecta siempre directamente.",
+        "Alcance de red: LocalSend es solo de red local; Relayium también conecta entre redes distintas con un código de emparejamiento: en el navegador ese trayecto va por un retransmisor cifrado, y las sesiones con código de emparejamiento de la CLI también usan ese retransmisor siempre que el servidor emite uno.",
         "Cifrado: LocalSend asegura su transporte local; Relayium añade un canal independiente en la capa de aplicación con X25519 + AES-256-GCM y un código de verificación SAS, incluso en la red local.",
         "Cuentas: LocalSend nunca necesita ninguna; el modo de red local de Relayium tampoco; solo quien crea el código de emparejamiento inicia sesión, y únicamente para crearlo.",
-        "Automatización: Relayium incluye una CLI para push/pull por SSH, sincronización incremental y un servicio de recepción siempre activo; LocalSend es solo aplicación.",
+        "Automatización: Relayium incluye una CLI para push/sync con daemon directo, sincronización incremental y un servicio de recepción siempre activo; LocalSend es solo aplicación.",
       ],
     },
   ],
@@ -742,7 +742,7 @@ const pt = {
       body: [
         "O LocalSend é só para rede local por decisão de projeto — não tem como alcançar um dispositivo em uma rede diferente ou pela internet. O Relayium acrescenta isso: crie um código de emparelhamento (ou compartilhe o link de acesso que ele gera), e o outro lado se conecta de qualquer lugar. No navegador, esse caminho entre redes passa de propósito por um retransmissor TURN criptografado em vez de procurar uma rota direta: forçar um ICE somente de retransmissão levanta a conexão em um ou dois segundos, em vez de gastar cerca de 20 segundos em verificações de candidatos diretos através de NAT que quase sempre falham.",
         "Criar um código de emparelhamento entre redes exige que o remetente faça login; a pessoa que recebe nunca precisa de conta. Toda transferência em tempo real — na rede local ou entre redes — é criptografada de ponta a ponta na camada de aplicação: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM. Comparar fora de banda o mesmo código SAS de 6 dígitos confirma que as chaves públicas dos endpoints não foram substituídas e detecta um serviço de sinalização ou endpoint TURN que se faça passar pela outra ponta. A verificação SAS não prova que o TURN esteja fora do caminho da rede; nas transferências entre redes pelo navegador, o retransmissor continua transportando apenas texto cifrado e não consegue ler um byte do seu arquivo. Cada arquivo também é verificado com um hash SHA-256. As transferências na mesma rede ligam os dois dispositivos diretamente.",
-        "Para quem quiser automatizar transferências para um servidor, também há uma CLI — push/pull por SSH ou daemon direto, sincronização incremental de pastas e envio/recebimento por código de emparelhamento —, algo que um aplicativo só de rede local não oferece. A CLI sempre se conecta diretamente e nunca usa retransmissor.",
+        "Para quem quiser automatizar transferências para um servidor, também há uma CLI — push/sync com daemon direto, sincronização incremental de pastas e envio/recebimento por código de pareamento —, algo que um aplicativo só de rede local não oferece. O push/sync conecta as suas máquinas diretamente e nunca usa retransmissor; o send/receive passa pelo retransmissor criptografado sempre que o servidor emite um para o código, contabilizado na cota mensal de tráfego da conta que gerou o código.",
       ],
     },
     {
@@ -756,10 +756,10 @@ const pt = {
       body: ["As diferenças que mais importam, lado a lado:"],
       bullets: [
         "Instalação: o LocalSend precisa de um aplicativo em cada dispositivo; o modo de mesma rede do Relayium não precisa de nada além de um navegador.",
-        "Alcance de rede: o LocalSend é só de rede local; o Relayium também conecta entre redes diferentes com um código de emparelhamento — no navegador esse trecho passa por um retransmissor criptografado, enquanto a CLI conecta sempre direto.",
+        "Alcance de rede: o LocalSend é só de rede local; o Relayium também conecta entre redes diferentes com um código de emparelhamento — no navegador esse trecho passa por um retransmissor criptografado, e as sessões com código de pareamento da CLI também usam esse retransmissor sempre que o servidor emite um.",
         "Criptografia: o LocalSend protege seu transporte local; o Relayium acrescenta um canal independente na camada de aplicação com X25519 + AES-256-GCM e um código de verificação SAS, mesmo na rede local.",
         "Contas: o LocalSend nunca precisa de nenhuma; o modo de rede local do Relayium também não — só quem cria o código de emparelhamento faz login, e só para criá-lo.",
-        "Automação: o Relayium traz uma CLI para push/pull por SSH, sincronização incremental e um serviço de recebimento sempre ativo; o LocalSend é apenas aplicativo.",
+        "Automação: o Relayium traz uma CLI para push/sync com daemon direto, sincronização incremental e um serviço de recebimento sempre ativo; o LocalSend é apenas aplicativo.",
       ],
     },
   ],

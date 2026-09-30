@@ -75,9 +75,24 @@ func (s *Service) CSRFGuard(next http.Handler) http.Handler {
 				return
 			}
 		}
+		// The admin console is the one surface where a single forged request
+		// changes the whole service, so it does not rely on Origin always being
+		// present: a browser that omits or strips Origin still states where the
+		// request came from in Sec-Fetch-Site, and anything but the console's own
+		// origin (or a user-typed navigation, "none") is refused. A client that
+		// sends neither header is not a browser and carries no ambient cookie
+		// risk, so it is left to the admin session check as before.
+		if isAdminPath(r.URL.Path) {
+			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+				http.Error(w, "cross-site request rejected", http.StatusForbidden)
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }
+
+func isAdminPath(p string) bool { return p == "/admin" || strings.HasPrefix(p, "/admin/") }
 
 func (s *Service) routeMux() *http.ServeMux {
 	mux := http.NewServeMux()
@@ -559,18 +574,45 @@ func (s *Service) RequireSession(next func(http.ResponseWriter, *http.Request, U
 
 func (s *Service) handleMagicRequest(w http.ResponseWriter, r *http.Request) {
 	email := normEmail(r.FormValue("email"))
-	// Rate-limit per email+IP so the endpoint can't be turned into an email bomb.
+	// Rate-limit per email+IP and per address (allowEmailSend) so the endpoint
+	// can't be turned into an email bomb.
 	// Each request counts toward the limit; past the threshold we silently skip
 	// sending. Always respond 200 regardless — of send success, unknown email, or
 	// throttle state — so neither account existence nor the limit leaks.
-	if email != "" {
-		key := email + "|" + s.rateLimitIP(r)
-		if !s.magicRequests.locked(key, s.now()) {
-			s.magicRequests.recordFail(key, s.now())
-			_ = s.RequestMagicLink(r.Context(), email)
-		}
+	if email != "" && s.allowEmailSend(s.magicRequests, email, r) {
+		_ = s.RequestMagicLink(r.Context(), email)
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
+// emailBudgetKey namespaces the per-address send budget inside a request
+// throttle. The "|" separated email+IP keys never start with this prefix.
+func emailBudgetKey(email string) string { return "email-budget|" + email }
+
+// allowEmailSend gates an unauthenticated "send a mail to this address"
+// request (magic link, password reset, verification resend) on two budgets and
+// spends both only when it lets the send through:
+//
+//   - email+IP caps what one source can make any one address receive;
+//   - the address alone caps what it receives in total, so many source IPs
+//     cannot add their per-IP budgets together into a mail bomb.
+//
+// The address-only budget is deliberately NOT applied to password login: there
+// a shared counter would let anyone lock a victim out of their own account.
+// Here exhausting it cannot lock the owner out, because it is only exhausted by
+// mails that were actually sent to that inbox: their links stay valid (a new
+// request does not revoke earlier ones) for at least the lockout window, so the
+// owner always holds a live link while their own request is being skipped
+// (shipped TTLs: magic link 15 min = the lockout window, reset 1 h, verify 24 h).
+func (s *Service) allowEmailSend(t *loginThrottle, email string, r *http.Request) bool {
+	now := s.now()
+	sourceKey, budgetKey := email+"|"+s.rateLimitIP(r), emailBudgetKey(email)
+	if t.locked(sourceKey, now) || t.locked(budgetKey, now) {
+		return false
+	}
+	t.recordFail(sourceKey, now)
+	t.recordFail(budgetKey, now)
+	return true
 }
 
 // handleMagicVerifyRedirect 只把邮件里的链接转成 SPA 路由，**不碰令牌**。
@@ -1175,17 +1217,14 @@ func (s *Service) handleResendVerification(w http.ResponseWriter, r *http.Reques
 	}
 	_ = httpx.DecodeJSONBody(w, r, &in)
 	email := normEmail(in.Email)
-	// Anti-enumeration + anti-bomb: throttle per email+IP; only resend when the
-	// account exists AND is still unverified; always respond 200.
-	if email != "" {
-		key := email + "|" + s.rateLimitIP(r)
-		if !s.verifyRequests.locked(key, s.now()) {
-			s.verifyRequests.recordFail(key, s.now())
-			if uid, _, ok, _ := s.store.GetCredentials(r.Context(), email); ok {
-				if verified, _ := s.store.EmailVerified(r.Context(), uid); !verified {
-					if u, err := s.store.GetUserByID(r.Context(), uid); err == nil {
-						_ = s.SendVerifyEmail(r.Context(), u)
-					}
+	// Anti-enumeration + anti-bomb: throttle per email+IP and per address (see
+	// allowEmailSend); only resend when the account exists AND is still
+	// unverified; always respond 200.
+	if email != "" && s.allowEmailSend(s.verifyRequests, email, r) {
+		if uid, _, ok, _ := s.store.GetCredentials(r.Context(), email); ok {
+			if verified, _ := s.store.EmailVerified(r.Context(), uid); !verified {
+				if u, err := s.store.GetUserByID(r.Context(), uid); err == nil {
+					_ = s.SendVerifyEmail(r.Context(), u)
 				}
 			}
 		}
@@ -1199,12 +1238,8 @@ func (s *Service) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = httpx.DecodeJSONBody(w, r, &in)
 	email := normEmail(in.Email)
-	if email != "" {
-		key := email + "|" + s.rateLimitIP(r)
-		if !s.resetRequests.locked(key, s.now()) {
-			s.resetRequests.recordFail(key, s.now())
-			_ = s.RequestPasswordReset(r.Context(), email)
-		}
+	if email != "" && s.allowEmailSend(s.resetRequests, email, r) {
+		_ = s.RequestPasswordReset(r.Context(), email)
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }

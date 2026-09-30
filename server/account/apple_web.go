@@ -93,6 +93,10 @@ func (s *Service) handleAppleWebStart(w http.ResponseWriter, r *http.Request) {
 // session exactly like handleGoogleCallback does for Google.
 func (s *Service) handleAppleWebCallback(w http.ResponseWriter, r *http.Request) {
 	fail := func() { http.Redirect(w, r, "/?login=error", http.StatusFound) }
+	// Spend the state and nonce on every outcome (see clearOAuthCookie). The
+	// request still carries them, so the checks below read them as before.
+	s.clearOAuthCookie(w, oauthStateCookie, http.SameSiteNoneMode)
+	s.clearOAuthCookie(w, oauthNonceCookie, http.SameSiteNoneMode)
 	if err := r.ParseForm(); err != nil {
 		fail()
 		return
@@ -129,6 +133,15 @@ func (s *Service) handleAppleWebCallback(w http.ResponseWriter, r *http.Request)
 	}
 	if !found {
 		if claims.Email == "" {
+			fail()
+			return
+		}
+		// Creating or linking an account by email is only as trustworthy as the
+		// email: an address the IdP has not verified must not attach this Apple
+		// id to whichever account holds it (or reserve it for a later owner).
+		// Apple marks relay and ordinary addresses verified, so this refuses only
+		// an anomalous token.
+		if !claims.EmailVerified {
 			fail()
 			return
 		}

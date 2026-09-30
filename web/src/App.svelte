@@ -20,6 +20,7 @@
   import Icon from "./lib/Icon.svelte";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
+  import { progressPercent } from "./lib/progress-percent";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
   import { MAX_FILES } from "./lib/transfer";
   import type { Xfer } from "./lib/transfer-model";
@@ -1586,8 +1587,11 @@
     registerServiceWorker();
     // Pick up any files launched into the app via the OS share sheet (installed
     // PWA, Android/Chromium). The auto-send effect routes them once a peer is up.
-    drainSharedFiles().then((files) => {
+    // A failed hand-off must be said out loud: without it the app opens as if
+    // nothing had been shared (the cached plaintext is already deleted by then).
+    drainSharedFiles().then(({ files, failed }) => {
       if (files.length) setOutbox(files.map((file) => ({ file })));
+      if (failed) flash(messages[lang()].shareTargetFailed);
     });
     if (!window.isSecureContext || !crypto.subtle) {
       unsupported = true;
@@ -1998,8 +2002,10 @@
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+  // Held at 99 until the transfer is done (verified/acknowledged), so the card
+  // and the tab title never read 100 % for something still being confirmed.
   function pct(x: Xfer): number {
-    return x.total ? Math.min(100, Math.round((x.sent / x.total) * 100)) : (x.done ? 100 : 0);
+    return progressPercent(x.sent, x.total, x.done);
   }
   // Resolve a status key against the active language at render time.
   function statusText(m: Messages, x: Xfer): string {

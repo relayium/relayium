@@ -96,6 +96,7 @@ type pairFlags struct {
 	dest      string
 	verify    bool
 	accept    bool
+	configDir string
 }
 
 func pairFlagSet(f *pairFlags) *flag.FlagSet {
@@ -105,6 +106,7 @@ func pairFlagSet(f *pairFlags) *flag.FlagSet {
 	fs.StringVar(&f.dest, "dest", ".", "directory accepted files are saved into")
 	fs.BoolVar(&f.verify, "verify", false, "require SAS confirmation before anything is accepted or sent")
 	fs.BoolVar(&f.accept, "accept", false, "accept every incoming batch without asking")
+	fs.StringVar(&f.configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
 	return fs
 }
 
@@ -164,7 +166,7 @@ func runPair(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 	if code == "" {
 		var err error
-		if code, err = mintCode(ctx, f.server, stderr, mintForPair); err != nil {
+		if code, err = mintCodeIn(ctx, f.server, f.configDir, stderr, mintForPair); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}

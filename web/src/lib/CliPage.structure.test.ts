@@ -161,9 +161,9 @@ describe("按任务选择", () => {
   });
 });
 
-// ── 六种模式 ────────────────────────────────────────────────────────────────
+// ── 七种模式 ────────────────────────────────────────────────────────────────
 describe("模式区块", () => {
-  it("恰好六个，按被采纳的顺序，名字是命令本身", async () => {
+  it("恰好七个，按被采纳的顺序，名字是命令本身", async () => {
     const target = await render();
     const rendered = [...target.querySelectorAll("[data-cli-mode]")].map((n) =>
       n.getAttribute("data-cli-mode"),
@@ -173,6 +173,7 @@ describe("模式区块", () => {
       "Device Inbox",
       "text",
       "send / receive",
+      "pair",
       "serve",
       "sync",
     ]);
@@ -189,7 +190,7 @@ describe("模式区块", () => {
     expect(CLI_MODES.find((m) => m.key === "inbox")!.id).toBe("device-inbox");
   });
 
-  it("对比表覆盖六种模式 × 四个维度，没有空格子", async () => {
+  it("对比表覆盖七种模式 × 四个维度，没有空格子", async () => {
     const target = await render();
     const rows = [...target.querySelectorAll("#modes table tbody tr")];
     expect(rows).toHaveLength(CLI_MODES.length);
@@ -212,18 +213,21 @@ describe("模式区块", () => {
 // 滚过剩下的模式、再从八篇里挑对一篇。写在页面标记里的链接就是会被一行一行漏掉，
 // 所以配对是**数据**（MODE_GUIDE），由 ModeSection 统一渲染。
 describe("模式 → 指南", () => {
-  it("就是被采纳的那张映射表，六个模式一个不多一个不少", () => {
+  it("就是被采纳的那张映射表，七个模式一个不多一个不少", () => {
     expect(Object.keys(MODE_GUIDE).sort()).toEqual([...CLI_MODES.map((m) => m.key)].sort());
     expect(MODE_GUIDE).toEqual({
       cloud: "cloudAsync",
       inbox: "deviceInboxServer",
       text: "terminal",
       sendReceive: "sendToSomeone",
+      // 没有任何一篇现有指南讲 pair；显式的 null 好过一条指向别的主题的链接。
+      pair: null,
       serve: "serverToServer",
       sync: "syncLargeFolder",
     });
     // 映射的右边必须是真存在的指南键，否则 href 会渲染成 /undefined/。
     for (const key of Object.values(MODE_GUIDE)) {
+      if (key === null) continue;
       expect(GUIDES.map((g) => g.key), `${key} 不是一篇真指南`).toContain(key);
     }
   });
@@ -233,22 +237,29 @@ describe("模式 → 指南", () => {
     for (const mode of CLI_MODES) {
       const section = target.querySelector(`#${mode.id}`) as HTMLElement;
       const links = [...section.querySelectorAll("a[data-mode-guide]")] as HTMLAnchorElement[];
+      const guide = MODE_GUIDE[mode.key];
+      if (guide === null) {
+        // 显式"还没有指南"：不渲染链接，而不是借一篇别的。
+        expect(links, `${mode.name} 没有指南却渲染了链接`).toHaveLength(0);
+        continue;
+      }
       // 两条 = 又回到"这一行还要再选一次"，零条 = 这一行没有出口。
       expect(links, `${mode.name} 的指南链接不是恰好一条`).toHaveLength(1);
-      const guide = MODE_GUIDE[mode.key];
       expect(links[0].getAttribute("data-mode-guide")).toBe(guide);
       // 结尾斜杠：文章页是目录，少一个斜杠每个读者都多花一次跳转。
       expect(links[0].getAttribute("href")).toBe(`/${GUIDE_SLUG[guide]}/`);
       expect(links[0].textContent).toContain(en.cliPage.guides[guide]);
     }
-    // 七行，七条，页面上再没有第八条。
-    expect(target.querySelectorAll("#modes a[data-mode-guide]")).toHaveLength(CLI_MODES.length);
+    // 有指南的每一行一条，页面上再没有多余的。
+    const withGuide = CLI_MODES.filter((m) => MODE_GUIDE[m.key] !== null).length;
+    expect(target.querySelectorAll("#modes a[data-mode-guide]")).toHaveLength(withGuide);
   });
 
   it("中文页链进中文文章，仍然带斜杠，标题也是中文的", async () => {
     const target = await render("zh");
     for (const mode of CLI_MODES) {
       const guide = MODE_GUIDE[mode.key];
+      if (guide === null) continue;
       const link = target.querySelector(
         `#${mode.id} a[data-mode-guide="${guide}"]`,
       ) as HTMLAnchorElement;
@@ -385,7 +396,7 @@ describe("复制控件", () => {
   it("每一个命令块都渲染出来了，数量和数据一致", async () => {
     const target = await render();
     const buttons = [...target.querySelectorAll("button.copy")];
-    expect(COMMAND_BLOCKS).toHaveLength(16);
+    expect(COMMAND_BLOCKS).toHaveLength(17);
     expect(buttons).toHaveLength(COMMAND_BLOCKS.length);
   });
 
@@ -562,11 +573,13 @@ describe("产品事实", () => {
     expect(hrefs).toContain("/releases/latest");
   });
 
-  it("设备收件箱只讲接收侧，并且把发送侧指去别处", async () => {
+  it("设备收件箱两侧都讲：CLI 能发送（inbox send），也能接收", async () => {
     const target = await render();
     const text = target.querySelector("#device-inbox")!.textContent ?? "";
-    expect(text).toMatch(/RECEIVE side only/);
-    expect(text).toMatch(/no CLI command that sends into an inbox/i);
+    expect(text).not.toMatch(/RECEIVE side only/);
+    expect(text).not.toMatch(/no CLI command that sends into an inbox/i);
+    expect(text).toMatch(/relayium inbox send --to <device>/);
+    expect(text).toMatch(/Queued is not saved/);
     // 两台自己的服务器之间搬文件不是收件箱的事，要说清楚去哪。
     expect(text).toMatch(/serve with push or sync/i);
     expect(text).toMatch(/no official Relayium container image/i);
@@ -679,8 +692,17 @@ describe("产品事实", () => {
     for (const cmd of ["login", "logout", "inbox <any>"]) {
       expect(scope["--config-dir <d>"], `--config-dir 漏了 ${cmd}`).toContain(cmd);
     }
-    // 曾经写作 "send / receive"。text 也吃这个参数，而 text 恰恰是最想用它的地方。
-    expect(scope["--verify"]).toBe("send · receive · text");
+    // 曾经写作 "send / receive"。text 也吃这个参数，而 text 恰恰是最想用它的地方；
+    // pair 同样（help.go pairUsage）。
+    expect(scope["--verify"]).toBe("pair · send · receive · text");
+    // whoami/up/send/text/pair 学会了 --config-dir（run.go usage 的 → 列表）。
+    for (const cmd of ["whoami", "up", "pair", "send", "text"]) {
+      expect(scope["--config-dir <d>"], `--config-dir 漏了 ${cmd}`).toContain(cmd);
+    }
+    expect(scope["--config-dir <d>"]).not.toContain("receive");
+    expect(scope["--dest <dir>"]).toBe("pair");
+    expect(scope["--accept"]).toBe("pair");
+    expect(scope["--server <url>"]).toContain("pair");
     // 曾经写作 "serve, relayium://"。push 根本没有 --port，端口写在 URL 里。
     expect(scope["--port <n>"]).toBe("serve");
     // 这四个此前完全缺席，而它们正是装服务的人要问的。
@@ -701,6 +723,69 @@ describe("产品事实", () => {
     expect(note).toMatch(/really be reachable/i);
     expect(note).toMatch(/forwarded port/i);
     expect(target.querySelector("#command-reference")!.textContent).toContain(note);
+  });
+
+  // 2026-09-30：这一页描述的是下一个 CLI 版本的二进制。每条都对着
+  // server/cmd/relayium 的 help 文本核过：linkRelayPolicy（配对码会话只要签发了
+  // TURN 就全程走中继，计入生成码的账号）、pairUsage（--dest/--accept，对端可以
+  // 是 App 或网页）、parseTTL + account.clampTTL（任意时长，服务端夹到
+  // [60s, 套餐上限]）、syncUsage（没有 --allow-delete 时 --delete 被忽略并回报）。
+  for (const [code, m] of Object.entries(locales) as ["en" | "zh", Messages][]) {
+    it(`${code}: 配对码会话的中继与计量说的是二进制的规则，不是"只走直连"`, () => {
+      const all = JSON.stringify(m.cliPage);
+      expect(all).not.toMatch(/direct-only|never relays|只走直连/i);
+      expect(all).not.toMatch(/both ends must be the CLI|两端都必须是 CLI/i);
+      for (const key of ["text", "sendReceive", "pair"] as const) {
+        expect(m.cliPage.compare[key].path, `${code}: compare.${key}.path`).toMatch(
+          code === "en" ? /relay whenever it issues one/ : /服务器签发中继时经 Relayium 中继/,
+        );
+      }
+      expect(m.cliPage.modes.sendReceive.notes.join(" ")).toMatch(
+        code === "en" ? /account that minted the code/ : /生成配对码那个账号/,
+      );
+    });
+
+    it(`${code}: --ttl 是任意时长、由服务端夹紧，不是一张固定菜单`, () => {
+      const ttl = m.cliPage.flags.ttl;
+      expect(ttl).not.toMatch(/1h, 1d, 3d, 7d or 14d|unavailable/);
+      expect(ttl).toMatch(code === "en" ? /at least a minute and at most your plan/ : /至少保留一分钟/);
+      expect(ttl).toMatch(/90m/);
+    });
+
+    it(`${code}: sync --delete 没有 --allow-delete 时是被忽略并回报，不是被拒绝`, () => {
+      const notes = m.cliPage.modes.sync.notes.join(" ");
+      expect(notes).not.toMatch(/delete is refused/);
+      expect(notes).toMatch(code === "en" ? /ignored and reported back to you/ : /被忽略并回报给你/);
+    });
+
+    it(`${code}: update --force 还会绕过降级保护与最低版本下限`, () => {
+      expect(m.cliPage.flags.force).toMatch(
+        code === "en" ? /downgrade guard and the minimum-version floor/ : /降级保护和最低版本下限/,
+      );
+    });
+
+    it(`${code}: 安装脚本需要 openssl，否则要显式 RELAYIUM_ALLOW_UNSIGNED=1`, () => {
+      expect(m.cliPage.installVerifyNote).toContain("openssl");
+      expect(m.cliPage.installVerifyNote).toContain("RELAYIUM_ALLOW_UNSIGNED=1");
+    });
+
+    it(`${code}: login/up 拒绝非回环的明文 http 服务器`, () => {
+      expect(m.cliPage.flags.server).toMatch(/https:\/\//);
+      expect(m.cliPage.flags.server).toMatch(/loopback|回环/);
+    });
+  }
+
+  it("pair 是一种独立的模式，带着它真实的命令与参数", async () => {
+    const target = await render();
+    const section = target.querySelector("#pair") as HTMLElement;
+    expect(section, "没有 #pair 区块").toBeTruthy();
+    const text = section.textContent ?? "";
+    expect(text).toContain("relayium pair");
+    expect(text).toContain("--dest");
+    expect(text).toContain("--accept");
+    expect(text).toMatch(/\/send/);
+    expect(text).toMatch(/app or the web page/i);
+    expect(target.querySelector("#install")!.textContent).toContain("RELAYIUM_ALLOW_UNSIGNED=1");
   });
 
   it("FAQ 就是被采纳的那四个问题", async () => {

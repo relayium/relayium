@@ -71,14 +71,16 @@ func createIdentity(dir, keyPath, crtPath string) (*Identity, error) {
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 	crtPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 
-	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+	// The key file's existence is what LoadOrCreateIdentity treats as "an
+	// identity exists", so the certificate is published FIRST and the key LAST,
+	// each by write-temp + fsync + rename. A crash or error at any point leaves
+	// either no key (the next run regenerates cleanly) or a complete pair —
+	// never a key without its certificate, or a torn file, which would fail
+	// every later load until the user deleted it by hand.
+	if err := writeFileAtomic(dir, crtPath, crtPEM, 0o644); err != nil {
 		return nil, err
 	}
-	// Guarantee 0600 regardless of umask so the load-time perm check passes.
-	if err := os.Chmod(keyPath, 0o600); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(crtPath, crtPEM, 0o644); err != nil {
+	if err := writeFileAtomic(dir, keyPath, keyPEM, 0o600); err != nil {
 		return nil, err
 	}
 
@@ -87,6 +89,56 @@ func createIdentity(dir, keyPath, crtPath string) (*Identity, error) {
 		TLSCert:     tls.Certificate{Certificate: [][]byte{der}, PrivateKey: priv},
 		Fingerprint: hex.EncodeToString(sum[:]),
 	}, nil
+}
+
+// fsyncFile flushes a file to stable storage. A var so a test can inject a
+// failure and prove nothing is published when the flush fails.
+var fsyncFile = (*os.File).Sync
+
+// writeFileAtomic writes data to path via a temp file in dir: write, chmod
+// (exact mode regardless of umask), fsync, close, rename, then a best-effort
+// fsync of dir so the rename itself survives a crash. On any error the temp
+// file is removed and path is untouched.
+func writeFileAtomic(dir, path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op once the rename succeeds
+	if err := tmp.Chmod(perm); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := fsyncFile(tmp); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	syncDir(dir)
+	return nil
+}
+
+// syncDir fsyncs a directory so a rename into it is durable. Best effort:
+// Windows cannot open a directory for sync, and a failure here cannot undo the
+// rename that already happened.
+func syncDir(dir string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		d.Close()
+	}
 }
 
 func loadIdentity(keyPath, crtPath string) (*Identity, error) {

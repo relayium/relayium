@@ -77,11 +77,11 @@ const NO_REALTIME_RETENTION = {
   pt: /(?:não mantém cópia (?:no servidor|de conteúdo)|não armazena conteúdo nem histórico|não fica cópia de conteúdo)/i,
 };
 
-// The seven frozen locales keep the sentence they were archived with, and it
-// is not corrected — their prose is byte-stable by policy. The two maintained
-// ones may no longer say it: `relayium up` and `relayium down` are CLI modes
-// and they read and write hosted storage, so "the CLI is direct-only" is false
-// of the CLI and true only of the modes this lead now enumerates.
+// The archived "the CLI is direct-only" sentence, per frozen locale. It was
+// kept byte-stable until 2026-09-30, when the pairing-code sessions began to
+// relay; it is now false of every locale, so the seven archived leads carry a
+// translated erratum instead (DECISION-LOG 2026-09-30 item 2) and none may
+// say it. `relayium up` and `relayium down` were already hosted-storage modes.
 const CLI_DIRECT_ONLY = {
   ja: /CLI.*直接接続専用/,
   ko: /CLI.*직접 연결 전용/,
@@ -91,10 +91,23 @@ const CLI_DIRECT_ONLY = {
   es: /CLI.*direct-only/i,
   pt: /CLI.*direct-only/i,
 };
-// What the maintained lead must say instead: which modes are direct.
+// What the archived leads say instead: the CLI splits into direct
+// server-to-server modes and pairing-code sessions that relay when issued.
+const CLI_SPLIT_FROZEN = {
+  ja: /CLI は2つに分かれます。サーバー間モード（serve と push または sync）は直結でリレーを使わず、ペアリングコードによるセッション（send \/ receive、text、pair）はサーバーがそのコードに暗号化 TURN リレーを発行した場合はそれを通ります/,
+  ko: /CLI는 둘로 나뉩니다\. 서버 간 모드\(serve와 push 또는 sync\)는 직접 연결이며 릴레이를 쓰지 않고, 페어링 코드 세션\(send \/ receive, text, pair\)은 서버가 해당 코드에 암호화된 TURN 릴레이를 발급하면/,
+  de: /die CLI teilt sich in zwei: Ihre Server-zu-Server-Modi \(serve mit push oder sync\) sind direkt[^.]*Pairing-Code-Sitzungen \(send \/ receive, text und pair\) laufen über ein verschlüsseltes TURN-Relay/,
+  fr: /le CLI se divise en deux\u00a0: ses modes de serveur à serveur \(serve avec push ou sync\) sont directs[^.]*sessions à code d'appairage \(send \/ receive, text et pair\) passent par un relais TURN chiffré/,
+  ar: /وينقسم CLI إلى قسمين: أوضاعه بين الخوادم \(serve مع push أو sync\) مباشرة[^.]*جلسات رمز الاقتران فيه \(send \/ receive وtext وpair\) فتمر عبر مُرحِّل TURN مُشفَّر/u,
+  es: /el CLI se divide en dos: sus modos de servidor a servidor \(serve con push o sync\) son directos[^.]*sesiones con código de emparejamiento \(send \/ receive, text y pair\) pasan por un retransmisor TURN cifrado/,
+  pt: /a CLI se divide em duas: os modos de servidor para servidor \(serve com push ou sync\) são diretos[^.]*sessões com código de pareamento \(send \/ receive, text e pair\) passam por um retransmissor TURN criptografado/,
+};
+// What the maintained lead must say instead: which modes are direct. Only the
+// server-to-server modes are (2026-09-30, help.go linkRelayPolicy): the
+// pairing-code sessions relay whenever the server issues a relay.
 const CLI_DIRECT_MODES = {
-  en: /CLI'?s? transfer modes[^.]*are direct and never relayed/i,
-  zh: /CLI 的传输模式[^。]*都是直连，从不走中继/,
+  en: /server-to-server modes — serve with push or sync — are direct and never relayed, while its pairing-code sessions — send \/ receive, text and pair — go through an encrypted TURN relay whenever the server issues one/i,
+  zh: /服务器对服务器模式——serve 配合 push 或 sync——是直连，从不走中继；配对码会话——send \/ receive、text 和 pair——只要服务器为这个码签发了加密 TURN 中继，就经它传输/,
 };
 // …and what it may not say: that the CLI as a whole is direct.
 const CLI_WHOLE_IS_DIRECT = {
@@ -148,7 +161,8 @@ describe("article realtime path claims", () => {
           CLI_WHOLE_IS_DIRECT[lang],
         );
       } else {
-        expect(copy, `p2p-guide [${lang}] archived lead changed`).toMatch(CLI_DIRECT_ONLY[lang]);
+        expect(copy, `p2p-guide [${lang}] archived lead still calls the CLI direct-only`).not.toMatch(CLI_DIRECT_ONLY[lang]);
+        expect(copy, `p2p-guide [${lang}] archived lead lost the corrected CLI split`).toMatch(CLI_SPLIT_FROZEN[lang]);
       }
     }
 

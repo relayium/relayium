@@ -289,8 +289,7 @@ struct UploadPane: View {
                 .accessibilityIdentifier("storedSend.resultLink")
             HStack {
                 Button(L10n.t(.commonCopy)) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(link, forType: .string)
+                    copyCapabilityLink(link)
                     copiedLink = link
                 }
                 .buttonStyle(.referencePrimary)
@@ -349,8 +348,8 @@ struct UploadPane: View {
                 // holds a command, not the link, and saying "Copied" beside the
                 // link would be describing the wrong thing.
                 Button(L10n.t(.storedSendCliCopy)) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(command, forType: .string)
+                    // The command embeds the same `#k=` key as the link.
+                    copyCapabilityLink(command)
                     copiedCommand = command
                 }
                 .buttonStyle(.referenceSecondary)

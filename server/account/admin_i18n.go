@@ -362,6 +362,10 @@ var adminEN = map[string]string{
 	"新购买已暂停": "New purchases paused",
 	"暂停新购买":  "Pause new purchases",
 	"恢复新购买":  "Resume new purchases",
+
+	// A-M3: shown instead of a fleet node's delete button while rows still block it.
+	"条记录待清理（含已过期未回收的文件与上传会话），归零后才能删除": "record(s) left to clear (expired, not-yet-collected files and upload sessions count too); delete becomes available at zero",
+	"无法读取剩余记录数，暂不提供删除":                "Could not read what is left on this node, so delete is not offered",
 }
 
 // adminLangCookie holds an explicit choice made in the console's header.

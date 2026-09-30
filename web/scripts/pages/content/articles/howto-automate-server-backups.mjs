@@ -132,12 +132,12 @@ $ echo $?
             fix: "cron runs with a minimal PATH, usually just /usr/bin:/bin. If install.sh could not write to /usr/local/bin it put the binary in ~/.local/bin, which cron will never find. Use the absolute path from command -v in the crontab line, or set PATH= on a line at the top of the crontab.",
           },
           {
-            symptom: "The log shows the ssh connection being refused, or nothing after the first run.",
+            symptom: "The log says \"SSH transfers are currently disabled\", or shows nothing after the first run.",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              `grep -i "SSH transfers" ~/relayium-sync.log
+# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.`,
             ],
-            fix: "cron has no ssh-agent and no terminal, so a key with a passphrase can only hang or fail. Point -i at a passphrase-less key reserved for backups, and confirm with BatchMode=yes, which refuses to prompt rather than waiting for someone who is not there.",
+            fix: "The scheduled command still names an old SSH destination, and SSH transfers are retired. Run relayium serve on the backup server, authorize this machine's relayium id fingerprint there, and change the target to relayium://backup-server — no SSH key, agent or passphrase is involved any more.",
           },
           {
             symptom: "sync runs cleanly but files deleted at the source are still on the destination.",
@@ -178,7 +178,7 @@ $ echo $?
       },
       {
         q: "What happens if the cron job is interrupted halfway through?",
-        a: "It depends which command you scheduled. sync continues: the next run skips what already matches and carries on a partial file, and --no-resume turns that off. push does not resume in either protocol — it refuses a destination that already exists, which is why the push line above writes into a dated directory, so the next night is a clean full copy rather than a refusal. --no-resume is accepted by push and does nothing.",
+        a: "It depends which command you scheduled. sync continues: the next run skips what already matches and carries on a partial file, and --no-resume turns that off. push does not resume — it refuses a destination that already exists, so a scheduled push would need a fresh (for example dated) destination every run; that is why this guide schedules sync. --no-resume is accepted by push and does nothing.",
       },
       {
         q: "Can --delete accidentally wipe my destination?",
@@ -329,12 +329,12 @@ $ echo $?
             fix: "cron 使用一个最小化的 PATH，通常只有 /usr/bin:/bin。如果 install.sh 当初写不进 /usr/local/bin，它会把二进制放在 ~/.local/bin，而 cron 永远找不到那里。把 command -v 给出的绝对路径写进 crontab 行，或者在 crontab 顶部单独加一行 PATH=。",
           },
           {
-            symptom: "日志显示 ssh 连接被拒绝，或者第一次运行之后就什么都没有了。",
+            symptom: "日志显示 “SSH transfers are currently disabled”，或者第一次运行之后就什么都没有了。",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              `grep -i "SSH transfers" ~/relayium-sync.log
+# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.`,
             ],
-            fix: "cron 既没有 ssh-agent 也没有终端，所以带口令的密钥只能卡住或失败。用 -i 指向一把专供备份、没有口令的密钥，并用 BatchMode=yes 确认——它宁可拒绝也不会去等一个根本不在场的人。",
+            fix: "定时命令里还写着旧的 SSH 目标，而 SSH 传输已经退役。请在备份服务器上运行 relayium serve，在那边授权这台机器 relayium id 打印的指纹，再把目标改成 relayium://backup-server——从此不再涉及 SSH 密钥、agent 或口令。",
           },
           {
             symptom: "sync 跑得很干净，但源端已删除的文件在目标端还在。",
@@ -375,7 +375,7 @@ $ echo $?
       },
       {
         q: "如果 cron 任务执行到一半被中断会怎样？",
-        a: "看你排的是哪条命令。sync 会接着来：下一次运行跳过已匹配的文件，并把半截的文件接着传，--no-resume 可以关掉这一点。push 在两条协议下都不续传——它会拒绝已存在的目标，这正是上面那行 push 写进按日期命名目录的原因，好让第二晚是一次干净的完整复制而不是一次拒绝。--no-resume 在 push 上能被接受，但什么也不做。",
+        a: "看你排的是哪条命令。sync 会接着来：下一次运行跳过已匹配的文件，并把半截的文件接着传，--no-resume 可以关掉这一点。push 不续传——它会拒绝已存在的目标，所以定时运行的 push 每次都需要一个新的（例如按日期命名的）目标目录；这正是本指南排的是 sync 的原因。--no-resume 在 push 上能被接受，但什么也不做。",
       },
       {
         q: "--delete 会不会不小心清空我的目标目录？",
@@ -406,36 +406,32 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "自分で覚えて実行しなければならないバックアップは、たいてい実行されません。cron は覚えていてくれますし、Relayium CLI はまさにそのために作られています。ディレクトリを別のマシンへコピー（またはミラー）し、転送する各ファイルを検証する、単一の非対話型コマンドです。",
-    "本ガイドでは、cron から relayium push と増分同期の relayium sync をスケジュール実行する方法、どちらでも使える2つの転送方式、そしてそのままコピーできる crontab の行を扱います。",
+    "本ガイドでは、cron から relayium push と増分同期の relayium sync をスケジュール実行する方法、どちらも使うデーモン直結の転送方式、そしてそのままコピーできる crontab の行を扱います。",
   ],
   sections: [
     {
       heading: "push と sync：全体コピーか増分ミラーか",
       body: [
         "push と sync はどちらもディレクトリを別のマシンへ転送し、どちらも繰り返し実行して安全ですが、解決するバックアップの課題は少し異なります。",
-        "push は実行するたびに SSH または daemon-direct 経由で毎回コピーを送ります。シンプルで、relayium がインストールされていない素のサーバーに対しても tar フォールバックで動作します。一方 sync は宛先をソースの増分・一方向ミラーとして維持します。変更されたファイルだけを再送するので、大きなディレクトリでも最初の同期の後は夜間の同期が高速です。sync は常に両端で relayium のネイティブプロトコルを必要とします。tar フォールバックはありません。",
+        "push は衝突に安全な一回限りのデーモン直結コピーを作り、既存の宛先は上書きも再開もせずに拒否します。そのため、固定の受信ディレクトリへ繰り返し実行するジョブには向きません。一方 sync は宛先をソースの増分・一方向ミラーとして維持します。変更のないファイルは飛ばし、変更されたファイルだけを送り、半端なファイルは次の実行で続けます。ミラーなので保持するのは過去ではなく現在の状態で、ソース側での削除や破損も伝わり得ます。",
       ],
       bullets: [
-        "relayium がインストールされていないかもしれないサーバーへの、シンプルなスケジュールコピーには push を使いましょう。",
+        "実行ごとに独立したコピーを残し、古いコピーも保持したいときは、日付付きの宛先へ push を使いましょう。",
         "大きい、あるいは頻繁に変化するディレクトリで、毎晩すべてを再送するのが無駄になる場合は sync を使いましょう。",
-        "どちらもネイティブプロトコルでは転送したものをファイルごとに SHA-256 で検証します。push も pull も再開しません。半端なファイルを続けられるのは3つのうち sync だけで、tar フォールバックは検証も再開もしません。",
+        "どちらも転送した各ファイルを SHA-256 で検証します。push は再開せず、sync は半端なファイルを次の実行で続けます。",
       ],
     },
     {
-      heading: "2つの転送方式：SSH か daemon-direct か",
+      heading: "転送方式は1つ：daemon-direct",
       body: [
-        "どちらのコマンドも、SSH の宛先（scp 形式、お使いの ~/.ssh/config を使用）を指定できますし、相手のマシンで relayium serve が動いていれば、SSH なしで daemon-direct プロトコル経由で直接接続することもできます。",
+        "どちらのコマンドも、受信側のマシンで relayium serve が動いている relayium:// の宛先を指定します。SSH の宛先は廃止されました。",
       ],
       code: [
-        `# SSH の宛先：既存の SSH 鍵と設定をそのまま使います
-relayium push ./data user@backup-server:/srv/backups/
-
-# daemon-direct：宛先で "relayium serve" が動いていれば SSH は不要です
-relayium push ./data relayium://backup-server:9031`,
+        "# daemon-direct：宛先で \"relayium serve\" が動いています\nrelayium push ./data relayium://backup-server:9031",
       ],
       bullets: [
         "daemon-direct 接続はピン留めされた TLS 1.3 で、初回接続時に信頼（trust-on-first-use）し、以降の実行では同じフィンガープリントに対して検証します。",
-        "sync は push と同じ2つの宛先の書き方を受け付けます。",
+        "sync は push と同じ relayium:// の宛先の書き方を受け付けます。",
       ],
     },
     {
@@ -443,8 +439,8 @@ relayium push ./data relayium://backup-server:9031`,
       prereqs: {
         label: "手順1の前に必要なもの",
         items: [
-          "このマシンの CLI。sync を使うつもりなら送り先にも必要です。sync に tar のフォールバックはありません。",
-          "パスフレーズなしの SSH 鍵、または relayium serve が動いている送り先。cron にはエージェントも端末もないため、パスフレーズの入力には答えられません。",
+          "両方のマシンに CLI があり、送り先で relayium serve が動いていること。",
+          "relayium serve が動いていて、この送信側を事前承認している送り先。cron には端末がないため、未知のフィンガープリントは確認を求めずに拒否されます。",
           "cron が起動する時点で実在するソースディレクトリ。ログイン中だけマウントされるネットワーク領域では困ります。",
           "ログの書き出し先。出力がどこにも残らない cron ジョブは、必要になったときに初めて問題が分かるバックアップです。",
         ],
@@ -455,12 +451,12 @@ relayium push ./data relayium://backup-server:9031`,
           code: ["command -v relayium"],
         },
         {
-          text: "誰も鍵盤の前にいない状態でも鍵が使えるか確認します。BatchMode=yes は入力を促さずに失敗するので、cron と同じ条件です。",
-          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+          text: "リスナーに到達でき、この送信側がすでに承認されていることを確認します。",
+          code: ["relayium id"],
         },
         {
           text: "まず手で一度、cron が実行するのとまったく同じ書き方で、絶対パスも含めて通しで実行します。",
-          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+          code: ["/usr/local/bin/relayium sync ~/documents relayium://backup-server:9031"],
         },
         {
           text: "それが通ってからスケジュールを追加します。絶対パスとリダイレクトはそのまま残してください。",
@@ -474,29 +470,21 @@ relayium push ./data relayium://backup-server:9031`,
       success: {
         label: "正しく設定できたときの見え方",
         body: [
-          "relayium が crontab にそのまま貼れる絶対パスとして解決され、BatchMode 付きの ssh 確認が何も表示せず何も尋ねずに終了コード0で終わります。対話シェルでしか動かないバックアップは、まだスケジュールされていません。",
+          "relayium が crontab にそのまま貼れる絶対パスとして解決され、手で実行したデーモン直結の sync が、未知の送信側の承認を求めずに終了コード0で終わります。対話的な承認を経ないと動かないコピーは、まだスケジュールされていません。",
         ],
         code: [
-          `$ command -v relayium
-/usr/local/bin/relayium
-$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-$ echo $?
-0`,
+          "$ command -v relayium\n/usr/local/bin/relayium\n$ /usr/local/bin/relayium sync ~/documents relayium://backup-server:9031\n$ echo $?\n0",
         ],
       },
       body: [
-        "push と sync はどちらも単一の非対話型コマンドなので、そのまま crontab に組み込めます。パスフレーズなしの鍵（または agent）を指定し、出力をログに残して失敗を確認できるようにしましょう：",
+        "送信側を事前承認しておけば、sync は単一の非対話型コマンドなので、そのまま crontab に組み込めます。出力をログに残して、失敗を確認できるようにしましょう：",
       ],
       code: [
-        `# 毎晩2時に全体コピー：crontab に追加します（crontab -e）
-0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\\%F)/ >> ~/relayium-backup.log 2>&1
-
-# 代わりに15分ごとの増分ミラー
-*/15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ >> ~/relayium-sync.log 2>&1`,
+        "# 15分ごとの増分ミラー\n*/15 * * * * relayium sync ~/documents relayium://backup-server:9031 >> ~/relayium-sync.log 2>&1",
       ],
       bullets: [
         "いずれかのファイルが整合性チェックに失敗すると、コマンドは非ゼロで終了するので、cron の失敗時メール通知で問題に気づけます。",
-        "中断された sync は次の予定実行で追いつきます。すでに一致するものは飛ばされ、半端なファイルは続きから送られます。中断された push は再開しませんが、毎晩それぞれ日付付きのディレクトリへ書くので、翌晩は拒否ではなく新しい完全なコピーになります。",
+        "中断された sync は次の予定実行で追いつきます。すでに一致するものは飛ばされ、半端なファイルは続きから送られます。",
       ],
     },
     {
@@ -506,8 +494,8 @@ $ echo $?
         "cron の次の実行タイミングを待ちたくない場合は、--watch を使うと relayium sync が動き続け、ソース配下のファイルが変化するとすぐに自動で再同期します。スケジュールでポーリングする代わりの軽量な選択肢です。",
       ],
       bullets: [
-        "relayium sync ./data user@backup-server:/srv/backups/ --delete は削除もミラーします（受信側に serve --allow-delete が必要）。",
-        "relayium sync ./data user@backup-server:/srv/backups/ --watch は動き続けて変化のたびに同期します。cron による単発実行の代わりに使えます。",
+        "relayium sync ./data relayium://backup-server:9031 --delete は削除もミラーします（受信側に serve --allow-delete が必要）。",
+        "relayium sync ./data relayium://backup-server:9031 --watch は動き続けて変化のたびに同期します。cron による単発実行の代わりに使えます。",
       ],
     },
     {
@@ -527,12 +515,11 @@ $ echo $?
             fix: "cron は最小限の PATH、たいてい /usr/bin:/bin だけで動きます。install.sh が /usr/local/bin に書けなかった場合、バイナリは ~/.local/bin に置かれ、cron はそこを決して探しません。command -v が示す絶対パスを crontab の行に書くか、crontab の先頭に PATH= の行を足してください。",
           },
           {
-            symptom: "ログに ssh 接続の拒否が出る、または初回以降なにも記録されない。",
+            symptom: "ログに「SSH transfers are currently disabled」と出る、または初回以降なにも記録されない。",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              "grep -i \"SSH transfers\" ~/relayium-sync.log\n# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.",
             ],
-            fix: "cron には ssh-agent も端末もないため、パスフレーズ付きの鍵は固まるか失敗するかしかありません。-i でバックアップ専用のパスフレーズなし鍵を指し、BatchMode=yes で確認してください。これは、そこにいない人を待つ代わりに入力を拒否します。",
+            fix: "予定されたコマンドがまだ古い SSH の宛先を指定していますが、SSH 転送は廃止されました。バックアップサーバーで relayium serve を実行し、そこでこのマシンの relayium id のフィンガープリントを承認して、宛先を relayium://backup-server に変えてください。SSH 鍵も agent もパスフレーズも、もう関係ありません。",
           },
           {
             symptom: "sync は問題なく走るのに、ソースで削除したファイルが送り先に残っている。",
@@ -544,8 +531,7 @@ $ echo $?
           {
             symptom: "sync が --delete をきっぱり拒否する。",
             code: [
-              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+              "relayium sync ~/documents relayium://backup-server:9031 --delete\n# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).",
             ],
             fix: "ソース側が1ファイルも解決できず、そのままではミラーが送り先を空にしてしまう状態です。この拒否は意図的です。パスの打ち間違いを確認し、そこにマウントされるはずのものが、ログイン中だけでなく cron の起動時点でも実際にマウントされているかを確認してください。",
           },
@@ -554,7 +540,7 @@ $ echo $?
             code: [
               `ssh user@backup-server command -v relayium`,
             ],
-            fix: "リモートに relayium がないとき、push は SSH 上の素の tar ストリームにフォールバックします。ファイルは届くので何も文句を言いませんが、その経路にはファイルごとの SHA-256 検証も、送信前の衝突チェックもありません——scp ではなくこれをスケジュールする理由そのものが失われます。送り先に CLI を入れれば戻ります。sync にこの失敗はありません。フォールバックが一切ないので、代わりに大きな音を立てて失敗します。",
+            fix: "現在の push と sync には Relayium のリスナーが必要です。送り先に CLI を入れて serve を起動し、送信側を承認して relayium:// の宛先を使ってください。黙って切り替わる代替の転送方式はありません。",
           },
         ],
       },
@@ -565,15 +551,15 @@ $ echo $?
     items: [
       {
         q: "バックアップサーバーに relayium のインストールは必要ですか？",
-        a: "コマンドによります。push はどちらでも動作します。relayium がインストールされていればネイティブプロトコル（送信前の衝突チェック + ファイルごとの SHA-256 検証）を使い、なければ push は SSH 上の tar ストリームにフォールバックするので、素のサーバーでも動作します。sync は常にリモート側で relayium のネイティブプロトコルが必要です。sync に tar フォールバックはないので、先にインストールしてください。",
+        a: "はい。現在の push と sync はデーモン直結のネイティブプロトコルを使い、受信側で relayium serve が必要です。SSH や tar へのフォールバックはありません。",
       },
       {
         q: "バックアップは暗号化・検証されますか？",
-        a: "されます。すべてのファイルはエンドツーエンドで SHA-256 ハッシュによって検証され、SSH または daemon-direct でプッシュする場合、バイトはその接続自体の暗号化によってすでに保護されています。追加の設定は不要です。",
+        a: "されます。転送中は暗号化され、転送されたすべてのファイルは SHA-256 で検証されます。sync はサイズと更新時刻で送るものを決めるので、飛ばしたファイルはハッシュを取り直しません。ディレクトリのサイズが一致するのは目安であって、飛ばした内容がまだ一致している証明ではありません。",
       },
       {
         q: "cron ジョブが途中で中断された場合はどうなりますか？",
-        a: "どちらのコマンドを予定したかによります。sync は続きます。次の実行はすでに一致するものを飛ばし、半端なファイルを続きから送ります。--no-resume はそれを切ります。push はどちらのプロトコルでも再開しません。既存の宛先を拒否するからで、上の push の行が日付付きディレクトリへ書いているのはそのためです。おかげで翌晩は拒否ではなく新しい完全なコピーになります。--no-resume は push でも受け付けられますが、何もしません。",
+        a: "どちらのコマンドを予定したかによります。sync は続きます。次の実行はすでに一致するものを飛ばし、半端なファイルを続きから送ります。--no-resume はそれを切ります。push は再開しません。既存の宛先を拒否するので、繰り返し実行するなら sync を予定するか、実行ごとに新しい宛先へ push してください。--no-resume は push でも受け付けられますが、何もしません。",
       },
       {
         q: "--delete で誤って宛先を消してしまうことはありますか？",
@@ -581,7 +567,7 @@ $ echo $?
       },
       {
         q: "アカウントは必要ですか、これは有料ですか？",
-        a: "いいえ。CLI は無料で、push、pull、sync のいずれにもアカウントは不要です。転送はご自身の SSH 接続、または直接の daemon 接続の上で行われ、Relayium のサーバーは経由しません。",
+        a: "いいえ。CLI は無料で、デーモン直結の push/sync に Relayium アカウントも転送ごとの支払いも不要です。",
       },
     ],
   },
@@ -600,36 +586,32 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "직접 기억해서 실행해야 하는 백업은 결국 실행되지 않습니다. cron은 기억해 주며, Relayium CLI는 바로 그 목적을 위해 만들어졌습니다: 디렉터리를 다른 머신으로 복사(또는 미러링)하고, 전송하는 각 파일을 검증하는 단일 비대화형 명령입니다.",
-    "이 가이드는 cron에서 relayium push와 증분 방식의 relayium sync를 예약하는 방법, 둘 다에 사용할 수 있는 두 가지 전송 방식, 그리고 그대로 복사해 쓸 수 있는 crontab 줄을 다룹니다.",
+    "이 가이드는 cron에서 relayium push와 증분 방식의 relayium sync를 예약하는 방법, 둘 다 사용하는 데몬 다이렉트 전송 방식, 그리고 그대로 복사해 쓸 수 있는 crontab 줄을 다룹니다.",
   ],
   sections: [
     {
       heading: "push와 sync: 전체 복사냐 증분 미러링이냐",
       body: [
         "push와 sync는 둘 다 디렉터리를 다른 머신으로 옮기고, 둘 다 반복 실행해도 안전하지만, 해결하는 백업 문제는 조금 다릅니다.",
-        "push는 실행할 때마다 SSH 또는 daemon-direct로 매번 전체 복사본을 보냅니다 — 단순하며, relayium이 설치되지 않은 순수한 서버에도 tar 대체 방식으로 동작합니다. 반면 sync는 대상을 소스의 증분 단방향 미러로 유지합니다. 변경된 파일만 다시 전송하므로, 큰 디렉터리라도 첫 실행 이후의 야간 동기화는 빠릅니다. sync는 항상 양쪽 모두에서 relayium의 네이티브 프로토콜이 필요합니다 — tar 대체 방식이 없습니다.",
+        "push는 충돌에 안전한 일회성 데몬 다이렉트 복사를 만들며, 이미 있는 목적지는 덮어쓰거나 재개하지 않고 거부합니다. 그래서 고정된 수신 디렉터리로 반복 실행하는 작업에는 맞지 않습니다. 반면 sync는 목적지를 소스의 증분 단방향 미러로 유지합니다. 바뀌지 않은 파일은 건너뛰고 바뀐 파일만 보내며, 부분 파일은 다음 실행에서 이어 갑니다. 미러이므로 과거가 아니라 현재 상태를 담으며, 소스의 삭제나 손상도 전파될 수 있습니다.",
       ],
       bullets: [
-        "relayium이 설치되어 있지 않을 수도 있는 서버로의 단순한 예약 복사에는 push를 사용하세요.",
+        "실행마다 독립된 복사본을 남기고 이전 복사본도 보존하고 싶다면 날짜별 목적지로 push를 사용하세요.",
         "크거나 자주 변하는 디렉터리에서 매일 밤 전체를 다시 보내는 것이 낭비라면 sync를 사용하세요.",
-        "둘 다 네이티브 프로토콜에서는 전송하는 것을 파일별 SHA-256으로 검증합니다. push도 pull도 재개하지 않습니다. 셋 중 부분 파일을 이어가는 것은 sync뿐이며, tar 대체 방식은 검증도 재개도 하지 않습니다.",
+        "둘 다 전송한 각 파일을 SHA-256으로 검증합니다. push는 재개하지 않고, sync는 부분 파일을 다음 실행에서 이어 갑니다.",
       ],
     },
     {
-      heading: "두 가지 전송 방식: SSH 또는 daemon-direct",
+      heading: "전송 방식은 하나: daemon-direct",
       body: [
-        "두 명령 모두 SSH 대상(scp 형식, 기존 ~/.ssh/config 사용)을 지정할 수도 있고, 상대 머신에서 relayium serve가 실행 중이라면 SSH 없이 daemon-direct 프로토콜로 곧장 연결할 수도 있습니다.",
+        "두 명령 모두 받는 기기에서 relayium serve가 실행 중인 relayium:// 대상을 지정합니다. SSH 대상은 폐지되었습니다.",
       ],
       code: [
-        `# SSH 대상: 기존 SSH 키와 설정을 그대로 사용합니다
-relayium push ./data user@backup-server:/srv/backups/
-
-# daemon-direct: 대상에서 "relayium serve"가 실행 중이면 SSH가 필요 없습니다
-relayium push ./data relayium://backup-server:9031`,
+        "# daemon-direct: 대상에서 \"relayium serve\"가 실행 중입니다\nrelayium push ./data relayium://backup-server:9031",
       ],
       bullets: [
         "daemon-direct 연결은 고정된(pinned) TLS 1.3을 사용하며, 처음 연결할 때 신뢰(trust-on-first-use)하고 이후 실행부터는 같은 지문(fingerprint)에 대해 검증합니다.",
-        "sync는 push와 동일한 두 가지 대상 표기법을 받아들입니다.",
+        "sync는 push와 같은 relayium:// 대상 형식을 받습니다.",
       ],
     },
     {
@@ -637,8 +619,8 @@ relayium push ./data relayium://backup-server:9031`,
       prereqs: {
         label: "1단계 전에 필요한 것",
         items: [
-          "이 기기의 CLI. sync를 쓸 생각이라면 목적지에도 필요합니다. sync에는 tar 대체 경로가 없습니다.",
-          "암호가 없는 SSH 키, 또는 relayium serve를 돌리는 목적지. cron에는 에이전트도 터미널도 없어 암호 입력에 답할 수 없습니다.",
+          "두 기기 모두에 CLI가 있고, 대상에서 relayium serve가 실행 중일 것.",
+          "relayium serve가 실행 중이고 이 보내는 쪽을 미리 승인해 둔 대상. cron에는 터미널이 없으므로 모르는 지문은 묻지 않고 거부됩니다.",
           "cron이 실행되는 시점에 실제로 존재하는 원본 디렉터리. 로그인해 있을 때만 붙는 네트워크 마운트는 곤란합니다.",
           "로그를 남길 곳. 출력이 아무 데도 가지 않는 cron 작업은, 정작 필요할 때에야 문제를 알게 되는 백업입니다.",
         ],
@@ -649,12 +631,12 @@ relayium push ./data relayium://backup-server:9031`,
           code: ["command -v relayium"],
         },
         {
-          text: "아무도 키보드 앞에 없어도 키가 동작하는지 확인하세요. BatchMode=yes는 묻지 않고 실패하므로 cron과 같은 조건입니다.",
-          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+          text: "리스너에 도달할 수 있고 이 보내는 쪽이 이미 승인되었는지 확인합니다.",
+          code: ["relayium id"],
         },
         {
           text: "먼저 손으로 한 번, cron이 실행할 것과 똑같은 형태로 절대 경로까지 포함해 통째로 실행해 보세요.",
-          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+          code: ["/usr/local/bin/relayium sync ~/documents relayium://backup-server:9031"],
         },
         {
           text: "그다음에야 스케줄을 추가합니다. 절대 경로와 리다이렉트는 그대로 두세요.",
@@ -668,29 +650,21 @@ relayium push ./data relayium://backup-server:9031`,
       success: {
         label: "제대로 설정된 백업의 모습",
         body: [
-          "relayium이 crontab에 그대로 붙여 넣을 수 있는 절대 경로로 확인되고, BatchMode를 붙인 ssh 검사가 아무것도 출력하지 않고 아무것도 묻지 않은 채 0으로 끝납니다. 대화형 셸에서만 되는 백업은 아직 예약된 것이 아닙니다.",
+          "relayium이 crontab에 그대로 붙여 넣을 수 있는 절대 경로로 확인되고, 직접 실행한 데몬 다이렉트 sync가 모르는 보내는 쪽의 승인을 묻지 않고 종료 코드 0으로 끝납니다. 대화형 승인을 거쳐야만 동작하는 복사는 아직 예약된 것이 아닙니다.",
         ],
         code: [
-          `$ command -v relayium
-/usr/local/bin/relayium
-$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-$ echo $?
-0`,
+          "$ command -v relayium\n/usr/local/bin/relayium\n$ /usr/local/bin/relayium sync ~/documents relayium://backup-server:9031\n$ echo $?\n0",
         ],
       },
       body: [
-        "push와 sync는 둘 다 단일 비대화형 명령이므로, 그대로 crontab에 넣을 수 있습니다. 암호 없는 키(또는 agent)를 지정하고, 출력을 로그로 남겨 실패를 확인할 수 있게 하세요:",
+        "보내는 쪽을 미리 승인해 두면 sync는 단일 비대화형 명령이므로 crontab에 그대로 넣을 수 있습니다. 실패를 확인할 수 있도록 출력을 로그로 남기세요:",
       ],
       code: [
-        `# 매일 밤 2시 전체 복사: crontab에 추가하세요 (crontab -e)
-0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\\%F)/ >> ~/relayium-backup.log 2>&1
-
-# 대신 15분마다 증분 미러링
-*/15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ >> ~/relayium-sync.log 2>&1`,
+        "# 15분마다 증분 미러\n*/15 * * * * relayium sync ~/documents relayium://backup-server:9031 >> ~/relayium-sync.log 2>&1",
       ],
       bullets: [
         "무결성 검사에 실패한 파일이 하나라도 있으면 명령이 0이 아닌 상태로 종료되므로, cron의 실패 시 메일 알림으로 문제를 발견할 수 있습니다.",
-        "중단된 sync는 다음 예약 실행에서 따라잡습니다: 이미 일치하는 것은 건너뛰고 부분 파일은 이어서 보냅니다. 중단된 push는 재개하지 않지만, 매일 밤 각자의 날짜별 디렉터리에 쓰므로 다음 날 밤은 거부가 아니라 새로운 전체 복사가 됩니다.",
+        "중단된 sync는 다음 예약 실행에서 따라잡습니다. 이미 일치하는 것은 건너뛰고 부분 파일은 이어서 보냅니다.",
       ],
     },
     {
@@ -700,8 +674,8 @@ $ echo $?
         "cron의 다음 실행 시각을 기다리고 싶지 않다면, --watch를 사용해 relayium sync를 계속 실행 상태로 두면 소스 아래의 파일이 변경된 직후 자동으로 다시 동기화됩니다 — 예약된 폴링을 대신하는 가벼운 방법입니다.",
       ],
       bullets: [
-        "relayium sync ./data user@backup-server:/srv/backups/ --delete는 삭제도 미러링합니다(수신 측에 serve --allow-delete 필요).",
-        "relayium sync ./data user@backup-server:/srv/backups/ --watch는 계속 실행되며 변경 시마다 동기화합니다. cron의 단발 실행 대신 사용할 수 있습니다.",
+        "relayium sync ./data relayium://backup-server:9031 --delete는 삭제도 미러링합니다(수신 측에 serve --allow-delete 필요).",
+        "relayium sync ./data relayium://backup-server:9031 --watch는 계속 실행되며 변경 시마다 동기화합니다. cron의 단발 실행 대신 사용할 수 있습니다.",
       ],
     },
     {
@@ -721,12 +695,11 @@ $ echo $?
             fix: "cron은 최소한의 PATH, 보통 /usr/bin:/bin만으로 돕니다. install.sh가 /usr/local/bin에 쓰지 못했다면 바이너리는 ~/.local/bin에 있고, cron은 그곳을 결코 찾지 않습니다. command -v가 알려 준 절대 경로를 crontab 줄에 쓰거나, crontab 맨 위에 PATH= 줄을 넣으세요.",
           },
           {
-            symptom: "로그에 ssh 연결이 거부되었다고 나오거나, 첫 실행 이후로 아무것도 없습니다.",
+            symptom: "로그에 “SSH transfers are currently disabled”가 나오거나, 첫 실행 이후로 아무것도 없습니다.",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              "grep -i \"SSH transfers\" ~/relayium-sync.log\n# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.",
             ],
-            fix: "cron에는 ssh-agent도 터미널도 없어서 암호가 걸린 키는 멈추거나 실패할 수밖에 없습니다. -i로 백업 전용의 암호 없는 키를 지정하고 BatchMode=yes로 확인하세요. 그 옵션은 거기 없는 사람을 기다리는 대신 아예 묻기를 거부합니다.",
+            fix: "예약된 명령이 아직 예전 SSH 대상을 지정하고 있는데, SSH 전송은 폐지되었습니다. 백업 서버에서 relayium serve를 실행하고 거기서 이 기기의 relayium id 지문을 승인한 뒤, 대상을 relayium://backup-server로 바꾸세요. 이제 SSH 키도 agent도 패스프레이즈도 필요 없습니다.",
           },
           {
             symptom: "sync는 깔끔하게 도는데 원본에서 지운 파일이 목적지에 그대로 있습니다.",
@@ -738,8 +711,7 @@ $ echo $?
           {
             symptom: "sync가 --delete를 아예 거부합니다.",
             code: [
-              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+              "relayium sync ~/documents relayium://backup-server:9031 --delete\n# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).",
             ],
             fix: "원본에서 파일이 하나도 잡히지 않아, 그대로 두면 미러가 목적지를 비워 버리는 상태입니다. 이 거부는 의도된 것입니다. 경로 오타를 확인하고, 거기 붙어야 할 것이 로그인 중일 때뿐 아니라 cron이 도는 시점에도 실제로 마운트되어 있는지 확인하세요.",
           },
@@ -748,7 +720,7 @@ $ echo $?
             code: [
               `ssh user@backup-server command -v relayium`,
             ],
-            fix: "원격에 relayium이 없으면 push는 SSH 위의 평범한 tar 스트림으로 물러납니다. 파일은 도착하니 아무도 불평하지 않지만, 그 경로에는 파일별 SHA-256 검증도, 보내기 전 충돌 검사도 없습니다 — scp 대신 이걸 예약하는 두 가지 이유가 바로 그것입니다. 목적지에 CLI를 설치하면 되돌아옵니다. sync에는 이런 실패가 없습니다. 대체 경로가 아예 없어서 대신 요란하게 실패합니다.",
+            fix: "현재 push와 sync에는 Relayium 리스너가 필요합니다. 대상에 CLI를 설치하고 serve를 시작한 뒤 보내는 쪽을 승인하고 relayium:// 대상을 사용하세요. 조용히 바뀌는 대체 전송 방식은 없습니다.",
           },
         ],
       },
@@ -759,15 +731,15 @@ $ echo $?
     items: [
       {
         q: "백업 서버에 relayium이 설치되어 있어야 하나요?",
-        a: "명령에 따라 다릅니다. push는 어느 쪽이든 동작합니다: relayium이 설치되어 있으면 네이티브 프로토콜(보내기 전 충돌 검사 + 파일별 SHA-256 검사)을 사용하고, 없으면 push는 SSH를 통한 일반 tar 스트림으로 대체되어 순수한 서버에서도 동작합니다. sync는 항상 원격지에 relayium의 네이티브 프로토콜이 필요합니다 — sync에는 tar 대체 방식이 없으므로 먼저 그곳에 설치하세요.",
+        a: "네. 현재 push와 sync는 데몬 다이렉트 네이티브 프로토콜을 사용하며 받는 쪽에 relayium serve가 필요합니다. SSH나 tar 대체 방식은 없습니다.",
       },
       {
         q: "백업이 암호화되고 검증되나요?",
-        a: "네. 모든 파일은 종단간 SHA-256 해시로 검사되며, SSH나 daemon-direct로 푸시할 때 바이트는 이미 해당 연결 자체의 암호화로 보호됩니다 — 추가로 설정할 것이 없습니다.",
+        a: "네, 전송 중에 암호화되며 전송된 모든 파일은 SHA-256으로 검증됩니다. sync는 크기와 수정 시각으로 보낼 것을 정하므로, 건너뛴 파일은 다시 해시하지 않습니다. 디렉터리 크기가 같다는 것은 대략적인 확인일 뿐, 건너뛴 내용이 여전히 같다는 증거는 아닙니다.",
       },
       {
         q: "cron 작업이 중간에 중단되면 어떻게 되나요?",
-        a: "어떤 명령을 예약했느냐에 따라 다릅니다. sync는 이어집니다: 다음 실행이 이미 일치하는 것은 건너뛰고 부분 파일을 이어서 보내며, --no-resume이 그것을 끕니다. push는 어느 프로토콜에서든 재개하지 않습니다 — 이미 존재하는 목적지를 거부하며, 위의 push 줄이 날짜별 디렉터리에 쓰는 이유가 바로 그것입니다. 덕분에 다음 날 밤은 거부가 아니라 새로운 전체 복사가 됩니다. --no-resume은 push에서도 받아들여지지만 아무 일도 하지 않습니다.",
+        a: "어떤 명령을 예약했느냐에 따라 다릅니다. sync는 이어집니다: 다음 실행이 이미 일치하는 것은 건너뛰고 부분 파일을 이어서 보내며, --no-resume이 그것을 끕니다. push는 재개하지 않습니다 — 이미 존재하는 목적지를 거부하므로, 반복 실행하려면 sync를 예약하거나 실행마다 새 목적지로 push하세요. --no-resume은 push에서도 받아들여지지만 아무 일도 하지 않습니다.",
       },
       {
         q: "--delete가 실수로 대상을 지워버릴 수 있나요?",
@@ -775,7 +747,7 @@ $ echo $?
       },
       {
         q: "계정이 필요한가요, 비용이 드나요?",
-        a: "아니요. CLI는 무료이며 push, pull, sync 모두 계정이 필요 없습니다. 전송은 본인의 SSH 연결이나 직접적인 daemon 연결을 통해 이루어지며, Relayium의 서버를 거치지 않습니다.",
+        a: "아니요. CLI는 무료이며, 데몬 다이렉트 push/sync에는 Relayium 계정도 전송별 결제도 필요 없습니다.",
       },
     ],
   },
@@ -794,36 +766,32 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Backups, an die man selbst denken muss, passieren am Ende nicht. cron denkt daran, und die Relayium CLI ist genau dafür gebaut: ein einzelner, nicht-interaktiver Befehl, der ein Verzeichnis auf eine andere Maschine kopiert (oder spiegelt) und jede Datei prüft, die er überträgt.",
-    "Diese Anleitung behandelt, wie du relayium push und das inkrementelle relayium sync per cron planst, welche zwei Übertragungswege beide nutzen können, und welche crontab-Zeilen du einfach übernehmen kannst.",
+    "Diese Anleitung behandelt, wie du relayium push und das inkrementelle relayium sync per cron planst, den daemon-direct-Übertragungsweg, den beide nutzen, und welche crontab-Zeilen du einfach übernehmen kannst.",
   ],
   sections: [
     {
       heading: "push oder sync: vollständige Kopie oder inkrementelle Spiegelung",
       body: [
         "push und sync übertragen beide ein Verzeichnis auf eine andere Maschine, und beide lassen sich gefahrlos wiederholt ausführen, aber sie lösen leicht unterschiedliche Backup-Probleme.",
-        "push sendet bei jedem Lauf eine Kopie per SSH oder daemon-direct — einfach, und funktioniert dank Tar-Fallback sogar gegen einen nackten Server ohne installiertes relayium. sync dagegen hält das Ziel als inkrementellen, einseitigen Spiegel der Quelle: Nur geänderte Dateien werden erneut gesendet, sodass eine nächtliche Synchronisierung eines großen Verzeichnisses nach dem ersten Lauf schnell ist. sync benötigt auf beiden Seiten immer das native Protokoll von relayium — es gibt keinen Tar-Fallback.",
+        "push erstellt eine kollisionssichere einmalige daemon-direct-Kopie und verweigert ein vorhandenes Ziel, statt es zu überschreiben oder fortzusetzen — für einen wiederholten Job auf ein festes Empfangsverzeichnis passt das nicht. sync hält dagegen ein Ziel als inkrementellen Einweg-Spiegel der Quelle: Unveränderte Dateien werden übersprungen, geänderte gesendet, und eine Teildatei wird beim nächsten Lauf fortgesetzt. Als Spiegel ist es aktuell statt historisch: Das Löschen oder Beschädigen einer Quelldatei kann mitübertragen werden.",
       ],
       bullets: [
-        "Nutze push für eine unkomplizierte geplante Kopie, besonders auf einen Server, auf dem eventuell kein relayium installiert ist.",
+        "Nutze push in ein datiertes Ziel, wenn jeder Lauf für sich stehen und ältere Kopien erhalten bleiben sollen.",
         "Nutze sync für ein großes oder häufig wechselndes Verzeichnis, bei dem jede Nacht alles neu zu senden Verschwendung wäre.",
-        "Beide prüfen, was sie übertragen, im nativen Protokoll je Datei per SHA-256. Weder push noch pull setzt fort; von den dreien führt nur sync eine Teildatei weiter, und der tar-Fallback prüft und setzt gar nichts fort.",
+        "Beide prüfen jede übertragene Datei per SHA-256. push setzt nicht fort; sync führt eine Teildatei in einem späteren Lauf weiter.",
       ],
     },
     {
-      heading: "Zwei Übertragungswege: SSH oder daemon-direct",
+      heading: "Ein Übertragungsweg: daemon-direct",
       body: [
-        "Richte beide Befehle entweder auf ein SSH-Ziel (im scp-Stil, unter Verwendung deiner ~/.ssh/config) oder, falls die andere Maschine relayium serve ausführt, direkt über das daemon-direct-Protokoll — ganz ohne SSH.",
+        "Richte beide Befehle auf ein relayium://-Ziel, dessen Empfangsrechner relayium serve ausführt. SSH-Ziele sind eingestellt.",
       ],
       code: [
-        `# SSH-Ziel — nutzt deine vorhandenen SSH-Schlüssel und deine Konfiguration
-relayium push ./data user@backup-server:/srv/backups/
-
-# daemon-direct — auf dem Ziel läuft "relayium serve", kein SSH nötig
-relayium push ./data relayium://backup-server:9031`,
+        "# daemon-direct: auf dem Ziel läuft \"relayium serve\"\nrelayium push ./data relayium://backup-server:9031",
       ],
       bullets: [
         "daemon-direct-Verbindungen nutzen gepinntes TLS 1.3 mit Trust-on-first-use und werden danach bei jedem weiteren Lauf gegen genau diesen Fingerabdruck geprüft.",
-        "sync akzeptiert dieselben zwei Zielformen wie push.",
+        "sync akzeptiert dieselbe relayium://-Zielform wie push.",
       ],
     },
     {
@@ -831,8 +799,8 @@ relayium push ./data relayium://backup-server:9031`,
       prereqs: {
         label: "Was du vor Schritt 1 brauchst",
         items: [
-          "Die CLI auf diesem Rechner — und auf dem Ziel ebenfalls, wenn du sync nutzen willst. sync hat keinen tar-Fallback.",
-          "Einen SSH-Schlüssel ohne Passphrase, oder ein Ziel, auf dem relayium serve läuft. cron hat weder Agent noch Terminal und kann eine Passphrase-Abfrage nicht beantworten.",
+          "Die CLI auf beiden Rechnern, mit relayium serve auf dem Ziel.",
+          "Ein Ziel, auf dem relayium serve läuft und das diesen Absender vorab autorisiert hat. cron hat kein Terminal, daher wird ein unbekannter Fingerabdruck abgelehnt statt nachgefragt.",
           "Ein Quellverzeichnis, das in dem Moment existiert, in dem cron feuert — keins auf einem Netzlaufwerk, das nur eingehängt ist, solange du angemeldet bist.",
           "Einen Ort für ein Log. Ein Cron-Job, dessen Ausgabe ins Nichts geht, ist ein Backup, von dem du erst erfährst, wenn du es brauchst.",
         ],
@@ -843,12 +811,12 @@ relayium push ./data relayium://backup-server:9031`,
           code: ["command -v relayium"],
         },
         {
-          text: "Prüfe, ob der Schlüssel auch ohne jemanden an der Tastatur funktioniert. BatchMode=yes scheitert, statt zu fragen — genau die Lage von cron.",
-          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+          text: "Prüfe, dass der Listener erreichbar ist und dieser Absender bereits autorisiert wurde.",
+          code: ["relayium id"],
         },
         {
           text: "Führ den ganzen Befehl einmal von Hand aus, exakt so geschrieben wie cron ihn ausführen wird, absoluter Pfad inklusive.",
-          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+          code: ["/usr/local/bin/relayium sync ~/documents relayium://backup-server:9031"],
         },
         {
           text: "Erst danach den Zeitplan eintragen. Absoluten Pfad und Umleitung behalten.",
@@ -862,29 +830,21 @@ relayium push ./data relayium://backup-server:9031`,
       success: {
         label: "So sieht ein funktionierendes Setup aus",
         body: [
-          "relayium löst sich zu einem absoluten Pfad auf, den du in die crontab kopieren kannst, und die ssh-Prüfung mit BatchMode endet mit 0, ohne etwas auszugeben oder zu fragen. Ein Backup, das nur aus deiner interaktiven Shell läuft, ist noch nicht geplant.",
+          "relayium löst zu einem absoluten Pfad auf, den du in die crontab einfügen kannst, und ein manueller daemon-direct-sync endet mit 0, ohne nach der Autorisierung eines unbekannten Absenders zu fragen. Eine Kopie, die nur nach einer interaktiven Bestätigung funktioniert, ist noch nicht eingeplant.",
         ],
         code: [
-          `$ command -v relayium
-/usr/local/bin/relayium
-$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-$ echo $?
-0`,
+          "$ command -v relayium\n/usr/local/bin/relayium\n$ /usr/local/bin/relayium sync ~/documents relayium://backup-server:9031\n$ echo $?\n0",
         ],
       },
       body: [
-        "push und sync sind beide einzelne, nicht-interaktive Befehle, die sich direkt in eine crontab einsetzen lassen. Verweise auf einen Schlüssel ohne Passphrase (oder einen Agent) und protokolliere die Ausgabe, damit Fehlschläge sichtbar werden:",
+        "Ist der Absender vorab autorisiert, ist sync ein einzelner nicht-interaktiver Befehl und passt direkt in eine crontab. Protokolliere die Ausgabe, damit Fehler sichtbar werden:",
       ],
       code: [
-        `# vollständige Kopie jede Nacht um 2 Uhr — in deine crontab eintragen (crontab -e)
-0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\\%F)/ >> ~/relayium-backup.log 2>&1
-
-# stattdessen alle 15 Minuten ein inkrementeller Spiegel
-*/15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ >> ~/relayium-sync.log 2>&1`,
+        "# inkrementeller Spiegel alle 15 Minuten\n*/15 * * * * relayium sync ~/documents relayium://backup-server:9031 >> ~/relayium-sync.log 2>&1",
       ],
       bullets: [
         "Der Befehl endet mit einem Exit-Code ungleich null, wenn eine Datei ihre Integritätsprüfung nicht besteht, sodass crons Mail-bei-Fehlschlag das Problem auffängt.",
-        "Ein unterbrochenes sync holt beim nächsten geplanten Lauf auf: Was schon passt, wird übersprungen, und eine Teildatei wird weitergeführt. Ein unterbrochenes push setzt nicht fort — aber weil jede Nacht in ihr eigenes datiertes Verzeichnis schreibt, ist die nächste Nacht eine saubere vollständige Kopie statt einer Ablehnung.",
+        "Ein unterbrochener sync holt beim nächsten geplanten Lauf auf: Was schon passt, wird übersprungen, und eine Teildatei wird fortgesetzt.",
       ],
     },
     {
@@ -894,8 +854,8 @@ $ echo $?
         "Wer nicht auf den nächsten cron-Zeitpunkt warten will, kann mit --watch relayium sync dauerhaft laufen lassen: Es synchronisiert automatisch kurz nachdem sich eine Datei unter der Quelle ändert — eine leichtgewichtige Alternative zum zeitgesteuerten Polling.",
       ],
       bullets: [
-        "relayium sync ./data user@backup-server:/srv/backups/ --delete spiegelt auch Löschungen (Empfänger braucht serve --allow-delete).",
-        "relayium sync ./data user@backup-server:/srv/backups/ --watch bleibt laufen und synchronisiert bei jeder Änderung, statt einmalig per cron.",
+        "relayium sync ./data relayium://backup-server:9031 --delete spiegelt auch Löschungen (Empfänger braucht serve --allow-delete).",
+        "relayium sync ./data relayium://backup-server:9031 --watch bleibt laufen und synchronisiert bei jeder Änderung, statt einmalig per cron.",
       ],
     },
     {
@@ -915,12 +875,11 @@ $ echo $?
             fix: "cron läuft mit einem minimalen PATH, meist nur /usr/bin:/bin. Konnte install.sh nicht nach /usr/local/bin schreiben, liegt das Binary in ~/.local/bin, und dort sucht cron nie. Nimm den absoluten Pfad aus command -v in die crontab-Zeile, oder setz oben in der crontab eine PATH=-Zeile.",
           },
           {
-            symptom: "Das Log zeigt eine abgewiesene ssh-Verbindung, oder nach dem ersten Lauf gar nichts mehr.",
+            symptom: "Das Log zeigt „SSH transfers are currently disabled“, oder nach dem ersten Lauf gar nichts mehr.",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              "grep -i \"SSH transfers\" ~/relayium-sync.log\n# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.",
             ],
-            fix: "cron hat keinen ssh-agent und kein Terminal, ein Schlüssel mit Passphrase kann also nur hängen oder scheitern. Zeig mit -i auf einen passphrasenlosen Schlüssel, der nur fürs Backup da ist, und prüfe mit BatchMode=yes — das verweigert die Abfrage, statt auf jemanden zu warten, der nicht da ist.",
+            fix: "Der geplante Befehl nennt noch ein altes SSH-Ziel, und SSH-Übertragungen sind eingestellt. Starte relayium serve auf dem Backup-Server, autorisiere dort den Fingerabdruck aus relayium id dieses Rechners und ändere das Ziel auf relayium://backup-server — SSH-Schlüssel, Agent und Passphrase spielen keine Rolle mehr.",
           },
           {
             symptom: "sync läuft sauber, aber an der Quelle gelöschte Dateien liegen am Ziel noch.",
@@ -932,8 +891,7 @@ $ echo $?
           {
             symptom: "sync verweigert --delete rundheraus.",
             code: [
-              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+              "relayium sync ~/documents relayium://backup-server:9031 --delete\n# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).",
             ],
             fix: "Die Quelle löste sich zu null Dateien auf, der Spiegel hätte also das Ziel geleert. Diese Weigerung ist Absicht. Prüfe den Pfad auf einen Tippfehler — und prüfe, ob das, was dort eingehängt sein soll, auch zum Zeitpunkt des Cron-Laufs eingehängt ist und nicht nur, während du angemeldet bist.",
           },
@@ -942,7 +900,7 @@ $ echo $?
             code: [
               `ssh user@backup-server command -v relayium`,
             ],
-            fix: "Hat die Gegenstelle kein relayium, fällt push auf einen einfachen tar-Strom über SSH zurück. Die Dateien kommen an, also beschwert sich nichts — aber auf diesem Weg gibt es keine SHA-256-Prüfung pro Datei und keine Kollisionsprüfung vorab, und genau das sind die beiden Gründe, das hier statt scp einzuplanen. Installier die CLI auf dem Ziel, dann sind sie zurück. sync kennt diesen Fehler nicht: es hat gar keinen Fallback und scheitert stattdessen laut.",
+            fix: "Aktuelles push und sync brauchen einen Relayium-Listener. Installiere die CLI auf dem Ziel, starte serve, autorisiere den Absender und nutze ein relayium://-Ziel; einen stillen Ersatz-Übertragungsweg gibt es nicht.",
           },
         ],
       },
@@ -953,15 +911,15 @@ $ echo $?
     items: [
       {
         q: "Muss auf dem Backup-Server relayium installiert sein?",
-        a: "Das hängt vom Befehl ab. push funktioniert so oder so: Mit installiertem relayium nutzt es das native Protokoll (Kollisionsprüfung vorab + SHA-256 je Datei); ohne weicht push auf einen einfachen Tar-Stream über SSH aus, sodass auch ein nackter Server funktioniert. sync braucht auf der Gegenseite immer das native Protokoll von relayium — für sync gibt es keinen Tar-Fallback, installiere es also dort zuerst.",
+        a: "Ja. Aktuelles push und sync nutzen das native daemon-direct-Protokoll und brauchen relayium serve auf dem Empfänger. Es gibt keinen SSH- oder tar-Fallback.",
       },
       {
         q: "Ist das Backup verschlüsselt und geprüft?",
-        a: "Ja. Jede Datei wird Ende-zu-Ende mit einem SHA-256-Hash geprüft, und beim Push per SSH oder daemon-direct sind die Bytes bereits durch die Verschlüsselung dieser Verbindung geschützt — es ist nichts zusätzlich zu konfigurieren.",
+        a: "Ja, während der Übertragung, und jede übertragene Datei wird per SHA-256 geprüft. sync entscheidet anhand von Größe und Änderungszeit, was gesendet wird, eine übersprungene Datei wird also nicht neu gehasht. Übereinstimmende Verzeichnisgrößen sind eine Plausibilitätsprüfung, kein Beweis, dass übersprungene Inhalte noch übereinstimmen.",
       },
       {
         q: "Was passiert, wenn der cron-Job mittendrin unterbrochen wird?",
-        a: "Das hängt davon ab, welchen Befehl du eingeplant hast. sync macht weiter: Der nächste Lauf überspringt, was schon passt, und führt eine Teildatei fort — und --no-resume schaltet genau das ab. push setzt in keinem der beiden Protokolle fort: Es verweigert ein Ziel, das schon existiert, und deshalb schreibt die push-Zeile oben in ein datiertes Verzeichnis, sodass die nächste Nacht eine saubere vollständige Kopie statt einer Ablehnung ist. --no-resume wird von push angenommen und tut nichts.",
+        a: "Das hängt davon ab, welchen Befehl du eingeplant hast. sync macht weiter: Der nächste Lauf überspringt, was schon passt, und führt eine Teildatei fort — und --no-resume schaltet genau das ab. push setzt nicht fort: Es verweigert ein Ziel, das schon existiert; für wiederholte Läufe plane daher sync ein oder pushe bei jedem Lauf in ein neues Ziel. --no-resume wird von push angenommen und tut nichts.",
       },
       {
         q: "Kann --delete versehentlich mein Ziel leeren?",
@@ -969,7 +927,7 @@ $ echo $?
       },
       {
         q: "Brauche ich ein Konto oder kostet das etwas?",
-        a: "Nein. Die CLI ist kostenlos und braucht für push, pull oder sync kein Konto — die Übertragung läuft über deine eigene SSH-Verbindung oder eine direkte daemon-Verbindung, nicht über die Server von Relayium.",
+        a: "Nein. Die CLI ist kostenlos, und daemon-direct push/sync braucht weder ein Relayium-Konto noch eine Zahlung pro Übertragung.",
       },
     ],
   },
@@ -988,36 +946,32 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Les sauvegardes qu'il faut penser à lancer soi-même finissent par ne pas être faites. cron, lui, s'en souvient, et la CLI Relayium est conçue pour cela : une seule commande non interactive qui copie (ou met en miroir) un répertoire vers une autre machine et vérifie chaque fichier qu'elle transfère.",
-    "Ce guide couvre la planification de relayium push et du relayium sync incrémental via cron, les deux modes de transport que l'un comme l'autre peuvent utiliser, et des lignes de crontab prêtes à copier.",
+    "Ce guide couvre la planification de relayium push et du relayium sync incrémental via cron, le transport daemon-direct que l'un comme l'autre utilisent, et des lignes de crontab prêtes à copier.",
   ],
   sections: [
     {
       heading: "push ou sync : copie complète ou miroir incrémental",
       body: [
         "push et sync déplacent tous deux un répertoire vers une autre machine, et tous deux peuvent être exécutés sans risque de façon répétée, mais ils résolvent des problèmes de sauvegarde légèrement différents.",
-        "push envoie une copie via SSH ou daemon-direct à chaque exécution — simple, et cela fonctionne même vers un serveur nu sans relayium installé grâce à un repli tar. sync, lui, maintient la destination comme un miroir incrémental et unidirectionnel de la source : seuls les fichiers modifiés sont renvoyés, si bien qu'une synchronisation nocturne d'un grand répertoire est rapide après la première exécution. sync a toujours besoin du protocole natif de relayium des deux côtés — il n'a pas de repli tar.",
+        "push crée une copie daemon-direct ponctuelle protégée contre les collisions et refuse une destination existante au lieu de l'écraser ou de reprendre — ce qui ne convient pas à une tâche répétée vers un répertoire de réception fixe. sync, lui, maintient une destination comme miroir incrémental à sens unique de la source : les fichiers inchangés sont sautés, les fichiers modifiés envoyés, et un fichier partiel est poursuivi à l'exécution suivante. En tant que miroir, il reflète l'état actuel et non l'historique : la suppression ou la corruption d'un fichier source peut être propagée.",
       ],
       bullets: [
-        "Utilisez push pour une copie planifiée simple, surtout vers un serveur qui pourrait ne pas avoir relayium installé.",
+        "Utilisez push vers une destination datée quand chaque exécution doit être autonome et que les copies plus anciennes doivent survivre.",
         "Utilisez sync pour un répertoire volumineux ou qui change souvent, où tout renvoyer chaque nuit serait un gaspillage.",
-        "Tous deux vérifient ce qu'ils transfèrent par un SHA-256 par fichier sur le protocole natif. Ni push ni pull ne reprend. Des trois, seul sync poursuit un fichier partiel, et le repli tar ne vérifie ni ne reprend rien.",
+        "Les deux vérifient chaque fichier transféré par SHA-256. push ne reprend pas ; sync poursuit un fichier partiel lors d'une exécution ultérieure.",
       ],
     },
     {
-      heading: "Deux modes de transport : SSH ou daemon-direct",
+      heading: "Un seul transport : daemon-direct",
       body: [
-        "Pointez l'une ou l'autre commande vers une destination SSH (style scp, en utilisant votre ~/.ssh/config) ou, si l'autre machine exécute relayium serve, directement vers elle via le protocole daemon-direct — sans SSH.",
+        "Pointez l'une ou l'autre commande vers une destination relayium:// dont la machine réceptrice exécute relayium serve. Les destinations SSH sont retirées.",
       ],
       code: [
-        `# destination SSH — utilise vos clés et votre configuration SSH existantes
-relayium push ./data user@backup-server:/srv/backups/
-
-# daemon-direct — la destination exécute "relayium serve", aucun SSH requis
-relayium push ./data relayium://backup-server:9031`,
+        "# daemon-direct : la destination exécute \"relayium serve\"\nrelayium push ./data relayium://backup-server:9031",
       ],
       bullets: [
         "Les connexions daemon-direct utilisent du TLS 1.3 épinglé avec confiance à la première utilisation (trust-on-first-use), puis sont vérifiées contre cette même empreinte à chaque exécution suivante.",
-        "sync accepte les deux mêmes formes de destination que push.",
+        "sync accepte la même forme de destination relayium:// que push.",
       ],
     },
     {
@@ -1025,8 +979,8 @@ relayium push ./data relayium://backup-server:9031`,
       prereqs: {
         label: "Ce qu'il vous faut avant l'étape 1",
         items: [
-          "La CLI sur cette machine, et sur la destination aussi si vous comptez utiliser sync. sync n'a aucun repli sur tar.",
-          "Une clé SSH sans phrase de passe, ou une destination qui fait tourner relayium serve. cron n'a ni agent ni terminal : il ne peut pas répondre à une demande de phrase de passe.",
+          "La CLI sur les deux machines, avec relayium serve en cours d'exécution sur la destination.",
+          "Une destination qui exécute relayium serve et a pré-autorisé cet expéditeur. cron n'a pas de terminal : une empreinte inconnue est donc refusée au lieu de déclencher une question.",
           "Un répertoire source qui existe au moment où cron se déclenche — pas un montage réseau présent seulement pendant que vous êtes connecté.",
           "Un endroit où écrire un journal. Une tâche cron dont la sortie ne va nulle part est une sauvegarde dont vous découvrirez l'état le jour où vous en aurez besoin.",
         ],
@@ -1037,12 +991,12 @@ relayium push ./data relayium://backup-server:9031`,
           code: ["command -v relayium"],
         },
         {
-          text: "Vérifiez que la clé fonctionne sans personne au clavier. BatchMode=yes échoue au lieu de demander, ce qui est exactement la situation de cron.",
-          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+          text: "Vérifiez que l'écouteur est joignable et que cet expéditeur a déjà été autorisé.",
+          code: ["relayium id"],
         },
         {
           text: "Exécutez la commande entière une fois à la main, écrite exactement comme cron l'exécutera, chemin absolu compris.",
-          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+          code: ["/usr/local/bin/relayium sync ~/documents relayium://backup-server:9031"],
         },
         {
           text: "Ensuite seulement, ajoutez la planification. Gardez le chemin absolu et la redirection.",
@@ -1056,29 +1010,21 @@ relayium push ./data relayium://backup-server:9031`,
       success: {
         label: "À quoi ressemble une installation qui fonctionne",
         body: [
-          "relayium se résout en un chemin absolu que vous pouvez coller dans la crontab, et la vérification ssh avec BatchMode se termine par 0 sans rien afficher ni rien demander. Une sauvegarde qui ne marche que depuis votre shell interactif n'est pas encore planifiée.",
+          "relayium se résout en un chemin absolu que vous pouvez coller dans la crontab, et un sync daemon-direct lancé à la main se termine avec 0 sans demander d'autoriser un expéditeur inconnu. Une copie qui ne fonctionne qu'après une approbation interactive n'est pas encore planifiée.",
         ],
         code: [
-          `$ command -v relayium
-/usr/local/bin/relayium
-$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-$ echo $?
-0`,
+          "$ command -v relayium\n/usr/local/bin/relayium\n$ /usr/local/bin/relayium sync ~/documents relayium://backup-server:9031\n$ echo $?\n0",
         ],
       },
       body: [
-        "push et sync sont tous deux des commandes uniques et non interactives, elles s'intègrent donc directement dans une crontab. Pointez-les vers une clé sans phrase de passe (ou vers un agent), et journalisez la sortie pour repérer les échecs :",
+        "Une fois l'expéditeur pré-autorisé, sync est une seule commande non interactive qui s'insère directement dans une crontab. Journalisez la sortie pour que les échecs soient visibles :",
       ],
       code: [
-        `# copie complète chaque nuit à 2 h — à ajouter à votre crontab (crontab -e)
-0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\\%F)/ >> ~/relayium-backup.log 2>&1
-
-# à la place, un miroir incrémental toutes les 15 minutes
-*/15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ >> ~/relayium-sync.log 2>&1`,
+        "# miroir incrémental toutes les 15 minutes\n*/15 * * * * relayium sync ~/documents relayium://backup-server:9031 >> ~/relayium-sync.log 2>&1",
       ],
       bullets: [
         "La commande se termine avec un code non nul si un fichier échoue à sa vérification d'intégrité, si bien que la notification par e-mail en cas d'échec de cron détecte les problèmes.",
-        "Un sync interrompu rattrape son retard à la prochaine exécution planifiée : ce qui correspond déjà est sauté et un fichier partiel est poursuivi. Un push interrompu ne reprend pas — mais comme chaque nuit écrit dans son propre répertoire daté, la nuit suivante donne une copie complète et propre plutôt qu'un refus.",
+        "Un sync interrompu rattrape son retard à l'exécution planifiée suivante : ce qui correspond déjà est sauté et un fichier partiel est poursuivi.",
       ],
     },
     {
@@ -1088,8 +1034,8 @@ $ echo $?
         "Si vous préférez ne pas attendre le prochain passage de cron, --watch garde relayium sync en cours d'exécution et resynchronise automatiquement peu après qu'un fichier sous la source change — une solution légère, sans interrogation périodique.",
       ],
       bullets: [
-        "relayium sync ./data user@backup-server:/srv/backups/ --delete met en miroir les suppressions (le récepteur a besoin de serve --allow-delete).",
-        "relayium sync ./data user@backup-server:/srv/backups/ --watch reste en cours d'exécution et resynchronise à chaque changement, au lieu d'une exécution unique via cron.",
+        "relayium sync ./data relayium://backup-server:9031 --delete met en miroir les suppressions (le récepteur a besoin de serve --allow-delete).",
+        "relayium sync ./data relayium://backup-server:9031 --watch reste en cours d'exécution et resynchronise à chaque changement, au lieu d'une exécution unique via cron.",
       ],
     },
     {
@@ -1109,12 +1055,11 @@ $ echo $?
             fix: "cron tourne avec un PATH minimal, en général seulement /usr/bin:/bin. Si install.sh n'a pas pu écrire dans /usr/local/bin, le binaire est dans ~/.local/bin, que cron ne cherchera jamais. Mettez le chemin absolu donné par command -v dans la ligne de crontab, ou ajoutez une ligne PATH= en tête de crontab.",
           },
           {
-            symptom: "Le journal montre une connexion ssh refusée, ou plus rien après la première exécution.",
+            symptom: "Le journal affiche « SSH transfers are currently disabled », ou plus rien après la première exécution.",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              "grep -i \"SSH transfers\" ~/relayium-sync.log\n# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.",
             ],
-            fix: "cron n'a ni ssh-agent ni terminal, une clé protégée par phrase de passe ne peut donc que bloquer ou échouer. Pointez -i sur une clé sans phrase de passe réservée aux sauvegardes, et vérifiez avec BatchMode=yes, qui refuse de demander plutôt que d'attendre quelqu'un qui n'est pas là.",
+            fix: "La commande planifiée désigne encore une ancienne destination SSH, et les transferts SSH sont retirés. Lancez relayium serve sur le serveur de sauvegarde, autorisez-y l'empreinte relayium id de cette machine et changez la cible en relayium://backup-server — plus aucune clé SSH, agent ou phrase de passe n'intervient.",
           },
           {
             symptom: "sync s'exécute proprement, mais les fichiers supprimés à la source sont toujours sur la destination.",
@@ -1126,8 +1071,7 @@ $ echo $?
           {
             symptom: "sync refuse purement et simplement --delete.",
             code: [
-              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+              "relayium sync ~/documents relayium://backup-server:9031 --delete\n# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).",
             ],
             fix: "La source n'a résolu aucun fichier, le miroir aurait donc vidé la destination. Ce refus est délibéré. Vérifiez le chemin, et vérifiez que ce qui doit y être monté l'est bien à l'heure où cron se déclenche et pas seulement quand vous êtes connecté.",
           },
@@ -1136,7 +1080,7 @@ $ echo $?
             code: [
               `ssh user@backup-server command -v relayium`,
             ],
-            fix: "Quand la machine distante n'a pas relayium, push se rabat sur un simple flux tar via SSH. Les fichiers arrivent, donc rien ne se plaint — mais ce chemin n'a ni vérification SHA-256 fichier par fichier ni contrôle de collision en amont, c'est-à-dire précisément les deux raisons de planifier ceci plutôt qu'un scp. Installez la CLI sur la destination pour les retrouver. sync n'a pas ce défaut : n'ayant aucun repli, il échoue bruyamment à la place.",
+            fix: "Les push et sync actuels exigent un écouteur Relayium. Installez la CLI sur la destination, lancez serve, autorisez l'expéditeur et utilisez une cible relayium:// ; il n'existe aucun transport de repli silencieux.",
           },
         ],
       },
@@ -1147,15 +1091,15 @@ $ echo $?
     items: [
       {
         q: "Le serveur de sauvegarde a-t-il besoin de relayium installé ?",
-        a: "Cela dépend de la commande. push fonctionne dans les deux cas : avec relayium installé, il utilise le protocole natif (contrôle de collision en amont + vérification SHA-256 par fichier) ; sans, push bascule sur un simple flux tar via SSH, si bien qu'un serveur nu fonctionne quand même. sync a toujours besoin du protocole natif de relayium côté distant — il n'y a pas de repli tar pour sync, installez-le donc là-bas au préalable.",
+        a: "Oui. Les push et sync actuels utilisent le protocole natif daemon-direct et exigent relayium serve sur le destinataire. Il n'y a aucun repli SSH ou tar.",
       },
       {
         q: "La sauvegarde est-elle chiffrée et vérifiée ?",
-        a: "Oui. Chaque fichier est vérifié de bout en bout par un hachage SHA-256, et en poussant via SSH ou daemon-direct, les octets sont déjà protégés par le chiffrement propre à cette connexion — rien à configurer en plus.",
+        a: "Oui pendant le transfert, et chaque fichier transféré est vérifié par SHA-256. sync décide de ce qu'il envoie d'après la taille et la date de modification, donc un fichier sauté n'est pas re-haché. Des tailles de répertoire identiques sont un contrôle de cohérence, pas la preuve que les contenus sautés correspondent encore.",
       },
       {
         q: "Que se passe-t-il si la tâche cron est interrompue en cours de route ?",
-        a: "Cela dépend de la commande que vous avez planifiée. sync continue : l'exécution suivante saute ce qui correspond déjà et poursuit un fichier partiel, et --no-resume désactive cela. push ne reprend dans aucun des deux protocoles — il refuse une destination qui existe déjà, ce qui est la raison pour laquelle la ligne push ci-dessus écrit dans un répertoire daté, de sorte que la nuit suivante donne une copie complète et propre plutôt qu'un refus. --no-resume est accepté par push et n'y fait rien.",
+        a: "Cela dépend de la commande que vous avez planifiée. sync continue : l'exécution suivante saute ce qui correspond déjà et poursuit un fichier partiel, et --no-resume désactive cela. push ne reprend pas — il refuse une destination qui existe déjà ; pour des exécutions répétées, planifiez donc sync ou poussez vers une nouvelle destination à chaque exécution. --no-resume est accepté par push et n'y fait rien.",
       },
       {
         q: "--delete peut-il vider ma destination par accident ?",
@@ -1163,7 +1107,7 @@ $ echo $?
       },
       {
         q: "Ai-je besoin d'un compte, est-ce payant ?",
-        a: "Non. La CLI est gratuite et ne nécessite aucun compte pour push, pull ou sync — le transfert passe par votre propre connexion SSH ou une connexion daemon directe, pas par les serveurs de Relayium.",
+        a: "Non. La CLI est gratuite, et push/sync en daemon-direct ne demande ni compte Relayium ni paiement par transfert.",
       },
     ],
   },
@@ -1182,36 +1126,32 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "النسخ الاحتياطي الذي عليك أن تتذكر تشغيله لا يحدث. أما cron فيتذكر، وواجهة Relayium CLI مبنية لذلك: أمر واحد غير تفاعلي ينسخ (أو يعكس) مجلدًا إلى جهاز آخر ويتحقق من كل ملف يَنقله.",
-    "يغطي هذا الدليل جدولة relayium push وrelayium sync التزايدي عبر cron، ووسيلتَي النقل اللتين يمكن توجيه أيٍّ منهما إليهما، وأسطر crontab الجاهزة للنسخ.",
+    "يغطي هذا الدليل جدولة relayium push وrelayium sync التزايدي عبر cron، ووسيلة النقل daemon direct التي يستخدمها كلاهما، وأسطر crontab الجاهزة للنسخ.",
   ],
   sections: [
     {
       heading: "push مقابل sync: نسخة كاملة أم مرآة تزايدية",
       body: [
         "كلٌّ من push وsync ينقل مجلدًا إلى جهاز آخر، وكلاهما آمن للتشغيل المتكرر، لكنهما يحلّان مشكلتَي نسخ احتياطي مختلفتَين قليلًا.",
-        "يرسل push نسخة عبر SSH أو daemon-direct في كل مرة تُشغّله — بسيط، بل ويعمل حتى مع خادم مجرّد لا يوجد عليه relayium عبر بديل tar. أما sync فيُبقي الوجهة كمرآة تزايدية أحادية الاتجاه للمصدر: تُعاد فقط الملفات المتغيرة، فتصبح مزامنة ليلية لمجلد كبير سريعة بعد التشغيل الأول. يحتاج sync دائمًا إلى بروتوكول relayium الأصلي على الطرفين — ولا يوجد لديه بديل tar.",
+        "ينشئ push نسخة daemon direct لمرة واحدة آمنة من التعارض، ويرفض وجهة موجودة بدل الكتابة فوقها أو الاستئناف — ولذا لا يناسب مهمة متكررة نحو مجلد استقبال ثابت. أما sync فيُبقي الوجهة مرآة تزايدية أحادية الاتجاه للمصدر: يتخطى الملفات غير المتغيّرة ويرسل المتغيّرة ويُكمل الملف الجزئي في التشغيل التالي. ولأنه مرآة فهو يعكس الحالة الحالية لا التاريخ: فقد يُنقل حذف ملف في المصدر أو تلفه.",
       ],
       bullets: [
-        "استخدم push لنسخة مجدولة مباشرة، خاصةً إلى خادم قد لا يكون relayium مثبتًا عليه.",
+        "استخدم push نحو وجهة مؤرَّخة حين تريد أن يكون كل تشغيل قائمًا بذاته وأن تبقى النسخ الأقدم.",
         "استخدم sync لمجلد كبير أو كثير التغير حيث تكون إعادة إرسال كل شيء كل ليلة إهدارًا.",
-        "كلاهما يتحقق مما يَنقله بـ SHA-256 لكل ملف على البروتوكول الأصلي. ولا يستأنف push ولا pull؛ ومن الثلاثة، sync وحده يُكمل ملفًا جزئيًا، أما تراجع tar فلا يتحقق ولا يستأنف شيئًا.",
+        "يتحقق كلاهما من كل ملف منقول بـ SHA-256. لا يستأنف push، بينما يُكمل sync الملف الجزئي في تشغيل لاحق.",
       ],
     },
     {
-      heading: "وسيلتا نقل: SSH أو daemon-direct",
+      heading: "وسيلة نقل واحدة: daemon-direct",
       body: [
-        "وجِّه أيًّا من الأمرين إلى وجهة SSH (بأسلوب scp، باستخدام ~/.ssh/config لديك)، أو إذا كان الجهاز الآخر يشغّل relayium serve، فمباشرةً إليه عبر بروتوكول daemon-direct — دون حاجة إلى SSH.",
+        "وجّه أيًّا من الأمرين إلى وجهة relayium:// يشغّل جهاز الاستقبال فيها relayium serve. أما وجهات SSH فقد أُوقفت.",
       ],
       code: [
-        `# وجهة SSH — تستخدم مفاتيح SSH وإعداداتك الحالية
-relayium push ./data user@backup-server:/srv/backups/
-
-# daemon-direct — الوجهة تشغّل "relayium serve"، ولا حاجة إلى SSH
-relayium push ./data relayium://backup-server:9031`,
+        "# daemon-direct: الوجهة تشغّل \"relayium serve\"\nrelayium push ./data relayium://backup-server:9031",
       ],
       bullets: [
         "اتصالات daemon-direct مثبَّتة على TLS 1.3 مع الثقة عند الاستخدام الأول، ثم تُثبَّت على تلك البصمة في كل تشغيل لاحق.",
-        "يقبل sync الشكلين نفسيهما للوجهة كما يقبلهما push.",
+        "يقبل sync صيغة الوجهة relayium:// نفسها التي يقبلها push.",
       ],
     },
     {
@@ -1219,8 +1159,8 @@ relayium push ./data relayium://backup-server:9031`,
       prereqs: {
         label: "ما تحتاجه قبل الخطوة 1",
         items: [
-          "الـ CLI على هذا الجهاز، وعلى الوجهة أيضًا إن كنت تنوي استخدام sync. فـ sync بلا بديل احتياطي عبر tar.",
-          "مفتاح SSH بلا عبارة مرور، أو وجهة تشغّل relayium serve. فـ cron بلا وكيل وبلا طرفية، ولا يستطيع الإجابة عن طلب عبارة المرور.",
+          "واجهة CLI على الجهازين، مع تشغيل relayium serve على الوجهة.",
+          "وجهة تشغّل relayium serve واعتمدت هذا المُرسِل مسبقًا. ليس لدى cron طرفية، لذا تُرفض البصمة المجهولة بدل السؤال عنها.",
           "دليل مصدر موجود فعلًا في اللحظة التي ينطلق فيها cron — لا دليل على مشاركة شبكية لا تُركَّب إلا وأنت مسجَّل الدخول.",
           "مكان تكتب فيه سجلًا. فمهمة cron التي تذهب مخرجاتها إلى العدم هي نسخة احتياطية لن تعرف حالها إلا يوم تحتاجها.",
         ],
@@ -1231,12 +1171,12 @@ relayium push ./data relayium://backup-server:9031`,
           code: ["command -v relayium"],
         },
         {
-          text: "تأكّد أن المفتاح يعمل ولا أحد أمام لوحة المفاتيح. فـ BatchMode=yes يفشل بدل أن يسأل، وهذا هو حال cron تمامًا.",
-          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+          text: "تأكّد من أن المستمع قابل للوصول وأن هذا المُرسِل قد اعتُمد بالفعل.",
+          code: ["relayium id"],
         },
         {
           text: "شغّل الأمر كاملًا يدويًا مرة واحدة، مكتوبًا تمامًا كما سيشغّله cron، بما في ذلك المسار المطلق.",
-          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+          code: ["/usr/local/bin/relayium sync ~/documents relayium://backup-server:9031"],
         },
         {
           text: "عندها فقط أضف الجدولة. أبقِ المسار المطلق وإعادة التوجيه كما هما.",
@@ -1250,29 +1190,21 @@ relayium push ./data relayium://backup-server:9031`,
       success: {
         label: "كيف يبدو إعداد يعمل بشكل صحيح",
         body: [
-          "يُحَل relayium إلى مسار مطلق يمكنك لصقه في crontab، وينتهي فحص ssh مع BatchMode بالرمز 0 دون أن يطبع شيئًا أو يطلب شيئًا. والنسخة الاحتياطية التي لا تعمل إلا من صدفتك التفاعلية ليست مجدولة بعد.",
+          "يُحلّ relayium إلى مسار مطلق يمكنك لصقه في crontab، وينتهي sync يدوي عبر daemon direct برمز 0 دون أن يطلب اعتماد مُرسِل مجهول. والنسخة التي لا تعمل إلا بعد موافقة تفاعلية ليست مجدولة بعد.",
         ],
         code: [
-          `$ command -v relayium
-/usr/local/bin/relayium
-$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-$ echo $?
-0`,
+          "$ command -v relayium\n/usr/local/bin/relayium\n$ /usr/local/bin/relayium sync ~/documents relayium://backup-server:9031\n$ echo $?\n0",
         ],
       },
       body: [
-        "كلٌّ من push وsync أمر واحد غير تفاعلي، فيندرج مباشرةً في crontab. وجِّهه إلى مفتاح SSH بلا عبارة مرور (أو إلى وكيل)، وسجِّل المُخرجات لتظهر حالات الفشل:",
+        "بعد اعتماد المُرسِل مسبقًا، يصبح sync أمرًا واحدًا غير تفاعلي يدخل مباشرةً في crontab. سجّل المخرجات كي تظهر الإخفاقات:",
       ],
       code: [
-        `# نسخة كاملة كل ليلة عند الساعة 2 — أضِفها إلى crontab لديك (crontab -e)
-0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\\%F)/ >> ~/relayium-backup.log 2>&1
-
-# مرآة تزايدية كل 15 دقيقة بدلًا من ذلك
-*/15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ >> ~/relayium-sync.log 2>&1`,
+        "# مرآة تزايدية كل 15 دقيقة\n*/15 * * * * relayium sync ~/documents relayium://backup-server:9031 >> ~/relayium-sync.log 2>&1",
       ],
       bullets: [
         "يخرج الأمر بحالة غير صفرية إذا فشل أي ملف في فحص سلامته، فتلتقط رسالة cron عند الفشل المشكلات.",
-        "‏sync المُقاطَع يلحق بالركب في التشغيل المُجدوَل التالي: يُتخطّى ما يطابق سلفًا ويُكمَل الملف الجزئي. أما push المُقاطَع فلا يستأنف — لكن لأن كل ليلة تكتب في مجلدها المؤرَّخ الخاص، فإن الليلة التالية تعطي نسخة كاملة نظيفة بدل الرفض.",
+        "يلحق sync المنقطع بالركب في التشغيل المجدول التالي: يتخطى ما يطابق سلفًا ويُكمل الملف الجزئي.",
       ],
     },
     {
@@ -1282,8 +1214,8 @@ $ echo $?
         "إذا كنت تفضّل ألا تنتظر الدورة التالية لـ cron، يُبقي --watch عمل relayium sync مستمرًا ويعيد المزامنة تلقائيًا بعد لحظة من تغيّر أي ملف تحت المصدر — بديل خفيف عن الاستطلاع وفق جدول زمني.",
       ],
       bullets: [
-        "relayium sync ./data user@backup-server:/srv/backups/ --delete يعكس عمليات الحذف (يحتاج المستقبِل إلى serve --allow-delete).",
-        "relayium sync ./data user@backup-server:/srv/backups/ --watch يبقى مستمرًا ويعيد المزامنة عند التغيّر بدلًا من التشغيل مرة واحدة من cron.",
+        "relayium sync ./data relayium://backup-server:9031 --delete يعكس عمليات الحذف (يحتاج المستقبِل إلى serve --allow-delete).",
+        "relayium sync ./data relayium://backup-server:9031 --watch يبقى مستمرًا ويعيد المزامنة عند التغيّر بدلًا من التشغيل مرة واحدة من cron.",
       ],
     },
     {
@@ -1303,12 +1235,11 @@ $ echo $?
             fix: "يعمل cron بمسار PATH أدنى، غالبًا ‎/usr/bin:/bin‎ فقط. وإن لم يتمكّن install.sh من الكتابة في ‎/usr/local/bin‎ فقد وضع الثنائي في ‎~/.local/bin‎، وهو موضع لن يبحث فيه cron قط. ضع المسار المطلق الذي يعطيه command -v في سطر crontab، أو أضف سطر ‎PATH=‎ في أعلى crontab.",
           },
           {
-            symptom: "يُظهر السجل رفض اتصال ssh، أو لا شيء بعد التشغيل الأول.",
+            symptom: "يُظهر السجل «SSH transfers are currently disabled»، أو لا شيء بعد التشغيل الأول.",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              "grep -i \"SSH transfers\" ~/relayium-sync.log\n# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.",
             ],
-            fix: "لا يملك cron وكيل ssh ولا طرفية، فالمفتاح المحمي بعبارة مرور لا يسعه إلا أن يتعلّق أو يفشل. وجّه ‎-i‎ إلى مفتاح بلا عبارة مرور مخصَّص للنسخ الاحتياطي، وتحقّق بـ BatchMode=yes الذي يرفض السؤال بدل انتظار شخص غير موجود.",
+            fix: "ما زال الأمر المجدول يسمّي وجهة SSH قديمة، وقد أُوقفت عمليات النقل عبر SSH. شغّل relayium serve على خادم النسخ الاحتياطي، واعتمد هناك بصمة relayium id لهذا الجهاز، وغيّر الهدف إلى relayium://backup-server — لم يعد لمفتاح SSH ولا للوكيل ولا لعبارة المرور أي دور.",
           },
           {
             symptom: "يعمل sync بنظافة، لكن الملفات المحذوفة من المصدر ما تزال في الوجهة.",
@@ -1320,8 +1251,7 @@ $ echo $?
           {
             symptom: "يرفض sync الخيار ‎--delete‎ رفضًا قاطعًا.",
             code: [
-              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+              "relayium sync ~/documents relayium://backup-server:9031 --delete\n# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).",
             ],
             fix: "لم يُحلّ المصدر إلى أي ملف، فكانت المرآة ستفرغ الوجهة. وهذا الرفض مقصود. تحقّق من المسار بحثًا عن خطأ مطبعي، وتحقّق أن ما يُفترض تركيبه هناك مُركَّب فعلًا وقت انطلاق cron لا حين تكون مسجَّل الدخول فقط.",
           },
@@ -1330,7 +1260,7 @@ $ echo $?
             code: [
               `ssh user@backup-server command -v relayium`,
             ],
-            fix: "حين لا يملك الجهاز البعيد relayium يتراجع push إلى تدفّق tar عادي عبر SSH. تصل الملفات فلا يشتكي شيء — لكن هذا المسار بلا تحقّق SHA-256 لكل ملف وبلا فحص تعارض مسبق، وهما بالضبط السببان اللذان من أجلهما تجدول هذا بدل scp. ثبّت الـ CLI على الوجهة لتستعيدهما. أما sync فلا يعرف هذا الإخفاق: إذ لا بديل احتياطي لديه أصلًا، فيفشل بصوت عالٍ بدلًا من ذلك.",
+            fix: "يتطلب push وsync الحاليان مستمع Relayium. ثبّت CLI على الوجهة وشغّل serve واعتمد المُرسِل واستخدم هدف relayium://؛ لا توجد وسيلة نقل بديلة صامتة.",
           },
         ],
       },
@@ -1341,15 +1271,15 @@ $ echo $?
     items: [
       {
         q: "هل يحتاج خادم النسخ الاحتياطي إلى تثبيت relayium؟",
-        a: "يعتمد على الأمر. يعمل push في كلتا الحالتين: مع تثبيت relayium يستخدم البروتوكول الأصلي (فحص التعارض المسبق + SHA-256 لكل ملف)؛ ومن دونه، يتراجع push إلى تدفق tar عادي عبر SSH، فيعمل حتى الخادم المجرّد. أما sync فيحتاج دائمًا إلى بروتوكول relayium الأصلي على الطرف البعيد — لا يوجد بديل tar لـ sync، فثبِّته هناك أولًا.",
+        a: "نعم. يستخدم push وsync الحاليان بروتوكول daemon direct الأصلي ويتطلبان relayium serve على جهاز الاستقبال. لا يوجد تراجع إلى SSH أو tar.",
       },
       {
         q: "هل النسخة الاحتياطية مُشفَّرة ومُتحقَّق منها؟",
-        a: "نعم. يُفحَص كل ملف بتجزئة SHA-256 من الطرف إلى الطرف، والدفع عبر SSH أو daemon-direct يعني أن البايتات محمية أصلًا بتشفير ذلك الاتصال — لا شيء إضافي لضبطه.",
+        a: "نعم أثناء النقل، ويُتحقق من كل ملف منقول بـ SHA-256. يقرر sync ما يرسله بحسب الحجم ووقت التعديل، فلا يُعاد حساب تجزئة الملف المُتخطّى. وتطابق أحجام المجلدات فحص تقريبي، لا دليل على أن المحتويات المُتخطّاة ما زالت متطابقة.",
       },
       {
         q: "ماذا يحدث إذا قوطعت مهمة cron في منتصفها؟",
-        a: "يعتمد على الأمر الذي جدولته. sync يُكمل: التشغيل التالي يتخطى ما يطابق سلفًا ويُكمل ملفًا جزئيًا، و‏--no-resume يوقف ذلك. أما push فلا يستأنف في أي من البروتوكولين — فهو يرفض وجهة موجودة سلفًا، ولهذا يكتب سطر push أعلاه في مجلد مؤرَّخ، كي تكون الليلة التالية نسخة كاملة نظيفة بدل الرفض. و‏--no-resume مقبول في push ولا يفعل شيئًا.",
+        a: "يعتمد على الأمر الذي جدولته. sync يُكمل: التشغيل التالي يتخطى ما يطابق سلفًا ويُكمل ملفًا جزئيًا، و‏--no-resume يوقف ذلك. أما push فلا يستأنف — فهو يرفض وجهة موجودة سلفًا؛ لذا جدوِل sync للتشغيل المتكرر أو ادفع بـ push إلى وجهة جديدة في كل تشغيل. و‏--no-resume مقبول في push ولا يفعل شيئًا.",
       },
       {
         q: "هل يمكن أن يمحو --delete وجهتي بالخطأ؟",
@@ -1357,7 +1287,7 @@ $ echo $?
       },
       {
         q: "هل أحتاج إلى حساب، وهل يكلّف هذا شيئًا؟",
-        a: "لا. واجهة CLI مجانية ولا تحتاج إلى حساب لـ push أو pull أو sync — يجري النقل عبر اتصال SSH لديك أو اتصال daemon مباشر، لا عبر خوادم Relayium.",
+        a: "لا. واجهة CLI مجانية، ولا يحتاج push/sync عبر daemon direct إلى حساب Relayium ولا إلى دفع لكل عملية نقل.",
       },
     ],
   },
@@ -1376,36 +1306,32 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "Las copias de seguridad que tienes que acordarte de ejecutar no ocurren. cron sí se acuerda, y la CLI de Relayium está hecha para eso: un único comando no interactivo que copia (o replica) un directorio a otra máquina y verifica cada archivo que transfiere.",
-    "Esta guía cubre cómo programar relayium push y el relayium sync incremental desde cron, los dos transportes a los que puedes apuntar cualquiera de ellos, y las líneas de crontab para copiar.",
+    "Esta guía cubre cómo programar relayium push y el relayium sync incremental desde cron, el transporte daemon directo que usan ambos, y las líneas de crontab para copiar.",
   ],
   sections: [
     {
       heading: "push frente a sync: copia completa o réplica incremental",
       body: [
         "Tanto push como sync mueven un directorio a otra máquina y ambos son seguros de ejecutar repetidamente, pero resuelven problemas de copia de seguridad ligeramente distintos.",
-        "push envía una copia por SSH o daemon-direct cada vez que lo ejecutas: sencillo, e incluso funciona contra un servidor pelado sin relayium instalado gracias a un respaldo con tar. sync, en cambio, mantiene el destino como una réplica incremental unidireccional del origen: solo se reenvían los archivos cambiados, así que un sync nocturno de un directorio grande es rápido después de la primera ejecución. sync siempre necesita el protocolo nativo de relayium en ambos extremos: no tiene respaldo con tar.",
+        "push hace una copia puntual con daemon directo, segura ante colisiones, y rechaza un destino existente en lugar de sobrescribirlo o reanudar; por eso no encaja en una tarea repetida hacia un directorio de recepción fijo. sync, en cambio, mantiene un destino como espejo incremental de un solo sentido del origen: se saltan los archivos sin cambios, se envían los modificados y un archivo parcial continúa en la siguiente ejecución. Como es un espejo, refleja el estado actual y no el histórico: borrar o corromper un archivo de origen puede propagarse.",
       ],
       bullets: [
-        "Usa push para una copia programada sencilla, sobre todo hacia un servidor que quizá no tenga relayium instalado.",
+        "Usa push hacia un destino con fecha cuando quieras que cada ejecución sea independiente y que las copias anteriores se conserven.",
         "Usa sync para un directorio grande o que cambia con frecuencia, donde reenviar todo cada noche sería un desperdicio.",
-        "Ambos verifican lo que transfieren con un SHA-256 por archivo en el protocolo nativo. Ni push ni pull reanuda; de los tres, solo sync continúa un archivo parcial, y la alternativa con tar no verifica ni reanuda nada.",
+        "Ambos verifican cada archivo transferido con SHA-256. push no reanuda; sync continúa un archivo parcial en una ejecución posterior.",
       ],
     },
     {
-      heading: "Dos transportes: SSH o daemon-direct",
+      heading: "Un solo transporte: daemon-direct",
       body: [
-        "Apunta cualquiera de los comandos a un destino SSH (al estilo scp, usando tu ~/.ssh/config) o, si la otra máquina ejecuta relayium serve, directamente a ella por el protocolo daemon-direct, sin necesidad de SSH.",
+        "Apunta cualquiera de los dos comandos a un destino relayium:// cuya máquina receptora ejecute relayium serve. Los destinos SSH están retirados.",
       ],
       code: [
-        `# destino SSH — usa tus claves y tu configuración de SSH existentes
-relayium push ./data user@backup-server:/srv/backups/
-
-# daemon-direct — el destino ejecuta "relayium serve", no hace falta SSH
-relayium push ./data relayium://backup-server:9031`,
+        "# daemon-direct: el destino ejecuta \"relayium serve\"\nrelayium push ./data relayium://backup-server:9031",
       ],
       bullets: [
         "Las conexiones daemon-direct usan TLS 1.3 fijado con confianza en el primer uso, y luego se comprueban contra esa misma huella en cada ejecución posterior.",
-        "sync acepta las mismas dos formas de destino que push.",
+        "sync acepta la misma forma de destino relayium:// que push.",
       ],
     },
     {
@@ -1413,8 +1339,8 @@ relayium push ./data relayium://backup-server:9031`,
       prereqs: {
         label: "Lo que necesitas antes del paso 1",
         items: [
-          "La CLI en esta máquina, y también en el destino si piensas usar sync. sync no tiene repliegue a tar.",
-          "Una clave SSH sin frase de paso, o un destino que ejecute relayium serve. cron no tiene agente ni terminal, así que no puede responder a una petición de frase de paso.",
+          "La CLI en las dos máquinas, con relayium serve en ejecución en el destino.",
+          "Un destino que ejecute relayium serve y tenga preautorizado a este remitente. cron no tiene terminal, así que una huella desconocida se rechaza en lugar de preguntar.",
           "Un directorio de origen que exista en el momento en que cron se dispara, no uno en un montaje de red que solo está presente mientras tienes la sesión abierta.",
           "Un sitio donde escribir un registro. Una tarea de cron cuya salida no va a ninguna parte es una copia de seguridad de la que te enterarás el día que la necesites.",
         ],
@@ -1425,12 +1351,12 @@ relayium push ./data relayium://backup-server:9031`,
           code: ["command -v relayium"],
         },
         {
-          text: "Comprueba que la clave funciona sin nadie al teclado. BatchMode=yes falla en lugar de preguntar, que es exactamente la situación de cron.",
-          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+          text: "Confirma que el receptor es alcanzable y que este remitente ya fue autorizado.",
+          code: ["relayium id"],
         },
         {
           text: "Ejecuta la orden entera a mano una vez, escrita exactamente como la ejecutará cron, ruta absoluta incluida.",
-          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+          code: ["/usr/local/bin/relayium sync ~/documents relayium://backup-server:9031"],
         },
         {
           text: "Solo entonces añade la programación. Conserva la ruta absoluta y la redirección.",
@@ -1444,29 +1370,21 @@ relayium push ./data relayium://backup-server:9031`,
       success: {
         label: "Qué aspecto tiene un montaje que funciona",
         body: [
-          "relayium se resuelve a una ruta absoluta que puedes pegar en el crontab, y la comprobación de ssh con BatchMode termina con 0 sin imprimir ni pedir nada. Una copia de seguridad que solo funciona desde tu shell interactiva todavía no está programada.",
+          "relayium se resuelve a una ruta absoluta que puedes pegar en el crontab, y un sync con daemon directo ejecutado a mano termina con 0 sin pedir autorizar a un remitente desconocido. Una copia que solo funciona tras una aprobación interactiva todavía no está programada.",
         ],
         code: [
-          `$ command -v relayium
-/usr/local/bin/relayium
-$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-$ echo $?
-0`,
+          "$ command -v relayium\n/usr/local/bin/relayium\n$ /usr/local/bin/relayium sync ~/documents relayium://backup-server:9031\n$ echo $?\n0",
         ],
       },
       body: [
-        "Tanto push como sync son comandos únicos y no interactivos, así que se integran directamente en un crontab. Apúntalos a una clave SSH sin frase de contraseña (o a un agente) y registra la salida para que los fallos sean visibles:",
+        "Con el remitente preautorizado, sync es un único comando no interactivo que entra directamente en un crontab. Registra la salida para que los fallos sean visibles:",
       ],
       code: [
-        `# copia completa cada noche a las 2 — añádela a tu crontab (crontab -e)
-0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\\%F)/ >> ~/relayium-backup.log 2>&1
-
-# en su lugar, réplica incremental cada 15 minutos
-*/15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ >> ~/relayium-sync.log 2>&1`,
+        "# espejo incremental cada 15 minutos\n*/15 * * * * relayium sync ~/documents relayium://backup-server:9031 >> ~/relayium-sync.log 2>&1",
       ],
       bullets: [
         "El comando termina con un código distinto de cero si algún archivo falla su comprobación de integridad, así que el aviso por correo de cron ante fallos detecta los problemas.",
-        "Un sync interrumpido se pone al día en la siguiente ejecución programada: lo que ya coincide se salta y un archivo parcial se continúa. Un push interrumpido no reanuda, pero como cada noche escribe en su propio directorio con fecha, la noche siguiente es una copia completa y limpia en lugar de un rechazo.",
+        "Un sync interrumpido se pone al día en la siguiente ejecución programada: lo que ya coincide se salta y un archivo parcial continúa.",
       ],
     },
     {
@@ -1476,8 +1394,8 @@ $ echo $?
         "Si prefieres no esperar al siguiente tic de cron, --watch mantiene relayium sync en ejecución y vuelve a sincronizar automáticamente un instante después de que cambie cualquier archivo bajo el origen: una alternativa ligera al sondeo programado.",
       ],
       bullets: [
-        "relayium sync ./data user@backup-server:/srv/backups/ --delete replica los borrados (el receptor necesita serve --allow-delete).",
-        "relayium sync ./data user@backup-server:/srv/backups/ --watch se mantiene en ejecución y vuelve a sincronizar al cambiar algo, en lugar de ejecutarse una sola vez desde cron.",
+        "relayium sync ./data relayium://backup-server:9031 --delete replica los borrados (el receptor necesita serve --allow-delete).",
+        "relayium sync ./data relayium://backup-server:9031 --watch se mantiene en ejecución y vuelve a sincronizar al cambiar algo, en lugar de ejecutarse una sola vez desde cron.",
       ],
     },
     {
@@ -1497,12 +1415,11 @@ $ echo $?
             fix: "cron corre con un PATH mínimo, normalmente solo /usr/bin:/bin. Si install.sh no pudo escribir en /usr/local/bin, el binario está en ~/.local/bin, donde cron no mirará jamás. Pon en la línea del crontab la ruta absoluta que da command -v, o añade una línea PATH= al principio del crontab.",
           },
           {
-            symptom: "El registro muestra la conexión ssh rechazada, o nada después de la primera ejecución.",
+            symptom: "El registro muestra «SSH transfers are currently disabled», o nada después de la primera ejecución.",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              "grep -i \"SSH transfers\" ~/relayium-sync.log\n# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.",
             ],
-            fix: "cron no tiene ssh-agent ni terminal, así que una clave con frase de paso solo puede colgarse o fallar. Apunta -i a una clave sin frase de paso reservada para las copias, y compruébalo con BatchMode=yes, que se niega a preguntar en lugar de esperar a alguien que no está.",
+            fix: "El comando programado todavía nombra un destino SSH antiguo, y las transferencias SSH están retiradas. Ejecuta relayium serve en el servidor de copias, autoriza allí la huella de relayium id de esta máquina y cambia el destino a relayium://backup-server: ya no intervienen clave SSH, agente ni frase de contraseña.",
           },
           {
             symptom: "sync se ejecuta limpiamente, pero los archivos borrados en el origen siguen en el destino.",
@@ -1514,8 +1431,7 @@ $ echo $?
           {
             symptom: "sync rechaza --delete de plano.",
             code: [
-              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+              "relayium sync ~/documents relayium://backup-server:9031 --delete\n# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).",
             ],
             fix: "El origen no resolvió ningún archivo, así que el espejo habría vaciado el destino. Ese rechazo es deliberado. Revisa la ruta por si hay una errata, y comprueba que lo que deba estar montado ahí lo esté a la hora en que se dispara cron y no solo cuando tienes sesión abierta.",
           },
@@ -1524,7 +1440,7 @@ $ echo $?
             code: [
               `ssh user@backup-server command -v relayium`,
             ],
-            fix: "Cuando la máquina remota no tiene relayium, push se repliega a un flujo tar simple sobre SSH. Los archivos llegan, así que nada se queja, pero ese camino no tiene verificación SHA-256 por archivo ni comprobación de colisiones por adelantado, que son justo las dos razones para programar esto en lugar de un scp. Instala la CLI en el destino para recuperarlas. sync no tiene este fallo: como no tiene ningún repliegue, falla ruidosamente.",
+            fix: "push y sync actuales requieren un receptor de Relayium. Instala la CLI en el destino, inicia serve, autoriza al remitente y usa un destino relayium://; no hay ningún transporte alternativo silencioso.",
           },
         ],
       },
@@ -1535,15 +1451,15 @@ $ echo $?
     items: [
       {
         q: "¿El servidor de copias de seguridad necesita relayium instalado?",
-        a: "Depende del comando. push funciona de cualquier forma: con relayium instalado usa el protocolo nativo (comprobación de colisiones por adelantado + SHA-256 por archivo); sin él, push recurre a un simple flujo tar por SSH, así que un servidor pelado sigue funcionando. sync siempre necesita el protocolo nativo de relayium en el extremo remoto: no hay respaldo con tar para sync, así que instálalo allí primero.",
+        a: "Sí. push y sync actuales usan el protocolo nativo daemon directo y requieren relayium serve en el receptor. No hay alternativa con SSH ni con tar.",
       },
       {
         q: "¿La copia de seguridad va cifrada y verificada?",
-        a: "Sí. Cada archivo se comprueba con un hash SHA-256 de extremo a extremo, y al enviar por SSH o daemon-direct los bytes ya están protegidos por el cifrado de esa conexión: nada más que configurar.",
+        a: "Sí durante la transferencia, y cada archivo transferido se comprueba con SHA-256. sync decide qué enviar por tamaño y fecha de modificación, así que un archivo saltado no se vuelve a hashear. Que coincidan los tamaños de directorio es una comprobación de cordura, no una prueba de que el contenido saltado siga coincidiendo.",
       },
       {
         q: "¿Qué pasa si la tarea cron se interrumpe a mitad de camino?",
-        a: "Depende de qué comando hayas programado. sync continúa: la siguiente ejecución se salta lo que ya coincide y sigue con un archivo parcial, y --no-resume desactiva eso. push no reanuda en ninguno de los dos protocolos: rechaza un destino que ya existe, que es la razón por la que la línea push de arriba escribe en un directorio con fecha, de modo que la noche siguiente es una copia completa y limpia en lugar de un rechazo. --no-resume se acepta en push y no hace nada.",
+        a: "Depende de qué comando hayas programado. sync continúa: la siguiente ejecución se salta lo que ya coincide y sigue con un archivo parcial, y --no-resume desactiva eso. push no reanuda: rechaza un destino que ya existe, así que para ejecuciones repetidas programa sync o haz push a un destino nuevo en cada ejecución. --no-resume se acepta en push y no hace nada.",
       },
       {
         q: "¿Puede --delete vaciar mi destino por accidente?",
@@ -1551,7 +1467,7 @@ $ echo $?
       },
       {
         q: "¿Necesito una cuenta o esto cuesta algo?",
-        a: "No. La CLI es gratis y no necesita cuenta para push, pull ni sync: la transferencia va por tu propia conexión SSH o una conexión de daemon directo, no a través de los servidores de Relayium.",
+        a: "No. La CLI es gratis y push/sync con daemon directo no necesita cuenta de Relayium ni pago por transferencia.",
       },
     ],
   },
@@ -1570,36 +1486,32 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "Backups que você precisa lembrar de executar não acontecem. O cron lembra, e a CLI do Relayium foi feita para isso: um único comando não interativo que copia (ou espelha) um diretório para outra máquina e verifica cada arquivo que transfere.",
-    "Este guia aborda como agendar o relayium push e o relayium sync incremental pelo cron, os dois transportes para os quais você pode apontar qualquer um deles e as linhas de crontab para copiar.",
+    "Este guia aborda como agendar o relayium push e o relayium sync incremental pelo cron, o transporte daemon direto que ambos usam e as linhas de crontab para copiar.",
   ],
   sections: [
     {
       heading: "push versus sync: cópia completa ou espelho incremental",
       body: [
         "Tanto push quanto sync movem um diretório para outra máquina e ambos são seguros para rodar repetidamente, mas resolvem problemas de backup um pouco diferentes.",
-        "push envia uma cópia por SSH ou daemon-direct a cada execução — simples, e funciona até contra um servidor pelado sem o relayium instalado, graças a um recurso alternativo com tar. Já o sync mantém o destino como um espelho incremental e unidirecional da origem: apenas os arquivos alterados são reenviados, então um sync noturno de um diretório grande fica rápido depois da primeira execução. O sync sempre precisa do protocolo nativo do relayium nas duas pontas — ele não tem recurso alternativo com tar.",
+        "O push faz uma cópia pontual com daemon direto, segura contra colisões, e recusa um destino existente em vez de sobrescrever ou retomar — por isso não serve para uma tarefa repetida apontada para um diretório de recebimento fixo. Já o sync mantém um destino como espelho incremental de mão única da origem: arquivos inalterados são pulados, os alterados são enviados e um arquivo parcial continua na próxima execução. Por ser um espelho, ele reflete o estado atual e não o histórico: apagar ou corromper um arquivo na origem pode ser propagado.",
       ],
       bullets: [
-        "Use push para uma cópia agendada direta, especialmente para um servidor que talvez não tenha o relayium instalado.",
+        "Use push para um destino com data quando quiser que cada execução seja independente e que as cópias anteriores sobrevivam.",
         "Use sync para um diretório grande ou que muda com frequência, onde reenviar tudo toda noite seria desperdício.",
-        "Ambos verificam o que transferem com um SHA-256 por arquivo no protocolo nativo. Nem o push nem o pull retoma; dos três, só o sync continua um arquivo parcial, e a alternativa com tar não verifica nem retoma nada.",
+        "Ambos verificam cada arquivo transferido com SHA-256. O push não retoma; o sync continua um arquivo parcial em uma execução posterior.",
       ],
     },
     {
-      heading: "Dois transportes: SSH ou daemon-direct",
+      heading: "Um só transporte: daemon-direct",
       body: [
-        "Aponte qualquer um dos comandos para um destino SSH (no estilo scp, usando seu ~/.ssh/config) ou, se a outra máquina estiver rodando relayium serve, direto para ela pelo protocolo daemon-direct — sem precisar de SSH.",
+        "Aponte qualquer um dos dois comandos para um destino relayium:// cuja máquina de destino rode relayium serve. Destinos SSH foram descontinuados.",
       ],
       code: [
-        `# destino SSH — usa suas chaves e sua configuração de SSH existentes
-relayium push ./data user@backup-server:/srv/backups/
-
-# daemon-direct — o destino roda "relayium serve", sem precisar de SSH
-relayium push ./data relayium://backup-server:9031`,
+        "# daemon-direct: o destino roda \"relayium serve\"\nrelayium push ./data relayium://backup-server:9031",
       ],
       bullets: [
         "As conexões daemon-direct usam TLS 1.3 fixado com confiança no primeiro uso e, depois, são verificadas contra essa mesma impressão digital em todas as execuções seguintes.",
-        "O sync aceita as mesmas duas formas de destino que o push.",
+        "O sync aceita a mesma forma de destino relayium:// que o push.",
       ],
     },
     {
@@ -1607,8 +1519,8 @@ relayium push ./data relayium://backup-server:9031`,
       prereqs: {
         label: "O que você precisa antes do passo 1",
         items: [
-          "A CLI nesta máquina, e também no destino se pretende usar o sync. O sync não tem recurso ao tar.",
-          "Uma chave SSH sem frase secreta, ou um destino rodando relayium serve. O cron não tem agente nem terminal, então não consegue responder a um pedido de frase secreta.",
+          "A CLI nas duas máquinas, com relayium serve rodando no destino.",
+          "Um destino rodando relayium serve com este remetente pré-autorizado. O cron não tem terminal, então uma impressão digital desconhecida é recusada em vez de gerar uma pergunta.",
           "Um diretório de origem que exista no momento em que o cron dispara — não um em montagem de rede que só está presente enquanto você está logado.",
           "Um lugar para escrever um log. Uma tarefa de cron cuja saída não vai a lugar nenhum é um backup do qual você vai saber no dia em que precisar dele.",
         ],
@@ -1619,12 +1531,12 @@ relayium push ./data relayium://backup-server:9031`,
           code: ["command -v relayium"],
         },
         {
-          text: "Confirme que a chave funciona sem ninguém ao teclado. BatchMode=yes falha em vez de perguntar, que é justamente a situação do cron.",
-          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+          text: "Confirme que o receptor está acessível e que este remetente já foi autorizado.",
+          code: ["relayium id"],
         },
         {
           text: "Rode o comando inteiro à mão uma vez, escrito exatamente como o cron vai rodar, caminho absoluto incluído.",
-          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+          code: ["/usr/local/bin/relayium sync ~/documents relayium://backup-server:9031"],
         },
         {
           text: "Só então adicione o agendamento. Mantenha o caminho absoluto e o redirecionamento.",
@@ -1638,29 +1550,21 @@ relayium push ./data relayium://backup-server:9031`,
       success: {
         label: "Como é uma configuração que funciona",
         body: [
-          "O relayium resolve para um caminho absoluto que dá para colar no crontab, e a checagem de ssh com BatchMode termina em 0 sem imprimir nem pedir nada. Um backup que só funciona a partir do seu shell interativo ainda não está agendado.",
+          "O relayium resolve para um caminho absoluto que você pode colar no crontab, e um sync com daemon direto rodado à mão termina com 0 sem pedir para autorizar um remetente desconhecido. Uma cópia que só funciona depois de uma aprovação interativa ainda não está agendada.",
         ],
         code: [
-          `$ command -v relayium
-/usr/local/bin/relayium
-$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-$ echo $?
-0`,
+          "$ command -v relayium\n/usr/local/bin/relayium\n$ /usr/local/bin/relayium sync ~/documents relayium://backup-server:9031\n$ echo $?\n0",
         ],
       },
       body: [
-        "Tanto push quanto sync são comandos únicos e não interativos, então se encaixam direto em um crontab. Aponte-os para uma chave SSH sem senha (ou um agente) e registre a saída para que as falhas fiquem visíveis:",
+        "Com o remetente pré-autorizado, o sync é um único comando não interativo que entra direto no crontab. Registre a saída em log para que as falhas fiquem visíveis:",
       ],
       code: [
-        `# cópia completa toda noite às 2h — adicione ao seu crontab (crontab -e)
-0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\\%F)/ >> ~/relayium-backup.log 2>&1
-
-# no lugar disso, espelho incremental a cada 15 minutos
-*/15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ >> ~/relayium-sync.log 2>&1`,
+        "# espelho incremental a cada 15 minutos\n*/15 * * * * relayium sync ~/documents relayium://backup-server:9031 >> ~/relayium-sync.log 2>&1",
       ],
       bullets: [
         "O comando termina com código diferente de zero se algum arquivo falhar na verificação de integridade, então o aviso por e-mail em caso de falha do cron detecta os problemas.",
-        "Um sync interrompido se atualiza na próxima execução agendada: o que já corresponde é pulado e um arquivo parcial é continuado. Um push interrompido não retoma — mas, como cada noite escreve no seu próprio diretório com data, a noite seguinte é uma cópia completa e limpa em vez de uma recusa.",
+        "Um sync interrompido se atualiza na próxima execução agendada: o que já corresponde é pulado e um arquivo parcial continua.",
       ],
     },
     {
@@ -1670,8 +1574,8 @@ $ echo $?
         "Se você preferir não esperar o próximo ciclo do cron, --watch mantém o relayium sync em execução e sincroniza novamente de forma automática logo após qualquer arquivo sob a origem mudar — uma alternativa leve à sondagem agendada.",
       ],
       bullets: [
-        "relayium sync ./data user@backup-server:/srv/backups/ --delete espelha as exclusões (o receptor precisa de serve --allow-delete).",
-        "relayium sync ./data user@backup-server:/srv/backups/ --watch permanece em execução e sincroniza novamente a cada mudança, em vez de rodar uma única vez pelo cron.",
+        "relayium sync ./data relayium://backup-server:9031 --delete espelha as exclusões (o receptor precisa de serve --allow-delete).",
+        "relayium sync ./data relayium://backup-server:9031 --watch permanece em execução e sincroniza novamente a cada mudança, em vez de rodar uma única vez pelo cron.",
       ],
     },
     {
@@ -1691,12 +1595,11 @@ $ echo $?
             fix: "O cron roda com um PATH mínimo, normalmente só /usr/bin:/bin. Se o install.sh não conseguiu escrever em /usr/local/bin, o binário está em ~/.local/bin, onde o cron nunca vai procurar. Use na linha do crontab o caminho absoluto que o command -v mostra, ou coloque uma linha PATH= no topo do crontab.",
           },
           {
-            symptom: "O log mostra a conexão ssh recusada, ou nada depois da primeira execução.",
+            symptom: "O log mostra “SSH transfers are currently disabled”, ou nada depois da primeira execução.",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              "grep -i \"SSH transfers\" ~/relayium-sync.log\n# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.",
             ],
-            fix: "O cron não tem ssh-agent nem terminal, então uma chave com frase secreta só pode travar ou falhar. Aponte o -i para uma chave sem frase secreta reservada aos backups e confirme com BatchMode=yes, que se recusa a perguntar em vez de esperar por alguém que não está lá.",
+            fix: "O comando agendado ainda aponta para um destino SSH antigo, e as transferências por SSH foram descontinuadas. Rode relayium serve no servidor de backup, autorize lá a impressão digital do relayium id desta máquina e mude o alvo para relayium://backup-server — chave SSH, agente e frase-senha não entram mais na história.",
           },
           {
             symptom: "O sync roda limpo, mas os arquivos apagados na origem continuam no destino.",
@@ -1708,8 +1611,7 @@ $ echo $?
           {
             symptom: "O sync recusa o --delete de saída.",
             code: [
-              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+              "relayium sync ~/documents relayium://backup-server:9031 --delete\n# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).",
             ],
             fix: "A origem não resolveu nenhum arquivo, então o espelho teria esvaziado o destino. Essa recusa é proposital. Verifique o caminho por causa de um erro de digitação, e verifique se o que deveria estar montado ali está montado na hora em que o cron dispara, e não só quando você está logado.",
           },
@@ -1718,7 +1620,7 @@ $ echo $?
             code: [
               `ssh user@backup-server command -v relayium`,
             ],
-            fix: "Quando a máquina remota não tem relayium, o push recorre a um fluxo tar simples sobre SSH. Os arquivos chegam, então nada reclama — mas esse caminho não tem verificação SHA-256 por arquivo nem checagem de colisão antecipada, que são exatamente os dois motivos para agendar isto em vez de um scp. Instale a CLI no destino para recuperá-las. O sync não tem essa falha: como não tem recurso nenhum, ele falha alto em vez disso.",
+            fix: "O push e o sync atuais exigem um receptor do Relayium. Instale a CLI no destino, inicie o serve, autorize o remetente e use um alvo relayium://; não existe transporte alternativo silencioso.",
           },
         ],
       },
@@ -1729,15 +1631,15 @@ $ echo $?
     items: [
       {
         q: "O servidor de backup precisa do relayium instalado?",
-        a: "Depende do comando. push funciona nos dois casos: com o relayium instalado, ele usa o protocolo nativo (checagem de colisão antecipada + SHA-256 por arquivo); sem ele, push recorre a um fluxo tar simples por SSH, então um servidor pelado ainda funciona. O sync sempre precisa do protocolo nativo do relayium no lado remoto — não há recurso alternativo com tar para o sync, então instale-o lá primeiro.",
+        a: "Sim. O push e o sync atuais usam o protocolo nativo daemon direto e exigem relayium serve no destino. Não há alternativa com SSH nem com tar.",
       },
       {
         q: "O backup é criptografado e verificado?",
-        a: "Sim. Cada arquivo é conferido com um hash SHA-256 de ponta a ponta, e ao enviar por SSH ou daemon-direct os bytes já estão protegidos pela criptografia daquela conexão — nada mais a configurar.",
+        a: "Sim durante a transferência, e cada arquivo transferido é conferido com SHA-256. O sync decide o que enviar por tamanho e data de modificação, então um arquivo pulado não é re-hasheado. Tamanhos de diretório iguais são uma checagem de sanidade, não prova de que o conteúdo pulado ainda corresponde.",
       },
       {
         q: "O que acontece se a tarefa cron for interrompida no meio?",
-        a: "Depende de qual comando você agendou. O sync continua: a próxima execução pula o que já corresponde e leva adiante um arquivo parcial, e o --no-resume desliga isso. O push não retoma em nenhum dos dois protocolos — ele recusa um destino que já existe, que é o motivo de a linha de push acima escrever em um diretório com data, para que a noite seguinte seja uma cópia completa e limpa em vez de uma recusa. O --no-resume é aceito pelo push e não faz nada.",
+        a: "Depende de qual comando você agendou. O sync continua: a próxima execução pula o que já corresponde e leva adiante um arquivo parcial, e o --no-resume desliga isso. O push não retoma — ele recusa um destino que já existe; para execuções repetidas, agende o sync ou faça push para um destino novo a cada execução. O --no-resume é aceito pelo push e não faz nada.",
       },
       {
         q: "O --delete pode apagar meu destino por acidente?",
@@ -1745,7 +1647,7 @@ $ echo $?
       },
       {
         q: "Preciso de uma conta ou isso custa alguma coisa?",
-        a: "Não. A CLI é gratuita e não precisa de conta para push, pull ou sync — a transferência ocorre pela sua própria conexão SSH ou por uma conexão direta de daemon, não pelos servidores do Relayium.",
+        a: "Não. A CLI é gratuita e push/sync com daemon direto não precisa de conta do Relayium nem de pagamento por transferência.",
       },
     ],
   },

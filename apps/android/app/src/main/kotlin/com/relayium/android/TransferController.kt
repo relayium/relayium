@@ -415,6 +415,13 @@ class TransferController(
     private val sessionDispatcher = session.asCoroutineDispatcher()
     private val storage = ScheduledThreadPoolExecutor(1)
 
+    init {
+        // Staging an earlier incarnation left behind would otherwise wait for
+        // the next local receive to be swept. First on the storage thread, so
+        // it precedes any begin; the store's own fences keep it off live work.
+        runCatching { storage.execute { runCatching { deps.store.sweepStaleStaging() } } }
+    }
+
     /**
      * The CONNECTION generation, and the published `linkId`.
      *

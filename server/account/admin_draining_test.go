@@ -198,6 +198,9 @@ func TestCountFilesOnNodeLiveOnly(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Node-backed objects need their node row (the insert's node fence).
+	am3EnsureNode(t, store, "nodeA", "fleet", "")
+	am3EnsureNode(t, store, "nodeB", "fleet", "")
 	mustCreate("live1", "nodeA", now+100)
 	mustCreate("live2", "nodeA", now+500) // furthest out on nodeA
 	mustCreate("expired", "nodeA", now-1) // must be excluded

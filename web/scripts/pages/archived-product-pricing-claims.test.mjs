@@ -39,7 +39,6 @@ import wetransfer from "./content/articles/compare-wetransfer.mjs";
 import firefoxSend from "./content/articles/compare-firefox-send.mjs";
 import croc from "./content/articles/compare-croc.mjs";
 import wormhole from "./content/articles/compare-magic-wormhole.mjs";
-import scp from "./content/articles/compare-scp.mjs";
 import rsync from "./content/articles/compare-rsync.mjs";
 import selfHost from "./content/articles/guides-self-host.mjs";
 import cliStart from "./content/articles/cli-getting-started.mjs";
@@ -128,11 +127,10 @@ const CASES = [
   },
   { name: "croc faq 'is the CLI free?'", page: croc, slug: "compare/croc", path: "faq.items.0.a", old: CLI_TOTAL, facts: ["directModes", "unmetered", "up", "storageCap", "plan"] },
   { name: "magic-wormhole faq 'is the CLI free?'", page: wormhole, slug: "compare/magic-wormhole", path: "faq.items.0.a", old: CLI_TOTAL, facts: ["directModes", "unmetered", "up", "storageCap", "plan"] },
-  {
-    name: "scp faq 'is the CLI free?'", page: scp, slug: "compare/scp", path: "faq.items.4.a",
-    old: { ...CLI_TOTAL, ja: [...CLI_TOTAL.ja, "はい、完全に無料です"], de: [...CLI_TOTAL.de, "Ja, vollständig"], fr: [...CLI_TOTAL.fr, "Oui, entièrement"], ar: [...CLI_TOTAL.ar, "نعم، بالكامل"], es: [...CLI_TOTAL.es, "Sí, por completo"], pt: [...CLI_TOTAL.pt, "Sim, totalmente"] },
-    facts: ["unmetered", "up", "plan", "hostedStorage"],
-  },
+  // "scp faq 'is the CLI free?'" (faq.items.4.a) was retired on 2026-09-30: the
+  // archived scp comparison described the retired SSH transport and is now a
+  // short historical notice with no cost answer. Its old claims stay pinned as
+  // absent by archived-fact-errata.test.mjs (compare/scp rows).
   {
     name: "rsync 'where sync wins' bullet", page: rsync, slug: "compare/rsync", path: "sections.5.bullets.3",
     old: { ja: ["どの転送モードも無料"], ko: ["어떤 전송 모드든 무료"], de: ["für jeden Übertragungsmodus kostenlos"], fr: ["gratuit pour n'importe quel mode de transfert"], ar: ["مجاني لأي وضع نقل"], es: ["gratis para cualquier modo de transferencia"], pt: ["gratuito para qualquer modo de transferência"] },

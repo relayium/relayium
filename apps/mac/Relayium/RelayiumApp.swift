@@ -619,7 +619,8 @@ struct RelayiumApp: App {
         // state rather than a shutdown.
         let delivering = AppEnvironment.makeInboxSendModel(
             pending: AppEnvironment.makePendingUploadSupport(
-                drafts: nil, root: UITestMode.pendingUploadRoot()),
+                drafts: nil, root: UITestMode.pendingUploadRoot(),
+                keys: UITestMode.makePendingUploadKeyStore()),
             transport: UITestMode.makeAccountTransport())
         delivering.observe(account.$state)
 

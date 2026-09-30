@@ -12,9 +12,15 @@ import { cli } from "../../web/scripts/pages/content/spa-pages.mjs";
 
 const locales = { en, zh };
 
+// The /cli page describes the next CLI release: a pairing-code session's SAS is
+// linkcrypto.SAS over the two X25519 public keys the ends exchanged
+// (server/internal/linksession/format.go), not the pinned-TLS-fingerprint SAS
+// (server/internal/secure.SAS) that only the older CLI-to-CLI pairing
+// (server/cmd/relayium/crossnet.go crossnetLegacy -> rzvous) still uses.
+// Only en/zh are read (`locales` above); the frozen-locale rows are archival.
 const cliTokens = {
-  en: [/pinned TLS certificate fingerprints/i, /rendezvous service/i, /endpoints?/i, /network hop/i],
-  zh: [/TLS 证书指纹/, /会合服务/, /端点/, /网络路径/],
+  en: [/derived from the keys the two ends exchanged/i, /rendezvous service/i, /endpoints?/i, /network hop/i],
+  zh: [/由双方交换的密钥推导/, /会合服务/, /端点/, /网络路径/],
   ja: [/TLS 証明書フィンガープリント/, /ランデブーサービス/, /エンドポイント/, /ネットワーク経路/],
   ko: [/TLS 인증서 지문/, /랑데부 서비스/, /끝점/, /네트워크 경로/],
   de: [/TLS-Zertifikatsfingerabdr/i, /Rendezvous-Dienst/i, /Endpunkte?/i, /Netzwerk-Hop/i],
@@ -48,13 +54,21 @@ const sendReceiveCopy = (m) =>
 // order changes.
 const shellMode = (name) => cli.why.items.find((i) => i.title === name).desc;
 
+// The current session's SAS must not be attributed to TLS certificate
+// fingerprints: that construction belongs to the older CLI-to-CLI pairing only.
+const tlsSasClaim = {
+  en: /(?:SAS|verification code)[^.]*(?:TLS|certificate) fingerprint/i,
+  zh: /(?:SAS|校验码)[^。]*TLS 证书指纹|TLS 证书指纹[^。]*(?:SAS|校验码)/,
+};
+
 describe("public SAS copy", () => {
-  it("describes the CLI certificate-fingerprint SAS in every locale", () => {
+  it("describes the CLI exchanged-key SAS in every locale", () => {
     for (const [lang, messages] of Object.entries(locales)) {
       const copy = sendReceiveCopy(messages);
       for (const token of cliTokens[lang]) {
         assert.match(copy, token, `${lang}:${token}`);
       }
+      assert.doesNotMatch(copy, tlsSasClaim[lang], `${lang}: current-session SAS attributed to TLS fingerprints`);
     }
   });
 
@@ -69,7 +83,8 @@ describe("public SAS copy", () => {
 
   it("keeps the crawler CLI copy protocol-specific", () => {
     const copy = shellMode("send / receive");
-    assert.match(copy, /pinned TLS certificate fingerprints/i);
+    assert.match(copy, /derived from the keys the two ends exchanged/i);
+    assert.doesNotMatch(copy, tlsSasClaim.en);
     assert.match(copy, /rendezvous service/i);
     assert.match(copy, /not every network hop/i);
   });

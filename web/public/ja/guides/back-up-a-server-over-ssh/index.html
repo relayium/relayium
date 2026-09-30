@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Relayium CLI と SSH で自分のサーバーにファイルをバックアップする · Relayium</title>
-    <meta name="description" content="relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。両端に relayium があればファイル単位で整合性チェックされ、しかも無料。バイトは自分の SSH 接続を通り、Relayium のサーバーには一切触れません。" />
+    <title>Relayium CLI と SSH でサーバーをバックアップする（廃止） · Relayium</title>
+    <meta name="description" content="Relayium の SSH 転送、relayium pull、-i と -p は廃止されました。このアーカイブページには実行できるコマンドはもう載っていません。代わりに relayium serve と relayium://host への push または sync を使ってください。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/guides/back-up-a-server-over-ssh/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -18,8 +18,8 @@
     <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="Relayium CLI と SSH で自分のサーバーにファイルをバックアップする" />
-    <meta property="og:description" content="relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。両端に relayium があればファイル単位で整合性チェックされ、しかも無料。バイトは自分の SSH 接続を通り、Relayium のサーバーには一切触れません。" />
+    <meta property="og:title" content="Relayium CLI と SSH でサーバーをバックアップする（廃止）" />
+    <meta property="og:description" content="Relayium の SSH 転送、relayium pull、-i と -p は廃止されました。このアーカイブページには実行できるコマンドはもう載っていません。代わりに relayium serve と relayium://host への push または sync を使ってください。" />
     <meta property="og:url" content="https://relayium.com/ja/guides/back-up-a-server-over-ssh/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -28,10 +28,10 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Relayium CLI と SSH で自分のサーバーにファイルをバックアップする" />
-    <meta name="twitter:description" content="relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。両端に relayium があればファイル単位で整合性チェックされ、しかも無料。バイトは自分の SSH 接続を通り、Relayium のサーバーには一切触れません。" />
+    <meta name="twitter:title" content="Relayium CLI と SSH でサーバーをバックアップする（廃止）" />
+    <meta name="twitter:description" content="Relayium の SSH 転送、relayium pull、-i と -p は廃止されました。このアーカイブページには実行できるコマンドはもう載っていません。代わりに relayium serve と relayium://host への push または sync を使ってください。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI と SSH で自分のサーバーにファイルをバックアップする","description":"relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。両端に relayium があればファイル単位で整合性チェックされ、しかも無料。バイトは自分の SSH 接続を通り、Relayium のサーバーには一切触れません。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI と SSH で自分のサーバーにファイルをバックアップする"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルは Relayium のサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。push と pull はすべて自分の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。"}},{"@type":"Question","name":"サーバーに relayium のインストールは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"方向によります。push の場合は任意です。リモートに relayium があればネイティブプロトコルが使え、送信前の衝突チェックと、転送するすべてのファイルに対する SHA-256 チェックが得られます。なければ push は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、ファイル単位では何も検証しません。pull の場合は必須です。pull は常にリモート側の relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。"}},{"@type":"Question","name":"どの SSH 鍵とポートを使うかはどう決まりますか？","acceptedAnswer":{"@type":"Answer","text":"ssh と同じように既存の ~/.ssh/config を読み込むため、ホストエイリアス、鍵、ポートは自動的に反映されます。コマンドごとに -i でアイデンティティファイル、-p でポートを指定して上書きすることもできます。"}},{"@type":"Question","name":"これは rsync より速いですか？","acceptedAnswer":{"@type":"Answer","text":"自分のサーバーへの push に関しては、SSH 経由の rsync とほぼ同等です。狙いは rsync に勝つことではなく、同じファイル単位の整合性チェックを備えたまま、クロスネットワーク転送やサーバー間転送もこなせる1つのツールを提供することです。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI と SSH でサーバーをバックアップする（廃止）","description":"Relayium の SSH 転送、relayium pull、-i と -p は廃止されました。このアーカイブページには実行できるコマンドはもう載っていません。代わりに relayium serve と relayium://host への push または sync を使ってください。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI と SSH でサーバーをバックアップする（廃止）"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"古い SSH の書き方を使い続けられますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。現在の CLI は、SSH の宛先、relayium pull、-i と -p を、1バイトも転送する前に拒否します。SSH は別の管理ツールとして引き続き使えますが、Relayium のデータ転送手段ではありません。"}}]}]}</script>
     <style>
 :root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
@@ -174,30 +174,13 @@ pre code{background:none;padding:0;border-radius:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
-    <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
-.cbox p:last-child{margin-bottom:0}
-.cbox ul{margin:0}
-.cbox pre{margin:10px 0 0}
-ol.steps{margin:18px 0;padding-inline-start:26px}
-ol.steps>li{margin:12px 0}
-ol.steps>li::marker{color:var(--text-h);font-weight:600}
-ol.steps>li>p{margin:0}
-ol.steps>li>pre{margin:8px 0 0}
-.fix dl{margin:0}
-.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
-.fix dl>dt:first-child{margin-top:0}
-.fix dd{margin:0}
-.fix dd>pre{margin:6px 0}
-</style>
   </head>
   <body>
     <div class="appshell">
       <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row dest" href="/">LAN</a><a class="row dest" href="/ja/cross-network/">ネットワーク間</a><a class="row dest" href="/ja/offline-transfer/">非同期</a><a class="row dest" href="/device-inbox">デバイス受信箱</a><a class="row tool" href="/cli">CLI</a><a class="row tool" href="/ja/apps/">アプリ</a><a class="row tool" href="/pricing">料金</a></nav></header>
       <div class="pane"><div class="wrap">
 
-      <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</span></nav>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium CLI と SSH でサーバーをバックアップする（廃止）</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
@@ -206,7 +189,7 @@ ol.steps>li>pre{margin:8px 0 0}
            instead — a labelled <aside>, so it is a complementary landmark rather
            than a navigation one, and the same rule is satisfied either way. -->
       <main>
-      <h1>Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</h1>
+      <h1>Relayium CLI と SSH でサーバーをバックアップする（廃止）</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
            bidi algorithm lays those runs out right-to-left inside the Arabic
            page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
@@ -216,62 +199,26 @@ ol.steps>li>pre{margin:8px 0 0}
            generated Arabic page. -->
       <p class="updated">最終更新: <bdi>2026-09-01</bdi></p>
       <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/guides/back-up-a-server-over-ssh/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/back-up-a-server-over-ssh/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
-      <p class="lead">VPS、自宅サーバー、NAS、ワークステーションなど、すでに ssh でアクセスできるマシンがあれば、同期サービスやアカウントを用意しなくても Relayium CLI でそこへファイルをバックアップできます。転送は既存の SSH 接続の上で行われるため、バイトは直接自分のサーバーへ向かい、Relayium を通ることはありません。</p>
-      <p class="lead">本ガイドではディレクトリの push と pull、整合性チェックが何を保証し何を保証しないか、なぜ push は同じ宛先へ二度目を拒否するのか、そして cron でスケジュール実行する方法を扱います。</p>
+      <p class="lead">過去の記述についての注記：このページでは、Relayium の SSH 転送（user@host:path 形式の宛先への push や sync、relayium pull、-i と -p オプション）でサーバーをバックアップする方法を説明していました。現在の CLI ではこの転送方式は廃止され、「SSH transfers are currently disabled」と表示して拒否されるため、ここにあったコマンドはもう動作せず、掲載していません。</p>
+      <p class="lead">ページ上部からリンクしている、保守されている英語版と簡体字中国語版が代わりの方法を説明しています。受信側のサーバーで relayium serve を実行し、証明書ピンニング付き TLS で relayium://host へ push または sync します。これは現在の状態のコピーであって、バージョン履歴を持つバックアップではありません。</p>
       <section class="sheet"><h2>始める前に</h2>
       <p>以下はすべて relayium CLI なので、未インストールならまず入れてください。macOS または Linux では、1つのコマンドでビルド済みバイナリが PATH に入ります：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build ./cmd/relayium も可）。</li><li>relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。</li></ul></section>
-      <section class="sheet"><h2>ディレクトリをサーバーへ push する</h2>
-      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>すでに使っている SSH アクセス。ssh user@your-server true が黙って戻ることが条件です。push はまさにその接続を再利用し、独自の設定は何も持ちません。</li><li>サーバー側の書き込み可能な宛先。宛先パスの親ディレクトリが存在し、その SSH ユーザーが書き込めることが必要です。</li><li>任意で、サーバー側の relayium。送信前の衝突チェックとファイル単位の SHA-256 はこれで得られます。なくても push は素の tar ストリームで動きますが、そちらは何も検証しません。</li><li>Relayium アカウントも、どちらの端のデーモンも不要です。ここでは Relayium のサーバーと通信するものは何もありません。</li></ul></div>
-      <p>push は1つ以上のソースと scp 形式の宛先を受け取ります。Relayium はいつも使っている鍵と設定を使って SSH 経由で接続し、ファイルを宛先ディレクトリへストリーミングします：</p>
-      <ol class="steps" data-block="steps"><li><p>push が再利用する SSH アクセスを確認します。黙って戻れば、鍵もホストエイリアスもポートもすでに正しいということです。</p><pre tabindex="0"><code>ssh user@your-server true</code></pre></li><li><p>どちらのプロトコルになるかを調べます。パスが表示されればネイティブプロトコル（送信前の衝突チェックとファイル単位の SHA-256）、何も出なければ tar ストリームの方で、こちらはファイル単位では何も検証しません。</p><pre tabindex="0"><code>ssh user@your-server command -v relayium</code></pre></li><li><p>ディレクトリを push します。宛先は scp 形式で、末尾のスラッシュは「このディレクトリの中へ」を意味します。</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>ssh の設定にそのホストがまだ無い場合は、このコマンドに限って鍵やポートを指定します。</p><pre tabindex="0"><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>何が届いたかを確認します。push ./photos は宛先の下に photos/ を再現するので、フォルダー名もそのまま付いてきます。</p><pre tabindex="0"><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">成功したときの表示</p><p>ネイティブプロトコルなら、push は完了したファイルごとに1行を表示して終了コード 0 で終わります。素のサーバー相手なら要約が1行出るだけで、それが tar フォールバックであり、これも成功です。</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
-  photos/IMG_0413.jpg (2314518 bytes)
-  photos/IMG_0414.jpg (1998233 bytes)
-
-# against a server with no relayium installed, one summary line instead:
-sent 2 file(s) (zero-dependency mode)</code></pre></div>
-      <ul><li>既存の ~/.ssh/config を再利用するので、すでに設定済みのホストエイリアス、鍵、ポートがそのまま使えます。</li><li>サーバーに relayium がインストールされていれば、ネイティブプロトコルを使います。送信前にバッチ全体の衝突チェックを行い、転送する各ファイルを SHA-256 で検証してから設置します。</li><li>インストールされていない場合は、tar ストリームをリモートへパイプする方式にフォールバックするので、relayium のない素のサーバーでも動作します。</li></ul></section>
-      <section class="sheet"><h2>ファイルを pull で戻す</h2>
-      <p>復元は同じコマンドを逆にするだけです。リモートのソースとローカルの宛先ディレクトリを指定します。これがバックアップを復元したり、サーバーの出力をノート PC に同期したりする方法です：</p>
-      <pre tabindex="0"><code>relayium pull user@your-server:backups/ ./restore</code></pre>
-      <ul><li>push と異なり、pull は常にリモートに relayium がすでにインストールされている必要があります。tar フォールバックがないため、なければ先にそちらへインストールしてください。</li></ul></section>
-      <section class="sheet"><h2>整合性は標準で備わっている——再開は備わっていない</h2>
-      <p>relayium が両端にあれば、push が転送する各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、暫定領域に置かれてから設置されます。サーバーに届くものは送ったものとバイト単位で同一です。ここまでは本当で、宛先に relayium を入れる理由もそこにあります。</p>
-      <p>push がしないのは再開です。ファイルは通過した順に1つずつ設置されるため、途中で接続が切れると、すでに届いたファイルはそのまま残ります。そしてそれらが存在するせいで、同じ push をやり直しても衝突チェックに拒否されます。足りないパスを個別に push するか、すでに一致するものを飛ばし、半端なファイルを次回の実行で続けてくれる relayium sync を使ってください。</p>
-      <p>--no-resume は push と pull でも受け付けられますが、そこでは何もしません。実際に効くのは sync を受ける serve の待ち受け側です——半端なファイルが存在しうるのは、そもそもそこだけだからです。</p>
-      <ul><li>push も pull も、どちらのプロトコルでも再開しません。中断されうるディレクトリには sync を使ってください。tar フォールバックは再開もせず、ファイル単位の検証もしません。</li><li>SHA-256 チェックは自動的に実行され、不一致があれば報告され、そのファイルは失敗としてフラグが立てられます。</li></ul></section>
-      <section class="sheet"><h2>cron でスケジュール実行する</h2>
-      <p>cron に入れるのは push ではなく sync です。push は既存の宛先を拒否するので、同じディレクトリへ毎晩 push すると初回だけ成功し、以降は毎回拒否されます。sync は繰り返し実行のために作られたモードで、サイズと更新時刻が変わっていないファイルを飛ばし、変わった分だけを送り、中断された実行が残した半端なファイルを続けます。SSH 鍵を使う単一の非対話型コマンドなので、そのまま cron に入ります。パスフレーズなしの鍵（または agent）を指定し、出力をログに残して失敗を確認できるようにしましょう：</p>
-      <pre tabindex="0"><code># 毎晩2時にバックアップ（crontab -e で crontab に追加）
-0 2 * * * relayium sync -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
-      <ul><li>中断された夜間の sync は翌晩そのまま続きます。すでに一致するものは飛ばされ、半端なファイルはやり直しではなく続きから送られます。</li><li>いずれかのファイルが整合性チェックに失敗すると、コマンドは非ゼロで終了するので、cron の失敗時メール通知で問題に気づけます。</li></ul></section>
-      <section class="sheet"><h2>バックアップが届かないとき</h2>
-      <p>スケジュール実行のバックアップは、その性質上ひっそりと失敗します。誰も端末を見ていないからです。次の4つでほぼ尽きますし、どれも今すぐ実行できるコマンドで判定できます。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>cron ジョブが固まる、またはログがパスワード入力待ちで終わっている。</dt><dd><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
-# Permission denied (publickey).</code></pre><p>BatchMode=yes は入力を求めずに失敗するので、無言のハングがこの1行に変わります。その鍵の公開鍵をサーバーの ~/.ssh/authorized_keys に追加するか、エージェントがすでに保持している鍵をジョブに指定してください。</p></dd><dt>crontab の行は動いているのにログが空のまま。</dt><dd><pre tabindex="0"><code>command -v relayium
-# /usr/local/bin/relayium</code></pre><p>cron は最小限の PATH で動き、たいてい /usr/local/bin を含みません。そのため relayium が起動する前に行が失敗します。いま確認した絶対パスを crontab のエントリーに書き、&gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 のリダイレクトは残しておいて、次の失敗が見えるようにしてください。</p></dd><dt>中断された夜間の sync が、次の実行でゼロからやり直しになる。</dt><dd><pre tabindex="0"><code>ssh user@your-server command -v relayium
-# （何も表示されない）</code></pre><p>リモートに relayium が無いということです。sync にはフォールバックが無いのでそもそも動かず、push は何も検証しない tar ストリームに落ちて毎回ファイル全体を送り直します。サーバーに入れてください。半端なファイルを次回に続けるのは sync だけで、push と pull はどちらのプロトコルでも再開しません。すでに sync を使っているなら、その待ち受け側の再開を実際に切る --no-resume を渡していないかも確認してください。</p></dd><dt>「N file(s) could not be verified or saved」と表示され、終了コードが 0 以外になる。</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
-# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
-# exit status 1
-echo $?
-# 1</code></pre><p>到着時に計算した SHA-256 が送信時のものと一致しなかったか、サーバー上の relayium がファイルを保存・設置できなかった（空き容量不足、権限がない、書き込めない保存先パスなど）かのどちらかで、このメッセージはどちらなのかを区別しません。1 行目はサーバー上の relayium が出力して SSH 経由で転送されたもので、続く exit status 1 はそのリモートプロセスの終了コードです。どちらの場合も、ネイティブプロトコルは各ファイルをいったん暫定領域に置き、ハッシュが一致して保存できたときだけ設置します。つまり今回の転送はそのパスを設置していません。ただし、それは保存先に何も無いことの証明にはなりません（その間に別のプログラムが作成した可能性があります）。このメッセージだけを理由に、受信側に既にあるファイルを削除しないでください。同じバッチの他のファイルがすでに設置されている場合は、バッチ全体をやり直すと衝突チェックに拒否されるので、そのパスだけを本来の保存先に向けて push し直してください。それでも繰り返し失敗するなら一度きりの転送エラーではありません。サーバー側の空き容量・権限・保存先パスを確認し、元ファイル（読み取り中に何かが書き込んでいないか）も調べてください。</p></dd></dl></div></section>
+      <section class="sheet"><h2>代わりに使うもの</h2>
+      <p>受信側のサーバーで送信側のフィンガープリント（送信側で relayium id が表示します）を承認し、リスナーを起動します。そのうえで、一度きりのコピーには push、繰り返し実行する一方向ミラーには sync を使います。</p>
+      <pre tabindex="0"><code>relayium authorize &lt;sender-fingerprint&gt;</code></pre>
+      <pre tabindex="0"><code>relayium serve --dir ~/backups</code></pre>
+      <pre tabindex="0"><code>relayium sync ./photos relayium://server.example</code></pre></section>
       <h2>よくある質問</h2>
-      <h3>ファイルは Relayium のサーバーを経由しますか？</h3>
-      <p>いいえ。push と pull はすべて自分の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。</p>
-      <h3>サーバーに relayium のインストールは必要ですか？</h3>
-      <p>方向によります。push の場合は任意です。リモートに relayium があればネイティブプロトコルが使え、送信前の衝突チェックと、転送するすべてのファイルに対する SHA-256 チェックが得られます。なければ push は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、ファイル単位では何も検証しません。pull の場合は必須です。pull は常にリモート側の relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。</p>
-      <h3>どの SSH 鍵とポートを使うかはどう決まりますか？</h3>
-      <p>ssh と同じように既存の ~/.ssh/config を読み込むため、ホストエイリアス、鍵、ポートは自動的に反映されます。コマンドごとに -i でアイデンティティファイル、-p でポートを指定して上書きすることもできます。</p>
-      <h3>これは rsync より速いですか？</h3>
-      <p>自分のサーバーへの push に関しては、SSH 経由の rsync とほぼ同等です。狙いは rsync に勝つことではなく、同じファイル単位の整合性チェックを備えたまま、クロスネットワーク転送やサーバー間転送もこなせる1つのツールを提供することです。</p>
+      <h3>古い SSH の書き方を使い続けられますか？</h3>
+      <p>いいえ。現在の CLI は、SSH の宛先、relayium pull、-i と -p を、1バイトも転送する前に拒否します。SSH は別の管理ツールとして引き続き使えますが、Relayium のデータ転送手段ではありません。</p>
       <div class="ctacard">
-        <p>次のディレクトリを直接の方法でバックアップしましょう。自分の SSH 経由、ファイル単位の整合性チェック付きで無料です。</p>
+        <p>サーバーのコピー作業をデーモン直結に移しましょう。</p>
         <a class="cta" href="/cli">CLI を入手</a>
       </div>
       <h2>続けて読む</h2>
-      <ul class="related"><li><a href="/ja/how-to/automate-server-backups/">cron で暗号化されたサーバーバックアップを自動化する</a></li><li><a href="/ja/guides/server-to-server-transfers/">Relayium CLI でサーバー間転送（デーモン直結）</a></li><li><a href="/ja/compare/scp/">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers/">2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/ja/how-to/automate-server-backups/">cron で暗号化されたサーバーバックアップを自動化する</a></li><li><a href="/ja/guides/server-to-server-transfers/">Relayium CLI でサーバー間転送（デーモン直結）</a></li><li><a href="/ja/compare/scp/">Relayium と scp の比較：Relayium の SSH 転送は廃止されました</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers/">2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）</a></li><li><a href="/ja/">Relayium</a></li></ul>
       </main>
       <footer>
         <a href="/">← Relayium</a>

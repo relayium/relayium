@@ -44,6 +44,7 @@ func TestStoredFileNodeIDRoundTrip(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "u@x.com", "u")
+	am3EnsureNode(t, st, "node-7", "fleet", "") // the insert's node fence
 	f := StoredFile{ID: "f1", UserID: u.ID, BlobKey: "bk", EncManifest: []byte("m"),
 		Size: 10, CreatedAt: 1, ExpiresAt: 9999999999, NodeID: "node-7"}
 	if err := st.CreateStoredFile(ctx, f); err != nil {

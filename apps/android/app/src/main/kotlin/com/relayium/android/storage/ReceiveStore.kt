@@ -30,7 +30,10 @@ import java.io.IOException
  *
  * Staging lives in a per-batch directory under [stagingRoot]; anything else
  * found under that root at [begin] is an orphan of an earlier process
- * incarnation and is removed then.
+ * incarnation and is removed then. Because [begin] runs only when the next
+ * receive OF THE SAME KIND starts, the owner also calls [sweepStaleStaging]
+ * once when it comes up, so an interrupted batch's plaintext does not sit in
+ * the cache until a receive that may never come.
  *
  * NOT thread-safe by itself: the controller confines every call to its storage
  * executor.
@@ -323,6 +326,31 @@ open class ReceiveStore(
         }
     }
 
+    /**
+     * Remove staging left behind by an earlier process incarnation, without
+     * waiting for the next [begin].
+     *
+     * Called once by the store's owner on the store's own thread, before any
+     * batch. Two fences keep it off a live receive: the CURRENT batch
+     * directory is never touched, and an entry whose newest modification is
+     * younger than [STALE_STAGING_AGE_MS] is left alone. The age fence is what
+     * covers a receive this store does not own — a previous owner whose
+     * storage executor is still draining after its screen went away writes to
+     * the same root, and every write it makes is fsync'd, so its batch stays
+     * young while it lives. Returns how many top-level entries were removed.
+     */
+    open fun sweepStaleStaging(nowMs: Long = System.currentTimeMillis()): Int {
+        val current = batchDir?.canonicalFile
+        var removed = 0
+        stagingRoot.listFiles()?.forEach { entry ->
+            if (current != null && entry.canonicalFile == current) return@forEach
+            val newest = entry.walkTopDown().maxOfOrNull { it.lastModified() } ?: return@forEach
+            if (nowMs - newest < STALE_STAGING_AGE_MS) return@forEach
+            if (runCatching { entry.deleteRecursively() }.getOrDefault(false)) removed++
+        }
+        return removed
+    }
+
     /** A batch that completed: staging goes, EXPORTED DOCUMENTS STAY. */
     open fun finish() {
         for (sink in sinks.values) runCatching { sink.close() }
@@ -340,4 +368,14 @@ open class ReceiveStore(
     // Observability for tests that must prove cleanup really removed something.
     val stagedCount: Int get() = staged.size
     val ledgerSize: Int get() = created.size
+
+    companion object {
+        /**
+         * How long staging must have gone untouched before [sweepStaleStaging]
+         * treats it as abandoned. Generous on purpose: a live receive rewrites
+         * its part file on every chunk, so anything this old has had no writer
+         * for an hour — far past any transfer's no-progress timeout.
+         */
+        const val STALE_STAGING_AGE_MS: Long = 60L * 60 * 1000
+    }
 }

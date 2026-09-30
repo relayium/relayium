@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -52,6 +54,7 @@ import com.relayium.protocol.inbox.InboxCapability
 import com.relayium.protocol.inbox.InboxKeyMaterial
 import com.relayium.protocol.inbox.InboxManifestKind
 import com.relayium.protocol.inbox.InboxProtocol
+import com.relayium.protocol.inbox.InboxTaskState
 import java.io.File
 import java.util.Collections
 import org.junit.Assert.assertEquals
@@ -638,6 +641,49 @@ class InboxScreenAcceptanceTest {
         assertTrue(recorder.saw("send:job00000000000000000000000001"))
     }
 
+    /**
+     * Every row's controls read the same words; each one is SPOKEN with its
+     * device and contents, so TalkBack does not offer two identical "Remove"s.
+     */
+    @Test
+    fun outgoingControlsAreNamedPerRow() {
+        host(
+            ready().copy(
+                sends = listOf(
+                    InboxSendStatus(
+                        jobId = "job00000000000000000000000001",
+                        targetDeviceId = peerId,
+                        kind = InboxManifestKind.FILE,
+                        names = listOf("report.pdf"),
+                        totalBytes = 2_400_000,
+                        phase = InboxSendStatus.Phase.STAGED,
+                    ),
+                    InboxSendStatus(
+                        jobId = "job00000000000000000000000002",
+                        targetDeviceId = peerId,
+                        kind = InboxManifestKind.TEXT,
+                        names = emptyList(),
+                        totalBytes = 12,
+                        phase = InboxSendStatus.Phase.STOPPED,
+                        stop = InboxSendCoordinator.Result.Reason.TRANSPORT,
+                    ),
+                ),
+            ),
+            InboxActions(),
+        )
+        fun spoken(tag: String): String = compose.onNodeWithTag(tag).performScrollTo()
+            .fetchSemanticsNode().config[SemanticsProperties.ContentDescription].joinToString()
+
+        val first = spoken("inbox-send-discard-job00000000000000000000000001")
+        val second = spoken("inbox-send-discard-job00000000000000000000000002")
+        assertTrue(first, first.startsWith(s(R.string.inbox_sending_discard)) && first.contains("MacBook"))
+        assertTrue(second, second.startsWith(s(R.string.inbox_sending_discard)) && second.contains("MacBook"))
+        assertFalse("two rows' Remove sound the same: $first", first == second)
+        // A staged job has never been sent, so it offers Send; a stopped one, Try again.
+        assertTrue(spoken("inbox-send-send-job00000000000000000000000001").startsWith(s(R.string.inbox_sending_send)))
+        assertTrue(spoken("inbox-send-retry-job00000000000000000000000002").startsWith(s(R.string.inbox_sending_retry)))
+    }
+
     @Test
     fun aSendInFlightCanBeStopped() {
         val recorder = Recorder()
@@ -691,7 +737,7 @@ class InboxScreenAcceptanceTest {
             ready().copy(sends = listOf(outgoing(InboxSendStatus.Phase.STOPPED))),
             InboxActions(discardSend = { recorder.record("discard:$it") }),
         )
-        // Send is still there; Remove is the way out that was missing.
+        // Try again is still there; Remove is the way out that was missing.
         control(R.string.inbox_sending_retry).performScrollTo().assertIsDisplayed()
         clickText(R.string.inbox_sending_discard)
         compose.onNodeWithText(s(R.string.inbox_sending_discard_title)).assertIsDisplayed()
@@ -730,7 +776,13 @@ class InboxScreenAcceptanceTest {
     fun aQueuedDeliveryIsCancelledNotMerelyRemoved() {
         val recorder = Recorder()
         host(
-            ready().copy(sends = listOf(outgoing(InboxSendStatus.Phase.DELIVERED))),
+            // QUEUED: Cancel is offered only before the receiver owns a claim,
+            // and an unpolled delivery (no state yet) offers none.
+            ready().copy(
+                sends = listOf(
+                    outgoing(InboxSendStatus.Phase.DELIVERED).copy(taskState = InboxTaskState.QUEUED),
+                ),
+            ),
             InboxActions(discardSend = { recorder.record("discard:$it") }),
         )
         // Named for what it does to the OTHER device, and explained as such.

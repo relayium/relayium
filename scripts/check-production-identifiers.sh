@@ -74,7 +74,10 @@ fi
 #       - loopback (127/8)
 #       - link-local (169.254/16, incl. the cloud-metadata address)
 #       - carrier-grade NAT (100.64/10)
-#       - unspecified (0.0.0.0)
+#       - unspecified / "this network" (0.0.0.0/8)
+#       - benchmarking (198.18.0.0/15, RFC 2544) and reserved/broadcast
+#         (240.0.0.0/4, incl. 255.255.255.255) — never routable, so never a
+#         production address; they appear as SSRF-guard block ranges and tests
 #       - RFC5737 documentation ranges (192.0.2/24, 198.51.100/24, 203.0.113/24)
 #       - the explicit ALLOWED_IPS below
 #     is flagged as an unexpected public IP — the kind of thing a real
@@ -113,6 +116,9 @@ FIXTURE_IP_EXCEPTIONS=(
   "$PION_TURN/internal/proto/peeraddr_test.go|111.11.1.2"
   "$PION_TURN/internal/proto/relayedaddr_test.go|111.11.1.2"
   "$PION_TURN/server_test.go|1.2.3.5"
+  # SSRF-guard boundary fixture: the first address just outside 198.18.0.0/15,
+  # asserted to be ALLOWED; never dialled.
+  "server/account/ssrfguard_t4_test.go|198.20.0.1"
 )
 
 say "-- unexpected public IP literals --"
@@ -144,7 +150,9 @@ if [ -n "$ip_hits" ]; then
       if (o[1] == 127) next;                                   # loopback
       if (o[1] == 169 && o[2] == 254) next;                    # link-local
       if (o[1] == 100 && o[2] >= 64 && o[2] <= 127) next;      # CGNAT
-      if (ip == "0.0.0.0") next;                                # unspecified
+      if (o[1] == 0) next;                                      # 0/8 this-network
+      if (o[1] == 198 && (o[2] == 18 || o[2] == 19)) next;      # RFC2544 benchmarking
+      if (o[1] >= 240) next;                                    # reserved + broadcast
       if (o[1] == 192 && o[2] == 0   && o[3] == 2)   next;     # RFC5737
       if (o[1] == 198 && o[2] == 51  && o[3] == 100) next;     # RFC5737
       if (o[1] == 203 && o[2] == 0   && o[3] == 113) next;     # RFC5737

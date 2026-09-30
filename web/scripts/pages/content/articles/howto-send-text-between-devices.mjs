@@ -66,7 +66,7 @@ const en = article({
   updatedLabel: "Last updated",
   lead: [
     "Relayium can move clipboard-shaped content as well as files: a URL from your phone, a command for another computer, or a multiline code block. Messages are end-to-end encrypted; Relayium servers keep no message bodies or server-side history, but either endpoint can copy or retain received text.",
-    "The browser and command-line client each support text, but they are separate transports and cannot join each other's pairing codes. Choose one flow below and use it on both ends.",
+    "The browser and a current command-line client both support text and share the same pairing codes, so either can create the code and the other joins it. Only an older relayium keeps a separate, CLI-only pairing — update it or use the CLI on both ends.",
   ],
   browserHeading: "Browser: send a message to an online device",
   browserBody:
@@ -131,8 +131,8 @@ const en = article({
     },
     {
       symptom: "A browser and the CLI cannot join each other's code.",
-      code: ["relayium text 483920   # a CLI code only ever pairs CLI to CLI"],
-      fix: "Browser and CLI text sessions use different transports and pairing handshakes, so a six-digit code minted by one is meaningless to the other. Use two browsers, or the CLI on both ends — relayium text prints the exact command the second machine should run.",
+      code: ["relayium version   # a current CLI shares pairing codes with the web page"],
+      fix: "A current relayium and the web page use the same pairing codes for text, so either can mint the code and the other joins it. When they cannot, the CLI on that machine is an older release whose pairing is CLI-only and direct-only: run relayium update there, or use the CLI on both ends — relayium text prints the exact command the second machine should run.",
     },
   ],
   cliHeading: "CLI: mint a code on one machine, join it on the other",
@@ -141,7 +141,7 @@ const en = article({
     "Run relayium text with that code on the other machine. Interactive mode sends one line per message and does not stop to compare a code unless you ask it to. For multiline or byte-exact stdin, pipe it as one message; a piped run needs no extra flag.",
   ],
   cliNotes: [
-    "CLI codes last five minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.",
+    "CLI codes last five minutes. The other end can be relayium text, relayium pair, a Relayium app or the web page, and whenever the server issues a relay for the code the messages go through it as ciphertext, counted toward the traffic allowance of the account that minted the code.",
     "Only the machine that mints needs a signed-in account. The machine joining the printed code does not sign in.",
     "--verify opts in to comparing the SAS and needs a terminal to answer it, so a piped run with --verify refuses instead of continuing as if it had been confirmed. --yes is still accepted, still means “never prompt”, and overrides --verify.",
   ],
@@ -161,7 +161,7 @@ const en = article({
     },
     {
       q: "Can I use a browser on one end and the CLI on the other?",
-      a: "No. Browser and CLI text sessions use different transports and pairing handshakes. Use two browsers or two CLI clients.",
+      a: "Yes, with a current relayium: the CLI and the web page use the same pairing codes, so either side can mint the code and the other joins it. An older relayium CLI only pairs with another CLI; relayium update brings it current.",
     },
   ],
   ctaText: "Open Relayium on two online devices and move the next thing you would otherwise send to yourself.",
@@ -176,7 +176,7 @@ const zh = article({
   updatedLabel: "最近更新",
   lead: [
     "Relayium 不只能传文件，也能传适合剪贴板的内容：手机上的网址、要在另一台电脑执行的命令，或一整段多行代码。消息端到端加密；Relayium 服务器不保存消息正文或服务端历史，但任一端都能复制或留存收到的文本。",
-    "浏览器和命令行都支持文本，但它们是两套独立传输，不能加入彼此的配对码。下面任选一种方式，两端保持一致。",
+    "浏览器和当前版本的命令行都支持文本，并且共用同一种配对码：任何一方生成的码，另一方都能加入。只有旧版 relayium 仍是单独的、仅限 CLI 的配对——请更新它，或者两端都用 CLI。",
   ],
   browserHeading: "浏览器：给在线设备发送消息",
   browserBody:
@@ -241,8 +241,8 @@ const zh = article({
     },
     {
       symptom: "浏览器和 CLI 无法加入彼此的配对码。",
-      code: ["relayium text 483920   # CLI 的配对码只能 CLI 对 CLI"],
-      fix: "浏览器与 CLI 的文本会话使用不同的传输和配对握手，所以一端生成的 6 位码对另一端毫无意义。请用两个浏览器，或者两端都用 CLI——relayium text 会打印出第二台机器该运行的完整命令。",
+      code: ["relayium version   # 当前版本的 CLI 与网页共用配对码"],
+      fix: "当前版本的 relayium 与网页的文本会话使用同一种配对码，任何一方生成的码另一方都能加入。如果加入不了，说明那台机器上的 CLI 是旧版，它的配对只限 CLI、只走直连：在那台机器上运行 relayium update，或者两端都用 CLI——relayium text 会打印出第二台机器该运行的完整命令。",
     },
   ],
   cliHeading: "CLI：一台机器生成配对码，另一台加入",
@@ -251,7 +251,7 @@ const zh = article({
     "另一台机器用该码运行 relayium text。交互模式每行是一条消息，除非你主动要求，否则不会停下来核对校验码；多行或要求逐字节保真的内容请通过管道作为一条消息发送，管道方式不需要额外加任何参数。",
   ],
   cliNotes: [
-    "CLI 配对码有效期 5 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。",
+    "CLI 配对码有效期 5 分钟。对端可以是 relayium text、relayium pair、Relayium 应用或网页；只要服务器为这个码签发了中继，消息就以密文经它传输，并计入生成配对码那个账号的流量额度。",
     "只有生成配对码的那台机器需要已登录账号；使用打印出来的配对码加入时不需要登录。",
     "--verify 用来主动开启 SAS 核对，它需要终端来回答，因此管道运行时加 --verify 会直接拒绝，而不是当作已确认继续。--yes 仍然可用，含义仍是“永不提示”，并且优先于 --verify。",
   ],
@@ -271,7 +271,7 @@ const zh = article({
     },
     {
       q: "一端用浏览器、另一端用 CLI 可以吗？",
-      a: "不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。",
+      a: "可以，只要 relayium 是当前版本：CLI 与网页使用同一种配对码，任何一方都能生成配对码，另一方加入即可。旧版 relayium CLI 只能和另一个 CLI 配对；运行 relayium update 即可升级。",
     },
   ],
   ctaText: "在两台在线设备上打开 Relayium，把下一段原本要“发给自己”的内容直接传过去。",
@@ -286,7 +286,7 @@ const ja = article({
   updatedLabel: "最終更新",
   lead: [
     "Relayium はファイルだけでなく、スマートフォンの URL、別の PC で使うコマンド、複数行のコードなど、クリップボード向けの内容も運べます。メッセージはエンドツーエンド暗号化され、Relayium サーバーは本文やサーバー側履歴を保存しませんが、各端末は受信テキストをコピーまたは保持できます。",
-    "ブラウザと CLI の両方がテキストに対応しますが、別々の転送方式であり、互いのペアリングコードには参加できません。両端で同じ方式を選んでください。",
+    "ブラウザと CLI の両方がテキストに対応します。現在の relayium はウェブページと同じペアリングコードを使うので、どちらが発行したコードにももう一方から参加できます。CLI 以外と組めないのは古い CLI だけです。",
   ],
   browserHeading: "ブラウザ：オンライン端末へメッセージを送る",
   browserBody:
@@ -351,8 +351,8 @@ const ja = article({
     },
     {
       symptom: "ブラウザと CLI が互いのコードで参加できない。",
-      code: ["relayium text 483920   # CLI のコードは CLI 同士しかペアにしない"],
-      fix: "ブラウザと CLI のテキストセッションは転送方式もペアリング手順も異なるため、一方が発行した6桁コードは他方には無意味です。ブラウザ2つ、または両端で CLI を使ってください。relayium text は2台目が実行すべきコマンドをそのまま表示します。",
+      code: ["relayium version   # 現在の CLI はウェブページとペアリングコードを共有する"],
+      fix: "現在の relayium とウェブページはテキストに同じペアリングコードを使うので、どちらがコードを発行しても、もう一方が参加できます。参加できない場合、そのマシンの CLI はペアリングが CLI 間の直結に限られる古いリリースです。そこで relayium update を実行するか、両端で CLI を使ってください。relayium text は2台目が実行すべきコマンドをそのまま表示します。",
     },
   ],
   cliHeading: "CLI：片方でコードを発行し、もう片方が参加する",
@@ -361,7 +361,7 @@ const ja = article({
     "もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、こちらから求めない限りコード照合で止まることはありません。複数行や正確な stdin はパイプで 1 メッセージとして送れます。パイプ実行に追加のフラグは不要です。",
   ],
   cliNotes: [
-    "CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。",
+    "CLI コードは 5 分有効です。相手側は relayium text、relayium pair、Relayium のアプリ、ウェブページのどれでも構いません。サーバーがそのコードにリレーを発行した場合、メッセージは暗号文としてそのリレーを通り、コードを発行したアカウントの転送量の枠に計上されます。",
     "ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。",
     "--verify は SAS 照合を有効にするオプションで、応答するには端末が必要です。そのためパイプ実行に --verify を付けると、確認済みとして続行せずに拒否します。--yes も引き続き使え、意味は「決してプロンプトを出さない」で、--verify より優先されます。",
   ],
@@ -376,7 +376,7 @@ const ja = article({
   faqHeading: "よくある質問",
   faq: [
     { q: "Relayium はメッセージを読んだり復元できますか？", a: "できません。内容は端末間でエンドツーエンド暗号化され、Relayium サーバーは本文やサーバー側履歴を保存しません。各端末は受信テキストを保持できますが、セッション終了後に Relayium から復元できるサーバーコピーはありません。" },
-    { q: "片方をブラウザ、片方を CLI にできますか？", a: "できません。転送方式とペアリング方式が異なります。ブラウザ同士、または CLI 同士で使ってください。" },
+    { q: "片方をブラウザ、片方を CLI にできますか？", a: "はい、現在の relayium なら可能です。CLI とウェブページは同じペアリングコードを使うので、どちらがコードを発行しても、もう一方が参加できます。古い relayium CLI は別の CLI としか組めません。relayium update で最新にできます。" },
   ],
   ctaText: "オンラインの 2 台で Relayium を開き、次に自分宛てへ送るはずだった内容を直接移しましょう。",
   ctaButton: "テキストを送る",
@@ -390,7 +390,7 @@ const ko = article({
   updatedLabel: "최근 업데이트",
   lead: [
     "Relayium은 파일뿐 아니라 휴대폰의 URL, 다른 컴퓨터에서 쓸 명령, 여러 줄 코드처럼 클립보드에 맞는 내용도 옮깁니다. 메시지는 종단간 암호화되며 Relayium 서버는 본문이나 서버 측 기록을 저장하지 않지만, 각 기기는 받은 텍스트를 복사하거나 보관할 수 있습니다.",
-    "브라우저와 CLI 모두 텍스트를 지원하지만 서로 다른 전송 방식이므로 상대 방식의 페어링 코드에 참여할 수 없습니다. 양쪽에서 같은 방식을 사용하세요.",
+    "브라우저와 CLI 모두 텍스트를 지원합니다. 현재 relayium은 웹 페이지와 같은 페어링 코드를 쓰므로, 어느 쪽이 발급한 코드든 다른 쪽이 참여할 수 있습니다. CLI끼리만 연결되는 것은 이전 CLI뿐입니다.",
   ],
   browserHeading: "브라우저: 온라인 기기에 메시지 보내기",
   browserBody:
@@ -455,8 +455,8 @@ const ko = article({
     },
     {
       symptom: "브라우저와 CLI가 서로의 코드로 참여하지 못합니다.",
-      code: ["relayium text 483920   # CLI 코드는 CLI끼리만 짝을 짓는다"],
-      fix: "브라우저와 CLI의 텍스트 세션은 전송 방식과 페어링 절차가 달라, 한쪽이 발급한 여섯 자리 코드는 다른 쪽에 아무 의미가 없습니다. 브라우저 두 개를 쓰거나 양쪽 모두 CLI를 쓰세요. relayium text가 두 번째 컴퓨터에서 실행할 명령을 그대로 출력합니다.",
+      code: ["relayium version   # 현재 CLI는 웹 페이지와 페어링 코드를 공유한다"],
+      fix: "현재 relayium과 웹 페이지는 텍스트에 같은 페어링 코드를 쓰므로, 어느 쪽이 코드를 발급하든 다른 쪽이 참여할 수 있습니다. 참여할 수 없다면 그 컴퓨터의 CLI는 페어링이 CLI 간 직접 연결로만 제한된 이전 릴리스입니다. 그곳에서 relayium update를 실행하거나 양쪽 모두 CLI를 쓰세요. relayium text가 두 번째 컴퓨터에서 실행할 명령을 그대로 출력합니다.",
     },
   ],
   cliHeading: "CLI: 한쪽에서 코드를 발급하고 다른 쪽이 참여",
@@ -465,7 +465,7 @@ const ko = article({
     "다른 쪽 컴퓨터에서 그 코드로 relayium text를 실행합니다. 대화형 모드는 한 줄을 한 메시지로 보내며, 직접 요청하지 않는 한 코드를 대조하려고 멈추지 않습니다. 여러 줄이거나 바이트 그대로 보내야 하는 stdin은 파이프로 한 메시지로 보내면 되고, 파이프 실행에는 추가 플래그가 필요 없습니다.",
   ],
   cliNotes: [
-    "CLI 코드는 5분 동안 유효하고 CLI끼리만 연결합니다. 브라우저와 CLI는 서로 연결되지 않습니다.",
+    "CLI 코드는 5분 동안 유효합니다. 상대는 relayium text, relayium pair, Relayium 앱, 웹 페이지 중 무엇이든 됩니다. 서버가 해당 코드에 릴레이를 발급하면 메시지는 암호문으로 그 릴레이를 거치며, 코드를 발급한 계정의 전송량 한도에 집계됩니다.",
     "로그인 계정은 코드를 발급하는 쪽에만 필요합니다. 출력된 코드로 참여하는 쪽은 로그인할 필요가 없습니다.",
     "--verify는 SAS 대조를 켜는 옵션이며 답하려면 터미널이 필요합니다. 그래서 파이프 실행에 --verify를 붙이면 확인된 것처럼 진행하지 않고 거부합니다. --yes도 그대로 쓸 수 있고 “절대 묻지 않음”을 뜻하며 --verify보다 우선합니다.",
   ],
@@ -480,7 +480,7 @@ const ko = article({
   faqHeading: "자주 묻는 질문",
   faq: [
     { q: "Relayium이 메시지를 읽거나 복구할 수 있나요?", a: "아니요. 내용은 기기 사이에서 종단간 암호화되고 Relayium 서버는 본문이나 서버 측 기록을 저장하지 않습니다. 각 기기는 받은 텍스트를 보관할 수 있지만, 세션이 끝나면 Relayium에서 복구할 서버 사본은 없습니다." },
-    { q: "한쪽은 브라우저, 다른 쪽은 CLI를 쓸 수 있나요?", a: "아니요. 전송과 페어링 방식이 다릅니다. 브라우저 두 개 또는 CLI 두 개를 사용하세요." },
+    { q: "한쪽은 브라우저, 다른 쪽은 CLI를 쓸 수 있나요?", a: "네, 현재 relayium이라면 가능합니다. CLI와 웹 페이지는 같은 페어링 코드를 쓰므로 어느 쪽이 코드를 발급하든 다른 쪽이 참여할 수 있습니다. 이전 relayium CLI는 다른 CLI와만 연결되며, relayium update로 최신으로 만들 수 있습니다." },
   ],
   ctaText: "온라인 기기 두 대에서 Relayium을 열고 다음에 자신에게 보낼 내용을 바로 옮겨 보세요.",
   ctaButton: "텍스트 보내기",
@@ -494,7 +494,7 @@ const de = article({
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Relayium überträgt neben Dateien auch Inhalte für die Zwischenablage: eine URL vom Handy, einen Befehl für einen anderen Rechner oder mehrzeiligen Code. Nachrichten sind Ende-zu-Ende-verschlüsselt; Relayium-Server speichern weder Inhalte noch serverseitigen Verlauf, aber beide Endpunkte können empfangenen Text kopieren oder aufbewahren.",
-    "Browser und CLI unterstützen beide Text, verwenden aber getrennte Transportwege und können den Kopplungscode der jeweils anderen Seite nicht nutzen. Verwende an beiden Enden dieselbe Variante.",
+    "Browser und CLI unterstützen beide Text. Ein aktuelles relayium nutzt dieselben Pairing-Codes wie die Webseite, sodass jede Seite einen Code erzeugen kann, dem die andere beitritt; nur eine ältere CLI koppelt sich ausschließlich mit einer anderen CLI.",
   ],
   browserHeading: "Browser: Nachricht an ein Online-Gerät senden",
   browserBody:
@@ -559,8 +559,8 @@ const de = article({
     },
     {
       symptom: "Ein Browser und die CLI können dem Code des jeweils anderen nicht beitreten.",
-      code: ["relayium text 483920   # ein CLI-Code koppelt immer nur CLI mit CLI"],
-      fix: "Browser- und CLI-Textsitzungen nutzen verschiedene Transportwege und Kopplungsverfahren, ein sechsstelliger Code der einen Seite ist für die andere also bedeutungslos. Nimm zwei Browser, oder die CLI an beiden Enden — relayium text gibt genau den Befehl aus, den der zweite Rechner ausführen soll.",
+      code: ["relayium version   # eine aktuelle CLI teilt Pairing-Codes mit der Webseite"],
+      fix: "Ein aktuelles relayium und die Webseite nutzen für Text dieselben Pairing-Codes, sodass jede Seite den Code erzeugen und die andere beitreten kann. Klappt das nicht, ist die CLI auf diesem Rechner eine ältere Version, deren Pairing nur direkt von CLI zu CLI funktioniert: Führe dort relayium update aus, oder nimm die CLI an beiden Enden — relayium text gibt genau den Befehl aus, den der zweite Rechner ausführen soll.",
     },
   ],
   cliHeading: "CLI: auf einem Rechner einen Code erzeugen, auf dem anderen beitreten",
@@ -569,7 +569,7 @@ const de = article({
     "Starte auf dem anderen Rechner relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht, und es wird nicht für einen Codevergleich angehalten, solange du das nicht verlangst. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped — dafür ist kein zusätzliches Flag nötig.",
   ],
   cliNotes: [
-    "CLI-Codes gelten fünf Minuten und verbinden nur CLI mit CLI; Browser und CLI sind nicht interoperabel.",
+    "CLI-Codes gelten fünf Minuten. Die Gegenseite kann relayium text, relayium pair, eine Relayium-App oder die Webseite sein; stellt der Server für den Code ein Relay aus, laufen die Nachrichten als Chiffretext darüber und zählen zum Datenvolumen des Kontos, das den Code erzeugt hat.",
     "Nur der Rechner, der den Code erzeugt, braucht ein angemeldetes Konto. Der Rechner, der dem ausgegebenen Code beitritt, muss sich nicht anmelden.",
     "--verify schaltet den SAS-Vergleich ein und braucht ein Terminal für die Antwort; ein gepipeter Lauf mit --verify wird deshalb abgelehnt, statt so weiterzulaufen, als wäre bestätigt worden. --yes wird weiterhin akzeptiert, bedeutet „niemals fragen“ und hat Vorrang vor --verify.",
   ],
@@ -584,7 +584,7 @@ const de = article({
   faqHeading: "Häufige Fragen",
   faq: [
     { q: "Kann Relayium meine Nachrichten lesen oder wiederherstellen?", a: "Nein. Der Inhalt ist zwischen den Geräten Ende-zu-Ende-verschlüsselt, und Relayium-Server speichern weder Nachrichteninhalte noch serverseitigen Verlauf. Beide Endpunkte können empfangenen Text aufbewahren; nach Sitzungsende hat Relayium keine Serverkopie zur Wiederherstellung." },
-    { q: "Kann eine Seite den Browser und die andere die CLI nutzen?", a: "Nein. Transport und Kopplung sind verschieden. Verwende zwei Browser oder zwei CLI-Clients." },
+    { q: "Kann eine Seite den Browser und die andere die CLI nutzen?", a: "Ja, mit einem aktuellen relayium: CLI und Webseite nutzen dieselben Pairing-Codes, sodass jede Seite den Code erzeugen und die andere beitreten kann. Eine ältere relayium-CLI koppelt sich nur mit einer anderen CLI; relayium update bringt sie auf den aktuellen Stand." },
   ],
   ctaText: "Öffne Relayium auf zwei Online-Geräten und übertrage den nächsten Inhalt direkt statt ihn dir selbst zu schicken.",
   ctaButton: "Jetzt Text senden",
@@ -598,7 +598,7 @@ const fr = article({
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Relayium transporte aussi le contenu du presse-papiers : une URL du téléphone, une commande pour un autre ordinateur ou un bloc de code multiligne. Les messages sont chiffrés de bout en bout ; les serveurs Relayium ne gardent ni corps de message ni historique côté serveur, mais chaque extrémité peut copier ou conserver le texte reçu.",
-    "Le navigateur et la CLI prennent en charge le texte, mais utilisent des transports séparés et ne peuvent pas rejoindre leurs codes respectifs. Utilisez la même méthode aux deux extrémités.",
+    "Le navigateur et la CLI prennent tous deux en charge le texte. Un relayium actuel utilise les mêmes codes d'appairage que la page web, si bien que chacun peut créer un code que l'autre rejoint ; seule une ancienne CLI ne s'appaire qu'avec une autre CLI.",
   ],
   browserHeading: "Navigateur : envoyer un message à un appareil en ligne",
   browserBody:
@@ -663,8 +663,8 @@ const fr = article({
     },
     {
       symptom: "Un navigateur et la CLI ne peuvent pas rejoindre le code de l'autre.",
-      code: ["relayium text 483920   # un code CLI n'appaire jamais que CLI avec CLI"],
-      fix: "Les sessions de texte navigateur et CLI utilisent des transports et des appairages différents, donc un code à six chiffres créé par l'un n'a aucun sens pour l'autre. Utilisez deux navigateurs, ou la CLI aux deux extrémités : relayium text affiche exactement la commande que la seconde machine doit exécuter.",
+      code: ["relayium version   # une CLI actuelle partage les codes d'appairage avec la page web"],
+      fix: "Un relayium actuel et la page web utilisent les mêmes codes d'appairage pour le texte : l'un ou l'autre peut créer le code et l'autre le rejoint. Si cela échoue, la CLI de cette machine est une ancienne version dont l'appairage est limité au direct de CLI à CLI : lancez-y relayium update, ou utilisez la CLI aux deux extrémités — relayium text affiche exactement la commande que la seconde machine doit exécuter.",
     },
   ],
   cliHeading: "CLI : créer un code sur une machine, le rejoindre sur l'autre",
@@ -673,7 +673,7 @@ const fr = article({
     "Lancez ensuite relayium text avec ce code sur l'autre machine. En mode interactif, chaque ligne est un message et rien ne s'arrête pour comparer un code tant que vous ne le demandez pas. Pour du texte multiligne ou exact, utilisez un pipe en un seul message : aucun indicateur supplémentaire n'est requis.",
   ],
   cliNotes: [
-    "Les codes CLI durent cinq minutes et relient uniquement deux CLI ; navigateur et CLI ne sont pas interopérables.",
+    "Les codes CLI durent cinq minutes. L'autre bout peut être relayium text, relayium pair, une application Relayium ou la page web ; dès que le serveur attribue un relais pour le code, les messages y passent chiffrés et sont décomptés du quota de trafic du compte qui a généré le code.",
     "Seule la machine qui crée le code exige un compte connecté. Celle qui rejoint le code affiché n'a pas besoin de se connecter.",
     "--verify active la comparaison du SAS et nécessite un terminal pour y répondre : un lancement avec un pipe et --verify est refusé plutôt que poursuivi comme s'il avait été confirmé. --yes reste accepté, signifie toujours « ne jamais demander » et l'emporte sur --verify.",
   ],
@@ -688,7 +688,7 @@ const fr = article({
   faqHeading: "Questions fréquentes",
   faq: [
     { q: "Relayium peut-il lire ou récupérer mes messages ?", a: "Non. Le contenu est chiffré de bout en bout entre les appareils, et les serveurs Relayium ne gardent ni corps de message ni historique côté serveur. Chaque extrémité peut conserver le texte reçu ; après la session, Relayium n'a aucune copie serveur à récupérer." },
-    { q: "Puis-je utiliser le navigateur d'un côté et la CLI de l'autre ?", a: "Non. Les transports et associations diffèrent. Utilisez deux navigateurs ou deux clients CLI." },
+    { q: "Puis-je utiliser le navigateur d'un côté et la CLI de l'autre ?", a: "Oui, avec un relayium actuel : la CLI et la page web utilisent les mêmes codes d'appairage, donc l'un ou l'autre peut créer le code et l'autre le rejoint. Une ancienne CLI relayium ne s'appaire qu'avec une autre CLI ; relayium update la met à jour." },
   ],
   ctaText: "Ouvrez Relayium sur deux appareils en ligne et transférez directement ce que vous vous seriez envoyé à vous-même.",
   ctaButton: "Envoyer du texte",
@@ -702,7 +702,7 @@ const ar = article({
   updatedLabel: "آخر تحديث",
   lead: [
     "ينقل Relayium محتوى الحافظة إلى جانب الملفات: رابطًا من الهاتف، أو أمرًا لجهاز آخر، أو شيفرة متعددة الأسطر. الرسائل مشفّرة من الطرف إلى الطرف؛ لا تحتفظ خوادم Relayium بمتون الرسائل أو سجل على الخادم، لكن يمكن لأي طرف نسخ النص المستلم أو الاحتفاظ به.",
-    "يدعم المتصفح وسطر الأوامر النصوص، لكنهما وسيلتا نقل منفصلتان ولا يمكن لإحداهما الانضمام برمز الأخرى. استخدم الوسيلة نفسها في الطرفين.",
+    "يدعم المتصفح وسطر الأوامر النصوص كلاهما. ويستخدم الإصدار الحالي من relayium رموز الاقتران نفسها التي تستخدمها صفحة الويب، فيمكن لأي منهما إنشاء رمز ينضم إليه الآخر؛ ووحده سطر الأوامر الأقدم لا يقترن إلا بسطر أوامر آخر.",
   ],
   browserHeading: "المتصفح: إرسال رسالة إلى جهاز متصل",
   browserBody:
@@ -767,8 +767,8 @@ const ar = article({
     },
     {
       symptom: "لا يستطيع المتصفح وسطر الأوامر الانضمام برمز أحدهما الآخر.",
-      code: ["relayium text 483920   # رمز CLI يقرن CLI بـ CLI فقط"],
-      fix: "تستخدم جلسات النص في المتصفح وسطر الأوامر وسائل نقل ومصافحات اقتران مختلفة، فرمزٌ من ست خانات يصدره أحدهما لا معنى له عند الآخر. استخدم متصفحين، أو سطر الأوامر في الطرفين — فـ relayium text يطبع الأمر الذي ينبغي أن يشغّله الجهاز الثاني تمامًا.",
+      code: ["relayium version   # سطر الأوامر الحالي يشارك رموز الاقتران مع صفحة الويب"],
+      fix: "يستخدم الإصدار الحالي من relayium وصفحة الويب رموز الاقتران نفسها للنص، فيمكن لأي منهما إنشاء الرمز وينضم الآخر. وإن تعذّر ذلك فسطر الأوامر على ذلك الجهاز إصدار أقدم يقتصر اقترانه على اتصال مباشر بين سطرَي أوامر: شغّل هناك relayium update، أو استخدم سطر الأوامر في الطرفين — فـ relayium text يطبع الأمر الذي ينبغي أن يشغّله الجهاز الثاني تمامًا.",
     },
   ],
   cliHeading: "سطر الأوامر: أصدر الرمز على جهاز وانضم إليه من الآخر",
@@ -777,7 +777,7 @@ const ar = article({
     "شغّل relayium text بذلك الرمز على الجهاز الآخر. في الوضع التفاعلي كل سطر رسالة، ولا يتوقّف التشغيل لمقارنة أي رمز ما لم تطلب ذلك. أرسل النص متعدد الأسطر أو الدقيق عبر pipe كرسالة واحدة؛ ولا يحتاج ذلك إلى أي خيار إضافي.",
   ],
   cliNotes: [
-    "رمز CLI صالح لخمس دقائق ويربط CLI بـ CLI فقط؛ لا يتوافق المتصفح مع CLI.",
+    "رمز CLI صالح لخمس دقائق. ويمكن أن يكون الطرف الآخر relayium text أو relayium pair أو تطبيق Relayium أو صفحة الويب؛ وكلما أصدر الخادم مُرحِّلًا للرمز مرّت الرسائل عبره نصًا مُشفَّرًا واحتُسبت ضمن حصة حركة البيانات للحساب الذي أنشأ الرمز.",
     "الجهاز الذي يصدر الرمز وحده يحتاج حسابًا مسجل الدخول؛ أما الجهاز الذي ينضم بالرمز المطبوع فلا يحتاج إلى تسجيل الدخول.",
     "‏--verify يفعّل مقارنة SAS ويحتاج طرفية للإجابة، لذلك يُرفض التشغيل عبر pipe مع --verify بدل المتابعة وكأن التأكيد قد تم. ولا يزال --yes مقبولًا ويعني «لا تسأل أبدًا»، وله الأولوية على --verify.",
   ],
@@ -792,7 +792,7 @@ const ar = article({
   faqHeading: "الأسئلة الشائعة",
   faq: [
     { q: "هل يستطيع Relayium قراءة رسائلي أو استعادتها؟", a: "لا. المحتوى مشفّر بين الجهازين، ولا تحتفظ خوادم Relayium بمتون الرسائل أو سجل على الخادم. يمكن لأي طرف الاحتفاظ بالنص المستلم، لكن بعد انتهاء الجلسة لا تملك Relayium نسخة خادم لاستعادتها." },
-    { q: "هل يمكن استخدام المتصفح في طرف وCLI في الآخر؟", a: "لا. النقل والاقتران مختلفان. استخدم متصفحين أو عميلَي CLI." },
+    { q: "هل يمكن استخدام المتصفح في طرف وCLI في الآخر؟", a: "نعم، مع إصدار حالي من relayium: يستخدم سطر الأوامر وصفحة الويب رموز الاقتران نفسها، فيمكن لأي منهما إنشاء الرمز وينضم الآخر. أما سطر أوامر relayium الأقدم فلا يقترن إلا بسطر أوامر آخر؛ ويُحدّثه relayium update." },
   ],
   ctaText: "افتح Relayium على جهازين متصلين وانقل مباشرة ما كنت سترسله إلى نفسك.",
   ctaButton: "إرسال نص الآن",
@@ -806,7 +806,7 @@ const es = article({
   updatedLabel: "Última actualización",
   lead: [
     "Relayium también mueve contenido de portapapeles: una URL del teléfono, un comando para otro ordenador o código multilínea. Los mensajes están cifrados de extremo a extremo; los servidores de Relayium no guardan cuerpos de mensajes ni historial del servidor, pero cualquiera de los extremos puede copiar o conservar el texto recibido.",
-    "El navegador y la CLI admiten texto, pero usan transportes separados y no pueden unirse con el código del otro. Usa el mismo método en ambos extremos.",
+    "El navegador y la CLI admiten texto. Un relayium actual usa los mismos códigos de emparejamiento que la página web, así que cualquiera de los dos puede crear un código al que se une el otro; solo una CLI antigua se empareja únicamente con otra CLI.",
   ],
   browserHeading: "Navegador: enviar un mensaje a un dispositivo en línea",
   browserBody:
@@ -871,8 +871,8 @@ const es = article({
     },
     {
       symptom: "Un navegador y la CLI no pueden unirse con el código del otro.",
-      code: ["relayium text 483920   # un código de la CLI solo empareja CLI con CLI"],
-      fix: "Las sesiones de texto del navegador y de la CLI usan transportes y emparejamientos distintos, así que un código de seis dígitos creado por uno no significa nada para el otro. Usa dos navegadores, o la CLI en los dos extremos: relayium text imprime exactamente el comando que debe ejecutar la segunda máquina.",
+      code: ["relayium version   # una CLI actual comparte códigos de emparejamiento con la página web"],
+      fix: "Un relayium actual y la página web usan los mismos códigos de emparejamiento para el texto, así que cualquiera puede crear el código y el otro se une. Si no funciona, la CLI de esa máquina es una versión antigua cuyo emparejamiento se limita a CLI con CLI en directo: ejecuta allí relayium update, o usa la CLI en los dos extremos; relayium text imprime exactamente el comando que debe ejecutar la segunda máquina.",
     },
   ],
   cliHeading: "CLI: emite el código en un equipo y únete desde el otro",
@@ -881,7 +881,7 @@ const es = article({
     "Después ejecuta relayium text con ese código en el otro equipo. El modo interactivo envía una línea por mensaje y no se detiene a comparar ningún código salvo que lo pidas. Para texto multilínea o exacto, usa una tubería como un solo mensaje: no hace falta ninguna opción adicional.",
   ],
   cliNotes: [
-    "Los códigos CLI duran cinco minutos y solo conectan CLI con CLI; navegador y CLI no son interoperables.",
+    "Los códigos CLI duran cinco minutos. El otro extremo puede ser relayium text, relayium pair, una app de Relayium o la página web; siempre que el servidor emite un retransmisor para el código, los mensajes pasan por él cifrados y cuentan para la cuota de tráfico de la cuenta que generó el código.",
     "Solo el equipo que emite el código exige una cuenta conectada. El equipo que se une con el código impreso no necesita iniciar sesión.",
     "--verify activa la comparación del SAS y necesita un terminal para responder, así que una ejecución con tubería y --verify se rechaza en lugar de continuar como si se hubiera confirmado. --yes se sigue aceptando, sigue significando «nunca preguntar» y tiene prioridad sobre --verify.",
   ],
@@ -896,7 +896,7 @@ const es = article({
   faqHeading: "Preguntas frecuentes",
   faq: [
     { q: "¿Puede Relayium leer o recuperar mis mensajes?", a: "No. El contenido está cifrado entre los dispositivos, y los servidores de Relayium no guardan cuerpos de mensajes ni historial del servidor. Cualquiera de los extremos puede conservar el texto recibido; al terminar la sesión Relayium no tiene una copia de servidor que recuperar." },
-    { q: "¿Puedo usar navegador en un extremo y CLI en el otro?", a: "No. El transporte y el emparejamiento son distintos. Usa dos navegadores o dos clientes CLI." },
+    { q: "¿Puedo usar navegador en un extremo y CLI en el otro?", a: "Sí, con un relayium actual: la CLI y la página web usan los mismos códigos de emparejamiento, así que cualquiera puede crear el código y el otro se une. Una CLI de relayium antigua solo se empareja con otra CLI; relayium update la actualiza." },
   ],
   ctaText: "Abre Relayium en dos dispositivos en línea y mueve directamente lo próximo que te enviarías a ti mismo.",
   ctaButton: "Enviar texto ahora",
@@ -910,7 +910,7 @@ const pt = article({
   updatedLabel: "Última atualização",
   lead: [
     "O Relayium também move conteúdo de área de transferência: uma URL do celular, um comando para outro computador ou código multilinha. As mensagens são criptografadas de ponta a ponta; os servidores do Relayium não guardam o corpo das mensagens nem histórico no servidor, mas qualquer ponta pode copiar ou conservar o texto recebido.",
-    "O navegador e a CLI aceitam texto, mas usam transportes separados e não entram com o código um do outro. Use o mesmo método nas duas pontas.",
+    "O navegador e a CLI aceitam texto. Um relayium atual usa os mesmos códigos de pareamento da página web, então qualquer um dos dois pode criar um código em que o outro entra; só uma CLI antiga pareia apenas com outra CLI.",
   ],
   browserHeading: "Navegador: enviar mensagem a um dispositivo online",
   browserBody:
@@ -975,8 +975,8 @@ const pt = article({
     },
     {
       symptom: "Um navegador e a CLI não conseguem entrar com o código um do outro.",
-      code: ["relayium text 483920   # um código da CLI só pareia CLI com CLI"],
-      fix: "As sessões de texto do navegador e da CLI usam transportes e handshakes de emparelhamento diferentes, então um código de seis dígitos criado por um não significa nada para o outro. Use dois navegadores, ou a CLI nas duas pontas: o relayium text imprime exatamente o comando que a segunda máquina deve executar.",
+      code: ["relayium version   # uma CLI atual compartilha códigos de pareamento com a página web"],
+      fix: "Um relayium atual e a página web usam os mesmos códigos de pareamento para texto, então qualquer um pode criar o código e o outro entra. Se não der certo, a CLI daquela máquina é uma versão antiga cujo pareamento se limita a CLI com CLI em direto: rode relayium update lá, ou use a CLI nas duas pontas; o relayium text imprime exatamente o comando que a segunda máquina deve executar.",
     },
   ],
   cliHeading: "CLI: emita o código em uma máquina e entre pela outra",
@@ -985,7 +985,7 @@ const pt = article({
     "Depois execute relayium text com esse código na outra máquina. O modo interativo envia uma linha por mensagem e não para para comparar nenhum código, a menos que você peça. Para texto multilinha ou exato, use um pipe como uma única mensagem: nenhuma opção extra é necessária.",
   ],
   cliNotes: [
-    "Códigos CLI duram cinco minutos e conectam apenas CLI com CLI; navegador e CLI não são interoperáveis.",
+    "Códigos CLI duram cinco minutos. A outra ponta pode ser relayium text, relayium pair, um app do Relayium ou a página web; sempre que o servidor emite um retransmissor para o código, as mensagens passam por ele cifradas e contam para a cota de tráfego da conta que gerou o código.",
     "Somente a máquina que emite o código exige uma conta conectada. A máquina que entra com o código impresso não precisa fazer login.",
     "--verify ativa a comparação do SAS e precisa de um terminal para responder, então uma execução com pipe e --verify é recusada em vez de continuar como se tivesse sido confirmada. --yes continua aceito, ainda significa “nunca perguntar” e tem prioridade sobre --verify.",
   ],
@@ -1000,7 +1000,7 @@ const pt = article({
   faqHeading: "Perguntas frequentes",
   faq: [
     { q: "O Relayium pode ler ou recuperar minhas mensagens?", a: "Não. O conteúdo é criptografado entre os dispositivos, e os servidores do Relayium não guardam o corpo das mensagens nem histórico no servidor. Qualquer ponta pode conservar o texto recebido; ao terminar a sessão o Relayium não tem uma cópia no servidor para recuperar." },
-    { q: "Posso usar navegador em uma ponta e CLI na outra?", a: "Não. Transporte e pareamento são diferentes. Use dois navegadores ou dois clientes CLI." },
+    { q: "Posso usar navegador em uma ponta e CLI na outra?", a: "Sim, com um relayium atual: a CLI e a página web usam os mesmos códigos de pareamento, então qualquer um pode criar o código e o outro entra. Uma CLI do relayium antiga só pareia com outra CLI; o relayium update a atualiza." },
   ],
   ctaText: "Abra o Relayium em dois dispositivos online e mova diretamente o próximo conteúdo que enviaria a si mesmo.",
   ctaButton: "Enviar texto agora",

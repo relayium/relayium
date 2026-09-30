@@ -97,7 +97,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "No relay and no fallback: if the listener isn't reachable, the push fails — file bytes never route through anyone else.",
-        "The same transfer engine as the other modes: each file is checked with a per-file SHA-256 and staged before it is installed. push does not resume, here or over SSH — it refuses a destination that already exists, so an interrupted run is finished by pushing the missing paths, or by relayium sync, which continues a partial file and which this listener honours unless it was started with --no-resume.",
+        "The same transfer engine as the other modes: each file is checked with a per-file SHA-256 and staged before it is installed. push does not resume — it refuses a destination that already exists, so an interrupted run is finished by pushing the missing paths, or by relayium sync, which continues a partial file and which this listener honours unless it was started with --no-resume.",
       ],
     },
     {
@@ -216,8 +216,8 @@ ls -l /etc/relayium/id.key`,
     heading: "Frequently asked questions",
     items: [
       {
-        q: "How is daemon direct different from push over SSH?",
-        a: "push over SSH tunnels the transfer through your SSH connection and needs an SSH account on the remote. Daemon direct needs no SSH and no account — the two servers authenticate each other by certificate fingerprint over pinned TLS, which is lighter when both machines are yours.",
+        q: "What happened to push over SSH?",
+        a: "SSH transfers — push or sync to an SSH destination, and relayium pull — are retired in the current CLI and refuse with \"SSH transfers are currently disabled\". Daemon direct is the server-to-server path: it needs no SSH and no account — the two servers authenticate each other by certificate fingerprint over pinned TLS, which is lighter when both machines are yours.",
       },
       {
         q: "Do I have to copy fingerprints around by hand?",
@@ -241,7 +241,7 @@ ls -l /etc/relayium/id.key`,
       },
       {
         q: "Should I use Device Inbox for this instead?",
-        a: "No — the CLI's Inbox is the receiving side only. It accepts files your account sends to that machine, and there is no CLI command that sends into an inbox; you send to one from the Web app or a native app. To move files between two servers you control, serve plus push or sync is the direct path, and it needs no account at all.",
+        a: "Usually not. The CLI can send into an inbox — relayium inbox send --to <device> — but a Device Inbox delivery is uploaded to Relayium as ciphertext, queued until the device fetches it, needs both ends signed in to the same account, and counts against that account's storage, traffic, daily quota and retention limits. It is the right tool when the receiving machine may be offline. To move files between two servers you control that can reach each other, serve plus push or sync is the direct path: nothing is uploaded or metered, and it needs no account at all.",
       },
       {
         q: "Can a push delete files on the receiver?",
@@ -349,7 +349,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。",
-        "使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传——无论走这条路还是走 SSH：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync（它会接着传半截文件，而这个监听端会遵守，除非它是以 --no-resume 启动的）。",
+        "使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync（它会接着传半截文件，而这个监听端会遵守，除非它是以 --no-resume 启动的）。",
       ],
     },
     {
@@ -468,8 +468,8 @@ ls -l /etc/relayium/id.key`,
     heading: "常见问题",
     items: [
       {
-        q: "daemon 直连和通过 SSH 推送有什么不同？",
-        a: "通过 SSH 推送会把传输隧道进你的 SSH 连接，并且需要在远端有一个 SSH 账号。daemon 直连不需要 SSH，也不需要账号——两台服务器通过证书固定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。",
+        q: "通过 SSH 推送还能用吗？",
+        a: "不能。SSH 传输——向 SSH 目标 push 或 sync，以及 relayium pull——在当前 CLI 中已退役，会以「SSH transfers are currently disabled」拒绝。daemon 直连才是服务器对服务器的路径：它不需要 SSH，也不需要账号——两台服务器通过证书固定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。",
       },
       {
         q: "我需要手动到处复制指纹吗？",
@@ -493,7 +493,7 @@ ls -l /etc/relayium/id.key`,
       },
       {
         q: "这种场景该改用「设备收件箱」吗？",
-        a: "不该——CLI 上的收件箱只有接收这一侧。它接收的是你的账号发给这台机器的文件，而 CLI 并没有向收件箱发送的命令；要发给某个收件箱，请用网页版或原生 App。要在你自己掌控的两台服务器之间搬文件，serve 加 push 或 sync 才是直连的那条路，而且完全不需要账号。",
+        a: "通常不该。CLI 可以往收件箱发送——relayium inbox send --to <设备>——但设备收件箱投递会以密文上传到 Relayium，排队等设备来取，两端需要登录同一个账号，并占用该账号的存储、流量、每日额度与留存限制。接收机器可能离线时，它才是合适的工具。要在你自己掌控、彼此可达的两台服务器之间搬文件，serve 加 push 或 sync 才是直连的那条路：不上传、不计量，而且完全不需要账号。",
       },
       {
         q: "推送会删掉接收方的文件吗？",
@@ -598,7 +598,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "リレーもフォールバックもありません。リスナーに到達できなければプッシュは失敗します。ファイルのバイト列が他の誰かを経由することは決してありません。",
-        "他のモードと同じ転送エンジンです。各ファイルはファイルごとの SHA-256 でチェックされ、暫定領域に置かれてから設置されます。push は再開しません。SSH 経由でもこの経路でも同じで、すでに存在する宛先を拒否します。中断されたときは足りないパスを push するか、半端なファイルを続けてくれる relayium sync を使ってください（この待ち受け側は --no-resume 付きで起動されていない限りそれに従います）。",
+        "他のモードと同じ転送エンジンです。各ファイルはファイルごとの SHA-256 でチェックされ、暫定領域に置かれてから設置されます。push は再開せず、すでに存在する宛先を拒否します。中断されたときは足りないパスを push するか、半端なファイルを続けてくれる relayium sync を使ってください（この待ち受け側は --no-resume 付きで起動されていない限りそれに従います）。",
       ],
     },
     {
@@ -710,8 +710,8 @@ ls -l /etc/relayium/id.key`,
     heading: "よくある質問",
     items: [
       {
-        q: "デーモン直結は SSH 経由の push と何が違いますか？",
-        a: "SSH 経由の push は転送を SSH 接続のトンネルに通し、リモート側に SSH アカウントが必要です。デーモン直結には SSH もアカウントも不要です。2台のサーバーは証明書ピンニング付き TLS 上で証明書のフィンガープリントによって互いを認証します。両方のマシンが自分のものである場合、これはより軽量です。",
+        q: "SSH 経由の push はどうなりましたか？",
+        a: "SSH 転送（SSH の宛先への push や sync、relayium pull）は現在の CLI では廃止され、「SSH transfers are currently disabled」と表示して拒否されます。サーバー間の経路はデーモン直結です。SSH もアカウントも不要で、2台のサーバーは証明書ピンニング付き TLS 上で証明書のフィンガープリントによって互いを認証します。両方のマシンが自分のものである場合、これはより軽量です。",
       },
       {
         q: "フィンガープリントを手作業でコピーして回る必要がありますか？",
@@ -828,7 +828,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "릴레이도 폴백도 없습니다. 리스너에 도달할 수 없으면 푸시는 실패합니다. 파일 바이트는 결코 다른 누군가를 거쳐 전달되지 않습니다.",
-        "다른 모드와 동일한 전송 엔진입니다: 각 파일은 파일별 SHA-256으로 검사되고 스테이징된 뒤 설치됩니다. push는 재개하지 않습니다 — 여기서도 SSH에서도 마찬가지로 이미 존재하는 목적지를 거부합니다. 중단되었다면 빠진 경로를 push하거나, 부분 파일을 이어가는 relayium sync를 쓰세요(이 수신 측은 --no-resume으로 시작되지 않은 한 그것을 존중합니다).",
+        "다른 모드와 동일한 전송 엔진입니다: 각 파일은 파일별 SHA-256으로 검사되고 스테이징된 뒤 설치됩니다. push는 재개하지 않으며 이미 존재하는 목적지를 거부합니다. 중단되었다면 빠진 경로를 push하거나, 부분 파일을 이어가는 relayium sync를 쓰세요(이 수신 측은 --no-resume으로 시작되지 않은 한 그것을 존중합니다).",
       ],
     },
     {
@@ -940,8 +940,8 @@ ls -l /etc/relayium/id.key`,
     heading: "자주 묻는 질문",
     items: [
       {
-        q: "데몬 다이렉트는 SSH를 통한 push와 어떻게 다른가요?",
-        a: "SSH를 통한 push는 전송을 SSH 연결 터널로 통과시키며 원격에 SSH 계정이 필요합니다. 데몬 다이렉트는 SSH도 계정도 필요 없습니다. 두 서버는 인증서 고정 TLS를 통해 인증서 핑거프린트로 서로를 인증하며, 두 기기가 모두 내 것일 때 더 가볍습니다.",
+        q: "SSH를 통한 push는 어떻게 되었나요?",
+        a: "SSH 전송(SSH 대상으로의 push 또는 sync, relayium pull)은 현재 CLI에서 폐지되어 “SSH transfers are currently disabled”라는 메시지와 함께 거부됩니다. 서버 간 경로는 데몬 다이렉트입니다. SSH도 계정도 필요 없으며, 두 서버는 인증서 고정 TLS를 통해 인증서 핑거프린트로 서로를 인증합니다. 두 기기가 모두 내 것일 때 더 가볍습니다.",
       },
       {
         q: "핑거프린트를 손으로 일일이 복사해서 옮겨야 하나요?",
@@ -1058,7 +1058,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Kein Relay und kein Fallback: Ist der Listener nicht erreichbar, schlägt der Push fehl — die Datei-Bytes laufen nie über irgendjemand anderen.",
-        "Dieselbe Übertragungs-Engine wie die anderen Modi: Jede Datei wird per SHA-256 geprüft und zwischengelagert, bevor sie installiert wird. push setzt nicht fort, weder hier noch über SSH — es verweigert ein Ziel, das schon existiert. Einen abgebrochenen Lauf beendest du, indem du die fehlenden Pfade pushst, oder mit relayium sync, das eine Teildatei weiterführt und das dieser Listener respektiert, sofern er nicht mit --no-resume gestartet wurde.",
+        "Dieselbe Übertragungs-Engine wie die anderen Modi: Jede Datei wird per SHA-256 geprüft und zwischengelagert, bevor sie installiert wird. push setzt nicht fort — es verweigert ein Ziel, das schon existiert. Einen abgebrochenen Lauf beendest du, indem du die fehlenden Pfade pushst, oder mit relayium sync, das eine Teildatei weiterführt und das dieser Listener respektiert, sofern er nicht mit --no-resume gestartet wurde.",
       ],
     },
     {
@@ -1170,8 +1170,8 @@ ls -l /etc/relayium/id.key`,
     heading: "Häufige Fragen",
     items: [
       {
-        q: "Wie unterscheidet sich daemon-direct von push über SSH?",
-        a: "push über SSH tunnelt die Übertragung durch deine SSH-Verbindung und braucht ein SSH-Konto auf der Gegenseite. daemon-direct braucht weder SSH noch ein Konto — die beiden Server authentifizieren sich gegenseitig per Zertifikats-Fingerprint über TLS mit Pinning, was leichtgewichtiger ist, wenn beide Maschinen dir gehören.",
+        q: "Was ist aus push über SSH geworden?",
+        a: "SSH-Übertragungen — push oder sync zu einem SSH-Ziel sowie relayium pull — sind in der aktuellen CLI eingestellt und werden mit „SSH transfers are currently disabled“ abgelehnt. Der Weg von Server zu Server ist daemon-direct: Er braucht weder SSH noch ein Konto — die beiden Server authentifizieren sich gegenseitig per Zertifikats-Fingerprint über TLS mit Pinning, was leichtgewichtiger ist, wenn beide Maschinen dir gehören.",
       },
       {
         q: "Muss ich Fingerprints von Hand herumkopieren?",
@@ -1288,7 +1288,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Aucun relais et aucun repli : si le processus à l'écoute n'est pas joignable, l'envoi échoue — les octets du fichier ne transitent jamais par qui que ce soit d'autre.",
-        "Le même moteur de transfert que les autres modes : chaque fichier est contrôlé par un SHA-256 par fichier et mis en zone d'attente avant d'être installé. push ne reprend pas, ni ici ni via SSH — il refuse une destination qui existe déjà. Une exécution interrompue se termine en poussant les chemins manquants, ou avec relayium sync, qui poursuit un fichier partiel et que ce processus à l'écoute respecte, sauf s'il a été démarré avec --no-resume.",
+        "Le même moteur de transfert que les autres modes : chaque fichier est contrôlé par un SHA-256 par fichier et mis en zone d'attente avant d'être installé. push ne reprend pas — il refuse une destination qui existe déjà. Une exécution interrompue se termine en poussant les chemins manquants, ou avec relayium sync, qui poursuit un fichier partiel et que ce processus à l'écoute respecte, sauf s'il a été démarré avec --no-resume.",
       ],
     },
     {
@@ -1400,8 +1400,8 @@ ls -l /etc/relayium/id.key`,
     heading: "Questions fréquentes",
     items: [
       {
-        q: "En quoi le daemon-direct diffère-t-il de push via SSH ?",
-        a: "push via SSH fait transiter le transfert par votre connexion SSH et nécessite un compte SSH sur la machine distante. Le daemon-direct ne nécessite ni SSH ni compte — les deux serveurs s'authentifient mutuellement par empreinte de certificat via TLS avec épinglage, ce qui est plus léger quand les deux machines vous appartiennent.",
+        q: "Qu'est devenu push via SSH ?",
+        a: "Les transferts SSH — push ou sync vers une destination SSH, et relayium pull — sont retirés de la CLI actuelle et refusés avec « SSH transfers are currently disabled ». Le chemin de serveur à serveur est le daemon-direct : il ne nécessite ni SSH ni compte — les deux serveurs s'authentifient mutuellement par empreinte de certificat via TLS avec épinglage, ce qui est plus léger quand les deux machines vous appartiennent.",
       },
       {
         q: "Dois-je recopier les empreintes à la main ?",
@@ -1518,7 +1518,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "لا مُرحِّل ولا احتياطي: إن تعذَّر الوصول إلى المُستمِع، تفشل الدفعة — ولا تمر بايتات الملف أبدًا عبر أي طرف آخر.",
-        "المحرك نفسه المُستخدَم في الأوضاع الأخرى: يُفحَص كل ملف بـ SHA-256 لكل ملف ويوضع في منطقة مؤقتة قبل تثبيته. ولا يستأنف push، لا هنا ولا عبر SSH — فهو يرفض وجهة موجودة سلفًا. وإذا انقطع التشغيل، أكمِله بدفع المسارات الناقصة أو باستخدام relayium sync الذي يُكمل ملفًا جزئيًا ويحترمه هذا المُستمِع ما لم يكن قد بدأ بـ --no-resume.",
+        "المحرك نفسه المُستخدَم في الأوضاع الأخرى: يُفحَص كل ملف بـ SHA-256 لكل ملف ويوضع في منطقة مؤقتة قبل تثبيته. ولا يستأنف push — فهو يرفض وجهة موجودة سلفًا. وإذا انقطع التشغيل، أكمِله بدفع المسارات الناقصة أو باستخدام relayium sync الذي يُكمل ملفًا جزئيًا ويحترمه هذا المُستمِع ما لم يكن قد بدأ بـ --no-resume.",
       ],
     },
     {
@@ -1630,8 +1630,8 @@ ls -l /etc/relayium/id.key`,
     heading: "الأسئلة الشائعة",
     items: [
       {
-        q: "بماذا يختلف daemon direct عن push عبر SSH؟",
-        a: "يوجِّه push عبر SSH النقل خلال اتصال SSH لديك ويحتاج إلى حساب SSH على الطرف البعيد. أما daemon direct فلا يحتاج SSH ولا حسابًا — يصادق الخادمان أحدهما الآخر ببصمة الشهادة عبر TLS مُثبَّت، وهو أخف حين يكون الجهازان كلاهما لك.",
+        q: "ماذا حدث لـ push عبر SSH؟",
+        a: "أُوقفت عمليات النقل عبر SSH — أي push أو sync إلى وجهة SSH، وrelayium pull — في CLI الحالي، وتُرفض برسالة «SSH transfers are currently disabled». والمسار بين الخوادم هو daemon direct: لا يحتاج SSH ولا حسابًا — يصادق الخادمان أحدهما الآخر ببصمة الشهادة عبر TLS مُثبَّت، وهو أخف حين يكون الجهازان كلاهما لك.",
       },
       {
         q: "هل عليّ نسخ البصمات يدويًا هنا وهناك؟",
@@ -1748,7 +1748,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Sin retransmisor y sin respaldo: si no se puede alcanzar el proceso a la escucha, el push falla; los bytes del archivo nunca se enrutan a través de nadie más.",
-        "El mismo motor de transferencia que los otros modos: cada archivo se comprueba con un SHA-256 por archivo y se coloca en un área temporal antes de instalarlo. push no reanuda, ni aquí ni por SSH: rechaza un destino que ya existe. Una ejecución interrumpida se termina enviando las rutas que faltan, o con relayium sync, que continúa un archivo parcial y que este proceso a la escucha respeta salvo que se haya arrancado con --no-resume.",
+        "El mismo motor de transferencia que los otros modos: cada archivo se comprueba con un SHA-256 por archivo y se coloca en un área temporal antes de instalarlo. push no reanuda: rechaza un destino que ya existe. Una ejecución interrumpida se termina enviando las rutas que faltan, o con relayium sync, que continúa un archivo parcial y que este proceso a la escucha respeta salvo que se haya arrancado con --no-resume.",
       ],
     },
     {
@@ -1860,8 +1860,8 @@ ls -l /etc/relayium/id.key`,
     heading: "Preguntas frecuentes",
     items: [
       {
-        q: "¿En qué se diferencia daemon directo de push por SSH?",
-        a: "push por SSH tuneliza la transferencia a través de tu conexión SSH y necesita una cuenta SSH en el remoto. daemon directo no necesita SSH ni cuenta: los dos servidores se autentican mutuamente por huella de certificado sobre TLS con anclaje, lo cual es más ligero cuando ambas máquinas son tuyas.",
+        q: "¿Qué pasó con push por SSH?",
+        a: "Las transferencias SSH —push o sync a un destino SSH, y relayium pull— están retiradas en la CLI actual y se rechazan con «SSH transfers are currently disabled». La ruta de servidor a servidor es daemon directo: no necesita SSH ni cuenta; los dos servidores se autentican mutuamente por huella de certificado sobre TLS con anclaje, lo cual es más ligero cuando ambas máquinas son tuyas.",
       },
       {
         q: "¿Tengo que copiar huellas a mano de un lado a otro?",
@@ -1978,7 +1978,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Sem retransmissor e sem retorno: se o processo à escuta não for alcançável, o push falha — os bytes do arquivo nunca são roteados por mais ninguém.",
-        "O mesmo motor de transferência dos outros modos: cada arquivo é conferido com um SHA-256 por arquivo e preparado em área temporária antes de ser instalado. O push não retoma, nem aqui nem por SSH — ele recusa um destino que já existe. Uma execução interrompida se conclui enviando os caminhos que faltam, ou com o relayium sync, que continua um arquivo parcial e que este processo à escuta respeita, a menos que tenha sido iniciado com --no-resume.",
+        "O mesmo motor de transferência dos outros modos: cada arquivo é conferido com um SHA-256 por arquivo e preparado em área temporária antes de ser instalado. O push não retoma — ele recusa um destino que já existe. Uma execução interrompida se conclui enviando os caminhos que faltam, ou com o relayium sync, que continua um arquivo parcial e que este processo à escuta respeita, a menos que tenha sido iniciado com --no-resume.",
       ],
     },
     {
@@ -2090,8 +2090,8 @@ ls -l /etc/relayium/id.key`,
     heading: "Perguntas frequentes",
     items: [
       {
-        q: "Em que o daemon direto difere de push por SSH?",
-        a: "push por SSH tunela a transferência pela sua conexão SSH e precisa de uma conta SSH no remoto. O daemon direto não precisa de SSH nem de conta — os dois servidores se autenticam mutuamente pela impressão digital do certificado sobre TLS com fixação, o que é mais leve quando as duas máquinas são suas.",
+        q: "O que aconteceu com o push por SSH?",
+        a: "As transferências por SSH — push ou sync para um destino SSH, e relayium pull — foram descontinuadas na CLI atual e são recusadas com “SSH transfers are currently disabled”. O caminho de servidor para servidor é o daemon direto: não precisa de SSH nem de conta — os dois servidores se autenticam mutuamente pela impressão digital do certificado sobre TLS com fixação, o que é mais leve quando as duas máquinas são suas.",
       },
       {
         q: "Preciso copiar impressões digitais à mão de um lado para o outro?",

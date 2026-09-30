@@ -975,7 +975,7 @@ td .off{color:var(--muted);opacity:.7}
 <button type="submit">{{t $.Lang "保存"}}</button>
 </form>
 </td>
-<td><form method="post" action="/admin/nodes/{{.ID}}/delete" onsubmit="return confirm('{{t $.Lang "删除该官方节点？"}}')"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form></td>
+<td>{{if .DeleteBlockersUnknown}}<span class="err">{{t $.Lang "无法读取剩余记录数，暂不提供删除"}}</span>{{else if .DeleteBlockers}}<span style="color:var(--muted);font-size:12px">{{.DeleteBlockers}} {{t $.Lang "条记录待清理（含已过期未回收的文件与上传会话），归零后才能删除"}}</span>{{else}}<form method="post" action="/admin/nodes/{{.ID}}/delete" onsubmit="return confirm('{{t $.Lang "删除该官方节点？"}}')"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form>{{end}}</td>
 </tr>
 {{end}}{{end}}
 </tbody></table>

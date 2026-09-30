@@ -22,6 +22,12 @@ func (d *dedupBiller) ListActiveSubscriptions(ctx context.Context, customerID st
 	return d.active, nil
 }
 
+// ListSubscriptionEvidence must be overridden too: the embedded stripeClient's
+// would go to the network.
+func (d *dedupBiller) ListSubscriptionEvidence(ctx context.Context, customerID string) (SubscriptionEvidence, error) {
+	return SubscriptionEvidence{Live: d.active}, nil
+}
+
 func (d *dedupBiller) CancelSubscription(ctx context.Context, subID string, refund bool) error {
 	d.canceled = append(d.canceled, subID)
 	d.refunded = append(d.refunded, refund)

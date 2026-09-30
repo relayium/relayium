@@ -916,8 +916,20 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	}
-	n, err := io.Copy(w, rc)
-	complete := err == nil && n == sf.Size-start
+	// Serve exactly the committed bytes, never what happens to lie past them
+	// on storage. A blob longer than sf.Size (a late append after the
+	// terminal finalize) would otherwise overrun Content-Length: net/http
+	// rejects the whole Write that crosses it (ErrContentLength, nothing of
+	// that chunk sent), so the client got a truncated body, a complete
+	// download never burned its burn-after-read file, and n — the bytes
+	// metered below — under-reported what left the server; on the sendfile
+	// path the excess instead went onto the wire and was metered. Bounding
+	// the source makes a complete delivery exactly sf.Size-start bytes; a
+	// short blob still ends early (err == nil, n short) and a client abort
+	// still errors, so both stay incomplete as before.
+	want := sf.Size - start
+	n, err := io.Copy(w, io.LimitReader(rc, want))
+	complete := err == nil && n == want
 
 	// Meter/stat the OWNER for the bytes THIS request actually egressed — whether
 	// or not the transfer completed — never the downloader (no downloader identity
@@ -948,10 +960,19 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		// exempts METERING only, never the overTraffic gate above — a genuinely
 		// over-quota owner is still refused service during their own update
 		// window, the same as any other time.
-		if !s.byoUpdateExempt(ctx, sf) {
-			_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
-		}
+		exempt := s.byoUpdateExempt(ctx, sf)
 		cancel()
+		// The bill gets its own budget: the statistics write and the exemption
+		// read above may have spent most of theirs, and a bill must not fail
+		// merely because statistics were slow. MeterDownload lands the bytes on
+		// the meter or in the owed-bill outbox; an error means neither.
+		if !exempt {
+			mctx, mcancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := s.store.MeterDownload(mctx, sf.UserID, n, s.now().Unix()); err != nil {
+				log.Printf("UNSETTLED BILL: download: %d bytes of download egress for user %s could be neither metered nor journaled; they stay unbilled: %v", n, sf.UserID, err)
+			}
+			mcancel()
+		}
 	}
 
 	if !complete {

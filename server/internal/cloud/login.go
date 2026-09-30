@@ -316,6 +316,11 @@ func (c *Client) DevicePoll(ctx context.Context, deviceCode string) (status, acc
 // and verification URL, then polls until the user approves ("ok"), the
 // request is denied/expired, or ExpiresIn elapses.
 func (c *Client) Login(ctx context.Context, notify func(DeviceStart)) (Creds, error) {
+	// The token this flow obtains travels in the poll response: never over
+	// cleartext to a non-local host.
+	if err := checkSecureServer(c.Server); err != nil {
+		return Creds{}, err
+	}
 	start, err := c.DeviceStart(ctx)
 	if err != nil {
 		return Creds{}, fmt.Errorf("device start: %w", err)

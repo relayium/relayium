@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/relayium/relayium/authx"
 	"github.com/relayium/relayium/internal/inbox"
@@ -135,10 +136,13 @@ func (s *SQLiteStore) CreateInboxTask(ctx context.Context, t InboxTask) (InboxTa
 		if !sameInboxTaskRequest(existing, t) {
 			return InboxTask{}, false, ErrIdempotencyKeyConflict
 		}
-		if expired, err := expireLoadedInboxTask(ctx, tx, &existing, t.CreatedAt); err != nil {
+		// A replay past the TTL reports the truthful terminal state.
+		// expireLoadedInboxTask commits the transaction itself when it writes
+		// the expiry; otherwise this path wrote nothing and the deferred
+		// Rollback just releases a read-only transaction. Either way the
+		// replay converges on the stored task.
+		if _, err := expireLoadedInboxTask(ctx, tx, &existing, t.CreatedAt); err != nil {
 			return InboxTask{}, false, err
-		} else if expired {
-			return existing, false, nil
 		}
 		return existing, false, nil
 	case !errors.Is(err, sql.ErrNoRows):
@@ -384,11 +388,13 @@ func (s *SQLiteStore) ListInboxTasks(ctx context.Context, deviceID, userID strin
 //     it behind would strand storage the user can neither see nor reclaim, and
 //     the binding index would keep it unusable for anything else forever.
 //
-// The returned StoredFile is the object this call orphaned physically: its row
-// is gone, so the CALLER must drop the blob (and queue a retry if the node is
-// unreachable). A zero value means nothing was released. Doing it in this order
-// — row first, blob second — means a failed blob delete leaks a retryable
-// orphan rather than destroying ciphertext whose row still promises a delivery.
+// The returned StoredFile is the object this call released: its row is gone and
+// its blob's delete intent is already queued in the same transaction, so the
+// CALLER deletes the blob and discharges that intent on success; a failed or
+// skipped delete is retried by GC's drain. A zero value means nothing was
+// released. Doing it in this order — row and intent first, blob second — means
+// a failed blob delete leaves a queued retry rather than destroying ciphertext
+// whose row still promises a delivery.
 func (s *SQLiteStore) DeleteInboxTask(ctx context.Context, taskID, userID string) (bool, StoredFile, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -434,6 +440,19 @@ func (s *SQLiteStore) DeleteInboxTask(ctx context.Context, taskID, userID string
 		return false, StoredFile{}, tx.Commit()
 	}
 	if owned.ID != "" {
+		// The blob's delete intent is written in THIS transaction, before the
+		// row that names the blob goes (DeleteStoredFileQueuingBlob's rule), so
+		// no commit leaves the ciphertext with neither a row nor a queue entry
+		// naming it — and a retired node always has one of the two, so GC's
+		// PurgeRetiredNodes can never drop the node between this commit and the
+		// caller's physical delete (A-M3). The caller deletes and then
+		// discharges; a failed delete is simply left to GC's drain.
+		// enqueued_at is wall-clock: this method takes no clock, and the column
+		// only feeds the retry order and the age-based retirement of rows
+		// already discharged.
+		if err := enqueueNodeDeleteOn(ctx, tx, owned.BlobKey, owned.NodeID, time.Now().Unix(), 0); err != nil {
+			return false, StoredFile{}, err
+		}
 		if _, err := tx.ExecContext(ctx,
 			`DELETE FROM stored_files WHERE id = ? AND user_id = ? AND purpose = ? AND inbox_task_id = ?`,
 			owned.ID, userID, StoredPurposeDeviceTask, taskID); err != nil {
@@ -1090,8 +1109,16 @@ func expireDueInboxTasks(ctx context.Context, tx *sql.Tx, deviceID, userID strin
 // error_code is deliberately preserved: until the task is actually leased again
 // the last failure is still the truthful explanation of why nothing has landed.
 // The claim clears it at the moment work genuinely restarts.
+//
+// claim_token_hash IS cleared, exactly as the lease reclaim and accept paths
+// clear it when a task returns to the claimable pool. failed_retryable keeps the
+// last claimant's hash (so that claimant's retried report converges), but once
+// the task is queued again that worker no longer holds it: left in place, its
+// old token would still match and could move the requeued task straight back to
+// downloading without a claim — skipping the attempt count and taking a lease
+// no claim handed out.
 func requeueDueRetries(ctx context.Context, tx *sql.Tx, deviceID, userID string, now int64) error {
-	q := `UPDATE inbox_tasks SET state = ?, updated_at = ?
+	q := `UPDATE inbox_tasks SET state = ?, claim_token_hash = '', updated_at = ?
 	       WHERE state = ? AND next_attempt_at <= ? AND expires_at > ?
 	         AND target_device_id = ? AND user_id = ?`
 	_, err := tx.ExecContext(ctx, q, inbox.TaskQueued, now,

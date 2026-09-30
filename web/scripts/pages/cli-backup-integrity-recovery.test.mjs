@@ -278,33 +278,40 @@ function recoveryComplaints(lang, fix) {
 }
 
 describe("the archived SSH backup guide's integrity-failure recovery", () => {
-  it("preserves exactly one integrity-failure item in each frozen locale", () => {
-    // Guards the guard. If the item is renamed, moved or dropped, every rule
-    // below would pass over an empty string instead of failing.
-    for (const lang of FROZEN_LANGS) {
-      expect(integrityItems(cliBackupSsh.langs[lang]), `${lang}: integrity item missing or duplicated`).toHaveLength(1);
-    }
-  });
-
-  it("gives the cause and recovery accurately in all frozen locales", () => {
-    const bad = [];
-    for (const lang of FROZEN_LANGS) bad.push(...recoveryComplaints(lang, integrityItems(cliBackupSsh.langs[lang])[0].fix));
-    expect(bad).toEqual([]);
-  });
-
-  it("quotes reportExit's actual line in each locale's symptom and sample", () => {
-    const line = formatLine(FORMAT);
-    const symptom = FORMAT.replace("%d", "N").split(": %v")[0];
+  // 2026-09-30 (DECISION-LOG item 2): SSH push is retired, so the seven archived
+  // translations of this guide are now a translated historical notice with no
+  // procedure (cli-tutorial-structure.test.mjs RETIRED_IN_ARCHIVE). There is no
+  // push to recover from and no integrity item left to check; the rules above
+  // stay as the contract any recovery instruction here must meet if one returns,
+  // and the mutation proofs below keep them honest.
+  it("carries no retired push procedure and no recovery instruction in any frozen locale", () => {
     const bad = [];
     for (const lang of FROZEN_LANGS) {
-      const item = integrityItems(cliBackupSsh.langs[lang])[0];
-      if (!item.symptom.includes(symptom)) bad.push(`${lang}: symptom does not quote "${symptom}"`);
-      const out = item.code.join("\n").split("\n").filter((l) => l.startsWith("# ")).map((l) => l.slice(2));
-      if (!out.some((l) => line.test(l))) bad.push(`${lang}: sample has no line in reportExit's format`);
-      // runPush prints the ssh child's exit error after the remote's line.
-      if (!out.includes("exit status 1")) bad.push(`${lang}: sample omits the ssh session's "exit status 1"`);
+      const doc = cliBackupSsh.langs[lang];
+      for (const item of integrityItems(doc)) bad.push(...recoveryComplaints(lang, item.fix), `${lang}: integrity item is back`);
+      const code = (doc.sections || []).flatMap((s) => [
+        ...(s.code || []), ...(s.steps || []).flatMap((x) => x.code || []), ...(s.success?.code || []),
+        ...(s.troubleshooting?.items || []).flatMap((x) => x.code || []),
+      ]).join("\n");
+      if (/\brelayium\s+(?:push|sync|pull)\b[^\n]*\S+@\S+:/.test(code)) bad.push(`${lang}: runnable SSH transfer command`);
     }
     expect(bad).toEqual([]);
+  });
+
+  it("never republishes the recovery text the archived locales shipped", () => {
+    // The shipped text of the seven locales, first line of each (the complete
+    // strings are in the mutation proof below): gone from source and page.
+    const FIRST = {
+      ja: "サーバー上のそのファイルは信頼できません", ko: "서버의 그 파일은 믿을 수 없습니다", de: "diese Datei ist auf dem Server also nicht vertrauenswürdig",
+      fr: "ce fichier n'est donc pas fiable sur le serveur", ar: "فذلك الملف غير موثوق على الخادم", es: "así que ese archivo no es de fiar en el servidor",
+      pt: "então aquele arquivo não é confiável no servidor",
+    };
+    for (const lang of FROZEN_LANGS) {
+      expect(JSON.stringify(cliBackupSsh.langs[lang]), lang).not.toContain(FIRST[lang]);
+      const html = readFileSync(resolve(import.meta.dirname, "..", "..", "public", lang, cliBackupSsh.slug, "index.html"), "utf8");
+      expect(html, lang).not.toContain(FIRST[lang]);
+      expect(html, `${lang}: archive notice`).toMatch(/<aside class="archived"/);
+    }
   });
 
   it("rejects a sample quoting the CLI's previous wording", () => {
@@ -373,15 +380,5 @@ describe("the archived SSH backup guide's integrity-failure recovery", () => {
       expect(bad, `${lang}: the missing conditional refusal was not caught`).toMatch(/refused if other files landed/);
       expect(bad, `${lang}: the missing same-destination was not caught`).toMatch(/same intended destination/);
     }
-  });
-
-  it("does not reach the item through any other guide's troubleshooting box", () => {
-    // The locator is a code-block substring, so it would silently pick up a
-    // second item if one were added elsewhere in this document. Pinned to the
-    // section that owns it.
-    const owning = (cliBackupSsh.langs.ja.sections || []).filter((s) =>
-      (s.troubleshooting?.items || []).some((i) => (i.code || []).join("\n").includes(FAILURE_OUTPUT)),
-    );
-    expect(owning).toHaveLength(1);
   });
 });

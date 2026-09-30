@@ -277,8 +277,13 @@ describe("a scheduled push never runs twice into the same destination", () => {
       }
     }
     expect(bad).toEqual([]);
-    // Guards the guard: no scheduled push at all would make the rule vacuous.
-    expect(seen, "no crontab push left to check").toBeGreaterThan(0);
+    // Since 2026-09-30 no guide schedules push at all: the maintained cron line
+    // is a daemon-direct sync, and the archived dated-push lines ran over the
+    // retired SSH transport (DECISION-LOG 2026-09-30 item 2). The rule stays for
+    // any crontab push that returns; the synthetic proof below keeps it live.
+    expect(seen).toBeGreaterThanOrEqual(0);
+    const sample = (cmd) => ({ sections: [{ heading: "x", code: [`0 2 * * * ${cmd} >> ~/relayium-backup.log 2>&1`] }] });
+    expect(cronCommands(sample("relayium push ~/documents relayium://backup-server:9031/$(date +\\%F)/"))).toHaveLength(1);
   });
 
   it("escapes the percent, or cron truncates the command at it", () => {
@@ -296,10 +301,11 @@ describe("a scheduled push never runs twice into the same destination", () => {
   });
 
   it("fails when a scheduled push goes back to a fixed destination", () => {
-    // Mutation proof, on the exact regression: the line these guides shipped.
-    const mutated = JSON.parse(
-      JSON.stringify(GUIDES["howto-automate-server-backups"].langs.ja).replaceAll("/$(date +\\\\%F)/", "/"),
-    );
+    // Mutation proof, on the exact regression: the line these guides shipped
+    // (with its destination written as a daemon-direct target, since the SSH
+    // form is retired), with the dated suffix removed.
+    const shipped = { sections: [{ heading: "x", code: ["0 2 * * * relayium push ~/documents relayium://backup-server:9031/$(date +\\%F)/ >> ~/relayium-backup.log 2>&1"] }] };
+    const mutated = JSON.parse(JSON.stringify(shipped).replaceAll("/$(date +\\\\%F)/", "/"));
     const pushes = cronCommands(mutated).filter((c) => /\brelayium\s+push\b/.test(c));
     expect(pushes.length).toBeGreaterThan(0);
     expect(pushes.every((c) => c.includes("$(date"))).toBe(false);

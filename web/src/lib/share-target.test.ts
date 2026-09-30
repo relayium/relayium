@@ -20,12 +20,18 @@ vi.mock("./filesink", () => ({
 }));
 
 // A tiny in-memory stand-in for the Cache API the SW writes shared files into.
-function stubCaches(entries: Record<string, Response>) {
+function stubCaches(entries: Record<string, Response>, o: { failMatch?: string } = {}) {
   const store = new Map(Object.entries(entries));
   const cache = {
-    match: async (k: string) => store.get(k),
-    delete: async (k: string) => store.delete(k),
+    match: async (k: string) => {
+      if (k === o.failMatch) throw new Error("cache read failed");
+      return store.get(k);
+    },
+    // Like a real Cache: keys() hands back absolute Requests, delete() takes them.
+    delete: async (k: string | { url: string }) =>
+      store.delete(typeof k === "string" ? k : new URL(k.url).pathname),
     put: async (k: string, v: Response) => void store.set(k, v),
+    keys: async () => [...store.keys()].map((url) => ({ url: new URL(url, location.origin).href })),
   };
   vi.stubGlobal("caches", { open: async () => cache });
   return store;
@@ -39,7 +45,7 @@ afterEach(() => {
 describe("drainSharedFiles", () => {
   it("returns nothing and leaves the URL alone when there is no token", async () => {
     history.replaceState(null, "", "/?foo=bar");
-    expect(await drainSharedFiles()).toEqual([]);
+    expect(await drainSharedFiles()).toEqual({ files: [], failed: false });
     expect(location.search).toBe("?foo=bar");
   });
 
@@ -55,7 +61,8 @@ describe("drainSharedFiles", () => {
       }),
     });
 
-    const files = await drainSharedFiles();
+    const { files, failed } = await drainSharedFiles();
+    expect(failed).toBe(false);
 
     // Names (percent-decoded, incl. non-ASCII) and types come from the stashed
     // headers; byte content flows through browser-native Response/File, which
@@ -69,10 +76,50 @@ describe("drainSharedFiles", () => {
     expect(location.search).toBe("?keep=1");
   });
 
-  it("survives a missing cache entry without throwing", async () => {
+  // Audit W2 (2026-09-28): every failure below used to come back as a silent
+  // empty list — the app opened as if nothing had been shared — and a throw
+  // left the token's plaintext in the cache until the SW's 24 h sweep.
+  it("reports a missing cache entry as a failure and still cleans up", async () => {
     history.replaceState(null, "", "/?share-target=tokX");
-    stubCaches({ "/__shared__/tokX/count": new Response("1") }); // entry 0 absent
-    expect(await drainSharedFiles()).toEqual([]);
+    const store = stubCaches({ "/__shared__/tokX/count": new Response("1") }); // entry 0 absent
+    expect(await drainSharedFiles()).toEqual({ files: [], failed: true });
+    expect(store.size).toBe(0);
+  });
+
+  it("delivers what it could read, flags the rest, and deletes all plaintext when a read throws", async () => {
+    history.replaceState(null, "", "/?share-target=tokY");
+    const store = stubCaches(
+      {
+        "/__shared__/tokY/count": new Response("2"),
+        "/__shared__/tokY/0": new Response("a", { headers: { "x-name": "a.txt" } }),
+        "/__shared__/tokY/1": new Response("b", { headers: { "x-name": "b.txt" } }),
+        "/__shared__/other/0": new Response("keep"),
+      },
+      { failMatch: "/__shared__/tokY/1" },
+    );
+    const out = await drainSharedFiles();
+    expect(out.failed).toBe(true);
+    expect(out.files.map((f) => f.name)).toEqual(["a.txt"]);
+    expect([...store.keys()], "this token's plaintext must be gone; others untouched").toEqual([
+      "/__shared__/other/0",
+    ]);
+  });
+
+  it("deletes entries even when the count itself is unreadable", async () => {
+    history.replaceState(null, "", "/?share-target=tokZ");
+    const store = stubCaches({
+      "/__shared__/tokZ/count": new Response("garbage"),
+      "/__shared__/tokZ/0": new Response("secret"),
+    });
+    expect(await drainSharedFiles()).toEqual({ files: [], failed: true });
+    expect(store.size).toBe(0);
+  });
+
+  it("surfaces the service worker's own failure flag and strips it from the URL", async () => {
+    history.replaceState(null, "", "/?share-target-error=1&keep=1");
+    stubCaches({});
+    expect(await drainSharedFiles()).toEqual({ files: [], failed: true });
+    expect(location.search).toBe("?keep=1");
   });
 });
 

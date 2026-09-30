@@ -165,9 +165,16 @@ describe("维护中语言的收件箱文案", () => {
       expect(notes, `${code}: 没说"没有官方镜像"`).toMatch(/no official|没有官方/i);
     });
 
-    it(`${code}: 说清楚 CLI 只有接收侧`, () => {
+    // CLI 现在两侧都有：inbox send 发送（server/cmd/relayium/inbox_send.go），
+    // inbox enable/run 接收。旧的"只有接收侧"是把读者从一条真实命令前赶走。
+    it(`${code}: 说清楚 CLI 也能发送（inbox send）`, () => {
       const lead = m.cliPage.modes.inbox.lead;
-      expect(lead, `${code}: 没说只有接收侧`).toMatch(/RECEIVE side only|只有接收侧/i);
+      expect(lead, `${code}: 还在说只有接收侧`).not.toMatch(/RECEIVE side only|只有接收侧/i);
+      expect(lead, `${code}: 没提 relayium inbox send`).toContain("relayium inbox send");
+      const notes = m.cliPage.modes.inbox.notes.join(" ");
+      for (const cmd of ["inbox devices", "inbox sent", "inbox cancel", "inbox retry", "--wait"]) {
+        expect(notes, `${code}: 没提 ${cmd}`).toContain(cmd);
+      }
     });
 
     it(`${code}: My Devices 的发现性三件套齐全`, () => {

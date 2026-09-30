@@ -7,9 +7,13 @@ import receive from "./content/articles/guides-receive-from-cli.mjs";
 const locales = ["en", "zh", "ja", "ko", "de", "fr", "ar", "es", "pt"];
 const articles = { send, croc, receive };
 
+// Maintained en/zh (2026-09-30): a current CLI pairing session derives its SAS
+// from the keys the two ends exchanged (link/1, like the Web); only the older
+// CLI pairing used pinned certificate fingerprints. The frozen locales keep the
+// archived certificate wording.
 const localeTokens = {
-  en: [/certificate fingerprints/i, /rendezvous service/i, /endpoints?/i, /network hop/i],
-  zh: [/证书指纹/, /会合服务/, /端点/, /网络路径/],
+  en: [/keys the two ends exchanged/i, /rendezvous service/i, /endpoints?/i, /network hop/i],
+  zh: [/双方交换的密钥/, /会合服务/, /端点/, /网络路径/],
   ja: [/証明書フィンガープリント/, /ランデブーサービス/, /エンドポイント/, /ネットワーク経路/],
   ko: [/인증서 지문/, /랑데부 서비스/, /끝점/, /네트워크 경로/],
   de: [/Zertifikatsfingerabdr/i, /Rendezvous-Dienst/i, /Endpunkte?/i, /Netzwerk-Hop/i],
@@ -49,13 +53,15 @@ describe("CLI article SAS precision", () => {
     }
   });
 
-  it("pins the English CLI semantics and preserves the direct-only path", () => {
+  it("pins the English CLI semantics and the relay policy", () => {
     for (const [name, article] of Object.entries(articles)) {
       const copy = JSON.stringify(article.langs.en);
-      expect(copy, name).toMatch(/pinned TLS certificate fingerprints/i);
+      expect(copy, name).toMatch(/keys the two ends exchanged/i);
+      expect(copy, name).not.toMatch(/pinned TLS certificate fingerprints/i);
       expect(copy, name).toMatch(/not (?:prove|every) (?:every )?network hop/i);
-      expect(copy, name).toMatch(/direct-only|direct only/i);
-      expect(copy, name).toMatch(/rather than (?:falling back|routing).*relay/i);
+      // help.go linkRelayPolicy: relay whenever the server issues one.
+      expect(copy, name).toMatch(/whenever the server issues (?:a |an encrypted )?(?:TURN )?relay/i);
+      expect(copy, name).not.toMatch(/send\/receive is direct-only|never relays|rather than (?:falling back|routing)[^"]*relay/i);
     }
   });
 

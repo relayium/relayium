@@ -17,7 +17,7 @@ const ORIGIN = "https://relayium.test";
 const SHARE_ROUTE = "/share-target";
 
 interface FetchEvent {
-  request: { method: string; url: string; mode?: string };
+  request: { method: string; url: string; mode?: string; formData?: () => Promise<FormData> };
   respondWith: (r: Response | Promise<Response>) => void;
 }
 
@@ -31,7 +31,14 @@ const CACHE = "relayium-shell-test";
  * 创建顺序，而 CacheStorage.keys() 的规范保证正是「按插入顺序返回」，旧壳保留策略
  * 整个建立在这一点上。
  */
-function loadSW(o: { precache?: string[]; seed?: [string, string[]][] } = {}) {
+function loadSW(
+  o: {
+    precache?: string[];
+    seed?: [string, string[]][];
+    /** Make the share cache's put() throw from the n-th call on (0-based). */
+    failSharePutAt?: number;
+  } = {},
+) {
   const src = readFileSync(resolve(process.cwd(), "src/sw-template.js"), "utf8")
     .replace("__VERSION__", "test")
     .replace("__PRECACHE__", JSON.stringify(o.precache ?? []))
@@ -66,6 +73,7 @@ function loadSW(o: { precache?: string[]; seed?: [string, string[]][] } = {}) {
   const put: { url: string; body: string }[] = [];
   // 分享缓存是真的会被枚举和删除的（sweepStaleShares），所以这个桩不能只有 put。
   const shareEntries = new Map<string, string>();
+  let sharePuts = 0;
 
   /**
    * shell 及其它命名缓存。Map 保插入顺序 = 创建顺序，keys() 就照这个顺序返回。
@@ -80,13 +88,21 @@ function loadSW(o: { precache?: string[]; seed?: [string, string[]][] } = {}) {
   };
   const shareCache = {
     addAll: async () => {},
-    put: async (req: { url: string }, res: Response) => void put.push({ url: req.url, body: await res.text() }),
+    // handleShare puts by path string. Record it under the absolute URL, the
+    // way a real Cache reports keys(), so the SW's own cleanup is exercised.
+    put: async (req: string | { url: string }, res: Response) => {
+      if (o.failSharePutAt !== undefined && sharePuts++ >= o.failSharePutAt) throw new Error("QuotaExceededError");
+      const url = typeof req === "string" ? req : req.url;
+      const body = await res.text();
+      put.push({ url, body });
+      shareEntries.set(new URL(url, ORIGIN).href, body);
+    },
     keys: async () => [...shareEntries.keys()].map((url) => ({ url })),
     delete: async (req: { url: string }) => shareEntries.delete(req.url),
     // 分享缓存**能**答得上来（真 Cache 也一样）。桩必须忠实，否则「shell 回退绝不
     // 碰分享缓存」那条断言就只是在测一个空实现。
     match: async (req: unknown) => {
-      const body = shareEntries.get(pathOf(req));
+      const body = shareEntries.get(pathOf(req)) ?? shareEntries.get(new URL(pathOf(req), ORIGIN).href);
       return body === undefined ? undefined : new Response(body);
     },
   };
@@ -169,7 +185,15 @@ function loadSW(o: { precache?: string[]; seed?: [string, string[]][] } = {}) {
     return new Response("from network");
   };
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  new Function("self", "caches", "fetch", src)(swSelf, cachesStub, fetchStub);
+  // A real SW resolves Response.redirect("/…") against its own origin; Node's
+  // Response has no base URL and throws, which would turn every share-target
+  // redirect into a rejected promise here.
+  class SWResponse extends Response {
+    static redirect(url: string | URL, status?: number): Response {
+      return Response.redirect(new URL(url, ORIGIN).href, status);
+    }
+  }
+  new Function("self", "caches", "fetch", "Response", src)(swSelf, cachesStub, fetchStub, SWResponse);
 
   return {
     put,
@@ -223,7 +247,7 @@ function loadSW(o: { precache?: string[]; seed?: [string, string[]][] } = {}) {
       await done;
     },
     /** 发一个 fetch 事件，返回 SW 交出的 Response；没拦截则返回 null。 */
-    fetch(req: { method?: string; url: string; mode?: string }): Promise<Response> | null {
+    fetch(req: { method?: string; url: string; mode?: string; formData?: () => Promise<FormData> }): Promise<Response> | null {
       let answer: Promise<Response> | null = null;
       const e: FetchEvent = {
         request: { method: "GET", ...req },
@@ -884,6 +908,55 @@ describe("sw-template 分享缓存的过期清理", () => {
     sw.shareEntries.set(other, "x");
     await sw.activate();
     expect([...sw.shareEntries.keys()]).toEqual([other]);
+  });
+});
+
+// Audit W2 (2026-09-28): a share that fails half-way used to redirect to a
+// bare "/" — the app opened as if nothing had been shared, and whatever had
+// already been written stayed in the cache as plaintext until the 24 h sweep.
+describe("sw-template share-target hand-off", () => {
+  const shareForm = (n: number) => async () => {
+    const fd = new FormData();
+    for (let i = 0; i < n; i++) fd.append("files", new File([`body-${i}`], `f${i}.txt`, { type: "text/plain" }));
+    return fd;
+  };
+  const post = (sw: ReturnType<typeof loadSW>, formData: () => Promise<FormData>) =>
+    sw.fetch({ url: ORIGIN + SHARE_ROUTE, method: "POST", formData })!;
+
+  it("parks every file and redirects the app to its token", async () => {
+    const sw = loadSW();
+    const res = await post(sw, shareForm(2));
+    expect(res.status).toBe(303);
+    const loc = new URL(res.headers.get("location")!);
+    const token = loc.searchParams.get("share-target");
+    expect(token).toBeTruthy();
+    const keys = [...sw.shareEntries.keys()].map((u) => new URL(u).pathname);
+    expect(keys).toEqual([`/__shared__/${token}/count`, `/__shared__/${token}/0`, `/__shared__/${token}/1`]);
+  });
+
+  it("on a failed write deletes what it already cached and tells the app", async () => {
+    const sw = loadSW({ failSharePutAt: 2 }); // count and file 0 land, file 1 throws
+    const res = await post(sw, shareForm(3));
+    expect(res.status).toBe(303);
+    const loc = new URL(res.headers.get("location")!);
+    expect(loc.searchParams.get("share-target-error"), "the app must be told").toBe("1");
+    expect(loc.searchParams.has("share-target")).toBe(false);
+    expect(sw.put.length, "the failure really came after partial writes").toBe(2);
+    expect([...sw.shareEntries.keys()], "partial plaintext left in the cache").toEqual([]);
+  });
+
+  it("does not touch another share's entries while cleaning up", async () => {
+    const sw = loadSW({ failSharePutAt: 1 });
+    const other = `${ORIGIN}/__shared__/${Date.now().toString(36)}-other/0`;
+    sw.shareEntries.set(other, "keep");
+    await post(sw, shareForm(1));
+    expect([...sw.shareEntries.keys()]).toEqual([other]);
+  });
+
+  it("reports an unreadable form as a failure too", async () => {
+    const sw = loadSW();
+    const res = await post(sw, async () => { throw new TypeError("bad multipart"); });
+    expect(new URL(res.headers.get("location")!).searchParams.get("share-target-error")).toBe("1");
   });
 });
 

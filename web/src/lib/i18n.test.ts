@@ -605,14 +605,21 @@ describe("平台定位文案覆盖文件与临时文本", () => {
     });
   }
 
-  it("text 被当作直连模式说明：只有会合握手经过服务器", () => {
+  it("text 的字节路径说的是二进制的中继规则，不是\"只有会合握手经过\"", () => {
     // freenote 那一段没了（它把七种模式压成一句话，正是这次改版要拆开的东西）。
     // 它守的事实换了地方：现在由 text 模式自己的引导句和「模式速览」那一行承担。
     // 命令名是原样的英文标识符，所以这里匹配它本身，而不是各语言的"文本"。
+    //
+    // 2026-09-30：这一行以前断言"直连"，而那是假的——help.go linkRelayPolicy：
+    // 只要服务器为这个码签发了 TURN 中继，text 的每个字节都走中继，并计入生成码
+    // 的账号；只有没签发中继时才点对点。
     for (const { code } of LANGS) {
       const m = messages[code];
       expect(m.cliPage.modes.text.lead, `${code} 的 text 模式没有提到命令名`).toContain("relayium text");
-      expect(m.cliPage.compare.text.path, `${code} 的 text 行没说明字节走直连`).toMatch(/Direct|直连/i);
+      const path = m.cliPage.compare.text.path;
+      expect(path, `${code} 的 text 行没说明中继`).toMatch(/relay|中继/i);
+      expect(path, `${code} 的 text 行没说明没有中继时点对点`).toMatch(/peer to peer|点对点/i);
+      expect(path, `${code} 的 text 行又说只有握手经过`).not.toMatch(/only a rendezvous|只有会合握手经过/i);
     }
   });
 

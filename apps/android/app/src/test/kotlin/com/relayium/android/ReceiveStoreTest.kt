@@ -410,6 +410,49 @@ class ReceiveStoreTest {
         assertFalse("the orphan is gone", File(staging, "batch-0/3.part").exists())
     }
 
+    /** Backdate a whole staging entry, children before the directory, since
+     *  creating a child moves the directory's own mtime. */
+    private fun age(entry: File, ageMs: Long) {
+        val then = System.currentTimeMillis() - ageMs
+        entry.walkBottomUp().forEach { it.setLastModified(then) }
+    }
+
+    @Test
+    fun `stale staging is swept at start without waiting for a receive`() {
+        val staging = temp.newFolder("staging-sweep")
+        // An interrupted batch from an earlier incarnation, idle for two hours.
+        File(staging, "batch-0").mkdirs()
+        File(staging, "batch-0/0.part").writeBytes(ByteArray(64))
+        age(File(staging, "batch-0"), 2 * ReceiveStore.STALE_STAGING_AGE_MS)
+        // Another owner's batch that is still being written right now.
+        File(staging, "batch-7").mkdirs()
+        File(staging, "batch-7/0.part").writeBytes(ByteArray(64))
+
+        val store = ReceiveStore(staging)
+        assertEquals(1, store.sweepStaleStaging())
+        assertFalse("the abandoned plaintext is gone", File(staging, "batch-0").exists())
+        assertTrue("a batch written recently is not touched", File(staging, "batch-7/0.part").exists())
+    }
+
+    @Test
+    fun `the sweep never touches this store's own live batch`() {
+        val (store, staging) = store()
+        val (ops, rootDir) = tree()
+        assertEquals(
+            ReceiveStore.Outcome.Ok,
+            store.begin(listOf(FileMeta("f.bin", 2)), ops, ops.node(rootDir)),
+        )
+        assertEquals(ReceiveStore.Outcome.Ok, store.write(0, byteArrayOf(1)))
+        // Even when its files LOOK abandoned (a stalled provider, a clock jump).
+        staging.listFiles()!!.forEach { age(it, 2 * ReceiveStore.STALE_STAGING_AGE_MS) }
+
+        assertEquals(0, store.sweepStaleStaging())
+        assertEquals(1, store.stagedCount)
+        assertEquals(ReceiveStore.Outcome.Ok, store.write(0, byteArrayOf(2)))
+        assertEquals(ReceiveStore.Outcome.Ok, store.export(0))
+        assertEquals(listOf<Byte>(1, 2), File(rootDir, "f.bin").readBytes().toList())
+    }
+
     @Test
     fun `a failing local sink is a write failure the ACK path can see`() {
         val staging = temp.newFolder("staging-badsink")

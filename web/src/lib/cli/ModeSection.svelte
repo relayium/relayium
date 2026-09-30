@@ -11,7 +11,9 @@
   //
   // The row ends with exactly one guide link, and the row renders it rather than
   // the page: MODE_GUIDE pairs every mode with its walkthrough, so a row cannot
-  // end at its last command block with no way forward. Its text is the guide's
+  // end at its last command block with no way forward. The one exception is an
+  // explicit `null` in MODE_GUIDE (today: pair, which no guide covers yet) —
+  // that row renders no link rather than a link to a guide about something else. Its text is the guide's
   // own localized title (`cli.guides[key]`) — the same string the guide list
   // below uses — so a second translation of the same title never has to exist,
   // and the seven links have seven distinct accessible names. Its arrow is
@@ -45,7 +47,7 @@
   // this component reimplementing any of them. The trailing slash comes from
   // guidePath: these pages are directories, and a link without it costs a
   // redirect.
-  const guideHref = $derived(guidePath(GUIDE_SLUG[guide], lang));
+  const guideHref = $derived(guide ? guidePath(GUIDE_SLUG[guide], lang) : null);
 
   // The arrow points at the link's destination, which in a right-to-left script
   // is to the reader's left. `dir()` answers for any tag, not only the two
@@ -74,12 +76,14 @@
     {/each}
   </ul>
   {@render children?.()}
-  <p class="guide">
-    <a href={guideHref} data-mode-guide={guide}>
-      <span>{cli.guides[guide]}</span>
-      <span class="arrow" class:flip aria-hidden="true">→</span>
-    </a>
-  </p>
+  {#if guide && guideHref}
+    <p class="guide">
+      <a href={guideHref} data-mode-guide={guide}>
+        <span>{cli.guides[guide]}</span>
+        <span class="arrow" class:flip aria-hidden="true">→</span>
+      </a>
+    </p>
+  {/if}
 </section>
 
 <style>
@@ -89,7 +93,8 @@
     border-block-start: 1px solid var(--border);
   }
   /* Device Inbox keeps a mark, because it is the answer to "get this file onto
-     my server" and the only mode whose sender is not the CLI. A rule on the
+     my server" and the one mode whose sender can be the Web or an app as well
+     as the CLI (inbox send). A rule on the
      inline-start edge rather than a tinted fill: the row holds four command
      blocks, and a background wash behind them fights the code styling in both
      themes. */

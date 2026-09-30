@@ -162,6 +162,11 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "no_email_first_signin"})
 			return
 		}
+		// Linking by email needs an email Apple verified (see the web callback).
+		if !claims.EmailVerified {
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "email_not_verified"})
+			return
+		}
 		u, err = s.store.UpsertUserByEmail(r.Context(), claims.Email, in.Name)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)

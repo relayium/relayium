@@ -302,40 +302,85 @@ export function activateWhenIdle(reg: ServiceWorkerRegistration, hadControllerAt
   tryActivate();
 }
 
+/** What a share-target launch produced. `failed` means at least one shared
+ *  file could not be handed over — the app must say so rather than open as if
+ *  nothing had been shared (audit W2, 2026-09-28). */
+export interface SharedDrain {
+  files: File[];
+  failed: boolean;
+}
+
+/** URL flag the service worker sets when it could not even park the files.
+ *  Keep in sync with handleShare in sw-template.js. */
+const SHARE_ERROR_PARAM = "share-target-error";
+
+/**
+ * Delete every cache entry under this token's prefix. Enumerates the cache
+ * rather than trusting `count`, because a failure is exactly when `count` may
+ * be missing, unreadable or wrong — and whatever is left behind is plaintext
+ * that would otherwise sit on disk until the SW's 24 h sweep.
+ */
+async function purgeShareToken(cache: Cache, base: string, count: number): Promise<void> {
+  try {
+    for (const req of await cache.keys()) {
+      const raw = typeof req === "string" ? req : req.url;
+      const path = new URL(raw, location.origin).pathname;
+      if (path.startsWith(base)) await cache.delete(req);
+    }
+  } catch {
+    /* keys() unavailable — fall through to the addressed deletes */
+  }
+  try {
+    await cache.delete(base + "count");
+    for (let i = 0; i < count; i++) await cache.delete(base + i);
+  } catch {
+    /* best effort: the SW's TTL sweep is the last line */
+  }
+}
+
 /** If the current URL carries a share-target token, drain the SW-stashed files
  *  back into File objects, then clean up the cache entries and the URL param so
- *  a reload can't re-trigger. Returns [] when there's nothing to drain. */
-export async function drainSharedFiles(): Promise<File[]> {
+ *  a reload can't re-trigger. Returns no files and `failed: false` when there is
+ *  nothing to drain. On any failure the token's cached plaintext is deleted
+ *  immediately and `failed` is set so the caller can tell the user. */
+export async function drainSharedFiles(): Promise<SharedDrain> {
   const params = new URLSearchParams(location.search);
   const token = params.get("share-target");
-  if (!token) return [];
+  const swFailed = params.has(SHARE_ERROR_PARAM);
+  if (!token && !swFailed) return { files: [], failed: false };
 
-  // Strip the param up front so a refresh doesn't reopen a spent share.
+  // Strip the params up front so a refresh doesn't reopen a spent share.
   params.delete("share-target");
+  params.delete(SHARE_ERROR_PARAM);
   const qs = params.toString();
   history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
 
-  if (!("caches" in window)) return [];
+  if (!token) return { files: [], failed: true };
+  if (!("caches" in window)) return { files: [], failed: true };
+  const base = "/__shared__/" + token + "/";
+  let cache: Cache | undefined;
+  let count = 0;
+  const files: File[] = [];
+  let failed = false;
   try {
-    const cache = await caches.open(SHARE_CACHE);
-    const base = "/__shared__/" + token + "/";
+    cache = await caches.open(SHARE_CACHE);
     const countRes = await cache.match(base + "count");
-    const count = countRes ? parseInt(await countRes.text(), 10) : 0;
-
-    const files: File[] = [];
+    count = countRes ? parseInt(await countRes.text(), 10) : NaN;
+    if (!Number.isFinite(count) || count < 0) {
+      count = 0;
+      failed = true;
+    }
     for (let i = 0; i < count; i++) {
       const res = await cache.match(base + i);
-      if (!res) continue;
+      if (!res) { failed = true; continue; }
       const blob = await res.blob();
       const name = decodeURIComponent(res.headers.get("x-name") || `shared-${i}`);
       files.push(new File([blob], name, { type: res.headers.get("content-type") || blob.type }));
     }
-
-    // Best-effort cleanup: this token's entries are one-shot.
-    await cache.delete(base + "count");
-    for (let i = 0; i < count; i++) await cache.delete(base + i);
-    return files;
   } catch {
-    return [];
+    failed = true;
   }
+  // This token's entries are one-shot, success or not.
+  if (cache) await purgeShareToken(cache, base, count);
+  return { files, failed };
 }

@@ -10,6 +10,60 @@ import (
 // Postgres swap need only touch sqlite.go.
 var ErrNotFound = errors.New("account: not found")
 
+// ErrNodeHasStoredFiles is returned by DeleteFleetNode while stored_files or
+// upload_sessions rows still name the node: deleting it would leave them
+// pointing at an id nobody owns (A-M3). Drain the node and wait for its files
+// to expire and be collected (and its upload sessions to be purged) first.
+var ErrNodeHasStoredFiles = errors.New("account: node still holds stored files")
+
+// ErrStoredFileNodeGone is returned by the stored-file insert when the object
+// names a node whose row no longer exists (it was deleted between placement and
+// persist). Nothing was written; see insertStoredFileOn's node fence.
+var ErrStoredFileNodeGone = errors.New("account: the object's storage node was deleted")
+
+// ErrNodeOwnerMismatch is returned by UpsertNode when the id already belongs to
+// a different owner: the upsert never rewrites a node's owner.
+var ErrNodeOwnerMismatch = errors.New("account: node id belongs to another owner")
+
+// NodeRegisterOutcome is RegisterNode's admission decision.
+type NodeRegisterOutcome int
+
+const (
+	NodeRegisterOK            NodeRegisterOutcome = iota
+	NodeRegisterOwnerMismatch                     // the id is a live node of another owner
+	NodeRegisterRetired                           // tombstoned by another owner
+	NodeRegisterReferenced                        // no tombstone, still referenced by stored data
+	NodeRegisterLimit                             // the user is at the live-node cap
+	NodeRegisterInvalidID                         // a new id central would never generate
+)
+
+// NodeRegistration is RegisterNode's result. Node is the row as written (only
+// meaningful for NodeRegisterOK); Existed/Prior describe the row found inside
+// the transaction; PinRetained reports that the storage pin ratchet kept the
+// prior storage config.
+type NodeRegistration struct {
+	Node        Node
+	Outcome     NodeRegisterOutcome
+	Existed     bool
+	Prior       Node
+	PinRetained bool
+}
+
+// NodeIDReuse classifies an unregistered node id; see Store.NodeIDReuseState.
+type NodeIDReuse int
+
+const (
+	// NodeIDFresh: registrable — never deleted and unreferenced, or deleted by
+	// the registrant itself.
+	NodeIDFresh NodeIDReuse = iota
+	// NodeIDTombstoned: the id was hard-deleted by a DIFFERENT owner than the
+	// registrant; it can never be taken over.
+	NodeIDTombstoned
+	// NodeIDReferenced: no tombstone, but stored data still names the id, so
+	// whoever registered it would receive traffic meant for the old node.
+	NodeIDReferenced
+)
+
 const MaxBrowserDevicesPerAccount = 20
 
 var ErrBrowserDeviceLimit = errors.New("account: browser device limit reached")
@@ -491,6 +545,28 @@ type UsageEvent struct {
 	RecordedAt   int64
 	NodeID       string
 	Billable     bool
+}
+
+// RelayAttribBudget is the per-(node, user) relay-attribution policy the
+// caller holds a heartbeat entry to (A-M8): a leaky bucket that drains at
+// RatePerSec and holds RatePerSec x WindowSecs. See relayAttribRatePerSec.
+type RelayAttribBudget struct {
+	RatePerSec int64
+	WindowSecs int64
+}
+
+// UsageRecordResult is what RecordNodeUsage did with one report's accepted
+// increment: Recorded went into the alloc's usage_periods row now, Deferred
+// was added to the (node, user) owed backlog (recorded later as the bucket
+// drains), Dropped exceeded the owed cap and will never be recorded. Drained
+// is owed bytes from earlier reports this call recorded. Warn is true at most
+// once per (node, user) per window, on a report that deferred or dropped bytes.
+type UsageRecordResult struct {
+	Recorded int64
+	Deferred int64
+	Dropped  int64
+	Drained  int64
+	Warn     bool
 }
 
 // UploadFinalizeRecord is what a finalize recovery may learn about one
@@ -1874,6 +1950,20 @@ type Store interface {
 	// event for its provider changes nothing and reports Applied=false.
 	ApplySubscriptionSource(ctx context.Context, ev SourceEvent) (SubscriptionApply, error)
 	ApplyAuthorizedStripeLifecycle(ctx context.Context, ev SourceEvent) (SubscriptionApply, error)
+	// ApplyStripeReconcileDowngrade writes the reconcile sweep's
+	// missed-cancellation downgrade (Stripe row to free/canceled, canonical
+	// subscription binding cleared) only if the user's Stripe source row is still
+	// exactly `observed`, stamped on Stripe's clock with
+	// max(observed.EventAt, endedAt) — endedAt being the latest ended_at Stripe
+	// reported for the customer (0 = none) — never with the local clock.
+	// false = the row changed (or vanished) since it was observed and nothing
+	// was written.
+	ApplyStripeReconcileDowngrade(ctx context.Context, observed SubscriptionSource, endedAt, now int64) (bool, error)
+	// ApplyStripeSourceIfUnchanged binds and/or applies a Stripe lifecycle
+	// event only if the user's Stripe source row is still exactly what the
+	// caller observed before fetching its Stripe evidence (see the SQLite
+	// implementation). Unchanged=false: nothing written; re-observe, re-fetch.
+	ApplyStripeSourceIfUnchanged(ctx context.Context, in StripeSourceWrite) (StripeSourceWriteResult, error)
 	BillingAuthority(ctx context.Context, userID string) (BillingAuthority, bool, error)
 	// GetSubscriptionSource returns one provider's recorded state for a user.
 	GetSubscriptionSource(ctx context.Context, userID, provider string) (SubscriptionSource, bool, error)
@@ -2106,9 +2196,10 @@ type Store interface {
 	ListInboxTasks(ctx context.Context, deviceID, userID string, now int64, limit int) ([]InboxTask, error)
 	// DeleteInboxTask removes one task the account owns. A REFERENCED share is
 	// never touched — the task borrows that object, it does not own it — but a
-	// task-purpose Stored Object (Phase 1D-A) is deleted with the task, and
-	// returned so the caller can drop its blob. A zero StoredFile means nothing
-	// was released.
+	// task-purpose Stored Object (Phase 1D-A) is deleted with the task, its
+	// blob's delete intent queued in the same transaction, and returned so the
+	// caller can delete the blob and discharge that intent. A zero StoredFile
+	// means nothing was released.
 	DeleteInboxTask(ctx context.Context, taskID, userID string) (deleted bool, released StoredFile, err error)
 	// CountPendingInboxTasks counts a device's unfinished rows, for the
 	// per-device row bound.
@@ -2147,6 +2238,14 @@ type Store interface {
 	// NodeRelayedSince sums relayed bytes per node for usage since `since`
 	// (per-node monthly traffic cap), keyed by node id.
 	NodeRelayedSince(ctx context.Context, since int64) (map[string]int64, error)
+	// RecordNodeUsage is RecordUsage for a node heartbeat entry, additionally
+	// holding the recorded increment to the (e.NodeID, e.UserID) relay-
+	// attribution budget b in the same transaction (A-M8).
+	RecordNodeUsage(ctx context.Context, e UsageEvent, b RelayAttribBudget) (UsageRecordResult, error)
+	// SettleRelayAttribBudget is the per-heartbeat upkeep of that budget:
+	// drains owed bytes of up to maxPairs pairs into the ledger as their
+	// buckets allow, and prunes idle rows that owe nothing.
+	SettleRelayAttribBudget(ctx context.Context, now int64, b RelayAttribBudget, maxPairs int) (drained, pruned int64, err error)
 	// admin (read-only)
 	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
 	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)
@@ -2334,6 +2433,11 @@ type Store interface {
 	// usage_monthly (per-month billing ledger: upload/download bytes; relay is
 	// derived from usage_events, not stored here)
 	RecordMeter(ctx context.Context, userID string, kind UsageKind, bytes, at int64) error
+	// MeterDownload bills download egress: the bytes land on the meter or,
+	// when the increment is refused, in the unbilled_meter outbox for GC to
+	// settle — exactly once either way. ctx bounds only acquiring the
+	// connection; a non-nil error means the bytes are in neither place.
+	MeterDownload(ctx context.Context, userID string, bytes, at int64) error
 	// EnqueueUnbilledMeter durably records bytes that are owed after a
 	// RecordMeter failed, on the paths whose evidence does not survive the
 	// failure. See UnbilledMeter.
@@ -2387,6 +2491,10 @@ type Store interface {
 	// dismissal without touching the result.
 	SetReleaseCheckDismissed(ctx context.Context, tag string, at int64) error
 	// relay nodes (self-reporting fleet telemetry)
+	// UpsertNode inserts a node or updates a same-owner row. It never rewrites
+	// an existing row's owner: an id of another owner returns
+	// ErrNodeOwnerMismatch and changes nothing (A-M3). Registration itself goes
+	// through RegisterNode.
 	UpsertNode(ctx context.Context, n Node) (Node, error)
 	// TouchNode records a heartbeat. activeTransfers is the node's live
 	// in-flight allocation count (see Node.ActiveTransfers) and, like the three
@@ -2415,8 +2523,12 @@ type Store interface {
 	UserStorageNodes(ctx context.Context, userID string, since, minFree int64) ([]Node, error)
 	// DeleteNode removes a user-owned node, scoped to its owner: only a node
 	// with owner_user_id == ownerUserID is deleted, so a non-owner's call and a
-	// missing id are indistinguishable (both ErrNotFound). Also clears the
-	// node's pending_node_deletes entries.
+	// missing id are indistinguishable (both ErrNotFound). It tombstones the
+	// id and — in the same transaction — retires the row while
+	// cleanup still needs its storage endpoint (queued deletes, upload sessions,
+	// objects) or removes it otherwise; its queued deletes are kept either way
+	// (A-M3, see retireOrDeleteNodeTx). Never refused for the owner. A retired
+	// node is invisible to its owner (a second delete is ErrNotFound).
 	DeleteNode(ctx context.Context, id, ownerUserID string) error
 	// SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
 	SetNodeLimits(ctx context.Context, nodeID string, trafficLimit, diskLimit int64) error
@@ -2465,7 +2577,49 @@ type Store interface {
 	// storage (node_id unset) — the app server's own disk fallback.
 	CentralStoredBytes(ctx context.Context) (int64, error)
 	// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'.
+	// It refuses (ErrNodeHasStoredFiles) while any stored_files row still names
+	// the node, and records the id in node_tombstones in the same transaction as
+	// the delete, so no other owner can ever register the id (A-M3). Queued
+	// node deletes are kept, and while any remain the row is retired rather than
+	// removed so GC can still reach the machine (retireOrDeleteNodeTx).
 	DeleteFleetNode(ctx context.Context, id string) error
+	// NodeIDReuseState classifies a node id that has NO row in nodes, for a
+	// register by (ownerType, ownerUserID) — see A-M3:
+	//   - tombstoned (hard-deleted by DeleteNode/DeleteFleetNode) by the SAME
+	//     owner (fleet: owner_type fleet; user: same user id) -> NodeIDFresh:
+	//     the owner may bring its own machine back as a new node;
+	//   - tombstoned by a different owner -> NodeIDTombstoned;
+	//   - no tombstone, but a stored_files, upload_sessions or
+	//     pending_node_deletes row still names it (a deletion from before
+	//     tombstones existed, whose owner is therefore unknown) ->
+	//     NodeIDReferenced, for every registrant;
+	//   - otherwise NodeIDFresh.
+	NodeIDReuseState(ctx context.Context, id, ownerType, ownerUserID string) (NodeIDReuse, error)
+	// RegisterNode is the register handler's single write, and the only place
+	// its admission is decided (A-M3/A-M4). In ONE transaction it: re-reads the
+	// id; for an existing row refuses a different owner
+	// (NodeRegisterOwnerMismatch) or updates it (register-updatable columns
+	// only, with the storage pin ratchet applied against the current row); for
+	// a new id (an empty n.ID gets a generated one) refuses a malformed id, one
+	// tombstoned by another owner or still referenced (NodeIDReuseState), and —
+	// for owner_type 'user' with userNodeCap > 0 — an owner already at
+	// userNodeCap live nodes, and otherwise INSERTs. Refusals return a nil error
+	// and write nothing. Never overwrites an existing row's owner.
+	RegisterNode(ctx context.Context, n Node, userNodeCap int) (NodeRegistration, error)
+	// NodeDeleteBlockers counts, per node id, the rows that make DeleteFleetNode
+	// refuse (ErrNodeHasStoredFiles): every stored_files row naming the node —
+	// INCLUDING expired rows the GC has not collected yet — plus every
+	// upload_sessions row. Nodes with none are absent. For the admin panel, so
+	// what it shows matches what delete will accept.
+	NodeDeleteBlockers(ctx context.Context) (map[string]int, error)
+	// PurgeRetiredNodes removes retired node rows (deleted_at != 0) that no
+	// pending_node_deletes, upload_sessions or stored_files row names any more,
+	// and reports how many. Their tombstones stay (A-M3).
+	PurgeRetiredNodes(ctx context.Context) (int64, error)
+	// CountLiveUserNodes counts a user's owner_type='user' nodes that are not
+	// deregistered (removed_at = 0) — the population the BYO rollout governs and
+	// the per-user registration cap (maxLiveNodesPerUser) is checked against.
+	CountLiveUserNodes(ctx context.Context, userID string) (int, error)
 	// node_rollout (Part 2: automatic node update rollout state machine).
 	// GetRolloutTrack returns ok=false if the track has no persisted state yet
 	// (a fresh DB, or a track that has never had a rollout started).
@@ -2638,6 +2792,20 @@ type Store interface {
 	// CreateSessionAtEpoch inserts sess only while the user's credential_epoch
 	// still equals epoch (false = a password reset/change got there first).
 	CreateSessionAtEpoch(ctx context.Context, sess Session, epoch int64) (bool, error)
+	// CreateSessionForIdentityAtEpoch inserts sess in one statement only while
+	// the user's credential_epoch still equals epoch, the account is not pending
+	// deletion, and identities(provider, subject) still maps to sess.UserID
+	// (false = any of those changed since the caller checked them).
+	CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error)
+	// CreateReactivateTokenForIdentityLogin inserts a "reactivate" token in one
+	// statement only while the account is pending deletion at epoch and the
+	// subject predicate holds (linked: mapped to t.UserID; unseen: mapped to no
+	// account and the account email still t.Email). false = state moved.
+	CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool) (bool, error)
+	// VerifyEmailForIdentityLogin clears a password planted while unverified
+	// and marks the email verified, in one transaction guarded by epoch, active
+	// state, unchanged email and the subject mapping (false = state moved).
+	VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error)
 	// CredentialEpoch / CredentialEpochByEmail read users.credential_epoch
 	// (0 for an unknown address).
 	CredentialEpoch(ctx context.Context, userID string) (int64, error)

@@ -77,6 +77,11 @@ func (s *receiptWriteSpy) RecordMeter(ctx context.Context, userID string, kind U
 	return s.Store.RecordMeter(ctx, userID, kind, bytes, at)
 }
 
+func (s *receiptWriteSpy) MeterDownload(ctx context.Context, userID string, bytes, at int64) error {
+	s.t.Errorf("download-receipt handler metered %d download bytes (MeterDownload); it must not write", bytes)
+	return s.Store.MeterDownload(ctx, userID, bytes, at)
+}
+
 func (s *receiptWriteSpy) AddDownloadStat(ctx context.Context, userID string, bytes int64) error {
 	s.t.Errorf("download-receipt handler adjusted download stats by %d (AddDownloadStat); it must not write", bytes)
 	return s.Store.AddDownloadStat(ctx, userID, bytes)
@@ -239,6 +244,7 @@ func seedReceiptService(t *testing.T, clock func() time.Time) (*Service, *SQLite
 	st := s.store.(*SQLiteStore)
 	ctx := context.Background()
 	owner, _ := st.UpsertUserByEmail(ctx, "receipt@example.com", "")
+	am3EnsureNode(t, st, "fleetnode", "fleet", "") // the insert's node fence
 	if err := st.CreateStoredFile(ctx, StoredFile{
 		ID: "f", UserID: owner.ID, BlobKey: "bk", EncManifest: []byte("m"), Size: 200,
 		NodeID: "fleetnode", CreatedAt: 1, ExpiresAt: 1 << 40,

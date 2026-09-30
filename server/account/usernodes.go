@@ -2,6 +2,7 @@ package account
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -121,7 +122,12 @@ func (s *Service) handleRenameMyNode(w http.ResponseWriter, r *http.Request, u U
 func (s *Service) handleDeleteMyNode(w http.ResponseWriter, r *http.Request, u User) {
 	id := r.PathValue("id")
 	if err := s.store.DeleteNode(r.Context(), id, u.ID); err != nil {
-		http.Error(w, "not found", http.StatusNotFound) // non-owner and missing are indistinguishable
+		switch {
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound) // non-owner and missing are indistinguishable
+		default:
+			http.Error(w, "server error", http.StatusInternalServerError)
+		}
 		return
 	}
 	// Revoke any token bound to this node (owner-scoped).

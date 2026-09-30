@@ -96,11 +96,14 @@
     <string name="inbox_sending_failed_retryable">That device could not save it yet and may retry.</string>
     <string name="inbox_sending_failed_terminal">The delivery ended without being saved.</string>
     <string name="inbox_sending_stopped">Stopped.</string>
-    <string name="inbox_sending_ambiguous">Relayium cannot tell whether this reached the other device. Trying again is safe: the server keeps only one copy of this delivery.</string>
+    <string name="inbox_sending_ambiguous">Relayium couldn\'t tell whether this was handed over. Nothing has been deleted, and trying again continues the same delivery instead of making a second one.</string>
     <string name="inbox_sending_upload_unknown">The upload stopped without an answer, so Relayium cannot tell whether these encrypted bytes reached the server. Sending again would start a separate upload and still would not answer that, so this one cannot safely be retried.</string>
-    <string name="inbox_sending_upload_unsettled">Relayium couldn\'t confirm whether this upload finished, so nothing has been delivered. The server may still hold it; Retry asks again without uploading it twice.</string>
+    <string name="inbox_sending_upload_unsettled">Relayium couldn\'t confirm whether this upload finished, so nothing has been delivered. The server may still hold it; Try again asks again without uploading it twice.</string>
     <string name="inbox_sending_cancel">Stop</string>
-    <string name="inbox_sending_retry">Send</string>
+    <string name="inbox_sending_send">Send</string>
+    <string name="inbox_sending_retry">Try again</string>
+    <!-- The SPOKEN name of one Outgoing control: the control, the device, what it carries. -->
+    <string name="inbox_sending_control_spoken">%1$s · %2$s · %3$s</string>
     <string name="inbox_sending_discard">Remove</string>
     <string name="inbox_sending_discard_title">Remove this from Outgoing?</string>
     <string name="inbox_sending_discard_body">It will not be sent, and the encrypted copy on this device is deleted now. If part of it was already uploaded, relayium.com discards that on its own within about an hour.</string>

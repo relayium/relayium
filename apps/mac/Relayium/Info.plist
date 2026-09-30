@@ -115,5 +115,7 @@
 	<string>https://relayium.com/apps/macos/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>AoA0oNo2cZzjIJ4CJgnaFUhy3EAucSxcM+/iayLux6k=</string>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

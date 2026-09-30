@@ -537,7 +537,7 @@ struct AccountSummaryView: View {
     /// itself stays in the model and never becomes SwiftUI state.
     private func copyButton(link: String, row: StoredFileRow) -> some View {
         Button {
-            UIPasteboard.general.string = link
+            copyCapabilityLink(link)
             copiedStoredFileID = row.id
         } label: {
             Label(L10n.t(copiedStoredFileID == row.id

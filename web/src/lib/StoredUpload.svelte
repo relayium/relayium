@@ -7,6 +7,7 @@
   import { maxSizeHint } from "./max-size";
   import { hasFiles, filesFromDataTransfer } from "./drag";
   import { rememberUploadKey } from "./upload-keys";
+  import { progressPercent } from "./progress-percent";
   import { LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
   import { holdRefresh } from "./app-update.svelte";
   import { session } from "./auth.svelte";
@@ -67,6 +68,10 @@
   // "uploading" phase that runs 0→100 once. Only the single-shot fallback still has
   // two phases (encrypt, then POST); the label says which one is live.
   let phase = $state<"encrypting" | "uploading">("encrypting");
+  // Every byte is on the server but the finalize/complete response has not come
+  // back yet. The bar stays at 99 % and the label says it is confirming: until
+  // that response there is no link, and it may still fail (audit W3).
+  let finishing = $state(false);
   let link = $state("");
   let expiresAt = $state(0); // unix seconds of the generated link, 0 until ready
   let err = $state("");
@@ -140,6 +145,7 @@
     busy = true;
     progress = 0;
     phase = "encrypting";
+    finishing = false;
     controller = new AbortController();
     // 刷新会把这次上传整个丢掉，连带那把只存在于本机内存里的零知识密钥（它要等
     // 上传成功才 rememberUploadKey）。这条路完全在 workspace 之外，warnsOnLeave
@@ -149,7 +155,10 @@
       const out = await uploadFileResumable(files, { burnAfterRead: burn, ttl }, (p) => {
         // The bar tracks whichever phase is live.
         phase = p.phase;
-        progress = p.total > 0 ? Math.round((p.sent / p.total) * 100) : 0;
+        // Capped below 100 until uploadFileResumable resolves, i.e. until the
+        // server has confirmed the upload.
+        progress = progressPercent(p.sent, p.total, false);
+        finishing = p.phase === "uploading" && p.total > 0 && p.sent >= p.total;
       }, controller.signal);
       link = buildDownloadLink(location.origin, out.id, out.key);
       expiresAt = out.expiresAt;
@@ -167,6 +176,7 @@
       else err = t.stored.errUpload;
     } finally {
       releaseRefresh();
+      finishing = false;
       busy = false;
       controller = null;
     }
@@ -215,9 +225,9 @@
   {#if bigBatch}<p class="bignote">{t.stored.bigNote}</p>{/if}
 
   {#if busy}
-    <div class="progress-bar" role="progressbar" aria-label={phase === "uploading" ? t.stored.uploadingNow : t.stored.encrypting} aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
+    <div class="progress-bar" role="progressbar" aria-label={finishing ? t.stored.finishing : phase === "uploading" ? t.stored.uploadingNow : t.stored.encrypting} aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
     <!-- 同 DownloadPage：百分比不进 live region，理由见那里的注释。 -->
-    <p class="phase">{phase === "uploading" ? `${t.stored.uploadingNow} ${progress}%` : `${t.stored.encrypting} ${progress}%`}</p>
+    <p class="phase">{finishing ? t.stored.finishing : phase === "uploading" ? `${t.stored.uploadingNow} ${progress}%` : `${t.stored.encrypting} ${progress}%`}</p>
     <button type="button" class="btn btn-ghost cancel" onclick={cancel}>{t.cancel}</button>
   {/if}
 

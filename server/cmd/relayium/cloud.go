@@ -164,11 +164,18 @@ func runLogout(args []string, stdout, stderr io.Writer) int {
 
 // runWhoami reports the locally stored account, if any.
 func runWhoami(args []string, stdout, stderr io.Writer) int {
-	if wantsHelp(args) {
+	fs := flag.NewFlagSet("whoami", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var configDir string
+	fs.StringVar(&configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
+	if wantsHelpFS(fs, args) {
 		fmt.Fprint(stdout, whoamiUsage)
 		return 0
 	}
-	cfgDir, err := resolveConfigDir("")
+	if err := parseArgs(fs, args); err != nil {
+		return 2
+	}
+	cfgDir, err := resolveConfigDir(configDir)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -288,11 +295,12 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	var burn bool
 	var ttlArg string
 	var maxDownloads int64
-	var server string
+	var server, configDir string
 	fs.BoolVar(&burn, "burn", false, "delete after first download")
 	fs.StringVar(&ttlArg, "ttl", "", "retention, as a duration (7d, 2h, 90m) or seconds")
 	fs.Int64Var(&maxDownloads, "max-downloads", 0, "max number of downloads allowed")
 	fs.StringVar(&server, "server", "", "override the cloud server (defaults to the logged-in server)")
+	fs.StringVar(&configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
 	if wantsHelpFS(fs, args) {
 		fmt.Fprint(stdout, upUsage)
 		return 0
@@ -306,7 +314,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	cfgDir, err := resolveConfigDir("")
+	cfgDir, err := resolveConfigDir(configDir)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

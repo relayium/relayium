@@ -54,7 +54,7 @@ export const SECTIONS = [
 
 export type SectionKey = (typeof SECTIONS)[number]["key"];
 
-// ── The six modes ────────────────────────────────────────────────────────────
+// ── The seven modes ──────────────────────────────────────────────────────────
 //
 // `name` is the command surface, so it is code-native in every language: a
 // reader who translates "send / receive" gets a command that does not exist.
@@ -67,6 +67,7 @@ export const CLI_MODES = [
   { key: "inbox", id: "device-inbox", name: "Device Inbox", cmd: "relayium inbox enable --dir ~/inbox" },
   { key: "text", id: "text", name: "text", cmd: "relayium text [code]" },
   { key: "sendReceive", id: "send-receive", name: "send / receive", cmd: "relayium send … / relayium receive <code>" },
+  { key: "pair", id: "pair", name: "pair", cmd: "relayium pair [code]" },
   { key: "serve", id: "serve", name: "serve", cmd: "relayium serve --dir ~/inbox" },
   { key: "sync", id: "sync", name: "sync", cmd: "relayium sync ./site relayium://host" },
 ] as const;
@@ -82,7 +83,7 @@ export type ModeKey = (typeof CLI_MODES)[number]["key"];
 // tests assert: a mode in two branches is a page that cannot answer "which one".
 export const TASK_BRANCHES = [
   { key: "offline", modes: ["cloud", "inbox"] },
-  { key: "bothOnline", modes: ["text", "sendReceive"] },
+  { key: "bothOnline", modes: ["text", "sendReceive", "pair"] },
   { key: "managed", modes: ["serve", "sync"] },
 ] as const;
 
@@ -92,7 +93,7 @@ export type TaskKey = (typeof TASK_BRANCHES)[number]["key"];
 //
 // Four columns, each answering one thing the modes genuinely differ on. There
 // is deliberately no "resume" column: resume is a `sync` property, and a column
-// that has to read "no" six times is a table that exists to be filled in.
+// that has to read "no" seven times is a table that exists to be filled in.
 export const COMPARE_COLUMNS = ["account", "online", "path", "verify"] as const;
 
 export type CompareColumn = (typeof COMPARE_COLUMNS)[number];
@@ -120,6 +121,10 @@ export type CompareColumn = (typeof COMPARE_COLUMNS)[number];
 // table excludes it for that reason — see help_flagscope_test.go's
 // TestAdvertiseStaysOutOfTheCommonFlagTable. It is mentioned once, in prose,
 // with that condition attached.
+//
+// 2026-09-30 (the next CLI release): pair joined --verify/--server/--config-dir,
+// whoami/up/send/text/pair learned --config-dir (help.go, run.go `usage`),
+// inbox send takes --ttl too, and pair's own --dest/--accept got rows.
 export const FLAG_ROWS = [
   { key: "dir", flag: "--dir <d>", who: "serve · inbox enable · inbox service" },
   { key: "bind", flag: "--bind <addr>", who: "serve" },
@@ -129,18 +134,24 @@ export const FLAG_ROWS = [
   { key: "noResume", flag: "--no-resume", who: "serve · push" },
   { key: "delete", flag: "--delete", who: "sync" },
   { key: "watch", flag: "--watch", who: "sync" },
-  { key: "verify", flag: "--verify", who: "send · receive · text" },
+  { key: "dest", flag: "--dest <dir>", who: "pair" },
+  { key: "accept", flag: "--accept", who: "pair" },
+  { key: "verify", flag: "--verify", who: "pair · send · receive · text" },
   { key: "yes", flag: "--yes", who: "text" },
   { key: "burn", flag: "--burn", who: "up" },
-  { key: "ttl", flag: "--ttl <dur>", who: "up" },
+  { key: "ttl", flag: "--ttl <dur>", who: "up · inbox send" },
   { key: "maxDownloads", flag: "--max-downloads <n>", who: "up" },
-  { key: "server", flag: "--server <url>", who: "login · up · down · send · receive · text" },
+  { key: "server", flag: "--server <url>", who: "login · up · down · pair · send · receive · text" },
   { key: "deviceName", flag: "--device-name <label>", who: "login" },
   { key: "localOnly", flag: "--local-only", who: "logout · inbox disable" },
   { key: "check", flag: "--check", who: "update" },
   { key: "force", flag: "--force", who: "update" },
   { key: "serviceUser", flag: "--service-user <u>", who: "inbox service" },
-  { key: "configDir", flag: "--config-dir <d>", who: "push · sync · serve · id · authorize · login · logout · inbox <any>" },
+  {
+    key: "configDir",
+    flag: "--config-dir <d>",
+    who: "push · sync · serve · id · authorize · login · logout · whoami · up · pair · send · text · inbox <any>",
+  },
 ] as const;
 
 export type FlagKey = (typeof FLAG_ROWS)[number]["key"];
@@ -210,9 +221,14 @@ export const GUIDE_SLUG = Object.fromEntries(GUIDES.map((g) => [g.key, g.slug]))
 // six came to be missing — a link that lives in the page's markup is a link that
 // can be forgotten one row at a time.
 //
-// So the pairing is data, `Record<ModeKey, GuideKey>` is the type, and
-// ModeSection renders it: a new mode without a guide, or a renamed guide key, is
-// a compile error rather than a row that quietly has no way forward.
+// So the pairing is data, `Record<ModeKey, GuideKey | null>` is the type, and
+// ModeSection renders it: a new mode missing from the map, or a renamed guide
+// key, is a compile error rather than a row that quietly has no way forward.
+//
+// `null` is an explicit, reviewed "no walkthrough exists yet" — never a
+// default. `pair` is the one: no current guide covers the two-way session, and
+// pointing its row at a guide about something else would be a link that lies.
+// Give it a guide by writing one, not by borrowing a neighbour's.
 //
 // It is deliberately one guide per mode and not "the guides that mention this
 // mode". Three guides mention `sync`; a row that offers three links has asked
@@ -222,9 +238,10 @@ export const MODE_GUIDE = {
   inbox: "deviceInboxServer",
   text: "terminal",
   sendReceive: "sendToSomeone",
+  pair: null,
   serve: "serverToServer",
   sync: "syncLargeFolder",
-} as const satisfies Record<ModeKey, GuideKey>;
+} as const satisfies Record<ModeKey, GuideKey | null>;
 
 // ── FAQ ──────────────────────────────────────────────────────────────────────
 export const FAQ_KEYS = ["account", "offline", "resume", "verification"] as const;
@@ -344,6 +361,19 @@ relayium send ./file.zip
 
 # receiver — no account needed
 relayium receive 483920 ./downloads`,
+  },
+  {
+    key: "pair",
+    name: "relayium pair",
+    code: `# one side mints a code (needs relayium login) and waits
+relayium pair --dest ~/Downloads
+#   → Code: 483920
+#     On the other machine:  relayium pair 483920   (or type the code in the Relayium app or web page)
+
+# in the session: type a line to send a message, or
+/send ./report.pdf ./photos     # offer files or folders
+/accept                         # save what the other side offered (into --dest)
+/quit                           # leave once what you queued has gone`,
   },
   {
     key: "serveListen",

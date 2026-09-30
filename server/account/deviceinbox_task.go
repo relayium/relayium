@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -136,12 +137,20 @@ func (s *Service) handleInboxTaskBlob(w http.ResponseWriter, r *http.Request, u 
 	} else {
 		w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	}
-	n, _ := io.Copy(w, rc)
+	// Exactly the committed bytes, and so exactly what is metered: see the
+	// same bound in handleFileBlob.
+	n, _ := io.Copy(w, io.LimitReader(rc, sf.Size-start))
 	if n > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = s.store.AddDownloadStat(ctx, sf.UserID, n)
-		_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
 		cancel()
+		// Own budget for the bill (see handleFileBlob): meter or owed-bill
+		// outbox, and an error means neither.
+		mctx, mcancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := s.store.MeterDownload(mctx, sf.UserID, n, s.now().Unix()); err != nil {
+			log.Printf("UNSETTLED BILL: inbox: %d bytes of download egress for user %s could be neither metered nor journaled; they stay unbilled: %v", n, sf.UserID, err)
+		}
+		mcancel()
 	}
 }
 
@@ -403,7 +412,18 @@ func (s *Service) handleDeleteInboxTask(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if released.ID != "" {
-		s.dropUploadBlob(r.Context(), released.NodeID, released.BlobKey)
+		// The delete intent is already queued (DeleteInboxTask); deleting now is
+		// promptness, and a success discharges the intent. Detached from the
+		// client hanging up and bounded, like the share-delete route; a failure
+		// is left to GC's drain.
+		now := s.now().Unix()
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), nodeDeleteTimeout)
+		if bs, berr := s.blobFor(dctx, released.NodeID); berr == nil {
+			if derr := bs.Delete(dctx, released.BlobKey); derr == nil {
+				_ = dischargePendingNodeDelete(dctx, s.store, released.BlobKey, released.NodeID, now)
+			}
+		}
+		cancel()
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

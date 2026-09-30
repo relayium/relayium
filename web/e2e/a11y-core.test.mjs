@@ -175,8 +175,33 @@ describe("scanner target readiness", () => {
       "spa/device-inbox/signed-in",
       "spa/me/devices",
       "spa/me/devices/mobile-dark",
+      "spa/offline-transfer/signed-in",
       "spa/cross-network/account-modal/pricing",
     ]);
+  });
+
+  it("scans the stored-link page, the mailed account landings and zh-Hans screens", () => {
+    // Audit 2026-09-28: none of these had a cell. Each ready selector names the
+    // control that exists only in the state worth scanning — never the shell.
+    expect(target("spa/offline-transfer/signed-out").ready).toBe(".offlinepage .signin");
+    const signedIn = target("spa/offline-transfer/signed-in");
+    expect(signedIn.ready).toBe(".offlinepage .stored .opts");
+    expect(signedIn.fixture["/api/me"].user).toBeTruthy();
+    for (const [id, path] of [
+      ["spa/magic-link/confirm", "/magic-link"],
+      ["spa/verify-email/confirm", "/verify-email"],
+      ["spa/reset-password/form", "/reset-password"],
+      ["spa/account-delete/confirm", "/account/delete/confirm"],
+      ["spa/account-reactivate/confirm", "/account/reactivate"],
+    ]) {
+      const t = target(id);
+      expect(t.url, id).toBe(`${path}#token=a11y`); // without a token the page shows "no link"
+      expect(t.ready, id).toMatch(/^\.auth-page /);
+      expect(t.fixture, id).toBeUndefined(); // no request happens before a press
+    }
+    const zh = TARGETS.filter((t) => t.id.endsWith("/zh") && t.id.startsWith("spa/"));
+    expect(zh.map((t) => t.id)).toEqual(["spa/landing/zh", "spa/offline-transfer/zh", "spa/account-delete/zh"]);
+    for (const t of zh) expect(new URL(t.url, "https://x.test").searchParams.get("lang"), t.id).toBe("zh");
   });
 
   it("scans the signed-in Device Inbox, where the send controls now live", () => {

@@ -435,7 +435,7 @@ downloads/report.pdf
     items: [
       {
         q: "我需要账号吗？",
-        a: "上传时需要；发送时，只在必须签发配对码的情况下需要。relayium up 始终需要 relayium login，这样文件才能存到你的账号下。relayium send 只在服务器必须为你签发一个新的配对码时才需要——用别人给你的配对码运行 send，它不会签发任何东西，因此也不需要登录。relayium down 和 relayium receive 不需要账号，push/pull、daemon 直连、sync 也都不需要。",
+        a: "上传时需要；发送时，只在必须签发配对码的情况下需要。relayium up 始终需要 relayium login，这样文件才能存到你的账号下。relayium send 只在服务器必须为你签发一个新的配对码时才需要——用别人给你的配对码运行 send，它不会签发任何东西，因此也不需要登录。relayium down 和 relayium receive 不需要账号，daemon 直连 push/sync 也不需要。",
       },
       {
         q: "我的文件加密吗？",
@@ -474,7 +474,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "二台のコンピュータが同時に起きていることは決してない、という場面があります。今夜は仕事用ノートからファイルを置いておき、明日は自宅のデスクトップから取りたい。ライブ接続を待つ人は誰もいません。relayium up と relayium down はまさにそれです。up はローカルで暗号化してアカウントにアップロードし、down は後から任意のマシンで取得・復号します。P2P ハンドシェイクも、双方が ssh できるサーバーも不要です。",
-    "これは CLI の中で Relayium アカウントを使う主な部分です。もう一つはペアリングコードの発行にアカウントを必要とする send です。残りのバインドは任意で、push/pull、デーモン直結、sync はログインなしで動き続け、receive も同様です。ダウンロードにはアカウントは一切不要で、リンクさえあれば十分です。",
+    "これは CLI の中で Relayium アカウントを使う主な部分です。もう一つはペアリングコードの発行にアカウントを必要とする send です。残りのバインドは任意で、デーモン直結の push と sync はログインなしで動き続け、receive も同様です。ダウンロードにはアカウントは一切不要で、リンクさえあれば十分です。",
   ],
   sections: [
     {
@@ -482,9 +482,9 @@ const ja = {
       body: ["相手側がオンラインかどうか、二台がどう到達し合うかでモードを選びます："],
       bullets: [
         "up / down（このガイド）：二台が同時にオンラインになりません。今アップロードし、後で自分（または別のマシン）がダウンロードします。アカウント経由です。",
-        "send / receive：両端が今オンラインで、使い捨てコードで直接 P2P 転送したいときです。",
-        "push / pull：相手のマシンに既に ssh できます。",
-        "relayium login が要るのは up と send の二つ。up はファイルをアカウントに保存するため、send はペアリングコードを発行しなければならないときだけ（コードを渡されていれば不要）。down、receive、push/pull、デーモン直結、sync はアカウント不要です。",
+        "send / receive：両端が今オンラインで、使い捨てコードで転送したいときです（サーバーがそのコードにリレーを発行した場合は暗号化リレーを通ります）。",
+        "serve + push / sync（デーモン直結）：両方のマシンが自分のもので、互いに到達できます。以前の SSH 経由の push / pull は廃止されました。",
+        "relayium login が要るのは up と send の二つ。up はファイルをアカウントに保存するため、send はペアリングコードを発行しなければならないときだけ（コードを渡されていれば不要）。down、receive、デーモン直結の push/sync はアカウント不要です。",
       ],
     },
     {
@@ -665,7 +665,7 @@ downloads/report.pdf
     items: [
       {
         q: "アカウントは必要ですか？",
-        a: "アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルを自分のアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです。誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、push/pull、デーモン直結、sync もアカウントなしで動きます。",
+        a: "アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルを自分のアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです。誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、デーモン直結の push/sync もアカウントなしで動きます。",
       },
       {
         q: "ファイルは暗号化されますか？",
@@ -700,7 +700,7 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "두 컴퓨터가 동시에 켜져 있는 일이 결코 없을 때가 있습니다. 오늘 밤 업무용 노트북에서 파일을 올려두고 내일 집 데스크톱에서 받고 싶은데, 실시간 연결을 기다리는 사람은 아무도 없습니다. relayium up과 relayium down이 바로 그 일을 합니다. up은 로컬에서 암호화해 계정에 업로드하고, down은 나중에 아무 기기에서나 가져와 복호화합니다. P2P 핸드셰이크도, 둘 다 ssh 할 수 있는 서버도 필요 없습니다.",
-    "이것은 CLI에서 Relayium 계정을 사용하는 주된 부분이며, 다른 하나는 페어링 코드를 발급하기 위해 계정이 필요한 send입니다. 나머지의 바인딩은 선택 사항입니다. push/pull, 데몬 다이렉트, sync는 로그인 없이 계속 동작하고 receive도 마찬가지입니다. 다운로드에는 계정이 전혀 필요 없고 링크만 있으면 됩니다.",
+    "이것은 CLI에서 Relayium 계정을 사용하는 주된 부분이며, 다른 하나는 페어링 코드를 발급하기 위해 계정이 필요한 send입니다. 나머지의 바인딩은 선택 사항입니다. 데몬 다이렉트 push와 sync는 로그인 없이 계속 동작하고 receive도 마찬가지입니다. 다운로드에는 계정이 전혀 필요 없고 링크만 있으면 됩니다.",
   ],
   sections: [
     {
@@ -708,9 +708,9 @@ const ko = {
       body: ["상대편이 온라인인지, 두 기기가 서로 어떻게 닿는지에 따라 모드를 고릅니다:"],
       bullets: [
         "up / down (이 가이드) — 두 기기가 동시에 온라인이 되지 않습니다. 지금 업로드하고, 나중에 자신(또는 다른 기기)이 다운로드합니다. 계정을 거칩니다.",
-        "send / receive — 양쪽이 지금 온라인이며 일회용 코드로 직접 P2P 전송을 원합니다.",
-        "push / pull — 상대 기기에 이미 ssh 할 수 있습니다.",
-        "relayium login이 필요한 것은 up과 send 둘입니다 — up은 파일을 계정에 저장하기 위해, send는 페어링 코드를 발급해야 할 때만(코드를 받았다면 필요 없습니다). down, receive, push/pull, 데몬 다이렉트, sync는 계정이 필요 없습니다.",
+        "send / receive — 양쪽이 지금 온라인이며 일회용 코드로 전송하려 합니다(서버가 해당 코드에 릴레이를 발급하면 암호화된 릴레이를 거칩니다).",
+        "serve + push / sync(데몬 다이렉트) — 두 기기가 모두 내 것이고 서로 도달할 수 있습니다. 예전의 SSH 기반 push / pull은 폐지되었습니다.",
+        "relayium login이 필요한 것은 up과 send 둘입니다 — up은 파일을 계정에 저장하기 위해, send는 페어링 코드를 발급해야 할 때만(코드를 받았다면 필요 없습니다). down, receive, 데몬 다이렉트 push/sync는 계정이 필요 없습니다.",
       ],
     },
     {
@@ -891,7 +891,7 @@ downloads/report.pdf
     items: [
       {
         q: "계정이 필요한가요?",
-        a: "업로드할 때, 그리고 코드를 발급해야 하는 보내기일 때요. relayium up은 파일을 내 계정에 저장해야 하므로 언제나 relayium login이 필요합니다. relayium send는 서버가 새 페어링 코드를 발급해야 할 때만 필요합니다 — 누군가 건네준 코드로 send를 실행하면 아무것도 발급하지 않으므로 로그인이 필요 없습니다. relayium down과 relayium receive는 계정이 필요 없고, push/pull, 데몬 다이렉트, sync도 계정 없이 동작합니다.",
+        a: "업로드할 때, 그리고 코드를 발급해야 하는 보내기일 때요. relayium up은 파일을 내 계정에 저장해야 하므로 언제나 relayium login이 필요합니다. relayium send는 서버가 새 페어링 코드를 발급해야 할 때만 필요합니다 — 누군가 건네준 코드로 send를 실행하면 아무것도 발급하지 않으므로 로그인이 필요 없습니다. relayium down과 relayium receive는 계정이 필요 없고, 데몬 다이렉트 push/sync도 계정 없이 동작합니다.",
       },
       {
         q: "파일은 암호화되나요?",
@@ -926,7 +926,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Manchmal sind die beiden Computer nie gleichzeitig wach. Du willst heute Abend vom Arbeitslaptop eine Datei ablegen und sie morgen vom Desktop zu Hause holen, ohne dass jemand auf eine Live-Verbindung wartet. Genau das tun relayium up und relayium down: up verschlüsselt lokal und lädt in dein Konto hoch, down holt sie später auf einem beliebigen Rechner und entschlüsselt sie — kein Peer-to-Peer-Handshake, kein Server, in den beide per ssh kommen.",
-    "Das ist der wesentliche Teil der CLI, der dein Relayium-Konto nutzt — daneben send, das eines braucht, um einen Pairing-Code zu erzeugen. Für den Rest ist das Binden optional: push/pull, daemon-direct und sync laufen weiter ohne Anmeldung, receive ebenso. Das Herunterladen braucht überhaupt kein Konto, nur den Link.",
+    "Das ist der wesentliche Teil der CLI, der dein Relayium-Konto nutzt — daneben send, das eines braucht, um einen Pairing-Code zu erzeugen. Für den Rest ist das Binden optional: daemon-direct push und sync laufen weiter ohne Anmeldung, receive ebenso. Das Herunterladen braucht überhaupt kein Konto, nur den Link.",
   ],
   sections: [
     {
@@ -934,9 +934,9 @@ const de = {
       body: ["Wähle den Modus danach, ob die Gegenseite online ist und wie sich die beiden Rechner erreichen:"],
       bullets: [
         "up / down (diese Anleitung) — die beiden Rechner sind nie gleichzeitig online. Du lädst jetzt hoch; du (oder ein anderer Rechner) lädst später herunter. Läuft über dein Konto.",
-        "send / receive — beide Seiten sind jetzt online und wollen eine direkte Peer-to-Peer-Übertragung über einen Einmalcode.",
-        "push / pull — du kommst bereits per ssh auf den entfernten Rechner.",
-        "relayium login brauchen nur up und send — up, um die Datei unter deinem Konto zu speichern, send nur dann, wenn es einen Pairing-Code erzeugen muss (mit einem übergebenen Code gar nicht). down, receive, push/pull, daemon-direct und sync brauchen kein Konto.",
+        "send / receive — beide Seiten sind jetzt online und wollen eine Übertragung über einen Einmalcode (über das verschlüsselte Relay, sobald der Server für den Code eines ausstellt).",
+        "serve + push / sync (daemon-direct) — beide Rechner gehören dir und erreichen einander. Das frühere push / pull über SSH ist eingestellt.",
+        "relayium login brauchen nur up und send — up, um die Datei unter deinem Konto zu speichern, send nur dann, wenn es einen Pairing-Code erzeugen muss (mit einem übergebenen Code gar nicht). down, receive und daemon-direct push/sync brauchen kein Konto.",
       ],
     },
     {
@@ -1117,7 +1117,7 @@ downloads/report.pdf
     items: [
       {
         q: "Brauche ich ein Konto?",
-        a: "Zum Hochladen — und zum Senden, wenn dabei ein Code erzeugt werden muss. relayium up erfordert immer relayium login, damit die Datei unter deinem Konto liegen kann. relayium send erfordert es nur, wenn der Server einen frischen Pairing-Code für dich erzeugen muss — führst du send mit einem Code aus, den dir jemand gegeben hat, wird keiner erzeugt und es braucht keine Anmeldung. relayium down und relayium receive brauchen kein Konto, und push/pull, daemon-direct und sync laufen ohne eines.",
+        a: "Zum Hochladen — und zum Senden, wenn dabei ein Code erzeugt werden muss. relayium up erfordert immer relayium login, damit die Datei unter deinem Konto liegen kann. relayium send erfordert es nur, wenn der Server einen frischen Pairing-Code für dich erzeugen muss — führst du send mit einem Code aus, den dir jemand gegeben hat, wird keiner erzeugt und es braucht keine Anmeldung. relayium down und relayium receive brauchen kein Konto, und daemon-direct push/sync läuft ohne eines.",
       },
       {
         q: "Ist meine Datei verschlüsselt?",
@@ -1152,7 +1152,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Parfois, les deux ordinateurs ne sont jamais allumés en même temps. Vous voulez déposer un fichier ce soir depuis le portable du travail et le récupérer demain depuis le poste de la maison, sans que personne n'attende une connexion en direct. relayium up et relayium down font exactement cela : up chiffre localement puis téléverse vers votre compte, et down le récupère plus tard sur n'importe quelle machine et le déchiffre — pas de poignée de main pair-à-pair, pas de serveur où vous pouvez tous les deux vous connecter en ssh.",
-    "C'est la principale partie de la CLI qui utilise votre compte Relayium, avec send, qui en a besoin pour générer un code d'appairage. Pour le reste, la liaison est facultative : push/pull, daemon-direct et sync continuent de fonctionner sans connexion, et receive aussi. Le téléchargement ne demande aucun compte, juste le lien.",
+    "C'est la principale partie de la CLI qui utilise votre compte Relayium, avec send, qui en a besoin pour générer un code d'appairage. Pour le reste, la liaison est facultative : push et sync en daemon-direct continuent de fonctionner sans connexion, et receive aussi. Le téléchargement ne demande aucun compte, juste le lien.",
   ],
   sections: [
     {
@@ -1160,9 +1160,9 @@ const fr = {
       body: ["Choisissez le mode selon que l'autre extrémité est en ligne et selon la façon dont les deux machines se joignent :"],
       bullets: [
         "up / down (ce guide) — les deux machines ne sont jamais en ligne ensemble. Vous téléversez maintenant ; vous (ou une autre machine) téléchargez plus tard. Passe par votre compte.",
-        "send / receive — les deux extrémités sont en ligne maintenant et veulent un transfert pair-à-pair direct via un code à usage unique.",
-        "push / pull — vous pouvez déjà vous connecter en ssh à la machine distante.",
-        "Seuls up et send demandent relayium login — up pour stocker le fichier sous votre compte, send uniquement quand il doit générer un code d'appairage (avec un code qu'on vous a donné, aucun). down, receive, push/pull, daemon-direct et sync ne demandent aucun compte.",
+        "send / receive — les deux extrémités sont en ligne maintenant et veulent un transfert via un code à usage unique (par le relais chiffré dès que le serveur en attribue un pour le code).",
+        "serve + push / sync (daemon-direct) — les deux machines vous appartiennent et se joignent. L'ancien push / pull via SSH est retiré.",
+        "Seuls up et send demandent relayium login — up pour stocker le fichier sous votre compte, send uniquement quand il doit générer un code d'appairage (avec un code qu'on vous a donné, aucun). down, receive et push/sync en daemon-direct ne demandent aucun compte.",
       ],
     },
     {
@@ -1343,7 +1343,7 @@ downloads/report.pdf
     items: [
       {
         q: "Ai-je besoin d'un compte ?",
-        a: "Pour téléverser, et pour envoyer quand un code doit être généré. relayium up exige toujours relayium login, afin que le fichier soit stocké sous votre compte. relayium send ne l'exige que lorsque le serveur doit générer un nouveau code d'appairage pour vous — lancez send avec un code qu'on vous a remis et il n'en génère aucun, donc il ne demande pas de connexion. relayium down et relayium receive ne demandent aucun compte, et push/pull, daemon-direct et sync fonctionnent sans.",
+        a: "Pour téléverser, et pour envoyer quand un code doit être généré. relayium up exige toujours relayium login, afin que le fichier soit stocké sous votre compte. relayium send ne l'exige que lorsque le serveur doit générer un nouveau code d'appairage pour vous — lancez send avec un code qu'on vous a remis et il n'en génère aucun, donc il ne demande pas de connexion. relayium down et relayium receive ne demandent aucun compte, et push/sync en daemon-direct fonctionne sans.",
       },
       {
         q: "Mon fichier est-il chiffré ?",
@@ -1378,7 +1378,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "أحيانًا لا يكون الحاسوبان مستيقظين في الوقت نفسه أبدًا. تريد أن تُسقط ملفًا من حاسوب العمل المحمول الليلة وتلتقطه من سطح مكتب المنزل غدًا، دون أن ينتظر أحد اتصالًا مباشرًا. يفعل relayium up وrelayium down ذلك بالضبط: up يشفّر ويرفع إلى حسابك، وdown يجلبه ويفكّ تشفيره لاحقًا على أي جهاز — بلا مصافحة من الند للند، وبلا خادم يدخل إليه كلاكما عبر ssh.",
-    "هذا هو الجزء الرئيسي من CLI الذي يستخدم حساب Relayium لديك، إلى جانب send الذي يحتاجه لإصدار رمز اقتران. أما البقية فالربط فيها اختياري: push/pull، وdaemon direct، وsync تظل تعمل بلا تسجيل دخول، وكذلك receive. التنزيل لا يحتاج إلى حساب على الإطلاق، فقط الرابط.",
+    "هذا هو الجزء الرئيسي من CLI الذي يستخدم حساب Relayium لديك، إلى جانب send الذي يحتاجه لإصدار رمز اقتران. أما البقية فالربط فيها اختياري: push وsync عبر daemon direct تظل تعمل بلا تسجيل دخول، وكذلك receive. التنزيل لا يحتاج إلى حساب على الإطلاق، فقط الرابط.",
   ],
   sections: [
     {
@@ -1386,9 +1386,9 @@ const ar = {
       body: ["اختر الوضع بحسب ما إذا كان الطرف البعيد متصلًا وكيف يصل كل جهاز إلى الآخر:"],
       bullets: [
         "‏up / down (هذا الدليل) — الجهازان لا يكونان متصلين معًا أبدًا. ترفع الآن؛ وتنزّل أنت (أو جهاز آخر) لاحقًا. يمرّ عبر حسابك.",
-        "‏send / receive — كلا الطرفين متصل الآن ويريدان نقلًا مباشرًا من الند للند عبر رمز لمرة واحدة.",
-        "‏push / pull — يمكنك بالفعل الدخول إلى الجهاز البعيد عبر ssh.",
-        "الأمران اللذان يتطلبان relayium login هما up وsend — الأول ليخزّن الملف تحت حسابك، والثاني فقط حين يلزمه إصدار رمز اقتران (ومع رمز سُلِّم إليك لا يلزمه شيء). أما down وreceive وpush/pull وdaemon direct وsync فلا تحتاج إلى حساب.",
+        "‏send / receive — كلا الطرفين متصل الآن ويريدان نقلًا عبر رمز لمرة واحدة (عبر المُرحِّل المُشفَّر كلما أصدر الخادم مُرحِّلًا للرمز).",
+        "‏serve + push / sync ‏(daemon direct) — الجهازان كلاهما لك ويمكن لكل منهما الوصول إلى الآخر. أما push / pull القديم عبر SSH فقد أُوقف.",
+        "الأمران اللذان يتطلبان relayium login هما up وsend — الأول ليخزّن الملف تحت حسابك، والثاني فقط حين يلزمه إصدار رمز اقتران (ومع رمز سُلِّم إليك لا يلزمه شيء). أما down وreceive وpush/sync عبر daemon direct فلا تحتاج إلى حساب.",
       ],
     },
     {
@@ -1569,7 +1569,7 @@ downloads/report.pdf
     items: [
       {
         q: "هل أحتاج إلى حساب؟",
-        a: "للرفع، وللإرسال حين يلزم إصدار رمز. يتطلب relayium up دائمًا تسجيل relayium login كي يُخزَّن الملف تحت حسابك. أما relayium send فلا يتطلبه إلا حين يلزم الخادم أن يُصدر لك رمز اقتران جديدًا — فإن شغّلت send برمزٍ سلّمه إليك أحدهم، فهو لا يُصدر شيئًا ولا يلزمه تسجيل الدخول. أما relayium down وrelayium receive فلا يحتاجان إلى حساب، وكذلك تعمل push/pull، وdaemon direct، وsync بلا واحد.",
+        a: "للرفع، وللإرسال حين يلزم إصدار رمز. يتطلب relayium up دائمًا تسجيل relayium login كي يُخزَّن الملف تحت حسابك. أما relayium send فلا يتطلبه إلا حين يلزم الخادم أن يُصدر لك رمز اقتران جديدًا — فإن شغّلت send برمزٍ سلّمه إليك أحدهم، فهو لا يُصدر شيئًا ولا يلزمه تسجيل الدخول. أما relayium down وrelayium receive فلا يحتاجان إلى حساب، وكذلك يعمل push/sync عبر daemon direct بلا واحد.",
       },
       {
         q: "هل ملفي مشفّر؟",
@@ -1604,7 +1604,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "A veces los dos ordenadores nunca están despiertos a la vez. Quieres soltar un archivo desde el portátil del trabajo esta noche y cogerlo desde el sobremesa de casa mañana, sin que nadie espere una conexión en directo. relayium up y relayium down hacen exactamente eso: up cifra y sube a tu cuenta, y down lo recupera y lo descifra después en cualquier máquina — sin handshake de igual a igual, sin un servidor al que las dos partes entren por ssh.",
-    "Esta es la parte principal de la CLI que usa tu cuenta de Relayium, junto con send, que la necesita para generar un código de emparejamiento. Para el resto la vinculación es opcional: push/pull, daemon directo y sync siguen funcionando sin iniciar sesión, y receive también. Descargar no necesita ninguna cuenta, solo el enlace.",
+    "Esta es la parte principal de la CLI que usa tu cuenta de Relayium, junto con send, que la necesita para generar un código de emparejamiento. Para el resto la vinculación es opcional: push y sync con daemon directo siguen funcionando sin iniciar sesión, y receive también. Descargar no necesita ninguna cuenta, solo el enlace.",
   ],
   sections: [
     {
@@ -1612,9 +1612,9 @@ const es = {
       body: ["Elige el modo según si el otro extremo está en línea y cómo se alcanzan las dos máquinas entre sí:"],
       bullets: [
         "up / down (esta guía) — las dos máquinas nunca están en línea a la vez. Subes ahora; tú (u otra máquina) descargas después. Pasa por tu cuenta.",
-        "send / receive — ambos extremos están en línea ahora mismo y quieren una transferencia directa de igual a igual con un código de un solo uso.",
-        "push / pull — ya puedes entrar por ssh a la máquina remota.",
-        "Los que piden relayium login son up y send — up para guardar el archivo bajo tu cuenta, send solo cuando tiene que generar un código de emparejamiento (con uno que te hayan dado, ninguno). down, receive, push/pull, daemon directo y sync no necesitan cuenta.",
+        "send / receive — ambos extremos están en línea ahora mismo y quieren una transferencia con un código de un solo uso (por el retransmisor cifrado siempre que el servidor emite uno para el código).",
+        "serve + push / sync (daemon directo) — las dos máquinas son tuyas y se alcanzan entre sí. El antiguo push / pull por SSH está retirado.",
+        "Los que piden relayium login son up y send — up para guardar el archivo bajo tu cuenta, send solo cuando tiene que generar un código de emparejamiento (con uno que te hayan dado, ninguno). down, receive y push/sync con daemon directo no necesitan cuenta.",
       ],
     },
     {
@@ -1795,7 +1795,7 @@ downloads/report.pdf
     items: [
       {
         q: "¿Necesito una cuenta?",
-        a: "Para subir, y para enviar cuando hay que generar un código. relayium up requiere siempre relayium login, para guardar el archivo bajo tu cuenta. relayium send lo requiere solo cuando el servidor tiene que generar un código de emparejamiento nuevo para ti — si ejecutas send con un código que te han dado, no genera ninguno, así que no hace falta iniciar sesión. relayium down y relayium receive no necesitan cuenta, y push/pull, daemon directo y sync funcionan sin una.",
+        a: "Para subir, y para enviar cuando hay que generar un código. relayium up requiere siempre relayium login, para guardar el archivo bajo tu cuenta. relayium send lo requiere solo cuando el servidor tiene que generar un código de emparejamiento nuevo para ti — si ejecutas send con un código que te han dado, no genera ninguno, así que no hace falta iniciar sesión. relayium down y relayium receive no necesitan cuenta, y push/sync con daemon directo funciona sin una.",
       },
       {
         q: "¿Está cifrado mi archivo?",
@@ -1830,7 +1830,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "Às vezes os dois computadores nunca estão ligados ao mesmo tempo. Você quer soltar um arquivo do notebook do trabalho hoje à noite e pegá-lo no desktop de casa amanhã, sem ninguém esperando uma conexão ao vivo. relayium up e relayium down fazem exatamente isso: o up criptografa e envia para a sua conta, e o down o busca e o descriptografa depois em qualquer máquina — sem handshake ponto a ponto, sem um servidor no qual os dois entrem por ssh.",
-    "Esta é a principal parte da CLI que usa a sua conta do Relayium, ao lado do send, que precisa dela para gerar um código de emparelhamento. Para o resto a vinculação é opcional: push/pull, daemon direto e sync continuam funcionando sem login, e o receive também. Baixar não precisa de conta alguma, apenas do link.",
+    "Esta é a principal parte da CLI que usa a sua conta do Relayium, ao lado do send, que precisa dela para gerar um código de emparelhamento. Para o resto a vinculação é opcional: push e sync com daemon direto continuam funcionando sem login, e o receive também. Baixar não precisa de conta alguma, apenas do link.",
   ],
   sections: [
     {
@@ -1838,9 +1838,9 @@ const pt = {
       body: ["Escolha o modo conforme a outra ponta esteja online e como as duas máquinas se alcançam:"],
       bullets: [
         "up / down (este guia) — as duas máquinas nunca estão online juntas. Você envia agora; você (ou outra máquina) baixa depois. Passa pela sua conta.",
-        "send / receive — as duas pontas estão online agora e querem uma transferência ponto a ponto direta com um código de uso único.",
-        "push / pull — você já consegue entrar por ssh na máquina remota.",
-        "Os que pedem relayium login são o up e o send — o up para guardar o arquivo sob a sua conta, o send apenas quando precisa gerar um código de emparelhamento (com um código que lhe deram, nenhum). O down, o receive, push/pull, daemon direto e sync não precisam de conta.",
+        "send / receive — as duas pontas estão online agora e querem uma transferência com um código de uso único (pelo retransmissor criptografado sempre que o servidor emite um para o código).",
+        "serve + push / sync (daemon direto) — as duas máquinas são suas e se alcançam. O antigo push / pull por SSH foi descontinuado.",
+        "Os que pedem relayium login são o up e o send — o up para guardar o arquivo sob a sua conta, o send apenas quando precisa gerar um código de emparelhamento (com um código que lhe deram, nenhum). O down, o receive e push/sync com daemon direto não precisam de conta.",
       ],
     },
     {
@@ -2021,7 +2021,7 @@ downloads/report.pdf
     items: [
       {
         q: "Preciso de uma conta?",
-        a: "Para enviar para a nuvem, e para o send quando um código precisa ser gerado. O relayium up sempre exige relayium login, para que o arquivo fique guardado sob a sua conta. O relayium send só exige quando o servidor precisa gerar um novo código de emparelhamento para você — se você executar send com um código que alguém lhe passou, nada é gerado, então nenhum login é necessário. O relayium down e o relayium receive não precisam de conta, e push/pull, daemon direto e sync funcionam sem uma.",
+        a: "Para enviar para a nuvem, e para o send quando um código precisa ser gerado. O relayium up sempre exige relayium login, para que o arquivo fique guardado sob a sua conta. O relayium send só exige quando o servidor precisa gerar um novo código de emparelhamento para você — se você executar send com um código que alguém lhe passou, nada é gerado, então nenhum login é necessário. O relayium down e o relayium receive não precisam de conta, e push/sync com daemon direto funciona sem uma.",
       },
       {
         q: "Meu arquivo é criptografado?",

@@ -51,11 +51,14 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 	})
 	authed := func(h func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			// The "Bearer " scheme is required, not optional: TrimPrefix alone
+			// also accepted the bare secret as the whole header. Every caller
+			// (internal/storage.Remote) sends the scheme.
+			tok, hasScheme := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 			// Fail closed on an unset secret: "" == "" would otherwise let an
 			// empty (or absent) bearer through. loadState back-fills a legacy
 			// state.json, so this only fires if that ever regresses.
-			if secret == "" || subtle.ConstantTimeCompare([]byte(tok), []byte(secret)) != 1 {
+			if !hasScheme || secret == "" || subtle.ConstantTimeCompare([]byte(tok), []byte(secret)) != 1 {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}

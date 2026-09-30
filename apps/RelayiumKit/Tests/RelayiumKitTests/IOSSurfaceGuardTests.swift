@@ -975,8 +975,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(sendAnother.contains(".controlSize(.large)"))
         XCTAssertTrue(completed.contains("Text(link)"))
         XCTAssertTrue(completed.contains(".fixedSize(horizontal: false, vertical: true)"))
-        XCTAssertTrue(completed.contains("UIPasteboard.general.string = link"),
-                      "the generated capability has no explicit Copy action")
+        XCTAssertTrue(completed.contains("copyCapabilityLink(link)"),
+                      "the generated capability has no explicit, key-safe Copy action")
         XCTAssertTrue(completed.contains("copiedGeneratedLink ? .commonCopied : .commonCopy"),
                       "Copy provides no acknowledgement for the generated link")
         XCTAssertTrue(completed.contains("ShareLink(item: link)"),
@@ -3530,7 +3530,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the link must leave through the platform's hand-off")
         XCTAssertEqual(summary.text.components(separatedBy: "ShareLink(").count - 1, 1,
                        "one share affordance, in the one arm that has a link")
-        XCTAssertTrue(summary.text.contains("UIPasteboard.general.string = link"))
+        XCTAssertTrue(summary.text.contains("copyCapabilityLink(link)"),
+                      "the rebuilt `#k=` link must be copied local-only and expiring")
         XCTAssertTrue(summary.text.contains("copiedStoredFileID = row.id"))
         XCTAssertTrue(summary.text.contains("AccountPresentation.copyActionLabel("))
         XCTAssertTrue(summary.text.contains("AccountPresentation.retainedCopiedFileID("))
@@ -4187,18 +4188,18 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // Same shape — one write, inside the button that says Copy.
         // The link transcript joins it for A16: macOS's link rows have had Copy,
         // and the two must not disagree about how a message leaves a session.
-        XCTAssertEqual(holders, ["AccountSummaryView.swift", "DeviceConversationView.swift",
+        // A-L11: the two `#k=` link copies (SendView, AccountSummaryView) left
+        // the list for the one helper that writes them local-only and expiring.
+        XCTAssertEqual(holders, ["CapabilityLinkPasteboard.swift", "DeviceConversationView.swift",
                                  "DirectTextSessionView.swift",
-                                 "DirectView.swift", "NearbyLinkWorkspaceView.swift",
-                                 "SendView.swift"],
+                                 "DirectView.swift", "NearbyLinkWorkspaceView.swift"],
                        "the pasteboard is reachable from somewhere other than Copy")
         let expectedWrites = [
-            "AccountSummaryView.swift": "UIPasteboard.general.string = link",
+            "CapabilityLinkPasteboard.swift": "UIPasteboard.general.setItems(",
             "DeviceConversationView.swift": "UIPasteboard.general.string = message.text",
             "DirectTextSessionView.swift": "UIPasteboard.general.string = text",
             "DirectView.swift": "UIPasteboard.general.string = url.absoluteString",
             "NearbyLinkWorkspaceView.swift": "UIPasteboard.general.string = message.body",
-            "SendView.swift": "UIPasteboard.general.string = link",
         ]
         for (name, write) in expectedWrites {
             let view = try XCTUnwrap(all.first { $0.name == name })

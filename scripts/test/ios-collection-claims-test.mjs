@@ -93,9 +93,15 @@ test("each iOS declared data type has a sending call site and retained storage",
   const inboxTask = read("server/account/deviceinbox_task.go")
   assert.ok(contains(inboxTask, "inbox/tasks/{taskId}/blob"),
                 "the metered Device Inbox blob route is gone")
-  assert.ok(contains(inboxTask, "RecordMeter(ctx, sf.UserID, MeterDownload, n"),
+  // The handler meters through the store's MeterDownload (increment, or the
+  // owed-bill outbox when the increment fails — B-M2), and that method still
+  // records a download meter against the same account.
+  assert.ok(contains(inboxTask, "s.store.MeterDownload(mctx, sf.UserID, n,"),
                 "a Device Inbox delivery is no longer metered to the account, so Other "
                  + "Usage Data may no longer describe what receiving costs")
+  assert.ok(contains(read("server/account/sqlite.go"),
+                      "recordMeterOn(wctx, conn, userID, MeterDownload, bytes, at)"),
+                "the store's MeterDownload no longer records a download meter for the account")
 
   // And the app reads its own totals back, which is where the user sees
   // what is being kept.

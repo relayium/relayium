@@ -184,6 +184,10 @@ export interface Messages {
   /** A selection over `MAX_FILES`, refused whole. Wording matches macOS's
    *  `error.selection.tooManyFiles` rather than being invented for the web. */
   tooManyFiles: (max: number) => string;
+  /** Files shared into the installed PWA (Web Share Target) could not all be
+   *  handed over; the cached copies are already deleted, so the user must share
+   *  again. Shown as a flash notice on launch. */
+  shareTargetFailed: string;
   peerUnsupported: string;
   generating: string; // transient "creating…" state while a code/link is minted
   footer: string;
@@ -1206,6 +1210,9 @@ export interface Messages {
     installWindowsCta: string;
     /** `relayium update` cannot replace a running .exe — it prints the zip URL. */
     installWindowsUpdateNote: string;
+    /** install.sh verifies the release signature with openssl and refuses to
+     *  install without it unless RELAYIUM_ALLOW_UNSIGNED=1 (checksum only). */
+    installVerifyNote: string;
     installReleases: string;
     installBuild: string;
     installHelp: string;
@@ -1273,8 +1280,9 @@ export interface Messages {
     // image is published (an image is a supply-chain artifact needing its own
     // signing and provenance). Linux servers use the inspectable installer for
     // a resident low-privilege systemd service; `inbox run` remains the explicit
-    // foreground diagnostic/container entrypoint. And the CLI is the RECEIVE
-    // side only: there is no CLI command that sends into an inbox.
+    // foreground diagnostic/container entrypoint. The CLI covers both halves:
+    // `inbox send` (with devices/sent/cancel/retry) sends, `inbox enable/run`
+    // receives.
     inbox: {
       stepsLabel: string;
       steps: { label: string; body: string }[]; // iterated
@@ -1481,6 +1489,7 @@ export interface Messages {
     uploading: string;
     encrypting: string; // phase 1: encrypting in the browser (progress bar tracks this)
     uploadingNow: string; // phase 2: ciphertext is being POSTed (bar sits full)
+    finishing: string; // every byte sent, waiting for the server to confirm; the bar holds at 99 %
     burnLabel: string;
     ttlLabel: string;
     notBackup: string; // gentle reminder: stored links are temporary delivery, not a backup

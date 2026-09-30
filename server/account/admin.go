@@ -104,6 +104,16 @@ type adminNodeView struct {
 	// earliest moment it is actually safe to remove. 0 means the node holds
 	// nothing live: safe now, no wait.
 	SafeToUninstallAt int64
+	// DeleteBlockers is how many rows still stop an admin delete of this node
+	// (Store.NodeDeleteBlockers): all stored_files rows naming it, expired but
+	// not yet collected ones included, plus its upload_sessions rows. It is
+	// deliberately NOT StoredFileCount, which counts only LIVE files (the
+	// uninstall question): a node can be safe to uninstall and still not
+	// deletable until GC has collected its expired rows.
+	DeleteBlockers int
+	// DeleteBlockersUnknown is set when the blocker count could not be read;
+	// the panel then shows an error instead of a delete button.
+	DeleteBlockersUnknown bool
 	// Removed is set once the node has told central it was being uninstalled
 	// (Node.RemovedAt). The row is kept for audit, but the machine is gone: it
 	// is out of placement, out of ICE and never receives a download redirect.
@@ -981,6 +991,18 @@ func (s *Service) buildAdminFleetData(r *http.Request, data adminHomeData) (admi
 	} else {
 		allNodes = rows
 		data.Nodes = nodeViews(rows, monthly, fileCounts, s.Now(), st)
+		if blockers, err := s.Store().NodeDeleteBlockers(r.Context()); err != nil {
+			// Unknown is not zero: without the count the panel cannot say the
+			// node is deletable, so it offers no delete button at all.
+			log.Printf("admin: NodeDeleteBlockers failed: %v", err)
+			for i := range data.Nodes {
+				data.Nodes[i].DeleteBlockersUnknown = true
+			}
+		} else {
+			for i := range data.Nodes {
+				data.Nodes[i].DeleteBlockers = blockers[data.Nodes[i].ID]
+			}
+		}
 	}
 	for _, node := range data.Nodes {
 		if node.OwnerType == "fleet" {
@@ -1591,13 +1613,30 @@ func (s *Service) handleAdminMarkNodeRemoved(w http.ResponseWriter, r *http.Requ
 }
 
 // handleAdminDeleteNode deletes an official (fleet) node.
+//
+// A-M3: the delete is refused (409) while stored files still point at the
+// node — deleting it would leave them resolving against an id nobody owns —
+// and a successful delete tombstones the id so no other owner can ever
+// register it (the fleet itself may bring the machine back as a new node).
+// Queued node deletes survive it: while any remain the row is retired, hidden
+// from the panel but still resolvable by GC. The normal way to retire a machine
+// is drain → wait until its file count reaches 0 → uninstall (deregistration
+// marks it removed); delete is only for clearing out a row that no longer
+// carries anything.
 func (s *Service) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if err := s.Store().DeleteFleetNode(r.Context(), r.PathValue("id")); err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		switch {
+		case errors.Is(err, ErrNodeHasStoredFiles):
+			http.Error(w, "this node still has stored files or upload sessions (expired files that are not yet collected count too): drain it and wait until the panel shows nothing left to clear before deleting it", http.StatusConflict)
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		default:
+			http.Error(w, "server error", http.StatusInternalServerError)
+		}
 		return
 	}
 	http.Redirect(w, r, "/admin/fleet", http.StatusFound)

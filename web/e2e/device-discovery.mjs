@@ -147,11 +147,11 @@ async function checkCliPage(browser, base, view) {
     `[...document.querySelectorAll("[data-cli-mode]")].map((e) => e.getAttribute("data-cli-mode"))`,
   );
   // The accepted connectivity/ownership taxonomy: offline-capable first (Cloud,
-  // Device Inbox), then both-ends-online (text, send / receive), then machines
+  // Device Inbox), then both-ends-online (text, send / receive, pair), then machines
   // you administer (serve, sync). Each value is the command surface
   // itself, which is why they are not translated — see the note on the localized
   // check below.
-  const expected = ["Cloud", "Device Inbox", "text", "send / receive", "serve", "sync"];
+  const expected = ["Cloud", "Device Inbox", "text", "send / receive", "pair", "serve", "sync"];
   if (JSON.stringify(order) !== JSON.stringify(expected)) {
     throw new Error(`${view.id}: CLI mode order is ${JSON.stringify(order)}, expected ${JSON.stringify(expected)}`);
   }

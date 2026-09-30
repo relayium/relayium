@@ -729,8 +729,19 @@ func TestUpdateCheckByoHaltReasonIsGenericToTheNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	snaps := newByoFleet(t, st, 5, "v0.8.0")
+	// The BYO halt counts failures per OWNER (A-M4), so the two failing nodes
+	// must belong to two different accounts: move snaps[1] to a second user.
+	u2, err := st.UpsertUserByEmail(ctx, "byo2@example.com", "B2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A direct row edit: UpsertNode never rewrites an owner (A-M3).
+	if _, err := st.db.ExecContext(ctx, `UPDATE nodes SET owner_user_id = ? WHERE id = ?`, u2.ID, snaps[1].ID); err != nil {
+		t.Fatal(err)
+	}
 	// Command every node for this rollout, then report two of them failed --
-	// 2/5 = 40%, clearing both the rate (20%) and count (2) thresholds.
+	// 2 of 2 owners = 100%, clearing both the rate (20%) and count (2)
+	// thresholds.
 	for _, n := range snaps {
 		if err := st.CommandNodeUpdate(ctx, n.ID, "v0.8.0", tNow-100000); err != nil {
 			t.Fatal(err)
