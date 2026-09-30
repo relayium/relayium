@@ -27,7 +27,7 @@ export const pricing = {
     heading: "Always free",
     steps: [
       "Local network (LAN) transfers — instant, no account needed.",
-      "Direct peer-to-peer CLI transfers — files over daemon-direct or a pairing code, plus ephemeral text by pairing code — carry no per-transfer charge. Minting a send or text code needs an account with traffic allowance left; that eligibility check consumes no bytes and is not a charge. Joining one never needs an account.",
+      "The CLI's server-to-server modes — relayium serve with push or sync — go straight between your own machines and never touch Relayium's servers, so they use no allowance. The CLI's pairing-code sessions (send / receive for files, text for ephemeral text, and pair) are metered: whenever the server issues a relay for the code, every byte goes through that encrypted relay and counts toward the monthly traffic allowance of the account that minted the code — usage accounting, not a per-transfer charge. Minting a pair, send or text code needs an account with traffic allowance left; joining one never needs an account.",
       "End-to-end encrypted: files have no size limit, while live text needs both ends online and leaves no message bodies or server-side history on Relayium servers — each device can still copy or keep what it receives. On direct paths, your files and messages go straight between devices — they never touch our servers.",
     ],
   },
@@ -36,7 +36,7 @@ export const pricing = {
     items: [
       {
         title: "Relay bandwidth",
-        desc: "Cross-network file or text transfers in the browser go through an encrypted relay by design rather than as a fallback, so they connect through strict firewalls and NATs. Those bytes count against the same monthly traffic allowance as hosted uploads and downloads; every account gets one, and paid plans raise it. This uses real bandwidth.",
+        desc: "Cross-network file or text transfers in the browser, and the CLI's pairing-code sessions whenever the server issues a relay, go through an encrypted relay by design rather than as a fallback, so they connect through strict firewalls and NATs. Those bytes count against the same monthly traffic allowance as hosted uploads and downloads; every account gets one, and paid plans raise it. This uses real bandwidth.",
       },
       {
         title: "Temporary hosted storage",
@@ -66,11 +66,11 @@ export const pricing = {
     items: [
       {
         q: "Is it really free?",
-        a: "Yes for the direct paths. Same-network file or live-text transfers and the CLI's direct modes are end-to-end encrypted and completely free — you don't even need an account to receive a file or join a text session. Files are unlimited in size; ephemeral text requires both devices online, and Relayium servers keep no message bodies or server-side history — though each device can copy or keep the text it receives. Cross-network browser relay and hosted storage draw on allowances that every account gets, Free included: a monthly traffic allowance counting relayed bytes together with hosted uploads and downloads, a separate cap on storage held live at once, a retention window, and a daily upload limit. You pay only when you need more.",
+        a: "Yes for the direct paths. Same-network file or live-text transfers and the CLI's server-to-server modes (serve with push or sync) are end-to-end encrypted and completely free — you don't even need an account to receive a file or join a text session. Files are unlimited in size; ephemeral text requires both devices online, and Relayium servers keep no message bodies or server-side history — though each device can copy or keep the text it receives. Cross-network relay — in the browser, and in the CLI's pairing-code sessions whenever the server issues a relay — and hosted storage draw on allowances that every account gets, Free included: a monthly traffic allowance counting relayed bytes together with hosted uploads and downloads, a separate cap on storage held live at once, a retention window, and a daily upload limit. You pay only when you need more.",
       },
       {
         q: "What's the difference between direct and relayed transfers?",
-        a: "A direct transfer sends files or live text straight from one device to the other — fastest, and free; that's how same-network browser transfers and the CLI's direct modes work. Cross-network browser transfers go through an encrypted relay by design rather than as a fallback, so they connect reliably through strict firewalls and NATs — the relay only ever carries ciphertext, and the bytes it moves count against the same monthly traffic allowance as hosted uploads and downloads.",
+        a: "A direct transfer sends files or live text straight from one device to the other — fastest, and free; that's how same-network browser transfers and the CLI's server-to-server modes (serve with push or sync) work. Cross-network browser transfers, and the CLI's pairing-code sessions (send / receive, text, pair) whenever the server issues a relay, go through an encrypted relay by design rather than as a fallback, so they connect reliably through strict firewalls and NATs — the relay only ever carries ciphertext, and the bytes it moves count against the same monthly traffic allowance as hosted uploads and downloads.",
       },
       {
         q: "Why is there a paid tier at all?",
@@ -99,9 +99,10 @@ export const pricing = {
 // Three things this shell got wrong until now, all of them claims rather than
 // wording:
 //
-//   * Device Inbox was absent entirely. The one mode whose sender is the Web app
-//     — the answer to "get this file onto my server" — did not exist for any
-//     crawler, so the mode list read as six.
+//   * Device Inbox was absent entirely. The mode that answers "get this file
+//     onto my server" did not exist for any crawler, so the mode list read as
+//     six. (2026-09-30: pair makes it seven, and the CLI now sends into an
+//     inbox too — `relayium inbox send`.)
 //   * "Verified and resumable … every file … an interrupted transfer resumes"
 //     was a blanket promise over all modes. Neither half is true across the
 //     board: the zero-dependency tar fallback verifies nothing, and resume is
@@ -120,7 +121,7 @@ export const cli = {
   // on `pricing` above.
   title: "Relayium CLI — encrypted file and text transfer from the terminal",
   description:
-    "A single binary for macOS, Linux and Windows: send by pairing code, push server-to-server, mirror a folder, share ephemeral text, upload now and download later, or receive into a Device Inbox. Free and open source.",
+    "A single binary for macOS, Linux and Windows: send by pairing code, open a live two-way session, push server-to-server, mirror a folder, share ephemeral text, upload now and download later, or send to and receive into a Device Inbox. Free and open source.",
   hero: {
     h1: "Relayium CLI",
     pitch: "Move files between machines — directly, through your devices, or with Relayium Cloud.",
@@ -130,6 +131,7 @@ export const cli = {
     heading: "Install",
     steps: [
       "macOS and Linux: one command downloads a prebuilt binary and puts it on your PATH — curl -fsSL https://relayium.com/install.sh | sh",
+      "The installer checks the release's signature with openssl before it installs anything, and refuses to install when openssl is missing. RELAYIUM_ALLOW_UNSIGNED=1 overrides that and installs with checksum-only verification.",
       "Windows: download the portable ZIP for x64 or ARM64 from the releases page and put relayium.exe anywhere on your PATH. The installer above is a POSIX shell script and does not run on Windows; relayium update also cannot replace a running .exe there, so it prints the download URL instead.",
       "Or build from source with Go.",
       "Then relayium --help lists every command, and relayium help <command> prints that command's own usage — offline, with no account and no network request.",
@@ -144,15 +146,19 @@ export const cli = {
       },
       {
         title: "Device Inbox",
-        desc: "Another device can be offline. Send from a browser or a native app into a folder on a machine you own. In the CLI this is the RECEIVE side only — there is no CLI command that sends into an inbox; to move files between two of your own servers, use serve with push or sync. Both ends must be signed in to the same account, and receiving stays off until someone at that machine turns it on there. If the machine is offline the encrypted task waits in the queue; until that machine reports it wrote the file to disk, the status says the ciphertext is uploaded, never that it arrived. The content key is sealed to a public key that machine published, so Relayium never sees the plaintext, the file names or the folder structure, and an existing file is never overwritten. There is no official Relayium container image.",
+        desc: "Another device can be offline. Send files into a folder on a machine you own — from a browser, a native app, or the CLI with relayium inbox send — and receive them there with the CLI's own receiver. relayium inbox devices lists the account's devices, inbox send --to <device> encrypts and queues a delivery (sending needs only relayium login), and inbox sent, cancel and retry follow it up; queued is not saved, and --wait stays until the device reports it saved. To move files directly between two of your own servers, use serve with push or sync. Both ends must be signed in to the same account, and receiving stays off until someone at that machine turns it on there. If the machine is offline the encrypted task waits in the queue; until that machine reports it wrote the file to disk, the status says the ciphertext is uploaded, never that it arrived. The content key is sealed to a public key that machine published, so Relayium never sees the plaintext, the file names or the folder structure, and an existing file is never overwritten. There is no official Relayium container image.",
       },
       {
         title: "text",
-        desc: "Both devices are online. Ephemeral encrypted messages between two terminals: one runs relayium text to mint a 6-digit pairing code — that side needs relayium login — and the other joins with the printed relayium text CODE, which needs no account. Both ends stay online for the session; it is its own end-to-end encrypted peer-to-peer session, Relayium servers keep no message bodies and no server-side history, and the machine on the other end can of course copy or keep what it receives. One message is at most 65,536 bytes of UTF-8; anything larger is a file. Verification is opt-in: --verify stops to compare the SAS and needs a terminal to answer.",
+        desc: "Both devices are online. Ephemeral encrypted messages between two terminals: one runs relayium text to mint a 6-digit pairing code — that side needs relayium login — and the other joins with the printed relayium text CODE, which needs no account. Both ends stay online for the session; it is an end-to-end encrypted session, Relayium servers keep no message bodies and no server-side history, and the machine on the other end can of course copy or keep what it receives. One message is at most 65,536 bytes of UTF-8; anything larger is a file. The other end can also be relayium pair, a Relayium app or the web page, and whenever the server issues a relay for the code every message goes through it and counts toward the traffic allowance of the account that minted the code. Verification is opt-in: --verify stops to compare the SAS and needs a terminal to answer.",
       },
       {
         title: "send / receive",
-        desc: "Both devices are online. Send files to another person across networks. relayium send mints a 6-digit pairing code, good for 5 minutes, and prints the exact command the other end runs; minting needs relayium login and the receiver needs no account. Only a short rendezvous handshake passes through Relayium, and this mode is direct-only: if no direct path can be found the transfer fails rather than falling back to a relay, which is this mode's limit and not a claim about Relayium as a whole. Both terminals print a 6-digit verification code (SAS) derived from their pinned TLS certificate fingerprints, a different value from the pairing code. Comparing it out of band is optional (--verify stops for it) and confirms the fingerprints were not substituted and that the rendezvous service did not impersonate either endpoint; it authenticates the endpoints, not every network hop, and only when someone actually compares it.",
+        desc: "Both devices are online. Send files to another person across networks. relayium send mints a 6-digit pairing code, good for 5 minutes, and prints the exact command the other end runs; minting needs relayium login and the receiver needs no account. The other end can be relayium receive, relayium pair, a Relayium app or the web page. Whenever the server issues a relay for the code, every byte goes through that encrypted relay — even when the two ends could reach each other directly — and counts toward the monthly traffic allowance of the account that minted the code; only when no relay is issued do the two ends connect peer to peer. Both ends print a 6-digit verification code (SAS) derived from the keys the two ends exchanged, a different value from the pairing code. Comparing it out of band is optional (--verify stops for it) and confirms the keys were not substituted and that the rendezvous service did not impersonate either endpoint; it authenticates the endpoints, not every network hop, and only when someone actually compares it.",
+      },
+      {
+        title: "pair",
+        desc: "Both devices are online. A live, two-way session with another device: once linked, files, folders and messages go both ways until either side leaves. relayium pair mints a 6-digit code (that side needs relayium login); the other side runs relayium pair CODE, which needs no account, or types the code into a Relayium app or the web page. In the session /send offers files or folders, /accept saves what was offered into --dest, /decline refuses it and /quit leaves; --accept accepts every batch without asking. Received files are only ever created new under --dest, and nothing existing is overwritten. The same relay rule as send / receive applies, and --verify stops to compare the SAS before anything is accepted or sent.",
       },
       {
         title: "serve",
@@ -160,7 +166,7 @@ export const cli = {
       },
       {
         title: "sync",
-        desc: "A machine you manage. One-way incremental folder mirroring to a Relayium listener: files whose size and modification time are unchanged are skipped. The files it does transfer are verified, and a partial file left at the destination by an interrupted run is continued by the next run rather than started over. --delete also removes files gone from the source, but only if the listener was started with --allow-delete; --watch keeps it running with debouncing and backoff. A one-way mirror is a copy of the current state, not a versioned backup.",
+        desc: "A machine you manage. One-way incremental folder mirroring to a Relayium listener: files whose size and modification time are unchanged are skipped. The files it does transfer are verified, and a partial file left at the destination by an interrupted run is continued by the next run rather than started over. --delete also removes files gone from the source, but only if the listener was started with --allow-delete — otherwise the delete is ignored and reported, and nothing is removed; --watch keeps it running with debouncing and backoff. A one-way mirror is a copy of the current state, not a versioned backup.",
       },
     ],
   },
@@ -169,7 +175,7 @@ export const cli = {
     items: [
       {
         title: "Verification is per-mode, not a blanket promise",
-        body: "push, send and receive verify every transferred file by SHA-256. sync verifies the files it transfers, but decides what to transfer from size and modification time. Cloud and Device Inbox verify on the receiving side before anything is written, and Device Inbox reports saved only once the file is durably on disk. The SAS that send, receive and text print authenticates the endpoints only if someone actually compares it out of band.",
+        body: "push, pair, send and receive verify every transferred file by SHA-256. sync verifies the files it transfers, but decides what to transfer from size and modification time. Cloud and Device Inbox verify on the receiving side before anything is written, and Device Inbox reports saved only once the file is durably on disk. The SAS that pair, send, receive and text print authenticates the endpoints only if someone actually compares it out of band.",
       },
       {
         title: "Resume means two different things, and neither covers every mode",
@@ -186,11 +192,11 @@ export const cli = {
     items: [
       {
         q: "Do I need an account?",
-        a: "For most of the CLI, no. push, serve, sync, relayium down, and joining a send or text session with a code someone gave you all need no account. An account is required to upload with relayium up, to mint a pairing code for send or text, and on both ends of Device Inbox. Signing in never grants anyone access to your filesystem.",
+        a: "For most of the CLI, no. push, serve, sync, relayium down, and joining a pair, send or text session with a code someone gave you all need no account. An account is required to upload with relayium up, to mint a pairing code for pair, send or text, and on both ends of Device Inbox. Signing in never grants anyone access to your filesystem.",
       },
       {
         q: "Can the other device be offline?",
-        a: "In two modes. Cloud stores the encrypted file until someone fetches the link, and Device Inbox queues the encrypted task until that device comes back — an offline target is valid there, not a refusal. Everything else moves bytes straight between two machines, so text, send / receive, serve and sync all need the far end available at the same time.",
+        a: "In two modes. Cloud stores the encrypted file until someone fetches the link, and Device Inbox queues the encrypted task until that device comes back — an offline target is valid there, not a refusal. Everything else is live: text, send / receive and pair need both ends in the session at once — Relayium may relay the encrypted bytes but stores nothing — and serve and sync need the listener running.",
       },
       {
         q: "Which transfers can resume?",
@@ -198,7 +204,7 @@ export const cli = {
       },
       {
         q: "How does verification differ by mode?",
-        a: "push, send and receive verify every transferred file by SHA-256. send and receive additionally print a 6-digit SAS derived from the pinned TLS fingerprints, which proves something only if someone compares it out of band — --verify stops for that. text has the same optional SAS and no files to verify. sync verifies the files it transfers, but decides what to transfer from size and modification time. Cloud and Device Inbox verify on the receiving side before writing.",
+        a: "push, pair, send and receive verify every transferred file by SHA-256. pair, send and receive additionally print a 6-digit SAS derived from the keys the two ends exchanged, which proves something only if someone compares it out of band — --verify stops for that. text has the same optional SAS and no files to verify. sync verifies the files it transfers, but decides what to transfer from size and modification time. Cloud and Device Inbox verify on the receiving side before writing.",
       },
       {
         q: "Which platforms does it run on?",
@@ -206,7 +212,7 @@ export const cli = {
       },
       {
         q: "Can I point it at my own server?",
-        a: "Yes — --server https://your-domain points login, up, down, send, receive and text at a self-hosted Relayium instance, so pairing codes are minted by your server too. For up it must be the server you are logged in to; the token is never sent elsewhere.",
+        a: "Yes — --server https://your-domain points login, up, down, pair, send, receive and text at a self-hosted Relayium instance, so pairing codes are minted by your server too. login and up require https:// — a plain http:// server is refused unless it is on this machine (loopback). For up it must be the server you are logged in to; the token is never sent elsewhere.",
       },
     ],
   },

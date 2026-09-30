@@ -199,6 +199,14 @@
           />
         </ModeSection>
 
+        <ModeSection {cli} lang={lang()} mode={mode.pair}>
+          <CommandBlock
+            code={COMMANDS.pair.code}
+            title={COMMANDS.pair.name}
+            {...copyProps(cli.copy, COMMANDS.pair.name)}
+          />
+        </ModeSection>
+
         <ModeSection {cli} lang={lang()} mode={mode.serve}>
           <CommandBlock
             code={COMMANDS.serveListen.code}

@@ -54,7 +54,7 @@ describe("the crawlable /cli shell", () => {
     expect(cli.hero.pitch).toBe(en.cliPage.heroSupport);
   });
 
-  it("names all six modes, in the accepted order", () => {
+  it("names all seven modes, in the accepted order", () => {
     expect(cli.why.items.map((i) => i.title)).toEqual(CLI_MODES.map((m) => m.name));
     for (const m of CLI_MODES) expect(body, m.name).toContain(m.name);
   });
@@ -63,18 +63,35 @@ describe("the crawlable /cli shell", () => {
     const byTitle = Object.fromEntries(cli.why.items.map((i) => [i.title, i.desc]));
     for (const name of ["Cloud", "Device Inbox"])
       expect(byTitle[name], name).toMatch(/Another device can be offline/);
-    for (const name of ["text", "send / receive"])
+    for (const name of ["text", "send / receive", "pair"])
       expect(byTitle[name], name).toMatch(/Both devices are online/);
     for (const name of ["serve", "sync"])
       expect(byTitle[name], name).toMatch(/A machine you manage/);
   });
 
-  it("states that the CLI is the Device Inbox RECEIVE side only", () => {
-    // The one mode whose sender is not the CLI. Without this, a reader is sent
-    // looking for a `relayium inbox send` that does not exist.
-    expect(body).toMatch(/RECEIVE side only/);
-    expect(body).toMatch(/no CLI command that sends into an inbox/i);
+  it("says the CLI sends into a Device Inbox as well as receiving", () => {
+    // `relayium inbox send` exists (server/cmd/relayium/inbox_send.go); the old
+    // "RECEIVE side only" sentence sent readers away from a real command.
+    expect(body).not.toMatch(/RECEIVE side only/);
+    expect(body).not.toMatch(/no CLI command that sends into an inbox/i);
+    expect(body).toMatch(/relayium inbox send/);
     expect(body).toMatch(/serve with push or sync/i);
+  });
+
+  it("states the relay rule for pairing-code sessions, not a direct-only one", () => {
+    // help.go linkRelayPolicy: relayed whenever a TURN relay is issued, and
+    // metered to the code's minter.
+    expect(body).not.toMatch(/direct-only|never relays/i);
+    expect(body).not.toMatch(/both ends must be the CLI/i);
+    expect(body).toMatch(/traffic allowance of the account that minted the code/);
+  });
+
+  it("presents pair with its own flags", () => {
+    const pair = cli.why.items.find((i) => i.title === "pair");
+    expect(pair, "no pair mode in the crawlable shell").toBeTruthy();
+    expect(pair.desc).toMatch(/relayium pair/);
+    expect(pair.desc).toMatch(/--dest/);
+    expect(pair.desc).toMatch(/--accept/);
   });
 
   it("carries no blanket resume or SHA-256 promise", () => {
