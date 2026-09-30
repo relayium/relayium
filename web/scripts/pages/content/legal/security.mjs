@@ -14,7 +14,7 @@ const en = {
     {
       heading: "Browser realtime file encryption (X25519 + AES-256-GCM)",
       body: [
-        "For realtime file transfers in the browser, each transfer generates a fresh, ephemeral X25519 key pair on each device. The two browsers perform a key exchange to derive a shared AES-256-GCM key. Every file chunk is encrypted under that key with a unique nonce, so the signaling server — and any relay — sees ciphertext rather than file plaintext. CLI transfers use a different direct TLS 1.3 protocol described below.",
+        "For realtime file transfers in the browser, each transfer generates a fresh, ephemeral X25519 key pair on each device. The two browsers perform a key exchange to derive a shared AES-256-GCM key. Every file chunk is encrypted under that key with a unique nonce, so the signaling server — and any relay — sees ciphertext rather than file plaintext. The CLI's pairing-code sessions use the same scheme with a current peer; its server-to-server push and sync, and its older pairing, use a different direct TLS 1.3 protocol described below.",
       ],
       bullets: [
         "Keys are ephemeral and per-transfer — nothing is reused across sessions.",
@@ -26,7 +26,7 @@ const en = {
       heading: "The verification code (SAS) — detecting a malicious server",
       body: [
         "WebRTC's built-in encryption (DTLS) exchanges key fingerprints through the signaling server, so a dishonest server could sit in the middle and swap keys. To catch this, Relayium derives a 6-digit Short Authentication String (SAS) from both sides' public keys and can show it on both screens. Matching codes provide the strongest interception check only when the two people compare them out of band. Showing that code and stopping to compare it is a preference — “advanced verification”, off by default, and `--verify` in the CLI. Turning it off changes what is displayed and which steps pause for confirmation; it does not change the encryption. The commit-then-reveal handshake below still runs on every connection and still refuses one whose reveal does not match, keys are still generated on your device and never sent to us, the relay still carries only ciphertext, and in the browser, receiving files still asks you before anything is saved — the native macOS app writes into its configured destination (Downloads by default) instead of asking. That prompt is about unsolicited writes to your disk, not about who is on the other end; only comparing the code establishes that.",
-        "A plain 6-digit code (about 20 bits) could in principle be brute-forced by a relay racing to force a matching code. Relayium closes that gap with a commit-then-reveal handshake: each side first commits to its key by sending a hash, and only reveals the key after receiving the other side's commitment. CLI transfers use a separate SAS derived through a commit-then-reveal exchange of the pinned TLS certificate fingerprints; it too detects nothing unless someone actually compares it out of band, which is what `--verify` stops for.",
+        "A plain 6-digit code (about 20 bits) could in principle be brute-forced by a relay racing to force a matching code. Relayium closes that gap with a commit-then-reveal handshake: each side first commits to its key by sending a hash, and only reveals the key after receiving the other side's commitment. The CLI's pairing-code sessions use this same handshake with a current peer; its older direct-only pairing derives a separate SAS through a commit-then-reveal exchange of the pinned TLS certificate fingerprints. Either one detects nothing unless someone actually compares it out of band, which is what `--verify` stops for.",
       ],
       bullets: [
         "For the strongest guarantee, turn on advanced verification and compare the code out of band — in person or over a voice call.",
@@ -49,7 +49,7 @@ const en = {
     {
       heading: "When browser files and text are relayed (TURN)",
       body: [
-        "Browser file and text transfers across networks — pairing-code sessions, including their join links — run through a TURN server by design, not as a fallback. Restrictive NATs and firewalls make a genuinely direct path unlikely there, so the app forces the relay route outright. Same-network browser sessions receive no relay credentials and connect directly. CLI file and text transfers never use TURN: they are direct-only and fail if no direct path can be found.",
+        "Browser file and text transfers across networks — pairing-code sessions, including their join links — run through a TURN server by design, not as a fallback. Restrictive NATs and firewalls make a genuinely direct path unlikely there, so the app forces the relay route outright. Same-network browser sessions receive no relay credentials and connect directly. CLI pairing-code sessions (files, text and pair) use TURN whenever the server issues a relay for the code, even when a direct path exists, and their relayed bytes count toward the code creator's monthly relay allowance; only when no relay is issued do they connect directly, failing if no direct path can be found. The CLI's server-to-server push and sync never use TURN.",
       ],
       bullets: [
         "The relay forwards only ciphertext — it cannot read your files or messages, which stay end-to-end encrypted.",
@@ -61,7 +61,7 @@ const en = {
       heading: "Temporary text transfer",
       body: [
         "Browser text sessions use the Web protocol: the peers perform an ephemeral X25519 exchange and derive direction-separated AES-256-GCM subkeys in a domain separate from file-transfer keys. Each valid UTF-8 message is authenticated and encrypted as its own frame. Across networks, browser sessions use TURN by design; the relay carries ciphertext and has no message key. With advanced verification on, comparing the SAS out of band also detects signaling interception.",
-        "CLI text is a different, direct-only protocol over pinned TLS 1.3. It does not use the browser X25519/AES message framing or TURN, and it fails when no direct path can be established. Message bodies are not stored by Relayium, but either endpoint can copy, log, screenshot, or otherwise retain text after receiving it.",
+        "CLI text with a current peer uses this same protocol, including TURN whenever the server issues a relay for the code; only with an older relayium does it use a separate, direct-only protocol over pinned TLS 1.3 that fails when no direct path can be established. Message bodies are not stored by Relayium, but either endpoint can copy, log, screenshot, or otherwise retain text after receiving it.",
       ],
       bullets: [
         "Both people must be online; Relayium provides no offline text delivery or server-side message history.",
@@ -133,7 +133,7 @@ const zh = {
     {
       heading: "浏览器实时文件加密（X25519 + AES-256-GCM）",
       body: [
-        "浏览器进行实时文件传输时，每次传输都会在各自设备上重新生成一对临时的 X25519 密钥。两个浏览器通过密钥交换协商出共享的 AES-256-GCM 密钥。每个文件数据块都用该密钥配合唯一的随机数加密，因此信令服务器和任何中继看到的都是密文，而非文件明文。CLI 传输使用下文所述的另一套 TLS 1.3 直连协议。",
+        "浏览器进行实时文件传输时，每次传输都会在各自设备上重新生成一对临时的 X25519 密钥。两个浏览器通过密钥交换协商出共享的 AES-256-GCM 密钥。每个文件数据块都用该密钥配合唯一的随机数加密，因此信令服务器和任何中继看到的都是密文，而非文件明文。CLI 的配对码会话在对端为当前版本时使用同一方案；CLI 的服务器对服务器 push 与 sync，以及旧版配对，使用下文所述的另一套 TLS 1.3 直连协议。",
       ],
       bullets: [
         "密钥是临时的、每次传输独立——不会跨会话复用。",
@@ -145,7 +145,7 @@ const zh = {
       heading: "校验码（SAS）——识破恶意服务器",
       body: [
         "WebRTC 自带的加密（DTLS）会通过信令服务器交换密钥指纹，因此不诚实的服务器可能居中调包密钥。为识破这种攻击，Relayium 从双方公钥推导出一段 6 位短校验码（SAS），并可以把它显示在两端屏幕上。只有双方通过带外渠道核对一致时，相同的校验码才提供最强的拦截检测保证。 是否显示这段码、是否停下来核对，是一个偏好设置——网页端叫「高级验证」，默认关闭；CLI 里是 `--verify`。关掉它改变的只是屏幕上显示什么、哪些步骤会停下来等你确认，不改变加密：下面的「先承诺后揭示」握手在每条连接上照常运行，揭示对不上就直接拒绝连接；密钥仍在你的设备上生成、从不发给我们；中继仍然只承载密文；在浏览器里，接收文件在写入任何内容之前仍会先询问你——原生 macOS 应用则直接写入它配置的保存位置（默认是「下载」文件夹）。这道询问防的是未经请求的写盘，而不是「对面是谁」；后者只有核对校验码才能确认。",
-        "单纯的 6 位数字（约 20 比特）理论上可能被中继抢先暴力凑出一个相同的码。Relayium 用「先承诺后揭示」握手堵住这个缺口：双方先各自发送密钥的哈希作为承诺，收到对方的承诺后才揭示真正的密钥。CLI 传输使用另一套 SAS，它通过「先承诺后揭示」交换固定 TLS 证书指纹来推导；同样只有真的有人带外核对了才起作用，而 `--verify` 就是那个停下来核对的开关。",
+        "单纯的 6 位数字（约 20 比特）理论上可能被中继抢先暴力凑出一个相同的码。Relayium 用「先承诺后揭示」握手堵住这个缺口：双方先各自发送密钥的哈希作为承诺，收到对方的承诺后才揭示真正的密钥。CLI 的配对码会话在对端为当前版本时使用同一握手；旧版只走直连的配对则使用另一套 SAS，它通过「先承诺后揭示」交换固定 TLS 证书指纹来推导。两者都只有真的有人带外核对了才起作用，而 `--verify` 就是那个停下来核对的开关。",
       ],
       bullets: [
         "为获得最强的保证，请先打开高级验证，再通过带外渠道核对校验码——当面或语音通话。",
@@ -168,7 +168,7 @@ const zh = {
     {
       heading: "浏览器文件与文本何时会经中继转发（TURN）",
       body: [
-        "浏览器的跨网络文件和文本传输——即配对码会话（含其生成的加入链接）——按设计经 TURN 服务器中继，而不是作为兜底手段。受限的 NAT 与防火墙让真正的直连希望渺茫，因此应用直接强制走中继路径。同一网络的浏览器会话不会获发中继凭证，走的是直连。CLI 文件和文本传输都不使用 TURN：它们只走直连，找不到直连路径就失败。",
+        "浏览器的跨网络文件和文本传输——即配对码会话（含其生成的加入链接）——按设计经 TURN 服务器中继，而不是作为兜底手段。受限的 NAT 与防火墙让真正的直连希望渺茫，因此应用直接强制走中继路径。同一网络的浏览器会话不会获发中继凭证，走的是直连。CLI 配对码会话（文件、文本和 pair）只要服务器为该码签发了中继，就使用 TURN，即使存在直连路径也是如此，其中继字节计入配对码创建端账号的每月中继额度；只有在没有签发中继时才直连，找不到直连路径就失败。CLI 的服务器对服务器 push 与 sync 从不使用 TURN。",
       ],
       bullets: [
         "中继只转发密文——它无法读取你的文件或消息，内容始终保持端到端加密。",
@@ -180,7 +180,7 @@ const zh = {
       heading: "临时文本传输",
       body: [
         "浏览器文本会话使用 Web 协议：双方执行临时 X25519 密钥交换，并在独立于文件传输密钥的域中派生按方向隔离的 AES-256-GCM 子密钥。每条有效 UTF-8 消息都作为独立帧进行认证和加密。跨网络时，浏览器会话按设计使用 TURN；中继只承载密文，不持有消息密钥。打开高级验证后，再通过带外渠道核对 SAS，还能发现对信令的拦截。",
-        "CLI 文本使用另一套经固定证书校验的 TLS 1.3 直连协议。它不使用浏览器的 X25519/AES 消息帧或 TURN，无法建立直连时就会失败。Relayium 不存储消息正文，但任一端点在收到文本后都可以复制、记录、截图或以其他方式留存。",
+        "CLI 文本在对端为当前版本时使用同一协议，服务器为该码签发中继时同样经 TURN；只有对端是旧版 relayium 时，才改用另一套经固定证书校验、只走直连的 TLS 1.3 协议，无法建立直连时就会失败。Relayium 不存储消息正文，但任一端点在收到文本后都可以复制、记录、截图或以其他方式留存。",
       ],
       bullets: [
         "双方必须同时在线；Relayium 不提供离线文本投递，也不保留服务器端消息历史。",

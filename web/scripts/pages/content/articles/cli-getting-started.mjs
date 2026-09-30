@@ -12,7 +12,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "The Relayium CLI is a single small binary that moves files and ephemeral text from your terminal — encrypted end to end, self-hostable, and free and open source under the AGPL-3.0. It handles copying files to a server, pushing a build between machines, sending an archive across networks, and moving a URL, command, or code snippet without first saving it as a file.",
-    "In the direct modes — push, pull, sync, daemon direct, send / receive and text — the file bytes travel directly between the two ends and never pass through Relayium's servers, so there is nothing metered and nothing to pay. Two modes are not direct: up, which stores an encrypted copy under your account and draws on four separate plan limits — monthly traffic, the storage you hold live at once, retention, and a rolling daily upload quota — and Device Inbox, which queues an encrypted task until a machine of your own comes back for it. This guide gets you installed and through your first transfer, then points you at the deeper how-tos for each mode.",
+    "In daemon direct — relayium serve with push or sync — the file bytes travel straight between your two machines and never pass through Relayium's servers, so nothing is metered. The pairing-code sessions — send / receive, text and pair — are end-to-end encrypted, but whenever the server issues a relay for the code every byte travels through that encrypted relay and counts toward the monthly traffic allowance of the account that minted the code. Two modes hold data under your account: up, which stores an encrypted copy and draws on four separate plan limits — monthly traffic, the storage you hold live at once, retention, and a rolling daily upload quota — and Device Inbox, which queues an encrypted delivery until a machine of your own comes back for it. This guide gets you installed and through your first transfer, then points you at the deeper how-tos for each mode.",
   ],
   sections: [
     {
@@ -23,7 +23,7 @@ const en = {
           "A macOS, Linux or Windows machine with a terminal. Prebuilt binaries cover x86-64 and arm64 on all three.",
           "curl, for the one-line install on macOS and Linux — curl --version prints a version. On Windows, download the .zip from the releases page instead.",
           "A writable install directory. The script uses /usr/local/bin when it can write there and ~/.local/bin otherwise, and its last lines name the one it chose.",
-          "Nothing else for daemon-direct push or sync. Only minting a pairing code with send or text, and uploading with up, need a Relayium account.",
+          "Nothing else for daemon-direct push or sync. Only minting a pairing code with send, text or pair, uploading with up, and the Device Inbox need a Relayium account.",
         ],
       },
       body: [
@@ -43,9 +43,9 @@ const en = {
       ],
       bullets: [
         "relayium up / relayium down (Cloud) — the far end can be offline. up encrypts on this machine, uploads only the ciphertext and prints a link; down fetches and decrypts it on any other machine, with no account. Uploading needs relayium login and draws on your plan's monthly traffic, storage cap, retention ceiling and daily upload quota, and the key rides only in the link's #k= fragment, which never reaches Relayium: the encrypted copy stays stored until its retention expires, but losing the link loses the only key that can decrypt it.",
-        "Device Inbox — the far end can be offline, and in the CLI this is the RECEIVE side only: a browser or a native app sends into a folder on a machine you own, and there is no CLI command that sends into an inbox. Both ends sign in to the same account, and someone at the receiving machine has to choose a folder and turn receiving on there. To move files between two of your own servers, use serve with push or sync instead.",
+        "Device Inbox — the far end can be offline. relayium inbox send --to <device> encrypts files here and queues them for one of your own devices (relayium inbox sent, cancel and retry follow a delivery up), and relayium inbox enable plus relayium inbox run receive into a folder you chose; browsers and the native apps send and receive too. Both ends sign in to the same account, and someone at the receiving machine has to choose a folder and turn receiving on there. To move files between two of your own servers directly, use serve with push or sync instead.",
         "relayium text — ephemeral encrypted messages between two terminals that are both online at the same time. Minting the code needs relayium login; joining with a code someone handed you needs no account, and Relayium servers keep no message bodies.",
-        `relayium send / relayium receive — to another person across networks, using a short pairing code the sender's CLI mints (sign in once with relayium login; the receiver never does). A minted code is good for five minutes, so start the receiving machine's command within that window. ${cliDirectFacts.en}`,
+        `relayium send / relayium receive — to another person across networks, using a short pairing code the sender's CLI mints (sign in once with relayium login; the receiver never does). The other end can be relayium receive, relayium pair, a Relayium app or the web page, and relayium pair is the two-way session over the same kind of code. A minted code is good for five minutes, so start the receiving end within that window. ${cliDirectFacts.en}`,
         "relayium serve + relayium push relayium:// (daemon direct) — straight between two machines you own, over pinned TLS 1.3. No relay, no SSH, no pairing code. The receiving host's authorized_fingerprints file is the whole trust decision, and being signed in to a Relayium account grants no one filesystem access.",
         "relayium sync — one-way incremental mirroring over the same transports as push: files whose size and modification time are unchanged are skipped. It is the mode that continues a partial file at the destination on a later run, and it verifies the files it does transfer — but a one-way mirror is a copy of the current state, not a versioned backup.",
       ],
@@ -153,7 +153,7 @@ relayium text 483920`,
     {
       heading: "Free, and private by design",
       body: [
-        "There is no per-transfer charge for the direct modes above: daemon-direct push/sync, send / receive and text move content between the two ends. Among them the only sign-in is the one that mints a pairing code, for send or for text. The pairing modes contact Relayium only for a tiny rendezvous handshake, never for the content. The two modes that go through your account work differently: Cloud up stores an encrypted copy under your account, so it needs a sign-in and consumes the plan's monthly traffic allowance, storage cap, retention ceiling and daily upload quota; Device Inbox queues an encrypted task for a machine of your own, and both ends have to be signed in to the same account. Consuming an allowance is usage accounting, not a per-transfer charge.",
+        "Relayium has no per-transfer charge. Daemon-direct push/sync moves content straight between your two machines, never through Relayium's servers, so it uses no allowance and needs no account. The pairing-code sessions — send / receive, text and pair — need a sign-in only on the side that mints the code, and whenever the server issues a relay for the code, every byte goes through that encrypted relay and counts toward the monthly traffic allowance of the account that minted the code. The two modes that hold data under your account work differently: Cloud up stores an encrypted copy, so it needs a sign-in and consumes the plan's monthly traffic allowance, storage cap, retention ceiling and daily upload quota; Device Inbox queues an encrypted delivery for a machine of your own, counts against the same limits, and both ends have to be signed in to the same account. Consuming an allowance is usage accounting, not a per-transfer charge.",
         "Every direct file transfer is encrypted end to end and verifies each transferred file with SHA-256. Resume is narrower: relayium sync continues a partial file on a later run, relayium down reconnects within the run that started it, and push, send and receive do not resume. It runs on macOS, Linux and Windows, and is open source and self-hostable.",
       ],
     },
@@ -163,11 +163,11 @@ relayium text 483920`,
     items: [
       {
         q: "Does the CLI cost anything?",
-        a: "The CLI itself is free and open source, and daemon-direct push/sync plus send / receive and text cost nothing to use: their file or text bytes never pass through Relayium storage, so there is nothing to meter. The commands that draw on your plan are up and down, which write and read an encrypted copy held under your account. Using allowance is usage accounting, not a per-transfer charge: free accounts pay nothing, while paid plans raise the monthly traffic, stored-at-once, retention and rolling daily-upload limits.",
+        a: "The CLI itself is free and open source, and daemon-direct push/sync costs nothing to use: its bytes never touch Relayium's servers, so there is nothing to meter. send / receive, text and pair are metered when relayed: whenever the server issues a relay for the code, the relayed bytes count toward the monthly traffic allowance of the account that minted the code. up and down, and Device Inbox deliveries, draw on your plan because they write and read an encrypted copy held under your account. Using allowance is usage accounting, not a per-transfer charge: free accounts pay nothing, while paid plans raise the monthly traffic, stored-at-once, retention and rolling daily-upload limits.",
       },
       {
         q: "Do I need a Relayium account?",
-        a: "To mint a pairing code with send or text, and for cloud up. Daemon-direct push/sync uses local public-key trust and needs no account. A server mints pairing codes only for a signed-in account, so the creator runs relayium login once; joining with a code you were handed needs no login. A receive user never signs in.",
+        a: "To mint a pairing code with send, text or pair, for cloud up, and for the Device Inbox. Daemon-direct push/sync uses local public-key trust and needs no account. A server mints pairing codes only for a signed-in account, so the creator runs relayium login once; joining with a code you were handed needs no login. A receive user never signs in.",
       },
       {
         q: "Which operating systems are supported?",
@@ -175,7 +175,7 @@ relayium text 483920`,
       },
       {
         q: "Do my files pass through Relayium's servers?",
-        a: "Not with the direct modes. With push/sync daemon-direct, send / receive and text, content travels directly between the two ends; send / receive and text contact our servers only for a small rendezvous handshake, never for the content. Two modes are the deliberate exceptions, and in both the server holds only ciphertext it cannot read: up uploads an encrypted copy to your account's storage, and Device Inbox — receive-only in the CLI, through relayium inbox — queues an encrypted copy that a browser or native app sent to a machine of your own until that machine downloads it.",
+        a: "Not with daemon-direct push/sync: content travels straight between your two machines. send / receive, text and pair contact our servers for a small rendezvous handshake, and whenever the server issues a TURN relay for the code, every byte of the session travels through that relay — as end-to-end-encrypted ciphertext it cannot read, counted toward the monthly traffic allowance of the account that minted the code, and never stored. Two modes hold data server-side on purpose, and in both the server holds only ciphertext it cannot read: up uploads an encrypted copy to your account's storage, and Device Inbox — relayium inbox send from the CLI, or a browser or native app — queues an encrypted copy for a machine of your own until that machine downloads it.",
       },
     ],
   },
@@ -194,7 +194,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件与临时文本——端到端加密、可自托管，并且以 AGPL-3.0 许可免费开源。你可以把文件复制到服务器、在机器间推送构建产物、跨网络发送压缩包，也可以直接传 URL、命令或代码片段，无需先保存成文件。",
-    "在直连模式下——daemon 直连 push/sync、send / receive 以及 text——文件字节都在两端之间直接传输，从不经过 Relayium 的服务器，也不按次收费。有两种模式不是直连：up 会把加密副本存放在你的账号下，占用套餐的每月流量额度、同时存放的存储上限、留存时长与每日上传额度；设备收件箱则会把加密任务排队存着，直到你自己的那台机器回来取。本指南带你完成安装并走通第一次传输。",
+    "在 daemon 直连——relayium serve 配合 push 或 sync——下，文件字节在你的两台机器之间直接传输，从不经过 Relayium 的服务器，不计量。配对码会话——send / receive、text 和 pair——是端到端加密的，但只要服务器为这个码签发了中继，每个字节都经这条加密中继传输，并计入生成配对码那个账号的每月流量额度。有两种模式会在你的账号下保存数据：up 会存放加密副本，占用套餐的每月流量额度、同时存放的存储上限、留存时长与每日上传额度；设备收件箱则会把加密投递排队存着，直到你自己的那台机器回来取。本指南带你完成安装并走通第一次传输。",
   ],
   sections: [
     {
@@ -205,7 +205,7 @@ const zh = {
           "一台有终端的 macOS、Linux 或 Windows 机器。三个系统都提供 x86-64 和 arm64 的预编译二进制。",
           "curl，用于 macOS 和 Linux 上的一行安装——curl --version 会打印版本号。Windows 请改从发布页下载 .zip。",
           "一个可写的安装目录。脚本能写 /usr/local/bin 时就用它，否则用 ~/.local/bin，最后几行会写明它选了哪个。",
-          "daemon 直连 push/sync 不需要别的东西。只有用 send 或 text 生成配对码、以及用 up 上传，才需要 Relayium 账号。",
+          "daemon 直连 push/sync 不需要别的东西。只有用 send、text 或 pair 生成配对码、用 up 上传，以及设备收件箱，才需要 Relayium 账号。",
         ],
       },
       body: [
@@ -225,9 +225,9 @@ const zh = {
       ],
       bullets: [
         "relayium up / relayium down（云端）——对端可以离线。up 在本机加密，只上传密文并打印出一个链接；down 在任何另一台机器上取回并解密，无需账号。上传需要 relayium login，并会占用套餐的每月流量、存储上限、留存时长与每日上传额度；密钥只在链接的 #k= 片段里，从不到达 Relayium：加密副本会一直存到留存到期，但链接一旦丢失，能解密它的唯一密钥也就没有了。",
-        "Device Inbox（设备收件箱）——对端可以离线；在 CLI 里它只有接收侧：由浏览器或原生应用把文件发进你自己机器上的一个文件夹，CLI 没有任何命令能往收件箱里发送。两端要登录同一个账号，并且必须有人在接收端那台机器上选好文件夹、在本地把接收打开。要在你自己的两台服务器之间搬文件，请改用 serve 配合 push 或 sync。",
+        "Device Inbox（设备收件箱）——对端可以离线。relayium inbox send --to <device> 在本机加密文件，并排队发给你自己的某台设备（relayium inbox sent、cancel 和 retry 用来跟进投递）；relayium inbox enable 加上 relayium inbox run 则把收到的文件存进你选好的文件夹；浏览器和原生应用也能发送和接收。两端要登录同一个账号，并且必须有人在接收端那台机器上选好文件夹、在本地把接收打开。要在你自己的两台服务器之间直接搬文件，请改用 serve 配合 push 或 sync。",
         "relayium text——两个终端之间的临时加密消息，两端必须同时在线。生成配对码需要 relayium login；拿着别人给你的配对码加入则无需账号，Relayium 服务器也不保存消息正文。",
-        `relayium send / relayium receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。铸出来的配对码有效期 5 分钟，所以要在这段时间内在接收端把命令跑起来。${cliDirectFacts.zh}`,
+        `relayium send / relayium receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。对端可以是 relayium receive、relayium pair、Relayium 应用或网页；relayium pair 是基于同一种配对码的双向会话。铸出来的配对码有效期 5 分钟，所以要在这段时间内让接收端加入。${cliDirectFacts.zh}`,
         "relayium serve + relayium push relayium://（daemon 直连）——直接在你拥有的两台机器之间传输，走证书固定的 TLS 1.3。无中继、无 SSH、无需配对码。接收端主机的 authorized_fingerprints 文件就是全部的信任决定；登录 Relayium 账号并不会给任何人文件系统权限。",
         "relayium sync——单向增量镜像，走和 push 相同的传输通道：大小与修改时间都没变的文件会被跳过。它是那个会在下一次运行时接着传目标端半截文件的模式，并且会校验它确实传输的文件——但单向镜像是当前状态的副本，不是带版本的备份。",
       ],
@@ -335,7 +335,7 @@ relayium text 483920`,
     {
       heading: "免费，且从设计上保护隐私",
       body: [
-        "上面的直连模式都不按次收费：daemon 直连 push/sync、send / receive 与 text 都在两端之间传内容。它们当中唯一需要登录的，是为 send 或 text 生成配对码的那一端；配对模式只会联系 Relayium 做一次很小的会合握手，绝不传内容。走你账号的两种模式则不同：云端 up 把加密副本存放在账号下，因此会占用套餐的每月流量额度、存储上限、留存时长与每日上传额度；设备收件箱会为你自己的机器排入加密任务，两端都必须登录同一账号。占用额度表示计入用量，不等于按次收费。",
+        "Relayium 不按次收费。daemon 直连 push/sync 在你的两台机器之间直接传内容，从不经过 Relayium 的服务器，因此不占用额度，也不需要账号。配对码会话——send / receive、text 和 pair——只有生成配对码的那一端需要登录；只要服务器为这个码签发了中继，每个字节都经这条加密中继传输，并计入生成配对码那个账号的每月流量额度。在你账号下保存数据的两种模式则不同：云端 up 存放加密副本，因此需要登录，并会占用套餐的每月流量额度、存储上限、留存时长与每日上传额度；设备收件箱会为你自己的机器排入加密投递，占用同样的额度，两端都必须登录同一账号。占用额度表示计入用量，不等于按次收费。",
         "每次直连文件传输都端到端加密，并对真正传输的文件做 SHA-256 校验。续传范围更窄：relayium sync 会在下一次运行接着传半截文件，relayium down 会在发起下载的同一次运行内重连，而 push、send、receive 不续传。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。",
       ],
     },
@@ -345,11 +345,11 @@ relayium text 483920`,
     items: [
       {
         q: "CLI 要收费吗？",
-        a: "CLI 本身免费且开源，daemon 直连 push/sync 与 send / receive 不按次收费：这些文件字节不经过 Relayium 中继。会占用套餐额度的是 up 和 down；占用额度表示用量记账，不等于按次收费。免费账号不付费，付费套餐提高每月流量、存储、留存时长与每日上传限制。",
+        a: "CLI 本身免费且开源，daemon 直连 push/sync 用起来没有任何费用：它的字节从不经过 Relayium 的服务器，没有可计量的东西。send / receive、text 和 pair 经中继时会计量：只要服务器为这个码签发了中继，经中继的字节就计入生成配对码那个账号的每月流量额度。up 和 down，以及设备收件箱投递，也会占用套餐额度，因为它们写入和读取的是存放在你账号下的加密副本。占用额度表示用量记账，不等于按次收费。免费账号不付费，付费套餐提高每月流量、存储、留存时长与每日上传限制。",
       },
       {
         q: "需要 Relayium 账号吗？",
-        a: "send 或 text 生成配对码时需要账号，云端 up 也需要。daemon 直连 push/sync 使用本机公钥信任，无需账号。服务器只为已登录账号签发配对码，因此创建端先运行一次 relayium login；持别人给你的码加入无需登录，receive 接收方也无需登录。",
+        a: "send、text 或 pair 生成配对码时需要账号，云端 up 和设备收件箱也需要。daemon 直连 push/sync 使用本机公钥信任，无需账号。服务器只为已登录账号签发配对码，因此创建端先运行一次 relayium login；持别人给你的码加入无需登录，receive 接收方也无需登录。",
       },
       {
         q: "支持哪些操作系统？",
@@ -357,7 +357,7 @@ relayium text 483920`,
       },
       {
         q: "我的文件会经过 Relayium 的服务器吗？",
-        a: "直连模式不会。用 daemon 直连 push/sync 和 send / receive 时，文件字节都在两端之间直接传输；只有 send / receive 会联系服务器做一次很小的会合握手。有两种模式是有意为之的例外，服务器在两种情况下都只保存无法读取的密文：up 会把加密副本上传到你账号的存储里；设备收件箱（在 CLI 中只有接收侧，即 relayium inbox）会把加密副本排队存着，直到设备下载。",
+        a: "daemon 直连 push/sync 不会：内容在你的两台机器之间直接传输。send / receive、text 和 pair 会联系服务器做一次很小的会合握手；只要服务器为这个码签发了 TURN 中继，会话的每个字节都经这条中继传输——是它读不了的端到端加密密文，计入生成配对码那个账号的每月流量额度，而且从不留存。有两种模式会有意在服务器上保存数据，服务器在两种情况下都只保存无法读取的密文：up 会把加密副本上传到你账号的存储里；设备收件箱（CLI 里用 relayium inbox send，也可以用浏览器或原生应用）会把加密副本排队存着，直到你自己的那台机器下载。",
       },
     ],
   },

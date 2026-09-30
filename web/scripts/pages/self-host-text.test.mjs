@@ -62,9 +62,12 @@ const ONLINE = {
   pt: /permanecer online/i,
 };
 
+// Maintained en/zh (2026-09-30, help.go linkRelayPolicy): CLI text uses the
+// server's TURN relay whenever one is issued for the code, and connects peer
+// to peer otherwise. The frozen locales keep the archived "does not use" text.
 const NO_TURN = {
-  en: /does not use/i,
-  zh: /不使用/,
+  en: /whenever your server issues a TURN relay for the code the session goes through it, and otherwise the two terminals connect peer to peer/i,
+  zh: /只要你的服务器为这个码签发了 TURN 中继，会话就经它传输，否则两个终端点对点连接/,
   ja: /使いません/,
   ko: /사용하지 않습니다/,
   de: /nutzt nicht/i,
@@ -129,7 +132,7 @@ describe("self-hosting guide documents CLI text against a custom server", () => 
 
       const prose = [...section.body, ...section.bullets].join(" ");
       expect(prose).toContain("relayium login --server https://your-domain");
-      expect(prose).toMatch(/P2P|peer-to-peer/i);
+      expect(prose).toMatch(/P2P|peer[- ]to[- ]peer|点对点/i);
       expect(prose).toContain("TURN");
       expect(prose).toMatch(NO_LOGIN[lang]);
       expect(prose).toMatch(NO_SERVER_HISTORY[lang]);

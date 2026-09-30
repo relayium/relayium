@@ -870,39 +870,39 @@ const pt = {
 };
 
 const currentEn = {
-  title: "Relayium vs magic-wormhole: direct-only pairing and managed listeners",
+  title: "Relayium vs magic-wormhole: relayed pairing and managed listeners",
   description: "Compare Relayium CLI pairing, daemon-direct and hosted delivery with magic-wormhole's code workflow and relay-assisted reachability.",
   updatedLabel: "Last updated",
-  lead: ["Both tools can transfer with a short code. magic-wormhole can use its Transit Relay; Relayium CLI send/receive is direct-only and fails rather than falling back to a relay when no direct path exists.", "Relayium also provides authorized daemon-direct push/sync for reachable machines you manage, plus encrypted Cloud or Device Inbox delivery when a recipient may be offline. SSH transport and pull are retired."],
+  lead: ["Both tools can transfer with a short code, and both can relay. magic-wormhole can use its Transit Relay; Relayium CLI send/receive goes through an encrypted TURN relay whenever the server issues one for the code, and those relayed bytes count toward the monthly traffic allowance of the account that minted it.", "Relayium also provides authorized daemon-direct push/sync for reachable machines you manage, plus encrypted Cloud or Device Inbox delivery when a recipient may be offline. SSH transport and pull are retired."],
   sections: [
-    { heading: "Pair two online terminals", body: ["Relayium send mints a six-digit code for five minutes. The optional SAS is derived from pinned TLS certificate fingerprints; comparing it authenticates the endpoints and detects rendezvous service impersonation, but does not prove every network hop."], code: ["relayium send ./archive.zip", "relayium receive 483920"] },
-    { heading: "Reachability is the main tradeoff", bullets: ["magic-wormhole can relay encrypted bytes when direct connection fails.", "Relayium CLI send/receive never relays; use it when direct-only is acceptable.", "For reachable servers you manage, run relayium serve and use relayium:// push or sync."] },
+    { heading: "Pair two online terminals", body: ["Relayium send mints a six-digit code for five minutes; the other end can be relayium receive, a Relayium app or the web page. The optional SAS is derived from the keys the two ends exchanged; comparing it authenticates the endpoints and detects rendezvous service impersonation, but does not prove every network hop."], code: ["relayium send ./archive.zip", "relayium receive 483920"] },
+    { heading: "Reachability is the main tradeoff", bullets: ["magic-wormhole can relay encrypted bytes when direct connection fails.", "Relayium CLI send/receive relays whenever the server issues a relay for the code — even when a direct path exists — metered to the minting account's monthly traffic allowance; with no relay issued (for example that allowance is used up) it needs a direct path.", "For reachable servers you manage, run relayium serve and use relayium:// push or sync."] },
     { heading: "Offline delivery", body: ["Relayium up stores client-side-encrypted ciphertext and prints a link; Device Inbox queues encrypted data for one of your devices. These hosted paths consume plan allowances, which is usage accounting rather than a per-transfer charge."] },
   ],
   faq: { heading: "Frequently asked questions", items: [
-    { q: "Which works behind strict NAT?", a: "magic-wormhole's relay can preserve reachability. Relayium CLI pairing is direct-only; use Cloud or Device Inbox when hosted asynchronous delivery is acceptable." },
+    { q: "Which works behind strict NAT?", a: "Both, while a relay is available. magic-wormhole's relay can preserve reachability; Relayium CLI pairing goes through its encrypted relay whenever the server issues one, counted toward the minting account's monthly allowance. When no relay is issued it needs a direct path; use Cloud or Device Inbox when hosted asynchronous delivery is acceptable." },
     { q: "Does Relayium use SSH for servers?", a: "No. Current server transfer uses relayium serve and relayium:// over pinned TLS." },
     { q: "Does Relayium require an account?", a: "Minting a send code and uploading with up do. Joining with a code, downloading a link and daemon-direct push/sync do not." },
   ] },
-  cta: { text: "Choose direct-only, relay-assisted, or asynchronous delivery deliberately.", button: "Get the CLI", href: "/cli" },
+  cta: { text: "Choose relayed pairing, daemon-direct, or asynchronous delivery deliberately.", button: "Get the CLI", href: "/cli" },
   relatedHeading: "Keep reading",
 };
 const currentZh = {
-  title: "Relayium 与 magic-wormhole：纯直连配对和自管监听端",
+  title: "Relayium 与 magic-wormhole：经中继的配对和自管监听端",
   description: "比较 Relayium CLI 的配对、daemon 直连和托管投递，与 magic-wormhole 的口令流程和中继辅助可达性。",
   updatedLabel: "最近更新",
-  lead: ["两者都能用短码传输。magic-wormhole 可以使用 Transit Relay；Relayium CLI send/receive 只走直连，找不到直连路径时会失败，而不是回退到中继。", "Relayium 还为你管理且可达的机器提供授权 daemon 直连 push/sync，并在接收方可能离线时提供加密云端或设备收件箱投递。SSH 传输与 pull 已退役。"],
+  lead: ["两者都能用短码传输，也都能走中继。magic-wormhole 可以使用 Transit Relay；Relayium CLI send/receive 只要服务器为这个码签发了加密 TURN 中继就经它传输，经中继的字节计入生成配对码那个账号的每月流量额度。", "Relayium 还为你管理且可达的机器提供授权 daemon 直连 push/sync，并在接收方可能离线时提供加密云端或设备收件箱投递。SSH 传输与 pull 已退役。"],
   sections: [
-    { heading: "配对两台在线终端", body: ["Relayium send 生成有效期五分钟的六位码。可选 SAS 来自固定 TLS 证书指纹；带外比对可以认证端点并发现会合服务冒充，但不能证明每一段网络路径。"], code: ["relayium send ./archive.zip", "relayium receive 483920"] },
-    { heading: "可达性是主要取舍", bullets: ["直连失败时，magic-wormhole 可以用中继承载加密字节。", "Relayium CLI send/receive 绝不使用中继；能接受纯直连限制时使用。", "对于你管理且可达的服务器，运行 relayium serve，再使用 relayium:// push 或 sync。"] },
+    { heading: "配对两台在线终端", body: ["Relayium send 生成有效期五分钟的六位码；对端可以是 relayium receive、Relayium 应用或网页。可选 SAS 来自双方交换的密钥；带外比对可以认证端点并发现会合服务冒充，但不能证明每一段网络路径。"], code: ["relayium send ./archive.zip", "relayium receive 483920"] },
+    { heading: "可达性是主要取舍", bullets: ["直连失败时，magic-wormhole 可以用中继承载加密字节。", "只要服务器为这个码签发了中继，Relayium CLI send/receive 就经中继传输——即使存在直连路径——并计入生成配对码那个账号的每月流量额度；没有签发中继时（比如该额度已用尽），它需要一条直连路径。", "对于你管理且可达的服务器，运行 relayium serve，再使用 relayium:// push 或 sync。"] },
     { heading: "离线投递", body: ["Relayium up 存储本机加密的密文并打印链接；设备收件箱为你的某台设备排队加密数据。这些托管路径会占用套餐额度，表示用量记账，而不是按次收费。"] },
   ],
   faq: { heading: "常见问题", items: [
-    { q: "严格 NAT 下哪个能用？", a: "magic-wormhole 的中继可以保持可达。Relayium CLI 配对只走直连；能接受托管异步投递时，可使用云端或设备收件箱。" },
+    { q: "严格 NAT 下哪个能用？", a: "有中继可用时两者都行。magic-wormhole 的中继可以保持可达；只要服务器签发了中继，Relayium CLI 配对就经它的加密中继传输，计入生成配对码那个账号的每月额度。没有签发中继时，它需要一条直连路径；能接受托管异步投递时，可使用云端或设备收件箱。" },
     { q: "Relayium 的服务器传输使用 SSH 吗？", a: "不使用。当前服务器传输通过证书固定 TLS 使用 relayium serve 与 relayium://。" },
     { q: "Relayium 需要账号吗？", a: "生成 send 配对码和用 up 上传需要。用码加入、下载链接和 daemon 直连 push/sync 不需要。" },
   ] },
-  cta: { text: "有意识地选择纯直连、中继辅助或异步投递。", button: "获取 CLI", href: "/cli" },
+  cta: { text: "有意识地选择经中继的配对、daemon 直连或异步投递。", button: "获取 CLI", href: "/cli" },
   relatedHeading: "继续阅读",
 };
 

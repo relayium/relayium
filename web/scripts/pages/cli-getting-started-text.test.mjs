@@ -29,8 +29,10 @@ describe("CLI getting-started guide includes ephemeral text", () => {
 
       const copy = [...(section.body ?? []), ...(section.bullets ?? [])].join(" ");
       expect(copy, `${lang} mint login`).toContain("relayium login");
-      expect(copy, `${lang} direct P2P`).toMatch(/P2P|peer-to-peer/i);
-      expect(copy, `${lang} no browser relay`).toContain("TURN");
+      // Maintained en/zh (2026-09-30): the text session relays whenever the
+      // server issues a TURN relay and is peer to peer only without one.
+      expect(copy, `${lang} P2P path`).toMatch(/P2P|peer[- ]to[- ]peer|点对点/i);
+      expect(copy, `${lang} TURN named`).toContain("TURN");
       expect(copy, `${lang} server storage boundary`).toMatch(SERVER_WORD);
       expect(copy, `${lang} endpoint retention boundary`).toMatch(RETAIN_WORD);
       expect(copy, `${lang} byte limit`).toMatch(/65[.,\s]?536/);

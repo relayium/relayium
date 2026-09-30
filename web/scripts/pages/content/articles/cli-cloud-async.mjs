@@ -435,7 +435,7 @@ downloads/report.pdf
     items: [
       {
         q: "我需要账号吗？",
-        a: "上传时需要；发送时，只在必须签发配对码的情况下需要。relayium up 始终需要 relayium login，这样文件才能存到你的账号下。relayium send 只在服务器必须为你签发一个新的配对码时才需要——用别人给你的配对码运行 send，它不会签发任何东西，因此也不需要登录。relayium down 和 relayium receive 不需要账号，push/pull、daemon 直连、sync 也都不需要。",
+        a: "上传时需要；发送时，只在必须签发配对码的情况下需要。relayium up 始终需要 relayium login，这样文件才能存到你的账号下。relayium send 只在服务器必须为你签发一个新的配对码时才需要——用别人给你的配对码运行 send，它不会签发任何东西，因此也不需要登录。relayium down 和 relayium receive 不需要账号，daemon 直连 push/sync 也不需要。",
       },
       {
         q: "我的文件加密吗？",

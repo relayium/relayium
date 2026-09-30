@@ -91,10 +91,12 @@ const CLI_DIRECT_ONLY = {
   es: /CLI.*direct-only/i,
   pt: /CLI.*direct-only/i,
 };
-// What the maintained lead must say instead: which modes are direct.
+// What the maintained lead must say instead: which modes are direct. Only the
+// server-to-server modes are (2026-09-30, help.go linkRelayPolicy): the
+// pairing-code sessions relay whenever the server issues a relay.
 const CLI_DIRECT_MODES = {
-  en: /CLI'?s? transfer modes[^.]*are direct and never relayed/i,
-  zh: /CLI 的传输模式[^。]*都是直连，从不走中继/,
+  en: /server-to-server modes — serve with push or sync — are direct and never relayed, while its pairing-code sessions — send \/ receive, text and pair — go through an encrypted TURN relay whenever the server issues one/i,
+  zh: /服务器对服务器模式——serve 配合 push 或 sync——是直连，从不走中继；配对码会话——send \/ receive、text 和 pair——只要服务器为这个码签发了加密 TURN 中继，就经它传输/,
 };
 // …and what it may not say: that the CLI as a whole is direct.
 const CLI_WHOLE_IS_DIRECT = {

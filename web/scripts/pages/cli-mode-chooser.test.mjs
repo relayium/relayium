@@ -217,15 +217,15 @@ describe("the getting-started chooser covers all six modes", () => {
       expect(cloud).toMatch(lang === "en" ? /stays stored/i : /会一直存到/);
     });
 
-    it(`${lang}: says Device Inbox is the receive side only`, () => {
-      // The mode most likely to be half-stated: its sender is a browser or a
-      // native app, and a reader who takes it for a CLI mode goes looking for a
-      // `relayium inbox send` that does not exist.
+    it(`${lang}: says the CLI both sends into and receives from a Device Inbox`, () => {
+      // 2026-09-30: the next CLI release ships `relayium inbox send` (plus sent,
+      // cancel and retry), so the old "RECEIVE side only" bullet became false.
       const inbox = chooser(lang).bullets.find((b) => modeOf(b) === "inbox");
       expect(inbox, `${lang} has no Device Inbox bullet`).toBeTruthy();
-      expect(inbox).toMatch(lang === "en" ? /RECEIVE side only/ : /只有接收侧/);
-      expect(inbox).toMatch(
-        lang === "en" ? /no CLI command that sends into an inbox/i : /没有任何命令能往收件箱里发送/,
+      expect(inbox).toContain("relayium inbox send --to <device>");
+      expect(inbox).toMatch(/relayium inbox run/);
+      expect(inbox).not.toMatch(
+        lang === "en" ? /RECEIVE side only|no CLI command that sends into an inbox/i : /只有接收侧|没有任何命令能往收件箱里发送/,
       );
     });
 

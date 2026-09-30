@@ -97,7 +97,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "No relay and no fallback: if the listener isn't reachable, the push fails — file bytes never route through anyone else.",
-        "The same transfer engine as the other modes: each file is checked with a per-file SHA-256 and staged before it is installed. push does not resume, here or over SSH — it refuses a destination that already exists, so an interrupted run is finished by pushing the missing paths, or by relayium sync, which continues a partial file and which this listener honours unless it was started with --no-resume.",
+        "The same transfer engine as the other modes: each file is checked with a per-file SHA-256 and staged before it is installed. push does not resume — it refuses a destination that already exists, so an interrupted run is finished by pushing the missing paths, or by relayium sync, which continues a partial file and which this listener honours unless it was started with --no-resume.",
       ],
     },
     {
@@ -216,8 +216,8 @@ ls -l /etc/relayium/id.key`,
     heading: "Frequently asked questions",
     items: [
       {
-        q: "How is daemon direct different from push over SSH?",
-        a: "push over SSH tunnels the transfer through your SSH connection and needs an SSH account on the remote. Daemon direct needs no SSH and no account — the two servers authenticate each other by certificate fingerprint over pinned TLS, which is lighter when both machines are yours.",
+        q: "What happened to push over SSH?",
+        a: "SSH transfers — push or sync to an SSH destination, and relayium pull — are retired in the current CLI and refuse with \"SSH transfers are currently disabled\". Daemon direct is the server-to-server path: it needs no SSH and no account — the two servers authenticate each other by certificate fingerprint over pinned TLS, which is lighter when both machines are yours.",
       },
       {
         q: "Do I have to copy fingerprints around by hand?",
@@ -241,7 +241,7 @@ ls -l /etc/relayium/id.key`,
       },
       {
         q: "Should I use Device Inbox for this instead?",
-        a: "No — the CLI's Inbox is the receiving side only. It accepts files your account sends to that machine, and there is no CLI command that sends into an inbox; you send to one from the Web app or a native app. To move files between two servers you control, serve plus push or sync is the direct path, and it needs no account at all.",
+        a: "Usually not. The CLI can send into an inbox — relayium inbox send --to <device> — but a Device Inbox delivery is uploaded to Relayium as ciphertext, queued until the device fetches it, needs both ends signed in to the same account, and counts against that account's storage, traffic, daily quota and retention limits. It is the right tool when the receiving machine may be offline. To move files between two servers you control that can reach each other, serve plus push or sync is the direct path: nothing is uploaded or metered, and it needs no account at all.",
       },
       {
         q: "Can a push delete files on the receiver?",
@@ -349,7 +349,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。",
-        "使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传——无论走这条路还是走 SSH：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync（它会接着传半截文件，而这个监听端会遵守，除非它是以 --no-resume 启动的）。",
+        "使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync（它会接着传半截文件，而这个监听端会遵守，除非它是以 --no-resume 启动的）。",
       ],
     },
     {
@@ -468,8 +468,8 @@ ls -l /etc/relayium/id.key`,
     heading: "常见问题",
     items: [
       {
-        q: "daemon 直连和通过 SSH 推送有什么不同？",
-        a: "通过 SSH 推送会把传输隧道进你的 SSH 连接，并且需要在远端有一个 SSH 账号。daemon 直连不需要 SSH，也不需要账号——两台服务器通过证书固定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。",
+        q: "通过 SSH 推送还能用吗？",
+        a: "不能。SSH 传输——向 SSH 目标 push 或 sync，以及 relayium pull——在当前 CLI 中已退役，会以「SSH transfers are currently disabled」拒绝。daemon 直连才是服务器对服务器的路径：它不需要 SSH，也不需要账号——两台服务器通过证书固定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。",
       },
       {
         q: "我需要手动到处复制指纹吗？",
@@ -493,7 +493,7 @@ ls -l /etc/relayium/id.key`,
       },
       {
         q: "这种场景该改用「设备收件箱」吗？",
-        a: "不该——CLI 上的收件箱只有接收这一侧。它接收的是你的账号发给这台机器的文件，而 CLI 并没有向收件箱发送的命令；要发给某个收件箱，请用网页版或原生 App。要在你自己掌控的两台服务器之间搬文件，serve 加 push 或 sync 才是直连的那条路，而且完全不需要账号。",
+        a: "通常不该。CLI 可以往收件箱发送——relayium inbox send --to <设备>——但设备收件箱投递会以密文上传到 Relayium，排队等设备来取，两端需要登录同一个账号，并占用该账号的存储、流量、每日额度与留存限制。接收机器可能离线时，它才是合适的工具。要在你自己掌控、彼此可达的两台服务器之间搬文件，serve 加 push 或 sync 才是直连的那条路：不上传、不计量，而且完全不需要账号。",
       },
       {
         q: "推送会删掉接收方的文件吗？",

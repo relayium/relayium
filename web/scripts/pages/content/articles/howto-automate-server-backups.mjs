@@ -132,12 +132,12 @@ $ echo $?
             fix: "cron runs with a minimal PATH, usually just /usr/bin:/bin. If install.sh could not write to /usr/local/bin it put the binary in ~/.local/bin, which cron will never find. Use the absolute path from command -v in the crontab line, or set PATH= on a line at the top of the crontab.",
           },
           {
-            symptom: "The log shows the ssh connection being refused, or nothing after the first run.",
+            symptom: "The log says \"SSH transfers are currently disabled\", or shows nothing after the first run.",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              `grep -i "SSH transfers" ~/relayium-sync.log
+# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.`,
             ],
-            fix: "cron has no ssh-agent and no terminal, so a key with a passphrase can only hang or fail. Point -i at a passphrase-less key reserved for backups, and confirm with BatchMode=yes, which refuses to prompt rather than waiting for someone who is not there.",
+            fix: "The scheduled command still names an old SSH destination, and SSH transfers are retired. Run relayium serve on the backup server, authorize this machine's relayium id fingerprint there, and change the target to relayium://backup-server — no SSH key, agent or passphrase is involved any more.",
           },
           {
             symptom: "sync runs cleanly but files deleted at the source are still on the destination.",
@@ -329,12 +329,12 @@ $ echo $?
             fix: "cron 使用一个最小化的 PATH，通常只有 /usr/bin:/bin。如果 install.sh 当初写不进 /usr/local/bin，它会把二进制放在 ~/.local/bin，而 cron 永远找不到那里。把 command -v 给出的绝对路径写进 crontab 行，或者在 crontab 顶部单独加一行 PATH=。",
           },
           {
-            symptom: "日志显示 ssh 连接被拒绝，或者第一次运行之后就什么都没有了。",
+            symptom: "日志显示 “SSH transfers are currently disabled”，或者第一次运行之后就什么都没有了。",
             code: [
-              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).`,
+              `grep -i "SSH transfers" ~/relayium-sync.log
+# SSH transfers are currently disabled. Use relayium pair, or relayium serve with push/sync to relayium://host.`,
             ],
-            fix: "cron 既没有 ssh-agent 也没有终端，所以带口令的密钥只能卡住或失败。用 -i 指向一把专供备份、没有口令的密钥，并用 BatchMode=yes 确认——它宁可拒绝也不会去等一个根本不在场的人。",
+            fix: "定时命令里还写着旧的 SSH 目标，而 SSH 传输已经退役。请在备份服务器上运行 relayium serve，在那边授权这台机器 relayium id 打印的指纹，再把目标改成 relayium://backup-server——从此不再涉及 SSH 密钥、agent 或口令。",
           },
           {
             symptom: "sync 跑得很干净，但源端已删除的文件在目标端还在。",

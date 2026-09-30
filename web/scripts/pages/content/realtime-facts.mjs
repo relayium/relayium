@@ -1,6 +1,13 @@
 // Shared realtime-transfer facts. Articles compose these fragments instead of
 // restating protocol constants in prose, so changing the code format, account
 // boundary, TTL or cross-network path has one nine-language authority.
+//
+// cliDirectFacts keeps its historical name so every article that composes it
+// keeps one reference, but its maintained en/zh text is the CLI relay policy
+// (server/cmd/relayium/help.go linkRelayPolicy): a pairing-code session relays
+// every byte whenever the server issues a TURN relay and meters it to the code
+// owner; it goes peer to peer only when no relay is issued. The frozen locales
+// still carry the retired direct-only wording as archived translations.
 
 export const pairingFacts = {
   en: "The server generates exactly six decimal digits (0–9, including a leading zero). The sender signs in to create the code, while the person joining by code, link or QR never needs an account. It accepts new joins for five minutes; an already connected transfer is not cut off when that countdown ends.",
@@ -27,8 +34,8 @@ export const browserRelayFacts = {
 };
 
 export const cliDirectFacts = {
-  en: "Relayium's CLI send/receive and text modes are direct-only P2P: as they are built today they carry no ICE and no TURN, so if the two ends cannot establish a direct connection the session fails rather than falling back to a relay. That is a property of these modes rather than of Relayium as a whole — the apps and the web page relay a cross-network transfer by design, over ciphertext the relay cannot read.",
-  zh: "Relayium CLI 的 send/receive 和 text 模式只走 P2P 直连：按它们今天的实现，这条路径里没有 ICE 也没有 TURN，所以两端建立不了直连时，会话会直接失败，而不是回退到中继。这是这些模式的性质，不是 Relayium 整体的性质——App 和网页做跨网络传输时按设计就是走中继的，中继上流过的是它读不了的密文。",
+  en: "Relayium's CLI pairing-code sessions (send / receive, text and pair) send every byte through an encrypted TURN relay whenever the server issues one for the code — even when the two ends could reach each other directly — and those relayed bytes count toward the monthly traffic allowance of the account that minted the code; the relay carries only ciphertext it cannot read. Only when no relay is issued (none is configured, or that allowance is used up) do the two ends connect peer to peer, and then the session fails if they have no direct path.",
+  zh: "Relayium CLI 的配对码会话（send / receive、text 和 pair）只要服务器为这个码签发了 TURN 中继，每个字节就都经这条加密中继传输——即使两端本可直接连通——并计入生成配对码那个账号的每月流量额度；中继只经手它读不了的密文。只有在没有签发中继时（没有配置中继，或该额度已用尽），两端才点对点连接，而此时如果两端之间没有直连路径，会话就会失败。",
   ja: "Relayium CLI の send/receive と text は P2P 直接接続専用です。ファイルやメッセージのバイトを TURN やその他の Relayium サーバーで中継することはありません。2 つの端末が直接接続を確立できなければ、リレーへフォールバックせずにセッションは失敗します。",
   ko: "Relayium CLI의 send/receive와 text는 P2P 직접 연결 전용입니다. 파일이나 메시지 바이트를 TURN 또는 다른 Relayium 서버로 릴레이하지 않습니다. 두 기기가 직접 연결을 맺지 못하면 릴레이로 대체하지 않고 세션이 실패합니다.",
   de: "Relayium CLI send/receive und text sind direct-only P2P: Datei- oder Nachrichtenbytes werden weder über TURN noch über einen anderen Relayium-Server weitergeleitet. Können die beiden Endpunkte keine direkte Verbindung herstellen, schlägt die Sitzung fehl, statt auf ein Relay auszuweichen.",

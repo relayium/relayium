@@ -153,6 +153,49 @@ must_have "$CLI_ZH" '否则删除会被忽略并回报给你'
 must_have "$CLI_EN" 'downgrade guard and the minimum-version floor'
 must_have "$CLI_ZH" '降级保护和最低版本下限'
 
+# ── The rest of the maintained public copy about the CLI ──
+#
+# The generated English/Chinese guides, how-tos and comparisons, the privacy
+# and security pages, and the en/zh app strings outside cliPage must not
+# repeat the claims the /cli page retracted. The patterns are the exact
+# retired phrasings, not bare words: the corrected copy still says, truthfully,
+# that an OLDER relayium's pairing is direct-only, and that daemon-direct
+# push/sync never relays.
+must_have "$TMPROOT/send" 'relay allowance'
+must_have "$TMPROOT/pull" 'relayium pair\), or run relayium serve'
+PUBLIC_CLI="$TMPROOT/public-cli"
+{
+  cat "$PAGES"
+  for p in privacy security zh/privacy zh/security; do
+    echo "web/public/$p/index.html"
+  done
+} >"$PUBLIC_CLI"
+CLI_FALSE_EN='send ?/ ?receive (is|are) direct-only|CLI pairing (path )?is direct-only|CLI text is (a different, )?direct-only|modes are direct-only|Same direct-only rule as send|Direct only — free, or it fails|send ?/ ?receive never relays|CLI file and text transfers never use TURN|does not use or count against TURN|has no relay (fallback|path)|no relay fallback, by design|transfer modes — push, pull|CLI codes pair CLI to CLI|only ever pairs CLI to CLI|CLI-to-CLI only|a CLI code only pairs with another CLI|[Bb]oth ends must be the CLI|other end must be the CLI|direct CLI (transfers|paths)|CLI direct is unaffected|push ?/ ?pull (reuses|uses) your (own |existing )?SSH|reuses your SSH access|push over SSH tunnels|here or over SSH|RECEIVE side only|no CLI command that sends into an inbox|receive-only in the CLI|the CLI.s Inbox is the receiving side only|CLI paths connect directly; they never use a relay|while the CLI connects directly|daemon-direct CLI push/sync, and send / receive|between two online CLIs|Point -i at a passphrase-less key'
+CLI_FALSE_ZH='send/receive (只走直连|是纯直连|绝不使用中继)|CLI 配对(码 send/receive )?只走直连|CLI 文本仅直连|CLI text 只支持直连|和 send 一样只走直连|只走直连——免费，否则失败|只能 CLI 对 CLI|CLI 的码只能和(另一个 )?CLI|两端都必须是 CLI|另一端必须是 CLI|命令行工具则始终直连|这些命令行路径始终直连|CLI 直连(不计入|不受影响)|同一网络传输与 CLI 不受影响|CLI 文件和文本传输都不使用 TURN|复用你现有的 SSH 权限|在 CLI 中只有接收侧|CLI 里它只有接收侧|CLI 上的收件箱只有接收这一侧|直连路径不按次收费：同一网络内的浏览器传输、CLI 的 daemon 直连 push/sync 与 send / receive|连接两台在线 CLI|用 -i 指向一把专供备份|CLI 的传输模式——push、pull'
+while IFS= read -r page; do
+  case $page in
+    '') continue ;;
+  esac
+  [ -f "$ROOT/$page" ] || { bad "$page is listed but missing"; continue; }
+  must_lack "$ROOT/$page" "$CLI_FALSE_EN"
+  must_lack "$ROOT/$page" "$CLI_FALSE_ZH"
+done <"$PUBLIC_CLI"
+for f in "$ROOT/web/src/lib/i18n/en.ts" "$ROOT/web/src/lib/i18n/zh.ts"; do
+  must_lack "$f" "$CLI_FALSE_EN"
+  must_lack "$f" "$CLI_FALSE_ZH"
+done
+# …and the corrected facts are what those pages now say.
+must_have "$ROOT/web/public/guides/send-a-file-to-someone/index.html" 'monthly traffic allowance of the account that minted the code'
+must_have "$ROOT/web/public/zh/guides/send-a-file-to-someone/index.html" '生成配对码那个账号的每月流量额度'
+must_have "$ROOT/web/public/guides/receive-files-from-the-command-line/index.html" 'can be relayium send or relayium pair, a Relayium app or the web page'
+must_have "$ROOT/web/public/guides/transfer-files-from-terminal/index.html" 'relayium inbox send --to'
+must_have "$ROOT/web/public/zh/guides/transfer-files-from-terminal/index.html" 'relayium inbox send --to'
+must_have "$ROOT/web/public/security/index.html" 'CLI pairing-code sessions \(files, text and pair\) use TURN whenever the server issues a relay'
+must_have "$ROOT/web/public/zh/security/index.html" 'CLI 配对码会话（文件、文本和 pair）只要服务器为该码签发了中继，就使用 TURN'
+must_have "$ROOT/web/public/privacy/index.html" 'CLI pairing-code sessions \(files, text and pair\) use TURN'
+must_have "$ROOT/web/src/lib/i18n/en.ts" "CLI.s server-to-server push/sync are unaffected"
+must_have "$ROOT/web/src/lib/i18n/zh.ts" 'CLI 的服务器对服务器 push/sync 不受影响'
+
 must_have "$ROOT/web/public/llms.txt" '1 hour, 1 day, 3 days, 7 days and 14 days'
 must_have "$ROOT/web/public/llms.txt" 'subject to the plan'
 must_have "$ROOT/web/public/llms.txt" 'usage accounting, not a separate charge'
@@ -162,4 +205,4 @@ must_have "$ROOT/README.md" 'does not mean a per-transfer charge'
 if [ "$fail" -ne 0 ]; then
   exit 1
 fi
-echo "cli-public-truth: candidate help, the /cli page sources and generated English/Chinese public truth agree"
+echo "cli-public-truth: candidate help, the /cli page sources, the en/zh app strings and generated English/Chinese public truth agree"

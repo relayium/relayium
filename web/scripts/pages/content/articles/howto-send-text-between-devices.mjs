@@ -131,8 +131,8 @@ const en = article({
     },
     {
       symptom: "A browser and the CLI cannot join each other's code.",
-      code: ["relayium text 483920   # a CLI code only ever pairs CLI to CLI"],
-      fix: "Browser and CLI text sessions use different transports and pairing handshakes, so a six-digit code minted by one is meaningless to the other. Use two browsers, or the CLI on both ends — relayium text prints the exact command the second machine should run.",
+      code: ["relayium version   # a current CLI shares pairing codes with the web page"],
+      fix: "A current relayium and the web page use the same pairing codes for text, so either can mint the code and the other joins it. When they cannot, the CLI on that machine is an older release whose pairing is CLI-only and direct-only: run relayium update there, or use the CLI on both ends — relayium text prints the exact command the second machine should run.",
     },
   ],
   cliHeading: "CLI: mint a code on one machine, join it on the other",
@@ -141,7 +141,7 @@ const en = article({
     "Run relayium text with that code on the other machine. Interactive mode sends one line per message and does not stop to compare a code unless you ask it to. For multiline or byte-exact stdin, pipe it as one message; a piped run needs no extra flag.",
   ],
   cliNotes: [
-    "CLI codes last five minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.",
+    "CLI codes last five minutes. The other end can be relayium text, relayium pair, a Relayium app or the web page, and whenever the server issues a relay for the code the messages go through it as ciphertext, counted toward the traffic allowance of the account that minted the code.",
     "Only the machine that mints needs a signed-in account. The machine joining the printed code does not sign in.",
     "--verify opts in to comparing the SAS and needs a terminal to answer it, so a piped run with --verify refuses instead of continuing as if it had been confirmed. --yes is still accepted, still means “never prompt”, and overrides --verify.",
   ],
@@ -161,7 +161,7 @@ const en = article({
     },
     {
       q: "Can I use a browser on one end and the CLI on the other?",
-      a: "No. Browser and CLI text sessions use different transports and pairing handshakes. Use two browsers or two CLI clients.",
+      a: "Yes, with a current relayium: the CLI and the web page use the same pairing codes, so either side can mint the code and the other joins it. An older relayium CLI only pairs with another CLI; relayium update brings it current.",
     },
   ],
   ctaText: "Open Relayium on two online devices and move the next thing you would otherwise send to yourself.",
@@ -241,8 +241,8 @@ const zh = article({
     },
     {
       symptom: "浏览器和 CLI 无法加入彼此的配对码。",
-      code: ["relayium text 483920   # CLI 的配对码只能 CLI 对 CLI"],
-      fix: "浏览器与 CLI 的文本会话使用不同的传输和配对握手，所以一端生成的 6 位码对另一端毫无意义。请用两个浏览器，或者两端都用 CLI——relayium text 会打印出第二台机器该运行的完整命令。",
+      code: ["relayium version   # 当前版本的 CLI 与网页共用配对码"],
+      fix: "当前版本的 relayium 与网页的文本会话使用同一种配对码，任何一方生成的码另一方都能加入。如果加入不了，说明那台机器上的 CLI 是旧版，它的配对只限 CLI、只走直连：在那台机器上运行 relayium update，或者两端都用 CLI——relayium text 会打印出第二台机器该运行的完整命令。",
     },
   ],
   cliHeading: "CLI：一台机器生成配对码，另一台加入",
@@ -251,7 +251,7 @@ const zh = article({
     "另一台机器用该码运行 relayium text。交互模式每行是一条消息，除非你主动要求，否则不会停下来核对校验码；多行或要求逐字节保真的内容请通过管道作为一条消息发送，管道方式不需要额外加任何参数。",
   ],
   cliNotes: [
-    "CLI 配对码有效期 5 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。",
+    "CLI 配对码有效期 5 分钟。对端可以是 relayium text、relayium pair、Relayium 应用或网页；只要服务器为这个码签发了中继，消息就以密文经它传输，并计入生成配对码那个账号的流量额度。",
     "只有生成配对码的那台机器需要已登录账号；使用打印出来的配对码加入时不需要登录。",
     "--verify 用来主动开启 SAS 核对，它需要终端来回答，因此管道运行时加 --verify 会直接拒绝，而不是当作已确认继续。--yes 仍然可用，含义仍是“永不提示”，并且优先于 --verify。",
   ],
@@ -271,7 +271,7 @@ const zh = article({
     },
     {
       q: "一端用浏览器、另一端用 CLI 可以吗？",
-      a: "不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。",
+      a: "可以，只要 relayium 是当前版本：CLI 与网页使用同一种配对码，任何一方都能生成配对码，另一方加入即可。旧版 relayium CLI 只能和另一个 CLI 配对；运行 relayium update 即可升级。",
     },
   ],
   ctaText: "在两台在线设备上打开 Relayium，把下一段原本要“发给自己”的内容直接传过去。",

@@ -60,7 +60,7 @@ const en = {
       },
       {
         q: "Is Relayium free?",
-        a: "The software is free and open source under the AGPL-3.0 license, and direct paths carry no per-transfer charge: same-network browser transfers, daemon-direct CLI push/sync, and send / receive. The hosted service has a free tier rather than being free without limit — a stored download link uses the sender's plan storage allowance and retention window. Consuming allowance is usage accounting, not a separate charge; Free accounts pay nothing and paid plans (Plus, Pro, Max) raise the limits. Creating a link requires the sender to sign in; the recipient never needs an account or plan to download.",
+        a: "The software is free and open source under the AGPL-3.0 license, and no path carries a per-transfer charge: same-network browser transfers and daemon-direct CLI push/sync use no allowance, while a relayed CLI send / receive counts toward the monthly traffic allowance of the account that minted its code. The hosted service has a free tier rather than being free without limit — a stored download link uses the sender's plan storage allowance and retention window. Consuming allowance is usage accounting, not a separate charge; Free accounts pay nothing and paid plans (Plus, Pro, Max) raise the limits. Creating a link requires the sender to sign in; the recipient never needs an account or plan to download.",
       },
     ],
   },
@@ -127,7 +127,7 @@ const zh = {
       },
       {
         q: "Relayium 免费吗？",
-        a: "软件本身免费开源，采用 AGPL-3.0 许可；直连路径不按次收费：同一网络内的浏览器传输、CLI 的 daemon 直连 push/sync 与 send / receive。托管服务则是「有免费额度」而不是「无限免费」——存储下载链接会计入发送方套餐的存储额度与留存时长。占用额度表示用量记账，不是另外收费；免费账号不付费，Plus、Pro、Max 会提高限制。生成链接需要发送方登录；收件方下载无需账号或套餐。",
+        a: "软件本身免费开源，采用 AGPL-3.0 许可；任何路径都不按次收费：同一网络内的浏览器传输与 CLI 的 daemon 直连 push/sync 不占用额度，而经中继的 CLI send / receive 计入生成配对码那个账号的每月流量额度。托管服务则是「有免费额度」而不是「无限免费」——存储下载链接会计入发送方套餐的存储额度与留存时长。占用额度表示用量记账，不是另外收费；免费账号不付费，Plus、Pro、Max 会提高限制。生成链接需要发送方登录；收件方下载无需账号或套餐。",
       },
     ],
   },

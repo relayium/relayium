@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { LANGS } from "./shared.mjs";
+import { LANGS, MAINTAINED_LANGS } from "./shared.mjs";
 import {
   pairingFacts,
   browserRelayFacts,
@@ -45,6 +45,19 @@ const FAILS = {
   es: /sesión falla/, pt: /sessão falha/,
 };
 
+const RELAY_WHENEVER = {
+  en: /through an encrypted TURN relay whenever the server issues one for the code/,
+  zh: /只要服务器为这个码签发了 TURN 中继，每个字节就都经这条加密中继传输/,
+};
+const METERED = {
+  en: /monthly traffic allowance of the account that minted the code/,
+  zh: /生成配对码那个账号的每月流量额度/,
+};
+const NO_RELAY_FAILS = {
+  en: /Only when no relay is issued[^.]*peer to peer[^.]*fails/,
+  zh: /只有在没有签发中继时[^。]*点对点[^。]*会话就会失败/,
+};
+
 describe("shared browser protocol facts", () => {
   it("has one complete composition in every shipped language", () => {
     expect(Object.keys(pairingFacts)).toEqual(LANGS);
@@ -72,12 +85,24 @@ describe("shared browser protocol facts", () => {
     }
   });
 
-  it("states one complete CLI direct-only boundary in every shipped language", () => {
+  it("states one complete CLI relay boundary in every shipped language", () => {
     expect(Object.keys(cliDirectFacts)).toEqual(LANGS);
     for (const lang of LANGS) {
-      expect(cliDirectFacts[lang]).toMatch(DIRECT[lang]);
       expect(cliDirectFacts[lang]).toMatch(/TURN/);
-      expect(cliDirectFacts[lang]).toMatch(FAILS[lang]);
+      if (MAINTAINED_LANGS.includes(lang)) {
+        // help.go linkRelayPolicy (2026-09-30): relay whenever issued, metered
+        // to the code owner; peer to peer (and needing a direct path) only
+        // when no relay is issued. The retired direct-only claim must be gone.
+        expect(cliDirectFacts[lang]).not.toMatch(DIRECT[lang]);
+        expect(cliDirectFacts[lang]).toMatch(RELAY_WHENEVER[lang]);
+        expect(cliDirectFacts[lang]).toMatch(METERED[lang]);
+        expect(cliDirectFacts[lang]).toMatch(NO_RELAY_FAILS[lang]);
+      } else {
+        // Frozen archived translations keep the retired wording (reported to
+        // the owner; not translated as ordinary acceptance work).
+        expect(cliDirectFacts[lang]).toMatch(DIRECT[lang]);
+        expect(cliDirectFacts[lang]).toMatch(FAILS[lang]);
+      }
     }
   });
 

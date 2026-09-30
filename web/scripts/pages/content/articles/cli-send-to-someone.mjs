@@ -9,11 +9,11 @@ import { cliDirectFacts } from "../realtime-facts.mjs";
 const en = {
   title: "Send a file to someone across networks with the Relayium CLI",
   description:
-    "Use relayium send and receive to move a file directly between two people on different networks, using a short pairing code. End-to-end encrypted, with an optional SAS code to compare, and free — the file goes straight between you, never through our servers.",
+    "Use relayium send and receive to move a file between two people on different networks, using a short pairing code. End-to-end encrypted, with an optional SAS code to compare. Whenever the server issues a relay for the code, the file travels through it as ciphertext and counts toward the monthly traffic allowance of the account that minted the code.",
   updatedLabel: "Last updated",
   lead: [
-    "Sometimes the other machine isn't yours and you can't SSH into it — a file for a colleague in another office, a build for a client, an archive for a friend across the country. relayium send and receive move it directly between the two of you across networks, using nothing but a short pairing code that your CLI mints when you send.",
-    "The connection is peer-to-peer and end-to-end encrypted. Only a tiny rendezvous handshake passes through Relayium to introduce the two ends; the file bytes never do.",
+    "Sometimes the other machine isn't yours and you can't SSH into it — a file for a colleague in another office, a build for a client, an archive for a friend across the country. relayium send and receive move it between the two of you across networks, using nothing but a short pairing code that your CLI mints when you send.",
+    "The session is end-to-end encrypted. A short rendezvous on Relayium's server introduces the two ends; whenever the server issues a TURN relay for the code, the file bytes then travel through that relay as ciphertext it cannot read, and count toward the monthly traffic allowance of the account that minted the code.",
   ],
   sections: [
     {
@@ -21,9 +21,9 @@ const en = {
       prereqs: {
         label: "What you need",
         items: [
-          "The CLI on both machines. relayium version prints a version string on each; a shell that answers 'command not found' means it isn't installed there yet.",
+          "The CLI on the sending machine. relayium version prints a version string; a shell that answers 'command not found' means it isn't installed there yet. The other end can run the CLI too, or type the code into a Relayium app or the web page.",
           "A signed-in sender. relayium whoami prints the account email; minting a pairing code needs relayium login first. The receiving machine never signs in.",
-          "Both of you at a terminal at the same time. The code lives five minutes, so agree on the moment before you mint one.",
+          "Both of you online at the same time. The code lives five minutes, so agree on the moment before you mint one.",
           "A way to say six digits out of band — a phone call, a chat window, the room you are both sitting in.",
         ],
       },
@@ -62,33 +62,33 @@ On the other machine:  relayium receive 483920
   not installed there?  curl -fsSL https://relayium.com/install.sh | sh
 waiting for the receiver…
 verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
-path: direct`,
+path: relay (selected pair …)`,
         ],
       },
       bullets: [
         "The code is 6 decimal digits — any of 0-9, leading zeros included — and it expires 5 minutes after it is minted.",
         "The code is just a shared secret to meet on; it isn't sent to anyone but the rendezvous, and it introduces the two ends only.",
-        "Both ends must be the CLI — a browser can't join a CLI pairing code. Sending to someone who only has a browser? Use relayium up instead, which gives you a download link.",
+        "The other end does not have to be the CLI: relayium receive, relayium pair, a Relayium app or the web page can all join the code. Sending to someone who is not online right now? Use relayium up for a download link, or relayium inbox send for one of your own devices.",
       ],
     },
     {
       heading: "Verify with the SAS code",
       body: [
-        "When the two ends connect, both terminals print the same 6-digit SAS (short authentication string) derived from their pinned TLS certificate fingerprints. Compare it out of band — read it aloud on the call — to confirm the fingerprints were not substituted and the rendezvous service did not impersonate either endpoint. The SAS authenticates the endpoints; it does not prove every network hop.",
+        "When the two ends connect, both terminals print the same 6-digit SAS (short authentication string) derived from the keys the two ends exchanged. Compare it out of band — read it aloud on the call — to confirm the keys were not substituted and the rendezvous service did not impersonate either endpoint. The SAS authenticates the endpoints; it does not prove every network hop — or rule out a relay, which carries only ciphertext.",
         "For the strongest protection, add --verify: the transfer then waits for you to confirm the codes match before a single byte moves.",
       ],
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "Direct only — free, or it fails",
+      heading: "Relay or peer to peer — and what it counts against",
       body: [
-        "The transfer races a direct connection between the two ends. When one can be established — which is the common case for at least one side with a reachable address — the file streams straight across, encrypted, at full speed and at no cost.",
+        "The path line tells you which way the bytes went: relay, or direct / lan for peer to peer. Either way the file is end-to-end encrypted, and either way there is no per-transfer charge — relayed bytes are usage accounting against the minting account's monthly traffic allowance.",
         cliDirectFacts.en,
-        "If you hit this, the reliable answer is daemon direct between two reachable servers, push over SSH, or a stored link from relayium up.",
+        "If a transfer cannot connect, the reliable answers are a stored link from relayium up, relayium inbox send for a device of your own that is not online right now, or relayium serve with push / sync between two reachable servers you run — that path is direct and not metered.",
       ],
       bullets: [
-        "Direct connection succeeds → free, full-speed, end-to-end encrypted.",
-        "Both ends can be anywhere geographically — the sender just runs send, and the receiver runs receive with the code it printed.",
+        "Relay issued → every byte goes through the encrypted relay and counts toward the monthly traffic allowance of the account that minted the code.",
+        "No relay issued → the two ends connect peer to peer when a direct path exists; otherwise the session fails.",
       ],
     },
     {
@@ -119,15 +119,15 @@ Code: 483920   (valid 5 minutes)`,
           {
             symptom: "The two terminals print different verification codes.",
             code: ["relayium send --verify ./release.zip"],
-            fix: "Stop and do not send the file. Differing codes mean the certificate fingerprints the two ends pinned disagree, so the far end is not the machine you think it is. Re-run with --verify, which holds the transfer at that comparison until you confirm, and check with the other person which machine they are on.",
+            fix: "Stop and do not send the file. Differing codes mean the keys the two ends exchanged disagree, so the far end is not the machine you think it is. Re-run with --verify, which holds the transfer at that comparison until you confirm, and check with the other person which machine they are on.",
           },
           {
-            symptom: "\"no direct connection to the peer (both ends behind strict NAT?)\".",
+            symptom: "The sender prints \"relay unavailable: …\" and the two ends never connect.",
             code: [
               `relayium send ./release.zip
-# no direct connection to the peer (both ends behind strict NAT?): …`,
+# relay unavailable: the pairing code owner's monthly relay allowance is used up; trying a direct connection only (no relay) — across strict NATs that may fail`,
             ],
-            fix: "Neither end could reach the other and the CLI has no relay path for file bytes, by design. Move one end onto a network with a reachable address — a server, or a phone hotspot — or upload the file with relayium up and hand over the download link instead.",
+            fix: "The server issued no relay for this code, so the ends tried peer to peer and neither could reach the other. The line names the reason: an allowance that is used up resets with the month or grows with a paid plan, and an unverified email address needs verifying. Otherwise move one end onto a network with a reachable address — a server, or a phone hotspot — or upload the file with relayium up and hand over the download link instead. Against an older relayium on the other end the error reads \"no direct connection to the peer\" instead: that older pairing is direct-only, so update both ends.",
           },
         ],
       },
@@ -142,20 +142,20 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "Is the file uploaded anywhere?",
-        a: "No. The file streams directly between the two of you, end-to-end encrypted. Only a small rendezvous handshake passes through Relayium to introduce the ends — never the file.",
+        a: "It is not stored. The file streams between the two of you, end-to-end encrypted. A small rendezvous handshake on Relayium's server introduces the ends, and whenever the server issues a TURN relay for the code the file's bytes pass through that relay as ciphertext it cannot read — counted toward the monthly traffic allowance of the account that minted the code, and never kept.",
       },
       {
         q: "What if we can't connect?",
-        a: "If both ends are behind strict NAT with no reachable address, the direct connection can't be made and the transfer fails — the CLI has no relay fallback, by design. Use daemon direct between two reachable servers, or push over SSH, when a direct path isn't available.",
+        a: "Whenever the server issues a relay for the code, the session goes through it, so strict NATs do not stop it. When no relay is issued — none is configured, or the minting account's allowance is used up — the two ends need a direct path, and without one the transfer fails. Then use a stored link from relayium up, or relayium serve with push / sync between two reachable servers you run.",
       },
       {
         q: "How do I know it's really the right person on the other end?",
-        a: "Both terminals print an identical 6-digit SAS code derived from their pinned TLS certificate fingerprints. Compare it out of band; a match confirms the fingerprints were not substituted and the rendezvous service did not impersonate either endpoint. It authenticates the endpoints, not every network hop. Add --verify to require that confirmation before any bytes move.",
+        a: "Both terminals print an identical 6-digit SAS code derived from the keys the two ends exchanged. Compare it out of band; a match confirms the keys were not substituted and the rendezvous service did not impersonate either endpoint. It authenticates the endpoints, not every network hop. Add --verify to require that confirmation before any bytes move.",
       },
     ],
   },
   cta: {
-    text: "Send your next file straight to someone on another network — end-to-end encrypted, and free.",
+    text: "Send your next file to someone on another network — end-to-end encrypted, with no per-transfer charge.",
     button: "Get the CLI",
     href: "/cli",
   },
@@ -165,11 +165,11 @@ Code: 483920   (valid 5 minutes)`,
 const zh = {
   title: "用 Relayium CLI 跨网络把文件发给对方",
   description:
-    "使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。",
+    "使用 relayium send 和 receive，凭一个简短的配对码，在两个不同网络上的人之间传输文件。端到端加密，可选用 SAS 码验证。只要服务器为这个码签发了中继，文件就以密文经它传输，并计入生成配对码那个账号的每月流量额度。",
   updatedLabel: "最近更新",
   lead: [
-    "有时候对方的机器不是你的，你也没法用 SSH 登录进去——给另一个办公室的同事发个文件，给客户发个构建产物，给国外的朋友发个压缩包。relayium send 和 receive 会跨网络把文件直接送到你们两个之间，靠的只是发送时 CLI 为你生成的一个简短配对码。",
-    "连接是点对点、端到端加密的。只有一次极小的会合握手会经过 Relayium 来介绍双方；文件字节从不经过。",
+    "有时候对方的机器不是你的，你也没法用 SSH 登录进去——给另一个办公室的同事发个文件，给客户发个构建产物，给国外的朋友发个压缩包。relayium send 和 receive 会跨网络把文件送到你们两个之间，靠的只是发送时 CLI 为你生成的一个简短配对码。",
+    "会话是端到端加密的。Relayium 服务器上的一次简短会合负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节随后就经这条中继以它读不了的密文传输，并计入生成配对码那个账号的每月流量额度。",
   ],
   sections: [
     {
@@ -177,9 +177,9 @@ const zh = {
       prereqs: {
         label: "你需要准备",
         items: [
-          "两台机器上都装好 CLI。在各自终端里 relayium version 会打印版本号；如果 shell 回的是 “command not found”，说明那台还没装。",
+          "发送方机器上装好 CLI。relayium version 会打印版本号；如果 shell 回的是 “command not found”，说明还没装。对端也可以用 CLI，或者把码输入 Relayium 应用或网页。",
           "发送方已登录。relayium whoami 会打印账号邮箱；生成配对码之前必须先 relayium login。接收方那台机器全程不用登录。",
-          "两个人同时守在终端前。码只有五分钟寿命，所以先约好时间再生成。",
+          "两个人同时在线。码只有五分钟寿命，所以先约好时间再生成。",
           "一个能把六位数字带外告诉对方的渠道——一通电话、一个聊天窗口，或者你们同处的那个房间。",
         ],
       },
@@ -218,33 +218,33 @@ On the other machine:  relayium receive 483920
   not installed there?  curl -fsSL https://relayium.com/install.sh | sh
 waiting for the receiver…
 verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
-path: direct`,
+path: relay (selected pair …)`,
         ],
       },
       bullets: [
         "这个码是 6 位十进制数字——0-9 都可能出现，也可能以 0 开头——并且在生成 5 分钟后失效。",
         "这个码只是一个用来会合的共享密钥；除了会合服务器，它不会发给任何人，而且只用来介绍双方。",
-        "两端都必须是 CLI——浏览器无法加入 CLI 的配对码。如果对方只有浏览器，请改用 relayium up，它会给你一个下载链接。",
+        "对端不一定是 CLI：relayium receive、relayium pair、Relayium 应用或网页都能加入这个码。对方此刻不在线？请用 relayium up 生成下载链接，或用 relayium inbox send 发给你自己的设备。",
       ],
     },
     {
       heading: "用 SAS 码验证",
       body: [
-        "两端连接建立后，两边的终端会打印出同一个从固定 TLS 证书指纹派生的 6 位 SAS（简短认证串）。通过带外方式核对——例如在通话中念出来——可以确认指纹没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。",
+        "两端连接建立后，两边的终端会打印出同一个从双方交换的密钥派生的 6 位 SAS（简短认证串）。通过带外方式核对——例如在通话中念出来——可以确认密钥没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳，也不排除中继——中继只经手密文。",
         "为获得最强保护，加上 --verify：传输会等你确认两边的码一致后，才会移动哪怕一个字节。",
       ],
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "只走直连——免费，否则失败",
+      heading: "走中继还是点对点——以及计入什么",
       body: [
-        "传输会在两端之间竞速建立直连。一旦能建立——这是常见情况，只要至少一方有可达地址——文件就会直接、加密地全速传输，不收费。",
+        "path 那一行会告诉你字节走的是哪条路：relay，或者表示点对点的 direct / lan。两种情况下文件都是端到端加密的，也都不按次收费——经中继的字节只是计入生成配对码那个账号每月流量额度的用量。",
         cliDirectFacts.zh,
-        "如果遇到这种情况，可靠的办法是在两台可达的服务器之间用 daemon 直连，或者通过 relayium up 创建存储链接。",
+        "如果传输连不上，可靠的办法是用 relayium up 创建存储链接，用 relayium inbox send 发给你自己那台此刻不在线的设备，或者在你运行的两台可达服务器之间用 relayium serve 配合 push / sync——这条路径是直连的，不计量。",
       ],
       bullets: [
-        "直连成功 → 免费、全速、端到端加密。",
-        "两端在地理上可以在任何地方——发送方直接运行 send，接收方用它打印出来的码运行 receive。",
+        "签发了中继 → 每个字节都经加密中继传输，并计入生成配对码那个账号的每月流量额度。",
+        "没有签发中继 → 有直连路径时两端点对点连接；否则会话失败。",
       ],
     },
     {
@@ -275,15 +275,15 @@ Code: 483920   (valid 5 minutes)`,
           {
             symptom: "两边终端打印出的校验码不一样。",
             code: ["relayium send --verify ./release.zip"],
-            fix: "停下，别把文件发出去。校验码不一致意味着两端固定下来的证书指纹对不上，也就是说对面那台机器并不是你以为的那台。用 --verify 重跑一次，它会在这一步停住等你确认，同时跟对方核对他们到底在哪台机器上操作。",
+            fix: "停下，别把文件发出去。校验码不一致意味着两端交换的密钥对不上，也就是说对面那台机器并不是你以为的那台。用 --verify 重跑一次，它会在这一步停住等你确认，同时跟对方核对他们到底在哪台机器上操作。",
           },
           {
-            symptom: "“no direct connection to the peer (both ends behind strict NAT?)”。",
+            symptom: "发送方打印 “relay unavailable: …”，两端一直连不上。",
             code: [
               `relayium send ./release.zip
-# no direct connection to the peer (both ends behind strict NAT?): …`,
+# relay unavailable: the pairing code owner's monthly relay allowance is used up; trying a direct connection only (no relay) — across strict NATs that may fail`,
             ],
-            fix: "两端谁也够不着谁，而 CLI 刻意如此，没有给文件字节留任何中继通路。把其中一端换到有可达地址的网络上——一台服务器，或者手机热点——或者改用 relayium up 上传文件，把下载链接交给对方。",
+            fix: "服务器没有为这个码签发中继，于是两端尝试点对点，而谁也够不着谁。这一行写明了原因：额度用尽会在下个月重置，也可以通过付费套餐提高；邮箱未验证就先去验证。否则把其中一端换到有可达地址的网络上——一台服务器，或者手机热点——或者改用 relayium up 上传文件，把下载链接交给对方。如果对端是旧版 relayium，报错会是 “no direct connection to the peer”：那种旧配对只走直连，请把两端都升级。",
           },
         ],
       },
@@ -298,20 +298,20 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "文件会上传到什么地方吗？",
-        a: "不会。文件在你们两个之间直接流式传输，端到端加密。只有一次很小的会合握手会经过 Relayium 来介绍双方——文件本身从不经过。",
+        a: "不会被存储。文件在你们两个之间流式传输，端到端加密。Relayium 服务器上的一次很小的会合握手负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节就以它读不了的密文经这条中继传输——计入生成配对码那个账号的每月流量额度，而且从不留存。",
       },
       {
         q: "如果连接不上怎么办？",
-        a: "如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon 直连，或者改用 relayium up 创建存储链接。",
+        a: "只要服务器为这个码签发了中继，会话就经它传输，严格 NAT 挡不住。没有签发中继时——没有配置中继，或生成配对码那个账号的额度已用尽——两端需要一条直连路径，没有的话传输会失败。这时可以改用 relayium up 创建存储链接，或者在你运行的两台可达服务器之间用 relayium serve 配合 push / sync。",
       },
       {
         q: "我怎么知道对面真的是对的人？",
-        a: "两边的终端会打印出一个从固定 TLS 证书指纹派生的相同 6 位 SAS 码。通过带外方式核对；一致就能确认指纹没有被替换、会合服务没有冒充任一端。它认证的是端点，而不是网络路径上的每一跳。加上 --verify 可以要求在任何字节移动之前先完成这个确认。",
+        a: "两边的终端会打印出一个从双方交换的密钥派生的相同 6 位 SAS 码。通过带外方式核对；一致就能确认密钥没有被替换、会合服务没有冒充任一端。它认证的是端点，而不是网络路径上的每一跳。加上 --verify 可以要求在任何字节移动之前先完成这个确认。",
       },
     ],
   },
   cta: {
-    text: "把你的下一个文件直接发给另一个网络上的人——端到端加密，而且免费。",
+    text: "把你的下一个文件发给另一个网络上的人——端到端加密，不按次收费。",
     button: "获取 CLI",
     href: "/cli",
   },

@@ -13,7 +13,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "\"Peer-to-peer\" gets used loosely, so here's what it actually means for a file transfer: your file goes straight from one device to the other, not up to a company's server and back down. No stop in the middle where a copy could sit.",
-    "That sounds simple, but routes differ in practice. This page first explains generic WebRTC/ICE, where TURN can be a fallback, then separates Relayium's actual choices: LAN browser WebRTC is direct, cross-network browser sessions use TURN by design, and the CLI's transfer modes — push, pull, sync, serve, send and receive — are direct and never relayed.",
+    "That sounds simple, but routes differ in practice. This page first explains generic WebRTC/ICE, where TURN can be a fallback, then separates Relayium's actual choices: LAN browser WebRTC is direct, cross-network browser sessions use TURN by design, and the CLI splits in two: its server-to-server modes — serve with push or sync — are direct and never relayed, while its pairing-code sessions — send / receive, text and pair — go through an encrypted TURN relay whenever the server issues one for the code.",
   ],
   sections: [
     {
@@ -173,7 +173,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "「点对点」这个词经常被随意使用，但对文件传输来说，它的确切含义是：文件直接从一台设备到另一台设备，而不是先上传到某家公司的服务器再下载下来。中间没有一站可以停留、可能留下副本。",
-    "听起来很简单，但实际路径并不相同。本文先解释通用 WebRTC/ICE 中 TURN 可作为后备的概念，再明确区分 Relayium 的实现：局域网浏览器 WebRTC 直连、跨网络浏览器按设计使用 TURN；CLI 的传输模式——push、pull、sync、serve、send、receive——都是直连，从不走中继。",
+    "听起来很简单，但实际路径并不相同。本文先解释通用 WebRTC/ICE 中 TURN 可作为后备的概念，再明确区分 Relayium 的实现：局域网浏览器 WebRTC 直连、跨网络浏览器按设计使用 TURN；CLI 则分成两类：服务器对服务器模式——serve 配合 push 或 sync——是直连，从不走中继；配对码会话——send / receive、text 和 pair——只要服务器为这个码签发了加密 TURN 中继，就经它传输。",
   ],
   sections: [
     {

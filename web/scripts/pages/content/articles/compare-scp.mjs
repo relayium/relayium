@@ -874,7 +874,7 @@ const currentEn = {
   updatedLabel: "Last updated",
   lead: ["scp is the straightforward choice when you already want SSH file copy. Relayium no longer wraps SSH: SSH destinations, pull, -i and -p are retired.", "Choose Relayium when pinned-TLS server transfer, pairing without SSH access, asynchronous encrypted delivery or one-way daemon-direct mirroring fits the task."],
   sections: [
-    { heading: "The practical difference", body: ["scp copies through SSH. Relayium push and sync connect only to a relayium serve listener at a relayium:// address; send/receive uses a short pairing code between two online CLIs."], code: ["scp -r ./photos user@server:backups/", "relayium push ./photos relayium://server.example", "relayium sync ./photos relayium://server.example --watch"] },
+    { heading: "The practical difference", body: ["scp copies through SSH. Relayium push and sync connect only to a relayium serve listener at a relayium:// address; send/receive uses a short pairing code between two online ends — the CLI, a Relayium app or the web page."], code: ["scp -r ./photos user@server:backups/", "relayium push ./photos relayium://server.example", "relayium sync ./photos relayium://server.example --watch"] },
     { heading: "Use scp when", bullets: ["SSH is already the required trust and network boundary.", "You want an ad-hoc copy with no additional listener.", "You need to copy from the remote machine with ordinary SSH syntax; Relayium pull is unavailable."] },
     { heading: "Use Relayium when", bullets: ["You manage both machines and want an explicitly authorized pinned-TLS listener.", "You want incremental one-way sync with cross-run partial-file continuation.", "You need pairing-code transfer without granting SSH access, or encrypted hosted delivery to an offline recipient."] },
   ],
@@ -893,7 +893,7 @@ const currentZh = {
   updatedLabel: "最近更新",
   lead: ["如果你本来就要通过 SSH 复制文件，scp 是直接选择。Relayium 不再封装 SSH：SSH 目标、pull、-i 与 -p 均已退役。", "需要证书固定的服务器传输、无需 SSH 权限的配对、异步加密投递或单向 daemon 镜像时，再选择 Relayium。"],
   sections: [
-    { heading: "实际区别", body: ["scp 通过 SSH 复制。Relayium push 与 sync 只连接 relayium:// 地址上的 relayium serve 监听端；send/receive 用短配对码连接两台在线 CLI。"], code: ["scp -r ./photos user@server:backups/", "relayium push ./photos relayium://server.example", "relayium sync ./photos relayium://server.example --watch"] },
+    { heading: "实际区别", body: ["scp 通过 SSH 复制。Relayium push 与 sync 只连接 relayium:// 地址上的 relayium serve 监听端；send/receive 用短配对码连接两台在线设备——CLI、Relayium 应用或网页均可。"], code: ["scp -r ./photos user@server:backups/", "relayium push ./photos relayium://server.example", "relayium sync ./photos relayium://server.example --watch"] },
     { heading: "适合用 scp 的情况", bullets: ["SSH 本来就是要求的信任与网络边界。", "你要一次临时复制，不想再运行监听器。", "你需要用普通 SSH 语法从远端复制；Relayium pull 已不可用。"] },
     { heading: "适合用 Relayium 的情况", bullets: ["你管理两台机器，并希望使用显式授权、证书固定 TLS 的监听端。", "你要增量单向 sync，并允许跨运行继续半截文件。", "你要在不授予 SSH 权限的情况下配对传输，或向离线接收方发送加密托管文件。"] },
   ],

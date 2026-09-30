@@ -96,18 +96,25 @@ const ENCRYPTED = { ja: /暗号化/, ko: /암호화/, de: /verschlüsselte/, fr:
 // released shape differs) must not be introduced by this errata.
 const NOT_RELEASED = /\b(pair|inbox)\b|Inbox|收件箱|受信箱|수신함|Posteingang|boîte de réception|صندوق الوارد|bandeja de entrada|caixa de entrada/;
 
-// Maintained en/zh FAQ: both server-held paths named, no sole-exception claim,
-// and nothing that only exists after v0.26.0.
+// Maintained en/zh FAQ: both server-held paths named, no sole-exception claim.
+// 2026-09-30: the maintained guide now describes the next CLI release, like
+// /cli (help.go): the CLI sends into a Device Inbox (inbox send), and a
+// pairing-code session relays every byte whenever the server issues a relay.
+// The frozen rows above keep their v0.26.0 NOT_RELEASED rule; the maintained
+// answer must no longer call the inbox receive-only or the pairing path direct.
 const SOLE_EXCEPTION = {
-  en: ["up is the deliberate exception", "the only exception", "sole exception"],
-  zh: ["up 是有意为之的例外", "唯一的例外", "唯一例外"],
+  en: ["up is the deliberate exception", "the only exception", "sole exception", "receive-only in the CLI",
+    "contact our servers only for a small rendezvous handshake, never for the content"],
+  zh: ["up 是有意为之的例外", "唯一的例外", "唯一例外", "在 CLI 中只有接收侧", "只有 send / receive 会联系服务器做一次很小的会合握手"],
 };
 const TWO_EXCEPTIONS = {
-  en: [/Two modes are the deliberate exceptions/, /server holds only ciphertext it cannot read/,
+  en: [/Two modes hold data server-side on purpose/, /server holds only ciphertext it cannot read/,
     /up uploads an encrypted copy to your account's storage/,
-    /Device Inbox — receive-only in the CLI, through relayium inbox — queues an encrypted copy/],
-  zh: [/有两种模式是有意为之的例外/, /只保存无法读取的密文/, /up 会把加密副本上传到你账号的存储里/,
-    /设备收件箱（在 CLI 中只有接收侧，即 relayium inbox）/, /加密副本排队存着/],
+    /Device Inbox — relayium inbox send from the CLI, or a browser or native app — queues an encrypted copy/,
+    /whenever the server issues a TURN relay for the code, every byte of the session travels through that relay/],
+  zh: [/有两种模式会有意在服务器上保存数据/, /只保存无法读取的密文/, /up 会把加密副本上传到你账号的存储里/,
+    /设备收件箱（CLI 里用 relayium inbox send，也可以用浏览器或原生应用）/, /加密副本排队存着/,
+    /只要服务器为这个码签发了 TURN 中继，会话的每个字节都经这条中继传输/],
 };
 const POST_V026 = /\bpair\b|配对会话|inbox send|CLI (sender|command that sends)|SSH transfers are (currently )?disabled|SSH 传输/;
 

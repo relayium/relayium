@@ -9,7 +9,7 @@ const en = {
     "Three ways to receive a file with the Relayium CLI: receive a pairing-code send, serve as a daemon-direct listener, or download a stored encrypted link with down.",
   updatedLabel: "Last updated",
   lead: [
-    "Sending is only half the story — sooner or later you're on the receiving end: a colleague wants to hand you a file across the internet, one of your own machines wants to hand off to another, or you want to reach out and grab something from a server you administer. The Relayium CLI covers all three with a different command for each, and none of them need an account.",
+    "Sending is only half the story — sooner or later you're on the receiving end: a colleague wants to hand you a file across the internet, one of your own machines wants to hand off to another, or someone left you a stored link to fetch whenever you get to it. The Relayium CLI covers all three with a different command for each, and none of them need an account on the receiving side.",
     "Pick receive when someone else sends by pairing code, serve when trusted machines push directly to a listener you manage, and down when the sender gave you a stored encrypted link and may already be offline.",
   ],
   sections: [
@@ -19,7 +19,7 @@ const en = {
         "Which command you run depends on who's starting the transfer and how the two machines know each other:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — someone sends to you across networks using a pairing code their CLI minted and passed to you out of band. Direct peer-to-peer, with a SAS code you can compare.",
+        "relayium receive <code> [destdir] — someone sends to you across networks using a pairing code they minted (with the CLI, a Relayium app or the web page) and passed to you out of band. End-to-end encrypted, relayed whenever the server issues a relay for the code, with a SAS code you can compare.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — this machine listens for daemon-direct relayium:// pushes, on port 9031 by default.",
         "relayium down <link> [destdir] — fetch and decrypt a stored link; no account is needed to download.",
       ],
@@ -33,7 +33,7 @@ const en = {
           "A sender who is signed in and at their terminal right now. Only they need an account — you never sign in to receive.",
           "The six digits, passed to you out of band. They live five minutes from the moment their CLI minted them, so agree on the moment first.",
           "A way to read six more digits back to them afterwards: the SAS is compared out loud, not on screen.",
-          "The other end must be the CLI. A browser cannot join a CLI pairing code — if that is what you have, ask for a relayium up link instead.",
+          "The other end can be relayium send or relayium pair, a Relayium app or the web page — any of them mints a code you can receive with.",
         ],
       },
       steps: [
@@ -57,12 +57,12 @@ const en = {
       success: {
         label: "What a successful receive looks like",
         body: [
-          "The connection is announced as direct, and both terminals print the SAME verification code. Different codes are the one result you must not accept — stop and check with the sender which machine they are on.",
+          "The path line says how the bytes travel — relay, or direct / lan for peer to peer — and both ends show the SAME verification code. Different codes are the one result you must not accept — stop and check with the sender which machine they are on.",
         ],
         code: [
           `$ relayium receive 483920
 verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
-path: direct`,
+path: relay (selected pair …)`,
         ],
       },
       body: [
@@ -75,10 +75,10 @@ path: direct`,
 relayium receive 483920 ./downloads`,
       ],
       bullets: [
-        "The connection is direct, peer-to-peer, and end-to-end encrypted; both terminals print the same SAS (short authentication string) once connected. Compare it out of band to confirm that the pinned TLS certificate fingerprints were not substituted and the rendezvous service did not impersonate either endpoint. The SAS authenticates the endpoints; it does not prove every network hop.",
+        "The connection is end-to-end encrypted; both ends print the same SAS (short authentication string) once connected. Compare it out of band to confirm that the keys the two ends exchanged were not substituted and the rendezvous service did not impersonate either endpoint. The SAS authenticates the endpoints; it does not prove every network hop.",
         "No destination given: files land in the current directory.",
-        "Same direct-only rule as send: if no direct path can be found between the two networks, the transfer fails rather than routing through a relay.",
-        "This is the CLI's own pairing-code protocol — CLI codes pair CLI to CLI. It doesn't interoperate with the browser's pairing code or QR flow at relayium.com today; that's a possible future addition, not something you can rely on yet. If you only have a browser, ask the sender for a relayium up download link instead.",
+        "Same relay rule as send: whenever the server issues a relay for the code, every byte goes through that encrypted relay and counts toward the monthly traffic allowance of the account that minted the code — the sender's, never yours. Only when no relay is issued do the two ends connect peer to peer, and then the transfer fails if no direct path exists.",
+        "The code is the same pairing code the apps and the web page use: a sender on relayium.com or in a Relayium app can read you a code and you receive it here, and a code minted by relayium send can be joined from the web page instead of the CLI.",
         "The receiver never needs an account, on any network. Only the sender signs in, so their CLI can mint the code.",
       ],
     },
@@ -171,12 +171,12 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
             fix: "With no destination, receive writes into the directory you ran it from, which is rarely where you were looking. Pass one explicitly, or run pwd first and be sure.",
           },
           {
-            symptom: "It fails with \"no direct connection to the peer (both ends behind strict NAT?)\".",
+            symptom: "It prints \"relay unavailable: …\" and never connects.",
             code: [
               `relayium receive 483920
-# no direct connection to the peer (both ends behind strict NAT?): …`,
+# relay unavailable: the pairing code owner's monthly relay allowance is used up; trying a direct connection only (no relay) — across strict NATs that may fail`,
             ],
-            fix: "The CLI pairing path is direct-only by design: when no direct route exists it fails rather than routing your file through a relay. Ask the sender for a relayium up download link instead, or use daemon-direct between reachable machines you control.",
+            fix: "The server issued no relay for this code — the line names why, for example the sender's monthly allowance is used up — so the two ends tried peer to peer and could not reach each other. Ask the sender for a relayium up download link instead, or use daemon-direct between reachable machines you control. If it says \"no direct connection to the peer\" instead, the other end runs an older relayium whose pairing is direct-only: update it.",
           },
           {
             symptom: "down says the link is invalid or cannot decrypt the file.",
@@ -206,15 +206,15 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       },
       {
         q: "Does relayium receive interoperate with the browser's pairing code?",
-        a: "No. The CLI's pairing-code protocol is separate from the browser's join-link and QR flow at relayium.com — they use different handshakes and don't talk to each other today, so a CLI code only pairs with another CLI. That's on the roadmap, not something you can rely on yet. Until then, a browser recipient wants a relayium up link rather than a code.",
+        a: "Yes. A current relayium and the apps and web page at relayium.com use the same pairing codes, so relayium receive can take a code a browser or app minted, and a browser can join a code relayium send minted. Only an older relayium CLI, or a server that predates pairing hints, falls back to the older CLI-only, direct-only pairing.",
       },
       {
         q: "What happens if an unknown machine pushes to my serve listener?",
         a: "In a terminal, you're prompted to approve it by address and fingerprint on its first push, and the approval is remembered. Without a terminal — a systemd service, a cron job — there's no one to ask, so an unrecognized pusher is rejected; pre-authorize it first with relayium authorize <fingerprint>.",
       },
       {
-        q: "Can I pull from a server that doesn't have relayium installed?",
-        a: "No. pull always needs relayium on the remote end; there's no tar fallback the way there is for push. Install relayium there first.",
+        q: "Can I pull files from a server I administer?",
+        a: "Not with relayium pull: it and SSH transfers are retired in the current CLI. Run relayium serve on this machine and have the server push to it with relayium push relayium://this-host, or have the server upload with relayium up and fetch the link here with relayium down.",
       },
       {
         q: "Where does relayium keep my identity and trusted peers?",
@@ -236,7 +236,7 @@ const zh = {
     "用 Relayium CLI 接收文件的三种方式：receive 接收配对码发送，serve 监听 daemon 直连推送，或者用 down 下载托管的加密链接。",
   updatedLabel: "最近更新",
   lead: [
-    "发送只是故事的一半——迟早你也会是接收方：同事想跨网络给你一个文件，你自己的一台机器想把东西交给另一台，或者你想主动从你管理的服务器上取点东西回来。Relayium CLI 用三个不同的命令覆盖这三种情形，而且都不需要账号。",
+    "发送只是故事的一半——迟早你也会是接收方：同事想跨网络给你一个文件，你自己的一台机器想把东西交给另一台，或者有人给你留了一个托管链接，等你有空再取。Relayium CLI 用三个不同的命令覆盖这三种情形，接收这一侧都不需要账号。",
     "对方用配对码发送时用 receive；受信任机器向你管理的监听端直推时用 serve；发送方给了托管加密链接、而且可能已经离线时用 down。",
   ],
   sections: [
@@ -244,7 +244,7 @@ const zh = {
       heading: "三种接收方式，各自适用于什么场景",
       body: ["用哪个命令，取决于谁在发起传输，以及两台机器是怎么互相认识的："],
       bullets: [
-        "relayium receive <code> [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，并给出一段可供核对的 SAS 码。",
+        "relayium receive <code> [destdir] ——对方跨网络发给你：他先生成一个配对码（用 CLI、Relayium 应用或网页都行），再线下转告你。端到端加密；只要服务器为这个码签发了中继就经中继传输，并给出一段可供核对的 SAS 码。",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听 daemon 直连的 relayium:// 推送，默认端口 9031。",
         "relayium down <link> [destdir] ——下载并解密托管链接；下载端不需要账号。",
       ],
@@ -258,7 +258,7 @@ const zh = {
           "一位此刻已登录、并且人就在终端前的发送方。只有他需要账号——你接收全程都不用登录。",
           "那六位数字，通过带外渠道传给你。它从对方 CLI 生成的那一刻起只活五分钟，所以先约好时间。",
           "事后还能再把六位数字念回去的渠道：SAS 是靠口头比对的，不是看屏幕。",
-          "另一端必须是 CLI。浏览器无法加入 CLI 的配对码——如果你手上只有浏览器，请对方改用 relayium up 链接。",
+          "另一端可以是 relayium send 或 relayium pair、Relayium 应用或网页——它们生成的码你都能用 receive 接收。",
         ],
       },
       steps: [
@@ -282,12 +282,12 @@ const zh = {
       success: {
         label: "一次成功的接收长什么样",
         body: [
-          "连接被标为 direct，并且两个终端打印出相同的验证码。验证码不同是唯一一种你绝不能接受的结果——立刻停下，跟发送方核对他到底在哪台机器上。",
+          "path 那一行会写明字节怎么走——relay，或者表示点对点的 direct / lan——并且两端显示相同的验证码。验证码不同是唯一一种你绝不能接受的结果——立刻停下，跟发送方核对他到底在哪台机器上。",
         ],
         code: [
           `$ relayium receive 483920
 verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
-path: direct`,
+path: relay (selected pair …)`,
         ],
       },
       body: [
@@ -300,10 +300,10 @@ path: direct`,
 relayium receive 483920 ./downloads`,
       ],
       bullets: [
-        "连接是直接点对点、端到端加密的；一旦连上，两边的终端会打印出同一个 SAS（简短认证串）。通过带外方式与发送方核对，可以确认固定的 TLS 证书指纹没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。",
+        "连接是端到端加密的；一旦连上，两端会打印出同一个 SAS（简短认证串）。通过带外方式与发送方核对，可以确认双方交换的密钥没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。",
         "不指定目标目录时，文件会落到当前目录。",
-        "和 send 一样只走直连：如果两个网络之间找不到直连路径，传输会失败，而不会经中继转发。",
-        "这是 CLI 自己的配对码协议——CLI 的码只能和 CLI 配对。目前和 relayium.com 浏览器端的配对码或二维码流程互不通用；未来也许会支持，但现在还不能指望。如果你手上只有浏览器，请让发送方改用 relayium up 给你一个下载链接。",
+        "中继规则和 send 一样：只要服务器为这个码签发了中继，每个字节都经这条加密中继传输，并计入生成配对码那个账号的每月流量额度——是发送方的，不是你的。只有在没有签发中继时，两端才点对点连接，这时如果没有直连路径，传输就会失败。",
+        "这个码和应用、网页用的是同一种配对码：在 relayium.com 或 Relayium 应用里发送的人可以把码念给你，你在这里接收；relayium send 生成的码，也可以在网页上加入，而不必用 CLI。",
         "接收方无论在哪个网络上，都不需要账号。只有发送方需要登录，好让发送端的 CLI 生成配对码。",
       ],
     },
@@ -396,12 +396,12 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
             fix: "不指定目标目录时，receive 会写进你执行它时所在的那个目录，而那通常不是你去找的地方。显式传一个目录，或者先跑 pwd 确认清楚。",
           },
           {
-            symptom: "失败并提示「no direct connection to the peer (both ends behind strict NAT?)」。",
+            symptom: "打印「relay unavailable: …」，一直连不上。",
             code: [
               `relayium receive 483920
-# no direct connection to the peer (both ends behind strict NAT?): …`,
+# relay unavailable: the pairing code owner's monthly relay allowance is used up; trying a direct connection only (no relay) — across strict NATs that may fail`,
             ],
-            fix: "CLI 的配对码路径按设计只走直连：找不到直连路径时会失败，不会让文件绕经中继。让发送方改用 relayium up 下载链接；如果两台机器都归你控制，就用 daemon 直连。",
+            fix: "服务器没有为这个码签发中继——这一行会写明原因，比如发送方的每月额度已用尽——于是两端尝试点对点，却够不着对方。让发送方改用 relayium up 下载链接；如果两台机器都归你控制，就用 daemon 直连。如果报的是「no direct connection to the peer」，说明对端是旧版 relayium，它的配对只走直连：请把它升级。",
           },
           {
             symptom: "down 提示链接无效或无法解密。",
@@ -431,15 +431,15 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       },
       {
         q: "relayium receive 和浏览器的配对码互通吗？",
-        a: "不互通。CLI 的配对码协议和 relayium.com 浏览器端的加入链接、二维码流程是分开的——它们的握手方式不同，目前也无法互相通信，所以 CLI 的码只能和另一个 CLI 配对。这是路线图上的事，现在还不能指望。在此之前，用浏览器接收的人需要的是一个 relayium up 链接，而不是配对码。",
+        a: "互通。当前版本的 relayium 与 relayium.com 上的应用和网页使用同一种配对码，所以 relayium receive 能接收浏览器或应用生成的码，浏览器也能加入 relayium send 生成的码。只有旧版 relayium CLI，或者早于配对提示的服务器，才会退回旧的、只限 CLI 且只走直连的配对。",
       },
       {
         q: "如果一台未知机器向我的 serve 监听端推送会怎样？",
         a: "在终端中，会在它首次推送时提示你按地址和指纹批准，批准结果会被记住。没有终端时——比如作为 systemd 服务或 cron 任务——没有人来回应，未知推送方会被拒绝；应先用 relayium authorize <fingerprint> 预先授权。",
       },
       {
-        q: "能从一台没装 relayium 的服务器 pull 吗？",
-        a: "不能。pull 始终需要远程装有 relayium；不像 push 那样有 tar 兜底方案。请先在远程安装 relayium。",
+        q: "能从我管理的服务器上把文件取回来吗？",
+        a: "不能用 relayium pull：它和 SSH 传输在当前 CLI 中都已退役。请在本机运行 relayium serve，让服务器用 relayium push relayium://本机 推送过来；或者让服务器用 relayium up 上传，再在这里用 relayium down 取回链接。",
       },
       {
         q: "relayium 把我的身份和受信任的对端存在哪里？",
