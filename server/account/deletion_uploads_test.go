@@ -87,6 +87,7 @@ func TestPurgeTransientUserDataReclaimsEveryUploadSessionBlob(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create central stored file: %v", err)
 	}
+	am3EnsureNode(t, st, "node-1", "user", u.ID) // the insert's node fence
 	if err := st.CreateStoredFile(ctx, StoredFile{
 		ID: authx.NewID(), UserID: u.ID, BlobKey: "sf-node", NodeID: "node-1",
 		EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1,

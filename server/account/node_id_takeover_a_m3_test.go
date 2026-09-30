@@ -380,3 +380,14 @@ func TestA_M3_AdminDeleteRefusedWhileFilesRemain(t *testing.T) {
 		t.Fatalf("admin delete of a missing node: got %d, want 404", w.Code)
 	}
 }
+
+// am3EnsureNode gives a fixture's node id a row, so a stored file placed on it
+// passes the insert's node fence (a node-backed object can only be inserted
+// while its node exists).
+func am3EnsureNode(t *testing.T, st *SQLiteStore, id, ownerType, ownerUserID string) {
+	t.Helper()
+	if _, err := st.UpsertNode(context.Background(), Node{ID: id, OwnerType: ownerType, OwnerUserID: ownerUserID,
+		URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+}

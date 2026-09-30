@@ -10,11 +10,40 @@ import (
 // Postgres swap need only touch sqlite.go.
 var ErrNotFound = errors.New("account: not found")
 
-// ErrNodeHasStoredFiles is returned by DeleteFleetNode while stored_files rows
-// still name the node: deleting it would leave those files pointing at an id
-// nobody owns (A-M3). Drain the node and wait for its files to expire and be
-// collected first.
+// ErrNodeHasStoredFiles is returned by DeleteFleetNode while stored_files or
+// upload_sessions rows still name the node: deleting it would leave them
+// pointing at an id nobody owns (A-M3). Drain the node and wait for its files
+// to expire and be collected (and its upload sessions to be purged) first.
 var ErrNodeHasStoredFiles = errors.New("account: node still holds stored files")
+
+// ErrStoredFileNodeGone is returned by the stored-file insert when the object
+// names a node whose row no longer exists (it was deleted between placement and
+// persist). Nothing was written; see insertStoredFileOn's node fence.
+var ErrStoredFileNodeGone = errors.New("account: the object's storage node was deleted")
+
+// NodeRegisterOutcome is RegisterNode's admission decision.
+type NodeRegisterOutcome int
+
+const (
+	NodeRegisterOK            NodeRegisterOutcome = iota
+	NodeRegisterOwnerMismatch                     // the id is a live node of another owner
+	NodeRegisterRetired                           // tombstoned by another owner
+	NodeRegisterReferenced                        // no tombstone, still referenced by stored data
+	NodeRegisterLimit                             // the user is at the live-node cap
+	NodeRegisterInvalidID                         // a new id central would never generate
+)
+
+// NodeRegistration is RegisterNode's result. Node is the row as written (only
+// meaningful for NodeRegisterOK); Existed/Prior describe the row found inside
+// the transaction; PinRetained reports that the storage pin ratchet kept the
+// prior storage config.
+type NodeRegistration struct {
+	Node        Node
+	Outcome     NodeRegisterOutcome
+	Existed     bool
+	Prior       Node
+	PinRetained bool
+}
 
 // NodeIDReuse classifies an unregistered node id; see Store.NodeIDReuseState.
 type NodeIDReuse int
@@ -2552,6 +2581,23 @@ type Store interface {
 	//     NodeIDReferenced, for every registrant;
 	//   - otherwise NodeIDFresh.
 	NodeIDReuseState(ctx context.Context, id, ownerType, ownerUserID string) (NodeIDReuse, error)
+	// RegisterNode is the register handler's single write, and the only place
+	// its admission is decided (A-M3/A-M4). In ONE transaction it: re-reads the
+	// id; for an existing row refuses a different owner
+	// (NodeRegisterOwnerMismatch) or updates it (register-updatable columns
+	// only, with the storage pin ratchet applied against the current row); for
+	// a new id (an empty n.ID gets a generated one) refuses a malformed id, one
+	// tombstoned by another owner or still referenced (NodeIDReuseState), and —
+	// for owner_type 'user' with userNodeCap > 0 — an owner already at
+	// userNodeCap live nodes, and otherwise INSERTs. Refusals return a nil error
+	// and write nothing. Never overwrites an existing row's owner.
+	RegisterNode(ctx context.Context, n Node, userNodeCap int) (NodeRegistration, error)
+	// NodeDeleteBlockers counts, per node id, the rows that make DeleteFleetNode
+	// refuse (ErrNodeHasStoredFiles): every stored_files row naming the node —
+	// INCLUDING expired rows the GC has not collected yet — plus every
+	// upload_sessions row. Nodes with none are absent. For the admin panel, so
+	// what it shows matches what delete will accept.
+	NodeDeleteBlockers(ctx context.Context) (map[string]int, error)
 	// CountLiveUserNodes counts a user's owner_type='user' nodes that are not
 	// deregistered (removed_at = 0) — the population the BYO rollout governs and
 	// the per-user registration cap (maxLiveNodesPerUser) is checked against.

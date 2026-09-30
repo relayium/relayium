@@ -244,6 +244,7 @@ func seedReceiptService(t *testing.T, clock func() time.Time) (*Service, *SQLite
 	st := s.store.(*SQLiteStore)
 	ctx := context.Background()
 	owner, _ := st.UpsertUserByEmail(ctx, "receipt@example.com", "")
+	am3EnsureNode(t, st, "fleetnode", "fleet", "") // the insert's node fence
 	if err := st.CreateStoredFile(ctx, StoredFile{
 		ID: "f", UserID: owner.ID, BlobKey: "bk", EncManifest: []byte("m"), Size: 200,
 		NodeID: "fleetnode", CreatedAt: 1, ExpiresAt: 1 << 40,

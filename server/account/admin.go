@@ -104,6 +104,13 @@ type adminNodeView struct {
 	// earliest moment it is actually safe to remove. 0 means the node holds
 	// nothing live: safe now, no wait.
 	SafeToUninstallAt int64
+	// DeleteBlockers is how many rows still stop an admin delete of this node
+	// (Store.NodeDeleteBlockers): all stored_files rows naming it, expired but
+	// not yet collected ones included, plus its upload_sessions rows. It is
+	// deliberately NOT StoredFileCount, which counts only LIVE files (the
+	// uninstall question): a node can be safe to uninstall and still not
+	// deletable until GC has collected its expired rows.
+	DeleteBlockers int
 	// Removed is set once the node has told central it was being uninstalled
 	// (Node.RemovedAt). The row is kept for audit, but the machine is gone: it
 	// is out of placement, out of ICE and never receives a download redirect.
@@ -981,6 +988,13 @@ func (s *Service) buildAdminFleetData(r *http.Request, data adminHomeData) (admi
 	} else {
 		allNodes = rows
 		data.Nodes = nodeViews(rows, monthly, fileCounts, s.Now(), st)
+		if blockers, err := s.Store().NodeDeleteBlockers(r.Context()); err != nil {
+			log.Printf("admin: NodeDeleteBlockers failed: %v", err)
+		} else {
+			for i := range data.Nodes {
+				data.Nodes[i].DeleteBlockers = blockers[data.Nodes[i].ID]
+			}
+		}
 	}
 	for _, node := range data.Nodes {
 		if node.OwnerType == "fleet" {
@@ -1606,7 +1620,7 @@ func (s *Service) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) 
 	if err := s.Store().DeleteFleetNode(r.Context(), r.PathValue("id")); err != nil {
 		switch {
 		case errors.Is(err, ErrNodeHasStoredFiles):
-			http.Error(w, "this node still holds stored files: drain it and wait until its file count is 0 (expired files must also be collected) before deleting it", http.StatusConflict)
+			http.Error(w, "this node still has stored files or upload sessions (expired files that are not yet collected count too): drain it and wait until the panel shows nothing left to clear before deleting it", http.StatusConflict)
 		case errors.Is(err, ErrNotFound):
 			http.Error(w, "not found", http.StatusNotFound)
 		default:

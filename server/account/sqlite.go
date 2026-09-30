@@ -3195,6 +3195,9 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		// Before the nodes, as DeleteNode does in its own transaction, and after
 		// the enqueue loop at the top: see there for why these rows end here.
 		{`DELETE FROM pending_node_deletes WHERE node_id IN (SELECT id FROM nodes WHERE owner_type='user' AND owner_user_id=?)`, []any{userID}},
+		// A-M3: tombstone the account's nodes in the same transaction that
+		// deletes them, so no other owner can ever register those ids.
+		{nodeTombstoneUserNodesSQL, []any{userID}},
 		{`DELETE FROM nodes WHERE owner_type='user' AND owner_user_id=?`, []any{userID}},
 	}
 	for _, st := range stmts {
@@ -3486,6 +3489,9 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// window can still reactivate, and it must come back with its evidence.
 		{`DELETE FROM apple_billing_incidents WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM subscription_sources WHERE user_id=?`, []any{userID}},
+		// A-M3: tombstone the account's nodes in the same transaction that
+		// deletes them, so no other owner can ever register those ids.
+		{nodeTombstoneUserNodesSQL, []any{userID}},
 		{`DELETE FROM nodes WHERE owner_type='user' AND owner_user_id=?`, []any{userID}},
 	}
 	for _, st := range stmts {
@@ -6074,13 +6080,32 @@ func insertStoredFileOn(ctx context.Context, ex sqlExecer, f StoredFile) error {
 	// unreachable by the only thing that can end it — held for good by the very
 	// rule completion exists to close — and no repair pass could invent the value,
 	// since the server has never seen the key it comes from.
-	_, err := ex.ExecContext(ctx,
+	//
+	// Node fence (A-M3): a node-backed object is inserted only while its node
+	// row still exists, decided by this same statement. A node deleted between
+	// placement and this insert (DeleteNode/DeleteFleetNode) makes the insert
+	// write nothing and return ErrStoredFileNodeGone, so no object can ever
+	// point at an id that is gone — and could later be registered by someone
+	// else. Callers treat it like any other insert failure: their transaction
+	// rolls back (with it any quota debit, idempotency claim or session link),
+	// and the upload fails through its existing error path.
+	res, err := ex.ExecContext(ctx,
 		`INSERT INTO stored_files (`+storedFileCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		  WHERE ? = '' OR EXISTS(SELECT 1 FROM nodes WHERE id = ?)`,
 		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
 		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads,
-		purposeOrShare(f.Purpose), f.InboxTaskID, f.PairRoomID, nullBytes(f.CompletionVerifier))
-	return err
+		purposeOrShare(f.Purpose), f.InboxTaskID, f.PairRoomID, nullBytes(f.CompletionVerifier),
+		f.NodeID, f.NodeID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return ErrStoredFileNodeGone
+	}
+	return nil
 }
 
 // requireUploadSessionOn is the finalize side of cleanup ownership: when the
@@ -7844,13 +7869,17 @@ func (s *SQLiteStore) DeleteFleetNode(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	// A-M3: refuse while any stored_files row -- live or expired-but-not-yet-
-	// collected -- still names the node. Deleting the row would leave those
-	// files resolving (blobFor) and GC-deleting against an id nobody owns. The
-	// check runs inside this IMMEDIATE transaction, so no placement can slip a
-	// new row in between it and the DELETE.
+	// collected -- or any upload_sessions row (an upload in flight, or a
+	// finished session's tombstone) still names the node. Deleting the row would
+	// leave those files resolving (blobFor) and GC-deleting against an id nobody
+	// owns. The check runs inside this IMMEDIATE transaction, so no row can
+	// slip in between it and the DELETE; a single-shot upload that was placed
+	// on the node before this commits is caught at its own insert instead
+	// (insertStoredFileOn's node fence).
 	var files int
 	if err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM stored_files WHERE node_id = ?)`, id).Scan(&files); err != nil {
+		`SELECT EXISTS(SELECT 1 FROM stored_files WHERE node_id = ?)
+		     OR EXISTS(SELECT 1 FROM upload_sessions WHERE node_id = ?)`, id, id).Scan(&files); err != nil {
 		return err
 	}
 	if files != 0 {
@@ -7871,6 +7900,13 @@ func (s *SQLiteStore) DeleteFleetNode(ctx context.Context, id string) error {
 	}
 	return tx.Commit()
 }
+
+// nodeTombstoneUserNodesSQL tombstones every user node of one account (the
+// account purges' form of tombstoneNodeTx); one argument, the user id.
+const nodeTombstoneUserNodesSQL = `INSERT INTO node_tombstones (id, owner_type, owner_user_id, deleted_at)
+	 SELECT id, owner_type, COALESCE(owner_user_id, ''), CAST(strftime('%s','now') AS INTEGER)
+	   FROM nodes WHERE owner_type='user' AND owner_user_id=?
+	 ON CONFLICT(id) DO NOTHING`
 
 // tombstoneNodeTx records the node row(s) matching where (a predicate over the
 // nodes table) in node_tombstones, inside the caller's delete transaction. An
@@ -7897,9 +7933,20 @@ func tombstoneNodeTx(ctx context.Context, tx *sql.Tx, where string, args ...any)
 // is exposed. Without a tombstone the owner is unknown, so a reference refuses
 // everyone.
 func (s *SQLiteStore) NodeIDReuseState(ctx context.Context, id, ownerType, ownerUserID string) (NodeIDReuse, error) {
+	return nodeIDReuseStateOn(ctx, s.db, id, ownerType, ownerUserID)
+}
+
+// nodeRowQueryer is what the node helpers need to read inside either the
+// writer pool or a caller's transaction.
+type nodeRowQueryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func nodeIDReuseStateOn(ctx context.Context, q nodeRowQueryer, id, ownerType, ownerUserID string) (NodeIDReuse, error) {
 	var tombType, tombUser sql.NullString
 	var ref int
-	err := s.db.QueryRowContext(ctx,
+	err := q.QueryRowContext(ctx,
 		`SELECT (SELECT owner_type FROM node_tombstones WHERE id = ?),
 		        (SELECT owner_user_id FROM node_tombstones WHERE id = ?),
 		        EXISTS(SELECT 1 FROM stored_files WHERE node_id = ?)
@@ -7939,17 +7986,170 @@ func sameNodeOwner(tombType, tombUser, ownerType, ownerUserID string) bool {
 	return false
 }
 
+// NodeDeleteBlockers: see Store.NodeDeleteBlockers. Exactly DeleteFleetNode's
+// refusal predicate, grouped: every stored_files row (whatever its expiry) plus
+// every upload_sessions row naming the node.
+func (s *SQLiteStore) NodeDeleteBlockers(ctx context.Context) (map[string]int, error) {
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT node_id, COUNT(*) FROM (
+		   SELECT node_id FROM stored_files WHERE node_id IS NOT NULL AND node_id != ''
+		   UNION ALL
+		   SELECT node_id FROM upload_sessions WHERE node_id != ''
+		 ) GROUP BY node_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var c int
+		if err := rows.Scan(&id, &c); err != nil {
+			return nil, err
+		}
+		out[id] = c
+	}
+	return out, rows.Err()
+}
+
 // CountLiveUserNodes: see Store.CountLiveUserNodes.
 func (s *SQLiteStore) CountLiveUserNodes(ctx context.Context, userID string) (int, error) {
+	return countLiveUserNodesOn(ctx, s.db, userID)
+}
+
+func countLiveUserNodesOn(ctx context.Context, q nodeRowQueryer, userID string) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx,
+	err := q.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM nodes WHERE owner_type = 'user' AND owner_user_id = ? AND removed_at = 0`,
 		userID).Scan(&n)
 	return n, err
 }
 
+// RegisterNode: see Store.RegisterNode.
+//
+// Everything that decides whether the registration may land runs here, inside
+// one IMMEDIATE transaction (the writer pool's _txlock=immediate): the live
+// owner check, the tombstone/reference checks, the per-user cap and the write.
+// Nothing another writer commits can fall between a check and the write, so a
+// registration that waited out a concurrent register or delete of the same id
+// is judged on the row as it is NOW. The write never uses ON CONFLICT: an
+// existing row is UPDATEd only after its owner matched, a missing one is
+// INSERTed (a unique-key error, not an overwrite, if that were ever violated).
+func (s *SQLiteStore) RegisterNode(ctx context.Context, n Node, userNodeCap int) (NodeRegistration, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return NodeRegistration{}, err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	var reg NodeRegistration
+	if n.ID != "" {
+		rows, err := queryNodesOn(ctx, tx, `SELECT `+nodeCols+` FROM nodes WHERE id = ?`, n.ID)
+		if err != nil {
+			return NodeRegistration{}, err
+		}
+		if len(rows) > 0 {
+			reg.Existed, reg.Prior = true, rows[0]
+		}
+	}
+	if reg.Existed {
+		p := reg.Prior
+		if p.OwnerType != n.OwnerType || (n.OwnerType == "user" && p.OwnerUserID != n.OwnerUserID) {
+			reg.Outcome = NodeRegisterOwnerMismatch
+			return reg, nil
+		}
+		// Pin ratchet, judged against the row as it is now (see the handler).
+		if p.StorageFP != "" && (n.StorageFP == "" || !strings.HasPrefix(strings.ToLower(n.StorageURL), "https://")) {
+			n.StorageURL, n.StorageSecret, n.StorageFP = p.StorageURL, p.StorageSecret, p.StorageFP
+			reg.PinRetained = true
+		}
+		urls, err := json.Marshal(n.URLs)
+		if err != nil {
+			return NodeRegistration{}, err
+		}
+		// The same columns UpsertNode's ON CONFLICT branch updates, and only
+		// those: label, update_*, draining, removed_at, active_transfers and the
+		// prober's columns stay the row's own.
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE nodes SET
+			   region=?, urls=?, turn_secret=?, version=?, last_seen_at=?,
+			   storage_url=?, storage_secret=?, storage_fp=?,
+			   storage_enabled=?, storage_total=?, storage_free=?, download_url=?
+			 WHERE id=? AND owner_type=? AND COALESCE(owner_user_id,'')=?`,
+			n.Region, string(urls), n.TURNSecret, n.Version, n.LastSeenAt,
+			nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP,
+			b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree, n.DownloadURL,
+			n.ID, p.OwnerType, p.OwnerUserID); err != nil {
+			return NodeRegistration{}, err
+		}
+		saved := p
+		saved.Region, saved.URLs, saved.TURNSecret, saved.Version, saved.LastSeenAt = n.Region, n.URLs, n.TURNSecret, n.Version, n.LastSeenAt
+		saved.StorageURL, saved.StorageSecret, saved.StorageFP = n.StorageURL, n.StorageSecret, n.StorageFP
+		saved.StorageEnabled, saved.StorageTotal, saved.StorageFree, saved.DownloadURL = n.StorageEnabled, n.StorageTotal, n.StorageFree, n.DownloadURL
+		if err := tx.Commit(); err != nil {
+			return NodeRegistration{}, err
+		}
+		reg.Node = saved
+		return reg, nil
+	}
+
+	// A NEW row from here on.
+	if n.ID == "" {
+		n.ID = authx.NewID()
+	} else {
+		if !validNodeID(n.ID) {
+			reg.Outcome = NodeRegisterInvalidID
+			return reg, nil
+		}
+		switch reuse, err := nodeIDReuseStateOn(ctx, tx, n.ID, n.OwnerType, n.OwnerUserID); {
+		case err != nil:
+			return NodeRegistration{}, err
+		case reuse == NodeIDTombstoned:
+			reg.Outcome = NodeRegisterRetired
+			return reg, nil
+		case reuse == NodeIDReferenced:
+			reg.Outcome = NodeRegisterReferenced
+			return reg, nil
+		}
+	}
+	if n.OwnerType == "user" && userNodeCap > 0 {
+		live, err := countLiveUserNodesOn(ctx, tx, n.OwnerUserID)
+		if err != nil {
+			return NodeRegistration{}, err
+		}
+		if live >= userNodeCap {
+			reg.Outcome = NodeRegisterLimit
+			return reg, nil
+		}
+	}
+	urls, err := json.Marshal(n.URLs)
+	if err != nil {
+		return NodeRegistration{}, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO nodes (`+nodeCols+`)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
+		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
+		nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP, b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
+		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL,
+		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts, b2i(n.Draining), n.RemovedAt,
+		n.ActiveTransfers, b2i(n.StorageUnreachable), n.StorageProbedAt); err != nil {
+		return NodeRegistration{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return NodeRegistration{}, err
+	}
+	reg.Node = n
+	return reg, nil
+}
+
 func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]Node, error) {
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	return queryNodesOn(ctx, s.db, q, args...)
+}
+
+func queryNodesOn(ctx context.Context, qr nodeRowQueryer, q string, args ...any) ([]Node, error) {
+	rows, err := qr.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
