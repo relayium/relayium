@@ -868,9 +868,46 @@ const pt = {
   relatedHeading: "Continue lendo",
 };
 
+const currentEn = {
+  title: "Relayium vs croc: pairing codes, relays and managed servers",
+  description: "Compare Relayium's current pairing-code and daemon-direct modes with croc, including relay behavior, accounts, verification and offline delivery.",
+  updatedLabel: "Last updated",
+  lead: ["Both tools can pair two terminals with a short code. croc can use its relay; Relayium CLI send/receive is direct-only and fails rather than falling back to a relay when no direct path exists.", "Relayium also offers daemon-direct push/sync to a listener you manage and encrypted hosted delivery for an offline recipient. Its retired SSH transport is not a current option. croc is MIT-licensed; the Relayium CLI is AGPL-3.0-licensed."],
+  sections: [
+    { heading: "Ad-hoc transfer", body: ["croc emphasizes a single code phrase and relay-assisted reachability. Relayium send mints a six-digit code for five minutes; both CLIs stay online, and the file goes directly between them. Relayium's optional SAS comes from pinned TLS certificate fingerprints: comparing it authenticates the endpoints and detects rendezvous service impersonation, but does not prove every network hop."], code: ["relayium send ./archive.zip", "relayium receive 483920"] },
+    { heading: "Managed machines", body: ["Run relayium serve on the receiver and push or sync to relayium:// over pinned TLS. No SSH transport or Relayium account is involved."], code: ["relayium serve --dir ~/inbox", "relayium push ./archive.zip relayium://server.example"] },
+    { heading: "Choose deliberately", bullets: ["Choose croc when relay-assisted ad-hoc reachability is the priority.", "Choose Relayium when you want explicitly authorized server listeners, one-way folder mirroring, or encrypted Cloud/Device Inbox delivery to an offline target.", "Relayium pairing-code and text sessions require an eligible account to mint a code; joining does not, and the eligibility check is not a per-transfer charge."] },
+  ],
+  faq: { heading: "Frequently asked questions", items: [
+    { q: "Will Relayium fall back to a relay?", a: "Not for CLI send/receive. It is direct-only. Browser cross-network sessions use encrypted TURN by design." },
+    { q: "Does Relayium use SSH for managed servers?", a: "No. Current push/sync uses relayium serve and relayium:// over pinned TLS." },
+    { q: "Can the recipient be offline?", a: "Use Relayium Cloud or Device Inbox for that; pairing-code transfers require both ends online." },
+  ] },
+  cta: { text: "Pick the path that matches reachability and trust.", button: "Get the CLI", href: "/cli" },
+  relatedHeading: "Keep reading",
+};
+const currentZh = {
+  title: "Relayium 与 croc：配对码、中继和自管服务器",
+  description: "比较 Relayium 当前配对码与 daemon 直连模式和 croc，包括中继行为、账号、校验与离线投递。",
+  updatedLabel: "最近更新",
+  lead: ["两者都能用短码连接两个终端。croc 可以使用其中继；Relayium CLI send/receive 只走直连，找不到直连路径时会失败，而不是回退到中继。", "Relayium 还提供面向自管监听端的 daemon 直连 push/sync，以及给离线接收方的加密托管投递。已退役的 SSH 传输不再是现行选项。croc 采用 MIT 许可；Relayium CLI 采用 AGPL-3.0 许可。"],
+  sections: [
+    { heading: "临时传输", body: ["croc 强调一个暗号和中继辅助的可达性。Relayium send 生成有效期五分钟的六位码；两台 CLI 保持在线，文件在两端之间直传。Relayium 的可选 SAS 来自固定的 TLS 证书指纹；带外比对可以认证端点并发现会合服务冒充，但不能证明每一段网络路径。"], code: ["relayium send ./archive.zip", "relayium receive 483920"] },
+    { heading: "自管机器", body: ["在接收端运行 relayium serve，再通过证书固定 TLS 向 relayium:// push 或 sync。不使用 SSH 传输，也不需要 Relayium 账号。"], code: ["relayium serve --dir ~/inbox", "relayium push ./archive.zip relayium://server.example"] },
+    { heading: "有意识地选择", bullets: ["最看重中继辅助的临时可达性时选择 croc。", "需要显式授权的服务器监听器、单向文件夹镜像，或向离线目标发送加密云端/设备收件箱任务时选择 Relayium。", "Relayium 配对码与 text 会话的生成端需要符合条件的账号；加入端不需要，资格检查也不是按次收费。"] },
+  ],
+  faq: { heading: "常见问题", items: [
+    { q: "Relayium 会回退到中继吗？", a: "CLI send/receive 不会，它只走直连。浏览器跨网络会话按设计使用加密 TURN。" },
+    { q: "Relayium 的自管服务器模式使用 SSH 吗？", a: "不使用。当前 push/sync 通过证书固定 TLS 连接 relayium serve 与 relayium://。" },
+    { q: "接收方可以离线吗？", a: "可以改用 Relayium 云端或设备收件箱；配对码传输要求两端在线。" },
+  ] },
+  cta: { text: "按可达性和信任要求选择路径。", button: "获取 CLI", href: "/cli" },
+  relatedHeading: "继续阅读",
+};
+
 export default {
   slug: "compare/croc",
   published: "2026-07-09",
   updated: "2026-07-31",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
+  langs: withInstall({ en: currentEn, zh: currentZh, ja, ko, de, fr, ar, es, pt }),
 };

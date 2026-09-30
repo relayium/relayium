@@ -653,8 +653,8 @@ function selfTest() {
   const problems = [];
   const cases = [
     ["web.yml", "'server/**'", /web reads server\/account\/store\.go/],
-    ["macos.yml", "'apps/RelayiumKit/Tests/RelayiumKitTests/ErrorCopyTests.swift'",
-      /macos reads apps\/RelayiumKit\/Tests\/RelayiumKitTests\/ErrorCopyTests\.swift/],
+    ["ios-transfer-interop.yml", "'server/**'",
+      /ios-transfer-interop reads server\//],
     ["ios.yml", "'scripts/test/ios-app-store-candidate-test.sh'",
       /ios reads scripts\/test\/ios-app-store-candidate-test\.sh/],
     ["swift-package.yml", "'scripts/ci/assert-swift-named-execution.mjs'",

@@ -88,7 +88,7 @@ ready`,
     {
       heading: "Add a TURN relay for cross-network transfers",
       body: [
-        "Same-network (LAN) transfers and SSH-based push/pull work with nothing extra. Cross-network realtime transfers (two devices behind different NATs) sometimes need a TURN relay to establish a path — the relay only ever sees ciphertext, never your file contents.",
+        "Same-network (LAN) transfers and daemon-direct push/sync work without TURN. Cross-network browser realtime transfers (two devices behind different NATs) may use a TURN relay by design — the relay only ever sees ciphertext, never your file contents.",
         "docker-compose.yml has an optional relay profile that starts coturn (the TURN server) alongside the main server. The profile also starts a small Redis instance, but the server's coturn relay-byte metering through it is currently disabled, so relayed bytes are not counted.",
         "The secret has to reach two different places, and getting that wrong fails silently. coturn receives it through Compose variable interpolation, which resolves from the shell or a project-root .env. The server reads it from its own environment, which means server/.env — and an empty secret disables TURN outright. Set only one of them and you get a running coturn the server never issues credentials for: every container reports healthy, nothing is logged, and strict-NAT transfers keep failing exactly as they did before.",
       ],
@@ -180,7 +180,7 @@ you@example.com (https://your-domain)`,
       bullets: [
         "The CLI binary is free either way — --server changes which rendezvous server it talks to for the pairing-code handshake. send or text without a code mints one against that server, and cloud up stores under an account on it, so sign in there first with relayium login --server https://your-domain. Pointed at your own server, up stores on your own disk under your own limits; pointed at relayium.com it uses hosted storage and your plan's allowance. receive, down, and text with the printed code need no login.",
         "Both text peers must stay online. Messages use their own end-to-end encrypted, direct peer-to-peer session; CLI text is direct-only and does not use the browser's TURN relay. Neither Relayium nor your self-hosted server stores message bodies or server-side history, but either terminal or recipient can copy or retain text after receiving it.",
-        "push/pull (over your own SSH) and serve + daemon-direct push relayium://host don't touch relayium.com at all, self-hosted or not — they connect straight to the remote you specify.",
+        "serve with daemon-direct push/sync to relayium://host does not touch relayium.com at all, self-hosted or not — it connects straight to the remote you specify.",
       ],
     },
     {
@@ -240,7 +240,7 @@ you@example.com (https://your-domain)`,
     items: [
       {
         q: "Do I need to set up TURN?",
-        a: "Only if you want cross-network realtime transfers to work through strict NATs. Same-network transfers, SSH-based push/pull, and daemon-direct all work without it — TURN is purely for NAT traversal on the cross-network pairing-code path.",
+        a: "Only for browser cross-network realtime transfers through strict NATs. Same-network transfers and daemon-direct CLI push/sync work without it. CLI pairing-code send/receive is direct-only and fails rather than using TURN.",
       },
       {
         q: "Is the CLI still free if I self-host?",
@@ -347,7 +347,7 @@ ready`,
     {
       heading: "为跨网络传输加上 TURN 中继",
       body: [
-        "同一网络（局域网）的传输，以及基于 SSH 的 push/pull，不需要任何额外配置就能工作。跨网络的实时传输（两台设备各自处于不同的 NAT 之后）有时需要一个 TURN 中继来建立路径——中继全程只能看到密文，绝不会看到文件内容。",
+        "同一网络（局域网）的传输，以及 daemon 直连 push/sync，都不需要 TURN。浏览器跨网络实时传输（两台设备各自处于不同 NAT 之后）按设计可能使用 TURN 中继——中继全程只能看到密文，绝不会看到文件内容。",
         "docker-compose.yml 里有一个可选的 relay profile，会在启动主服务器的同时启动 coturn（TURN 服务器）。这个 profile 也会启动一个小型 Redis 实例，但服务器通过它进行的 coturn 中继流量计量目前已停用，中继字节不会被计入。",
         "这个密钥必须送到两个不同的地方，而送错了是不会报错的。coturn 通过 Compose 的变量插值拿到它，插值只从 shell 或项目根目录的 .env 解析。服务端则是从它自己的环境变量里读——也就是 server/.env——而密钥为空就等于彻底关闭 TURN。只设其中一处，你就会得到一个正在运行、服务端却从不为它签发凭据的 coturn：每个容器都报告健康，日志里什么都没有，跨严格 NAT 的传输和加中继之前一样失败。",
       ],
@@ -439,7 +439,7 @@ you@example.com (https://your-domain)`,
       bullets: [
         "无论用哪个服务器，CLI 二进制本身都是免费的——--server 只是改变了配对码握手所连接的会合服务器。send 或 text 不带码运行时会在该服务器生成配对码，云端 up 也存到那台服务器上的账号下，所以要先用 relayium login --server https://your-domain 在那边登录。指向你自己的服务器时，up 存在你自己的磁盘上、受你自己的限额约束；指向 relayium.com 时则使用托管存储和套餐额度。receive、down，以及使用打印配对码加入的 text 都无需登录。",
         "text 两端必须同时在线。消息使用独立的端到端加密 P2P 直连会话；CLI text 只支持直连，不使用网页版的 TURN 中继。Relayium 和你的自托管服务器都不保存消息正文或服务端历史，但任一终端或接收方都可以在收到文本后复制或留存。",
-        "push/pull（走你自己的 SSH）以及 serve + daemon 直连的 push relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。",
+        "serve 配合 daemon 直连 push/sync 到 relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。",
       ],
     },
     {
@@ -499,7 +499,7 @@ you@example.com (https://your-domain)`,
     items: [
       {
         q: "我需要搭建 TURN 吗？",
-        a: "只有当你希望跨网络的实时传输能穿透严格 NAT 时才需要。同一网络传输、基于 SSH 的 push/pull，以及 daemon 直连都不需要它——TURN 只用于跨网络配对码路径上的 NAT 穿透。",
+        a: "只有浏览器跨网络实时传输穿透严格 NAT 时才需要。同一网络传输和 daemon 直连 CLI push/sync 都不需要。CLI 配对码 send/receive 只走直连，失败时不会使用 TURN。",
       },
       {
         q: "自托管之后 CLI 还免费吗？",

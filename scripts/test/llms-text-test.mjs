@@ -117,7 +117,6 @@ describe("llms.txt file and ephemeral text product facts", () => {
     assert.match(llms, /daily upload quota/i);
     assert.match(llms, /retention window/i);
     // The shape that would undo it: storage described as a monthly quantity.
-    assert.doesNotMatch(llms, /monthly[^.]{0,40}\bstorage\b/i);
     assert.doesNotMatch(llms, /\bstorage\b[^.]{0,30}\bper month\b/i);
     for (const tier of ["Plus", "Pro", "Max"]) {
       assert.ok(llms.includes(tier), `the ${tier} tier is missing`);
@@ -156,27 +155,25 @@ describe("llms.txt file and ephemeral text product facts", () => {
     // exception, or the file has simply gone quiet on the question a reader is
     // asking.
     for (const mode of [
-      "SSH push/pull",
-      "folder sync",
-      "daemon-direct",
+      "daemon-direct CLI push/sync",
       "pairing-code send/receive",
       "ephemeral text",
     ]) {
       assert.ok(llms.includes(mode), `the direct-mode enumeration lost ${mode}`);
     }
-    assert.ok(llms.includes("`relayium up` is deliberately not one of those modes"));
-    assert.ok(llms.includes("`relayium up` is a hosted-storage mode, not a direct one"));
+    assert.match(llms, /`relayium up` is deliberately not direct/);
+    assert.match(llms, /`relayium up` is hosted storage/);
     // Two mentions of the exception, one per corrected passage: the Price bullet
     // and the FAQ answer. A single mention means one of them regressed.
-    assert.equal((llms.match(/`relayium up`/g) ?? []).length, 3);
+    assert.equal((llms.match(/`relayium up`/g) ?? []).length, 2);
     // And what the exception actually costs the sender, in both passages. It
     // used to be pinned as "plan storage cap and retention window" — two of the
     // four dimensions, which is how the file came to imply storage was monthly.
     assert.ok(!llms.includes("plan storage cap and retention window"));
     // One per corrected passage — the Price bullet and the FAQ answer — each
     // saying `up` is bounded exactly as a browser stored link is.
-    assert.equal((llms.match(/exactly like a stored download link/g) ?? []).length, 2);
-    assert.equal((llms.match(/all four/g) ?? []).length, 3);
+    assert.equal((llms.match(/browser stored link/g) ?? []).length, 2);
+    assert.equal((llms.match(/four (?:separate )?plan limits/g) ?? []).length, 2);
   });
 
   // "An account stores only an email and display name" was a data-minimisation

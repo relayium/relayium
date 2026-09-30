@@ -38,7 +38,7 @@ const en = {
       body: [
         "LocalSend is local-network only by design — it has no way to reach a device on a different network or across the internet. Relayium adds that: create a pairing code (or share the join link it generates), and the other side connects from anywhere. In the browser, that cross-network hop deliberately runs over an encrypted TURN relay rather than hunting for a direct route — relay-only ICE brings the connection up in a second or two, instead of burning around 20 seconds on cross-NAT direct-candidate checks that would almost always fail anyway.",
         "Creating a cross-network pairing code requires the sender to sign in; the person receiving never needs an account. Every realtime transfer — LAN or cross-network — is encrypted end-to-end at the application layer: an X25519 key exchange derives a key used for AES-256-GCM, and matching the 6-digit SAS code out of band confirms that the endpoint public keys were not replaced, detecting a signaling service or TURN relay impersonating an endpoint. The SAS check does not prove that TURN is absent from the network path; on cross-network browser transfers, the relay still carries only ciphertext and cannot read a byte of your file. Each file is also verified with a SHA-256 hash. Same-network transfers connect straight between the two devices.",
-        "For anyone scripting transfers to a server, there's also a CLI — push/pull over SSH or daemon-direct, incremental folder sync, and send/receive by pairing code — something a LAN-only app doesn't offer. The CLI always connects directly; it never uses a relay.",
+        "For anyone scripting transfers to a server, there's also a CLI — daemon-direct push/sync and send/receive by pairing code — something a LAN-only app doesn't offer. These CLI paths connect directly; they never use a relay.",
       ],
     },
     {
@@ -55,7 +55,7 @@ const en = {
         "Network reach: LocalSend is local-network only; Relayium also connects across different networks with a pairing code — in the browser that hop runs over an encrypted relay, while the CLI connects directly.",
         "Encryption: LocalSend secures its local transport; Relayium adds an independent application-layer X25519 + AES-256-GCM channel with a SAS verification code, even on the LAN.",
         "Accounts: LocalSend never needs one; Relayium's LAN mode needs none either — only the side that creates the pairing code signs in, and only to create it.",
-        "Automation: Relayium ships a CLI for SSH push/pull, incremental sync, and an always-on receive service; LocalSend is app-only.",
+        "Automation: Relayium ships a CLI for daemon-direct push/sync and an always-on receive service; LocalSend is app-only.",
       ],
     },
   ],
@@ -126,7 +126,7 @@ const zh = {
       body: [
         "LocalSend 在设计上只面向局域网——它没有办法连到不同网络或跨互联网的设备。Relayium 补上了这一块：创建一个配对码（或分享它生成的加入链接），对方就能从任何地方连接进来。在浏览器里，这条跨网络通道是刻意走加密 TURN 中继的，而不是先去碰运气试直连：把 ICE 限定为 relay-only，连接一两秒就能建立，省下大约 20 秒——那段时间本来会耗在几乎注定失败的跨 NAT 直连候选探测上。",
         "创建跨网络配对码需要发送方登录；接收方始终无需账号。每一次实时传输——无论局域网还是跨网络——都在应用层做端到端加密：X25519 密钥交换协商出用于 AES-256-GCM 的密钥，双方通过带外方式核对相同的 6 位 SAS 校验码，可以确认端点公钥未被替换，并检测冒充端点的信令服务或 TURN 端点。SAS 校验并不能证明 TURN 不在网络路径上；浏览器跨网络传输仍会经过中继，但中继只承载密文，读不到文件里的任何一个字节。每个文件还会用 SHA-256 做校验。同一网络内的传输是两台设备直连。",
-        "如果你需要把传输写进脚本发往服务器，Relayium 还提供命令行工具——通过 SSH 或 daemon 直连做 push/pull、增量同步文件夹、用配对码 send/receive——这些都是纯局域网应用做不到的。命令行工具始终直连，从不走中继。",
+        "如果你需要把传输写进脚本发往服务器，Relayium 还提供命令行工具——通过 daemon 直连做 push/sync、用配对码 send/receive——这些都是纯局域网应用做不到的。这些命令行路径始终直连，从不走中继。",
       ],
     },
     {
@@ -143,7 +143,7 @@ const zh = {
         "网络覆盖：LocalSend 只能在局域网内使用；Relayium 还能用配对码连接不同网络——浏览器里这一跳走的是加密中继，命令行工具则始终直连。",
         "加密：LocalSend 保护的是本地传输通道；Relayium 即便在局域网内也会额外加一层独立的应用层 X25519 + AES-256-GCM 通道，并带 SAS 校验码。",
         "账号：LocalSend 从不需要账号；Relayium 的局域网模式同样无需账号——只有创建配对码的一方需要登录，而且仅为创建配对码。",
-        "自动化：Relayium 提供命令行工具支持 SSH push/pull、增量同步和常驻接收服务；LocalSend 只有应用形态。",
+        "自动化：Relayium 提供命令行工具支持 daemon 直连 push/sync 和常驻接收服务；LocalSend 只有应用形态。",
       ],
     },
   ],

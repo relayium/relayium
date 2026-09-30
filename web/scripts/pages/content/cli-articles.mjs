@@ -3,7 +3,6 @@
 // than a hand-typed list) so a renamed article or retitled guide can't leave a
 // dead link on the hub page: the titles come from the article docs themselves.
 import cliGettingStarted from "./articles/cli-getting-started.mjs";
-import cliBackupSsh from "./articles/cli-backup-server-ssh.mjs";
 import cliSendToSomeone from "./articles/cli-send-to-someone.mjs";
 import cliServerToServer from "./articles/cli-server-to-server.mjs";
 import cliSyncLargeFolder from "./articles/cli-sync-large-folder.mjs";
@@ -14,7 +13,6 @@ import guidesDeviceInboxServer from "./articles/guides-device-inbox-server.mjs";
 
 const ARTICLES = [
   cliGettingStarted,
-  cliBackupSsh,
   cliSendToSomeone,
   cliServerToServer,
   cliSyncLargeFolder,

@@ -199,14 +199,6 @@
           />
         </ModeSection>
 
-        <ModeSection {cli} lang={lang()} mode={mode.pushPull}>
-          <CommandBlock
-            code={COMMANDS.pushPull.code}
-            title={COMMANDS.pushPull.name}
-            {...copyProps(cli.copy, COMMANDS.pushPull.name)}
-          />
-        </ModeSection>
-
         <ModeSection {cli} lang={lang()} mode={mode.serve}>
           <CommandBlock
             code={COMMANDS.serveListen.code}

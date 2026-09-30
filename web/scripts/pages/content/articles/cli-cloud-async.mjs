@@ -10,7 +10,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "Sometimes the two computers are never awake at the same time. You want to drop a file from your work laptop tonight and grab it from your home desktop tomorrow, with nobody waiting on a live connection. relayium up and relayium down do exactly that: up encrypts and uploads to your account, and down fetches and decrypts it later on any machine — no peer-to-peer handshake, no server you both ssh into.",
-    "This is the main part of the CLI that uses your Relayium account, alongside send, which needs it to mint a pairing code. Binding is optional for the rest: push/pull, daemon-direct and sync keep working with no login, and so does receive. Downloading needs no account at all, just the link.",
+    "This is the main part of the CLI that uses your Relayium account, alongside send, which needs it to mint a pairing code. The direct modes — daemon-direct push/sync and receive — keep working with no login. Downloading needs no account at all, just the link.",
   ],
   sections: [
     {
@@ -19,8 +19,8 @@ const en = {
       bullets: [
         "up / down (this guide) — the two machines are never online together. You upload now; you (or another machine) download later. Goes through your account.",
         "send / receive — both ends are online right now and want a direct peer-to-peer transfer over a one-time code.",
-        "push / pull — you can already ssh into the far machine.",
-        "up and send are the two that need relayium login — up to store the file under your account, send only when it has to mint a pairing code (handed one, it needs nothing). down, receive, push/pull, daemon-direct and sync need no account.",
+        "serve with push or sync — you manage both machines and can run a relayium:// listener on the receiver.",
+        "up and send are the two that need relayium login — up to store the file under your account, send only when it has to mint a pairing code (handed one, it needs nothing). down, receive and daemon-direct push/sync need no account.",
       ],
     },
     {
@@ -203,7 +203,7 @@ downloads/report.pdf
     items: [
       {
         q: "Do I need an account?",
-        a: "To upload, and to send when a code has to be minted. relayium up always requires relayium login, so the file can be stored under your account. relayium send requires it only when the server has to mint a fresh pairing code for you — run send with a code someone handed you and it mints nothing, so it needs no login. relayium down and relayium receive need no account, and push/pull, daemon-direct and sync work without one.",
+        a: "To upload, and to send when a code has to be minted. relayium up always requires relayium login, so the file can be stored under your account. relayium send requires it only when the server has to mint a fresh pairing code for you — run send with a code someone handed you and it mints nothing, so it needs no login. relayium down, relayium receive and daemon-direct push/sync need no account.",
       },
       {
         q: "Is my file encrypted?",
@@ -242,7 +242,7 @@ const zh = {
   updatedLabel: "最后更新",
   lead: [
     "有时两台电脑根本不会同时开着。你想今晚从工作笔记本丢一个文件，明天再从家里台式机取，中间没人等着保持在线连接。relayium up 和 relayium down 正是干这个的：up 在本地加密后上传到你的账号，down 之后在任意机器上取回并解密——无需点对点握手，也无需一台双方都能 ssh 进去的服务器。",
-    "这是 CLI 里主要会用到 Relayium 账号的部分，另一个是 send——它需要账号来生成配对码。其余功能的绑定是可选的：push/pull、daemon 直连、sync 都无需登录照常可用，receive 也一样。下载则完全不需要账号，有链接即可。",
+    "这是 CLI 里主要会用到 Relayium 账号的部分，另一个是 send——它需要账号来生成配对码。直连模式——daemon 直连 push/sync 与 receive——无需登录照常可用。下载则完全不需要账号，有链接即可。",
   ],
   sections: [
     {
@@ -251,8 +251,8 @@ const zh = {
       bullets: [
         "up / down（本指南）——两台机器从不同时在线。你现在上传，之后你（或另一台机器）再下载。走你的账号。",
         "send / receive——两端此刻都在线，想用一次性配对码做直接点对点传输。",
-        "push / pull——你已经能 ssh 进对端机器。",
-        "需要 relayium login 的是 up 和 send——up 是为了把文件存到你的账号下，send 只在必须签发配对码时才需要（别人给了你码就不用）。down、receive、push/pull、daemon 直连、sync 都不需要账号。",
+        "serve 配合 push 或 sync——两台机器都由你管理，并能在接收端运行 relayium:// 监听器。",
+        "需要 relayium login 的是 up 和 send——up 是为了把文件存到你的账号下，send 只在必须签发配对码时才需要（别人给了你码就不用）。down、receive 和 daemon 直连 push/sync 都不需要账号。",
       ],
     },
     {

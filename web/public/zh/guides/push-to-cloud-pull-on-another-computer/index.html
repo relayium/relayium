@@ -225,10 +225,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="updated">最后更新: <bdi>2026-09-01</bdi></p>
       
       <p class="lead">有时两台电脑根本不会同时开着。你想今晚从工作笔记本丢一个文件，明天再从家里台式机取，中间没人等着保持在线连接。relayium up 和 relayium down 正是干这个的：up 在本地加密后上传到你的账号，down 之后在任意机器上取回并解密——无需点对点握手，也无需一台双方都能 ssh 进去的服务器。</p>
-      <p class="lead">这是 CLI 里主要会用到 Relayium 账号的部分，另一个是 send——它需要账号来生成配对码。其余功能的绑定是可选的：push/pull、daemon 直连、sync 都无需登录照常可用，receive 也一样。下载则完全不需要账号，有链接即可。</p>
+      <p class="lead">这是 CLI 里主要会用到 Relayium 账号的部分，另一个是 send——它需要账号来生成配对码。直连模式——daemon 直连 push/sync 与 receive——无需登录照常可用。下载则完全不需要账号，有链接即可。</p>
       <section class="sheet"><h2>什么时候用它</h2>
       <p>按对端是否在线、以及两台机器如何互相触达来选模式：</p>
-      <ul><li>up / down（本指南）——两台机器从不同时在线。你现在上传，之后你（或另一台机器）再下载。走你的账号。</li><li>send / receive——两端此刻都在线，想用一次性配对码做直接点对点传输。</li><li>push / pull——你已经能 ssh 进对端机器。</li><li>需要 relayium login 的是 up 和 send——up 是为了把文件存到你的账号下，send 只在必须签发配对码时才需要（别人给了你码就不用）。down、receive、push/pull、daemon 直连、sync 都不需要账号。</li></ul></section>
+      <ul><li>up / down（本指南）——两台机器从不同时在线。你现在上传，之后你（或另一台机器）再下载。走你的账号。</li><li>send / receive——两端此刻都在线，想用一次性配对码做直接点对点传输。</li><li>serve 配合 push 或 sync——两台机器都由你管理，并能在接收端运行 relayium:// 监听器。</li><li>需要 relayium login 的是 up 和 send——up 是为了把文件存到你的账号下，send 只在必须签发配对码时才需要（别人给了你码就不用）。down、receive 和 daemon 直连 push/sync 都不需要账号。</li></ul></section>
       <section class="sheet"><h2>开始之前</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>先装 CLI，这样 relayium 命令才存在。下面这行会把预编译好的二进制放到你的 PATH 上（macOS 和 Linux；Windows 请从发布页下载 .zip）；relayium --version 可确认是否装好，relayium.com/cli 列出了所有安装方式。不装这一步，relayium login 只会报「command not found」。</li><li>有一个免费的 Relayium 账号。浏览器那一步是拿你的账号来批准这次登录，所以你得先有账号才能批准——先在 relayium.com 登录，没有就在那里注册一个。只有上传才需要账号；下载从不需要。</li><li>一个能把链接送到另一台机器的办法——备忘录、聊天窗口、密码管理器都行。任何拿到链接的人都能下载该文件，所以要像对待密码一样对待它。</li></ul></div>
       <p>第一次 up 之前有两件一次性的事——装好 CLI，以及有个账号。两样都齐了就往下跳。</p>

@@ -197,6 +197,7 @@ const GOVERNED = [
   // from.
   { file: "macos.yml", dispatch: false, call: true, directPr: false },
   { file: "ios.yml", dispatch: true, call: true, directPr: false },
+  { file: "ios-transfer-interop.yml", dispatch: true, call: true, directPr: false },
   // The shared Swift package's own lane. It is here for the same reason every
   // other filtered workflow is — its triggers, its concurrency and its
   // push/pull_request path symmetry would otherwise be governed by nothing.
@@ -333,6 +334,7 @@ const GATE_LANES = new Map([
   ["go", "go.yml"],
   ["macos", MACOS],
   ["ios", "ios.yml"],
+  ["ios-transfer-interop", "ios-transfer-interop.yml"],
   ["android", "android.yml"],
   ["android-interop", "android-interop.yml"],
   ["windows", "windows.yml"],
@@ -422,6 +424,7 @@ const LITERAL_GROUP_PREFIX = new Map([
   ["web.yml", "web-lane"],
   ["go.yml", "go-lane"],
   ["ios.yml", "ios-lane"],
+  ["ios-transfer-interop.yml", "ios-transfer-interop-lane"],
   ["android.yml", "android-lane"],
   ["android-interop.yml", "android-interop-lane"],
   ["windows.yml", "windows-lane"],
@@ -1265,6 +1268,7 @@ if (nightly) {
 // `MACOS` and `MACOS_RELEASE` are declared at the top of this file, beside the
 // concurrency prefixes their split made necessary.
 const IOS = "ios.yml";
+const IOS_TRANSFER_INTEROP = "ios-transfer-interop.yml";
 
 // ── 6k's subjects, declared beside the workflows they are about ─────────────
 //
@@ -1475,16 +1479,16 @@ if (docs.get(IOS)) {
 // 5c. Moved, not copied. A "split" that leaves the old job in place doubles the
 //     cost of the exact change it was meant to make cheaper, and both runs are
 //     green so nothing reports it.
-for (const [marker, home, what] of [
-  [IOS_PROJECT, IOS, "the iOS app build"],
-  [MACOS_PROJECT, MACOS, "the macOS app build"],
+for (const [marker, homes, what] of [
+  [IOS_PROJECT, [IOS, IOS_TRANSFER_INTEROP], "the iOS app build and built-App acceptance"],
+  [MACOS_PROJECT, [MACOS], "the macOS app build"],
 ]) {
   const hosts = GOVERNED.map((g) => g.file).filter((file) => workflowBody(file).includes(marker));
   check(
-    hosts.length === 1 && hosts[0] === home,
+    deepEqual(hosts.sort(), homes.toSorted()),
     `${what} (\`${marker}\`) runs in ${hosts.length ? hosts.join(", ") : "no governed workflow"}; `
-    + `want exactly ${home}. Two hosts is a duplicated macOS runner and no new evidence; zero is `
-    + `a platform that stopped being built at all.`,
+    + `want exactly ${homes.join(", ")}. The dedicated interop host is intentional; any other `
+    + `duplicate is a paid runner with no new evidence, while zero stops building the platform.`,
   );
 }
 
@@ -1896,6 +1900,11 @@ const RUNNER_BUDGETS = [
         why: "a PAID macOS runner is held by an iPad simulator that never boots, or by a "
           + "regular-width UI test waiting on a sidebar that never appeared",
       },
+    },
+  },
+  {
+    file: IOS_TRANSFER_INTEROP,
+    jobs: {
       "ios-transfer-acceptance": {
         max: 45,
         why: "a PAID macOS runner is held by a transfer peer, local server or built-App session "
@@ -2062,6 +2071,7 @@ const PLATFORM_OWNERS = [
     marker: IOS_PROJECT,
     sample: "apps/ios/Relayium/RelayiumApp.swift",
     appleShared: true,
+    buildHosts: [IOS, IOS_TRANSFER_INTEROP],
   },
   {
     // The marker is the Gradle task only `android.yml` may invoke in workflow
@@ -2306,12 +2316,13 @@ function platformBoundaryFailures(world) {
   //     path list, so "too broad" and "too narrow" both fail here.
   for (const platform of PLATFORM_OWNERS) {
     const hosts = governedFiles.filter((file) => wJobBody(world, file).includes(platform.marker));
+    const wantedHosts = platform.buildHosts ?? [platform.workflow];
     need(
-      hosts.length === 1 && hosts[0] === platform.workflow,
+      deepEqual(hosts.sort(), wantedHosts.toSorted()),
       `platform root ${platform.root}: the ${platform.label} app build (\`${platform.marker}\`) `
-      + `runs in [${hosts.join(", ")}]; want exactly [${platform.workflow}]. A platform root has `
-      + `exactly one heavy owner — two hosts is a second platform runner per commit and no new `
-      + `evidence, zero is a platform that quietly stopped being built.`,
+      + `runs in [${hosts.join(", ")}]; want exactly [${wantedHosts.join(", ")}]. The platform has `
+      + `one build owner plus only its declared acceptance hosts; any other host adds a runner `
+      + `with no new evidence, while zero leaves the platform unbuilt.`,
     );
     need(
       wTriggers(world, platform.workflow, platform.sample),
@@ -3552,7 +3563,7 @@ function iosParallelLaneFailures(world) {
   const doc = world.docs.get(IOS);
   if (!doc) return out;
 
-  const wanted = ["ios-build", "ios-ui-smoke", "ios-ipad-shell", "ios-transfer-acceptance"];
+  const wanted = ["ios-build", "ios-ui-smoke", "ios-ipad-shell"];
   const names = Object.keys(doc.jobs ?? {});
   need(
     names.length === wanted.length && wanted.every((name) => names.includes(name)),
@@ -3566,7 +3577,7 @@ function iosParallelLaneFailures(world) {
     if (!job) continue;
     need(
       job.needs === undefined,
-      `${IOS}/${name} declares \`needs: ${JSON.stringify(job.needs)}\`. The three iOS evidence `
+      `${IOS}/${name} declares \`needs: ${JSON.stringify(job.needs)}\`. The iOS evidence `
       + `classes are deliberately independent; this edge serializes paid macOS runners and `
       + `restores the previous 37-minute critical path.`,
     );
@@ -3604,10 +3615,10 @@ function iosParallelLaneFailures(world) {
   need(
     !ipad.includes("local-transfer-acceptance.sh") && !ipad.includes("actions/setup-go"),
     `${IOS}/${IOS_REGULAR_WIDTH_JOB} must own the regular-width shell and nothing else; transfer `
-    + `acceptance and Go setup belong to ${IOS}/ios-transfer-acceptance.`,
+      + `acceptance and Go setup belong to ${IOS_TRANSFER_INTEROP}/ios-transfer-acceptance.`,
   );
 
-  const transfer = body("ios-transfer-acceptance");
+  const transfer = JSON.stringify(world.docs.get(IOS_TRANSFER_INTEROP)?.jobs?.["ios-transfer-acceptance"] ?? {});
   for (const marker of [
     "actions/setup-go",
     "generic/platform=iOS Simulator",
@@ -3617,7 +3628,7 @@ function iosParallelLaneFailures(world) {
   ]) {
     need(
       transfer.includes(marker),
-      `${IOS}/ios-transfer-acceptance does not contain ${JSON.stringify(marker)}. The split may `
+      `${IOS_TRANSFER_INTEROP}/ios-transfer-acceptance does not contain ${JSON.stringify(marker)}. The split may `
       + `shorten the critical path, but it may not drop a transfer prerequisite or acceptance case.`,
     );
   }
@@ -5245,6 +5256,15 @@ function iosUploadToolchainFailures(world) {
   const out = [];
   const need = (ok, message) => { if (!ok) out.push(message); };
 
+  const transferJob = world.docs.get(IOS_TRANSFER_INTEROP)?.jobs?.["ios-transfer-acceptance"];
+  need(
+    transferJob?.["runs-on"] === IOS_RUNNER,
+    `${IOS_TRANSFER_INTEROP}/ios-transfer-acceptance: \`runs-on\` is `
+    + `${JSON.stringify(transferJob?.["runs-on"])}, want ${JSON.stringify(IOS_RUNNER)}. The `
+    + `acceptance selects Xcode from this image's inventory and that claim does not transfer `
+    + `to another image implicitly.`,
+  );
+
   const doc = world.docs.get(IOS);
   need(doc !== undefined, `${IOS} is missing or did not parse.`);
   if (!doc) return out;
@@ -6471,12 +6491,12 @@ const MUTATIONS = [
   },
   {
     name: "the parallel iOS transfer job drops cleanup acceptance",
-    mutate: (world) => withNamedJob(world, IOS, "ios-transfer-acceptance", (job) => {
+    mutate: (world) => withNamedJob(world, IOS_TRANSFER_INTEROP, "ios-transfer-acceptance", (job) => {
       const step = job.steps.find((candidate) => String(candidate.run ?? "")
         .includes("local-transfer-cleanup-test.sh"));
       step.run = step.run.replace("scripts/local-transfer-cleanup-test.sh", "true");
     }),
-    expect: /ios\.yml\/ios-transfer-acceptance does not contain "local-transfer-cleanup-test\.sh"/,
+    expect: /ios-transfer-interop\.yml\/ios-transfer-acceptance does not contain "local-transfer-cleanup-test\.sh"/,
   },
   // The macOS lane, budgeted per job. Each case below names ONE job, and each
   // uses `withNamedJob` so a reorder of `macos.yml`'s six jobs is a thrown
@@ -6721,10 +6741,10 @@ const MUTATIONS = [
     // failed cannot skip a build, and `ios.yml` carries exactly one. A budget
     // check that fired on it would be widened until it fired on nothing.
     name: "a failure-only diagnosis step keeps its `if:`",
-    mutate: (world) => withNamedJob(world, IOS, "ios-transfer-acceptance", (job) => {
+    mutate: (world) => withNamedJob(world, IOS_TRANSFER_INTEROP, "ios-transfer-acceptance", (job) => {
       job.steps[job.steps.length - 1].if = "failure()";
     }),
-    refute: /ios\.yml\/ios-transfer-acceptance: a condition reads the commit message/,
+    refute: /ios-transfer-interop\.yml\/ios-transfer-acceptance: a condition reads the commit message/,
   },
   {
     // 6i again, in the direction the check itself can fail SILENTLY. The marker
@@ -7753,10 +7773,10 @@ const MUTATIONS = [
   // refuses at upload.
   {
     name: "an iOS job moves off the image this gate's inventory claim is about",
-    mutate: (world) => withNamedJob(world, IOS, "ios-transfer-acceptance", (job) => {
+    mutate: (world) => withNamedJob(world, IOS_TRANSFER_INTEROP, "ios-transfer-acceptance", (job) => {
       job["runs-on"] = "macos-latest";
     }),
-    expect: /ios\.yml\/ios-transfer-acceptance: `runs-on` is "macos-latest", want "macos-15"/,
+    expect: /ios-transfer-interop\.yml\/ios-transfer-acceptance: `runs-on` is "macos-latest", want "macos-15"/,
   },
   {
     // Down, to the runner image default. The classic direction.

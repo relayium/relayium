@@ -30,7 +30,7 @@ describe("the /cli guide set has one authority", () => {
     // the two, and the reason a renamed or added article cannot leave the hub
     // page linking at a 404 or silently dropping a guide.
     expect(GUIDES.map((g) => g.slug).sort()).toEqual(CLI_ARTICLES.map((a) => a.slug).sort());
-    expect(GUIDES).toHaveLength(9);
+    expect(GUIDES).toHaveLength(8);
   });
 
   it("every localized guide title is filled in for both maintained languages", () => {
@@ -54,7 +54,7 @@ describe("the crawlable /cli shell", () => {
     expect(cli.hero.pitch).toBe(en.cliPage.heroSupport);
   });
 
-  it("names all seven modes, in the accepted order", () => {
+  it("names all six modes, in the accepted order", () => {
     expect(cli.why.items.map((i) => i.title)).toEqual(CLI_MODES.map((m) => m.name));
     for (const m of CLI_MODES) expect(body, m.name).toContain(m.name);
   });
@@ -65,7 +65,7 @@ describe("the crawlable /cli shell", () => {
       expect(byTitle[name], name).toMatch(/Another device can be offline/);
     for (const name of ["text", "send / receive"])
       expect(byTitle[name], name).toMatch(/Both devices are online/);
-    for (const name of ["push / pull", "serve", "sync"])
+    for (const name of ["serve", "sync"])
       expect(byTitle[name], name).toMatch(/A machine you manage/);
   });
 
@@ -82,8 +82,7 @@ describe("the crawlable /cli shell", () => {
     expect(body).not.toMatch(/an interrupted transfer resumes from where it stopped/i);
     expect(body).not.toContain("Verified and resumable");
     // …and says the per-mode truth instead.
-    expect(body).toMatch(/verifies nothing per file/);
-    expect(body).toMatch(/push and pull do not resume/i);
+    expect(body).toMatch(/push does not resume/i);
   });
 
   // The first fix for the blanket promise replaced it with "Resume is a sync
@@ -150,9 +149,9 @@ describe("the crawlable /cli shell", () => {
     expect(steps).not.toMatch(/a prebuilt binary for your OS/i);
   });
 
-  it("links all nine guides, each with a trailing slash", () => {
+  it("links all eight current guides, each with a trailing slash", () => {
     for (const a of CLI_ARTICLES) expect(body, a.slug).toContain(`href="/${a.slug}/"`);
-    expect(body.match(/href="\/(?:guides|how-to)\/[^"]+\/"/g)).toHaveLength(9);
+    expect(body.match(/href="\/(?:guides|how-to)\/[^"]+\/"/g)).toHaveLength(8);
   });
 
   it("asks the four accepted FAQ questions", () => {

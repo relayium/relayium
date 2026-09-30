@@ -173,6 +173,8 @@ jobs:
           fi
           echo "notarizing the signed package uploaded as $SIGNED_ARTIFACT"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Recheck complete macOS release readiness
+        run: apps/mac/scripts/test-release-readiness.sh
       # The artifact NAME the build actually used, carried across the file
       # boundary as a value. Re-deriving it here from `github.sha` and
       # `inputs.release_version` would be a second copy of the callee's naming
