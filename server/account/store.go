@@ -2687,6 +2687,15 @@ type Store interface {
 	// CreateSessionAtEpoch inserts sess only while the user's credential_epoch
 	// still equals epoch (false = a password reset/change got there first).
 	CreateSessionAtEpoch(ctx context.Context, sess Session, epoch int64) (bool, error)
+	// CreateSessionForIdentityAtEpoch inserts sess in one statement only while
+	// the user's credential_epoch still equals epoch, the account is not pending
+	// deletion, and identities(provider, subject) still maps to sess.UserID
+	// (false = any of those changed since the caller checked them).
+	CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error)
+	// CreateEmailTokenForIdentity inserts t in one statement only while
+	// identities(provider, subject) still maps to t.UserID (false = unlinked or
+	// relinked since the caller resolved it).
+	CreateEmailTokenForIdentity(ctx context.Context, t EmailToken, provider, subject string) (bool, error)
 	// CredentialEpoch / CredentialEpochByEmail read users.credential_epoch
 	// (0 for an unknown address).
 	CredentialEpoch(ctx context.Context, userID string) (int64, error)

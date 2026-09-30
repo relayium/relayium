@@ -3628,6 +3628,41 @@ func (s *SQLiteStore) CreateSessionAtEpoch(ctx context.Context, sess Session, ep
 	return n == 1, err
 }
 
+// CreateSessionForIdentityAtEpoch is CreateSessionAtEpoch for a login proven
+// by a linked provider identity: the epoch fence, the not-pending-deletion
+// check and the subject mapping are evaluated in the same INSERT, so a deletion
+// or an unlink that commits after the caller's checks leaves no session.
+func (s *SQLiteStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked)
+		 SELECT ?, u.id, ?, ?, 0 FROM users u
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0
+		    AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`,
+		authx.HashToken(sess.ID), sess.CreatedAt, sess.ExpiresAt, sess.UserID, epoch, provider, subject)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+// CreateEmailTokenForIdentity is CreateEmailToken bound to a linked provider
+// identity: the token row exists only if identities(provider, subject) maps to
+// t.UserID at the moment of the insert.
+func (s *SQLiteStore) CreateEmailTokenForIdentity(ctx context.Context, t EmailToken, provider, subject string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, credential_epoch, created_at, expires_at, used_at)
+		 SELECT ?, ?, ?, ?, ?, ?, ?, 0
+		  WHERE EXISTS (SELECT 1 FROM identities WHERE provider = ? AND subject = ? AND user_id = ?)`,
+		t.TokenHash, t.UserID, normEmail(t.Email), t.Purpose, t.CredentialEpoch, t.CreatedAt, t.ExpiresAt,
+		provider, subject, t.UserID)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
 func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool, error) {
 	var sess Session
 	var revoked int

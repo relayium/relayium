@@ -1,12 +1,17 @@
 package account
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/authx"
 )
 
 // A-L13 Google: the callback resolves an account by the Google subject first.
@@ -16,7 +21,7 @@ func googleSubService(t *testing.T, store Store, sub, email string, verified boo
 	t.Helper()
 	svc := NewService(store, &capturingMailer{}, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: time.Minute,
-		EnableGoogle: true,
+		EnableGoogle: true, AccountGraceDays: 30,
 	})
 	svc.fetchGoogleUser = func(context.Context, string) (string, string, string, bool, error) {
 		return sub, email, "Google Name", verified, nil
@@ -130,6 +135,11 @@ func TestGoogleSubChangedEmailSignsInOriginalAccount(t *testing.T) {
 func TestGoogleSubMatchingEmailVerifiesAndDropsPlantedPassword(t *testing.T) {
 	store := newTestStore(t)
 	u := googleSubAccount(t, store, "same@example.com", "sub-S", "planted-hash")
+	// A non-zero credential epoch (after an earlier reset) must not block a
+	// legitimate login: the session is inserted at the epoch actually read.
+	if _, err := store.db.Exec(`UPDATE users SET credential_epoch = 5 WHERE id = ?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	rec := googleSubCallback(t, googleSubService(t, store, "sub-S", " SAME@example.com ", true))
 
@@ -274,4 +284,255 @@ func TestGoogleSubPendingDeletionAccount(t *testing.T) {
 	if u, _ := store.GetUserByID(ctx, frozen.ID); u.DeletedAt == 0 {
 		t.Fatal("pending account must stay pending")
 	}
+}
+
+// credentialHookStore runs a hook just before the callback's atomic credential
+// insert, to land a concurrent deletion or unlink deterministically between the
+// callback's checks and its write.
+type credentialHookStore struct {
+	*SQLiteStore
+	beforeSession func()
+	beforeToken   func()
+	afterGetUser  func()
+}
+
+func (s *credentialHookStore) GetUserByID(ctx context.Context, id string) (User, error) {
+	u, err := s.SQLiteStore.GetUserByID(ctx, id)
+	if s.afterGetUser != nil {
+		hook := s.afterGetUser
+		s.afterGetUser = nil
+		hook()
+	}
+	return u, err
+}
+
+func (s *credentialHookStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error) {
+	if s.beforeSession != nil {
+		s.beforeSession()
+	}
+	return s.SQLiteStore.CreateSessionForIdentityAtEpoch(ctx, sess, epoch, provider, subject)
+}
+
+func (s *credentialHookStore) CreateEmailTokenForIdentity(ctx context.Context, t EmailToken, provider, subject string) (bool, error) {
+	if s.beforeToken != nil {
+		s.beforeToken()
+	}
+	return s.SQLiteStore.CreateEmailTokenForIdentity(ctx, t, provider, subject)
+}
+
+// commitDeletion runs the real account-deletion transaction (session purge,
+// epoch bump and deleted_at together).
+func commitDeletion(t *testing.T, store *SQLiteStore, userID string) {
+	t.Helper()
+	ctx := context.Background()
+	u, err := store.GetUserByID(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const now = int64(50_000)
+	tokenHash := authx.HashToken("delete-" + userID)
+	if err := store.CreateEmailToken(ctx, EmailToken{TokenHash: tokenHash, UserID: u.ID, Email: u.Email,
+		Purpose: "delete", CreatedAt: now, ExpiresAt: now + 3600}); err != nil {
+		t.Fatal(err)
+	}
+	react := EmailToken{TokenHash: authx.HashToken("react-" + userID), UserID: u.ID, Purpose: "reactivate", CreatedAt: now, ExpiresAt: now + 86400}
+	if _, committed, err := store.CommitAccountDeletion(ctx, tokenHash, u, now, now+86400, react); err != nil || !committed {
+		t.Fatalf("commit deletion: committed=%v err=%v", committed, err)
+	}
+}
+
+func googleSubCount(t *testing.T, store *SQLiteStore, q string, args ...any) int {
+	t.Helper()
+	var n int
+	if err := store.db.QueryRow(q, args...).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	return n
+}
+
+func assertNoGoogleSession(t *testing.T, store *SQLiteStore, rec *httptest.ResponseRecorder, userID string) {
+	t.Helper()
+	if got := sessionUser(t, store, rec); got != "" {
+		t.Fatalf("no session may be issued, got one for %q", got)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/?login=error" {
+		t.Fatalf("want login error, got %q", loc)
+	}
+	if n := googleSubCount(t, store, `SELECT COUNT(*) FROM sessions WHERE user_id = ?`, userID); n != 0 {
+		t.Fatalf("no session row may exist for the account, found %d", n)
+	}
+}
+
+// Finding 1: a deletion that commits between the callback's checks and its
+// session insert leaves no session — and none reappears after reactivation.
+func TestGoogleSubDeletionBeforeSessionInsertIssuesNothing(t *testing.T) {
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "del@example.com", "sub-D", "")
+	hs := &credentialHookStore{SQLiteStore: store}
+	hs.beforeSession = func() { commitDeletion(t, store, u.ID) }
+
+	rec := googleSubCallback(t, googleSubService(t, hs, "sub-D", "del@example.com", true))
+	assertNoGoogleSession(t, store, rec, u.ID)
+
+	if err := store.ClearAccountDeletion(context.Background(), u.ID); err != nil {
+		t.Fatalf("reactivate: %v", err)
+	}
+	if n := googleSubCount(t, store, `SELECT COUNT(*) FROM sessions WHERE user_id = ?`, u.ID); n != 0 {
+		t.Fatalf("reactivation must not revive a session minted across the deletion, found %d", n)
+	}
+}
+
+// Epoch fence: deletion AND reactivation both committing between the checks
+// and the insert still leave no session (the account state the login read is
+// gone even though the account is active again).
+func TestGoogleSubDeletionAndReactivationBeforeSessionInsertIssuesNothing(t *testing.T) {
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "delre@example.com", "sub-DR", "")
+	hs := &credentialHookStore{SQLiteStore: store}
+	hs.beforeSession = func() {
+		commitDeletion(t, store, u.ID)
+		if err := store.ClearAccountDeletion(context.Background(), u.ID); err != nil {
+			t.Fatalf("reactivate: %v", err)
+		}
+	}
+	rec := googleSubCallback(t, googleSubService(t, hs, "sub-DR", "delre@example.com", true))
+	assertNoGoogleSession(t, store, rec, u.ID)
+}
+
+// Frozen fence: an account marked pending deletion without an epoch bump
+// between the checks and the insert gets no session.
+func TestGoogleSubFrozenBeforeSessionInsertIssuesNothing(t *testing.T) {
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "frz@example.com", "sub-Z", "")
+	hs := &credentialHookStore{SQLiteStore: store}
+	hs.beforeSession = func() {
+		if err := store.SetAccountDeletion(context.Background(), u.ID, 100, 100+30*86400); err != nil {
+			t.Fatalf("set deletion: %v", err)
+		}
+	}
+	rec := googleSubCallback(t, googleSubService(t, hs, "sub-Z", "frz@example.com", true))
+	assertNoGoogleSession(t, store, rec, u.ID)
+}
+
+// Finding 2 (session): an unlink between the confirm step and the session
+// insert leaves no session.
+func TestGoogleSubUnlinkBeforeSessionInsertIssuesNothing(t *testing.T) {
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "unl@example.com", "sub-L", "keep")
+	hs := &credentialHookStore{SQLiteStore: store}
+	hs.beforeSession = func() {
+		if err := store.UnlinkIdentity(context.Background(), "google", u.ID); err != nil {
+			t.Fatalf("unlink: %v", err)
+		}
+	}
+	rec := googleSubCallback(t, googleSubService(t, hs, "sub-L", "unl@example.com", true))
+	assertNoGoogleSession(t, store, rec, u.ID)
+}
+
+// Finding 2 (reactivation token): an unlink between the subject lookup and the
+// reactivate-token insert of a pending account leaves no token.
+func TestGoogleSubUnlinkBeforeReactivationTokenIssuesNothing(t *testing.T) {
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "unlf@example.com", "sub-LF", "")
+	if err := store.SetAccountDeletion(context.Background(), u.ID, 100, 100+30*86400); err != nil {
+		t.Fatalf("set deletion: %v", err)
+	}
+	hs := &credentialHookStore{SQLiteStore: store}
+	hs.beforeToken = func() {
+		if err := store.UnlinkIdentity(context.Background(), "google", u.ID); err != nil {
+			t.Fatalf("unlink: %v", err)
+		}
+	}
+	rec := googleSubCallback(t, googleSubService(t, hs, "sub-LF", "unlf@example.com", true))
+	if loc := rec.Header().Get("Location"); loc != "/?login=error" {
+		t.Fatalf("want login error, got %q", loc)
+	}
+	if n := googleSubCount(t, store, `SELECT COUNT(*) FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate'`, u.ID); n != 0 {
+		t.Fatalf("no reactivate token may be minted after the unlink, found %d", n)
+	}
+}
+
+// Finding 3: a pending-deletion linked subject whose Google email changed gets
+// a reactivate token that recovers exactly the subject's account; the (also
+// pending) account holding the changed address is untouched.
+func TestGoogleSubFrozenChangedEmailTokenRecoversSubjectAccountOnly(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	subject := googleSubAccount(t, store, "subject@example.com", "sub-R", "")
+	other := googleSubAccount(t, store, "changed@example.com", "", "other-hash")
+	for _, id := range []string{subject.ID, other.ID} {
+		if err := store.SetAccountDeletion(ctx, id, 100, 100+30*86400); err != nil {
+			t.Fatalf("set deletion: %v", err)
+		}
+	}
+	svc := googleSubService(t, store, "sub-R", "Changed@Example.com", true)
+	rec := googleSubCallback(t, svc)
+	loc := rec.Header().Get("Location")
+	const prefix = "/#account=pending_deletion&token="
+	if !strings.HasPrefix(loc, prefix) {
+		t.Fatalf("want pending_deletion redirect, got %q", loc)
+	}
+	if got := sessionUser(t, store, rec); got != "" {
+		t.Fatalf("pending account must not get a session, got %q", got)
+	}
+	raw, err := url.QueryUnescape(strings.TrimPrefix(loc, prefix))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, ok, err := store.PeekEmailToken(ctx, authx.HashToken(raw), "reactivate", svc.now().Unix())
+	if err != nil || !ok || tok.UserID != subject.ID || tok.Email != "subject@example.com" {
+		t.Fatalf("token must be scoped to the subject's account: ok=%v err=%v tok=%+v", ok, err, tok)
+	}
+
+	body, _ := json.Marshal(map[string]string{"token": raw})
+	rreq := httptest.NewRequest("POST", "/api/account/reactivate", bytes.NewReader(body))
+	rreq.Header.Set("Content-Type", "application/json")
+	rrec := httptest.NewRecorder()
+	svc.handleReactivate(rrec, rreq)
+	if rrec.Code != http.StatusOK {
+		t.Fatalf("redeem: want 200, got %d %s", rrec.Code, rrec.Body.String())
+	}
+	if got := sessionUser(t, store, rrec); got != subject.ID {
+		t.Fatalf("redeemed token must sign in the subject's account %s, got %q", subject.ID, got)
+	}
+	if u, _ := store.GetUserByID(ctx, subject.ID); u.DeletedAt != 0 || u.Email != "subject@example.com" {
+		t.Fatalf("subject's account must be recovered with its email: %+v", u)
+	}
+	o, _ := store.GetUserByID(ctx, other.ID)
+	if o.DeletedAt == 0 {
+		t.Fatal("the account holding the changed address must stay pending deletion")
+	}
+	if mustVerified(t, store, other.ID) || passwordHash(t, store, other.ID) != "other-hash" {
+		t.Fatal("the account holding the changed address must not be verified or changed")
+	}
+	if n := googleSubCount(t, store, `SELECT COUNT(*) FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate'`, other.ID); n != 0 {
+		t.Fatalf("no reactivate token may be minted for the changed address's account, found %d", n)
+	}
+	if n := googleSubCount(t, store, `SELECT COUNT(*) FROM sessions WHERE user_id = ?`, other.ID); n != 0 {
+		t.Fatalf("no session may exist for the changed address's account, found %d", n)
+	}
+	if providers, _ := store.ListIdentityProviders(ctx, other.ID); len(providers) != 0 {
+		t.Fatalf("the changed address's account must not gain a link: %v", providers)
+	}
+}
+
+// Epoch capture order: the epoch is read BEFORE the account state the login
+// acts on. A deletion and reactivation that both commit right after that state
+// read leave the state stale, and the session insert must refuse it. The
+// account starts at a non-zero epoch so a zero/unread epoch cannot pass by luck.
+func TestGoogleSubDeletionAfterStateReadIssuesNothing(t *testing.T) {
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "order@example.com", "sub-O", "")
+	if _, err := store.db.Exec(`UPDATE users SET credential_epoch = 3 WHERE id = ?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	hs := &credentialHookStore{SQLiteStore: store}
+	hs.afterGetUser = func() {
+		commitDeletion(t, store, u.ID)
+		if err := store.ClearAccountDeletion(context.Background(), u.ID); err != nil {
+			t.Fatalf("reactivate: %v", err)
+		}
+	}
+	rec := googleSubCallback(t, googleSubService(t, hs, "sub-O", "order@example.com", true))
+	assertNoGoogleSession(t, store, rec, u.ID)
 }

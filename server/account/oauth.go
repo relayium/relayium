@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -97,7 +98,31 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// (a user can rename their Google address, and a released address can be
 	// re-registered by someone else), so once a subject is linked it — not the
 	// email — decides which account signs in.
-	u, found, err := s.store.GetUserByIdentity(r.Context(), "google", sub)
+	resolved, found, err := s.store.GetUserByIdentity(r.Context(), "google", sub)
+	if err != nil {
+		fail()
+		return
+	}
+	if !found {
+		// Unseen subject: keep verified-email linking, so a user who recreated
+		// their Google account with the same verified address still reaches it.
+		resolved, err = s.store.UpsertUserByEmail(r.Context(), email, name)
+		if err != nil {
+			fail()
+			return
+		}
+	}
+	// Credential fence: read the epoch BEFORE the account state this login acts
+	// on, and insert the session only at that epoch (as Login does). An account
+	// deletion commits its session purge and epoch bump together, so a deletion
+	// landing anywhere after this read leaves no session behind — not even one
+	// that a later reactivation would make usable again.
+	epoch, err := s.store.CredentialEpoch(r.Context(), resolved.ID)
+	if err != nil {
+		fail()
+		return
+	}
+	u, err := s.store.GetUserByID(r.Context(), resolved.ID)
 	if err != nil {
 		fail()
 		return
@@ -107,27 +132,27 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// planted on it while unverified. A linked subject whose Google email has
 	// changed signs in to its own account but proves nothing about that
 	// account's stored address, and never touches the account holding the new one.
-	emailProven := found && normEmail(u.Email) == email
-	if !found {
-		// Unseen subject: keep verified-email linking, so a user who recreated
-		// their Google account with the same verified address still reaches it.
-		u, err = s.store.UpsertUserByEmail(r.Context(), email, name)
-		if err != nil {
-			fail()
-			return
-		}
-		emailProven = true
-	}
+	emailProven := normEmail(u.Email) == email
 	// Frozen-login guard (Task 4): a pending-deletion account must not get a
 	// live session via OAuth either — checked right after u is resolved,
-	// before any of LinkIdentity/SetEmailVerified/IssueSession run. For a
-	// subject-resolved account the reactivate token is earned by the linked
-	// Google credential itself (like a password login of a pending account),
-	// not by the email, so it is issued for that account whatever address
-	// Google reports now.
+	// before any of LinkIdentity/SetEmailVerified/IssueSession run.
 	if u.DeletedAt > 0 {
-		raw, terr := s.issueReactivateToken(r.Context(), u.ID, u.Email)
-		if terr != nil {
+		var raw string
+		if found {
+			// Subject-resolved: the reactivate token is earned by the linked
+			// Google credential itself (like a password login of a pending
+			// account), whatever address Google reports now — so it is minted
+			// only while that link still stands, in the same statement.
+			var ok bool
+			raw, ok, err = s.issueReactivateTokenForIdentity(r.Context(), u.ID, u.Email, "google", sub)
+			if err == nil && !ok {
+				err = errIdentityMoved
+			}
+		} else {
+			// Unseen subject: the verified email is the credential (unchanged).
+			raw, err = s.issueReactivateToken(r.Context(), u.ID, u.Email)
+		}
+		if err != nil {
 			fail()
 			return
 		}
@@ -144,11 +169,12 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Confirm the subject maps to this account before anything is verified or a
-	// session exists. LinkIdentity is INSERT OR IGNORE, so its success does not
-	// prove the row is ours: a concurrent first login of the same subject may
-	// have linked it to another account, and a linked subject may have been
-	// unlinked since it was read. Either way this login is refused.
+	// Confirm the subject maps to this account before anything is verified.
+	// LinkIdentity is INSERT OR IGNORE, so its success does not prove the row is
+	// ours: a concurrent first login of the same subject may have linked it to
+	// another account, and a linked subject may have been unlinked since it was
+	// read. Either way this login is refused. The session insert below repeats
+	// the check atomically, so a change after this point is caught there too.
 	owner, linked, err := s.store.GetUserByIdentity(r.Context(), "google", sub)
 	if err != nil || !linked || owner.ID != u.ID {
 		fail()
@@ -167,11 +193,46 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	sess, err := s.IssueSession(r.Context(), u.ID)
-	if err != nil {
+	now := s.now()
+	sess := Session{
+		ID:        authx.RandToken(),
+		UserID:    u.ID,
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
+	}
+	// One statement: epoch unchanged, account not pending deletion, subject
+	// still linked to u. Any of those failing means a deletion, reset or unlink
+	// committed after the checks above, and no session may exist for it.
+	ok, err := s.store.CreateSessionForIdentityAtEpoch(r.Context(), sess, epoch, "google", sub)
+	if err != nil || !ok {
 		fail()
 		return
 	}
 	s.setSessionCookie(w, sess)
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// errIdentityMoved reports that a provider identity no longer maps to the
+// account a login resolved, so no credential may be issued for it.
+var errIdentityMoved = errors.New("identity no longer linked to the resolved account")
+
+// issueReactivateTokenForIdentity is issueReactivateToken for a login proven
+// by a linked provider identity: the token is inserted only while
+// identities(provider, subject) still maps to userID (ok=false otherwise).
+func (s *Service) issueReactivateTokenForIdentity(ctx context.Context, userID, email, provider, subject string) (string, bool, error) {
+	raw := authx.RandToken()
+	now := s.now()
+	st := s.ResolveSettings(ctx)
+	ok, err := s.store.CreateEmailTokenForIdentity(ctx, EmailToken{
+		TokenHash: authx.HashToken(raw),
+		UserID:    userID,
+		Email:     email,
+		Purpose:   "reactivate",
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Unix() + st.AccountGraceDays*86400,
+	}, provider, subject)
+	if err != nil || !ok {
+		return "", false, err
+	}
+	return raw, true, nil
 }
