@@ -694,8 +694,14 @@ func (c *stripeClient) ListSubscriptionEvidence(ctx context.Context, customerID 
 		if err != nil {
 			return SubscriptionEvidence{}, err
 		}
+		// Pointers so an ABSENT or null field is told apart from a zero value: a
+		// 200 whose body is {}, null, or lacks has_more parses without error into
+		// "no subscriptions, no more pages", which is exactly the answer that
+		// authorizes a downgrade. Evidence that is not a well-formed list is
+		// unknown, never empty.
 		var list struct {
-			Data []struct {
+			Object *string `json:"object"`
+			Data   *[]struct {
 				ID               string `json:"id"`
 				Status           string `json:"status"`
 				Created          int64  `json:"created"`
@@ -709,12 +715,21 @@ func (c *stripeClient) ListSubscriptionEvidence(ctx context.Context, customerID 
 					} `json:"data"`
 				} `json:"items"`
 			} `json:"data"`
-			HasMore bool `json:"has_more"`
+			HasMore *bool `json:"has_more"`
 		}
 		if err := json.Unmarshal(body, &list); err != nil {
 			return SubscriptionEvidence{}, fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
 		}
-		for _, s := range list.Data {
+		if list.Object == nil || *list.Object != "list" || list.Data == nil || list.HasMore == nil {
+			return SubscriptionEvidence{}, errors.New("stripe: list subscriptions: response is not a complete list object")
+		}
+		data := *list.Data
+		for _, s := range data {
+			if s.ID == "" || !knownStripeSubStatus(s.Status) {
+				return SubscriptionEvidence{}, fmt.Errorf("stripe: list subscriptions: malformed subscription (id %q, status %q)", s.ID, s.Status)
+			}
+		}
+		for _, s := range data {
 			if !liveSubStatus(s.Status) {
 				if s.EndedAt > out.LatestEndedAt {
 					out.LatestEndedAt = s.EndedAt
@@ -730,17 +745,29 @@ func (c *stripeClient) ListSubscriptionEvidence(ctx context.Context, customerID 
 				Status: s.Status, CurrentPeriodEnd: s.CurrentPeriodEnd,
 			})
 		}
-		if !list.HasMore {
+		if !*list.HasMore {
 			return out, nil
 		}
 		last := ""
-		if n := len(list.Data); n > 0 {
-			last = list.Data[n-1].ID
+		if n := len(data); n > 0 {
+			last = data[n-1].ID
 		}
 		if last == "" || last == q.Get("starting_after") {
 			return SubscriptionEvidence{}, errors.New("stripe: list subscriptions: has_more without a usable cursor")
 		}
 		q.Set("starting_after", last)
+	}
+}
+
+// knownStripeSubStatus is Stripe's documented subscription status set. A
+// status outside it is a response we do not understand, so the list carrying
+// it is not evidence of anything.
+func knownStripeSubStatus(status string) bool {
+	switch status {
+	case "incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused":
+		return true
+	default:
+		return false
 	}
 }
 

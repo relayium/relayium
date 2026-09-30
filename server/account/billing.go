@@ -986,6 +986,15 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 // That makes a late-delivered event from before the cancellation stale (it
 // cannot re-grant a tier nobody is paying for), while every event Stripe
 // creates after the list still applies (see ApplyStripeReconcileDowngrade).
+//
+// The stamp is the second line of defence. The first is the webhook's
+// canonical refresh: every subscription.created/updated and invoice event is
+// re-read from Stripe before it is applied, so a delayed `active` for a
+// subscription Stripe now reports canceled, unpaid or paused grants nothing
+// whatever its created time — including a replay in the very second the
+// subscription ended, or one for an unpaid/paused subscription that carries no
+// ended_at at all (the stamp then falls back to the observed clock). unpaid and
+// paused are non-live here exactly as they are on the webhook path.
 func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 	if s.biller == nil {
 		return
@@ -1017,11 +1026,11 @@ func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 		now := s.Now().Unix()
 		endedAt := evidence.LatestEndedAt
 		if endedAt > now+maxReconcileEndedAtSkew {
-			// A subscription cannot have ended in the future. Stamping with an
-			// implausible clock could make genuine later events look stale, so fall
-			// back to the observed clock (which outranks nothing new).
-			log.Printf("billing: reconcile sweep ignoring implausible ended_at %d for %s (now %d)", endedAt, u.ID, now)
-			endedAt = 0
+			// A subscription cannot have ended in the future: evidence that
+			// contradicts itself is unknown, so this user is skipped, not
+			// downgraded on a guessed clock.
+			log.Printf("billing: reconcile sweep skipping %s: implausible ended_at %d (now %d)", u.ID, endedAt, now)
+			continue
 		}
 		applied, err := s.Store().ApplyStripeReconcileDowngrade(ctx, observed, endedAt, now)
 		if err != nil {
@@ -1041,7 +1050,7 @@ func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 
 // maxReconcileEndedAtSkew is how far past the local clock a Stripe ended_at
 // may lie and still be believed (clock skew between us and Stripe). Beyond it
-// the sweep stamps with the observed clock instead.
+// the evidence is treated as unknown and the user is not downgraded.
 const maxReconcileEndedAtSkew = 300
 
 // subEventIsStale reports whether a subscription webhook event (identified by
@@ -1304,6 +1313,18 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			}
 			if missing {
 				w.WriteHeader(http.StatusOK)
+				return
+			}
+			// With refresh on, the event's own payload is never the evidence: it
+			// may be a late retry or a dashboard resend describing a state Stripe
+			// has since left (a canceled, unpaid or paused subscription's old
+			// `active`). A 200 that is not this subscription, or carries no
+			// status we understand, is therefore not a reason to fall back to the
+			// payload — it is unknown evidence, and Stripe must redeliver.
+			if client.canonicalWebhookRefresh && ev.SubscriptionID != "" &&
+				(info.ID != ev.SubscriptionID || !knownStripeSubStatus(info.Status)) {
+				log.Printf("billing: canonical refresh of subscription %s returned an unusable object (id %q, status %q)", ev.SubscriptionID, info.ID, info.Status)
+				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
 			if info.ID != "" {

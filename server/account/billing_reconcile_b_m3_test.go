@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,12 +36,41 @@ type bm3Stripe struct {
 	onList   map[string]func()     // customer -> hook run inside the list request
 	endless  map[string]bool       // customer -> every page has one ended sub and has_more=true
 	requests map[string][]string   // customer -> starting_after values seen
+	raw      map[string]string     // customer -> literal 200 body to serve instead of a list
+	objects  map[string]bm3Object  // subscription id -> what GET /v1/subscriptions/{id} returns
+	rawObj   map[string]string     // subscription id -> literal 200 body for GET /v1/subscriptions/{id}
+}
+
+// bm3Object is one subscription as Stripe's retrieve endpoint reports it NOW
+// (the canonical refresh the webhook performs before applying).
+type bm3Object struct {
+	Customer, Status, Price string
+	PeriodEnd               int64
 }
 
 func newBM3Stripe(t *testing.T) (*bm3Stripe, *stripeClient) {
 	t.Helper()
-	f := &bm3Stripe{pages: map[string][][]bm3Sub{}, hasMore: map[string]bool{}, fail: map[string]int{}, onList: map[string]func(){}, endless: map[string]bool{}, requests: map[string][]string{}}
+	f := &bm3Stripe{pages: map[string][][]bm3Sub{}, hasMore: map[string]bool{}, fail: map[string]int{}, onList: map[string]func(){}, endless: map[string]bool{}, requests: map[string][]string{}, raw: map[string]string{}, objects: map[string]bm3Object{}, rawObj: map[string]string{}}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id, ok := strings.CutPrefix(r.URL.Path, "/v1/subscriptions/"); ok && r.Method == http.MethodGet {
+			f.mu.Lock()
+			obj, found := f.objects[id]
+			rawObj, haveRawObj := f.rawObj[id]
+			f.mu.Unlock()
+			if haveRawObj {
+				w.Header().Set("Content-Type", "application/json")
+				io.WriteString(w, rawObj)
+				return
+			}
+			if !found {
+				http.Error(w, `{"error":{"code":"resource_missing"}}`, http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"id":%q,"object":"subscription","customer":%q,"status":%q,"current_period_end":%d,"items":{"data":[{"price":{"id":%q}}]}}`,
+				id, obj.Customer, obj.Status, obj.PeriodEnd, obj.Price)
+			return
+		}
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/subscriptions" {
 			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusBadRequest)
 			return
@@ -54,6 +85,7 @@ func newBM3Stripe(t *testing.T) (*bm3Stripe, *stripeClient) {
 		forceMore := f.hasMore[cus]
 		endless := f.endless[cus]
 		n := len(f.requests[cus])
+		raw, haveRaw := f.raw[cus]
 		f.mu.Unlock()
 		if hook != nil {
 			hook()
@@ -62,9 +94,14 @@ func newBM3Stripe(t *testing.T) (*bm3Stripe, *stripeClient) {
 			http.Error(w, `{"error":{"message":"boom"}}`, status)
 			return
 		}
+		if haveRaw && status == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, raw)
+			return
+		}
 		if endless && status == 0 {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"data":[{"id":"sub_e_%d","status":"canceled","created":1}],"has_more":true}`, n)
+			fmt.Fprintf(w, `{"object":"list","data":[{"id":"sub_e_%d","status":"canceled","created":1}],"has_more":true}`, n)
 			return
 		}
 		idx := 0
@@ -95,9 +132,10 @@ func newBM3Stripe(t *testing.T) (*bm3Stripe, *stripeClient) {
 			} `json:"items"`
 		}
 		out := struct {
-			Data    []sub `json:"data"`
-			HasMore bool  `json:"has_more"`
-		}{Data: []sub{}}
+			Object  string `json:"object"`
+			Data    []sub  `json:"data"`
+			HasMore bool   `json:"has_more"`
+		}{Object: "list", Data: []sub{}}
 		if idx < len(pages) {
 			for _, s := range pages[idx] {
 				v := sub{ID: s.ID, Status: s.Status, Created: s.Created, EndedAt: s.EndedAt}
@@ -302,22 +340,22 @@ func TestBM3SweepStampAdmitsSameSecondResubscription(t *testing.T) {
 	}
 }
 
-// (e”) An ended_at in the future is implausible evidence: the sweep falls back
-// to the observed clock rather than let it censor genuine events.
-func TestBM3SweepIgnoresImplausibleEndedAt(t *testing.T) {
+// (e2) An ended_at in the future is self-contradictory evidence: the user is
+// skipped (unknown), neither downgraded nor stamped with a guessed clock.
+func TestBM3SweepSkipsImplausibleEndedAt(t *testing.T) {
 	fake, client := newBM3Stripe(t)
 	svc, store := bm3Service(t, client)
 	ctx := context.Background()
 	u := bm3PaidUser(t, store, "bm3-future@example.com", "cus_future", "sub_old", 4000)
+	before, _, _ := store.GetSubscriptionSource(ctx, u.ID, ProviderStripe)
 	fake.pages["cus_future"] = [][]bm3Sub{{{ID: "sub_old", Status: "canceled", Created: 3000, EndedAt: bm3LocalNow + maxReconcileEndedAtSkew + 1}}}
 
 	svc.ReconcileStripeSubscriptions(ctx)
-	src, _, _ := store.GetSubscriptionSource(ctx, u.ID, ProviderStripe)
-	if src.PlanID != "free" || src.EventAt != 4000 {
-		t.Fatalf("want free stamped at the observed clock 4000, got %+v", src)
+	if after, _, _ := store.GetSubscriptionSource(ctx, u.ID, ProviderStripe); after != before {
+		t.Fatalf("implausible ended_at still moved the Stripe row:\n before %+v\n after  %+v", before, after)
 	}
-	if !bm3Event(t, store, u.ID, "plus", "active", "sub_again", 1_990_000_000, 8000) {
-		t.Fatal("a genuine event was censored by an implausible future ended_at")
+	if got, _ := store.GetUserByID(ctx, u.ID); got.PlanID != "plus" || got.StripeSubscriptionID != "sub_old" {
+		t.Fatalf("implausible ended_at downgraded or unbound the user: plan=%q sub=%q", got.PlanID, got.StripeSubscriptionID)
 	}
 }
 
