@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本 · Relayium</title>
-    <meta name="description" content="用 relayium push、pull 和 sync 把目录复制到你已经能 ssh 上去的服务器——两端都装了 relayium 时逐文件校验，而且免费。字节走你自己的 SSH 连接，从不经过 Relayium 的服务器。它做出来的是一份异地副本，不是带版本历史的备份。" />
+    <title>把旧 SSH 备份命令迁移到 Relayium daemon 直连 · Relayium</title>
+    <meta name="description" content="SSH 传输、relayium pull、-i 与 -p 已退役。用 serve 加 relayium:// push 或 sync 替换旧服务器复制命令。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/guides/back-up-a-server-over-ssh/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/back-up-a-server-over-ssh/" />
@@ -21,8 +21,8 @@
     <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本" />
-    <meta property="og:description" content="用 relayium push、pull 和 sync 把目录复制到你已经能 ssh 上去的服务器——两端都装了 relayium 时逐文件校验，而且免费。字节走你自己的 SSH 连接，从不经过 Relayium 的服务器。它做出来的是一份异地副本，不是带版本历史的备份。" />
+    <meta property="og:title" content="把旧 SSH 备份命令迁移到 Relayium daemon 直连" />
+    <meta property="og:description" content="SSH 传输、relayium pull、-i 与 -p 已退役。用 serve 加 relayium:// push 或 sync 替换旧服务器复制命令。" />
     <meta property="og:url" content="https://relayium.com/zh/guides/back-up-a-server-over-ssh/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -31,10 +31,10 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本" />
-    <meta name="twitter:description" content="用 relayium push、pull 和 sync 把目录复制到你已经能 ssh 上去的服务器——两端都装了 relayium 时逐文件校验，而且免费。字节走你自己的 SSH 连接，从不经过 Relayium 的服务器。它做出来的是一份异地副本，不是带版本历史的备份。" />
+    <meta name="twitter:title" content="把旧 SSH 备份命令迁移到 Relayium daemon 直连" />
+    <meta name="twitter:description" content="SSH 传输、relayium pull、-i 与 -p 已退役。用 serve 加 relayium:// push 或 sync 替换旧服务器复制命令。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本","description":"用 relayium push、pull 和 sync 把目录复制到你已经能 ssh 上去的服务器——两端都装了 relayium 时逐文件校验，而且免费。字节走你自己的 SSH 连接，从不经过 Relayium 的服务器。它做出来的是一份异地副本，不是带版本历史的备份。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"文件会经过 Relayium 的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"不会。push 和 pull 完全跑在你自己的 SSH 连接上。Relayium 的服务器全程不参与，也不需要账号。"}},{"@type":"Question","name":"服务器需要装 relayium 吗？","acceptedAnswer":{"@type":"Answer","text":"要看方向。对 push 来说是可选的：远端装了 relayium 就能走原生协议——发送前对整批做冲突预检，并对它传输的每个文件做 SHA-256 校验；没装的话，push 会退回到通过 SSH 传输 tar 流，依然可用，只是逐文件什么都不校验。对 pull 来说则是必须的：pull 始终需要远端装有 relayium（它没有 tar 兜底方案），请先在远端装好。sync 同理，也必须装。"}},{"@type":"Question","name":"它怎么决定用哪个 SSH 密钥和端口？","acceptedAnswer":{"@type":"Answer","text":"它会像 ssh 一样读取你的 ~/.ssh/config，所以主机别名、密钥和端口都会被自动识别。你也可以在单条命令里用 -i 指定身份文件、用 -p 指定端口来覆盖它们。"}},{"@type":"Question","name":"这比 rsync 快吗？","acceptedAnswer":{"@type":"Answer","text":"在推送到自己服务器这件事上，速度和走 SSH 的 rsync 差不多。重点不是跑赢 rsync，而是让你只用一个工具，就能顺带做跨网络传输和服务器之间的传输，并且沿用同一套逐文件完整性校验。在历史这件事上两者也一样：rsync 和 relayium sync 都不保留文件的旧版本，所以都是副本，而不是备份。"}},{"@type":"Question","name":"这算备份吗？","acceptedAnswer":{"@type":"Answer","text":"它是一份异地副本——那是备份的一部分，但不是全部。push 写下的是文件此刻的样子，而定时 sync 让这份副本保持最新，这也意味着它会在下一次运行时把源端的删除或原地损坏一起带过去，加上 --delete 更是把删除这一半明确打开。这里没有任何东西会保留旧版本，所以如果你需要恢复到上周的样子，请在目标端保留快照，或者改用会做版本管理的工具。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"把旧 SSH 备份命令迁移到 Relayium daemon 直连","description":"SSH 传输、relayium pull、-i 与 -p 已退役。用 serve 加 relayium:// push 或 sync 替换旧服务器复制命令。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"把旧 SSH 备份命令迁移到 Relayium daemon 直连"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"还能继续用旧 SSH 语法吗？","acceptedAnswer":{"@type":"Answer","text":"当前 CLI 不行。它会在传输任何字节之前拒绝 SSH 目标。"}},{"@type":"Question","name":"怎样恢复文件？","acceptedAnswer":{"@type":"Answer","text":"Relayium 当前没有 pull 命令。请用普通管理通道从接收端恢复，或反向发起一次新的 daemon 直连传输。"}},{"@type":"Question","name":"sync 是备份吗？","acceptedAnswer":{"@type":"Answer","text":"它是当前状态的镜像，不保留历史；--delete 还会有意传播删除。"}}]}]}</script>
     <style>
 :root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
@@ -195,7 +195,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row dest" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row dest" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row dest" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row dest" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row tool" href="/cli">CLI</a><a class="row tool" href="/zh/apps/">应用</a><a class="row tool" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/" aria-current="true">中文</a></nav></div></header>
       <div class="pane"><div class="wrap">
 
-      <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本</span></nav>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">把旧 SSH 备份命令迁移到 Relayium daemon 直连</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
@@ -204,7 +204,7 @@ ol.steps>li>pre{margin:8px 0 0}
            instead — a labelled <aside>, so it is a complementary landmark rather
            than a navigation one, and the same rule is satisfied either way. -->
       <main>
-      <h1>用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本</h1>
+      <h1>把旧 SSH 备份命令迁移到 Relayium daemon 直连</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
            bidi algorithm lays those runs out right-to-left inside the Arabic
            page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
@@ -214,66 +214,39 @@ ol.steps>li>pre{margin:8px 0 0}
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-09-01</bdi></p>
       
-      <p class="lead">如果你已经能 ssh 到某台机器上——VPS、家庭服务器、NAS、工作站都算——那就可以用 Relayium CLI 把文件的一份副本放过去，不用搭同步服务，也不用注册账号。传输走的是你现有的 SSH 连接，字节直接进你的服务器，从不经过 Relayium。</p>
-      <p class="lead">先把它能给你什么说清楚：一份此刻状态的异地副本。它不是有版本历史的备份。你覆盖掉的文件，这里不会保留昨天那一版；而定时跑的镜像，会在下一次运行时把源端的删除或损坏一起带过去。如果你需要恢复到上周的样子，请再配一层快照或者会保留历史的备份工具。</p>
-      <p class="lead">本文介绍怎么 push 和 pull 目录、完整性校验覆盖到哪里、为什么 push 不会往同一个目标跑第二次，以及如何用 cron 让这份副本保持最新。</p>
+      <p class="lead">这个网址过去介绍 Relayium 的 SSH 传输。该传输已经退役：当前 push 与 sync 只接受 relayium:// 目标，relayium pull 不可用。</p>
+      <p class="lead">要在自己管理的机器上保留异地副本，请在接收端运行 relayium serve，再通过证书固定 TLS 直接 push 或 sync。它保存的是当前状态，不是带版本历史的备份。</p>
       <section class="sheet"><h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
-      <section class="sheet"><h2>把一个目录 push 到你的服务器</h2>
-      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>你已经在用的 SSH 访问权限。ssh user@your-server true 必须静默返回——push 复用的就是这条连接，它自己不做任何额外配置。</li><li>服务器上一个可写的落点。目标路径的上一级目录必须存在，且那个 SSH 用户对它有写权限。</li><li>服务器上可选装 relayium，它换来的是发送前的冲突预检和逐文件 SHA-256。不装 push 也能用，走一条什么都不校验的普通 tar 流。</li><li>不需要 Relayium 账号，两端也都不需要跑守护进程。这里的一切都不会与 Relayium 的服务器通信。</li></ul></div>
-      <p>push 接受一个或多个源，以及一个 scp 风格的目标地址。Relayium 会用你平常的密钥和配置通过 SSH 连过去，再把文件流式写入目标目录：</p>
-      <ol class="steps" data-block="steps"><li><p>确认 push 将要复用的那条 SSH 访问。静默返回就说明你的密钥、主机别名和端口都已正确。</p><pre tabindex="0"><code>ssh user@your-server true</code></pre></li><li><p>查清你会走哪条协议。打印出路径就是原生协议——发送前的冲突预检加逐文件 SHA-256；什么都不打印就是走 tar 流兜底，那条路逐文件什么都不校验。</p><pre tabindex="0"><code>ssh user@your-server command -v relayium</code></pre></li><li><p>把目录 push 上去。目标是 scp 风格的写法，末尾的斜杠表示“放进这个目录里”。</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>如果你的 ssh 配置里还没有这台主机，就为这一条命令临时指定密钥或端口。</p><pre tabindex="0"><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>确认落地结果。push ./photos 会在目标下重建 photos/，所以文件夹名会一起带过去。</p><pre tabindex="0"><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">成功时你会看到什么</p><p>走原生协议时，push 每传完一个文件打印一行，并以 0 退出。对着裸机服务器则只打印一行汇总——那是 tar 兜底，同样算成功。</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
-  photos/IMG_0413.jpg (2314518 bytes)
-  photos/IMG_0414.jpg (1998233 bytes)
-
-# against a server with no relayium installed, one summary line instead:
-sent 2 file(s) (zero-dependency mode)</code></pre></div>
-      <ul><li>它会复用你的 ~/.ssh/config，所以你早就配好的主机别名、密钥和端口都能直接生效。</li><li>如果服务器上装了 relayium，就走原生协议：发送任何字节之前先对整批做冲突预检，传输的每个文件都做 SHA-256 校验并先落到暂存区再安装。</li><li>如果没装，就退回到把 tar 流通过管道送给远端自己的 tar -x -k，所以一台没有 relayium 的裸服务器也能收——但那条路逐文件什么都不校验，而且可能让一批文件只装了一半。</li></ul></section>
-      <section class="sheet"><h2>把文件 pull 回来</h2>
-      <p>恢复就是把同一条命令反过来写：给出一个远程源和一个本地目标目录。恢复备份，或者把服务器上的产物同步回笔记本，都用它：</p>
-      <pre tabindex="0"><code>relayium pull user@your-server:backups/ ./restore</code></pre>
-      <ul><li>和 push 不同，pull 始终需要远端已经装好 relayium——它没有 tar 兜底方案，远端要是没装，请先装好。</li></ul></section>
-      <section class="sheet"><h2>完整性校验是内置的，续传不是</h2>
-      <p>两端都装了 relayium 时，push 传输的每个文件都会用 SHA-256 哈希做端到端校验，并先落到暂存区再安装——落到服务器上的内容，和你发出去的逐字节一致。这一半是真的，也正是值得在目标端装上 relayium 的理由。</p>
-      <p>push 不做的事情是续传。它也不是事务：文件是一个一个装上去的，所以中途断线会把已经落地的文件留在原地——而正因为这些文件现在存在了，重跑同一条 push 会被冲突检查拒绝，而不是接着传。请显式补传缺失的路径，或者改用 relayium sync：它才是会跳过已匹配文件、并在下次运行时接着传半截文件的那个模式。</p>
-      <p>--no-resume 在 push 和 pull 上能被接受，但什么也不做。它只在接收 sync 的 serve 监听端上才是真的有效——那里才可能出现半截文件。</p>
-      <ul><li>SHA-256 校验会自动进行；一旦对不上就会报出来，该文件被标记为失败。</li><li>它覆盖的是这一次真正传输的内容。tar 兜底路径不做任何哈希；而 sync 的 size+mtime 跳过意味着看起来没变的文件根本不会被读取，也就不会被哈希。</li><li>push 和 pull 在两条协议下都不续传。预计会被中断的目录，请用 sync。</li></ul></section>
-      <section class="sheet"><h2>用 cron 让这份副本保持最新</h2>
-      <p>要放进 cron 的是 sync，不是 push。push 会拒绝已存在的目标，所以每晚往同一个目录 push，只有第一晚会成功，之后每晚都被拒。sync 才是为反复运行设计的：它跳过大小与修改时间都没变的文件，只发变化的部分，并接着传上一次中断留下的半截文件。</p>
-      <p>它是一条用你自己 SSH 密钥的非交互式命令，所以可以原样放进 cron。给它指定一个没有口令的密钥（或者用 agent），并把输出记下来，好让失败能被看见：</p>
-      <pre tabindex="0"><code># 每晚 2 点备份——加到你的 crontab 里（crontab -e）
-0 2 * * * relayium sync -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
-      <ul><li>一个被中断的夜间 sync，下一晚会接着来：已经匹配的会被跳过，半截的文件会接着传而不是重头来。</li><li>sync 没有 tar 兜底，所以服务器上必须装有 relayium。那是一次响亮的失败，而不是悄悄降级。</li><li>只要有文件没通过完整性校验，命令就会以非零状态退出，cron 的失败邮件通知就能发现问题。</li><li>它保持的是副本的最新状态，不保存历史。只有当你确实希望源端的删除也在服务器上生效时才加 --delete——那就是镜像，而如果你可能误删东西，这恰恰是你不想要的。</li></ul></section>
-      <section class="sheet"><h2>定时副本没落地的时候</h2>
-      <p>定时任务天生就是悄无声息地失败的——没人盯着终端。下面四种是真正会发生的，而且每一种都能用一条你现在就能跑的命令定性。它们并不是全部：目标端也可能磁盘满了，或者那个 SSH 用户没有写权限。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>cron 任务卡住，或者日志停在一个输入密码的提示上。</dt><dd><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
-# Permission denied (publickey).</code></pre><p>BatchMode=yes 会拒绝弹出提示，于是把静默的卡死变成了这一行。把这把密钥的公钥加到服务器的 ~/.ssh/authorized_keys 里，或者让任务改用 agent 已经持有的那把密钥。</p></dd><dt>crontab 那行跑了，日志却始终是空的。</dt><dd><pre tabindex="0"><code>command -v relayium
-# /usr/local/bin/relayium</code></pre><p>cron 用的是一份极简 PATH，通常不含 /usr/local/bin，所以那行在 relayium 启动之前就失败了。把刚才查出来的绝对路径写进 crontab 条目里，并保留 &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 重定向，好让下一次失败看得见。</p></dd><dt>任务每晚都报成功，但其实什么都没有被校验过。</dt><dd><pre tabindex="0"><code>ssh user@your-server command -v relayium
-# （什么都不打印）</code></pre><p>远端没有 relayium，就意味着 push 走了 tar 流兜底：它逐文件不做任何哈希，而且在解压中途遇到重名时可能让一批文件只装了一半。在服务器上装好 CLI，就能把发送前的冲突预检和逐文件 SHA-256 拿回来。装好之后你还可以把这个任务改成 relayium sync——它根本没有兜底路径，会响亮地失败而不是悄悄降级。</p></dd><dt>出现 “N file(s) could not be verified or saved”，并以非 0 退出。</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
-# 1 file(s) could not be verified or saved: [photos/IMG_0413.jpg]
-# exit status 1
-echo $?
-# 1</code></pre><p>要么落地时算出的 SHA-256 与发送时的不一致，要么服务器上的 relayium 没能保存或安装这个文件（磁盘空间不足、没有权限，或目标路径无法写入）；这条消息不区分是哪一种。第一行由服务器上的 relayium 打印、经 SSH 转发过来，后面的 exit status 1 是那个远程进程的退出码。无论哪种，原生协议都会先把每个文件写到暂存区，只有校验一致并且保存成功才安装，所以这次传输没有安装那个路径。但这并不能证明目标位置什么都没有——期间可能有别的程序创建了它——所以不要仅仅因为这条消息就删除接收端已有的文件。如果同一批里有其他文件已经落地，整批重跑会被冲突检查拒绝，所以单独 push 那一个路径，目标仍是原来打算的位置。如果它反复失败，就不是一次偶发的链路错误：检查服务器上的剩余空间、权限和目标路径，并查源文件（读取时是否正被写入）。</p></dd></dl></div></section>
+      <section class="sheet"><h2>准备接收服务器</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>发送端和接收端两台机器都已经安装 Relayium。</li><li>一个仅向发送端开放的可达 TCP 端口（默认 9031）。</li><li>一个已经存在、监听进程账户可以写入的接收目录。</li></ul></div>
+      <ol class="steps" data-block="steps"><li><p>创建用于接收副本的目录。</p><pre tabindex="0"><code>mkdir -p ~/backups</code></pre></li><li><p>在发送端输出需要由接收端授权的指纹。</p><pre tabindex="0"><code>relayium id</code></pre></li><li><p>在接收端授权该指纹；这里与启动 serve 时必须使用同一个 --config-dir。</p><pre tabindex="0"><code>relayium authorize &lt;sender-fingerprint&gt;</code></pre></li><li><p>让接收端在预期网络接口上启动监听。</p><pre tabindex="0"><code>relayium serve --dir ~/backups --bind 10.0.0.12</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">接收端就绪时会看到</p><p>serve 会报告监听地址、接收目录和接收端指纹，然后持续等待已授权发送端。</p><pre tabindex="0"><code>relayium serve: listening on 10.0.0.12:9031, receiving into /home/you/backups (fingerprint 5c1d9f04…)</code></pre></div>
+      <ul><li>authorize 与 serve 使用同一个 --config-dir。</li><li>无人值守时要提前授权；没有终端可询问时，未知发送端会被拒绝。</li></ul></section>
+      <section class="sheet"><h2>发送一次副本或持续镜像</h2>
+      <p>一次性、拒绝冲突的复制用 push；反复运行的单向镜像用 sync。</p>
+      <pre tabindex="0"><code>relayium push ./photos relayium://server.example</code></pre>
+      <pre tabindex="0"><code>relayium sync ./photos relayium://server.example --watch</code></pre>
+      <ul><li>push 不覆盖，也不续传。</li><li>sync 按大小与修改时间跳过文件，并能跨运行继续半截文件。</li><li>sync --delete 还需要监听端显式启用 --allow-delete。</li></ul></section>
+      <section class="sheet"><h2>安全替换旧脚本</h2>
+      <p>从 Relayium 命令中移除 host:path 目标、relayium pull、-i 与 -p。SSH 仍可独立用于系统管理，但不再是 Relayium 的数据传输通道。</p>
+      <ul><li>需要旧版本恢复能力时，另加快照或保留历史的备份工具。</li><li>定时镜像会在下次运行时把源端删除或损坏同步过去，因此要保留独立历史。</li><li>记录定时 sync 的输出，并对非零退出报警。</li><li>用 --bind 与防火墙限制监听端。</li></ul>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">故障排查</p><dl><dt>发送端因未授权而被拒绝</dt><dd><pre tabindex="0"><code>relayium id</code></pre><p>在接收端授权这个发送端的准确指纹，并确保使用与 serve 进程相同的 --config-dir。</p></dd><dt>监听端在绑定端口前退出</dt><dd><pre tabindex="0"><code>test -d ~/backups &amp;&amp; test -w ~/backups</code></pre><p>创建 ~/backups，让监听进程账户能够写入这个准确目录，然后重新启动 relayium serve。</p></dd><dt>发送端无法连接监听端</dt><dd><pre tabindex="0"><code>curl -v telnet://10.0.0.12:9031</code></pre><p>检查 --bind 地址，并在主机与云防火墙中仅允许发送端访问 TCP 9031。</p></dd><dt>传输以非零状态退出</dt><dd><pre tabindex="0"><code>relayium sync ./photos relayium://server.example</code></pre><p>根据报告的路径和错误修正权限或容量，再运行 sync；已完成文件会按大小和修改时间跳过。</p></dd></dl></div></section>
       <h2>常见问题</h2>
-      <h3>文件会经过 Relayium 的服务器吗？</h3>
-      <p>不会。push 和 pull 完全跑在你自己的 SSH 连接上。Relayium 的服务器全程不参与，也不需要账号。</p>
-      <h3>服务器需要装 relayium 吗？</h3>
-      <p>要看方向。对 push 来说是可选的：远端装了 relayium 就能走原生协议——发送前对整批做冲突预检，并对它传输的每个文件做 SHA-256 校验；没装的话，push 会退回到通过 SSH 传输 tar 流，依然可用，只是逐文件什么都不校验。对 pull 来说则是必须的：pull 始终需要远端装有 relayium（它没有 tar 兜底方案），请先在远端装好。sync 同理，也必须装。</p>
-      <h3>它怎么决定用哪个 SSH 密钥和端口？</h3>
-      <p>它会像 ssh 一样读取你的 ~/.ssh/config，所以主机别名、密钥和端口都会被自动识别。你也可以在单条命令里用 -i 指定身份文件、用 -p 指定端口来覆盖它们。</p>
-      <h3>这比 rsync 快吗？</h3>
-      <p>在推送到自己服务器这件事上，速度和走 SSH 的 rsync 差不多。重点不是跑赢 rsync，而是让你只用一个工具，就能顺带做跨网络传输和服务器之间的传输，并且沿用同一套逐文件完整性校验。在历史这件事上两者也一样：rsync 和 relayium sync 都不保留文件的旧版本，所以都是副本，而不是备份。</p>
-      <h3>这算备份吗？</h3>
-      <p>它是一份异地副本——那是备份的一部分，但不是全部。push 写下的是文件此刻的样子，而定时 sync 让这份副本保持最新，这也意味着它会在下一次运行时把源端的删除或原地损坏一起带过去，加上 --delete 更是把删除这一半明确打开。这里没有任何东西会保留旧版本，所以如果你需要恢复到上周的样子，请在目标端保留快照，或者改用会做版本管理的工具。</p>
+      <h3>还能继续用旧 SSH 语法吗？</h3>
+      <p>当前 CLI 不行。它会在传输任何字节之前拒绝 SSH 目标。</p>
+      <h3>怎样恢复文件？</h3>
+      <p>Relayium 当前没有 pull 命令。请用普通管理通道从接收端恢复，或反向发起一次新的 daemon 直连传输。</p>
+      <h3>sync 是备份吗？</h3>
+      <p>它是当前状态的镜像，不保留历史；--delete 还会有意传播删除。</p>
       <div class="ctacard">
-        <p>把你的下一个目录放一份异地副本到自己的服务器上——走你自己的 SSH，逐文件校验，而且免费。</p>
+        <p>把服务器复制任务迁移到 daemon 直连。</p>
         <a class="cta" href="/cli">获取 CLI</a>
       </div>
       <h2>继续阅读</h2>
-      <ul class="related"><li><a href="/zh/how-to/automate-server-backups/">用 cron 任务定时做异地服务器副本</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（daemon 直连）</a></li><li><a href="/zh/compare/scp/">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/zh/how-to/automate-server-backups/">用 cron 任务定时做异地服务器副本</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（daemon 直连）</a></li><li><a href="/zh/compare/scp/">Relayium 与 scp：daemon 直连、配对码传输和 SSH 的对比</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/">Relayium</a></li></ul>
       </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>

@@ -113,10 +113,15 @@ const POST_V026 = /\bpair\b|配对会话|inbox send|CLI (sender|command that sen
 
 const CASES = [
   ...["sections.0.body.0", "sections.5.bullets.5"].map((path) => ({
-    task: "W-N50", page: croc, slug: "compare/croc", path, langs: [...MAINTAINED_LANGS, ...FROZEN_LANGS],
+    task: "W-N50", page: croc, slug: "compare/croc", path, langs: FROZEN_LANGS,
     old: (l) => [...BOTH_PERMISSIVE[l], ...BOTH_AGPL[l]],
     facts: () => [LICENSE_FACT],
   })),
+  {
+    task: "W-N50", page: croc, slug: "compare/croc", path: "lead.1", langs: MAINTAINED_LANGS,
+    old: (l) => [...BOTH_PERMISSIVE[l], ...BOTH_AGPL[l]],
+    facts: () => [LICENSE_FACT],
+  },
   {
     task: "W-N51", page: selfHost, slug: "guides/self-host-relayium", path: "sections.2.body.1", langs: [...MAINTAINED_LANGS, ...FROZEN_LANGS],
     old: (l) => REDIS_OLD[l] ?? [],
@@ -137,8 +142,7 @@ const CASES = [
   {
     task: "W-N52", page: cliStart, slug: "guides/transfer-files-from-terminal", path: "faq.items.3.a", langs: MAINTAINED_LANGS,
     old: (l) => SOLE_EXCEPTION[l],
-    facts: (l) => [/push、pull|push, pull/, ...TWO_EXCEPTIONS[l]],
-    postV026: true,
+    facts: (l) => [/push\/sync|push\/sync daemon/, ...TWO_EXCEPTIONS[l]],
   },
 ];
 

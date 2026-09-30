@@ -130,10 +130,10 @@ describe("the rewritten CLI guides carry the date of their rewrite", () => {
   });
 });
 
-// ── The seven-mode chooser ──────────────────────────────────────────────────
+// ── The six-mode chooser ────────────────────────────────────────────────────
 
 /**
- * The seven modes in /cli's accepted order, keyed by the label the bullet opens
+ * The six modes in /cli's accepted order, keyed by the label the bullet opens
  * with. The labels are identical in English and Chinese because they are command
  * surfaces — a translated command is a command that does not run — and that is
  * exactly why one table can police both languages. `Device Inbox` is the one
@@ -145,7 +145,6 @@ const MODES = [
   { key: "inbox", label: "Device Inbox" },
   { key: "text", label: "relayium text" },
   { key: "sendReceive", label: "relayium send / relayium receive" },
-  { key: "pushPull", label: "relayium push / relayium pull" },
   { key: "serve", label: "relayium serve + relayium push relayium://" },
   { key: "sync", label: "relayium sync" },
 ];
@@ -171,16 +170,16 @@ const modeOf = (bullet) => {
   return MODES.find((m) => m.label === head)?.key ?? null;
 };
 
-describe("the getting-started chooser covers all seven modes", () => {
+describe("the getting-started chooser covers all six modes", () => {
   for (const lang of MAINTAINED_LANGS) {
-    it(`${lang}: names exactly the seven modes, in the accepted order`, () => {
+    it(`${lang}: names exactly the six modes, in the accepted order`, () => {
       const listed = chooser(lang)
         .bullets.map((b) => modeOf(b))
         .filter(Boolean);
       expect(listed).toEqual(MODES.map((m) => m.key));
     });
 
-    it(`${lang}: is seven bullets and seven modes — there is no eighth of anything`, () => {
+    it(`${lang}: is six bullets and six modes — there is no seventh of anything`, () => {
       // Not "at least seven": a chooser is a list the reader counts, so an extra
       // bullet is an extra option no matter what its text says. The one that used
       // to be here was the shared direct-only boundary, which is a property of two

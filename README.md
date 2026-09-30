@@ -124,12 +124,15 @@ pair `relayium up` / `relayium down`: `up` uploads a client-side-encrypted copy 
 so that a browser can open the link, which is the whole point of it — and that means it counts against your
 account plan's storage cap, monthly traffic allowance, daily upload quota and retention window, exactly like
 a stored download link created in the browser. Downloading with `relayium down` still needs no account.
+Hosted expiry has five choices — 1 hour, 1 day, 3 days, 7 days and 14 days — and the account's plan
+decides which of those choices are available. Using an allowance means usage is counted against that
+limit; it does not mean a per-transfer charge. Free accounts pay nothing, and paid plans are flat plans.
 The second is **Device Inbox**, which is hosted and asynchronous too: the encrypted task waits in Relayium's
 queue while the target machine is offline, and the CLI is that machine's receive side (see below).
 Neither surface hands Relayium a key — `up` keeps it in the link's `#k=` fragment, and Device Inbox seals
 the content key to a public key the receiving machine published.
 
-SSH transport is **temporarily disabled in the current source**: `push` and
+SSH transport is **retired from the next CLI release candidate**: `push` and
 `sync` accept only `relayium://` destinations, and `pull` is unavailable. Older
 published binaries are unchanged. Use `serve` + `push`/`sync` for direct transfers,
 or a pairing session for two online devices. See the
@@ -441,7 +444,7 @@ or sending to your own machine with Device Inbox, also requires sign-in.
 **Do my files get uploaded to a server?**
 On a LAN, file bytes stream directly between devices over WebRTC. Cross-network browser transfers use a
 TURN relay by design, but it sees only end-to-end encrypted ciphertext, never readable files, names, or keys.
-The CLI's direct modes — `push`/`pull`, `sync`, daemon-direct, `send`/`receive` and `text` — never route
+The CLI's direct modes — `push`/`sync` over daemon-direct, `send`/`receive` and `text` — never route
 bytes through us; `relayium up` deliberately does. Stored download links, whether created in the browser
 or by `relayium up`, are encrypted before upload, so the server stores ciphertext.
 

@@ -39,7 +39,7 @@ const en = {
       heading: "Beyond link sharing: realtime transfer, a CLI, and self-hosting",
       body: [
         "Firefox Send only ever did one thing — encrypted, async link sharing — and Relayium's stored mode covers that ground. Relayium also offers realtime browser transfer without server-side content storage: devices connect directly on the same LAN, while cross-network sessions use a TURN relay by design. TURN carries end-to-end encrypted ciphertext but cannot read or decrypt the plaintext. Neither side needs an account on the same LAN; across networks, whoever creates the pairing code signs in and whoever joins does not need an account.",
-        "For people who want more control, Relayium also ships a free, open-source CLI (push/pull over SSH, cross-network send/receive, folder sync) and a self-hostable server you can run yourself — none of which Firefox Send ever had. The whole project is AGPL-3.0-licensed and open source on GitHub.",
+        "For people who want more control, Relayium also ships a free, open-source CLI (daemon-direct push/sync and cross-network send/receive) and a self-hostable server you can run yourself — none of which Firefox Send ever had. The whole project is AGPL-3.0-licensed and open source on GitHub.",
       ],
     },
   ],
@@ -60,7 +60,7 @@ const en = {
       },
       {
         q: "Is Relayium free?",
-        a: "The software is free and open source under the AGPL-3.0 license, and the direct paths cost nothing: same-network browser transfers, and the CLI's push/pull over SSH, sync, daemon direct and send / receive. The hosted service has a free tier rather than being free without limit — a stored download link like the one this article is about is held in Relayium's encrypted storage, so it draws on the sender's plan storage allowance and retention window, and paid plans (Plus, Pro, Max) raise both. Creating one requires the sender to sign in; the recipient never needs an account, or a plan, to download.",
+        a: "The software is free and open source under the AGPL-3.0 license, and direct paths carry no per-transfer charge: same-network browser transfers, daemon-direct CLI push/sync, and send / receive. The hosted service has a free tier rather than being free without limit — a stored download link uses the sender's plan storage allowance and retention window. Consuming allowance is usage accounting, not a separate charge; Free accounts pay nothing and paid plans (Plus, Pro, Max) raise the limits. Creating a link requires the sender to sign in; the recipient never needs an account or plan to download.",
       },
     ],
   },
@@ -106,7 +106,7 @@ const zh = {
       heading: "不止链接分享：实时传输、命令行工具与自托管",
       body: [
         "Firefox Send 只做一件事——异步加密链接分享，Relayium 的存储模式覆盖了这一点。Relayium 还提供不在服务端存储内容的浏览器实时传输：同一局域网内设备直连，跨网络会话则按设计使用 TURN 中继。TURN 承载端到端加密的密文，但无法读取或解密明文。同一局域网内双方都无需账号；跨网络时，创建配对码的一方登录，加入者无需账号。",
-        "对想要更多掌控权的人，Relayium 还提供免费开源的命令行工具（基于 SSH 的 push/pull、跨网络的 send/receive、文件夹同步）以及可自行运行的自托管服务端——这些都是 Firefox Send 从未有过的。整个项目在 GitHub 上以 AGPL-3.0 许可开源。",
+        "对想要更多掌控权的人，Relayium 还提供免费开源的命令行工具（daemon 直连 push/sync 与跨网络 send/receive）以及可自行运行的自托管服务端——这些都是 Firefox Send 从未有过的。整个项目在 GitHub 上以 AGPL-3.0 许可开源。",
       ],
     },
   ],
@@ -127,7 +127,7 @@ const zh = {
       },
       {
         q: "Relayium 免费吗？",
-        a: "软件本身免费开源，采用 AGPL-3.0 许可；直连路径也不花钱：同一网络内的浏览器传输，以及 CLI 的 SSH push/pull、sync、daemon 直连与 send / receive。托管服务则是「有免费额度」而不是「无限免费」——本文所说的存储下载链接保存在 Relayium 的加密存储里，会计入发送方套餐的存储额度与留存时长，付费套餐（Plus、Pro、Max）会把两者都提高。生成链接需要发送方登录；收件方下载始终无需账号，也无需任何套餐。",
+        a: "软件本身免费开源，采用 AGPL-3.0 许可；直连路径不按次收费：同一网络内的浏览器传输、CLI 的 daemon 直连 push/sync 与 send / receive。托管服务则是「有免费额度」而不是「无限免费」——存储下载链接会计入发送方套餐的存储额度与留存时长。占用额度表示用量记账，不是另外收费；免费账号不付费，Plus、Pro、Max 会提高限制。生成链接需要发送方登录；收件方下载无需账号或套餐。",
       },
     ],
   },

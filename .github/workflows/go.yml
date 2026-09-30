@@ -202,6 +202,8 @@ jobs:
           for t in TestSSHTransfersDisabled TestSSHRetirementDoesNotConsumeStdin; do
             grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
           done
+      - name: CLI binary and public truth agree
+        run: sh scripts/test/cli-public-truth-test.sh
       - name: govulncheck
         working-directory: server
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...

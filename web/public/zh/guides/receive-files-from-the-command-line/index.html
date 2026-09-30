@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>在命令行接收文件 · Relayium</title>
-    <meta name="description" content="用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收 daemon 直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。" />
+    <meta name="description" content="用 Relayium CLI 接收文件的三种方式：receive 接收配对码发送，serve 监听 daemon 直连推送，或者用 down 下载托管的加密链接。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/guides/receive-files-from-the-command-line/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/receive-files-from-the-command-line/" />
@@ -22,7 +22,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="在命令行接收文件" />
-    <meta property="og:description" content="用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收 daemon 直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。" />
+    <meta property="og:description" content="用 Relayium CLI 接收文件的三种方式：receive 接收配对码发送，serve 监听 daemon 直连推送，或者用 down 下载托管的加密链接。" />
     <meta property="og:url" content="https://relayium.com/zh/guides/receive-files-from-the-command-line/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -32,9 +32,9 @@
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="在命令行接收文件" />
-    <meta name="twitter:description" content="用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收 daemon 直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。" />
+    <meta name="twitter:description" content="用 Relayium CLI 接收文件的三种方式：receive 接收配对码发送，serve 监听 daemon 直连推送，或者用 down 下载托管的加密链接。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在命令行接收文件","description":"用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收 daemon 直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/receive-files-from-the-command-line/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在命令行接收文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"接收文件需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。三种方式——relayium receive、relayium serve、relayium pull——都完全免费，你这一端不需要 Relayium 账号。整个过程里唯一需要登录的，是 receive 模式下的发送方，好让发送端的 CLI 生成配对码。"}},{"@type":"Question","name":"relayium receive 和浏览器的配对码互通吗？","acceptedAnswer":{"@type":"Answer","text":"不互通。CLI 的配对码协议和 relayium.com 浏览器端的加入链接、二维码流程是分开的——它们的握手方式不同，目前也无法互相通信，所以 CLI 的码只能和另一个 CLI 配对。这是路线图上的事，现在还不能指望。在此之前，用浏览器接收的人需要的是一个 relayium up 链接，而不是配对码。"}},{"@type":"Question","name":"如果一台未知机器向我的 serve 监听端推送会怎样？","acceptedAnswer":{"@type":"Answer","text":"在终端中，会在它首次推送时提示你按地址和指纹批准，批准结果会被记住。没有终端时——比如作为 systemd 服务或 cron 任务——没有人来回应，未知推送方会被拒绝；应先用 relayium authorize \u003cfingerprint> 预先授权。"}},{"@type":"Question","name":"能从一台没装 relayium 的服务器 pull 吗？","acceptedAnswer":{"@type":"Answer","text":"不能。pull 始终需要远程装有 relayium；不像 push 那样有 tar 兜底方案。请先在远程安装 relayium。"}},{"@type":"Question","name":"relayium 把我的身份和受信任的对端存在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium 中——在任何涉及身份或信任的命令上，都可以用 --config-dir 覆盖这个位置。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在命令行接收文件","description":"用 Relayium CLI 接收文件的三种方式：receive 接收配对码发送，serve 监听 daemon 直连推送，或者用 down 下载托管的加密链接。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/receive-files-from-the-command-line/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在命令行接收文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"接收文件需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"receive 与 serve 在你这一端不需要账号，down 只需要链接。发送方生成 receive 配对码或托管链接时需要登录。托管存储会占用发送方套餐额度，这表示用量记账，不是按次收费。"}},{"@type":"Question","name":"relayium receive 和浏览器的配对码互通吗？","acceptedAnswer":{"@type":"Answer","text":"不互通。CLI 的配对码协议和 relayium.com 浏览器端的加入链接、二维码流程是分开的——它们的握手方式不同，目前也无法互相通信，所以 CLI 的码只能和另一个 CLI 配对。这是路线图上的事，现在还不能指望。在此之前，用浏览器接收的人需要的是一个 relayium up 链接，而不是配对码。"}},{"@type":"Question","name":"如果一台未知机器向我的 serve 监听端推送会怎样？","acceptedAnswer":{"@type":"Answer","text":"在终端中，会在它首次推送时提示你按地址和指纹批准，批准结果会被记住。没有终端时——比如作为 systemd 服务或 cron 任务——没有人来回应，未知推送方会被拒绝；应先用 relayium authorize \u003cfingerprint> 预先授权。"}},{"@type":"Question","name":"能从一台没装 relayium 的服务器 pull 吗？","acceptedAnswer":{"@type":"Answer","text":"不能。pull 始终需要远程装有 relayium；不像 push 那样有 tar 兜底方案。请先在远程安装 relayium。"}},{"@type":"Question","name":"relayium 把我的身份和受信任的对端存在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium 中——在任何涉及身份或信任的命令上，都可以用 --config-dir 覆盖这个位置。"}}]}]}</script>
     <style>
 :root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
@@ -215,10 +215,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="updated">最近更新: <bdi>2026-09-01</bdi></p>
       
       <p class="lead">发送只是故事的一半——迟早你也会是接收方：同事想跨网络给你一个文件，你自己的一台机器想把东西交给另一台，或者你想主动从你管理的服务器上取点东西回来。Relayium CLI 用三个不同的命令覆盖这三种情形，而且都不需要账号。</p>
-      <p class="lead">对方用配对码推给你时用 receive；想要一个常驻收件箱、让受信任的机器随时可以推送过来时用 serve；而你主动去连接一台已能 SSH 登录的服务器取文件时用 pull。</p>
+      <p class="lead">对方用配对码发送时用 receive；受信任机器向你管理的监听端直推时用 serve；发送方给了托管加密链接、而且可能已经离线时用 down。</p>
       <section class="sheet"><h2>三种接收方式，各自适用于什么场景</h2>
       <p>用哪个命令，取决于谁在发起传输，以及两台机器是怎么互相认识的：</p>
-      <ul><li>relayium receive &lt;code&gt; [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，并给出一段可供核对的 SAS 码。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听 daemon 直连的 relayium:// 推送，默认端口 9031。</li><li>relayium pull [user@]host:src &lt;dest&gt; ——你主动通过 SSH 连接到一台你已能登录的服务器，把文件取回来。</li></ul></section>
+      <ul><li>relayium receive &lt;code&gt; [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，并给出一段可供核对的 SAS 码。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听 daemon 直连的 relayium:// 推送，默认端口 9031。</li><li>relayium down &lt;link&gt; [destdir] ——下载并解密托管链接；下载端不需要账号。</li></ul></section>
       <section class="sheet"><h2>receive：对方跨网络把文件发给你</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前你需要什么</p><ul><li>本机装好 CLI。relayium version 会打印版本号；如果 shell 回答 command not found，说明这台还没装。</li><li>一位此刻已登录、并且人就在终端前的发送方。只有他需要账号——你接收全程都不用登录。</li><li>那六位数字，通过带外渠道传给你。它从对方 CLI 生成的那一刻起只活五分钟，所以先约好时间。</li><li>事后还能再把六位数字念回去的渠道：SAS 是靠口头比对的，不是看屏幕。</li><li>另一端必须是 CLI。浏览器无法加入 CLI 的配对码——如果你手上只有浏览器，请对方改用 relayium up 链接。</li></ul></div>
       <p>这是 relayium send 的接收端。对方在自己那边运行 relayium send &lt;path&gt;（事先 relayium login 过），CLI 会生成一个 6 位数字、5 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：</p>
@@ -243,20 +243,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
       <p>对于无人值守运行的 serve（systemd、后台脚本），让推送方运行 relayium id 打印出它的指纹，然后在接收方这边提前批准它：</p>
       <pre tabindex="0"><code>relayium authorize &lt;fingerprint&gt;</code></pre>
       <ul><li>--dir 设置文件落地的位置（默认为当前目录）；--once 只接受一次传输就退出；--allow-delete 允许推送方的 --delete（镜像）请求真正在这里删除文件，默认关闭。</li><li>--config-dir（默认 ~/.config/relayium）指向一个位置：这台主机的身份和已授权指纹列表都存放在那里——如果把 serve 作为专用服务运行，可以覆盖它。</li></ul></section>
-      <section class="sheet"><h2>pull：主动从你能 SSH 登录的服务器取文件</h2>
-      <p>pull 是 push 的镜像：不是等别人发东西给你，而是你通过已有的 SSH 权限主动连过去，把文件取回来。</p>
-      <pre tabindex="0"><code>relayium pull user@host:/path/to/files ./local-dest</code></pre>
-      <ol class="steps" data-block="steps"><li><p>先确认远端真的装了 CLI。pull 是在远端执行 relayium 的，而且不像 push 那样有 tar 兜底，二进制缺失会让整条命令失败。</p><pre tabindex="0"><code>ssh user@host command -v relayium</code></pre></li><li><p>如果没有，先在远端装上。</p><pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre></li><li><p>用你已有的 SSH 访问把文件拉回来。-i 和 -p 的行为与 ssh 自身一致。</p><pre tabindex="0"><code>relayium pull user@host:/path/to/files ./local-dest</code></pre></li></ol>
-      <ul><li>和 push 不同，pull 始终需要远程已经装有 relayium——从裸机服务器 pull 没有 tar 兜底方案。如果远程还没装，先在那边用 curl -fsSL https://relayium.com/install.sh | sh 安装。</li><li>每个文件都会做逐文件 SHA-256 校验。pull 不续传：它在移动任何字节之前就会拒绝已存在的目标，所以中断之后要么把缺失的路径再取一次，要么在同一方向上改用 relayium sync。--no-resume 在这里能被接受，但什么也不做。</li><li>-i 和 -p 的行为和 ssh 自己的 -i/-p 一样，用于指定身份文件或端口。</li></ul></section>
+      <section class="sheet"><h2>down：下载托管的加密链接</h2>
+      <p>down 会取回 Relayium 保存的密文，在本地解密并校验后再安装输出。</p>
+      <pre tabindex="0"><code>relayium down &#39;&lt;complete-link-with-#k-fragment&gt;&#39; ./local-dest</code></pre>
+      <ol class="steps" data-block="steps"><li><p>复制完整链接，包括 #k= 片段。该片段含唯一解密密钥，从不会发送给 Relayium 服务器。</p><pre tabindex="0"><code>relayium down &#39;&lt;complete-link-with-#k-fragment&gt;&#39; ./local-dest</code></pre></li><li><p>选择一个已存在且可写的目标目录，或先创建它。</p><pre tabindex="0"><code>mkdir -p ./local-dest</code></pre></li><li><p>用完整链接运行 down。接收方不需要登录。</p><pre tabindex="0"><code>relayium down &#39;&lt;complete-link-with-#k-fragment&gt;&#39; ./local-dest</code></pre></li></ol>
+      <ul><li>服务器会收到 # 之前的 URL，但永远收不到片段里的解密密钥。</li><li>down 会在同一次调用内自动重连，最多五次；如果最终失败，会删除半截输出，之后重新运行会从头开始。</li><li>当前 CLI 中，SSH 目标、relayium pull、-i 与 -p 已退役。</li></ul></section>
       <section class="sheet"><h2>出问题时怎么办</h2>
       <p>几乎所有失败的接收都逃不出这五种。你当时跑的是哪条命令，决定了适用哪一条；每一条都有一行可读的输出或一条可跑的命令来判定。</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>你输入配对码，会合服务器拒绝了它。</dt><dd><pre tabindex="0"><code>relayium receive 483920
 # the rendezvous refuses the code</code></pre><p>几乎总是那五分钟已经过去了——配对码是从发送方 CLI 生成的那一刻起计时，而不是从你被告知的那一刻。让他重新跑一次 send，并立刻把新的数字念给你。输错一位数字从你这边看起来一模一样，所以在断定它过期之前，先把码复述回去核对一遍。</p></dd><dt>传输完成了，但你找不到文件。</dt><dd><pre tabindex="0"><code>relayium receive 483920 ./downloads</code></pre><p>不指定目标目录时，receive 会写进你执行它时所在的那个目录，而那通常不是你去找的地方。显式传一个目录，或者先跑 pwd 确认清楚。</p></dd><dt>失败并提示「no direct connection to the peer (both ends behind strict NAT?)」。</dt><dd><pre tabindex="0"><code>relayium receive 483920
-# no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>CLI 的配对码路径按设计只走直连：找不到直连路径时它宁可失败，也不会把你的文件绕经中继。这在你这边无解。让发送方改用 relayium up 下载链接；如果两台机器都归你控制，那就用 daemon 直连或走 SSH 的 push。</p></dd><dt>pull 立刻失败，提示找不到 relayium。</dt><dd><pre tabindex="0"><code>ssh user@host command -v relayium
-# (no output)</code></pre><p>pull 是在远端执行 relayium 的——在那次交换里远端才是发送方——而且它没有 push 那样的 tar 兜底。先在远端装好 CLI，再重跑 pull。</p></dd><dt>有机器推送到你的 serve 监听器，被拒绝了，而且从头到尾没问过你。</dt><dd><pre tabindex="0"><code>relayium serve --dir ~/incoming</code></pre><p>那个提示只在 serve 拥有终端时才存在。跑在 systemd 下、脚本里或管道后面时没人可问，所以陌生指纹会被直接拒绝。让推送方跑 relayium id，在这边用 relayium authorize &lt;指纹&gt; 预先授权，并且要用监听器运行时相同的 --config-dir。</p></dd></dl></div></section>
+# no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>CLI 的配对码路径按设计只走直连：找不到直连路径时会失败，不会让文件绕经中继。让发送方改用 relayium up 下载链接；如果两台机器都归你控制，就用 daemon 直连。</p></dd><dt>down 提示链接无效或无法解密。</dt><dd><pre tabindex="0"><code>relayium down &#39;&lt;link-without-fragment&gt;&#39; ./downloads
+# invalid link or missing key</code></pre><p>重新复制完整链接，包括 #k=。该片段是唯一解密密钥；缺失后服务器无法补回。</p></dd><dt>有机器推送到你的 serve 监听器，被拒绝了，而且从头到尾没问过你。</dt><dd><pre tabindex="0"><code>relayium serve --dir ~/incoming</code></pre><p>那个提示只在 serve 拥有终端时才存在。跑在 systemd 下、脚本里或管道后面时没人可问，所以陌生指纹会被直接拒绝。让推送方跑 relayium id，在这边用 relayium authorize &lt;指纹&gt; 预先授权，并且要用监听器运行时相同的 --config-dir。</p></dd></dl></div></section>
       <h2>常见问题</h2>
       <h3>接收文件需要账号吗？</h3>
-      <p>不需要。三种方式——relayium receive、relayium serve、relayium pull——都完全免费，你这一端不需要 Relayium 账号。整个过程里唯一需要登录的，是 receive 模式下的发送方，好让发送端的 CLI 生成配对码。</p>
+      <p>receive 与 serve 在你这一端不需要账号，down 只需要链接。发送方生成 receive 配对码或托管链接时需要登录。托管存储会占用发送方套餐额度，这表示用量记账，不是按次收费。</p>
       <h3>relayium receive 和浏览器的配对码互通吗？</h3>
       <p>不互通。CLI 的配对码协议和 relayium.com 浏览器端的加入链接、二维码流程是分开的——它们的握手方式不同，目前也无法互相通信，所以 CLI 的码只能和另一个 CLI 配对。这是路线图上的事，现在还不能指望。在此之前，用浏览器接收的人需要的是一个 relayium up 链接，而不是配对码。</p>
       <h3>如果一台未知机器向我的 serve 监听端推送会怎样？</h3>
@@ -270,7 +270,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
         <a class="cta" href="/cli">获取 CLI</a>
       </div>
       <h2>继续阅读</h2>
-      <ul class="related"><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件与文本</a></li><li><a href="/zh/compare/croc/">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件与文本</a></li><li><a href="/zh/compare/croc/">Relayium 与 croc：配对码、中继和自管服务器</a></li><li><a href="/zh/">Relayium</a></li></ul>
       </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
