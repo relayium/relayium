@@ -424,10 +424,11 @@ enum UITestMode {
                 appropriateFor: nil, create: true) else { return nil }
         let root = support.appendingPathComponent("uitest-pending", isDirectory: true)
         // Both this root and its protected Device Inbox sibling, and the
-        // content key of every job they held. Each staged job's key is written
-        // to the product's keychain namespace (`pending-upload-key:<jobId>`),
-        // not into this directory, so deleting the directory alone left one
-        // orphaned keychain item per job on every run. Keys are named only by
+        // content key of every job they held. A run now keeps those keys in
+        // memory (`makePendingUploadKeyStore`); a job staged by a run from
+        // before that change had its key written to the product's keychain
+        // namespace (`pending-upload-key:<jobId>`), not into this directory,
+        // so deleting the directory alone would orphan it. Keys are named only by
         // the ids of the directories discarded here — never by enumerating the
         // keychain, which is shared with the installed app's real uploads. The
         // directories go synchronously, before any store sees the root; the
@@ -441,6 +442,19 @@ enum UITestMode {
             }
         }
         return root
+    }
+
+    /// The pending-upload key store an acceptance launch uses: in memory.
+    ///
+    /// Every staged job's content key used to be written to the product's
+    /// keychain namespace (`pending-upload-key:<jobId>`), which the installed
+    /// app's real pending uploads share (N-0928-6). In memory, a run's keys
+    /// cannot reach that namespace or outlive the process — and nothing needs
+    /// them to: `pendingUploadRoot` empties the staging root on every launch,
+    /// so no job survives into a relaunch that would look for its key.
+    static func makePendingUploadKeyStore() -> StoredLinkKeyStore? {
+        guard isActive else { return nil }
+        return InMemoryStoredLinkKeyStore()
     }
 
     /// The stored-link key store an acceptance launch may use.
@@ -793,6 +807,10 @@ enum UITestMode {
 
     /// nil, so a shipped launch always stages where the product stages.
     static func pendingUploadRoot() -> URL? { nil }
+
+    /// nil, so a shipped launch always keeps a pending upload's content key in
+    /// the product's own keychain namespace, where recovery looks for it.
+    static func makePendingUploadKeyStore() -> StoredLinkKeyStore? { nil }
 
     /// false, so a shipped launch can never be told it already holds an account.
     static let isSignedIn = false

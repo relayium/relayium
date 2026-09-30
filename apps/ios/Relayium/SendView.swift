@@ -566,7 +566,7 @@ struct SendView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button {
-                    UIPasteboard.general.string = link
+                    copyCapabilityLink(link)
                     copiedGeneratedLink = true
                 } label: {
                     Label(L10n.t(copiedGeneratedLink ? .commonCopied : .commonCopy),

@@ -96,5 +96,44 @@ final class PendingUploadTestRootResetTests: XCTestCase {
         let removed = try await keys.key(for: valid)
         XCTAssertNil(removed)
     }
+
+    // MARK: - N-0928-6 option A: UI-test keys stay in memory
+
+    /// An injected key store REPLACES the product keychain namespace rather
+    /// than sitting beside it, and omitting it still yields the product's.
+    func testAnInjectedPendingKeyStoreReplacesTheProductKeychain() async throws {
+        let injected = InMemoryStoredLinkKeyStore()
+        let support = AppEnvironment.makePendingUploadSupport(drafts: nil, root: base, keys: injected)
+        let id = UUID().uuidString
+        try await support.keys.save(id: id, keyB64url: key)
+        let stored = try await injected.key(for: id)
+        XCTAssertEqual(stored, key, "a staged job's key did not reach the injected store")
+        XCTAssertFalse(support.keys is KeychainStoredLinkKeyStore)
+
+        let product = AppEnvironment.makePendingUploadSupport(drafts: nil, root: base)
+        XCTAssertTrue(product.keys is KeychainStoredLinkKeyStore,
+                      "a shipped launch must keep pending keys in the product namespace")
+    }
+
+    /// Both apps hand the acceptance store to the ONE pending-upload
+    /// composition, and both Release stubs return nil, so a shipped launch can
+    /// never be pointed at an in-memory store.
+    func testBothAppsPassTheUITestPendingKeyStoreAndReleaseReturnsNil() throws {
+        for platform in ["ios", "mac"] {
+            let app = try RepoRoot.text("apps/\(platform)/Relayium/RelayiumApp.swift")
+            XCTAssertTrue(app.contains("keys: UITestMode.makePendingUploadKeyStore())"),
+                          "\(platform) stages UI-test keys in the product keychain")
+            let mode = try RepoRoot.text("apps/\(platform)/Relayium/UITestMode.swift")
+            XCTAssertTrue(mode.contains(
+                "static func makePendingUploadKeyStore() -> StoredLinkKeyStore? { nil }"),
+                "\(platform)'s Release stub must return nil")
+            let debug = try XCTUnwrap(mode.components(
+                separatedBy: "static func makePendingUploadKeyStore() -> StoredLinkKeyStore? {\n")
+                .dropFirst().first)
+            XCTAssertTrue(debug.hasPrefix("        guard isActive else { return nil }\n"
+                                          + "        return InMemoryStoredLinkKeyStore()"),
+                          "\(platform)'s DEBUG store is not the in-memory one, gated on UI-test mode")
+        }
+    }
 }
 #endif

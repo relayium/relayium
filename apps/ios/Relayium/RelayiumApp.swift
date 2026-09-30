@@ -332,7 +332,8 @@ struct RelayiumApp: App {
         // elsewhere, and would then leave device deliveries the recovery path
         // cannot see. Same shape and same reason as `keys` and `drafts` above.
         let pending = AppEnvironment.makePendingUploadSupport(
-            drafts: drafts, root: UITestMode.pendingUploadRoot())
+            drafts: drafts, root: UITestMode.pendingUploadRoot(),
+            keys: UITestMode.makePendingUploadKeyStore())
         let uploads = AppEnvironment.makeUploadModel(
             keyStore: keys,
             pending: pending,

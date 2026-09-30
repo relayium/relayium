@@ -12,11 +12,12 @@ import RelayiumKit
 /// **Why it exists.** An acceptance launch stages into a root of its own and
 /// empties it before use, so a run never inherits the previous run's
 /// interrupted job. The staged bytes live in that directory, but each job's
-/// content key does not: `AppEnvironment.makePendingUploadSupport` always pairs
-/// the store with the product's keychain namespace (`pending-upload-key:<jobId>`),
-/// because the app's composition root is shared with Release. Deleting only the
-/// directory therefore left one keychain item behind per staged job, every
-/// run, on every developer Mac and simulator that runs the suite.
+/// content key does not: until N-0928-6 option A,
+/// `AppEnvironment.makePendingUploadSupport` always paired the store with the
+/// product's keychain namespace (`pending-upload-key:<jobId>`), because the
+/// app's composition root is shared with Release. Deleting only the directory
+/// therefore left one keychain item behind per staged job, every run, on every
+/// developer Mac and simulator that ran the suite.
 ///
 /// **Why keys are removed by the ids of the directories being discarded**, and
 /// never by enumerating the keychain: those items share a namespace with the
@@ -24,11 +25,13 @@ import RelayiumKit
 /// inside the discarded roots is provably this suite's, so only its id may be
 /// named. A key whose job lives anywhere else is not touched.
 ///
-/// **Why a keychain store is kept rather than swapped for an in-memory one**:
-/// that would be cleaner isolation, but the store is chosen by the app's
-/// composition root (`RelayiumApp`), which the UI-test seam does not reach —
-/// it can only choose the root. Nothing in the suite relies on the key
-/// surviving a relaunch either way; a job directory never survives one.
+/// **Since N-0928-6 option A, a UI-test launch no longer writes those keys**:
+/// `RelayiumApp` passes `UITestMode.makePendingUploadKeyStore()`, an in-memory
+/// store, to `AppEnvironment.makePendingUploadSupport`. This reset still runs,
+/// because a staging root left by a run from before that change holds jobs
+/// whose keys ARE in the keychain; for a newer run's jobs the deletes are
+/// no-ops. Nothing in the suite relies on a key surviving a relaunch; a job
+/// directory never survives one.
 public enum PendingUploadTestRootReset {
     /// Discard `shared` AND its protected Device Inbox sibling, returning the
     /// id of every job directory that was in either. Synchronous, so both roots

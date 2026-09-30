@@ -469,8 +469,7 @@ struct AccountView: View {
                     .accessibilityLabel(
                         AccountPresentation.openActionLabel(fileId: row.file.id))
                     Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(link, forType: .string)
+                        copyCapabilityLink(link)
                         copiedStoredFileID = row.id
                     } label: {
                         Label(L10n.t(copiedStoredFileID == row.id
