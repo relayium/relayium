@@ -111,6 +111,7 @@ jobs:
       go: ${{ steps.select.outputs['go'] }}
       macos: ${{ steps.select.outputs['macos'] }}
       ios: ${{ steps.select.outputs['ios'] }}
+      ios-transfer-interop: ${{ steps.select.outputs['ios-transfer-interop'] }}
       android: ${{ steps.select.outputs['android'] }}
       android-interop: ${{ steps.select.outputs['android-interop'] }}
       windows: ${{ steps.select.outputs['windows'] }}
@@ -241,6 +242,14 @@ jobs:
     if: needs.select.outputs['ios'] == 'true'
     uses: ./.github/workflows/ios.yml
 
+  # The iOS built-App acceptance is server-backed. Its narrow dependency set
+  # gives server changes immediate Swift↔Go evidence without starting the full
+  # iOS build and UI matrix.
+  ios-transfer-interop:
+    needs: select
+    if: needs.select.outputs['ios-transfer-interop'] == 'true'
+    uses: ./.github/workflows/ios-transfer-interop.yml
+
   android:
     needs: select
     if: needs.select.outputs['android'] == 'true'
@@ -341,6 +350,7 @@ jobs:
       - go
       - macos
       - ios
+      - ios-transfer-interop
       - android
       - android-interop
       - windows
@@ -385,7 +395,7 @@ jobs:
           # space-delimited, though: every consumer below turns it into newline
           # records EXPLICITLY, so nothing here leans on unquoted expansion to
           # do the splitting for it.
-          CONDITIONAL_LANES='web go macos ios android android-interop windows swift-package inbox-swift-interop native-web-pairing contracts ops-contract'
+          CONDITIONAL_LANES='web go macos ios ios-transfer-interop android android-interop windows swift-package inbox-swift-interop native-web-pairing contracts ops-contract'
           UNCONDITIONAL_LANES='compat repo-hygiene'
           SELECT_JOB='select'
 

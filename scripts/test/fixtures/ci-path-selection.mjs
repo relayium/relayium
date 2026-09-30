@@ -49,7 +49,7 @@
 
 export const PATH_MATRIX = [
   ["server/account/pairroom.go",
-    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "ios-transfer-interop.yml", "native-web-pairing.yml",
       "web.yml", "windows.yml"],
     "server-only: none of the three APP lanes may start — not macos.yml, not ios.yml, not "
     + "android.yml. That is a claim about app BUILD AND RELEASE lanes, not about runner "
@@ -69,7 +69,7 @@ export const PATH_MATRIX = [
     + "its Vitest suite reads server sources as test input — the surgical list it replaced "
     + "watched six of those inputs"],
   ["server/go.mod",
-    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "ios-transfer-interop.yml", "native-web-pairing.yml",
       "web.yml", "windows.yml"],
     "the server module: still not a trigger for macos.yml, ios.yml or android.yml — the app "
     + "build and release lanes — and still an input to every lane that builds this module from "
@@ -100,13 +100,13 @@ export const PATH_MATRIX = [
     + "acceptance, which does not package a DMG. The package suite starts too, because its "
     + "filter is the whole apps/mac tree rather than a hand-kept list of the files its guards "
     + "open — that list is what drifted on the iOS side"],
-  ["apps/ios/Relayium/RelayiumApp.swift", ["ios.yml", "swift-package.yml"],
+  ["apps/ios/Relayium/RelayiumApp.swift", ["ios-transfer-interop.yml", "ios.yml", "swift-package.yml"],
     "iOS-only source: the iOS build lane, plus the package suite, whose guards read this tree "
     + "the way they read apps/mac. No macOS signing lane, and — since the pairing filter was narrowed off "
     + "`apps/**` — no 45-minute macOS pairing runner either. That acceptance builds "
     + "apps/RelayiumKit and the Web bundle; nothing under apps/ios is an input to it"],
   ["apps/RelayiumKit/Sources/RelayiumKit/Crypto/SealedBox.swift",
-    ["ios.yml", "macos.yml", "native-web-pairing.yml", "swift-package.yml"],
+    ["ios-transfer-interop.yml", "ios.yml", "macos.yml", "native-web-pairing.yml", "swift-package.yml"],
     "SHARED source: both native workflows, or one app's break goes unseen — plus the pairing "
     + "acceptance that compiles it and the package's own suite. The rest of that package's "
     + "ownership, including the `!apps/RelayiumKit/Tests/**` exclusions the three heavy filters "
@@ -126,11 +126,10 @@ export const PATH_MATRIX = [
     + "StoredWireVectorTest runs in the unfiltered compat.yml; the Windows unit suite reads it, but "
     + "compat.yml's check-wire-vectors.mjs holds it to its web/scripts generator, which windows.yml "
     + "watches; web.yml's only consumer is that same compat check"],
-  ["apps/RelayiumKit/Tests/RelayiumKitTests/ErrorCopyTests.swift", ["macos.yml", "swift-package.yml"],
-    "one of the eleven package test files apps/mac/scripts/test-release-readiness.sh requires "
-    + "to exist as release evidence: re-included into macos.yml by name after its "
-    + "`!apps/RelayiumKit/Tests/**` exclusion, so a rename fails the macOS gate on the commit "
-    + "that makes it. Still not ios.yml or the pairing acceptance"],
+  ["apps/RelayiumKit/Tests/RelayiumKitTests/ErrorCopyTests.swift", ["swift-package.yml"],
+    "a package test and release-evidence file: swift-package owns the test; the unfiltered "
+    + "Linux repository-policy job runs the files-only readiness check, so no heavy app lane "
+    + "is needed merely to catch its deletion"],
   ["apps/mac/RelayiumShare/Info.plist", ["macos.yml", "swift-package.yml", "web.yml"],
     "the macOS Share extension's plist: its own app lanes, plus web.yml because "
     + "AppsPage.claims.test.ts asserts the /apps page's share claim against it"],
@@ -144,12 +143,12 @@ export const PATH_MATRIX = [
     + "edit selects the lane and, being outside server/, runs every job there"],
   ["scripts/ci/share-target-e2e.sh", ["web.yml"],
     "the wrapper web.yml's mixed-link-e2e job runs the Share Target browser suite through"],
-  ["scripts/ios-ui-session-acceptance.sh", ["ios.yml"],
+  ["scripts/ios-ui-session-acceptance.sh", ["ios-transfer-interop.yml"],
     "the iOS built-App acceptance: the workflow that runs it, and only that one. The pairing "
     + "workflow does not source this script, and `scripts/**` is gone from its filter"],
-  ["scripts/lib/local-acceptance.sh", ["android-interop.yml", "ios.yml", "native-web-pairing.yml"],
+  ["scripts/lib/local-acceptance.sh", ["android-interop.yml", "ios-transfer-interop.yml", "native-web-pairing.yml"],
     "the isolation library those acceptance runs — Apple and Android alike — are built from"],
-  ["scripts/local-transfer-cleanup-test.sh", ["ios.yml"],
+  ["scripts/local-transfer-cleanup-test.sh", ["ios-transfer-interop.yml"],
     "the launcher's own failure-path test, run by the iOS job and by nothing else"],
   ["scripts/go-race-shard.go", ["go.yml"],
     "a Go helper: it used to start the macOS signing lane through `scripts/**`, and then the "
@@ -169,6 +168,8 @@ export const PATH_MATRIX = [
     + "no other"],
   [".github/workflows/macos.yml", ["macos.yml"], "a workflow edit starts its own workflow only"],
   [".github/workflows/ios.yml", ["ios.yml"], "and the same for the new one"],
+  [".github/workflows/ios-transfer-interop.yml", ["ios-transfer-interop.yml"],
+    "the server-backed iOS acceptance workflow starts itself only"],
   [".github/workflows/go.yml", ["go.yml"], "and for an unrelated one"],
   [".github/workflows/android.yml", ["android.yml"],
     "and the Android build lane's own edit starts itself only"],
@@ -266,7 +267,7 @@ export const PATH_MATRIX = [
     + "`docs/**`, which would start the full web suite, the accessibility scan and three "
     + "headless-Chrome journeys for every unrelated document in the repository"],
   ["server/cmd/relayium/run.go",
-    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "ios-transfer-interop.yml", "native-web-pairing.yml",
       "web.yml", "windows.yml"],
     "a server source file that is ALSO web TEST INPUT. Every lane that compiles and runs this "
     + "server starts, as for any server file — web.yml among them since it watches server/** "
@@ -275,7 +276,7 @@ export const PATH_MATRIX = [
     + "starts inbox-swift-interop.yml: it dispatches the `inbox send`/`inbox sent` commands the "
     + "live Swift interop drives, which is exactly the known input design review refused to omit"],
   ["server/internal/inboxlive/central_test.go",
-    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "ios-transfer-interop.yml", "native-web-pairing.yml",
       "web.yml", "windows.yml"],
     "the Go half of the live CLI-sender -> native-receiver acceptance. It is build-tagged, so "
     + "no `go test ./...` lane ever compiles it, but it is under server/** like any server file "
@@ -287,7 +288,7 @@ export const PATH_MATRIX = [
     + "Swift edit would start two macOS runners — and none of the three heavy Apple/pairing "
     + "lanes, whose ordered `!apps/RelayiumKit/Tests/**` exclusions keep a test edit off them"],
   ["server/internal/inboxlive/finalize_test.go",
-    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "native-web-pairing.yml",
+    ["android-interop.yml", "go.yml", "inbox-swift-interop.yml", "ios-transfer-interop.yml", "native-web-pairing.yml",
       "web.yml", "windows.yml"],
     "the Go half of the Device Inbox finalize-recovery acceptance: build-tagged like its sibling "
     + "central_test.go, and under server/** like it, so the same lanes"],
