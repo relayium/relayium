@@ -63,10 +63,12 @@ func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.googleConfig().AuthCodeURL(state), http.StatusFound)
 }
 
-// clearOAuthCookie expires a one-shot login cookie (state or nonce). A callback
-// clears it on every outcome, so a state value is spent by its first use and
-// cannot be replayed for the rest of its lifetime. The attributes mirror the
-// ones it was set with, which is what makes browsers replace rather than add.
+// clearOAuthCookie expires a login cookie (state or nonce). A callback clears it
+// on every outcome so the browser drops it after its first use. This is not a
+// server-side one-use guarantee: a copied state/cookie pair is not invalidated
+// on the server (the provider's authorization code is single-use on its side).
+// The attributes mirror the ones it was set with, which is what makes browsers
+// replace rather than add.
 func (s *Service) clearOAuthCookie(w http.ResponseWriter, name string, sameSite http.SameSite) {
 	http.SetCookie(w, &http.Cookie{
 		Name: name, Value: "", Path: "/", MaxAge: -1,
