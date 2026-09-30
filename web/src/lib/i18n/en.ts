@@ -354,7 +354,6 @@ const en: Messages = {
     nodeUnreachable: "unreachable",
     delNode: "Remove",
     confirmDelNode: "Remove this node? It will stop relaying or storing for your account.",
-    delNodeBusy: "This node can't be removed yet: uploads to it are still in progress or finished recently. Try again in about an hour.",
     copyLink: "Copy link",
     linkHint: "A share link's key is kept only in the browser you uploaded from — it can't be recovered on another device, so save the link.",
     deviceTitle: "Signed-in apps and CLI devices",

@@ -21,11 +21,6 @@ var ErrNodeHasStoredFiles = errors.New("account: node still holds stored files")
 // persist). Nothing was written; see insertStoredFileOn's node fence.
 var ErrStoredFileNodeGone = errors.New("account: the object's storage node was deleted")
 
-// ErrNodeHasUploadSessions is returned by DeleteNode (a user deleting their own
-// node) while upload_sessions rows still name the node: their blobs are
-// reachable only through the node row. See SQLiteStore.DeleteNode.
-var ErrNodeHasUploadSessions = errors.New("account: node still has upload sessions")
-
 // ErrNodeOwnerMismatch is returned by UpsertNode when the id already belongs to
 // a different owner: the upsert never rewrites a node's owner.
 var ErrNodeOwnerMismatch = errors.New("account: node id belongs to another owner")
@@ -2527,9 +2522,12 @@ type Store interface {
 	UserStorageNodes(ctx context.Context, userID string, since, minFree int64) ([]Node, error)
 	// DeleteNode removes a user-owned node, scoped to its owner: only a node
 	// with owner_user_id == ownerUserID is deleted, so a non-owner's call and a
-	// missing id are indistinguishable (both ErrNotFound). Also clears the
-	// node's pending_node_deletes entries, and tombstones the id in the same
-	// transaction so no other owner can ever register it (A-M3).
+	// missing id are indistinguishable (both ErrNotFound). It tombstones the
+	// id and — in the same transaction — retires the row while
+	// cleanup still needs its storage endpoint (queued deletes, upload sessions,
+	// objects) or removes it otherwise; its queued deletes are kept either way
+	// (A-M3, see retireOrDeleteNodeTx). Never refused for the owner. A retired
+	// node is invisible to its owner (a second delete is ErrNotFound).
 	DeleteNode(ctx context.Context, id, ownerUserID string) error
 	// SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
 	SetNodeLimits(ctx context.Context, nodeID string, trafficLimit, diskLimit int64) error
@@ -2580,7 +2578,9 @@ type Store interface {
 	// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'.
 	// It refuses (ErrNodeHasStoredFiles) while any stored_files row still names
 	// the node, and records the id in node_tombstones in the same transaction as
-	// the delete, so no other owner can ever register the id (A-M3).
+	// the delete, so no other owner can ever register the id (A-M3). Queued
+	// node deletes are kept, and while any remain the row is retired rather than
+	// removed so GC can still reach the machine (retireOrDeleteNodeTx).
 	DeleteFleetNode(ctx context.Context, id string) error
 	// NodeIDReuseState classifies a node id that has NO row in nodes, for a
 	// register by (ownerType, ownerUserID) — see A-M3:

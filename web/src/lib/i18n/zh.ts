@@ -337,7 +337,6 @@ const zh: Messages = {
     nodeUnreachable: "不可达",
     delNode: "移除",
     confirmDelNode: "确定移除这个节点？移除后它将不再参与中继与存储。",
-    delNodeBusy: "暂时无法移除这个节点：仍有上传正在进行或刚刚完成。请约一小时后再试。",
     copyLink: "复制链接",
     linkHint: "分享链接的密钥只保存在你上传时用的这台浏览器本地——换设备无法找回，请及时保存链接。",
     deviceTitle: "已登录的 App 与 CLI 设备",

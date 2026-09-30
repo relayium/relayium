@@ -548,6 +548,17 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		writePairRoomError(w, errPairRoomOver)
 		return
 	}
+	if errors.Is(err, ErrStoredFileNodeGone) {
+		// The node placement chose was deleted before the session could be
+		// created (A-M3 node fence); nothing was written. Same answer as the
+		// placement refusals above: the storage node is not available.
+		if billable {
+			http.Error(w, "storage node unavailable — try again", http.StatusServiceUnavailable)
+		} else {
+			http.Error(w, "your storage node is offline", http.StatusServiceUnavailable)
+		}
+		return
+	}
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

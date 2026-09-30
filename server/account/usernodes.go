@@ -123,14 +123,6 @@ func (s *Service) handleDeleteMyNode(w http.ResponseWriter, r *http.Request, u U
 	id := r.PathValue("id")
 	if err := s.store.DeleteNode(r.Context(), id, u.ID); err != nil {
 		switch {
-		case errors.Is(err, ErrNodeHasUploadSessions):
-			// Only reachable for the owner (DeleteNode checks ownership first).
-			// Its uploads' data is reachable only through this node's record,
-			// so it cannot go yet; finished uploads clear within about an hour.
-			httpx.WriteJSON(w, http.StatusConflict, map[string]string{
-				"error": "this node still has uploads in progress or recently finished; try again in about an hour",
-				"code":  "node_has_uploads",
-			})
 		case errors.Is(err, ErrNotFound):
 			http.Error(w, "not found", http.StatusNotFound) // non-owner and missing are indistinguishable
 		default:

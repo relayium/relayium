@@ -702,6 +702,17 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// from UpsertNode's ON CONFLICT clause, like draining above.
 		// 0 on every existing row = still installed.
 		`ALTER TABLE nodes ADD COLUMN removed_at INTEGER NOT NULL DEFAULT 0`,
+		// deleted_at (A-M3): a node its owner (DeleteNode) or an admin
+		// (DeleteFleetNode) deleted while cleanup still needed its endpoint —
+		// queued node deletes, upload sessions or objects still naming it. The
+		// row is RETIRED instead of removed: removed_at is set too, so it is out
+		// of placement, ICE, downloads and the rollout, and every listing hides
+		// it, but blobFor still resolves its storage endpoint so GC, the reaper
+		// and pair-room voids can finish reclaiming the ciphertext. Its owner
+		// re-registering the id brings it back as a new live node; anyone else
+		// is refused (RegisterNode). 0 = not deleted. Additive: an older binary
+		// ignores it and simply shows the row as uninstalled.
+		`ALTER TABLE nodes ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0`,
 		// active_transfers is the node's live load signal: how many relay
 		// allocations it is currently serving, as of its last heartbeat. It exists
 		// for exactly one consumer — decideFleet's canary pick, which sends the
@@ -4920,7 +4931,7 @@ func (s *SQLiteStore) CreateUploadSession(ctx context.Context, r UploadSessionRo
 	// reachable by nothing). Nothing has been written to the node yet.
 	if r.NodeID != "" {
 		var exists int
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM nodes WHERE id = ?)`, r.NodeID).Scan(&exists); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM nodes WHERE id = ? AND deleted_at = 0)`, r.NodeID).Scan(&exists); err != nil {
 			return false, err
 		}
 		if exists == 0 {
@@ -6105,7 +6116,7 @@ func insertStoredFileOn(ctx context.Context, ex sqlExecer, f StoredFile) error {
 	res, err := ex.ExecContext(ctx,
 		`INSERT INTO stored_files (`+storedFileCols+`)
 		 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-		  WHERE ? = '' OR EXISTS(SELECT 1 FROM nodes WHERE id = ?)`,
+		  WHERE ? = '' OR EXISTS(SELECT 1 FROM nodes WHERE id = ? AND deleted_at = 0)`,
 		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
 		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads,
 		purposeOrShare(f.Purpose), f.InboxTaskID, f.PairRoomID, nullBytes(f.CompletionVerifier),
@@ -7506,7 +7517,7 @@ func (s *SQLiteStore) OnlineNodes(ctx context.Context, since int64) ([]Node, err
 }
 
 func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
-	return s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY last_seen_at DESC`)
+	return s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes WHERE deleted_at = 0 ORDER BY last_seen_at DESC`)
 }
 
 // adminByoSearchMax bounds the length of a BYO search term.
@@ -7604,7 +7615,7 @@ func clampByoSearch(s string) string {
 // issues instead of a hand-copied literal — a copy would keep passing after
 // an ORDER BY change made only here; this can't, because it IS here.
 func byoListWhereOrder(q AdminByoNodeQuery) (where string, whereArgs []any, order string) {
-	where = ` WHERE owner_type='user' AND removed_at` + map[bool]string{false: `=0`, true: `!=0`}[q.Removed]
+	where = ` WHERE owner_type='user' AND deleted_at=0 AND removed_at` + map[bool]string{false: `=0`, true: `!=0`}[q.Removed]
 	if search := clampByoSearch(q.Search); search != "" {
 		// The owner's email lives on users, reached with EXISTS rather than a
 		// JOIN so a node whose owner row is gone (deleted account) still lists
@@ -7659,7 +7670,7 @@ func (s *SQLiteStore) UserNodes(ctx context.Context, userID string, since int64)
 // the dashboard list (which shows offline nodes too).
 func (s *SQLiteStore) UserNodesAll(ctx context.Context, userID string) ([]Node, error) {
 	return s.queryNodes(ctx,
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? ORDER BY last_seen_at DESC`,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND deleted_at=0 ORDER BY last_seen_at DESC`,
 		userID)
 }
 
@@ -7685,52 +7696,68 @@ func (s *SQLiteStore) DeleteNode(ctx context.Context, id, ownerUserID string) er
 	}
 	defer tx.Rollback() // no-op after a successful Commit
 
-	// Ownership first, so a non-owner or a missing id stays ErrNotFound and
-	// learns nothing about the node's uploads.
+	// Owner-scoped, and an already-deleted (retired) node is gone as far as
+	// its owner is concerned: both answer ErrNotFound.
 	var owned int
 	if err := tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM nodes WHERE id = ? AND owner_user_id = ?`, id, ownerUserID).Scan(&owned); err != nil {
+		`SELECT COUNT(*) FROM nodes WHERE id = ? AND owner_user_id = ? AND deleted_at = 0`, id, ownerUserID).Scan(&owned); err != nil {
 		return err
 	}
 	if owned == 0 {
 		return ErrNotFound
 	}
-	// A-M3 round 3: refuse while any upload_sessions row names the node, as
-	// DeleteFleetNode does. A session's blob is reachable only through this
-	// node row — the finalize-refusal reclaim, the reaper and GC all resolve
-	// storage by node id — so deleting the row under an open, finalizing or
-	// not-yet-purged session would strand its ciphertext on the machine for
-	// good (and the stored-file insert fence would refuse its finalize).
-	// Checked in this IMMEDIATE transaction; CreateUploadSession fences on the
-	// node row in its own, so no session can appear for a node deleted here.
-	// Finished sessions are purged about an hour after they go idle
-	// (PurgeDoneUploadSessions), after which the delete goes through.
-	var sessions int
-	if err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM upload_sessions WHERE node_id = ?)`, id).Scan(&sessions); err != nil {
-		return err
-	}
-	if sessions != 0 {
-		return ErrNodeHasUploadSessions
-	}
-	// Tombstone first, from the very row about to be deleted (same owner
-	// scope), so the id is retired iff the delete below lands: an ErrNotFound
-	// return rolls this back with it. See node_tombstones.
+	// Tombstone the id (so another owner can never register it once the row is
+	// physically gone), then retire or remove the row — see retireOrDeleteNodeTx.
+	// Never refused: the owner can always delete their node, including one whose
+	// machine is dead with uploads it will never finish.
 	if err := tombstoneNodeTx(ctx, tx, `id = ? AND owner_user_id = ?`, id, ownerUserID); err != nil {
 		return err
 	}
-	// Owner-scoped: only delete a node this user owns.
-	res, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND owner_user_id = ?`, id, ownerUserID)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE node_id = ?`, id); err != nil {
+	if err := retireOrDeleteNodeTx(ctx, tx, id); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// retireOrDeleteNodeTx ends a node inside the caller's delete transaction
+// (A-M3). If anything still needs the node's storage endpoint — a queued node
+// delete (including a late-append hold or a billing obligation), an upload
+// session, or a stored object — the row is RETIRED (deleted_at and removed_at
+// set, storage URL/secret kept) so GC, the upload reaper, refused-finalize
+// reclaim and pair-room voids keep resolving it through blobFor and finish
+// reclaiming the ciphertext, with their billing settled exactly as for any
+// other node. Otherwise nothing will ever look the node up again and the row
+// is removed. Its queued deletes are never dropped here: a delete used to take
+// them with it, and with them the only record that the ciphertext was still
+// on the machine.
+func retireOrDeleteNodeTx(ctx context.Context, tx *sql.Tx, id string) error {
+	var needed int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM pending_node_deletes WHERE node_id = ?)
+		     OR EXISTS(SELECT 1 FROM upload_sessions WHERE node_id = ?)
+		     OR EXISTS(SELECT 1 FROM stored_files WHERE node_id = ?)`, id, id, id).Scan(&needed); err != nil {
+		return err
+	}
+	var res sql.Result
+	var err error
+	if needed != 0 {
+		res, err = tx.ExecContext(ctx,
+			`UPDATE nodes SET
+			   deleted_at = CAST(strftime('%s','now') AS INTEGER),
+			   removed_at = CASE WHEN removed_at = 0 THEN CAST(strftime('%s','now') AS INTEGER) ELSE removed_at END
+			 WHERE id = ? AND deleted_at = 0`, id)
+	} else {
+		res, err = tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND deleted_at = 0`, id)
+	}
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n != 1 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
@@ -7836,7 +7863,9 @@ func (s *SQLiteStore) MarkNodeRemoved(ctx context.Context, id string, at int64) 
 // files, limits, label and update history are exactly as it left them, which is
 // the whole point of this existing instead of "delete the row and reinstall".
 func (s *SQLiteStore) ClearNodeRemoved(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET removed_at = 0 WHERE id = ?`, id)
+	// A deleted (retired) node is not restorable: it comes back only by its
+	// owner re-registering it (RegisterNode).
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET removed_at = 0 WHERE id = ? AND deleted_at = 0`, id)
 	if err != nil {
 		return err
 	}
@@ -7913,7 +7942,7 @@ func (s *SQLiteStore) DeleteFleetNode(ctx context.Context, id string) error {
 	// rather than disclosing whether files point at it.
 	var exists int
 	if err := tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM nodes WHERE id = ? AND owner_type = 'fleet'`, id).Scan(&exists); err != nil {
+		`SELECT COUNT(*) FROM nodes WHERE id = ? AND owner_type = 'fleet' AND deleted_at = 0`, id).Scan(&exists); err != nil {
 		return err
 	}
 	if exists == 0 {
@@ -7939,14 +7968,9 @@ func (s *SQLiteStore) DeleteFleetNode(ctx context.Context, id string) error {
 	if err := tombstoneNodeTx(ctx, tx, `id = ? AND owner_type = 'fleet'`, id); err != nil {
 		return err
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND owner_type = 'fleet'`, id)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE node_id = ?`, id); err != nil {
+	// Queued node deletes (and their billing obligations) are kept: the row is
+	// retired while any remain, so GC can still reach the machine to finish them.
+	if err := retireOrDeleteNodeTx(ctx, tx, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -8094,6 +8118,7 @@ func (s *SQLiteStore) RegisterNode(ctx context.Context, n Node, userNodeCap int)
 	defer tx.Rollback() // no-op after a successful Commit
 
 	var reg NodeRegistration
+	var deletedAt int64
 	if n.ID != "" {
 		rows, err := queryNodesOn(ctx, tx, `SELECT `+nodeCols+` FROM nodes WHERE id = ?`, n.ID)
 		if err != nil {
@@ -8101,13 +8126,35 @@ func (s *SQLiteStore) RegisterNode(ctx context.Context, n Node, userNodeCap int)
 		}
 		if len(rows) > 0 {
 			reg.Existed, reg.Prior = true, rows[0]
+			if err := tx.QueryRowContext(ctx, `SELECT deleted_at FROM nodes WHERE id = ?`, n.ID).Scan(&deletedAt); err != nil {
+				return NodeRegistration{}, err
+			}
 		}
 	}
 	if reg.Existed {
 		p := reg.Prior
 		if p.OwnerType != n.OwnerType || (n.OwnerType == "user" && p.OwnerUserID != n.OwnerUserID) {
 			reg.Outcome = NodeRegisterOwnerMismatch
+			if deletedAt != 0 {
+				// A deleted node kept only for cleanup: to anyone else it is a
+				// retired id, exactly as if its row were already gone.
+				reg.Outcome = NodeRegisterRetired
+			}
 			return reg, nil
+		}
+		// Its owner bringing a DELETED node back: a new live node, so it counts
+		// against the cap like any new registration (it is not counted now —
+		// a retired row has removed_at set).
+		revive := deletedAt != 0
+		if revive && n.OwnerType == "user" && userNodeCap > 0 {
+			live, err := countLiveUserNodesOn(ctx, tx, n.OwnerUserID)
+			if err != nil {
+				return NodeRegistration{}, err
+			}
+			if live >= userNodeCap {
+				reg.Outcome = NodeRegisterLimit
+				return reg, nil
+			}
 		}
 		// Pin ratchet, judged against the row as it is now (see the handler).
 		if p.StorageFP != "" && (n.StorageFP == "" || !strings.HasPrefix(strings.ToLower(n.StorageURL), "https://")) {
@@ -8125,11 +8172,14 @@ func (s *SQLiteStore) RegisterNode(ctx context.Context, n Node, userNodeCap int)
 			`UPDATE nodes SET
 			   region=?, urls=?, turn_secret=?, version=?, last_seen_at=?,
 			   storage_url=?, storage_secret=?, storage_fp=?,
-			   storage_enabled=?, storage_total=?, storage_free=?, download_url=?
+			   storage_enabled=?, storage_total=?, storage_free=?, download_url=?,
+			   deleted_at = CASE WHEN ? THEN 0 ELSE deleted_at END,
+			   removed_at = CASE WHEN ? THEN 0 ELSE removed_at END
 			 WHERE id=? AND owner_type=? AND COALESCE(owner_user_id,'')=?`,
 			n.Region, string(urls), n.TURNSecret, n.Version, n.LastSeenAt,
 			nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP,
 			b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree, n.DownloadURL,
+			b2i(revive), b2i(revive),
 			n.ID, p.OwnerType, p.OwnerUserID); err != nil {
 			return NodeRegistration{}, err
 		} else if affected, err := res.RowsAffected(); err != nil {
@@ -8140,6 +8190,10 @@ func (s *SQLiteStore) RegisterNode(ctx context.Context, n Node, userNodeCap int)
 			return NodeRegistration{}, fmt.Errorf("register node %s: update matched %d rows, want 1", n.ID, affected)
 		}
 		saved := p
+		if revive {
+			saved.RemovedAt = 0
+			reg.Prior.RemovedAt = 0 // not a deregistered node coming back: a deleted one, revived
+		}
 		saved.Region, saved.URLs, saved.TURNSecret, saved.Version, saved.LastSeenAt = n.Region, n.URLs, n.TURNSecret, n.Version, n.LastSeenAt
 		saved.StorageURL, saved.StorageSecret, saved.StorageFP = n.StorageURL, n.StorageSecret, n.StorageFP
 		saved.StorageEnabled, saved.StorageTotal, saved.StorageFree, saved.DownloadURL = n.StorageEnabled, n.StorageTotal, n.StorageFree, n.DownloadURL

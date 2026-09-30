@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -13,12 +14,23 @@ import (
 	"github.com/relayium/relayium/authx"
 )
 
-// A-M3 round 3: a user may not delete their own node while an upload session
-// names it. A session's blob is reachable only through the node row (the
-// finalize-refusal reclaim, the reaper and GC all resolve storage by node id),
-// so deleting the row under it would strand the ciphertext on the machine; and
-// the stored-file fence would refuse the session's finalize. Session creation
-// is fenced on the node row too, so no session can appear for a deleted node.
+// A-M3 round 4: a node delete RETIRES the row while cleanup still needs its
+// storage endpoint (queued node deletes, upload sessions, stored objects) and
+// removes it only when nothing does. The owner is never refused; GC, the
+// reaper, refused-finalize reclaim and pair-room voids keep resolving the node
+// through blobFor and finish reclaiming its ciphertext, with billing settled
+// exactly as for a node that was never deleted.
+
+func am4rOwnNode(t *testing.T, st *SQLiteStore, userID, storageURL string, lastSeen int64) Node {
+	t.Helper()
+	n, err := st.UpsertNode(context.Background(), Node{ID: authx.NewID(), OwnerType: "user", OwnerUserID: userID,
+		URLs: []string{"turn:x:3478"}, TURNSecret: "t", StorageEnabled: true, StorageURL: storageURL,
+		StorageSecret: "ss", StorageFree: 100 << 30, CreatedAt: 1, LastSeenAt: lastSeen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
 
 func am3rSessionRow(t *testing.T, st *SQLiteStore, id, userID, nodeID, purpose string, finalizedFileID string) {
 	t.Helper()
@@ -29,133 +41,284 @@ func am3rSessionRow(t *testing.T, st *SQLiteStore, id, userID, nodeID, purpose s
 	}
 }
 
-// The store refusal, for every kind of session (open share, finalized device
-// task tombstone, pair-room): refused while any names the node, allowed after.
-// A non-owner still gets ErrNotFound — the refusal leaks nothing.
-func TestA_M3_UserDeleteRefusedWhileUploadSessionNamesNode(t *testing.T) {
-	for _, purpose := range []string{StoredPurposeShare, StoredPurposeDeviceTask, StoredPurposePairRoom} {
-		t.Run(purpose, func(t *testing.T) {
-			_, st, u1, u2 := am3Service(t)
-			ctx := context.Background()
-			n, err := st.UpsertNode(ctx, Node{ID: authx.NewID(), OwnerType: "user", OwnerUserID: u1.ID,
-				URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
-			if err != nil {
+func am4rDeletedAt(t *testing.T, st *SQLiteStore, id string) (exists bool, deletedAt, removedAt int64) {
+	t.Helper()
+	err := st.db.QueryRow(`SELECT deleted_at, removed_at FROM nodes WHERE id = ?`, id).Scan(&deletedAt, &removedAt)
+	if err != nil {
+		return false, 0, 0
+	}
+	return true, deletedAt, removedAt
+}
+
+func am4rGC(st *SQLiteStore, svc *Service, now int64) *GC {
+	return &GC{Store: st, BlobFor: svc.blobFor, Now: func() int64 { return now }, Log: log.New(io.Discard, "", 0)}
+}
+
+// Every kind of remaining reference retires the row instead of removing it;
+// with none, the row is removed. Either way the owner is never refused, the
+// node disappears from every listing, and only its owner can bring it back.
+func TestA_M3_DeleteRetiresWhileCleanupNeedsTheNode(t *testing.T) {
+	refs := map[string]func(t *testing.T, st *SQLiteStore, userID, nodeID string){
+		"none": func(*testing.T, *SQLiteStore, string, string) {},
+		"open share session": func(t *testing.T, st *SQLiteStore, userID, nodeID string) {
+			am3rSessionRow(t, st, "am4r-s", userID, nodeID, StoredPurposeShare, "")
+		},
+		"finalized device-task session": func(t *testing.T, st *SQLiteStore, userID, nodeID string) {
+			am3rSessionRow(t, st, "am4r-d", userID, nodeID, StoredPurposeDeviceTask, "some-file")
+		},
+		"pair-room session": func(t *testing.T, st *SQLiteStore, userID, nodeID string) {
+			am3rSessionRow(t, st, "am4r-p", userID, nodeID, StoredPurposePairRoom, "")
+		},
+		"queued node delete": func(t *testing.T, st *SQLiteStore, _, nodeID string) {
+			if err := st.EnqueueNodeDelete(context.Background(), "am4r-q", nodeID, 1); err != nil {
 				t.Fatal(err)
 			}
-			am3rSessionRow(t, st, "am3s-"+purpose, u1.ID, n.ID, purpose, "")
+		},
+		"stored object": func(t *testing.T, st *SQLiteStore, userID, nodeID string) {
+			if err := st.CreateStoredFile(context.Background(), StoredFile{ID: "am4r-f", UserID: userID, BlobKey: "am4r-fb",
+				EncManifest: []byte("m"), Size: 1, CreatedAt: 1, ExpiresAt: 1 << 40, NodeID: nodeID}); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, ref := range refs {
+		t.Run(name, func(t *testing.T) {
+			s, st, u1, u2 := am3Service(t)
+			ctx := context.Background()
+			n := am4rOwnNode(t, st, u1.ID, "https://node.example", 1)
+			ref(t, st, u1.ID, n.ID)
+			var pendingBefore int
+			_ = st.db.QueryRow(`SELECT COUNT(*) FROM pending_node_deletes WHERE node_id = ?`, n.ID).Scan(&pendingBefore)
+
 			if err := st.DeleteNode(ctx, n.ID, u2.ID); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("non-owner delete: want ErrNotFound, got %v", err)
 			}
-			if err := st.DeleteNode(ctx, n.ID, u1.ID); !errors.Is(err, ErrNodeHasUploadSessions) {
-				t.Fatalf("owner delete with a session: want ErrNodeHasUploadSessions, got %v", err)
-			}
-			if _, ok, _ := st.GetNode(ctx, n.ID); !ok {
-				t.Fatal("a refused delete removed the node")
-			}
-			if state, _ := st.NodeIDReuseState(ctx, n.ID, "user", u2.ID); state == NodeIDTombstoned {
-				t.Fatal("a refused delete tombstoned the id")
-			}
-			if _, err := st.db.ExecContext(ctx, `DELETE FROM upload_sessions WHERE node_id = ?`, n.ID); err != nil {
-				t.Fatal(err)
-			}
 			if err := st.DeleteNode(ctx, n.ID, u1.ID); err != nil {
-				t.Fatalf("owner delete after the session is gone: %v", err)
+				t.Fatalf("owner delete: %v", err)
 			}
-			if state, _ := st.NodeIDReuseState(ctx, n.ID, "user", u2.ID); state != NodeIDTombstoned {
-				t.Fatalf("after delete: state=%v, want tombstoned", state)
+			exists, deletedAt, removedAt := am4rDeletedAt(t, st, n.ID)
+			if name == "none" {
+				if exists {
+					t.Fatal("a node nothing references was retired instead of removed")
+				}
+			} else {
+				if !exists || deletedAt == 0 || removedAt == 0 {
+					t.Fatalf("referenced node: exists=%v deleted_at=%d removed_at=%d, want a retired row", exists, deletedAt, removedAt)
+				}
+				// Still resolvable for cleanup...
+				if _, err := s.blobFor(ctx, n.ID); err != nil {
+					t.Fatalf("a retired node no longer resolves for cleanup: %v", err)
+				}
+			}
+			var pendingAfter int
+			_ = st.db.QueryRow(`SELECT COUNT(*) FROM pending_node_deletes WHERE node_id = ?`, n.ID).Scan(&pendingAfter)
+			if pendingAfter != pendingBefore {
+				t.Fatalf("queued node deletes %d -> %d: a delete must not drop cleanup intents", pendingBefore, pendingAfter)
+			}
+			// ...but gone from every listing and from placement.
+			if all, _ := st.UserNodesAll(ctx, u1.ID); len(all) != 0 {
+				t.Fatalf("the deleted node is still listed for its owner: %+v", all)
+			}
+			if all, _ := st.ListNodes(ctx); len(all) != 0 {
+				t.Fatalf("the deleted node is still in the admin listing: %d", len(all))
+			}
+			if page, total, _ := st.ListByoNodes(ctx, AdminByoNodeQuery{Removed: true, Limit: 20}); total != 0 || len(page) != 0 {
+				t.Fatalf("the deleted node is in the BYO removed section: %d", total)
+			}
+			if live, _ := st.UserStorageNodes(ctx, u1.ID, 0, 0); len(live) != 0 {
+				t.Fatal("the deleted node is still a placement candidate")
+			}
+			// The admin "restore" control cannot bring a deleted node back.
+			if err := st.ClearNodeRemoved(ctx, n.ID); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("restore of a deleted node: want ErrNotFound, got %v", err)
+			}
+			if err := st.DeleteNode(ctx, n.ID, u1.ID); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("second delete: want ErrNotFound, got %v", err)
+			}
+			// Another owner is refused as retired; the owner brings it back live.
+			if got := am3Register(t, s, "attacker-token", n.ID); got.Code != http.StatusForbidden || got.Reason != nodeRegisterCodeRetired {
+				t.Fatalf("another user registering the deleted id: %d code=%q, want 403 %q", got.Code, got.Reason, nodeRegisterCodeRetired)
+			}
+			if got := am3Register(t, s, "owner-token", n.ID); got.Code != http.StatusOK {
+				t.Fatalf("owner re-registering the deleted id: %d %q", got.Code, got.Error)
+			}
+			if exists, d, r := am4rDeletedAt(t, st, n.ID); !exists || d != 0 || r != 0 {
+				t.Fatalf("revived node: exists=%v deleted_at=%d removed_at=%d, want a live row", exists, d, r)
+			}
+			if all, _ := st.UserNodesAll(ctx, u1.ID); len(all) != 1 {
+				t.Fatalf("the revived node is not listed: %d", len(all))
 			}
 		})
 	}
 }
 
-// Session creation is fenced on the node row: a node deleted between placement
-// and CreateUploadSession gets no session, so no finalize (resumable or
-// pair-room) can ever run against a node that is gone.
-func TestA_M3_UploadSessionCreationFencedOnDeletedNode(t *testing.T) {
-	_, st, u1, _ := am3Service(t)
+// Pair-room close hands the room's blob to the queue and deletes its session;
+// the owner deletes the node before GC drains. The retired row lets the drain
+// reach the machine and reclaim the blob. Own-node traffic is never metered.
+func TestA_M3_RoomCloseThenOwnerDeleteStillReclaims(t *testing.T) {
+	_, svc, st, _ := newFileServer(t)
 	ctx := context.Background()
-	n, err := st.UpsertNode(ctx, Node{ID: authx.NewID(), OwnerType: "user", OwnerUserID: u1.ID,
-		URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
-	if err != nil {
-		t.Fatal(err)
+	u, _ := st.UpsertUserByEmail(ctx, "am4r-room@example.com", "")
+	objects := map[string][]byte{}
+	srv := fakeNode(t, objects)
+	t.Cleanup(srv.Close)
+	now := time.Now().Unix()
+	n := am4rOwnNode(t, st, u.ID, srv.URL, now)
+	room := PairRoom{ID: "am4r-room", Code: "515151", UserID: u.ID, CreatedAt: now, ExpiresAt: now + pairRoomJoinWindow}
+	if _, created, err := st.CreatePairRoomIfAbsent(ctx, room); err != nil || !created {
+		t.Fatalf("room: %v %v", created, err)
 	}
-	if err := st.DeleteNode(ctx, n.ID, u1.ID); err != nil {
-		t.Fatal(err)
+	if ok, err := st.CreateUploadSession(ctx, UploadSessionRow{ID: "am4r-rs", UserID: u.ID, BlobKey: "am4r-rb",
+		NodeID: n.ID, PairRoomID: room.ID, Purpose: StoredPurposePairRoom, MaxSize: 1 << 20, Received: 400,
+		CreatedAt: now}, maxSessionsPerUser); err != nil || !ok {
+		t.Fatalf("session: %v %v", ok, err)
 	}
-	row := UploadSessionRow{ID: "am3s-late", UserID: u1.ID, BlobKey: authx.RandToken(), NodeID: n.ID,
-		EncManifest: []byte("m"), TTL: 3600, MaxSize: 1 << 20, CreatedAt: tNow}
-	if ok, err := st.CreateUploadSession(ctx, row, 10); ok || !errors.Is(err, ErrStoredFileNodeGone) {
-		t.Fatalf("session on a deleted node: ok=%v err=%v, want refused with ErrStoredFileNodeGone", ok, err)
+	objects["am4r-rb"] = bytes.Repeat([]byte("r"), 400)
+	meterBefore := uploadedThisMonth(t, st, u.ID)
+
+	if _, err := st.ClosePairRoom(ctx, room.ID, now, now+pairRoomBlobHold); err != nil {
+		t.Fatalf("close room: %v", err)
 	}
-	var c int
-	_ = st.db.QueryRow(`SELECT COUNT(*) FROM upload_sessions WHERE node_id = ?`, n.ID).Scan(&c)
-	if c != 0 {
-		t.Fatalf("%d session row(s) created for a deleted node", c)
+	if err := st.DeleteNode(ctx, n.ID, u.ID); err != nil {
+		t.Fatalf("owner delete after the room closed: %v", err)
 	}
-	// Positive control: a live node and a central (no-node) session still work.
-	live, _ := st.UpsertNode(ctx, Node{ID: authx.NewID(), OwnerType: "user", OwnerUserID: u1.ID,
-		URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
-	row.ID, row.BlobKey, row.NodeID = "am3s-live", authx.RandToken(), live.ID
-	if ok, err := st.CreateUploadSession(ctx, row, 10); !ok || err != nil {
-		t.Fatalf("session on a live node: ok=%v err=%v", ok, err)
+	am4rGC(st, svc, now).drainPending(ctx)
+	if _, still := objects["am4r-rb"]; still {
+		t.Fatal("the closed room's blob was not reclaimed after its node was deleted")
 	}
-	row.ID, row.BlobKey, row.NodeID = "am3s-central", authx.RandToken(), ""
-	if ok, err := st.CreateUploadSession(ctx, row, 10); !ok || err != nil {
-		t.Fatalf("central session: ok=%v err=%v", ok, err)
+	if m := uploadedThisMonth(t, st, u.ID); m != meterBefore {
+		t.Fatalf("own-node room cleanup metered %d bytes, want none", m-meterBefore)
 	}
 }
 
-// End to end: a resumable upload to the user's own node. While it is in
-// flight (and after it finalized, until its session row is purged) DELETE
-// /api/nodes/{id} answers 409 node_has_uploads and the node stays; the upload
-// finalizes normally with its blob on the node. Once the session row is gone
-// the delete goes through.
-func TestA_M3_ResumableUploadBlocksOwnNodeDelete(t *testing.T) {
-	ts, svc, st, mail := newFileServer(t)
-	svc.cfg.EnableUserNodes = true
-	cookie := loginCookie(t, ts, mail, "am3s-e2e@example.com")
-	ctx := context.Background()
-	u, _ := st.UpsertUserByEmail(ctx, "am3s-e2e@example.com", "")
-	objects := map[string][]byte{}
-	srv := fakeNode(t, objects) // speaks PUT/PATCH(append)/GET/DELETE like a real node
-	t.Cleanup(srv.Close)
-	own, err := st.UpsertNode(ctx, Node{ID: authx.NewID(), OwnerType: "user", OwnerUserID: u.ID,
-		URLs: []string{"turn:x:3478"}, TURNSecret: "t", StorageEnabled: true, StorageURL: srv.URL,
-		StorageSecret: "ss", StorageFree: 100 << 30, CreatedAt: 1, LastSeenAt: time.Now().Unix()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	deleteNode := func() (int, string) {
-		req, _ := http.NewRequest("DELETE", ts.URL+"/api/nodes/"+own.ID, nil)
-		req.AddCookie(cookie)
-		resp, err := ts.Client().Do(req)
+// The reaper's hand-off (ClaimUploadSessionCleanup) queues a billable session's
+// blob with its billing obligation and deletes the session; an admin then
+// deletes the fleet node before GC drains. The retired row lets GC settle the
+// obligation and reclaim the blob — billing exactly what the same drain bills
+// when the node was NOT deleted, once, however often GC runs.
+func TestA_M3_ReaperHandoffThenFleetDeleteStillSettlesAndReclaims(t *testing.T) {
+	run := func(t *testing.T, deleteNode bool) (meter int64, blobLeft bool) {
+		_, svc, st, _ := newFileServer(t)
+		ctx := context.Background()
+		u, _ := st.UpsertUserByEmail(ctx, "am4r-reap@example.com", "")
+		objects := map[string][]byte{}
+		srv := fakeNode(t, objects)
+		t.Cleanup(srv.Close)
+		now := time.Now().Unix()
+		fleet, err := st.UpsertNode(ctx, Node{ID: authx.NewID(), OwnerType: "fleet", URLs: []string{"turn:x:3478"},
+			TURNSecret: "t", StorageEnabled: true, StorageURL: srv.URL, StorageSecret: "ss", StorageFree: 100 << 30,
+			CreatedAt: 1, LastSeenAt: now})
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
-		b, _ := io.ReadAll(resp.Body)
-		var out struct {
-			Code string `json:"code"`
+		// A refused/abandoned billable upload: 300 bytes received and metered,
+		// but a late append left 500 on the node (the residual the queue owns).
+		if ok, err := st.CreateUploadSession(ctx, UploadSessionRow{ID: "am4r-us", UserID: u.ID, BlobKey: "am4r-ub",
+			NodeID: fleet.ID, Billable: true, MaxSize: 1000, Received: 300, Metered: 300, Done: true,
+			CreatedAt: now - 7200}, maxSessionsPerUser); err != nil || !ok {
+			t.Fatalf("session: %v %v", ok, err)
 		}
-		_ = json.Unmarshal(b, &out)
-		return resp.StatusCode, out.Code
+		objects["am4r-ub"] = bytes.Repeat([]byte("u"), 500)
+		if _, _, ok, err := st.ClaimUploadSessionCleanup(ctx, "am4r-us", now, now); err != nil || !ok {
+			t.Fatalf("reaper claim: ok=%v err=%v", ok, err)
+		}
+		if deleteNode {
+			if err := st.DeleteFleetNode(ctx, fleet.ID); err != nil {
+				t.Fatalf("admin delete after the hand-off: %v", err)
+			}
+			if exists, d, _ := am4rDeletedAt(t, st, fleet.ID); !exists || d == 0 {
+				t.Fatal("the fleet node was removed although its queued delete still needs it")
+			}
+		}
+		g := am4rGC(st, svc, now)
+		g.drainPending(ctx)
+		g.drainPending(ctx) // a second sweep must not bill again
+		_, blobLeft = objects["am4r-ub"]
+		return uploadedThisMonth(t, st, u.ID), blobLeft
 	}
+	controlMeter, controlLeft := run(t, false)
+	meter, left := run(t, true)
+	if controlLeft || left {
+		t.Fatalf("blob left on the node: control=%v deleted=%v, want reclaimed in both", controlLeft, left)
+	}
+	if meter != controlMeter {
+		t.Fatalf("metered %d after the node was deleted, %d when it was not: deletion changed billing", meter, controlMeter)
+	}
+	t.Logf("residual billed once in both runs: %d bytes", meter)
+}
+
+// A user whose machine is dead — offline for good, with an upload stuck in the
+// recovery state that nothing will ever finish — can still delete the node,
+// immediately, through the real endpoint; it vanishes from their list.
+func TestA_M3_DeadOwnNodeCanBeDeleted(t *testing.T) {
+	ts, svc, st, mail := newFileServer(t)
+	svc.cfg.EnableUserNodes = true
+	cookie := loginCookie(t, ts, mail, "am4r-dead@example.com")
+	ctx := context.Background()
+	u, _ := st.UpsertUserByEmail(ctx, "am4r-dead@example.com", "")
+	n := am4rOwnNode(t, st, u.ID, "https://gone.example", 1) // last seen at t=1
+	am3rSessionRow(t, st, "am4r-stuck", u.ID, n.ID, StoredPurposeShare, "")
+	if _, err := st.db.ExecContext(ctx, `UPDATE upload_sessions SET done = 1, unresolved_at = 5 WHERE id = 'am4r-stuck'`); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest("DELETE", ts.URL+"/api/nodes/"+n.ID, nil)
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("deleting a dead own node with a stuck upload: %d, want 200", resp.StatusCode)
+	}
+	lreq, _ := http.NewRequest("GET", ts.URL+"/api/nodes/mine", nil)
+	lreq.AddCookie(cookie)
+	lresp, err := ts.Client().Do(lreq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list struct {
+		Nodes []map[string]any `json:"nodes"`
+	}
+	_ = json.NewDecoder(lresp.Body).Decode(&list)
+	lresp.Body.Close()
+	if len(list.Nodes) != 0 {
+		t.Fatalf("the deleted node is still in the user's list: %+v", list.Nodes)
+	}
+}
+
+// End to end: the owner deletes their node in the middle of a resumable
+// upload. The delete succeeds; the finalize is then refused by the insert's
+// node fence and its refused-upload reclaim reaches the retired node and
+// removes the partial blob. No object, and own-node traffic is not metered.
+func TestA_M3_OwnNodeDeletedMidUploadReclaimsTheBlob(t *testing.T) {
+	ts, svc, st, mail := newFileServer(t)
+	svc.cfg.EnableUserNodes = true
+	cookie := loginCookie(t, ts, mail, "am4r-mid@example.com")
+	ctx := context.Background()
+	u, _ := st.UpsertUserByEmail(ctx, "am4r-mid@example.com", "")
+	objects := map[string][]byte{}
+	srv := fakeNode(t, objects)
+	t.Cleanup(srv.Close)
+	own := am4rOwnNode(t, st, u.ID, srv.URL, time.Now().Unix())
 
 	blob := bytes.Repeat([]byte("Q"), 600)
 	id := initUpload(t, ts, cookie, []byte("M"), len(blob), 0)
-	var sessNode string
-	_ = st.db.QueryRow(`SELECT node_id FROM upload_sessions WHERE id = ?`, id).Scan(&sessNode)
-	if sessNode != own.ID {
-		t.Fatalf("session placed on %q, want the own node %q", sessNode, own.ID)
-	}
-	if code, _ := patchChunk(t, ts, cookie, id, blob, 0, 300, len(blob)); code != 200 {
+	if code, _ := patchChunk(t, ts, cookie, id, blob, 0, 600, len(blob)); code != 200 {
 		t.Fatalf("chunk: %d", code)
 	}
-	if code, c := deleteNode(); code != http.StatusConflict || c != "node_has_uploads" {
-		t.Fatalf("delete mid-upload: %d %q, want 409 node_has_uploads", code, c)
+	if len(objects) != 1 {
+		t.Fatalf("partial blob not on the own node: %d objects", len(objects))
 	}
-	if code, _ := patchChunk(t, ts, cookie, id, blob, 300, 600, len(blob)); code != 200 {
-		t.Fatalf("chunk: %d", code)
+	dreq, _ := http.NewRequest("DELETE", ts.URL+"/api/nodes/"+own.ID, nil)
+	dreq.AddCookie(cookie)
+	dresp, err := ts.Client().Do(dreq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dresp.Body.Close()
+	if dresp.StatusCode != http.StatusOK {
+		t.Fatalf("delete mid-upload: %d, want 200", dresp.StatusCode)
 	}
 	freq, _ := http.NewRequest("POST", ts.URL+"/api/uploads/"+id+"/finalize", nil)
 	freq.AddCookie(cookie)
@@ -164,25 +327,82 @@ func TestA_M3_ResumableUploadBlocksOwnNodeDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	fresp.Body.Close()
-	if fresp.StatusCode != http.StatusOK {
-		t.Fatalf("finalize after the refused delete: %d, want 200", fresp.StatusCode)
+	if fresp.StatusCode == http.StatusOK {
+		t.Fatal("a finalize onto a deleted node was accepted")
 	}
-	if len(objects) != 1 {
-		t.Fatalf("node holds %d objects, want the finalized blob", len(objects))
+	var files int
+	_ = st.db.QueryRow(`SELECT COUNT(*) FROM stored_files WHERE user_id = ?`, u.ID).Scan(&files)
+	if files != 0 {
+		t.Fatalf("%d object(s) stored on a deleted node", files)
 	}
-	for _, b := range objects {
-		if !bytes.Equal(b, blob) {
-			t.Fatalf("node blob is %d bytes, want the %d-byte upload", len(b), len(blob))
+	// The refused-upload reclaim deletes directly or queues; drain the queue.
+	am4rGC(st, svc, time.Now().Unix()).drainPending(ctx)
+	if len(objects) != 0 {
+		t.Fatalf("the partial blob was stranded on the deleted node: %d objects", len(objects))
+	}
+	if m := uploadedThisMonth(t, st, u.ID); m != 0 {
+		t.Fatalf("own-node upload metered %d bytes", m)
+	}
+}
+
+// Session creation is fenced on a live (not deleted) node row: nothing is
+// written, and the init endpoint answers 503 with the node-offline wording.
+func TestA_M3_UploadSessionCreationFencedOnDeletedNode(t *testing.T) {
+	_, st, u1, _ := am3Service(t)
+	ctx := context.Background()
+	gone := am4rOwnNode(t, st, u1.ID, "https://x.example", 1)
+	if err := st.DeleteNode(ctx, gone.ID, u1.ID); err != nil {
+		t.Fatal(err)
+	}
+	retired := am4rOwnNode(t, st, u1.ID, "https://y.example", 1)
+	if err := st.EnqueueNodeDelete(ctx, "am4r-keep", retired.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteNode(ctx, retired.ID, u1.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, nodeID := range []string{gone.ID, retired.ID} {
+		row := UploadSessionRow{ID: "am4r-late-" + nodeID[:6], UserID: u1.ID, BlobKey: authx.RandToken(), NodeID: nodeID,
+			EncManifest: []byte("m"), TTL: 3600, MaxSize: 1 << 20, CreatedAt: tNow}
+		if ok, err := st.CreateUploadSession(ctx, row, 10); ok || !errors.Is(err, ErrStoredFileNodeGone) {
+			t.Fatalf("session on a deleted node: ok=%v err=%v, want ErrStoredFileNodeGone", ok, err)
 		}
 	}
-	if code, c := deleteNode(); code != http.StatusConflict || c != "node_has_uploads" {
-		t.Fatalf("delete while the finished session row remains: %d %q, want 409", code, c)
+	var c int
+	_ = st.db.QueryRow(`SELECT COUNT(*) FROM upload_sessions WHERE user_id = ?`, u1.ID).Scan(&c)
+	if c != 0 {
+		t.Fatalf("%d session row(s) created for deleted nodes", c)
 	}
-	if _, err := st.db.ExecContext(ctx, `DELETE FROM upload_sessions WHERE id = ?`, id); err != nil {
-		t.Fatal(err) // stands in for PurgeDoneUploadSessions
+	live := am4rOwnNode(t, st, u1.ID, "https://z.example", 1)
+	row := UploadSessionRow{ID: "am4r-live", UserID: u1.ID, BlobKey: authx.RandToken(), NodeID: live.ID,
+		EncManifest: []byte("m"), TTL: 3600, MaxSize: 1 << 20, CreatedAt: tNow}
+	if ok, err := st.CreateUploadSession(ctx, row, 10); !ok || err != nil {
+		t.Fatalf("session on a live node: ok=%v err=%v", ok, err)
 	}
-	if code, _ := deleteNode(); code != http.StatusOK {
-		t.Fatalf("delete after the session was purged: %d, want 200", code)
+}
+
+type sessionGoneStore struct{ Store }
+
+func (sessionGoneStore) CreateUploadSession(context.Context, UploadSessionRow, int) (bool, error) {
+	return false, ErrStoredFileNodeGone
+}
+
+func TestA_M3_UploadInitAnswers503WhenItsNodeWasDeleted(t *testing.T) {
+	ts, svc, st, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "am4r-503@example.com")
+	svc.store = sessionGoneStore{st}
+	var body bytes.Buffer
+	body.Write([]byte{0, 0, 0, 1, 'M'})
+	req, _ := http.NewRequest("POST", ts.URL+"/api/uploads?ttl=0&size=10", &body)
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("init onto a just-deleted node: %d %q, want 503", resp.StatusCode, msg)
 	}
 }
 
@@ -245,5 +465,36 @@ func TestA_M3_AdminPanelBlockersUnknownOffersNoDelete(t *testing.T) {
 	}
 	if !bytes.Contains(page, []byte("无法读取剩余记录数")) {
 		t.Fatal("the unknown-blockers state is not shown")
+	}
+}
+
+// Bringing a RETIRED node back is a new live node: it counts against the cap.
+func TestA_M3_ReviveOfRetiredNodeIsCapped(t *testing.T) {
+	s, st, u1, _ := am3Service(t)
+	ctx := context.Background()
+	reg := am3Register(t, s, "owner-token", authx.NewID())
+	if reg.Code != http.StatusOK {
+		t.Fatalf("register: %d %q", reg.Code, reg.Error)
+	}
+	if err := st.EnqueueNodeDelete(ctx, "am4r-cap", reg.NodeID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteNode(ctx, reg.NodeID, u1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if exists, d, _ := am4rDeletedAt(t, st, reg.NodeID); !exists || d == 0 {
+		t.Fatal("setup: the node was not retired")
+	}
+	for i := 0; i < maxLiveNodesPerUser; i++ {
+		if got := am3Register(t, s, "owner-token", authx.NewID()); got.Code != http.StatusOK {
+			t.Fatalf("node %d: %d %q", i, got.Code, got.Error)
+		}
+	}
+	got := am3Register(t, s, "owner-token", reg.NodeID)
+	if got.Code != http.StatusForbidden || got.Reason != nodeRegisterCodeLimit {
+		t.Fatalf("reviving a retired node at the cap: %d code=%q, want 403 %q", got.Code, got.Reason, nodeRegisterCodeLimit)
+	}
+	if _, d, _ := am4rDeletedAt(t, st, reg.NodeID); d == 0 {
+		t.Fatal("a refused revive still revived the node")
 	}
 }

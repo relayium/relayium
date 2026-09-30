@@ -141,8 +141,10 @@ func TestA_M3_DeletedUserNodeIDCannotBeTakenOver(t *testing.T) {
 	if got.Code != http.StatusForbidden || got.Reason != nodeRegisterCodeRetired {
 		t.Fatalf("takeover of a deleted user node id: got %d code=%q, want 403 %q", got.Code, got.Reason, nodeRegisterCodeRetired)
 	}
-	if _, ok, _ := st.GetNode(ctx, reg.NodeID); ok {
-		t.Fatal("a refused registration still created the node row")
+	// The owner's file still names the node, so the row is RETIRED (kept for
+	// cleanup), not gone — and the refused registration left it untouched.
+	if row, ok, _ := st.GetNode(ctx, reg.NodeID); !ok || row.OwnerUserID != u1.ID || row.RemovedAt == 0 {
+		t.Fatalf("retired row after a refused takeover: ok=%v %+v, want still the owner's, removed", ok, row)
 	}
 	if fleet := am3Register(t, s, "fleet-secret", reg.NodeID); fleet.Code != http.StatusForbidden || fleet.Reason != nodeRegisterCodeRetired {
 		t.Fatalf("fleet claiming a deleted user node id: got %d code=%q, want 403 %q", fleet.Code, fleet.Reason, nodeRegisterCodeRetired)

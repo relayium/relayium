@@ -173,16 +173,21 @@ func TestAnUndischargedDeleteIsNotRetiredMerelyForBeingOld(t *testing.T) {
 		t.Fatal("deregistering a node — which can be undone — threw away its blobs' only owner")
 	}
 
-	// THE EXPLICIT END is the irreversible one: deleting the node row. That
-	// transaction removes ITS OWN pending rows — and only its own. The rows
-	// naming "no-such-node" were never part of any node deletion, so they stay,
-	// undischarged owners that they are, however old they grow.
+	// Deleting the node does not end them either (A-M3). It used to remove the
+	// node's own pending rows with the node row — and with them the only record
+	// that ciphertext was still on a machine that might well be alive. Now a
+	// node with queued deletes is RETIRED (hidden, out of every pool, storage
+	// endpoint kept) so the drain can still reach it; its rows stay, and so do
+	// the rows naming "no-such-node", undischarged owners that they are.
 	if err := st.DeleteFleetNode(ctx, n.ID); err != nil {
 		t.Fatalf("delete node: %v", err)
 	}
 	left = pendingKeys(t, st)
-	if _, ok := left["bk-never"]; ok {
-		t.Fatal("deleting the node — the explicit, irreversible end — left its own queued deletes behind")
+	if _, ok := left["bk-never"]; !ok {
+		t.Fatal("deleting the node dropped its own undischarged queued delete — the blob lost its only cleanup owner")
+	}
+	if got, ok, _ := st.GetNode(ctx, n.ID); !ok || got.RemovedAt == 0 || got.StorageURL == "" {
+		t.Fatalf("a node with queued deletes must stay resolvable (retired): ok=%v %+v", ok, got)
 	}
 	if _, ok := left["bk-gone"]; !ok {
 		t.Fatal("deleting one node swept away another id's undischarged row")
