@@ -3646,21 +3646,71 @@ func (s *SQLiteStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess 
 	return n == 1, err
 }
 
-// CreateEmailTokenForIdentity is CreateEmailToken bound to a linked provider
-// identity: the token row exists only if identities(provider, subject) maps to
-// t.UserID at the moment of the insert.
-func (s *SQLiteStore) CreateEmailTokenForIdentity(ctx context.Context, t EmailToken, provider, subject string) (bool, error) {
+// CreateReactivateTokenForIdentityLogin inserts a "reactivate" token for a
+// provider login in one statement, and only while the account is still pending
+// deletion at the credential epoch the caller read (so a recovery, or a
+// recovery followed by a fresh deletion, that committed since leaves no token).
+// The token row records that epoch. linked selects the subject predicate:
+// true requires identities(provider, subject) to map to t.UserID; false (an
+// unseen subject recovering by verified email) requires the subject to still be
+// linked to NO account and the account's email to still equal t.Email.
+func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool) (bool, error) {
+	subjectCond := `EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`
+	args := []any{provider, subject}
+	if !linked {
+		subjectCond = `NOT EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ?) AND u.email = ?`
+		args = append(args, normEmail(t.Email))
+	}
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, credential_epoch, created_at, expires_at, used_at)
-		 SELECT ?, ?, ?, ?, ?, ?, ?, 0
-		  WHERE EXISTS (SELECT 1 FROM identities WHERE provider = ? AND subject = ? AND user_id = ?)`,
-		t.TokenHash, t.UserID, normEmail(t.Email), t.Purpose, t.CredentialEpoch, t.CreatedAt, t.ExpiresAt,
-		provider, subject, t.UserID)
+		 SELECT ?, u.id, ?, 'reactivate', u.credential_epoch, ?, ?, 0 FROM users u
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at > 0 AND `+subjectCond,
+		append([]any{t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt, t.UserID, epoch}, args...)...)
 	if err != nil {
 		return false, err
 	}
 	n, err := res.RowsAffected()
 	return n == 1, err
+}
+
+// VerifyEmailForIdentityLogin is the provider-login form of
+// dropUnverifiedPassword + SetEmailVerified, in one transaction whose every
+// write is guarded by the state the login was decided on: the account is
+// active, still at epoch, still holds email, and identities(provider, subject)
+// still maps to it. A password planted while the address was unverified is
+// cleared (with its "password" identity) only while the address is still
+// unverified at that epoch, so a password reset that committed in between —
+// it bumps the epoch — is never overwritten; the call then reports false.
+func (s *SQLiteStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	const guard = ` WHERE id = ? AND email = ? AND credential_epoch = ? AND deleted_at = 0
+	   AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = users.id)`
+	args := []any{userID, normEmail(email), epoch, provider, subject}
+	res, err := tx.ExecContext(ctx,
+		`UPDATE users SET password_hash = NULL`+guard+` AND email_verified = 0 AND password_hash IS NOT NULL AND password_hash != ''`, args...)
+	if err != nil {
+		return false, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return false, err
+	} else if n == 1 {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM identities WHERE provider = 'password' AND user_id = ?`, userID); err != nil {
+			return false, err
+		}
+	}
+	res, err = tx.ExecContext(ctx, `UPDATE users SET email_verified = 1`+guard, args...)
+	if err != nil {
+		return false, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool, error) {

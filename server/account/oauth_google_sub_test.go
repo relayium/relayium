@@ -294,6 +294,8 @@ type credentialHookStore struct {
 	beforeSession func()
 	beforeToken   func()
 	afterGetUser  func()
+
+	beforePasswordWrite func()
 }
 
 func (s *credentialHookStore) GetUserByID(ctx context.Context, id string) (User, error) {
@@ -313,11 +315,33 @@ func (s *credentialHookStore) CreateSessionForIdentityAtEpoch(ctx context.Contex
 	return s.SQLiteStore.CreateSessionForIdentityAtEpoch(ctx, sess, epoch, provider, subject)
 }
 
-func (s *credentialHookStore) CreateEmailTokenForIdentity(ctx context.Context, t EmailToken, provider, subject string) (bool, error) {
+func (s *credentialHookStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool) (bool, error) {
 	if s.beforeToken != nil {
 		s.beforeToken()
 	}
-	return s.SQLiteStore.CreateEmailTokenForIdentity(ctx, t, provider, subject)
+	return s.SQLiteStore.CreateReactivateTokenForIdentityLogin(ctx, t, epoch, provider, subject, linked)
+}
+
+// beforePasswordWrite fires once, at the first of: right after the
+// verification-state read of the legacy dropUnverifiedPassword path, or right
+// before the guarded VerifyEmailForIdentityLogin transaction.
+func (s *credentialHookStore) firePasswordHook() {
+	if s.beforePasswordWrite != nil {
+		hook := s.beforePasswordWrite
+		s.beforePasswordWrite = nil
+		hook()
+	}
+}
+
+func (s *credentialHookStore) EmailVerified(ctx context.Context, userID string) (bool, error) {
+	v, err := s.SQLiteStore.EmailVerified(ctx, userID)
+	s.firePasswordHook()
+	return v, err
+}
+
+func (s *credentialHookStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error) {
+	s.firePasswordHook()
+	return s.SQLiteStore.VerifyEmailForIdentityLogin(ctx, userID, email, epoch, provider, subject)
 }
 
 // commitDeletion runs the real account-deletion transaction (session purge,
@@ -535,4 +559,174 @@ func TestGoogleSubDeletionAfterStateReadIssuesNothing(t *testing.T) {
 	}
 	rec := googleSubCallback(t, googleSubService(t, hs, "sub-O", "order@example.com", true))
 	assertNoGoogleSession(t, store, rec, u.ID)
+}
+
+// Codex r2-1: the reactivate-token insert is fenced by lifecycle and epoch, on
+// both the linked-subject and the unseen-subject (verified email) paths.
+func TestGoogleSubReactivateTokenFencedByLifecycleAndEpoch(t *testing.T) {
+	for _, linked := range []bool{true, false} {
+		for _, tc := range []struct {
+			name  string
+			moved func(t *testing.T, store *SQLiteStore, userID string)
+		}{
+			{"recovered before insert", func(t *testing.T, store *SQLiteStore, userID string) {
+				if err := store.ClearAccountDeletion(context.Background(), userID); err != nil {
+					t.Fatalf("recover: %v", err)
+				}
+			}},
+			{"recovered and deleted again before insert", func(t *testing.T, store *SQLiteStore, userID string) {
+				if err := store.ClearAccountDeletion(context.Background(), userID); err != nil {
+					t.Fatalf("recover: %v", err)
+				}
+				commitDeletion(t, store, userID)
+			}},
+		} {
+			name := tc.name + map[bool]string{true: " (linked subject)", false: " (unseen subject)"}[linked]
+			t.Run(name, func(t *testing.T) {
+				store := newTestStore(t)
+				sub := ""
+				if linked {
+					sub = "sub-P"
+				}
+				u := googleSubAccount(t, store, "pend@example.com", sub, "")
+				if err := store.SetAccountDeletion(context.Background(), u.ID, 100, 100+30*86400); err != nil {
+					t.Fatalf("set deletion: %v", err)
+				}
+				before := googleSubCount(t, store, `SELECT COUNT(*) FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate'`, u.ID)
+				hs := &credentialHookStore{SQLiteStore: store}
+				hs.beforeToken = func() { tc.moved(t, store, u.ID) }
+				rec := googleSubCallback(t, googleSubService(t, hs, "sub-P", "pend@example.com", true))
+				if loc := rec.Header().Get("Location"); loc != "/?login=error" {
+					t.Fatalf("want login error, got %q", loc)
+				}
+				// commitDeletion mints its own confirmation-flow token; count only others.
+				after := googleSubCount(t, store, `SELECT COUNT(*) FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate' AND token_hash != ?`, u.ID, authx.HashToken("react-"+u.ID))
+				if after != before {
+					t.Fatalf("no reactivate token may be minted across a lifecycle change: before=%d after=%d", before, after)
+				}
+			})
+		}
+	}
+}
+
+// The minted token records the epoch it was issued at.
+func TestGoogleSubReactivateTokenRecordsEpoch(t *testing.T) {
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "ep@example.com", "sub-E", "")
+	if _, err := store.db.Exec(`UPDATE users SET credential_epoch = 7 WHERE id = ?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetAccountDeletion(context.Background(), u.ID, 100, 100+30*86400); err != nil {
+		t.Fatal(err)
+	}
+	rec := googleSubCallback(t, googleSubService(t, store, "sub-E", "ep@example.com", true))
+	if !strings.HasPrefix(rec.Header().Get("Location"), "/#account=pending_deletion&token=") {
+		t.Fatalf("want pending_deletion redirect, got %q", rec.Header().Get("Location"))
+	}
+	if n := googleSubCount(t, store, `SELECT COUNT(*) FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate' AND credential_epoch = 7`, u.ID); n != 1 {
+		t.Fatalf("want one reactivate token recorded at epoch 7, got %d", n)
+	}
+}
+
+// Codex r2-2: an unseen subject that a concurrent login links to another
+// account before the email-based recovery token is minted gets no token for
+// the pending account selected by email.
+func TestGoogleSubUnseenSubjectLinkedElsewhereBeforeTokenIssuesNothing(t *testing.T) {
+	store := newTestStore(t)
+	pending := googleSubAccount(t, store, "pendb@example.com", "", "")
+	if err := store.SetAccountDeletion(context.Background(), pending.ID, 100, 100+30*86400); err != nil {
+		t.Fatal(err)
+	}
+	rival := googleSubAccount(t, store, "rivala@example.com", "", "")
+	hs := &credentialHookStore{SQLiteStore: store}
+	hs.beforeToken = func() {
+		if err := store.LinkIdentity(context.Background(), "google", "sub-N", rival.ID); err != nil {
+			t.Fatalf("link: %v", err)
+		}
+	}
+	rec := googleSubCallback(t, googleSubService(t, hs, "sub-N", "pendb@example.com", true))
+	if loc := rec.Header().Get("Location"); loc != "/?login=error" {
+		t.Fatalf("want login error, got %q", loc)
+	}
+	if n := googleSubCount(t, store, `SELECT COUNT(*) FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate'`, pending.ID); n != 0 {
+		t.Fatalf("no email-based reactivate token once the subject is linked elsewhere, found %d", n)
+	}
+}
+
+// Codex r2-3: a password reset that commits between the login's verification
+// read and its password clear must survive; the login gets no session.
+func TestGoogleSubPasswordResetBeforeClearSurvives(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "reset@example.com", "sub-RS", "planted-hash")
+	const now = int64(50_000)
+	resetHash := authx.HashToken("reset-token")
+	if err := store.CreateEmailToken(ctx, EmailToken{TokenHash: resetHash, UserID: u.ID, Email: u.Email,
+		Purpose: "reset", CreatedAt: now, ExpiresAt: now + 3600}); err != nil {
+		t.Fatal(err)
+	}
+	hs := &credentialHookStore{SQLiteStore: store}
+	hs.beforePasswordWrite = func() {
+		outcome, uid, _, err := store.ResetPasswordWithToken(ctx, resetHash, now, "owner-reset-hash")
+		if err != nil || uid != u.ID {
+			t.Fatalf("reset: outcome=%v uid=%q err=%v", outcome, uid, err)
+		}
+	}
+	rec := googleSubCallback(t, googleSubService(t, hs, "sub-RS", "reset@example.com", true))
+	if got := passwordHash(t, store, u.ID); got != "owner-reset-hash" {
+		t.Fatalf("a completed password reset must never be overwritten, password is now %q", got)
+	}
+	assertNoGoogleSession(t, store, rec, u.ID)
+}
+
+// Epoch guard of the verify transaction: a password change (epoch bump, email
+// still unverified) between the login's epoch read and its clear is not
+// overwritten by that stale attempt, which is refused; a fresh attempt then
+// applies the pre-hijack defense to the current state.
+func TestGoogleSubPasswordChangeBeforeClearRefusesStaleAttempt(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "chg@example.com", "sub-CH", "planted-hash")
+	hs := &credentialHookStore{SQLiteStore: store}
+	hs.beforePasswordWrite = func() {
+		epoch, err := store.CredentialEpoch(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.ChangePasswordAndRevokeSessions(ctx, u.ID, "changed-hash", "", "", epoch); err != nil {
+			t.Fatalf("change password: %v", err)
+		}
+	}
+	rec := googleSubCallback(t, googleSubService(t, hs, "sub-CH", "chg@example.com", true))
+	if got := passwordHash(t, store, u.ID); got != "changed-hash" {
+		t.Fatalf("a stale login attempt must not overwrite a concurrent password change, password is now %q", got)
+	}
+	if mustVerified(t, store, u.ID) {
+		t.Fatal("a stale login attempt must not verify the email")
+	}
+	assertNoGoogleSession(t, store, rec, u.ID)
+
+	rec = googleSubCallback(t, googleSubService(t, store, "sub-CH", "chg@example.com", true))
+	if got := sessionUser(t, store, rec); got != u.ID {
+		t.Fatalf("retry must sign in, got %q", got)
+	}
+	if passwordHash(t, store, u.ID) != "" || !mustVerified(t, store, u.ID) {
+		t.Fatal("retry must drop the unverified password and verify the email")
+	}
+}
+
+// A verified account's password is its owner's and survives a Google login.
+func TestGoogleSubVerifiedAccountKeepsPassword(t *testing.T) {
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "kept@example.com", "sub-K", "owner-hash")
+	if err := store.SetEmailVerified(context.Background(), u.ID); err != nil {
+		t.Fatal(err)
+	}
+	rec := googleSubCallback(t, googleSubService(t, store, "sub-K", "kept@example.com", true))
+	if got := sessionUser(t, store, rec); got != u.ID {
+		t.Fatalf("want session for %s, got %q", u.ID, got)
+	}
+	if got := passwordHash(t, store, u.ID); got != "owner-hash" {
+		t.Fatalf("a verified account's password must survive a Google login, got %q", got)
+	}
 }
