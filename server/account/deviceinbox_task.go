@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -140,8 +141,14 @@ func (s *Service) handleInboxTaskBlob(w http.ResponseWriter, r *http.Request, u 
 	if n > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = s.store.AddDownloadStat(ctx, sf.UserID, n)
-		_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
 		cancel()
+		// Own budget for the bill (see handleFileBlob): meter or owed-bill
+		// outbox, and an error means neither.
+		mctx, mcancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := s.store.MeterDownload(mctx, sf.UserID, n, s.now().Unix()); err != nil {
+			log.Printf("inbox: metering %d bytes of download egress for user %s failed; they stay unbilled: %v", n, sf.UserID, err)
+		}
+		mcancel()
 	}
 }
 

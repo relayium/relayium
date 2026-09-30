@@ -2334,6 +2334,11 @@ type Store interface {
 	// usage_monthly (per-month billing ledger: upload/download bytes; relay is
 	// derived from usage_events, not stored here)
 	RecordMeter(ctx context.Context, userID string, kind UsageKind, bytes, at int64) error
+	// MeterDownload bills download egress: the bytes land on the meter or,
+	// when the increment is refused, in the unbilled_meter outbox for GC to
+	// settle — exactly once either way. ctx bounds only acquiring the
+	// connection; a non-nil error means the bytes are in neither place.
+	MeterDownload(ctx context.Context, userID string, bytes, at int64) error
 	// EnqueueUnbilledMeter durably records bytes that are owed after a
 	// RecordMeter failed, on the paths whose evidence does not survive the
 	// failure. See UnbilledMeter.

@@ -6488,6 +6488,44 @@ func recordMeterOn(ctx context.Context, ex sqlExecer, userID string, kind UsageK
 	return err
 }
 
+// downloadMeterFailedReason is the unbilled_meter reason MeterDownload writes
+// when the direct increment was refused.
+const downloadMeterFailedReason = "download_meter_failed"
+
+// MeterDownload bills `bytes` of download egress to userID so that the number
+// is either on the meter or in the unbilled_meter outbox — never silently
+// dropped and never counted twice.
+//
+// Why not RecordMeter with the caller's context, then enqueue on error: the
+// sqlite driver reports ctx.Err() whenever the context fired during the call,
+// INCLUDING after the autocommit INSERT has already committed. "RecordMeter
+// failed, so journal the bytes as owed" would then bill the same bytes a second
+// time when GC settles the row. So the caller's bounded context is spent only
+// on acquiring the single pooled connection — failing there means nothing was
+// written — and both statements run on that connection with cancellation
+// removed. An error from the increment therefore means the statement did not
+// apply (its own wait is bounded by busy_timeout), which is exactly when the
+// bytes are owed. A non-nil return means the bytes are in neither place; the
+// caller logs who and how much.
+func (s *SQLiteStore) MeterDownload(ctx context.Context, userID string, bytes, at int64) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("account: download meter: acquire connection: %w", err)
+	}
+	defer conn.Close()
+	wctx := context.WithoutCancel(ctx)
+	incErr := recordMeterOn(wctx, conn, userID, MeterDownload, bytes, at)
+	if incErr == nil {
+		return nil
+	}
+	if _, err := conn.ExecContext(wctx,
+		`INSERT INTO unbilled_meter (id, user_id, kind, bytes, at, reason) VALUES (?,?,?,?,?,?)`,
+		authx.NewID(), userID, int(MeterDownload), bytes, at, downloadMeterFailedReason); err != nil {
+		return fmt.Errorf("account: download meter: increment failed (%v) and outbox write failed: %w", incErr, err)
+	}
+	return nil
+}
+
 // EnqueueUnbilledMeter durably records bytes that are OWED but could not be
 // metered when they became known. See the unbilled_meter schema comment.
 func (s *SQLiteStore) EnqueueUnbilledMeter(ctx context.Context, m UnbilledMeter) error {

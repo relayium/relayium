@@ -948,10 +948,19 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		// exempts METERING only, never the overTraffic gate above — a genuinely
 		// over-quota owner is still refused service during their own update
 		// window, the same as any other time.
-		if !s.byoUpdateExempt(ctx, sf) {
-			_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
-		}
+		exempt := s.byoUpdateExempt(ctx, sf)
 		cancel()
+		// The bill gets its own budget: the statistics write and the exemption
+		// read above may have spent most of theirs, and a bill must not fail
+		// merely because statistics were slow. MeterDownload lands the bytes on
+		// the meter or in the owed-bill outbox; an error means neither.
+		if !exempt {
+			mctx, mcancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := s.store.MeterDownload(mctx, sf.UserID, n, s.now().Unix()); err != nil {
+				log.Printf("download: metering %d bytes of download egress for user %s failed; they stay unbilled: %v", n, sf.UserID, err)
+			}
+			mcancel()
+		}
 	}
 
 	if !complete {
