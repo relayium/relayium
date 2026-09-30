@@ -112,27 +112,43 @@ func TestStripeWebhookRefusesUnsetSecretForgedGrant(t *testing.T) {
 }
 
 // The production-configured client (canonical refresh on) must refuse before
-// it asks Stripe anything: a forged event may not even cause API traffic.
-func TestStripeWebhookUnsetSecretMakesNoStripeCalls(t *testing.T) {
-	var calls atomic.Int64
+// it asks Stripe anything: a forged event may not even cause API traffic. The
+// configured-secret control proves the same payload DOES reach the Stripe API
+// (canonical subscription refresh), so zero calls is evidence of the refusal.
+func stripeAPICallsForSubscriptionEvent(t *testing.T, secret string) (status int, calls int64) {
+	t.Helper()
+	var n atomic.Int64
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
+		n.Add(1)
 		http.Error(w, "unexpected", http.StatusInternalServerError)
 	}))
 	defer api.Close()
 	ts, svc, store, mail := newBillingServer(t)
-	client := NewStripeClient("sk_test", "", "bpc_dedicated")
+	client := NewStripeClient("sk_test", secret, "bpc_dedicated")
 	client.base = api.URL
 	svc.biller = client
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	_ = loginCookie(t, ts, mail, "forged-nocall@example.com")
 	uid := mustUserID(t, store, "forged-nocall@example.com")
-	resp := postWebhook(t, ts, "", webhookEnv("checkout.session.completed", "cus_forged_nocall", "", uid, "", "", 0))
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("forged webhook: status %d, want 400", resp.StatusCode)
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_forged_nocall"); err != nil {
+		t.Fatal(err)
 	}
-	if n := calls.Load(); n != 0 {
-		t.Fatalf("forged webhook caused %d Stripe API call(s), want 0", n)
+	resp := postWebhook(t, ts, secret, webhookEnv("customer.subscription.updated", "cus_forged_nocall", "sub_forged_nocall", "", "active", "price_pro_m", 1700000000))
+	resp.Body.Close()
+	return resp.StatusCode, n.Load()
+}
+
+func TestStripeWebhookUnsetSecretMakesNoStripeCalls(t *testing.T) {
+	if _, calls := stripeAPICallsForSubscriptionEvent(t, "whsec_configured"); calls == 0 {
+		t.Fatal("control: a verified subscription event made no Stripe API call, so the zero-call assertion below would prove nothing")
+	}
+	for _, secret := range []string{"", " "} {
+		status, calls := stripeAPICallsForSubscriptionEvent(t, secret)
+		if status != http.StatusBadRequest {
+			t.Fatalf("secret %q: forged webhook status %d, want 400", secret, status)
+		}
+		if calls != 0 {
+			t.Fatalf("secret %q: forged webhook caused %d Stripe API call(s), want 0", secret, calls)
+		}
 	}
 }
