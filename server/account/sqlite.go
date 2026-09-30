@@ -8352,6 +8352,68 @@ func (s *SQLiteStore) EnqueueNodeDelete(ctx context.Context, blobKey, nodeID str
 	return enqueueNodeDeleteOn(ctx, s.db, blobKey, nodeID, at, 0)
 }
 
+// EnqueueNodeDeleteRetainingNode: see Store.EnqueueNodeDeleteRetainingNode
+// (N-0930-6).
+//
+// The race it closes: a single-shot upload (POST /api/files) has no session,
+// object or queue row naming its node while Put runs, so a node delete in
+// that window finds nothing referencing the node and removes the row
+// (retireOrDeleteNodeTx). The upload's persist is then refused by the node
+// fence and its blob dropped; when that immediate DELETE fails too, a plain
+// enqueue names an id blobFor can never resolve again, so the row can never
+// drain and the ciphertext stays on the machine with nothing able to remove
+// it.
+//
+// Here the queue row and, when the node row is gone, a RETIRED node row are
+// written in ONE transaction. The restored row is exactly what
+// retireOrDeleteNodeTx would have left had the upload been visible to the
+// delete: deleted_at and removed_at set (so every pool, listing, ICE and the
+// rollout keep excluding it), last_seen_at 0, no TURN urls/secret, and only the
+// storage endpoint the upload itself was using. GC drains the delete through
+// it and PurgeRetiredNodes removes it once nothing names it. It is restored
+// only when:
+//   - the id is tombstoned with the SAME owner the upload saw — i.e. the row
+//     went through an A-M3 delete of that very node, never an id that was not
+//     deleted or that belongs to someone else;
+//   - for a user node, the owning account exists and is not being deleted
+//     (both account purges drop their own nodes' cleanup by design — they
+//     forgive the owner's bill and leave the owner's ciphertext on the owner's
+//     machine — and a deleted account's node secret is not brought back);
+//   - the upload actually had a storage endpoint.
+//
+// A row that still exists (live, retired, or re-registered by the same owner)
+// is left untouched: the insert is a no-op and this is a plain enqueue.
+func (s *SQLiteStore) EnqueueNodeDeleteRetainingNode(ctx context.Context, blobKey string, placed Node, at int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+	if err := enqueueNodeDeleteOn(ctx, tx, blobKey, placed.ID, at, 0); err != nil {
+		return err
+	}
+	if placed.ID != "" && placed.StorageEnabled && placed.StorageURL != "" {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO nodes (id, owner_type, owner_user_id, region, urls, turn_secret, version, created_at, last_seen_at,
+			                    storage_url, storage_secret, storage_fp, storage_enabled, removed_at, deleted_at)
+			 SELECT t.id, t.owner_type, NULLIF(t.owner_user_id, ''), '', '[]', '', '', ?, 0,
+			        ?, ?, ?, 1, `+retiredAtSQL+`, `+retiredAtSQL+`
+			   FROM node_tombstones t
+			  WHERE t.id = ? AND t.owner_type = ? AND t.owner_user_id = ?
+			    AND NOT EXISTS (SELECT 1 FROM nodes n WHERE n.id = t.id)
+			    AND (t.owner_type = 'fleet' OR EXISTS (SELECT 1 FROM users u WHERE u.id = t.owner_user_id AND u.deleted_at = 0))`,
+			at, placed.StorageURL, placed.StorageSecret, placed.StorageFP,
+			placed.ID, placed.OwnerType, placed.OwnerUserID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// retiredAtSQL is the retirement stamp of a row restored from its tombstone:
+// the tombstone's own deletion time (never 0, which would read as live).
+const retiredAtSQL = `CASE WHEN t.deleted_at > 0 THEN t.deleted_at ELSE CAST(strftime('%s','now') AS INTEGER) END`
+
 // enqueueNodeDeleteOn is EnqueueNodeDelete's body against any executor, so a
 // caller that must queue the responsibility INSIDE its own transaction — a pair
 // room's close, which deletes the rows that would otherwise point at these blobs

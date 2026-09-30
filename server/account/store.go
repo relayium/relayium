@@ -2724,6 +2724,14 @@ type Store interface {
 	BumpNodeUpdateAttempts(ctx context.Context, nodeID string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
+	// EnqueueNodeDeleteRetainingNode is EnqueueNodeDelete for a blob whose
+	// node may have been deleted — row and all — while the blob was being
+	// written (a single-shot upload holds no durable reference to its node).
+	// `placed` is the node row as the upload saw it; if the row is gone, a
+	// RETIRED row carrying only its storage endpoint is restored in the same
+	// transaction so GC can still resolve the queued delete. See
+	// SQLiteStore.EnqueueNodeDeleteRetainingNode (N-0930-6).
+	EnqueueNodeDeleteRetainingNode(ctx context.Context, blobKey string, placed Node, at int64) error
 	// PrepareRefusedUploadReclaim is a refused finalize's settle-first ownership
 	// step for its blob; see SQLiteStore.PrepareRefusedUploadReclaim.
 	PrepareRefusedUploadReclaim(ctx context.Context, sessionID, blobKey, nodeID string, at int64) (bool, error)
