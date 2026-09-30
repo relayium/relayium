@@ -98,7 +98,14 @@ func (f *fakeBiller) InspectDuplicateSubscription(_ context.Context, userID, cus
 	return DuplicateRefundPlan{UserID: userID, CustomerID: customerID, CanonicalSubscriptionID: canonicalID, DuplicateSubscriptionID: duplicateID}, nil
 }
 
-func (f *fakeBiller) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob) (DuplicateRefundResult, error) {
+// DuplicateCanonicalSubscription is never reached: this fake's
+// ReconcileDuplicateSubscription does not model cancellation authority (the
+// real stripeClient does, and N-0930-1 tests exercise it over HTTP).
+func (f *fakeBiller) DuplicateCanonicalSubscription(context.Context, string) (SubscriptionInfo, bool, error) {
+	return SubscriptionInfo{}, false, errors.New("fakeBiller: canonical subscription read is not modeled")
+}
+
+func (f *fakeBiller) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob, _ func(context.Context) (string, error)) (DuplicateRefundResult, error) {
 	if err := f.CancelSubscription(ctx, job.DuplicateSubscriptionID, true); err != nil {
 		return DuplicateRefundResult{}, err
 	}

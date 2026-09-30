@@ -73,7 +73,7 @@ func TestWebhookDuplicateInspectionFailureIsRetryableBeforeCancellation(t *testi
 	}
 }
 
-func (d *dedupBiller) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob) (DuplicateRefundResult, error) {
+func (d *dedupBiller) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob, _ func(context.Context) (string, error)) (DuplicateRefundResult, error) {
 	if err := d.CancelSubscription(ctx, job.DuplicateSubscriptionID, true); err != nil {
 		return DuplicateRefundResult{}, err
 	}

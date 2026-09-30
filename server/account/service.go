@@ -130,6 +130,11 @@ type Config struct {
 	StripeWebhookSecret string
 	StripePortalConfig  string
 	BillingHoldSecret   string
+	// DisableBillingDuplicateAutoCancel turns off the automatic DELETE of a
+	// duplicate Stripe subscription on BOTH the inline webhook path and the
+	// worker, while liability inspection continues (flag
+	// -billing-duplicate-auto-cancel=false). Zero value keeps auto-cancel on.
+	DisableBillingDuplicateAutoCancel bool
 	// ReleaseCheck enables the hourly poll for a newer upstream release and the
 	// admin notice built on it. On by default; RELAYIUM_RELEASE_CHECK=false
 	// turns it off, and when off no request is made at all.

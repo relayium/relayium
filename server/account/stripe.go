@@ -872,7 +872,38 @@ func (c *stripeClient) InspectDuplicateSubscription(ctx context.Context, userID,
 	return plan, nil
 }
 
-func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob) (DuplicateRefundResult, error) {
+// DuplicateCanonicalSubscription reads the canonical subscription a duplicate
+// cancellation depends on. Unlike canonicalSubscription it is not gated on the
+// webhook-refresh setting: the cancellation authority check must always see
+// Stripe's current object. A 404 is reported as missing, never as live.
+func (c *stripeClient) DuplicateCanonicalSubscription(ctx context.Context, subID string) (SubscriptionInfo, bool, error) {
+	if subID == "" {
+		return SubscriptionInfo{}, false, errors.New("stripe: canonical subscription id is required")
+	}
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(subID), nil)
+	if err != nil {
+		if stripeDeletionObjectGone(err) {
+			return SubscriptionInfo{}, true, nil
+		}
+		return SubscriptionInfo{}, false, err
+	}
+	var sub struct {
+		ID       string `json:"id"`
+		Customer string `json:"customer"`
+		Status   string `json:"status"`
+	}
+	if json.Unmarshal(body, &sub) != nil || sub.ID != subID || sub.Status == "" {
+		return SubscriptionInfo{}, false, errors.New("stripe: canonical subscription identity is invalid")
+	}
+	return SubscriptionInfo{ID: sub.ID, CustomerID: sub.Customer, Status: sub.Status}, false, nil
+}
+
+// ReconcileDuplicateSubscription stops one duplicate subscription. The DELETE is
+// issued only after authorize -- called after the duplicate is read and
+// immediately before the DELETE -- returns no hold and no error. A nil
+// authorize fails closed. A duplicate that is already canceled needs no
+// authority: nothing is mutated, and liability discovery continues.
+func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob, authorize func(context.Context) (string, error)) (DuplicateRefundResult, error) {
 	result := DuplicateRefundResult{SubscriptionCanceled: job.SubscriptionCanceled, RefundComplete: job.RefundComplete, ManualReason: job.ManualReason}
 	readSubscription := func() (string, bool, error) {
 		body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(job.DuplicateSubscriptionID), nil)
@@ -898,6 +929,23 @@ func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job D
 		return result, err
 	}
 	if !canceled {
+		if authorize == nil {
+			return result, errors.New("stripe: duplicate subscription cancellation requires authorization")
+		}
+		hold, err := authorize(ctx)
+		if errors.Is(err, errDuplicateAutoCancelDisabled) {
+			result.RefundComplete = false
+			result.CancelSkipped = true
+			return result, nil
+		}
+		if err != nil {
+			return result, err
+		}
+		if hold != "" {
+			result.RefundComplete = false
+			result.HoldReason = hold
+			return result, nil
+		}
 		if _, err := c.request(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(job.DuplicateSubscriptionID), nil); err != nil && !stripeDeletionObjectGone(err) {
 			return result, err
 		}

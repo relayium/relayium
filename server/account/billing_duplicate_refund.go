@@ -37,11 +37,26 @@ type DuplicateRefundJob struct {
 	State, LastError                                            string
 	SubscriptionCanceled, RefundComplete                        bool
 	Attempts, Revision, LiabilityRevision, CreatedAt, UpdatedAt int64
+	// DiscoveredAt is 0 while the liability set is UNKNOWN: only a Put that
+	// follows one complete inspection of the duplicate may set it. A job can
+	// become terminal or refund_complete, and an operator refund can start, only
+	// once it is non-zero.
+	DiscoveredAt int64
+	// CancelHold, when non-empty, forbids automatic cancellation. Put and Save
+	// never clear it; only the documented operator procedure does.
+	CancelHold   string
+	HoldEvidence string
+	NextAuditAt  int64
 }
 
 type DuplicateRefundResult struct {
 	SubscriptionCanceled, RefundComplete bool
 	ManualReason                         string
+	// HoldReason is set when cancellation authority was refused (no DELETE).
+	HoldReason string
+	// CancelSkipped is set when automatic cancellation is disabled by
+	// configuration (no DELETE, no hold).
+	CancelSkipped bool
 }
 
 type DuplicateRefundEvidence struct {
@@ -55,6 +70,13 @@ type DuplicateRefundEvidence struct {
 	Liabilities                                                        []DuplicateRefundLiability
 	ActionID, ActionState                                              string
 	ActionGeneration                                                   int64
+	// LiabilitiesUnknown is true while no complete inspection has been recorded
+	// (DiscoveredAt == 0): an empty Liabilities list then means "unknown", never
+	// "nothing is owed".
+	LiabilitiesUnknown bool
+	DiscoveredAt       int64
+	CancelHold         string
+	HoldEvidence       string
 }
 
 type DuplicateRefundOperatorResult struct {
@@ -83,6 +105,25 @@ var errDuplicateRefundCanonicalSnapshotStale = errors.New("stripe: duplicate ref
 var errDuplicateRefundPending = errors.New("stripe: duplicate refund remains pending")
 var errDuplicateRefundReopened = errors.New("account: duplicate refund failure reopened operator reconciliation")
 
+// errDuplicateAutoCancelDisabled is returned by the cancellation authorizer when
+// -billing-duplicate-auto-cancel is off. The provider skips the DELETE without
+// treating it as a failure; inspection continues.
+var errDuplicateAutoCancelDisabled = errors.New("billing: duplicate auto-cancel is disabled")
+
+// Cancellation hold reason codes (billing_duplicate_refunds.cancel_hold).
+const (
+	duplicateHoldCanonicalPastDue  = "canonical_past_due"
+	duplicateHoldCanonicalNotLive  = "canonical_not_live"
+	duplicateHoldCanonicalReplaced = "canonical_replaced"
+	duplicateHoldCustomerChanged   = "customer_changed"
+	duplicateHoldAdminComp         = "admin_comp"
+	duplicateHoldAccountMissing    = "account_missing"
+	duplicateHoldAccountDeleting   = "account_deleting"
+)
+
+// duplicateResponsibilityAlert is the fixed log prefix operators alert on.
+const duplicateResponsibilityAlert = "billing: duplicate responsibility needs attention"
+
 type duplicateRefundObservation struct {
 	RefundID, InvoicePaymentID, PaymentIntentID, Status string
 	Amount                                              int64
@@ -95,14 +136,19 @@ type duplicateRefundProof struct {
 
 type duplicateSubscriptionProvider interface {
 	InspectDuplicateSubscription(context.Context, string, string, string, string) (DuplicateRefundPlan, error)
-	ReconcileDuplicateSubscription(context.Context, DuplicateRefundJob) (DuplicateRefundResult, error)
+	ReconcileDuplicateSubscription(context.Context, DuplicateRefundJob, func(context.Context) (string, error)) (DuplicateRefundResult, error)
+	DuplicateCanonicalSubscription(context.Context, string) (SubscriptionInfo, bool, error)
 }
 
 type duplicateRefundStore interface {
 	DuplicateRefundBySubscription(context.Context, string) (DuplicateRefundJob, bool, error)
-	PutDuplicateRefund(context.Context, DuplicateRefundPlan, int64) (DuplicateRefundJob, error)
+	PutDuplicateRefund(context.Context, DuplicateRefundPlan, bool, int64) (DuplicateRefundJob, error)
 	SaveDuplicateRefund(context.Context, DuplicateRefundJob, DuplicateRefundResult, error, int64) error
-	ListDuplicateRefunds(context.Context, int) ([]DuplicateRefundJob, error)
+	SaveDuplicateRefundBeforeReinspection(context.Context, DuplicateRefundJob, DuplicateRefundResult, int64) error
+	RecordDuplicateRefundError(context.Context, DuplicateRefundJob, error, int64) error
+	ListDuplicateRefunds(context.Context, int, int64) ([]DuplicateRefundJob, error)
+	DuplicateCancelAuthority(context.Context, string) (duplicateCancelAuthority, error)
+	HoldDuplicateRefundCancellation(context.Context, string, duplicateHoldEvidence) (string, error)
 }
 
 func duplicateRefundID(subscriptionID string) string {
@@ -163,8 +209,8 @@ func (s *SQLiteStore) DuplicateRefundBySubscription(ctx context.Context, subscri
 	var row DuplicateRefundJob
 	var raw string
 	var canceled, refunded int
-	err := s.reader().QueryRowContext(ctx, `SELECT id,user_id,customer_id,canonical_subscription_id,duplicate_subscription_id,invoice_id,constituents_json,state,manual_reason,subscription_canceled,refund_complete,attempts,revision,liability_revision,last_error,created_at,updated_at FROM billing_duplicate_refunds WHERE duplicate_subscription_id=?`, subscriptionID).
-		Scan(&row.ID, &row.UserID, &row.CustomerID, &row.CanonicalSubscriptionID, &row.DuplicateSubscriptionID, &row.InvoiceID, &raw, &row.State, &row.ManualReason, &canceled, &refunded, &row.Attempts, &row.Revision, &row.LiabilityRevision, &row.LastError, &row.CreatedAt, &row.UpdatedAt)
+	err := s.reader().QueryRowContext(ctx, `SELECT id,user_id,customer_id,canonical_subscription_id,duplicate_subscription_id,invoice_id,constituents_json,state,manual_reason,subscription_canceled,refund_complete,attempts,revision,liability_revision,last_error,created_at,updated_at,discovered_at,cancel_hold,hold_evidence,next_audit_at FROM billing_duplicate_refunds WHERE duplicate_subscription_id=?`, subscriptionID).
+		Scan(&row.ID, &row.UserID, &row.CustomerID, &row.CanonicalSubscriptionID, &row.DuplicateSubscriptionID, &row.InvoiceID, &raw, &row.State, &row.ManualReason, &canceled, &refunded, &row.Attempts, &row.Revision, &row.LiabilityRevision, &row.LastError, &row.CreatedAt, &row.UpdatedAt, &row.DiscoveredAt, &row.CancelHold, &row.HoldEvidence, &row.NextAuditAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return DuplicateRefundJob{}, false, nil
 	}
@@ -240,6 +286,8 @@ func ListDuplicateRefundEvidence(ctx context.Context, store *SQLiteStore, select
 	out.State, out.ManualReason, out.HasError = job.State, job.ManualReason, job.LastError != ""
 	out.SubscriptionCanceled, out.RefundComplete = job.SubscriptionCanceled, job.RefundComplete
 	out.Attempts, out.Revision, out.LiabilityRevision, out.Liabilities = job.Attempts, job.Revision, job.LiabilityRevision, job.Liabilities
+	out.DiscoveredAt, out.LiabilitiesUnknown = job.DiscoveredAt, job.DiscoveredAt == 0
+	out.CancelHold, out.HoldEvidence = job.CancelHold, job.HoldEvidence
 	for _, liability := range job.Liabilities {
 		out.Payments = append(out.Payments, liability.Payments...)
 	}
@@ -254,6 +302,8 @@ func ListDuplicateRefundEvidence(ctx context.Context, store *SQLiteStore, select
 		return DuplicateRefundEvidence{}, err
 	}
 	switch {
+	case job.DiscoveredAt == 0:
+		out.Resolution = "liabilities_unknown"
 	case job.State == "terminal" && job.ManualReason == "no_refund_needed":
 		out.Resolution = "no_refund_needed"
 	case job.State == "terminal" && out.ActionState == "succeeded":
@@ -867,7 +917,7 @@ func finishDuplicateRefundAction(ctx context.Context, store *SQLiteStore, job Du
 	if n, _ := res.RowsAffected(); n != 1 {
 		return errors.New("account: stale duplicate refund action")
 	}
-	res, err = tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state='terminal',manual_reason='',refund_complete=1,last_error='',revision=revision+1,next_audit_at=?,updated_at=? WHERE id=? AND state='manual' AND liability_revision=?`, now+6*60*60, now, job.ID, action.LiabilityRevision)
+	res, err = tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state='terminal',manual_reason='',refund_complete=1,last_error='',revision=revision+1,next_audit_at=?,updated_at=? WHERE id=? AND state='manual' AND liability_revision=? AND discovered_at>0`, now+6*60*60, now, job.ID, action.LiabilityRevision)
 	if err != nil {
 		return err
 	}
@@ -891,6 +941,9 @@ func ResolveDuplicateRefund(ctx context.Context, store *SQLiteStore, biller Bill
 	}
 	if job.State != "manual" && job.State != "terminal" {
 		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund job is not manual")
+	}
+	if job.DiscoveredAt == 0 {
+		return DuplicateRefundOperatorResult{}, errors.New("account: duplicate refund liabilities are unknown until one complete inspection is recorded")
 	}
 	_, currentDigest, err := duplicateRefundLiabilitySnapshot(job.Liabilities)
 	if err != nil {
@@ -930,7 +983,15 @@ func ResolveDuplicateRefund(ctx context.Context, store *SQLiteStore, biller Bill
 	return DuplicateRefundOperatorResult{ActionID: action.ID, State: "succeeded"}, nil
 }
 
-func (s *SQLiteStore) PutDuplicateRefund(ctx context.Context, plan DuplicateRefundPlan, now int64) (DuplicateRefundJob, error) {
+// PutDuplicateRefund appends plan's liabilities to the responsibility for its
+// duplicate subscription, creating it when absent. fullInspection must be true
+// only when plan is the result of one COMPLETE inspection of the duplicate's
+// invoice history; it is what turns an unknown liability set (discovered_at=0)
+// into a known one. A single observed invoice passes false.
+func (s *SQLiteStore) PutDuplicateRefund(ctx context.Context, plan DuplicateRefundPlan, fullInspection bool, now int64) (DuplicateRefundJob, error) {
+	if fullInspection && now <= 0 {
+		return DuplicateRefundJob{}, errors.New("account: duplicate refund inspection time is required")
+	}
 	if plan.UserID == "" || plan.CustomerID == "" || plan.CanonicalSubscriptionID == "" || plan.DuplicateSubscriptionID == "" || plan.CanonicalSubscriptionID == plan.DuplicateSubscriptionID {
 		return DuplicateRefundJob{}, errors.New("account: duplicate refund identity is incomplete")
 	}
@@ -1018,6 +1079,13 @@ func (s *SQLiteStore) PutDuplicateRefund(ctx context.Context, plan DuplicateRefu
 			return DuplicateRefundJob{}, err
 		}
 	}
+	if fullInspection {
+		// Monotonic: a later full inspection can only move the evidence time
+		// forward, and nothing but this branch ever makes it non-zero.
+		if _, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET discovered_at=MAX(discovered_at,?) WHERE id=?`, now, id); err != nil {
+			return DuplicateRefundJob{}, err
+		}
+	}
 	var got DuplicateRefundJob
 	var gotRaw string
 	var canceled, refunded int
@@ -1057,10 +1125,12 @@ func (s *SQLiteStore) AppendCanonicalDuplicatePaidInvoice(ctx context.Context, i
 	if job.CustomerID != invoice.CustomerID {
 		return errors.New("account: canonical duplicate paid invoice customer changed")
 	}
+	// One invoice is not a complete inspection: an unknown placeholder must
+	// stay unknown (fullInspection=false).
 	_, err = s.PutDuplicateRefund(ctx, DuplicateRefundPlan{
 		UserID: job.UserID, CustomerID: job.CustomerID, CanonicalSubscriptionID: job.CanonicalSubscriptionID, DuplicateSubscriptionID: job.DuplicateSubscriptionID,
 		Liabilities: []DuplicateRefundLiability{{InvoiceID: invoice.InvoiceID, Status: "paid", AmountPaid: invoice.AmountPaid, Payments: invoice.Payments, ManualReason: duplicateRefundManualReason(invoice)}},
-	}, now)
+	}, false, now)
 	return err
 }
 
@@ -1077,6 +1147,22 @@ func (s *SQLiteStore) HasDuplicateRefundSubscription(ctx context.Context, subscr
 }
 
 func (s *SQLiteStore) SaveDuplicateRefund(ctx context.Context, job DuplicateRefundJob, result DuplicateRefundResult, providerErr error, now int64) error {
+	return s.saveDuplicateRefund(ctx, job, result, providerErr, now, true)
+}
+
+// SaveDuplicateRefundBeforeReinspection persists a cancellation observed in
+// this run BEFORE the post-cancel inspection has re-read the liabilities. It can
+// never make the job terminal or refund_complete: a liability can still appear
+// between the pre-cancel inspection and the DELETE, and a failed re-inspection
+// must leave the job for the next worker run instead of ending it.
+func (s *SQLiteStore) SaveDuplicateRefundBeforeReinspection(ctx context.Context, job DuplicateRefundJob, result DuplicateRefundResult, now int64) error {
+	return s.saveDuplicateRefund(ctx, job, result, nil, now, false)
+}
+
+func (s *SQLiteStore) saveDuplicateRefund(ctx context.Context, job DuplicateRefundJob, result DuplicateRefundResult, providerErr error, now int64, allowTerminal bool) error {
+	if !allowTerminal {
+		result.RefundComplete = false
+	}
 	state, manual, lastError := "pending", result.ManualReason, ""
 	if result.SubscriptionCanceled && result.RefundComplete && len(job.Liabilities) == 0 {
 		manual = "no_refund_needed"
@@ -1092,10 +1178,27 @@ func (s *SQLiteStore) SaveDuplicateRefund(ctx context.Context, job DuplicateRefu
 			manual = "refund_operator_required"
 		}
 	}
+	if !allowTerminal && state == "manual" && manual == "refund_operator_required" && result.ManualReason == "" && len(job.Liabilities) == 0 {
+		// Canceled, nothing known to be owed yet, re-inspection pending: keep the
+		// job ordinary pending work rather than claiming operator action.
+		state, manual = "pending", ""
+	}
 	if providerErr != nil {
 		lastError = providerErr.Error()
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET state=?,manual_reason=?,subscription_canceled=?,refund_complete=?,attempts=attempts+1,revision=revision+1,last_error=?,updated_at=? WHERE id=? AND state<>'terminal' AND liability_revision=?`, state, manual, b2i(result.SubscriptionCanceled), b2i(result.RefundComplete), lastError, now, job.ID, job.LiabilityRevision)
+	// terminal and refund_complete require durable discovery evidence
+	// (discovered_at>0), checked in the same fenced UPDATE that writes them: an
+	// unknown liability set is at most manual/liabilities_unknown. Cancellation is
+	// a monotonic fact, and a successful outcome resets the consecutive-failure
+	// counter the alert reads. cancel_hold and hold_evidence are never written.
+	res, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET
+ state=CASE WHEN ?='terminal' AND discovered_at=0 THEN 'manual' ELSE ? END,
+ manual_reason=CASE WHEN ?='terminal' AND discovered_at=0 THEN 'liabilities_unknown' ELSE ? END,
+ subscription_canceled=MAX(subscription_canceled,?),
+ refund_complete=CASE WHEN discovered_at>0 THEN ? ELSE 0 END,
+ attempts=CASE WHEN ?<>'' THEN attempts+1 ELSE 0 END,
+ revision=revision+1,last_error=?,updated_at=?
+ WHERE id=? AND state<>'terminal' AND liability_revision=?`, state, state, state, manual, b2i(result.SubscriptionCanceled), b2i(result.RefundComplete), lastError, lastError, now, job.ID, job.LiabilityRevision)
 	if err != nil {
 		return err
 	}
@@ -1121,28 +1224,165 @@ func (s *SQLiteStore) SaveDuplicateRefund(ctx context.Context, job DuplicateRefu
 	return nil
 }
 
-func (s *SQLiteStore) ListDuplicateRefunds(ctx context.Context, limit int) ([]DuplicateRefundJob, error) {
+// RecordDuplicateRefundError records a failed inspection, authorization read or
+// provider call. It moves the job to the back of its scheduling class --
+// updated_at for open work, next_audit_at for a terminal audit -- so a
+// permanently failing job cannot monopolise the bounded worker scan. It never
+// touches the cancellation flags, liabilities, discovered_at or cancel_hold.
+func (s *SQLiteStore) RecordDuplicateRefundError(ctx context.Context, job DuplicateRefundJob, cause error, now int64) error {
+	message := "unknown duplicate refund failure"
+	if cause != nil {
+		message = cause.Error()
+	}
+	if len(message) > 1024 {
+		message = message[:1024]
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET attempts=attempts+1,last_error=?,updated_at=?,next_audit_at=CASE WHEN state='terminal' THEN ? ELSE next_audit_at END,revision=revision+1 WHERE id=?`, message, now, now+6*60*60, job.ID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		if err != nil {
+			return err
+		}
+		return errors.New("account: duplicate refund responsibility disappeared")
+	}
+	return nil
+}
+
+// duplicateCancelAuthority is the CURRENT persisted local state a duplicate
+// cancellation depends on, read in one statement immediately before DELETE.
+type duplicateCancelAuthority struct {
+	State, CancelHold                                                    string
+	UserID, CustomerID, CanonicalSubscriptionID, DuplicateSubscriptionID string
+	UserExists, DeletionPending                                          bool
+	UserCustomerID, UserSubscriptionID, UserPlanSource                   string
+	UserDeletedAt                                                        int64
+}
+
+// DuplicateCancelAuthority reads the job row and its user's billing binding in
+// one statement (one snapshot). "Account deletion in progress" is represented
+// by users.deleted_at>0 (CommitAccountDeletion) OR a pending account_deletion
+// row in billing_cancellation_outbox for the user -- the record
+// ReconcileBillingCancellations drives. The outbox is checked separately
+// because ClearAccountDeletion can zero deleted_at while that saga is still
+// pending. A purged account has no users row.
+func (s *SQLiteStore) DuplicateCancelAuthority(ctx context.Context, jobID string) (duplicateCancelAuthority, error) {
+	var a duplicateCancelAuthority
+	var exists, pending int
+	err := s.reader().QueryRowContext(ctx, `SELECT r.state,r.cancel_hold,r.user_id,r.customer_id,r.canonical_subscription_id,r.duplicate_subscription_id,
+ u.id IS NOT NULL,COALESCE(u.stripe_customer_id,''),COALESCE(u.stripe_subscription_id,''),COALESCE(u.plan_source,''),COALESCE(u.deleted_at,0),
+ EXISTS(SELECT 1 FROM billing_cancellation_outbox o WHERE o.billing_subject_id=r.user_id AND o.provider='stripe' AND o.state='pending' AND o.mode='account_deletion')
+ FROM billing_duplicate_refunds r LEFT JOIN users u ON u.id=r.user_id WHERE r.id=?`, jobID).
+		Scan(&a.State, &a.CancelHold, &a.UserID, &a.CustomerID, &a.CanonicalSubscriptionID, &a.DuplicateSubscriptionID, &exists, &a.UserCustomerID, &a.UserSubscriptionID, &a.UserPlanSource, &a.UserDeletedAt, &pending)
+	if err != nil {
+		return duplicateCancelAuthority{}, err
+	}
+	a.UserExists, a.DeletionPending = exists != 0, pending != 0
+	return a, nil
+}
+
+// duplicateHoldEvidence is one append-only entry of hold_evidence.
+type duplicateHoldEvidence struct {
+	At            int64  `json:"at"`
+	Reason        string `json:"reason"`
+	Path          string `json:"path"`
+	Actor         string `json:"actor"`
+	CanonicalSeen string `json:"canonical_seen"`
+	BindingSeen   string `json:"binding_seen"`
+	CustomerSeen  string `json:"customer_seen"`
+}
+
+// HoldDuplicateRefundCancellation sets cancel_hold when it is empty (an existing
+// hold is preserved) and appends one evidence entry, atomically. It returns the
+// hold now in force.
+func (s *SQLiteStore) HoldDuplicateRefundCancellation(ctx context.Context, jobID string, evidence duplicateHoldEvidence) (string, error) {
+	if evidence.Reason == "" {
+		return "", errors.New("account: duplicate cancellation hold reason is required")
+	}
+	raw, err := json.Marshal(evidence)
+	if err != nil {
+		return "", err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET cancel_hold=CASE WHEN cancel_hold='' THEN ? ELSE cancel_hold END,hold_evidence=json_insert(hold_evidence,'$[#]',json(?)),revision=revision+1 WHERE id=?`, evidence.Reason, string(raw), jobID)
+	if err != nil {
+		return "", err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		if err != nil {
+			return "", err
+		}
+		return "", errors.New("account: duplicate refund responsibility disappeared")
+	}
+	var hold string
+	if err := tx.QueryRowContext(ctx, `SELECT cancel_hold FROM billing_duplicate_refunds WHERE id=?`, jobID).Scan(&hold); err != nil {
+		return "", err
+	}
+	if hold == "" {
+		return "", errors.New("account: duplicate cancellation hold was not recorded")
+	}
+	return hold, tx.Commit()
+}
+
+// ListDuplicateRefunds selects one bounded worker batch with a quota per class
+// so neither can starve the other: at most limit*3/4 open (non-terminal) jobs,
+// oldest updated_at first, and at most limit/4 due terminal audits, earliest
+// next_audit_at first. A class that does not use its quota lends it to the
+// other; the total never exceeds limit. Every run outcome advances the
+// ordering key (Save/RecordDuplicateRefundError/Put), so the batch rotates.
+func (s *SQLiteStore) ListDuplicateRefunds(ctx context.Context, limit int, now int64) ([]DuplicateRefundJob, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	rows, err := s.reader().QueryContext(ctx, `SELECT duplicate_subscription_id FROM billing_duplicate_refunds WHERE state<>'terminal' OR next_audit_at<=? ORDER BY CASE WHEN state='terminal' THEN 1 ELSE 0 END,next_audit_at,updated_at,id LIMIT ?`, time.Now().Unix(), limit)
+	openQuota := limit - limit/4
+	scan := func(query string, args ...any) ([]string, error) {
+		rows, err := s.reader().QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var ids []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			ids = append(ids, id)
+		}
+		return ids, rows.Err()
+	}
+	open, err := scan(`SELECT duplicate_subscription_id FROM billing_duplicate_refunds WHERE state<>'terminal' ORDER BY updated_at,id LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
+	due, err := scan(`SELECT duplicate_subscription_id FROM billing_duplicate_refunds WHERE state='terminal' AND next_audit_at<=? ORDER BY next_audit_at,id LIMIT ?`, now, limit)
+	if err != nil {
 		return nil, err
 	}
-	out := make([]DuplicateRefundJob, 0, len(ids))
-	for _, id := range ids {
+	takeOpen := len(open)
+	if takeOpen > openQuota && takeOpen > limit-len(due) {
+		takeOpen = openQuota
+		if limit-len(due) > takeOpen {
+			takeOpen = limit - len(due)
+		}
+	}
+	takeDue := len(due)
+	if takeDue > limit-takeOpen {
+		takeDue = limit - takeOpen
+	}
+	selected := append(append([]string(nil), open[:takeOpen]...), due[:takeDue]...)
+	seen := map[string]bool{}
+	out := make([]DuplicateRefundJob, 0, len(selected))
+	for _, id := range selected {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
 		row, ok, err := s.DuplicateRefundBySubscription(ctx, id)
 		if err != nil {
 			return nil, err
@@ -1172,7 +1412,7 @@ func (s *Service) reconcileDuplicateSubscription(ctx context.Context, user User,
 		if err != nil {
 			return err
 		}
-		job, err = store.PutDuplicateRefund(ctx, plan, s.Now().Unix())
+		job, err = store.PutDuplicateRefund(ctx, plan, true, s.Now().Unix())
 		if err != nil {
 			return err
 		}
@@ -1180,29 +1420,129 @@ func (s *Service) reconcileDuplicateSubscription(ctx context.Context, user User,
 	return s.runDuplicateRefund(ctx, store, provider, job)
 }
 
+// duplicateCancelAuthorizer returns the check the provider runs after reading
+// the duplicate and immediately before DELETE. It re-reads the CURRENT persisted
+// job and user rows (never the caller's snapshot), then Stripe's canonical
+// subscription. Any refusal becomes a durable cancel_hold with evidence; an
+// unreadable input is a retryable error. Neither issues a DELETE.
+//
+// Residual, documented rather than claimed away: Stripe (the canonical being
+// canceled) and the local rows (binding, comp, deletion, hold) can still change
+// in the milliseconds between this check and the DELETE.
+func (s *Service) duplicateCancelAuthorizer(store duplicateRefundStore, provider duplicateSubscriptionProvider, job DuplicateRefundJob) func(context.Context) (string, error) {
+	return func(ctx context.Context) (string, error) {
+		if s.cfg.DisableBillingDuplicateAutoCancel {
+			return "", errDuplicateAutoCancelDisabled
+		}
+		if job.CanonicalSubscriptionID == "" || job.CanonicalSubscriptionID == job.DuplicateSubscriptionID {
+			return "", errors.New("billing: duplicate cancellation has no distinct canonical subscription")
+		}
+		current, err := store.DuplicateCancelAuthority(ctx, job.ID)
+		if err != nil {
+			return "", fmt.Errorf("billing: read duplicate cancellation authority: %w", err)
+		}
+		if current.CancelHold != "" {
+			return current.CancelHold, nil
+		}
+		if current.State == "terminal" {
+			return "", errors.New("billing: duplicate refund job is terminal; cancellation is not authorized")
+		}
+		if current.UserID != job.UserID || current.CustomerID != job.CustomerID || current.CanonicalSubscriptionID != job.CanonicalSubscriptionID || current.DuplicateSubscriptionID != job.DuplicateSubscriptionID {
+			return "", errors.New("billing: duplicate refund responsibility identity changed")
+		}
+		evidence := duplicateHoldEvidence{At: s.Now().Unix(), Actor: "system", Path: "duplicate_cancel_authorization", BindingSeen: current.UserSubscriptionID, CustomerSeen: current.UserCustomerID}
+		switch {
+		case !current.UserExists:
+			evidence.Reason = duplicateHoldAccountMissing
+		case current.UserDeletedAt > 0 || current.DeletionPending:
+			evidence.Reason = duplicateHoldAccountDeleting
+		case current.UserPlanSource == "admin":
+			evidence.Reason = duplicateHoldAdminComp
+		case current.UserCustomerID != job.CustomerID:
+			evidence.Reason = duplicateHoldCustomerChanged
+		case current.UserSubscriptionID != job.CanonicalSubscriptionID:
+			evidence.Reason = duplicateHoldCanonicalReplaced
+		}
+		if evidence.Reason == "" {
+			canonical, missing, err := provider.DuplicateCanonicalSubscription(ctx, job.CanonicalSubscriptionID)
+			if err != nil {
+				return "", fmt.Errorf("billing: read canonical subscription: %w", err)
+			}
+			evidence.CanonicalSeen = "missing"
+			if !missing {
+				evidence.CanonicalSeen = canonical.Status
+			}
+			switch {
+			case missing:
+				evidence.Reason = duplicateHoldCanonicalNotLive
+			case canonical.CustomerID != job.CustomerID:
+				evidence.Reason = duplicateHoldCustomerChanged
+			case canonical.Status == "active" || canonical.Status == "trialing":
+				return "", nil
+			case canonical.Status == "past_due":
+				// Deliberately stricter than liveSubStatus: canceling a paying
+				// duplicate while the canonical is failing to charge could leave the
+				// customer with only a failing subscription.
+				evidence.Reason = duplicateHoldCanonicalPastDue
+			default:
+				evidence.Reason = duplicateHoldCanonicalNotLive
+			}
+		}
+		hold, err := store.HoldDuplicateRefundCancellation(ctx, job.ID, evidence)
+		if err != nil {
+			return "", fmt.Errorf("billing: persist duplicate cancellation hold: %w", err)
+		}
+		log.Printf("billing: duplicate cancellation held job=%s duplicate=%s reason=%s", job.ID, job.DuplicateSubscriptionID, hold)
+		return hold, nil
+	}
+}
+
 func (s *Service) runDuplicateRefund(ctx context.Context, store duplicateRefundStore, provider duplicateSubscriptionProvider, job DuplicateRefundJob) error {
+	fail := func(stage string, cause error) error {
+		if err := store.RecordDuplicateRefundError(ctx, job, fmt.Errorf("%s: %w", stage, cause), s.Now().Unix()); err != nil {
+			log.Printf("%s: job=%s duplicate=%s reason=persistence_failed stage=record_error cause=%q err=%v", duplicateResponsibilityAlert, job.ID, job.DuplicateSubscriptionID, cause.Error(), err)
+		}
+		return cause
+	}
+	persistFail := func(stage string, cause error) error {
+		log.Printf("%s: job=%s duplicate=%s reason=persistence_failed stage=%s err=%v", duplicateResponsibilityAlert, job.ID, job.DuplicateSubscriptionID, stage, cause)
+		return fail(stage, cause)
+	}
 	plan, err := provider.InspectDuplicateSubscription(ctx, job.UserID, job.CustomerID, job.CanonicalSubscriptionID, job.DuplicateSubscriptionID)
 	if err != nil {
-		return err
+		return fail("inspect", err)
 	}
-	job, err = store.PutDuplicateRefund(ctx, plan, s.Now().Unix())
+	current, err := store.PutDuplicateRefund(ctx, plan, true, s.Now().Unix())
 	if err != nil {
-		return err
+		return persistFail("put_inspection", err)
 	}
-	result, providerErr := provider.ReconcileDuplicateSubscription(ctx, job)
-	if err := store.SaveDuplicateRefund(ctx, job, result, providerErr, s.Now().Unix()); err != nil {
-		return err
-	}
+	job = current
+	wasCanceled := job.SubscriptionCanceled
+	result, providerErr := provider.ReconcileDuplicateSubscription(ctx, job, s.duplicateCancelAuthorizer(store, provider, job))
 	if providerErr != nil {
-		return providerErr
+		return fail("cancel", providerErr)
 	}
-	plan, err = provider.InspectDuplicateSubscription(ctx, job.UserID, job.CustomerID, job.CanonicalSubscriptionID, job.DuplicateSubscriptionID)
-	if err != nil {
-		return err
+	if result.SubscriptionCanceled && !wasCanceled {
+		// The inspection above predates this run's cancellation. Persist the
+		// cancellation fact, then re-inspect; only that later inspection may
+		// conclude there is nothing to refund.
+		if err := store.SaveDuplicateRefundBeforeReinspection(ctx, job, result, s.Now().Unix()); err != nil {
+			return persistFail("save_canceled", err)
+		}
+		plan, err = provider.InspectDuplicateSubscription(ctx, job.UserID, job.CustomerID, job.CanonicalSubscriptionID, job.DuplicateSubscriptionID)
+		if err != nil {
+			return fail("post_cancel_inspect", err)
+		}
+		current, err = store.PutDuplicateRefund(ctx, plan, true, s.Now().Unix())
+		if err != nil {
+			return persistFail("put_post_cancel_inspection", err)
+		}
+		job = current
+		result.RefundComplete = len(job.Liabilities) == 0
+		result.ManualReason = job.ManualReason
 	}
-	job, err = store.PutDuplicateRefund(ctx, plan, s.Now().Unix())
-	if err != nil {
-		return err
+	if err := store.SaveDuplicateRefund(ctx, job, result, nil, s.Now().Unix()); err != nil {
+		return persistFail("save", err)
 	}
 	// Refunds are an operator-only action. The background worker's authority is
 	// deliberately limited to discovering durable liabilities and stopping the
@@ -1212,20 +1552,74 @@ func (s *Service) runDuplicateRefund(ctx context.Context, store duplicateRefundS
 	return nil
 }
 
+// duplicateHoldSince returns when the hold now in force was set, from the last
+// hold_evidence entry that records it (operator clears carry "cleared").
+func duplicateHoldSince(job DuplicateRefundJob) int64 {
+	var entries []map[string]any
+	if json.Unmarshal([]byte(job.HoldEvidence), &entries) != nil {
+		return 0
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		if _, cleared := entries[i]["cleared"]; cleared {
+			continue
+		}
+		reason, _ := entries[i]["reason"].(string)
+		at, _ := entries[i]["at"].(float64)
+		if reason == job.CancelHold && at > 0 {
+			return int64(at)
+		}
+	}
+	return 0
+}
+
+// duplicateResponsibilityAttention lists why a job needs an operator: about a
+// day of consecutive failures, liabilities still unknown after a day, or a
+// cancellation hold older than three days.
+func duplicateResponsibilityAttention(job DuplicateRefundJob, now int64) []string {
+	var reasons []string
+	if job.Attempts >= 4 {
+		reasons = append(reasons, "repeated_failures")
+	}
+	if job.DiscoveredAt == 0 && now-job.CreatedAt > 24*60*60 {
+		reasons = append(reasons, "liabilities_unknown")
+	}
+	if job.CancelHold != "" {
+		since := duplicateHoldSince(job)
+		if since == 0 {
+			since = job.CreatedAt
+		}
+		if now-since > 72*60*60 {
+			reasons = append(reasons, "cancel_hold")
+		}
+	}
+	return reasons
+}
+
 func (s *Service) ReconcileDuplicateRefunds(ctx context.Context) {
 	store, ok := s.Store().(duplicateRefundStore)
 	provider, providerOK := s.biller.(duplicateSubscriptionProvider)
 	if !ok || !providerOK {
 		return
 	}
-	jobs, err := store.ListDuplicateRefunds(ctx, 100)
+	jobs, err := store.ListDuplicateRefunds(ctx, 100, s.Now().Unix())
 	if err != nil {
 		log.Printf("billing: list duplicate refund responsibilities: %v", err)
 		return
 	}
 	for _, job := range jobs {
+		if err := ctx.Err(); err != nil {
+			return
+		}
 		if err := s.runDuplicateRefund(ctx, store, provider, job); err != nil {
 			log.Printf("billing: reconcile duplicate refund %s: %v", job.ID, err)
+		}
+		after, found, err := store.DuplicateRefundBySubscription(ctx, job.DuplicateSubscriptionID)
+		if err != nil || !found {
+			log.Printf("%s: job=%s duplicate=%s reason=persistence_failed stage=reload found=%t err=%v", duplicateResponsibilityAlert, job.ID, job.DuplicateSubscriptionID, found, err)
+			continue
+		}
+		if reasons := duplicateResponsibilityAttention(after, s.Now().Unix()); len(reasons) > 0 {
+			log.Printf("%s: job=%s duplicate=%s reason=%s state=%s attempts=%d discovered_at=%d cancel_hold=%s last_error=%q", duplicateResponsibilityAlert, after.ID, after.DuplicateSubscriptionID, strings.Join(reasons, ","), after.State, after.Attempts, after.DiscoveredAt, after.CancelHold, after.LastError)
 		}
 	}
 }
@@ -1257,4 +1651,48 @@ func duplicatePaymentIdentitiesEqual(a, b []CanonicalStripeInvoicePayment) bool 
 		}
 	}
 	return true
+}
+
+// migrateDuplicateRefundResponsibility adds the discovery-evidence and
+// cancellation-hold columns (N-0930-1). Additive with defaults, so an older
+// binary keeps reading and writing rows. Existing rows were always written
+// after a complete inspection, so their discovered_at is backfilled from
+// created_at -- in the SAME migrateOnce transaction as the ALTER, and only when
+// this migration added the column, so a crash cannot leave legacy rows unknown
+// and a later boot can never mistake a genuine unknown row for a legacy one.
+//
+// Mixed-version note: rows an OLDER binary inserts after this migration carry
+// discovered_at=0 (unknown) until this binary's next complete inspection -- the
+// conservative direction. An older binary does not honour cancel_hold or the
+// discovered_at terminal gate at all; rollout must not run one alongside this
+// binary (see TestN0930_1LegacyBinarySQLIgnoresHoldAndDiscovery).
+func migrateDuplicateRefundResponsibility(db *sql.DB) error {
+	return migrateOnce(db, "billing_duplicate_refund_responsibility_v1", func(tx *sql.Tx) error {
+		addedDiscovery := false
+		for _, column := range []struct{ name, ddl string }{
+			{"discovered_at", `ALTER TABLE billing_duplicate_refunds ADD COLUMN discovered_at INTEGER NOT NULL DEFAULT 0`},
+			{"cancel_hold", `ALTER TABLE billing_duplicate_refunds ADD COLUMN cancel_hold TEXT NOT NULL DEFAULT ''`},
+			{"hold_evidence", `ALTER TABLE billing_duplicate_refunds ADD COLUMN hold_evidence TEXT NOT NULL DEFAULT '[]'`},
+		} {
+			exists, err := columnExistsTx(tx, "billing_duplicate_refunds", column.name)
+			if err != nil {
+				return err
+			}
+			if exists {
+				continue
+			}
+			if _, err := tx.ExecContext(context.Background(), column.ddl); err != nil {
+				return err
+			}
+			if column.name == "discovered_at" {
+				addedDiscovery = true
+			}
+		}
+		if addedDiscovery {
+			if _, err := tx.ExecContext(context.Background(), `UPDATE billing_duplicate_refunds SET discovered_at=MAX(created_at,1) WHERE discovered_at=0`); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

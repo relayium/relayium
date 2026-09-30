@@ -400,6 +400,7 @@ func main() {
 	billingDuplicateActor := flag.String("billing-duplicate-actor", "", "operator-only: accountable actor for a duplicate refund")
 	billingDuplicateReason := flag.String("billing-duplicate-reason", "", "operator-only: audited reason for a duplicate refund")
 	billingDuplicateExpectedLiabilityRevision := flag.Int64("billing-duplicate-expected-liability-revision", -1, "operator-only: exact liability revision printed by -billing-duplicate-list")
+	billingDuplicateAutoCancel := flag.Bool("billing-duplicate-auto-cancel", envBool("RELAYIUM_BILLING_DUPLICATE_AUTO_CANCEL", true), "automatically cancel a discovered duplicate Stripe subscription (inline webhook and worker); false keeps liability inspection but never cancels")
 	billingDuplicateExpectedDigest := flag.String("billing-duplicate-expected-digest", "", "operator-only: exact liability digest printed by -billing-duplicate-list")
 	billingAppleLegacyList := flag.String("billing-apple-legacy-list", "", "operator-only: list sanitized recovery evidence for one supported Apple attempt id or account email, then exit")
 	billingAppleLegacyRelease := flag.String("billing-apple-legacy-release", "", "operator-only: release one evidence-approved Apple attempt id or account email, then exit")
@@ -928,6 +929,8 @@ func main() {
 			StripePortalConfig:   *stripePortalConfig,
 			BillingHoldSecret:    *billingHoldSecret,
 			ReleaseCheck:         *releaseCheck,
+
+			DisableBillingDuplicateAutoCancel: !*billingDuplicateAutoCancel,
 		})
 		// Device-IP retention is an account privacy obligation, not a stored-file
 		// feature, so it runs even if blob storage (and its GC) is disabled.
