@@ -11,8 +11,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -168,17 +170,35 @@ func TestB_L4HeartbeatSkipsAMismatchedAllocAndRecordsTheRest(t *testing.T) {
 	s := &Service{store: st, cfg: Config{NodeToken: "fleet-secret"}, now: func() time.Time { return time.Unix(50, 0) }}
 	mux := http.NewServeMux()
 	s.RegisterNodeRoutes(mux)
-	hb := nodeHeartbeatReq{NodeID: n.ID, Status: "ok", Usage: []nodeUsage{
-		{AllocID: "shared", Username: "9999:" + victim.ID + ".code", RelayedBytes: 90000}, // refused: alloc owned by node "other"
-		{AllocID: "fresh", Username: "9999:" + victim.ID + ".code", RelayedBytes: 700},    // recorded
-	}}
-	body, _ := json.Marshal(hb)
-	r := httptest.NewRequest("POST", "/api/nodes/heartbeat", bytes.NewReader(body))
-	r.Header.Set("Authorization", "Bearer fleet-secret")
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, r)
-	if w.Code != http.StatusOK {
-		t.Fatalf("heartbeat: %d body=%s", w.Code, w.Body)
+	// send posts one heartbeat and returns what it logged.
+	send := func(usage []nodeUsage) string {
+		t.Helper()
+		body, _ := json.Marshal(nodeHeartbeatReq{NodeID: n.ID, Status: "ok", Usage: usage})
+		r := httptest.NewRequest("POST", "/api/nodes/heartbeat", bytes.NewReader(body))
+		r.Header.Set("Authorization", "Bearer fleet-secret")
+		w := httptest.NewRecorder()
+		var buf bytes.Buffer
+		old := log.Writer()
+		log.SetOutput(&buf)
+		mux.ServeHTTP(w, r)
+		log.SetOutput(old)
+		if w.Code != http.StatusOK {
+			t.Fatalf("heartbeat: %d body=%s", w.Code, w.Body)
+		}
+		return buf.String()
+	}
+	// The refused report claims far more than implausiblePerHeartbeat: it billed
+	// nobody, so it must not raise the implausible-attribution warning naming
+	// the victim.
+	out := send([]nodeUsage{
+		{AllocID: "shared", Username: "9999:" + victim.ID + ".code", RelayedBytes: 200 << 30}, // refused: alloc owned by node "other"
+		{AllocID: "fresh", Username: "9999:" + victim.ID + ".code", RelayedBytes: 700},        // recorded
+	})
+	if !strings.Contains(out, "record alloc shared failed") {
+		t.Fatalf("the refusal was not logged: %q", out)
+	}
+	if strings.Contains(out, "attributed") {
+		t.Fatalf("a refused report raised the implausible-attribution warning: %q", out)
 	}
 	if row := b_l4AllocRow(t, st, "shared"); row.Bytes != 1000 || row.NodeID.String != "other" {
 		t.Fatalf("the refused alloc's row moved: %+v", row)
@@ -188,5 +208,12 @@ func TestB_L4HeartbeatSkipsAMismatchedAllocAndRecordsTheRest(t *testing.T) {
 	}
 	if q, _ := st.UserRelayedSince(ctx, victim.ID, 0); q != 1700 {
 		t.Fatalf("victim's billed relay = %d, want 1000 + 700", q)
+	}
+
+	// Control: an ACCEPTED report of the same size still warns, so the check
+	// above is not passing because the capture or the warning is dead.
+	out = send([]nodeUsage{{AllocID: "big", Username: "9999:" + victim.ID + ".code", RelayedBytes: 200 << 30}})
+	if !strings.Contains(out, "WARNING") || !strings.Contains(out, "attributed") || !strings.Contains(out, victim.ID) {
+		t.Fatalf("an accepted implausible report did not warn: %q", out)
 	}
 }

@@ -1423,18 +1423,22 @@ func generateAdminTOTP(adminUser string) error {
 
 // coturnRedisMeteringDisabledLog is the one startup line printed when
 // -redis-addr / RELAYIUM_REDIS_ADDR is set.
-const coturnRedisMeteringDisabledLog = "metering: -redis-addr/RELAYIUM_REDIS_ADDR is set but the direct coturn->Redis relay-byte ingest is DISABLED and nothing was started: it keys usage by coturn's raw session id, which restarts from zero on every coturn restart and is shared across coturn hosts, so a reused id would add one user's relay bytes to another user's bill. It stays off until the re-keyed ingest (F02) replaces it; unset the variable to silence this line."
+const coturnRedisMeteringDisabledLog = "metering: -redis-addr/RELAYIUM_REDIS_ADDR is set but the direct coturn->Redis relay-byte ingest is DISABLED and nothing was started: it keys usage by coturn's raw session id, which restarts from zero on every coturn restart and is shared across coturn hosts, so a reused id collides with an earlier allocation: the usage ledger now refuses a report whose user does not own that id, and keep-max folds a same-user reuse into the old total, so those relay bytes would go unmetered or undercounted. It stays off until the re-keyed ingest (F02) replaces it; unset the variable to silence this line."
 
 // guardCoturnRedisMetering is the whole of the -redis-addr wiring. It never
 // starts the metering worker, its Redis subscription or its silence watchdog.
 //
 // Invariant (money): no coturn byte report may reach the usage ledger through
-// this path. usage_events.alloc_id is the ledger's primary key and RecordUsage
-// keeps an existing row's user_id, so feeding it coturn's reusable session ids
-// would charge a later allocation's bytes to whichever user first held that id
-// in the same period. Failing safe here means leaving coturn traffic unmetered,
-// exactly as production already runs (the flag is unset there), rather than
-// crashing the server or misattributing usage.
+// this path. usage_events.alloc_id is the ledger's primary key, and coturn's
+// session ids are reused (reset on restart, shared across hosts). RecordUsage
+// refuses a report whose (user_id, node_id) does not match the row already
+// holding that id (ErrUsageAllocOwnerMismatch, B-L4), so a reused id no longer
+// charges another user — but the later allocation then goes unmetered, and a
+// same-user reuse is folded into the old keep-max total and undercounted. The
+// ingest therefore stays disabled until the re-keyed ingest (F02) replaces it.
+// Failing safe here means leaving coturn traffic unmetered, exactly as
+// production already runs (the flag is unset there), rather than crashing the
+// server or metering it wrongly.
 //
 // It returns whether ingest was started, which is always false; the return
 // value exists so a test pins that contract.

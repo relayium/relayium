@@ -1336,8 +1336,10 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		}); err != nil {
 			// Log-and-continue: one bad alloc must not drop the rest.
 			log.Printf("node %s heartbeat: record alloc %s failed: %v", req.NodeID, u.AllocID, err)
-		}
-		if u.RelayedBytes > 0 {
+		} else if u.RelayedBytes > 0 {
+			// Only a report the ledger accepted counts toward the implausibility
+			// warning: a refused one (e.g. ErrUsageAllocOwnerMismatch) billed
+			// nobody, and must not name its would-be victim as having been billed.
 			attributed[userID] += u.RelayedBytes
 		}
 	}

@@ -1469,11 +1469,15 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		// A read error fails CLOSED here, exactly like the daily-quota read below
 		// (B-L2): this is the last traffic gate an upload passes, so admitting on
 		// an unanswered question would store an object the allowance may not
-		// cover. The refusal goes through the same fail as the over-limit one —
-		// drop the blob, keep the tombstone, no object, no daily-quota debit —
-		// and the bytes that moved stay metered, as they do for that refusal.
-		// The init pre-check and the download gates stay fail-open on purpose:
-		// they are availability trade-offs, and this gate backs them up.
+		// cover. The refusal goes through the same fail as the over-limit one:
+		// no object and no daily-quota debit; the tombstone stays; a non-pair
+		// session's blob is reclaimed settle-first (queued with any residual
+		// obligation, billed durably, then deleted — see reclaimRefusedUpload),
+		// while a pair-room session's blob is left to the room's void or the
+		// orphan pass. The bytes that moved stay metered, as for that refusal.
+		// The upload init pre-check stays fail-open on purpose (an availability
+		// trade-off) and this gate is its backstop for upload admission only; the
+		// download gates are separate, also fail-open, and not backed by this.
 		over, err := s.overTraffic(r.Context(), u.ID, 0)
 		if err != nil {
 			log.Printf("upload finalize %s: reading the monthly traffic allowance: %v; refusing", sess.ID, err)
