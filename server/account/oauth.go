@@ -61,7 +61,19 @@ func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.googleConfig().AuthCodeURL(state), http.StatusFound)
 }
 
+// clearOAuthCookie expires a one-shot login cookie (state or nonce). A callback
+// clears it on every outcome, so a state value is spent by its first use and
+// cannot be replayed for the rest of its lifetime. The attributes mirror the
+// ones it was set with, which is what makes browsers replace rather than add.
+func (s *Service) clearOAuthCookie(w http.ResponseWriter, name string, sameSite http.SameSite) {
+	http.SetCookie(w, &http.Cookie{
+		Name: name, Value: "", Path: "/", MaxAge: -1,
+		HttpOnly: true, Secure: s.CookieSecure(), SameSite: sameSite,
+	})
+}
+
 func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
+	s.clearOAuthCookie(w, oauthStateCookie, http.SameSiteLaxMode)
 	stateCookie, err := r.Cookie(oauthStateCookie)
 	if err != nil || stateCookie.Value == "" || stateCookie.Value != r.URL.Query().Get("state") {
 		http.Redirect(w, r, "/?login=error", http.StatusFound)

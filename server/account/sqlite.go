@@ -3107,6 +3107,12 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		// In THIS transaction, with the credentials, objects and key claims, so
 		// no request can hold a valid credential and a pre-deletion value at once.
 		{`UPDATE users SET upload_epoch = upload_epoch + 1 WHERE id=?`, []any{userID}},
+		// Likewise fence every credential check still in flight: a password login
+		// or reactivation that read the epoch before this commit inserts its
+		// session/bearer only AtEpoch, so bumping it here means none can land on
+		// the account after its sessions and bearers were deleted above. It also
+		// retires any outstanding epoch-bound email token (set-password proof).
+		{`UPDATE users SET credential_epoch = credential_epoch + 1 WHERE id=?`, []any{userID}},
 		// Before devices. REDUNDANT with target_device_id's ON DELETE CASCADE
 		// today, and kept anyway: it is scoped by user_id, so it does not depend
 		// on every task having a live device row, and it survives a future schema
