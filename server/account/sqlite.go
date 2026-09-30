@@ -6507,6 +6507,12 @@ const downloadMeterFailedReason = "download_meter_failed"
 // apply (its own wait is bounded by busy_timeout), which is exactly when the
 // bytes are owed. A non-nil return means the bytes are in neither place; the
 // caller logs who and how much.
+//
+// Bounded worst case: up to the caller's budget (5 s at both call sites) waiting
+// for the pool's one connection, then — because cancellation is removed — up to
+// busy_timeout (5 s) for each of the two statements while holding that single
+// connection, so roughly 5 s + 2 x busy_timeout in total, during which every
+// other user of the pool queues behind this call.
 func (s *SQLiteStore) MeterDownload(ctx context.Context, userID string, bytes, at int64) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {

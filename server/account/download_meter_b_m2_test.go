@@ -392,12 +392,12 @@ func TestB_M2_StoredLinkDownloadLogsALostBillWithoutFileIdentity(t *testing.T) {
 
 	var line string
 	for _, l := range strings.Split(logs, "\n") {
-		if strings.Contains(l, "download egress") && strings.Contains(l, owner.ID) {
+		if strings.Contains(l, "UNSETTLED BILL: download:") && strings.Contains(l, owner.ID) {
 			line = l
 		}
 	}
 	if line == "" {
-		t.Fatalf("no loss line for user %s in log:\n%s", owner.ID, logs)
+		t.Fatalf("no UNSETTLED BILL line for user %s in log:\n%s", owner.ID, logs)
 	}
 	if !strings.Contains(line, "77 bytes") {
 		t.Fatalf("loss line does not carry the byte count: %q", line)
@@ -434,4 +434,107 @@ func TestB_M2_InboxTaskDownloadWithARefusedMeterIsOwedAndSettledOnce(t *testing.
 	}
 	heal()
 	assertOwedOnceThenSettledOnce(t, h.store, uid, before, int64(len(payload)), at)
+}
+
+// slowStatsStore makes the statistics write spend its whole context — it
+// blocks until that context is done — and records the context the bill then
+// arrives with. The bill must not inherit the spent statistics budget.
+type slowStatsStore struct {
+	Store
+	mu        sync.Mutex
+	statsRuns int
+	meterRuns int
+	liveMeter int // MeterDownload calls whose ctx was still live on entry
+	metered   int64
+}
+
+func (s *slowStatsStore) AddDownloadStat(ctx context.Context, userID string, bytes int64) error {
+	<-ctx.Done()
+	s.mu.Lock()
+	s.statsRuns++
+	s.mu.Unlock()
+	return s.Store.AddDownloadStat(context.WithoutCancel(ctx), userID, bytes)
+}
+
+func (s *slowStatsStore) MeterDownload(ctx context.Context, userID string, bytes, at int64) error {
+	s.mu.Lock()
+	s.meterRuns++
+	if ctx.Err() == nil {
+		s.liveMeter++
+	}
+	s.metered += bytes
+	s.mu.Unlock()
+	return s.Store.MeterDownload(ctx, userID, bytes, at)
+}
+
+func (s *slowStatsStore) check(t *testing.T, raw *SQLiteStore, userID string, before, n, at int64) {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.statsRuns != 1 {
+		t.Fatalf("AddDownloadStat ran %d times, want 1 (the harness did not exhaust the stats budget)", s.statsRuns)
+	}
+	if s.meterRuns != 1 || s.metered != n {
+		t.Fatalf("MeterDownload ran %d times for %d bytes, want once for %d", s.meterRuns, s.metered, n)
+	}
+	if s.liveMeter != 1 {
+		t.Fatalf("MeterDownload was handed an already-expired context: the bill inherited the statistics budget")
+	}
+	if d := downloadMeter(t, raw, userID, at); d != before+n {
+		t.Fatalf("download meter = %d, want %d (exactly N once)", d, before+n)
+	}
+	if owed := owedRows(t, raw); len(owed) != 0 {
+		t.Fatalf("owed rows = %+v, want none", owed)
+	}
+}
+
+// The bill gets its own live budget, on both download paths, even when the
+// statistics write before it used up all of its own. Each case waits out the
+// 5 s statistics budget once, so they run in parallel.
+func TestB_M2_DownloadBillGetsItsOwnLiveBudget(t *testing.T) {
+	t.Run("stored-link", func(t *testing.T) {
+		t.Parallel()
+		ts, svc, store, mail := newFileServer(t)
+		ctx := context.Background()
+		cookie := loginCookie(t, ts, mail, "bm2-budget-link@example.test")
+		blob := bytes.Repeat([]byte("b"), 211)
+		resp := postUpload(t, ts, cookie, "?burnAfterRead=0&ttl=3600", uploadBody([]byte("m"), blob))
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("upload status = %d", resp.StatusCode)
+		}
+		var up struct {
+			ID string `json:"id"`
+		}
+		decodeJSON(t, resp, &up)
+		owner, _ := store.UpsertUserByEmail(ctx, "bm2-budget-link@example.test", "")
+		at := svc.now().Unix()
+		spy := &slowStatsStore{Store: svc.store}
+		svc.store = spy
+		downloadAll(t, ts.Client(), ts.URL+"/api/files/"+up.ID+"/blob")
+		spy.check(t, store, owner.ID, 0, int64(len(blob)), at)
+	})
+	t.Run("inbox", func(t *testing.T) {
+		t.Parallel()
+		h := newTaskObjectHarness(t)
+		uid := h.user(t, "bm2-budget-inbox@example.test")
+		tg := h.enrolTarget(t, uid, "server", inbox.AutoAcceptAuto, true)
+		payload := bytes.Repeat([]byte("i"), 222)
+		_, task := h.bindTask(t, tg, "bm2-budget", payload)
+		blobPath := "/api/devices/" + tg.deviceID + "/inbox/tasks/" + task["ID"].(string) + "/blob"
+		_, claim := h.claimOne(t, tg)
+		at := h.svc.now().Unix()
+		before := downloadMeter(t, h.store, uid, at)
+		spy := &slowStatsStore{Store: h.svc.store}
+		h.svc.store = spy
+		resp := h.do(t, "GET", blobPath, func(r *http.Request) {
+			r.Header.Set("Authorization", "Bearer "+tg.token)
+			r.Header.Set("X-Relayium-Inbox-Claim", claim)
+		})
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("claim-holder blob read: got %d, want 200", resp.StatusCode)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		spy.check(t, h.store, uid, before, int64(len(payload)), at)
+	})
 }

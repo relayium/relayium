@@ -957,7 +957,7 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		if !exempt {
 			mctx, mcancel := context.WithTimeout(context.Background(), 5*time.Second)
 			if err := s.store.MeterDownload(mctx, sf.UserID, n, s.now().Unix()); err != nil {
-				log.Printf("download: metering %d bytes of download egress for user %s failed; they stay unbilled: %v", n, sf.UserID, err)
+				log.Printf("UNSETTLED BILL: download: %d bytes of download egress for user %s could be neither metered nor journaled; they stay unbilled: %v", n, sf.UserID, err)
 			}
 			mcancel()
 		}

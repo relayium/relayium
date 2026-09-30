@@ -146,7 +146,7 @@ func (s *Service) handleInboxTaskBlob(w http.ResponseWriter, r *http.Request, u 
 		// outbox, and an error means neither.
 		mctx, mcancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := s.store.MeterDownload(mctx, sf.UserID, n, s.now().Unix()); err != nil {
-			log.Printf("inbox: metering %d bytes of download egress for user %s failed; they stay unbilled: %v", n, sf.UserID, err)
+			log.Printf("UNSETTLED BILL: inbox: %d bytes of download egress for user %s could be neither metered nor journaled; they stay unbilled: %v", n, sf.UserID, err)
 		}
 		mcancel()
 	}
