@@ -66,7 +66,7 @@ const en = article({
   updatedLabel: "Last updated",
   lead: [
     "Relayium can move clipboard-shaped content as well as files: a URL from your phone, a command for another computer, or a multiline code block. Messages are end-to-end encrypted; Relayium servers keep no message bodies or server-side history, but either endpoint can copy or retain received text.",
-    "The browser and command-line client each support text, but they are separate transports and cannot join each other's pairing codes. Choose one flow below and use it on both ends.",
+    "The browser and a current command-line client both support text and share the same pairing codes, so either can create the code and the other joins it. Only an older relayium keeps a separate, CLI-only pairing — update it or use the CLI on both ends.",
   ],
   browserHeading: "Browser: send a message to an online device",
   browserBody:
@@ -176,7 +176,7 @@ const zh = article({
   updatedLabel: "最近更新",
   lead: [
     "Relayium 不只能传文件，也能传适合剪贴板的内容：手机上的网址、要在另一台电脑执行的命令，或一整段多行代码。消息端到端加密；Relayium 服务器不保存消息正文或服务端历史，但任一端都能复制或留存收到的文本。",
-    "浏览器和命令行都支持文本，但它们是两套独立传输，不能加入彼此的配对码。下面任选一种方式，两端保持一致。",
+    "浏览器和当前版本的命令行都支持文本，并且共用同一种配对码：任何一方生成的码，另一方都能加入。只有旧版 relayium 仍是单独的、仅限 CLI 的配对——请更新它，或者两端都用 CLI。",
   ],
   browserHeading: "浏览器：给在线设备发送消息",
   browserBody:

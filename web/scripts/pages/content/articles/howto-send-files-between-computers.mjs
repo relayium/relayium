@@ -89,7 +89,7 @@ const en = {
           {
             symptom: "The card says relay is only issued to verified accounts.",
             code: ["https://relayium.com/cross-network   # the pairing card names the reason it was refused"],
-            fix: "The sender's email address has not been verified yet. Open the account panel, verify the address from the email Relayium sent, then create a new pairing code — the old one cannot pick up a relay it was already refused. Same-network transfers and the CLI are unaffected by this.",
+            fix: "The sender's email address has not been verified yet. Open the account panel, verify the address from the email Relayium sent, then create a new pairing code — the old one cannot pick up a relay it was already refused. Same-network transfers and the CLI's server-to-server push/sync are unaffected; CLI pairing-code sessions need the relay too.",
           },
           {
             symptom: "The card says this month's relay traffic is used up.",
@@ -236,7 +236,7 @@ const zh = {
           {
             symptom: "卡片提示中继只发给已验证的账号。",
             code: ["https://relayium.com/cross-network   # 配对卡片会写明被拒的原因"],
-            fix: "发送方的邮箱地址还没有验证。打开账户面板，用 Relayium 发出的那封邮件完成验证，然后重新生成一个配对码——旧的那个拿不到已经被拒绝过的中继。同网络传输和 CLI 都不受此影响。",
+            fix: "发送方的邮箱地址还没有验证。打开账户面板，用 Relayium 发出的那封邮件完成验证，然后重新生成一个配对码——旧的那个拿不到已经被拒绝过的中继。同网络传输以及 CLI 的服务器对服务器 push/sync 不受此影响；CLI 的配对码会话同样需要这条中继。",
           },
           {
             symptom: "卡片提示本月的中继流量已经用完。",

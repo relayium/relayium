@@ -178,7 +178,7 @@ $ echo $?
       },
       {
         q: "What happens if the cron job is interrupted halfway through?",
-        a: "It depends which command you scheduled. sync continues: the next run skips what already matches and carries on a partial file, and --no-resume turns that off. push does not resume in either protocol — it refuses a destination that already exists, which is why the push line above writes into a dated directory, so the next night is a clean full copy rather than a refusal. --no-resume is accepted by push and does nothing.",
+        a: "It depends which command you scheduled. sync continues: the next run skips what already matches and carries on a partial file, and --no-resume turns that off. push does not resume — it refuses a destination that already exists, so a scheduled push would need a fresh (for example dated) destination every run; that is why this guide schedules sync. --no-resume is accepted by push and does nothing.",
       },
       {
         q: "Can --delete accidentally wipe my destination?",
@@ -375,7 +375,7 @@ $ echo $?
       },
       {
         q: "如果 cron 任务执行到一半被中断会怎样？",
-        a: "看你排的是哪条命令。sync 会接着来：下一次运行跳过已匹配的文件，并把半截的文件接着传，--no-resume 可以关掉这一点。push 在两条协议下都不续传——它会拒绝已存在的目标，这正是上面那行 push 写进按日期命名目录的原因，好让第二晚是一次干净的完整复制而不是一次拒绝。--no-resume 在 push 上能被接受，但什么也不做。",
+        a: "看你排的是哪条命令。sync 会接着来：下一次运行跳过已匹配的文件，并把半截的文件接着传，--no-resume 可以关掉这一点。push 不续传——它会拒绝已存在的目标，所以定时运行的 push 每次都需要一个新的（例如按日期命名的）目标目录；这正是本指南排的是 sync 的原因。--no-resume 在 push 上能被接受，但什么也不做。",
       },
       {
         q: "--delete 会不会不小心清空我的目标目录？",
