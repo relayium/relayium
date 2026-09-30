@@ -1002,7 +1002,18 @@ type StripeSourceWrite struct {
 	Bind *string
 	// Event, when non-nil, is applied through applySourceTx (the same rules as
 	// ApplyAuthorizedStripeLifecycle, including purchase-attempt convergence).
+	// If it is dropped as stale, NOTHING commits — a Bind in the same write
+	// is rolled back with it, so a stale event can never leave a binding
+	// behind for somebody else's entitlement.
 	Event *SourceEvent
+	// ExpectUser, when set, extends the comparison to the users-row fields the
+	// caller DECIDED on (which path to take: adopt, dedup or admin), so a
+	// decision taken from a users snapshot older than the write cannot land.
+	ExpectUser         bool
+	UserSubscriptionID string
+	UserPlanSource     string
+	// Now stamps the authority check when there is no Event (bind-only).
+	Now int64
 }
 
 // StripeSourceWriteResult reports a conditional write.
@@ -1033,7 +1044,7 @@ func (s *SQLiteStore) ApplyStripeSourceIfUnchanged(ctx context.Context, in Strip
 		(in.Event != nil && (in.Event.UserID != in.UserID || in.Event.Provider != ProviderStripe)) {
 		return StripeSourceWriteResult{}, ErrBillingAuthorityConflict
 	}
-	now := int64(0)
+	now := in.Now
 	if in.Event != nil {
 		now = in.Event.Now
 	}
@@ -1053,6 +1064,16 @@ func (s *SQLiteStore) ApplyStripeSourceIfUnchanged(ctx context.Context, in Strip
 	if exists != in.ObservedExists || (exists && current != in.Observed) {
 		return StripeSourceWriteResult{}, nil // moved since the evidence was fetched
 	}
+	if in.ExpectUser {
+		var subID, planSource string
+		if err := tx.QueryRowContext(ctx, `SELECT stripe_subscription_id, plan_source FROM users WHERE id = ?`, in.UserID).
+			Scan(&subID, &planSource); err != nil {
+			return StripeSourceWriteResult{}, err
+		}
+		if subID != in.UserSubscriptionID || planSource != in.UserPlanSource {
+			return StripeSourceWriteResult{}, nil // the decision's users snapshot is stale
+		}
+	}
 	if in.Bind != nil {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE users SET stripe_subscription_id = ? WHERE id = ?`, *in.Bind, in.UserID); err != nil {
@@ -1068,6 +1089,10 @@ func (s *SQLiteStore) ApplyStripeSourceIfUnchanged(ctx context.Context, in Strip
 		res, err := applySourceTx(ctx, tx, ev)
 		if err != nil {
 			return StripeSourceWriteResult{}, err
+		}
+		if !res.Applied {
+			// Stale: roll back everything, including a Bind above.
+			return StripeSourceWriteResult{Unchanged: true, Apply: res, After: current, AfterExists: exists}, nil
 		}
 		// Same attempt convergence as ApplyAuthorizedStripeLifecycle.
 		if res.Applied && stripeAttemptMayConverge(ev.Status) && ev.BillingAttemptID != "" && ev.ExternalID != "" {

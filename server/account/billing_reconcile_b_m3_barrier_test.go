@@ -163,18 +163,20 @@ func TestBM3WebhookPartialRetrieveEvidenceIsUnknown(t *testing.T) {
 }
 
 // Codex r2 finding 2 (dedup): a live list item without a price used to become
-// the canonical and write free. It is now unknown list evidence; the webhook
-// falls back to its own refreshed event, which grants the real tier.
+// the canonical and write free. It is now unknown list evidence — and, since
+// round 5, unknown list evidence for a non-canonical event is a 5xx rather
+// than a fall-through to the per-event write — so the payer is left untouched.
 func TestBM3WebhookDedupIgnoresLiveListItemWithoutPrice(t *testing.T) {
 	fake, ts, _, store := bm3WebhookEnv(t)
 	u := bm3PaidUser(t, store, "bm3-dedup-price@example.com", "cus_dp", "sub_old", 4000)
+	before, _, _ := store.GetSubscriptionSource(context.Background(), u.ID, ProviderStripe)
 	fake.objects["sub_new"] = bm3Obj("cus_dp", "active")
 	fake.raw["cus_dp"] = `{"object":"list","has_more":false,"data":[{"id":"sub_new","customer":"cus_dp","status":"active","created":5000,"items":{"data":[{"price":{}}]}}]}`
-	if code := bm3PostSubEvent(t, ts, "evt_dp", "customer.subscription.updated", "cus_dp", "sub_new", "active", "price_plus", 5000); code != http.StatusOK {
-		t.Fatalf("webhook status %d", code)
+	if code := bm3PostSubEvent(t, ts, "evt_dp", "customer.subscription.updated", "cus_dp", "sub_new", "active", "price_plus", 5000); code < 500 {
+		t.Fatalf("webhook status %d, want 5xx on unknown list evidence", code)
 	}
-	if plan, status := bm3Plan(t, store, u.ID); plan != "plus" || status != "active" {
-		t.Fatalf("a live list item without a price downgraded the payer: plan=%q status=%q", plan, status)
+	if after, _, _ := store.GetSubscriptionSource(context.Background(), u.ID, ProviderStripe); after != before {
+		t.Fatalf("a live list item without a price changed the payer's row:\n before %+v\n after  %+v", before, after)
 	}
 	if n := len(fake.requests["cus_dp"]); n != 1 {
 		t.Fatalf("precondition: the dedup path must have listed once, got %d", n)

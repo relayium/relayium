@@ -41,6 +41,7 @@ type bm3Stripe struct {
 	rawObj   map[string]string     // subscription id -> literal 200 body for GET /v1/subscriptions/{id}
 	onGet    map[string]func()     // subscription id -> ONE-SHOT hook run after the object is read, before it is sent
 	gets     map[string]int        // subscription id -> retrieve count
+	other    []string              // any other request (e.g. a duplicate's cancel/refund inspection)
 }
 
 // bm3Object is one subscription as Stripe's retrieve endpoint reports it NOW
@@ -82,6 +83,9 @@ func newBM3Stripe(t *testing.T) (*bm3Stripe, *stripeClient) {
 			return
 		}
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/subscriptions" {
+			f.mu.Lock()
+			f.other = append(f.other, r.Method+" "+r.URL.Path)
+			f.mu.Unlock()
 			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusBadRequest)
 			return
 		}
