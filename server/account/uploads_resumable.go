@@ -1465,7 +1465,22 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		// answer — is the account over its allowance as things stand — and it is
 		// the same test as before per-append metering, since used_now equals
 		// used_before + size.
-		if over, err := s.overTraffic(r.Context(), u.ID, 0); err == nil && over {
+		//
+		// A read error fails CLOSED here, exactly like the daily-quota read below
+		// (B-L2): this is the last traffic gate an upload passes, so admitting on
+		// an unanswered question would store an object the allowance may not
+		// cover. The refusal goes through the same fail as the over-limit one —
+		// drop the blob, keep the tombstone, no object, no daily-quota debit —
+		// and the bytes that moved stay metered, as they do for that refusal.
+		// The init pre-check and the download gates stay fail-open on purpose:
+		// they are availability trade-offs, and this gate backs them up.
+		over, err := s.overTraffic(r.Context(), u.ID, 0)
+		if err != nil {
+			log.Printf("upload finalize %s: reading the monthly traffic allowance: %v; refusing", sess.ID, err)
+			fail("server error", http.StatusInternalServerError)
+			return
+		}
+		if over {
 			fail("monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
 			return
 		}

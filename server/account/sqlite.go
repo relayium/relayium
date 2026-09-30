@@ -4032,6 +4032,12 @@ const (
 	maxFirstReportBytes = int64(maxRelayBytesPerSec)*firstReportWindowSecs + relayReportSlack
 )
 
+// ErrUsageAllocOwnerMismatch is RecordUsage's refusal of a report whose
+// alloc_id already belongs to a different (user_id, node_id). It is not
+// retryable: the same report will be refused again, and callers log it and
+// continue with their other allocations.
+var ErrUsageAllocOwnerMismatch = errors.New("account: usage report does not match the allocation's recorded owner")
+
 // RecordUsage records an allocation's relayed bytes. The reported cumulative is
 // clamped to physically-plausible bounds — monotonic, capped by (a) an absolute
 // per-allocation ceiling and (b) the prior total plus maxRelayBytesPerSec ×
@@ -4041,6 +4047,15 @@ const (
 // rather than having its whole cumulative reattributed to the latest month.
 // usage_events holds the per-alloc high-water mark; usage_periods holds the
 // per-month deltas the billing/cap queries read.
+//
+// An existing allocation belongs to the (user_id, node_id) that first reported
+// it (B-L4). A later report under the same alloc_id from a different user or a
+// different node would otherwise advance that owner's high-water mark and add
+// bytes to the owner's usage_periods row (keyed by alloc_id alone). Such a
+// report changes nothing and returns ErrUsageAllocOwnerMismatch. node_id is
+// compared NULL-safely: a report without a node (central coturn metering)
+// matches only a row stored without one, the same "" ⇔ NULL mapping nullStr
+// writes.
 func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -4049,15 +4064,21 @@ func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 	defer tx.Rollback()
 
 	var prev, prevRec int64
+	var ownerUser string
+	var ownerNode sql.NullString
 	exists := true
 	switch err := tx.QueryRowContext(ctx,
-		`SELECT relayed_bytes, recorded_at FROM usage_events WHERE alloc_id = ?`, e.AllocID).
-		Scan(&prev, &prevRec); err {
+		`SELECT relayed_bytes, recorded_at, user_id, node_id FROM usage_events WHERE alloc_id = ?`, e.AllocID).
+		Scan(&prev, &prevRec, &ownerUser, &ownerNode); err {
 	case nil:
 	case sql.ErrNoRows:
 		exists = false
 	default:
 		return err
+	}
+	if exists && (ownerUser != e.UserID || ownerNode.String != e.NodeID) {
+		// Nothing written: the deferred Rollback ends the read transaction.
+		return ErrUsageAllocOwnerMismatch
 	}
 
 	// Clamp the reported cumulative.
