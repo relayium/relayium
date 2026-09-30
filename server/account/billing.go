@@ -857,25 +857,6 @@ func (s *Service) handlePublicPlans(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-// clearCanonicalSubscription drops the recorded canonical subscription id on a
-// path that is about to write the user to free anyway.
-//
-// This is the one SetUserStripeSubscription call whose failure is genuinely
-// proportionate to log rather than propagate. Clearing can never hit the
-// ownership check (an empty id claims nothing), so the only failure left is the
-// store itself — and the very next statement on every one of these paths writes
-// to that same store, which is what turns a real outage into the 500 that makes
-// Stripe redeliver. What is left behind meanwhile is a stale canonical id on a
-// free account: it grants nothing, and the next event for any subscription
-// either takes the normal path or re-runs reconciliation, both of which
-// converge. Refusing to downgrade over it would be the worse trade — a canceled
-// subscriber left on a paid tier.
-func (s *Service) clearCanonicalSubscription(ctx context.Context, userID string) {
-	if err := s.Store().SetUserStripeSubscription(ctx, userID, ""); err != nil {
-		log.Printf("billing: clearing the canonical subscription id for user %s failed: %v (the downgrade still applies)", userID, err)
-	}
-}
-
 // maxWebhookBodyBytes caps the raw Stripe webhook payload we'll read before
 // giving up; real Stripe event payloads are a few KB, so 1 MiB is generous
 // headroom while still bounding memory against a malicious/broken sender.
@@ -898,14 +879,14 @@ const maxWebhookBodyBytes = 1 << 20
 //
 // Returns:
 //   - (true, false, nil)  → reconciled; caller writes 200.
-//   - (false, false, nil) → the Stripe list call failed; caller falls back to
-//     the single-event path rather than dropping the webhook.
+//   - (false, false, nil) → the Stripe list call failed; the evidence is
+//     unknown and the caller answers 5xx so Stripe redelivers.
 //   - (false, true, nil)  → the row moved under us; caller re-observes/retries.
 //   - (false, _, err)     → a store write failed; caller 500s so Stripe retries.
 func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated int64, obs SubscriptionSource, obsExists bool) (bool, bool, error) {
 	subs, err := s.biller.ListActiveSubscriptions(ctx, u.StripeCustomerID)
 	if err != nil {
-		log.Printf("billing: reconcile list subs failed for user %s: %v (falling back to per-event)", u.ID, err)
+		log.Printf("billing: reconcile list subs failed for user %s: %v (evidence unknown; answering 5xx for redelivery)", u.ID, err)
 		return false, false, nil
 	}
 	now := s.Now().Unix()

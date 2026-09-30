@@ -1095,7 +1095,7 @@ func (s *SQLiteStore) ApplyStripeSourceIfUnchanged(ctx context.Context, in Strip
 			return StripeSourceWriteResult{Unchanged: true, Apply: res, After: current, AfterExists: exists}, nil
 		}
 		// Same attempt convergence as ApplyAuthorizedStripeLifecycle.
-		if res.Applied && stripeAttemptMayConverge(ev.Status) && ev.BillingAttemptID != "" && ev.ExternalID != "" {
+		if stripeAttemptMayConverge(ev.Status) && ev.BillingAttemptID != "" && ev.ExternalID != "" {
 			if _, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts
  SET state='resolved', provider_subscription_id=CASE WHEN provider_subscription_id='' THEN ? ELSE provider_subscription_id END
  WHERE id=? AND user_id=? AND epoch=? AND provider=? AND state='dispatched'

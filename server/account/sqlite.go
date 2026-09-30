@@ -2775,10 +2775,9 @@ func (s *SQLiteStore) SetUserStripeCustomer(ctx context.Context, userID, custome
 // A refusal is NOT something callers may shrug off. Both adoption call sites —
 // the webhook's first-subscription branch and reconcileSubscriptions' canonical
 // pick — stop and 500 on it, because the grant that would follow is justified
-// by a subscription this account does not own. The one caller that does merely
-// log is clearCanonicalSubscription, which passes ” and therefore cannot hit
-// the ownership check at all; see its comment for why that single case is
-// proportionate.
+// by a subscription this account does not own. Clearing the binding (an empty
+// subID) cannot hit the ownership check at all; the webhook and sweep clear it
+// only inside ApplyStripeSourceIfUnchanged / ApplyStripeReconcileDowngrade.
 func (s *SQLiteStore) SetUserStripeSubscription(ctx context.Context, userID, subID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
