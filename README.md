@@ -49,7 +49,9 @@ opens an independent end-to-end encrypted connection — with its own optional v
 a command, or a block of multiline code instead of a file. (Inside the shared workspace above it is
 not a separate connection: that message lane rides the one link you already verified.)
 On a LAN, browser messages move directly;
-cross-network browser sessions use TURN that carries only ciphertext; CLI text is direct-only.
+cross-network browser sessions use TURN that carries only ciphertext; CLI text is direct-only in the
+published CLI (v0.26.0), and from the next CLI release candidate follows the pairing-code relay rule
+described under the CLI modes below.
 Messages are session-scoped:
 never stored by Relayium, and gone from its session when that session ends. There is no offline messaging
 or server-side history, though either endpoint can retain received text — one message is at most
@@ -96,14 +98,14 @@ is **how seriously we take end-to-end encryption**:
 
 - 🔒 **End-to-end encrypted** — per-transfer ephemeral X25519 keys → AES-256-GCM per chunk. Keys never leave the two devices.
 - 🛡️ **Optional SAS verification code** — turn on *advanced verification* (off by default) and both browsers show a six-digit code derived from the X25519 endpoint public keys; the CLI shows one derived from the pinned TLS certificate fingerprints (`--verify` stops for it). Matching it out of band detects endpoint impersonation or key substitution — when someone actually compares it. It is a different value from the six-digit pairing code, and the encryption never depends on it: commit-then-reveal and AEAD integrity fail closed either way.
-- 📡 **Private paths, stated precisely** — on a LAN, realtime file bytes flow directly over WebRTC. Cross-network browser sessions use a TURN relay by design, but it carries only end-to-end encrypted ciphertext; the CLI's transfer modes are direct-only apart from `up`/`down`, which deliberately use the same hosted encrypted storage as a browser stored link. Stored download links are encrypted in your browser first, and the server holds only ciphertext it has no key for (see [docs/billing-transparency.md](docs/billing-transparency.md)).
+- 📡 **Private paths, stated precisely** — on a LAN, realtime file bytes flow directly over WebRTC. Cross-network browser sessions use a TURN relay by design, but it carries only end-to-end encrypted ciphertext; in the published CLI (v0.26.0) the CLI's transfer modes are direct-only apart from `up`/`down`, which deliberately use the same hosted encrypted storage as a browser stored link. From the next CLI release candidate, pairing-code sessions (`send`/`receive`, `text`, `pair`) go through that same ciphertext-only TURN relay whenever the server issues one. Stored download links are encrypted in your browser first, and the server holds only ciphertext it has no key for (see [docs/billing-transparency.md](docs/billing-transparency.md)).
 - 📦 **Multi-file batches** (up to 1,000) — streamed straight to disk where supported; other browsers may buffer in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
 - 💬 **Ephemeral encrypted text** — send a link, a command, or a block of multiline code to a device that's online right now, over a connection of its own that is end-to-end encrypted, with the same optional SAS comparison as a transfer. Relayium never stores message bodies or server-side history; either endpoint can retain received text. At most 65,536 UTF-8 bytes per message, delivered exactly as typed; anything larger is a file.
 - 🌐 **English and 简体中文** — the two maintained product languages, auto-detected and switchable; any other language resolves to English. Seven earlier locales (日本語, 한국어, Deutsch, Français, العربية, Español, Português) stay reachable as archived tutorial pages rather than as product languages.
 - 📥 **Device Inbox / My Devices** — send a file from any browser to a folder on a machine *you* own: a Mac, a PC, a NAS, or a server running the CLI. The file is encrypted in the browser and its content key is sealed to that device's own X25519 public key, so the server can open neither. The task waits in a queue while the device is offline; the device dials out, claims it, decrypts, verifies, and writes. It is only ever reported **saved** once that device says the bytes are on disk — ciphertext reaching Relayium is deliberately a different state. A public download link authenticates nothing and can never make a device write to disk. See [relayium.com/device-inbox](https://relayium.com/device-inbox) and [`docs/protocol/relayium-device-inbox-v1.md`](docs/protocol/relayium-device-inbox-v1.md).
 - ⚡ **Browser-first** — just open a URL; installing the CLI is optional. Realtime files and text on the same LAN need **no account**; creating a cross-network file or text pairing code requires sign-in, while anyone joining with that code needs no account. Creating stored download links and using Device Inbox also require sign-in.
-- 💳 **A free tier, not a free service** — direct paths are unmetered and always free: same-LAN browser transfers, and the CLI's direct modes (`push`/`sync` over daemon-direct, `serve`/daemon-direct, pairing-code `send`/`receive`, and `text`). `relayium up` is deliberately not one of them: it stores an encrypted copy in Relayium's hosted storage, exactly like a stored download link created in the browser. What is metered is what costs real money to run — cross-network browser **relay bandwidth**, and **temporary encrypted hosted storage**. They are bounded by four separate limits, not one: a **monthly traffic allowance** that counts hosted uploads, hosted downloads and relayed bytes together; a **storage cap** on how much ciphertext you keep live at once, which is occupancy rather than a monthly total; a **retention window**; and a rolling **daily upload quota**. Every account, Free included, gets an allowance of each, and the paid tiers (Plus, Pro, Max) raise them. Current figures are at [relayium.com/pricing](https://relayium.com/pricing) rather than in this file, because an operator can edit a plan. Running your own relay/storage node takes the node-local paths out of metering: bytes relayed through your own node, and uploads that land on it, are neither metered nor charged against the daily quota, although files on your node still count toward the storage cap. A download from your own node is free only when the server operator has turned direct downloads on (relayium.com has not), the node is set up to serve them, and the client opts into fetching straight from it; every other download — including every browser download — goes through the central proxy, so Relayium really carries those bytes and still meters them.
+- 💳 **A free tier, not a free service** — direct paths are unmetered and always free: same-LAN browser transfers, and the CLI's direct modes (`push`/`sync` over daemon-direct and `serve`/daemon-direct, plus — in the published CLI, v0.26.0, where they are direct-only — pairing-code `send`/`receive` and `text`). From the next CLI release candidate, a pairing-code session (`send`/`receive`, `text`, `pair`) that the server issues a TURN relay sends every byte through it, and those relayed bytes count toward the monthly traffic allowance of the account that minted the code; it stays unmetered only when it goes peer to peer. `relayium up` is deliberately not one of them: it stores an encrypted copy in Relayium's hosted storage, exactly like a stored download link created in the browser. What is metered is what costs real money to run — cross-network browser **relay bandwidth** (and, from the next CLI release candidate, relayed CLI pairing sessions), and **temporary encrypted hosted storage**. They are bounded by four separate limits, not one: a **monthly traffic allowance** that counts hosted uploads, hosted downloads and relayed bytes together; a **storage cap** on how much ciphertext you keep live at once, which is occupancy rather than a monthly total; a **retention window**; and a rolling **daily upload quota**. Every account, Free included, gets an allowance of each, and the paid tiers (Plus, Pro, Max) raise them. Current figures are at [relayium.com/pricing](https://relayium.com/pricing) rather than in this file, because an operator can edit a plan. Running your own relay/storage node takes the node-local paths out of metering: bytes relayed through your own node, and uploads that land on it, are neither metered nor charged against the daily quota, although files on your node still count toward the storage cap. A download from your own node is free only when the server operator has turned direct downloads on (relayium.com has not), the node is set up to serve them, and the client opts into fetching straight from it; every other download — including every browser download — goes through the central proxy, so Relayium really carries those bytes and still meters them.
 - 🪶 **Self-hostable footprint** — one static SPA + a single Go server binary, with optional CLI and node binaries.
 
 ## Command-line client (CLI)
@@ -117,13 +119,16 @@ curl -fsSL https://relayium.com/install.sh | sh
 **Free and open source — and direct in the modes below.** In these modes the CLI connects your machines
 directly: file and message bytes never pass through Relayium's servers, and nothing is metered. Among
 them, only `send`/`receive`/`text` touch our servers at all, and only for a tiny rendezvous handshake
-(never the content).
+(never the content). That describes the published CLI (v0.26.0); from the next CLI release candidate the
+pairing-code modes can be relayed and metered — see `send` / `receive` below.
 
 **Two CLI surfaces are hosted rather than direct, and both are asynchronous.** The first is the stored-link
 pair `relayium up` / `relayium down`: `up` uploads a client-side-encrypted copy to Relayium's hosted storage
 so that a browser can open the link, which is the whole point of it — and that means it counts against your
 account plan's storage cap, monthly traffic allowance, daily upload quota and retention window, exactly like
 a stored download link created in the browser. Downloading with `relayium down` still needs no account.
+From the next CLI release candidate, `relayium login` and `relayium up` refuse a plain `http://` server
+unless it is a loopback address (a local development server), and `up` accepts `--config-dir`.
 Hosted expiry has five choices — 1 hour, 1 day, 3 days, 7 days and 14 days — and the account's plan
 decides which of those choices are available. Using an allowance means usage is counted against that
 limit; it does not mean a per-transfer charge. Free accounts pay nothing, and paid plans are flat plans.
@@ -140,8 +145,9 @@ or a pairing session for two online devices. See the
 
 The other transfer modes remain available:
 
-- **`text` — ephemeral encrypted messages** — run `relayium text` with no code on one machine to mint a code (with your account, as `send` does); it prints the exact `relayium text 483920` command the other machine runs, then waits in the live session for it. Both machines must be online at the same time: this is not a mailbox. One line per message interactively; pipe stdin (`pbpaste | relayium text 483920`) to send multiline content or exact bytes. End-to-end encrypted over a pinned-TLS direct connection of its own, exactly like a file transfer; Relayium stores no message body or server-side history, though either endpoint can retain text. Verification is opt-in: add `--verify` to stop and compare the SAS (that needs a terminal to answer, so a piped `--verify` run refuses rather than pretending it was confirmed); `--yes` is still accepted and means the same as the default. One message is at most 65,536 bytes of UTF-8 — anything larger is a file. CLI to CLI: exactly as with file transfers, the terminal and the browser are separate transports and don't pair with each other.
-- **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive 483920`. Codes are 6 digits and last 5 minutes; the receiver needs no account. Cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends and the file goes straight between them. This mode is direct-only: with no direct path between the two machines the transfer fails rather than falling back to a relay, which is this mode's limit and not a claim about Relayium as a whole — the apps and the web page relay a cross-network transfer by design, over ciphertext the relay cannot read. The code pairs two CLIs: typed into a Relayium app or the web page it cannot connect (the CLI moves bytes over a direct pinned-TLS connection, the apps over WebRTC), and both ends say so instead of failing obscurely. Sending to someone with a browser or an app instead? Use `relayium up` for a download link.
+- **`text` — ephemeral encrypted messages** — run `relayium text` with no code on one machine to mint a code (with your account, as `send` does); it prints the exact `relayium text 483920` command the other machine runs, then waits in the live session for it. Both machines must be online at the same time: this is not a mailbox. One line per message interactively; pipe stdin (`pbpaste | relayium text 483920`) to send multiline content or exact bytes. End-to-end encrypted — in the published CLI over a pinned-TLS direct connection of its own, exactly like a file transfer; Relayium stores no message body or server-side history, though either endpoint can retain text. Verification is opt-in: add `--verify` to stop and compare the SAS (that needs a terminal to answer, so a piped `--verify` run refuses rather than pretending it was confirmed); `--yes` is still accepted and means the same as the default. One message is at most 65,536 bytes of UTF-8 — anything larger is a file. In the published CLI (v0.26.0) it is CLI to CLI and direct-only: exactly as with file transfers, the terminal and the browser are separate transports and don't pair with each other. From the next CLI release candidate, the other end may also be `relayium pair`, a Relayium app or the web page, the session follows the same relay rule as `send` / `receive` below, and `--config-dir` selects the credential directory used to mint the code.
+- **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive 483920`. Codes are 6 digits and last 5 minutes; the receiver needs no account. In the published CLI (v0.26.0) it is cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends and the file goes straight between them. This mode is direct-only: with no direct path between the two machines the transfer fails rather than falling back to a relay, which is this mode's limit and not a claim about Relayium as a whole — the apps and the web page relay a cross-network transfer by design, over ciphertext the relay cannot read. The code pairs two CLIs: typed into a Relayium app or the web page it cannot connect (the CLI moves bytes over a direct pinned-TLS connection, the apps over WebRTC), and both ends say so instead of failing obscurely. Sending to someone with a browser or an app instead? Use `relayium up` for a download link. **From the next CLI release candidate**, the other end may be a current `relayium` (`receive` or `pair`), a Relayium app or the web page, over an end-to-end encrypted link. Whenever the server issues a TURN relay for the code, every byte goes through that relay — even when the two ends could reach each other directly, on one LAN too — and the relayed bytes count toward the monthly traffic allowance of the account that minted the code; the relay carries only ciphertext it cannot read. Only when no relay is issued (none configured, or the allowance is used up) does the session go peer to peer, and then it needs a direct path. Against an older `relayium` CLI the direct-only CLI pairing above is used unchanged. `send` also accepts `--config-dir` for the credential used to mint the code.
+- **`pair` — a live two-way session (next CLI release candidate)** — `relayium pair` mints a code (after `relayium login`); the other side runs `relayium pair <code>` or types it into a Relayium app or the web page, with no account needed to join. Once linked, files, folders and messages go both ways, as often as you like, until either side leaves; received files go into `--dest` and are only ever created new. It follows the same relay and allowance rule as `send` / `receive`, and is not in a published CLI release yet.
 - **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it). This is the direct route between two servers you control, and it needs no Relayium account on either side: a listener accepts a pusher only when that pusher's fingerprint is in the listener's own `authorized_fingerprints` file. Being logged in grants nobody filesystem access, and the two decisions are independent. For a non-interactive listener, pre-authorize with `relayium authorize <fingerprint>` using the *same* `--config-dir` the listener runs with; a running listener honors it on the next connection without a restart. `serve` listens on every interface unless you pass `--bind ADDR`, so firewall the port or bind it narrowly, and it requires `--dir` to be an existing writable directory before it binds.
 
 In the published CLI releases, the CLI's **Device Inbox is the receive side only** — it accepts files your account sends to that machine, and no released CLI command sends into an inbox (you send to one from the Web or a native app). A sending command, `relayium inbox send --to <device> <path...>`, is in the source on `main` but not yet in a published CLI release. To move files between two of your own servers, use `serve` with `push`/`sync` above.
@@ -177,6 +183,12 @@ was altered after the build — or built anywhere else — fails. Each release a
 (SHA-256 of every archive) with a detached signature, `checksums.txt.sig`, made with the project's release
 key. `relayium update` does this for you: it verifies that signature against a public key built into the
 binary, then the downloaded archive's SHA-256 against `checksums.txt`, and refuses to install on a mismatch.
+`relayium update --force` also disables the built-in downgrade guard and minimum-version floor (it does in
+the published CLI too, though only the next release's help says so), so it can install an older release,
+even one below a security fix; use it only for a deliberate rollback.
+The `install.sh` one-liner checks the same signature with `openssl`. In the source on `main` it refuses to
+install when `openssl` is missing rather than falling back to checksum-only verification, unless you set
+`RELAYIUM_ALLOW_UNSIGNED=1`; the copy relayium.com serves changes when the site is next deployed.
 
 The macOS app is a separate download: it is signed with a Developer ID certificate, notarized by Apple and
 stapled, so Gatekeeper verifies it when you first open it. To check by hand:
@@ -263,8 +275,10 @@ handshake and an optional short code two humans can compare out of band.
   makes a ~20-bit code worth comparing is not, and rejects a mismatched reveal on every connection.
 - **Metadata minimization:** the server sees room membership (public IP), a device nickname, presence,
   and signaling envelopes. On a LAN, content travels directly over the DataChannel; cross-network browser
-  TURN carries only end-to-end encrypted ciphertext; CLI transfers are direct-only except `up`/`down`,
-  which move the same client-side-encrypted ciphertext through hosted storage. Relayium never stores
+  TURN carries only end-to-end encrypted ciphertext; in the published CLI (v0.26.0) CLI transfers are
+  direct-only except `up`/`down`, which move the same client-side-encrypted ciphertext through hosted
+  storage, and from the next CLI release candidate pairing-code sessions also use that ciphertext-only
+  TURN relay whenever the server issues one. Relayium never stores
   message bodies.
 
 That's what the server *can't* see. For what it *does* record — TURN relay bytes, stored-transfer
@@ -430,10 +444,13 @@ may change without notice until this note says otherwise.
 The software is free and open source — see [License](#license) for which license covers which part,
 and self-host it with no limits at all. The hosted service has a **free tier** rather than being
 free without limit. Free forever, unmetered: same-LAN realtime files and text (no account), and
-the CLI's direct modes — `push`/`sync` over daemon-direct, `serve`/daemon-direct, pairing-code
-`send`/`receive`, and `text`. Metered: cross-network browser **relay bandwidth** and **temporary
-hosted storage** for stored download links, including the ones `relayium up` creates — the two
-things that cost real money to run. They are bounded by four separate limits every account has, Free
+the CLI's direct modes — `push`/`sync` over daemon-direct and `serve`/daemon-direct, plus, in the
+published CLI (v0.26.0), pairing-code `send`/`receive` and `text`, which are direct-only there.
+Metered: cross-network browser **relay bandwidth** and **temporary hosted storage** for stored
+download links, including the ones `relayium up` creates — the two things that cost real money to
+run. From the next CLI release candidate, a pairing-code session (`send`/`receive`, `text`, `pair`)
+that the server issues a TURN relay is relayed too, and its relayed bytes count toward the monthly
+traffic allowance of the account that minted the code; it is unmetered only when it goes peer to peer. They are bounded by four separate limits every account has, Free
 included: a **monthly traffic allowance** (hosted uploads + hosted downloads + relayed bytes,
 combined), a **storage cap** on how much you keep stored at once, a **retention window**, and a
 rolling **daily upload quota**. Paid tiers (Plus, Pro, Max) raise all four; current figures are at
@@ -444,8 +461,10 @@ or sending to your own machine with Device Inbox, also requires sign-in.
 **Do my files get uploaded to a server?**
 On a LAN, file bytes stream directly between devices over WebRTC. Cross-network browser transfers use a
 TURN relay by design, but it sees only end-to-end encrypted ciphertext, never readable files, names, or keys.
-The CLI's direct modes — `push`/`sync` over daemon-direct, `send`/`receive` and `text` — never route
-bytes through us; `relayium up` deliberately does. Stored download links, whether created in the browser
+The CLI's `push`/`sync` over daemon-direct never route bytes through us, and neither do `send`/`receive`
+and `text` in the published CLI (v0.26.0); from the next CLI release candidate, a pairing-code session
+sends its ciphertext through the TURN relay whenever the server issues one. `relayium up` deliberately
+uploads. Stored download links, whether created in the browser
 or by `relayium up`, are encrypted before upload, so the server stores ciphertext.
 
 **Is it really end-to-end encrypted?**
@@ -473,8 +492,9 @@ Yes. When both devices are online you can open a message session — its own end
 peer-to-peer connection, with its own optional SAS to compare: links, commands, and multiline code arrive
 exactly as typed, up to 65,536 UTF-8 bytes per message. Relayium never stores message bodies or server-side
 history; there's no offline messaging, though either endpoint can retain received text. Anything
-larger goes as a file. The terminal has its own equivalent, `relayium text <code>` — CLI to CLI,
-since the two transports don't pair.
+larger goes as a file. The terminal has its own equivalent, `relayium text <code>` — in the
+published CLI, CLI to CLI only, since the two transports don't pair there; from the next CLI release
+candidate it can also meet a Relayium app or the web page.
 
 **Can I send across different networks / over the internet?**
 Yes — via a pairing code. Browser cross-network sessions use an encrypted TURN relay by design that only

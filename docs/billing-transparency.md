@@ -78,15 +78,21 @@ first" and the difference is what decides whether anything is billed:
   anyway, and waiting out their checks costs about 20 seconds before ICE reaches
   the relay it would have used. So **there is no STUN-P2P rung for the browser**,
   and a cross-network browser transfer is a metered transfer.
-- **CLI:** not relayed **as the CLI is built today** — there is no ICE or TURN
-  code path in `server/cmd/relayium/` at all. Stated as a fact about the current
-  binary rather than as a promise, because it is one: these modes were built
-  direct-only, and whether that stays true is a product decision, not an
-  invariant. What IS invariant, and what this document is really about, is that
-  no path lets relayium.com read a file — a relayed browser transfer is metered
-  precisely because the relay forwards ciphertext it cannot decrypt. Its **direct** modes (`push`, `pull`, `sync`,
-  `serve` and daemon-direct, `send`/`receive`, `text`) therefore carry nothing
-  relayium.com can meter. Its **hosted** modes are the exception, and they are
+- **CLI:** in the **published CLI (v0.26.0)** the pairing-code modes are
+  direct-only: that binary has no ICE or TURN path for file or text bytes.
+  **From the next CLI release candidate** (source on `main`), pairing-code
+  sessions — `send`/`receive`, `text` and `pair` — relay every byte through the
+  same ciphertext-only TURN relay whenever the server issues one for the code,
+  even on one LAN, and those relayed bytes count toward the monthly traffic
+  allowance of the account that minted the code; they go peer to peer (and are
+  unmetered) only when no relay is issued. Against an older relayium the old
+  direct-only pairing is used. What IS invariant, and what this document is
+  really about, is that no path lets relayium.com read a file — a relayed
+  transfer is metered precisely because the relay forwards ciphertext it cannot
+  decrypt. Its server-to-server **direct** modes (`serve` with `push`/`sync`
+  over daemon-direct) never touch a relay, and neither do the published CLI's
+  pairing-code modes, so they carry nothing
+relayium.com can meter. Its **hosted** modes are the exception, and they are
   not relayed either: `relayium up` and `relayium down` write and read the same
   encrypted server-side storage a browser stored link uses, so they count
   toward monthly traffic — and `up`, being an upload, also against the storage
@@ -581,8 +587,9 @@ which flags a given deployment sets (`main.go`):
   attributed to anyone, full stop.
 - **TURN relay itself** is off unless `-turn-secret` /
   `RELAYIUM_TURN_SECRET` is set (`main.go:314`) — without it there's simply no
-  relay to meter. What still works is LAN browser transfers and the direct-only
-  CLI; cross-network browser transfers do not, because the relay they depend on
+  relay to meter. What still works is LAN browser transfers and the CLI's
+  direct paths (daemon-direct push/sync, and pairing-code sessions that find a
+  direct path); cross-network browser transfers do not, because the relay they depend on
   is the thing that is switched off.
 - **Billing (Stripe)** is entirely off unless `-stripe-secret-key` /
   `RELAYIUM_STRIPE_SECRET_KEY` is set (`main.go:388`); every
