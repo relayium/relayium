@@ -144,6 +144,8 @@
     font-size: var(--fs-xs); color: var(--text); line-height: 1.55;
   }
   .cli-note.plan-note { margin-block-start: -8px; }
-  .cli-note a { color: var(--accent-fg); text-decoration: none; white-space: nowrap; }
-  .cli-note a:hover { text-decoration: underline; }
+  /* Links inside a sentence carry an underline, not colour alone: the accent on
+     the muted note text is ~1.1:1 against its surroundings, which fails axe's
+     link-in-text-block (found when /offline-transfer got scan targets). */
+  .cli-note a { color: var(--accent-fg); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 </style>

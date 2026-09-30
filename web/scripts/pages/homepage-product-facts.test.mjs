@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { FROZEN_LANGS, OG_IMAGE_META } from "./shared.mjs";
+import landing from "./content/landing.mjs";
 
 const read = (path) => readFileSync(resolve(process.cwd(), path), "utf8");
 const indexHtml = read("index.html");
@@ -108,5 +109,32 @@ describe("homepage product facts", () => {
     expect(indexHtml).not.toContain(
       '<p>Also available in: <a href="/zh/">中文</a> · <a href="/ja/">日本語</a>',
     );
+  });
+
+  // Audit W1 (2026-09-28): the file-size answer said "no server-imposed limit"
+  // with no scope, while stored download links are capped per file by the
+  // server (-max-file-size, 1 GiB by default). Every maintained answer must
+  // scope the "no limit" claim to realtime transfer and name the stored-link cap.
+  it("scopes the file-size answer to realtime and states the stored-link cap", () => {
+    const faqEntry = structuredData()["@graph"]
+      .find((entry) => entry["@type"] === "FAQPage")
+      .mainEntity.find((entry) => entry.name === "What is the file-size limit?");
+    expect(faqEntry, "JSON-LD keeps the file-size question").toBeTruthy();
+    const body = indexHtml.match(
+      /<h3>What is the file-size limit\?<\/h3>\s*<p>([\s\S]*?)<\/p>/,
+    )?.[1];
+    expect(body, "visible FAQ keeps the file-size answer").toBeTruthy();
+    for (const [surface, text] of [
+      ["json-ld", faqEntry.acceptedAnswer.text],
+      ["body", body],
+    ]) {
+      expect(text, `${surface}: unscoped claim`).not.toMatch(/^\s*(?:There is )?no server-imposed limit/i);
+      expect(text, `${surface}: realtime scope`).toMatch(/Realtime[^.]*no server-imposed size limit/);
+      expect(text, `${surface}: stored-link cap`).toMatch(/Stored download links[^.]*per-file size limit \(1 GiB by default/);
+    }
+    const zhAnswer = landing.langs.zh.faq.items.find((item) => item.q === "文件有大小限制吗？")?.a;
+    expect(zhAnswer, "zh landing keeps the file-size question").toBeTruthy();
+    expect(zhAnswer).toMatch(/^实时传输/);
+    expect(zhAnswer).toMatch(/下载链接[^。]*单文件大小上限（默认 1 GiB/);
   });
 });

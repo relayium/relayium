@@ -198,3 +198,36 @@ describe("StoredUpload × 更新刷新闸门", () => {
     expect(refreshHolds()).toBe(0);
   });
 });
+
+// Audit W3 (2026-09-28): the bar read "Uploading… 100%" the moment the last
+// byte left, while the finalize/complete call — which can still fail or come
+// back unconfirmed — was still outstanding.
+describe("StoredUpload progress before server confirmation", () => {
+  it("holds below 100 % and says it is confirming until the upload resolves", async () => {
+    let report!: (p: { phase: string; sent: number; total: number }) => void;
+    let finish!: (v: unknown) => void;
+    uploadFileResumable.mockImplementation((_f: unknown, _o: unknown, onProgress: typeof report) => {
+      report = onProgress;
+      return new Promise((r) => (finish = r));
+    });
+    await mountUpload();
+    await pick([1024]);
+
+    report({ phase: "uploading", sent: 512, total: 1024 });
+    flushSync();
+    expect(target.querySelector(".phase")?.textContent).toBe("Uploading… 50%");
+
+    report({ phase: "uploading", sent: 1024, total: 1024 });
+    flushSync();
+    const bar = target.querySelector('[role="progressbar"]')!;
+    expect(bar.getAttribute("aria-valuenow"), "no 100 % before the server confirms").toBe("99");
+    expect(target.querySelector(".phase")?.textContent).toBe("Confirming upload…");
+    expect(target.textContent).not.toContain("100%");
+
+    finish({ id: "abc", key: "zzz", expiresAt: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(target.querySelector('[role="progressbar"]'), "bar leaves once confirmed").toBeNull();
+    expect(target.querySelector("input[readonly]"), "link appears only after confirmation").not.toBeNull();
+  });
+});

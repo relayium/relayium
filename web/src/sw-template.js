@@ -524,14 +524,21 @@ function streamHeaders(given) {
 // cache keyed by a one-off token, then redirect the launch to the app, which
 // drains them back into File objects. A cache (not postMessage) is used because
 // at share time the app may not have an open client yet.
+//
+// On failure nothing half-written may stay behind — it is the user's plaintext
+// and nobody would come for it until the 24 h sweep — and the app must be told,
+// or it opens as if nothing had been shared (audit W2). The error flag is read
+// by drainSharedFiles in share-target.ts.
 async function handleShare(req) {
+  let cache = null;
+  let base = null;
   try {
     const form = await req.formData();
     const files = form.getAll("files").filter((f) => f instanceof File);
     const token = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
-    const cache = await caches.open(SHARE_CACHE);
+    cache = await caches.open(SHARE_CACHE);
     await sweepStaleShares(cache); // 顺手清掉过期的（见 SHARE_TTL_MS）
-    const base = "/__shared__/" + token + "/";
+    base = "/__shared__/" + token + "/";
     await cache.put(base + "count", new Response(String(files.length)));
     for (let i = 0; i < files.length; i++) {
       await cache.put(
@@ -547,6 +554,15 @@ async function handleShare(req) {
     }
     return Response.redirect("/?share-target=" + token, 303);
   } catch {
-    return Response.redirect("/", 303);
+    if (cache && base) {
+      try {
+        for (const r of await cache.keys()) {
+          if (new URL(r.url).pathname.startsWith(base)) await cache.delete(r);
+        }
+      } catch {
+        /* the TTL sweep is the last line */
+      }
+    }
+    return Response.redirect("/?share-target-error=1", 303);
   }
 }

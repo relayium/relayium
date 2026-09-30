@@ -10,17 +10,59 @@
 // key material, so it lives in localStorage only, never on the server.
 
 const STORAGE_KEY = "relayium.uploadKeys.v1";
+/**
+ * Where an unreadable map is moved aside before anything new is written.
+ *
+ * A map that fails to parse may still hold every key this browser ever kept,
+ * and each is the ONLY copy of that file's key. Writing a fresh `{id: key}`
+ * over it would silently destroy them all; set aside, they can still be
+ * recovered by hand. It holds key material too, so logout clears it as well.
+ */
+const CORRUPT_BACKUP_KEY = STORAGE_KEY + ".corrupt";
 
 type KeyMap = Record<string, string>; // stored-file id → base64url key
 
-function readAll(): KeyMap {
+/**
+ * The current map, and whether it is safe to write a new one over the stored
+ * value. `writable` is false only when the stored value is unreadable AND it
+ * could not be moved aside — then writing would destroy it.
+ */
+function readAll(): { map: KeyMap; writable: boolean } {
+  let raw: string | null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? (parsed as KeyMap) : {};
+    raw = localStorage.getItem(STORAGE_KEY);
   } catch {
-    return {}; // storage disabled/full or malformed — behave as if empty
+    return { map: {}, writable: true }; // storage disabled — nothing to lose
+  }
+  if (!raw) return { map: {}, writable: true };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = undefined;
+  }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    // Keep every well-formed entry; drop only the ones that aren't id → string.
+    const map: KeyMap = {};
+    for (const [id, key] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof key === "string" && key) map[id] = key;
+    }
+    return { map, writable: true };
+  }
+  return { map: {}, writable: quarantine(raw) };
+}
+
+/** Move an unreadable stored value aside. True when it is safe to overwrite. */
+function quarantine(raw: string): boolean {
+  try {
+    const existing = localStorage.getItem(CORRUPT_BACKUP_KEY);
+    if (existing === raw) return true;
+    // An earlier, different backup is never replaced: refuse the write instead.
+    if (existing !== null) return false;
+    localStorage.setItem(CORRUPT_BACKUP_KEY, raw);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -35,21 +77,22 @@ function writeAll(m: KeyMap): void {
 /** Remember the key for a freshly uploaded file so its link can be rebuilt later. */
 export function rememberUploadKey(id: string, key: string): void {
   if (!id || !key) return;
-  const m = readAll();
+  const { map: m, writable } = readAll();
+  if (!writable) return; // the link is still shown on the upload page
   m[id] = key;
   writeAll(m);
 }
 
 /** The stored key for an upload id, or undefined if this browser never held it. */
 export function uploadKey(id: string): string | undefined {
-  return readAll()[id];
+  return readAll().map[id];
 }
 
 /** Drop a key (e.g. after the file is deleted), keeping the store from growing
  *  without bound. Missing ids are ignored. */
 export function forgetUploadKey(id: string): void {
-  const m = readAll();
-  if (id in m) {
+  const { map: m, writable } = readAll();
+  if (writable && id in m) {
     delete m[id];
     writeAll(m);
   }
@@ -59,7 +102,8 @@ export function forgetUploadKey(id: string): void {
  *  that uploaded many expired files doesn't accumulate dead keys forever. */
 export function pruneUploadKeys(liveIds: Iterable<string>): void {
   const live = new Set(liveIds);
-  const m = readAll();
+  const { map: m, writable } = readAll();
+  if (!writable) return;
   let changed = false;
   for (const id of Object.keys(m)) {
     if (!live.has(id)) {
@@ -81,6 +125,7 @@ export function pruneUploadKeys(liveIds: Iterable<string>): void {
 export function forgetAllUploadKeys(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(CORRUPT_BACKUP_KEY);
   } catch {
     /* storage disabled — nothing was persisted either */
   }
