@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/relayium/relayium/authx"
+	"github.com/relayium/relayium/internal/inbox"
 )
 
 // A-M3 round 4: a node delete RETIRES the row while cleanup still needs its
@@ -594,5 +595,114 @@ func TestA_M3_GCRemovesARetiredNodeOnceNothingNamesIt(t *testing.T) {
 	}
 	if got := am3Register(t, s, "owner-token", reg.NodeID); got.Code != http.StatusOK {
 		t.Fatalf("owner after GC removed the row: %d %q", got.Code, got.Error)
+	}
+}
+
+// Round 6 (Fable 2): cancelling a Device Inbox task queues its task object's
+// blob delete in the SAME transaction that deletes the object row, so a retired
+// node always has a row or a queue entry naming it and GC's PurgeRetiredNodes
+// cannot drop it before the blob is deleted.
+func TestA_M3_InboxTaskDeleteQueuesTheBlobBeforeItsRowGoes(t *testing.T) {
+	h := newTaskObjectHarness(t)
+	u := h.user(t, "am6-inbox@example.test")
+	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
+	fileID, task := h.bindTask(t, tg, "send-1", []byte("ciphertext"))
+	key := h.blobKey(t, fileID)
+	ctx := context.Background()
+	st := h.store
+
+	// Put the task object on a node that has since been deleted: the object is
+	// its only reference, so the node is retired, not removed.
+	n := am4rOwnNode(t, st, u, "https://inbox-node.example", 1)
+	if _, err := st.db.ExecContext(ctx, `UPDATE stored_files SET node_id = ? WHERE id = ?`, n.ID, fileID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteNode(ctx, n.ID, u); err != nil {
+		t.Fatal(err)
+	}
+	if exists, d, _ := am4rDeletedAt(t, st, n.ID); !exists || d == 0 {
+		t.Fatal("setup: the node was not retired")
+	}
+
+	deleted, released, err := st.DeleteInboxTask(ctx, task["ID"].(string), u)
+	if err != nil || !deleted || released.ID != fileID {
+		t.Fatalf("DeleteInboxTask: deleted=%v released=%q err=%v", deleted, released.ID, err)
+	}
+	var queued int
+	_ = st.db.QueryRow(`SELECT COUNT(*) FROM pending_node_deletes WHERE blob_key = ? AND node_id = ?`, key, n.ID).Scan(&queued)
+	if queued != 1 {
+		t.Fatalf("the task object's blob delete was not queued with the row delete (%d rows)", queued)
+	}
+	if purged, err := st.PurgeRetiredNodes(ctx); err != nil || purged != 0 {
+		t.Fatalf("PurgeRetiredNodes removed %d node(s) (err %v) while the blob's delete was still queued", purged, err)
+	}
+	if exists, _, _ := am4rDeletedAt(t, st, n.ID); !exists {
+		t.Fatal("the retired node was removed before its blob could be deleted")
+	}
+}
+
+// And through the route: the delete succeeds, the blob goes, and the queued
+// intent is discharged (nothing left for GC).
+func TestA_M3_InboxTaskDeleteRouteDischargesItsIntent(t *testing.T) {
+	h := newTaskObjectHarness(t)
+	u := h.user(t, "am6-route@example.test")
+	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
+	fileID, task := h.bindTask(t, tg, "send-1", []byte("ciphertext"))
+	key := h.blobKey(t, fileID)
+	resp := h.do(t, "DELETE", "/api/devices/"+tg.deviceID+"/inbox/tasks/"+task["ID"].(string), withBearer(tg.token))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("delete task: %d", resp.StatusCode)
+	}
+	if h.blobExists(t, key) {
+		t.Fatal("the task object's blob survived the task delete")
+	}
+	var queued int
+	_ = h.store.db.QueryRow(`SELECT COUNT(*) FROM pending_node_deletes WHERE blob_key = ?`, key).Scan(&queued)
+	if queued != 0 {
+		t.Fatalf("a successful delete left its intent queued (%d rows)", queued)
+	}
+}
+
+// Round 6 (Fable 3): an upload session or a stored object ALONE keeps a
+// retired node from being purged; once it is gone, the node goes.
+func TestA_M3_GCKeepsARetiredNodeWhileAnyOneReferenceRemains(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		add   func(t *testing.T, st *SQLiteStore, userID, nodeID string)
+		clear string
+	}{
+		{"upload session only", func(t *testing.T, st *SQLiteStore, userID, nodeID string) {
+			am3rSessionRow(t, st, "am6-us", userID, nodeID, StoredPurposeShare, "")
+		}, `DELETE FROM upload_sessions WHERE node_id = ?`},
+		{"stored object only", func(t *testing.T, st *SQLiteStore, userID, nodeID string) {
+			if err := st.CreateStoredFile(context.Background(), StoredFile{ID: "am6-f", UserID: userID, BlobKey: "am6-fb",
+				EncManifest: []byte("m"), Size: 1, CreatedAt: 1, ExpiresAt: 1 << 40, NodeID: nodeID}); err != nil {
+				t.Fatal(err)
+			}
+		}, `DELETE FROM stored_files WHERE node_id = ?`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, st, u1, _ := am3Service(t)
+			ctx := context.Background()
+			n := am4rOwnNode(t, st, u1.ID, "https://ref.example", 1)
+			tc.add(t, st, u1.ID, n.ID)
+			if err := st.DeleteNode(ctx, n.ID, u1.ID); err != nil {
+				t.Fatal(err)
+			}
+			var pending int
+			_ = st.db.QueryRow(`SELECT COUNT(*) FROM pending_node_deletes WHERE node_id = ?`, n.ID).Scan(&pending)
+			if pending != 0 {
+				t.Fatalf("setup: %d queued deletes; this case must have exactly one reference", pending)
+			}
+			if purged, err := st.PurgeRetiredNodes(ctx); err != nil || purged != 0 {
+				t.Fatalf("purge with the %s: removed %d (err %v), want the node kept", tc.name, purged, err)
+			}
+			if _, err := st.db.ExecContext(ctx, tc.clear, n.ID); err != nil {
+				t.Fatal(err)
+			}
+			if purged, err := st.PurgeRetiredNodes(ctx); err != nil || purged != 1 {
+				t.Fatalf("purge after the reference went: removed %d (err %v), want 1", purged, err)
+			}
+		})
 	}
 }

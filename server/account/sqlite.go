@@ -7951,9 +7951,14 @@ func (s *SQLiteStore) CentralStoredBytes(ctx context.Context) (int64, error) {
 	return total.Int64, nil
 }
 
-// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'
-// so a user node id cannot be deleted through the admin path. Also clears the
-// node's pending_node_deletes entries (mirrors DeleteNode).
+// DeleteFleetNode deletes an official (fleet) node, scoped to owner_type='fleet'
+// so a user node id cannot be deleted through the admin path (and to rows not
+// already deleted). It is REFUSED (ErrNodeHasStoredFiles) while any
+// stored_files row — live or expired-but-uncollected — or any upload_sessions
+// row names the node. Otherwise it tombstones the id and, like DeleteNode,
+// goes through retireOrDeleteNodeTx: the node's queued deletes are KEPT (it no
+// longer clears pending_node_deletes), and while any remain the row is retired
+// rather than removed so GC can still reach the machine to finish them.
 func (s *SQLiteStore) DeleteFleetNode(ctx context.Context, id string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -8115,6 +8120,13 @@ func (s *SQLiteStore) NodeDeleteBlockers(ctx context.Context) (map[string]int, e
 // reference (every such writer is itself fenced on deleted_at = 0 or runs in a
 // transaction that read the row, and SQLite's single writer serializes them).
 // The tombstone was written when the node was deleted and is kept.
+//
+// ANY pending_node_deletes row keeps the node, including one already
+// discharged (deleted_at > 0) that is only held open for a late-append window
+// (not_before). That delay is intentional: the hold exists because an append
+// in flight can put the blob back, and the drain keeps re-issuing the delete
+// through this node's endpoint until the hold ends and the row is retired
+// (RetirePendingNodeDeletes). Only then may the node go.
 func (s *SQLiteStore) PurgeRetiredNodes(ctx context.Context) (int64, error) {
 	res, err := s.db.ExecContext(ctx,
 		`DELETE FROM nodes WHERE deleted_at != 0
@@ -8833,11 +8845,12 @@ func (s *SQLiteStore) settleBlobBilling(ctx context.Context, blobKey, nodeID str
 // permanently invisible AND permanently present. A node offline for a week is a
 // node coming back on the eighth day.
 //
-// The node row being ABSENT is not read as terminal either. The one legitimate
-// end of an undischarged row is the irreversible operator action — DeleteNode /
-// DeleteFleetNode — and that transaction removes its own pending rows
-// explicitly, in the same statement batch that drops the node. GC never infers
-// that state: a row naming an id that is not in `nodes` may be a note written
+// The node row being ABSENT is not read as terminal either. Deleting a node
+// (DeleteNode / DeleteFleetNode) does not end its undischarged rows any more:
+// it retires the node so they keep draining (A-M3, retireOrDeleteNodeTx). The
+// only thing that drops them is the owner's own account deletion, for the
+// rows naming that account's own nodes, with any bill they carry forgiven in
+// the same transaction (purgeTransientUserDataTx). GC never infers an end: a row naming an id that is not in `nodes` may be a note written
 // moments before the node's first registration lands, a restore in progress, or
 // a delete transaction that half-applied — and in every one of those readings
 // the safe answer is the same, keep the row. removed_at is likewise not read:
@@ -8846,8 +8859,8 @@ func (s *SQLiteStore) settleBlobBilling(ctx context.Context, blobKey, nodeID str
 //
 // Every old row whose delete has never succeeded is counted in `retained`,
 // whatever its node's registration state, so a queue that is not draining is
-// visible rather than silent — the fix for a growing count is an operator
-// bringing a node back or explicitly deleting it, never a timer.
+// visible rather than silent — the fix for a growing count is bringing the
+// node back so the drain can finish, never a timer.
 func (s *SQLiteStore) RetirePendingNodeDeletes(ctx context.Context, before int64) (retired, retained int, err error) {
 	res, err := s.db.ExecContext(ctx,
 		`DELETE FROM pending_node_deletes WHERE deleted_at > 0 AND enqueued_at < ?`, before)

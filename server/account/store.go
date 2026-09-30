@@ -2196,9 +2196,10 @@ type Store interface {
 	ListInboxTasks(ctx context.Context, deviceID, userID string, now int64, limit int) ([]InboxTask, error)
 	// DeleteInboxTask removes one task the account owns. A REFERENCED share is
 	// never touched — the task borrows that object, it does not own it — but a
-	// task-purpose Stored Object (Phase 1D-A) is deleted with the task, and
-	// returned so the caller can drop its blob. A zero StoredFile means nothing
-	// was released.
+	// task-purpose Stored Object (Phase 1D-A) is deleted with the task, its
+	// blob's delete intent queued in the same transaction, and returned so the
+	// caller can delete the blob and discharge that intent. A zero StoredFile
+	// means nothing was released.
 	DeleteInboxTask(ctx context.Context, taskID, userID string) (deleted bool, released StoredFile, err error)
 	// CountPendingInboxTasks counts a device's unfinished rows, for the
 	// per-device row bound.

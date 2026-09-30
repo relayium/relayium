@@ -412,7 +412,18 @@ func (s *Service) handleDeleteInboxTask(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if released.ID != "" {
-		s.dropUploadBlob(r.Context(), released.NodeID, released.BlobKey)
+		// The delete intent is already queued (DeleteInboxTask); deleting now is
+		// promptness, and a success discharges the intent. Detached from the
+		// client hanging up and bounded, like the share-delete route; a failure
+		// is left to GC's drain.
+		now := s.now().Unix()
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), nodeDeleteTimeout)
+		if bs, berr := s.blobFor(dctx, released.NodeID); berr == nil {
+			if derr := bs.Delete(dctx, released.BlobKey); derr == nil {
+				_ = dischargePendingNodeDelete(dctx, s.store, released.BlobKey, released.NodeID, now)
+			}
+		}
+		cancel()
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

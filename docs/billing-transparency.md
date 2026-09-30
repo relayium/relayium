@@ -529,7 +529,7 @@ including the admin-audit prune below — see the residual noted at
 
 | Data | Kept for | Where |
 |---|---|---|
-| Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `GC.expireStoredFiles` (`account/gc.go:287`): `ListExpiredStoredFiles`, then per file `removeStoredFileQueuingBlob` deletes the row and durably queues its blob's delete intent in one transaction (`DeleteStoredFileQueuingBlob` (`account/sqlite.go:7821`)); the blob is deleted in the same pass or retried by `GC.drainPending` |
+| Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `GC.expireStoredFiles` (`account/gc.go:287`): `ListExpiredStoredFiles`, then per file `removeStoredFileQueuingBlob` deletes the row and durably queues its blob's delete intent in one transaction (`DeleteStoredFileQueuingBlob` (`account/sqlite.go:7833`)); the blob is deleted in the same pass or retried by `GC.drainPending` |
 | Rolling daily-quota ledger (`upload_events`) | ~25 hours (a small margin past the 24h window it backs) | `pruneMargin`, `account/gc.go:18`, applied at `account/gc.go:321` |
 | Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:6275`), in the same prune as `upload_events` |
 | Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:22`, applied at `account/gc.go:326` |
@@ -549,7 +549,13 @@ user-linked row (sessions, devices, identities, Device Inbox tasks,
 `pair_rooms`, `upload_events`, `user_stats`, `usage_monthly`, per-provider
 subscription sources, attributable Apple notification records, tokens, CLI
 device-authorisation requests, owned nodes) is deleted before the `users` row
-itself. The comment at `sqlite.go:3278-3283` is explicit that leaving
+itself. **One node record deliberately outlives it:** for every node the
+account deleted, and every node the purge itself removes, `node_tombstones`
+keeps the node id, its owner type, the (now-deleted) account's user id and the
+deletion time, with no expiry. It exists to prevent node-ID takeover: node ids
+are client-chosen and fleet ids are public, so without it a deleted id could
+be registered by someone else and receive download and cleanup traffic still
+addressed to it. It holds no file, name, address, key or usage data. The comment at `sqlite.go:3278-3283` is explicit that leaving
 `usage_periods` behind would "retain user-attributed relay history
 indefinitely after the hard purge" and calls that out as contradicting the
 stated model — so it's deleted too, not just anonymized. The purge is
