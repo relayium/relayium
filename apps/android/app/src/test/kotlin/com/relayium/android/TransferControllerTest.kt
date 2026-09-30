@@ -208,6 +208,21 @@ class TransferControllerTest {
         return remote
     }
 
+    // ── B-L7: staging an earlier incarnation left behind ────────────────────
+
+    @Test
+    fun `stale local staging is swept when the controller comes up, not at the next receive`() {
+        val staging = temp.newFolder("staging-stale-${System.nanoTime()}")
+        val orphan = File(staging, "batch-0").apply { mkdirs() }
+        File(orphan, "0.part").writeBytes(ByteArray(64))
+        val then = System.currentTimeMillis() - 2 * ReceiveStore.STALE_STAGING_AGE_MS
+        orphan.walkBottomUp().forEach { it.setLastModified(then) }
+
+        rig(store = ReceiveStore(staging))
+
+        awaitTrue("the orphan was swept without a receive") { !orphan.exists() }
+    }
+
     // ── R10: caps piggyback and admission ───────────────────────────────────
 
     @Test

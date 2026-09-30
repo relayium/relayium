@@ -43,6 +43,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -694,39 +695,37 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+                // Every row's controls read the same word, so each one is SPOKEN
+                // with the device and what it carries — otherwise TalkBack
+                // offers a column of identical "Remove" buttons, one of which
+                // deletes the only local copy of the wrong delivery.
+                val target = deviceLabel(state, send.targetDeviceId)
+                val summary = sendSummary(send)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (send.phase == InboxSendStatus.Phase.SENDING) {
-                        OutlinedButton(
-                            onClick = { actions.cancelSend(send.jobId) },
-                            colors = accentOutlinedColors(),
-                            modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
-                        ) { Text(stringResource(R.string.inbox_sending_cancel)) }
-                    } else if (send.offersRetry) {
-                        OutlinedButton(
-                            onClick = { actions.send(send.jobId) },
-                            colors = accentOutlinedColors(),
-                            modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
-                        ) { Text(stringResource(R.string.inbox_sending_retry)) }
-                    }
-                    // A local plan always gets a way out. A server delivery gets
-                    // Cancel only before the receiver owns a live claim; once
-                    // receiving/verifying, central would refuse it.
-                    if (send.phase != InboxSendStatus.Phase.DELIVERED || send.offersCancelDelivery) {
-                        TextButton(
-                            onClick = { discardingId = send.jobId },
-                            modifier = Modifier
-                                .defaultMinSize(minHeight = Metrics.touch)
-                                .testTag("inbox-send-discard-${send.jobId}"),
-                        ) {
-                            Text(
-                                stringResource(
-                                    if (send.phase == InboxSendStatus.Phase.DELIVERED) {
-                                        R.string.inbox_sending_cancel_delivery
-                                    } else {
-                                        R.string.inbox_sending_discard
-                                    },
-                                ),
-                            )
+                    for (control in sendControls(send)) {
+                        val label = stringResource(control.labelRes)
+                        val spoken = stringResource(
+                            R.string.inbox_sending_control_spoken, label, target, summary,
+                        )
+                        val modifier = Modifier
+                            .defaultMinSize(minHeight = Metrics.touch)
+                            .testTag(sendControlTag(control, send.jobId))
+                            .semantics { contentDescription = spoken }
+                        when (control) {
+                            SendControl.STOP -> OutlinedButton(
+                                onClick = { actions.cancelSend(send.jobId) },
+                                colors = accentOutlinedColors(),
+                                modifier = modifier,
+                            ) { Text(label) }
+                            SendControl.SEND, SendControl.RETRY -> OutlinedButton(
+                                onClick = { actions.send(send.jobId) },
+                                colors = accentOutlinedColors(),
+                                modifier = modifier,
+                            ) { Text(label) }
+                            SendControl.REMOVE, SendControl.CANCEL_DELIVERY -> TextButton(
+                                onClick = { discardingId = send.jobId },
+                                modifier = modifier,
+                            ) { Text(label) }
                         }
                     }
                 }
@@ -782,6 +781,42 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                 }
             },
         )
+    }
+}
+
+/**
+ * One control an Outgoing row can offer, with its visible word and test tag.
+ *
+ * SEND and RETRY are the same action with different truths: a staged job has
+ * never been attempted, so "Send"; a stopped one is being attempted again, so
+ * "Try again" — the word RelayiumKit's `InboxSendPresentation.label` uses.
+ * REMOVE and CANCEL_DELIVERY share one tag because they open the same
+ * confirmation and only one of them is ever offered.
+ */
+internal enum class SendControl(val labelRes: Int, val tag: String) {
+    STOP(R.string.inbox_sending_cancel, "inbox-send-stop"),
+    SEND(R.string.inbox_sending_send, "inbox-send-send"),
+    RETRY(R.string.inbox_sending_retry, "inbox-send-retry"),
+    REMOVE(R.string.inbox_sending_discard, "inbox-send-discard"),
+    CANCEL_DELIVERY(R.string.inbox_sending_cancel_delivery, "inbox-send-discard"),
+}
+
+internal fun sendControlTag(control: SendControl, jobId: String): String = "${control.tag}-$jobId"
+
+/**
+ * What one Outgoing row offers, in order. A local plan always gets a way out.
+ * A server delivery gets Cancel only before the receiver owns a live claim;
+ * once receiving/verifying, central would refuse it.
+ */
+internal fun sendControls(send: InboxSendStatus): List<SendControl> = buildList {
+    when {
+        send.phase == InboxSendStatus.Phase.SENDING -> add(SendControl.STOP)
+        send.offersRetry ->
+            add(if (send.phase == InboxSendStatus.Phase.STAGED) SendControl.SEND else SendControl.RETRY)
+    }
+    when {
+        send.phase != InboxSendStatus.Phase.DELIVERED -> add(SendControl.REMOVE)
+        send.offersCancelDelivery -> add(SendControl.CANCEL_DELIVERY)
     }
 }
 

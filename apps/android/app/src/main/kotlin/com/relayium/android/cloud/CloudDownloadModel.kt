@@ -76,6 +76,14 @@ class CloudDownloadModel(
 
     private val client = clientFor(storage)
 
+    init {
+        // Staging an earlier incarnation left behind would otherwise wait for
+        // the next cloud receive to be swept. Queued first on the store's own
+        // thread, so it precedes any begin; the store's fences keep it off
+        // live work.
+        scope.launch(storage) { runCatching { store.sweepStaleStaging() } }
+    }
+
     sealed interface State {
         data object Idle : State
 

@@ -177,6 +177,19 @@ class CloudDownloadRecoveryTest {
     // ── recovery that keeps the batch ───────────────────────────────────────
 
     @Test
+    fun `stale cloud staging is swept when the model comes up, not at the next receive`() {
+        val staging = temp.newFolder("staging-stale")
+        val orphan = File(staging, "batch-0").apply { mkdirs() }
+        File(orphan, "0.part").writeBytes(ByteArray(64))
+        val then = System.currentTimeMillis() - 2 * ReceiveStore.STALE_STAGING_AGE_MS
+        orphan.walkBottomUp().forEach { it.setLastModified(then) }
+
+        model(ReceiveStore(staging))
+
+        await({ orphan.exists() }) { !it }
+    }
+
+    @Test
     fun `an interrupted receive resumes and every file is byte-exact`() {
         // Cut inside the multi-frame file, after two whole frames have landed,
         // so the resume has to reattach in the middle of ONE document and get

@@ -87,11 +87,13 @@
     <string name="inbox_sending_failed_retryable">那台设备暂时无法保存，之后可能重试。</string>
     <string name="inbox_sending_failed_terminal">投递已经结束，内容没有保存。</string>
     <string name="inbox_sending_stopped">已停止。</string>
-    <string name="inbox_sending_ambiguous">Relayium 无法确定这次是否已到达另一台设备。再试一次是安全的：服务器只会保留这次投递的一份。</string>
+    <string name="inbox_sending_ambiguous">Relayium 无法确定这次投递是否已移交。没有删除任何内容；重试会继续同一次投递，而不会再生成一次。</string>
     <string name="inbox_sending_upload_unknown">上传中断且没有得到回应，Relayium 无法确定这些加密数据是否已经到达服务器。再发一次会是另一次独立上传，仍然无法回答这个问题，所以这一条不能安全重试。</string>
     <string name="inbox_sending_upload_unsettled">Relayium 无法确认这次上传是否已完成，因此没有送达任何内容。服务器可能仍保存着它；重试会再次向服务器确认，不会重复上传。</string>
     <string name="inbox_sending_cancel">停止</string>
-    <string name="inbox_sending_retry">发送</string>
+    <string name="inbox_sending_send">发送</string>
+    <string name="inbox_sending_retry">重试</string>
+    <string name="inbox_sending_control_spoken">%1$s · %2$s · %3$s</string>
     <string name="inbox_sending_discard">移除</string>
     <string name="inbox_sending_discard_title">从“发送中”移除？</string>
     <string name="inbox_sending_discard_body">它不会被发送，本机上的加密副本会立即删除。如果已经上传了一部分，relayium.com 会在大约一小时内自行丢弃。</string>
