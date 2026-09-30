@@ -501,13 +501,17 @@ type RelayAttribBudget struct {
 	WindowSecs int64
 }
 
-// UsageRecordResult is what RecordNodeUsage did: Recorded is the increment
-// written to the ledger, Withheld the part of the (otherwise accepted)
-// increment the budget refused, and Warn is true at most once per (node,
-// user) per window, on a report that had bytes withheld.
+// UsageRecordResult is what RecordNodeUsage did with one report's accepted
+// increment: Recorded went into the alloc's usage_periods row now, Deferred
+// was added to the (node, user) owed backlog (recorded later as the bucket
+// drains), Dropped exceeded the owed cap and will never be recorded. Drained
+// is owed bytes from earlier reports this call recorded. Warn is true at most
+// once per (node, user) per window, on a report that deferred or dropped bytes.
 type UsageRecordResult struct {
 	Recorded int64
-	Withheld int64
+	Deferred int64
+	Dropped  int64
+	Drained  int64
 	Warn     bool
 }
 
@@ -2183,8 +2187,10 @@ type Store interface {
 	// holding the recorded increment to the (e.NodeID, e.UserID) relay-
 	// attribution budget b in the same transaction (A-M8).
 	RecordNodeUsage(ctx context.Context, e UsageEvent, b RelayAttribBudget) (UsageRecordResult, error)
-	// PruneRelayAttribBudget deletes budget rows idle since before idleBefore.
-	PruneRelayAttribBudget(ctx context.Context, idleBefore int64) (int64, error)
+	// SettleRelayAttribBudget is the per-heartbeat upkeep of that budget:
+	// drains owed bytes of up to maxPairs pairs into the ledger as their
+	// buckets allow, and prunes idle rows that owe nothing.
+	SettleRelayAttribBudget(ctx context.Context, now int64, b RelayAttribBudget, maxPairs int) (drained, pruned int64, err error)
 	// admin (read-only)
 	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
 	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)

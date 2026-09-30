@@ -7,7 +7,8 @@ package account
 // per-(node, user) wall-clock budget, charged inside the ledger write's own
 // transaction, that closes that multiplier — and prove it does not eat a heavy
 // but physically plausible relay, including a whole node's catch-up after an
-// hour offline.
+// hour offline, and that bytes beyond the bucket are deferred centrally (owed)
+// rather than refused to the node.
 
 import (
 	"bytes"
@@ -121,6 +122,22 @@ func (e *a_m8Env) recorded(userID, nodeID string) int64 {
 	return n
 }
 
+// owed is the pair's owed backlog, checked against the rows it summarizes.
+func (e *a_m8Env) owed(nodeID, userID string) int64 {
+	e.t.Helper()
+	var col, rows int64
+	if err := e.st.db.QueryRow(`SELECT COALESCE((SELECT owed FROM relay_attrib_budget WHERE node_id=? AND user_id=?),0)`, nodeID, userID).Scan(&col); err != nil {
+		e.t.Fatal(err)
+	}
+	if err := e.st.db.QueryRow(`SELECT COALESCE(SUM(bytes),0) FROM relay_attrib_owed WHERE node_id=? AND user_id=?`, nodeID, userID).Scan(&rows); err != nil {
+		e.t.Fatal(err)
+	}
+	if col != rows {
+		e.t.Fatalf("owed column %d disagrees with owed rows %d", col, rows)
+	}
+	return col
+}
+
 func (e *a_m8Env) budgetRows(userID string) int {
 	e.t.Helper()
 	var n int
@@ -180,8 +197,11 @@ func TestA_M8ForgedHeartbeatStreamCannotExceedWindowBudget(t *testing.T) {
 	if unbounded := int64(beats) * maxAllocsPerUser * maxFirstReportBytes; unbounded < 5*budget {
 		t.Fatalf("test does not exercise the multiplier: unbounded %d vs budget %d", unbounded, budget)
 	}
-	if lastOK {
-		t.Fatalf("a heartbeat whose bytes were withheld answered OK:true")
+	if !lastOK {
+		t.Fatalf("an over-budget heartbeat answered OK:false — the node would retain every final it carried")
+	}
+	if owed := e.owed(node, victim); owed != a_m8Capacity {
+		t.Fatalf("owed backlog %d, want capped at one bucket %d", owed, a_m8Capacity)
 	}
 	if warns := strings.Count(logs.String(), a_m8WarnText); warns != 1 {
 		t.Fatalf("got %d budget warnings in one window, want exactly 1:\n%s", warns, logs)
@@ -355,11 +375,12 @@ func TestA_M8EightAllocsCatchUpAfterAnHourOutage(t *testing.T) {
 	}
 }
 
-// Beyond the bucket, withheld CLOSED finals stay retryable: the heartbeat
-// answers OK:false, a node that retains unacknowledged finals resends them,
-// and every byte is recorded as the bucket drains.
-func TestA_M8WithheldFinalsAreRecordedOnResend(t *testing.T) {
-	a_m8CaptureLog(t)
+// Beyond the bucket, closed finals are acknowledged at once (OK:true) and
+// their withheld bytes are kept centrally: the node never sends them again,
+// and upkeep on later heartbeats — which carry no usage at all — records
+// every byte, each in the month it was relayed.
+func TestA_M8DeferredFinalsAreRecordedWithoutResend(t *testing.T) {
+	logs := a_m8CaptureLog(t)
 	e := newA_M8Env(t)
 	node := e.fleetNode()
 	user := e.user("retry@a-m8.test")
@@ -380,25 +401,202 @@ func TestA_M8WithheldFinalsAreRecordedOnResend(t *testing.T) {
 	}
 	now := start + interval + 5400
 	e.set(now)
-	if e.heartbeat(node, usage) {
-		t.Fatalf("a heartbeat with withheld finals answered OK:true — the node would evict them")
+	if !e.heartbeat(node, usage) {
+		t.Fatalf("a heartbeat with deferred finals answered OK:false")
 	}
 	want := int64(legitAllocs) * final
-	if got := e.recorded(user, node); got >= want {
-		t.Fatalf("expected the first catch-up to be partly withheld, recorded %d of %d", got, want)
+	got := e.recorded(user, node)
+	if got >= want || got+e.owed(node, user) != want {
+		t.Fatalf("after the catch-up: recorded %d + owed %d, want recorded < %d and the sum exact", got, e.owed(node, user), want)
 	}
-	// The node keeps and resends the same finals every heartbeat until OK.
-	ok := false
-	for i := 0; i < 500 && !ok; i++ {
+	if !strings.Contains(logs.String(), a_m8WarnText) {
+		t.Fatalf("deferral was not logged")
+	}
+	// The finals were acknowledged; the node only sends empty heartbeats now.
+	for i := 0; i < 500 && e.owed(node, user) > 0; i++ {
 		now += interval
 		e.set(now)
-		ok = e.heartbeat(node, usage)
-	}
-	if !ok {
-		t.Fatalf("resent finals never acknowledged")
+		e.heartbeat(node, nil)
 	}
 	if got := e.recorded(user, node); got != want {
-		t.Fatalf("resent finals recorded %d, want every byte %d (lost %d)", got, want, want-got)
+		t.Fatalf("deferred finals recorded %d, want every byte %d (lost %d)", got, want, want-got)
+	}
+	if e.owed(node, user) != 0 {
+		t.Fatalf("owed backlog not drained")
+	}
+}
+
+// Codex round 2: one user over budget must not hold up anyone else. User A
+// runs nine allocs at the per-alloc ceiling (above the budget rate) after a
+// 90-minute outage and keeps going; user B closes one allocation every
+// heartbeat. Every heartbeat is answered OK, so the node retires B's finals at
+// once, and B's bytes are recorded in full the heartbeat they arrive.
+func TestA_M8OverBudgetUserDoesNotHoldUpOthers(t *testing.T) {
+	a_m8CaptureLog(t)
+	e := newA_M8Env(t)
+	node := e.fleetNode()
+	heavy := e.user("heavy@a-m8.test")
+	other := e.user("other@a-m8.test")
+	rate := int64(maxRelayBytesPerSec)
+	interval := int64(nodeHeartbeatInterval)
+	now := a_m8Base + interval
+	e.set(now)
+	var a []nodeUsage
+	for i := 0; i < 9; i++ {
+		a = append(a, nodeUsage{AllocID: fmt.Sprintf("h%d", i), Username: a_m8Username(heavy), RelayedBytes: rate * interval})
+	}
+	e.heartbeat(node, a)
+	elapsed := interval + 5400
+	var otherWant int64
+	for beat := 0; beat < 200; beat++ {
+		now = a_m8Base + elapsed
+		e.set(now)
+		for i := range a {
+			a[i].RelayedBytes = rate * elapsed
+		}
+		final := nodeUsage{AllocID: fmt.Sprintf("b%d", beat), Username: a_m8Username(other), RelayedBytes: 100 << 20}
+		if !e.heartbeat(node, append(append([]nodeUsage{}, a...), final)) {
+			t.Fatalf("heartbeat %d answered OK:false while one user was over budget — the node would retain the other user's final", beat)
+		}
+		otherWant += 100 << 20
+		if got := e.recorded(other, node); got != otherWant {
+			t.Fatalf("heartbeat %d: other user's finals recorded %d, want %d", beat, got, otherWant)
+		}
+		elapsed += interval
+	}
+	if e.owed(node, heavy) == 0 {
+		t.Fatalf("the heavy user was never over budget; the test does not exercise deferral")
+	}
+}
+
+// An ErrUsageAllocOwnerMismatch entry is logged and skipped; the heartbeat is
+// still OK, so the node retires the rest of its batch.
+func TestA_M8OwnerMismatchEntryStillAnswersOK(t *testing.T) {
+	a_m8CaptureLog(t)
+	e := newA_M8Env(t)
+	node := e.fleetNode()
+	user := e.user("u@a-m8.test")
+	if err := e.st.RecordUsage(context.Background(), UsageEvent{AllocID: "taken", Token: "t", UserID: user, RelayedBytes: 1,
+		RecordedAt: a_m8Base - 10, NodeID: "other-node", Billable: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !e.heartbeat(node, []nodeUsage{
+		{AllocID: "taken", Username: a_m8Username(user), RelayedBytes: 5000},
+		{AllocID: "mine", Username: a_m8Username(user), RelayedBytes: 700},
+	}) {
+		t.Fatalf("a batch with a refused entry answered OK:false")
+	}
+	if got := e.recorded(user, node); got != 700 {
+		t.Fatalf("recorded %d via node, want 700", got)
+	}
+}
+
+// The owed backlog is capped at one bucket per pair: a forger's flood leaves
+// at most one bucket recorded now and one owed, and after the bucket drains
+// nothing beyond those two is ever recorded.
+func TestA_M8OwedBacklogIsCappedAtOneBucket(t *testing.T) {
+	logs := a_m8CaptureLog(t)
+	e := newA_M8Env(t)
+	node, quiet := e.fleetNode(), e.fleetNode()
+	victim := e.user("victim@a-m8.test")
+	for i := 0; i < 40; i++ {
+		e.heartbeat(node, forgedBatch(fmt.Sprintf("f%d", i), victim))
+	}
+	if got := e.recorded(victim, ""); got != a_m8Capacity {
+		t.Fatalf("flood recorded %d now, want one bucket %d", got, a_m8Capacity)
+	}
+	if owed := e.owed(node, victim); owed != a_m8Capacity {
+		t.Fatalf("flood owes %d, want capped at %d", owed, a_m8Capacity)
+	}
+	if !strings.Contains(logs.String(), "dropped over the owed cap") {
+		t.Fatalf("dropping was not logged:\n%s", logs)
+	}
+	// Upkeep driven by ANOTHER node's heartbeats drains it: the flooding node
+	// has gone quiet.
+	for step := int64(1); step <= 3; step++ {
+		e.set(a_m8Base + step*relayAttribWindowSecs)
+		e.heartbeat(quiet, nil)
+	}
+	if got := e.recorded(victim, ""); got != 2*a_m8Capacity {
+		t.Fatalf("after draining recorded %d, want exactly two buckets %d", got, 2*a_m8Capacity)
+	}
+	if e.owed(node, victim) != 0 {
+		t.Fatalf("owed backlog not drained")
+	}
+}
+
+// Reports under the synthetic alloc id owed bytes are drained into are
+// refused: usage_periods is keyed by alloc id alone.
+func TestA_M8ReservedAllocIDIsRefused(t *testing.T) {
+	a_m8CaptureLog(t)
+	e := newA_M8Env(t)
+	node := e.fleetNode()
+	user := e.user("u@a-m8.test")
+	err := e.st.RecordUsage(context.Background(), UsageEvent{AllocID: relayAttribOwedAllocID(node, user), Token: "t", UserID: user,
+		RelayedBytes: 5, RecordedAt: a_m8Base, NodeID: node, Billable: true})
+	if !errors.Is(err, ErrUsageReservedAllocID) {
+		t.Fatalf("reserved alloc id accepted: %v", err)
+	}
+	e.heartbeat(node, []nodeUsage{{AllocID: relayAttribOwedAllocID(node, user), Username: a_m8Username(user), RelayedBytes: 5}})
+	if got := e.recorded(user, ""); got != 0 {
+		t.Fatalf("reserved alloc id recorded %d", got)
+	}
+}
+
+// A backwards clock drains nothing and never goes negative; saturating budget
+// parameters cannot overflow level or owed.
+func TestA_M8BackwardsClockAndSaturation(t *testing.T) {
+	a_m8CaptureLog(t)
+	e := newA_M8Env(t)
+	node := e.fleetNode()
+	user := e.user("clock@a-m8.test")
+	for i := 0; i < 5; i++ {
+		e.heartbeat(node, forgedBatch(fmt.Sprintf("t%d", i), user))
+	}
+	// Clock steps back an hour: nothing drains, nothing more is recorded.
+	e.set(a_m8Base - relayAttribWindowSecs)
+	for i := 0; i < 5; i++ {
+		e.heartbeat(node, forgedBatch(fmt.Sprintf("u%d", i), user))
+	}
+	if got := e.recorded(user, ""); got != a_m8Capacity {
+		t.Fatalf("backwards clock recorded %d, want still %d", got, a_m8Capacity)
+	}
+	var level, owed int64
+	if err := e.st.db.QueryRow(`SELECT level, owed FROM relay_attrib_budget WHERE user_id=?`, user).Scan(&level, &owed); err != nil {
+		t.Fatal(err)
+	}
+	if level < 0 || level > a_m8Capacity || owed < 0 || owed > a_m8Capacity {
+		t.Fatalf("level %d / owed %d out of [0, %d]", level, owed, a_m8Capacity)
+	}
+	// Store level: a report stamped before the bucket's last update (backwards
+	// clock) on a lightly used pair is recorded in full, and the result's
+	// parts are non-negative and add up to the increment.
+	ctx0 := context.Background()
+	if _, err := e.st.RecordNodeUsage(ctx0, UsageEvent{AllocID: "bc1", Token: "t", UserID: user,
+		RelayedBytes: maxFirstReportBytes, RecordedAt: a_m8Base, NodeID: "bc-node", Billable: true}, relayAttribBudget); err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.st.RecordNodeUsage(ctx0, UsageEvent{AllocID: "bc2", Token: "t", UserID: user,
+		RelayedBytes: maxFirstReportBytes, RecordedAt: a_m8Base - relayAttribWindowSecs, NodeID: "bc-node", Billable: true}, relayAttribBudget)
+	if err != nil || res.Recorded != maxFirstReportBytes || res.Deferred != 0 || res.Dropped != 0 {
+		t.Fatalf("backwards-clock report on a light pair: %+v, %v", res, err)
+	}
+	// Saturation: rate x window overflows int64; capacity saturates, and a
+	// report is recorded without wrapping.
+	huge := RelayAttribBudget{RatePerSec: math.MaxInt64 / 2, WindowSecs: 1 << 20}
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		res, err := e.st.RecordNodeUsage(ctx, UsageEvent{AllocID: fmt.Sprintf("sat%d", i), Token: "t", UserID: user,
+			RelayedBytes: maxFirstReportBytes, RecordedAt: a_m8Base, NodeID: "sat-node", Billable: true}, huge)
+		if err != nil || res.Recorded != maxFirstReportBytes || res.Deferred != 0 || res.Dropped != 0 {
+			t.Fatalf("saturated budget report %d: %+v, %v", i, res, err)
+		}
+	}
+	if err := e.st.db.QueryRow(`SELECT level, owed FROM relay_attrib_budget WHERE node_id='sat-node'`).Scan(&level, &owed); err != nil {
+		t.Fatal(err)
+	}
+	if level != 3*maxFirstReportBytes || owed != 0 {
+		t.Fatalf("saturated bucket level %d owed %d", level, owed)
 	}
 }
 
@@ -429,21 +627,41 @@ func TestA_M8BudgetsAreIndependentPerNodeAndUser(t *testing.T) {
 	}
 }
 
-// A restart does not refill the budget: it lives in the store.
-func TestA_M8BudgetSurvivesRestart(t *testing.T) {
+// A restart does not refill the budget: it lives in the SQLite file, which is
+// closed and reopened here, owed backlog included.
+func TestA_M8BudgetSurvivesCloseAndReopen(t *testing.T) {
 	a_m8CaptureLog(t)
-	e := newA_M8Env(t)
+	path := t.TempDir() + "/a-m8.db"
+	st, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &a_m8Env{t: t, st: st, clock: a_m8Base}
+	e.restart()
 	node := e.fleetNode()
 	victim := e.user("victim@a-m8.test")
 	for i := 0; i < 5; i++ {
 		e.heartbeat(node, forgedBatch(fmt.Sprintf("p%d", i), victim))
 	}
+	owedBefore := e.owed(node, victim)
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	st2, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st2.Close() })
+	e.st = st2
 	e.restart()
+	if got := e.owed(node, victim); got != owedBefore || got == 0 {
+		t.Fatalf("owed after reopen %d, want %d (non-zero)", got, owedBefore)
+	}
 	for i := 0; i < 5; i++ {
 		e.heartbeat(node, forgedBatch(fmt.Sprintf("q%d", i), victim))
 	}
 	if got := e.recorded(victim, ""); got != a_m8Capacity {
-		t.Fatalf("after a restart recorded %d, want still held to %d", got, a_m8Capacity)
+		t.Fatalf("after reopen recorded %d, want still held to %d", got, a_m8Capacity)
 	}
 }
 
@@ -509,6 +727,13 @@ func TestA_M8NonexistentUserCreatesNoBudgetRow(t *testing.T) {
 	if n := e.budgetRows("ghost-user-id"); n != 0 {
 		t.Fatalf("nonexistent user got %d budget rows", n)
 	}
+	var owedRows int
+	if err := e.st.db.QueryRow(`SELECT COUNT(*) FROM relay_attrib_owed`).Scan(&owedRows); err != nil {
+		t.Fatal(err)
+	}
+	if owedRows != 0 {
+		t.Fatalf("nonexistent user got %d owed rows", owedRows)
+	}
 }
 
 // Both account purges delete the user's budget rows, with no later heartbeat.
@@ -520,8 +745,13 @@ func TestA_M8PurgesDeleteBudgetRows(t *testing.T) {
 			node := e.fleetNode()
 			user := e.user("purge-" + which + "@a-m8.test")
 			keep := e.user("keep-" + which + "@a-m8.test")
-			e.heartbeat(node, forgedBatch("x", user))
+			for i := 0; i < 5; i++ {
+				e.heartbeat(node, forgedBatch(fmt.Sprintf("x%d", i), user))
+			}
 			e.heartbeat(node, forgedBatch("k", keep))
+			if e.owed(node, user) == 0 {
+				t.Fatalf("setup: expected owed bytes before purge")
+			}
 			if e.budgetRows(user) != 1 {
 				t.Fatalf("expected a budget row before purge")
 			}
@@ -545,6 +775,13 @@ func TestA_M8PurgesDeleteBudgetRows(t *testing.T) {
 			if n := e.budgetRows(user); n != 0 {
 				t.Fatalf("%s purge left %d budget rows for the user", which, n)
 			}
+			var owedRows int
+			if err := e.st.db.QueryRow(`SELECT COUNT(*) FROM relay_attrib_owed WHERE user_id=?`, user).Scan(&owedRows); err != nil {
+				t.Fatal(err)
+			}
+			if owedRows != 0 {
+				t.Fatalf("%s purge left %d owed rows for the user", which, owedRows)
+			}
 			if e.budgetRows(keep) != 1 {
 				t.Fatalf("%s purge removed another user's budget row", which)
 			}
@@ -552,30 +789,42 @@ func TestA_M8PurgesDeleteBudgetRows(t *testing.T) {
 	}
 }
 
-// Rows idle for a full window are pruned by the next heartbeat (their level
-// has drained to 0, so pruning changes no budget).
+// Rows idle for a full window that owe nothing are pruned by the next
+// heartbeat of any node (their level has drained to 0, so pruning changes no
+// budget); a row that still owes is kept until drained.
 func TestA_M8IdleBudgetRowsArePruned(t *testing.T) {
 	a_m8CaptureLog(t)
 	e := newA_M8Env(t)
 	nodeA, nodeB := e.fleetNode(), e.fleetNode()
 	user := e.user("user@a-m8.test")
+	owing := e.user("owing@a-m8.test")
 	e.set(a_m8Base)
-	for i := 0; i < 5; i++ {
-		e.heartbeat(nodeA, forgedBatch(fmt.Sprintf("x%d", i), user))
+	e.heartbeat(nodeA, []nodeUsage{{AllocID: "x", Username: a_m8Username(user), RelayedBytes: 1 << 30}})
+	for i := 0; i < 8; i++ {
+		e.heartbeat(nodeA, forgedBatch(fmt.Sprintf("o%d", i), owing))
 	}
-	if e.budgetRows(user) != 1 {
-		t.Fatalf("expected one budget row after attribution")
+	if e.budgetRows(user) != 1 || e.owed(nodeA, owing) == 0 {
+		t.Fatalf("setup: expected a budget row and an owing pair")
 	}
 	e.set(a_m8Base + relayAttribWindowSecs + 1)
 	e.heartbeat(nodeB, nil)
 	if n := e.budgetRows(user); n != 0 {
 		t.Fatalf("idle budget row not pruned after a window: %d", n)
 	}
-	for i := 0; i < 5; i++ {
-		e.heartbeat(nodeA, forgedBatch(fmt.Sprintf("y%d", i), user))
+	if e.budgetRows(owing) != 1 {
+		t.Fatalf("a pair that still owed bytes was pruned")
 	}
-	if got := e.recorded(user, nodeA); got != 2*a_m8Capacity {
-		t.Fatalf("after a full idle window recorded %d, want %d", got, 2*a_m8Capacity)
+	// Prune alone (upkeep reaching no owing pair): an idle pair that owes
+	// must survive it, or its owed bytes would be orphaned.
+	for i := 0; i < 8; i++ {
+		e.heartbeat(nodeA, forgedBatch(fmt.Sprintf("p%d", i), owing))
+	}
+	idle := a_m8Base + 3*relayAttribWindowSecs
+	if _, _, err := e.st.SettleRelayAttribBudget(context.Background(), idle, relayAttribBudget, 0); err != nil {
+		t.Fatal(err)
+	}
+	if e.budgetRows(owing) != 1 || e.owed(nodeA, owing) == 0 {
+		t.Fatalf("prune removed an idle pair that still owes bytes")
 	}
 }
 
