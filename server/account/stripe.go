@@ -163,8 +163,12 @@ type stripeClient struct {
 // come from RELAYIUM_STRIPE_{SECRET_KEY,WEBHOOK_SECRET,PORTAL_CONFIG}. Portal
 // creation fails closed when its dedicated configuration is absent.
 // ErrWebhookSecretUnset is returned by VerifyWebhook when the client was built
-// without a webhook signing secret. Every webhook is then refused.
+// without a usable webhook signing secret. Every webhook is then refused.
 var ErrWebhookSecretUnset = errors.New("stripe webhook: signing secret not configured")
+
+// WebhookSecretConfigured reports whether secret can serve as a webhook
+// signing key: anything empty or whitespace-only is a predictable key.
+func WebhookSecretConfigured(secret string) bool { return strings.TrimSpace(secret) != "" }
 
 func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClient {
 	return &stripeClient{
@@ -324,11 +328,12 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		return WebhookEvent{}, errors.New("stripe webhook: timestamp outside tolerance")
 	}
 
-	// An empty signing secret is a misconfiguration, not a key: an HMAC with
-	// the empty key is computable by anyone, so accepting it would let a forged
-	// checkout/subscription/refund event through. A genuine Stripe signature
-	// never matches the empty key either, so refusing here loses nothing.
-	if c.webhookSecret == "" {
+	// An empty or whitespace-only signing secret is a misconfiguration, not a
+	// key: an HMAC with it is computable by anyone, so accepting it would let a
+	// forged checkout/subscription/refund event through. A genuine Stripe
+	// signature never matches such a key either, so refusing here loses
+	// nothing. main refuses to start in this state; this is defense in depth.
+	if !WebhookSecretConfigured(c.webhookSecret) {
 		return WebhookEvent{}, ErrWebhookSecretUnset
 	}
 	signedPayload := strconv.FormatInt(ts, 10) + "." + string(payload)
