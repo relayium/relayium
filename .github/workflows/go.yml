@@ -19,6 +19,11 @@ on:
       - 'server/**'
       - 'scripts/go-race-shard.go'
       - 'scripts/test/db-rollback-harness.sh'
+      # The CLI/public-truth gate builds the candidate and reads these exact
+      # public inputs, so an edit to any of them must select this lane.
+      - 'scripts/test/cli-public-truth-test.sh'
+      - 'README.md'
+      - 'web/public/llms.txt'
       # Four frozen fixtures, named one file at a time, each with the Go
       # test that reads it directly:
       #
