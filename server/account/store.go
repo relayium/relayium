@@ -1874,6 +1874,15 @@ type Store interface {
 	// event for its provider changes nothing and reports Applied=false.
 	ApplySubscriptionSource(ctx context.Context, ev SourceEvent) (SubscriptionApply, error)
 	ApplyAuthorizedStripeLifecycle(ctx context.Context, ev SourceEvent) (SubscriptionApply, error)
+	// ApplyStripeReconcileDowngrade writes the reconcile sweep's
+	// missed-cancellation downgrade (Stripe row to free/canceled, canonical
+	// subscription binding cleared) only if the user's Stripe source row is still
+	// exactly `observed`, stamped on Stripe's clock with
+	// max(observed.EventAt, endedAt) — endedAt being the latest ended_at Stripe
+	// reported for the customer (0 = none) — never with the local clock.
+	// false = the row changed (or vanished) since it was observed and nothing
+	// was written.
+	ApplyStripeReconcileDowngrade(ctx context.Context, observed SubscriptionSource, endedAt, now int64) (bool, error)
 	BillingAuthority(ctx context.Context, userID string) (BillingAuthority, bool, error)
 	// GetSubscriptionSource returns one provider's recorded state for a user.
 	GetSubscriptionSource(ctx context.Context, userID, provider string) (SubscriptionSource, bool, error)

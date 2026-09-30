@@ -49,6 +49,7 @@ type fakeBiller struct {
 	ensureCalls      int
 
 	activeSubs    []SubscriptionInfo // what ListActiveSubscriptions returns
+	endedAt       int64              // SubscriptionEvidence.LatestEndedAt
 	listSubsErr   error
 	listSubsCalls int
 	canceledSubs  []string // ids passed to CancelSubscription
@@ -69,6 +70,14 @@ func (f *fakeBiller) ListActiveSubscriptions(ctx context.Context, customerID str
 		return nil, f.listSubsErr
 	}
 	return f.activeSubs, nil
+}
+
+func (f *fakeBiller) ListSubscriptionEvidence(ctx context.Context, customerID string) (SubscriptionEvidence, error) {
+	live, err := f.ListActiveSubscriptions(ctx, customerID)
+	if err != nil {
+		return SubscriptionEvidence{}, err
+	}
+	return SubscriptionEvidence{Live: live, LatestEndedAt: f.endedAt}, nil
 }
 
 func (f *fakeBiller) CancelSubscription(ctx context.Context, subID string, refund bool) error {

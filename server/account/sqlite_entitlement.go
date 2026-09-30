@@ -903,3 +903,85 @@ func backfillSubscriptionSources(ctx context.Context, db *sql.DB) error {
 		           WHERE s.user_id = u.id AND s.provider = 'stripe')`)
 	return err
 }
+
+// ApplyStripeReconcileDowngrade is the reconcile sweep's missed-cancellation
+// write: Stripe's source row goes to free/canceled and the canonical
+// subscription binding is cleared — but ONLY if that row is still exactly
+// `observed`, the copy the sweep read BEFORE it asked Stripe for the customer's
+// live subscriptions. Any write to the row in between (a webhook granting a new
+// subscription, a renewal, a deletion already applied) changes at least one
+// compared column and turns this into a no-op reporting false, so a webhook
+// that lands while the sweep is deciding always wins over the sweep's older
+// evidence.
+//
+// The downgrade is stamped on Stripe's clock, never the local one:
+// max(observed.EventAt, endedAt), where endedAt is the latest ended_at of the
+// customer's ended subscriptions from the same Stripe list that showed nothing
+// live (0 = none reported). applySourceTx drops only events STRICTLY older than
+// the stored clock, so:
+//
+//   - every subscription in that list had ended by the time Stripe answered,
+//     so any event Stripe creates AFTER the answer — a re-subscription, a
+//     reactivation — has created >= endedAt (whole seconds) and still applies,
+//     however soon after the sweep it lands and however far the local clock
+//     runs ahead;
+//   - an event created BEFORE endedAt describes a subscription state the same
+//     list already shows as superseded (nothing live). Such an event arriving
+//     late — a delayed retry or a manual dashboard resend of an `active` update
+//     from before the cancellation — would re-grant a paid tier nobody is
+//     paying for; the endedAt stamp makes it stale instead.
+//
+// observed.EventAt is the floor so the stamp never moves the clock backwards
+// (the upsert keeps it monotonic anyway). With no ended_at available the stamp
+// is exactly observed.EventAt, which rejects nothing that was not already
+// rejected before the sweep.
+//
+// The check, the binding clear and the source write are one transaction on the
+// single write connection, so nothing can interleave between them.
+func (s *SQLiteStore) ApplyStripeReconcileDowngrade(ctx context.Context, observed SubscriptionSource, endedAt, now int64) (bool, error) {
+	if observed.UserID == "" || observed.Provider != ProviderStripe {
+		return false, ErrBillingAuthorityConflict
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if _, err := acquireBillingAuthorityTx(ctx, tx, BillingAuthorityRequest{UserID: observed.UserID, Provider: ProviderStripe, Now: now}); err != nil {
+		return false, err
+	}
+	current, err := scanSubscriptionSource(tx.QueryRowContext(ctx,
+		`SELECT `+subscriptionSourceCols+` FROM subscription_sources WHERE user_id = ? AND provider = ?`,
+		observed.UserID, ProviderStripe))
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if current != observed {
+		return false, nil // the row moved after the sweep's evidence was taken
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET stripe_subscription_id = '' WHERE id = ?`, observed.UserID); err != nil {
+		return false, err
+	}
+	if err := bindExternalSubscriptionTx(ctx, tx, observed.UserID, ProviderStripe, ""); err != nil {
+		return false, err
+	}
+	stamp := observed.EventAt
+	if endedAt > stamp {
+		stamp = endedAt
+	}
+	res, err := applySourceTx(ctx, tx, SourceEvent{
+		UserID: observed.UserID, Provider: ProviderStripe, PlanID: "free", Status: "canceled",
+		EventAt: stamp, Now: now,
+	})
+	if err != nil {
+		return false, err
+	}
+	if !res.Applied {
+		return false, nil // rolled back: the binding clear above is discarded too
+	}
+	return true, tx.Commit()
+}

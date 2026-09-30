@@ -965,10 +965,27 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 // cancellation would then leave a canceled user on a paid plan forever. This
 // sweep lists each Stripe-paid user's active subscriptions and, when none
 // remain, downgrades them to free — the same transition the deleted webhook
-// makes. The live Stripe query is authoritative, so a user who re-subscribed
-// between cancellation and this sweep still shows an active sub and is left
-// alone. Best-effort: a per-user Stripe/store error is logged and retried next
+// makes. Best-effort: a per-user Stripe/store error is logged and retried next
 // sweep. Wired to a ticker in main.go.
+//
+// A downgrade is money-moving in the customer's disfavour, so it is taken only
+// on evidence that is complete AND current, per user, in this order:
+//
+//  1. Read the user's Stripe source row (the observation). A row that is no
+//     longer on a paid tier has already been handled by a webhook; skip.
+//  2. Ask Stripe for the customer's live subscriptions, AFTER the observation.
+//     Any error — including a subscription list that could not be walked to
+//     its end — is "unknown" and skips the user; it never means "none".
+//  3. Write the downgrade conditionally on the row still being exactly the
+//     observation (ApplyStripeReconcileDowngrade). A webhook applied at any
+//     point after step 1 changes the row, and the downgrade is dropped: the
+//     webhook's newer evidence wins and the next sweep re-evaluates.
+//
+// The write is stamped on Stripe's clock — the latest ended_at in that same
+// list, floored at the observation's event clock — never on the local clock.
+// That makes a late-delivered event from before the cancellation stale (it
+// cannot re-grant a tier nobody is paying for), while every event Stripe
+// creates after the list still applies (see ApplyStripeReconcileDowngrade).
 func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 	if s.biller == nil {
 		return
@@ -979,20 +996,40 @@ func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 		return
 	}
 	for _, u := range users {
-		subs, err := s.biller.ListActiveSubscriptions(ctx, u.StripeCustomerID)
+		observed, ok, err := s.Store().GetSubscriptionSource(ctx, u.ID, ProviderStripe)
+		if err != nil {
+			log.Printf("billing: reconcile sweep read Stripe state for %s: %v", u.ID, err)
+			continue
+		}
+		if !ok || observed.PlanID == "" || observed.PlanID == freePlanID {
+			continue // already downgraded since the candidate list was taken
+		}
+		evidence, err := s.biller.ListSubscriptionEvidence(ctx, u.StripeCustomerID)
 		if err != nil {
 			log.Printf("billing: reconcile sweep list subs for %s: %v", u.ID, err)
-			continue // transient — leave the plan untouched, retry next sweep
+			continue // unknown — leave the plan untouched, retry next sweep
 		}
-		if len(subs) > 0 {
+		if len(evidence.Live) > 0 {
 			continue // still has a live subscription
 		}
 		// Paid plan but no live subscription → a cancellation whose webhook we
 		// never received. Downgrade to free, mirroring customer.subscription.deleted.
 		now := s.Now().Unix()
-		s.clearCanonicalSubscription(ctx, u.ID)
-		if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", now, now); err != nil {
+		endedAt := evidence.LatestEndedAt
+		if endedAt > now+maxReconcileEndedAtSkew {
+			// A subscription cannot have ended in the future. Stamping with an
+			// implausible clock could make genuine later events look stale, so fall
+			// back to the observed clock (which outranks nothing new).
+			log.Printf("billing: reconcile sweep ignoring implausible ended_at %d for %s (now %d)", endedAt, u.ID, now)
+			endedAt = 0
+		}
+		applied, err := s.Store().ApplyStripeReconcileDowngrade(ctx, observed, endedAt, now)
+		if err != nil {
 			log.Printf("billing: reconcile sweep downgrade %s: %v", u.ID, err)
+			continue
+		}
+		if !applied {
+			log.Printf("billing: reconcile sweep left user %s unchanged: Stripe state moved while the sweep was checking it", u.ID)
 			continue
 		}
 		if u.ScheduledPlanID != "" {
@@ -1001,6 +1038,11 @@ func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 		log.Printf("billing: reconcile sweep downgraded user %s to free (no active Stripe subscription, missed deletion webhook)", u.ID)
 	}
 }
+
+// maxReconcileEndedAtSkew is how far past the local clock a Stripe ended_at
+// may lie and still be believed (clock skew between us and Stripe). Beyond it
+// the sweep stamps with the observed clock instead.
+const maxReconcileEndedAtSkew = 300
 
 // subEventIsStale reports whether a subscription webhook event (identified by
 // its Stripe event.created) is older than the last one already applied to this

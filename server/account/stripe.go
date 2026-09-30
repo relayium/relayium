@@ -33,6 +33,10 @@ type Biller interface {
 	// ListActiveSubscriptions returns a customer's active/trialing subscriptions,
 	// so the webhook can detect a double-checkout (>1) and keep the earliest.
 	ListActiveSubscriptions(ctx context.Context, customerID string) ([]SubscriptionInfo, error)
+	// ListSubscriptionEvidence walks the SAME complete list and additionally
+	// reports when the customer's most recent subscription ENDED on Stripe's
+	// clock — the evidence the reconcile sweep stamps a downgrade with.
+	ListSubscriptionEvidence(ctx context.Context, customerID string) (SubscriptionEvidence, error)
 	CreateCheckoutSession(ctx context.Context, in CheckoutInput) (CheckoutSession, error)
 	CreatePortalSession(ctx context.Context, customerID, returnURL string) (url string, err error)
 	// ChangeSubscriptionPlan switches the customer's existing active subscription
@@ -633,53 +637,117 @@ type SubscriptionInfo struct {
 	MetadataUserID   string
 }
 
+// SubscriptionEvidence is one complete walk of a customer's subscriptions.
+type SubscriptionEvidence struct {
+	// Live are the active/trialing/past_due subscriptions, as
+	// ListActiveSubscriptions returns them.
+	Live []SubscriptionInfo
+	// LatestEndedAt is the largest Stripe `ended_at` (unix seconds) among the
+	// customer's subscriptions that are NOT live; 0 when none reports one.
+	//
+	// ended_at, not canceled_at or cancel_at: per Stripe's subscription object,
+	// ended_at is "the date the subscription ended" and is set only once it has
+	// actually ended, which is the moment the paid entitlement stops and the
+	// moment customer.subscription.deleted describes. canceled_at is when the
+	// cancellation was REQUESTED — for cancel_at_period_end it is the request
+	// time, possibly weeks before access ends, so events between the two are
+	// genuine and must not be outranked. cancel_at is a scheduled FUTURE end
+	// that can still be changed, so it is not evidence of anything yet.
+	LatestEndedAt int64
+}
+
 // ListActiveSubscriptions returns the customer's active/trialing subscriptions
 // (oldest key = Created). The webhook uses it to detect a double-checkout: more
 // than one active subscription on one customer means keep the earliest, cancel
-// the rest.
+// the rest. See ListSubscriptionEvidence for how the list is walked.
 func (c *stripeClient) ListActiveSubscriptions(ctx context.Context, customerID string) ([]SubscriptionInfo, error) {
+	ev, err := c.ListSubscriptionEvidence(ctx, customerID)
+	if err != nil {
+		return nil, err
+	}
+	return ev.Live, nil
+}
+
+// ListSubscriptionEvidence lists every subscription of the customer and splits
+// it into the live ones and the latest end time among the rest. The reconcile
+// sweep uses an EMPTY Live as evidence that a paid user's subscription is gone.
+//
+// The list is status=all (so a past_due subscription is still seen), which
+// means abandoned and ended subscriptions count against Stripe's page size too.
+// It therefore follows has_more/starting_after to the end: a customer with more
+// than one page of history whose live subscription sits on a later page must
+// never be reported as having none. Any page that cannot be trusted — a
+// transport error, an unparsable body, has_more with no cursor to continue
+// from, or a history longer than maxSubscriptionListPages pages — fails the
+// whole call, so callers see "unknown" and never a truncated "none".
+func (c *stripeClient) ListSubscriptionEvidence(ctx context.Context, customerID string) (SubscriptionEvidence, error) {
 	q := url.Values{}
 	q.Set("customer", customerID)
 	q.Set("status", "all")
 	q.Set("limit", "100")
-	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
-	if err != nil {
-		return nil, err
-	}
-	var list struct {
-		Data []struct {
-			ID               string `json:"id"`
-			Status           string `json:"status"`
-			Created          int64  `json:"created"`
-			CurrentPeriodEnd int64  `json:"current_period_end"`
-			Items            struct {
-				Data []struct {
-					Price struct {
-						ID string `json:"id"`
-					} `json:"price"`
-				} `json:"data"`
-			} `json:"items"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &list); err != nil {
-		return nil, fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
-	}
-	out := make([]SubscriptionInfo, 0, len(list.Data))
-	for _, s := range list.Data {
-		if !liveSubStatus(s.Status) {
-			continue
+	out := SubscriptionEvidence{Live: []SubscriptionInfo{}}
+	for page := 0; ; page++ {
+		if page >= maxSubscriptionListPages {
+			return SubscriptionEvidence{}, fmt.Errorf("stripe: list subscriptions: more than %d pages for one customer", maxSubscriptionListPages)
 		}
-		price := ""
-		if len(s.Items.Data) > 0 {
-			price = s.Items.Data[0].Price.ID
+		body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
+		if err != nil {
+			return SubscriptionEvidence{}, err
 		}
-		out = append(out, SubscriptionInfo{
-			ID: s.ID, Created: s.Created, PriceID: price,
-			Status: s.Status, CurrentPeriodEnd: s.CurrentPeriodEnd,
-		})
+		var list struct {
+			Data []struct {
+				ID               string `json:"id"`
+				Status           string `json:"status"`
+				Created          int64  `json:"created"`
+				EndedAt          int64  `json:"ended_at"`
+				CurrentPeriodEnd int64  `json:"current_period_end"`
+				Items            struct {
+					Data []struct {
+						Price struct {
+							ID string `json:"id"`
+						} `json:"price"`
+					} `json:"data"`
+				} `json:"items"`
+			} `json:"data"`
+			HasMore bool `json:"has_more"`
+		}
+		if err := json.Unmarshal(body, &list); err != nil {
+			return SubscriptionEvidence{}, fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
+		}
+		for _, s := range list.Data {
+			if !liveSubStatus(s.Status) {
+				if s.EndedAt > out.LatestEndedAt {
+					out.LatestEndedAt = s.EndedAt
+				}
+				continue
+			}
+			price := ""
+			if len(s.Items.Data) > 0 {
+				price = s.Items.Data[0].Price.ID
+			}
+			out.Live = append(out.Live, SubscriptionInfo{
+				ID: s.ID, Created: s.Created, PriceID: price,
+				Status: s.Status, CurrentPeriodEnd: s.CurrentPeriodEnd,
+			})
+		}
+		if !list.HasMore {
+			return out, nil
+		}
+		last := ""
+		if n := len(list.Data); n > 0 {
+			last = list.Data[n-1].ID
+		}
+		if last == "" || last == q.Get("starting_after") {
+			return SubscriptionEvidence{}, errors.New("stripe: list subscriptions: has_more without a usable cursor")
+		}
+		q.Set("starting_after", last)
 	}
-	return out, nil
 }
+
+// maxSubscriptionListPages bounds how much subscription history one customer
+// may make us walk (100 per page). Far beyond any real customer; exceeding it
+// is reported as an error ("unknown"), never as a truncated answer.
+const maxSubscriptionListPages = 50
 
 func (c *stripeClient) InspectDuplicateSubscription(ctx context.Context, userID, customerID, canonicalID, duplicateID string) (DuplicateRefundPlan, error) {
 	plan := DuplicateRefundPlan{UserID: userID, CustomerID: customerID, CanonicalSubscriptionID: canonicalID, DuplicateSubscriptionID: duplicateID}
