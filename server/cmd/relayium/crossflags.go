@@ -16,6 +16,25 @@ func crossFlagSet(f *crossFlags) *flag.FlagSet {
 	return fs
 }
 
+// sendFlagSet is crossFlagSet plus --config-dir: send mints a code with the
+// stored login when no code is given, so it must read the credential from the
+// same directory `relayium login --config-dir` wrote it to. receive never reads
+// a credential and so does not take the flag.
+func sendFlagSet(f *crossFlags) *flag.FlagSet {
+	fs := crossFlagSet(f)
+	fs.StringVar(&f.configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
+	return fs
+}
+
+func parseSendFlags(args []string) (crossFlags, []string, error) {
+	var f crossFlags
+	fs := sendFlagSet(&f)
+	if err := parseArgs(fs, args); err != nil {
+		return f, nil, err
+	}
+	return f, fs.Args(), nil
+}
+
 func parseCrossFlags(args []string) (crossFlags, []string, error) {
 	var f crossFlags
 	fs := crossFlagSet(&f)

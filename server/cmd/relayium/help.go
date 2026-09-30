@@ -35,7 +35,7 @@ up) does the link go peer to peer, and then it needs a direct path.`
 const pairUsage = `relayium pair — a live, two-way session with another device
 
 usage:
-  relayium pair [code] [--dest DIR] [--accept] [--verify]
+  relayium pair [code] [--dest DIR] [--accept] [--verify] [--config-dir D]
 
 Leave the code out to mint one, which requires "relayium login"; the other side
 then runs "relayium pair <code>", or types the code into the Relayium app or the
@@ -87,12 +87,14 @@ flags:
   --server URL       Relayium server (self-hosting)
   --advertise H:P    offer this address as a direct candidate (advanced; it
                      must really be reachable from the peer)
+  --config-dir D     credential directory used to mint a code (default
+                     ~/.config/relayium)
 `
 
 const sendUsage = `relayium send — send files to a peer over a pairing code
 
 usage:
-  relayium send <src...> [code]
+  relayium send <src...> [code] [--config-dir D]
 
 Both machines must be online at the same time; this is not a mailbox. For a
 recipient who is not there right now, use "relayium up" (a stored link) or the
@@ -126,6 +128,8 @@ flags:
   --advertise H:P    advertise this host:port as a direct endpoint (advanced; the
                      address must really be reachable from the peer, e.g. a
                      forwarded port)
+  --config-dir D     credential directory used to mint a code (default
+                     ~/.config/relayium)
 `
 
 const receiveUsage = `relayium receive — receive files sent to a pairing code
@@ -171,7 +175,7 @@ flags:
 const textUsage = `relayium text — ephemeral encrypted messages with a peer
 
 usage:
-  relayium text [code]
+  relayium text [code] [--config-dir D]
 
 Both ends run this command (or one end runs "relayium pair", or uses a Relayium
 app or the web page). The session is end-to-end encrypted; Relayium keeps no
@@ -207,6 +211,8 @@ flags:
   --server URL       Relayium rendezvous server (self-hosting)
   --advertise H:P    advertise this host:port as a direct endpoint (advanced; the
                      address must really be reachable from the peer)
+  --config-dir D     credential directory used to mint a code (default
+                     ~/.config/relayium)
 `
 
 const idUsage = `relayium id — print this host's direct-transfer fingerprint
@@ -285,18 +291,21 @@ flags:
 const whoamiUsage = `relayium whoami — show the logged-in cloud account
 
 usage:
-  relayium whoami
+  relayium whoami [--config-dir D]
 
-Reads the credential stored in ~/.config/relayium and prints the account and
-server it is for. Local only: it makes no request, so it reports what this
-machine has, not whether the server still accepts it. Exits non-zero when this
-machine is not logged in.
+Reads the credential stored in --config-dir (default ~/.config/relayium) and
+prints the account and server it is for. Local only: it makes no request, so it
+reports what this machine has, not whether the server still accepts it. Exits
+non-zero when this machine is not logged in.
+
+flags:
+  --config-dir D   credential directory (default ~/.config/relayium)
 `
 
 const upUsage = `relayium up — encrypt locally and upload to a shareable link
 
 usage:
-  relayium up <path...> [--burn] [--ttl D] [--max-downloads N]
+  relayium up <path...> [--burn] [--ttl D] [--max-downloads N] [--config-dir D]
 
 Files are encrypted on this machine and only the ciphertext is uploaded; the
 printed link carries the key in its "#k=" fragment, which a browser never sends
@@ -326,6 +335,7 @@ flags:
   --max-downloads N      stop serving the link after N downloads
   --server URL           override the cloud server. It must be the server you
                          are logged in to; the token is never sent elsewhere.
+  --config-dir D         credential directory (default ~/.config/relayium)
 
 The link goes to stdout, so "relayium up f | pbcopy" copies only the link.
 `
@@ -362,7 +372,10 @@ cannot be replaced, so it prints where to download the zip instead.
 
 flags:
   --check    only report whether an update is available; install nothing
-  --force    reinstall even when already on the latest version
+  --force    reinstall even when already on the latest version. --force also
+             disables the downgrade guard and the minimum-version floor built
+             into this binary, so it will install an older release, even one
+             below a security fix. Use it only for a deliberate rollback.
 `
 
 const versionUsage = `relayium version — print the CLI version

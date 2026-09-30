@@ -23,7 +23,7 @@ func runUpdate(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var check, force bool
 	fs.BoolVar(&check, "check", false, "only report whether an update is available; install nothing")
-	fs.BoolVar(&force, "force", false, "reinstall even if already on the latest version")
+	fs.BoolVar(&force, "force", false, "reinstall even if already on the latest version; also permits downgrades, including below the built-in minimum version")
 	if wantsHelpFS(fs, args) {
 		fmt.Fprint(stdout, updateUsage)
 		return 0
@@ -48,11 +48,7 @@ func runUpdate(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		fmt.Fprintf(stdout, "current: %s\nlatest:  %s\n", version, tag)
-		if selfupdate.SameVersion(tag, version) {
-			fmt.Fprintln(stdout, "up to date")
-		} else {
-			fmt.Fprintln(stdout, "update available — run `relayium update`")
-		}
+		fmt.Fprintln(stdout, updateCheckVerdict(tag, version))
 		return 0
 	}
 
@@ -90,4 +86,22 @@ func runUpdate(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "Updated %s → %s\n", from, to)
 	return 0
+}
+
+// updateCheckVerdict is the one-line answer `relayium update --check` prints.
+// An update is "available" only when the latest release is strictly newer than
+// the running version: a running build that is newer than the latest release
+// (a pre-release install, or a release host serving a stale "latest") must not
+// be told to "update", because `relayium update` would refuse that downgrade.
+// A version that is not a plain release ("dev", a pre-release suffix) cannot be
+// ordered; it keeps the long-standing answer that the latest release is
+// available, since `relayium update` installs it over such a build.
+func updateCheckVerdict(latest, current string) string {
+	if selfupdate.SameVersion(latest, current) {
+		return "up to date"
+	}
+	if cmp, ok := selfupdate.CompareVersions(latest, current); ok && cmp <= 0 {
+		return "up to date (this build is newer than the latest release " + latest + ")"
+	}
+	return "update available — run `relayium update`"
 }

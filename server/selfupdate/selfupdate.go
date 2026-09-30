@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -653,6 +654,13 @@ func replaceFromArchive(archivePath, entryName, targetPath string, verify func(s
 		tmpf.Close()
 		return err
 	}
+	// Flush the new binary before it replaces the old one: a crash after the
+	// rename but before writeback would otherwise leave a truncated executable
+	// under the real name — the CLI or node would not start again.
+	if err := fsyncFile(tmpf); err != nil {
+		tmpf.Close()
+		return err
+	}
 	if err := tmpf.Close(); err != nil {
 		return err
 	}
@@ -667,7 +675,25 @@ func replaceFromArchive(archivePath, entryName, targetPath string, verify func(s
 	if err := os.Rename(tmpName, targetPath); err != nil {
 		return permHint(targetPath, err)
 	}
+	syncDir(dir)
 	return nil
+}
+
+// fsyncFile flushes a file to stable storage. A var so a test can inject a
+// failure and prove the target is untouched when the flush fails.
+var fsyncFile = (*os.File).Sync
+
+// syncDir fsyncs a directory so a rename into it is durable. Best effort:
+// Windows cannot open a directory for sync, and a failure here cannot undo the
+// rename that already happened.
+func syncDir(dir string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		d.Close()
+	}
 }
 
 // extractInto streams the tar.gz's entryName (matched by base name) into w.

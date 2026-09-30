@@ -128,11 +128,18 @@ func errNotLoggedIn(base string, p mintPurpose) error {
 // mintCode mints a pairing code with the stored CLI credentials and prints the
 // block the minting machine hands to the other machine's operator.
 func mintCode(ctx context.Context, server string, stderr io.Writer, p mintPurpose) (string, error) {
+	return mintCodeIn(ctx, server, "", stderr, p)
+}
+
+// mintCodeIn is mintCode reading the credential from configDir (the command's
+// --config-dir; "" means the default directory), so a login stored with
+// `relayium login --config-dir D` is the one send/text/pair mint with.
+func mintCodeIn(ctx context.Context, server, configDir string, stderr io.Writer, p mintPurpose) (string, error) {
 	base, err := apiBase(server)
 	if err != nil {
 		return "", err
 	}
-	cfgDir, err := resolveConfigDir("")
+	cfgDir, err := resolveConfigDir(configDir)
 	if err != nil {
 		return "", err
 	}

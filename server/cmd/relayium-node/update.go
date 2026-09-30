@@ -51,6 +51,9 @@ const defaultBinPath = "/usr/local/bin/relayium-node"
 //	                                      restart; old binary restored
 //	7 exitNotHealthy      -> rolled_back  new binary ran but never heartbeated in
 //	                                      the health window; old binary restored
+//	                                      (the version is recorded as failed only
+//	                                      when central was reachable from this
+//	                                      host; otherwise it stays retryable)
 //	8 exitFetchFailed     -> unreachable  the artifact could not be OBTAINED
 //	                                      (DNS, TLS, a reset, a 404); says
 //	                                      nothing about the release itself, so
@@ -691,6 +694,17 @@ func runUpdateWith(uc updateConfig, svc serviceCtl, window, poll time.Duration, 
 	if !waitHealthy(uc.StateDir, restartedAt, uc.TargetTag, window, poll) {
 		fmt.Fprintf(stderr, "%s did not heartbeat within %s — rolling back to %s\n", to, window, from)
 		rollback(uc, svc, stderr)
+		// The health signal is "a heartbeat reached central", so a central
+		// outage during the window looks exactly like a broken release. Only
+		// blacklist the version when central is reachable from this host right
+		// now — then the new binary had its chance and failed on its own. If
+		// central is unreachable the verdict is inconclusive: still roll back
+		// (the old binary is the known-good one) and still report rolled_back,
+		// but leave the version retryable instead of refusing it here forever.
+		if !centralReachable(uc.CentralURL) {
+			fmt.Fprintf(stderr, "central (%s) is unreachable from this host, so the missing heartbeat is inconclusive; %s is NOT recorded as failed and may be retried\n", uc.CentralURL, uc.TargetTag)
+			return exitNotHealthy
+		}
 		recordFailed(uc.StateDir, uc.TargetTag, stderr)
 		return exitNotHealthy
 	}
@@ -698,6 +712,26 @@ func runUpdateWith(uc updateConfig, svc serviceCtl, window, poll time.Duration, 
 	fmt.Fprintf(stdout, "updated %s -> %s and confirmed healthy\n", from, to)
 	os.Remove(backupPath(uc.BinPath))
 	return exitOK
+}
+
+// centralReachable reports whether central answers at all from this host, so a
+// failed health window can be told apart from a central outage (see
+// runUpdateWith). Any HTTP answer below 500 counts as reachable: the question is
+// "could a heartbeat have gotten through", not whether this route exists. An
+// empty URL (a hand-run -to on a host with no central configured) answers true,
+// keeping the long-standing behaviour of blacklisting a version that never
+// became healthy. A var so tests can stand in for the network.
+var centralReachable = func(centralURL string) bool {
+	if centralURL == "" {
+		return true
+	}
+	hc := &http.Client{Timeout: centralRequestTimeout}
+	resp, err := hc.Get(strings.TrimRight(centralURL, "/") + "/healthz")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode < 500
 }
 
 // rollback restores the previous binary and restarts. Best-effort and loud:

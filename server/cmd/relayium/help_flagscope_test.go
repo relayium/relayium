@@ -28,14 +28,14 @@ var flagProbe = map[string][]string{
 // Retired SSH flags are covered by TestSSHTransfersDisabled; they are not
 // supported shared flags. pull returns the retirement notice without parsing.
 
-// flagParsingCommands is every command path that reaches a FlagSet. `whoami`
-// and `version` take no flags at all and never parse, so the probe below cannot
-// speak about them; TestFlagFreeCommandsTakeNoSharedFlags covers them instead.
+// flagParsingCommands is every command path that reaches a FlagSet. `version`
+// takes no flags at all and never parses, so the probe below cannot speak about
+// it; TestFlagFreeCommandsTakeNoSharedFlags covers it instead.
 func flagParsingCommands() [][]string {
 	paths := [][]string{
 		{"push"}, {"sync"}, {"send"}, {"receive"}, {"text"},
 		{"serve"}, {"id"}, {"authorize"}, {"login"}, {"logout"},
-		{"up"}, {"down"}, {"update"},
+		{"up"}, {"down"}, {"update"}, {"whoami"}, {"pair"},
 	}
 	for _, sub := range inboxSubcommands {
 		paths = append(paths, []string{"inbox", sub.name})
@@ -85,21 +85,36 @@ func commandAcceptsFlag(t *testing.T, cmd []string, flag string) bool {
 func documentedFlagScopes(t *testing.T) map[string][]string {
 	t.Helper()
 	scopes := map[string][]string{}
-	var current string
+	var current, continuing string
 	for _, line := range strings.Split(usage, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(line, "  -") && !strings.HasPrefix(trimmed, "→") {
-			current = strings.Fields(trimmed)[0]
+			current, continuing = strings.Fields(trimmed)[0], ""
 			continue
 		}
-		if !strings.HasPrefix(trimmed, "→") {
+		// A scope line that ends in "," continues on the next line.
+		var list string
+		switch {
+		case strings.HasPrefix(trimmed, "→"):
+			if current == "" {
+				t.Fatalf("usage has a scope line with no flag above it: %q", line)
+			}
+			list = strings.TrimPrefix(trimmed, "→")
+		case continuing != "" && trimmed != "":
+			current, list = continuing, trimmed
+		default:
+			continuing = ""
 			continue
 		}
-		if current == "" {
-			t.Fatalf("usage has a scope line with no flag above it: %q", line)
+		continuing = ""
+		if strings.HasSuffix(list, ",") {
+			continuing = current
 		}
-		for _, name := range strings.Split(strings.TrimPrefix(trimmed, "→"), ",") {
+		for _, name := range strings.Split(list, ",") {
 			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
 			if name == "inbox <any subcommand>" {
 				for _, sub := range inboxSubcommands {
 					scopes[current] = append(scopes[current], "inbox "+sub.name)
@@ -155,12 +170,12 @@ func TestTopLevelFlagScopesMatchTheCommands(t *testing.T) {
 	}
 }
 
-// The two commands that parse nothing must keep parsing nothing, so the probe
+// The command that parses nothing must keep parsing nothing, so the probe
 // above is allowed to skip them.
 func TestFlagFreeCommandsTakeNoSharedFlags(t *testing.T) {
 	isolatedEnv(t)
 	scopes := documentedFlagScopes(t)
-	for _, cmd := range []string{"whoami", "version"} {
+	for _, cmd := range []string{"version"} {
 		for flag, scope := range scopes {
 			for _, name := range scope {
 				if name == cmd {

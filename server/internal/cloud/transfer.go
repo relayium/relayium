@@ -117,6 +117,11 @@ func uploadQuery(opt UploadOpts) string {
 // counter across all files, starting at 1 (the manifest itself occupies
 // seq 0, per EncryptManifest).
 func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id, keyB64Url string, expiresAt int64, err error) {
+	// The request carries the account's bearer token: never in cleartext to a
+	// non-local host. Checked before reading any file.
+	if err := checkSecureServer(c.Server); err != nil {
+		return "", "", 0, err
+	}
 	files, err := walkUploadPaths(paths)
 	if err != nil {
 		return "", "", 0, err
@@ -335,21 +340,31 @@ func ParseClaim(s string) (server, id, keyB64Url string, err error) {
 	head, frag := s[:hashIdx], s[hashIdx+1:]
 	key, ok := strings.CutPrefix(frag, "k=")
 	if !ok || key == "" {
-		return "", "", "", fmt.Errorf("cloud: claim %q: fragment must be k=<key>", s)
+		return "", "", "", fmt.Errorf("cloud: claim %q: fragment must be k=<key>", redactClaim(s))
 	}
 
 	if u, uerr := url.Parse(head); uerr == nil && u.Scheme != "" && u.Host != "" {
 		id, ok := strings.CutPrefix(u.Path, "/d/")
 		if !ok || id == "" {
-			return "", "", "", fmt.Errorf("cloud: claim %q: not a /d/<id> link", s)
+			return "", "", "", fmt.Errorf("cloud: claim %q: not a /d/<id> link", redactClaim(s))
 		}
 		return u.Scheme + "://" + u.Host, id, key, nil
 	}
 
 	if head == "" {
-		return "", "", "", fmt.Errorf("cloud: claim %q: missing id", s)
+		return "", "", "", fmt.Errorf("cloud: claim %q: missing id", redactClaim(s))
 	}
 	return "", head, key, nil
+}
+
+// redactClaim hides a claim's URL fragment — the "#k=" decryption key — so an
+// error message (terminal scrollback, a pasted bug report, CI logs) never
+// repeats the secret that opens the files.
+func redactClaim(s string) string {
+	if i := strings.LastIndex(s, "#"); i >= 0 {
+		return s[:i] + "#<redacted>"
+	}
+	return s
 }
 
 // downloadStatusError maps a meta/blob fetch's HTTP status to an actionable

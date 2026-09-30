@@ -24,6 +24,7 @@ type textFlags struct {
 	advertise string
 	verify    bool // opt IN to the SAS prompt, exactly as `send --verify` does
 	yes       bool // legacy explicit "do not prompt me"; also overrides --verify
+	configDir string
 }
 
 // textFlagSet declares `text`'s flags, binding them into f. Separate from
@@ -35,6 +36,7 @@ func textFlagSet(f *textFlags) *flag.FlagSet {
 	fs.StringVar(&f.advertise, "advertise", "", "host:port to advertise as a direct endpoint")
 	fs.BoolVar(&f.verify, "verify", false, "require SAS confirmation before the session opens")
 	fs.BoolVar(&f.yes, "yes", false, "never prompt for SAS confirmation (the default; overrides --verify)")
+	fs.StringVar(&f.configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
 	return fs
 }
 
@@ -186,7 +188,7 @@ func runText(args []string, stdout, stderr io.Writer) int {
 	// -- nor make an authenticated request on behalf of a session that will
 	// never open.
 	if code == "" {
-		if code, err = mintCode(ctx, f.server, stderr, mintForText); err != nil {
+		if code, err = mintCodeIn(ctx, f.server, f.configDir, stderr, mintForText); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}

@@ -28,6 +28,7 @@ type crossFlags struct {
 	server    string
 	advertise string
 	verify    bool
+	configDir string // send only (credential for minting); receive never reads one
 }
 
 // modeCommand names a mode the way the user meets it: as a command. An unknown
@@ -202,11 +203,11 @@ var crossnetSendDial = func(ctx context.Context, code string, f crossFlags, stde
 }
 
 func runSendCross(args []string, stdout, stderr io.Writer) int {
-	if wantsHelpFS(crossFlagSet(&crossFlags{}), args) {
+	if wantsHelpFS(sendFlagSet(&crossFlags{}), args) {
 		fmt.Fprint(stdout, sendUsage)
 		return 0
 	}
-	f, rest, err := parseCrossFlags(args)
+	f, rest, err := parseSendFlags(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -228,7 +229,7 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 	// (signal.CodeTTLSeconds) the moment it is minted, and burning one on a
 	// typo'd path wastes it.
 	if code == "" {
-		if code, err = mintCode(ctx, f.server, stderr, mintForSend); err != nil {
+		if code, err = mintCodeIn(ctx, f.server, f.configDir, stderr, mintForSend); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}

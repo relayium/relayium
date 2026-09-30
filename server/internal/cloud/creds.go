@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 const credsFile = "credentials"
@@ -64,10 +65,37 @@ func Save(configDir string, c Creds) error {
 		tmp.Close()
 		return err
 	}
+	// Flush before the rename: otherwise a crash shortly after can leave the
+	// renamed file empty or torn on disk, i.e. a lost login.
+	if err := fsyncFile(tmp); err != nil {
+		tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpPath, path)
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	syncDir(configDir)
+	return nil
+}
+
+// fsyncFile flushes a file to stable storage. A var so a test can inject a
+// failure and prove nothing is published when the flush fails.
+var fsyncFile = (*os.File).Sync
+
+// syncDir fsyncs a directory so a rename into it is durable. Best effort:
+// Windows cannot open a directory for sync, and a failure here cannot undo the
+// rename that already happened.
+func syncDir(dir string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		d.Close()
+	}
 }
 
 func Clear(configDir string) error {

@@ -85,7 +85,8 @@ flags (after the subcommand; "→" lists every command the flag applies to):
                   default; it is kept for scripts)
                   → text
   --config-dir D  credential/identity/state directory (default ~/.config/relayium)
-                  → push, sync, serve, id, authorize, login, logout, inbox <any subcommand>
+                  → push, sync, serve, id, authorize, login, logout, whoami, up,
+                    pair, send, text, inbox <any subcommand>
 
 Every other flag belongs to one command; see that command's own help, e.g.
 "relayium serve -h" or "relayium up -h".
