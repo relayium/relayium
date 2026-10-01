@@ -4,11 +4,16 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // N-0930-1 step 2 acceptance tests (FINAL.md §9, tests 11-19): placeholder
@@ -51,31 +56,82 @@ func n0930Rows(t *testing.T, store *SQLiteStore) int {
 	return n
 }
 
-// Test 11 (the double-charge path): C was bound first; B (earlier) arrives,
-// the reconciliation rebinds B and C's inspection fails. The responsibility for
-// C is committed with the Bind, the webhook answers 200, and the worker later
-// cancels C. Before step 2, nothing durable remained and C kept charging.
+// n0930Event is a customer.subscription.created event for subscription sub,
+// with a fixed event id so a redelivery is the SAME event.
+func n0930Event(eventID, sub string, created int64) string {
+	return fmt.Sprintf(`{"id":%q,"type":"customer.subscription.created","created":%d,"data":{"object":{"id":%q,"object":"subscription","customer":"cus_n","status":"active","current_period_end":9999999999,"metadata":null,"items":{"data":[{"price":{"id":"price_pro_m"}}]}}}}`, eventID, created, sub)
+}
+
+// n0930Deliver posts a signed event to the real webhook handler, signing at the
+// service's (possibly controlled) clock.
+func n0930Deliver(t *testing.T, ts *httptest.Server, svc *Service, body string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/stripe/webhook", strings.NewReader(body))
+	if err != nil {
+		t.Error(err)
+		return 0
+	}
+	req.Header.Set("Stripe-Signature", signStripe("whsec", body, svc.Now().Unix()))
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Error(err)
+		return 0
+	}
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+func n0930WebhookServer(t *testing.T, client *stripeClient, svc *Service) *httptest.Server {
+	t.Helper()
+	client.canonicalWebhookRefresh = false // the event payload is the evidence; Stripe is only listed
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// Test 11 (the double-charge path), through the real webhook handler: C
+// (sub_d) was bound first; B (sub_c, earlier) arrives, the reconciliation
+// rebinds B and C's inline inspection fails. The answer is 200 and C's
+// responsibility is durable. Redelivering the SAME event is absorbed by the
+// processed-event gate, and a later event for B (now canonical) takes the
+// ordinary path: neither cancels C nor touches the unknown placeholder. Once
+// inspection works again, the WORKER cancels C.
 func TestN0930_1InspectionFailureAfterBindLeavesResponsibility(t *testing.T) {
-	f, _, store, svc := newN0930Step2(t, Config{}, n0930Duplicate) // C (sub_d) bound first
-	f.failListCall = 1                                             // the inline inspection of sub_d fails
-	ok, retry, err := n0930Reconcile(t, context.Background(), svc)
-	if !ok || retry || err != nil {
-		t.Fatalf("reconcile ok=%t retry=%t err=%v (want 200)", ok, retry, err)
+	f, client, store, svc := newN0930Step2(t, Config{}, n0930Duplicate)
+	ts := n0930WebhookServer(t, client, svc)
+	f.failLists = map[int]bool{1: true} // the inline inspection of sub_d fails
+	event := n0930Event("evt_n0930_b", n0930Canonical, 500)
+	if status := n0930Deliver(t, ts, svc, event); status != http.StatusOK {
+		t.Fatalf("first delivery status=%d (want 200)", status)
 	}
 	u, _ := store.GetUserByID(context.Background(), n0930User)
-	job := n0930Load(t, store)
-	if u.StripeSubscriptionID != n0930Canonical || job.CanonicalSubscriptionID != n0930Canonical || job.DiscoveredAt != 0 || job.Attempts == 0 || job.SubscriptionCanceled {
-		t.Fatalf("binding=%s placeholder=%+v", u.StripeSubscriptionID, job)
+	placeholder := n0930Load(t, store)
+	_, deletes, _, lists, _ := f.counts()
+	if u.StripeSubscriptionID != n0930Canonical || placeholder.CanonicalSubscriptionID != n0930Canonical || placeholder.DiscoveredAt != 0 || placeholder.Attempts == 0 || placeholder.SubscriptionCanceled || deletes != 0 {
+		t.Fatalf("binding=%s deletes=%d placeholder=%+v", u.StripeSubscriptionID, deletes, placeholder)
 	}
-	// Redelivery of the same event (binding already canonical): no-op for the row.
-	if ok, _, err := n0930Reconcile(t, context.Background(), svc); !ok || err != nil {
-		t.Fatalf("redelivery ok=%t err=%v", ok, err)
+	f.mu.Lock()
+	f.failLists = map[int]bool{lists + 1: true, lists + 2: true} // any inspection now would fail too
+	f.mu.Unlock()
+	if status := n0930Deliver(t, ts, svc, event); status != http.StatusOK {
+		t.Fatalf("redelivery status=%d", status)
 	}
+	if status := n0930Deliver(t, ts, svc, n0930Event("evt_n0930_b_update", n0930Canonical, 600)); status != http.StatusOK {
+		t.Fatalf("canonical event status=%d", status)
+	}
+	_, deletes, _, listsAfter, _ := f.counts()
+	still := n0930Load(t, store)
+	if deletes != 0 || listsAfter != lists || still.DiscoveredAt != 0 || still.Attempts != placeholder.Attempts || still.Revision != placeholder.Revision || still.SubscriptionCanceled {
+		t.Fatalf("redelivery and the canonical event must not touch the placeholder: deletes=%d lists=%d->%d before=%+v after=%+v", deletes, lists, listsAfter, placeholder, still)
+	}
+	f.mu.Lock()
+	f.failLists = nil
+	f.mu.Unlock()
 	svc.ReconcileDuplicateRefunds(context.Background())
 	_, deletes, _, _, refunds := f.counts()
 	done := n0930Load(t, store)
 	if deletes != 1 || refunds != 0 || !done.SubscriptionCanceled || done.DiscoveredAt == 0 || len(done.Liabilities) != 1 || done.State != "manual" || n0930Rows(t, store) != 1 {
-		t.Fatalf("worker must recover the duplicate: deletes=%d job=%+v", deletes, done)
+		t.Fatalf("the worker must recover the duplicate: deletes=%d job=%+v", deletes, done)
 	}
 }
 
@@ -249,33 +305,77 @@ func TestN0930_1PaidInvoiceOnPlaceholderStaysUnknown(t *testing.T) {
 	}
 }
 
-// Test 17: two handlers and the worker overlap (as after a 60 s event-lease
-// expiry). They converge: one row, canceled, liabilities recorded, no refund.
-// Exactly one HTTP DELETE is NOT required: DELETE is idempotent and covered by
-// readback.
-func TestN0930_1ConcurrentHandlersAndWorkerConverge(t *testing.T) {
-	f, _, store, svc := newN0930Step2(t, Config{}, n0930Duplicate)
-	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for attempt := 0; attempt < 5; attempt++ {
-				if ok, _, _ := n0930Reconcile(t, context.Background(), svc); ok {
-					return
-				}
-			}
-		}()
+// n0930PauseStore pauses the first Bind of sub_c right after it commits.
+type n0930PauseStore struct {
+	*SQLiteStore
+	once             sync.Once
+	reached, release chan struct{}
+}
+
+func (s *n0930PauseStore) ApplyStripeSourceIfUnchanged(ctx context.Context, in StripeSourceWrite) (StripeSourceWriteResult, error) {
+	res, err := s.SQLiteStore.ApplyStripeSourceIfUnchanged(ctx, in)
+	if err == nil && in.Bind != nil && *in.Bind == n0930Canonical && in.Event == nil {
+		s.once.Do(func() {
+			close(s.reached)
+			<-s.release
+		})
 	}
-	wg.Add(1)
-	go func() { defer wg.Done(); svc.ReconcileDuplicateRefunds(context.Background()) }()
-	wg.Wait()
-	svc.ReconcileDuplicateRefunds(context.Background())
+	return res, err
+}
+
+// Test 17: handler A commits the Bind (with the duplicate's responsibility)
+// and stalls; its 60 s claim lease expires on a controlled clock; replacement
+// handler B is admitted for the SAME event; the worker runs meanwhile; then A
+// resumes. The responsibility is durable from A's commit, the worker's
+// cancellation is authorizer-gated, the liability is recorded, entitlement
+// converges, and A's late completion is fenced by the claim generation.
+func TestN0930_1ConcurrentHandlersAndWorkerConverge(t *testing.T) {
+	f, client, store, svc := newN0930Step2(t, Config{}, n0930Duplicate)
+	ts := n0930WebhookServer(t, client, svc)
+	var clock atomic.Int64
+	clock.Store(time.Now().Unix())
+	svc.now = func() time.Time { return time.Unix(clock.Load(), 0) }
+	pause := &n0930PauseStore{SQLiteStore: store, reached: make(chan struct{}), release: make(chan struct{})}
+	svc.store = pause
+	event := n0930Event("evt_n0930_overlap", n0930Canonical, 500)
+	// Released exactly once, also when an assertion fails early, so a stalled
+	// handler A can never hang the test server's shutdown.
+	releaseA := sync.OnceFunc(func() { close(pause.release) })
+	defer releaseA()
+	aStatus := make(chan int, 1)
+	go func() { aStatus <- n0930Deliver(t, ts, svc, event) }()
+	<-pause.reached // A: Bind and responsibility committed, inline phase not started
+	if n0930Rows(t, store) != 1 || n0930Load(t, store).DiscoveredAt != 0 {
+		t.Fatal("the duplicate's responsibility must be durable as soon as A's Bind commits")
+	}
+	clock.Add(stripeEventLeaseSeconds + 1) // A's claim lease expires
+	if status := n0930Deliver(t, ts, svc, event); status != http.StatusOK {
+		t.Fatalf("replacement handler B status=%d", status)
+	}
+	svc.ReconcileDuplicateRefunds(context.Background()) // the worker overlaps A
+	_, deletes, _, _, _ := f.counts()
+	if beforeA := n0930Load(t, store); deletes != 1 || !beforeA.SubscriptionCanceled {
+		t.Fatalf("the worker must cancel from the committed responsibility while A is stalled: deletes=%d job=%+v", deletes, beforeA)
+	}
+	releaseA()
+	if status := <-aStatus; status != http.StatusInternalServerError {
+		t.Fatalf("A's late completion must be fenced by its stale claim generation: status=%d", status)
+	}
+	svc.store = store
+	var status string
+	var attempts int64
+	if err := store.db.QueryRow(`SELECT status,attempts FROM stripe_webhook_events WHERE event_id='evt_n0930_overlap'`).Scan(&status, &attempts); err != nil || status != "processed" || attempts != 2 {
+		t.Fatalf("event ledger status=%q attempts=%d err=%v (want processed by generation 2)", status, attempts, err)
+	}
 	_, deletes, _, _, refunds := f.counts()
 	u, _ := store.GetUserByID(context.Background(), n0930User)
 	job := n0930Load(t, store)
-	if n0930Rows(t, store) != 1 || deletes < 1 || refunds != 0 || !job.SubscriptionCanceled || job.State != "manual" || len(job.Liabilities) != 1 || u.StripeSubscriptionID != n0930Canonical {
-		t.Fatalf("rows=%d deletes=%d binding=%s job=%+v", n0930Rows(t, store), deletes, u.StripeSubscriptionID, job)
+	f.mu.Lock()
+	canonDeletes := f.deletesBy[n0930Canonical]
+	f.mu.Unlock()
+	if n0930Rows(t, store) != 1 || deletes < 1 || canonDeletes != 0 || refunds != 0 || !job.SubscriptionCanceled || job.State != "manual" || len(job.Liabilities) != 1 || job.CancelHold != "" ||
+		u.StripeSubscriptionID != n0930Canonical || u.PlanID != "pro" {
+		t.Fatalf("rows=%d deletes=%d canonDeletes=%d binding=%s plan=%s job=%+v", n0930Rows(t, store), deletes, canonDeletes, u.StripeSubscriptionID, u.PlanID, job)
 	}
 }
 
