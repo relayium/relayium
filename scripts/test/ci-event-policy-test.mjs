@@ -140,6 +140,7 @@
 // install first would trade a checkable risk for an outage that blocks merges.
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -450,6 +451,18 @@ const RENEW_PATTERN = "^(TestLinkRenew|TestLDRenew)";
 /** The renewal lane's measured weights, and the tool that records shard evidence. */
 const RENEW_WEIGHTS = "scripts/go-race-timings-renewal.json";
 const TIMINGS_TOOL = "scripts/go-race-timings.go";
+/**
+ * The account lane's measured profile, pinned to the exact corpus root and an
+ * independent Codex review accepted: run 36893745143 attempt 1 at 7c47921b9,
+ * all eight account shard archives verified against their API digests, 2633
+ * tests. Replacing it needs a new accepted corpus and a deliberate edit here.
+ */
+const ACCOUNT_WEIGHTS = "scripts/go-race-timings-account.json";
+const ACCOUNT_WEIGHTS_SHA256 = "e9d0d8b464b095188f602d7340f144be86c8f651f8e01ab93cb2d2c54d0f8abf";
+const ACCOUNT_WEIGHTS_PROVENANCE = {
+  kind: "go-test-json-corpus", sourceSHA: "7c47921b94b9120d528badc138d34fa0c8a6f1e9",
+  toolchain: "go version go1.26.6 linux/amd64", runID: 36893745143, runAttempt: 1, race: true, count: 1, complete: true,
+};
 
 const failures = [];
 function check(ok, message) {
@@ -1040,11 +1053,12 @@ const go = docs.get("go.yml");
 const GO_SHARD_LANES = [
   {
     job: "race-account", lane: "account", shards: SHARDS, pkg: "./account", maxPackageMinutes: 20,
-    planner: [`-shards ${SHARDS}`, "-shard '${{ matrix.shard }}'"],
-    // FNV stays the account default until a real eight-shard corpus from
-    // scripts/go-race-timings.go `corpus` exists and is accepted. Moving to
-    // -weights is a deliberate edit of this line, not a quiet one in go.yml.
-    forbidden: ["-weights", "-pattern", "-require-pass", "-forbid-skip"],
+    // Weighted over the accepted account profile (pinned below by digest); the
+    // package and the ^Test list stay the helper's defaults, so the compiled
+    // list of every top-level test remains the source of truth, and the
+    // package's own reasoned skips stay allowed.
+    planner: [`-weights ../${ACCOUNT_WEIGHTS}`, `-shards ${SHARDS}`, "-shard '${{ matrix.shard }}'"],
+    forbidden: ["-package", "-pattern", "-require-pass", "-forbid-skip", `-weights ../${RENEW_WEIGHTS}`],
     evidence: ["-lane account"],
   },
   {
@@ -1242,8 +1256,13 @@ if (go) {
       mutate: editRun(RENEW_JOB, `-pattern '${RENEW_PATTERN}'`, "-pattern '^TestLinkRenew'") },
     { name: "the renewal planner drops the measured weights", expect: /link-renew: the scripts\/go-race-shard\.go call lacks `-weights/,
       mutate: editRun(RENEW_JOB, `-weights ../${RENEW_WEIGHTS} `, "") },
-    { name: "the account lane switches to weights without an accepted corpus", expect: /race-account: uses `-weights`/,
-      mutate: editRun("race-account", "-shards 8 ", `-shards 8 -weights ../${RENEW_WEIGHTS} `) },
+    { name: "the account lane drops its measured profile (back to FNV)",
+      expect: /race-account: the scripts\/go-race-shard\.go call lacks `-weights \.\.\/scripts\/go-race-timings-account\.json`/,
+      mutate: editRun("race-account", `-weights ../${ACCOUNT_WEIGHTS} `, "") },
+    { name: "the account lane plans with the renewal profile", expect: /race-account: uses `-weights \.\.\/scripts\/go-race-timings-renewal\.json`/,
+      mutate: editRun("race-account", `-weights ../${ACCOUNT_WEIGHTS} `, `-weights ../${RENEW_WEIGHTS} `) },
+    { name: "the account lane narrows its listed tests", expect: /race-account: uses `-pattern`/,
+      mutate: editRun("race-account", "-shards 8 ", "-pattern '^TestA' -shards 8 ") },
     { name: "the renewal shard count drifts", expect: /link-renew: the scripts\/go-race-shard\.go call lacks `-shards 2`/,
       mutate: editRun(RENEW_JOB, "-shards 2 ", "-shards 3 ") },
     { name: "a renewal shard may SKIP", expect: /link-renew: the scripts\/go-race-timings\.go evidence call lacks `-forbid-skip`/,
@@ -1311,6 +1330,73 @@ if (go) {
   check(outside.length === 0,
     `the renewal pattern also matches tests outside cmd/relayium (${outside.join(", ")}); \`test\` and `
     + `\`race-rest\` skip them everywhere but \`${RENEW_JOB}\` runs only ./cmd/relayium.`);
+
+  // The account profile is exactly the accepted one: its bytes by digest and
+  // its provenance field by field, with every entry a finite measured weight.
+  // The digest makes a refreshed corpus a reviewed edit of this file.
+  const accountFailures = (raw) => {
+    const out = [];
+    const digest = createHash("sha256").update(raw).digest("hex");
+    if (digest !== ACCOUNT_WEIGHTS_SHA256) {
+      out.push(`${ACCOUNT_WEIGHTS}: sha256 ${digest}, want the accepted ${ACCOUNT_WEIGHTS_SHA256}. A new profile needs a `
+        + `new accepted corpus and a deliberate edit of ACCOUNT_WEIGHTS_SHA256.`);
+    }
+    let doc;
+    try {
+      doc = JSON.parse(raw);
+    } catch (err) {
+      return [...out, `${ACCOUNT_WEIGHTS} is not JSON (${err.message}); the account planner refuses to run without it.`];
+    }
+    if (doc.schema !== "relayium.go-test-weights/1" || doc.package !== "./account" || doc.pattern !== "^Test"
+      || doc.unit !== "seconds") {
+      out.push(`${ACCOUNT_WEIGHTS}: want schema relayium.go-test-weights/1, package ./account, pattern ^Test, seconds.`);
+    }
+    for (const [key, want] of Object.entries(ACCOUNT_WEIGHTS_PROVENANCE)) {
+      if (doc.provenance?.[key] !== want) {
+        out.push(`${ACCOUNT_WEIGHTS}: provenance.${key} is ${JSON.stringify(doc.provenance?.[key])}, want ${JSON.stringify(want)}.`);
+      }
+    }
+    const tests = Array.isArray(doc.tests) ? doc.tests : [];
+    const names = new Set(tests.map((t) => t?.name));
+    if (tests.length < 1000 || names.size !== tests.length
+      || !tests.every((t) => /^Test[A-Za-z0-9_]*$/.test(t?.name ?? "") && Number.isFinite(t?.seconds)
+        && t.seconds >= 0 && t.seconds <= 21600)) {
+      out.push(`${ACCOUNT_WEIGHTS}: want at least 1000 unique test names, each with a finite weight in [0, 21600] s; `
+        + `got ${tests.length} entries, ${names.size} unique.`);
+    }
+    return out;
+  };
+  let accountRaw = "";
+  try {
+    accountRaw = readFileSync(resolve(repoRoot, ACCOUNT_WEIGHTS), "utf8");
+  } catch (err) {
+    check(false, `${ACCOUNT_WEIGHTS} is missing (${err.message}); the account planner refuses to run without it.`);
+  }
+  if (accountRaw !== "") {
+    for (const m of accountFailures(accountRaw)) check(false, m);
+    // Controls: each change to the profile is reported, for its own reason.
+    const ACCOUNT_PROFILE_CONTROLS = [
+      { name: "one weight edited", expect: /sha256 .* want the accepted/,
+        raw: accountRaw.replace(/"seconds": 124\.26/, '"seconds": 1.26') },
+      { name: "a different run", expect: /provenance\.runID is 1, want 36893745143/,
+        raw: accountRaw.replace('"runID": 36893745143', '"runID": 1') },
+      { name: "another attempt", expect: /provenance\.runAttempt is 2/, raw: accountRaw.replace('"runAttempt": 1', '"runAttempt": 2') },
+      { name: "another commit", expect: /provenance\.sourceSHA/, raw: accountRaw.replace("7c47921b94b9120d528badc138d34fa0c8a6f1e9", "0".repeat(40)) },
+      { name: "measured without -race", expect: /provenance\.race is false/, raw: accountRaw.replace('"race": true', '"race": false') },
+      { name: "the renewal profile in its place", expect: /package \.\/account, pattern \^Test/,
+        raw: readFileSync(resolve(repoRoot, RENEW_WEIGHTS), "utf8") },
+      { name: "a truncated test list", expect: /want at least 1000 unique test names/,
+        raw: JSON.stringify({ ...JSON.parse(accountRaw), tests: JSON.parse(accountRaw).tests.slice(0, 10) }) },
+      { name: "a negative weight", expect: /finite weight in \[0, 21600\]/,
+        raw: JSON.stringify({ ...JSON.parse(accountRaw),
+          tests: JSON.parse(accountRaw).tests.map((t, i) => (i === 0 ? { ...t, seconds: -1 } : t)) }) },
+    ];
+    for (const c of ACCOUNT_PROFILE_CONTROLS) {
+      const got = accountFailures(c.raw);
+      check(c.raw !== accountRaw && got.some((m) => c.expect.test(m)),
+        `account profile control "${c.name}": did not report ${c.expect}; reported ${JSON.stringify(got)}.`);
+    }
+  }
 
   // The measured weights describe this lane: same package and pattern, and
   // provenance a reader can trace to a real hosted run.

@@ -987,6 +987,197 @@ if [ "$rc" != 0 ]; then
 else
   fail "a missing PASS left the renewal step green"
 fi
+echo "go-race-shard-test: the account lane's accepted measured profile"
+
+# ── 13. scripts/go-race-timings-account.json, and the account step using it ──
+#
+# The profile is the corpus of run 36893745143 attempt 1 at 7c47921b9 (all
+# eight account shards, 2633 tests), exactly as accepted: its digest and
+# provenance are pinned here and in ci-event-policy-test.mjs.
+acct_weights="$root/scripts/go-race-timings-account.json"
+if command -v sha256sum >/dev/null 2>&1; then
+  acct_sha=$(sha256sum "$acct_weights" | cut -d' ' -f1)
+else
+  acct_sha=$(shasum -a 256 "$acct_weights" | cut -d' ' -f1)
+fi
+if [ "$acct_sha" = e9d0d8b464b095188f602d7340f144be86c8f651f8e01ab93cb2d2c54d0f8abf ]; then
+  ok "the account profile is byte-for-byte the accepted corpus"
+else
+  fail "the account profile's sha256 is $acct_sha, not the accepted corpus"
+fi
+if grep -q '"runID": 36893745143,' "$acct_weights" && grep -q '"runAttempt": 1,' "$acct_weights" \
+  && grep -q '"sourceSHA": "7c47921b94b9120d528badc138d34fa0c8a6f1e9",' "$acct_weights" \
+  && grep -q '"toolchain": "go version go1.26.6 linux/amd64",' "$acct_weights" \
+  && grep -q '"kind": "go-test-json-corpus",' "$acct_weights"; then
+  ok "its provenance names run 36893745143 attempt 1, commit 7c47921b9 and go1.26.6 linux/amd64"
+else
+  fail "the account profile's provenance is not the accepted run"
+fi
+grep -o '"name": "Test[A-Za-z0-9_]*"' "$acct_weights" | sed 's/^"name": "//; s/"$//' > "$work/acct.txt"
+if [ "$(wc -l < "$work/acct.txt" | tr -d ' ')" -eq 2633 ]; then
+  ok "the account profile measures 2633 tests"
+else
+  fail "the account profile names $(wc -l < "$work/acct.txt" | tr -d ' ') tests, want the measured 2633"
+fi
+# The plan over the measured list: eight shards within ~1.2s of each other.
+# These are PLANNED seconds (an estimate), not a hosted measurement.
+aloads=$(go run "$helper" -weights "$acct_weights" -names-from "$work/acct.txt" -shards 8 -shard 0 -loads 2>"$work/acct-err" | tr '\n' ' ')
+if [ "$aloads" = "899203 900370 899203 899203 899203 899203 899203 899202 " ] \
+  && grep -q '0 listed test(s) without a measured weight' "$work/acct-err" && grep -q '0 weight(s) name no listed test' "$work/acct-err"; then
+  ok "the account plan is 899.2-900.4 planned seconds per shard (FNV measured 635-1116s in the same run)"
+else
+  fail "the account plan loads are '$aloads': $(cat "$work/acct-err")"
+fi
+: > "$work/acct-union.txt"
+empty=0
+i=0
+while [ "$i" -lt 8 ]; do
+  go run "$helper" -weights "$acct_weights" -names-from "$work/acct.txt" -shards 8 -shard "$i" -list > "$work/acct$i.txt" 2>/dev/null \
+    || fail "account weighted shard $i was refused"
+  [ -s "$work/acct$i.txt" ] || empty=$((empty + 1))
+  cat "$work/acct$i.txt" >> "$work/acct-union.txt"
+  i=$((i + 1))
+done
+if [ "$empty" -eq 0 ] && [ -z "$(sort "$work/acct-union.txt" | uniq -d)" ] \
+  && [ "$(sort "$work/acct-union.txt")" = "$(sort "$work/acct.txt")" ]; then
+  ok "the eight weighted account shards are non-empty, disjoint and together every measured test"
+else
+  fail "the weighted account shards are not a partition ($empty empty)"
+fi
+# A test added after the corpus joins at the largest measured weight; a
+# measured test since deleted is ignored and reaches no selector.
+{ cat "$work/acct.txt"; echo TestAccountAddedAfterTheCorpus; } > "$work/acct-new.txt"
+: > "$work/acct-new-union.txt"
+i=0
+while [ "$i" -lt 8 ]; do
+  go run "$helper" -weights "$acct_weights" -names-from "$work/acct-new.txt" -shards 8 -shard "$i" -list >> "$work/acct-new-union.txt" 2>"$work/acct-new-err" || true
+  i=$((i + 1))
+done
+if grep -qx TestAccountAddedAfterTheCorpus "$work/acct-new-union.txt" \
+  && [ "$(sort "$work/acct-new-union.txt")" = "$(sort "$work/acct-new.txt")" ] \
+  && grep -q '1 listed test(s) without a measured weight planned at 124260 ms' "$work/acct-new-err"; then
+  ok "a new account test joins a weighted shard at the largest measured weight (124.26s)"
+else
+  fail "a new account test did not join the weighted plan: $(cat "$work/acct-new-err")"
+fi
+grep -vx TestUploadQuotaCrashChild "$work/acct.txt" > "$work/acct-gone.txt"
+: > "$work/acct-gone-union.txt"
+for i in 0 1 2 3 4 5 6 7; do
+  go run "$helper" -weights "$acct_weights" -names-from "$work/acct-gone.txt" -shards 8 -shard "$i" >> "$work/acct-gone-union.txt" 2>"$work/acct-gone-err" || true
+done
+if ! grep -q 'TestUploadQuotaCrashChild[|)]' "$work/acct-gone-union.txt" && grep -q '1 weight(s) name no listed test' "$work/acct-gone-err"; then
+  ok "a measured account test since deleted is ignored and reaches no selector"
+else
+  fail "a stale account weight leaked into a selector or was not reported: $(cat "$work/acct-gone-err")"
+fi
+# Inventory drift at scale: the 2026-08-21 list (1904 names, many renamed
+# since) still plans to an exact partition, unknown names included.
+: > "$work/acct-old-union.txt"
+for i in 0 1 2 3 4 5 6 7; do
+  go run "$helper" -weights "$acct_weights" -names-from "$corpus" -shards 8 -shard "$i" -list >> "$work/acct-old-union.txt" 2>/dev/null \
+    || fail "the 2026-08-21 list was refused by the weighted planner (shard $i)"
+done
+if [ "$(sort "$work/acct-old-union.txt")" = "$(sort "$corpus")" ]; then
+  ok "a drifted inventory (the 2026-08-21 list) still plans to an exact partition"
+else
+  fail "the weighted plan over the 2026-08-21 list is not that list"
+fi
+# The profile is refused anywhere it does not describe the listed package, and
+# when its provenance stops describing a complete measurement.
+if go run "$helper" -package ./cmd/relayium -pattern "$renew_pattern" -weights "$acct_weights" -names-from "$work/renew.txt" \
+  -shards 2 -shard 0 >/dev/null 2>"$work/err"; then
+  fail "the account profile was accepted for the renewal package"
+elif grep -q 'measured package "./account"' "$work/err"; then
+  ok "the account profile is refused for another package"
+else
+  fail "the account profile was refused for another package, but not for that reason: $(cat "$work/err")"
+fi
+sed 's/"complete": true/"complete": false/' "$acct_weights" > "$work/acct-incomplete.json"
+if go run "$helper" -weights "$work/acct-incomplete.json" -names-from "$work/acct.txt" -shards 8 -shard 0 >/dev/null 2>&1; then
+  fail "an account profile from an incomplete corpus was accepted"
+else
+  ok "an account profile from an incomplete corpus is refused"
+fi
+sed 's/"runID": 36893745143,/"runID": 36893745143, "runID": 1,/' "$acct_weights" > "$work/acct-dupkey.json"
+if go run "$helper" -weights "$work/acct-dupkey.json" -names-from "$work/acct.txt" -shards 8 -shard 0 >/dev/null 2>"$work/err"; then
+  fail "an account profile with a duplicated run ID key was accepted"
+elif grep -q 'key "runID" appears twice' "$work/err"; then
+  ok "an account profile with a duplicated run ID key is refused"
+else
+  fail "the duplicated-key profile was refused for another reason: $(cat "$work/err")"
+fi
+if go run "$helper" -weights "$work/no-such-profile.json" -names-from "$work/acct.txt" -shards 8 -shard 0 >/dev/null 2>&1; then
+  fail "a missing account profile fell back to a plan"
+else
+  ok "a missing account profile is an error, not a fallback to FNV"
+fi
+# FNV stays the helper default: without -weights the golden hash still rules.
+if [ "$(go run "$helper" -where TestUserDelete -shards 8 2>/dev/null)" = 5 ] \
+  && go run "$helper" -names-from "$work/acct.txt" -shards 8 -shard 0 2>&1 >/dev/null | grep -q '^go-race-shard: fnv shard 0/8'; then
+  ok "without -weights the helper is still FNV, golden cases unchanged"
+else
+  fail "the helper's default is no longer FNV"
+fi
+
+# The go.yml account step itself, against a throw-away `account` package of
+# nine tests and a synthetic profile for it in the step's ../scripts layout:
+# the plan must be weighted, the evidence complete and lane account.
+acct_step="$work/acct-step.sh"
+awk '
+  /name: go test -race \(account shard/ { found = 1; next }
+  found && /^        run: \|/ { inrun = 1; next }
+  inrun && /^      - / { exit }
+  inrun { sub(/^          /, ""); print }
+' "$root/.github/workflows/go.yml" | sed "s/'\\\${{ matrix.shard }}'/\"\\\$SHARD\"/g" > "$acct_step"
+if grep -q 'go-race-timings-account.json' "$acct_step" && grep -q -- '-lane account' "$acct_step"; then
+  ok "the account step was found in go.yml and plans with the account profile"
+else
+  fail "could not cut a weighted account step out of go.yml: $(head -c 300 "$acct_step")"
+fi
+mkdir -p "$work/srv/account"
+{
+  printf 'package account\n\nimport "testing"\n\n'
+  for n in 1 2 3 4 5 6 7 8 9; do printf 'func TestAcct%s(t *testing.T) {}\n' "$n"; done
+} > "$work/srv/account/a_test.go"
+acct_tests='[{"name":"TestAcct1","seconds":9},{"name":"TestAcct2","seconds":8},{"name":"TestAcct3","seconds":7},{"name":"TestAcct4","seconds":6},{"name":"TestAcct5","seconds":5},{"name":"TestAcct6","seconds":4},{"name":"TestAcct7","seconds":3},{"name":"TestAcct8","seconds":2},{"name":"TestAcct9","seconds":1}]'
+weights_doc ./account '^Test' "$prov" "$acct_tests" > "$work/scripts/go-race-timings-account.json"
+printf 'TestAcct1\nTestAcct2\nTestAcct3\nTestAcct4\nTestAcct5\nTestAcct6\nTestAcct7\nTestAcct8\nTestAcct9\n' > "$work/acct9.txt"
+go run "$helper" -weights "$work/scripts/go-race-timings-account.json" -names-from "$work/acct9.txt" -shards 8 -shard 0 -list > "$work/acct9-0.txt" 2>/dev/null \
+  || fail "the nine-test account plan was refused"
+: > "$work/acct9-stream.json"
+while read -r n; do ev_line pass "$n" 0.2 >> "$work/acct9-stream.json"; done < "$work/acct9-0.txt"
+saved_step=$step
+step=$acct_step
+rc=$(run_step 0 "$work/acct9-stream.json" 0)
+if [ "$rc" = 0 ] && grep -q '"mode": "weighted"' "$work/rt/go-race-timing/evidence.json" \
+  && grep -q '"lane": "account"' "$work/rt/go-race-timing/evidence.json" && grep -q '"complete": true' "$work/rt/go-race-timing/evidence.json"; then
+  ok "the account step plans weighted and writes complete account evidence"
+else
+  fail "the account step exited $rc or did not write complete weighted evidence: $(tail -3 "$work/step-out" | tr '\n' ' ')"
+fi
+rc=$(run_step 0 "$work/acct9-stream.json" 1)
+if [ "$rc" = 1 ] && [ -s "$work/rt/go-race-timing/evidence.json" ]; then
+  ok "a failing account go test keeps its exit status and its evidence"
+else
+  fail "a failing account go test made the step exit $rc, or lost its evidence"
+fi
+# An account skip is the package's own and stays allowed in this lane.
+{ head -n 1 "$work/acct9-0.txt" | while read -r n; do ev_line skip "$n" 0; done; tail -n +2 "$work/acct9-0.txt" | while read -r n; do ev_line pass "$n" 0.2; done; } > "$work/acct9-skip.json"
+rc=$(run_step 0 "$work/acct9-skip.json" 0)
+if [ "$rc" = 0 ]; then
+  ok "a reasoned top-level SKIP stays allowed in the weighted account lane"
+else
+  fail "a SKIP failed the account step (exit $rc): $(tail -3 "$work/step-out" | tr '\n' ' ')"
+fi
+rm -f "$work/scripts/go-race-timings-account.json"
+rc=$(run_step 0 "$work/acct9-stream.json" 0)
+if [ "$rc" != 0 ]; then
+  ok "without its profile the account step fails instead of planning FNV"
+else
+  fail "the account step passed with no profile"
+fi
+step=$saved_step
+
 echo
 failures=$(wc -l < "$fail_log" | tr -d ' ')
 if [ "$failures" -ne 0 ]; then

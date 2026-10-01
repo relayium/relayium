@@ -1211,7 +1211,7 @@ a control. Neither the Linux nor the Windows CLI matrix names a renewal test
 ### Race shard planning and timing evidence
 
 `scripts/go-race-shard.go` has two modes. **FNV** (the default) hashes each
-test name to a shard; `race-account` keeps it for its eight shards. **Weighted**
+test name to a shard; it remains the helper's default. **Weighted**
 (`-weights FILE`) orders the compiled list by measured seconds, heaviest first
 with ties by name, and gives each test to the least-loaded shard, ties to the
 lowest index; loads are integer milliseconds. The compiled list is always
@@ -1246,13 +1246,26 @@ test's measured time is kept as its weight; the planner floors every weight at
 strict decoding and provenance formats to a weights file; the renewal file's
 provenance is the PR #156 run 36873812806, attempt 1.
 
-The account lane stays FNV until a real eight-shard hosted corpus has been
-collected that way and independently accepted; no account weight in the
-repository is estimated, and the policy test refuses `-weights` on
-`race-account` until that acceptance edits it. `scripts/test/go-race-shard-test.sh`
-(repo-hygiene) proves both modes, the evidence and corpus refusals, and runs the
-renewal step cut from `go.yml` against a canned failing stream to show go
-test's status survives `tee` and render while the evidence is still written.
+`race-account` plans its eight shards weighted over
+`scripts/go-race-timings-account.json`: the corpus of hosted run 36893745143
+attempt 1 at `7c47921b9` (all eight account shards SUCCESS, every archive
+checked against its API digest), 2633 tests, 7194.45 s summed, with one
+legitimate SKIP (`TestUploadQuotaCrashChild`, the child process the SIGKILL
+test re-executes, measured at 0 s and planned at the 1 ms floor). In that run
+FNV's shards took 635–1116 s of test time; the weighted plan for the same list
+is 899.2–900.4 s per shard. That is a **planned estimate**: the gain is
+claimed only once a hosted run under the weighted plan measures it. The
+package and `^Test` list stay the helper's defaults, so the compiled list
+remains authoritative: a test added since plans at the largest measured weight
+(124.26 s) and a measured test since deleted is ignored. The policy test pins
+the profile by SHA-256 and its provenance field by field, so a refreshed
+profile is a reviewed edit, and refuses the renewal profile, a narrowed
+pattern or a dropped `-weights` on `race-account`.
+`scripts/test/go-race-shard-test.sh` (repo-hygiene) proves both modes, the
+account profile's plan, partition, new/deleted-test handling and refusals, the
+evidence and corpus refusals, and runs the renewal and account steps cut from
+`go.yml` against canned streams to show go test's status survives `tee` and
+render while the evidence is still written.
 
 Locally, `scripts/test/go-local.sh` (from any directory) runs the same two
 halves: `ordinary` is `test`'s command with `-count=1` and Go's default

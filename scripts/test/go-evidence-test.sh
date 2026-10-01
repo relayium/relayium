@@ -1149,7 +1149,8 @@ $got_paths
 # different partition, not evidence for this one. Derived from go.yml's run
 # text, not listed here, so a new `../scripts/go-race-*` input is caught too.
 shard_inputs=$(grep -oE '\.\./scripts/go-race-[A-Za-z0-9._-]+' "$GO_WORKFLOW" | sed 's|^\.\./||' | LC_ALL=C sort -u)
-assert_eq 'go.yml names the planner, the timing tool and the renewal weights' "$shard_inputs" "scripts/go-race-shard.go
+assert_eq 'go.yml names the planner, the timing tool and the account and renewal weights' "$shard_inputs" "scripts/go-race-shard.go
+scripts/go-race-timings-account.json
 scripts/go-race-timings-renewal.json
 scripts/go-race-timings.go"
 for input in $shard_inputs; do

@@ -170,6 +170,7 @@ server
 scripts/go-race-shard.go
 scripts/go-race-timings.go
 scripts/go-race-timings-renewal.json
+scripts/go-race-timings-account.json
 scripts/test/db-rollback-harness.sh
 scripts/test/cli-public-truth-test.sh
 README.md
