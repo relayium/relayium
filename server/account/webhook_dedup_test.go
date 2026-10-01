@@ -48,7 +48,7 @@ func (d *dedupBiller) InspectDuplicateSubscription(_ context.Context, userID, cu
 	return DuplicateRefundPlan{UserID: userID, CustomerID: customerID, CanonicalSubscriptionID: canonicalID, DuplicateSubscriptionID: duplicateID}, nil
 }
 
-func TestWebhookDuplicateInspectionFailureIsRetryableBeforeCancellation(t *testing.T) {
+func TestWebhookDuplicateInspectionFailureLeavesPlaceholderWithoutCancellation(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_dedup_prepare"
 	biller := &dedupBiller{stripeClient: NewStripeClient("sk_test", secret, ""), inspectErr: errors.New("canonical invoice unavailable"), active: []SubscriptionInfo{

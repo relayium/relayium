@@ -1233,6 +1233,25 @@ func (e *DuplicateResponsibilityOwnershipConflict) Error() string {
 	return fmt.Sprintf("account: duplicate responsibility for %s is owned by user %s customer %s, not user %s customer %s", e.Ref.DuplicateSubscriptionID, e.ExistingUserID, e.ExistingCustomerID, e.Ref.UserID, e.Ref.CustomerID)
 }
 
+// canonicalConflictAlreadyRecorded reports whether the hold in force is
+// canonical_conflict and the latest evidence entry already names this
+// canonical, so recording it again would only add evidence and revision churn
+// (a revision bump also defeats the operator's revision-fenced hold clear).
+func canonicalConflictAlreadyRecorded(hold, evidence, canonical string) bool {
+	if hold != duplicateHoldCanonicalConflict {
+		return false
+	}
+	var entries []map[string]any
+	if json.Unmarshal([]byte(evidence), &entries) != nil || len(entries) == 0 {
+		return false
+	}
+	last := entries[len(entries)-1]
+	reason, _ := last["reason"].(string)
+	seen, _ := last["canonical_seen"].(string)
+	_, cleared := last["cleared"]
+	return !cleared && reason == duplicateHoldCanonicalConflict && seen == canonical
+}
+
 // duplicateResponsibilityOwnershipLog is the fixed prefix of the diagnostic
 // logged OUTSIDE the rolled-back Bind transaction.
 const duplicateResponsibilityOwnershipLog = "billing: duplicate responsibility ownership conflict"
@@ -1262,6 +1281,13 @@ func recordDuplicateResponsibilitiesTx(ctx context.Context, tx *sql.Tx, refs []D
 		case user != ref.UserID || customer != ref.CustomerID:
 			return &DuplicateResponsibilityOwnershipConflict{Ref: ref, ExistingUserID: user, ExistingCustomerID: customer}
 		case canonical != ref.CanonicalSubscriptionID:
+			var hold, evidence string
+			if err := tx.QueryRowContext(ctx, `SELECT cancel_hold,hold_evidence FROM billing_duplicate_refunds WHERE id=?`, id).Scan(&hold, &evidence); err != nil {
+				return err
+			}
+			if canonicalConflictAlreadyRecorded(hold, evidence, ref.CanonicalSubscriptionID) {
+				continue // no evidence or revision churn on every reconcile
+			}
 			if _, err := holdDuplicateRefundCancellationTx(ctx, tx, id, duplicateHoldEvidence{At: now, Reason: duplicateHoldCanonicalConflict, Path: "bind", Actor: "system", CanonicalSeen: ref.CanonicalSubscriptionID, BindingSeen: ref.CanonicalSubscriptionID, CustomerSeen: ref.CustomerID}); err != nil {
 				return err
 			}
@@ -1652,6 +1678,9 @@ func (s *Service) reconcileDuplicateSubscription(ctx context.Context, user User,
 			conflict := &DuplicateResponsibilityOwnershipConflict{Ref: ref, ExistingUserID: job.UserID, ExistingCustomerID: job.CustomerID}
 			log.Printf("%s: user=%s customer=%s canonical=%s duplicate=%s existing_user=%s existing_customer=%s (inline attempt refused)", duplicateResponsibilityOwnershipLog, user.ID, user.StripeCustomerID, canonicalID, duplicateID, job.UserID, job.CustomerID)
 			return conflict
+		case job.CanonicalSubscriptionID != canonicalID && canonicalConflictAlreadyRecorded(job.CancelHold, job.HoldEvidence, canonicalID):
+			// Already held for this conflict (typically by the Bind transaction
+			// that just ran): nothing to append.
 		case job.CanonicalSubscriptionID != canonicalID:
 			if _, err := store.HoldDuplicateRefundCancellation(ctx, job.ID, duplicateHoldEvidence{At: s.Now().Unix(), Reason: duplicateHoldCanonicalConflict, Path: "inline", Actor: "system", CanonicalSeen: canonicalID, BindingSeen: canonicalID, CustomerSeen: user.StripeCustomerID}); err != nil {
 				return err

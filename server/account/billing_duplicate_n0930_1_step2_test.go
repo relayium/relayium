@@ -416,3 +416,65 @@ func TestN0930_1OrdinaryDoubleCheckoutUnchanged(t *testing.T) {
 		t.Fatalf("ok=%t retry=%t err=%v plan=%s deletes=%d job=%+v", ok, retry, err, u.PlanID, deletes, job)
 	}
 }
+
+// A Bind whose discovered duplicates carry a customer id older than the
+// account's current one is stale: nothing commits, no placeholder freezes the
+// old customer.
+func TestN0930_1BindRejectsStaleCustomerInResponsibilities(t *testing.T) {
+	_, _, store, _ := newN0930Step2(t, Config{}, n0930Duplicate)
+	obs, ok, err := store.GetSubscriptionSource(context.Background(), n0930User, ProviderStripe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bind := n0930Canonical
+	res, err := store.ApplyStripeSourceIfUnchanged(context.Background(), StripeSourceWrite{
+		UserID: n0930User, Observed: obs, ObservedExists: ok, Bind: &bind,
+		ExpectUser: true, UserSubscriptionID: n0930Duplicate, UserPlanSource: "stripe", Now: 500,
+		DuplicateResponsibilities: []DuplicateResponsibilityRef{{UserID: n0930User, CustomerID: "cus_stale", CanonicalSubscriptionID: n0930Canonical, DuplicateSubscriptionID: n0930Duplicate}},
+	})
+	u, _ := store.GetUserByID(context.Background(), n0930User)
+	if err != nil || res.Unchanged || n0930Rows(t, store) != 0 || u.StripeSubscriptionID != n0930Duplicate {
+		t.Fatalf("stale customer must commit nothing: res=%+v err=%v rows=%d binding=%s", res, err, n0930Rows(t, store), u.StripeSubscriptionID)
+	}
+}
+
+// Recording the same canonical conflict again (another reconcile of the same
+// state) adds no evidence and no revision bump; the inline path does not
+// append what the Bind transaction just recorded.
+func TestN0930_1CanonicalConflictRecordedOnce(t *testing.T) {
+	f, _, store, svc := newN0930Step2(t, Config{}, n0930Duplicate)
+	if _, err := store.PutDuplicateRefund(context.Background(), DuplicateRefundPlan{UserID: n0930User, CustomerID: n0930Customer, CanonicalSubscriptionID: "sub_old", DuplicateSubscriptionID: n0930Duplicate}, true, 50); err != nil {
+		t.Fatal(err)
+	}
+	bindOnce := func() {
+		t.Helper()
+		obs, ok, err := store.GetSubscriptionSource(context.Background(), n0930User, ProviderStripe)
+		if err != nil {
+			t.Fatal(err)
+		}
+		u, _ := store.GetUserByID(context.Background(), n0930User)
+		bind := n0930Canonical
+		if res, err := store.ApplyStripeSourceIfUnchanged(context.Background(), StripeSourceWrite{
+			UserID: n0930User, Observed: obs, ObservedExists: ok, Bind: &bind,
+			ExpectUser: true, UserSubscriptionID: u.StripeSubscriptionID, UserPlanSource: u.PlanSource, Now: 500,
+			DuplicateResponsibilities: []DuplicateResponsibilityRef{{UserID: n0930User, CustomerID: n0930Customer, CanonicalSubscriptionID: n0930Canonical, DuplicateSubscriptionID: n0930Duplicate}},
+		}); err != nil || !res.Unchanged {
+			t.Fatalf("bind res=%+v err=%v", res, err)
+		}
+	}
+	bindOnce()
+	first := n0930Load(t, store)
+	bindOnce()
+	second := n0930Load(t, store)
+	if strings.Count(second.HoldEvidence, `"reason":"canonical_conflict"`) != 1 || second.Revision != first.Revision || second.CancelHold != duplicateHoldCanonicalConflict {
+		t.Fatalf("repeat bind churned the conflict: first=%+v second=%+v", first, second)
+	}
+	// Full reconcile (Bind + inline attempt): still one evidence entry.
+	f.paid = false
+	if ok, _, err := n0930Reconcile(t, context.Background(), svc); !ok || err != nil {
+		t.Fatalf("reconcile ok=%t err=%v", ok, err)
+	}
+	if after := n0930Load(t, store); strings.Count(after.HoldEvidence, `"reason":"canonical_conflict"`) != 1 {
+		t.Fatalf("inline path re-appended the conflict: %s", after.HoldEvidence)
+	}
+}

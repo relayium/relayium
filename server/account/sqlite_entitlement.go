@@ -1071,14 +1071,23 @@ func (s *SQLiteStore) ApplyStripeSourceIfUnchanged(ctx context.Context, in Strip
 		return StripeSourceWriteResult{}, nil // moved since the evidence was fetched
 	}
 	if in.ExpectUser {
-		var subID, planSource string
-		if err := tx.QueryRowContext(ctx, `SELECT stripe_subscription_id, plan_source FROM users WHERE id = ?`, in.UserID).
-			Scan(&subID, &planSource); err != nil {
+		var subID, planSource, customerID string
+		if err := tx.QueryRowContext(ctx, `SELECT stripe_subscription_id, plan_source, stripe_customer_id FROM users WHERE id = ?`, in.UserID).
+			Scan(&subID, &planSource, &customerID); err != nil {
 			return StripeSourceWriteResult{}, err
 		}
 		if subID != in.UserSubscriptionID || planSource != in.UserPlanSource {
 			return StripeSourceWriteResult{}, nil // the decision's users snapshot is stale
 		}
+		// Duplicate responsibilities freeze the customer they were discovered
+		// under; a customer changed since the decision's snapshot is stale too.
+		for _, ref := range in.DuplicateResponsibilities {
+			if ref.CustomerID != customerID {
+				return StripeSourceWriteResult{}, nil
+			}
+		}
+	} else if len(in.DuplicateResponsibilities) > 0 {
+		return StripeSourceWriteResult{}, errors.New("account: duplicate responsibilities require ExpectUser")
 	}
 	if in.Bind != nil {
 		if _, err := tx.ExecContext(ctx,
