@@ -1235,6 +1235,7 @@ func main() {
 				for {
 					acct.ReconcileStripeSubscriptions(ctx)
 					acct.ReconcileBillingCancellations(ctx)
+					acct.DiscoverStripeDuplicates(ctx) // enqueue-only (N-0930-11); the worker below acts
 					acct.ReconcileDuplicateRefunds(ctx)
 					select {
 					case <-ctx.Done():

@@ -2072,3 +2072,219 @@ func migrateDuplicateRefundDiscovery(db *sql.DB) error {
 		return nil
 	})
 }
+
+// ---- N-0930-11: discovery sweep -------------------------------------------
+//
+// A live duplicate can exist with NO responsibility: the first-subscription
+// adoption binds without listing, a canonical deletion clears the binding
+// without discovering survivors, admin comps skip dedup, the reconcile sweep
+// only downgrades, and a delayed older creation on a bound account is dropped
+// by the B-M3 replay rule. DiscoverStripeDuplicates is the backstop. It only
+// ENQUEUES: it lists, then records placeholder responsibilities (the step-1
+// "unknown" state) fenced on the canonical it read. It never cancels, never
+// binds or rebinds, never chooses a canonical. Every cancellation stays with
+// the duplicate worker and its step-1 gates (inspection, fresh authorization,
+// admin_comp / canonical_replaced holds).
+
+// duplicateDiscoveryAttention is the fixed log prefix for accounts the sweep
+// cannot resolve automatically (several live subscriptions, no canonical).
+const duplicateDiscoveryAttention = "billing: duplicate discovery needs attention"
+
+// duplicateDiscoveryBatch bounds Stripe list calls per sweep (one complete,
+// paginated list per account); a durable cursor rotates through the rest.
+const duplicateDiscoveryBatch = 100
+
+const duplicateDiscoveryCursorKey = "billing_duplicate_discovery_cursor"
+
+type duplicateDiscoveryCandidate struct {
+	RowID              int64
+	UserID, CustomerID string
+}
+
+// duplicateDiscoveryFence is what the sweep's decision read: the users
+// binding (and customer), plus -- when the canonical came from a live source
+// row on an unbound account -- that row's subscription.
+type duplicateDiscoveryFence struct {
+	UserID, CustomerID, Binding string
+	RowCanonical                string // non-empty only when Binding is empty
+}
+
+type duplicateDiscoveryStore interface {
+	DuplicateDiscoveryCandidates(context.Context, int64, int) ([]duplicateDiscoveryCandidate, error)
+	RecordDiscoveredDuplicates(context.Context, duplicateDiscoveryFence, []DuplicateResponsibilityRef, int64) (bool, error)
+	GetSetting(context.Context, string) (int64, bool, error)
+	SetSetting(context.Context, string, int64, int64) error
+}
+
+// DuplicateDiscoveryCandidates returns live (not deleting) accounts that have a
+// Stripe customer, in rowid order after the cursor. Every plan source is
+// included: a stripe_customer_id is the only evidence that Stripe can bill the
+// account at all, and comped ('admin'), never-adopted (”) or Apple-effective
+// accounts are exactly the ones the reconcile sweep never looks at.
+func (s *SQLiteStore) DuplicateDiscoveryCandidates(ctx context.Context, afterRowID int64, limit int) ([]duplicateDiscoveryCandidate, error) {
+	rows, err := s.reader().QueryContext(ctx, `SELECT rowid,id,stripe_customer_id FROM users WHERE stripe_customer_id<>'' AND deleted_at=0 AND rowid>? ORDER BY rowid LIMIT ?`, afterRowID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []duplicateDiscoveryCandidate
+	for rows.Next() {
+		var c duplicateDiscoveryCandidate
+		if err := rows.Scan(&c.RowID, &c.UserID, &c.CustomerID); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// RecordDiscoveredDuplicates records the sweep's placeholders in ONE
+// transaction, only if the account still looks exactly as the decision read it:
+// same customer, not deleting, same users binding, and -- for a canonical taken
+// from a live source row on an unbound account -- that row still names it and
+// is still live. A miss writes nothing (false, nil). Existing rows follow the
+// §4.2 rules of recordDuplicateResponsibilitiesTx; an ownership conflict
+// returns *DuplicateResponsibilityOwnershipConflict and writes nothing.
+func (s *SQLiteStore) RecordDiscoveredDuplicates(ctx context.Context, fence duplicateDiscoveryFence, refs []DuplicateResponsibilityRef, now int64) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var binding, customer string
+	var deletedAt int64
+	if err := tx.QueryRowContext(ctx, `SELECT stripe_subscription_id,stripe_customer_id,deleted_at FROM users WHERE id=?`, fence.UserID).Scan(&binding, &customer, &deletedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	if binding != fence.Binding || customer != fence.CustomerID || deletedAt != 0 {
+		return false, nil
+	}
+	canonical := fence.Binding
+	if canonical == "" {
+		if fence.RowCanonical == "" {
+			return false, errors.New("account: discovered duplicates need a canonical")
+		}
+		var external, status string
+		if err := tx.QueryRowContext(ctx, `SELECT external_id,status FROM subscription_sources WHERE user_id=? AND provider='stripe'`, fence.UserID).Scan(&external, &status); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return false, nil
+			}
+			return false, err
+		}
+		if external != fence.RowCanonical || !liveSubStatus(status) {
+			return false, nil
+		}
+		canonical = fence.RowCanonical
+	}
+	for _, ref := range refs {
+		if ref.UserID != fence.UserID || ref.CustomerID != fence.CustomerID || ref.CanonicalSubscriptionID != canonical {
+			return false, errors.New("account: discovered duplicate does not match its fence")
+		}
+	}
+	if err := recordDuplicateResponsibilitiesTx(ctx, tx, refs, now); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+// DiscoverStripeDuplicates is one bounded discovery pass (see the section
+// comment). Any Stripe or store error for an account skips it; nothing is
+// concluded from missing evidence.
+func (s *Service) DiscoverStripeDuplicates(ctx context.Context) {
+	if s.biller == nil {
+		return
+	}
+	store, ok := s.Store().(duplicateDiscoveryStore)
+	if !ok {
+		return
+	}
+	cursor, _, err := store.GetSetting(ctx, duplicateDiscoveryCursorKey)
+	if err != nil {
+		log.Printf("billing: duplicate discovery cursor: %v", err)
+		return
+	}
+	candidates, err := store.DuplicateDiscoveryCandidates(ctx, cursor, duplicateDiscoveryBatch)
+	if err != nil {
+		log.Printf("billing: duplicate discovery candidates: %v", err)
+		return
+	}
+	next := int64(0) // wrap when the tail is shorter than a batch
+	if len(candidates) == duplicateDiscoveryBatch {
+		next = candidates[len(candidates)-1].RowID
+	}
+	for _, c := range candidates {
+		if ctx.Err() != nil {
+			return // cursor not advanced: the next sweep repeats this batch
+		}
+		s.discoverAccountDuplicates(ctx, store, c)
+	}
+	if err := store.SetSetting(ctx, duplicateDiscoveryCursorKey, next, s.Now().Unix()); err != nil {
+		log.Printf("billing: duplicate discovery cursor: %v", err)
+	}
+}
+
+func (s *Service) discoverAccountDuplicates(ctx context.Context, store duplicateDiscoveryStore, c duplicateDiscoveryCandidate) {
+	u, err := s.Store().GetUserByID(ctx, c.UserID)
+	if err != nil || u.StripeCustomerID != c.CustomerID || u.DeletedAt != 0 {
+		return
+	}
+	row, rowExists, err := s.Store().GetSubscriptionSource(ctx, u.ID, ProviderStripe)
+	if err != nil {
+		return
+	}
+	evidence, err := s.biller.ListSubscriptionEvidence(ctx, u.StripeCustomerID)
+	if err != nil {
+		log.Printf("billing: duplicate discovery list subs for %s: %v (skipped)", u.ID, err)
+		return
+	}
+	fence := duplicateDiscoveryFence{UserID: u.ID, CustomerID: u.StripeCustomerID, Binding: u.StripeSubscriptionID}
+	canonical := u.StripeSubscriptionID
+	if canonical == "" && rowExists && row.ExternalID != "" && liveSubStatus(row.Status) {
+		// A live source row is the canonical's evidence even without a users
+		// binding (legacy comps never bound one). Responsibilities recorded
+		// against it stay held for an operator: the authorizer requires the
+		// users binding to equal their canonical (canonical_replaced).
+		canonical, fence.RowCanonical = row.ExternalID, row.ExternalID
+	}
+	live := map[string]bool{}
+	var ids []string
+	for _, sub := range evidence.Live {
+		live[sub.ID] = true
+		ids = append(ids, sub.ID)
+	}
+	if canonical == "" || !live[canonical] {
+		if len(ids) > 1 {
+			// No canonical to keep: choosing one (earliest? the one paying for
+			// the plan?) is a product and money decision with the account's
+			// own history unknown -- the inline dedup decides it with the
+			// binding in hand, the sweep must not. Leave it to an operator.
+			log.Printf("%s: user=%s customer=%s binding=%q source_subscription=%q source_status=%q plan_source=%s live=%s reason=several_live_without_canonical",
+				duplicateDiscoveryAttention, u.ID, u.StripeCustomerID, u.StripeSubscriptionID, row.ExternalID, row.Status, u.PlanSource, strings.Join(ids, ","))
+		}
+		return
+	}
+	var refs []DuplicateResponsibilityRef
+	for _, id := range ids {
+		if id != canonical {
+			refs = append(refs, DuplicateResponsibilityRef{UserID: u.ID, CustomerID: u.StripeCustomerID, CanonicalSubscriptionID: canonical, DuplicateSubscriptionID: id})
+		}
+	}
+	if len(refs) == 0 {
+		return
+	}
+	written, err := store.RecordDiscoveredDuplicates(ctx, fence, refs, s.Now().Unix())
+	var conflict *DuplicateResponsibilityOwnershipConflict
+	switch {
+	case errors.As(err, &conflict):
+		log.Printf("%s: user=%s customer=%s canonical=%s duplicate=%s existing_user=%s existing_customer=%s (discovery wrote nothing)", duplicateResponsibilityOwnershipLog, u.ID, u.StripeCustomerID, canonical, conflict.Ref.DuplicateSubscriptionID, conflict.ExistingUserID, conflict.ExistingCustomerID)
+	case err != nil:
+		log.Printf("billing: duplicate discovery record for %s: %v", u.ID, err)
+	case !written:
+		log.Printf("billing: duplicate discovery for %s: account moved while listing; nothing written, next sweep retries", u.ID)
+	default:
+		log.Printf("billing: duplicate discovery recorded %d responsibilit(ies) for user %s (canonical %s)", len(refs), u.ID, canonical)
+	}
+}

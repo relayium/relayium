@@ -32,6 +32,11 @@ type n09302Stripe struct {
 	deletes map[string]int
 	failInv bool              // invoice lists fail (keeps a duplicate un-inspected)
 	onGet   map[string]func() // fired once on the next GET of that subscription
+	// N-0930-11 discovery: list call count, list failure, a list that never
+	// ends (truncated evidence), and a hook fired once on the next list.
+	lists              int
+	failList, truncate bool
+	onList             func()
 }
 
 func (f *n09302Stripe) set(id, status string, created int64) {
@@ -53,6 +58,15 @@ func newN09302(t *testing.T) (*n09302Stripe, *SQLiteStore, *Service, *httptest.S
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
+			f.lists++
+			if f.failList {
+				http.Error(w, `{"error":{"message":"list unavailable"}}`, http.StatusInternalServerError)
+				return
+			}
+			if hook := f.onList; hook != nil {
+				f.onList = nil
+				hook()
+			}
 			ids := make([]string, 0, len(f.subs))
 			for id := range f.subs {
 				ids = append(ids, id)
@@ -62,7 +76,7 @@ func newN09302(t *testing.T) (*n09302Stripe, *SQLiteStore, *Service, *httptest.S
 			for _, id := range ids {
 				items = append(items, f.subJSON(id, f.subs[id]))
 			}
-			fmt.Fprintf(w, `{"object":"list","data":[%s],"has_more":false}`, strings.Join(items, ","))
+			fmt.Fprintf(w, `{"object":"list","data":[%s],"has_more":%t}`, strings.Join(items, ","), f.truncate)
 		case strings.HasPrefix(r.URL.Path, "/v1/subscriptions/"):
 			id := strings.TrimPrefix(r.URL.Path, "/v1/subscriptions/")
 			s, ok := f.subs[id]
@@ -484,5 +498,24 @@ func TestN0930_2LiveSubscriptionAdoptedAfterSweepDowngrade(t *testing.T) {
 				t.Fatalf("past_due B must keep the original rule: user=%+v row=%+v", u, row)
 			}
 		})
+	}
+}
+
+// Fable (N-0930-2 round 2): on an unbound account whose row has ended, a NEWER
+// past_due event for another subscription takes its tier from Stripe's current
+// price, not from the ended row's free tier.
+func TestN0930_2PastDueOtherSubscriptionTakesItsOwnTier(t *testing.T) {
+	f, store, svc, ts := newN09302(t)
+	n09302AdoptA(t, f, ts, svc, store)
+	n09302Deliver(t, ts, svc, "customer.subscription.updated", "sub_A", 400)
+	f.set("sub_A", "canceled", 100)
+	svc.ReconcileStripeSubscriptions(context.Background())
+	f.set("sub_B", "past_due", 200)
+	if st := n09302Deliver(t, ts, svc, "customer.subscription.updated", "sub_B", 500); st != http.StatusOK {
+		t.Fatalf("B past_due status=%d", st)
+	}
+	u, row := n09302User_(t, store)
+	if u.StripeSubscriptionID != "sub_B" || row.ExternalID != "sub_B" || row.PlanID != "pro" || row.Status != "past_due" {
+		t.Fatalf("past_due B must keep the tier it is billed for: user=%+v row=%+v", u, row)
 	}
 }

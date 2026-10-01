@@ -1705,8 +1705,8 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			res, err := s.Store().ApplyStripeSourceIfUnchanged(ctx, StripeSourceWrite{
 				UserID: u.ID, Observed: obs.row, ObservedExists: obs.exists, Bind: &clear,
 				ExpectUser: true, UserSubscriptionID: u.StripeSubscriptionID, UserPlanSource: u.PlanSource,
-				// The same event applyStripeLifecycle wrote before (the row keeps
-				// recording which subscription ended; attempts converge).
+				// The deletion event itself (the row keeps recording which
+				// subscription ended; attempts converge).
 				Event: &SourceEvent{UserID: u.ID, Provider: ProviderStripe, PlanID: "free", Status: ev.Status,
 					PeriodEnd: ev.CurrentPeriodEnd, ExternalID: ev.SubscriptionID, EventAt: ev.Created,
 					Now: s.Now().Unix(), BillingAttemptID: ev.MetadataBillingAttemptID, BillingProductID: ev.PriceID},
@@ -1929,6 +1929,19 @@ func (s *Service) applySubscriptionEvent(ctx context.Context, w http.ResponseWri
 		planID, cycle = freePlanID, ""
 		if obs.exists && obs.row.PlanID != "" {
 			planID, cycle = obs.row.PlanID, obs.row.Cycle
+		}
+		// ...but the row only describes THIS subscription when it names it and
+		// is still live. For another subscription, or after the row's own
+		// subscription ended (its tier is then free), Stripe's current object
+		// (refreshed) says what is being billed: take the tier from its price.
+		otherOrEnded := !obs.exists || !liveSubStatus(obs.row.Status) || obs.row.ExternalID != ev.SubscriptionID
+		if otherOrEnded && ev.Refreshed && ev.PriceID != "" {
+			if p, ok, err := s.Store().PlanByStripePrice(ctx, ev.PriceID); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return applyDone
+			} else if ok {
+				planID, cycle = p.ID, cycleOfPrice(p, ev.PriceID)
+			}
 		}
 	}
 	if u.PlanSource == "admin" {
