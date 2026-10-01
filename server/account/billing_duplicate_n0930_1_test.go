@@ -881,7 +881,7 @@ func (b *n0930BarrierStore) PutDuplicateRefundInspection(ctx context.Context, pl
 	return b.SQLiteStore.PutDuplicateRefundInspection(ctx, plan, start, now)
 }
 
-// Codex finding 1: run A inspects (nothing owed yet) and pauses before
+// Run A inspects (nothing owed yet) and pauses before
 // recording it; run B cancels, records the cancellation and fails its
 // post-cancel inspection; A resumes. A's inspection started BEFORE the
 // cancellation, so it must not be what ends the job. In the late_invoice case
@@ -971,7 +971,7 @@ func TestN0930_1OperatorRefundRequiresPostCancelInspection(t *testing.T) {
 	}
 }
 
-// Codex finding 3: a successful terminal audit ends a run of consecutive
+// A successful terminal audit ends a run of consecutive
 // failures, and the repeated_failures alert stops.
 func TestN0930_1TerminalAuditRecoveryClearsFailureBookkeeping(t *testing.T) {
 	f, client, store, svc := newN0930(t, Config{})
@@ -1040,7 +1040,7 @@ func TestN0930_1StaleSaveCannotUncancel(t *testing.T) {
 	}
 }
 
-// Codex round 2, finding 1: a cancellation recorded while an operator refund
+// A cancellation recorded while an operator refund
 // is in flight (it does not move liability_revision) without a following
 // inspection must stop the refund POST itself, not only the finish.
 func TestN0930_1RefundMutationRechecksPostCancelGate(t *testing.T) {
@@ -1077,7 +1077,7 @@ func TestN0930_1RefundMutationRechecksPostCancelGate(t *testing.T) {
 	}
 }
 
-// Codex round 2, finding 2: the row records the duplicate canceled (run B), B's
+// The row records the duplicate canceled (run B), B's
 // post-cancel inspection failed, and Stripe now reports it live. Run A, which
 // inspected before B's cancellation, must not finish on any branch that does
 // not DELETE (hold, auto-cancel disabled); the contradiction is durable until a
@@ -1166,7 +1166,7 @@ func TestN0930_1ReconfirmationFencedOnContradictionCount(t *testing.T) {
 	}
 }
 
-// Fable round 2, LOW 1: the stale-snapshot merge must not reopen a terminal
+// The stale-snapshot merge must not reopen a terminal
 // (already refunded) job.
 func TestN0930_1StaleSaveCannotReopenTerminal(t *testing.T) {
 	store := newTestStore(t)
@@ -1189,7 +1189,7 @@ func TestN0930_1StaleSaveCannotReopenTerminal(t *testing.T) {
 	}
 }
 
-// Fable round 2, LOW 2: a 404 for the duplicate is not evidence of
+// A 404 for the duplicate is not evidence of
 // cancellation, before or after the DELETE. Inspection still records
 // liabilities; nothing completes.
 func TestN0930_1DuplicateNotFoundIsNotCancellation(t *testing.T) {
@@ -1217,7 +1217,7 @@ func TestN0930_1DuplicateNotFoundIsNotCancellation(t *testing.T) {
 	}
 }
 
-// Codex round 3: a TERMINAL job that saw Stripe report the duplicate live must
+// A TERMINAL job that saw Stripe report the duplicate live must
 // be able to recover once Stripe freshly confirms the cancellation, and an
 // open contradiction must stay visible rather than pass as a clean audit.
 func TestN0930_1TerminalContradictionRecovers(t *testing.T) {
@@ -1276,7 +1276,7 @@ func TestN0930_1TerminalContradictionRecovers(t *testing.T) {
 	}
 }
 
-// Fable round 3, finding 1 (i): the post_cancel_inspected write in Put is
+// The post_cancel_inspected write in Put is
 // fenced on the pre-inspection contradiction count and on no open
 // contradiction, independently of the caller's claim.
 func TestN0930_1PostCancelFlagFencedOnContradictionCount(t *testing.T) {
@@ -1308,7 +1308,7 @@ func TestN0930_1PostCancelFlagFencedOnContradictionCount(t *testing.T) {
 	}
 }
 
-// Fable round 3, finding 1 (ii): a contradiction recorded while the
+// A contradiction recorded while the
 // re-inspection's Put is paused must keep that Put from setting the flag.
 func TestN0930_1ContradictionDuringReinspectionPutKeepsFlagClear(t *testing.T) {
 	f, client, store, svc := newN0930(t, Config{})
@@ -1330,7 +1330,7 @@ func TestN0930_1ContradictionDuringReinspectionPutKeepsFlagClear(t *testing.T) {
 	}
 }
 
-// Fable round 3, finding 2: the provider's result never inherits the stored
+// The provider's result never inherits the stored
 // cancellation; a live read that ends in a hold or a disabled auto-cancel
 // reports SubscriptionCanceled=false, ObservedLive=true.
 func TestN0930_1ProviderResultIsThisReadOnly(t *testing.T) {
@@ -1344,5 +1344,43 @@ func TestN0930_1ProviderResultIsThisReadOnly(t *testing.T) {
 		if err != nil || result.SubscriptionCanceled || result.RefundComplete || !result.ObservedLive {
 			t.Fatalf("%s: result=%+v err=%v", name, result, err)
 		}
+	}
+}
+
+// n0930ContradictBeforeFinalSave records a contradiction immediately before
+// the run's final Save, as a concurrent run would.
+type n0930ContradictBeforeFinalSave struct{ *SQLiteStore }
+
+func (s n0930ContradictBeforeFinalSave) SaveDuplicateRefund(ctx context.Context, job DuplicateRefundJob, result DuplicateRefundResult, providerErr error, now int64) error {
+	if err := s.SQLiteStore.RecordDuplicateCancelContradiction(ctx, job, errors.New("concurrent live observation"), now); err != nil {
+		return err
+	}
+	return s.SQLiteStore.SaveDuplicateRefund(ctx, job, result, providerErr, now)
+}
+
+// A contradiction recorded after the run's snapshot but before its final Save
+// must not be erased as a clean outcome: the failure bookkeeping survives.
+func TestN0930_1FinalSaveCannotClearNewerContradiction(t *testing.T) {
+	f, client, store, svc := newN0930(t, Config{})
+	f.paid = false
+	seedDuplicateOwner(t, store, n0930User, n0930Customer, n0930Canonical)
+	job := n0930Job(t, store, client)
+	err := svc.runDuplicateRefund(context.Background(), n0930ContradictBeforeFinalSave{store}, client, job)
+	got := n0930Load(t, store)
+	if err == nil || got.Attempts == 0 || !strings.Contains(got.LastError, "contradiction") || got.State == "terminal" || got.CancelContradictions != 1 || got.CancelReconfirmed != 0 {
+		t.Fatalf("newer contradiction must stay recorded as a failure: err=%v job=%+v", err, got)
+	}
+}
+
+// A terminal, canceled job without post-cancel evidence is reported for
+// attention (visibility only).
+func TestN0930_1TerminalWithoutPostCancelEvidenceNeedsAttention(t *testing.T) {
+	job := DuplicateRefundJob{State: "terminal", SubscriptionCanceled: true, DiscoveredAt: 1}
+	if reasons := duplicateResponsibilityAttention(job, 2); strings.Join(reasons, ",") != "post_cancel_evidence_missing" {
+		t.Fatalf("reasons=%v", reasons)
+	}
+	job.PostCancelInspected = true
+	if reasons := duplicateResponsibilityAttention(job, 2); len(reasons) != 0 {
+		t.Fatalf("evidence present: reasons=%v", reasons)
 	}
 }

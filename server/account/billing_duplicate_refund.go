@@ -65,8 +65,8 @@ type DuplicateRefundJob struct {
 	// delayed write can invalidate newer evidence, which only costs one more
 	// fresh confirmation and inspection. A terminal row with CC>CR keeps its
 	// state, liabilities and refund/action proofs, but post_cancel_inspected is
-	// cleared, so Resolve and any refund POST are refused. Since round 4 it is
-	// not stuck: the next audit that freshly confirms the cancellation closes
+	// cleared, so Resolve and any refund POST are refused. It is not stuck: the
+	// next audit that freshly confirms the cancellation closes
 	// the contradiction (ReconfirmDuplicateCancellation, fenced on the count read
 	// before the provider call), re-inspects, and only then restores the
 	// post-cancel evidence. CC>CR therefore persists only while Stripe keeps
@@ -1258,6 +1258,11 @@ func (s *SQLiteStore) saveDuplicateRefund(ctx context.Context, job DuplicateRefu
 	// if no further contradiction was recorded since job was read (before the
 	// provider call).
 	reconfirm := !allowTerminal && result.SubscriptionCanceled && providerErr == nil
+	// A successful FINAL save is a clean outcome that resets the failure
+	// bookkeeping; it is fenced on the CURRENT row having no open
+	// contradiction (one may be recorded after this run's snapshot). The
+	// pre-reinspection save stays unfenced: it is the reconfirmation path.
+	cleanOutcome := allowTerminal && providerErr == nil
 	if !allowTerminal {
 		result.RefundComplete = false
 	}
@@ -1297,7 +1302,7 @@ func (s *SQLiteStore) saveDuplicateRefund(ctx context.Context, job DuplicateRefu
  cancel_reconfirmed=CASE WHEN ?=1 AND cancel_contradictions=? THEN cancel_contradictions ELSE cancel_reconfirmed END,
  attempts=CASE WHEN ?<>'' THEN attempts+1 ELSE 0 END,
  revision=revision+1,last_error=?,updated_at=?
- WHERE id=? AND state<>'terminal' AND liability_revision=?`, state, state, state, state, state, manual, b2i(result.SubscriptionCanceled), b2i(result.RefundComplete), b2i(result.SubscriptionCanceled), b2i(reconfirm), job.CancelContradictions, lastError, lastError, now, job.ID, job.LiabilityRevision)
+ WHERE id=? AND state<>'terminal' AND liability_revision=? AND (?=0 OR cancel_contradictions=cancel_reconfirmed)`, state, state, state, state, state, manual, b2i(result.SubscriptionCanceled), b2i(result.RefundComplete), b2i(result.SubscriptionCanceled), b2i(reconfirm), job.CancelContradictions, lastError, lastError, now, job.ID, job.LiabilityRevision, b2i(cleanOutcome))
 	if err != nil {
 		return err
 	}
@@ -1331,6 +1336,10 @@ func (s *SQLiteStore) saveDuplicateRefund(ctx context.Context, job DuplicateRefu
 			if _, mergeErr := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET subscription_canceled=1,state='manual',manual_reason='refund_operator_required',refund_complete=0,revision=revision+1,updated_at=? WHERE id=? AND state<>'terminal' AND liability_revision<>? AND EXISTS(SELECT 1 FROM billing_duplicate_refund_invoices WHERE job_id=?)`, now, job.ID, job.LiabilityRevision, job.ID); mergeErr != nil {
 				return mergeErr
 			}
+		}
+		var open int
+		if err := s.reader().QueryRowContext(ctx, `SELECT cancel_contradictions>cancel_reconfirmed FROM billing_duplicate_refunds WHERE id=?`, job.ID).Scan(&open); err == nil && open != 0 {
+			return errors.New("account: duplicate refund cancellation contradiction is open; not saved as a clean outcome")
 		}
 		return errors.New("account: duplicate refund update is stale")
 	}
@@ -1395,7 +1404,7 @@ func (s *SQLiteStore) RecordDuplicateCancelContradiction(ctx context.Context, jo
 // post-cancel inspection that follows is what can re-set post_cancel_inspected.
 // A fence miss is not an error: the contradiction simply stays open.
 func (s *SQLiteStore) ReconfirmDuplicateCancellation(ctx context.Context, job DuplicateRefundJob, now int64) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET cancel_reconfirmed=cancel_contradictions,revision=revision+1 WHERE id=? AND subscription_canceled=1 AND cancel_contradictions=? AND cancel_reconfirmed<cancel_contradictions`, job.ID, job.CancelContradictions)
+	_, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET cancel_reconfirmed=cancel_contradictions,revision=revision+1,updated_at=? WHERE id=? AND subscription_canceled=1 AND cancel_contradictions=? AND cancel_reconfirmed<cancel_contradictions`, now, job.ID, job.CancelContradictions)
 	return err
 }
 
@@ -1778,6 +1787,11 @@ func duplicateResponsibilityAttention(job DuplicateRefundJob, now int64) []strin
 	}
 	if job.CancelContradictions > job.CancelReconfirmed {
 		reasons = append(reasons, "cancel_contradiction")
+	}
+	if job.State == "terminal" && job.SubscriptionCanceled && !job.PostCancelInspected {
+		// Visibility only: a terminal job whose post-cancel evidence was voided
+		// (or a legacy terminal row a failing audit cannot re-inspect).
+		reasons = append(reasons, "post_cancel_evidence_missing")
 	}
 	if job.DiscoveredAt == 0 && now-job.CreatedAt > 24*60*60 {
 		reasons = append(reasons, "liabilities_unknown")
