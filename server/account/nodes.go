@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/relayium/relayium/authx"
@@ -1427,7 +1428,9 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		// belong to earlier reports and are logged separately below.
 		attributed[userID] += res.Recorded
 		drainedFor[userID] += res.Drained
+		relayAttribDrops.note(req.NodeID, userID, res.Dropped, now)
 	}
+	relayAttribDrops.flush(now)
 	for userID, n := range drainedFor {
 		if n > 0 {
 			log.Printf("relay attribution: node %s recorded %d previously owed bytes for user %s", req.NodeID, n, userID)
@@ -1572,6 +1575,21 @@ const maxAllocsPerUser = 64
 // 它**所有**用户加起来的量。128 GiB 因此远高于任何真实的单用户单周期数字，同时又
 // 远低于伪造能达到的量级：一个 1 MiB 的心跳体能塞进约 7000 条 usage，每条各带一个
 // 新的 allocID 绕过单条钳制，一次就能给受害者记上约 20 TB。
+//
+// Why it stays BELOW one A-M8 bucket (~703 GiB) — N-0930-8, reviewed and kept:
+// the value is compared with bytes one heartbeat RECORDED for one user, and the
+// budget can never record more than one bucket in one heartbeat. At or above a
+// bucket this warning would be unreachable. Below it, it is the only signal for
+// a forger's FIRST bucket: the budget warns only when it withholds bytes, so a
+// fresh pair absorbs up to a whole bucket in silence — one heartbeat of
+// maxAllocsPerUser fresh allocs at maxFirstReportBytes (~203 GiB) records all
+// of it, withholds nothing and trips only this line. The legitimate cadence
+// stays far below it (relayAttribAllocs allocs at maxRelayBytesPerSec for one
+// heartbeat interval plus slack, ~8 GiB); the one legitimate case above it is a
+// node catching up after more than ~11 minutes of full-rate relay without a
+// heartbeat, where a warning (never an accounting change) is an acceptable
+// false positive. TestN0930_8_ImplausibleThresholdSitsBetweenCadenceAndForgery
+// pins these relations.
 const implausiblePerHeartbeat = 128 << 30
 
 // implausibleUsageCount 是单次心跳里 usage 条数的可信上限。真实节点在 30 秒里不会
@@ -1628,6 +1646,66 @@ func (s *Service) attributionRefused(token, userID string) string {
 		}
 	}
 	return ""
+}
+
+// relayAttribDropLogEvery is how long (seconds) dropped attribution bytes of
+// one (node, user) pair are accumulated before they are logged (N-0930-8).
+const relayAttribDropLogEvery = 300
+
+// relayAttribDrops accounts for the bytes the A-M8 budget DROPS — withheld
+// beyond a pair's owed cap, never recorded for anyone (user-favourable). The
+// budget WARNING fires at most once per pair per window and names only the
+// report that triggered it, so every later drop in that window used to be
+// silent: an operator could not tell a single 1 KiB overflow from a sustained
+// multi-terabyte forged flood. Every drop is now summed per (node, user) and
+// logged at most once per relayAttribDropLogEvery per pair, with the
+// process-lifetime total, from any node's heartbeat — so a pair whose node has
+// gone quiet is still reported. A log line, not accounting: the bytes stay
+// dropped and nothing here changes what is recorded. In memory: a restart
+// loses at most the last interval's unlogged sum (the budget warning that
+// opened it is already in the log), and the map holds only pairs that dropped
+// bytes in the last interval.
+var relayAttribDrops = &relayAttribDropLog{pending: map[relayAttribPair]*relayAttribDropped{}}
+
+type relayAttribPair struct{ node, user string }
+
+type relayAttribDropped struct{ bytes, since int64 }
+
+type relayAttribDropLog struct {
+	mu      sync.Mutex
+	pending map[relayAttribPair]*relayAttribDropped
+	total   int64
+}
+
+// note adds n dropped bytes for (node, user) at now; n <= 0 is ignored.
+func (d *relayAttribDropLog) note(node, user string, n, now int64) {
+	if n <= 0 {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.total = satAdd(d.total, n)
+	k := relayAttribPair{node, user}
+	if p := d.pending[k]; p != nil {
+		p.bytes = satAdd(p.bytes, n)
+		return
+	}
+	d.pending[k] = &relayAttribDropped{bytes: n, since: now}
+}
+
+// flush logs and forgets every pair whose first unlogged drop is at least
+// relayAttribDropLogEvery old. A clock that went backwards waits.
+func (d *relayAttribDropLog) flush(now int64) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for k, p := range d.pending {
+		if now-p.since < relayAttribDropLogEvery {
+			continue
+		}
+		log.Printf("WARNING: relay attribution: node %s had %d bytes for user %s dropped over the owed cap in the last %ds — never recorded (possible forged attribution; see A-M8); %d bytes dropped by this process in total",
+			k.node, p.bytes, k.user, now-p.since, d.total)
+		delete(d.pending, k)
+	}
 }
 
 // warnImplausibleAttribution 在归因量级不像真的时喊一声。

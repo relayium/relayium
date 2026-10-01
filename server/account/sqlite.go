@@ -1898,6 +1898,16 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		// prefix makes the "how many machine rows are there" pre-check an index
 		// seek, and at/id carry the newest-first ordering the cap needs.
 		`CREATE INDEX IF NOT EXISTS idx_admin_audit_machine ON admin_audit(auth, at DESC, id DESC)`,
+		// N-0930-7: "does anything still name this node" (retireOrDeleteNodeTx,
+		// DeleteFleetNode, NodeIDReuseState on every register of an unknown id,
+		// the per-row correlated probes of PurgeRetiredNodes on every GC sweep,
+		// NodeDeleteBlockers on every fleet-panel render) looks rows up by
+		// node_id. upload_sessions had no index on it and pending_node_deletes
+		// only the (blob_key, node_id) primary key, whose leading column is the
+		// wrong one, so each probe was a full-table scan. stored_files already
+		// has idx_stored_files_node.
+		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_node ON upload_sessions(node_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_pending_node_deletes_node ON pending_node_deletes(node_id)`,
 		// idx_nodes_owner_type(owner_type) is now a strict prefix of
 		// idx_nodes_byo_rank(owner_type, removed_at, draining DESC,
 		// last_seen_at DESC, id ASC): any lookup the single-column index could
@@ -4463,8 +4473,12 @@ var relayAttribOwedBlocked sync.Map
 // arbitrary alloc ids, so a legacy row under that id may exist and belong to
 // someone else; the upsert adds only to a row whose user_id, node_id and
 // billable all match. On a mismatch nothing is written, the bytes stay owed
-// (user-favourable: never attributed to anyone else, never lost), draining
-// stops for this pair, and it is logged once.
+// (user-favourable: never attributed to anyone else, never lost), and it is
+// logged once. Draining then SKIPS that period and continues with the pair's
+// later ones (N-0930-9): each period drains into its own (alloc id, period)
+// row, so one blocked month must not freeze every later month's owed bytes
+// behind it; only the blocked period's bytes stay owed, and a pair with any
+// blocked row is never reported exhausted.
 func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID string, limit int64) (moved int64, exhausted bool, err error) {
 	type owedRow struct {
 		period   string
@@ -4491,6 +4505,7 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 		return 0, false, err
 	}
 	allocID := relayAttribOwedAllocID(nodeID, userID)
+	blocked := false
 	for _, o := range owed {
 		if moved >= limit {
 			return moved, false, nil
@@ -4517,7 +4532,8 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 					log.Printf("WARNING: relay attribution: usage_periods row %s/%s belongs to another owner; %d owed bytes for node %s user %s kept owed (A-M8)",
 						allocID, o.period, o.bytes, nodeID, userID)
 				}
-				return moved, false, nil
+				blocked = true
+				continue
 			}
 		}
 		if take >= o.bytes {
@@ -4530,8 +4546,9 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 		}
 		moved += max(take, 0)
 	}
-	// Every row was consumed; moved < limit means nothing is left to owe.
-	return moved, moved < limit, nil
+	// Every unblocked row was consumed; moved < limit means nothing is left to
+	// owe unless a blocked row is still owed.
+	return moved, !blocked && moved < limit, nil
 }
 
 // chargeRelayAttribTx charges a report's delta bytes to the (nodeID, userID)
@@ -8139,6 +8156,41 @@ func (s *SQLiteStore) PurgeRetiredNodes(ctx context.Context) (int64, error) {
 	return res.RowsAffected()
 }
 
+// ListRetiredNodes: see Store.ListRetiredNodes. The three counts are
+// correlated probes on idx_pending_node_deletes_node, idx_upload_sessions_node
+// and idx_stored_files_node, and the number of retired rows is small (each is
+// purged as soon as nothing names it), so this is cheap per panel render.
+func (s *SQLiteStore) ListRetiredNodes(ctx context.Context, limit int) ([]RetiredNode, int64, error) {
+	var total int64
+	if err := s.reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM nodes WHERE deleted_at != 0`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 {
+		limit = 1
+	}
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT n.id, n.owner_type, COALESCE(n.owner_user_id, ''), n.label, n.deleted_at,
+		        (SELECT COUNT(*) FROM pending_node_deletes p WHERE p.node_id = n.id),
+		        (SELECT COUNT(*) FROM upload_sessions u WHERE u.node_id = n.id),
+		        (SELECT COUNT(*) FROM stored_files f WHERE f.node_id = n.id)
+		   FROM nodes n WHERE n.deleted_at != 0
+		  ORDER BY n.deleted_at DESC, n.id ASC LIMIT ?`, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []RetiredNode
+	for rows.Next() {
+		var r RetiredNode
+		if err := rows.Scan(&r.ID, &r.OwnerType, &r.OwnerUserID, &r.Label, &r.DeletedAt,
+			&r.QueuedDeletes, &r.Sessions, &r.Files); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, r)
+	}
+	return out, total, rows.Err()
+}
+
 // CountLiveUserNodes: see Store.CountLiveUserNodes.
 func (s *SQLiteStore) CountLiveUserNodes(ctx context.Context, userID string) (int, error) {
 	return countLiveUserNodesOn(ctx, s.db, userID)
@@ -8351,6 +8403,68 @@ func queryNodesOn(ctx context.Context, qr nodeRowQueryer, q string, args ...any)
 func (s *SQLiteStore) EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error {
 	return enqueueNodeDeleteOn(ctx, s.db, blobKey, nodeID, at, 0)
 }
+
+// EnqueueNodeDeleteRetainingNode: see Store.EnqueueNodeDeleteRetainingNode
+// (N-0930-6).
+//
+// The race it closes: a single-shot upload (POST /api/files) has no session,
+// object or queue row naming its node while Put runs, so a node delete in
+// that window finds nothing referencing the node and removes the row
+// (retireOrDeleteNodeTx). The upload's persist is then refused by the node
+// fence and its blob dropped; when that immediate DELETE fails too, a plain
+// enqueue names an id blobFor can never resolve again, so the row can never
+// drain and the ciphertext stays on the machine with nothing able to remove
+// it.
+//
+// Here the queue row and, when the node row is gone, a RETIRED node row are
+// written in ONE transaction. The restored row is exactly what
+// retireOrDeleteNodeTx would have left had the upload been visible to the
+// delete: deleted_at and removed_at set (so every pool, listing, ICE and the
+// rollout keep excluding it), last_seen_at 0, no TURN urls/secret, and only the
+// storage endpoint the upload itself was using. GC drains the delete through
+// it and PurgeRetiredNodes removes it once nothing names it. It is restored
+// only when:
+//   - the id is tombstoned with the SAME owner the upload saw — i.e. the row
+//     went through an A-M3 delete of that very node, never an id that was not
+//     deleted or that belongs to someone else;
+//   - for a user node, the owning account exists and is not being deleted
+//     (both account purges drop their own nodes' cleanup by design — they
+//     forgive the owner's bill and leave the owner's ciphertext on the owner's
+//     machine — and a deleted account's node secret is not brought back);
+//   - the upload actually had a storage endpoint.
+//
+// A row that still exists (live, retired, or re-registered by the same owner)
+// is left untouched: the insert is a no-op and this is a plain enqueue.
+func (s *SQLiteStore) EnqueueNodeDeleteRetainingNode(ctx context.Context, blobKey string, placed Node, at int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+	if err := enqueueNodeDeleteOn(ctx, tx, blobKey, placed.ID, at, 0); err != nil {
+		return err
+	}
+	if placed.ID != "" && placed.StorageEnabled && placed.StorageURL != "" {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO nodes (id, owner_type, owner_user_id, region, urls, turn_secret, version, created_at, last_seen_at,
+			                    storage_url, storage_secret, storage_fp, storage_enabled, removed_at, deleted_at)
+			 SELECT t.id, t.owner_type, NULLIF(t.owner_user_id, ''), '', '[]', '', '', ?, 0,
+			        ?, ?, ?, 1, `+retiredAtSQL+`, `+retiredAtSQL+`
+			   FROM node_tombstones t
+			  WHERE t.id = ? AND t.owner_type = ? AND t.owner_user_id = ?
+			    AND NOT EXISTS (SELECT 1 FROM nodes n WHERE n.id = t.id)
+			    AND (t.owner_type = 'fleet' OR EXISTS (SELECT 1 FROM users u WHERE u.id = t.owner_user_id AND u.deleted_at = 0))`,
+			at, placed.StorageURL, placed.StorageSecret, placed.StorageFP,
+			placed.ID, placed.OwnerType, placed.OwnerUserID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// retiredAtSQL is the retirement stamp of a row restored from its tombstone:
+// the tombstone's own deletion time (never 0, which would read as live).
+const retiredAtSQL = `CASE WHEN t.deleted_at > 0 THEN t.deleted_at ELSE CAST(strftime('%s','now') AS INTEGER) END`
 
 // enqueueNodeDeleteOn is EnqueueNodeDelete's body against any executor, so a
 // caller that must queue the responsibility INSIDE its own transaction — a pair
