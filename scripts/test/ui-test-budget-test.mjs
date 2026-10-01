@@ -34,6 +34,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { fullPathOf } from "../ci/ci-evidence-view.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MAX_ALLOWANCE_S = 600;
@@ -201,7 +202,7 @@ function selfTest(files) {
 }
 
 const files = Object.fromEntries(["macos.yml", "ios.yml"]
-  .map((f) => [f, readFileSync(resolve(repoRoot, ".github/workflows", f), "utf8")]));
+  .map((f) => [f, fullPathOf(f, readFileSync(resolve(repoRoot, ".github/workflows", f), "utf8"))]));
 const problems = budgetProblems(files);
 const self = problems.length === 0 ? selfTest(files) : { failures: [], count: 0 };
 const all = [...problems, ...self.failures];

@@ -75,6 +75,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { fullPathOf } from "../ci/ci-evidence-view.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const workflowsDir = resolve(repoRoot, ".github/workflows");
@@ -569,7 +570,7 @@ function loadWorld() {
   const texts = new Map(
     readdirSync(workflowsDir)
       .filter((name) => /\.ya?ml$/.test(name))
-      .map((name) => [name, readFileSync(resolve(workflowsDir, name), "utf8")]),
+      .map((name) => [name, fullPathOf(name, readFileSync(resolve(workflowsDir, name), "utf8"))]),
   );
   const docs = new Map();
   for (const [name, text] of texts) {

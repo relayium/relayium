@@ -315,11 +315,24 @@ check(
 // Deliberately not the whole of `.github/workflows/`: every lane workflow
 // already selects its own lane through that lane's filter, and widening this
 // list would buy a full macOS run for every workflow edit with nothing gained.
+//
+// The PR→main evidence verifier, its registry, its adoption transform, its
+// tests, and the toolchain certificate probe, registry and tests are the other
+// seven. They decide whether a `main` push may witness a lane
+// from the proof this gate mints, so a pull request that edits any of them runs
+// every lane and proves every lane.
 check(
   deepEqual(CONTROL_FILES.slice().sort(), [
     ".github/workflows/merge-gate.yml",
     "scripts/ci/select-lanes.mjs",
     "scripts/test/fixtures/ci-path-selection.mjs",
+    "scripts/ci/ci-evidence.mjs",
+    "scripts/ci/ci-evidence-registry.json",
+    "scripts/ci/ci-evidence-view.mjs",
+    "scripts/test/ci-evidence-test.mjs",
+    "scripts/ci/ci-evidence-toolchain.mjs",
+    "scripts/ci/ci-evidence-toolchain-registry.json",
+    "scripts/test/ci-evidence-toolchain-test.mjs",
   ].sort()),
   `the selector's control-file list is [${CONTROL_FILES.join(", ")}]. Dropping an entry makes a `
   + `pull request that edits the gate, the selector or the shared oracle select lanes by its own `

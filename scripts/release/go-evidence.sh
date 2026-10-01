@@ -199,6 +199,14 @@ scripts/list-go-fuzz-targets.sh
 .github/workflows/go.yml
 scripts/interop/cli-go-matrix.sh
 scripts/interop/build-old-cli.sh
+scripts/ci/ci-evidence.mjs
+scripts/ci/ci-evidence-registry.json
+scripts/ci/select-lanes.mjs
+scripts/ci/ci-evidence-view.mjs
+scripts/test/ci-evidence-test.mjs
+scripts/ci/ci-evidence-toolchain.mjs
+scripts/ci/ci-evidence-toolchain-registry.json
+scripts/test/ci-evidence-toolchain-test.mjs
 PATHS
 }
 

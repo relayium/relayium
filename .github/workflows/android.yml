@@ -35,6 +35,19 @@ on:
     paths:
       - 'apps/android/**'
       - '.github/workflows/android.yml'
+      # The PR→main evidence verifier, its registry, the filter reader it imports,
+      # the adoption transform, the toolchain certificate probe and registry, and
+      # their tests decide whether a main push may witness this lane instead of
+      # re-running it — so a change to any of them is a change to this lane
+      # (scripts/ci/ci-evidence-view.mjs).
+      - 'scripts/ci/ci-evidence.mjs'
+      - 'scripts/ci/ci-evidence-registry.json'
+      - 'scripts/ci/select-lanes.mjs'
+      - 'scripts/ci/ci-evidence-view.mjs'
+      - 'scripts/test/ci-evidence-test.mjs'
+      - 'scripts/ci/ci-evidence-toolchain.mjs'
+      - 'scripts/ci/ci-evidence-toolchain-registry.json'
+      - 'scripts/test/ci-evidence-toolchain-test.mjs'
   workflow_dispatch:
   # The aggregate merge gate's entry point.
   workflow_call:
@@ -50,22 +63,125 @@ permissions:
   contents: read
 
 jobs:
+  # PR→main evidence reuse (scripts/ci/ci-evidence.mjs; docs/CI-PLATFORM-BOUNDARY.md).
+  #
+  # On an ORDINARY push to main, decides whether the merged pull request's
+  # latest merge-gate run already proved this exact tree for this lane, on the
+  # same toolchain this runner family offers now. Every other event — the merge
+  # gate's own pull_request call, a dispatch, a release caller — skips the
+  # decision, so `reuse` is empty and every job below runs its original steps
+  # on its original runner. The verifier always exits 0 and any doubt is
+  # `reuse=false`: a missing, partial, stale, uncertified or mismatched proof
+  # means the full lane, never approval. It reads the GitHub API (hence the
+  # read-only actions/pull-requests grants) and runs nothing it downloads.
+  # Never red (`continue-on-error`), and nothing below depends on how it
+  # ended: every original job's condition is an explicit `!cancelled()` over
+  # its OWN needs, so a failed setup step, a timeout or a skipped dependency
+  # here leaves `reuse` empty and the whole lane runs in full.
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    # Promoted ONLY by the handover, after the witness was kept: a decision
+    # whose upload failed or timed out, or whose retained file is missing or
+    # not the decided witness, never reaches the jobs below.
+    outputs:
+      reuse: ${{ steps.handover.outputs.reuse }}
+      witness: ${{ steps.handover.outputs.witness }}
+    steps:
+      - name: Check out the verifier (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install the pinned SDK platform
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'build-tools;36.0.0'
+      - name: Certify this runner's toolchain now (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles linux-java-android --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Does the merged pull request's full proof cover this main tree?
+        id: verify
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVIDENCE_CURRENT_TOOLCHAIN_DIR: ${{ runner.temp }}/ci-evidence-current
+          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/android.json
+        run: node scripts/ci/ci-evidence.mjs witness android >> "$GITHUB_OUTPUT"
+      - name: Keep the witness (reuse only)
+        id: keep
+        if: steps.verify.outputs.reuse == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-witness-android-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-witness
+          if-no-files-found: error
+          retention-days: 30
+      - name: Hand the decision to the lane only once its witness is kept
+        id: handover
+        if: steps.verify.outputs.reuse == 'true' && steps.keep.outcome == 'success'
+        env:
+          CI_EVIDENCE_WITNESS: ${{ steps.verify.outputs.witness }}
+          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/android.json
+        run: node scripts/ci/ci-evidence.mjs handover >> "$GITHUB_OUTPUT"
+  # (end of the PR→main evidence jobs; everything above was generated by scripts/ci/ci-evidence-view.mjs)
+
   # One job, four gates, one Gradle daemon: protocol tests, app unit tests,
   # lint (warningsAsErrors), debug assemble. Splitting them into jobs would
   # re-resolve the same dependency graph three more times for no added
   # isolation — they share one module graph and one toolchain.
   build:
+    needs: evidence
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     # The first run downloads the AGP classpath and the app's dependency tree;
     # generous for that, finite so a wedged resolver cannot hold a runner for
     # GitHub's 6-hour default.
     timeout-minutes: 45
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm android
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
       # retagged upstream release can't silently change what runs here.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           distribution: temurin
           java-version: '17'
@@ -74,6 +190,7 @@ jobs:
       # Installed explicitly so the build fails here, by name, rather than deep
       # inside AGP's missing-platform fallback.
       - name: Install the pinned SDK platform
+        if: needs.evidence.outputs.reuse != 'true'
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'build-tools;36.0.0'
       # `-Prelayium.android=true` is EXPLICIT even though the runner has an
       # ambient SDK: a workflow that leaned on the environment fallback would
@@ -81,5 +198,26 @@ jobs:
       # pinned distribution SHA-256, so the Gradle that runs here is the Gradle
       # that was reviewed.
       - name: Protocol tests, app unit tests, lint, debug assemble
+        if: needs.evidence.outputs.reuse != 'true'
         working-directory: apps/android
         run: ./gradlew --no-daemon -Prelayium.android=true :protocol:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile linux-java-android --lane android --job build --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-android-build-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7

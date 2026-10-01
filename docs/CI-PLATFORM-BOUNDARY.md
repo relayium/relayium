@@ -132,10 +132,17 @@ profiles and own smoke step, all thirteen signed-build steps) exactly once
 `completed`/`success` on the expected runner (`macos-15`; contract also
 `ubuntu-latest`), and no PR→main witness step run. A producer whose `macos.yml`
 at that SHA carries the canonical PR→main evidence adoption (structurally equal
-to `scripts/ci/ci-evidence-view.mjs`'s output) may have exactly one sixth
-`evidence` job, which must have decided on Ubuntu and kept no witness; a
-witnessed job is never accepted as executed, any other adoption is
-unavailable, and transitive native reuse stays uncertified — and exactly one unexpired artifact
+to `scripts/ci/ci-evidence-view.mjs`'s `adopt(fullPathText(macos.yml))`: the
+`screen`, `certify-macos` and `evidence` jobs, the handover-promoted outputs,
+each original job's explicit `!cancelled()` condition over its own needs, and
+the witness prefix) has exactly those three auxiliary jobs besides the five:
+`screen` and `certify-macos` exactly once each, completed `success`, `failure`
+or `skipped` (never `cancelled`, never missing); `evidence` exactly once,
+`success`, decided on Ubuntu, and neither kept a witness nor ran the handover.
+Any other job is unavailable — no unknown job is waived; a witnessed job is
+never accepted as executed, any other adoption is unavailable, and transitive
+native reuse stays uncertified. All eight job records are bound into the
+frozen evidence the notarization readback re-proves — and exactly one unexpired artifact
 `relayium-macos-signed-<sha>-ci` created while `signed-build` ran. Every list
 read is fully paginated against `total_count`. The zip must hash to the API
 digest and hold exactly the four payload files as regular members (parsed in
@@ -1551,6 +1558,168 @@ expression resolves to its own `name:`.
 
 **Do not read `github.workflow` as safe in a reusable callee.** It is safe only
 in a workflow nobody calls, which is now just the two scheduled nightlies.
+
+### PR→main evidence reuse: proving a merged tree once
+
+The `push: main` trigger above is permanent, and it used to mean every merged
+tree was proved twice: once by the merge gate on GitHub's synthetic merge
+commit, once more by each lane on the resulting `main` commit. On #156 the merge
+ref the gate tested (`0c2486e`) and the `main` commit (`b51681a`) had the same
+tree (`77a8636`), and `main` still spent ~21 minutes of Go re-proving it.
+
+A lane may now **witness** a `main` push instead of re-running it, when — and
+only when — `scripts/ci/ci-evidence.mjs` can re-derive from the GitHub API that
+the merged pull request's proof covers exactly this tree:
+
+1. **The proof is minted by the gate.** After the aggregate `merge-gate` job has
+   judged every lane, and only on `pull_request`, it runs the verifier's own
+   tests (`CI_EVIDENCE_TEST_SCOPE=verifier`; repo-hygiene runs the whole suite,
+   including the guard-projection controls, on every pull request and every
+   `main` push), then `ci-evidence.mjs produce`, and uploads
+   `relayium-ci-evidence-proof-attempt-<N>`: the merge commit and tree it checked
+   out, PR number/head/base and same-repository flag, run id/attempt, the
+   referenced workflows (all at `refs/pull/N/merge`), every job's final result
+   with its runner labels, per-lane input fingerprints, the
+   verifier/registry/selector hashes and the producer's runner image. It never
+   fails the gate; no proof means `main` runs in full.
+2. **Each adopted lane has an `evidence` job.** On an ordinary push to `main`
+   only, `ci-evidence.mjs witness <lane>` finds the one merged same-repository PR
+   whose merge produced this commit, takes the merge-gate run on its final head
+   that EXECUTED last — ordered by `run_started_at`, so an older run re-run later
+   counts as newer — (a failure, cancellation, dispatch or any pending run means
+   no reuse), reads that run's latest attempt and every paged job, requires the
+   tested merge commit's tree to equal this commit's whole tree, requires every
+   registered check of the lane to have succeeded on its registered runner,
+   downloads the proof by artifact id, checks its bytes against the API digest,
+   reads it without executing anything, cross-checks every field, bounds its age
+   (48 h), requires the repository's tags to equal the tag set Web's `test` job
+   recorded right after its own checkout (artifact
+   `relayium-ci-evidence-web-tags-attempt-<N>`, whenever `main` needs that job),
+   and re-reads the source run, the run listing and the current run before it
+   prints `reuse=true`. Every doubt is
+   `reuse=false` with its reason in the log and the step summary.
+3. **Every reusable job opens with three witness steps** and guards every
+   original step with `needs.evidence.outputs.reuse != 'true'`. A macOS or
+   Windows job runs on Ubuntu only when that output is exactly `'true'`; empty,
+   false or unknown runs the original job on its original runner. The witness
+   `confirm` step binds the check run to the verified proof for exactly this lane,
+   main commit, run, run ATTEMPT and job id, and fails the job otherwise ("re-run
+   failed jobs" keeps the earlier attempt's decision, so only "re-run all jobs"
+   recovers a witness) — a witness never
+   falls back to platform commands it has no runner for.
+
+4. **Every witnessed check is toolchain-certified.** The tree pins recipes, not
+   what they resolve to: Xcode is the image default or the highest installed 26.x,
+   `setup-node` `24` and `setup-java` `17` float, `go test -race` builds cgo with
+   the image's C compiler, the browser suites drive whatever Chrome the harness
+   resolves, a UI job tests on whatever simulator its own selection rule picks. So each
+   certified job ENDS with `scripts/ci/ci-evidence-toolchain.mjs capture` (after
+   every tool it used) and uploads `relayium-ci-evidence-toolchain-<lane>-<job>-
+   <job-index>-attempt-<N>`; and on the main push the current toolchain is probed
+   by the same rule — Ubuntu profiles inside `evidence` after copies of the lane's
+   own setup steps, macOS/Windows profiles in a `certify-macos`/`certify-windows`
+   job (3-minute bound, `continue-on-error`, copies of the lane's own Xcode
+   selection/setup steps). Those paid jobs start only when a cheap read-only
+   Ubuntu `screen` job (`ci-evidence.mjs screen <lane>`: the whole witness check
+   except the current-toolchain comparison) printed `eligible=true` on an
+   ordinary main push; the screen ENABLES a probe and approves nothing, and a
+   missing, failed, timed-out or skipped screen means no paid probe and the full
+   lane. A witness requires, per required job and
+   matrix entry, a source certificate bound to that run/attempt/tested commit/job
+   and EXACTLY equal to the current one (image OS/version, OS release, Go and the
+   cgo C compiler — its command, resolved binary, version line and the target
+   it reports itself via `-dumpmachine`, never inferred from GOARCH — Node/npm, JDK, Android package revisions, every installed Xcode
+   with SDKs, the default and the USED Xcode; the Chrome `web/e2e/harness.mjs`
+   `resolveChrome` itself resolves — `CHROME_PATH` first, then its candidate
+   order — by path, real path, sha256 and version; and the simulator
+   DESTINATION each UI job's own selection program picks — the job's
+   `python3 -c '…'`, pinned by sha256 in the registry and executed by the same
+   interpreter on the runner's `simctl` listing, compared as name, device type,
+   runtime version and build and listing position (the UDID, minted per device
+   set, is only recorded in the audit block). The iPhone smoke (first iPhone of the
+   listing), the iPad shell (sorted name/runtime/UDID) and the session
+   acceptance script (its PATH `python3`) are three different rules and are
+   never shared — `scripts/ci/ci-evidence-toolchain-registry.json` names each
+   job's profile. A missing, unknown, malformed or drifted certificate on either
+   side, or an `uncertifiable` job (Android interop: its emulator image
+   downloads at run time), means the full lane.
+
+   **The execution graph falls back to full by construction.** Every original
+   job (and the fresh macOS `signed-build`, which sits downstream of witnessable
+   jobs) carries `if: ${{ !cancelled() && needs.<own need>.result == 'success'
+   … && (<own condition>) }}` — GitHub's implicit `success()` spelled out over
+   its ORIGINAL needs only — so a failed Ubuntu setup step, a timed-out or
+   skipped `evidence`, `screen` or `certify-*` job can never skip a lane job; it
+   only leaves `reuse` empty. The `evidence` job's `reuse`/`witness` outputs
+   come ONLY from its last step, `ci-evidence.mjs handover`, which runs after
+   the witness upload succeeded and re-reads the retained witness: a failed or
+   timed-out upload, or a retained file that is missing, malformed or not the
+   decided witness, leaves `reuse` empty or `false`. `evidence`, `screen` and `certify-*` are
+   `continue-on-error` and never turn `main` red. Section "6x graph" of
+   `scripts/test/ci-event-policy-test.mjs` evaluates every adopted lane's real
+   job graph under fourteen outcomes (pull request, no eligible proof, eligible,
+   failed/timed-out/skipped screen, failed probe, failed-setup and timed-out
+   evidence, and a witness upload that failed, timed out or retained the wrong
+   file after the verifier said `true`), with each evidence step simulated,
+   implicit `success()` modelled pessimistically and a failed
+   `continue-on-error` job reported both ways, and proves revision 2's graph
+   fails each named outcome.
+
+5. **Two proof sources, never both.** Besides a merged pull request's merge-gate
+   run, the frozen release-metadata dispatch that `macos-release.yml` starts
+   (`mode: frozen-release-metadata`, branch `release-candidate/macos-v…`, the
+   candidate SHA itself, one commit on the CURRENT main, touching nothing under
+   `.github/` or `scripts/`) produces a separately named proof; the `main` push
+   that fast-forwards from exactly that base to exactly that SHA may witness
+   from it. Neither the mode name nor protected main is trusted: the producer
+   AND the consumer each re-derive the change set (both sides of every rename)
+   from the compare API and judge it with BASE's own
+   `web/scripts/macos-release-candidate.mjs` `checkCandidateScope` — exactly
+   `CANDIDATE_PATHS`, plus only the optional sitemap — after proving that module
+   unchanged and byte-identical to BASE's blob, and each checks
+   `web/native-releases.json`'s macOS version against the branch version; the
+   proof records the version, change set and whitelist digest, which the
+   consumer's own judgement must reproduce. A candidate of app code, web app
+   code or `go.mod` is refused on both sides. A commit with both kinds of
+   source, or a pull request that did not merge it, runs in full.
+
+What stays fresh on every `main` push: `repo-hygiene` and `windows` (not
+adopted), the macOS `signed-build` (it mints the source-bound artifact the
+release reuses), Web's `scope` job (it computes `main`'s own obligation from
+`before`→tip, and gated jobs are required from the proof only when it is not
+`'false'`), Go's two `govulncheck` queries and Web's `npm audit` (live
+vulnerability databases). Release callers, dispatches and any non-default input
+never reuse. `wire-vectors` still reports on every `main` commit as a real
+GitHub Actions check run, so `relayium-ops`' promotion contract is unchanged.
+
+The adoption is generated, not hand-written: `scripts/ci/ci-evidence-view.mjs`
+turns a lane's full-path text into its adopted form and back, exactly.
+`scripts/test/ci-event-policy-test.mjs` section 6x requires every lane to be
+`adopt(fullPathText(file))`, pins the evidence job, witness steps, guard forms,
+runner ternaries, merge-gate grants and producer, and the registry's job and
+check-name inventory (including GitHub's 100-character matrix-name truncation),
+then hands every older section the full-path projection (keeping the real
+`on:` block) so their rules keep judging the steps that run when reuse is off.
+Six other policy tests read adopted lanes through the same projection
+(`fullPathOf`); `ci-evidence-test.mjs` proves each still fails on a full-path
+break disguised as adoption. The eight evidence inputs (verifier, registry,
+selector, adoption transform, verifier tests, toolchain probe, its registry and
+its tests) are merge-gate control files and
+in every adopted lane's `push.paths` and `go-evidence.sh`'s mirror. After editing a lane's jobs, edit
+its full path, update `scripts/ci/ci-evidence-registry.json`, and run
+`node scripts/ci/ci-evidence-view.mjs adopt`. `scripts/test/ci-evidence-test.mjs`
+drives the verifier through a consistent world and 60+ single-fact breaks.
+
+Known limits: a certificate compares what a probe can observe identically on
+both sides after the same setup — not every byte of the image (`ImageVersion`
+stands for image-provided tools); a screened-eligible main push pays one
+macOS/Windows queue wait plus ≤3 minutes per certify job, measured only once
+hosted; a listing ORDER that differs between VMs of one image would make an
+iOS UI witness fall to full (fail-safe, unmeasured);
+the merge gate and lanes must grant `actions: read` and `pull-requests: read` to
+the read-only `evidence` job, and so must `macos-release.yml`'s call to
+`macos.yml`; and reuse has been proved against mocked and local-HTTP APIs, not
+yet by a hosted merge.
 
 ## CI architecture is executable policy, not prose
 

@@ -88,6 +88,7 @@ import { fileURLToPath } from "node:url";
 
 import { checkNamedExecution } from "../ci/assert-swift-named-execution.mjs";
 import { LANES as SELECTOR_LANES } from "../ci/select-lanes.mjs";
+import { fullPathOf } from "../ci/ci-evidence-view.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const workflowsDir = resolve(repoRoot, ".github/workflows");
@@ -829,7 +830,7 @@ const stripComments = (text) => text.split("\n").filter((line) => !/^\s*#/.test(
 const workflowTexts = new Map(
   readdirSync(workflowsDir)
     .filter((name) => /\.ya?ml$/.test(name))
-    .map((name) => [name, stripComments(readFileSync(resolve(workflowsDir, name), "utf8"))]),
+    .map((name) => [name, stripComments(fullPathOf(name, readFileSync(resolve(workflowsDir, name), "utf8")))]),
 );
 
 const docs = new Map();

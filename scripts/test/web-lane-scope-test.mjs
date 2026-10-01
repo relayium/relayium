@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import {
   BILLING_DOC, LIGHT_SERVER_INPUTS, SERVER_JOBS, billingDocServerInputs, classify, decide,
 } from "../ci/web-lane-scope.mjs";
+import { fullPathOf } from "../ci/ci-evidence-view.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const failures = [];
@@ -159,7 +160,7 @@ export function wiringProblems(text) {
   return problems;
 }
 
-const webYml = readFileSync(resolve(repoRoot, ".github/workflows/web.yml"), "utf8");
+const webYml = fullPathOf("web.yml", readFileSync(resolve(repoRoot, ".github/workflows/web.yml"), "utf8"));
 for (const problem of wiringProblems(webYml)) check(false, problem);
 
 // ── 4. mutations ────────────────────────────────────────────────────────────

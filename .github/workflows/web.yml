@@ -90,6 +90,19 @@ on:
       - 'apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/relay-renew-vectors.json'
       - '.github/workflows/web.yml'
+      # The PR→main evidence verifier, its registry, the filter reader it imports,
+      # the adoption transform, the toolchain certificate probe and registry, and
+      # their tests decide whether a main push may witness this lane instead of
+      # re-running it — so a change to any of them is a change to this lane
+      # (scripts/ci/ci-evidence-view.mjs).
+      - 'scripts/ci/ci-evidence.mjs'
+      - 'scripts/ci/ci-evidence-registry.json'
+      - 'scripts/ci/select-lanes.mjs'
+      - 'scripts/ci/ci-evidence-view.mjs'
+      - 'scripts/test/ci-evidence-test.mjs'
+      - 'scripts/ci/ci-evidence-toolchain.mjs'
+      - 'scripts/ci/ci-evidence-toolchain-registry.json'
+      - 'scripts/test/ci-evidence-toolchain-test.mjs'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
   #
   # This REPLACES this file's own `pull_request:` trigger, and the replacement
@@ -141,6 +154,158 @@ permissions:
   contents: read
 
 jobs:
+  # PR→main evidence: a cheap read-only screen before any paid macOS/Windows
+  # probe. `eligible=true` only when this main push has a source proof that a
+  # current toolchain certificate could complete; it ENABLES the certify jobs
+  # and approves nothing. Never red, and anything but `eligible=true` means no
+  # paid probe and the full lane.
+  screen:
+    needs: scope
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      eligible: ${{ steps.screen.outputs.eligible }}
+    steps:
+      - name: Check out the verifier
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Could a current toolchain certificate complete a proof?
+        id: screen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVIDENCE_SCOPE_LIGHT: ${{ needs.scope.outputs.light }}
+        run: node scripts/ci/ci-evidence.mjs screen web >> "$GITHUB_OUTPUT"
+
+  # PR→main evidence: the windows-latest toolchain a fresh run of this lane would get NOW,
+  # resolved by copies of the lane's own selection/setup steps and certified
+  # by scripts/ci/ci-evidence-toolchain.mjs. Ordinary main pushes the screen
+  # found eligible only; skipped everywhere else. Bounded at 3 minutes and never
+  # red: a failed, slow or unknown probe hands over no certificate, and the
+  # lane then runs in full.
+  certify-windows:
+    needs: screen
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.screen.result == 'success' && needs.screen.outputs.eligible == 'true' }}
+    runs-on: windows-latest
+    timeout-minutes: 3
+    continue-on-error: true
+    outputs:
+      certificates: ${{ steps.export.outputs.certificates }}
+    steps:
+      - name: Check out the probe
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Certify this runner's toolchain now
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles windows-node --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Hand the certificates to the evidence job
+        id: export
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs export --dir "$RUNNER_TEMP/ci-evidence-current" >> "$GITHUB_OUTPUT"
+
+  # PR→main evidence reuse (scripts/ci/ci-evidence.mjs; docs/CI-PLATFORM-BOUNDARY.md).
+  #
+  # On an ORDINARY push to main, decides whether the merged pull request's
+  # latest merge-gate run already proved this exact tree for this lane, on the
+  # same toolchain this runner family offers now. Every other event — the merge
+  # gate's own pull_request call, a dispatch, a release caller — skips the
+  # decision, so `reuse` is empty and every job below runs its original steps
+  # on its original runner. The verifier always exits 0 and any doubt is
+  # `reuse=false`: a missing, partial, stale, uncertified or mismatched proof
+  # means the full lane, never approval. It reads the GitHub API (hence the
+  # read-only actions/pull-requests grants) and runs nothing it downloads.
+  # Never red (`continue-on-error`), and nothing below depends on how it
+  # ended: every original job's condition is an explicit `!cancelled()` over
+  # its OWN needs, so a failed setup step, a timeout or a skipped dependency
+  # here leaves `reuse` empty and the whole lane runs in full.
+  # `!cancelled()`: a failed, timed-out or skipped dependency must not skip
+  # this job either. It then decides `reuse=false`.
+  evidence:
+    needs: [scope, screen, certify-windows]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    # Promoted ONLY by the handover, after the witness was kept: a decision
+    # whose upload failed or timed out, or whose retained file is missing or
+    # not the decided witness, never reaches the jobs below.
+    outputs:
+      reuse: ${{ steps.handover.outputs.reuse }}
+      witness: ${{ steps.handover.outputs.witness }}
+    steps:
+      - name: Check out the verifier (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          node-version: 24
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          go-version-file: server/go.mod
+      - name: Certify this runner's toolchain now (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles linux-node-chrome,linux-node-go-chrome --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Take the certify jobs' certificates (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          CI_EVIDENCE_CERTIFICATES_WINDOWS: ${{ needs['certify-windows'].outputs.certificates }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs import --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Does the merged pull request's full proof cover this main tree?
+        id: verify
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVIDENCE_SCOPE_LIGHT: ${{ needs.scope.outputs.light }}
+          CI_EVIDENCE_CURRENT_TOOLCHAIN_DIR: ${{ runner.temp }}/ci-evidence-current
+          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/web.json
+        run: node scripts/ci/ci-evidence.mjs witness web >> "$GITHUB_OUTPUT"
+      - name: Keep the witness (reuse only)
+        id: keep
+        if: steps.verify.outputs.reuse == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-witness-web-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-witness
+          if-no-files-found: error
+          retention-days: 30
+      - name: Hand the decision to the lane only once its witness is kept
+        id: handover
+        if: steps.verify.outputs.reuse == 'true' && steps.keep.outcome == 'success'
+        env:
+          CI_EVIDENCE_WITNESS: ${{ steps.verify.outputs.witness }}
+          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/web.json
+        run: node scripts/ci/ci-evidence.mjs handover >> "$GITHUB_OUTPUT"
+  # (end of the PR→main evidence jobs; everything above was generated by scripts/ci/ci-evidence-view.mjs)
+
   # Which of the jobs below this change set needs. `server/**` selects this
   # lane because three jobs run real Go code (`sealed-box-interop`,
   # `device-inbox-e2e`, `mixed-link-e2e`); the rest — check, Vitest, build,
@@ -182,8 +347,8 @@ jobs:
         run: node scripts/ci/web-lane-scope.mjs >> "$GITHUB_OUTPUT"
 
   test:
-    needs: scope
-    if: needs.scope.outputs.light != 'false'
+    needs: [scope, evidence]
+    if: ${{ !cancelled() && needs.scope.result == 'success' && (needs.scope.outputs.light != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -196,6 +361,28 @@ jobs:
       # the decision explicit instead of dependent on the image contents.
       RELAYIUM_GO_INTEROP: "0"
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm web
       # `fetch-tags` is not decoration. `releases.test.mjs`'s tag audits are the
       # only thing tying the public /releases page to reality, and they are
       # `skipIf(gitTags() === null)`. A default checkout has no tags, so on this
@@ -210,17 +397,44 @@ jobs:
       # clone with a tags refspec before this was written: 69/69 tags, every date
       # present. A full clone would work too and is not needed.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           fetch-tags: true
+      # PR→main evidence: the exact tag set this checkout fetched, which the tag
+      # audits and the /releases build below read. Recorded here, by the job
+      # that tests it and before anything else can fetch, because a main push may
+      # witness this job only while the repository's tags still equal this set
+      # (scripts/ci/ci-evidence.mjs). A tag created after this checkout is one no
+      # test here ever saw, even if it predates the merge gate's proof.
+      - name: Record the tag set this job tests
+        if: needs.evidence.outputs.reuse != 'true'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ci-evidence-tags"
+          git for-each-ref refs/tags --format='%(refname) %(objectname)' | LC_ALL=C sort > "$RUNNER_TEMP/ci-evidence-tags/tags.txt"
+      - name: Keep the tested tag set
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-web-tags-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-tags/tags.txt
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+        if: needs.evidence.outputs.reuse != 'true'
       - run: npm run check
+        if: needs.evidence.outputs.reuse != 'true'
       - run: npm test -- --run
+        if: needs.evidence.outputs.reuse != 'true'
       - run: npm run build
+        if: needs.evidence.outputs.reuse != 'true'
       # Every executable inline script in the BUILT dist must be one
       # scripts/pages/csp-inline-scripts-v1.json allows, and every hash there
       # must still be shipped — the bytes nginx will serve, not the generator's
@@ -228,12 +442,14 @@ jobs:
       # missing dist, a missing generated page or an unknown script type, and
       # prints each allowed hash with its page count.
       - run: node scripts/check-csp-inline.mjs dist
+        if: needs.evidence.outputs.reuse != 'true'
       # Runs after build: the scanner serves web/dist and drives a real
       # headless Chrome, so it needs the freshly built output — an earlier position
       # would scan whatever dist happened to be lying around, or nothing at all.
       # Fails on any axe violation not claimed by e2e/a11y-allowlist.json (empty);
       # `incomplete` results are printed and never fail.
       - run: npm run test:a11y
+        if: needs.evidence.outputs.reuse != 'true'
       # The auth-landing/apps/pricing page-shell contracts plus the insecure-context
       # single-column fallback. They were moved here off the since-deleted
       # `lan-transfer.mjs`, which needed a real Go server and a peer — neither of
@@ -242,6 +458,7 @@ jobs:
       # placed here so a page-shell regression fails fast before the heavier
       # real-signalling journeys below spend their minutes.
       - run: npm run test:e2e:page-shell
+        if: needs.evidence.outputs.reuse != 'true'
       # Two real tabs in one real pairing-code room, driving the freshly built
       # dist through a controlled rendezvous/ICE fixture. It is the ONLY gate
       # that executes the promoted routing decision — a code-room peer that
@@ -254,6 +471,7 @@ jobs:
       # fixture serves the built dist or fails to start. A missing Chrome is a
       # red build here, never a silent pass.
       - run: npm run test:e2e:code-room
+        if: needs.evidence.outputs.reuse != 'true'
       # Same real Chrome, same freshly built dist, one question the axe scan
       # cannot answer: is the feature FINDABLE. It walks /cli → My Devices →
       # rename → revoke at 1440×900, 390×844 and in Arabic RTL. It caught three
@@ -261,11 +479,34 @@ jobs:
       # 404s in eight locales, an anchor the SPA never scrolls to, and a CTA
       # styled as a heading.
       - run: npm run test:device-discovery
+        if: needs.evidence.outputs.reuse != 'true'
       # A separate findability journey for the first-class Device Inbox route:
       # / → Device Inbox → server setup/account action at desktop, 390px and RTL.
       # Keep it as its own step so a discovery failure cannot hide this signal.
       - run: npm run test:device-inbox-entry
+        if: needs.evidence.outputs.reuse != 'true'
       - run: npm audit --audit-level=high
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile linux-node-chrome --lane web --job test --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-web-test-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   # A sealed box produced by the REAL browser implementation, opened by the REAL
   # Go device implementation, in one run. Both halves execute; nothing here is a
@@ -273,26 +514,76 @@ jobs:
   # tampered box to FAIL, so a harness that silently stopped proving anything is
   # itself a red build.
   sealed-box-interop:
+    needs: evidence
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:
         working-directory: web
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm web
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       - run: npm ci
+        if: needs.evidence.outputs.reuse != 'true'
       # RELAYIUM_GO_INTEROP=1 (set by the script) makes a skip impossible: if the
       # toolchain is missing the suite fails instead of quietly reporting green.
       - run: npm run test:interop
+        if: needs.evidence.outputs.reuse != 'true'
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile linux-node-go-chrome --lane web --job sealed-box-interop --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-web-sealed-box-interop-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Browser -> central -> CLI -> disk, with nothing simulated: a real server on a
   # temporary database, a real `relayium inbox` worker holding its own X25519
@@ -300,27 +591,78 @@ jobs:
   # This is the only gate that can show "uploaded is not saved", because it is
   # the only one with a receiver that has genuinely not saved anything yet.
   device-inbox-e2e:
+    needs: evidence
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
       run:
         working-directory: web
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm web
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       - run: npm ci
+        if: needs.evidence.outputs.reuse != 'true'
       # The script serves web/dist through the real server, so the build has to
       # exist before it runs — the same ordering constraint as the a11y scan.
       - run: npm run build
+        if: needs.evidence.outputs.reuse != 'true'
       - run: npm run test:device-inbox
+        if: needs.evidence.outputs.reuse != 'true'
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile linux-node-go-chrome --lane web --job device-inbox-e2e --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-web-device-inbox-e2e-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Two real tabs on one real unified link (`link/1`) in the code-less LAN room,
   # against a real Go server this job's own runner starts, builds and tears down.
@@ -339,28 +681,58 @@ jobs:
   # step here starts one — because a suite that needs a human to set up its
   # world is a suite that runs when a human remembers.
   mixed-link-e2e:
+    needs: evidence
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
       run:
         working-directory: web
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm web
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       - run: npm ci
+        if: needs.evidence.outputs.reuse != 'true'
       # The server serves web/dist, and the runner REFUSES a missing or stale
       # bundle before it spawns anything — so this build is a hard prerequisite,
       # not an optimization.
       - run: npm run build
+        if: needs.evidence.outputs.reuse != 'true'
       - run: npm run test:e2e:mixed
+        if: needs.evidence.outputs.reuse != 'true'
       # Two more real-Chrome suites that no hosted job ran until 2026-09-28
       # (audit D-M1). They need this job's built dist and Go toolchain and
       # nothing heavier, so they share it rather than paying for another
@@ -373,32 +745,102 @@ jobs:
       # drives a real ICE restart between two real RTCPeerConnections. It
       # claims nothing about a server or a TURN relay; see the script header.
       - name: relay renewal, real ICE restart (e2e/relay-renewal.mjs)
+        if: needs.evidence.outputs.reuse != 'true'
         run: npm run test:e2e:relay-renewal
       # Web Share Target: a multipart share reaches the installed production
       # service worker and the outbox. The scenario needs a server it does not
       # start itself; the wrapper builds one, serves this dist through it with
       # a throwaway database, and tears it down.
       - name: Web Share Target through the production service worker (e2e/share-target.mjs)
+        if: needs.evidence.outputs.reuse != 'true'
         working-directory: .
         run: bash scripts/ci/share-target-e2e.sh
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile linux-node-go-chrome --lane web --job mixed-link-e2e --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-web-mixed-link-e2e-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   windows-temporary-downloader:
-    needs: scope
-    if: needs.scope.outputs.light != 'false'
-    runs-on: windows-latest
+    needs: [scope, evidence]
+    if: ${{ !cancelled() && needs.scope.result == 'success' && (needs.scope.outputs.light != 'false') }}
+    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'windows-latest' }}
     timeout-minutes: 10
     defaults:
       run:
         working-directory: web
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm web
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+        if: needs.evidence.outputs.reuse != 'true'
       # Executes the exact generated PowerShell against the pinned official
       # Windows artifact. The CLI then reaches a deliberate local connection
       # failure, proving verification/extraction/execution and finally cleanup.
       - run: npx vitest run src/lib/temp-downloader-windows.test.ts
+        if: needs.evidence.outputs.reuse != 'true'
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        working-directory: .
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile windows-node --lane web --job windows-temporary-downloader --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-web-windows-temporary-downloader-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7

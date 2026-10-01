@@ -120,11 +120,27 @@ export const LANES = [
  * whole directory would make every workflow edit a full macOS run for no added
  * safety. These three are the ones no lane filter covers and that no lane
  * result would reflect.
+ *
+ * The last seven are the PR→main evidence inputs: the verifier, its registry,
+ * the adoption transform the policy judges every lane with, the verifier's own
+ * tests (which the gate runs before minting a proof), and the toolchain
+ * certificate probe, its registry and its tests. They decide whether a
+ * `main` push may WITNESS a lane instead of re-running it, so a pull request
+ * that edits any of them is judged by running every lane: the resulting proof
+ * then covers every lane, and the `main` push that follows exercises the new
+ * verifier against all of them.
  */
 export const CONTROL_FILES = [
   ".github/workflows/merge-gate.yml",
   "scripts/ci/select-lanes.mjs",
   "scripts/test/fixtures/ci-path-selection.mjs",
+  "scripts/ci/ci-evidence.mjs",
+  "scripts/ci/ci-evidence-registry.json",
+  "scripts/ci/ci-evidence-view.mjs",
+  "scripts/test/ci-evidence-test.mjs",
+  "scripts/ci/ci-evidence-toolchain.mjs",
+  "scripts/ci/ci-evidence-toolchain-registry.json",
+  "scripts/test/ci-evidence-toolchain-test.mjs",
 ];
 
 /**

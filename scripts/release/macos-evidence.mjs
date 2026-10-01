@@ -40,8 +40,11 @@
 //   * exactly ONE such run, completed and successful in its LATEST attempt,
 //     created within MAX_RUN_AGE_HOURS;
 //   * exactly the five expected jobs in that attempt — contract, test, both
-//     ui-smoke shards and signed-build — every one completed `success`. A
-//     skipped UI shard is not a pass;
+//     ui-smoke shards and signed-build — every one completed `success` and
+//     EXECUTED (judged from its step records, never witnessed). A skipped UI
+//     shard is not a pass. Under the canonical PR→main evidence adoption the
+//     run also has exactly the three auxiliary jobs `screen`, `certify-macos`
+//     and `evidence` — no other job, ever;
 //   * exactly ONE artifact named for the commit, unexpired with margin, created
 //     while `signed-build` ran, whose downloaded zip hashes to the API digest
 //     and holds exactly four files;
@@ -117,6 +120,22 @@ export const EXPECTED_JOBS = [
 ];
 /** The sixth job a CANONICAL PR→main evidence adoption inserts, and only then. */
 export const EVIDENCE_JOB = { id: "evidence", match: (name) => name === "evidence" };
+/**
+ * The other two jobs that adoption inserts in front of it, and only then: the
+ * read-only availability screen and the paid macOS toolchain probe it may
+ * enable. Both are `continue-on-error` and approve nothing; each must still be
+ * there exactly once, completed, and never `cancelled`, so no unknown job and
+ * no missing one is ever waived. (`skipped` is their normal state when the
+ * merged pull request had no usable proof.)
+ */
+export const SCREEN_JOB = { id: "screen", match: (name) => name === "screen" };
+export const CERTIFY_JOB = { id: "certify-macos", match: (name) => name === "certify-macos" };
+export const AUXILIARY_JOBS = [SCREEN_JOB, CERTIFY_JOB, EVIDENCE_JOB];
+const AUXILIARY_CONCLUSIONS = {
+  screen: ["success", "failure", "skipped"],
+  "certify-macos": ["success", "failure", "skipped"],
+  evidence: ["success"],
+};
 
 /**
  * What each job must have EXECUTED, read from the API's step records — not
@@ -160,7 +179,9 @@ const MUST_NOT_RUN = {
   "ui-smoke/app-shell": [...WITNESS_STEPS, "Run macOS product-flow UI smoke (device-inbox)"],
   "ui-smoke/device-inbox": [...WITNESS_STEPS, "Run macOS product-flow UI smoke (app-shell)"],
   "signed-build": WITNESS_STEPS,
-  evidence: ["Keep the witness (reuse only)"],
+  // Neither kept a witness nor handed a decision to the lane: the jobs below
+  // only ever see `reuse=true` through the handover step.
+  evidence: ["Keep the witness (reuse only)", "Hand the decision to the lane only once its witness is kept"],
 };
 /** Runner labels each job must report: the Apple jobs on macos-15; the
  *  ordinary push contract on Ubuntu (a release-input contract on macOS). */
@@ -175,24 +196,83 @@ const RUNNER_LABELS = {
 
 /**
  * The canonical PR→main evidence adoption of `macos.yml`, as STRUCTURE: the
- * non-comment lines of the inserted job and of the three-step witness prefix,
- * exactly as `scripts/ci/ci-evidence-view.mjs` (`evidenceJobLines("macos")`,
- * `witnessStepLines("macos", false)`) writes them. Comments are ignored so an
- * edit to its prose does not turn reuse off; any structural difference does.
- * `scripts/test/macos-evidence-cases.mjs` compares these with that generator
- * whenever it is present in the tree.
+ * non-comment lines of the three inserted jobs, of the three-step witness
+ * prefix, and of the `needs`/`if`/`runs-on` lines adoption gives the five
+ * original jobs — exactly as `scripts/ci/ci-evidence-view.mjs` writes them for
+ * `adopt(fullPathText(macos.yml))`. Comments are ignored so an edit to their
+ * prose does not turn reuse off; any structural difference does.
+ * `scripts/test/macos-evidence-cases.mjs` compares each of these with that
+ * generator (`evidenceJobLines`, `witnessStepLines`, and the jobs of its own
+ * adoption of the full-path text) whenever it is present in the tree.
+ *
+ * The original jobs' conditions are pinned because they are what keeps the
+ * lane honest when the auxiliary jobs fail: an explicit `!cancelled()` over
+ * each job's OWN needs, so a failed, timed-out or skipped `evidence` leaves
+ * `reuse` empty and every gate runs in full on its own runner.
  */
-export const CANONICAL_EVIDENCE_JOB = [
-  "  evidence:",
+export const CANONICAL_SCREEN_JOB = [
+  "  screen:",
+  "    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}",
   "    runs-on: ubuntu-latest",
-  "    timeout-minutes: 10",
+  "    timeout-minutes: 5",
+  "    continue-on-error: true",
   "    permissions:",
   "      contents: read",
   "      actions: read",
   "      pull-requests: read",
   "    outputs:",
-  "      reuse: ${{ steps.verify.outputs.reuse }}",
-  "      witness: ${{ steps.verify.outputs.witness }}",
+  "      eligible: ${{ steps.screen.outputs.eligible }}",
+  "    steps:",
+  "      - name: Check out the verifier",
+  "        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2",
+  "        with:",
+  "          persist-credentials: false",
+  "      - name: Node for the verifier",
+  "        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0",
+  "        with:",
+  "          node-version: 24",
+  "      - name: Could a current toolchain certificate complete a proof?",
+  "        id: screen",
+  "        env:",
+  "          GH_TOKEN: ${{ github.token }}",
+  "        run: node scripts/ci/ci-evidence.mjs screen macos >> \"$GITHUB_OUTPUT\"",
+];
+export const CANONICAL_CERTIFY_JOB = [
+  "  certify-macos:",
+  "    needs: screen",
+  "    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.screen.result == 'success' && needs.screen.outputs.eligible == 'true' }}",
+  "    runs-on: macos-15",
+  "    timeout-minutes: 3",
+  "    continue-on-error: true",
+  "    outputs:",
+  "      certificates: ${{ steps.export.outputs.certificates }}",
+  "    steps:",
+  "      - name: Check out the probe",
+  "        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2",
+  "        with:",
+  "          persist-credentials: false",
+  "      - name: Certify this runner's toolchain now",
+  "        shell: bash",
+  "        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles macos-xcode --dir \"$RUNNER_TEMP/ci-evidence-current\"",
+  "      - name: Hand the certificates to the evidence job",
+  "        id: export",
+  "        shell: bash",
+  "        run: node scripts/ci/ci-evidence-toolchain.mjs export --dir \"$RUNNER_TEMP/ci-evidence-current\" >> \"$GITHUB_OUTPUT\"",
+];
+export const CANONICAL_EVIDENCE_JOB = [
+  "  evidence:",
+  "    needs: [screen, certify-macos]",
+  "    if: ${{ !cancelled() }}",
+  "    runs-on: ubuntu-latest",
+  "    timeout-minutes: 10",
+  "    continue-on-error: true",
+  "    permissions:",
+  "      contents: read",
+  "      actions: read",
+  "      pull-requests: read",
+  "    outputs:",
+  "      reuse: ${{ steps.handover.outputs.reuse }}",
+  "      witness: ${{ steps.handover.outputs.witness }}",
   "    steps:",
   "      - name: Check out the verifier (ordinary main push only)",
   "        if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
@@ -204,14 +284,26 @@ export const CANONICAL_EVIDENCE_JOB = [
   "        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0",
   "        with:",
   "          node-version: 24",
+  "      - name: Certify this runner's toolchain now (ordinary main push only)",
+  "        if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
+  "        shell: bash",
+  "        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles linux-base --dir \"$RUNNER_TEMP/ci-evidence-current\"",
+  "      - name: Take the certify jobs' certificates (ordinary main push only)",
+  "        if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
+  "        shell: bash",
+  "        env:",
+  "          CI_EVIDENCE_CERTIFICATES_MACOS: ${{ needs['certify-macos'].outputs.certificates }}",
+  "        run: node scripts/ci/ci-evidence-toolchain.mjs import --dir \"$RUNNER_TEMP/ci-evidence-current\"",
   "      - name: Does the merged pull request's full proof cover this main tree?",
   "        id: verify",
   "        if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
   "        env:",
   "          GH_TOKEN: ${{ github.token }}",
+  "          CI_EVIDENCE_CURRENT_TOOLCHAIN_DIR: ${{ runner.temp }}/ci-evidence-current",
   "          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/macos.json",
   "        run: node scripts/ci/ci-evidence.mjs witness macos >> \"$GITHUB_OUTPUT\"",
   "      - name: Keep the witness (reuse only)",
+  "        id: keep",
   "        if: steps.verify.outputs.reuse == 'true'",
   "        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
   "        with:",
@@ -219,6 +311,13 @@ export const CANONICAL_EVIDENCE_JOB = [
   "          path: ${{ runner.temp }}/ci-evidence-witness",
   "          if-no-files-found: error",
   "          retention-days: 30",
+  "      - name: Hand the decision to the lane only once its witness is kept",
+  "        id: handover",
+  "        if: steps.verify.outputs.reuse == 'true' && steps.keep.outcome == 'success'",
+  "        env:",
+  "          CI_EVIDENCE_WITNESS: ${{ steps.verify.outputs.witness }}",
+  "          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/macos.json",
+  "        run: node scripts/ci/ci-evidence.mjs handover >> \"$GITHUB_OUTPUT\"",
 ];
 export const CANONICAL_WITNESS_STEPS = [
   "      - name: Check out the verifier (witness path only)",
@@ -238,6 +337,28 @@ export const CANONICAL_WITNESS_STEPS = [
   "          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}",
   "        run: node scripts/ci/ci-evidence.mjs confirm macos",
 ];
+export const CANONICAL_JOB_CONDITIONS = {
+  "contract": [
+    "    needs: evidence",
+    "    if: ${{ !cancelled() }}",
+    "    runs-on: ${{ (github.event_name == 'workflow_dispatch' || inputs.release_version || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}"
+  ],
+  "test": [
+    "    needs: evidence",
+    "    if: ${{ !cancelled() }}",
+    "    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}"
+  ],
+  "ui-smoke": [
+    "    needs: [test, contract, evidence]",
+    "    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}",
+    "    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}"
+  ],
+  "signed-build": [
+    "    needs: [test, contract]",
+    "    runs-on: macos-15",
+    "    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}"
+  ]
+};
 /** The jobs the canonical adoption gives the witness prefix; signed-build is `fresh`. */
 const ADOPTED_JOB_IDS = ["contract", "test", "ui-smoke"];
 
@@ -264,11 +385,21 @@ export function workflowShape(text) {
   }
   blocks.forEach((b, k) => { b.end = k + 1 < blocks.length ? blocks[k + 1].start : lines.length; });
   const ids = blocks.map((b) => b.id);
-  if (JSON.stringify(ids) !== JSON.stringify(["evidence", "contract", "test", "ui-smoke", "signed-build"])) {
+  if (JSON.stringify(ids) !== JSON.stringify(["screen", "certify-macos", "evidence", "contract", "test", "ui-smoke", "signed-build"])) {
     return "non-canonical";
   }
-  const body = (id) => structural(lines.slice(blocks.find((b) => b.id === id).start, blocks.find((b) => b.id === id).end));
+  const body = (id) => {
+    const block = blocks.find((b) => b.id === id);
+    return block ? structural(lines.slice(block.start, block.end)) : [];
+  };
+  if (JSON.stringify(body("screen")) !== JSON.stringify(CANONICAL_SCREEN_JOB)) return "non-canonical";
+  if (JSON.stringify(body("certify-macos")) !== JSON.stringify(CANONICAL_CERTIFY_JOB)) return "non-canonical";
   if (JSON.stringify(body("evidence")) !== JSON.stringify(CANONICAL_EVIDENCE_JOB)) return "non-canonical";
+  for (const [id, want] of Object.entries(CANONICAL_JOB_CONDITIONS)) {
+    const b = body(id);
+    const conditions = b.slice(0, b.indexOf("    steps:")).filter((l) => /^ {4}(needs|if|runs-on):/.test(l));
+    if (JSON.stringify(conditions) !== JSON.stringify(want)) return "non-canonical";
+  }
   const witness = JSON.stringify(CANONICAL_WITNESS_STEPS);
   for (const id of ADOPTED_JOB_IDS) {
     const b = body(id);
@@ -279,6 +410,7 @@ export function workflowShape(text) {
     if (!/^ {6}- /.test(b[at + 1 + CANONICAL_WITNESS_STEPS.length] ?? "")) return "non-canonical";
     if (b.join("\n").split("node scripts/ci/ci-evidence.mjs confirm macos").length !== 2) return "non-canonical";
   }
+  // `fresh`: no witness, no capture, no reading of the decision.
   const signed = body("signed-build").join("\n");
   if (signed.includes("evidence") || signed.includes("ci-evidence")) return "non-canonical";
   return "adopted";
@@ -503,7 +635,7 @@ export async function selectProducerRun(api, { repository, repositoryId, sha, no
   const shape = workflowShape(Buffer.from(file.content, "base64").toString("utf8"));
   unavailable(shape !== "non-canonical",
     `${PRODUCER_WORKFLOW} at ${sha} carries a PR→main evidence adoption that is not the canonical one`);
-  const expectedJobs = shape === "adopted" ? [EVIDENCE_JOB, ...EXPECTED_JOBS] : EXPECTED_JOBS;
+  const expectedJobs = shape === "adopted" ? [...AUXILIARY_JOBS, ...EXPECTED_JOBS] : EXPECTED_JOBS;
   const byExpected = new Map(expectedJobs.map((e) => [e.id, []]));
   const strays = [];
   for (const job of jobs) {
@@ -525,6 +657,13 @@ export async function selectProducerRun(api, { repository, repositoryId, sha, no
   for (const [id, matched] of byExpected) {
     unavailable(matched.length === 1, `run ${run.id} has ${matched.length} \`${id}\` job(s); want exactly one`);
     const job = matched[0];
+    if (id === "screen" || id === "certify-macos") {
+      // Auxiliary and never red; judged for presence and a final state only.
+      unavailable(job.status === "completed" && AUXILIARY_CONCLUSIONS[id].includes(job.conclusion),
+        `run ${run.id}'s \`${id}\` job is ${job.status}/${job.conclusion}; want completed `
+        + AUXILIARY_CONCLUSIONS[id].join("/"));
+      continue;
+    }
     unavailable(job.status === "completed" && job.conclusion === "success",
       `run ${run.id}'s \`${id}\` job is ${job.status}/${job.conclusion}; every gate job must succeed`);
     judgeExecution(id, job, shape);
@@ -535,7 +674,7 @@ export async function selectProducerRun(api, { repository, repositoryId, sha, no
     jobs: EXPECTED_JOBS.map((e) => byExpected.get(e.id)[0]),
     shape,
     workflowBlob: file.sha,
-    evidenceJob: shape === "adopted" ? byExpected.get("evidence")[0] : null,
+    auxiliaryJobs: shape === "adopted" ? AUXILIARY_JOBS.map((e) => byExpected.get(e.id)[0]) : [],
   };
 }
 
@@ -914,7 +1053,7 @@ export function judgeProvenance(provenance, payloadHashes, checksumText, expect)
  * Returns the frozen evidence document.
  */
 export async function collectEvidence(api, { repository, repositoryId, sha, releaseVersion, now, dir }) {
-  const { workflow, run, jobs, shape, workflowBlob, evidenceJob } =
+  const { workflow, run, jobs, shape, workflowBlob, auxiliaryJobs } =
     await selectProducerRun(api, { repository, repositoryId, sha, now });
   const signedBuild = jobs[EXPECTED_JOBS.findIndex((e) => e.id === "signed-build")];
   const artifact = await selectArtifact(api, { repository, repositoryId, sha, run, signedBuild, now });
@@ -969,7 +1108,7 @@ export async function collectEvidence(api, { repository, repositoryId, sha, rele
       createdAt: run.created_at,
       runStartedAt: run.run_started_at ?? null,
     },
-    jobs: [...jobs, ...(evidenceJob ? [evidenceJob] : [])].map((job) => ({
+    jobs: [...jobs, ...auxiliaryJobs].map((job) => ({
       id: job.id,
       name: job.name,
       conclusion: job.conclusion,

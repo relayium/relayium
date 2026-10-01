@@ -1,0 +1,432 @@
+{
+  "$comment": [
+    "Read by scripts/ci/ci-evidence-toolchain.mjs and scripts/ci/ci-evidence.mjs; judged by scripts/test/ci-evidence-toolchain-test.mjs.",
+    "profiles.<name>: runner family + the components a certificate of that profile carries (image is always first). Every component is a fact both the source job and a current probe on that family can observe after the same setup actions.",
+    "lanes.<lane>.jobs.<jobId>: the profile the job's toolchain is certified under, or `uncertifiable` with the reason: such a job is never witnessed, so its whole lane runs in full on every main push.",
+    "Fresh jobs (macOS signed-build, Web scope) are absent: they always run their original steps.",
+    "A profile must cover EVERY tool the job uses that the tree does not pin exactly: image (ImageVersion covers image-provided gcc/git/jq/python), go (setup-go + cgo CC), node/npm (setup-node 24 floats), java (setup-java 17 floats), the Android packages the job installs, the Chrome binary web/e2e/harness.mjs resolves (CHROME_PATH first, then its candidate order; path, real path, sha256 and version), the Xcode inventory and default selection, and the simulator destination the job's own selection rule picks.",
+    "destinations.<id>: a job's own simulator selection program (`python3 -c '…'` over `xcrun simctl list devices available -j`) — in a workflow step (`file` + `step`) or a script the job runs (`file`) — pinned by sha256 of `interpreter NUL program`. The probe runs exactly that program with exactly that interpreter on the runner's listing and records the destination it picks (name, device type, runtime identifier, version and build, and its position in the listing; the UDID only in the audit block, because a UDID is minted per device set and says nothing comparable across runners). A changed program without a new pin, or any doubt, is unknown: the lane runs in full. The three rules differ on purpose (iPhone first-in-listing with /usr/bin/python3; iPad sorted by name, runtime, UDID; the session acceptance script's PATH python3 with an empty default) and are never shared.",
+    "lanes.<lane>.ubuntuSetup: source steps (job + step identity: name, else action without @ref, else run) the lane's `evidence` job copies — with:-inputs minus cache keys, unchanged otherwise — before it captures the current Ubuntu certificates. lanes.<lane>.certify.<runner>: the same for the lane's `certify-macos` / `certify-windows` job. Each copied step must be EXACTLY the setup/selection every job of that family in the lane runs (scripts/test/ci-event-policy-test.mjs 6x), so the current probe resolves the toolchain by the job's own rule, never a new one."
+  ],
+  "schema": "relayium.ci-evidence.toolchain-registry/v1",
+  "profiles": {
+    "linux-base": {
+      "runner": "ubuntu-latest",
+      "components": [
+        "image"
+      ]
+    },
+    "linux-go": {
+      "runner": "ubuntu-latest",
+      "components": [
+        "image",
+        "go"
+      ]
+    },
+    "linux-node": {
+      "runner": "ubuntu-latest",
+      "components": [
+        "image",
+        "node"
+      ]
+    },
+    "linux-node-chrome": {
+      "runner": "ubuntu-latest",
+      "components": [
+        "image",
+        "node",
+        "chrome"
+      ]
+    },
+    "linux-node-go-chrome": {
+      "runner": "ubuntu-latest",
+      "components": [
+        "image",
+        "node",
+        "go",
+        "chrome"
+      ]
+    },
+    "linux-java": {
+      "runner": "ubuntu-latest",
+      "components": [
+        "image",
+        "java"
+      ]
+    },
+    "linux-java-android": {
+      "runner": "ubuntu-latest",
+      "components": [
+        "image",
+        "java",
+        "android-sdk"
+      ],
+      "androidPackages": [
+        "platforms;android-37.0",
+        "build-tools;36.0.0"
+      ]
+    },
+    "windows-go": {
+      "runner": "windows-latest",
+      "components": [
+        "image",
+        "go"
+      ]
+    },
+    "windows-node": {
+      "runner": "windows-latest",
+      "components": [
+        "image",
+        "node"
+      ]
+    },
+    "macos-xcode": {
+      "runner": "macos-15",
+      "components": [
+        "image",
+        "xcode"
+      ]
+    },
+    "macos-xcode-iphone": {
+      "runner": "macos-15",
+      "components": [
+        "image",
+        "xcode",
+        "destination"
+      ],
+      "destination": "ios-ui-smoke-iphone"
+    },
+    "macos-xcode-ipad": {
+      "runner": "macos-15",
+      "components": [
+        "image",
+        "xcode",
+        "destination"
+      ],
+      "destination": "ios-ipad-shell-ipad"
+    },
+    "macos-xcode-go": {
+      "runner": "macos-15",
+      "components": [
+        "image",
+        "xcode",
+        "go"
+      ]
+    },
+    "macos-xcode-go-iphone": {
+      "runner": "macos-15",
+      "components": [
+        "image",
+        "xcode",
+        "go",
+        "destination"
+      ],
+      "destination": "session-acceptance-iphone"
+    },
+    "macos-xcode-node-go-chrome": {
+      "runner": "macos-15",
+      "components": [
+        "image",
+        "xcode",
+        "node",
+        "go",
+        "chrome"
+      ]
+    }
+  },
+  "destinations": {
+    "ios-ui-smoke-iphone": {
+      "file": ".github/workflows/ios.yml",
+      "step": "Run iOS primary-task UI smoke",
+      "sha256": "be25526fe433db586e0cce0023de2c6c4ad4ba8df8aee4d3eb340a5af9ef179d"
+    },
+    "ios-ipad-shell-ipad": {
+      "file": ".github/workflows/ios.yml",
+      "step": "Run the regular-width adaptive shell on an iPad simulator",
+      "sha256": "251b8d0c38c689731110d79660bd3757cb7933dbdeae49dd6e5caedb67bee478"
+    },
+    "session-acceptance-iphone": {
+      "file": "scripts/ios-ui-session-acceptance.sh",
+      "sha256": "771a5809e577644bac66097417f7c8b64ba5dddf3f16ef224569532bef5785a3"
+    }
+  },
+  "lanes": {
+    "go": {
+      "ubuntuSetup": [
+        {
+          "job": "test",
+          "step": "actions/setup-go"
+        }
+      ],
+      "certify": {
+        "windows-latest": [
+          {
+            "job": "cli-windows",
+            "step": "actions/setup-go"
+          }
+        ]
+      },
+      "jobs": {
+        "test": {
+          "profile": "linux-go"
+        },
+        "cli-windows": {
+          "profile": "windows-go"
+        },
+        "race-account": {
+          "profile": "linux-go"
+        },
+        "race-rest": {
+          "profile": "linux-go"
+        },
+        "link-renew": {
+          "profile": "linux-go"
+        },
+        "rollback-floor": {
+          "profile": "linux-go"
+        }
+      }
+    },
+    "macos": {
+      "certify": {
+        "macos-15": []
+      },
+      "jobs": {
+        "contract": {
+          "profile": "linux-base"
+        },
+        "test": {
+          "profile": "macos-xcode"
+        },
+        "ui-smoke": {
+          "profile": "macos-xcode"
+        }
+      }
+    },
+    "ios": {
+      "certify": {
+        "macos-15": [
+          {
+            "job": "ios-build",
+            "step": "Select and verify the Xcode 26 upload toolchain"
+          }
+        ]
+      },
+      "jobs": {
+        "ios-build": {
+          "profile": "macos-xcode"
+        },
+        "ios-ui-smoke": {
+          "profile": "macos-xcode-iphone"
+        },
+        "ios-ipad-shell": {
+          "profile": "macos-xcode-ipad"
+        }
+      }
+    },
+    "ios-transfer-interop": {
+      "certify": {
+        "macos-15": [
+          {
+            "job": "ios-transfer-acceptance",
+            "step": "Select a stable Xcode 26 toolchain"
+          },
+          {
+            "job": "ios-transfer-acceptance",
+            "step": "actions/setup-go"
+          }
+        ]
+      },
+      "jobs": {
+        "ios-transfer-acceptance": {
+          "profile": "macos-xcode-go-iphone"
+        }
+      }
+    },
+    "android": {
+      "ubuntuSetup": [
+        {
+          "job": "build",
+          "step": "actions/setup-java"
+        },
+        {
+          "job": "build",
+          "step": "Install the pinned SDK platform"
+        }
+      ],
+      "jobs": {
+        "build": {
+          "profile": "linux-java-android"
+        }
+      }
+    },
+    "android-interop": {
+      "jobs": {
+        "interop": {
+          "uncertifiable": "the emulator system image (api 36, x86_64) is downloaded at run time by android-emulator-runner; certifying it would mean downloading it again on every main push, well past the 3-minute probe budget"
+        }
+      }
+    },
+    "swift-package": {
+      "certify": {
+        "macos-15": [
+          {
+            "job": "swift-test",
+            "step": "actions/setup-go"
+          }
+        ]
+      },
+      "jobs": {
+        "swift-test": {
+          "profile": "macos-xcode-go"
+        }
+      }
+    },
+    "inbox-swift-interop": {
+      "certify": {
+        "macos-15": [
+          {
+            "job": "swift-live-interop",
+            "step": "actions/setup-go"
+          }
+        ]
+      },
+      "jobs": {
+        "swift-live-interop": {
+          "profile": "macos-xcode-go"
+        }
+      }
+    },
+    "native-web-pairing": {
+      "ubuntuSetup": [
+        {
+          "job": "cli-web",
+          "step": "actions/setup-node"
+        },
+        {
+          "job": "cli-web",
+          "step": "actions/setup-go"
+        }
+      ],
+      "certify": {
+        "macos-15": [
+          {
+            "job": "pairing",
+            "step": "actions/setup-node"
+          },
+          {
+            "job": "pairing",
+            "step": "actions/setup-go"
+          }
+        ]
+      },
+      "jobs": {
+        "pairing": {
+          "profile": "macos-xcode-node-go-chrome"
+        },
+        "cli-web": {
+          "profile": "linux-node-go-chrome"
+        }
+      }
+    },
+    "contracts": {
+      "ubuntuSetup": [
+        {
+          "job": "go-contract",
+          "step": "actions/setup-go"
+        },
+        {
+          "job": "web-contract",
+          "step": "actions/setup-node"
+        }
+      ],
+      "certify": {
+        "macos-15": []
+      },
+      "jobs": {
+        "go-contract": {
+          "profile": "linux-go"
+        },
+        "web-contract": {
+          "profile": "linux-node"
+        },
+        "swift-contract": {
+          "profile": "macos-xcode"
+        }
+      }
+    },
+    "ops-contract": {
+      "ubuntuSetup": [
+        {
+          "job": "go-contract",
+          "step": "actions/setup-go"
+        }
+      ],
+      "jobs": {
+        "go-contract": {
+          "profile": "linux-go"
+        }
+      }
+    },
+    "web": {
+      "ubuntuSetup": [
+        {
+          "job": "test",
+          "step": "actions/setup-node"
+        },
+        {
+          "job": "sealed-box-interop",
+          "step": "actions/setup-go"
+        }
+      ],
+      "certify": {
+        "windows-latest": [
+          {
+            "job": "windows-temporary-downloader",
+            "step": "actions/setup-node"
+          }
+        ]
+      },
+      "jobs": {
+        "test": {
+          "profile": "linux-node-chrome"
+        },
+        "sealed-box-interop": {
+          "profile": "linux-node-go-chrome"
+        },
+        "device-inbox-e2e": {
+          "profile": "linux-node-go-chrome"
+        },
+        "mixed-link-e2e": {
+          "profile": "linux-node-go-chrome"
+        },
+        "windows-temporary-downloader": {
+          "profile": "windows-node"
+        }
+      }
+    },
+    "compat": {
+      "ubuntuSetup": [
+        {
+          "job": "wire-vectors",
+          "step": "actions/setup-node"
+        },
+        {
+          "job": "android-protocol",
+          "step": "actions/setup-java"
+        }
+      ],
+      "jobs": {
+        "wire-vectors": {
+          "profile": "linux-node"
+        },
+        "android-protocol": {
+          "profile": "linux-java"
+        },
+        "cli-interop-guards": {
+          "profile": "linux-node"
+        }
+      }
+    }
+  }
+}

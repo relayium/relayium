@@ -90,6 +90,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { fullPathOf } from "../ci/ci-evidence-view.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const workflowsDir = resolve(repoRoot, ".github/workflows");
@@ -465,7 +466,7 @@ function gateCallersOf(gateSource, workflow) {
 const workflowFiles = (await readdir(workflowsDir)).filter((name) => /\.ya?ml$/.test(name));
 const workflows = new Map(
   await Promise.all(
-    workflowFiles.map(async (name) => [name, await readFile(resolve(workflowsDir, name), "utf8")]),
+    workflowFiles.map(async (name) => [name, fullPathOf(name, await readFile(resolve(workflowsDir, name), "utf8"))]),
   ),
 );
 const code = new Map(workflowFiles.map((name) => [name, stripComments(workflows.get(name))]));

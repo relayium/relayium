@@ -28,6 +28,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { matchesFilter, readPushPaths } from "../ci/select-lanes.mjs";
+import { fullPathOf } from "../ci/ci-evidence-view.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const interop = join(repo, "scripts", "interop");
@@ -352,7 +353,7 @@ try {
 
   // ── wiring ────────────────────────────────────────────────────────────
   {
-    const wf = (name) => readFileSync(join(repo, ".github", "workflows", name), "utf8");
+    const wf = (name) => fullPathOf(name, readFileSync(join(repo, ".github", "workflows", name), "utf8"));
     /** The `run:` values of one job's steps, and the job's own header lines. */
     const job = (text, id) => {
       const lines = text.split("\n");

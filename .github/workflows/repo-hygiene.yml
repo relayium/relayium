@@ -630,6 +630,19 @@ jobs:
       # mutates the real filters and requires each removal to be reported.
       - name: every file a lane reads selects that lane
         run: node scripts/test/ci-lane-closure-test.mjs
+      # The PR→main evidence verifier (scripts/ci/ci-evidence.mjs) decides
+      # whether a main push may WITNESS a lane instead of re-running it. The
+      # merge gate runs this suite before it mints a proof, but that is a pull
+      # request step; this is the one that runs on every ordinary main push too,
+      # so a verifier delivered straight to main has hosted, owning-test
+      # evidence. Node and git only.
+      - name: PR→main evidence verifier, positive world and every refusal
+        run: node scripts/test/ci-evidence-test.mjs
+      # The toolchain certificate probe a witness is compared on. On this hosted
+      # Ubuntu runner it also captures real Ubuntu certificates, so its parsers
+      # meet the actual image on every pull request and main push.
+      - name: PR→main evidence toolchain certificate, every component and refusal
+        run: node scripts/test/ci-evidence-toolchain-test.mjs
       # Inside the web lane, which JOBS a change runs: a server-only change runs
       # only the Go-running jobs. The helper's answers on fixed change sets, its
       # fail-closed cases, and the `scope`/`if:` wiring in web.yml.

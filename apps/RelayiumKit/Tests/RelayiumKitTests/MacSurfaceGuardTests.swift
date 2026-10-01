@@ -417,7 +417,10 @@ final class MacSurfaceGuardTests: XCTestCase {
         // it. One `contains` over the whole file was satisfied by a single
         // surviving copy, and after the split these two jobs are everything
         // this file still gates.
-        XCTAssertNotNil(ci.range(of: "needs: [test, contract]",
+        // `evidence` is the PR→main evidence decision (scripts/ci/ci-evidence.mjs):
+        // the UI shards read its output to witness a verified merge instead of
+        // re-running. It does not replace the two gates they wait for.
+        XCTAssertNotNil(ci.range(of: #"needs: \[test, contract(, evidence)?\]"#, options: .regularExpression,
                                  range: uiJob.lowerBound..<signedJob.lowerBound),
                         "the UI shards no longer wait for the cheap contract gates")
         XCTAssertNotNil(ci.range(of: "needs: [test, contract]",
@@ -470,9 +473,32 @@ final class MacSurfaceGuardTests: XCTestCase {
         // only when every job it called succeeded, so `contract` and `test`
         // now gate notarization too — and two job names from another file
         // cannot be depended on from here at all.
-        XCTAssertNotNil(release.range(of: "needs: build",
-                                      range: notarizeJob.lowerBound..<publishJob.lowerBound),
+        //
+        // Exact-main reuse (scripts/release/macos-evidence.mjs) added a second,
+        // explicit source: the preflight decides `build` or `reuse`, and a
+        // reused package skips the call. Both sources are stated in the
+        // condition — a fresh build must have SUCCEEDED, a reuse must have
+        // SKIPPED the build, never both and never neither — so on the build
+        // path notarization still waits for the whole called workflow, and on
+        // the reuse path it starts only after the preflight succeeded and is
+        // then re-proved by the readback below before anything is touched.
+        let notarizeHeader = notarizeJob.lowerBound..<(release.range(
+            of: "    steps:", range: notarizeJob.lowerBound..<publishJob.lowerBound)?.lowerBound ?? publishJob.lowerBound)
+        XCTAssertNotNil(release.range(of: "    needs: [preflight, build]\n", range: notarizeHeader),
                         "notarization does not wait for the whole called CI workflow")
+        // The job's `if:` LINE (its prose comments discuss `always()`).
+        let ifStart = try XCTUnwrap(release.range(of: "\n    if: ", range: notarizeHeader))
+        let ifEnd = release.range(of: "\n", range: ifStart.upperBound..<release.endIndex)?.lowerBound ?? release.endIndex
+        let notarizeIf = String(release[ifStart.upperBound..<ifEnd])
+        XCTAssertTrue(notarizeIf.hasPrefix("${{ !cancelled() && needs.preflight.result == 'success' && (("),
+                      "notarization does not wait for the whole called CI workflow: \(notarizeIf)")
+        for clause in ["(needs.preflight.outputs.source == 'build' && needs.build.result == 'success')",
+                       "(needs.preflight.outputs.source == 'reuse' && needs.build.result == 'skipped')"] {
+            XCTAssertTrue(notarizeIf.contains(clause),
+                          "notarization does not wait for the whole called CI workflow: missing \(clause)")
+        }
+        XCTAssertFalse(notarizeIf.contains("always()") || notarizeIf.contains("failure()"),
+                       "notarization would start after a failed or cancelled build")
         XCTAssertFalse(release.contains("needs: [ui-smoke, signed-build]"),
                        "notarization names jobs of another workflow instead of the call itself")
         XCTAssertNotNil(release.range(of: "needs: notarize-stage",
@@ -493,7 +519,12 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertNotNil(release.range(of: "name: ${{ needs.build.outputs.signed_artifact }}",
                                       range: notarizeRange),
                         "the download does not use the name the build actually uploaded")
-        XCTAssertFalse(release.contains("relayium-macos-signed-"),
+        // The one remaining occurrence of the prefix is the provenance SCHEMA
+        // id the payload declares (`relayium-macos-signed-provenance/v2`), not
+        // an artifact name; with it set aside, no copy of the callee's naming
+        // expression may exist here.
+        XCTAssertFalse(release.replacingOccurrences(of: "relayium-macos-signed-provenance/", with: "")
+                        .contains("relayium-macos-signed-"),
                        "the release lane re-derives the signed artifact name instead of consuming it")
 
         // The artifact-pin, checksum and tool-restoration order, unchanged in
@@ -504,9 +535,24 @@ final class MacSurfaceGuardTests: XCTestCase {
         let checksumAtArtifactRoot = try XCTUnwrap(release.range(
             of: "(cd \"$RUNNER_TEMP\" && shasum -a 256 -c Relayium.dmg.sha256)",
             range: notarizeRange))
+        // The mount moved, unchanged, into the shared verifier both sources
+        // run: it attaches exactly the DMG it is handed, read-only, and this
+        // job hands it the checksummed artifact-root DMG.
         let mountedArtifact = try XCTUnwrap(release.range(
-            of: "hdiutil attach \"$RUNNER_TEMP/Relayium.dmg\"",
+            of: "bash scripts/release/macos-evidence-verify-app.sh \\\n            \"$RUNNER_TEMP/Relayium.dmg\"",
             range: notarizeRange))
+        let verifyApp = try String(contentsOf: repoRoot.appendingPathComponent(
+            "scripts/release/macos-evidence-verify-app.sh"), encoding: .utf8)
+        XCTAssertTrue(verifyApp.contains("\ndmg=\"${1:?"),
+                      "the verifier does not mount the DMG it is handed")
+        XCTAssertTrue(verifyApp.contains("hdiutil attach \"$dmg\" -mountpoint \"$mount\" -nobrowse -readonly"),
+                      "the signed artifact is no longer mounted read-only before it is trusted")
+        // The reused package is re-proved and fetched between the (build-path)
+        // download and the checksum, so both sources reach the same checks.
+        let reuseReadback = try XCTUnwrap(release.range(
+            of: "node scripts/release/macos-evidence.mjs readback", range: notarizeRange))
+        XCTAssertLessThan(downloadedTool.lowerBound, reuseReadback.lowerBound)
+        XCTAssertLessThan(reuseReadback.lowerBound, checksumAtArtifactRoot.lowerBound)
         let restoredTool = try XCTUnwrap(release.range(
             of: "chmod 0755 \"$RUNNER_TEMP/release-tools/generate_appcast\"",
             range: notarizeRange))

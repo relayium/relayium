@@ -85,6 +85,19 @@ on:
       - 'apps/RelayiumKit/**'
       - '!apps/RelayiumKit/Tests/**'
       - '.github/workflows/macos.yml'
+      # The PR→main evidence verifier, its registry, the filter reader it imports,
+      # the adoption transform, the toolchain certificate probe and registry, and
+      # their tests decide whether a main push may witness this lane instead of
+      # re-running it — so a change to any of them is a change to this lane
+      # (scripts/ci/ci-evidence-view.mjs).
+      - 'scripts/ci/ci-evidence.mjs'
+      - 'scripts/ci/ci-evidence-registry.json'
+      - 'scripts/ci/select-lanes.mjs'
+      - 'scripts/ci/ci-evidence-view.mjs'
+      - 'scripts/test/ci-evidence-test.mjs'
+      - 'scripts/ci/ci-evidence-toolchain.mjs'
+      - 'scripts/ci/ci-evidence-toolchain-registry.json'
+      - 'scripts/test/ci-evidence-toolchain-test.mjs'
   # Called by `.github/workflows/macos-release.yml` and by
   # `.github/workflows/merge-gate.yml`, and by nothing else. There is
   # deliberately no `workflow_dispatch:` here any more: a manual run of this
@@ -198,6 +211,144 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # PR→main evidence: a cheap read-only screen before any paid macOS/Windows
+  # probe. `eligible=true` only when this main push has a source proof that a
+  # current toolchain certificate could complete; it ENABLES the certify jobs
+  # and approves nothing. Never red, and anything but `eligible=true` means no
+  # paid probe and the full lane.
+  screen:
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      eligible: ${{ steps.screen.outputs.eligible }}
+    steps:
+      - name: Check out the verifier
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Could a current toolchain certificate complete a proof?
+        id: screen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/ci-evidence.mjs screen macos >> "$GITHUB_OUTPUT"
+
+  # PR→main evidence: the macos-15 toolchain a fresh run of this lane would get NOW,
+  # resolved by copies of the lane's own selection/setup steps and certified
+  # by scripts/ci/ci-evidence-toolchain.mjs. Ordinary main pushes the screen
+  # found eligible only; skipped everywhere else. Bounded at 3 minutes and never
+  # red: a failed, slow or unknown probe hands over no certificate, and the
+  # lane then runs in full.
+  certify-macos:
+    needs: screen
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.screen.result == 'success' && needs.screen.outputs.eligible == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 3
+    continue-on-error: true
+    outputs:
+      certificates: ${{ steps.export.outputs.certificates }}
+    steps:
+      - name: Check out the probe
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Certify this runner's toolchain now
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles macos-xcode --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Hand the certificates to the evidence job
+        id: export
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs export --dir "$RUNNER_TEMP/ci-evidence-current" >> "$GITHUB_OUTPUT"
+
+  # PR→main evidence reuse (scripts/ci/ci-evidence.mjs; docs/CI-PLATFORM-BOUNDARY.md).
+  #
+  # On an ORDINARY push to main, decides whether the merged pull request's
+  # latest merge-gate run already proved this exact tree for this lane, on the
+  # same toolchain this runner family offers now. Every other event — the merge
+  # gate's own pull_request call, a dispatch, a release caller — skips the
+  # decision, so `reuse` is empty and every job below runs its original steps
+  # on its original runner. The verifier always exits 0 and any doubt is
+  # `reuse=false`: a missing, partial, stale, uncertified or mismatched proof
+  # means the full lane, never approval. It reads the GitHub API (hence the
+  # read-only actions/pull-requests grants) and runs nothing it downloads.
+  # Never red (`continue-on-error`), and nothing below depends on how it
+  # ended: every original job's condition is an explicit `!cancelled()` over
+  # its OWN needs, so a failed setup step, a timeout or a skipped dependency
+  # here leaves `reuse` empty and the whole lane runs in full.
+  # `!cancelled()`: a failed, timed-out or skipped dependency must not skip
+  # this job either. It then decides `reuse=false`.
+  evidence:
+    needs: [screen, certify-macos]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    # Promoted ONLY by the handover, after the witness was kept: a decision
+    # whose upload failed or timed out, or whose retained file is missing or
+    # not the decided witness, never reaches the jobs below.
+    outputs:
+      reuse: ${{ steps.handover.outputs.reuse }}
+      witness: ${{ steps.handover.outputs.witness }}
+    steps:
+      - name: Check out the verifier (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Certify this runner's toolchain now (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles linux-base --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Take the certify jobs' certificates (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          CI_EVIDENCE_CERTIFICATES_MACOS: ${{ needs['certify-macos'].outputs.certificates }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs import --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Does the merged pull request's full proof cover this main tree?
+        id: verify
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVIDENCE_CURRENT_TOOLCHAIN_DIR: ${{ runner.temp }}/ci-evidence-current
+          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/macos.json
+        run: node scripts/ci/ci-evidence.mjs witness macos >> "$GITHUB_OUTPUT"
+      - name: Keep the witness (reuse only)
+        id: keep
+        if: steps.verify.outputs.reuse == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-witness-macos-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-witness
+          if-no-files-found: error
+          retention-days: 30
+      - name: Hand the decision to the lane only once its witness is kept
+        id: handover
+        if: steps.verify.outputs.reuse == 'true' && steps.keep.outcome == 'success'
+        env:
+          CI_EVIDENCE_WITNESS: ${{ steps.verify.outputs.witness }}
+          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/macos.json
+        run: node scripts/ci/ci-evidence.mjs handover >> "$GITHUB_OUTPUT"
+  # (end of the PR→main evidence jobs; everything above was generated by scripts/ci/ci-evidence-view.mjs)
+
   contract:
     # macOS only when the step below can reach its release branch — the SAME
     # three conditions as its `if`: a dispatch, a non-empty release_version,
@@ -211,6 +362,8 @@ jobs:
     # widened `if` that this expression does not follow fails rather than
     # running `xcodebuild` nowhere. ci-event-policy-test.mjs (6t) runs the step
     # against both runners for each event/input case and holds the two equal.
+    needs: evidence
+    if: ${{ !cancelled() }}
     runs-on: ${{ (github.event_name == 'workflow_dispatch' || inputs.release_version || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}
     # Finite, and chosen rather than inherited. Outside the release branch
     # the job is a checkout; the 32 successful macOS runs in this workflow's
@@ -221,8 +374,31 @@ jobs:
     # in minutes instead of holding it for GitHub's 6-hour default.
     timeout-minutes: 10
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm macos
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       - name: Validate release contract
+        if: needs.evidence.outputs.reuse != 'true'
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
           NOTARIZE: ${{ inputs.notarize }}
@@ -253,10 +429,32 @@ jobs:
               node apps/mac/scripts/check-release-readiness.mjs --require-approved
             fi
           fi
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile linux-base --lane macos --job contract --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-macos-contract-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   # No secrets, so this runs on pull requests from forks like any other check.
   test:
-    runs-on: macos-15
+    needs: evidence
+    if: ${{ !cancelled() }}
+    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}
     # Finite, and chosen rather than inherited.
     #
     # This job used to be one unfiltered `swift test` over the shared package
@@ -275,13 +473,36 @@ jobs:
     # default. Re-measure and lower it once this shape has its own run history.
     timeout-minutes: 10
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm macos
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
       # retagged upstream release can't silently change what runs here.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       # Recorded in the log so a future failure can be compared against the
       # toolchain that produced the last green run.
       - name: Toolchain versions
+        if: needs.evidence.outputs.reuse != 'true'
         run: |
           xcodebuild -version
           swift --version
@@ -295,11 +516,32 @@ jobs:
       # that job, so this comment cannot decay into a step that quietly went
       # missing.
       - name: Release script tests
+        if: needs.evidence.outputs.reuse != 'true'
         run: |
           apps/mac/scripts/test-verify-apple-silicon.sh
           apps/mac/scripts/test-package-dmg.sh
           apps/mac/scripts/test-resign-sparkle.sh
           apps/mac/scripts/test-notarize-dmg.sh
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile macos-xcode --lane macos --job test --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-macos-test-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Needs the signing certificate, so it cannot run where secrets are
   # unavailable. This repository is public: a fork's pull request cannot read
@@ -308,8 +550,8 @@ jobs:
   # The complete product-flow suite is split only at XCTest class boundaries.
   # Both shards are mandatory; neither changes, skips, or weakens a test.
   ui-smoke:
-    needs: [test, contract]
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: [test, contract, evidence]
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     strategy:
       fail-fast: false
       matrix:
@@ -320,11 +562,34 @@ jobs:
           - shard: device-inbox
             tests: RelayiumUITests/DeviceInboxUITests,RelayiumUITests/SubscriptionUITests,RelayiumUITests/LocalSessionUITests
             timeout: 35
-    runs-on: macos-15
+    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}
     timeout-minutes: ${{ matrix.timeout }}
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm macos
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       - name: Import UI signing certificate
+        if: needs.evidence.outputs.reuse != 'true'
         env:
           CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
           CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
@@ -342,6 +607,7 @@ jobs:
           security list-keychains -d user -s "$keychain"
           rm -P "$cert"
       - name: Install UI provisioning profiles
+        if: needs.evidence.outputs.reuse != 'true'
         env:
           PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
           SHARE_PROFILE_BASE64: ${{ secrets.MACOS_SHARE_PROVISIONING_PROFILE_BASE64 }}
@@ -361,6 +627,7 @@ jobs:
       # budgets (30/35) with room for checkout, signing setup and the upload,
       # and 300 s per test is five times the slowest observed case.
       - name: Run macOS product-flow UI smoke (${{ matrix.shard }})
+        if: needs.evidence.outputs.reuse != 'true'
         id: ui_smoke
         timeout-minutes: 24
         env:
@@ -390,7 +657,7 @@ jobs:
       # when the smoke step never started (`skipped`, or an earlier step
       # failed), which leaves nothing to keep.
       - name: Upload macOS UI smoke result evidence
-        if: always() && contains(fromJSON('["success","failure","cancelled"]'), steps.ui_smoke.outcome)
+        if: always() && needs.evidence.outputs.reuse != 'true' && (contains(fromJSON('["success","failure","cancelled"]'), steps.ui_smoke.outcome))
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -399,13 +666,33 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Remove UI signing keychain
-        if: always()
+        if: always() && needs.evidence.outputs.reuse != 'true'
         run: security delete-keychain "$RUNNER_TEMP/ui-signing.keychain-db" || true
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile macos-xcode --lane macos --job ui-smoke --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-macos-ui-smoke-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   signed-build:
     needs: [test, contract]
     runs-on: macos-15
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     # The one value a caller gets from this file: the name the upload step
     # actually used. It is computed once, in the shell, and both the upload and
     # every consumer read that single string — so a caller cannot download an

@@ -1191,11 +1191,27 @@ go_jobs() {
   ' "$1"
 }
 job_level_ifs() {
-  # job_level_ifs FILE → every job-level `if:` line
+  # job_level_ifs FILE → every job-level `if:` or `continue-on-error:` line, as
+  # `FILE:LINE: JOB: TEXT`, EXCEPT the ones the PR→main evidence adoption
+  # generates (scripts/ci/ci-evidence-view.mjs, pinned by ci-event-policy-test
+  # 6x): the `evidence`, `screen` and `certify-*` jobs' exact conditions and
+  # their `continue-on-error: true` (none of them runs a test: the evidence job
+  # decides reuse, the screen only enables the certify jobs, a certify job only
+  # probes the toolchain — any failure of theirs means the lane runs in full),
+  # and on every OTHER job exactly `if: ${{ !cancelled() }}`, which never skips
+  # a job short of a cancelled run: it is what keeps a failed or timed-out
+  # evidence job from skipping the Go jobs behind GitHub's implicit success().
   awk '
     /^jobs:[[:space:]]*$/ { injobs = 1; next }
     injobs && /^[^[:space:]#]/ { injobs = 0 }
-    injobs && /^    if:/ { print FILENAME ":" FNR ": " $0 }
+    injobs && /^  [A-Za-z0-9_-]+:[[:space:]]*(#.*)?$/ { job = $1; sub(/:.*$/, "", job) }
+    injobs && /^    (if|continue-on-error):/ {
+      if ($0 == "    if: ${{ !cancelled() }}" && job !~ /^(screen|certify-(macos|windows))$/) next
+      if (job ~ /^(evidence|screen|certify-(macos|windows))$/ && $0 == "    continue-on-error: true") next
+      if (job == "screen" && $0 == "    if: ${{ !cancelled() && github.event_name == '\''push'\'' && github.ref == '\''refs/heads/main'\'' }}") next
+      if (job ~ /^certify-(macos|windows)$/ && $0 == "    if: ${{ !cancelled() && github.event_name == '\''push'\'' && github.ref == '\''refs/heads/main'\'' && needs.screen.result == '\''success'\'' && needs.screen.outputs.eligible == '\''true'\'' }}") next
+      print FILENAME ":" FNR ": " job ": " $0
+    }
   ' "$1"
 }
 njobs=$(go_jobs "$GO_WORKFLOW" | grep -c .)
@@ -1211,7 +1227,10 @@ else
   bad 'go.yml declares no job-level `if:` (a skipped job cannot hide behind a successful run)'
   printf '%s\n' "$found" | sed 's/^/       | /'
 fi
-found=$(grep -n -E '^[[:space:]]*continue-on-error[[:space:]]*:' "$GO_WORKFLOW")
+found=$(grep -n -E '^[[:space:]]*continue-on-error[[:space:]]*:' "$GO_WORKFLOW" | grep -v -E '^[0-9]+:    continue-on-error: true$')
+# A job-level `continue-on-error: true` is reported by job_level_ifs above unless
+# it is the canonical evidence, screen or certify job's; any other one, at any
+# depth, is here.
 if [ -z "$found" ]; then
   ok 'go.yml uses no continue-on-error (a failure cannot be reported as success)'
 else
@@ -1222,6 +1241,8 @@ printf 'name: go\non: push\njobs:\n  test:\n    runs-on: x\n    steps:\n      - 
 assert_eq 'the detector sees a job-level if' "$(job_level_ifs "$TMPROOT/wf-if.yml" | grep -c .)" 1
 assert_eq 'the detector counts jobs' "$(go_jobs "$TMPROOT/wf-if.yml" | grep -c .)" 2
 assert_eq 'the detector is quiet about a step-level if' "$(job_level_ifs "$TMPROOT/wf-paths.yml" | grep -c .)" 0
+printf 'jobs:\n  certify-windows:\n    if: ${{ !cancelled() && github.event_name == '"'"'push'"'"' && github.ref == '"'"'refs/heads/main'"'"' && needs.screen.result == '"'"'success'"'"' && needs.screen.outputs.eligible == '"'"'true'"'"' }}\n    continue-on-error: true\n  screen:\n    if: ${{ !cancelled() && github.event_name == '"'"'push'"'"' && github.ref == '"'"'refs/heads/main'"'"' }}\n    continue-on-error: true\n  evidence:\n    if: ${{ !cancelled() }}\n    continue-on-error: true\n  link:\n    if: ${{ !cancelled() }}\n  test:\n    continue-on-error: true\n  race:\n    if: always()\n  certify-macos:\n    if: ${{ !cancelled() }}\n  rollback:\n    if: ${{ !cancelled() && github.event_name == '"'"'push'"'"' && github.ref == '"'"'refs/heads/main'"'"' }}\n' >"$TMPROOT/wf-evidence.yml"
+assert_eq 'the canonical evidence/screen/certify/original conditions are the only exceptions' "$(job_level_ifs "$TMPROOT/wf-evidence.yml" | sed 's/^[^ ]* //' | tr '\n' '|')" 'test:     continue-on-error: true|race:     if: always()|certify-macos:     if: ${{ !cancelled() }}|rollback:     if: ${{ !cancelled() && github.event_name == '"'"'push'"'"' && github.ref == '"'"'refs/heads/main'"'"' }}|' 
 
 if [ "$fail" -eq 0 ]; then
   echo 'all go-evidence tests passed'

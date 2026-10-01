@@ -147,6 +147,19 @@ on:
       - 'scripts/interop/cli-matrix-plan.py'
       - 'scripts/interop/cli-process.mjs'
       - '.github/workflows/native-web-pairing.yml'
+      # The PR→main evidence verifier, its registry, the filter reader it imports,
+      # the adoption transform, the toolchain certificate probe and registry, and
+      # their tests decide whether a main push may witness this lane instead of
+      # re-running it — so a change to any of them is a change to this lane
+      # (scripts/ci/ci-evidence-view.mjs).
+      - 'scripts/ci/ci-evidence.mjs'
+      - 'scripts/ci/ci-evidence-registry.json'
+      - 'scripts/ci/select-lanes.mjs'
+      - 'scripts/ci/ci-evidence-view.mjs'
+      - 'scripts/test/ci-evidence-test.mjs'
+      - 'scripts/ci/ci-evidence-toolchain.mjs'
+      - 'scripts/ci/ci-evidence-toolchain-registry.json'
+      - 'scripts/test/ci-evidence-toolchain-test.mjs'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
   #
   # This REPLACES this file's own `pull_request:` trigger, and the replacement
@@ -198,12 +211,166 @@ permissions:
   contents: read
 
 jobs:
+  # PR→main evidence: a cheap read-only screen before any paid macOS/Windows
+  # probe. `eligible=true` only when this main push has a source proof that a
+  # current toolchain certificate could complete; it ENABLES the certify jobs
+  # and approves nothing. Never red, and anything but `eligible=true` means no
+  # paid probe and the full lane.
+  screen:
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      eligible: ${{ steps.screen.outputs.eligible }}
+    steps:
+      - name: Check out the verifier
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Could a current toolchain certificate complete a proof?
+        id: screen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/ci-evidence.mjs screen native-web-pairing >> "$GITHUB_OUTPUT"
+
+  # PR→main evidence: the macos-15 toolchain a fresh run of this lane would get NOW,
+  # resolved by copies of the lane's own selection/setup steps and certified
+  # by scripts/ci/ci-evidence-toolchain.mjs. Ordinary main pushes the screen
+  # found eligible only; skipped everywhere else. Bounded at 3 minutes and never
+  # red: a failed, slow or unknown probe hands over no certificate, and the
+  # lane then runs in full.
+  certify-macos:
+    needs: screen
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.screen.result == 'success' && needs.screen.outputs.eligible == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 3
+    continue-on-error: true
+    outputs:
+      certificates: ${{ steps.export.outputs.certificates }}
+    steps:
+      - name: Check out the probe
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+      - name: Certify this runner's toolchain now
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles macos-xcode-node-go-chrome --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Hand the certificates to the evidence job
+        id: export
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs export --dir "$RUNNER_TEMP/ci-evidence-current" >> "$GITHUB_OUTPUT"
+
+  # PR→main evidence reuse (scripts/ci/ci-evidence.mjs; docs/CI-PLATFORM-BOUNDARY.md).
+  #
+  # On an ORDINARY push to main, decides whether the merged pull request's
+  # latest merge-gate run already proved this exact tree for this lane, on the
+  # same toolchain this runner family offers now. Every other event — the merge
+  # gate's own pull_request call, a dispatch, a release caller — skips the
+  # decision, so `reuse` is empty and every job below runs its original steps
+  # on its original runner. The verifier always exits 0 and any doubt is
+  # `reuse=false`: a missing, partial, stale, uncertified or mismatched proof
+  # means the full lane, never approval. It reads the GitHub API (hence the
+  # read-only actions/pull-requests grants) and runs nothing it downloads.
+  # Never red (`continue-on-error`), and nothing below depends on how it
+  # ended: every original job's condition is an explicit `!cancelled()` over
+  # its OWN needs, so a failed setup step, a timeout or a skipped dependency
+  # here leaves `reuse` empty and the whole lane runs in full.
+  # `!cancelled()`: a failed, timed-out or skipped dependency must not skip
+  # this job either. It then decides `reuse=false`.
+  evidence:
+    needs: [screen, certify-macos]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    # Promoted ONLY by the handover, after the witness was kept: a decision
+    # whose upload failed or timed out, or whose retained file is missing or
+    # not the decided witness, never reaches the jobs below.
+    outputs:
+      reuse: ${{ steps.handover.outputs.reuse }}
+      witness: ${{ steps.handover.outputs.witness }}
+    steps:
+      - name: Check out the verifier (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          node-version: 24
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          go-version-file: server/go.mod
+      - name: Certify this runner's toolchain now (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles linux-node-go-chrome --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Take the certify jobs' certificates (ordinary main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          CI_EVIDENCE_CERTIFICATES_MACOS: ${{ needs['certify-macos'].outputs.certificates }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs import --dir "$RUNNER_TEMP/ci-evidence-current"
+      - name: Does the merged pull request's full proof cover this main tree?
+        id: verify
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVIDENCE_CURRENT_TOOLCHAIN_DIR: ${{ runner.temp }}/ci-evidence-current
+          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/native-web-pairing.json
+        run: node scripts/ci/ci-evidence.mjs witness native-web-pairing >> "$GITHUB_OUTPUT"
+      - name: Keep the witness (reuse only)
+        id: keep
+        if: steps.verify.outputs.reuse == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-witness-native-web-pairing-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-witness
+          if-no-files-found: error
+          retention-days: 30
+      - name: Hand the decision to the lane only once its witness is kept
+        id: handover
+        if: steps.verify.outputs.reuse == 'true' && steps.keep.outcome == 'success'
+        env:
+          CI_EVIDENCE_WITNESS: ${{ steps.verify.outputs.witness }}
+          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/native-web-pairing.json
+        run: node scripts/ci/ci-evidence.mjs handover >> "$GITHUB_OUTPUT"
+  # (end of the PR→main evidence jobs; everything above was generated by scripts/ci/ci-evidence-view.mjs)
+
   # No secrets are read here, so this runs on fork pull requests like any other
   # check. Deliberately no `if:` and no `continue-on-error`: a cross-client
   # acceptance that is allowed to skip or to be advisory is not a gate, and the
   # guard test asserts their absence.
   pairing:
-    runs-on: macos-15
+    needs: evidence
+    if: ${{ !cancelled() }}
+    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}
     # Worst case is ten rounds, each preceded by a 65s wait for the server's
     # own per-IP WebSocket join budget (5/min, production behaviour that must not
     # be relaxed for a test), on top of the Swift, Go and Vite builds. The bound
@@ -213,28 +380,54 @@ jobs:
     # ceiling for this paid runner (ci-event-policy-test.mjs).
     timeout-minutes: 60
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm native-web-pairing
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
       # retagged upstream release can't silently change what runs here.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       # Recorded in the log so a future failure can be compared against the
       # toolchain that produced the last green run.
       - name: Toolchain versions
+        if: needs.evidence.outputs.reuse != 'true'
         run: |
           xcodebuild -version
           swift --version
           go version
           node --version
       - name: Install web dependencies
+        if: needs.evidence.outputs.reuse != 'true'
         working-directory: web
         run: npm ci
       # The macOS runner image ships no browser. `e2e/harness.mjs` resolves
@@ -242,6 +435,7 @@ jobs:
       # a red build here; installing it explicitly is what keeps that red from
       # being the normal outcome.
       - name: Install Google Chrome
+        if: needs.evidence.outputs.reuse != 'true'
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
           HOMEBREW_NO_INSTALL_CLEANUP: '1'
@@ -266,6 +460,7 @@ jobs:
       # creates it under `${TMPDIR:-/tmp}`, which on a macOS runner is neither
       # `/tmp` nor `RUNNER_TEMP` by default.
       - name: macOS native to browser pairing acceptance
+        if: needs.evidence.outputs.reuse != 'true'
         env:
           TMPDIR: ${{ runner.temp }}
         run: scripts/native-web-pairing-acceptance.sh
@@ -275,6 +470,7 @@ jobs:
       # peer auto-accepts and cannot be driven to decline or cancel; those CLI
       # cells are proved by `cli-web` below and by android-interop.yml.
       - name: CLI to macOS app link workspace (A12)
+        if: needs.evidence.outputs.reuse != 'true'
         env:
           TMPDIR: ${{ runner.temp }}
         run: scripts/interop/cli-mac-acceptance.sh
@@ -284,7 +480,7 @@ jobs:
       # that root is signing or notarization material, but this is a public
       # repository and an artifact is not a place to leave anything by default.
       - name: Retain pairing diagnosis
-        if: failure()
+        if: failure() && needs.evidence.outputs.reuse != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: native-web-pairing-diagnosis
@@ -293,6 +489,26 @@ jobs:
             ${{ runner.temp }}/relayium-acceptance-*/**/*.json
           retention-days: 7
           if-no-files-found: ignore
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile macos-xcode-node-go-chrome --lane native-web-pairing --job pairing --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-native-web-pairing-pairing-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   # A12: the real `relayium pair` CLI ↔ a real browser (Chromium) over a real
   # pairing code on a real loopback server. Linux is enough — the CLI is built
@@ -307,39 +523,69 @@ jobs:
   #
   # Same rules as `pairing`: no `if:`, no `continue-on-error`, no secrets.
   cli-web:
+    needs: evidence
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     # Worst case 14 rounds of ~1.5 min, each after a 65 s join-budget wait.
     timeout-minutes: 50
     steps:
+      # Witness path (main push whose pull request proof was verified by the
+      # `evidence` job): bind this job's check run to that proof, then run
+      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
+      # Every original step below is guarded by `reuse != 'true'`, so an empty,
+      # false or unknown decision runs exactly the original job.
+      - name: Check out the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the verifier (witness path only)
+        if: needs.evidence.outputs.reuse == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: Witness — the pull request's full proof covers this job
+        if: needs.evidence.outputs.reuse == 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
+        run: node scripts/ci/ci-evidence.mjs confirm native-web-pairing
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.evidence.outputs.reuse != 'true'
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.evidence.outputs.reuse != 'true'
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       - name: Toolchain versions
+        if: needs.evidence.outputs.reuse != 'true'
         run: |
           go version
           node --version
       - name: Install web dependencies
+        if: needs.evidence.outputs.reuse != 'true'
         working-directory: web
         run: npm ci
       # `e2e/harness.mjs` resolves Chrome or throws; the ubuntu image ships it.
       - name: Verify a real Chrome is present
+        if: needs.evidence.outputs.reuse != 'true'
         run: |
           chrome="$(command -v google-chrome || command -v google-chrome-stable || true)"
           [ -n "$chrome" ] || { echo "::error::no Google Chrome on this runner"; exit 1; }
           "$chrome" --version
       - name: CLI to browser pairing acceptance (A12)
+        if: needs.evidence.outputs.reuse != 'true'
         env:
           TMPDIR: ${{ runner.temp }}
         run: scripts/interop/cli-web-acceptance.sh
       - name: Retain CLI pairing diagnosis
-        if: failure()
+        if: failure() && needs.evidence.outputs.reuse != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cli-web-pairing-diagnosis
@@ -349,3 +595,23 @@ jobs:
             ${{ runner.temp }}/relayium-acceptance-*/plan-*.json
           retention-days: 7
           if-no-files-found: ignore
+      # PR→main evidence: the toolchain this job actually ran on, captured after
+      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
+      # toolchain uploads nothing, and a job without a certificate is never
+      # witnessed; the tests above are unaffected either way.
+      - name: Certify this job's toolchain
+        if: needs.evidence.outputs.reuse != 'true'
+        shell: bash
+        env:
+          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
+          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
+          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
+        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile linux-node-go-chrome --lane native-web-pairing --job cli-web --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
+      - name: Keep this job's toolchain certificate
+        if: needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-toolchain-native-web-pairing-cli-web-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
+          if-no-files-found: ignore
+          retention-days: 7

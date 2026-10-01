@@ -267,16 +267,32 @@ jobs:
   # signing certificate and the provisioning profiles to `web`, `go` and
   # `contracts`, none of which reads a secret today, and would keep doing so as
   # secrets are added.
+  #
+  # Every lane but `windows` and `repo-hygiene` carries a `permissions:` block of
+  # exactly `contents: read`, `actions: read`, `pull-requests: read`. Each such
+  # lane has an `evidence` job (PR→main evidence reuse, scripts/ci/ci-evidence.mjs)
+  # that declares those grants for itself, and a called workflow may not request
+  # more than its caller gives — without them the whole gate fails to load. On a
+  # pull request that job decides nothing (it only acts on a push to main); the
+  # grants are read-only and no secret is added.
   # ---------------------------------------------------------------------------
   web:
     needs: select
     if: needs.select.outputs['web'] == 'true'
     uses: ./.github/workflows/web.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   go:
     needs: select
     if: needs.select.outputs['go'] == 'true'
     uses: ./.github/workflows/go.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   # The only lane given secrets, and only the four its own jobs use. The notary
   # key and the Sparkle private key are not among them and are not declared by
@@ -288,6 +304,10 @@ jobs:
     needs: select
     if: needs.select.outputs['macos'] == 'true'
     uses: ./.github/workflows/macos.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     secrets:
       MACOS_SIGNING_CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
       MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
@@ -298,6 +318,10 @@ jobs:
     needs: select
     if: needs.select.outputs['ios'] == 'true'
     uses: ./.github/workflows/ios.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   # The iOS built-App acceptance is server-backed. Its narrow dependency set
   # gives server changes immediate Swift↔Go evidence without starting the full
@@ -306,11 +330,19 @@ jobs:
     needs: select
     if: needs.select.outputs['ios-transfer-interop'] == 'true'
     uses: ./.github/workflows/ios-transfer-interop.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   android:
     needs: select
     if: needs.select.outputs['android'] == 'true'
     uses: ./.github/workflows/android.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   # A second Android lane rather than a second job in `android.yml`, for the
   # same reason `native-web-pairing.yml` is not a job in `macos.yml`: the two
@@ -320,6 +352,10 @@ jobs:
     needs: select
     if: needs.select.outputs['android-interop'] == 'true'
     uses: ./.github/workflows/android-interop.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   # The Windows desktop client. Its filter is wider than its own root because
   # the client compiles the protocol modules out of `web/src/lib` rather than
@@ -333,6 +369,10 @@ jobs:
     needs: select
     if: needs.select.outputs['swift-package'] == 'true'
     uses: ./.github/workflows/swift-package.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   # The Go side of the two Swift<->Go interop classes. swift-package runs them
   # on every Swift-side change; this narrow macOS lane runs ONLY those two
@@ -341,16 +381,28 @@ jobs:
     needs: select
     if: needs.select.outputs['inbox-swift-interop'] == 'true'
     uses: ./.github/workflows/inbox-swift-interop.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   native-web-pairing:
     needs: select
     if: needs.select.outputs['native-web-pairing'] == 'true'
     uses: ./.github/workflows/native-web-pairing.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   contracts:
     needs: select
     if: needs.select.outputs['contracts'] == 'true'
     uses: ./.github/workflows/contracts.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   # The caller job id deliberately differs from the workflow name. `contracts`
   # and `ops-deploy-contract` both declare a job literally named `go-contract`,
@@ -359,6 +411,10 @@ jobs:
     needs: select
     if: needs.select.outputs['ops-contract'] == 'true'
     uses: ./.github/workflows/ops-deploy-contract.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   # No `if:`, and no path filter in the callee either. This is the
   # wire-compatibility contract every platform — present and future — has to
@@ -379,6 +435,10 @@ jobs:
   compat:
     needs: select
     uses: ./.github/workflows/compat.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
 
   # No `if:`. This lane hosts the cross-cutting guards — the trigger policy, the
   # platform boundary, the dependency pins — which every change must pass, so it
@@ -419,7 +479,13 @@ jobs:
       - compat
       - repo-hygiene
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 5 for the judgement alone; the proof steps below add a checkout, the
+    # verifier's own test suite and a handful of read-only API calls.
+    timeout-minutes: 10
+    # `actions: read` is for the proof producer's job inventory, nothing else.
+    permissions:
+      contents: read
+      actions: read
     steps:
       # The rule is TWO-WAY, and that is the whole point of this step.
       #
@@ -539,3 +605,62 @@ jobs:
             exit 1
           fi
           echo "merge-gate: every selected lane succeeded and every unselected lane was skipped."
+
+      # ── PR→main evidence: the proof `main` may reuse ─────────────────────────
+      #
+      # Only after the judgement above has PASSED (no status function, so a red
+      # gate never reaches these steps) and only on `pull_request` or the
+      # `frozen-release-metadata` dispatch — never the `pull-request` dispatch
+      # mode or anything else. The frozen dispatch checks out its candidate, not a
+      # merge ref; its proof is the second, separately named kind, and producer
+      # and consumer each re-judge the candidate with BASE's release-metadata
+      # whitelist and its branch version rather than trusting this mode name
+      # (scripts/ci/ci-evidence.mjs, DISPATCH_KIND). The producer records what
+      # this run actually proved — the commit and tree it checked out, the pull
+      # request or candidate and run identity, every
+      # job's final result, per-lane input fingerprints, the tag set and the
+      # verifier/registry hashes — and each lane's own `evidence` job on the
+      # resulting `main` push re-derives all of it from the API before it lets a
+      # single job be witnessed instead of re-run. See scripts/ci/ci-evidence.mjs.
+      #
+      # The producer never fails the gate: it writes no manifest when anything
+      # is unknown, and no manifest means `main` runs every lane in full. The
+      # verifier's own test suite DOES fail it, because a verifier nothing has
+      # seen fail is not one this gate may mint proofs for.
+      - name: Check out the merge commit this run tested
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Node for the evidence verifier
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # The verifier half only: repo-hygiene runs the whole file (including the
+      # guard projection controls) on this same pull request and on every main
+      # push, and this job is on every merge's critical path.
+      - name: Evidence verifier tests
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        env:
+          CI_EVIDENCE_TEST_SCOPE: verifier
+        run: node scripts/test/ci-evidence-test.mjs
+      - name: Record this run's full proof for main
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVIDENCE_NEEDS: ${{ toJSON(needs) }}
+          CI_EVIDENCE_SELECTED: ${{ toJSON(needs.select.outputs) }}
+          CI_EVIDENCE_OUT: ${{ runner.temp }}/ci-evidence/ci-evidence.json
+          CI_EVIDENCE_DISPATCH_MODE: ${{ inputs.mode }}
+          CI_EVIDENCE_DISPATCH_BASE: ${{ inputs.base_sha }}
+          CI_EVIDENCE_DISPATCH_HEAD: ${{ inputs.head_sha }}
+        run: node scripts/ci/ci-evidence.mjs produce
+      - name: Keep the proof
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-ci-evidence-proof-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-evidence/ci-evidence.json
+          if-no-files-found: ignore
+          retention-days: 7

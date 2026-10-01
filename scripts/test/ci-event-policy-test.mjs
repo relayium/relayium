@@ -148,7 +148,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { PATH_MATRIX } from "./fixtures/ci-path-selection.mjs";
-import { LANES as SELECTOR_LANES } from "../ci/select-lanes.mjs";
+import { CONTROL_FILES as SELECTOR_CONTROL_FILES, LANES as SELECTOR_LANES } from "../ci/select-lanes.mjs";
+import { adopt as adoptText, fullPathText } from "../ci/ci-evidence-view.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const workflowsDir = resolve(repoRoot, ".github/workflows");
@@ -902,6 +903,1206 @@ function assertParseWasNotVacuous() {
 }
 
 assertParseWasNotVacuous();
+
+// ── 6x. PR→main evidence reuse: the canonical adoption, then the full path ──
+//
+// A `main` push may WITNESS a lane instead of re-running it when the merged
+// pull request's latest merge-gate run already proved the same tree
+// (scripts/ci/ci-evidence.mjs decides; scripts/ci/ci-evidence-registry.json
+// says which lanes, jobs and check names). That adds to a lane workflow, and
+// nothing else: an `evidence` job (never red), for a lane with paid macOS/Windows
+// probes a read-only `screen` job and the `certify-*` jobs it alone can enable,
+// three witness steps at the head of each reusable job, a toolchain capture at
+// the end of each certified job, a `reuse != 'true'` guard on every original
+// step, an explicit `!cancelled()` job condition carrying each original job's
+// own needs/if — plus, for a platform job, a runner that is Ubuntu only on the
+// witness path. "6x graph" then evaluates what actually runs, by outcome.
+//
+// Every rule in sections 1-8 was written about the ORIGINAL steps, and every
+// one of them must keep holding for the path that still runs them. So this
+// section does two things, in this order:
+//
+//   1. It asserts the adoption is EXACTLY canonical, against the raw workflows
+//      — the evidence job's whole shape, the witness steps, the guard forms,
+//      the runner ternary, the registry's job and check-name inventory, the
+//      merge gate's grants and producer, the selector's control files and the
+//      lanes' path filters — and mutates each of those to prove it can fail.
+//   2. It projects each lane to its FULL PATH — the job as it runs when the
+//      decision is false, empty or unknown — by removing only those canonical
+//      constructs, and hands that projection to every other section. A guard
+//      written in any other shape is NOT stripped, so the older rules (a gate
+//      step that can skip itself, an iOS job off the Apple runner, an Xcode
+//      selection under a condition) still see it and still fail.
+//
+// What the witness path may do is therefore stated once, here, and what the
+// full path must do is still stated by the sections that own it.
+
+const EVIDENCE_REGISTRY_FILE = "scripts/ci/ci-evidence-registry.json";
+const EVIDENCE_INPUTS = ["scripts/ci/ci-evidence.mjs", EVIDENCE_REGISTRY_FILE, "scripts/ci/select-lanes.mjs",
+  "scripts/ci/ci-evidence-view.mjs", "scripts/test/ci-evidence-test.mjs", "scripts/ci/ci-evidence-toolchain.mjs",
+  "scripts/ci/ci-evidence-toolchain-registry.json", "scripts/test/ci-evidence-toolchain-test.mjs"];
+const EV_FULL = "needs.evidence.outputs.reuse != 'true'";
+const EV_WITNESS = "needs.evidence.outputs.reuse == 'true'";
+const EV_MAIN_PUSH = "github.event_name == 'push' && github.ref == 'refs/heads/main'";
+const EV_CHECKOUT = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd";
+const EV_NODE = "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e";
+const EV_UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+const EV_GRANTS = { contents: "read", actions: "read", "pull-requests": "read" };
+/** The paid probes run only on an ordinary main push the screen found eligible. */
+const EV_SCREEN_ELIGIBLE = "needs.screen.result == 'success' && needs.screen.outputs.eligible == 'true'";
+const EV_CERTIFY_IF = `\${{ !cancelled() && ${EV_MAIN_PUSH} && ${EV_SCREEN_ELIGIBLE} }}`;
+const EV_SCREEN_IF = `\${{ !cancelled() && ${EV_MAIN_PUSH} }}`;
+/**
+ * An original job's condition once it also needs the evidence job: implicit
+ * `success()` spelled out over its ORIGINAL needs only, behind `!cancelled()`,
+ * so no outcome of the evidence job (failed setup, timeout, skip) can skip it.
+ */
+const evJobCondition = (needs, original) => `\${{ ${["!cancelled()", ...needs.map((n) => `needs.${n}.result == 'success'`),
+  ...(original === undefined ? [] : [`(${original})`])].join(" && ")} }}`;
+/**
+ * Callers of an adopted lane OUTSIDE the merge gate that do not yet grant the
+ * evidence job's read-only permissions. A called workflow may not request more
+ * than its caller gives, so such a caller fails to START. Each entry names its
+ * owner; it must be removed in the change that adds the grant (the rule below
+ * fails on a stale entry), and nothing else may be added here.
+ */
+const EVIDENCE_CALLER_GRANT_PENDING = {};
+/** Lanes the gate calls that deliberately carry no evidence job, and why. */
+const EVIDENCE_NOT_ADOPTED = {
+  windows: "not in the PR→main evidence scope of 2026-10-01; its jobs always run on main",
+  "repo-hygiene": "the cross-cutting policy guards stay fresh on every main push by rule",
+};
+
+let evidenceRegistry = null;
+try {
+  evidenceRegistry = JSON.parse(readFileSync(resolve(repoRoot, EVIDENCE_REGISTRY_FILE), "utf8"));
+} catch (err) {
+  check(false, `${EVIDENCE_REGISTRY_FILE} is unreadable (${err.message}); 6x cannot judge the evidence adoption.`);
+}
+
+/** The witness steps a reusable job must start with, exactly. */
+function canonicalWitnessSteps(laneId, needsWorkdir) {
+  const confirm = {
+    name: "Witness — the pull request's full proof covers this job",
+    if: EV_WITNESS,
+    ...(needsWorkdir ? { "working-directory": "." } : {}),
+    shell: "bash",
+    env: { CI_EVIDENCE_WITNESS: "${{ needs.evidence.outputs.witness }}" },
+    run: `node scripts/ci/ci-evidence.mjs confirm ${laneId}`,
+  };
+  return [
+    { name: "Check out the verifier (witness path only)", if: EV_WITNESS, uses: EV_CHECKOUT,
+      with: { "persist-credentials": "false" } },
+    { name: "Node for the verifier (witness path only)", if: EV_WITNESS, uses: EV_NODE,
+      with: { "node-version": "24" } },
+    confirm,
+  ];
+}
+
+/** A step's identity for `freshSteps`: its name, else its action, else its command. */
+const stepIdentity = (step) => step?.name ?? (step?.uses ? String(step.uses).split("@")[0] : String(step?.run ?? "").trim());
+
+const mentionsEvidence = (value) => JSON.stringify(value ?? null).includes("needs.evidence");
+
+/**
+ * The original condition a canonical guard wraps: `undefined` for a bare guard,
+ * the original text otherwise, or `null` when the condition is not one of the
+ * five canonical forms. The original must not itself mention the evidence job.
+ */
+function unwrapGuard(condition) {
+  if (condition === EV_FULL) return undefined;
+  if (condition === `failure() && ${EV_FULL}`) return "failure()";
+  if (condition === `always() && ${EV_FULL}`) return "always()";
+  let m = String(condition ?? "").match(/^always\(\) && needs\.evidence\.outputs\.reuse != 'true' && \((.+)\)$/s);
+  if (m && !mentionsEvidence(m[1])) return `always() && ${m[1]}`;
+  m = String(condition ?? "").match(/^needs\.evidence\.outputs\.reuse != 'true' && \((.+)\)$/s);
+  if (m && !mentionsEvidence(m[1])) return m[1];
+  return null;
+}
+
+const EVIDENCE_TOOLCHAIN_FILE = "scripts/ci/ci-evidence-toolchain-registry.json";
+let evidenceToolchain = null;
+try {
+  evidenceToolchain = JSON.parse(readFileSync(resolve(repoRoot, EVIDENCE_TOOLCHAIN_FILE), "utf8"));
+} catch (err) {
+  check(false, `${EVIDENCE_TOOLCHAIN_FILE} is unreadable (${err.message}); 6x cannot judge the toolchain certificates.`);
+}
+const EV_CERTIFY_JOBS = { "macos-15": "certify-macos", "windows-latest": "certify-windows" };
+const EV_CACHE_INPUTS = ["cache", "cache-dependency-path"];
+
+/** A lane step as a probe must copy it: no id, no cache inputs, `condition` as its if. Built here, not by the generator. */
+function probeCopyOf(fullDoc, ref, condition) {
+  const hits = (fullDoc?.jobs?.[ref.job]?.steps ?? []).filter((st) => stepIdentity(st) === ref.step);
+  if (hits.length !== 1) throw new Error(`${ref.job} has ${hits.length} steps named ${JSON.stringify(ref.step)}`);
+  const st = structuredClone(hits[0]);
+  delete st.id;
+  if (st.with) {
+    for (const k of EV_CACHE_INPUTS) delete st.with[k];
+    if (Object.keys(st.with).length === 0) delete st.with;
+  }
+  if (condition) st.if = condition;
+  return st;
+}
+
+/** What the toolchain registry requires of one lane, against its full-path document. */
+function evidencePlanOf(fullDoc, laneId, lane, tool) {
+  const tl = tool?.lanes?.[laneId];
+  if (!tl) throw new Error(`lane ${laneId} is not in the toolchain registry`);
+  const profiles = {};
+  for (const [jobId, job] of Object.entries(lane.jobs)) {
+    if (job.mode === "fresh") continue;
+    const t = tl.jobs?.[jobId];
+    if (!t) throw new Error(`${laneId}/${jobId} has no toolchain entry`);
+    if (t.profile) profiles[jobId] = t.profile;
+  }
+  const of = (runner) => [...new Set(Object.values(profiles).filter((p) => tool.profiles[p]?.runner === runner))].sort();
+  return {
+    profiles,
+    ubuntu: of("ubuntu-latest"),
+    ubuntuSteps: (tl.ubuntuSetup ?? []).map((ref) => probeCopyOf(fullDoc, ref, EV_MAIN_PUSH)),
+    certify: Object.keys(EV_CERTIFY_JOBS).filter((r) => of(r).length).map((runner) => ({
+      runner, job: EV_CERTIFY_JOBS[runner], profiles: of(runner),
+      steps: (tl.certify?.[runner] ?? []).map((ref) => probeCopyOf(fullDoc, ref, undefined)),
+    })),
+  };
+}
+
+/** The availability screen in front of a lane's paid certify jobs, exactly. */
+function canonicalScreenJob(laneId, lane) {
+  const env = { GH_TOKEN: "${{ github.token }}" };
+  if (lane.scope) {
+    env[`CI_EVIDENCE_SCOPE_${lane.scope.output.toUpperCase()}`] = `\${{ needs.${lane.scope.job}.outputs.${lane.scope.output} }}`;
+  }
+  return {
+    ...(lane.scope ? { needs: lane.scope.job } : {}),
+    if: EV_SCREEN_IF,
+    "runs-on": "ubuntu-latest",
+    "timeout-minutes": "5",
+    "continue-on-error": "true",
+    permissions: { ...EV_GRANTS },
+    outputs: { eligible: "${{ steps.screen.outputs.eligible }}" },
+    steps: [
+      { name: "Check out the verifier", uses: EV_CHECKOUT, with: { "persist-credentials": "false" } },
+      { name: "Node for the verifier", uses: EV_NODE, with: { "node-version": "24" } },
+      { name: "Could a current toolchain certificate complete a proof?", id: "screen", env,
+        run: `node scripts/ci/ci-evidence.mjs screen ${laneId} >> "$GITHUB_OUTPUT"` },
+    ],
+  };
+}
+
+function canonicalCertifyJob(c) {
+  return {
+    needs: "screen",
+    if: EV_CERTIFY_IF,
+    "runs-on": c.runner,
+    "timeout-minutes": "3",
+    "continue-on-error": "true",
+    outputs: { certificates: "${{ steps.export.outputs.certificates }}" },
+    steps: [
+      { name: "Check out the probe", uses: EV_CHECKOUT, with: { "persist-credentials": "false" } },
+      ...c.steps,
+      { name: "Certify this runner's toolchain now", shell: "bash",
+        run: `node scripts/ci/ci-evidence-toolchain.mjs current --profiles ${c.profiles.join(",")} --dir "$RUNNER_TEMP/ci-evidence-current"` },
+      { name: "Hand the certificates to the evidence job", id: "export", shell: "bash",
+        run: 'node scripts/ci/ci-evidence-toolchain.mjs export --dir "$RUNNER_TEMP/ci-evidence-current" >> "$GITHUB_OUTPUT"' },
+    ],
+  };
+}
+
+/** The evidence job a lane must declare, exactly. */
+function canonicalEvidenceJob(laneId, lane, plan) {
+  const env = { GH_TOKEN: "${{ github.token }}" };
+  if (lane.scope) {
+    env[`CI_EVIDENCE_SCOPE_${lane.scope.output.toUpperCase()}`] = `\${{ needs.${lane.scope.job}.outputs.${lane.scope.output} }}`;
+  }
+  env.CI_EVIDENCE_CURRENT_TOOLCHAIN_DIR = "${{ runner.temp }}/ci-evidence-current";
+  env.CI_EVIDENCE_WITNESS_FILE = `\${{ runner.temp }}/ci-evidence-witness/${laneId}.json`;
+  const needs = [...(lane.scope ? [lane.scope.job] : []), ...(plan.certify.length ? ["screen"] : []), ...plan.certify.map((c) => c.job)];
+  return {
+    ...(needs.length === 1 ? { needs: needs[0] } : needs.length > 1 ? { needs } : {}),
+    ...(needs.length ? { if: "${{ !cancelled() }}" } : {}),
+    "runs-on": "ubuntu-latest",
+    "timeout-minutes": "10",
+    "continue-on-error": "true",
+    permissions: { ...EV_GRANTS },
+    outputs: { reuse: "${{ steps.handover.outputs.reuse }}", witness: "${{ steps.handover.outputs.witness }}" },
+    steps: [
+      { name: "Check out the verifier (ordinary main push only)", if: EV_MAIN_PUSH, uses: EV_CHECKOUT,
+        with: { "persist-credentials": "false" } },
+      { name: "Node for the verifier (ordinary main push only)", if: EV_MAIN_PUSH, uses: EV_NODE,
+        with: { "node-version": "24" } },
+      ...plan.ubuntuSteps,
+      ...(plan.ubuntu.length ? [{ name: "Certify this runner's toolchain now (ordinary main push only)", if: EV_MAIN_PUSH, shell: "bash",
+        run: `node scripts/ci/ci-evidence-toolchain.mjs current --profiles ${plan.ubuntu.join(",")} --dir "$RUNNER_TEMP/ci-evidence-current"` }] : []),
+      ...(plan.certify.length ? [{ name: "Take the certify jobs' certificates (ordinary main push only)", if: EV_MAIN_PUSH, shell: "bash",
+        env: Object.fromEntries(plan.certify.map((c) => [`CI_EVIDENCE_CERTIFICATES_${c.job.slice(8).toUpperCase()}`,
+          `\${{ needs['${c.job}'].outputs.certificates }}`])),
+        run: 'node scripts/ci/ci-evidence-toolchain.mjs import --dir "$RUNNER_TEMP/ci-evidence-current"' }] : []),
+      { name: "Does the merged pull request's full proof cover this main tree?", id: "verify", if: EV_MAIN_PUSH,
+        env, run: `node scripts/ci/ci-evidence.mjs witness ${laneId} >> "$GITHUB_OUTPUT"` },
+      { name: "Keep the witness (reuse only)", id: "keep", if: "steps.verify.outputs.reuse == 'true'", uses: EV_UPLOAD,
+        with: {
+          name: `relayium-ci-evidence-witness-${laneId}-attempt-\${{ github.run_attempt }}`,
+          path: "${{ runner.temp }}/ci-evidence-witness", "if-no-files-found": "error", "retention-days": "30",
+        } },
+      // The ONLY source of the job's outputs, and only after the witness was kept.
+      { name: "Hand the decision to the lane only once its witness is kept", id: "handover",
+        if: "steps.verify.outputs.reuse == 'true' && steps.keep.outcome == 'success'",
+        env: { CI_EVIDENCE_WITNESS: "${{ steps.verify.outputs.witness }}",
+          CI_EVIDENCE_WITNESS_FILE: `\${{ runner.temp }}/ci-evidence-witness/${laneId}.json` },
+        run: 'node scripts/ci/ci-evidence.mjs handover >> "$GITHUB_OUTPUT"' },
+    ],
+  };
+}
+
+/** The source capture a certified job must end with, exactly. */
+function canonicalCaptureSteps(laneId, jobId, profile, needsWorkdir) {
+  return [
+    { name: "Certify this job's toolchain", if: EV_FULL, ...(needsWorkdir ? { "working-directory": "." } : {}), shell: "bash",
+      env: { CI_EVIDENCE_JOB_INDEX: "${{ strategy.job-index }}", CI_EVIDENCE_JOB_TOTAL: "${{ strategy.job-total }}",
+        CI_EVIDENCE_MATRIX: "${{ toJSON(matrix) }}" },
+      run: `node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile ${profile} --lane ${laneId} --job ${jobId} --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"` },
+    { name: "Keep this job's toolchain certificate", if: EV_FULL, uses: EV_UPLOAD,
+      with: { name: `relayium-ci-evidence-toolchain-${laneId}-${jobId}-\${{ strategy.job-index }}-attempt-\${{ github.run_attempt }}`,
+        path: "${{ runner.temp }}/ci-evidence-toolchain/toolchain.json", "if-no-files-found": "ignore", "retention-days": "7" } },
+  ];
+}
+
+/** A step stripped of what a probe copy drops (id, cache inputs) and of its evidence guard, for "same rule" comparison. */
+function setupRule(step) {
+  const st = structuredClone(step);
+  delete st.id;
+  if (st.if !== undefined) {
+    const back = unwrapGuard(st.if);
+    if (back === null && st.if !== EV_MAIN_PUSH) return { unguardable: st.if };
+    if (back === undefined || st.if === EV_MAIN_PUSH) delete st.if; else st.if = back;
+  }
+  if (st.with) {
+    for (const k of EV_CACHE_INPUTS) delete st.with[k];
+    if (Object.keys(st.with).length === 0) delete st.with;
+  }
+  return st;
+}
+
+const EV_RUNNER = /^\$\{\{ needs\.evidence\.outputs\.reuse == 'true' && 'ubuntu-latest' \|\| '([a-z0-9.-]+)' \}\}$/;
+
+/** Every combination a job's matrix produces, as ordered [key, value] lists. */
+function matrixCombinations(matrix) {
+  if (matrix === undefined) return [[]];
+  if (!matrix || typeof matrix !== "object") throw new Error("a matrix that is not a mapping");
+  const axes = Object.entries(matrix).filter(([k]) => k !== "include" && k !== "exclude");
+  if (matrix.exclude !== undefined) throw new Error("matrix exclude is not modelled");
+  let combos = [[]];
+  for (const [key, values] of axes) {
+    if (!Array.isArray(values) || values.length === 0) throw new Error(`matrix axis ${key} is not a list`);
+    combos = combos.flatMap((c) => values.map((v) => [...c, [key, String(v)]]));
+  }
+  if (matrix.include !== undefined) {
+    if (axes.length > 0) throw new Error("matrix include beside axes is not modelled");
+    if (!Array.isArray(matrix.include)) throw new Error("matrix include is not a list");
+    combos = matrix.include.map((entry) => Object.entries(entry).map(([k, v]) => [k, String(v)]));
+  }
+  return combos;
+}
+
+/** GitHub's check names for one job: its `name:` with matrix values, or `id (values)`, capped at 100. */
+function derivedCheckNames(jobId, job) {
+  return matrixCombinations(job?.strategy?.matrix).map((combo) => {
+    let name;
+    if (typeof job.name === "string") {
+      name = job.name.replace(/\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}/g, (_, k) => {
+        const hit = combo.find(([key]) => key === k);
+        if (!hit) throw new Error(`job ${jobId}'s name reads matrix.${k}, which is not in every combination`);
+        return hit[1];
+      });
+      if (name.includes("${{")) throw new Error(`job ${jobId}'s name has an expression this rule does not model`);
+    } else {
+      name = combo.length === 0 ? jobId : `${jobId} (${combo.map(([, v]) => v).join(", ")})`;
+    }
+    return name.length > 100 ? `${name.slice(0, 97)}...` : name;
+  });
+}
+
+function evidenceAdoptionFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const registry = world.evidenceRegistry;
+  if (!registry || typeof registry.lanes !== "object") return [`6x: the evidence registry is not readable as lanes.`];
+  const gate = world.docs.get(AGGREGATE);
+
+  // The registry against the gate: every lane is either adopted or excused.
+  const gateLanes = [...SELECTOR_LANES.map((l) => l.id), "compat", "repo-hygiene"];
+  for (const id of gateLanes) {
+    need((registry.lanes[id] !== undefined) !== (EVIDENCE_NOT_ADOPTED[id] !== undefined),
+      `6x: lane ${id} is ${registry.lanes[id] ? "in the evidence registry AND excused"
+        : "neither in the evidence registry nor excused"}; every lane the merge gate calls must be exactly one `
+        + "of the two, so a new lane cannot silently skip the decision or silently gain it.");
+  }
+  for (const id of Object.keys(registry.lanes)) {
+    need(gateLanes.includes(id), `6x: the evidence registry names ${id}, which the merge gate does not call.`);
+  }
+
+  for (const [laneId, lane] of Object.entries(registry.lanes)) {
+    const file = lane.workflow;
+    const doc = world.docs.get(file);
+    if (!doc) { out.push(`6x: ${file} (lane ${laneId}) is not parsed by this file; it must be GOVERNED.`); continue; }
+    const where = `${file} (evidence lane ${laneId})`;
+    const raw = world.texts.get(file);
+    if (raw !== undefined) {
+      let again = null;
+      try { again = adoptText(fullPathText(raw, laneId, lane, world.toolReg), laneId, lane, world.toolReg); } catch (err) { again = `error: ${err.message}`; }
+      need(again === raw, `${where}: the file is not exactly the canonical adoption of its own full path `
+        + `(scripts/ci/ci-evidence-view.mjs adopt would rewrite it${String(again).startsWith("error:") ? `: ${again}` : ""}). `
+        + "Edit the full path and re-run the adoption; a hand-edited witness path is the one this section cannot vouch for.");
+    }
+
+    // The main-push trigger stays: it is the event that witnesses, and the one
+    // relayium-ops' promotion reads check runs from.
+    need(deepEqual(doc.on?.push?.branches, ["main"]), `${where}: \`on.push.branches\` is not exactly [main]; `
+      + "the main-push trigger is never removed by evidence reuse.");
+    if (!lane.unfiltered) {
+      for (const input of EVIDENCE_INPUTS) {
+        need((doc.on?.push?.paths ?? []).includes(input), `${where}: \`push.paths\` does not name ${input}. The `
+          + "evidence job and every witness step run it, so a change to it must start this lane.");
+      }
+    }
+
+    // The toolchain plan, against the lane's own full path (the steps a probe copies).
+    let plan = null;
+    let fullDoc = null;
+    try {
+      fullDoc = parseYaml(fullPathText(raw ?? "", laneId, lane, world.toolReg));
+      plan = evidencePlanOf(fullDoc, laneId, lane, world.toolReg);
+    } catch (err) {
+      out.push(`${where}: its toolchain plan cannot be derived (${err.message}); every reusable job needs a profile or an `
+        + "uncertifiable reason, and every copied probe step must exist exactly once.");
+      continue;
+    }
+
+    // The evidence job, whole.
+    const ev = doc.jobs?.evidence;
+    const wantEv = canonicalEvidenceJob(laneId, lane, plan);
+    need(deepEqual(ev, wantEv), `${where}: the \`evidence\` job is not the canonical `
+      + `one.\n  got:  ${JSON.stringify(ev)}\n  want: ${JSON.stringify(wantEv)}\n`
+      + "It must act only on an ordinary push to main, never be skipped by a failed or skipped certify job, hold "
+      + "read-only grants and no secret, probe with copies of the lane's own setup steps, and publish only the "
+      + "verifier's own decision.");
+    // The certify jobs, whole — one per native family the lane's certified jobs use, and no other.
+    const certifyIds = plan.certify.map((c) => c.job);
+    for (const c of plan.certify) {
+      const want = canonicalCertifyJob(c);
+      need(deepEqual(doc.jobs?.[c.job], want), `${where}: the \`${c.job}\` job is not the canonical one.\n  got:  `
+        + `${JSON.stringify(doc.jobs?.[c.job])}\n  want: ${JSON.stringify(want)}\nIt must run only on an ordinary main `
+        + "push, within 3 minutes, never turn the run red, and resolve the toolchain by copies of the lane's own "
+        + "selection/setup steps.");
+    }
+    for (const id of Object.keys(doc.jobs ?? {})) {
+      need(!/^certify-/.test(id) || certifyIds.includes(id), `${where}: declares ${id}, a certify job no certified job of `
+        + "this lane needs.");
+    }
+    // The screen: exactly when the lane has paid probes, and exactly canonical.
+    if (plan.certify.length) {
+      const want = canonicalScreenJob(laneId, lane);
+      need(deepEqual(doc.jobs?.screen, want), `${where}: the \`screen\` job is not the canonical one.\n  got:  `
+        + `${JSON.stringify(doc.jobs?.screen)}\n  want: ${JSON.stringify(want)}\nIt must be read-only, on an ordinary main `
+        + "push only, never red, and only ENABLE the paid certify jobs.");
+    } else {
+      need(doc.jobs?.screen === undefined, `${where}: declares a \`screen\` job but has no paid certify job to screen.`);
+    }
+
+    // The job inventory and the check names, both directions.
+    const declared = Object.keys(doc.jobs ?? {}).filter((j) => j !== "evidence" && j !== "screen" && !certifyIds.includes(j));
+    const registered = Object.keys(lane.jobs ?? {});
+    need(deepEqual([...declared].sort(), [...registered].sort()), `${where}: declares jobs [${declared.join(", ")}], `
+      + `the evidence registry lists [${registered.join(", ")}]. A job the registry does not know is a job a witness `
+      + "would never be asked to prove; a registered job that is gone is a check name nothing reports.");
+    for (const jobId of declared) {
+      const job = doc.jobs[jobId];
+      const entry = lane.jobs?.[jobId];
+      if (!entry) continue;
+      let names;
+      try { names = derivedCheckNames(jobId, job); } catch (err) {
+        out.push(`${where}/${jobId}: ${err.message}; 6x cannot derive its check names.`);
+        continue;
+      }
+      need(deepEqual(names, entry.checks), `${where}/${jobId}: GitHub names this job's checks `
+        + `${JSON.stringify(names)}, the registry says ${JSON.stringify(entry.checks)}. The verifier requires each `
+        + "registered name to have succeeded in the source run; a drifted name makes reuse impossible or, worse, "
+        + "lets a renamed job go unproved.");
+      need(job.permissions === undefined, `${where}/${jobId}: declares its own \`permissions:\`; only the evidence `
+        + "job may, and only read-only grants.");
+      need(!mentionsEvidence(job.if), `${where}/${jobId}: a job-level \`if:\` reads the evidence decision, so `
+        + "the decision could skip a whole check instead of witnessing it.");
+      // The job condition: every witnessable job, and every fresh job downstream
+      // of one, carries exactly its ORIGINAL needs/if as an explicit `!cancelled()`
+      // condition — never GitHub's implicit success(), which would let a failed,
+      // timed-out or skipped evidence job skip the whole lane.
+      const fullJob = fullDoc?.jobs?.[jobId];
+      const origNeeds = Array.isArray(fullJob?.needs) ? fullJob.needs : fullJob?.needs === undefined ? [] : [fullJob.needs];
+      const downstream = (id, seen = new Set()) => {
+        const ns = Array.isArray(fullDoc?.jobs?.[id]?.needs) ? fullDoc.jobs[id].needs : fullDoc?.jobs?.[id]?.needs === undefined ? [] : [fullDoc.jobs[id].needs];
+        return ns.some((n) => !seen.has(n) && (seen.add(n), (lane.jobs[n] && lane.jobs[n].mode !== "fresh") || downstream(n, seen)));
+      };
+      if (entry.mode !== "fresh" || downstream(jobId)) {
+        const wantIf = evJobCondition(origNeeds, fullJob?.if);
+        need(job.if === wantIf, `${where}/${jobId}: the job condition is ${JSON.stringify(job.if ?? null)}, want exactly `
+          + `${JSON.stringify(wantIf)}. With \`needs: evidence\` upstream, any other form lets a failed setup step, a `
+          + "timeout or a skipped evidence job SKIP this job instead of running it in full.");
+      } else {
+        need(deepEqual(job.if, fullJob?.if), `${where}/${jobId}: a fresh job with no witnessable ancestor changed its condition.`);
+      }
+
+      if (entry.mode === "fresh") {
+        need(!mentionsEvidence(job), `${where}/${jobId}: is registered fresh but reads the evidence decision. `
+          + "A fresh job runs its original steps on every main push.");
+        continue;
+      }
+
+      const needs = Array.isArray(job.needs) ? job.needs : job.needs === undefined ? [] : [job.needs];
+      need(needs.includes("evidence"), `${where}/${jobId}: does not \`needs: evidence\`, so its steps read an `
+        + "output that does not exist and the witness path is unreachable.");
+      const fullRunner = typeof job["runs-on"] === "string" ? (EV_RUNNER.exec(job["runs-on"])?.[1] ?? null) : null;
+      if (entry.runner === "ubuntu-latest") {
+        need(!mentionsEvidence(job["runs-on"]), `${where}/${jobId}: an Ubuntu job's runner reads the evidence `
+          + "decision; only a platform job moves to Ubuntu on the witness path.");
+        let prRunner = null;
+        try { prRunner = evalRunsOn(job["runs-on"], "pull_request", undefined); } catch { /* reported below */ }
+        need(prRunner === "ubuntu-latest", `${where}/${jobId}: runs-on ${JSON.stringify(job["runs-on"])} is not `
+          + "ubuntu-latest on a pull request, but the registry says the proof comes from an Ubuntu run.");
+      } else {
+        need(fullRunner === entry.runner, `${where}/${jobId}: runs-on is ${JSON.stringify(job["runs-on"])}; want `
+          + `\${{ ${EV_WITNESS} && 'ubuntu-latest' || '${entry.runner}' }}. Whenever the decision is not exactly `
+          + `'true' this job must be on ${entry.runner}, the runner its proof came from.`);
+      }
+
+      const steps = job.steps ?? [];
+      const wantWitness = canonicalWitnessSteps(laneId, typeof job.defaults?.run?.["working-directory"] === "string");
+      need(deepEqual(steps.slice(0, 3), wantWitness), `${where}/${jobId}: does not open with the three canonical `
+        + `witness steps.\n  got:  ${JSON.stringify(steps.slice(0, 3))}\n  want: ${JSON.stringify(wantWitness)}\n`
+        + "The confirm step binds this check run to the verified proof for exactly this lane and main commit.");
+      const profile = plan.profiles[jobId];
+      const workdir = typeof job.defaults?.run?.["working-directory"] === "string";
+      if (profile) {
+        const wantCapture = canonicalCaptureSteps(laneId, jobId, profile, workdir);
+        need(deepEqual(steps.slice(-2), wantCapture), `${where}/${jobId}: does not end with the canonical toolchain `
+          + `capture for profile ${profile}.\n  got:  ${JSON.stringify(steps.slice(-2))}\n  want: ${JSON.stringify(wantCapture)}\n`
+          + "Without it this job's proof has no certificate and can never be witnessed; with another profile it would "
+          + "be compared on the wrong toolchain.");
+      } else {
+        need(!steps.some((st) => st?.name === "Certify this job's toolchain"), `${where}/${jobId}: is uncertifiable `
+          + "but captures a toolchain certificate.");
+      }
+      const original = steps.slice(3, profile ? -2 : undefined);
+      const fresh = new Set(entry.freshSteps ?? []);
+      need(fresh.size === 0 || (entry.runner === "ubuntu-latest" && job["runs-on"] === "ubuntu-latest"),
+        `${where}/${jobId}: keeps steps fresh on ${JSON.stringify(job["runs-on"])}; a witness runs only on `
+        + "ubuntu-latest, so a fresh step on a platform job would run a platform command on Ubuntu.");
+      const seenFresh = new Map();
+      for (const step of original) {
+        const id = stepIdentity(step);
+        if (fresh.has(id)) {
+          seenFresh.set(id, (seenFresh.get(id) ?? 0) + 1);
+          need(!mentionsEvidence(step), `${where}/${jobId}: fresh step ${JSON.stringify(id)} reads the evidence `
+            + "decision; a fresh step runs on both paths unchanged.");
+          continue;
+        }
+        need(step?.if !== undefined && unwrapGuard(step.if) !== null, `${where}/${jobId}: step ${JSON.stringify(id)} `
+          + `carries \`if: ${step?.if ?? "(none)"}\`. Every original step must be guarded by exactly \`${EV_FULL}\`, `
+          + "alone or in one of the canonical compositions, so a false, empty or unknown decision runs it as "
+          + "before and the witness path runs nothing that belongs to the platform.");
+      }
+      for (const id of fresh) {
+        need(seenFresh.get(id) === 1, `${where}/${jobId}: registry fresh step ${JSON.stringify(id)} matches `
+          + `${seenFresh.get(id) ?? 0} steps, want exactly 1.`);
+      }
+    }
+    // "Same rule": a probe copy must be EXACTLY the selection/setup each job of
+    // that family runs (modulo the cache inputs and the evidence guard), and a
+    // macOS job may select its own Xcode only if the lane's certify job copies
+    // that selection — otherwise the current probe would certify another Xcode.
+    const familyOf = (jobId) => world.toolReg.profiles[plan.profiles[jobId]]?.runner;
+    const copiesFor = (runner) => (runner === "ubuntu-latest" ? (doc.jobs?.evidence?.steps ?? [])
+      : (doc.jobs?.[EV_CERTIFY_JOBS[runner]]?.steps ?? [])).filter((st) => st?.name !== "Check out the probe"
+      && !/^(Certify this runner's toolchain now|Hand the certificates|Take the certify jobs|Check out the verifier|Node for the verifier|Does the merged|Keep the witness|Hand the decision)/.test(st?.name ?? ""));
+    const SETUP = /^actions\/setup-(go|node|java)$/;
+    for (const jobId of Object.keys(plan.profiles)) {
+      const runner = familyOf(jobId);
+      const copies = copiesFor(runner).map(setupRule);
+      const components = world.toolReg.profiles[plan.profiles[jobId]].components;
+      for (const st of (doc.jobs?.[jobId]?.steps ?? []).slice(3, -2)) {
+        const id = stepIdentity(st);
+        const action = SETUP.exec(id)?.[1];
+        const selects = /DEVELOPER_DIR|RELAYIUM_SELECT_XCODE|xcode-select -s/.test(JSON.stringify(st?.run ?? ""));
+        const sdk = /sdkmanager/.test(String(st?.run ?? ""));
+        if (!action && !selects && !sdk) continue;
+        if (action && !components.includes(action === "go" ? "go" : action)) continue;
+        const rule = setupRule(st);
+        need(copies.some((c) => deepEqual(c, rule)), `${where}/${jobId}: its ${JSON.stringify(id)} step is not exactly `
+          + `copied into the ${runner} probe (${runner === "ubuntu-latest" ? "evidence" : EV_CERTIFY_JOBS[runner]}), so the `
+          + "current certificate would describe a toolchain this job does not resolve.");
+      }
+    }
+    if (lane.scope) {
+      const gated = lane.scope.gates;
+      for (const g of gated) {
+        need(String(fullDoc?.jobs?.[g]?.if ?? "") === `needs.${lane.scope.job}.outputs.${lane.scope.output} != 'false'`,
+          `${where}/${g}: is registered as gated by ${lane.scope.job}.${lane.scope.output} but does not carry that `
+          + "job-level condition, so the witness would require (or excuse) it against a different rule.");
+      }
+    }
+  }
+
+  // The merge gate: grants for exactly the adopted lanes, the producer after
+  // the judgement, on pull_request only.
+  if (!gate) return [...out, `6x: ${AGGREGATE} is not parsed.`];
+  for (const id of gateLanes) {
+    const caller = gate.jobs?.[id];
+    if (!caller) continue;
+    if (registry.lanes[id]) {
+      need(deepEqual(caller.permissions, EV_GRANTS), `${AGGREGATE}/${id}: permissions are `
+        + `${JSON.stringify(caller.permissions)}, want exactly ${JSON.stringify(EV_GRANTS)} — the evidence job's `
+        + "read-only grants and nothing more.");
+    } else {
+      need(caller.permissions === undefined, `${AGGREGATE}/${id}: carries permissions, but the lane has no evidence job.`);
+    }
+  }
+  const agg = gate.jobs?.[GATE_JOB];
+  need(deepEqual(agg?.permissions, { contents: "read", actions: "read" }), `${AGGREGATE}/${GATE_JOB}: permissions `
+    + `are ${JSON.stringify(agg?.permissions)}, want exactly {contents: read, actions: read}.`);
+  const steps = agg?.steps ?? [];
+  // The frozen release-metadata dispatch is the second proof kind; the gate's
+  // other dispatch mode (`pull-request`) and every other event produce nothing.
+  const pr = "github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')";
+  const modeOptions = gate.on?.workflow_dispatch?.inputs?.mode?.options;
+  need(deepEqual(modeOptions, ["pull-request", "frozen-release-metadata"]), `${AGGREGATE}: the dispatch modes are `
+    + `${JSON.stringify(modeOptions)}, want exactly [pull-request, frozen-release-metadata]; the producer is wired to the `
+    + "accepted frozen mode and a new mode must not inherit it.");
+  const want = [
+    { name: "Check out the merge commit this run tested", if: pr, uses: EV_CHECKOUT, with: { "persist-credentials": "false" } },
+    { name: "Node for the evidence verifier", if: pr, uses: EV_NODE, with: { "node-version": "24" } },
+    { name: "Evidence verifier tests", if: pr, env: { CI_EVIDENCE_TEST_SCOPE: "verifier" }, run: "node scripts/test/ci-evidence-test.mjs" },
+    { name: "Record this run's full proof for main", if: pr, env: {
+      GH_TOKEN: "${{ github.token }}", CI_EVIDENCE_NEEDS: "${{ toJSON(needs) }}",
+      CI_EVIDENCE_SELECTED: "${{ toJSON(needs.select.outputs) }}",
+      CI_EVIDENCE_OUT: "${{ runner.temp }}/ci-evidence/ci-evidence.json",
+      CI_EVIDENCE_DISPATCH_MODE: "${{ inputs.mode }}",
+      CI_EVIDENCE_DISPATCH_BASE: "${{ inputs.base_sha }}",
+      CI_EVIDENCE_DISPATCH_HEAD: "${{ inputs.head_sha }}",
+    }, run: "node scripts/ci/ci-evidence.mjs produce" },
+    { name: "Keep the proof", if: pr, uses: EV_UPLOAD, with: {
+      name: "relayium-ci-evidence-proof-attempt-${{ github.run_attempt }}",
+      path: "${{ runner.temp }}/ci-evidence/ci-evidence.json", "if-no-files-found": "ignore", "retention-days": "7",
+    } },
+  ];
+  need(steps.length === 1 + want.length && String(steps[0]?.run ?? "").includes("CONDITIONAL_LANES")
+    && steps[0]?.if === undefined && deepEqual(steps.slice(1), want), `${AGGREGATE}/${GATE_JOB}: the steps after `
+    + `the judgement are not the canonical proof producer.\n  got:  ${JSON.stringify(steps.slice(1))}\n`
+    + `  want: ${JSON.stringify(want)}\nThe proof may be minted only after every lane is judged, only on a pull `
+    + "request, only by the verifier whose tests just passed, and only under its attempt-scoped name.");
+
+  // Every other workflow that calls an adopted lane must grant the same, or it
+  // fails to start the moment the callee carries an evidence job.
+  const adoptedFiles = new Map(Object.entries(registry.lanes).map(([id, l]) => [`./.github/workflows/${l.workflow}`, id]));
+  for (const [file, doc] of world.docs) {
+    if (file === AGGREGATE) continue;
+    for (const [jobId, j] of Object.entries(doc?.jobs ?? {})) {
+      if (!adoptedFiles.has(j?.uses)) continue;
+      const key = `${file}/${jobId}`;
+      const granted = deepEqual(j.permissions, EV_GRANTS);
+      if (EVIDENCE_CALLER_GRANT_PENDING[key]) {
+        need(!granted, `6x: ${key} now grants the evidence permissions; remove it from EVIDENCE_CALLER_GRANT_PENDING.`);
+        world.pendingCallers?.push(key);
+        continue;
+      }
+      need(granted, `${key}: calls ${j.uses} (an evidence lane) with permissions ${JSON.stringify(j.permissions)}; `
+        + `want exactly ${JSON.stringify(EV_GRANTS)}. A caller that grants less makes the run fail to start.`);
+    }
+  }
+  for (const key of Object.keys(EVIDENCE_CALLER_GRANT_PENDING)) {
+    const [file, jobId] = key.split("/");
+    need(adoptedFiles.has(world.docs.get(file)?.jobs?.[jobId]?.uses),
+      `6x: EVIDENCE_CALLER_GRANT_PENDING names ${key}, which no longer calls an evidence lane; remove the entry.`);
+  }
+
+  // The verifier's own suite runs, whole and unconditionally, on every main push:
+  // repo-hygiene has no path filter, and a scope variable here would skip the
+  // guard-projection controls on the one event direct-to-main delivery has.
+  const hygiene = world.docs.get("repo-hygiene.yml");
+  const unitSteps = Object.values(hygiene?.jobs ?? {}).flatMap((j) => (j?.steps ?? []).map((st) => ({ j, st })))
+    .filter(({ st }) => st?.run === "node scripts/test/ci-evidence-test.mjs");
+  need(unitSteps.length === 1 && unitSteps.every(({ j, st }) => j.if === undefined && st.if === undefined
+    && st.env === undefined && st["continue-on-error"] === undefined && j["continue-on-error"] === undefined),
+  "repo-hygiene.yml: want exactly one unconditional `node scripts/test/ci-evidence-test.mjs` step with no env, so "
+    + "the verifier and its guard-projection controls run in full on every pull request and every main push.");
+  // Every guard that judges a lane through the projection reads it through
+  // `fullPathOf` — the one function whose controls prove it hides nothing else.
+  for (const [file, text] of world.guardTexts) {
+    need(/import \{ fullPathOf \} from "\.\.\/ci\/ci-evidence-view\.mjs";/.test(text) && /fullPathOf\(/.test(text.replace(/^import .*$/m, "")),
+      `${file}: does not read workflows through fullPathOf from scripts/ci/ci-evidence-view.mjs, so its rules judge the `
+      + "witness path instead of the full path — or skip the projection's own controls.");
+  }
+
+  for (const input of EVIDENCE_INPUTS) {
+    need(world.controlFiles.includes(input), `${SELECTOR}: CONTROL_FILES does not name ${input}, so a pull request `
+      + "that edits the verifier would be judged by a partial run while minting a proof for every lane.");
+  }
+  return out;
+}
+
+/** The raw text of a lane workflow, as read from disk before any projection. */
+const evidenceRawTexts = new Map();
+for (const lane of Object.values(evidenceRegistry?.lanes ?? {})) {
+  try {
+    evidenceRawTexts.set(lane.workflow, readFileSync(resolve(workflowsDir, lane.workflow), "utf8"));
+  } catch { /* reported as missing by the governed-file loader */ }
+}
+/** The six policy tests that judge adopted lanes through the full-path projection. */
+const EVIDENCE_PROJECTED_GUARDS = ["contract-ci-policy", "swift-ci-boundary", "web-lane-scope", "ui-test-budget",
+  "native-web-pairing-gate", "cli-interop-matrix"].map((g) => `scripts/test/${g}-test.mjs`);
+const evidenceGuardTexts = new Map(EVIDENCE_PROJECTED_GUARDS.map((f) => {
+  try { return [f, readFileSync(resolve(repoRoot, f), "utf8")]; } catch { return [f, ""]; }
+}));
+
+function evidenceWorld() {
+  return {
+    guardTexts: new Map(evidenceGuardTexts),
+    texts: new Map(evidenceRawTexts),
+    docs: new Map([...docs].map(([file, doc]) => [file, structuredClone(doc)])),
+    evidenceRegistry: structuredClone(evidenceRegistry),
+    toolReg: structuredClone(evidenceToolchain),
+    controlFiles: [...SELECTOR_CONTROL_FILES],
+  };
+}
+
+const EVIDENCE_MUTATIONS = [
+  ["an original step loses its evidence guard", (w) => { delete w.docs.get("go.yml").jobs["race-account"].steps.find((st) => /^go test -race/.test(st.name ?? "")).if; },
+    /go\.yml \(evidence lane go\)\/race-account: step .* carries `if: \(none\)`/],
+  ["a guard is composed so it can skip on the full path", (w) => {
+    const step = w.docs.get("compat.yml").jobs["wire-vectors"].steps.find((st) => /^Regenerate the cross-language/.test(st.name ?? ""));
+    step.if = `${EV_FULL} || github.actor == 'x'`;
+  }, /compat\.yml \(evidence lane compat\)\/wire-vectors: step .* carries `if: needs\.evidence/],
+  ["a failure artifact runs on the witness path", (w) => {
+    const step = w.docs.get("go.yml").jobs.test.steps.find((s) => s.name === "Keep the CLI matrix log (on failure)");
+    step.if = "failure()";
+  }, /go\.yml \(evidence lane go\)\/test: step "Keep the CLI matrix log \(on failure\)" carries `if: failure\(\)`/],
+  ["a macOS job falls back to Ubuntu on the full path", (w) => {
+    w.docs.get("ios.yml").jobs["ios-ipad-shell"]["runs-on"] = `\${{ ${EV_WITNESS} && 'ubuntu-latest' || 'ubuntu-latest' }}`;
+  }, /ios\.yml \(evidence lane ios\)\/ios-ipad-shell: runs-on is/],
+  ["a Windows job loses its runner ternary", (w) => { w.docs.get("go.yml").jobs["cli-windows"]["runs-on"] = "ubuntu-latest"; },
+    /go\.yml \(evidence lane go\)\/cli-windows: runs-on is "ubuntu-latest"/],
+  ["a job stops needing the evidence job", (w) => { w.docs.get("swift-package.yml").jobs["swift-test"].needs = undefined; },
+    /swift-package\.yml \(evidence lane swift-package\)\/swift-test: does not `needs: evidence`/],
+  ["the confirm step vouches for another lane", (w) => {
+    w.docs.get("contracts.yml").jobs["swift-contract"].steps[2].run = "node scripts/ci/ci-evidence.mjs confirm ios";
+  }, /contracts\.yml \(evidence lane contracts\)\/swift-contract: does not open with the three canonical witness steps/],
+  ["the confirm step becomes advisory", (w) => {
+    w.docs.get("ios.yml").jobs["ios-build"].steps[2]["continue-on-error"] = "true";
+  }, /ios\.yml \(evidence lane ios\)\/ios-build: does not open with the three canonical witness steps/],
+  ["the evidence job decides on a pull request", (w) => {
+    w.docs.get("go.yml").jobs.evidence.steps.find((st) => st.id === "verify").if = "always()";
+  }, /go\.yml \(evidence lane go\): the `evidence` job is not the canonical one/],
+  ["the evidence job gains a secret", (w) => {
+    w.docs.get("macos.yml").jobs.evidence.steps.find((st) => st.id === "verify").env.TOKEN = "${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}";
+  }, /macos\.yml \(evidence lane macos\): the `evidence` job is not the canonical one/],
+  ["the evidence job gains a write grant", (w) => { w.docs.get("web.yml").jobs.evidence.permissions.actions = "write"; },
+    /web\.yml \(evidence lane web\): the `evidence` job is not the canonical one/],
+  ["the web witness forgets the main scope", (w) => { delete w.docs.get("web.yml").jobs.evidence.steps.find((st) => st.id === "verify").env.CI_EVIDENCE_SCOPE_LIGHT; },
+    /web\.yml \(evidence lane web\): the `evidence` job is not the canonical one/],
+  ["the fresh signed build reads the decision", (w) => {
+    w.docs.get("macos.yml").jobs["signed-build"].steps[0].if = EV_FULL;
+  }, /macos\.yml \(evidence lane macos\)\/signed-build: is registered fresh but reads the evidence decision/],
+  ["a macOS job is given a fresh step", (w) => {
+    w.evidenceRegistry.lanes.ios.jobs["ios-build"].freshSteps = ["Select and verify the Xcode 26 upload toolchain"];
+  }, /ios\.yml \(evidence lane ios\)\/ios-build: keeps steps fresh on/],
+  ["a fresh step name drifts", (w) => { w.evidenceRegistry.lanes.go.jobs.test.freshSteps.push("govulncheck v2"); },
+    /go\.yml \(evidence lane go\)\/test: registry fresh step "govulncheck v2" matches 0 steps/],
+  ["the registry loses a job", (w) => { delete w.evidenceRegistry.lanes.ios.jobs["ios-ipad-shell"]; },
+    /ios\.yml \(evidence lane ios\): declares jobs .* the evidence registry lists/],
+  ["a matrix check name drifts", (w) => { w.evidenceRegistry.lanes.go.jobs["race-account"].checks[7] = "race account shard 8"; },
+    /go\.yml \(evidence lane go\)\/race-account: GitHub names this job's checks/],
+  ["a truncated matrix name drifts", (w) => {
+    w.docs.get("macos.yml").jobs["ui-smoke"].strategy.matrix.include[1].shard = "inbox";
+  }, /macos\.yml \(evidence lane macos\)\/ui-smoke: GitHub names this job's checks/],
+  ["a lane loses an evidence input from its filter", (w) => {
+    const on = w.docs.get("ios.yml").on.push;
+    on.paths = on.paths.filter((p) => p !== "scripts/ci/ci-evidence.mjs");
+  }, /ios\.yml \(evidence lane ios\): `push\.paths` does not name scripts\/ci\/ci-evidence\.mjs/],
+  ["the main-push trigger is dropped", (w) => { delete w.docs.get("android.yml").on.push.branches; },
+    /android\.yml \(evidence lane android\): `on\.push\.branches` is not exactly \[main\]/],
+  ["a new gate lane is neither adopted nor excused", (w) => { delete w.evidenceRegistry.lanes.android; },
+    /6x: lane android is neither in the evidence registry nor excused/],
+  ["a caller grant widens", (w) => { w.docs.get(AGGREGATE).jobs.ios.permissions.actions = "write"; },
+    /merge-gate\.yml\/ios: permissions are/],
+  ["an excused lane gains grants", (w) => { w.docs.get(AGGREGATE).jobs.windows.permissions = { ...EV_GRANTS }; },
+    /merge-gate\.yml\/windows: carries permissions/],
+  ["the producer runs on a dispatch", (w) => { delete w.docs.get(AGGREGATE).jobs[GATE_JOB].steps[4].if; },
+    /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
+  ["the producer runs before the judgement", (w) => {
+    const steps = w.docs.get(AGGREGATE).jobs[GATE_JOB].steps;
+    steps.push(steps.shift());
+  }, /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
+  ["the proof name loses its attempt", (w) => {
+    w.docs.get(AGGREGATE).jobs[GATE_JOB].steps[5].with.name = "relayium-ci-evidence-proof";
+  }, /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
+  // ── the toolchain certificate's place in the adoption ──
+  ["a failed certify job can skip the evidence job", (w) => { delete w.docs.get("ios.yml").jobs.evidence.if; },
+    /ios\.yml \(evidence lane ios\): the `evidence` job is not the canonical one/],
+  ["a certify job runs on pull requests", (w) => { delete w.docs.get("swift-package.yml").jobs["certify-macos"].if; },
+    /swift-package\.yml \(evidence lane swift-package\): the `certify-macos` job is not the canonical one/],
+  ["a slow probe turns main red", (w) => { delete w.docs.get("go.yml").jobs["certify-windows"]["continue-on-error"]; },
+    /go\.yml \(evidence lane go\): the `certify-windows` job is not the canonical one/],
+  ["a certify job loses its time bound", (w) => { w.docs.get("ios.yml").jobs["certify-macos"]["timeout-minutes"] = "30"; },
+    /ios\.yml \(evidence lane ios\): the `certify-macos` job is not the canonical one/],
+  ["a certify job gains a secret", (w) => {
+    w.docs.get("macos.yml").jobs["certify-macos"].steps[1].env = { P: "${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}" };
+  }, /macos\.yml \(evidence lane macos\): the `certify-macos` job is not the canonical one/],
+  ["the iOS probe forgets the lane's Xcode selection", (w) => {
+    w.docs.get("ios.yml").jobs["certify-macos"].steps = w.docs.get("ios.yml").jobs["certify-macos"].steps.filter((st) => !/^Select/.test(st.name ?? ""));
+  }, /ios\.yml \(evidence lane ios\)\/ios-build: its "Select and verify the Xcode 26 upload toolchain" step is not exactly copied/],
+  ["a job's setup differs from the probe's", (w) => {
+    w.docs.get("web.yml").jobs["mixed-link-e2e"].steps.find((st) => st.name === undefined && /^actions\/setup-node/.test(st.uses ?? "")).with["node-version"] = "22";
+  }, /web\.yml \(evidence lane web\)\/mixed-link-e2e: its "actions\/setup-node" step is not exactly copied/],
+  ["the Android probe skips the job's SDK install", (w) => {
+    w.docs.get("android.yml").jobs.evidence.steps = w.docs.get("android.yml").jobs.evidence.steps.filter((st) => st.name !== "Install the pinned SDK platform");
+  }, /android\.yml \(evidence lane android\)\/build: its "Install the pinned SDK platform" step is not exactly copied/],
+  ["a certified job loses its capture", (w) => { w.docs.get("go.yml").jobs["race-rest"].steps.splice(-2, 2); },
+    /go\.yml \(evidence lane go\)\/race-rest: does not end with the canonical toolchain capture for profile linux-go/],
+  ["a job is captured under another profile", (w) => {
+    w.docs.get("compat.yml").jobs["android-protocol"].steps.at(-2).run = w.docs.get("compat.yml").jobs["android-protocol"].steps.at(-2).run.replace("linux-java", "linux-base");
+  }, /compat\.yml \(evidence lane compat\)\/android-protocol: does not end with the canonical toolchain capture/],
+  ["the capture runs on the witness path", (w) => { delete w.docs.get("ios.yml").jobs["ios-ipad-shell"].steps.at(-2).if; },
+    /ios\.yml \(evidence lane ios\)\/ios-ipad-shell: does not end with the canonical toolchain capture/],
+  ["an uncertifiable job captures anyway", (w) => {
+    w.docs.get("android-interop.yml").jobs.interop.steps.push({ name: "Certify this job's toolchain", run: "true" });
+  }, /android-interop\.yml \(evidence lane android-interop\)\/interop: is uncertifiable but captures/],
+  ["a reusable job has no toolchain entry", (w) => { delete w.toolReg.lanes.contracts.jobs["web-contract"]; },
+    /contracts\.yml \(evidence lane contracts\): its toolchain plan cannot be derived \(contracts\/web-contract has no toolchain entry\)/],
+  ["a stray certify job", (w) => { w.docs.get("android.yml").jobs["certify-macos"] = { "runs-on": "macos-15" }; },
+    /android\.yml \(evidence lane android\): declares certify-macos, a certify job no certified job/],
+  ["another workflow calls a lane without the grants", (w) => {
+    w.docs.get(MACOS_RELEASE).jobs.extra = { uses: "./.github/workflows/go.yml" };
+  }, /macos-release\.yml\/extra: calls \.\/\.github\/workflows\/go\.yml \(an evidence lane\)/],
+  ["the macOS release caller loses a grant", (w) => {
+    const { "pull-requests": _, ...rest } = w.docs.get(MACOS_RELEASE).jobs.build.permissions;
+    w.docs.get(MACOS_RELEASE).jobs.build.permissions = rest;
+  }, /macos-release\.yml\/build: calls \.\/\.github\/workflows\/macos\.yml \(an evidence lane\)/],
+  ["the adoption transform stops being a control file", (w) => { w.controlFiles = w.controlFiles.filter((f) => f !== "scripts/ci/ci-evidence-view.mjs"); },
+    /CONTROL_FILES does not name scripts\/ci\/ci-evidence-view\.mjs/],
+  ["the verifier's tests stop being a control file", (w) => { w.controlFiles = w.controlFiles.filter((f) => f !== "scripts/test/ci-evidence-test.mjs"); },
+    /CONTROL_FILES does not name scripts\/test\/ci-evidence-test\.mjs/],
+  ["a lane loses the verifier's tests from its filter", (w) => {
+    const on = w.docs.get("go.yml").on.push;
+    on.paths = on.paths.filter((p) => p !== "scripts/test/ci-evidence-test.mjs");
+  }, /go\.yml \(evidence lane go\): `push\.paths` does not name scripts\/test\/ci-evidence-test\.mjs/],
+  ["main stops running the verifier suite", (w) => {
+    for (const j of Object.values(w.docs.get("repo-hygiene.yml").jobs)) {
+      j.steps = (j.steps ?? []).filter((st) => st?.run !== "node scripts/test/ci-evidence-test.mjs");
+    }
+  }, /want exactly one unconditional `node scripts\/test\/ci-evidence-test\.mjs` step/],
+  ["main runs only the verifier half", (w) => {
+    for (const j of Object.values(w.docs.get("repo-hygiene.yml").jobs)) {
+      for (const st of j.steps ?? []) if (st?.run === "node scripts/test/ci-evidence-test.mjs") st.env = { CI_EVIDENCE_TEST_SCOPE: "verifier" };
+    }
+  }, /want exactly one unconditional/],
+  ["a guard reads lanes raw again", (w) => {
+    const f = "scripts/test/web-lane-scope-test.mjs";
+    w.guardTexts.set(f, w.guardTexts.get(f).replace(/fullPathOf\("web\.yml", (readFileSync\([^)]*\), "utf8"\))\)/, "$1"));
+  }, /web-lane-scope-test\.mjs: does not read workflows through fullPathOf/],
+  ["the verifier stops being a control file", (w) => { w.controlFiles = w.controlFiles.filter((f) => f !== "scripts/ci/ci-evidence.mjs"); },
+    /CONTROL_FILES does not name scripts\/ci\/ci-evidence\.mjs/],
+  // ── revision 3: the screen, the execution graph and the frozen dispatch ──
+  ["the screen gains a write grant", (w) => { w.docs.get("ios.yml").jobs.screen.permissions.actions = "write"; },
+    /ios\.yml \(evidence lane ios\): the `screen` job is not the canonical one/],
+  ["the screen can turn main red", (w) => { delete w.docs.get("go.yml").jobs.screen["continue-on-error"]; },
+    /go\.yml \(evidence lane go\): the `screen` job is not the canonical one/],
+  ["the screen runs on pull requests", (w) => { w.docs.get("contracts.yml").jobs.screen.if = "${{ !cancelled() }}"; },
+    /contracts\.yml \(evidence lane contracts\): the `screen` job is not the canonical one/],
+  ["a lane with no paid probe grows a screen", (w) => { w.docs.get("compat.yml").jobs.screen = structuredClone(w.docs.get("go.yml").jobs.screen); },
+    /compat\.yml \(evidence lane compat\): declares a `screen` job but has no paid certify job/],
+  ["a certify job stops waiting for the screen", (w) => { delete w.docs.get("macos.yml").jobs["certify-macos"].needs; },
+    /macos\.yml \(evidence lane macos\): the `certify-macos` job is not the canonical one/],
+  ["a certify job ignores the screen's verdict", (w) => { w.docs.get("web.yml").jobs["certify-windows"].if = `\${{ !cancelled() && ${EV_MAIN_PUSH} }}`; },
+    /web\.yml \(evidence lane web\): the `certify-windows` job is not the canonical one/],
+  ["the evidence job's outputs bypass the handover", (w) => { w.docs.get("contracts.yml").jobs.evidence.outputs.reuse = "${{ steps.verify.outputs.reuse }}"; },
+    /contracts\.yml \(evidence lane contracts\): the `evidence` job is not the canonical one/],
+  ["the handover stops checking the upload's outcome", (w) => {
+    w.docs.get("android.yml").jobs.evidence.steps.find((st) => st.id === "handover").if = "steps.verify.outputs.reuse == 'true'";
+  }, /android\.yml \(evidence lane android\): the `evidence` job is not the canonical one/],
+  ["the evidence job can turn main red", (w) => { delete w.docs.get("android.yml").jobs.evidence["continue-on-error"]; },
+    /android\.yml \(evidence lane android\): the `evidence` job is not the canonical one/],
+  ["the evidence job stops waiting for the screen", (w) => { w.docs.get("ios.yml").jobs.evidence.needs = ["certify-macos"]; },
+    /ios\.yml \(evidence lane ios\): the `evidence` job is not the canonical one/],
+  ["an original job falls back to implicit success()", (w) => { delete w.docs.get("go.yml").jobs["race-rest"].if; },
+    /go\.yml \(evidence lane go\)\/race-rest: the job condition is null, want exactly "\$\{\{ !cancelled\(\) \}\}"/],
+  ["an original job's condition forgets one of its needs", (w) => {
+    w.docs.get("macos.yml").jobs["ui-smoke"].if = w.docs.get("macos.yml").jobs["ui-smoke"].if.replace(" && needs.contract.result == 'success'", "");
+  }, /macos\.yml \(evidence lane macos\)\/ui-smoke: the job condition is/],
+  ["an original job's own condition is dropped", (w) => { w.docs.get("web.yml").jobs.test.if = "${{ !cancelled() && needs.scope.result == 'success' }}"; },
+    /web\.yml \(evidence lane web\)\/test: the job condition is/],
+  ["a fresh job downstream of a witness stays on implicit success()", (w) => {
+    w.docs.get("macos.yml").jobs["signed-build"].if = "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository";
+  }, /macos\.yml \(evidence lane macos\)\/signed-build: the job condition is/],
+  ["the producer runs on the pull-request dispatch mode", (w) => {
+    for (const st of w.docs.get(AGGREGATE).jobs[GATE_JOB].steps.slice(1)) st.if = "github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'";
+  }, /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
+  ["the producer loses the dispatched base", (w) => { delete w.docs.get(AGGREGATE).jobs[GATE_JOB].steps[4].env.CI_EVIDENCE_DISPATCH_BASE; },
+    /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
+  ["a new dispatch mode inherits the producer", (w) => { w.docs.get(AGGREGATE).on.workflow_dispatch.inputs.mode.options.push("hotfix"); },
+    /merge-gate\.yml: the dispatch modes are .*want exactly \[pull-request, frozen-release-metadata\]/],
+  ["a lane loses the toolchain registry from its filter", (w) => {
+    const on = w.docs.get("ios.yml").on.push;
+    on.paths = on.paths.filter((p) => p !== "scripts/ci/ci-evidence-toolchain-registry.json");
+  }, /ios\.yml \(evidence lane ios\): `push\.paths` does not name scripts\/ci\/ci-evidence-toolchain-registry\.json/],
+];
+
+// ── 6x graph. what actually RUNS, by outcome ───────────────────────────────
+//
+// The canonical shape is necessary, not sufficient: "no proof ⇒ full" is a
+// property of the job GRAPH — of which jobs GitHub starts given how their
+// dependencies ended. So each adopted lane's real job graph is evaluated here,
+// job-level `if:` expressions included, under the outcomes that matter: no
+// eligible proof, an eligible one, a failed or timed-out screen, a skipped
+// screen (the preflight), a failed certify job, an evidence job whose setup
+// failed or which timed out. GitHub's implicit `success()` is modelled
+// PESSIMISTICALLY (every transitive ancestor must have succeeded, a skipped one
+// counts against it), and a `continue-on-error` job that failed is evaluated
+// both ways GitHub might report it to `needs`. Every original job must then run
+// — on its original runner unless the decision is exactly 'true' — no paid
+// probe may start without an eligible screen, and nothing but an original job
+// may turn the run red.
+
+/** A GitHub expression, evaluated over `ctx`; unknown syntax or identifiers throw. */
+function evalGhExpression(text, ctx, status) {
+  const src = String(text).trim().replace(/^\$\{\{([\s\S]*)\}\}$/, "$1");
+  const toks = [];
+  const re = /\s*(?:('(?:[^']|'')*')|(\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_-]*)|(==|!=|&&|\|\||[!().,[\]]))/y;
+  let at = 0;
+  while (at < src.length) {
+    if (/^\s*$/.test(src.slice(at))) break;
+    re.lastIndex = at;
+    const m = re.exec(src);
+    if (!m) throw new Error(`unparsable expression at ${JSON.stringify(src.slice(at, at + 20))}`);
+    at = re.lastIndex;
+    toks.push(m[1] !== undefined ? { s: m[1].slice(1, -1).replace(/''/g, "'") } : m[2] !== undefined ? { n: Number(m[2]) }
+      : m[3] !== undefined ? { id: m[3] } : { p: m[4] });
+  }
+  let i = 0;
+  const peek = (p) => toks[i]?.p === p;
+  const take = (p) => { if (!peek(p)) throw new Error(`expected ${p} in ${src}`); i += 1; };
+  const truthy = (v) => !(v === false || v === null || v === undefined || v === "" || v === 0 || Number.isNaN(v));
+  const num = (v) => (v === null || v === undefined ? 0 : typeof v === "boolean" ? Number(v) : typeof v === "number" ? v
+    : String(v).trim() === "" ? 0 : Number(v));
+  const eq = (a, b) => {
+    if (typeof a === "string" && typeof b === "string") return a.toLowerCase() === b.toLowerCase();
+    if (typeof a === typeof b && a !== null && b !== null) return a === b;
+    return num(a) === num(b);
+  };
+  const FUNCS = {
+    always: () => true, cancelled: () => false, success: () => status.success, failure: () => status.failure,
+    contains: (a, b) => (Array.isArray(a) ? a.some((x) => eq(x, b)) : String(a ?? "").toLowerCase().includes(String(b ?? "").toLowerCase())),
+    fromJSON: (x) => JSON.parse(x),
+  };
+  const or = () => { let v = and(); while (peek("||")) { i += 1; const r = and(); v = truthy(v) ? v : r; } return v; };
+  const and = () => { let v = unary(); while (peek("&&")) { i += 1; const r = unary(); v = truthy(v) ? r : v; } return v; };
+  const unary = () => { if (peek("!")) { i += 1; return !truthy(unary()); } return cmp(); };
+  const cmp = () => {
+    const a = primary();
+    if (peek("==") || peek("!=")) { const op = toks[i].p; i += 1; const b = primary(); return op === "==" ? eq(a, b) : !eq(a, b); }
+    return a;
+  };
+  const primary = () => {
+    const t = toks[i];
+    if (!t) throw new Error(`truncated expression ${src}`);
+    if (t.p === "(") { i += 1; const v = or(); take(")"); return v; }
+    i += 1;
+    if (t.s !== undefined) return t.s;
+    if (t.n !== undefined) return t.n;
+    if (t.id === "true" || t.id === "false") return t.id === "true";
+    if (t.id === "null") return null;
+    if (peek("(")) {
+      i += 1;
+      const args = [];
+      while (!peek(")")) { args.push(or()); if (peek(",")) i += 1; }
+      take(")");
+      if (!FUNCS[t.id]) throw new Error(`unmodelled function ${t.id}()`);
+      return FUNCS[t.id](...args);
+    }
+    if (!Object.hasOwn(ctx, t.id)) throw new Error(`unmodelled context ${t.id}`);
+    let v = ctx[t.id];
+    for (;;) {
+      if (peek(".")) { i += 1; const k = toks[i++]?.id; v = v == null ? null : v[k] ?? null; continue; }
+      if (peek("[")) { i += 1; const k = or(); take("]"); v = v == null ? null : v[k] ?? null; continue; }
+      return v;
+    }
+  };
+  const v = or();
+  if (i !== toks.length) throw new Error(`trailing tokens in ${src}`);
+  return v;
+}
+
+const STATUS_FN = /\b(?:always|success|failure|cancelled)\s*\(/;
+
+/**
+ * The lane's jobs as GitHub would run them under `scenario`: per job, whether it
+ * started, its result as `needs` sees it, its outputs and its runner.
+ */
+function evalLaneGraph(doc, scenario, coeFailureReportsAs) {
+  const jobs = doc.jobs ?? {};
+  const needsOf = (id) => (Array.isArray(jobs[id]?.needs) ? jobs[id].needs : jobs[id]?.needs === undefined ? [] : [jobs[id].needs]);
+  const state = new Map();
+  const ancestors = (id, seen = new Set()) => { for (const n of needsOf(id)) if (!seen.has(n)) { seen.add(n); ancestors(n, seen); } return seen; };
+  const github = { event_name: scenario.event, ref: scenario.ref, repository: "relayium/relayium",
+    event: { pull_request: scenario.event === "pull_request" ? { head: { repo: { full_name: "relayium/relayium" } } } : null } };
+  const visit = (id) => {
+    if (state.has(id)) return state.get(id);
+    for (const n of needsOf(id)) visit(n);
+    const needs = Object.fromEntries(needsOf(id).map((n) => [n, { result: state.get(n).reported, outputs: state.get(n).outputs }]));
+    const anc = [...ancestors(id)].map((a) => state.get(a).reported);
+    const status = { success: anc.every((r) => r === "success"), failure: anc.some((r) => r === "failure") };
+    const cond = jobs[id].if;
+    const ctx = { github, needs, inputs: scenario.inputs ?? {}, vars: {} };
+    const runs = cond === undefined ? status.success
+      : STATUS_FN.test(String(cond)) ? Boolean(evalGhExpression(cond, ctx, status))
+        : status.success && Boolean(evalGhExpression(cond, ctx, status));
+    let result = "skipped";
+    let outputs = {};
+    if (runs && id === "evidence" && scenario.jobs?.evidence === undefined) {
+      ({ result, outputs } = evalEvidenceSteps(jobs[id], scenario, { github, needs, inputs: scenario.inputs ?? {}, vars: {} }));
+    } else if (runs) {
+      const o = scenario.jobs?.[id] ?? {};
+      result = o.result ?? "success";
+      outputs = result === "success" ? (o.outputs ?? scenario.defaultOutputs?.(id) ?? {}) : {};
+    }
+    const coe = String(jobs[id]["continue-on-error"] ?? "") === "true";
+    const reported = result === "failure" && coe ? coeFailureReportsAs : result;
+    const runsOn = runs ? String(jobs[id]["runs-on"]).includes("${{")
+      ? evalGhExpression(jobs[id]["runs-on"], { github, needs, inputs: scenario.inputs ?? {}, vars: {} }, status) : jobs[id]["runs-on"] : null;
+    const st = { runs, result, reported, outputs, runsOn, red: result === "failure" && !coe };
+    state.set(id, st);
+    return st;
+  };
+  for (const id of Object.keys(jobs)) visit(id);
+  return state;
+}
+
+/**
+ * The evidence job, step by step: each step's `if:` over the steps before it
+ * (implicit success() at step level), a step outcome or a timeout from the
+ * scenario, and the job's `outputs:` evaluated over what the steps produced —
+ * also when the job failed or was killed, which is the pessimistic reading.
+ */
+function evalEvidenceSteps(job, scenario, base) {
+  const steps = {};
+  let failed = false;
+  let killed = false;
+  for (const st of job.steps ?? []) {
+    const key = st.id ?? st.name ?? String(st.uses ?? st.run);
+    if (killed) { if (st.id) steps[st.id] = { outcome: "", conclusion: "", outputs: {} }; continue; }
+    const status = { success: !failed, failure: failed };
+    const ctx = { ...base, steps };
+    const cond = st.if;
+    const runs = cond === undefined ? !failed : STATUS_FN.test(String(cond)) ? Boolean(evalGhExpression(cond, ctx, status))
+      : !failed && Boolean(evalGhExpression(cond, ctx, status));
+    let outcome = "skipped";
+    let outputs = {};
+    if (runs) {
+      if (scenario.evidenceTimeoutAt !== undefined && scenario.evidenceTimeoutAt === key) { killed = true; failed = true; outcome = "failure"; }
+      else {
+        outcome = scenario.stepOutcome?.[key] ?? "success";
+        if (outcome === "failure") failed = true;
+        else outputs = scenario.stepOutputs?.[key] ?? (key === "verify" ? { reuse: scenario.verdict ?? "", witness: scenario.verdict === "true" ? "{}" : "" }
+          : key === "handover" ? { reuse: "true", witness: "{}" } : {});
+      }
+    }
+    if (st.id) steps[st.id] = { outcome, conclusion: outcome, outputs };
+  }
+  const outputs = Object.fromEntries(Object.entries(job.outputs ?? {}).map(([k, expr]) => {
+    const v = evalGhExpression(expr, { ...base, steps }, { success: !failed, failure: failed });
+    return [k, v === null || v === undefined ? "" : String(v)];
+  }));
+  return { result: failed ? "failure" : "success", outputs };
+}
+
+/** Every graph failure of one lane under every scenario, as messages. */
+function evidenceGraphFailures(world) {
+  const out = [];
+  const registry = world.evidenceRegistry;
+  for (const [laneId, lane] of Object.entries(registry?.lanes ?? {})) {
+    const doc = world.docs.get(lane.workflow);
+    if (!doc?.jobs?.evidence) continue;
+    const where = `${lane.workflow} (evidence lane ${laneId})`;
+    const paid = Object.keys(doc.jobs).filter((j) => /^certify-/.test(j));
+    const originals = Object.keys(lane.jobs);
+    const main = { event: "push", ref: "refs/heads/main" };
+    const dflt = (reuse, eligible) => (id) => (id === "evidence" ? { reuse, witness: reuse === "true" ? "{}" : "" }
+      : id === "screen" ? { eligible } : /^certify-/.test(id) ? { certificates: "{}" }
+        : lane.scope && id === lane.scope.job ? { [lane.scope.output]: "true" } : {});
+    const failed = (...ids) => Object.fromEntries(ids.map((id) => [id, { result: "failure" }]));
+    const eligible = { ...main, verdict: "true", defaultOutputs: dflt("true", "true") };
+    const firstSetup = (doc.jobs.evidence.steps ?? []).find((st) => /^Node for the verifier/.test(st.name ?? ""))?.name;
+    const SCENARIOS = [
+      ["a pull request", { event: "pull_request", ref: "refs/pull/1/merge", defaultOutputs: dflt("", "") }, { paid: 0, witness: false }],
+      ["a main push with no eligible proof", { ...main, verdict: "false", defaultOutputs: dflt("false", "false") }, { paid: 0, witness: false }],
+      ["a main push with an eligible, certified proof", eligible, { paid: paid.length, witness: true }],
+      ["a witness upload that failed after the verifier said true", { ...eligible, stepOutcome: { keep: "failure" } }, { paid: paid.length, witness: false }],
+      ["a witness upload that timed out after the verifier said true", { ...eligible, evidenceTimeoutAt: "keep" }, { paid: paid.length, witness: false }],
+      ["a retained witness that is missing or malformed after the verifier said true", { ...eligible, stepOutputs: { handover: { reuse: "false" } } },
+        { paid: paid.length, witness: false }],
+      ["a handover killed by the job timeout", { ...eligible, evidenceTimeoutAt: "handover" }, { paid: paid.length, witness: false }],
+      ["an evidence setup step that failed (step level)", { ...eligible, stepOutcome: { [firstSetup]: "failure" } }, { paid: paid.length, witness: false }],
+      ["a failed screen", { ...main, jobs: failed("screen"), defaultOutputs: dflt("false", "true") }, { paid: 0, witness: false }],
+      ["a timed-out screen", { ...main, jobs: { screen: { result: "failure" } }, defaultOutputs: dflt("false", "true") }, { paid: 0, witness: false }],
+      ["a skipped preflight (the screen never ran)", { ...main, jobs: { screen: { result: "skipped" } }, defaultOutputs: dflt("false", "true") }, { paid: 0, witness: false }],
+      ["a failed current-certificate probe", { ...main, jobs: failed(...paid), defaultOutputs: dflt("false", "true") }, { paid: paid.length, witness: false }],
+      ["an evidence job whose setup step failed", { ...main, jobs: failed("evidence"), defaultOutputs: dflt("true", "true") }, { paid: paid.length, witness: false }],
+      ["an evidence job that timed out", { ...main, jobs: { evidence: { result: "failure" } }, defaultOutputs: dflt("true", "true") }, { paid: paid.length, witness: false }],
+    ];
+    for (const [name, scenario, want] of SCENARIOS) {
+      // A skipped screen is forced by its result, not by a condition.
+      for (const coe of ["failure", "success"]) {
+        let g;
+        try {
+          const forced = structuredClone(doc);
+          if (scenario.jobs?.screen?.result === "skipped" && forced.jobs.screen) forced.jobs.screen.if = "false";
+          g = evalLaneGraph(forced, scenario, coe);
+        } catch (err) { out.push(`${where}: ${name}: the job graph cannot be evaluated (${err.message})`); continue; }
+        const tag = `${where}: ${name} (a failed continue-on-error job reported as ${coe})`;
+        const ranPaid = paid.filter((j) => g.get(j).runs).length;
+        if (ranPaid !== want.paid) out.push(`${tag}: ${ranPaid} paid certify job(s) started, want ${want.paid}`);
+        for (const id of originals) {
+          const st = g.get(id);
+          if (!st.runs) { out.push(`${tag}: original job ${id} was SKIPPED, want it to run`); continue; }
+          const runner = lane.jobs[id].runner;
+          const expect = want.witness && lane.jobs[id].mode !== "fresh" ? "ubuntu-latest" : runner;
+          if (st.runsOn !== expect) out.push(`${tag}: original job ${id} runs on ${st.runsOn}, want ${expect}`);
+        }
+        for (const [id, st] of g) if (st.red && !originals.includes(id)) out.push(`${tag}: auxiliary job ${id} turns the run red`);
+      }
+    }
+  }
+  return out;
+}
+
+if (evidenceRegistry) {
+  {
+    const real = evidenceWorld();
+    real.pendingCallers = [];
+    for (const message of evidenceAdoptionFailures(real)) check(false, message);
+    for (const key of real.pendingCallers) {
+      console.warn(`ci-event-policy-test: PENDING ${key} — ${EVIDENCE_CALLER_GRANT_PENDING[key]}`);
+    }
+  }
+  for (const [name, mutate, expect] of EVIDENCE_MUTATIONS) {
+    let got;
+    try {
+      const w = evidenceWorld();
+      mutate(w);
+      got = evidenceAdoptionFailures(w);
+    } catch (err) {
+      check(false, `6x mutation "${name}" threw instead of reporting: ${err.message}`);
+      continue;
+    }
+    check(got.some((m) => expect.test(m)), `6x did NOT complain about "${name}". Expected ${expect}; got `
+      + `${got.length === 0 ? "no failures at all" : JSON.stringify(got)}. A rule about what a witness may skip `
+      + "that cannot fail is the most expensive kind of green.");
+  }
+
+  // The graph, on the real adopted workflows: every scenario, both reporting conventions.
+  for (const message of evidenceGraphFailures(evidenceWorld())) check(false, message);
+  // ...and the graph rule fails for the stated reason when the execution graph
+  // is broken the ways this revision fixed: each control below must produce
+  // exactly the named failure, or the graph rule is a harness that cannot fail.
+  // Revision 2's graph: original jobs on implicit success() behind `needs: evidence`.
+  const implicitOriginals = (w) => {
+    for (const [, lane] of Object.entries(w.evidenceRegistry.lanes)) {
+      const d = w.docs.get(lane.workflow);
+      for (const [id, e] of Object.entries(lane.jobs)) if (e.mode !== "fresh") delete d.jobs[id].if;
+    }
+  };
+  for (const [name, mutate, expect] of [
+    ["revision 2's graph: a transient Ubuntu setup failure", (w) => { implicitOriginals(w); delete w.docs.get("go.yml").jobs.evidence["continue-on-error"]; },
+      /go\.yml \(evidence lane go\): an evidence job whose setup step failed \(a failed continue-on-error job reported as failure\): original job test was SKIPPED/],
+    ["revision 2's graph: an evidence-job timeout", (w) => { implicitOriginals(w); delete w.docs.get("compat.yml").jobs.evidence["continue-on-error"]; },
+      /compat\.yml \(evidence lane compat\): an evidence job that timed out \(a failed continue-on-error job reported as failure\): original job wire-vectors was SKIPPED/],
+    ["revision 2's graph: a skipped preflight", (w) => { implicitOriginals(w); delete w.docs.get("ios.yml").jobs.evidence.if; },
+      /ios\.yml \(evidence lane ios\): a skipped preflight \(the screen never ran\) .*: original job ios-build was SKIPPED/],
+    ["revision 2's graph: a failed current-certificate probe", (w) => { implicitOriginals(w); w.docs.get("swift-package.yml").jobs.evidence.if = "success()"; },
+      /swift-package\.yml \(evidence lane swift-package\): a failed current-certificate probe \(a failed continue-on-error job reported as failure\): original job swift-test was SKIPPED/],
+    ["revision 3's first draft: outputs promoted from the verifier before the witness upload", (w) => {
+      w.docs.get("ios.yml").jobs.evidence.outputs = { reuse: "${{ steps.verify.outputs.reuse }}", witness: "${{ steps.verify.outputs.witness }}" };
+    }, /ios\.yml \(evidence lane ios\): a witness upload that failed after the verifier said true .*: original job ios-ipad-shell runs on ubuntu-latest, want macos-15/],
+    ["outputs promoted on a timed-out upload", (w) => {
+      w.docs.get("macos.yml").jobs.evidence.outputs = { reuse: "${{ steps.verify.outputs.reuse }}", witness: "${{ steps.verify.outputs.witness }}" };
+    }, /macos\.yml \(evidence lane macos\): a witness upload that timed out after the verifier said true .*: original job test runs on ubuntu-latest, want macos-15/],
+    ["a handover that runs even after a failed upload", (w) => {
+      w.docs.get("web.yml").jobs.evidence.steps.find((st) => st.id === "handover").if = "always() && steps.verify.outputs.reuse == 'true'";
+    }, /web\.yml \(evidence lane web\): a witness upload that failed after the verifier said true .*: original job windows-temporary-downloader runs on ubuntu-latest, want windows-latest/],
+    ["the evidence job can turn the run red", (w) => { delete w.docs.get("android.yml").jobs.evidence["continue-on-error"]; },
+      /android\.yml \(evidence lane android\): an evidence job that timed out .*: auxiliary job evidence turns the run red/],
+    ["paid probes start without an eligible screen", (w) => {
+      w.docs.get("ios.yml").jobs["certify-macos"].if = `\${{ !cancelled() && ${EV_MAIN_PUSH} }}`;
+    }, /ios\.yml \(evidence lane ios\): a main push with no eligible proof .*: 1 paid certify job\(s\) started, want 0/],
+    ["paid probes start when the screen failed", (w) => {
+      w.docs.get("go.yml").jobs["certify-windows"].if = `\${{ !cancelled() && ${EV_MAIN_PUSH} && needs.screen.outputs.eligible != 'false' }}`;
+    }, /go\.yml \(evidence lane go\): a failed screen .*: 1 paid certify job\(s\) started, want 0/],
+    ["a failed screen turns the run red", (w) => { delete w.docs.get("web.yml").jobs.screen["continue-on-error"]; },
+      /web\.yml \(evidence lane web\): a failed screen .*: auxiliary job screen turns the run red/],
+    ["the fresh signed build stays on implicit success()", (w) => {
+      w.docs.get("macos.yml").jobs["signed-build"].if = "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository";
+    }, /macos\.yml \(evidence lane macos\): an evidence job whose setup step failed \(a failed continue-on-error job reported as failure\): original job signed-build was SKIPPED/],
+    ["a witnessed platform job keeps its platform runner", (w) => { w.docs.get("ios.yml").jobs["ios-ipad-shell"]["runs-on"] = "macos-15"; },
+      /ios\.yml \(evidence lane ios\): a main push with an eligible, certified proof .*: original job ios-ipad-shell runs on macos-15, want ubuntu-latest/],
+  ]) {
+    const w = evidenceWorld();
+    mutate(w);
+    let got = [];
+    try { got = evidenceGraphFailures(w); } catch (err) { got = [`threw: ${err.message}`]; }
+    check(got.some((m) => expect.test(m)), `6x graph control "${name}" did not fail for its stated reason. Expected ${expect}; got `
+      + `${got.length === 0 ? "no failures at all" : JSON.stringify(got.slice(0, 4))}`);
+  }
+
+  // The projection is fail-closed: a guard in any non-canonical shape survives
+  // it, so the owning sections below still see a step that can skip itself;
+  // and a lane whose evidence job is not exactly canonical is not projected.
+  {
+    const lane = evidenceRegistry.lanes.compat;
+    const raw = evidenceRawTexts.get("compat.yml") ?? "";
+    const canonical = `        if: ${EV_FULL}\n        working-directory: web\n        run: npm run test:vectors`;
+    check(raw.includes(canonical), "6x's projection controls lost their anchor in compat.yml's wire-vectors step.");
+    const odd = raw.replace(canonical, `        if: ${EV_FULL} || github.actor == 'x'\n        working-directory: web\n        run: npm run test:vectors`);
+    // Not canonical ⇒ not projected AT ALL: the whole adoption stays visible.
+    check(odd !== raw && fullPathText(odd, "compat", lane, evidenceToolchain) === odd,
+      "6x's full-path projection projected a file with a NON-canonical evidence guard; the older compat rule would "
+      + "then be told a gate step that can skip itself is the original.");
+    const oddJob = raw.replace(`        if: ${EV_MAIN_PUSH}\n        uses: ${EV_CHECKOUT} # v6.0.2`, `        if: always()\n        uses: ${EV_CHECKOUT} # v6.0.2`);
+    check(oddJob !== raw && fullPathText(oddJob, "compat", lane, evidenceToolchain) === oddJob,
+    "6x's full-path projection stripped a lane whose evidence job is not canonical; with the job left in place "
+      + "every older rule must keep seeing the adoption it would otherwise have been told is safe.");
+    const go = parseYaml(fullPathText(evidenceRawTexts.get("go.yml") ?? "", "go", evidenceRegistry.lanes.go, evidenceToolchain));
+    check(go.jobs?.["cli-windows"]?.["runs-on"] === "windows-latest"
+      && go.jobs?.test?.steps?.find((st) => st.name === "Keep the CLI matrix log (on failure)")?.if === "failure()"
+      && !mentionsEvidence(go.jobs) && go.jobs?.evidence === undefined && go.jobs?.["certify-windows"] === undefined
+      && !JSON.stringify(go.jobs).includes("ci-evidence-toolchain"),
+    "6x's full-path projection does not restore go.yml's original runners, conditions and jobs.");
+  }
+
+  // Hand the full path to every section below: exactly what runs when the
+  // decision is not 'true', parsed from the inverse of the canonical adoption.
+  for (const [laneId, lane] of Object.entries(evidenceRegistry.lanes)) {
+    const raw = evidenceRawTexts.get(lane.workflow);
+    if (raw === undefined) continue;
+    try {
+      const view = parseYaml(fullPathText(raw, laneId, lane, evidenceToolchain));
+      // Triggers are not part of the witness/full split: GitHub evaluates the
+      // REAL `on:` block, evidence inputs included, on both paths. So every
+      // trigger, path-filter and fixture rule below judges the raw block.
+      view.on = docs.get(lane.workflow)?.on;
+      docs.set(lane.workflow, view);
+    } catch (err) {
+      check(false, `${lane.workflow}: its full-path projection does not parse (${err.message}).`);
+    }
+  }
+}
 
 /** The steps of every job, flattened, with the job name attached. */
 function allSteps(doc) {

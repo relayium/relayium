@@ -32,8 +32,12 @@ import { fileURLToPath } from "node:url";
 import {
   CANDIDATE_REF,
   PROVENANCE_SCHEMA,
+  CANONICAL_CERTIFY_JOB,
   CANONICAL_EVIDENCE_JOB,
+  CANONICAL_JOB_CONDITIONS,
+  CANONICAL_SCREEN_JOB,
   CANONICAL_WITNESS_STEPS,
+  evidenceIdentity,
   Refused,
   Unavailable,
   crc32,
@@ -136,15 +140,25 @@ const REAL_STEPS = {
     "Build (signed, Release)", "Re-sign Sparkle distribution components", "Verify signature and entitlements",
     "Verify the direct product ships both privacy manifests", "Package and verify DMG", "Record signed package provenance",
     "Upload signed package artifact", "Remove signing keychain", `Post ${CHECKOUT_STEP}`, "Complete job"],
-  // The canonical adoption's sixth job on an ordinary main push whose PR proof
-  // did NOT cover the tree: the decision ran, nothing was kept.
+  // The canonical adoption's evidence job on an ordinary main push whose PR
+  // proof did NOT cover the tree: the decision ran, nothing was kept, nothing
+  // was handed over.
   evidence: ["Set up job", "Check out the verifier (ordinary main push only)",
     "Node for the verifier (ordinary main push only)",
+    "Certify this runner's toolchain now (ordinary main push only)",
+    "Take the certify jobs' certificates (ordinary main push only)",
     "Does the merged pull request's full proof cover this main tree?",
-    ["Keep the witness (reuse only)", "skipped"], "Post Check out the verifier (ordinary main push only)", "Complete job"],
+    ["Keep the witness (reuse only)", "skipped"],
+    ["Hand the decision to the lane only once its witness is kept", "skipped"],
+    "Post Check out the verifier (ordinary main push only)", "Complete job"],
+  // The screen on a main push with no usable proof: it ran and said no.
+  screen: ["Set up job", "Check out the verifier", "Node for the verifier",
+    "Could a current toolchain certificate complete a proof?", "Post Check out the verifier", "Complete job"],
 };
+/** The full path's own toolchain capture, after every original step (adoption only). */
+const CAPTURE_STEPS = ["Certify this job's toolchain", "Keep this job's toolchain certificate"];
 const JOB_IDS = ["contract", "test", "ui-smoke/app-shell", "ui-smoke/device-inbox", "signed-build"];
-const LABELS = { contract: ["ubuntu-latest"], evidence: ["ubuntu-latest"] };
+const LABELS = { contract: ["ubuntu-latest"], evidence: ["ubuntu-latest"], screen: ["ubuntu-latest"] };
 const steps = (list) => list.map((entry, index) => {
   const [name, conclusion] = Array.isArray(entry) ? entry : [entry, "success"];
   return { name, status: "completed", conclusion, number: index + 1 };
@@ -155,25 +169,46 @@ const WITNESS = [
   "Witness — the pull request's full proof covers this job",
 ];
 
-/** This tree's own `macos.yml` — the legacy, unadopted definition. */
-const LEGACY_WORKFLOW = readFileSync(join(repoRoot, ".github/workflows/macos.yml"), "utf8");
+/**
+ * The PR→main adoption generator, when this tree has it (or the tree named by
+ * MACOS_EVIDENCE_VIEW_ROOT). Its full-path text is the ONLY way to read the
+ * lane's original definition out of an adopted `macos.yml`: an adopted file
+ * cannot be adopted twice (the generator refuses), so every control below
+ * starts from `fullPathText`, never from the live adopted text.
+ */
+const VIEW_ROOT = process.env.MACOS_EVIDENCE_VIEW_ROOT ?? repoRoot;
+const VIEW = await (async () => {
+  const viewPath = join(VIEW_ROOT, "scripts/ci/ci-evidence-view.mjs");
+  try { lstatSync(viewPath); } catch { return null; }
+  const view = await import(viewPath);
+  return { view, ...view.registries(VIEW_ROOT) };
+})();
+const LIVE_WORKFLOW = readFileSync(join(repoRoot, ".github/workflows/macos.yml"), "utf8");
+/** This tree's `macos.yml` as its full path — the legacy, unadopted definition. */
+const LEGACY_WORKFLOW = VIEW
+  ? VIEW.view.fullPathText(LIVE_WORKFLOW, "macos", VIEW.registry.lanes.macos, VIEW.tool)
+  : LIVE_WORKFLOW;
 
 /**
- * The canonical adoption of a legacy text, structurally: the evidence job
- * inserted first under `jobs:`, and the three witness steps opening the
- * contract, test and ui-smoke steps. Prose comments are not reproduced; the
- * judge ignores comments by design. When the generic adoption module is in
- * the tree, the controls below also judge ITS output.
+ * The canonical adoption of a legacy text, structurally and from this file's
+ * OWN pins: the screen, certify-macos and evidence jobs inserted first under
+ * `jobs:`, each original job's needs/if/runs-on replaced by the pinned ones,
+ * and the three witness steps opening the contract, test and ui-smoke steps.
+ * Prose comments and the full path's capture steps are not reproduced; the
+ * judge ignores both by design. The controls below also judge the generator's
+ * own output when it is present.
  */
 function adoptedText(legacy = LEGACY_WORKFLOW) {
   const lines = legacy.split("\n");
   const out = [];
   let job = null;
   for (const line of lines) {
-    out.push(line);
-    if (line === "jobs:") out.push(...CANONICAL_EVIDENCE_JOB);
     const key = /^ {2}([a-z0-9-]+):\s*$/.exec(line);
     if (key) job = key[1];
+    if (CANONICAL_JOB_CONDITIONS[job] && /^ {4}(needs|if|runs-on):/.test(line)) continue;
+    out.push(line);
+    if (line === "jobs:") out.push(...CANONICAL_SCREEN_JOB, ...CANONICAL_CERTIFY_JOB, ...CANONICAL_EVIDENCE_JOB);
+    if (key && CANONICAL_JOB_CONDITIONS[job]) out.push(...CANONICAL_JOB_CONDITIONS[job]);
     if (line === "    steps:" && ["contract", "test", "ui-smoke"].includes(job)) out.push(...CANONICAL_WITNESS_STEPS);
   }
   return out.join("\n");
@@ -207,18 +242,24 @@ function reuseWorld({ adopted = false } = {}) {
     started_at: "2026-10-01T15:05:00Z",
     completed_at: "2026-10-01T15:20:00Z",
     labels: LABELS[JOB_IDS[index]] ?? ["macos-15"],
-    // Under the adoption, the witness prefix is reported skipped (full path).
-    steps: steps([
-      ...(adopted && JOB_IDS[index] !== "signed-build" ? WITNESS.map((n) => [n, "skipped"]) : []),
-      ...REAL_STEPS[JOB_IDS[index]],
-    ]),
+    // Under the adoption, the witness prefix is reported skipped and the
+    // full path's toolchain capture runs after the original steps.
+    steps: steps(adopted && JOB_IDS[index] !== "signed-build"
+      ? [...WITNESS.map((n) => [n, "skipped"]), ...REAL_STEPS[JOB_IDS[index]].slice(0, -2),
+        ...CAPTURE_STEPS, ...REAL_STEPS[JOB_IDS[index]].slice(-2)]
+      : REAL_STEPS[JOB_IDS[index]]),
   }));
   if (adopted) {
-    jobs.push({
-      id: 899, name: "evidence", run_id: 500, head_sha: SHA, run_attempt: 1, status: "completed",
-      conclusion: "success", started_at: "2026-10-01T15:01:00Z", completed_at: "2026-10-01T15:02:00Z",
-      labels: ["ubuntu-latest"], steps: steps(REAL_STEPS.evidence),
+    const aux = (id, name, conclusion, labels, list) => ({
+      id, name, run_id: 500, head_sha: SHA, run_attempt: 1, status: "completed",
+      conclusion, started_at: "2026-10-01T15:01:00Z", completed_at: "2026-10-01T15:02:00Z",
+      labels, steps: steps(list),
     });
+    // The common shape of a main push the merged pull request did not prove:
+    // the screen said no, so the paid probe never started.
+    jobs.push(aux(897, "screen", "success", ["ubuntu-latest"], REAL_STEPS.screen));
+    jobs.push(aux(898, "certify-macos", "skipped", [], []));
+    jobs.push(aux(899, "evidence", "success", ["ubuntu-latest"], REAL_STEPS.evidence));
   }
   const zip = payload();
   const artifact = {
@@ -714,7 +755,7 @@ function destinationCases() {
 
 // ── A3. executed, not witnessed: the producer run's job and step records ────
 
-const jobOf = (w, id) => w.jobs.find((j) => (id === "evidence" ? j.name === "evidence"
+const jobOf = (w, id) => w.jobs.find((j) => (["evidence", "screen", "certify-macos"].includes(id) ? j.name === id
   : j.name === { contract: "contract", test: "test", "signed-build": "signed-build" }[id]
     || (id === "ui-smoke/app-shell" && j.name.startsWith("ui-smoke (app-shell, "))
     || (id === "ui-smoke/device-inbox" && j.name.startsWith("ui-smoke (device-inbox, "))));
@@ -729,15 +770,38 @@ const witnessed = (job, { mac = false } = {}) => {
 };
 
 async function executionCases() {
-  // Positives: the legacy five-job producer and the canonical six-job full-native one.
-  for (const [name, adopted, shape, jobs] of [
-    ["a legacy five-job full producer", false, "legacy", 5],
-    ["a canonical six-job adopted producer that executed natively", true, "adopted", 6],
+  // Positives: the legacy five-job producer, and the canonical adoption's five
+  // full native jobs plus exactly its three auxiliary jobs, in every final
+  // state those auxiliaries legitimately end in on a main push the merged pull
+  // request did not prove (the screen said no / was red / the probe ran or failed).
+  for (const [name, adopted, shape, jobs, mutate] of [
+    ["a legacy five-job full producer", false, "legacy", 5, () => {}],
+    ["a canonical adopted producer (screen no, certify skipped) that executed natively", true, "adopted", 8, () => {}],
+    ["a canonical adopted producer whose screen failed (never red)", true, "adopted", 8, (w) => { jobOf(w, "screen").conclusion = "failure"; }],
+    ["a canonical adopted producer whose screen was skipped", true, "adopted", 8, (w) => { jobOf(w, "screen").conclusion = "skipped"; }],
+    ["a canonical adopted producer whose certify ran but the proof did not cover", true, "adopted", 8, (w) => { jobOf(w, "certify-macos").conclusion = "success"; }],
+    ["a canonical adopted producer whose certify failed (never red)", true, "adopted", 8, (w) => { jobOf(w, "certify-macos").conclusion = "failure"; }],
   ]) {
-    const got = await decideIn(reuseWorld({ adopted }));
+    const w = reuseWorld({ adopted });
+    mutate(w);
+    const got = await decideIn(w);
     check(got.value?.source === "reuse" && got.value.evidence.workflow.shape === shape
       && got.value.evidence.jobs.length === jobs,
     `execution: ${name} must be reused, got ${got.error?.message ?? got.value?.reason}`);
+    if (adopted) {
+      check(JSON.stringify(got.value?.evidence?.jobs?.slice(5).map((j) => j.name) ?? null) === JSON.stringify(["screen", "certify-macos", "evidence"]),
+        `execution: ${name}: the three auxiliary jobs are not bound into the evidence`);
+    }
+  }
+  {
+    // The frozen evidence binds the auxiliary jobs too: a readback that finds
+    // the screen in another final state is a different run record.
+    const w = reuseWorld({ adopted: true });
+    const first = await decideIn(w);
+    jobOf(w, "certify-macos").conclusion = "failure";
+    const again = await decideIn(w);
+    check(Boolean(first.value?.evidence && again.value?.evidence) && evidenceIdentity(first.value.evidence) !== evidenceIdentity(again.value.evidence),
+      "execution: the auxiliary jobs' final states are not part of the frozen evidence identity");
   }
   {
     // A partial rerun under the adoption: one UI shard re-ran and EXECUTED in
@@ -774,12 +838,30 @@ async function executionCases() {
     ["a failed evidence job", true, (w) => { jobOf(w, "evidence").conclusion = "failure"; }, /`evidence` job is completed\/failure/],
     ["a duplicated evidence job", true, (w) => { w.jobs.push({ ...jobOf(w, "evidence"), id: 898 }); }, /has 2 `evidence` job\(s\)/],
     ["an evidence job that kept a witness", true, (w) => setStep(jobOf(w, "evidence"), "Keep the witness (reuse only)", "success"), /ran "Keep the witness \(reuse only\)" \(success\)/],
+    ["an evidence job that handed reuse to the lane", true, (w) => setStep(jobOf(w, "evidence"), "Hand the decision to the lane only once its witness is kept", "success"), /ran "Hand the decision to the lane only once its witness is kept" \(success\)/],
+    ["a screen job missing under the adoption", true, (w) => { w.jobs = w.jobs.filter((j) => j.name !== "screen"); }, /has 0 `screen` job\(s\); want exactly one/],
+    ["a certify-macos job missing under the adoption", true, (w) => { w.jobs = w.jobs.filter((j) => j.name !== "certify-macos"); }, /has 0 `certify-macos` job\(s\); want exactly one/],
+    ["a duplicated screen job", true, (w) => { w.jobs.push({ ...jobOf(w, "screen"), id: 896 }); }, /has 2 `screen` job\(s\)/],
+    ["a duplicated certify-macos job", true, (w) => { w.jobs.push({ ...jobOf(w, "certify-macos"), id: 896 }); }, /has 2 `certify-macos` job\(s\)/],
+    ["a cancelled certify-macos job", true, (w) => { jobOf(w, "certify-macos").conclusion = "cancelled"; }, /`certify-macos` job is completed\/cancelled; want completed success\/failure\/skipped/],
+    ["a screen job still in progress", true, (w) => { Object.assign(jobOf(w, "screen"), { status: "in_progress", conclusion: null }); }, /`screen` job is in_progress\/null/],
+    ["a screen job on the legacy definition", false, (w) => { w.jobs.push({ ...reuseWorld({ adopted: true }).jobs.find((j) => j.name === "screen") }); }, /has unexpected jobs: screen/],
+    ["a certify job of another family under the adoption", true, (w) => { w.jobs.push({ ...jobOf(w, "certify-macos"), id: 895, name: "certify-windows" }); }, /has unexpected jobs: certify-windows/],
     ["an evidence job that never decided", true, (w) => { const j = jobOf(w, "evidence"); j.steps = j.steps.filter((st) => !st.name.startsWith("Does the merged")); }, /has 0 "Does the merged pull request's full proof cover this main tree\?" step/],
     ["an evidence job on macOS", true, (w) => { jobOf(w, "evidence").labels = ["macos-15"]; }, /\(evidence\) ran on \["macos-15"\]/],
     ["an evidence job on the legacy definition", false, (w) => { w.jobs.push({ ...reuseWorld({ adopted: true }).jobs.find((j) => j.name === "evidence") }); }, /has unexpected jobs: evidence/],
-    ["an unknown seventh job under the adoption", true, (w) => { w.jobs.push({ ...jobOf(w, "test"), id: 897, name: "smuggled" }); }, /has unexpected jobs: smuggled/],
+    ["an unknown ninth job under the adoption", true, (w) => { w.jobs.push({ ...jobOf(w, "test"), id: 890, name: "smuggled" }); }, /has unexpected jobs: smuggled/],
     ["a non-canonical adoption (evidence job widened)", true, (w) => { w.workflowText = w.workflowText.replace("      pull-requests: read\n    outputs:", "      pull-requests: write\n    outputs:"); }, /carries a PR→main evidence adoption that is not the canonical one/],
     ["a non-canonical adoption (signed-build reads the decision)", true, (w) => { w.workflowText = w.workflowText.replace("  signed-build:\n    needs: [test, contract]", "  signed-build:\n    needs: [test, contract, evidence]"); }, /not the canonical one/],
+    ["a non-canonical adoption (signed-build witnessed, conditions intact)", true, (w) => { const at = "  signed-build:\n" + CANONICAL_JOB_CONDITIONS["signed-build"].join("\n"); const steps = w.workflowText.indexOf("    steps:\n", w.workflowText.indexOf(at)) + "    steps:\n".length; w.workflowText = w.workflowText.slice(0, steps) + CANONICAL_WITNESS_STEPS.join("\n") + "\n" + w.workflowText.slice(steps); }, /not the canonical one/],
+    ["a non-canonical adoption (an extra job block in the definition)", true, (w) => { w.workflowText = w.workflowText.replace("\n  signed-build:\n", "\n  smuggled:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n  signed-build:\n"); }, /not the canonical one/],
+    ["a non-canonical adoption (screen widened)", true, (w) => { w.workflowText = w.workflowText.replace("      eligible: ${{ steps.screen.outputs.eligible }}", "      eligible: true"); }, /not the canonical one/],
+    ["a non-canonical adoption (certify on Ubuntu)", true, (w) => { w.workflowText = w.workflowText.replace("  certify-macos:\n    needs: screen\n", "  certify-macos:\n    needs: screen\n    runs-on: ubuntu-latest\n"); }, /not the canonical one/],
+    ["a non-canonical adoption (outputs promoted from verify, not the handover)", true, (w) => { w.workflowText = w.workflowText.replace("      reuse: ${{ steps.handover.outputs.reuse }}", "      reuse: ${{ steps.verify.outputs.reuse }}"); }, /not the canonical one/],
+    ["a non-canonical adoption (contract on implicit success())", true, (w) => { w.workflowText = w.workflowText.replace(/(  contract:\n(?:.*\n)*?)    if: \$\{\{ !cancelled\(\) \}\}\n/, "$1"); }, /not the canonical one/],
+    ["a non-canonical adoption (signed-build without !cancelled())", true, (w) => { const at = "  signed-build:\n" + CANONICAL_JOB_CONDITIONS["signed-build"].join("\n"); w.workflowText = w.workflowText.replace(at, at.replace("${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (", "${{ (")); }, /not the canonical one/],
+    ["a non-canonical adoption (ui-smoke stops waiting for its own gates)", true, (w) => { w.workflowText = w.workflowText.replace("    needs: [test, contract, evidence]", "    needs: evidence"); }, /not the canonical one/],
+    ["the revision-3 six-job adoption (no screen, no certify, no handover)", true, (w) => { w.workflowText = w.workflowText.replace(CANONICAL_SCREEN_JOB.join("\n") + "\n" + CANONICAL_CERTIFY_JOB.join("\n") + "\n", ""); }, /not the canonical one/],
     ["a release fallback (workflow_dispatch) run, full but not a push", true, (w) => { w.runs[0] = { ...w.run, event: "workflow_dispatch" }; }, /no push run of \.github\/workflows\/macos\.yml on main exists/],
   ];
   for (const [name, adopted, mutate, reason] of cases) {
@@ -815,28 +897,56 @@ async function executionCases() {
   // The shape judge itself, and agreement with the adoption generator.
   check(workflowShape(LEGACY_WORKFLOW) === "legacy", "shape: this tree's macos.yml is not judged legacy");
   check(workflowShape(adoptedText()) === "adopted", "shape: the canonical adoption is not judged adopted");
-  check(workflowShape(adoptedText().replace("# PR→main", "# reworded")) === "adopted"
-    && workflowShape(adoptedText().replace("  evidence:\n", "  evidence:\n    # a new comment\n")) === "adopted",
+  check(workflowShape(adoptedText().replace("  screen:\n", "  screen:\n    # a new comment\n")) === "adopted"
+    && workflowShape(adoptedText().replace("  evidence:\n", "  evidence:\n    # a new comment\n")) === "adopted"
+    && workflowShape(adoptedText().replace("    steps:\n", "    steps:\n      # a new comment\n")) === "adopted",
   "shape: a comment-only change turned the canonical adoption off");
   check(workflowShape(adoptedText().replace("        run: node scripts/ci/ci-evidence.mjs confirm macos\n", "        run: node scripts/ci/ci-evidence.mjs confirm macos\n        continue-on-error: true\n")) === "non-canonical",
     "shape: a witness step with an added key is still judged canonical");
   check(workflowShape(LEGACY_WORKFLOW.replace("jobs:\n", "jobs:\n  evidence:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n")) === "non-canonical",
     "shape: a hand-written evidence job is judged canonical");
-  const viewRoot = process.env.MACOS_EVIDENCE_VIEW_ROOT ?? repoRoot;
-  const viewPath = join(viewRoot, "scripts/ci/ci-evidence-view.mjs");
-  let view = null;
-  try { lstatSync(viewPath); view = await import(viewPath); } catch { view = null; }
-  if (view) {
-    const lane = JSON.parse(readFileSync(join(viewRoot, "scripts/ci/ci-evidence-registry.json"), "utf8")).lanes.macos;
+  // An adopted live file, judged against a legacy reading, would mean the
+  // generator vanished from a tree that still carries its output: no silent pass.
+  check(VIEW !== null || workflowShape(LIVE_WORKFLOW) === "legacy",
+    "shape: macos.yml carries an adoption but scripts/ci/ci-evidence-view.mjs is absent");
+  if (VIEW) {
+    const { view, registry, tool } = VIEW;
+    const lane = registry.lanes.macos;
     const strip = (lines) => lines.filter((l) => l.trim() !== "" && !l.trim().startsWith("#"));
-    check(JSON.stringify(strip(view.evidenceJobLines("macos", lane))) === JSON.stringify(CANONICAL_EVIDENCE_JOB),
+    // The adopted file cannot be adopted twice; its full path is the input.
+    let twice = null;
+    try { view.adopt(LIVE_WORKFLOW, "macos", lane, tool); } catch (error) { twice = error; }
+    check(twice instanceof view.AdoptError && /already adopted/.test(twice.message),
+      `shape: the generator adopted an already adopted macos.yml (${twice?.message ?? "no refusal"})`);
+    check(workflowShape(LEGACY_WORKFLOW) === "legacy", "shape: the full-path text of macos.yml is not judged legacy");
+    const generated = view.adopt(LEGACY_WORKFLOW, "macos", lane, tool);
+    check(generated === LIVE_WORKFLOW, "shape: adopt(fullPathText(macos.yml)) does not reproduce macos.yml byte for byte");
+    check(view.fullPathText(generated, "macos", lane, tool) === LEGACY_WORKFLOW,
+      "shape: fullPathText(adopt(full path)) is not the full path");
+    check(JSON.stringify(strip(view.evidenceJobLines("macos", lane, tool))) === JSON.stringify(CANONICAL_EVIDENCE_JOB),
       "shape: CANONICAL_EVIDENCE_JOB drifted from ci-evidence-view.mjs evidenceJobLines(\"macos\")");
     check(JSON.stringify(strip(view.witnessStepLines("macos", false))) === JSON.stringify(CANONICAL_WITNESS_STEPS),
       "shape: CANONICAL_WITNESS_STEPS drifted from ci-evidence-view.mjs witnessStepLines(\"macos\")");
-    const generated = view.adopt(LEGACY_WORKFLOW, "macos", lane);
+    // The other pins, against the jobs of the generator's own adoption.
+    const lines = generated.split("\n");
+    const job = (id) => {
+      const at = lines.indexOf(`  ${id}:`);
+      let end = at + 1;
+      while (end < lines.length && !/^ {2}[a-z0-9-]+:\s*$/.test(lines[end]) && !(lines[end] !== "" && !lines[end].startsWith(" "))) end += 1;
+      return at < 0 ? [] : strip(lines.slice(at, end));
+    };
+    check(JSON.stringify(job("screen")) === JSON.stringify(CANONICAL_SCREEN_JOB),
+      "shape: CANONICAL_SCREEN_JOB drifted from the generator's screen job");
+    check(JSON.stringify(job("certify-macos")) === JSON.stringify(CANONICAL_CERTIFY_JOB),
+      "shape: CANONICAL_CERTIFY_JOB drifted from the generator's certify-macos job");
+    for (const [id, want] of Object.entries(CANONICAL_JOB_CONDITIONS)) {
+      const b = job(id);
+      const got = b.slice(0, b.indexOf("    steps:")).filter((l) => /^ {4}(needs|if|runs-on):/.test(l));
+      check(JSON.stringify(got) === JSON.stringify(want),
+        `shape: CANONICAL_JOB_CONDITIONS.${id} drifted from the generator's ${id} job`);
+    }
     check(workflowShape(generated) === "adopted", "shape: the generator's own adoption of this tree is not judged adopted");
-    const liveMac = join(viewRoot, ".github/workflows/macos.yml");
-    check(workflowShape(readFileSync(liveMac, "utf8")) === "adopted", `shape: ${liveMac} is not judged adopted`);
+    check(workflowShape(LIVE_WORKFLOW) === "adopted", "shape: the live macos.yml is not judged adopted");
     generatorChecked = true;
   }
 }

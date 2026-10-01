@@ -1,0 +1,152 @@
+{
+  "$comment": [
+    "Read by scripts/ci/ci-evidence.mjs (the PR->main evidence verifier) and judged by scripts/test/ci-event-policy-test.mjs section 6x and scripts/test/ci-evidence-test.mjs.",
+    "lanes.<id>: <id> is the merge-gate CALLER job id (the check-name prefix on a pull request) and the lane id select-lanes.mjs publishes; workflow is the reusable file it calls.",
+    "jobs.<job-id>.checks: the EXACT check names that job reports on a main push (GitHub's own names, including matrix expansion and its 100-character truncation). On a pull request each is prefixed `<lane> / `.",
+    "jobs.<job-id>.runner: the runner the job uses on an ordinary pull request (the run whose proof is reused); the verifier requires the source job's labels to equal [runner].",
+    "jobs.<job-id>.mode: reuse (default; main may witness it) or fresh (never witnessed; it runs its original steps on every main push).",
+    "jobs.<job-id>.freshSteps: in a reuse job, the steps that still run on the witness path (live vulnerability queries and what they need). Allowed only on ubuntu-latest jobs, so a witness never runs a platform command.",
+    "scope: the lane's main-push obligation is event-sensitive. The witness reads <job>.outputs.<output> computed FRESH on main; when it is not exactly 'false' the gated jobs must have succeeded in the source run.",
+    "externalInputs: non-tree inputs a job read. git-tags: <job> records the tag set it checked out (its own step, right after checkout) as artifact <artifactPrefix><attempt> holding <entry>; whenever <job> is required on main, the repository's current tag set must equal that recorded set.",
+    "unfiltered: the lane's workflow has no push.paths filter; its input fingerprint is the whole tree."
+  ],
+  "schema": "relayium.ci-evidence.registry/v1",
+  "maxAgeHours": 48,
+  "producer": {
+    "workflow": "merge-gate.yml",
+    "aggregateJob": "merge-gate",
+    "selectJob": "select",
+    "artifactPrefix": "relayium-ci-evidence-proof-attempt-",
+    "entry": "ci-evidence.json"
+  },
+  "lanes": {
+    "go": {
+      "workflow": "go.yml",
+      "jobs": {
+        "test": {
+          "checks": ["test"],
+          "runner": "ubuntu-latest",
+          "freshSteps": [
+            "actions/setup-go",
+            "Toolchain version",
+            "govulncheck",
+            "govulncheck (pion/turn, which the directory replace hides from the step above)"
+          ]
+        },
+        "cli-windows": { "checks": ["cli-windows"], "runner": "windows-latest" },
+        "race-account": {
+          "checks": [
+            "race account shard 0", "race account shard 1", "race account shard 2", "race account shard 3",
+            "race account shard 4", "race account shard 5", "race account shard 6", "race account shard 7"
+          ],
+          "runner": "ubuntu-latest"
+        },
+        "race-rest": { "checks": ["race-rest"], "runner": "ubuntu-latest" },
+        "link-renew": { "checks": ["link-renew shard 0", "link-renew shard 1"], "runner": "ubuntu-latest" },
+        "rollback-floor": { "checks": ["rollback-floor"], "runner": "ubuntu-latest" }
+      }
+    },
+    "macos": {
+      "workflow": "macos.yml",
+      "jobs": {
+        "contract": { "checks": ["contract"], "runner": "ubuntu-latest" },
+        "test": { "checks": ["test"], "runner": "macos-15" },
+        "ui-smoke": {
+          "checks": [
+            "ui-smoke (app-shell, RelayiumUITests/AppShellUITests, 30)",
+            "ui-smoke (device-inbox, RelayiumUITests/DeviceInboxUITests,RelayiumUITests/SubscriptionUITests,Re..."
+          ],
+          "runner": "macos-15"
+        },
+        "signed-build": { "checks": ["signed-build"], "runner": "macos-15", "mode": "fresh" }
+      }
+    },
+    "ios": {
+      "workflow": "ios.yml",
+      "jobs": {
+        "ios-build": { "checks": ["ios-build"], "runner": "macos-15" },
+        "ios-ui-smoke": { "checks": ["ios-ui-smoke (app-shell)", "ios-ui-smoke (complement)"], "runner": "macos-15" },
+        "ios-ipad-shell": { "checks": ["ios-ipad-shell"], "runner": "macos-15" }
+      }
+    },
+    "ios-transfer-interop": {
+      "workflow": "ios-transfer-interop.yml",
+      "jobs": {
+        "ios-transfer-acceptance": { "checks": ["ios-transfer-acceptance"], "runner": "macos-15" }
+      }
+    },
+    "android": {
+      "workflow": "android.yml",
+      "jobs": {
+        "build": { "checks": ["build"], "runner": "ubuntu-latest" }
+      }
+    },
+    "android-interop": {
+      "workflow": "android-interop.yml",
+      "jobs": {
+        "interop": { "checks": ["interop"], "runner": "ubuntu-latest" }
+      }
+    },
+    "swift-package": {
+      "workflow": "swift-package.yml",
+      "jobs": {
+        "swift-test": { "checks": ["swift-test"], "runner": "macos-15" }
+      }
+    },
+    "inbox-swift-interop": {
+      "workflow": "inbox-swift-interop.yml",
+      "jobs": {
+        "swift-live-interop": { "checks": ["swift-live-interop"], "runner": "macos-15" }
+      }
+    },
+    "native-web-pairing": {
+      "workflow": "native-web-pairing.yml",
+      "jobs": {
+        "pairing": { "checks": ["pairing"], "runner": "macos-15" },
+        "cli-web": { "checks": ["cli-web"], "runner": "ubuntu-latest" }
+      }
+    },
+    "contracts": {
+      "workflow": "contracts.yml",
+      "jobs": {
+        "go-contract": { "checks": ["go-contract"], "runner": "ubuntu-latest" },
+        "web-contract": { "checks": ["web-contract"], "runner": "ubuntu-latest" },
+        "swift-contract": { "checks": ["swift-contract"], "runner": "macos-15" }
+      }
+    },
+    "ops-contract": {
+      "workflow": "ops-deploy-contract.yml",
+      "jobs": {
+        "go-contract": { "checks": ["go-contract"], "runner": "ubuntu-latest" }
+      }
+    },
+    "web": {
+      "workflow": "web.yml",
+      "scope": { "job": "scope", "output": "light", "gates": ["test", "windows-temporary-downloader"] },
+      "externalInputs": [
+        { "kind": "git-tags", "job": "test", "artifactPrefix": "relayium-ci-evidence-web-tags-attempt-", "entry": "tags.txt" }
+      ],
+      "jobs": {
+        "scope": { "checks": ["scope"], "runner": "ubuntu-latest", "mode": "fresh" },
+        "test": {
+          "checks": ["test"],
+          "runner": "ubuntu-latest",
+          "freshSteps": ["npm audit --audit-level=high"]
+        },
+        "sealed-box-interop": { "checks": ["sealed-box-interop"], "runner": "ubuntu-latest" },
+        "device-inbox-e2e": { "checks": ["device-inbox-e2e"], "runner": "ubuntu-latest" },
+        "mixed-link-e2e": { "checks": ["mixed-link-e2e"], "runner": "ubuntu-latest" },
+        "windows-temporary-downloader": { "checks": ["windows-temporary-downloader"], "runner": "windows-latest" }
+      }
+    },
+    "compat": {
+      "workflow": "compat.yml",
+      "unfiltered": true,
+      "jobs": {
+        "wire-vectors": { "checks": ["wire-vectors"], "runner": "ubuntu-latest" },
+        "android-protocol": { "checks": ["android-protocol"], "runner": "ubuntu-latest" },
+        "cli-interop-guards": { "checks": ["cli-interop-guards"], "runner": "ubuntu-latest" }
+      }
+    }
+  }
+}
