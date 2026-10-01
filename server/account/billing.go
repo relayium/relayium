@@ -1563,7 +1563,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		// canonical is current evidence; it is ordered against the observed row
 		// in applySubscriptionEvent, where another subscription's clock cannot
 		// drop it (N-0930-2).
-		if !(ev.Refreshed && liveSubStatus(ev.Status) && u.StripeSubscriptionID == "") && s.subEventIsStale(ctx, w, u.ID, ev.Created) {
+		if !(ev.Refreshed && (ev.Status == "active" || ev.Status == "trialing") && u.StripeSubscriptionID == "") && s.subEventIsStale(ctx, w, u.ID, ev.Created) {
 			return
 		}
 		// Every write below is conditional on the Stripe source row being what
@@ -1888,8 +1888,18 @@ func (s *Service) applySubscriptionEvent(ctx context.Context, w http.ResponseWri
 	// re-binds or reaps (TestBM3RetryStopsBeforeDedupWhenEventBecameStale) --
 	// so a delayed duplicate's creation is left to sweep discovery (N-0930-11).
 	// Every other event keeps the original rule.
-	crossSubscriptionLive := ev.Refreshed && liveSubStatus(ev.Status) && obs.exists && u.StripeSubscriptionID == "" &&
-		ev.SubscriptionID != "" && obs.row.ExternalID != "" && ev.SubscriptionID != obs.row.ExternalID
+	// The prior source must also have ENDED: a live observed source is the
+	// canonical's evidence even without a users binding (legacy comps never
+	// bind), and replacing it would orphan a paying subscription.
+	// An empty row id (the sweep's downgrade clears it) is trivially another
+	// subscription; a same-subscription replay is excluded because the refresh
+	// returns that subscription's current, non-live status. Only active and
+	// trialing qualify: a past_due subscription would take its tier from the
+	// observed row (another, ended subscription's -- free), so it keeps the
+	// original rule and is adopted by its next event.
+	crossSubscriptionLive := ev.Refreshed && (ev.Status == "active" || ev.Status == "trialing") && obs.exists && u.StripeSubscriptionID == "" &&
+		!liveSubStatus(obs.row.Status) &&
+		ev.SubscriptionID != "" && ev.SubscriptionID != obs.row.ExternalID
 	if !crossSubscriptionLive && obs.staleFor(ev.Created) {
 		w.WriteHeader(http.StatusOK)
 		return applyDone
@@ -1940,9 +1950,25 @@ func (s *Service) applySubscriptionEvent(ctx context.Context, w http.ResponseWri
 			w.WriteHeader(http.StatusOK)
 			return applyDone
 		}
-		if err := s.applyStripeLifecycle(ctx, u.ID, planID, cycle, ev); err != nil {
+		// Conditional on the observation and the users snapshot the canonical
+		// decision used: a binding change, a comp removal or a recorded
+		// cancellation between this event's Stripe retrieval and the write sends
+		// the handler back to re-observe and re-retrieve.
+		stripeWebhookSeam("comped_decided", u.ID)
+		res, err := s.Store().ApplyStripeSourceIfUnchanged(ctx, StripeSourceWrite{
+			UserID: u.ID, Observed: obs.row, ObservedExists: obs.exists,
+			ExpectUser: true, UserSubscriptionID: u.StripeSubscriptionID, UserPlanSource: u.PlanSource,
+			Event: &SourceEvent{UserID: u.ID, Provider: ProviderStripe, PlanID: planID, Status: ev.Status,
+				Cycle: cycle, PeriodEnd: ev.CurrentPeriodEnd, ExternalID: ev.SubscriptionID,
+				EventAt: ev.Created, Now: s.Now().Unix(), BillingAttemptID: ev.MetadataBillingAttemptID,
+				BillingProductID: ev.PriceID},
+		})
+		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return applyDone
+		}
+		if !res.Unchanged {
+			return applyRetry
 		}
 		w.WriteHeader(http.StatusOK)
 		return applyDone
@@ -1955,7 +1981,15 @@ func (s *Service) applySubscriptionEvent(ctx context.Context, w http.ResponseWri
 	// per-event path below.
 	var bind *string
 	externalID := ev.SubscriptionID
-	if u.StripeSubscriptionID != "" && ev.SubscriptionID != "" && ev.SubscriptionID != u.StripeSubscriptionID {
+	// A live observed source names the canonical even when the users binding is
+	// empty (legacy comps never bound one): a DIFFERENT subscription then goes
+	// through reconciliation -- durable duplicate responsibilities, conditional
+	// writes -- never straight adoption over a paying subscription (N-0930-2).
+	knownCanonical := u.StripeSubscriptionID
+	if knownCanonical == "" && obs.exists && liveSubStatus(obs.row.Status) {
+		knownCanonical = obs.row.ExternalID
+	}
+	if knownCanonical != "" && ev.SubscriptionID != "" && ev.SubscriptionID != knownCanonical {
 		done, lost, err := s.reconcileSubscriptions(ctx, u, ev.Created, obs.row, obs.exists)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
@@ -2032,16 +2066,6 @@ func (s *Service) applySubscriptionEvent(ctx context.Context, w http.ResponseWri
 	}
 	w.WriteHeader(http.StatusOK)
 	return applyDone
-}
-
-func (s *Service) applyStripeLifecycle(ctx context.Context, userID, planID, cycle string, ev WebhookEvent) error {
-	_, err := s.Store().ApplyAuthorizedStripeLifecycle(ctx, SourceEvent{
-		UserID: userID, Provider: ProviderStripe, PlanID: planID, Status: ev.Status,
-		Cycle: cycle, PeriodEnd: ev.CurrentPeriodEnd, ExternalID: ev.SubscriptionID,
-		EventAt: ev.Created, Now: s.Now().Unix(), BillingAttemptID: ev.MetadataBillingAttemptID,
-		BillingProductID: ev.PriceID,
-	})
-	return err
 }
 
 type stripeWebhookWriter struct {

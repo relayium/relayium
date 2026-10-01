@@ -478,3 +478,37 @@ func TestN0930_1CanonicalConflictRecordedOnce(t *testing.T) {
 		t.Fatalf("inline path re-appended the conflict: %s", after.HoldEvidence)
 	}
 }
+
+// With another hold in force (admin_comp), a repeated canonical conflict is
+// still recorded only once: the decision reads the latest canonical_conflict
+// evidence entry, not the current hold.
+func TestN0930_1CanonicalConflictRecordedOnceUnderAnotherHold(t *testing.T) {
+	_, _, store, _ := newN0930Step2(t, Config{}, n0930Duplicate)
+	job, err := store.PutDuplicateRefund(context.Background(), DuplicateRefundPlan{UserID: n0930User, CustomerID: n0930Customer, CanonicalSubscriptionID: "sub_old", DuplicateSubscriptionID: n0930Duplicate}, true, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.HoldDuplicateRefundCancellation(context.Background(), job.ID, duplicateHoldEvidence{At: 60, Reason: duplicateHoldAdminComp}); err != nil {
+		t.Fatal(err)
+	}
+	bindOnce := func() {
+		t.Helper()
+		obs, ok, _ := store.GetSubscriptionSource(context.Background(), n0930User, ProviderStripe)
+		u, _ := store.GetUserByID(context.Background(), n0930User)
+		bind := n0930Canonical
+		if res, err := store.ApplyStripeSourceIfUnchanged(context.Background(), StripeSourceWrite{
+			UserID: n0930User, Observed: obs, ObservedExists: ok, Bind: &bind,
+			ExpectUser: true, UserSubscriptionID: u.StripeSubscriptionID, UserPlanSource: u.PlanSource, Now: 500,
+			DuplicateResponsibilities: []DuplicateResponsibilityRef{{UserID: n0930User, CustomerID: n0930Customer, CanonicalSubscriptionID: n0930Canonical, DuplicateSubscriptionID: n0930Duplicate}},
+		}); err != nil || !res.Unchanged {
+			t.Fatalf("bind res=%+v err=%v", res, err)
+		}
+	}
+	bindOnce()
+	first := n0930Load(t, store)
+	bindOnce()
+	second := n0930Load(t, store)
+	if strings.Count(second.HoldEvidence, `"reason":"canonical_conflict"`) != 1 || second.Revision != first.Revision || second.CancelHold != duplicateHoldAdminComp {
+		t.Fatalf("repeat conflict under admin_comp churned: first=%+v second=%+v", first, second)
+	}
+}

@@ -30,7 +30,8 @@ type n09302Stripe struct {
 	mu      sync.Mutex
 	subs    map[string]*n09302Sub
 	deletes map[string]int
-	failInv bool // invoice lists fail (keeps a duplicate un-inspected)
+	failInv bool              // invoice lists fail (keeps a duplicate un-inspected)
+	onGet   map[string]func() // fired once on the next GET of that subscription
 }
 
 func (f *n09302Stripe) set(id, status string, created int64) {
@@ -45,7 +46,7 @@ func (f *n09302Stripe) subJSON(id string, s *n09302Sub) string {
 
 func newN09302(t *testing.T) (*n09302Stripe, *SQLiteStore, *Service, *httptest.Server) {
 	t.Helper()
-	f := &n09302Stripe{subs: map[string]*n09302Sub{}, deletes: map[string]int{}}
+	f := &n09302Stripe{subs: map[string]*n09302Sub{}, deletes: map[string]int{}, onGet: map[string]func(){}}
 	stripeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -73,7 +74,15 @@ func newN09302(t *testing.T) (*n09302Stripe, *SQLiteStore, *Service, *httptest.S
 				f.deletes[id]++
 				s.status = "canceled"
 			}
-			io.WriteString(w, f.subJSON(id, s))
+			body := f.subJSON(id, s)
+			if hook := f.onGet[id]; r.Method == http.MethodGet && hook != nil {
+				// Runs AFTER Stripe's answer is formed and before the handler
+				// writes: the classic retrieval-to-write window. Hooks run under
+				// f.mu and must touch f.subs directly.
+				delete(f.onGet, id)
+				hook()
+			}
+			io.WriteString(w, body)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/invoices":
 			if f.failInv {
 				http.Error(w, `{"error":{"message":"invoices unavailable"}}`, http.StatusInternalServerError)
@@ -317,5 +326,163 @@ func TestN0930_2AdminCompDuplicateUpdateKeepsCanonicalState(t *testing.T) {
 	}
 	if _, row := n09302User_(t, store); row.ExternalID != "sub_A" || row.EventAt != 800 {
 		t.Fatalf("canonical update under the comp: %+v", row)
+	}
+}
+
+// Comped created/updated writes are conditional (Codex N-0930-2 HIGH 1): a
+// binding replacement, a comp removal with a new canonical, or a recorded
+// cancellation between this event's Stripe retrieval and its write sends the
+// handler back to re-observe and re-retrieve instead of writing stale evidence.
+func TestN0930_2CompedUpdateIsConditionalOnObservation(t *testing.T) {
+	for _, tc := range []string{"binding_replaced", "comp_removed_new_canonical", "cancellation_recorded"} {
+		t.Run(tc, func(t *testing.T) {
+			f, store, svc, ts := newN09302(t)
+			n09302AdoptA(t, f, ts, svc, store)
+			if st := n09302Deliver(t, ts, svc, "customer.subscription.updated", "sub_A", 300); st != http.StatusOK {
+				t.Fatalf("A renewal status=%d", st)
+			}
+			if _, err := store.db.Exec(`UPDATE users SET plan_source='admin',plan_id='max' WHERE id=?`, n09302User); err != nil {
+				t.Fatal(err)
+			}
+			exec := func(q string, args ...any) {
+				if _, err := store.db.Exec(q, args...); err != nil {
+					t.Errorf("%s: %v", q, err)
+				}
+			}
+			f.mu.Lock()
+			switch tc {
+			// The first two land after the comped branch decided (canonical check
+			// done, users snapshot read) and before its write.
+			case "binding_replaced":
+				f.subs["sub_B"] = &n09302Sub{status: "active", created: 200}
+				withSeam(t, "comped_decided", n09302User, func() {
+					exec(`UPDATE users SET stripe_subscription_id='sub_B' WHERE id=?`, n09302User)
+				})
+			case "comp_removed_new_canonical":
+				// A is canceled in Stripe; B (live) becomes canonical and the comp
+				// is lifted, recorded at the same second as A's event.
+				f.subs["sub_A"].status = "canceled"
+				f.subs["sub_B"] = &n09302Sub{status: "active", created: 200}
+				withSeam(t, "comped_decided", n09302User, func() {
+					exec(`UPDATE users SET plan_source='stripe',plan_id='pro',stripe_subscription_id='sub_B' WHERE id=?`, n09302User)
+					exec(`UPDATE subscription_sources SET external_id='sub_B',status='active',plan_id='pro',event_at=400 WHERE user_id=?`, n09302User)
+				})
+			case "cancellation_recorded":
+				// The handler retrieves A active; A then ends and a sweep records
+				// free/canceled at the same second.
+				f.onGet["sub_A"] = func() {
+					f.subs["sub_A"].status = "canceled"
+					exec(`UPDATE subscription_sources SET status='canceled',plan_id='free',event_at=400 WHERE user_id=?`, n09302User)
+				}
+			}
+			f.mu.Unlock()
+			if st := n09302Deliver(t, ts, svc, "customer.subscription.updated", "sub_A", 400); st != http.StatusOK {
+				t.Fatalf("A update status=%d", st)
+			}
+			u, row := n09302User_(t, store)
+			switch tc {
+			case "binding_replaced":
+				if row.ExternalID != "sub_A" || row.EventAt != 300 {
+					t.Fatalf("A's event must not write once B is the canonical: row=%+v", row)
+				}
+			case "comp_removed_new_canonical":
+				if row.ExternalID != "sub_B" || row.Status != "active" || u.PlanID != "pro" || u.StripeSubscriptionID != "sub_B" {
+					t.Fatalf("A's stale cancellation downgraded the new canonical: user=%+v row=%+v", u, row)
+				}
+			case "cancellation_recorded":
+				if row.Status != "canceled" || row.PlanID != "free" {
+					t.Fatalf("cached active evidence re-granted after the cancellation: row=%+v", row)
+				}
+			}
+		})
+	}
+}
+
+// Codex N-0930-2 HIGH 2: a legacy comped account (no users binding) records a
+// live A under the comp; the comp is lifted. B's delayed creation must not be
+// adopted over the live A (both would charge, A with no responsibility); a
+// newer B event goes through reconciliation, which keeps the earliest and
+// commits a responsibility for B.
+func TestN0930_2LiveUnboundSourceIsCanonicalEvidence(t *testing.T) {
+	f, store, svc, ts := newN09302(t)
+	// A legacy Stripe account: its Stripe billing authority predates the comp
+	// (a comp cannot acquire one), it never had a users binding.
+	if _, err := store.db.Exec(`INSERT INTO billing_authorities(user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at) VALUES(?,'stripe','','','',1,'intent_legacy',1,1)`, n09302User); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE users SET plan_source='admin',plan_id='max' WHERE id=?`, n09302User); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO subscription_sources(user_id,provider,plan_id,status,cycle,period_end,external_id,external_scope,event_at,updated_at) VALUES(?,'stripe','free','canceled','',0,'sub_old','',50,50)`, n09302User); err != nil {
+		t.Fatal(err)
+	}
+	f.set("sub_A", "active", 100)
+	if st := n09302Deliver(t, ts, svc, "customer.subscription.created", "sub_A", 300); st != http.StatusOK {
+		t.Fatalf("A under comp status=%d", st)
+	}
+	if u, row := n09302User_(t, store); u.StripeSubscriptionID != "" || row.ExternalID != "sub_A" || row.Status != "active" {
+		t.Fatalf("setup: user=%+v row=%+v", u, row)
+	}
+	if _, err := store.db.Exec(`UPDATE users SET plan_source='stripe',plan_id='pro' WHERE id=?`, n09302User); err != nil {
+		t.Fatal(err)
+	}
+	f.set("sub_B", "active", 200)
+	if st := n09302Deliver(t, ts, svc, "customer.subscription.created", "sub_B", 200); st != http.StatusOK {
+		t.Fatalf("B delayed status=%d", st)
+	}
+	if u, row := n09302User_(t, store); row.ExternalID != "sub_A" || row.Status != "active" || u.StripeSubscriptionID == "sub_B" {
+		t.Fatalf("B's delayed creation replaced the live A: user=%+v row=%+v", u, row)
+	}
+	// Like a bound account (B-M3): an event older than the account clock never
+	// reaps either -- the live source is canonical evidence, so the delayed
+	// event is dropped, not reconciled.
+	f.mu.Lock()
+	early := f.deletes["sub_B"]
+	f.mu.Unlock()
+	if _, found, _ := store.DuplicateRefundBySubscription(context.Background(), "sub_B"); found || early != 0 {
+		t.Fatalf("a stale event reaped: responsibility=%t deletes=%d", found, early)
+	}
+	if st := n09302Deliver(t, ts, svc, "customer.subscription.updated", "sub_B", 500); st != http.StatusOK {
+		t.Fatalf("B newer status=%d", st)
+	}
+	job, ok, err := store.DuplicateRefundBySubscription(context.Background(), "sub_B")
+	u, row := n09302User_(t, store)
+	f.mu.Lock()
+	deletesA, deletesB := f.deletes["sub_A"], f.deletes["sub_B"]
+	f.mu.Unlock()
+	if err != nil || !ok || job.CanonicalSubscriptionID != "sub_A" || deletesB != 1 || deletesA != 0 || u.StripeSubscriptionID != "sub_A" || row.ExternalID != "sub_A" || u.PlanID != "pro" {
+		t.Fatalf("reconciliation must keep A and own B: ok=%t err=%v job=%+v deletesA=%d deletesB=%d user=%+v row=%+v", ok, err, job, deletesA, deletesB, u, row)
+	}
+}
+
+// The sweep's downgrade clears the row's subscription id and stamps the clock;
+// an older refreshed event for a live subscription is still adopted (Fable 3).
+// A past_due one keeps the original rule (Fable 4): adopting it here would take
+// the ended row's free tier, so its next event adopts it instead.
+func TestN0930_2LiveSubscriptionAdoptedAfterSweepDowngrade(t *testing.T) {
+	for _, status := range []string{"active", "past_due"} {
+		t.Run(status, func(t *testing.T) {
+			f, store, svc, ts := newN09302(t)
+			n09302AdoptA(t, f, ts, svc, store)
+			if st := n09302Deliver(t, ts, svc, "customer.subscription.updated", "sub_A", 400); st != http.StatusOK {
+				t.Fatalf("A renewal status=%d", st)
+			}
+			f.set("sub_A", "canceled", 100)
+			svc.ReconcileStripeSubscriptions(context.Background())
+			if u, row := n09302User_(t, store); u.PlanID != "free" || row.ExternalID != "" || row.EventAt < 400 || u.StripeSubscriptionID != "" {
+				t.Fatalf("sweep downgrade setup: user=%+v row=%+v", u, row)
+			}
+			f.set("sub_B", status, 200)
+			if st := n09302Deliver(t, ts, svc, "customer.subscription.created", "sub_B", 200); st != http.StatusOK {
+				t.Fatalf("B status=%d", st)
+			}
+			u, row := n09302User_(t, store)
+			if status == "active" && (u.StripeSubscriptionID != "sub_B" || u.PlanID != "pro" || row.ExternalID != "sub_B") {
+				t.Fatalf("live B must be adopted after the sweep downgrade: user=%+v row=%+v", u, row)
+			}
+			if status == "past_due" && (u.StripeSubscriptionID != "" || u.PlanID != "free") {
+				t.Fatalf("past_due B must keep the original rule: user=%+v row=%+v", u, row)
+			}
+		})
 	}
 }

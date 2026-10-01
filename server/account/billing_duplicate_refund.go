@@ -1233,23 +1233,26 @@ func (e *DuplicateResponsibilityOwnershipConflict) Error() string {
 	return fmt.Sprintf("account: duplicate responsibility for %s is owned by user %s customer %s, not user %s customer %s", e.Ref.DuplicateSubscriptionID, e.ExistingUserID, e.ExistingCustomerID, e.Ref.UserID, e.Ref.CustomerID)
 }
 
-// canonicalConflictAlreadyRecorded reports whether the hold in force is
-// canonical_conflict and the latest evidence entry already names this
-// canonical, so recording it again would only add evidence and revision churn
-// (a revision bump also defeats the operator's revision-fenced hold clear).
-func canonicalConflictAlreadyRecorded(hold, evidence, canonical string) bool {
-	if hold != duplicateHoldCanonicalConflict {
-		return false
-	}
+// canonicalConflictAlreadyRecorded reports whether the latest canonical_conflict
+// evidence entry -- not undone by a later operator clear -- already names this
+// canonical, whatever hold is in force (another hold, e.g. admin_comp, keeps
+// precedence). Recording it again would only add evidence and revision churn (a
+// revision bump also defeats the operator's revision-fenced hold clear).
+func canonicalConflictAlreadyRecorded(_ /* hold */, evidence, canonical string) bool {
 	var entries []map[string]any
-	if json.Unmarshal([]byte(evidence), &entries) != nil || len(entries) == 0 {
+	if json.Unmarshal([]byte(evidence), &entries) != nil {
 		return false
 	}
-	last := entries[len(entries)-1]
-	reason, _ := last["reason"].(string)
-	seen, _ := last["canonical_seen"].(string)
-	_, cleared := last["cleared"]
-	return !cleared && reason == duplicateHoldCanonicalConflict && seen == canonical
+	for i := len(entries) - 1; i >= 0; i-- {
+		if _, cleared := entries[i]["cleared"]; cleared {
+			return false
+		}
+		if reason, _ := entries[i]["reason"].(string); reason == duplicateHoldCanonicalConflict {
+			seen, _ := entries[i]["canonical_seen"].(string)
+			return seen == canonical
+		}
+	}
+	return false
 }
 
 // duplicateResponsibilityOwnershipLog is the fixed prefix of the diagnostic
