@@ -60,6 +60,19 @@ type DuplicateRefundJob struct {
 	// count at the last FRESH provider confirmation of cancellation. While
 	// CancelContradictions > CancelReconfirmed the stored cancellation proves
 	// nothing: no inspection can count as post-cancel and the job cannot finish.
+	//
+	// Contradictions are counted in COMMIT order, not observation order: a
+	// delayed write can invalidate newer evidence, which only costs one more
+	// fresh confirmation and inspection. A terminal row with CC>CR keeps its
+	// state, liabilities and refund/action proofs, but post_cancel_inspected is
+	// cleared, so Resolve and any refund POST are refused. Since round 4 it is
+	// not stuck: the next audit that freshly confirms the cancellation closes
+	// the contradiction (ReconfirmDuplicateCancellation, fenced on the count read
+	// before the provider call), re-inspects, and only then restores the
+	// post-cancel evidence. CC>CR therefore persists only while Stripe keeps
+	// reporting the duplicate live, the confirmation keeps failing, or newer
+	// contradictions keep arriving -- and it stays visible as the
+	// cancel_contradiction alert reason, never cleared as a clean audit.
 	CancelContradictions, CancelReconfirmed int64
 }
 
