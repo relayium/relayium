@@ -317,7 +317,9 @@ jobs:
   # Only those two jobs `needs:` this one, and each runs unless the `light`
   # output is exactly `'false'`: a helper that fails to answer runs them, and a
   # failure of this job fails the lane. The three Go-running jobs carry NO
-  # `needs:` and NO `if:` — they run whenever this lane is selected, because a
+  # `needs: scope` and no scope `if:` — only `needs: evidence`, `!cancelled()`
+  # and the fail-open evidence step guards — so they run whenever this lane is
+  # selected and no verified proof is reused, because a
   # hosted gate that can be skipped is a gate whose green means nothing (the C2
   # lesson `web/e2e/go-server.test.mjs` pins for mixed-link-e2e). The `server`
   # output is therefore informational only: it is logged and published, and no
@@ -736,10 +738,12 @@ jobs:
       # Two more real-Chrome suites that no hosted job ran until 2026-09-28
       # (audit D-M1). They need this job's built dist and Go toolchain and
       # nothing heavier, so they share it rather than paying for another
-      # checkout, `npm ci` and build. No step-level condition: this job carries no
-      # conditions at all (web/e2e/go-server.test.mjs), so a mixed-link failure
-      # ends the job red before these run: a failure there is already red, and
-      # these two then report after the fix. Each takes seconds locally.
+      # checkout, `npm ci` and build. Like every original step here they carry
+      # only the fail-open evidence guard, so they run whenever no verified proof
+      # is reused (web/e2e/go-server.test.mjs holds the job to exactly that), and
+      # a mixed-link failure ends the job red before these run: a failure there
+      # is already red, and these two then report after the fix. Each takes
+      # seconds locally.
       #
       # Relay renewal: the SHIPPED renewal controller, bundled from source,
       # drives a real ICE restart between two real RTCPeerConnections. It

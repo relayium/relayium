@@ -433,6 +433,29 @@ describe("startGoServer refuses before it builds anything", () => {
   });
 });
 
+/** The only two step conditions web.yml's evidence reuse may add. The negated
+ *  one fails open: an empty, false or unknown decision runs the original step. */
+const REUSE_NOT_TRUE = "needs.evidence.outputs.reuse != 'true'";
+const REUSE_TRUE = "needs.evidence.outputs.reuse == 'true'";
+
+/**
+ * Splits the mixed-link job body into its header and `steps:` entries, comment
+ * lines dropped, with each entry's `if:` values. Line-based on purpose: it only
+ * has to read this one job's fixed indentation, and a second `if:` in an entry
+ * is reported rather than collapsed the way a YAML parser would collapse it.
+ */
+function mixedLinkSteps(body) {
+  const code = body.split("\n").filter((line) => !/^\s*#/.test(line)).join("\n");
+  const [header, list] = code.split(/^    steps:$/m);
+  expect(list, "the mixed-link job has no steps: list").toBeDefined();
+  const steps = list.split(/^      - /m).slice(1).map((entry) => {
+    const text = `- ${entry}`;
+    const ifs = [...text.matchAll(/^\s*(?:-\s+)?if:\s*(.*?)\s*$/gm)].map((m) => m[1]);
+    return { text, ifs };
+  });
+  return { header, steps };
+}
+
 /**
  * Source contracts for the two runners this module exists to serve.
  *
@@ -575,9 +598,16 @@ describe("the runners this lifecycle serves", () => {
     });
   }
 
-  it("the hosted mixed-link job runs the suite unconditionally after a build", () => {
+  it("the hosted mixed-link job runs every original step unless a verified proof is reused", () => {
     // The C2 lesson, applied: a hosted gate that can be skipped is a gate whose
     // green means nothing. Guarding or deleting this job must fail HERE.
+    //
+    // Since the PR→main evidence reuse, the job and its steps DO carry
+    // conditions — but only two exact ones. Every original step runs on
+    // `reuse != 'true'`, so an empty, false, refused or unknown decision runs
+    // the whole original job; only the three verifier steps run on
+    // `reuse == 'true'`, and the job itself only on `!cancelled()`. Any other
+    // condition, a step moved to the witness side, or a deleted step fails here.
     const yml = readFileSync(join(WEB_DIR, "..", ".github", "workflows", "web.yml"), "utf8");
     const job = yml.split(/^  mixed-link-e2e:$/m)[1];
     expect(job, "web.yml has no mixed-link-e2e job").toBeDefined();
@@ -588,9 +618,55 @@ describe("the runners this lifecycle serves", () => {
     // A Go toolchain, because the runner builds and starts a real server.
     expect(body).toContain("actions/setup-go@");
     expect(body).toMatch(/node-version: 24/);
-    // No escape hatches anywhere in the job.
-    expect(body).not.toMatch(/\bif:/);
+    // No escape hatches anywhere in the job: no tolerated failure, and no
+    // condition other than the two exact evidence guards and `!cancelled()`.
     expect(body).not.toMatch(/continue-on-error/);
+    const { header, steps } = mixedLinkSteps(body);
+    expect(header).toMatch(/^    needs: evidence$/m);
+    expect(header.match(/^    if:\s*(.*?)\s*$/gm), "the mixed-link job's own condition")
+      .toEqual(["    if: ${{ !cancelled() }}"]);
+    for (const step of steps) {
+      expect(step.ifs, `a mixed-link step has a condition other than one exact evidence guard:\n${step.text}`)
+        .toHaveLength(1);
+      expect([REUSE_NOT_TRUE, REUSE_TRUE], `a mixed-link step has a non-evidence condition:\n${step.text}`)
+        .toContain(step.ifs[0]);
+    }
+    // The witness side only proves the reuse; it never carries original work.
+    const verifier = [/uses: actions\/checkout@/, /uses: actions\/setup-node@/,
+      /^\s+run: node scripts\/ci\/ci-evidence\.mjs confirm web$/m];
+    const witness = steps.filter((s) => s.ifs[0] === REUSE_TRUE);
+    for (const step of witness) {
+      expect(verifier.some((re) => re.test(step.text)), `a non-verifier step runs only on reuse:\n${step.text}`)
+        .toBe(true);
+    }
+    expect(witness.filter((s) => verifier[2].test(s.text)), "the witness path confirms no proof").toHaveLength(1);
+    // Every original command, exactly once, on the fail-open guard, in order.
+    const original = [
+      ["checkout", /uses: actions\/checkout@/],
+      ["setup-node", /uses: actions\/setup-node@[\s\S]*node-version: 24[\s\S]*cache: npm/],
+      ["setup-go", /uses: actions\/setup-go@/],
+      ["npm ci", /^- run: npm ci$/m],
+      ["build", /^- run: npm run build$/m],
+      ["mixed-link", /^- run: npm run test:e2e:mixed$/m],
+      ["relay renewal", /^\s+run: npm run test:e2e:relay-renewal$/m],
+      ["share target", /^\s+run: bash scripts\/ci\/share-target-e2e\.sh$/m],
+    ];
+    const at = {};
+    for (const [what, re] of original) {
+      const guarded = steps.flatMap((s, i) => (s.ifs[0] === REUSE_NOT_TRUE && re.test(s.text) ? [i] : []));
+      expect(guarded, `mixed-link must run ${what} once whenever the proof is not reused`).toHaveLength(1);
+      if (!["checkout", "setup-node"].includes(what)) {
+        expect(steps.filter((s) => re.test(s.text)), `mixed-link runs ${what} more than once`).toHaveLength(1);
+      }
+      at[what] = guarded[0];
+    }
+    expect(at.checkout).toBeLessThan(at["setup-node"]);
+    expect(at["setup-node"]).toBeLessThan(at["npm ci"]);
+    expect(at["setup-go"]).toBeLessThan(at["npm ci"]);
+    expect(at["npm ci"]).toBeLessThan(at.build);
+    expect(at.build).toBeLessThan(at["mixed-link"]);
+    expect(at["mixed-link"]).toBeLessThan(at["relay renewal"]);
+    expect(at["mixed-link"]).toBeLessThan(at["share target"]);
     // The build must come BEFORE the suite: the runner refuses a missing bundle.
     expect(body.indexOf("npm run build")).toBeLessThan(body.indexOf("npm run test:e2e:mixed"));
 

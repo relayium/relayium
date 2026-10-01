@@ -15,9 +15,10 @@ import { describe, expect, it } from "vitest";
  *    false N/N success (the exact failure the Phase 3D C2 lease calls out);
  *  - no `catch` sits between a scenario call and the counter that trusts it,
  *    which would let a swallowed scenario still increment `ran`;
- *  - the new CI step in `.github/workflows/web.yml` runs unconditionally —
- *    no `if:` guard, no `continue-on-error: true` — so it cannot become a
- *    silent no-op.
+ *  - the new CI step in `.github/workflows/web.yml` runs whenever no verified
+ *    proof is reused — its only `if:` is the fail-open evidence guard
+ *    `needs.evidence.outputs.reuse != 'true'`, with no `continue-on-error` —
+ *    so it cannot become a silent no-op.
  *
  * Mirrors `apps-hierarchy-contract.test.mjs`'s idiom: a source-shape guard, not
  * a run of the scenarios themselves, so a regression here is caught in the
@@ -168,15 +169,22 @@ describe("the sign-in / destination regression measures geometry, not nodes", ()
 });
 
 describe("the hosted CI step cannot become a silent no-op", () => {
-  it("runs the new npm script as its own unconditional step", () => {
+  it("runs the new npm script as its own step, skipped only by a reused proof", () => {
     const idx = WORKFLOW.indexOf("run: npm run test:e2e:page-shell");
     expect(idx, "no step in web.yml runs test:e2e:page-shell").toBeGreaterThan(-1);
     const dashIdx = WORKFLOW.lastIndexOf("\n      - ", idx);
     expect(dashIdx, "test:e2e:page-shell is not its own step entry").toBeGreaterThan(-1);
     const nextDash = WORKFLOW.indexOf("\n      - ", dashIdx + 1);
-    const step = nextDash === -1 ? WORKFLOW.slice(dashIdx) : WORKFLOW.slice(dashIdx, nextDash);
-    expect(step, "the page-shell step is guarded by an if: condition").not.toMatch(/\bif:/);
-    expect(step, "the page-shell step tolerates its own failure").not.toMatch(/continue-on-error:\s*true/);
+    const step = (nextDash === -1 ? WORKFLOW.slice(dashIdx) : WORKFLOW.slice(dashIdx, nextDash))
+      .split("\n").filter((line) => !/^\s*#/.test(line)).join("\n");
+    // The one condition allowed is the evidence guard, and it fails open: an
+    // empty, false, refused or unknown reuse decision still runs this step.
+    // Anything else — another clause, `== 'true'`, a literal false — is a
+    // silent no-op on the path that has no proof to stand on.
+    const conditions = [...step.matchAll(/^\s*(?:-\s+)?if:\s*(.*?)\s*$/gm)].map((m) => m[1]);
+    expect(conditions, "the page-shell step has a condition other than the evidence guard")
+      .toEqual(["needs.evidence.outputs.reuse != 'true'"]);
+    expect(step, "the page-shell step tolerates its own failure").not.toMatch(/continue-on-error/);
   });
 
   it("is wired into exactly one CI step", () => {
