@@ -199,15 +199,26 @@ concurrency:
 
 jobs:
   contract:
-    runs-on: macos-15
-    # Finite, and chosen rather than inherited. Outside a workflow_dispatch the
-    # whole step below is skipped, so the job is a checkout; the 32 successful
-    # runs in this workflow's recent history took 61s at worst and 24s on
-    # average. Only a release dispatch reaches the one `xcodebuild
-    # -showBuildSettings`, which reads the project rather than building it. The
-    # bound is far above either path and exists for the third case: a wedged
-    # `xcodebuild` gives a PAID macOS runner back in minutes instead of holding
-    # it for GitHub's 6-hour default.
+    # macOS only when the step below can reach its release branch — the SAME
+    # three conditions as its `if`: a dispatch, a non-empty release_version,
+    # or publish_release. Everything else (every push, pull request and
+    # merge-gate call, which passes no inputs) only checks out, and spent ~7
+    # minutes queueing for a macOS runner to do it (run 36736501756: 13 s of
+    # work) while `ui-smoke` and `signed-build`, which need it, waited.
+    # `inputs.release_version` is truthy exactly when `-n` is true; on push
+    # and pull_request `inputs` is empty, so both inputs are falsy. The
+    # step's first release-branch line refuses a non-macOS runner, so a
+    # widened `if` that this expression does not follow fails rather than
+    # running `xcodebuild` nowhere. ci-event-policy-test.mjs (6t) runs the step
+    # against both runners for each event/input case and holds the two equal.
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' || inputs.release_version || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}
+    # Finite, and chosen rather than inherited. Outside the release branch
+    # the job is a checkout; the 32 successful macOS runs in this workflow's
+    # recent history took 61s at worst and 24s on average. Only a release run
+    # reaches the one `xcodebuild -showBuildSettings`, which reads the project
+    # rather than building it. The bound is far above either path and exists
+    # for the third case: a wedged `xcodebuild` gives a PAID macOS runner back
+    # in minutes instead of holding it for GitHub's 6-hour default.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -230,6 +241,7 @@ jobs:
           # reachable more often.
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] \
             || [ -n "$RELEASE_VERSION" ] || [ "$PUBLISH_RELEASE" = true ]; then
+            [ "$RUNNER_OS" = macOS ] || { echo "::error::release contract reached on $RUNNER_OS; runs-on must select macos-15 for it"; exit 1; }
             if [ -n "$RELEASE_VERSION" ]; then
               printf '%s' "$RELEASE_VERSION" | grep -Eq '^[0-9]+(\.[0-9]+){1,2}$' || exit 1
               [ "$NOTARIZE" = true ] || exit 1

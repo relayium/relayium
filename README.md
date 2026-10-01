@@ -514,11 +514,15 @@ Issues, ideas, and PRs are welcome — especially security review of the crypto 
 
 ```bash
 # Web tests / type-check
-cd web && npx vitest run && npm run check
+(cd web && npx vitest run && npm run check)
 
-# Server tests
-cd server && go test ./...
+# Server tests: the ordinary lane, then the ~20-minute real-time relay-renewal tests under -race
+scripts/test/go-local.sh          # or: scripts/test/go-local.sh ordinary
 ```
+
+Plain `go test ./...` is not enough: the relay-renewal tests wait out real credentials and push
+`server/cmd/relayium` past Go's 10-minute package default. The script uses CI's exact selectors, but it is a
+subset of the Go workflow, not all of it — see [`docs/CI-PLATFORM-BOUNDARY.md`](docs/CI-PLATFORM-BOUNDARY.md).
 
 Please read [`docs/superpowers/specs/`](docs/superpowers/specs/) for the design rationale before proposing
 larger changes — but read it as **dated design history, not as current implementation authority**. Those

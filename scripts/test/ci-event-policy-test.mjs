@@ -1155,6 +1155,176 @@ if (go) {
     + `\`race-rest\` skip them everywhere but \`${RENEW_JOB}\` runs only ./cmd/relayium.`);
 }
 
+// ── 3c. scripts/test/go-local.sh: the local runner README and CONTRIBUTING
+//        recommend runs the SAME two halves as `test` and `link-renew` ───────
+//
+// Plain `go test ./...` runs the renewal tests inside Go's 10-minute package
+// default and fails without a failed assertion. The runner is read here, not
+// trusted: it is copied into a throw-away tree with a fake `go` first on PATH
+// and run from an unrelated directory, and the arguments the fake recorded are
+// compared token for token with go.yml. The fake also drives every way the
+// runner must fail. bash, git and a POSIX userland are all this needs.
+const LOCAL_RUNNER = "scripts/test/go-local.sh";
+const ORDINARY_TIMEOUT_FLAGS = ["-count=1", "-timeout", "10m"];
+
+/** The `go test` invocation in a job's run text that names `flag`, as argv after `go`. */
+function goTestArgv(text, flag) {
+  const line = text.split("\n").find((l) => /^\s*go test /.test(l) && l.includes(`${flag} '${RENEW_PATTERN}'`));
+  if (line === undefined) return undefined;
+  // Shell words up to the first unquoted `|` (the pattern itself contains one, quoted).
+  const argv = [];
+  for (const m of line.trim().matchAll(/'([^']*)'|(\S+)/g)) {
+    if (m[2] === "|") break;
+    argv.push(m[1] ?? m[2]);
+  }
+  return argv.slice(1);
+}
+
+/**
+ * Parity between the runner's recorded argv and go.yml's. Renewal must equal
+ * `link-renew` exactly; ordinary must equal `test` plus only the explicit
+ * `-count=1 -timeout 10m` (Go's default bound, which `test` gets implicitly).
+ */
+function localRunnerParityFailures(ordinary, renewal, ciTest, ciRenew) {
+  const out = [];
+  if (ciTest === undefined || ciRenew === undefined) {
+    return [`go.yml: could not find the \`test\` -skip or \`${RENEW_JOB}\` -run command to compare ${LOCAL_RUNNER} with.`];
+  }
+  if (JSON.stringify(renewal) !== JSON.stringify(ciRenew)) {
+    out.push(`${LOCAL_RUNNER} renewal runs \`go ${renewal?.join(" ")}\`; go.yml/${RENEW_JOB} runs `
+      + `\`go ${ciRenew.join(" ")}\`. The local renewal lane must be the CI one, verbatim.`);
+  }
+  const extra = [];
+  const rest = [...(ordinary ?? [])];
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "-count=1") { extra.push(...rest.splice(i, 1)); i--; }
+    else if (rest[i] === "-timeout") { extra.push(...rest.splice(i, 2)); i--; }
+  }
+  if (JSON.stringify(rest) !== JSON.stringify(ciTest)
+    || JSON.stringify([...extra].sort()) !== JSON.stringify([...ORDINARY_TIMEOUT_FLAGS].sort())) {
+    out.push(`${LOCAL_RUNNER} ordinary runs \`go ${ordinary?.join(" ")}\`; want go.yml/test's `
+      + `\`go ${ciTest.join(" ")}\` plus exactly \`${ORDINARY_TIMEOUT_FLAGS.join(" ")}\`. A selector that differs `
+      + `from CI either runs the renewal tests into the 10m bound or drops tests nobody runs.`);
+  }
+  return out;
+}
+
+if (go) {
+  const ciTest = goTestArgv(runText(go.jobs?.test), "-skip");
+  const ciRenew = goTestArgv(runText(go.jobs?.[RENEW_JOB]), "-run");
+  const runnerSrc = readFileSync(resolve(repoRoot, LOCAL_RUNNER), "utf8");
+  const sandbox = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/go-local-policy.XXXXXX`], { encoding: "utf8" })
+    .stdout.trim();
+  check(sandbox !== "", `could not create a temporary directory for the ${LOCAL_RUNNER} controls.`);
+  const sh = (script, env = {}) => spawnSync("bash", ["-c", script], {
+    encoding: "utf8", env: { ...process.env, ...env },
+  });
+  const FAKE_GO = [
+    "#!/usr/bin/env bash",
+    // One line per call: physical cwd, then each argument after a TAB.
+    "{ printf '%s' \"$(pwd -P)\"; printf '\\t%s' \"$@\"; printf '\\n'; } >> \"$FAKE_GO_CALLS\"",
+    "case \" $* \" in",
+    "  *' -run '*) [ -f \"$FAKE_RENEW_OUT\" ] && cat \"$FAKE_RENEW_OUT\"; exit \"${FAKE_RENEW_RC:-0}\" ;;",
+    "  *) echo 'ok  fake/ordinary'; exit \"${FAKE_ORD_RC:-0}\" ;;",
+    "esac",
+  ].join("\n");
+  let n = 0;
+  /**
+   * One control: a fresh tree <root>/scripts/test/go-local.sh + <root>/server,
+   * the given cmd/relayium test sources, the fake go, run from <root>/elsewhere.
+   */
+  const control = ({ mode = "", tests, renewOut = "", ordRc = 0, renewRc = 0, logDir }) => {
+    const root = `${sandbox}/c${n++}`;
+    const q = (s) => `'${s.replace(/'/g, "'\\''")}'`;
+    const setup = [
+      `mkdir -p ${q(root)}/scripts/test ${q(root)}/server/cmd/relayium ${q(root)}/bin ${q(root)}/elsewhere ${q(root)}/logs`,
+      `printf '%s' ${q(runnerSrc)} > ${q(root)}/scripts/test/go-local.sh`,
+      `printf '%s\\n' ${q(FAKE_GO)} > ${q(root)}/bin/go && chmod +x ${q(root)}/bin/go`,
+      `printf '%s' ${q(tests)} > ${q(root)}/server/cmd/relayium/renew_test.go`,
+      `printf '%s' ${q(renewOut)} > ${q(root)}/renew.out`,
+      `: > ${q(root)}/calls`,
+    ].join(" && ");
+    const made = sh(setup);
+    check(made.status === 0, `${LOCAL_RUNNER} control setup failed: ${made.stderr}`);
+    const r = sh(`cd ${q(root)}/elsewhere && bash ../scripts/test/go-local.sh ${mode}`, {
+      PATH: `${root}/bin:${process.env.PATH}`, FAKE_GO_CALLS: `${root}/calls`, FAKE_RENEW_OUT: `${root}/renew.out`,
+      FAKE_ORD_RC: String(ordRc), FAKE_RENEW_RC: String(renewRc), GO_LOCAL_LOG_DIR: logDir ?? `${root}/logs`,
+    });
+    const serverDir = sh(`cd ${q(root)}/server && pwd -P`).stdout.trim();
+    const calls = readFileSync(`${root}/calls`, "utf8").split("\n").filter(Boolean).map((l) => {
+      const [cwd, ...argv] = l.split("\t");
+      return { cwd, argv };
+    });
+    return { status: r.status, out: `${r.stdout}${r.stderr}`, calls, serverDir, root };
+  };
+  const TESTS = "package main\n\nfunc TestLinkRenewOne(t *testing.T) {}\nfunc TestLDRenewTwo(t *testing.T) {}\n"
+    + "func helperTestLinkRenew() {}\nfunc TestUnrelated(t *testing.T) {}\n";
+  const ALL_PASS = "=== RUN   TestLinkRenewOne\n--- PASS: TestLinkRenewOne (0.01s)\n"
+    + "=== RUN   TestLDRenewTwo\n--- PASS: TestLDRenewTwo (0.01s)\nPASS\nok  \tfake/cmd/relayium\t0.02s\n";
+  const tag = `${LOCAL_RUNNER} control`;
+
+  // Complete expected PASS: both lanes, in order, from server/, with CI's selectors.
+  const ok = control({ tests: TESTS, renewOut: ALL_PASS });
+  check(ok.status === 0, `${tag} (all PASS): exit ${ok.status}, want 0.\n${ok.out}`);
+  check(ok.calls.length === 2 && ok.calls.every((c) => c.cwd === ok.serverDir),
+    `${tag} (all PASS): want exactly two go calls, both in ${ok.serverDir}; got ${JSON.stringify(ok.calls)}.`);
+  check(/\[renewal\] PASS \(2 top-level tests/.test(ok.out),
+    `${tag} (all PASS): the summary does not report exactly the 2 top-level tests the pattern names `
+    + `(neither TestUnrelated nor a non-leading match counts).\n${ok.out}`);
+  for (const message of localRunnerParityFailures(ok.calls[0]?.argv, ok.calls[1]?.argv, ciTest, ciRenew)) {
+    check(false, message);
+  }
+  // The parity check can fail: a drifted pattern, a dropped -race, a missing ordinary timeout.
+  const drifted = (argv, from, to) => argv?.map((a) => (a === from ? to : a));
+  check(localRunnerParityFailures(drifted(ok.calls[0]?.argv, `${RENEW_PATTERN}`, "^TestLinkRenew"),
+    ok.calls[1]?.argv, ciTest, ciRenew).length === 1, `3c parity did NOT notice a narrowed ordinary -skip.`);
+  check(localRunnerParityFailures(ok.calls[0]?.argv, ok.calls[1]?.argv?.filter((a) => a !== "-race"),
+    ciTest, ciRenew).length === 1, `3c parity did NOT notice a renewal lane without -race.`);
+  check(localRunnerParityFailures(ok.calls[0]?.argv?.filter((a) => a !== "10m" && a !== "-timeout"),
+    ok.calls[1]?.argv, ciTest, ciRenew).length === 1, `3c parity did NOT notice an ordinary lane without -timeout.`);
+
+  // Mode selection runs one lane only.
+  const ordOnly = control({ mode: "ordinary", tests: "" });
+  check(ordOnly.status === 0 && ordOnly.calls.length === 1 && !ordOnly.calls[0].argv.includes("-race"),
+    `${tag} (ordinary mode): want one non-race call and exit 0 even with no renewal tests; got exit `
+    + `${ordOnly.status}, ${JSON.stringify(ordOnly.calls)}.`);
+  const renOnly = control({ mode: "renewal", tests: TESTS, renewOut: ALL_PASS });
+  check(renOnly.status === 0 && renOnly.calls.length === 1 && renOnly.calls[0].argv.includes("-race"),
+    `${tag} (renewal mode): want one race call and exit 0; got exit ${renOnly.status}, ${JSON.stringify(renOnly.calls)}.`);
+  // A relative GO_LOCAL_LOG_DIR is the CALLER's directory, not server/ after the runner's cd.
+  const relLogs = control({ mode: "renewal", tests: TESTS, renewOut: ALL_PASS, logDir: "rel-logs" });
+  const relLog = `${relLogs.root}/elsewhere/rel-logs/renewal.log`;
+  check(relLogs.status === 0 && sh(`test -s '${relLog}'`).status === 0
+    && sh(`test -e '${relLogs.root}/server/rel-logs'`).status !== 0,
+    `${tag} (relative GO_LOCAL_LOG_DIR): want exit 0 and the log at ${relLog}, nothing under server/; got exit `
+    + `${relLogs.status}.\n${relLogs.out}`);
+  const badMode = control({ mode: "everything", tests: TESTS });
+  check(badMode.status === 2 && badMode.calls.length === 0,
+    `${tag} (unknown mode): want exit 2 and no go call; got exit ${badMode.status}.`);
+
+  // Every failure path: non-zero exit, and the stated reason.
+  const FAILS = [
+    { name: "ordinary fails", args: { tests: TESTS, renewOut: ALL_PASS, ordRc: 1 }, calls: 1,
+      reason: /ordinary lane exited non-zero/ },
+    { name: "renewal exits non-zero after printing every PASS (tee must not mask it)",
+      args: { tests: TESTS, renewOut: ALL_PASS, renewRc: 1 }, calls: 2, reason: /renewal lane exited non-zero/ },
+    { name: "a discovered test has no PASS line",
+      args: { tests: TESTS, renewOut: "--- PASS: TestLinkRenewOne (0.01s)\nPASS\n" }, calls: 2,
+      reason: /renewal test TestLDRenewTwo did not PASS/ },
+    { name: "a subtest SKIPs", args: { tests: TESTS, renewOut: `    --- SKIP: TestLinkRenewOne/sub (0.00s)\n${ALL_PASS}` },
+      calls: 2, reason: /a renewal test skipped/ },
+    { name: "the pattern names no test", args: { tests: "package main\n\nfunc TestUnrelated(t *testing.T) {}\n",
+      renewOut: ALL_PASS }, calls: 0, reason: /no top-level test in server\/cmd\/relayium matches/ },
+  ];
+  for (const f of FAILS) {
+    const r = control(f.args);
+    check(r.status !== 0 && r.status !== null && f.reason.test(r.out) && r.calls.length === f.calls,
+      `${tag} (${f.name}): want a non-zero exit matching ${f.reason} after ${f.calls} go call(s); got exit `
+      + `${r.status} after ${r.calls.length}.\n${r.out}`);
+  }
+  sh(`rm -rf '${sandbox}'`);
+}
+
 /**
  * A race lane must be bounded and must not be allowed to try again. A retry
  * turns an intermittent race — the only kind the detector usually finds — into
@@ -1921,9 +2091,10 @@ const RUNNER_BUDGETS = [
     file: MACOS,
     why: "a PAID macOS runner is held by work that will never finish",
     jobs: {
-      // Declared 10. A checkout on most events; its one step is skipped
-      // outside a workflow_dispatch, and only a release dispatch reaches
-      // `xcodebuild -showBuildSettings`.
+      // Declared 10. A checkout on Ubuntu for push, pull request and the merge
+      // gate; on macOS only when a dispatch or release input reaches
+      // `xcodebuild -showBuildSettings` (6t). Still budgeted: on those runs it
+      // is a PAID runner, and 6l counts any `runs-on` that can name macOS.
       contract: {
         max: 15,
         why: "a PAID macOS runner is held by a release-contract check that reads a project file",
@@ -3896,7 +4067,9 @@ function macosBudgetFailures(world) {
   );
   for (const file of swept) {
     for (const [name, job] of Object.entries(world.docs.get(file)?.jobs ?? {})) {
-      if (!String(job?.["runs-on"] ?? "").startsWith("macos")) continue;
+      // `includes`, not `startsWith`: a conditional `runs-on` expression that can pick a
+      // macOS image (macos.yml's `contract`, 6t) is a paid job on those runs.
+      if (!String(job?.["runs-on"] ?? "").includes("macos")) continue;
       const ceiling = governedCeiling(file, name);
       need(
         Number.isFinite(ceiling),
@@ -3917,6 +4090,119 @@ function macosBudgetFailures(world) {
     }
   }
 
+  return out;
+}
+
+// ── 6t. macos.yml `contract`: Apple runner exactly when the release branch runs ─
+//
+// `contract` is a checkout on every push, pull request and merge-gate call; its
+// one step reaches `xcodebuild -showBuildSettings` and the readiness check only
+// on a dispatch, a non-empty `release_version` or `publish_release`. It used to
+// wait ~7 minutes for a macOS runner to do 13 s of checkout (run 36736501756)
+// while `ui-smoke` and `signed-build` waited on it, so `runs-on` now picks
+// `ubuntu-latest` unless one of those three holds.
+//
+// The two conditions are written twice — once as a GitHub expression, once as
+// shell — and nothing but this section keeps them equal. So nothing is taken
+// from the text: the expression is evaluated, and the step's script is RUN, for
+// each event/input shape a caller can produce, against stub `xcodebuild` and
+// `node`. A case reaches the release branch iff, run as Linux, the script calls
+// a tool, exits non-zero or trips its runner guard; every such case must have
+// evaluated to `macos-15`. Separately, no script run as Linux may call a tool at
+// all — the guard that makes a future widened `if` fail instead of running
+// `xcodebuild` on a runner without one.
+const CONTRACT_STEP = "Validate release contract";
+const CONTRACT_CASES = [
+  // [label, event, inputs (undefined: the event supplies none), ordinary?]
+  ["push to main", "push", undefined, true],
+  ["pull request", "pull_request", undefined, true],
+  ["merge-gate call under a pull request (no `with:`)", "pull_request",
+    { release_version: "", notarize: false, publish_release: false }, true],
+  ["merge-gate call under a push", "push", { release_version: "", notarize: false, publish_release: false }, true],
+  ["dispatch with no release inputs", "workflow_dispatch",
+    { release_version: "", notarize: false, publish_release: false }, false],
+  ["release candidate", "workflow_dispatch", { release_version: "1.4.5", notarize: true, publish_release: false }, false],
+  ["release inputs under a push event", "push", { release_version: "1.4.5", notarize: true, publish_release: false }, false],
+  ["publish without a version", "push", { release_version: "", notarize: false, publish_release: true }, false],
+  ["notarize alone", "push", { release_version: "", notarize: true, publish_release: false }, false],
+  ["publish release", "workflow_dispatch", { release_version: "1.4.5", notarize: true, publish_release: true }, false],
+];
+
+/** Evaluate a `${{ }}` runs-on for one case; throws on anything it does not model. */
+function evalRunsOn(runsOn, event, inputs) {
+  const m = /^\$\{\{([\s\S]*)\}\}$/.exec(String(runsOn).trim());
+  if (!m) return String(runsOn);
+  const js = m[1]
+    .replace(/'([^']*)'/g, (_, lit) => JSON.stringify(lit))
+    .replace(/\bgithub\.event_name\b/g, "ctx.event")
+    .replace(/\binputs\.([a-z_]+)\b/g, "ctx.inputs?.$1")
+    .replace(/!=/g, "!==").replace(/([^!=])==/g, "$1===");
+  const bare = js.replace(/"[^"]*"/g, "").replace(/ctx\.(event|inputs\?\.[a-z_]+)/g, "");
+  if (/[A-Za-z_$]/.test(bare)) throw new Error(`cannot evaluate runs-on ${runsOn}: unmodelled identifier`);
+  // eslint-disable-next-line no-new-func
+  return new Function("ctx", `return (${js});`)({ event, inputs });
+}
+
+function macosContractRunnerFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const job = world.docs.get(MACOS)?.jobs?.contract;
+  const step = (job?.steps ?? []).find((s) => s?.name === CONTRACT_STEP);
+  if (!job || typeof step?.run !== "string") {
+    return [`${MACOS}/contract: no job, or no \`${CONTRACT_STEP}\` step with a run script, to check the runner against.`];
+  }
+  const dir = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/macos-contract.XXXXXX`], { encoding: "utf8" })
+    .stdout.trim();
+  const stub = (tool) => `#!/bin/sh\necho "${tool} $*" >> "$TOOL_CALLS"\n`
+    + (tool === "xcodebuild" ? "echo '    MARKETING_VERSION = 1.4.5'\n" : "");
+  spawnSync("bash", ["-c", `mkdir -p "$1/bin" && printf '%s' "$2" > "$1/bin/xcodebuild" && printf '%s' "$3" > "$1/bin/node" `
+    + `&& chmod +x "$1/bin/xcodebuild" "$1/bin/node" && printf '%s' "$4" > "$1/step.sh"`,
+  "_", dir, stub("xcodebuild"), stub("node"), step.run]);
+  const run = (os, event, inputs, n) => {
+    const calls = `${dir}/calls-${n}-${os}`;
+    const r = spawnSync("bash", [`${dir}/step.sh`], {
+      encoding: "utf8",
+      env: {
+        PATH: `${dir}/bin:${process.env.PATH}`, TOOL_CALLS: calls, RUNNER_OS: os,
+        GITHUB_EVENT_NAME: event, GITHUB_REF: "refs/heads/main",
+        // How GitHub renders `${{ inputs.x }}`: absent inputs are empty, booleans are words.
+        RELEASE_VERSION: inputs ? String(inputs.release_version) : "",
+        NOTARIZE: inputs ? String(inputs.notarize) : "",
+        PUBLISH_RELEASE: inputs ? String(inputs.publish_release) : "",
+      },
+    });
+    const tools = spawnSync("cat", [calls], { encoding: "utf8" }).stdout ?? "";
+    return { status: r.status, out: `${r.stdout}${r.stderr}`, tools };
+  };
+  CONTRACT_CASES.forEach(([label, event, inputs, ordinary], n) => {
+    let runner;
+    try {
+      runner = evalRunsOn(job["runs-on"], event, inputs);
+    } catch (err) {
+      need(false, `${MACOS}/contract: ${err.message}. 6t cannot prove the runner choice, so it refuses it.`);
+      return;
+    }
+    need(runner === "macos-15" || runner === "ubuntu-latest",
+      `${MACOS}/contract (${label}): runs-on evaluates to ${JSON.stringify(runner)}; want macos-15 or ubuntu-latest.`);
+    const linux = run("Linux", event, inputs, n);
+    const reached = linux.status !== 0 || linux.tools !== "" || /release contract reached on/.test(linux.out);
+    need(linux.tools === "",
+      `${MACOS}/contract (${label}): run as Linux, the release-contract step called [${linux.tools.trim()}]. `
+      + `Its runner guard must refuse a non-macOS runner before any Apple tool runs.`);
+    need(!reached || runner === "macos-15",
+      `${MACOS}/contract (${label}): the step reaches its release branch, but runs-on picks `
+      + `${JSON.stringify(runner)}. Every release reachability must keep the Apple runner.`);
+    need(!ordinary || (!reached && runner === "ubuntu-latest"),
+      `${MACOS}/contract (${label}): an ordinary run picks ${JSON.stringify(runner)}${reached ? " and reaches the release branch" : ""}; `
+      + `want ubuntu-latest and a checkout only, so it does not queue for a macOS runner.`);
+    if (runner === "macos-15" && label === "publish release") {
+      const mac = run("macOS", event, inputs, n);
+      need(mac.status === 0 && /^xcodebuild /m.test(mac.tools) && /check-release-readiness\.mjs --require-approved/.test(mac.tools),
+        `${MACOS}/contract (${label}): on macOS the step must still read MARKETING_VERSION and run the readiness `
+        + `check, and pass with matching stubs; got exit ${mac.status}, tools [${mac.tools.trim()}].\n${mac.out}`);
+    }
+  });
+  spawnSync("rm", ["-rf", dir]);
   return out;
 }
 
@@ -5553,6 +5839,7 @@ for (const message of iosParallelLaneFailures(realWorld())) failures.push(messag
 for (const message of appGuardCoverageFailures(realWorld())) failures.push(message);
 for (const message of iosRegularWidthShellFailures(realWorld())) failures.push(message);
 for (const message of macosBudgetFailures(realWorld())) failures.push(message);
+for (const message of macosContractRunnerFailures(realWorld())) failures.push(message);
 for (const message of concurrencyFailures(realWorld())) failures.push(message);
 for (const message of releaseBoundaryFailures(realWorld())) failures.push(message);
 for (const message of aggregateGateFailures(realWorld())) failures.push(message);
@@ -8187,6 +8474,68 @@ const MUTATIONS = [
     }),
     refute: /a step names `iPhone`/,
   },
+  {
+    // 6t. A release input the expression forgets: the step still reaches its
+    // release branch, now on Ubuntu, where the guard fails the release.
+    name: "macos.yml contract's runs-on forgets publish_release",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      job["runs-on"] = job["runs-on"].replace(" || inputs.publish_release", "");
+    }),
+    expect: /macos\.yml\/contract \(publish without a version\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+  },
+  {
+    // 6t. The shell `if` grows a reach the expression does not follow.
+    name: "macos.yml contract's release branch becomes reachable by notarize alone",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace('|| [ "$PUBLISH_RELEASE" = true ]; then', '|| [ "$PUBLISH_RELEASE" = true ] || [ "$NOTARIZE" = true ]; then');
+    }),
+    expect: /macos\.yml\/contract \(notarize alone\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+  },
+  {
+    // 6t. Without the guard, a Linux run that reaches the branch calls xcodebuild.
+    name: "macos.yml contract loses its non-macOS runner guard",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(/^ *\[ "\$RUNNER_OS" = macOS \].*\n/m, "");
+    }),
+    expect: /macos\.yml\/contract \(release candidate\): run as Linux, the release-contract step called \[xcodebuild/,
+  },
+  {
+    // 6t. The optimisation itself: ordinary runs stop queueing for macOS.
+    name: "macos.yml contract goes back to macos-15 for every run",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => { job["runs-on"] = "macos-15"; }),
+    expect: /macos\.yml\/contract \(push to main\): an ordinary run picks "macos-15"/,
+  },
+  {
+    // 6t. An expression the evaluator does not model is refused, not guessed.
+    name: "macos.yml contract's runs-on reads a context 6t does not model",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      job["runs-on"] = job["runs-on"].replace("github.event_name", "github.event.action");
+    }),
+    expect: /macos\.yml\/contract: cannot evaluate runs-on/,
+  },
+  {
+    // 6t. The release branch's own checks survive the move: a renamed readiness
+    // check on the macOS publish run is noticed.
+    name: "macos.yml contract's publish branch drops the readiness check",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(/^ *node apps\/mac\/scripts\/check-release-readiness\.mjs --require-approved\n/m, "");
+    }),
+    expect: /macos\.yml\/contract \(publish release\): on macOS the step must still read MARKETING_VERSION and run the readiness/,
+  },
+  {
+    // 6l. A conditional runs-on that can pick macOS is still a paid job.
+    name: "macos.yml contract's conditional runner loses its runner-budget entry",
+    mutate: (world) => {
+      const budget = RUNNER_BUDGETS.find((b) => b.file === MACOS);
+      const saved = budget.jobs.contract;
+      delete budget.jobs.contract;
+      try { return { ...world, __budgetFailures: macosBudgetFailures(world) }; } finally { budget.jobs.contract = saved; }
+    },
+    expect: /macos\.yml\/contract runs on .*a PAID runner/,
+  },
 ];
 
 for (const { name, mutate, expect, refute } of MUTATIONS) {
@@ -8202,6 +8551,8 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...appGuardCoverageFailures(world),
       ...iosRegularWidthShellFailures(world),
       ...macosBudgetFailures(world),
+      ...macosContractRunnerFailures(world),
+      ...(world.__budgetFailures ?? []),
       ...concurrencyFailures(world),
       ...releaseBoundaryFailures(world),
       ...aggregateGateFailures(world),

@@ -84,6 +84,22 @@ job is `uses: ./.github/workflows/macos.yml`. The bytes that get notarized come
 out of the same `signed-build` lane every pull request already runs — one build
 definition, one signing path, one provenance record.
 
+**`contract` picks its runner by what it will do.** On a `main` push, a
+pull request and every merge-gate call (no `with:`), its one step skips its
+release branch, so the job is a checkout on `ubuntu-latest`; it used to queue
+~7 minutes for a macOS runner to do 13 s of work (run 36736501756) while
+`ui-smoke` and `signed-build` waited on it. `runs-on` selects `macos-15`
+whenever the step can reach that branch — a `workflow_dispatch` event, a
+non-empty `release_version`, or `publish_release` — so every release call keeps
+the Apple runner and its `xcodebuild -showBuildSettings`, readiness and `main`
+checks unchanged. The branch's first line fails on any non-macOS runner, so a
+widened condition the expression does not follow fails instead of skipping its
+checks. `ci-event-policy-test.mjs` section 6t evaluates the expression and runs
+the step against stub `xcodebuild`/`node` for each event/input shape, requiring
+macOS wherever the branch is reached and Ubuntu for ordinary runs; 6l counts a
+`runs-on` that can name macOS as paid. `test` stays on `macos-15`: it compiles
+real Mach-O fixtures and needs Apple tools.
+
 **Three details that are load-bearing rather than stylistic:**
 
 * The call forwards its four secrets **one line each**, never `secrets:
@@ -1158,6 +1174,17 @@ occurrences are the same literal, that no other `-skip` exists in `go.yml`,
 that the pattern names real tests and only in `cmd/relayium`, and that
 `link-renew` stays bounded, `-count=1` and retry-free. Neither the Linux nor
 the Windows CLI matrix names a renewal test (their `-run` lists are exact).
+
+Locally, `scripts/test/go-local.sh` (from any directory) runs the same two
+halves: `ordinary` is `test`'s command with `-count=1` and Go's default
+`-timeout 10m` written out, and `renewal` is `link-renew`'s command verbatim,
+with the same per-test PASS, no-SKIP and non-empty-set checks; it stops at the
+first failing lane and never retries. Section 3c of `ci-event-policy-test.mjs`
+runs the script against a fake `go` and compares the recorded arguments with
+`go.yml` token for token, so the two cannot drift. It is a subset of `go.yml`,
+not a local copy of it: no `go build`/`go vet`, no `race-account` shards or
+`race-rest`, no CLI pairing matrix (old-CLI pairs), no Windows runtime tests,
+no govulncheck and no rollback harness.
 
 ## Adding a platform: Android, Windows, anything next
 

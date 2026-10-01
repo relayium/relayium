@@ -64,10 +64,11 @@ Please make sure the checks pass:
 
 ```bash
 # Web: unit tests + type-check
-cd web && npx vitest run && npm run check
+(cd web && npx vitest run && npm run check)
 
-# Server: tests
-cd server && go test ./...
+# Server: the ordinary tests, then the ~20-minute real-time relay-renewal tests under -race
+# (`scripts/test/go-local.sh ordinary` runs only the first; plain `go test ./...` exceeds Go's 10-minute package default)
+scripts/test/go-local.sh
 
 # Repo hygiene: no production IPs/paths/hostnames leaking into the public repo
 scripts/check-production-identifiers.sh
