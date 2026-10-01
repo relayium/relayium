@@ -237,6 +237,9 @@ type Service struct {
 	// records a throttle fail on FINISH, so without this a begin-flood fills the
 	// shared ceremony cap and starves legit passkey login/step-up. nil = unlimited.
 	passkeyBeginLimiter rateLimiter
+	// oauthStartLimiter caps browser OAuth start redirects (Google, Apple web)
+	// per IP; each one writes a server-side state row. nil = unlimited.
+	oauthStartLimiter rateLimiter
 	// downloadLimiter caps GET /api/files/{id}/blob starts per IP. Every download
 	// is proxied through central, so an unbounded request rate against a public
 	// link amplifies central egress; this blunts a single source before the
@@ -845,6 +848,12 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 	if !ok {
 		return Session{}, fmt.Errorf("invalid or expired token")
 	}
+	// Read before the account state below: a frozen account's reactivation
+	// offer is minted only while this epoch still holds.
+	epoch, err := s.store.CredentialEpochByEmail(ctx, tok.Email)
+	if err != nil {
+		return Session{}, err
+	}
 	u, err := s.store.UpsertUserByEmail(ctx, tok.Email, "")
 	if err != nil {
 		return Session{}, err
@@ -852,9 +861,11 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 	// Frozen-login guard (Task 4): a pending-deletion account must not get a
 	// live session via magic link. Mint a fresh reactivate token right here,
 	// while we still have u — handleMagicVerify has no other way to recover
-	// the account's email from just the (now-consumed) magic token.
+	// the account's email from just the (now-consumed) magic token. The token
+	// is fenced by the epoch read above, pending state and the address the
+	// link proved (issueReactivateTokenAtEpoch).
 	if u.DeletedAt > 0 {
-		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
+		raw, terr := s.issueReactivateTokenAtEpoch(ctx, u.ID, u.Email, epoch, "")
 		if terr != nil {
 			return Session{}, terr
 		}

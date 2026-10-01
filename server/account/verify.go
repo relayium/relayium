@@ -84,12 +84,18 @@ func (s *Service) VerifyEmail(ctx context.Context, rawToken, password string) (S
 	// closes the same one-line gap as ResetPassword/Login/VerifyMagicLink for
 	// defense-in-depth, in case a future path lets an unverified account reach
 	// pending-deletion.
+	// Read before the account state: a frozen account's reactivation offer is
+	// minted only while this epoch still holds (issueReactivateTokenAtEpoch).
+	epoch, err := s.store.CredentialEpoch(ctx, tok.UserID)
+	if err != nil {
+		return Session{}, err
+	}
 	u, err := s.store.GetUserByID(ctx, tok.UserID)
 	if err != nil {
 		return Session{}, err
 	}
 	if u.DeletedAt > 0 {
-		return s.refuseVerifyOfFrozenAccount(ctx, tokenHash, u)
+		return s.refuseVerifyOfFrozenAccount(ctx, tokenHash, u, epoch)
 	}
 	dropPassword, err := s.verifyDropsPassword(ctx, u, password)
 	if errors.Is(err, ErrVerifyPasswordMismatch) {
@@ -116,11 +122,15 @@ func (s *Service) VerifyEmail(ctx context.Context, rawToken, password string) (S
 	case VerifyAccountFrozen:
 		// Deletion was requested between the check above and the transaction,
 		// which rolled back without spending the link.
+		frozenEpoch, err := s.store.CredentialEpoch(ctx, userID)
+		if err != nil {
+			return Session{}, err
+		}
 		frozen, err := s.store.GetUserByID(ctx, userID)
 		if err != nil {
 			return Session{}, err
 		}
-		return s.refuseVerifyOfFrozenAccount(ctx, tokenHash, frozen)
+		return s.refuseVerifyOfFrozenAccount(ctx, tokenHash, frozen, frozenEpoch)
 	default:
 		// Another request spent the link first.
 		return Session{}, ErrInvalidToken
@@ -147,13 +157,21 @@ func (s *Service) recordVerifyMismatch(ctx context.Context, tokenHash string) er
 
 // refuseVerifyOfFrozenAccount spends the verify link and answers with the
 // reactivation offer, leaving the account alone.
-func (s *Service) refuseVerifyOfFrozenAccount(ctx context.Context, tokenHash string, u User) (Session, error) {
+//
+// epoch is the credential_epoch read before u: the reactivation token is
+// minted only while it, the pending state and u's address still hold, so a
+// recovery or new deletion that committed since mints nothing (the link is
+// spent either way; the user can ask for a fresh one).
+func (s *Service) refuseVerifyOfFrozenAccount(ctx context.Context, tokenHash string, u User, epoch int64) (Session, error) {
 	if _, ok, err := s.store.UseEmailToken(ctx, tokenHash, "verify", s.now().Unix()); err != nil {
 		return Session{}, err
 	} else if !ok {
 		return Session{}, ErrInvalidToken
 	}
-	raw, err := s.issueReactivateToken(ctx, u.ID, u.Email)
+	raw, err := s.issueReactivateTokenAtEpoch(ctx, u.ID, u.Email, epoch, "")
+	if errors.Is(err, errReactivationStateMoved) {
+		return Session{}, ErrInvalidToken
+	}
 	if err != nil {
 		return Session{}, err
 	}

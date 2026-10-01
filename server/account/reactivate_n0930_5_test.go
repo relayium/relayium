@@ -84,9 +84,11 @@ func n5AssertRefusedStillPending(t *testing.T, svc *Service, store *SQLiteStore,
 	}
 }
 
-// A token that slipped in after a recovery (a login that read the pending
-// state, paused while the owner recovered, then minted its token at the
-// recovered epoch) cannot undo the NEXT deletion.
+// A token minted while the account was active again after a recovery — the
+// proof-less reminder issuer (issueReactivateToken) does not require pending
+// state — records the recovered epoch and so cannot undo the NEXT deletion.
+// (Proof-based issuers refuse to mint at all; see
+// reactivate_issuers_n0930_5_test.go.)
 func TestReactivateN0930StaleIssuanceCannotUndoNextDeletion(t *testing.T) {
 	ctx := context.Background()
 	svc, store := n5Service(t)
@@ -95,7 +97,7 @@ func TestReactivateN0930StaleIssuanceCannotUndoNextDeletion(t *testing.T) {
 	if err := store.ClearAccountDeletion(ctx, u.ID); err != nil { // the owner recovers
 		t.Fatal(err)
 	}
-	stale, err := svc.issueReactivateToken(ctx, u.ID, u.Email) // the paused login resumes
+	stale, err := svc.issueReactivateToken(ctx, u.ID, u.Email) // a reminder fires after the recovery
 	if err != nil {
 		t.Fatal(err)
 	}

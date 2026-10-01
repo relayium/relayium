@@ -145,18 +145,55 @@ func (s *Service) reclaimDeletedAccountBlobs(ctx context.Context, blobs []BlobRe
 	}
 }
 
-// issueReactivateToken mints a fresh "reactivate" email_tokens row for userID,
-// valid for a full grace window (Settings.AccountGraceDays, in days) from
-// now, and returns the raw token. Shared by ConfirmAccountDeletion's
-// scheduled-deletion email and every frozen-login guard (Task 4:
-// password/magic/OAuth) — each pending-deletion login attempt hands back its
-// own independently-expiring token rather than depending on the original
-// confirm email having survived or still being at hand.
+// errReactivationStateMoved: the account's epoch, lifecycle, address or
+// password changed after the caller read the state it decided on, so no
+// reactivate token was minted.
+var errReactivationStateMoved = errors.New("account: state moved before the reactivate token was minted")
+
+// issueReactivateTokenAtEpoch mints a fresh "reactivate" token for a frozen
+// login or link (password, magic link, reset, verify), valid for a full grace
+// window (Settings.AccountGraceDays, in days), and returns the raw token. Each
+// pending-deletion attempt hands back its own independently-expiring token
+// rather than depending on the confirm email having survived.
 //
-// The token records the account's current credential_epoch, which names the
-// pending-deletion generation it may undo (see RedeemReactivateToken). A
-// deletion committing between this read and the insert leaves a token that
-// records the older epoch and so can never be redeemed — the safe direction.
+// epoch is the credential_epoch the caller read BEFORE it checked its
+// credential and the account's pending state. The insert is one statement that
+// requires that epoch, pending deletion, the same address and — for a password
+// login, passwordHash != "" — the very hash the password was checked against
+// (CreateReactivateTokenAtEpoch). So a proof made in one deletion generation
+// can never mint a token for the next: a recovery, password reset/change or
+// fresh deletion committing in between moves the epoch (or the hash) and the
+// call returns errReactivationStateMoved.
+func (s *Service) issueReactivateTokenAtEpoch(ctx context.Context, userID, email string, epoch int64, passwordHash string) (string, error) {
+	raw := authx.RandToken()
+	now := s.now()
+	st := s.ResolveSettings(ctx)
+	ok, err := s.store.CreateReactivateTokenAtEpoch(ctx, EmailToken{
+		TokenHash: authx.HashToken(raw),
+		UserID:    userID,
+		Email:     email,
+		Purpose:   "reactivate",
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Unix() + st.AccountGraceDays*86400,
+	}, epoch, true, passwordHash)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", errReactivationStateMoved
+	}
+	return raw, nil
+}
+
+// issueReactivateToken mints a reactivate token that no login proof stands
+// behind: the GC pre-purge reminder (IssueReactivateLink), mailed to the
+// account's own address. It records the account's current credential_epoch,
+// which names the pending-deletion generation it may undo (see
+// RedeemReactivateToken), and is inserted only while the account still holds
+// email at that epoch, so it can never reach a changed address or outlive a
+// later deletion. Pending state is not required: a token minted for an
+// account recovered in the meantime is dead, because the next deletion moves
+// the epoch.
 func (s *Service) issueReactivateToken(ctx context.Context, userID, email string) (string, error) {
 	epoch, err := s.store.CredentialEpoch(ctx, userID)
 	if err != nil {
@@ -165,17 +202,19 @@ func (s *Service) issueReactivateToken(ctx context.Context, userID, email string
 	raw := authx.RandToken()
 	now := s.now()
 	st := s.ResolveSettings(ctx)
-	tok := EmailToken{
-		TokenHash:       authx.HashToken(raw),
-		UserID:          userID,
-		Email:           email,
-		Purpose:         "reactivate",
-		CredentialEpoch: epoch,
-		CreatedAt:       now.Unix(),
-		ExpiresAt:       now.Unix() + st.AccountGraceDays*86400,
-	}
-	if err := s.store.CreateEmailToken(ctx, tok); err != nil {
+	ok, err := s.store.CreateReactivateTokenAtEpoch(ctx, EmailToken{
+		TokenHash: authx.HashToken(raw),
+		UserID:    userID,
+		Email:     email,
+		Purpose:   "reactivate",
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Unix() + st.AccountGraceDays*86400,
+	}, epoch, false, "")
+	if err != nil {
 		return "", err
+	}
+	if !ok {
+		return "", errReactivationStateMoved
 	}
 	return raw, nil
 }

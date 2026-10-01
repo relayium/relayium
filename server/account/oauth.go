@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -59,14 +60,53 @@ const oauthStateCookie = "relayium_oauth_state"
 // state row share it.
 const oauthStateTTL = 600 // seconds
 
+// oauthStateBudget caps the unexpired server-side OAuth states across all
+// clients, so a start-flood from many addresses (each within its per-IP
+// throttle) cannot grow the table without bound. A variable so tests can
+// shrink it.
+var oauthStateBudget = 100_000
+
+// errOAuthStateBudget: the outstanding-state budget is exhausted.
+var errOAuthStateBudget = errors.New("account: oauth state budget exhausted")
+
+// SetOAuthStartLimiter caps the browser OAuth start routes (Google, Apple web)
+// per IP. nil = unlimited.
+func (s *Service) SetOAuthStartLimiter(rl rateLimiter) { s.oauthStartLimiter = rl }
+
+// beginOAuth runs the shared admission for a browser OAuth start: the per-IP
+// throttle, then a state minted within the global budget. It writes the
+// refusal itself and returns ok=false when the start must not proceed.
+func (s *Service) beginOAuth(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if s.oauthStartLimiter != nil && !s.oauthStartLimiter.Allow(s.rateLimitIP(r)) {
+		http.Error(w, "too many requests", http.StatusTooManyRequests)
+		return "", false
+	}
+	state, err := s.mintOAuthState(r.Context())
+	if errors.Is(err, errOAuthStateBudget) {
+		log.Printf("oauth: outstanding state budget (%d) exhausted; refusing new sign-in starts until states expire", oauthStateBudget)
+		http.Error(w, "sign-in temporarily unavailable", http.StatusServiceUnavailable)
+		return "", false
+	}
+	if err != nil {
+		http.Redirect(w, r, "/?login=error", http.StatusFound)
+		return "", false
+	}
+	return state, true
+}
+
 // mintOAuthState issues a fresh state for a browser OAuth attempt and records
 // its hash server-side until oauthStateTTL, so the callback can spend it
-// exactly once (consumeOAuthState).
+// exactly once (consumeOAuthState). It fails with errOAuthStateBudget when
+// oauthStateBudget unexpired states already exist.
 func (s *Service) mintOAuthState(ctx context.Context) (string, error) {
 	state := authx.RandToken()
 	now := s.now().Unix()
-	if err := s.store.CreateOAuthState(ctx, authx.HashToken(state), now, now+oauthStateTTL); err != nil {
+	ok, err := s.store.CreateOAuthState(ctx, authx.HashToken(state), now, now+oauthStateTTL, oauthStateBudget)
+	if err != nil {
 		return "", err
+	}
+	if !ok {
+		return "", errOAuthStateBudget
 	}
 	return state, nil
 }
@@ -82,9 +122,8 @@ func (s *Service) consumeOAuthState(ctx context.Context, state string) bool {
 }
 
 func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
-	state, err := s.mintOAuthState(r.Context())
-	if err != nil {
-		http.Redirect(w, r, "/?login=error", http.StatusFound)
+	state, ok := s.beginOAuth(w, r)
+	if !ok {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{

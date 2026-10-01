@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/mail"
 
@@ -78,12 +79,18 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 	// either, and its password must not be silently changed while frozen — GC
 	// still hard-purges it on schedule regardless, and reactivation is the only
 	// path meant to bring it back. The link is spent on this path, as before.
+	// Read before the account state: a frozen account's reactivation offer is
+	// minted only while this epoch still holds (issueReactivateTokenAtEpoch).
+	epoch, err := s.store.CredentialEpoch(ctx, tok.UserID)
+	if err != nil {
+		return Session{}, err
+	}
 	u, err := s.store.GetUserByID(ctx, tok.UserID)
 	if err != nil {
 		return Session{}, err
 	}
 	if u.DeletedAt > 0 {
-		return s.refuseResetOfFrozenAccount(ctx, tokenHash, u)
+		return s.refuseResetOfFrozenAccount(ctx, tokenHash, u, epoch)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
@@ -98,11 +105,15 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 	case ResetAccountFrozen:
 		// Deletion was requested between the check above and the transaction,
 		// which rolled back without spending the link.
+		frozenEpoch, err := s.store.CredentialEpoch(ctx, userID)
+		if err != nil {
+			return Session{}, err
+		}
 		frozen, err := s.store.GetUserByID(ctx, userID)
 		if err != nil {
 			return Session{}, err
 		}
-		return s.refuseResetOfFrozenAccount(ctx, tokenHash, frozen)
+		return s.refuseResetOfFrozenAccount(ctx, tokenHash, frozen, frozenEpoch)
 	default:
 		// Another request spent the link while this one was hashing.
 		return Session{}, ErrInvalidToken
@@ -130,13 +141,21 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 
 // refuseResetOfFrozenAccount spends the reset link and answers with the
 // reactivation offer, leaving the password alone.
-func (s *Service) refuseResetOfFrozenAccount(ctx context.Context, tokenHash string, u User) (Session, error) {
+//
+// epoch is the credential_epoch read before u: the reactivation token is
+// minted only while it, the pending state and u's address still hold, so a
+// recovery or new deletion that committed since mints nothing (the link is
+// spent either way; the user can ask for a fresh one).
+func (s *Service) refuseResetOfFrozenAccount(ctx context.Context, tokenHash string, u User, epoch int64) (Session, error) {
 	if _, ok, err := s.store.UseEmailToken(ctx, tokenHash, "reset", s.now().Unix()); err != nil {
 		return Session{}, err
 	} else if !ok {
 		return Session{}, ErrInvalidToken
 	}
-	raw, err := s.issueReactivateToken(ctx, u.ID, u.Email)
+	raw, err := s.issueReactivateTokenAtEpoch(ctx, u.ID, u.Email, epoch, "")
+	if errors.Is(err, errReactivationStateMoved) {
+		return Session{}, ErrInvalidToken
+	}
 	if err != nil {
 		return Session{}, err
 	}

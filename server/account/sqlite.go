@@ -130,11 +130,13 @@ CREATE TABLE IF NOT EXISTS magic_tokens (
 );
 -- One row per browser OAuth attempt (Google, Apple web): the hash of the state
 -- the start handler issued. The callback deletes it before anything else, so a
--- copied state/cookie pair works at most once. See CreateOAuthState.
+-- copied state/cookie pair works at most once. Live rows are capped by a
+-- global budget and the start routes are throttled per IP; see CreateOAuthState.
 CREATE TABLE IF NOT EXISTS oauth_states (
   state_hash TEXT PRIMARY KEY,
   expires_at INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
 CREATE TABLE IF NOT EXISTS devices (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES users(id),
@@ -3741,6 +3743,35 @@ func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context,
 	return n == 1, err
 }
 
+// CreateReactivateTokenAtEpoch inserts a "reactivate" token in one statement
+// only while the account still has credential_epoch == epoch and still holds
+// t.Email, and — when requirePending — is still pending deletion, and — when
+// passwordHash != "" — still has exactly that password hash. The row records
+// that epoch. It is the fenced form of every non-provider issuer: the caller
+// passes the epoch it read BEFORE checking the credential (password, magic,
+// reset or verify link) and the account state, so a recovery, password change
+// or fresh deletion that committed since leaves no token. false = state moved.
+func (s *SQLiteStore) CreateReactivateTokenAtEpoch(ctx context.Context, t EmailToken, epoch int64, requirePending bool, passwordHash string) (bool, error) {
+	cond := ""
+	args := []any{t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt, t.UserID, epoch, normEmail(t.Email)}
+	if requirePending {
+		cond += ` AND u.deleted_at > 0`
+	}
+	if passwordHash != "" {
+		cond += ` AND u.password_hash = ?`
+		args = append(args, passwordHash)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, credential_epoch, created_at, expires_at, used_at)
+		 SELECT ?, u.id, ?, 'reactivate', u.credential_epoch, ?, ?, 0 FROM users u
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.email = ?`+cond, args...)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
 // VerifyEmailForIdentityLogin is the provider-login form of
 // dropUnverifiedPassword + SetEmailVerified, in one transaction whose every
 // write is guarded by the state the login was decided on: the account is
@@ -3878,18 +3909,28 @@ func (s *SQLiteStore) RedeemReactivateToken(ctx context.Context, tokenHash strin
 // on each insert.
 const oauthStateSweepBatch = 100
 
-// CreateOAuthState records the hash of a browser OAuth state until expiresAt,
-// first deleting up to oauthStateSweepBatch expired rows so the table stays
-// bounded by the attempts of the last expiry window.
-func (s *SQLiteStore) CreateOAuthState(ctx context.Context, stateHash string, now, expiresAt int64) error {
+// CreateOAuthState records the hash of a browser OAuth state until expiresAt.
+// It first deletes up to oauthStateSweepBatch expired rows (an index range
+// scan on expires_at), then inserts only while fewer than budget unexpired
+// rows exist — one statement, so concurrent starts cannot overshoot it.
+// ok=false: the budget is exhausted and nothing was inserted. The table is
+// therefore bounded by budget live rows plus expired rows awaiting the sweep,
+// each start removing up to oauthStateSweepBatch of those while adding one.
+func (s *SQLiteStore) CreateOAuthState(ctx context.Context, stateHash string, now, expiresAt int64, budget int) (bool, error) {
 	if _, err := s.db.ExecContext(ctx,
 		`DELETE FROM oauth_states WHERE rowid IN
 		   (SELECT rowid FROM oauth_states WHERE expires_at <= ? LIMIT ?)`, now, oauthStateSweepBatch); err != nil {
-		return err
+		return false, err
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO oauth_states (state_hash, expires_at) VALUES (?, ?)`, stateHash, expiresAt)
-	return err
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO oauth_states (state_hash, expires_at)
+		 SELECT ?, ? WHERE (SELECT COUNT(*) FROM oauth_states WHERE expires_at > ?) < ?`,
+		stateHash, expiresAt, now, budget)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }
 
 // ConsumeOAuthState deletes an unexpired state row in one statement and

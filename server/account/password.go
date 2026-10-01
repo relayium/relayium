@@ -231,6 +231,14 @@ func (s *Service) verifyDropsPassword(ctx context.Context, u User, password stri
 // byte-for-byte identical credential/verification/frozen guards.
 func (s *Service) authenticate(ctx context.Context, email, password string) (string, error) {
 	email = normEmail(email)
+	// Read before the password and the account state are checked: a frozen
+	// account's reactivation offer is minted only while this epoch still holds
+	// (see issueReactivateTokenAtEpoch). The caller's own session/bearer fence
+	// reads its epoch separately, also before this call.
+	epoch, err := s.store.CredentialEpochByEmail(ctx, email)
+	if err != nil {
+		return "", err
+	}
 	uid, hash, ok, err := s.store.GetCredentials(ctx, email)
 	if err != nil {
 		return "", err
@@ -258,7 +266,14 @@ func (s *Service) authenticate(ctx context.Context, email, password string) (str
 		return "", err
 	}
 	if u.DeletedAt > 0 {
-		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
+		// Bound to the proof just made: the epoch read above, the pending state,
+		// the address and the exact hash the password matched. A recovery,
+		// password reset/change or new deletion since then mints nothing, and the
+		// stale password proof fails like a wrong password.
+		raw, terr := s.issueReactivateTokenAtEpoch(ctx, u.ID, u.Email, epoch, hash)
+		if errors.Is(terr, errReactivationStateMoved) {
+			return "", ErrBadCredentials
+		}
 		if terr != nil {
 			return "", terr
 		}

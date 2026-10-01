@@ -63,9 +63,8 @@ const appleTokenURL = "https://appleid.apple.com/auth/token"
 // authorization endpoint. response_mode=form_post is required whenever the
 // "name email" scope is requested.
 func (s *Service) handleAppleWebStart(w http.ResponseWriter, r *http.Request) {
-	state, err := s.mintOAuthState(r.Context())
-	if err != nil {
-		http.Redirect(w, r, "/?login=error", http.StatusFound)
+	state, ok := s.beginOAuth(w, r)
+	if !ok {
 		return
 	}
 	nonce := authx.RandToken()
