@@ -1271,32 +1271,43 @@ const duplicateResponsibilityOwnershipLog = "billing: duplicate responsibility o
 //   - other user or customer: *DuplicateResponsibilityOwnershipConflict, and
 //     the caller rolls the whole Bind back.
 func recordDuplicateResponsibilitiesTx(ctx context.Context, tx *sql.Tx, refs []DuplicateResponsibilityRef, now int64) error {
+	_, err := recordDuplicateResponsibilitiesCountTx(ctx, tx, refs, now)
+	return err
+}
+
+// recordDuplicateResponsibilitiesCountTx is recordDuplicateResponsibilitiesTx
+// that also reports how many responsibilities it actually changed (inserted a
+// placeholder or newly recorded a canonical conflict).
+func recordDuplicateResponsibilitiesCountTx(ctx context.Context, tx *sql.Tx, refs []DuplicateResponsibilityRef, now int64) (int, error) {
+	changed := 0
 	for _, ref := range refs {
 		var id, user, customer, canonical string
 		err := tx.QueryRowContext(ctx, `SELECT id,user_id,customer_id,canonical_subscription_id FROM billing_duplicate_refunds WHERE duplicate_subscription_id=?`, ref.DuplicateSubscriptionID).Scan(&id, &user, &customer, &canonical)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			if err := putDuplicateResponsibilityTx(ctx, tx, DuplicateRefundPlan{UserID: ref.UserID, CustomerID: ref.CustomerID, CanonicalSubscriptionID: ref.CanonicalSubscriptionID, DuplicateSubscriptionID: ref.DuplicateSubscriptionID}, false, duplicateInspectionStart{}, now); err != nil {
-				return err
+				return changed, err
 			}
+			changed++
 		case err != nil:
-			return err
+			return changed, err
 		case user != ref.UserID || customer != ref.CustomerID:
-			return &DuplicateResponsibilityOwnershipConflict{Ref: ref, ExistingUserID: user, ExistingCustomerID: customer}
+			return changed, &DuplicateResponsibilityOwnershipConflict{Ref: ref, ExistingUserID: user, ExistingCustomerID: customer}
 		case canonical != ref.CanonicalSubscriptionID:
 			var hold, evidence string
 			if err := tx.QueryRowContext(ctx, `SELECT cancel_hold,hold_evidence FROM billing_duplicate_refunds WHERE id=?`, id).Scan(&hold, &evidence); err != nil {
-				return err
+				return changed, err
 			}
 			if canonicalConflictAlreadyRecorded(hold, evidence, ref.CanonicalSubscriptionID) {
 				continue // no evidence or revision churn on every reconcile
 			}
 			if _, err := holdDuplicateRefundCancellationTx(ctx, tx, id, duplicateHoldEvidence{At: now, Reason: duplicateHoldCanonicalConflict, Path: "bind", Actor: "system", CanonicalSeen: ref.CanonicalSubscriptionID, BindingSeen: ref.CanonicalSubscriptionID, CustomerSeen: ref.CustomerID}); err != nil {
-				return err
+				return changed, err
 			}
+			changed++
 		}
 	}
-	return nil
+	return changed, nil
 }
 
 // AppendCanonicalDuplicatePaidInvoice records a verified late payment against an
@@ -2111,7 +2122,7 @@ type duplicateDiscoveryFence struct {
 
 type duplicateDiscoveryStore interface {
 	DuplicateDiscoveryCandidates(context.Context, int64, int) ([]duplicateDiscoveryCandidate, error)
-	RecordDiscoveredDuplicates(context.Context, duplicateDiscoveryFence, []DuplicateResponsibilityRef, int64) (bool, error)
+	RecordDiscoveredDuplicates(context.Context, duplicateDiscoveryFence, []DuplicateResponsibilityRef, int64) (int, bool, error)
 	GetSetting(context.Context, string) (int64, bool, error)
 	SetSetting(context.Context, string, int64, int64) error
 }
@@ -2122,7 +2133,9 @@ type duplicateDiscoveryStore interface {
 // account at all, and comped ('admin'), never-adopted (”) or Apple-effective
 // accounts are exactly the ones the reconcile sweep never looks at.
 func (s *SQLiteStore) DuplicateDiscoveryCandidates(ctx context.Context, afterRowID int64, limit int) ([]duplicateDiscoveryCandidate, error) {
-	rows, err := s.reader().QueryContext(ctx, `SELECT rowid,id,stripe_customer_id FROM users WHERE stripe_customer_id<>'' AND deleted_at=0 AND rowid>? ORDER BY rowid LIMIT ?`, afterRowID, limit)
+	rows, err := s.reader().QueryContext(ctx, `SELECT rowid,id,stripe_customer_id FROM users WHERE stripe_customer_id<>'' AND deleted_at=0
+ AND NOT EXISTS(SELECT 1 FROM billing_cancellation_outbox o WHERE o.billing_subject_id=users.id AND o.provider='stripe' AND o.state='pending' AND o.mode='account_deletion')
+ AND rowid>? ORDER BY rowid LIMIT ?`, afterRowID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -2145,49 +2158,60 @@ func (s *SQLiteStore) DuplicateDiscoveryCandidates(ctx context.Context, afterRow
 // is still live. A miss writes nothing (false, nil). Existing rows follow the
 // §4.2 rules of recordDuplicateResponsibilitiesTx; an ownership conflict
 // returns *DuplicateResponsibilityOwnershipConflict and writes nothing.
-func (s *SQLiteStore) RecordDiscoveredDuplicates(ctx context.Context, fence duplicateDiscoveryFence, refs []DuplicateResponsibilityRef, now int64) (bool, error) {
+func (s *SQLiteStore) RecordDiscoveredDuplicates(ctx context.Context, fence duplicateDiscoveryFence, refs []DuplicateResponsibilityRef, now int64) (int, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, err
+		return 0, false, err
 	}
 	defer tx.Rollback()
 	var binding, customer string
 	var deletedAt int64
 	if err := tx.QueryRowContext(ctx, `SELECT stripe_subscription_id,stripe_customer_id,deleted_at FROM users WHERE id=?`, fence.UserID).Scan(&binding, &customer, &deletedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
+			return 0, false, nil
 		}
-		return false, err
+		return 0, false, err
 	}
 	if binding != fence.Binding || customer != fence.CustomerID || deletedAt != 0 {
-		return false, nil
+		return 0, false, nil
+	}
+	// Account deletion in progress is deleted_at>0 OR a pending account_deletion
+	// saga, which ClearAccountDeletion can leave behind (same rule as the
+	// cancellation authorizer): that saga owns the account's subscriptions.
+	var deleting int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='pending' AND mode='account_deletion')`, fence.UserID).Scan(&deleting); err != nil {
+		return 0, false, err
+	}
+	if deleting != 0 {
+		return 0, false, nil
 	}
 	canonical := fence.Binding
 	if canonical == "" {
 		if fence.RowCanonical == "" {
-			return false, errors.New("account: discovered duplicates need a canonical")
+			return 0, false, errors.New("account: discovered duplicates need a canonical")
 		}
 		var external, status string
 		if err := tx.QueryRowContext(ctx, `SELECT external_id,status FROM subscription_sources WHERE user_id=? AND provider='stripe'`, fence.UserID).Scan(&external, &status); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return false, nil
+				return 0, false, nil
 			}
-			return false, err
+			return 0, false, err
 		}
 		if external != fence.RowCanonical || !liveSubStatus(status) {
-			return false, nil
+			return 0, false, nil
 		}
 		canonical = fence.RowCanonical
 	}
 	for _, ref := range refs {
 		if ref.UserID != fence.UserID || ref.CustomerID != fence.CustomerID || ref.CanonicalSubscriptionID != canonical {
-			return false, errors.New("account: discovered duplicate does not match its fence")
+			return 0, false, errors.New("account: discovered duplicate does not match its fence")
 		}
 	}
-	if err := recordDuplicateResponsibilitiesTx(ctx, tx, refs, now); err != nil {
-		return false, err
+	changed, err := recordDuplicateResponsibilitiesCountTx(ctx, tx, refs, now)
+	if err != nil {
+		return 0, false, err
 	}
-	return true, tx.Commit()
+	return changed, true, tx.Commit()
 }
 
 // DiscoverStripeDuplicates is one bounded discovery pass (see the section
@@ -2275,7 +2299,7 @@ func (s *Service) discoverAccountDuplicates(ctx context.Context, store duplicate
 	if len(refs) == 0 {
 		return
 	}
-	written, err := store.RecordDiscoveredDuplicates(ctx, fence, refs, s.Now().Unix())
+	changed, written, err := store.RecordDiscoveredDuplicates(ctx, fence, refs, s.Now().Unix())
 	var conflict *DuplicateResponsibilityOwnershipConflict
 	switch {
 	case errors.As(err, &conflict):
@@ -2284,7 +2308,9 @@ func (s *Service) discoverAccountDuplicates(ctx context.Context, store duplicate
 		log.Printf("billing: duplicate discovery record for %s: %v", u.ID, err)
 	case !written:
 		log.Printf("billing: duplicate discovery for %s: account moved while listing; nothing written, next sweep retries", u.ID)
-	default:
-		log.Printf("billing: duplicate discovery recorded %d responsibilit(ies) for user %s (canonical %s)", len(refs), u.ID, canonical)
+	case changed > 0:
+		// Only when something was actually inserted or newly held, not on every
+		// sweep over already-recorded responsibilities.
+		log.Printf("billing: duplicate discovery recorded %d responsibilit(ies) for user %s (canonical %s)", changed, u.ID, canonical)
 	}
 }

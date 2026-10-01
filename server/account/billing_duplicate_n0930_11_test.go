@@ -338,3 +338,56 @@ func TestN0930_11UnboundLiveSourceFence(t *testing.T) {
 		t.Fatalf("a source that ended during the list must leave nothing written: rows=%d", n093011Rows(t, store))
 	}
 }
+
+// Codex N-0930-11 MEDIUM: an account with a pending account_deletion saga is
+// deleting even after ClearAccountDeletion reset deleted_at. It is not a
+// discovery candidate, and a saga appearing while the sweep lists blocks the
+// write. Also: the "recorded" line appears only when something changed.
+func TestN0930_11PendingDeletionSagaExcludesDiscovery(t *testing.T) {
+	saga := `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,idempotency_key,state,created_at,updated_at,mode) VALUES('bco_m','user_m','stripe','idem_m','pending',1,1,'account_deletion')`
+	t.Run("reactivated_with_pending_saga", func(t *testing.T) {
+		f, store, svc, ts := newN09302(t)
+		f.set("sub_B", "active", 200)
+		n09302AdoptA(t, f, ts, svc, store)
+		if _, err := store.db.Exec(saga); err != nil {
+			t.Fatal(err)
+		}
+		f.mu.Lock()
+		f.lists = 0
+		f.mu.Unlock()
+		n093011Sweep(t, svc)
+		f.mu.Lock()
+		lists := f.lists
+		f.mu.Unlock()
+		if n093011Rows(t, store) != 0 || lists != 0 {
+			t.Fatalf("a deleting account must not be a candidate: rows=%d lists=%d", n093011Rows(t, store), lists)
+		}
+	})
+	t.Run("saga_appears_during_listing", func(t *testing.T) {
+		f, store, svc, ts := newN09302(t)
+		f.set("sub_B", "active", 200)
+		n09302AdoptA(t, f, ts, svc, store)
+		f.mu.Lock()
+		f.onList = func() {
+			if _, err := store.db.Exec(saga); err != nil {
+				t.Errorf("saga: %v", err)
+			}
+		}
+		f.mu.Unlock()
+		n093011Sweep(t, svc)
+		assertSweepOnlyEnqueued(t, f, store, "sub_A")
+		if n093011Rows(t, store) != 0 {
+			t.Fatalf("a saga committed during the list must block the write: rows=%d", n093011Rows(t, store))
+		}
+	})
+	t.Run("recorded_line_only_on_change", func(t *testing.T) {
+		f, store, svc, ts := newN09302(t)
+		f.set("sub_B", "active", 200)
+		n09302AdoptA(t, f, ts, svc, store)
+		first := n093011Sweep(t, svc)
+		second := n093011Sweep(t, svc)
+		if !strings.Contains(first, "duplicate discovery recorded 1") || strings.Contains(second, "duplicate discovery recorded") {
+			t.Fatalf("first:\n%s\nsecond:\n%s", first, second)
+		}
+	})
+}
