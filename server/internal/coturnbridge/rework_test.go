@@ -101,14 +101,18 @@ func TestConfigOrderingGuard(t *testing.T) {
 // F2 money control: a snapshot that is not on disk is never delivered. Spool
 // full → the record stays in memory unsent; the bridge crashes; after the
 // restart the same allocation's final is delivered as a fresh sequence that
-// central never saw, so no seq is ever reused with other content.
+// central never saw, so no seq is ever reused with other content. Its birth
+// died with the crash; after the restart coturn's psd listing supplies its
+// start again, as in production, so it stays billable.
 func TestBridgeNeverSendsUnpersistedSnapshot(t *testing.T) {
 	h := newHarness(t, account.CoturnMeteringBillable)
 	h.startWith(func(c *Config) { c.SpoolMaxEntries = 1 })
 	h.eventually("subscription", h.subscribed)
 	u := h.c.username("g1")
+	h.born(u, "007000000000000001")
 	h.redis.publish(chan4(u, "007000000000000001", "traffic"), counters(100, 0))
 	h.eventually("first delivered", func() bool { return h.c.sawSession("007000000000000001") && h.c.billed() == 100 })
+	h.born(u, "007000000000000002")
 	h.redis.publish(chan4(u, "007000000000000002", "traffic"), counters(0, 40))
 	h.eventually("spool full", func() bool { return h.logs.has("spool full") })
 	time.Sleep(300 * time.Millisecond) // ~10 report cycles
@@ -117,8 +121,21 @@ func TestBridgeNeverSendsUnpersistedSnapshot(t *testing.T) {
 	}
 	h.halt() // crash: the second allocation existed only in memory
 
-	h.startWith(func(c *Config) { c.SpoolMaxEntries = 1 })
+	f := &fakeCLI{password: "pw"}
+	f.set(psdListing(
+		PSDSession{SessionID: "007000000000000001", Username: u, StartedAgo: 5},
+		PSDSession{SessionID: "007000000000000002", Username: u, StartedAgo: 4}), "")
+	cli := withCLI(t, f, 700*time.Millisecond)
+	h.startWith(func(c *Config) { cli(c); c.SpoolMaxEntries = 1 })
 	h.eventually("resubscribed", h.subscribed)
+	h.eventually("second allocation's start listed", func() bool {
+		for _, a := range h.b.Snapshot() {
+			if a.Key.SessionID == "007000000000000002" {
+				return a.StartKnown && a.FirstObservedUnix > 1
+			}
+		}
+		return false
+	})
 	h.redis.publish(chan4(u, "007000000000000002", "total_traffic"), counters(0, 70))
 	time.Sleep(200 * time.Millisecond)
 	if h.c.sawSession("007000000000000002") {
@@ -201,6 +218,7 @@ func TestBridgeRefusesTrailingJSONAck(t *testing.T) {
 	h.c.mode.Store("trailingack")
 	h.start()
 	h.eventually("subscription", h.subscribed)
+	h.born(h.c.username("g1"), tSID)
 	h.redis.publish(chan4(h.c.username("g1"), tSID, "total_traffic"), counters(10, 0))
 	h.eventually("trailing ACK refused", func() bool { return h.logs.has("bad ACK") && h.c.posts.Load() >= 2 })
 	if n, _ := h.b.spool.Count(); n != 1 {
@@ -262,6 +280,7 @@ func TestBridgeGoneOwnerRecordRemoved(t *testing.T) {
 	h.start()
 	h.eventually("subscription", h.subscribed)
 	u := h.c.username("g1")
+	h.born(u, tSID)
 	h.redis.publish(chan4(u, tSID, "traffic"), counters(100, 0))
 	h.eventually("delivered", func() bool { return h.c.billed() == 100 })
 	ctx := context.Background()

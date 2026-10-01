@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -135,6 +136,7 @@ type central struct {
 	mode  atomic.Value // "", "down", "loseack", "badack"
 	posts atomic.Int64
 	user  string
+	db    string   // the SQLite file, for read-only ledger evidence
 	seen  sync.Map // "sessionId" → true for every snapshot ever POSTed
 }
 
@@ -142,7 +144,8 @@ func (c *central) sawSession(sid string) bool { _, ok := c.seen.Load(sid); retur
 
 func startCentral(t *testing.T, mode string, since int64) *central {
 	t.Helper()
-	store, err := account.OpenSQLite(filepath.Join(t.TempDir(), "central.db"))
+	dbPath := filepath.Join(t.TempDir(), "central.db")
+	store, err := account.OpenSQLite(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +161,7 @@ func startCentral(t *testing.T, mode string, since int64) *central {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &central{t: t, store: store, ing: ing, user: u.ID}
+	c := &central{t: t, store: store, ing: ing, user: u.ID, db: dbPath}
 	c.mode.Store("")
 	c.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c.posts.Add(1)
@@ -217,6 +220,24 @@ func (c *central) billed() int64 {
 	return n
 }
 
+// ledgerRows counts every usage_events and usage_periods row, billable or
+// not, through a separate read-only connection.
+func (c *central) ledgerRows() (events, periods int64) {
+	c.t.Helper()
+	db, err := sql.Open("sqlite", "file:"+c.db+"?mode=ro")
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.QueryRow(`SELECT COUNT(*) FROM usage_events`).Scan(&events); err != nil {
+		c.t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM usage_periods`).Scan(&periods); err != nil {
+		c.t.Fatal(err)
+	}
+	return events, periods
+}
+
 func (c *central) username(tag string) string { return "1790000000:" + c.user + "." + tag }
 
 type harness struct {
@@ -240,6 +261,13 @@ func (a *alertsSync) f(format string, args ...any) {
 	a.mu.Lock()
 	a.lines = append(a.lines, fmt.Sprintf(format, args...))
 	a.mu.Unlock()
+}
+
+// dump copies the lines under the lock: the bridge may still be logging.
+func (a *alertsSync) dump() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return strings.Join(a.lines, "\n")
 }
 
 func (a *alertsSync) has(sub string) bool {
@@ -299,7 +327,7 @@ func (h *harness) eventually(what string, cond func() bool) {
 	deadline := time.Now().Add(5 * time.Second)
 	for !cond() {
 		if time.Now().After(deadline) {
-			h.t.Fatalf("timed out waiting for %s; logs:\n%s", what, strings.Join(h.logs.lines, "\n"))
+			h.t.Fatalf("timed out waiting for %s; logs:\n%s", what, h.logs.dump())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -311,6 +339,13 @@ func (h *harness) subscribed() bool {
 
 func chan4(user, sid, kind string) string {
 	return "turn/realm/relayium.com/user/" + user + "/allocation/" + sid + "/" + kind
+}
+
+// born publishes coturn's "new" status for an allocation: its birth, seen in a
+// trusted segment before any of its traffic, is what makes its start known and
+// so its bytes billable. Without it the start is unknown and never billed.
+func (h *harness) born(user, sid string) {
+	h.redis.publish(chan4(user, sid, "status"), "new lifetime=600, type=UDP, local=a, remote=b, ssl=NONE, cipher=NONE")
 }
 
 func counters(rcvb, sentb uint64) string {
@@ -345,6 +380,7 @@ func TestBridgeQuarantinesSegmentAcrossProviderRestart(t *testing.T) {
 	h.start()
 	h.eventually("subscription", h.subscribed)
 	u := h.c.username("g1")
+	h.born(u, tSID)
 	h.redis.publish(chan4(u, tSID, "traffic"), counters(100, 100))
 	h.eventually("first delta delivered", func() bool { return h.c.billed() == 200 })
 
@@ -368,6 +404,7 @@ func TestBridgeQuarantinesSegmentAcrossProviderRestart(t *testing.T) {
 	}
 	// The new process reuses the raw id for a new allocation: a new binding.
 	u2 := h.c.username("g2")
+	h.born(u2, tSID)
 	h.redis.publish(chan4(u2, tSID, "total_traffic"), counters(10, 20))
 	h.eventually("new epoch allocation billed", func() bool { return h.c.billed() == 230 })
 	bs, _ := h.c.store.CoturnBindings(context.Background())
@@ -384,6 +421,7 @@ func TestBridgeCentralOutageLostAndBadAck(t *testing.T) {
 	h.start()
 	h.eventually("subscription", h.subscribed)
 	u := h.c.username("g1")
+	h.born(u, tSID)
 	h.redis.publish(chan4(u, tSID, "traffic"), counters(500, 500))
 	h.redis.publish(chan4(u, tSID, "total_traffic"), counters(800, 700))
 	h.eventually("delivery failing", func() bool { return h.b.Status().ReportFailingSince > 0 && h.c.posts.Load() >= 2 })
@@ -426,6 +464,7 @@ func TestBridgeRestartAndRedisDisconnect(t *testing.T) {
 	h.start()
 	h.eventually("subscription", h.subscribed)
 	u := h.c.username("g1")
+	h.born(u, tSID)
 	h.redis.publish(chan4(u, tSID, "traffic"), counters(300, 300))
 	h.eventually("spooled", func() bool { n, _ := h.b.spool.Count(); return n == 1 })
 	h.halt() // bridge stops (as in a crash after the spool write)
@@ -476,6 +515,8 @@ func TestBridgeFullSpoolStillDeliversAndAlerts(t *testing.T) {
 	h.startWith(func(c *Config) { c.SpoolMaxEntries = 1 })
 	h.eventually("subscription", h.subscribed)
 	u := h.c.username("g1")
+	h.born(u, "007000000000000001")
+	h.born(u, "007000000000000002")
 	h.redis.publish(chan4(u, "007000000000000001", "total_traffic"), counters(100, 0))
 	h.redis.publish(chan4(u, "007000000000000002", "total_traffic"), counters(0, 50))
 	h.eventually("spool full alerted", func() bool { return h.logs.has("spool full") && h.b.Status().Unpersisted == 1 })
@@ -486,5 +527,70 @@ func TestBridgeFullSpoolStillDeliversAndAlerts(t *testing.T) {
 	h.eventually("both delivered", func() bool { return h.c.billed() == 150 && len(h.b.Snapshot()) == 0 })
 	if n, _ := h.b.spool.Count(); n != 0 {
 		t.Fatalf("spool %d after delivery", n)
+	}
+}
+
+// Money control: an allocation whose birth the bridge never saw (no "new", no
+// psd start) is delivered with the reserved unknown start 1 and is shadow, live
+// delta and final alike, even though BillableSince is 1 — never billed, no
+// usage_events, no usage_periods. A born allocation beside it is billed, so the
+// zero is not an idle bridge.
+func TestBridgeUnknownStartNeverBillable(t *testing.T) {
+	h := newHarness(t, account.CoturnMeteringBillable)
+	h.start()
+	h.eventually("subscription", h.subscribed)
+	u := h.c.username("g1")
+	h.redis.publish(chan4(u, tSID, "traffic"), counters(400, 300))
+	h.eventually("unknown-start delta delivered", func() bool {
+		bs, _ := h.c.store.CoturnBindings(context.Background())
+		return len(bs) == 1 && bs[0].Accepted == 700
+	})
+	h.redis.publish(chan4(u, tSID, "total_traffic"), counters(900, 800))
+	h.eventually("unknown-start final settled", func() bool {
+		bs, _ := h.c.store.CoturnBindings(context.Background())
+		n, _ := h.b.spool.Count()
+		return len(bs) == 1 && bs[0].Terminal && bs[0].Accepted == 1700 && n == 0
+	})
+	bs, _ := h.c.store.CoturnBindings(context.Background())
+	if bs[0].Ledger != wire.LedgerShadow {
+		t.Fatalf("unknown start bound %q, want shadow", bs[0].Ledger)
+	}
+	if got := h.c.billed(); got != 0 {
+		t.Fatalf("unknown start billed %d", got)
+	}
+	if ev, p := h.c.ledgerRows(); ev != 0 || p != 0 {
+		t.Fatalf("unknown start wrote the ledger: %d usage_events, %d usage_periods", ev, p)
+	}
+
+	h.born(u, "007000000000000002")
+	h.redis.publish(chan4(u, "007000000000000002", "total_traffic"), counters(10, 5))
+	h.eventually("born allocation billed", func() bool { return h.c.billed() == 15 })
+	bs, _ = h.c.store.CoturnBindings(context.Background())
+	if len(bs) != 2 || bs[0].Ledger != wire.LedgerShadow || bs[1].Ledger != wire.LedgerBillable {
+		t.Fatalf("bindings %+v", bs)
+	}
+}
+
+// The timeout diagnostic copies the log lines under the lock while the bridge
+// may still be appending (run with -race).
+func TestAlertsSyncDumpWhileLogging(t *testing.T) {
+	a := &alertsSync{}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 200 {
+			a.f("line %d", i)
+		}
+	}()
+	for {
+		select {
+		case <-done:
+			if got := strings.Count(a.dump(), "\n") + 1; got != 200 {
+				t.Fatalf("%d lines", got)
+			}
+			return
+		default:
+			_ = a.dump()
+		}
 	}
 }
