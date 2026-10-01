@@ -53,14 +53,36 @@ on:
   pull_request:
   # Release metadata is generated after the signed/notarized artifact exists,
   # so the frozen candidate commit cannot arrive through an ordinary PR event.
-  # The release workflow creates a PR, then dispatches this same gate on the
-  # candidate SHA. Identity checks below bind the dispatch to that exact PR,
-  # base and one-commit head before any lane may run.
+  #
+  # Two dispatch modes, chosen by `mode` and nothing else:
+  #
+  #   pull-request             the original: an operator opened a PR for the
+  #                            candidate; identity checks bind the dispatch to
+  #                            that exact PR, base and one-commit head.
+  #   frozen-release-metadata  `macos-release.yml`'s own delivery, with NO pull
+  #                            request — this repository's Actions token may
+  #                            not create one. Strict: the run must be on a
+  #                            `release-candidate/macos-v<version>-<run>-<attempt>`
+  #                            branch, check out exactly `head_sha`, whose ONE
+  #                            parent is `base_sha` == current main, and whose
+  #                            complete change set (both sides of every rename)
+  #                            is exactly a release-metadata candidate. Any
+  #                            failure fails the gate; it never widens to "run
+  #                            every lane" the way the PR selector does.
   workflow_dispatch:
     inputs:
-      pr_number:
-        description: Frozen release-candidate pull request number
+      mode:
+        description: Dispatch mode (pull-request, or frozen-release-metadata from macos-release.yml)
         required: true
+        default: pull-request
+        type: choice
+        options:
+          - pull-request
+          - frozen-release-metadata
+      pr_number:
+        description: Frozen release-candidate pull request number (pull-request mode only)
+        required: false
+        default: ''
         type: string
       base_sha:
         description: Exact protected-main SHA the candidate must extend
@@ -98,6 +120,7 @@ jobs:
   select:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # `contents: read` also covers the frozen mode's main/branch ref reads.
     permissions:
       contents: read
       pull-requests: read
@@ -134,11 +157,15 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24
-      # Deliberately without `set -e`. This step must ALWAYS exit 0 and report
+      # Deliberately without `set -e`. On a pull request — and in the
+      # pull-request dispatch mode — this step must ALWAYS exit 0 and report
       # what happened through an output, because the selector is what turns an
       # API failure into "run every lane". A step that failed here instead would
       # take the whole gate red on a transient API error, and a red required
       # gate that nobody can turn green manufactures pressure to bypass it.
+      # The frozen release-metadata mode is the deliberate exception below: a
+      # release candidate that cannot be proven exact is not something to run
+      # every lane over and then report green.
       - name: Collect the pull request's cumulative file list
         id: files
         env:
@@ -146,6 +173,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           DISPATCHED: ${{ github.event_name == 'workflow_dispatch' }}
+          MODE: ${{ inputs.mode }}
           EXPECTED_BASE: ${{ inputs.base_sha }}
           EXPECTED_HEAD: ${{ inputs.head_sha }}
           CHECKED_SHA: ${{ github.sha }}
@@ -155,7 +183,36 @@ jobs:
           status=ok
           changed_files='${{ github.event.pull_request.changed_files }}'
 
+          # The strict frozen mode, and the ONE place this step exits non-zero:
+          # a failed select job fails the aggregate, which is the point. The
+          # judge is BASE's copy of the helper and of the scope rules, checked
+          # out beside the candidate, so the commit being judged cannot have
+          # rewritten what judges it. Its payload is the complete change set
+          # from git with renames split into both paths, in the files-API shape
+          # the selector reads.
+          if [ "$DISPATCHED" = true ] && [ "$MODE" = frozen-release-metadata ]; then
+            [[ "$EXPECTED_BASE" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::base_sha is not a full SHA"; exit 1; }
+            judge="$RUNNER_TEMP/frozen-base"
+            git worktree add --detach "$judge" "$EXPECTED_BASE" || {
+              echo "::error::base_sha $EXPECTED_BASE is not the candidate's parent in this checkout"; exit 1; }
+            node "$judge/scripts/release/macos-evidence.mjs" frozen-candidate \
+              --judge-root "$judge" --payload "$payload" --output "$RUNNER_TEMP/frozen.out" || {
+              echo "::error::the dispatched commit is not a frozen release-metadata candidate"; exit 1; }
+            # A judge that never ran wrote no verdict, and that is a failure too.
+            grep -qx 'status=ok' "$RUNNER_TEMP/frozen.out" || {
+              echo "::error::the frozen release-metadata judge returned no verdict"; exit 1; }
+            cat "$RUNNER_TEMP/frozen.out" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$DISPATCHED" = true ] && [ "$MODE" != pull-request ]; then
+            echo "::error::unknown dispatch mode ${MODE:-empty}"
+            exit 1
+          fi
+
           if [ "$DISPATCHED" = true ]; then
+            [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || status=identity-input-error
+          fi
+          if [ "$DISPATCHED" = true ] && [ "$status" = ok ]; then
             pr="$RUNNER_TEMP/pr.json"
             if ! gh api "repos/$REPOSITORY/pulls/$PR_NUMBER" > "$pr"; then
               status="identity-api-error-$?"
@@ -383,6 +440,10 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           SELECTED: ${{ toJSON(needs.select.outputs) }}
+          DISPATCHED: ${{ github.event_name == 'workflow_dispatch' }}
+          MODE: ${{ inputs.mode }}
+          EXPECTED_HEAD: ${{ inputs.head_sha }}
+          CHECKED_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
@@ -457,6 +518,19 @@ jobs:
               note "$lane: result is \"$result\", want \"success\". This lane carries no condition and must pass on every pull request."
             fi
           done <<< "$unconditional_lanes"
+
+          # The frozen release-metadata mode, judged once more where the verdict
+          # is given. `select` already refused anything but the exact candidate
+          # and failed if it could not prove it; this is the cheap half of that
+          # proof repeated in the job whose name protection requires, so an edit
+          # that let `select` skip its frozen branch still cannot report green
+          # for a commit other than the dispatched head on a candidate branch.
+          if [ "$DISPATCHED" = true ] && [ "$MODE" = frozen-release-metadata ]; then
+            if [ "$CHECKED_SHA" != "$EXPECTED_HEAD" ] \
+              || ! [[ "$GITHUB_REF" =~ ^refs/heads/release-candidate/macos-v[0-9]+(\.[0-9]+){1,2}-[1-9][0-9]*-[1-9][0-9]*$ ]]; then
+              note "frozen release-metadata mode: this run checked $CHECKED_SHA on $GITHUB_REF, not head_sha $EXPECTED_HEAD on a release-candidate/macos-v* branch."
+            fi
+          fi
 
           echo
           if [ -n "$problems" ]; then

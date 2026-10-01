@@ -694,22 +694,59 @@ jobs:
         id: package_identity
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
+        # Schema v2 is what lets `macos-release.yml` notarize THIS package from
+        # an ordinary push run instead of rebuilding it
+        # (`scripts/release/macos-evidence.mjs`). Every field binds something
+        # the reuse judge compares against GitHub's own record of the run: the
+        # repository by numeric id, the event and ref that started the run, the
+        # run and THIS job's attempt, the workflow file and commit that defined
+        # it, the toolchain, the direct channel, the arch, the team, the app and
+        # Share-extension versions, and both payload hashes. `releaseVersion`
+        # and `workflowRef` differ on a release-called build, so a build made
+        # inside a release run can never be reused by another; and
+        # `signedBuildSource` is always `built` here, so reuse never chains.
+        # Additive: the v1 keys the notarization job reads are unchanged.
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
+          appex="$app/Contents/PlugIns/RelayiumShare.appex"
           build="$(defaults read "$app/Contents/Info" CFBundleVersion)"
           version="$(defaults read "$app/Contents/Info" CFBundleShortVersionString)"
           [ -z "$RELEASE_VERSION" ] || [ "$version" = "$RELEASE_VERSION" ]
+          share_build="$(defaults read "$appex/Contents/Info" CFBundleVersion)"
+          share_version="$(defaults read "$appex/Contents/Info" CFBundleShortVersionString)"
+          executable="$(defaults read "$app/Contents/Info" CFBundleExecutable)"
+          arch="$(lipo -archs "$app/Contents/MacOS/$executable")"
+          team="$(codesign -d --verbose=2 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/{print $2}')"
           hash="$(shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" | awk '{print $1}')"
-          jq -n --arg repository "$GITHUB_REPOSITORY" --arg sha "$GITHUB_SHA" \
-            --arg version "$version" --arg build "$build" --arg hash "$hash" \
-            --arg attempt "$GITHUB_RUN_ATTEMPT" \
-            '{repository:$repository,sha:$sha,version:$version,build:$build,
-              signedDmgSha256:$hash,dmgSha256:$hash,runAttempt:$attempt}' \
-            > "$RUNNER_TEMP/provenance.json"
           mkdir "$RUNNER_TEMP/release-tools"
           cp "$RUNNER_TEMP/dd/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast" \
             "$RUNNER_TEMP/release-tools/generate_appcast"
+          tool_hash="$(shasum -a 256 "$RUNNER_TEMP/release-tools/generate_appcast" | awk '{print $1}')"
+          jq -n --arg repository "$GITHUB_REPOSITORY" --arg sha "$GITHUB_SHA" \
+            --arg version "$version" --arg build "$build" --arg hash "$hash" \
+            --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg repositoryId "$GITHUB_REPOSITORY_ID" --arg ref "$GITHUB_REF" \
+            --arg event "$GITHUB_EVENT_NAME" --arg runId "$GITHUB_RUN_ID" \
+            --arg workflowRef "$GITHUB_WORKFLOW_REF" --arg workflowSha "$GITHUB_WORKFLOW_SHA" \
+            --arg releaseVersion "$RELEASE_VERSION" --arg arch "$arch" --arg teamId "$team" \
+            --arg shareVersion "$share_version" --arg shareBuild "$share_build" \
+            --arg toolHash "$tool_hash" \
+            --arg xcode "$(xcodebuild -version | tr '\n' ' ' | sed 's/ *$//')" \
+            --arg swift "$(swift --version 2>&1 | sed -n 1p)" \
+            --arg macos "$(sw_vers -productVersion) ($(sw_vers -buildVersion))" \
+            --arg runnerImage "${ImageOS:-unknown}/${ImageVersion:-unknown}" \
+            '{schema:"relayium-macos-signed-provenance/v2",
+              repository:$repository,repositoryId:$repositoryId,sha:$sha,ref:$ref,
+              event:$event,runId:$runId,runAttempt:$attempt,
+              workflowRef:$workflowRef,workflowSha:$workflowSha,
+              releaseVersion:$releaseVersion,channel:"direct",arch:$arch,teamId:$teamId,
+              version:$version,build:$build,
+              shareExtensionVersion:$shareVersion,shareExtensionBuild:$shareBuild,
+              toolchain:{xcode:$xcode,swift:$swift,macos:$macos,runnerImage:$runnerImage},
+              signedBuildSource:"built",
+              signedDmgSha256:$hash,dmgSha256:$hash,generateAppcastSha256:$toolHash}' \
+            > "$RUNNER_TEMP/provenance.json"
           # The canonical artifact name, emitted once and consumed by the upload
           # below and by the job output above. The bytes are unchanged: this is
           # the same string the `with: name:` expression produced before the

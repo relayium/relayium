@@ -774,6 +774,37 @@ for (const [command, why] of [
   );
 }
 
+/**
+ * The delivery step BEHAVES, too — executed, not read.
+ *
+ * The order above says the candidate gate is dispatched, watched and only then
+ * followed by the main push. What it cannot say is whether that body actually
+ * refuses: a lane that failed under a green aggregate, a gate rerun after it
+ * was found, a main that moved while the gate ran, a dispatched run on another
+ * head. `scripts/test/macos-evidence-cases.mjs` runs the real step body against
+ * stub gh/git and a local API, and with it every other control of the macOS
+ * evidence judge — exact-main signed-build reuse, the fresh readback, the
+ * mounted-package verifier, the release contract and merge-gate's strict frozen
+ * mode. It lives beside this file and runs from it so the controls execute on
+ * every pull request through this test's existing repo-hygiene step.
+ */
+{
+  for (const step of publish) {
+    check(
+      !step.code.some((line) => line.includes("gh pr create")),
+      `"${step.name}" runs \`gh pr create\`. This repository's Actions token may not create pull`
+      + " requests (can_approve_pull_request_reviews=false); that call failed the first publish of"
+      + " 1.3.5, 1.3.7, 1.3.8, 1.4.3 and 1.4.4. Delivery dispatches merge-gate's frozen mode instead.",
+    );
+  }
+  const { run } = await import("./macos-evidence-cases.mjs");
+  const evidence = await run();
+  check(evidence.cases > 150, `the macOS evidence controls ran only ${evidence.cases} cases`);
+  for (const failure of evidence.failures) failures.push(`macos-evidence: ${failure}`);
+  process.stdout.write(`macos-evidence: ${evidence.cases} executable controls, ${evidence.failures.length} failed; `
+    + `adoption-generator agreement ${evidence.generatorChecked ? "checked" : "not applicable (scripts/ci/ci-evidence-view.mjs absent)"}\n`);
+}
+
 if (failures.length > 0) {
   for (const failure of failures) process.stderr.write(`FAIL: ${failure}\n`);
   process.stderr.write(`\n${failures.length} publication-order assertion(s) failed\n`);

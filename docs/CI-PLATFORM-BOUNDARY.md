@@ -66,8 +66,8 @@ pipelines that resemble each other:
 | --- | --- | --- |
 | Triggers | `push` (main), `workflow_call` | `workflow_dispatch` only |
 | Started by | a `main` push under its filter, `merge-gate.yml`, or `macos-release.yml` | a person |
-| Jobs | `contract`, `test`, `ui-smoke`, `signed-build` | `build` (the call), `notarize-stage`, `publish` |
-| Permissions | `contents: read`, no job-level block | `contents: read`; `publish` alone declares `contents: write` |
+| Jobs | `contract`, `test`, `ui-smoke`, `signed-build` | `preflight`, `build` (the call, skipped on proven reuse), `notarize-stage`, `publish` |
+| Permissions | `contents: read`, no job-level block | `contents: read`; `preflight`/`notarize-stage` add `actions: read`; the `build` caller grants the callee read-only `actions`/`contents`/`pull-requests` (its PR→main evidence job reads them); `publish` alone declares `contents: write` (with `actions: write`) |
 | Secrets | signing certificate and two provisioning profiles | those four are *forwarded* to the call; the notary key and Sparkle private key stay in `notarize-stage` |
 | Concurrency prefix | literal `macos-ci` | literal `macos-release` |
 
@@ -116,6 +116,92 @@ real Mach-O fixtures and needs Apple tools.
   job satisfies `needs:` and contributes empty outputs, so a skipped
   `signed-build` (a fork pull request) or a dotted output expression would
   otherwise reach the download as an artifact named `""`.
+
+**Exact-main signed-build reuse (2026-10-01).** `macos-release.yml` now starts
+with a free `preflight` job (`ubuntu-latest`, `actions: read`) whose
+`scripts/release/macos-evidence.mjs select` decides where the DMG comes from,
+per the dispatch input `signed_build_source` (`auto` default, `reuse`, `build`).
+It reuses only an ordinary `push` run of `macos.yml` on `main` for the **exact**
+release SHA: same repository id, no fork, workflow file `macos.yml`, exactly one
+such run, completed `success` in its latest attempt and under 168 hours old,
+exactly the five jobs (`contract`, `test`, both `ui-smoke` shards,
+`signed-build`) all `success` — and each proven EXECUTED from the jobs API's
+step records: every gate step (contract's `Validate release contract`, test's
+`Toolchain versions`/`Release script tests`, each UI shard's certificate,
+profiles and own smoke step, all thirteen signed-build steps) exactly once
+`completed`/`success` on the expected runner (`macos-15`; contract also
+`ubuntu-latest`), and no PR→main witness step run. A producer whose `macos.yml`
+at that SHA carries the canonical PR→main evidence adoption (structurally equal
+to `scripts/ci/ci-evidence-view.mjs`'s output) may have exactly one sixth
+`evidence` job, which must have decided on Ubuntu and kept no witness; a
+witnessed job is never accepted as executed, any other adoption is
+unavailable, and transitive native reuse stays uncertified — and exactly one unexpired artifact
+`relayium-macos-signed-<sha>-ci` created while `signed-build` ran. Every list
+read is fully paginated against `total_count`. The zip must hash to the API
+digest and hold exactly the four payload files as regular members (parsed in
+memory from the central directory with CRC checks — no `unzip`; unsafe,
+duplicate, symlink, special or extra entries and any directory but
+`release-tools/` are refused), written only with O_EXCL|O_NOFOLLOW where no
+payload path pre-exists and re-hashed from disk after `lstat`, and the provenance (schema v2,
+written by `signed-build`) must bind repository id, SHA, ref, event, run id,
+signed-build attempt (every job's attempt a positive integer no later than the
+run's latest; partial reruns keep earlier successful jobs), workflow ref/SHA, toolchain, `direct` channel, `arm64`,
+team, app and Share-extension version/build, and the DMG and `generate_appcast`
+hashes, and declare `signedBuildSource: built` with an empty `releaseVersion`,
+so a build made inside a release run is never reused and reuse never chains.
+*Unavailable* evidence (no run, pending or failed latest attempt, missing or
+skipped job, missing/expired/duplicate artifact, legacy provenance, a non-main
+release) makes `auto` run the unchanged full `build` call and fails `reuse`;
+*wrong* evidence (digest, payload, any provenance mismatch, a truncated listing)
+fails the release in every mode. The decision and its evidence are uploaded for
+90 days. `notarize-stage` needs `[preflight, build]` with an explicit
+`!cancelled()` condition (build `success` for a build, `skipped` for a reuse);
+on reuse it re-reads the run, attempt, jobs and artifact and requires them
+**identical** to the frozen evidence before extracting the payload, and on both
+sources it runs `scripts/release/macos-evidence-verify-app.sh` (Developer ID
+team signatures on DMG, app and extension, hardened runtime and timestamps,
+direct channel — Sparkle and feed — arm64 only, app and Share-extension
+entitlements typed and EXACT against the real signed `main` baseline (sandbox
+`true`, typed App Group/keychain/associated-domain/Sparkle Mach-name arrays,
+profile identifiers, no other key), privacy
+manifests, bundle ids, versions/builds, payload hashes) and
+`scripts/release/macos-evidence-release-contract.sh` (the `contract` job's
+checks plus the project's `CURRENT_PROJECT_VERSION` against the package) before
+any secret or the restored `generate_appcast` is touched. Notarization,
+stapling, Gatekeeper, Sparkle signing of final bytes, staging, the publish job's
+metadata/web gates and `--latest=false` are unchanged. Reuse is exact-SHA only;
+tree-equivalent reuse is a separate, unstarted design.
+
+**PR-free metadata delivery.** The publish job no longer runs `gh pr create`,
+which this repository's Actions token is not permitted to do
+(`can_approve_pull_request_reviews=false`) and which failed the first publish
+of 1.3.5, 1.3.7, 1.3.8, 1.4.3 and 1.4.4. It holds `actions: write` and
+`contents: write` only (`pull-requests: write` removed). It pushes the frozen
+candidate to `release-candidate/macos-v<version>-<run>-<attempt>`, dispatches
+`merge-gate.yml` with `mode=frozen-release-metadata`, finds exactly one
+dispatched run on that branch and head, watches it, re-verifies it as a record
+(same run and attempt, `merge-gate` and `select` `success`, no job in a failed
+state), re-reads `main` as the candidate's base, fast-forwards `main`, reads it
+back as the candidate, and only then creates the immutable release. The
+preflight fails fast — before the paid build — unless `main` is protected with
+exactly the `merge-gate` context bound to GitHub Actions, `main`'s gate has the
+frozen mode, the release SHA is on `main` and the tag is free or already this
+commit. The publish budget is 50 minutes because the gate now runs inside it
+and always selects the Go lane (`README.md`, `server/account/…`). In
+`merge-gate.yml` the frozen mode is strict where the pull-request selector
+fails open: the select job runs **base's** `macos-evidence.mjs frozen-candidate`
+from a worktree of `base_sha`, which requires a `workflow_dispatch` on a
+`release-candidate/macos-v*` branch, the checkout equal to `head_sha`, exactly
+one parent equal to `base_sha` equal to current `main`, the branch tip still
+`head_sha`, the manifest version equal to the branch's, and the complete
+change set (`git diff-tree --no-renames`, so both sides of every rename) to pass
+`web/scripts/macos-release-candidate.mjs`'s complete-candidate scope; any
+failure fails `select` and therefore the gate. The aggregate re-checks the head
+and branch shape. The pull-request dispatch mode is unchanged except that its
+now-optional `pr_number` must be a positive integer. Executable controls:
+`scripts/test/macos-evidence-cases.mjs`, run by
+`scripts/test/macos-publish-order-test.mjs`; shape guards and their mutations:
+`ci-event-policy-test.mjs` sections 6m/6n and section 8.
 
 **The caller job carries no `timeout-minutes`.** GitHub rejects a workflow whose
 `uses:` job declares one. That is not an unbounded job: every job the call starts

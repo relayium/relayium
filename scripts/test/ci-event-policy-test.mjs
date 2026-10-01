@@ -2483,6 +2483,15 @@ const RUNNER_BUDGETS = [
       // by exemption rather than by a number, and the exemption is asserted:
       // the loop below requires a caller job to declare no bound at all, and
       // every job the call actually starts is budgeted under `macos.yml`.
+      // Declared 10. A free Linux runner that reads the API, downloads and
+      // digest-checks one signed-build zip (a few hundred MB at most) and
+      // decides where the DMG comes from; it is the first thing every release
+      // waits for, so it must give up quickly.
+      preflight: {
+        max: 15,
+        why: "every release waits behind a reuse decision whose API read or artifact download "
+          + "never returns",
+      },
       build: {
         caller: true,
         why: "a reusable call cannot carry its own bound; the jobs it starts are budgeted in "
@@ -2502,9 +2511,12 @@ const RUNNER_BUDGETS = [
           + "mid-wait and burns the submission, which is a worse outcome than the runner time it "
           + "saves",
       },
-      // Declared 15. A free Linux runner, and the least recoverable job here.
+      // Declared 50. A free Linux runner, and the least recoverable job here.
+      // It used to be 15 and hand the candidate's merge gate to a human; it
+      // now WAITS for that gate, which selects the Go lane (21m46s measured on
+      // 1741bca3e) for every release-metadata candidate.
       publish: {
-        max: 20,
+        max: 60,
         why: "a half-finished publication holds a runner while the release it was supposed to "
           + "announce is neither published nor visibly failed",
       },
@@ -5015,11 +5027,22 @@ const DISPATCH_INPUTS = [
     description:
       "Publish the versioned GitHub Release and deliver its appcast/download metadata to main",
   },
+  // The sixth, and the only one that did not move from `macos.yml`: where the
+  // signed DMG comes from. `auto` reuses only proven exact-main evidence.
+  {
+    name: "signed_build_source",
+    type: "choice",
+    required: "true",
+    default: "auto",
+    description: "Signed DMG source: auto (reuse proven exact-main evidence, else rebuild), "
+      + "reuse (require it), build (always rebuild)",
+    options: ["auto", "reuse", "build"],
+  },
 ];
 
 /** The jobs each half declares, exactly. */
 const CI_JOBS = ["contract", "test", "ui-smoke", "signed-build"];
-const RELEASE_JOBS = ["build", "notarize-stage", "publish"];
+const RELEASE_JOBS = ["preflight", "build", "notarize-stage", "publish"];
 
 /** The job in the callee whose output the caller consumes, and the output's name. */
 const SIGNED_JOB = "signed-build";
@@ -5266,14 +5289,22 @@ function releaseBoundaryFailures(world) {
   need(
     deepEqual(dispatchInputs, DISPATCH_INPUTS.map((input) => input.name)),
     `${MACOS_RELEASE}'s dispatch inputs are [${dispatchInputs.join(", ")}]; want exactly `
-    + `[${DISPATCH_INPUTS.map((input) => input.name).join(", ")}], in that order. These are the `
-    + `operator's five controls and they MOVED here from ${MACOS}; an input dropped in the move `
-    + `is a decision that can no longer be made, and one added is a lever with no history behind `
-    + `its default.`,
+    + `[${DISPATCH_INPUTS.map((input) => input.name).join(", ")}], in that order. Five are the `
+    + `operator's controls that MOVED here from ${MACOS} and the sixth chooses the signed-build `
+    + `source; an input dropped is a decision that can no longer be made, and one added is a `
+    + `lever with no history behind its default.`,
   );
   for (const want of DISPATCH_INPUTS) {
     const input = dispatch && typeof dispatch === "object" ? dispatch.inputs?.[want.name] : undefined;
     if (input === undefined || typeof input !== "object") continue;
+    if (want.options !== undefined) {
+      need(
+        deepEqual(input.options, want.options),
+        `${MACOS_RELEASE}'s dispatch input \`${want.name}\` offers ${JSON.stringify(input.options)}, `
+        + `want ${JSON.stringify(want.options)}. A new choice is a signed-build source no judge `
+        + `was written for.`,
+      );
+    }
     for (const key of ["type", "required", "default", "description"]) {
       need(
         input[key] === want[key],
@@ -5345,25 +5376,126 @@ function releaseBoundaryFailures(world) {
       + `the half that must not be able to release.`,
     );
     need(
-      build.permissions === undefined,
-      `${MACOS_RELEASE}/build declares \`permissions: ${JSON.stringify(build.permissions)}\`. A `
-      + `caller's permission block is passed to the called workflow; the CI half is read-only and `
-      + `must stay that way when a release run is what started it.`,
+      deepEqual(build.permissions, { actions: "read", contents: "read", "pull-requests": "read" }),
+      `${MACOS_RELEASE}/build declares \`permissions: ${JSON.stringify(build.permissions)}\`; want `
+      + `exactly {"actions":"read","contents":"read","pull-requests":"read"}. A caller's permission `
+      + `block is the ceiling of the called workflow: \`macos.yml\`'s evidence job reads runs and `
+      + `pull requests, and GitHub rejects a callee job asking for more than its caller grants. `
+      + `Anything beyond these three READS — any write — hands the CI half a lever it must not hold `
+      + `when a release run is what started it.`,
     );
   }
 
   // The two release stages: order, guard, and the artifact they actually read.
+  // ── the signed-build source: rebuild, or reuse proven exact-main evidence ──
+  const preflight = release.jobs?.preflight;
+  if (preflight) {
+    need(
+      preflight["runs-on"] === "ubuntu-latest" && preflight.needs === undefined,
+      `${MACOS_RELEASE}/preflight runs on ${JSON.stringify(preflight["runs-on"])} with needs `
+      + `${JSON.stringify(preflight.needs)}; want ubuntu-latest and nothing before it. It is the `
+      + `free, first decision every release waits on, made before a paid minute is spent.`,
+    );
+    need(
+      deepEqual(preflight.permissions, { actions: "read", contents: "read" }),
+      `${MACOS_RELEASE}/preflight declares permissions ${JSON.stringify(preflight.permissions)}, want `
+      + `{"actions":"read","contents":"read"}: it reads runs, jobs and artifacts and writes nothing.`,
+    );
+    const text = JSON.stringify(preflight);
+    need(
+      text.includes("node scripts/release/macos-evidence.mjs select")
+        && text.includes("node scripts/release/macos-evidence.mjs publish-preflight"),
+      `${MACOS_RELEASE}/preflight no longer runs both \`macos-evidence.mjs select\` and `
+      + `\`publish-preflight\`; the reuse decision and the publication contract are made nowhere.`,
+    );
+    need(
+      preflight.outputs?.source === "${{ steps.select.outputs.source }}",
+      `${MACOS_RELEASE}/preflight's \`source\` output is ${JSON.stringify(preflight.outputs?.source)}; `
+      + `it must be the judge's own decision.`,
+    );
+  }
+  if (build) {
+    need(
+      build.needs === "preflight" && build.if === "needs.preflight.outputs.source == 'build'",
+      `${MACOS_RELEASE}/build declares needs ${JSON.stringify(build.needs)} and if `
+      + `${JSON.stringify(build.if)}; want \`preflight\` and exactly `
+      + `\`needs.preflight.outputs.source == 'build'\`. Anything wider builds AND reuses; anything `
+      + `narrower notarizes nothing whenever the evidence is unavailable.`,
+    );
+  }
   const notarize = release.jobs?.["notarize-stage"];
   if (notarize) {
     need(
-      notarize.needs === "build",
+      deepEqual(notarize.needs, ["preflight", "build"]),
       `${MACOS_RELEASE}/notarize-stage declares \`needs: ${JSON.stringify(notarize.needs)}\`, want `
-      + `\`build\`. Depending on the CALL means depending on every job inside it — \`contract\`, `
-      + `\`test\`, \`ui-smoke\` and \`signed-build\` — so nothing here can start while any part of `
-      + `the macOS gate is red. Naming individual jobs of a called workflow is not possible, and `
-      + `naming nothing would let a notarization run against a failed build.`,
+      + `\`[preflight, build]\`. Depending on the CALL means depending on every job inside it — `
+      + `\`contract\`, \`test\`, \`ui-smoke\` and \`signed-build\` — so nothing here can start `
+      + `while any part of the macOS gate is red; depending on the preflight is what tells it the `
+      + `call was skipped because a proven build is being reused.`,
+    );
+    const cond = String(notarize.if ?? "");
+    for (const clause of [
+      "!cancelled()",
+      "needs.preflight.result == 'success'",
+      "(needs.preflight.outputs.source == 'build' && needs.build.result == 'success')",
+      "(needs.preflight.outputs.source == 'reuse' && needs.build.result == 'skipped')",
+    ]) {
+      need(
+        cond.includes(clause),
+        `${MACOS_RELEASE}/notarize-stage's condition no longer states \`${clause}\`. With the `
+        + `build skipped on reuse the implicit success() is false, so the two sources must be `
+        + `spelled out — and a source whose build result is not checked notarizes a red build.`,
+      );
+    }
+    need(
+      !/\balways\(\)/.test(cond),
+      `${MACOS_RELEASE}/notarize-stage's condition uses always(), which starts notarizing a `
+      + `cancelled release; use !cancelled().`,
+    );
+    need(
+      deepEqual(notarize.permissions, { actions: "read", contents: "read" }),
+      `${MACOS_RELEASE}/notarize-stage declares permissions ${JSON.stringify(notarize.permissions)}, `
+      + `want {"actions":"read","contents":"read"}: the reuse readback re-reads the run and `
+      + `re-downloads its artifact, and nothing here writes.`,
     );
     const steps = notarize.steps ?? [];
+    const at = (pred) => steps.findIndex(pred);
+    const runs = (needle) => (step) => String(step?.run ?? "").includes(needle);
+    const verifyAt = at(runs("scripts/release/macos-evidence-verify-app.sh"));
+    const readbackAt = at(runs("node scripts/release/macos-evidence.mjs readback"));
+    const contractAt = at(runs("scripts/release/macos-evidence-release-contract.sh"));
+    const firstSecretAt = at((step) => RELEASE_SECRETS.some((secret) => JSON.stringify(step).includes(secret)));
+    const firstToolAt = at((step) => /\$tools\/generate_appcast|generate_appcast"\s*\\?\s*$|\|\s*"\$tools/.test(String(step?.run ?? ""))
+      || String(step?.run ?? "").includes('"$tools/generate_appcast"'));
+    need(
+      verifyAt !== -1 && steps[verifyAt].if === undefined,
+      `${MACOS_RELEASE}/notarize-stage does not unconditionally run `
+      + `\`scripts/release/macos-evidence-verify-app.sh\`. Signature, team, direct channel, arch, `
+      + `entitlements, privacy manifests and versions are proven on the mounted image for BOTH `
+      + `sources or for neither.`,
+    );
+    need(
+      readbackAt !== -1 && steps[readbackAt].if === "needs.preflight.outputs.source == 'reuse'"
+        && readbackAt < verifyAt,
+      `${MACOS_RELEASE}/notarize-stage must re-prove a reused build with \`macos-evidence.mjs `
+      + `readback\` (if source == 'reuse') BEFORE the package verification; found readback at `
+      + `${readbackAt + 1}, verification at ${verifyAt + 1}.`,
+    );
+    need(
+      contractAt !== -1 && steps[contractAt].if === undefined && contractAt > verifyAt,
+      `${MACOS_RELEASE}/notarize-stage must run the release contract unconditionally after the `
+      + `package is verified (a reuse skipped \`macos.yml\`'s contract job); found it at `
+      + `${contractAt + 1}.`,
+    );
+    for (const [label, index] of [["the first release secret", firstSecretAt],
+      ["the first generate_appcast execution", firstToolAt]]) {
+      need(
+        index === -1 || (verifyAt !== -1 && verifyAt < index && contractAt !== -1 && contractAt < index),
+        `${MACOS_RELEASE}/notarize-stage reaches ${label} at step ${index + 1}, before the package `
+        + `verification (${verifyAt + 1}) and the release contract (${contractAt + 1}). Neither a `
+        + `secret nor a restored tool may be touched by bytes nothing has verified yet.`,
+      );
+    }
     const downloadAt = steps.findIndex(
       (step) => String(step?.uses ?? "").startsWith("actions/download-artifact"),
     );
@@ -5428,14 +5560,39 @@ function releaseBoundaryFailures(world) {
       deepEqual(publish.permissions, {
         actions: "write",
         contents: "write",
-        "pull-requests": "write",
       }),
       `${MACOS_RELEASE}/publish declares permissions ${JSON.stringify(publish.permissions)}, want `
-      + `the exact release-delivery permission set. It needs contents to push the frozen branch, `
-      + `pull requests to bind that branch to protected main, and actions only to dispatch the `
-      + `required gate on the candidate SHA. These stay on the publish job, not the workflow.`,
+      + `exactly {"actions":"write","contents":"write"}. Contents pushes the frozen branch and `
+      + `fast-forwards main; actions dispatches and reads the candidate's merge gate. Delivery `
+      + `opens no pull request — this repository's Actions token may not — so \`pull-requests\` `
+      + `is not a permission it needs, and these stay on the publish job, not the workflow.`,
+    );
+    const cond = String(publish.if ?? "");
+    need(
+      cond.includes("!cancelled()") && cond.includes("needs.notarize-stage.result == 'success'")
+        && !/\balways\(\)/.test(cond),
+      `${MACOS_RELEASE}/publish's condition (${JSON.stringify(cond)}) must require `
+      + `\`!cancelled()\` and \`needs.notarize-stage.result == 'success'\` explicitly: on a reused `
+      + `build the transitive \`build\` need is skipped, so the implicit success() never publishes, `
+      + `and always() would publish a cancelled release.`,
     );
   }
+  const releaseText = world.texts.get(MACOS_RELEASE) ?? "";
+  need(
+    !releaseText.includes("gh pr create") && !/pull-requests:\s*write/.test(releaseText)
+      && Object.entries(release.jobs ?? {}).every(([name, job]) => job?.permissions?.["pull-requests"] === undefined
+        || (name === "build" && job.permissions["pull-requests"] === "read")),
+    `${MACOS_RELEASE} creates a pull request or asks for a pull-request permission again. This `
+    + `repository's Actions token cannot create one (can_approve_pull_request_reviews=false), which `
+    + `failed the first publish of five releases; delivery dispatches merge-gate's strict frozen `
+    + `mode on the candidate branch instead.`,
+  );
+  need(
+    releaseText.includes("-f mode=frozen-release-metadata")
+      && releaseText.includes("node scripts/release/macos-evidence.mjs gate-run --action verify"),
+    `${MACOS_RELEASE} no longer dispatches merge-gate in \`mode=frozen-release-metadata\` and `
+    + `re-verifies the finished gate run with \`macos-evidence.mjs gate-run --action verify\`.`,
+  );
   const writers = Object.entries(release.jobs ?? {})
     .filter(([, job]) => job?.permissions?.contents === "write")
     .map(([name]) => name);
@@ -5593,12 +5750,50 @@ function aggregateGateFailures(world) {
     ? gateDispatch.inputs ?? {}
     : {};
   need(
-    deepEqual(Object.keys(gateDispatchInputs), ["pr_number", "base_sha", "head_sha"]),
+    deepEqual(Object.keys(gateDispatchInputs), ["mode", "pr_number", "base_sha", "head_sha"]),
     `${AGGREGATE}'s workflow_dispatch inputs are [${Object.keys(gateDispatchInputs).join(", ")}]; `
-    + `want exactly [pr_number, base_sha, head_sha]. Those three values bind a manually started `
-    + `check to one frozen candidate rather than providing a general-purpose green status.`,
+    + `want exactly [mode, pr_number, base_sha, head_sha]. They bind a manually started check to `
+    + `one frozen candidate rather than providing a general-purpose green status.`,
   );
-  for (const name of ["pr_number", "base_sha", "head_sha"]) {
+  const modeInput = gateDispatchInputs.mode;
+  need(
+    modeInput?.type === "choice" && modeInput?.required === "true"
+      && modeInput?.default === "pull-request"
+      && deepEqual(modeInput?.options, ["pull-request", "frozen-release-metadata"]),
+    `${AGGREGATE}'s dispatch \`mode\` must be a required choice of exactly [pull-request, `
+    + `frozen-release-metadata] defaulting to pull-request; got ${JSON.stringify(modeInput)}.`,
+  );
+  need(
+    gateDispatchInputs.pr_number?.type === "string" && gateDispatchInputs.pr_number?.required === "false",
+    `${AGGREGATE}'s \`pr_number\` must be an optional string (the frozen mode has no pull `
+    + `request); got ${JSON.stringify(gateDispatchInputs.pr_number)}.`,
+  );
+  {
+    const collect = (jobs[SELECT_JOB]?.steps ?? []).find((step) => step?.id === "files");
+    const body = String(collect?.run ?? "");
+    for (const [needle, why] of [
+      ['[[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || status=identity-input-error',
+        "the pull-request mode no longer requires a pull request number now the input is optional"],
+      ['git worktree add --detach "$judge" "$EXPECTED_BASE"',
+        "the frozen judge no longer runs from BASE's tree, so the candidate judges itself"],
+      ['node "$judge/scripts/release/macos-evidence.mjs" frozen-candidate',
+        "the frozen mode no longer runs base's macos-evidence.mjs frozen-candidate judge"],
+      ['echo "::error::the dispatched commit is not a frozen release-metadata candidate"; exit 1; }',
+        "a frozen candidate that fails the judge no longer FAILS the selector"],
+      ['echo "::error::unknown dispatch mode ${MODE:-empty}"',
+        "an unknown dispatch mode no longer fails the selector"],
+    ]) {
+      need(body.includes(needle), `${AGGREGATE}/${SELECT_JOB}: ${why} (missing \`${needle}\`).`);
+    }
+    const judge = String((jobs[GATE_JOB]?.steps ?? []).map((step) => step?.run ?? "").join("\n"));
+    need(
+      judge.includes('if [ "$DISPATCHED" = true ] && [ "$MODE" = frozen-release-metadata ]; then')
+        && judge.includes('[ "$CHECKED_SHA" != "$EXPECTED_HEAD" ]'),
+      `${AGGREGATE}/${GATE_JOB} no longer re-checks, where the verdict is given, that a frozen `
+      + `release-metadata run checked the dispatched head on a release-candidate branch.`,
+    );
+  }
+  for (const name of ["base_sha", "head_sha"]) {
     const input = gateDispatchInputs[name];
     need(
       input?.required === "true" && input?.type === "string",
@@ -8105,6 +8300,20 @@ const MUTATIONS = [
     expect: /macos-release\.yml\/build declares `secrets: "inherit"`/,
   },
   {
+    name: "the reusable release build caller grants a write",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
+      job.permissions = { ...job.permissions, contents: "write" };
+    }),
+    expect: /macos-release\.yml\/build declares `permissions: .*"contents":"write"/,
+  },
+  {
+    name: "the reusable release build caller drops the read its callee's evidence job needs",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
+      delete job.permissions["pull-requests"];
+    }),
+    expect: /macos-release\.yml\/build declares `permissions: \{"actions":"read","contents":"read"\}`/,
+  },
+  {
     name: "the reusable call forwards release material into the CI half",
     mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
       job.secrets.MACOS_SPARKLE_PRIVATE_KEY = "${{ secrets.MACOS_SPARKLE_PRIVATE_KEY }}";
@@ -8218,6 +8427,148 @@ const MUTATIONS = [
       job["timeout-minutes"] = "40";
     }),
     expect: /macos-release\.yml\/notarize-stage: timeout-minutes is "40", at or below the/,
+  },
+  // ── exact-main signed-build reuse and PR-free delivery ────────────────────
+  {
+    name: "the reusable build runs even when the preflight chose reuse",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
+      job.if = "always()";
+    }),
+    expect: /macos-release\.yml\/build declares needs "preflight" and if "always\(\)"/,
+  },
+  {
+    name: "notarization uses always() and starts on a cancelled release",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.if = job.if.replace("!cancelled()", "always()");
+    }),
+    expect: /notarize-stage's condition (no longer states `!cancelled\(\)`|uses always\(\))/,
+  },
+  {
+    name: "notarization stops checking that a reuse skipped the build",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.if = job.if.replace(" && needs.build.result == 'skipped'", "");
+    }),
+    expect: /notarize-stage's condition no longer states `\(needs\.preflight\.outputs\.source == 'reuse' && needs\.build\.result == 'skipped'\)`/,
+  },
+  {
+    name: "notarization materializes the notary key before the package is verified",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      const at = job.steps.findIndex((step) => step.name === "Materialize notarization API key");
+      const [step] = job.steps.splice(at, 1);
+      job.steps.splice(1, 0, step);
+    }),
+    expect: /notarize-stage reaches the first release secret at step 2, before the package verification/,
+  },
+  {
+    name: "the restored generate_appcast runs before the package is verified",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      const at = job.steps.findIndex((step) => step.name === "Stage public release metadata");
+      const [step] = job.steps.splice(at, 1);
+      job.steps.splice(2, 0, { ...step, env: { RELEASE_VERSION: "${{ inputs.release_version }}" } });
+    }),
+    expect: /notarize-stage reaches the first generate_appcast execution at step 3, before the package verification/,
+  },
+  {
+    name: "a reused build is notarized without the fresh readback",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.steps = job.steps.filter((step) => !String(step.run ?? "").includes("macos-evidence.mjs readback"));
+    }),
+    expect: /notarize-stage must re-prove a reused build/,
+  },
+  {
+    name: "the package verifier becomes conditional",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      const step = job.steps.find((s) => String(s.run ?? "").includes("macos-evidence-verify-app.sh"));
+      step.if = "needs.preflight.outputs.source == 'reuse'";
+    }),
+    expect: /notarize-stage does not unconditionally run `scripts\/release\/macos-evidence-verify-app\.sh`/,
+  },
+  {
+    name: "the release contract is dropped from the notarization runner",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.steps = job.steps.filter((s) => !String(s.run ?? "").includes("macos-evidence-release-contract.sh"));
+    }),
+    expect: /notarize-stage must run the release contract unconditionally/,
+  },
+  {
+    name: "the preflight gains a write permission",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "preflight", (job) => {
+      job.permissions = { actions: "write", contents: "read" };
+    }),
+    expect: /macos-release\.yml\/preflight declares permissions/,
+  },
+  {
+    name: "publication asks for pull-request write again",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "publish", (job) => {
+      job.permissions = { ...job.permissions, "pull-requests": "write" };
+    }),
+    expect: /macos-release\.yml\/publish declares permissions/,
+  },
+  {
+    name: "delivery opens a pull request again",
+    mutate: (world) => {
+      world.texts.set(MACOS_RELEASE, `${world.texts.get(MACOS_RELEASE)}\n          gh pr create --base main\n`);
+      return world;
+    },
+    expect: /creates a pull request or asks for a pull-request permission again/,
+  },
+  {
+    name: "publication falls back to the implicit success(), which never publishes a reuse",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "publish", (job) => {
+      job.if = "github.event_name == 'workflow_dispatch' && inputs.publish_release";
+    }),
+    expect: /publish's condition .* must require `!cancelled\(\)`/,
+  },
+  {
+    name: "the signed-build source gains an unjudged choice",
+    mutate: (world) => {
+      world.docs.get(MACOS_RELEASE).on.workflow_dispatch.inputs.signed_build_source.options.push("cache");
+      return world;
+    },
+    expect: /dispatch input `signed_build_source` offers/,
+  },
+  {
+    name: "merge-gate's frozen mode stops failing a candidate the judge refuses",
+    mutate: (world) => withGateJob(world, "select", (job) => {
+      const step = job.steps.find((s) => s.id === "files");
+      step.run = step.run.replace(
+        'echo "::error::the dispatched commit is not a frozen release-metadata candidate"; exit 1; }',
+        'status=frozen-error; }');
+    }),
+    expect: /a frozen candidate that fails the judge no longer FAILS the selector/,
+  },
+  {
+    name: "merge-gate's frozen judge runs from the candidate's own tree",
+    mutate: (world) => withGateJob(world, "select", (job) => {
+      const step = job.steps.find((s) => s.id === "files");
+      step.run = step.run.replace('node "$judge/scripts/release/macos-evidence.mjs" frozen-candidate',
+        "node scripts/release/macos-evidence.mjs frozen-candidate");
+    }),
+    expect: /no longer runs base's macos-evidence\.mjs frozen-candidate judge/,
+  },
+  {
+    name: "merge-gate's pull-request dispatch mode stops requiring a PR number",
+    mutate: (world) => withGateJob(world, "select", (job) => {
+      const step = job.steps.find((s) => s.id === "files");
+      step.run = step.run.replace('[[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || status=identity-input-error', ":");
+    }),
+    expect: /pull-request mode no longer requires a pull request number/,
+  },
+  {
+    name: "merge-gate grows a third dispatch mode",
+    mutate: (world) => {
+      world.docs.get(AGGREGATE).on.workflow_dispatch.inputs.mode.options.push("anything");
+      return world;
+    },
+    expect: /dispatch `mode` must be a required choice/,
+  },
+  {
+    name: "the aggregate stops re-checking the frozen head",
+    mutate: (world) => withGateJob(world, "merge-gate", (job) => {
+      const step = job.steps.find((s) => String(s.run ?? "").includes("CHECKED_SHA"));
+      step.run = step.run.replace('[ "$CHECKED_SHA" != "$EXPECTED_HEAD" ]', "false");
+    }),
+    expect: /no longer re-checks, where the verdict is given/,
   },
   {
     // 6l reaching the BUDGET-ONLY files. Before the split this sweep covered the
