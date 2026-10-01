@@ -2107,10 +2107,10 @@ type Store interface {
 	// magic tokens
 	CreateMagicToken(ctx context.Context, t MagicToken) error
 	UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error)
-	// UseMagicTokenWithEpoch spends the token like UseMagicToken and, in the
-	// same transaction, reads the credential_epoch of the account holding its
-	// address (0 when none does yet).
-	UseMagicTokenWithEpoch(ctx context.Context, tokenHash string, now int64) (MagicToken, int64, bool, error)
+	// UseMagicTokenForUser spends the token like UseMagicToken and, in the
+	// same transaction, resolves or creates the account holding its address,
+	// returning that account and its credential_epoch.
+	UseMagicTokenForUser(ctx context.Context, tokenHash string, now int64) (MagicToken, User, int64, bool, error)
 	DeleteSpentMagicTokens(ctx context.Context, now int64) error
 	// email tokens (verify + reset)
 	CreateEmailToken(ctx context.Context, t EmailToken) error

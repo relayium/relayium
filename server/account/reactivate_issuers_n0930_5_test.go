@@ -21,7 +21,6 @@ import (
 type n5IssuerHooks struct {
 	*SQLiteStore
 	afterGetUser func()
-	afterUpsert  func()
 }
 
 func (s *n5IssuerHooks) GetUserByID(ctx context.Context, id string) (User, error) {
@@ -29,16 +28,6 @@ func (s *n5IssuerHooks) GetUserByID(ctx context.Context, id string) (User, error
 	if s.afterGetUser != nil {
 		hook := s.afterGetUser
 		s.afterGetUser = nil
-		hook()
-	}
-	return u, err
-}
-
-func (s *n5IssuerHooks) UpsertUserByEmail(ctx context.Context, email, name string) (User, error) {
-	u, err := s.SQLiteStore.UpsertUserByEmail(ctx, email, name)
-	if s.afterUpsert != nil {
-		hook := s.afterUpsert
-		s.afterUpsert = nil
 		hook()
 	}
 	return u, err
@@ -185,12 +174,14 @@ func TestReactivateN0930MagicLinkProofCannotMintForNextGeneration(t *testing.T) 
 		CreatedAt: n5Now, ExpiresAt: n5Now + 600}); err != nil {
 		t.Fatal(err)
 	}
+	// The account state is resolved in the transaction that spends the link,
+	// so right after that call is the first point anything can overtake it.
 	var g2 string
-	hs := &n5IssuerHooks{SQLiteStore: store}
-	hs.afterUpsert = func() { g2 = n5OwnerRecoversAndRedeletes(t, store, u.ID, false) }
+	hs := &n5MagicHooks{SQLiteStore: store}
+	hs.afterConsume = func() { g2 = n5OwnerRecoversAndRedeletes(t, store, u.ID, false) }
 	svc.store = hs
 	_, err := svc.VerifyMagicLink(ctx, raw)
-	if hs.afterUpsert != nil {
+	if hs.afterConsume != nil {
 		t.Fatal("the magic login never reached the interleaving point")
 	}
 	var pd *PendingDeletionError
@@ -327,10 +318,10 @@ func (s *n5MagicHooks) UseMagicToken(ctx context.Context, tokenHash string, now 
 	return t, ok, err
 }
 
-func (s *n5MagicHooks) UseMagicTokenWithEpoch(ctx context.Context, tokenHash string, now int64) (MagicToken, int64, bool, error) {
-	t, e, ok, err := s.SQLiteStore.UseMagicTokenWithEpoch(ctx, tokenHash, now)
+func (s *n5MagicHooks) UseMagicTokenForUser(ctx context.Context, tokenHash string, now int64) (MagicToken, User, int64, bool, error) {
+	t, u, e, ok, err := s.SQLiteStore.UseMagicTokenForUser(ctx, tokenHash, now)
 	s.fire()
-	return t, e, ok, err
+	return t, u, e, ok, err
 }
 
 func n5MagicLink(t *testing.T, store *SQLiteStore, email string) string {
@@ -537,5 +528,56 @@ func TestReactivateN0930MagicLinkPasswordChangeBeforeClearSurvives(t *testing.T)
 	}
 	if err == nil || liveSessions(t, store, u.ID) != 0 {
 		t.Fatalf("the stale magic login must get no session: err=%v", err)
+	}
+}
+
+// Codex r3: a first-sign-in magic link binds to the account incarnation its
+// spend created. Paused right after the spend, the new account is deleted,
+// hard-purged and the address re-created as a different account (epoch 0
+// again); the resumed login verifies nothing and signs nothing in.
+func TestReactivateN0930MagicLinkFirstSignInBoundToIncarnation(t *testing.T) {
+	ctx := context.Background()
+	svc, store := n5Service(t)
+	const email = "reborn@example.com"
+	raw := n5MagicLink(t, store, email)
+	var created, replacement User
+	hs := &n5MagicHooks{SQLiteStore: store}
+	hs.afterConsume = func() {
+		var id string
+		if err := store.db.QueryRow(`SELECT id FROM users WHERE email = ?`, email).Scan(&id); err != nil {
+			t.Fatalf("the spend must have created the account: %v", err)
+		}
+		created = User{ID: id}
+		var err error
+		n5Delete(t, store, created.ID, "g1", n5Now-1000)
+		if err := store.ArchiveAndPurgeUser(ctx, created.ID, n5Now-1000+30*86400+1); err != nil {
+			t.Fatalf("hard purge: %v", err)
+		}
+		if replacement, err = store.UpsertUserByEmail(ctx, email, ""); err != nil {
+			t.Fatal(err)
+		}
+		if replacement.ID == created.ID {
+			t.Fatal("the replacement must be a different account")
+		}
+		if err := store.SetPassword(ctx, replacement.ID, "replacement-hash"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	svc.store = hs
+	_, err := svc.VerifyMagicLink(ctx, raw)
+	if hs.afterConsume != nil {
+		t.Fatal("the magic login never reached the interleaving point")
+	}
+	if err == nil {
+		t.Fatal("a proof spent for a purged account must not sign in its replacement")
+	}
+	if n := liveSessions(t, store, replacement.ID); n != 0 {
+		t.Fatalf("no session for the replacement account, found %d", n)
+	}
+	if mustVerified(t, store, replacement.ID) || passwordHash(t, store, replacement.ID) != "replacement-hash" {
+		t.Fatal("the replacement account must be neither verified nor stripped of its password")
+	}
+	if providers, _ := store.ListIdentityProviders(ctx, replacement.ID); len(providers) != 0 {
+		t.Fatalf("the replacement account must gain no link: %v", providers)
 	}
 }

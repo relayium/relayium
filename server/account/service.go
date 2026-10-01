@@ -841,22 +841,19 @@ func (s *Service) RequestMagicLink(ctx context.Context, email string) error {
 }
 
 func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session, error) {
-	// The link is spent and the account's epoch read in one transaction, so
-	// the epoch names the generation the proof was made in. Everything this
-	// login issues — a reactivation offer or a session — is fenced by it: a
-	// recovery, password reset/change or new deletion committing after the
-	// spend leaves nothing behind. (No account yet: epoch 0, the value the
-	// account created below starts at.)
-	tok, epoch, ok, err := s.store.UseMagicTokenWithEpoch(ctx, authx.HashToken(rawToken), s.now().Unix())
+	// One transaction spends the link and resolves — or, on a first sign-in,
+	// creates — the account it proves, returning that account's id and epoch.
+	// The login continues strictly by that id, and everything it issues — a
+	// reactivation offer, the verification, the session — is fenced on (id,
+	// epoch): a recovery, password reset/change or new deletion committing
+	// after the spend, or the address being deleted, purged and re-created as
+	// another account, leaves nothing behind.
+	tok, u, epoch, ok, err := s.store.UseMagicTokenForUser(ctx, authx.HashToken(rawToken), s.now().Unix())
 	if err != nil {
 		return Session{}, err
 	}
 	if !ok {
 		return Session{}, fmt.Errorf("invalid or expired token")
-	}
-	u, err := s.store.UpsertUserByEmail(ctx, tok.Email, "")
-	if err != nil {
-		return Session{}, err
 	}
 	// Frozen-login guard (Task 4): a pending-deletion account must not get a
 	// live session via magic link. Mint a fresh reactivate token right here,

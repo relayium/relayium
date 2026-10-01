@@ -2556,9 +2556,22 @@ func (s *SQLiteStore) Close() error {
 func normEmail(e string) string { return strings.ToLower(strings.TrimSpace(e)) }
 
 func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName string) (User, error) {
+	return s.upsertUserByEmailOn(ctx, s.db, email, displayName)
+}
+
+// userUpsertExecer is what upsertUserByEmailOn needs: the writer pool or a
+// caller's transaction.
+type userUpsertExecer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// upsertUserByEmailOn is UpsertUserByEmail on q, so a caller can resolve or
+// create the account inside its own transaction (UseMagicTokenForUser).
+func (s *SQLiteStore) upsertUserByEmailOn(ctx context.Context, q userUpsertExecer, email, displayName string) (User, error) {
 	email = normEmail(email)
 	var u User
-	err := s.db.QueryRowContext(ctx,
+	err := q.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
 		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, scheduled_cycle, billing_cycle
 		   FROM users WHERE email = ?`, email,
@@ -2571,7 +2584,7 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 		return User{}, err
 	}
 	u = User{ID: authx.NewID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
-	_, err = s.db.ExecContext(ctx,
+	_, err = q.ExecContext(ctx,
 		`INSERT INTO users (id, email, display_name, created_at, canonical_email, billing_hold_hmac) VALUES (?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonicalEmail(email), s.billingEmailHMAC(email))
 	return u, err
@@ -4034,42 +4047,48 @@ func (s *SQLiteStore) UseMagicToken(ctx context.Context, tokenHash string, now i
 	return t, err == nil, err
 }
 
-// UseMagicTokenWithEpoch is UseMagicToken that also returns the
-// credential_epoch of the account holding the token's address (0 when no
-// account holds it yet), read in the same transaction that spends the token.
-// That epoch is the generation the link's proof belongs to: a recovery,
-// password reset/change or deletion that commits after the spend moves it,
-// so every credential the login later issues at this epoch is refused.
-func (s *SQLiteStore) UseMagicTokenWithEpoch(ctx context.Context, tokenHash string, now int64) (MagicToken, int64, bool, error) {
+// UseMagicTokenForUser spends a magic token and, in the same transaction,
+// resolves — or creates, exactly as UpsertUserByEmail does — the account
+// holding the token's address, returning that account and its
+// credential_epoch. The pair names one account incarnation in one credential
+// generation: the caller continues strictly by this user id and fences every
+// later write on (id, epoch), so neither a recovery, password change or new
+// deletion of this account, nor a deletion, hard purge and re-creation of the
+// address as a different account, can be reached by the spent proof.
+// ok=false: the token was unknown, spent or expired, and nothing changed.
+func (s *SQLiteStore) UseMagicTokenForUser(ctx context.Context, tokenHash string, now int64) (MagicToken, User, int64, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return MagicToken{}, 0, false, err
+		return MagicToken{}, User{}, 0, false, err
 	}
 	defer tx.Rollback()
 	res, err := tx.ExecContext(ctx,
 		`UPDATE magic_tokens SET used_at = ? WHERE token_hash = ? AND used_at = 0 AND expires_at > ?`,
 		now, tokenHash, now)
 	if err != nil {
-		return MagicToken{}, 0, false, err
+		return MagicToken{}, User{}, 0, false, err
 	}
 	if n, err := res.RowsAffected(); err != nil || n != 1 {
-		return MagicToken{}, 0, false, err
+		return MagicToken{}, User{}, 0, false, err
 	}
 	var t MagicToken
 	if err := tx.QueryRowContext(ctx,
 		`SELECT token_hash, email, created_at, expires_at, used_at FROM magic_tokens WHERE token_hash = ?`, tokenHash,
 	).Scan(&t.TokenHash, &t.Email, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt); err != nil {
-		return MagicToken{}, 0, false, err
+		return MagicToken{}, User{}, 0, false, err
+	}
+	u, err := s.upsertUserByEmailOn(ctx, tx, t.Email, "")
+	if err != nil {
+		return MagicToken{}, User{}, 0, false, err
 	}
 	var epoch int64
-	err = tx.QueryRowContext(ctx, `SELECT credential_epoch FROM users WHERE email = ?`, normEmail(t.Email)).Scan(&epoch)
-	if err != nil && err != sql.ErrNoRows {
-		return MagicToken{}, 0, false, err
+	if err := tx.QueryRowContext(ctx, `SELECT credential_epoch FROM users WHERE id = ?`, u.ID).Scan(&epoch); err != nil {
+		return MagicToken{}, User{}, 0, false, err
 	}
 	if err := tx.Commit(); err != nil {
-		return MagicToken{}, 0, false, err
+		return MagicToken{}, User{}, 0, false, err
 	}
-	return t, epoch, true, nil
+	return t, u, epoch, true, nil
 }
 
 // DeleteSpentMagicTokens reclaims one-time login tokens that are no longer
