@@ -279,7 +279,7 @@ func prepareCanceledManualDuplicate(t *testing.T, store *SQLiteStore, client *st
 	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 101); err != nil {
 		t.Fatal(err)
 	}
-	job, _, _ = store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
+	job = postCancelInspectForTest(t, store, client, "user_dup", "cus_dup", "sub_canonical", "sub_dup")
 	if !job.SubscriptionCanceled || job.State != "manual" || state.deletes != 1 {
 		t.Fatalf("job=%+v deletes=%d", job, state.deletes)
 	}
@@ -335,6 +335,16 @@ func TestDuplicateWithoutAnyInvoiceEndsNoRefundNeeded(t *testing.T) {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 101); err != nil {
+		t.Fatal(err)
+	}
+	// Completion needs an inspection that started after the recorded cancellation.
+	job, err = store.PutDuplicateRefundInspection(context.Background(), DuplicateRefundPlan{
+		UserID: "user_empty", CustomerID: "cus_dup", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_dup",
+	}, true, 102)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 103); err != nil {
 		t.Fatal(err)
 	}
 	evidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
@@ -1559,7 +1569,7 @@ func TestDuplicateRefundCrashBeforeLocalSaveReplaysWithoutDoubleRefund(t *testin
 	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 101); err != nil {
 		t.Fatal(err)
 	}
-	job, _, _ = store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
+	job = postCancelInspectForTest(t, store, client, "user_dup", "cus_dup", "sub_canonical", "sub_dup")
 	action, err := prepareDuplicateRefundAction(context.Background(), store, job, "operator", "verified duplicate payment", 102)
 	if err != nil {
 		t.Fatal(err)
