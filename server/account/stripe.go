@@ -136,6 +136,10 @@ type WebhookEvent struct {
 	// whose mode doesn't match the configured key (see wantLive), so a test-mode
 	// event can never assign a real plan on a live deployment and vice versa.
 	LiveMode bool
+	// Refreshed is set (never parsed) when the subscription fields were replaced
+	// by Stripe's CURRENT object, read after the account's row was observed
+	// (canonical refresh). Such evidence is not "as old as Created".
+	Refreshed bool `json:"-"`
 }
 
 // ErrWebhookWrongMode is returned by VerifyWebhook for a correctly-signed event

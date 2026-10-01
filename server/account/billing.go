@@ -1558,8 +1558,12 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Ordering guard: drop an out-of-order / re-delivered event older than the
-		// last one applied, so it cannot revert newer subscription state.
-		if s.subEventIsStale(ctx, w, u.ID, ev.Created) {
+		// last one applied, so it cannot revert newer subscription state. A
+		// refreshed event showing a LIVE subscription on an account with no bound
+		// canonical is current evidence; it is ordered against the observed row
+		// in applySubscriptionEvent, where another subscription's clock cannot
+		// drop it (N-0930-2).
+		if !(ev.Refreshed && liveSubStatus(ev.Status) && u.StripeSubscriptionID == "") && s.subEventIsStale(ctx, w, u.ID, ev.Created) {
 			return
 		}
 		// Every write below is conditional on the Stripe source row being what
@@ -1613,13 +1617,56 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if u.PlanSource == "admin" {
 			// Admin comp wins: the projection records the cancellation for
 			// visibility and keeps the comped plan, while Stripe's own row goes to
-			// free/canceled so a later fallback is truthful.
-			if err := s.applyStripeLifecycle(ctx, u.ID, "free", "", ev); err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
+			// free/canceled so a later fallback is truthful -- but only when the
+			// CANONICAL subscription ended. A duplicate's deletion must not
+			// replace the underlying source state while the canonical is live
+			// (N-0930-2); the comp only masked that. Same observe / compare /
+			// conditional-write loop as the non-admin path.
+			for attempt := 0; ; attempt++ {
+				if attempt >= maxStripeApplyAttempts {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
+				obs, fresh, err := s.observeStripeAccount(ctx, u.ID)
+				if err != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
+				u = fresh
+				if obs.staleFor(ev.Created) {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				if u.PlanSource != "admin" {
+					// The comp was lifted meanwhile: redelivery takes the ordinary path.
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
+				canonical := u.StripeSubscriptionID
+				if canonical == "" && obs.exists && liveSubStatus(obs.row.Status) {
+					canonical = obs.row.ExternalID
+				}
+				if canonical != "" && ev.SubscriptionID != "" && ev.SubscriptionID != canonical {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				res, err := s.Store().ApplyStripeSourceIfUnchanged(ctx, StripeSourceWrite{
+					UserID: u.ID, Observed: obs.row, ObservedExists: obs.exists,
+					ExpectUser: true, UserSubscriptionID: u.StripeSubscriptionID, UserPlanSource: u.PlanSource,
+					Event: &SourceEvent{UserID: u.ID, Provider: ProviderStripe, PlanID: "free", Status: ev.Status,
+						PeriodEnd: ev.CurrentPeriodEnd, ExternalID: ev.SubscriptionID, EventAt: ev.Created,
+						Now: s.Now().Unix(), BillingAttemptID: ev.MetadataBillingAttemptID, BillingProductID: ev.PriceID},
+				})
+				if err != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
+				if !res.Unchanged {
+					continue
+				}
+				w.WriteHeader(http.StatusOK)
 				return
 			}
-			w.WriteHeader(http.StatusOK)
-			return
 		}
 		// The binding check, the freshness check, the binding clear and the
 		// free/canceled write are ONE conditional write, retried on a moved row:
@@ -1809,6 +1856,7 @@ func (s *Service) refreshSubscriptionEvent(ctx context.Context, ev *WebhookEvent
 	ev.SubscriptionID, ev.CustomerID, ev.PriceID, ev.Status, ev.CurrentPeriodEnd = info.ID, info.CustomerID, info.PriceID, info.Status, info.CurrentPeriodEnd
 	ev.MetadataBillingAttemptID = info.BillingAttemptID
 	ev.MetadataUserID = info.MetadataUserID
+	ev.Refreshed = true
 	return refreshOK
 }
 
@@ -1827,9 +1875,27 @@ func (s *Service) applySubscriptionEvent(ctx context.Context, w http.ResponseWri
 	// destructive dedup: on a retry a newer event may have landed, and an
 	// event that has become stale must not reap or re-bind subscriptions
 	// whose entitlement it can no longer write.
-	if obs.staleFor(ev.Created) {
+	//
+	// The Stripe source row carries ONE clock for the account, but the replay
+	// rule is about one subscription's history. A refreshed event (Stripe's
+	// current object, read after this observation and written only if the row
+	// is still unchanged) showing a LIVE subscription other than the row's, on
+	// an account with NO bound canonical, is not a replay: dropping it left a
+	// paying subscription unadopted with no plan and no responsibility
+	// (N-0930-2). It is applied (adoption), stamped no older than the observed
+	// clock so the transactional rule accepts it and the clock stays monotonic.
+	// With a bound canonical the B-M3 rule stands -- a stale event never
+	// re-binds or reaps (TestBM3RetryStopsBeforeDedupWhenEventBecameStale) --
+	// so a delayed duplicate's creation is left to sweep discovery (N-0930-11).
+	// Every other event keeps the original rule.
+	crossSubscriptionLive := ev.Refreshed && liveSubStatus(ev.Status) && obs.exists && u.StripeSubscriptionID == "" &&
+		ev.SubscriptionID != "" && obs.row.ExternalID != "" && ev.SubscriptionID != obs.row.ExternalID
+	if !crossSubscriptionLive && obs.staleFor(ev.Created) {
 		w.WriteHeader(http.StatusOK)
 		return applyDone
+	}
+	if crossSubscriptionLive && obs.row.EventAt > ev.Created {
+		ev.Created = obs.row.EventAt
 	}
 	// Resolve what THIS event says Stripe is billing, before the admin branch:
 	// an admin-comped account still has its Stripe subscription recorded on
@@ -1862,6 +1928,18 @@ func (s *Service) applySubscriptionEvent(ctx context.Context, w http.ResponseWri
 		// The dedup/reconcile path below is skipped for the same reason it
 		// always was: reconcileSubscriptions cancels and refunds real
 		// subscriptions, and a comped account is not its responsibility.
+		//
+		// The underlying Stripe row records the CANONICAL subscription only: an
+		// event for another subscription must not replace its identity or state
+		// while the canonical is known (N-0930-2; mirrors the deletion branch).
+		canonical := u.StripeSubscriptionID
+		if canonical == "" && obs.exists && liveSubStatus(obs.row.Status) {
+			canonical = obs.row.ExternalID
+		}
+		if canonical != "" && ev.SubscriptionID != "" && ev.SubscriptionID != canonical {
+			w.WriteHeader(http.StatusOK)
+			return applyDone
+		}
 		if err := s.applyStripeLifecycle(ctx, u.ID, planID, cycle, ev); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return applyDone
