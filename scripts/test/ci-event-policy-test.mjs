@@ -447,6 +447,9 @@ const SHARDS = 8;
 /** The A11 relay-renewal driver tests' job, and the one pattern (section 3b). */
 const RENEW_JOB = "link-renew";
 const RENEW_PATTERN = "^(TestLinkRenew|TestLDRenew)";
+/** The renewal lane's measured weights, and the tool that records shard evidence. */
+const RENEW_WEIGHTS = "scripts/go-race-timings-renewal.json";
+const TIMINGS_TOOL = "scripts/go-race-timings.go";
 
 const failures = [];
 function check(ok, message) {
@@ -1022,61 +1025,144 @@ function triggerFailures(world) {
 /** Every file whose concurrency block this policy binds. */
 const CONCURRENCY_GOVERNED = [...files, MACOS_RELEASE, ...EXTRA_PARSED];
 
-// ── 3. the account race lane is sharded, and the shards really run ──────────
+// ── 3. the race shards: account (FNV, eight) and renewal (weighted, two) ────
+//
+// Two jobs carry a `strategy.matrix.shard`, and each is proved on its own:
+// its exact index list, fail-fast off, the planner invoked with its shard count
+// and the matrix index (so the planner's own partition proof covers every
+// index), the race command restricted to the planner's selector, and timing
+// evidence that is always uploaded under a name unique to lane, shard and
+// attempt. The rules live in a function so the controls below can break each
+// one and require the complaint; a rule no mutation can trip is not a rule.
 
 const go = docs.get("go.yml");
-if (go) {
-  const shardJobs = Object.entries(go.jobs ?? {}).filter(
-    ([, job]) => job?.strategy?.matrix?.shard !== undefined,
-  );
-  check(
-    shardJobs.length === 1,
-    `go.yml: expected exactly one job with a \`strategy.matrix.shard\`; found ${shardJobs.length}. `
-    + `That matrix is the only thing splitting the ~43m35s account race lane into finite pieces.`,
-  );
+/** The shard lanes, by job id: what each must plan and how it must be checked. */
+const GO_SHARD_LANES = [
+  {
+    job: "race-account", lane: "account", shards: SHARDS, pkg: "./account", maxPackageMinutes: 20,
+    planner: [`-shards ${SHARDS}`, "-shard '${{ matrix.shard }}'"],
+    // FNV stays the account default until a real eight-shard corpus from
+    // scripts/go-race-timings.go `corpus` exists and is accepted. Moving to
+    // -weights is a deliberate edit of this line, not a quiet one in go.yml.
+    forbidden: ["-weights", "-pattern", "-require-pass", "-forbid-skip"],
+    evidence: ["-lane account"],
+  },
+  {
+    job: RENEW_JOB, lane: "renewal", shards: 2, pkg: "./cmd/relayium", maxPackageMinutes: 20,
+    planner: ["-package ./cmd/relayium", `-pattern '${RENEW_PATTERN}'`, `-weights ../${RENEW_WEIGHTS}`,
+      "-shards 2", "-shard '${{ matrix.shard }}'"],
+    forbidden: [],
+    evidence: ["-lane renewal", "-require-pass", "-forbid-skip", "-expect-inventory \"$out/declared.txt\""],
+  },
+];
 
-  if (shardJobs.length === 1) {
-    const [name, job] = shardJobs[0];
-    const shard = job.strategy.matrix.shard;
+/** The minutes of a `-timeout` like 20m or 90s, or NaN. */
+const goMinutes = (d) => {
+  const m = /^(\d+)([ms])$/.exec(d ?? "");
+  return m ? Number(m[1]) / (m[2] === "m" ? 1 : 60) : NaN;
+};
+
+/** Reports, through `check`, every way the Go race lanes stop covering what they claim. */
+function checkGoRaceLanes(doc) {
+  const jobs = doc?.jobs ?? {};
+  const shardJobs = Object.entries(jobs).filter(([, job]) => job?.strategy?.matrix?.shard !== undefined);
+  check(
+    JSON.stringify(shardJobs.map(([n]) => n).sort()) === JSON.stringify(GO_SHARD_LANES.map((l) => l.job).sort()),
+    `go.yml: the jobs with a \`strategy.matrix.shard\` are ${JSON.stringify(shardJobs.map(([n]) => n))}, want `
+    + `exactly ${JSON.stringify(GO_SHARD_LANES.map((l) => l.job))}. Those matrices are what split the account race `
+    + `lane and the renewal tests into finite pieces.`,
+  );
+  const uploadNames = [];
+  for (const lane of GO_SHARD_LANES) {
+    const job = jobs[lane.job];
+    const name = lane.job;
+    if (job === undefined) {
+      check(false, `go.yml: the \`${name}\` shard job is gone; its tests would run nowhere.`);
+      continue;
+    }
+    const shard = job.strategy?.matrix?.shard;
     check(
-      Array.isArray(shard) && shard.length === SHARDS
-        && shard.map(String).join(",") === Array.from({ length: SHARDS }, (_, k) => k).join(","),
-      `go.yml/${name}: matrix.shard is ${JSON.stringify(shard)}, want 0..${SHARDS - 1}. `
+      Array.isArray(shard) && shard.map(String).join(",") === Array.from({ length: lane.shards }, (_, k) => k).join(","),
+      `go.yml/${name}: matrix.shard is ${JSON.stringify(shard)}, want 0..${lane.shards - 1}. `
       + `A missing index is a set of tests that silently stops being race-checked.`,
     );
     check(
-      job.strategy["fail-fast"] === "false",
-      `go.yml/${name}: strategy.fail-fast is ${JSON.stringify(job.strategy["fail-fast"])}, want false — `
-      + `one shard reporting a race must not cancel the other seven and leave them unknown.`,
+      job.strategy?.["fail-fast"] === "false",
+      `go.yml/${name}: strategy.fail-fast is ${JSON.stringify(job.strategy?.["fail-fast"])}, want false — `
+      + `one shard failing must not cancel the others and leave them unknown.`,
     );
-
-    const text = runText(job);
+    // Continuation lines joined, so a flag is found wherever the line breaks.
+    const text = runText(job).replace(/\\\n\s*/g, " ");
+    const plannerLine = (text.split(`go run ../${SHARD_HELPER}`)[1] ?? "").split(")\"")[0];
     check(
-      text.includes(SHARD_HELPER),
-      `go.yml/${name}: no longer invokes ${SHARD_HELPER}, which is what proves the eight shards `
-      + `partition the test list exactly.`,
+      text.includes(`go run ../${SHARD_HELPER}`),
+      `go.yml/${name}: no longer invokes ${SHARD_HELPER}, which is what proves the shards partition `
+      + `the test list exactly.`,
+    );
+    for (const flag of [...lane.planner, "-plan-out \"$out/plan.json\""]) {
+      check(plannerLine.includes(flag), `go.yml/${name}: the ${SHARD_HELPER} call lacks \`${flag}\`; `
+        + `without it the shards do not plan the ${lane.lane} lane's list, or do not record the plan.`);
+    }
+    for (const flag of lane.forbidden) {
+      check(!text.includes(flag), `go.yml/${name}: uses \`${flag}\`. The ${lane.lane} lane stays FNV until `
+        + `a real eight-shard timing corpus is accepted, and its skips are the package's own.`);
+    }
+    const goLine = text.split("\n").find((l) => /^\s*go test -race /.test(l)) ?? "";
+    check(
+      /-run "\$RUN_REGEX"/.test(goLine) && goLine.includes(` ${lane.pkg} `) && /(^|\s)-json(\s|$)/.test(goLine),
+      `go.yml/${name}: does not run \`go test -race ... -json -run "$RUN_REGEX" ${lane.pkg}\`.`,
+    );
+    const timeout = /-timeout\s+(\S+)/.exec(goLine)?.[1];
+    check(
+      goMinutes(timeout) > 0 && goMinutes(timeout) <= lane.maxPackageMinutes
+        && Number(job["timeout-minutes"]) > goMinutes(timeout) && Number(job["timeout-minutes"]) <= 25,
+      `go.yml/${name}: -timeout ${timeout} under timeout-minutes ${job["timeout-minutes"]}; want a package `
+      + `bound in (0, ${lane.maxPackageMinutes}m] inside a job bound of at most 25. Exceeding either is a hang.`,
     );
     check(
-      /-shards\s+8/.test(text) && /-shard\s+'?\$\{\{\s*matrix\.shard/.test(text),
-      `go.yml/${name}: does not pass \`-shards 8\` and the matrix index to ${SHARD_HELPER}, so `
-      + `every shard would run the same tests.`,
+      /set -euo pipefail/.test(text)
+        && goLine.includes(`| tee "$out/go-test.json" | go run ../${TIMINGS_TOOL} render || status=$?`)
+        && /\bexit "\$status"/.test(text),
+      `go.yml/${name}: go test's status no longer survives the pipe: want \`set -euo pipefail\`, the stream `
+      + `teed to "$out/go-test.json" through \`${TIMINGS_TOOL} render || status=$?\`, and \`exit "$status"\`.`,
     );
+    const evidenceText = (text.split(`go run ../${TIMINGS_TOOL} evidence`)[1] ?? "").split(/\n\s*exit "\$status"/)[0];
+    for (const flag of [...lane.evidence, "-plan \"$out/plan.json\"", "-json \"$out/go-test.json\"",
+      "-source-sha \"$(git rev-parse HEAD)\"", "-toolchain \"$(go version)\"", "-run-id \"$GITHUB_RUN_ID\"",
+      "-run-attempt \"$GITHUB_RUN_ATTEMPT\"", "-race -count 1",
+      "-go-exit \"$status\"", "-out \"$out/evidence.json\"", "|| { [ \"$status\" -ne 0 ] || status=1; }"]) {
+      check(evidenceText.includes(flag), `go.yml/${name}: the ${TIMINGS_TOOL} evidence call lacks \`${flag}\`; `
+        + `the timing evidence would not bind the run it describes, or its failure would not fail the step.`);
+    }
+    const upload = (job.steps ?? []).find((s) => /actions\/upload-artifact@/.test(s?.uses ?? ""));
+    const artifact = upload?.with?.name ?? "";
+    uploadNames.push(artifact.replace(/\$\{\{[^}]*\}\}/g, "*"));
     check(
-      /go test .*-race/.test(text) && /-run\s+"\$RUN_REGEX"/.test(text),
-      `go.yml/${name}: does not run \`go test -race\` restricted to the shard's \`-run\` regex.`,
+      upload !== undefined && upload.if === "always()"
+        && artifact.includes(lane.lane) && artifact.includes("${{ matrix.shard }}")
+        && artifact.includes("${{ github.run_attempt }}")
+        && upload.with?.path === "${{ runner.temp }}/go-race-timing"
+        && upload.with?.["if-no-files-found"] === "error",
+      `go.yml/${name}: the timing evidence must be uploaded \`if: always()\` from `
+      + `\${{ runner.temp }}/go-race-timing with if-no-files-found: error, under a name carrying the lane, `
+      + `\${{ matrix.shard }} and \${{ github.run_attempt }}; got ${JSON.stringify(upload ?? null)}.`,
     );
     assertNoRetryAndFiniteTimeouts("go.yml", name, job, text);
   }
+  check(
+    new Set(uploadNames).size === uploadNames.length,
+    `go.yml: two shard lanes upload timing evidence under the same artifact name pattern `
+    + `${JSON.stringify(uploadNames)}; one would overwrite or reject the other.`,
+  );
 
-  // The other half of ./... — everything the shards do not cover. The A11
-  // renewal job (below) is the one other race job, identified by name.
-  const restJobs = Object.entries(go.jobs ?? {}).filter(([jobName, job]) => {
+  // The other half of ./... — everything the shards do not cover.
+  const restJobs = Object.entries(jobs).filter(([jobName, job]) => {
     const text = runText(job);
-    return jobName !== shardJobs[0]?.[0] && jobName !== RENEW_JOB && /go test .*-race/.test(text);
+    return !GO_SHARD_LANES.some((l) => l.job === jobName) && /go test .*-race/.test(text);
   });
   check(
     restJobs.length === 1,
-    `go.yml: expected exactly one non-account race job; found ${restJobs.length}. Without it every `
+    `go.yml: expected exactly one non-shard race job; found ${restJobs.length}. Without it every `
     + `package outside server/account stops being race-checked, and the board stays green.`,
   );
   if (restJobs.length === 1) {
@@ -1094,25 +1180,17 @@ if (go) {
     );
     assertNoRetryAndFiniteTimeouts("go.yml", name, job, text);
   }
-}
 
-// ── 3b. the A11 renewal driver tests: skipped by `test` and `race-rest`, run
-//        by `link-renew` — with ONE pattern, so a skip can never outgrow the
-//        job that makes up for it ──────────────────────────────────────────
-//
-// They wait out 100-300 s credentials in real time (~20 min together) and
-// pushed cmd/relayium past the per-package bound in both `test` and
-// `race-rest` (run 35959733079). The pattern is a literal here and in go.yml;
-// every occurrence must be the same string, and the tests it names must exist.
-if (go) {
+  // 3b. The A11 renewal driver tests: skipped by `test` and `race-rest`,
+  // planned by `link-renew` — with ONE pattern, so the skip is exactly the
+  // complement of the two renewal shards. The planner lists the package with
+  // that pattern and proves its two selectors partition the list, so the
+  // union is the skipped set by construction, new tests included.
   const skipFlag = `-skip '${RENEW_PATTERN}'`;
-  const runFlag = `-run '${RENEW_PATTERN}'`;
-  const renew = go.jobs?.[RENEW_JOB];
-  check(renew !== undefined, `go.yml: the \`${RENEW_JOB}\` job is gone, but \`test\` and \`race-rest\` still skip `
-    + `${RENEW_PATTERN} — the relay-renewal driver tests would run nowhere.`);
-  for (const [jobName, job] of Object.entries(go.jobs ?? {})) {
+  for (const [jobName, job] of Object.entries(jobs)) {
     const text = runText(job);
-    const skips = [...text.matchAll(/-skip\s+('[^']*'|"[^"]*"|\S+)/g)].map((m) => m[1]);
+    // `-skip` as its own word: `-forbid-skip` is the evidence tool's flag.
+    const skips = [...text.matchAll(/(?<=^|\s)-skip\s+('[^']*'|"[^"]*"|\S+)/g)].map((m) => m[1]);
     for (const sk of skips) {
       check(sk === `'${RENEW_PATTERN}'`,
         `go.yml/${jobName}: \`-skip ${sk}\` is not the renewal pattern '${RENEW_PATTERN}'. A skip no job `
@@ -1126,20 +1204,100 @@ if (go) {
     if (jobName !== "test" && jobName !== "race-rest" && jobName !== RENEW_JOB) {
       check(!text.includes(RENEW_PATTERN),
         `go.yml/${jobName}: names the renewal pattern; only \`test\`, \`race-rest\` (skip) and `
-        + `\`${RENEW_JOB}\` (run) may.`);
+        + `\`${RENEW_JOB}\` (plan) may.`);
     }
   }
-  if (renew) {
-    const text = runText(renew);
-    check(/go test -race /.test(text) && text.includes(runFlag) && /\.\/cmd\/relayium\b/.test(text),
-      `go.yml/${RENEW_JOB}: does not run \`go test -race ... ${runFlag} ./cmd/relayium\`.`);
-    check(/-v\b/.test(text) && /--- PASS: \$t /.test(text) && /--- SKIP: /.test(text),
-      `go.yml/${RENEW_JOB}: lost its per-test PASS grep or its no-SKIP check; a renamed test would then `
-      + `make \`-run\` match less and still exit 0.`);
-    check(renew.strategy === undefined, `go.yml/${RENEW_JOB}: gained a strategy/matrix; the section-3 shard `
-      + `check assumes exactly one matrix job.`);
-    assertNoRetryAndFiniteTimeouts("go.yml", RENEW_JOB, renew, text);
+}
+
+/** Runs `fn` and returns, instead of keeping, the failures it reported. */
+function captureFailures(fn) {
+  const start = failures.length;
+  fn();
+  return failures.splice(start);
+}
+
+if (go) {
+  checkGoRaceLanes(go);
+
+  // The controls: each mutation must be reported, with its reason. Starting
+  // from the real go.yml, so a control that stays green means the rule above
+  // has stopped reading what go.yml actually says.
+  const clone = () => structuredClone(go);
+  const stepWith = (doc, job, needle) => doc.jobs[job].steps.find((s) => (s.run ?? "").includes(needle));
+  const editRun = (job, from, to) => (doc) => {
+    const step = stepWith(doc, job, from);
+    if (step) step.run = step.run.replace(from, to);
+  };
+  const upload = (job) => (doc) => doc.jobs[job].steps.find((s) => /upload-artifact/.test(s.uses ?? ""));
+  const GO_LANE_CONTROLS = [
+    { name: "an account matrix index is dropped", expect: /race-account: matrix\.shard is .*want 0\.\.7/,
+      mutate: (d) => { d.jobs["race-account"].strategy.matrix.shard = ["0", "1", "2", "3", "4", "5", "7"]; } },
+    { name: "a renewal matrix index is dropped", expect: /link-renew: matrix\.shard is .*want 0\.\.1/,
+      mutate: (d) => { d.jobs[RENEW_JOB].strategy.matrix.shard = ["0"]; } },
+    { name: "the renewal matrix is removed", expect: /strategy\.matrix\.shard` are .*want exactly/,
+      mutate: (d) => { delete d.jobs[RENEW_JOB].strategy; } },
+    { name: "renewal fail-fast", expect: /link-renew: strategy\.fail-fast/,
+      mutate: (d) => { d.jobs[RENEW_JOB].strategy["fail-fast"] = "true"; } },
+    { name: "the renewal planner forgets the pattern", expect: /link-renew: the scripts\/go-race-shard\.go call lacks `-pattern/,
+      mutate: editRun(RENEW_JOB, `-pattern '${RENEW_PATTERN}'`, "-pattern '^TestLinkRenew'") },
+    { name: "the renewal planner drops the measured weights", expect: /link-renew: the scripts\/go-race-shard\.go call lacks `-weights/,
+      mutate: editRun(RENEW_JOB, `-weights ../${RENEW_WEIGHTS} `, "") },
+    { name: "the account lane switches to weights without an accepted corpus", expect: /race-account: uses `-weights`/,
+      mutate: editRun("race-account", "-shards 8 ", `-shards 8 -weights ../${RENEW_WEIGHTS} `) },
+    { name: "the renewal shard count drifts", expect: /link-renew: the scripts\/go-race-shard\.go call lacks `-shards 2`/,
+      mutate: editRun(RENEW_JOB, "-shards 2 ", "-shards 3 ") },
+    { name: "a renewal shard may SKIP", expect: /link-renew: the scripts\/go-race-timings\.go evidence call lacks `-forbid-skip`/,
+      mutate: editRun(RENEW_JOB, " -forbid-skip", "") },
+    { name: "the renewal inventory is no longer checked against the declarations",
+      expect: /link-renew: the scripts\/go-race-timings\.go evidence call lacks `-expect-inventory/,
+      mutate: editRun(RENEW_JOB, '-expect-inventory "$out/declared.txt" ', "") },
+    { name: "a renewal shard need not PASS", expect: /link-renew: the scripts\/go-race-timings\.go evidence call lacks `-require-pass`/,
+      mutate: editRun(RENEW_JOB, "-require-pass ", "") },
+    { name: "the evidence no longer binds the source commit", expect: /race-account: the scripts\/go-race-timings\.go evidence call lacks `-source-sha/,
+      mutate: editRun("race-account", "-source-sha \"$(git rev-parse HEAD)\"", "-source-sha unknown") },
+    { name: "the evidence no longer binds the GitHub run", expect: /link-renew: the scripts\/go-race-timings\.go evidence call lacks `-run-id/,
+      mutate: editRun(RENEW_JOB, '-run-id "$GITHUB_RUN_ID"', "-run-id 1") },
+    { name: "the evidence no longer binds the run attempt", expect: /race-account: the scripts\/go-race-timings\.go evidence call lacks `-run-attempt/,
+      mutate: editRun("race-account", '-run-attempt "$GITHUB_RUN_ATTEMPT"', "-run-attempt 1") },
+    { name: "an evidence failure no longer fails the step", expect: /race-account: the .* evidence call lacks `\|\| \{/,
+      mutate: editRun("race-account", "|| { [ \"$status\" -ne 0 ] || status=1; }", "|| true") },
+    { name: "go test's status is lost in the pipe", expect: /link-renew: go test's status no longer survives the pipe/,
+      mutate: editRun(RENEW_JOB, " || status=$?", "") },
+    { name: "pipefail is dropped", expect: /race-account: go test's status no longer survives the pipe/,
+      mutate: editRun("race-account", "set -euo pipefail", "set -eu") },
+    { name: "the renewal package bound grows past 20m", expect: /link-renew: -timeout 35m/,
+      mutate: editRun(RENEW_JOB, "-timeout 20m", "-timeout 35m") },
+    { name: "the renewal job bound grows past 25", expect: /link-renew: -timeout 20m under timeout-minutes 45/,
+      mutate: (d) => { d.jobs[RENEW_JOB]["timeout-minutes"] = "45"; } },
+    { name: "the race run drops -json", expect: /link-renew: does not run `go test -race \.\.\. -json/,
+      mutate: editRun(RENEW_JOB, " -json ", " -v ") },
+    { name: "the evidence upload only runs on success", expect: /race-account: the timing evidence must be uploaded `if: always\(\)`/,
+      mutate: (d) => { delete upload("race-account")(d).if; } },
+    { name: "the artifact name loses the shard", expect: /link-renew: the timing evidence must be uploaded/,
+      mutate: (d) => { const u = upload(RENEW_JOB)(d); u.with.name = u.with.name.replace("${{ matrix.shard }}", "x"); } },
+    { name: "two lanes share an artifact name", expect: /two shard lanes upload timing evidence under the same artifact name/,
+      mutate: (d) => {
+        const a = upload("race-account")(d); const r = upload(RENEW_JOB)(d);
+        a.with.name = "go-race-timing-account-renewal-shard-${{ matrix.shard }}-attempt-${{ github.run_attempt }}";
+        r.with.name = a.with.name;
+      } },
+    { name: "the ordinary lane skips a narrower set", expect: /go\.yml\/test: `-skip '\^\(TestLinkRenew\)'` is not the renewal pattern/,
+      mutate: editRun("test", `-skip '${RENEW_PATTERN}'`, "-skip '^(TestLinkRenew)'") },
+    { name: "a retry is added to a renewal shard", expect: /link-renew: a retry appeared/,
+      mutate: editRun(RENEW_JOB, "status=0", "status=0 # retry once") },
+  ];
+  for (const c of GO_LANE_CONTROLS) {
+    const doc = clone();
+    c.mutate(doc);
+    const got = captureFailures(() => checkGoRaceLanes(doc));
+    check(got.some((m) => c.expect.test(m)),
+      `section 3 control "${c.name}": checkGoRaceLanes did not report ${c.expect}; it reported `
+      + `${JSON.stringify(got)}.`);
   }
+  const clean = captureFailures(() => checkGoRaceLanes(clone()));
+  check(clean.length === 0, `section 3: an unmutated clone of go.yml reports ${JSON.stringify(clean)}; the controls `
+    + `above prove nothing if the baseline already fails.`);
+
   // The pattern names real tests, all of them in cmd/relayium.
   const renewSrc = spawnSync("git", ["-C", repoRoot, "grep", "-hoE", `^func ${RENEW_PATTERN.slice(1)}[A-Za-z0-9_]*`,
     "--", "server/*_test.go"], { encoding: "utf8" }).stdout ?? "";
@@ -1153,6 +1311,22 @@ if (go) {
   check(outside.length === 0,
     `the renewal pattern also matches tests outside cmd/relayium (${outside.join(", ")}); \`test\` and `
     + `\`race-rest\` skip them everywhere but \`${RENEW_JOB}\` runs only ./cmd/relayium.`);
+
+  // The measured weights describe this lane: same package and pattern, and
+  // provenance a reader can trace to a real hosted run.
+  let weights;
+  try {
+    weights = JSON.parse(readFileSync(resolve(repoRoot, RENEW_WEIGHTS), "utf8"));
+  } catch (err) {
+    check(false, `${RENEW_WEIGHTS} is missing or not JSON (${err.message}); the renewal planner refuses to run without it.`);
+  }
+  if (weights) {
+    check(weights.package === "./cmd/relayium" && weights.pattern === RENEW_PATTERN
+      && weights.provenance?.race === true && weights.provenance?.count === 1 && weights.provenance?.complete === true
+      && /^[0-9a-f]{40}$/.test(weights.provenance?.sourceSHA ?? "") && /run \d+ job \d+/.test(weights.provenance?.source ?? ""),
+      `${RENEW_WEIGHTS}: want package ./cmd/relayium, pattern ${RENEW_PATTERN}, and provenance naming a complete `
+      + `-race -count=1 hosted run (run and job ids, 40-hex source SHA).`);
+  }
 }
 
 // ── 3c. scripts/test/go-local.sh: the local runner README and CONTRIBUTING
@@ -1181,18 +1355,72 @@ function goTestArgv(text, flag) {
 }
 
 /**
- * Parity between the runner's recorded argv and go.yml's. Renewal must equal
- * `link-renew` exactly; ordinary must equal `test` plus only the explicit
- * `-count=1 -timeout 10m` (Go's default bound, which `test` gets implicitly).
+ * The renewal shards' race command as argv after `go`, and the package and
+ * pattern their planner lists. Continuation lines are joined first.
+ */
+function ciRenewalPlan(job) {
+  const text = runText(job).replace(/\\\n\s*/g, " ");
+  const line = text.split("\n").find((l) => /^\s*go test -race /.test(l) && l.includes('-run "$RUN_REGEX"'));
+  if (line === undefined) return undefined;
+  const argv = [];
+  for (const m of line.trim().matchAll(/'([^']*)'|(\S+)/g)) {
+    if (m[2] === "|") break;
+    argv.push(m[1] ?? m[2]);
+  }
+  const planner = (text.split(`go run ../${SHARD_HELPER}`)[1] ?? "").split(")\"")[0];
+  return {
+    argv: argv.slice(1),
+    pattern: /-pattern '([^']*)'/.exec(planner)?.[1],
+    pkg: /-package (\S+)/.exec(planner)?.[1],
+  };
+}
+
+/** argv without one `-timeout X`, one `-run P` and the verbose flag, and what was removed. */
+function splitRenewalArgv(argv, verbose) {
+  const rest = [];
+  const out = { timeouts: [], runs: [], verbose: 0 };
+  for (let i = 0; i < (argv ?? []).length; i++) {
+    if (argv[i] === "-timeout") out.timeouts.push(argv[++i]);
+    else if (argv[i] === "-run") out.runs.push(argv[++i]);
+    else if (argv[i] === verbose) out.verbose++;
+    else rest.push(argv[i]);
+  }
+  return { ...out, rest };
+}
+
+/**
+ * Parity between the runner's recorded argv and go.yml's.
+ *
+ * Ordinary must equal `test` plus only the explicit `-count=1 -timeout 10m`
+ * (Go's default bound, which `test` gets implicitly).
+ *
+ * Renewal is compared as a COMPLETE PARTITION, not as one command literal:
+ * the runner runs the whole pattern in one process; CI runs it as shards whose
+ * `-run "$RUN_REGEX"` comes from the planner listing the same package with the
+ * same pattern (and the planner proves its selectors' union is that list).
+ * Every other argument must match token for token, with `-v` locally standing
+ * for `-json` in CI (which implies -v), and the local bound at least the CI
+ * per-shard bound, because the local run carries every shard's tests.
  */
 function localRunnerParityFailures(ordinary, renewal, ciTest, ciRenew) {
   const out = [];
   if (ciTest === undefined || ciRenew === undefined) {
     return [`go.yml: could not find the \`test\` -skip or \`${RENEW_JOB}\` -run command to compare ${LOCAL_RUNNER} with.`];
   }
-  if (JSON.stringify(renewal) !== JSON.stringify(ciRenew)) {
+  const local = splitRenewalArgv(renewal, "-v");
+  const ci = splitRenewalArgv(ciRenew.argv, "-json");
+  const pkg = ci.rest.at(-1);
+  const sameRest = JSON.stringify(local.rest) === JSON.stringify(ci.rest);
+  const bounds = local.timeouts.length === 1 && ci.timeouts.length === 1
+    && goMinutes(local.timeouts[0]) >= goMinutes(ci.timeouts[0]) && goMinutes(ci.timeouts[0]) > 0;
+  if (!sameRest || local.verbose !== 1 || ci.verbose !== 1 || !bounds
+    || JSON.stringify(local.runs) !== JSON.stringify([RENEW_PATTERN])
+    || JSON.stringify(ci.runs) !== JSON.stringify(['"$RUN_REGEX"'])
+    || ciRenew.pattern !== RENEW_PATTERN || ciRenew.pkg !== pkg) {
     out.push(`${LOCAL_RUNNER} renewal runs \`go ${renewal?.join(" ")}\`; go.yml/${RENEW_JOB} runs `
-      + `\`go ${ciRenew.join(" ")}\`. The local renewal lane must be the CI one, verbatim.`);
+      + `\`go ${ciRenew.argv.join(" ")}\` over the planner's -package ${ciRenew.pkg} -pattern '${ciRenew.pattern}'. `
+      + `The local lane must be the union of the CI shards: the same arguments, -v for -json, -run '${RENEW_PATTERN}' `
+      + `for the planned selector of that same package and pattern, and a -timeout no shorter than one shard's.`);
   }
   const extra = [];
   const rest = [...(ordinary ?? [])];
@@ -1211,7 +1439,7 @@ function localRunnerParityFailures(ordinary, renewal, ciTest, ciRenew) {
 
 if (go) {
   const ciTest = goTestArgv(runText(go.jobs?.test), "-skip");
-  const ciRenew = goTestArgv(runText(go.jobs?.[RENEW_JOB]), "-run");
+  const ciRenew = ciRenewalPlan(go.jobs?.[RENEW_JOB]);
   const runnerSrc = readFileSync(resolve(repoRoot, LOCAL_RUNNER), "utf8");
   const sandbox = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/go-local-policy.XXXXXX`], { encoding: "utf8" })
     .stdout.trim();
@@ -1282,6 +1510,19 @@ if (go) {
     ciTest, ciRenew).length === 1, `3c parity did NOT notice a renewal lane without -race.`);
   check(localRunnerParityFailures(ok.calls[0]?.argv?.filter((a) => a !== "10m" && a !== "-timeout"),
     ok.calls[1]?.argv, ciTest, ciRenew).length === 1, `3c parity did NOT notice an ordinary lane without -timeout.`);
+  check(localRunnerParityFailures(ok.calls[0]?.argv, drifted(ok.calls[1]?.argv, RENEW_PATTERN, "^TestLinkRenew"),
+    ciTest, ciRenew).length === 1, `3c parity did NOT notice a local renewal lane narrower than the CI shards' union.`);
+  check(localRunnerParityFailures(ok.calls[0]?.argv, ok.calls[1]?.argv, ciTest,
+    ciRenew && { ...ciRenew, pattern: "^TestLinkRenew" }).length === 1,
+  `3c parity did NOT notice CI shards planning a narrower pattern than the local renewal lane.`);
+  check(localRunnerParityFailures(ok.calls[0]?.argv, drifted(ok.calls[1]?.argv, "35m", "10m"),
+    ciTest, ciRenew).length === 1, `3c parity did NOT notice a local renewal bound shorter than one CI shard's.`);
+  check(localRunnerParityFailures(ok.calls[0]?.argv, ok.calls[1]?.argv, ciTest,
+    ciRenew && { ...ciRenew, argv: ciRenew.argv.filter((a) => a !== "-json") }).length === 1,
+  `3c parity did NOT notice CI shards without -json (the evidence stream and the -v the local lane mirrors).`);
+  check(localRunnerParityFailures(ok.calls[0]?.argv, ok.calls[1]?.argv, ciTest,
+    ciRenew && { ...ciRenew, pkg: "./account" }).length === 1,
+  `3c parity did NOT notice CI shards planning a different package from the one they run.`);
 
   // Mode selection runs one lane only.
   const ordOnly = control({ mode: "ordinary", tests: "" });

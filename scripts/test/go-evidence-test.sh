@@ -1144,6 +1144,31 @@ $got_paths
 " "
 .github/workflows/go.yml
 "
+# The race shards' execution inputs. Each one decides which tests a shard
+# runs or what it reports, so a run on a commit that differs only there is a
+# different partition, not evidence for this one. Derived from go.yml's run
+# text, not listed here, so a new `../scripts/go-race-*` input is caught too.
+shard_inputs=$(grep -oE '\.\./scripts/go-race-[A-Za-z0-9._-]+' "$GO_WORKFLOW" | sed 's|^\.\./||' | LC_ALL=C sort -u)
+assert_eq 'go.yml names the planner, the timing tool and the renewal weights' "$shard_inputs" "scripts/go-race-shard.go
+scripts/go-race-timings-renewal.json
+scripts/go-race-timings.go"
+for input in $shard_inputs; do
+  assert_has "the shard input $input is a lane path" "
+$got_paths
+" "
+$input
+"
+done
+# The control: an input go.yml gains without a lane path is reported.
+missing_input=0
+for input in $shard_inputs scripts/go-race-new-input.go; do
+  case "
+$got_paths
+" in *"
+$input
+"*) ;; *) missing_input=$((missing_input + 1)) ;; esac
+done
+assert_eq 'a shard input outside the lane paths is noticed (control)' "$missing_input" 1
 # The detector itself, so that "the lists agree" above means something.
 printf 'name: go\non:\n  push:\n    branches:\n      - main\n    paths:\n      - '"'"'server/**'"'"'\n      # a comment\n      - "scripts/x.go"  # trailing\n\n      - scripts/y.sh\n  workflow_dispatch:\njobs:\n  test:\n    runs-on: x\n' >"$TMPROOT/wf-paths.yml"
 assert_eq 'the parser reads quoted, commented and bare entries' "$(push_paths "$TMPROOT/wf-paths.yml" | tr '\n' ' ')" 'server scripts/x.go scripts/y.sh '

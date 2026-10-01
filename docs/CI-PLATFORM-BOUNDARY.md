@@ -1185,21 +1185,85 @@ compute), which pushed the package past Go's 10-minute default in `test` and
 past the 20m bound in `race-rest` (run 35959733079, no failed assertion).
 
 `test` and `race-rest` therefore `-skip '^(TestLinkRenew|TestLDRenew)'`, and
-`go.yml` `link-renew` runs exactly that pattern under `-race` (`-timeout 35m`,
-job bound 45m, ~1.8x the measurement) with a PASS line required per matching
-test and no SKIP. `scripts/test/ci-event-policy-test.mjs` asserts the three
-occurrences are the same literal, that no other `-skip` exists in `go.yml`,
-that the pattern names real tests and only in `cmd/relayium`, and that
-`link-renew` stays bounded, `-count=1` and retry-free. Neither the Linux nor
-the Windows CLI matrix names a renewal test (their `-run` lists are exact).
+`go.yml` `link-renew` runs exactly that set under `-race` as a two-job matrix
+(`fail-fast: false`, `-count=1`, `-timeout 20m` per package, 25m per job, no
+retry). As one job it was the Go workflow's critical path (~21 min; PR #156's
+hosted run 36873812806 took 1190.398s). Each job lists `./cmd/relayium` with
+the same pattern through `scripts/go-race-shard.go`, so a new renewal test
+joins automatically, and plans the list longest-processing-time first over
+`scripts/go-race-timings-renewal.json` — that run's top-level hosted PASS
+times, recorded with run/job ids, commit and toolchain — giving planned shards
+of 593.721s and 594.880s. A test without a recorded time plans at the largest
+recorded one; a time for a deleted test is ignored. The helper proves the two
+anchored, escaped `-run` selectors exact, disjoint, non-empty and together the
+whole list. Each job then requires a PASS for every test it was assigned and
+no SKIP anywhere, subtests included, from the `go test -json` stream
+(`scripts/go-race-timings.go evidence`), and requires the compiled list to
+equal the `func TestLinkRenew*`/`func TestLDRenew*` declarations grepped from
+the sources, so a test a build tag hides from the compiler fails the job.
+`scripts/test/ci-event-policy-test.mjs` asserts the skip and the planned
+pattern are the same literal, that no other `-skip` exists in `go.yml`, that
+the pattern names real tests and only in `cmd/relayium`, the matrix indices,
+bounds, status-preserving pipeline and evidence flags, and breaks each rule in
+a control. Neither the Linux nor the Windows CLI matrix names a renewal test
+(their `-run` lists are exact).
+
+### Race shard planning and timing evidence
+
+`scripts/go-race-shard.go` has two modes. **FNV** (the default) hashes each
+test name to a shard; `race-account` keeps it for its eight shards. **Weighted**
+(`-weights FILE`) orders the compiled list by measured seconds, heaviest first
+with ties by name, and gives each test to the least-loaded shard, ties to the
+lowest index; loads are integer milliseconds. The compiled list is always
+authoritative and the weights file is validated strictly (schema, no unknown
+fields, matching package and pattern, `-race -count=1` complete provenance,
+unique names, finite durations in [0, 21600] s); a malformed file is an error,
+never a fallback.
+
+Every account and renewal shard job runs `go test -json`, renders it back to
+the usual `-v` log, and uploads `plan.json`, the raw stream and
+`evidence.json` with `if: always()` as
+`go-race-timing-<lane>-shard-<n>-attempt-<attempt>` (30-day retention). The
+evidence records the tested commit (`git rev-parse HEAD`), `go version`, the
+GitHub run ID and attempt (`$GITHUB_RUN_ID`, `$GITHUB_RUN_ATTEMPT`),
+`-race`, `-count`, shard and shard count, the planned loads, the complete
+sorted compiled inventory and its SHA-256, the assignment and each assigned
+test's result and elapsed seconds; it fails the job if an assigned test
+produced no result, a test outside the shard ran, or any of that provenance is
+malformed. `scripts/go-race-timings.go corpus` turns the evidence of every
+shard of ONE run attempt into a weights file whose provenance names that run
+and attempt, and refuses anything less: a missing or duplicated shard, shards
+from different runs or attempts, mixed commits, toolchains, inventories or
+planned loads, or a run without `-race -count=1`. It does not trust a
+record's own `complete`/`problems`/skip flags: records are decoded strictly
+(no duplicate, unknown, missing or null key) and every fact is re-derived —
+one result per assigned test and no other, PASS (or, in the account lane
+only, the package's own reasoned SKIP) with a finite duration in
+[0, 21600] s, 40-hex commit, `go version` toolchain, positive bounded run ID
+and attempt, and FNV assignments recomputed from the hash. A skipped account
+test's measured time is kept as its weight; the planner floors every weight at
+1 ms. The renewal lane allows no SKIP at all. The planner applies the same
+strict decoding and provenance formats to a weights file; the renewal file's
+provenance is the PR #156 run 36873812806, attempt 1.
+
+The account lane stays FNV until a real eight-shard hosted corpus has been
+collected that way and independently accepted; no account weight in the
+repository is estimated, and the policy test refuses `-weights` on
+`race-account` until that acceptance edits it. `scripts/test/go-race-shard-test.sh`
+(repo-hygiene) proves both modes, the evidence and corpus refusals, and runs the
+renewal step cut from `go.yml` against a canned failing stream to show go
+test's status survives `tee` and render while the evidence is still written.
 
 Locally, `scripts/test/go-local.sh` (from any directory) runs the same two
 halves: `ordinary` is `test`'s command with `-count=1` and Go's default
-`-timeout 10m` written out, and `renewal` is `link-renew`'s command verbatim,
-with the same per-test PASS, no-SKIP and non-empty-set checks; it stops at the
-first failing lane and never retries. Section 3c of `ci-event-policy-test.mjs`
-runs the script against a fake `go` and compares the recorded arguments with
-`go.yml` token for token, so the two cannot drift. It is a subset of `go.yml`,
+`-timeout 10m` written out, and `renewal` runs the whole renewal pattern in one
+process (`-v`, `-timeout 35m`) with the same per-test PASS, no-SKIP and
+non-empty-set checks; it stops at the first failing lane and never retries.
+Section 3c of `ci-event-policy-test.mjs` runs the script against a fake `go`
+and compares the recorded arguments with `go.yml`: ordinary token for token,
+renewal as the union of the CI shards — the same arguments, `-v` for `-json`,
+the pattern for the planned selector of the same package and pattern, and a
+bound no shorter than one shard's — so the two cannot drift. It is a subset of `go.yml`,
 not a local copy of it: no `go build`/`go vet`, no `race-account` shards or
 `race-rest`, no CLI pairing matrix (old-CLI pairs), no Windows runtime tests,
 no govulncheck and no rollback harness.

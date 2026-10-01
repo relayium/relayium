@@ -168,6 +168,8 @@ lane_paths() {
   cat <<'PATHS'
 server
 scripts/go-race-shard.go
+scripts/go-race-timings.go
+scripts/go-race-timings-renewal.json
 scripts/test/db-rollback-harness.sh
 scripts/test/cli-public-truth-test.sh
 README.md

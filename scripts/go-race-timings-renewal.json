@@ -1,0 +1,79 @@
+{
+  "schema": "relayium.go-test-weights/1",
+  "package": "./cmd/relayium",
+  "pattern": "^(TestLinkRenew|TestLDRenew)",
+  "unit": "seconds",
+  "provenance": {
+    "kind": "go-test-v-log",
+    "source": "GitHub Actions run 36873812806 job 110408099155 (go / link-renew, PR #156 merge gate, attempt 1, success): top-level '--- PASS: <name> (<s>s)' lines of `go test -race -count=1 -v -timeout 35m -run '^(TestLinkRenew|TestLDRenew)' ./cmd/relayium`, package total 1190.398s",
+    "sourceSHA": "0c2486ebec0be2ca6d90ca8f3465300e1e0df2e6",
+    "toolchain": "go version go1.26.6 linux/amd64",
+    "runID": 36873812806,
+    "runAttempt": 1,
+    "race": true,
+    "count": 1,
+    "complete": true
+  },
+  "tests": [
+    {
+      "name": "TestLDRenewWriterStopEndsBlockedWrites",
+      "seconds": 0.0
+    },
+    {
+      "name": "TestLinkRenewBlockedSignallingAfterRestart",
+      "seconds": 108.81
+    },
+    {
+      "name": "TestLinkRenewBlockedSignallingBeforeRestart",
+      "seconds": 39.83
+    },
+    {
+      "name": "TestLinkRenewBusyPrepareDoesNotBreakLegacyRestart",
+      "seconds": 32.66
+    },
+    {
+      "name": "TestLinkRenewDisconnectDuringPreparationSurvivesHardCap",
+      "seconds": 129.18
+    },
+    {
+      "name": "TestLinkRenewFailureAfterSwitchEndsLinkTruthfully",
+      "seconds": 123.81
+    },
+    {
+      "name": "TestLinkRenewLedgerReconciliationWithRealNode",
+      "seconds": 126.01
+    },
+    {
+      "name": "TestLinkRenewLostProofEndsLinkTruthfully",
+      "seconds": 123.94
+    },
+    {
+      "name": "TestLinkRenewNeedsUserProgress",
+      "seconds": 119.25
+    },
+    {
+      "name": "TestLinkRenewNonRenewingPeerExpiresHonestly",
+      "seconds": 39.88
+    },
+    {
+      "name": "TestLinkRenewOverdueDeadlineWakesLoop",
+      "seconds": 124.44
+    },
+    {
+      "name": "TestLinkRenewQuotaDeniedRunsOutOriginalDeadline",
+      "seconds": 40.0
+    },
+    {
+      "name": "TestLinkRenewRecoveryAfterBusyRefusalStillRenews",
+      "seconds": 105.9
+    },
+    {
+      "name": "TestLinkRenewRelayedAcrossOneRenewal",
+      "seconds": 45.59
+    },
+    {
+      "name": "TestLinkRenewReplayedUnsignedAnswerRefused",
+      "seconds": 29.3
+    }
+  ]
+}

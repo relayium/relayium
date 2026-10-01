@@ -18,6 +18,10 @@ on:
     paths:
       - 'server/**'
       - 'scripts/go-race-shard.go'
+      # The race shards' timing-evidence tool and the renewal lane's measured
+      # weights: both decide what a shard job runs or reports.
+      - 'scripts/go-race-timings.go'
+      - 'scripts/go-race-timings-renewal.json'
       - 'scripts/test/db-rollback-harness.sh'
       # The CLI/public-truth gate builds the candidate and reads these exact
       # public inputs, so an edit to any of them must select this lane.
@@ -521,13 +525,44 @@ jobs:
       # found was a test seeding an exemption window from wall time and then
       # asserting the boundary at request time, which only held if setup
       # finished inside a second.
+      #
+      # Timing evidence. The run is `go test -json`, rendered back to the
+      # usual -v text for this log by scripts/go-race-timings.go, and kept
+      # whole; `evidence` then records every assigned test's result and
+      # elapsed seconds with the commit, toolchain, GitHub run ID and attempt,
+      # -race/-count, shard and the complete compiled inventory (from the
+      # helper's -plan-out). It fails the
+      # step if an assigned test produced no result or a test outside the shard
+      # ran. The upload below keeps it whether the job passed or not, so eight
+      # shards of one run are a corpus `go-race-timings.go corpus` can turn into
+      # measured weights. Until such a corpus is accepted the assignment stays
+      # FNV: no weight here is estimated.
+      #
+      # `|| status=$?` keeps go test's status through tee and render (pipefail)
+      # without letting `set -e` skip the evidence; the step still exits with it.
       - name: go test -race (account shard ${{ matrix.shard }} of 8)
         working-directory: server
         shell: bash
         run: |
           set -euo pipefail
-          RUN_REGEX="$(go run ../scripts/go-race-shard.go -shards 8 -shard '${{ matrix.shard }}')"
-          go test -race -count=1 -timeout 20m -run "$RUN_REGEX" ./account
+          out="$RUNNER_TEMP/go-race-timing"
+          mkdir -p "$out"
+          RUN_REGEX="$(go run ../scripts/go-race-shard.go -shards 8 -shard '${{ matrix.shard }}' -plan-out "$out/plan.json")"
+          status=0
+          go test -race -count=1 -timeout 20m -json -run "$RUN_REGEX" ./account | tee "$out/go-test.json" | go run ../scripts/go-race-timings.go render || status=$?
+          go run ../scripts/go-race-timings.go evidence -lane account -plan "$out/plan.json" -json "$out/go-test.json" \
+            -source-sha "$(git rev-parse HEAD)" -toolchain "$(go version)" -run-id "$GITHUB_RUN_ID" \
+            -run-attempt "$GITHUB_RUN_ATTEMPT" -race -count 1 -go-exit "$status" \
+            -out "$out/evidence.json" || { [ "$status" -ne 0 ] || status=1; }
+          exit "$status"
+      - name: Keep the account shard timing evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: go-race-timing-account-shard-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/go-race-timing
+          if-no-files-found: error
+          retention-days: 30
 
   # Every package EXCEPT account, which the shards above cover. The list is
   # enumerated from `go list ./...` at run time rather than written out here, so
@@ -601,24 +636,46 @@ jobs:
   # Split from `test` and `race-rest` (run 35959733079: both hit the 10m / 20m
   # per-package bound inside cmd/relayium with no failed assertion). The
   # pattern is the one both of those `-skip`; ci-event-policy-test.mjs asserts
-  # the three are the same string, that this job runs it under -race with a
-  # finite -timeout and -count=1, and that it matches every test in
-  # linkrenew*_test.go.
+  # the same string, that the shards below plan exactly it and run it under
+  # -race with a finite -timeout and -count=1, and that it matches every test
+  # in linkrenew*_test.go.
   #
-  # Under -race as a whole, in one job. Measured locally on 2026-09-24: the 15
-  # tests take 1183s WITHOUT -race, and the per-test times sum to that — they
-  # sleep far more than they compute, so the race build adds little wall clock
-  # (~1190s with -race, same machine) and the hosted runner's CPU factor
-  # (3.66x for account) does not apply to a wait. The 35m package bound is
-  # ~1.8x the measurement, the same margin race-account uses; the 45m job
-  # bound adds checkout, setup and the race build. One job at ~20 min is not
-  # the workflow's critical path (cli-windows is bounded at 50m), so it is not
-  # sharded; splitting would buy latency nobody waits for at the price of a
-  # second partition to keep exact. Both bounds stay finite on purpose:
-  # exceeding either is a hung renewal, not a number to raise.
+  # Two jobs, planned from measured time. Locally (2026-09-24) the 15 tests
+  # took 1183s without -race and ~1190s with it — they sleep far more than they
+  # compute — and PR #156's hosted run 36873812806 (job 110408099155) took
+  # 1190.398s, its top-level PASS times summing to 1188.60s. As one job that
+  # made link-renew the Go workflow's critical path (~21 min in each of the ten
+  # main runs measured on 2026-10-01). Because the tests wait rather than
+  # compute, splitting them shortens the wall clock almost linearly.
+  #
+  # scripts/go-race-shard.go lists the tests with the SAME pattern `test` and
+  # `race-rest` -skip (compiled, so a new renewal test joins automatically),
+  # and plans them by longest-processing-time first over
+  # scripts/go-race-timings-renewal.json — those hosted PASS times, recorded
+  # with their run, job, commit and toolchain. The plan is 593.721s and
+  # 594.880s. A test with no recorded time plans at the largest one, so a new
+  # test is placed first rather than dropped; a stale entry is ignored. The
+  # helper proves the two -run selectors exact, disjoint, non-empty and
+  # together the whole list, and fails otherwise.
+  #
+  # Each job needs a PASS for every test it was assigned, and no SKIP anywhere,
+  # subtests included (the ledger test skips only under -short): `evidence`
+  # checks both against the plan and the `go test -json` stream, and fails on
+  # any test outside the plan. Bounds: 20m per package is ~2x the ~595s plan,
+  # 25m per job adds checkout, setup and the race build; both stay finite on
+  # purpose — exceeding either is a hung renewal, not a number to raise. No
+  # retry, and fail-fast off so one renewal failure leaves the other known.
+  #
+  # scripts/test/go-local.sh still runs the whole pattern in one process; the
+  # policy accepts that as equivalent because the plan's union is the pattern.
   link-renew:
+    name: link-renew shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -627,26 +684,33 @@ jobs:
           cache-dependency-path: server/go.sum
       - name: Toolchain version
         run: go version
-      # The PASS grep is load-bearing, as elsewhere: a renamed test would make
-      # `-run` match less and still exit 0. Every Test in cmd/relayium that
-      # the pattern names must PASS; none may SKIP (the ledger test skips only
-      # under -short).
-      - name: go test -race (A11 relay-renewal driver tests)
+      - name: go test -race (A11 relay-renewal driver tests, shard ${{ matrix.shard }} of 2)
         working-directory: server
         shell: bash
         run: |
           set -euo pipefail
-          log="$RUNNER_TEMP/link-renew.log"
-          go test -race -count=1 -v -timeout 35m -run '^(TestLinkRenew|TestLDRenew)' ./cmd/relayium | tee "$log"
-          want="$(grep -hoE '^func (TestLinkRenew|TestLDRenew)[A-Za-z0-9_]*' cmd/relayium/*_test.go | awk '{print $2}')"
-          [ -n "$want" ] || { echo "::error::no renewal tests found in cmd/relayium" >&2; exit 1; }
-          for t in $want; do
-            grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
-          done
-          if grep -E '^ *--- SKIP: ' "$log"; then
-            echo "::error::a renewal test skipped" >&2
-            exit 1
-          fi
+          out="$RUNNER_TEMP/go-race-timing"
+          mkdir -p "$out"
+          # The declarations, independently of the compiler: `evidence` fails if
+          # the compiled list differs (a build tag would otherwise drop a test).
+          grep -hoE '^func (TestLinkRenew|TestLDRenew)[A-Za-z0-9_]*' cmd/relayium/*_test.go | awk '{print $2}' > "$out/declared.txt"
+          RUN_REGEX="$(go run ../scripts/go-race-shard.go -package ./cmd/relayium -pattern '^(TestLinkRenew|TestLDRenew)' \
+            -weights ../scripts/go-race-timings-renewal.json -shards 2 -shard '${{ matrix.shard }}' -plan-out "$out/plan.json")"
+          status=0
+          go test -race -count=1 -timeout 20m -json -run "$RUN_REGEX" ./cmd/relayium | tee "$out/go-test.json" | go run ../scripts/go-race-timings.go render || status=$?
+          go run ../scripts/go-race-timings.go evidence -lane renewal -plan "$out/plan.json" -json "$out/go-test.json" \
+            -source-sha "$(git rev-parse HEAD)" -toolchain "$(go version)" -run-id "$GITHUB_RUN_ID" \
+            -run-attempt "$GITHUB_RUN_ATTEMPT" -race -count 1 -go-exit "$status" \
+            -require-pass -forbid-skip -expect-inventory "$out/declared.txt" -out "$out/evidence.json" || { [ "$status" -ne 0 ] || status=1; }
+          exit "$status"
+      - name: Keep the renewal shard timing evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: go-race-timing-renewal-shard-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/go-race-timing
+          if-no-files-found: error
+          retention-days: 30
 
   # The one lane that runs an OLD server binary against a NEW database.
   #
