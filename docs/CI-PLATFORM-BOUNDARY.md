@@ -771,6 +771,24 @@ does **not** watch `server/**`. A server-only change therefore buys one bounded
 macOS interop job, not the whole iOS lane, while a break at the Swift↔Go
 boundary is detected on the breaking commit instead of the next iOS change.
 
+Inside `ios.yml`, the iPhone UI job `ios-ui-smoke` runs `RelayiumUITests` as
+two complementary matrix shards (2026-10-01): `app-shell` selects
+`RelayiumUITests/AppShellUITests` alone, and `complement` selects the whole
+target with `-skip-testing:RelayiumUITests/AppShellUITests`, so a newly added
+class lands in the complement without a workflow edit. `fail-fast` is off, each
+shard uploads its failure `.xcresult` under a shard-specific artifact name, and
+each shard proves from its own result bundle that it executed at least one
+passing test and only its side of the class boundary — `man xcodebuild` gives
+`-only-testing` precedence over `-skip-testing`, so the exclusion is checked at
+run time rather than assumed. The toolchain selection, scheme, per-test time
+allowance, step/job timeouts and the existing in-test skips are unchanged, and
+`ios-ipad-shell` still independently executes `AdaptiveShellUITests` on an iPad.
+Section 6u of `scripts/test/ci-event-policy-test.mjs` holds the partition against
+the classes declared on disk and fixes the shard count at two. The trade is an
+estimated 34.6 → 22.9 min iPhone UI critical path for about 6.9 extra PAID
+runner-minutes per run (~20%); both figures are estimates until hosted runs
+measure them.
+
 **The rule the aggregate enforces is two-way, not a whitelist.** A plain
 `success|skipped` whitelist passes a lane that *was* selected and then got
 skipped by a broken `if:` — the exact fail-open shape this gate exists to close.

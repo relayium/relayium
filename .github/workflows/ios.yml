@@ -324,9 +324,10 @@ jobs:
   # builds, ~22 minutes of UI smoke and ~7 minutes of transfer acceptance. The
   # independent evidence classes now run concurrently as four jobs — the UI
   # class as two, one per shell shape, because a compact iPhone and a
-  # regular-width iPad answer different questions. The reusable workflow still
-  # fails closed if any job fails, so this changes wall-clock time rather than
-  # coverage.
+  # regular-width iPad answer different questions. The iPhone UI job is itself
+  # two complementary matrix shards (see `ios-ui-smoke`). The reusable workflow
+  # still fails closed if any job fails, so this changes wall-clock time rather
+  # than coverage.
   ios-build:
     runs-on: macos-15
     timeout-minutes: 30
@@ -372,7 +373,8 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/dd-ios-release" \
             CODE_SIGNING_ALLOWED=NO build
 
-  # The COMPACT shell, on an iPhone, running the whole UI target.
+  # The COMPACT shell, on an iPhone, running the whole UI target — as two
+  # complementary shards on two runners rather than one serial run.
   #
   # It is deliberately the whole target and deliberately an iPhone: this is the
   # shape most of the suite is written for, and most of it asserts nothing about
@@ -383,15 +385,54 @@ jobs:
   # other, and `scripts/test/ci-event-policy-test.mjs` sections 6k and 6q hold
   # both.
   #
-  # Budgets, from the last ten `main` runs (2026-09-28): this job took
+  # ## The two shards, and why they are a partition by construction
+  #
+  # One serial run took 34.6 min on the last pull request measured
+  # (2026-10-01): AppShellUITests about 16.0 min of execution, every other
+  # class together about 11.7. So the split is at that one class boundary:
+  #
+  #   app-shell   -only-testing:RelayiumUITests/AppShellUITests
+  #   complement  -only-testing:RelayiumUITests
+  #               -skip-testing:RelayiumUITests/AppShellUITests
+  #
+  # The complement names the TARGET minus one class, never the remaining
+  # classes, so a class added to RelayiumUITests lands in it with no edit here.
+  # A hand-kept list — the shape `macos.yml`'s UI shards use — is exactly the
+  # list a new class silently falls out of. Section 6u of the policy test
+  # evaluates both selections against the classes declared on disk and fails
+  # unless they are disjoint and together the whole target.
+  #
+  # Selection is not proof, and here it specifically is not: `man xcodebuild`
+  # says `-only-testing` takes precedence over `-skip-testing`. So each shard
+  # then reads its own result bundle and fails unless it executed tests, at
+  # least one of them passed, and every executed case sits on its side of the
+  # boundary — no AppShellUITests case in the complement, nothing else in
+  # app-shell. A toolchain that ignored the skip would turn the complement red,
+  # not quietly run the class twice.
+  #
+  # Cost, stated rather than hidden: each shard pays its own checkout, Xcode
+  # selection, simulator boot and UI-target build, estimated at about 6.9
+  # extra PAID runner-minutes per run (~20%) for an estimated 34.6 → 22.9 min
+  # critical path. Both numbers are estimates until hosted runs measure them.
+  # The policy test fixes the shard count at two, so this cannot become a
+  # general fan-out by a one-line matrix edit.
+  #
+  # Budgets, from the last ten `main` runs (2026-09-28) of the unsharded job:
   # 28.1–39.9 min, so the old 45-minute ceiling was within five minutes of an
   # ordinary slow runner. 55 for the job; 48 for the test step inside it, so a
   # hang ends as a FAILED step with its result bundle written rather than as a
   # job timeout (reported `cancelled`); and 300 s per test, five times the
-  # slowest single case observed.
+  # slowest single case observed. Each shard keeps the unsharded bounds until
+  # hosted shard timings justify lowering them.
   ios-ui-smoke:
     runs-on: macos-15
     timeout-minutes: 55
+    strategy:
+      # One shard failing must not cancel the other: its own result, and its
+      # own result bundle, are the other half of the evidence.
+      fail-fast: false
+      matrix:
+        shard: [app-shell, complement]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # Nothing below this step may compile against the runner image's default
@@ -403,6 +444,8 @@ jobs:
       - name: Run iOS primary-task UI smoke
         id: ui_smoke
         timeout-minutes: 48
+        env:
+          UI_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
           device_id="$(xcrun simctl list devices available -j \
@@ -415,23 +458,102 @@ jobs:
                      and device.get("name", "").startswith("iPhone")))')"
           [ -n "$device_id" ] || {
             echo "::error::no available iPhone Simulator runtime"; exit 1; }
-          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
-            -destination "platform=iOS Simulator,id=$device_id" \
-            -derivedDataPath "$RUNNER_TEMP/dd-ios" \
-            -resultBundlePath "$RUNNER_TEMP/ios-ui-smoke.xcresult" \
-            -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 300 \
-            -maximum-test-execution-time-allowance 300 \
-            -only-testing:RelayiumUITests test
+          ui_test=(-project apps/ios/Relayium.xcodeproj -scheme Relayium
+            -destination "platform=iOS Simulator,id=$device_id"
+            -derivedDataPath "$RUNNER_TEMP/dd-ios"
+            -resultBundlePath "$RUNNER_TEMP/ios-ui-smoke-$UI_SHARD.xcresult"
+            -test-timeouts-enabled YES
+            -default-test-execution-time-allowance 300
+            -maximum-test-execution-time-allowance 300)
+          case "$UI_SHARD" in
+            app-shell)
+              xcodebuild "${ui_test[@]}" \
+                -only-testing:RelayiumUITests/AppShellUITests test
+              ;;
+            complement)
+              xcodebuild "${ui_test[@]}" \
+                -skip-testing:RelayiumUITests/AppShellUITests \
+                -only-testing:RelayiumUITests test
+              ;;
+            *)
+              echo "::error::unknown UI shard '$UI_SHARD'; it would select nothing"
+              exit 1
+              ;;
+          esac
+      # `xcodebuild … test` exits 0 for a selection that matched nothing or
+      # skipped everything, and the selection above is not self-evidently
+      # disjoint. So the bundle's own record is the evidence: the counts say
+      # something ran, and the per-case classes say it was this shard's half.
+      # The executed-case count must also equal the summary's total, so a
+      # misread of the bundle's shape fails here rather than passing on an
+      # empty walk.
+      - name: Prove the shard executed exactly its half of the UI target
+        id: ui_shard_proof
+        env:
+          UI_SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/ios-ui-smoke-$UI_SHARD.xcresult"
+          xcrun xcresulttool get test-results summary \
+            --path "$bundle" --format json > "$RUNNER_TEMP/ui-summary.json"
+          xcrun xcresulttool get test-results tests \
+            --path "$bundle" --format json > "$RUNNER_TEMP/ui-tests.json"
+          /usr/bin/python3 - "$UI_SHARD" "$RUNNER_TEMP/ui-summary.json" "$RUNNER_TEMP/ui-tests.json" <<'PY'
+          import json, sys
+          shard, summary_path, tests_path = sys.argv[1:4]
+          boundary = "AppShellUITests"
+          with open(summary_path) as handle:
+              summary = json.load(handle)
+          total = summary.get("totalTestCount", 0)
+          passed = summary.get("passedTests", 0)
+          skipped = summary.get("skippedTests", 0)
+          failed = summary.get("failedTests", 0)
+          if total <= 0:
+              sys.exit(f"::error::{shard}: the run executed no tests at all; its selection matched nothing")
+          if passed <= 0:
+              sys.exit(f"::error::{shard}: none of {total} case(s) passed; a fully skipped shard proves nothing")
+          cases = []
+          def walk(node, suite):
+              kind = node.get("nodeType")
+              if kind == "Test Suite":
+                  suite = node.get("name")
+              if kind == "Test Case":
+                  identifier = node.get("nodeIdentifier") or ""
+                  cases.append(suite or identifier.split("/")[0])
+                  return
+              for child in node.get("children") or []:
+                  walk(child, suite)
+          with open(tests_path) as handle:
+              for node in json.load(handle).get("testNodes") or []:
+                  walk(node, None)
+          if len(cases) != total:
+              sys.exit(f"::error::{shard}: the bundle lists {len(cases)} test case(s) but its summary counts {total}; "
+                       "the per-class proof cannot be trusted")
+          classes = sorted(set(cases))
+          if shard == "app-shell":
+              stray = [name for name in classes if name != boundary]
+              if stray or boundary not in classes:
+                  sys.exit(f"::error::app-shell executed {classes}; it must execute {boundary} and nothing else")
+          elif shard == "complement":
+              if boundary in classes:
+                  sys.exit(f"::error::complement executed {boundary}, which belongs to app-shell alone; "
+                           "the -skip-testing exclusion was not applied")
+          else:
+              sys.exit(f"::error::unknown UI shard {shard!r}")
+          print(f"{shard}: {total} case(s), {passed} passed, {skipped} skipped, {failed} failed; "
+                f"classes: {', '.join(classes)}")
+          PY
       # On failure AND on cancellation (a job-level timeout reports as
       # `cancelled`, and `failure()` is false then) — never on success or when
-      # the test step never started.
+      # the test step never started. Also when the shard proof failed: a bundle
+      # that ran the wrong half is the evidence of what it ran. The artifact
+      # name carries the shard, so the two halves of one run cannot collide.
       - name: Retain UI smoke diagnosis
-        if: always() && contains(fromJSON('["failure","cancelled"]'), steps.ui_smoke.outcome)
+        if: always() && contains(fromJSON('["failure","cancelled"]'), steps.ui_smoke.outcome) || always() && steps.ui_shard_proof.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ios-ui-smoke-diagnosis
-          path: ${{ runner.temp }}/ios-ui-smoke.xcresult
+          name: ios-ui-smoke-diagnosis-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ios-ui-smoke-${{ matrix.shard }}.xcresult
           retention-days: 7
           if-no-files-found: error
 

@@ -2056,8 +2056,13 @@ const RUNNER_BUDGETS = [
         max: 40,
         why: "a PAID macOS runner is held by either of the two unsigned compile graphs",
       },
+      // Declared 55 PER SHARD, and two shards. `shards` is the number of PAID
+      // runners one run of this job starts; 6u holds the matrix to exactly it.
+      // The split adds about 6.9 runner-minutes per run (~20%, an estimate
+      // until hosted runs measure it) for a ~12-minute shorter critical path.
       "ios-ui-smoke": {
         max: 55,
+        shards: 2,
         why: "a PAID macOS runner is held by an iPhone simulator or UI test that never exits",
       },
       // Declared 40. One class of six cases against one booted iPad simulator,
@@ -3972,6 +3977,263 @@ function iosRegularWidthShellFailures(world) {
   return out;
 }
 
+// ── 6u. the iPhone UI target runs as two shards, and the two are the whole ──
+//
+// `ios-ui-smoke` runs `RelayiumUITests` on an iPhone as a two-entry matrix:
+// `app-shell` runs one class, `complement` runs the target minus that class.
+// Splitting a suite is how coverage goes missing without anything turning red,
+// so every way of getting the split wrong is a failure here:
+//
+//   * a class selected by NEITHER shard — a dropped matrix entry, a deleted
+//     branch, or a complement written as a hand-kept class list that the next
+//     new class is not on;
+//   * a class selected by BOTH — the complement losing its `-skip-testing`,
+//     which doubles the slowest class's cost and still looks green;
+//   * a shard whose selection matched nothing or skipped everything, which
+//     `xcodebuild` reports as success;
+//   * the two shards' evidence colliding under one artifact name, or one
+//     shard's red cancelling the other's run;
+//   * the matrix quietly growing into a general fan-out of PAID runners.
+//
+// The partition is evaluated against the classes declared on disk, so adding a
+// class is checked rather than assumed. It reads the selections with the
+// semantics they are written for — `-skip-testing` removing a class from the
+// `-only-testing` target — and `man xcodebuild`'s precedence note is why that
+// is not taken on trust at run time: each shard also proves, from its own
+// result bundle, which classes it actually executed.
+
+const IOS_COMPACT_BOUNDARY_CLASS = "AppShellUITests";
+/** The matrix, in order: the boundary class's shard, then everything else. */
+const IOS_COMPACT_SHARDS = ["app-shell", "complement"];
+/** The `id:` of the step that proves, from the result bundle, what ran. */
+const IOS_COMPACT_PROOF_ID = "ui_shard_proof";
+
+/** The branches of a `case` statement in a run body: label → branch text. */
+function caseBranches(code) {
+  const out = new Map();
+  for (const match of code.matchAll(/^[ \t]*([A-Za-z0-9_*-]+)\)[ \t]*\n([\s\S]*?)^[ \t]*;;[ \t]*$/gm)) {
+    out.set(match[1], match[2]);
+  }
+  return out;
+}
+
+/** The `-only-testing` / `-skip-testing` identifiers a branch passes. */
+function testSelection(text) {
+  const ids = (flag) => [...text.matchAll(new RegExp(`${flag}[:=]\\s*([A-Za-z0-9_/]+)`, "g"))]
+    .map((match) => match[1]);
+  return { only: ids("-only-testing"), skip: ids("-skip-testing") };
+}
+
+/** Does this selection run class `name` of the UI target? `null` selects nothing. */
+function selectsClass(selection, name) {
+  if (selection === null || selection === undefined) return false;
+  const { only, skip } = selection;
+  const hits = (id) => id === IOS_UI_TARGET || id === `${IOS_UI_TARGET}/${name}`;
+  return (only.length === 0 || only.some(hits)) && !skip.some(hits);
+}
+
+function iosCompactShardFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const doc = world.docs.get(IOS);
+  if (!doc) return out;
+  const job = doc.jobs?.[IOS_COMPACT_JOB];
+  if (!job) return out; // iosParallelLaneFailures reports the missing job.
+  const where = `${IOS}/${IOS_COMPACT_JOB}`;
+
+  // ── the matrix: exactly two shards, neither cancelling the other ─────────
+  const planned = RUNNER_BUDGETS.find((entry) => entry.file === IOS)?.jobs?.[IOS_COMPACT_JOB]?.shards;
+  need(
+    planned === IOS_COMPACT_SHARDS.length,
+    `${where}: this policy budgets ${String(planned)} runner(s) per run for this job, want `
+    + `${IOS_COMPACT_SHARDS.length}. The split was costed at two shards — about 6.9 extra PAID `
+    + `runner-minutes for a ~12-minute shorter critical path — and a different count is a new `
+    + `cost decision, not a tidy-up.`,
+  );
+  const matrix = job.strategy?.matrix;
+  const axes = matrix && typeof matrix === "object" ? Object.keys(matrix) : [];
+  const shards = Array.isArray(matrix?.shard) ? matrix.shard.map(String) : matrix?.shard;
+  need(
+    axes.length === 1 && axes[0] === "shard"
+      && Array.isArray(shards) && shards.join(",") === IOS_COMPACT_SHARDS.join(","),
+    `${where}: matrix is ${JSON.stringify(matrix)}, want exactly \`shard: `
+    + `[${IOS_COMPACT_SHARDS.join(", ")}]\` and no other axis, include or exclude. A missing entry `
+    + `is half the UI target that silently stops running; an extra one is another PAID macOS `
+    + `runner per run that nobody costed.`,
+  );
+  need(
+    job.strategy?.["fail-fast"] === "false",
+    `${where}: strategy.fail-fast is ${JSON.stringify(job.strategy?.["fail-fast"])}, want false. `
+    + `With the default, one shard's failure cancels the other, which then reports \`cancelled\` `
+    + `with its half of the evidence unknown.`,
+  );
+  for (const [name, other] of Object.entries(doc.jobs ?? {})) {
+    if (name === IOS_COMPACT_JOB) continue;
+    need(
+      other?.strategy === undefined,
+      `${IOS}/${name} gained a \`strategy\`. Only ${IOS_COMPACT_JOB} is sharded, and only in two; `
+      + `${name === IOS_REGULAR_WIDTH_JOB ? "the iPad job runs one class once, and a matrix there "
+        + "is a second paid run of it" : "a matrix here is an uncosted PAID fan-out"}.`,
+    );
+  }
+
+  // ── the selection: one class, and the target minus that class ───────────
+  const steps = job.steps ?? [];
+  const test = steps.find((step) => step?.id === "ui_smoke");
+  need(
+    test !== undefined,
+    `${where}: no step has \`id: ui_smoke\`, so there is no shard selection to check.`,
+  );
+  if (!test) return out;
+  const code = String(test.run ?? "")
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+  need(
+    /\$\{\{\s*matrix\.shard\s*\}\}/.test(String(test.env?.UI_SHARD ?? "")),
+    `${where}: the test step does not receive \`UI_SHARD: \${{ matrix.shard }}\`, so the matrix `
+    + `entry and the selection it runs are not connected.`,
+  );
+  need(
+    /-resultBundlePath\s+"?[^"\s]*\$UI_SHARD/.test(code),
+    `${where}: the result bundle path does not carry \`$UI_SHARD\`. Each shard's bundle is the `
+    + `evidence for its half, and the proof and upload steps read it by that name.`,
+  );
+
+  const branches = caseBranches(code);
+  const labels = [...branches.keys()];
+  need(
+    labels.length === IOS_COMPACT_SHARDS.length + 1
+      && IOS_COMPACT_SHARDS.every((label) => branches.has(label)) && branches.has("*"),
+    `${where}: the test step's \`case "$UI_SHARD"\` branches are [${labels.join(", ")}], want `
+    + `[${IOS_COMPACT_SHARDS.join(", ")}, *]. A shard with no branch runs nothing; a branch with `
+    + `no shard is selection nobody executes.`,
+  );
+  need(
+    /\bexit\s+[1-9]/.test(branches.get("*") ?? ""),
+    `${where}: the default \`*)\` branch does not exit non-zero. An unrecognised shard must fail, `
+    + `not fall through to a run that selected nothing.`,
+  );
+
+  const selections = new Map();
+  for (const shard of IOS_COMPACT_SHARDS) {
+    const branch = branches.get(shard);
+    // A shard with no branch selects nothing; the partition below then names
+    // exactly the classes that stopped running.
+    if (branch === undefined) { selections.set(shard, null); continue; }
+    need(
+      /xcodebuild[^\n]*(?:\\\n[^\n]*)*\btest\s*$/m.test(branch),
+      `${where}: the \`${shard}\` branch runs no \`xcodebuild … test\`.`,
+    );
+    const selection = testSelection(branch);
+    selections.set(shard, selection);
+    const all = [...selection.only, ...selection.skip];
+    need(
+      all.every((id) => id === IOS_UI_TARGET || /^[A-Za-z0-9_]+\/[A-Za-z0-9_]+$/.test(id)),
+      `${where}: the \`${shard}\` branch selects [${all.join(", ")}]. The shards split at CLASS `
+      + `boundaries; a method-level identifier is a partition this policy cannot evaluate.`,
+    );
+    need(
+      all.every((id) => id === IOS_UI_TARGET || id.startsWith(`${IOS_UI_TARGET}/`)),
+      `${where}: the \`${shard}\` branch selects outside ${IOS_UI_TARGET}: [${all.join(", ")}].`,
+    );
+  }
+  const boundary = `${IOS_UI_TARGET}/${IOS_COMPACT_BOUNDARY_CLASS}`;
+  const shell = selections.get("app-shell");
+  if (shell) {
+    need(
+      shell.only.length === 1 && shell.only[0] === boundary && shell.skip.length === 0,
+      `${where}: the \`app-shell\` shard selects only [${shell.only.join(", ")}] and skips `
+      + `[${shell.skip.join(", ")}], want exactly \`-only-testing:${boundary}\`.`,
+    );
+  }
+  const rest = selections.get("complement");
+  if (rest) {
+    need(
+      rest.only.length === 1 && rest.only[0] === IOS_UI_TARGET
+        && rest.skip.length === 1 && rest.skip[0] === boundary,
+      `${where}: the \`complement\` shard selects only [${rest.only.join(", ")}] and skips `
+      + `[${rest.skip.join(", ")}], want the target minus the boundary class: `
+      + `\`-only-testing:${IOS_UI_TARGET}\` with \`-skip-testing:${boundary}\`. Naming the `
+      + `remaining classes instead is a list the next new class is silently not on.`,
+    );
+  }
+
+  need(
+    world.uiTestClasses.includes(IOS_COMPACT_BOUNDARY_CLASS),
+    `${where}: the shards split at \`${IOS_COMPACT_BOUNDARY_CLASS}\`, but ${IOS_UI_TEST_DIR} `
+    + `declares no such class. The app-shell shard would select nothing, and the complement's `
+    + `exclusion would exclude nothing.`,
+  );
+  for (const name of world.uiTestClasses) {
+    const owners = IOS_COMPACT_SHARDS.filter((shard) => selectsClass(selections.get(shard), name));
+    need(
+      owners.length > 0,
+      `${where}: ${IOS_UI_TARGET}/${name} is selected by no shard. Before the split one job ran `
+      + `the whole target; a class neither half selects is coverage that stopped without a red.`,
+    );
+    need(
+      owners.length < 2,
+      `${where}: ${IOS_UI_TARGET}/${name} is selected by both shards [${owners.join(", ")}]. `
+      + `The halves must be disjoint, or the class runs twice on PAID runners for one answer.`,
+    );
+  }
+
+  // ── the proof each shard ran its half, and the evidence it keeps ─────────
+  const proofAt = steps.findIndex((step) => step?.id === IOS_COMPACT_PROOF_ID);
+  const proof = steps[proofAt];
+  need(
+    proof !== undefined && proofAt > steps.indexOf(test),
+    `${where}: no step after the test has \`id: ${IOS_COMPACT_PROOF_ID}\`, so nothing proves a `
+    + `shard executed anything. \`xcodebuild … test\` exits 0 when a selection matched nothing `
+    + `or every case skipped.`,
+  );
+  if (proof) {
+    const body = String(proof.run ?? "");
+    need(
+      /totalTestCount/.test(body) && /passedTests/.test(body),
+      `${where}: the shard proof does not require both \`totalTestCount\` and \`passedTests\` to be `
+      + `positive. Zero tests is green to xcodebuild, and so is a shard in which every case skipped.`,
+    );
+    need(
+      /test-results tests/.test(body) && body.includes(IOS_COMPACT_BOUNDARY_CLASS),
+      `${where}: the shard proof does not read the executed cases' classes (\`xcresulttool get `
+      + `test-results tests\`) against \`${IOS_COMPACT_BOUNDARY_CLASS}\`. Counts alone cannot tell `
+      + `a disjoint split from one whose complement ran the boundary class again.`,
+    );
+    need(
+      proof.if === undefined && proof["continue-on-error"] === undefined,
+      `${where}: the shard proof carries \`if:\`/\`continue-on-error\`. It must run whenever the `
+      + `test step succeeded and fail the job when it fails.`,
+    );
+  }
+  const upload = steps.find((step) => String(step?.uses ?? "").includes("actions/upload-artifact"));
+  need(
+    upload !== undefined,
+    `${where}: nothing uploads a shard's result bundle on failure.`,
+  );
+  if (upload) {
+    need(
+      /\$\{\{\s*matrix\.shard\s*\}\}/.test(String(upload.with?.name ?? "")),
+      `${where}: the diagnosis artifact is named ${JSON.stringify(upload.with?.name)}, which does `
+      + `not carry \`\${{ matrix.shard }}\`. Both shards upload in the same run, and two uploads `
+      + `under one name conflict — the second failing shard's evidence is lost.`,
+    );
+    need(
+      /\$\{\{\s*matrix\.shard\s*\}\}/.test(String(upload.with?.path ?? "")),
+      `${where}: the diagnosis upload's path ${JSON.stringify(upload.with?.path)} does not name the `
+      + `shard's own result bundle.`,
+    );
+    need(
+      String(upload.if ?? "").includes(`steps.${IOS_COMPACT_PROOF_ID}.outcome`),
+      `${where}: the diagnosis upload does not run when the shard proof fails. A bundle that ran `
+      + `the wrong half is the only record of what it ran.`,
+    );
+  }
+
+  return out;
+}
+
 /**
  * The app-tree guards' coverage: the package lane starts on every class of file
  * they read, the tree's own build lane still does too, and neither Apple build
@@ -5838,6 +6100,7 @@ for (const message of fuzzCampaignFailures(realWorld())) failures.push(message);
 for (const message of iosParallelLaneFailures(realWorld())) failures.push(message);
 for (const message of appGuardCoverageFailures(realWorld())) failures.push(message);
 for (const message of iosRegularWidthShellFailures(realWorld())) failures.push(message);
+for (const message of iosCompactShardFailures(realWorld())) failures.push(message);
 for (const message of macosBudgetFailures(realWorld())) failures.push(message);
 for (const message of macosContractRunnerFailures(realWorld())) failures.push(message);
 for (const message of concurrencyFailures(realWorld())) failures.push(message);
@@ -6342,6 +6605,16 @@ function withIosGuard(world, name, mutate) {
   const at = steps.findIndex((step) => SELECT_REF_RE.test(String(step?.run ?? "")));
   if (at === -1) throw new Error(`${IOS}/${name} already runs no shared Xcode selection step`);
   mutate(steps, at);
+  return world;
+}
+
+/** Mutate the run body of `ios.yml`'s iPhone UI test step. */
+function withIosUiSmokeRun(world, edit) {
+  const step = world.docs.get(IOS)?.jobs?.[IOS_COMPACT_JOB]?.steps?.find((entry) => entry?.id === "ui_smoke");
+  if (step === undefined) throw new Error(`${IOS}/${IOS_COMPACT_JOB} has no ui_smoke step`);
+  const before = String(step.run);
+  step.run = edit(before);
+  if (step.run === before) throw new Error(`${IOS}/${IOS_COMPACT_JOB}: the ui_smoke mutation did not apply`);
   return world;
 }
 
@@ -8474,6 +8747,185 @@ const MUTATIONS = [
     }),
     refute: /a step names `iPhone`/,
   },
+  // ── 6u: the iPhone UI target's two complementary shards ──────────────────
+  //
+  // Every case below leaves both shards running and green while some part of
+  // the UI target runs twice, runs nowhere, or runs without evidence.
+  {
+    name: "the iPhone UI matrix loses its complement shard",
+    mutate: (world) => withNamedJob(world, IOS, IOS_COMPACT_JOB, (job) => {
+      job.strategy.matrix.shard = ["app-shell"];
+    }),
+    expect: /ios\.yml\/ios-ui-smoke: matrix is .*want exactly `shard: \[app-shell, complement\]`/,
+  },
+  {
+    name: "the iPhone UI matrix grows a third shard",
+    mutate: (world) => withNamedJob(world, IOS, IOS_COMPACT_JOB, (job) => {
+      job.strategy.matrix.shard = [...job.strategy.matrix.shard, "extra"];
+    }),
+    expect: /ios\.yml\/ios-ui-smoke: matrix is .*another PAID macOS runner per run/,
+  },
+  {
+    name: "the iPhone UI shards go back to cancelling each other",
+    mutate: (world) => withNamedJob(world, IOS, IOS_COMPACT_JOB, (job) => {
+      delete job.strategy["fail-fast"];
+    }),
+    expect: /ios\.yml\/ios-ui-smoke: strategy\.fail-fast is undefined, want false/,
+  },
+  {
+    // The branch is gone, the matrix entry is not: the complement job starts,
+    // falls to `*)` and fails — but the partition must name the lost classes.
+    name: "the complement shard's selection branch is deleted",
+    mutate: (world) => withIosUiSmokeRun(world, (run) => run.replace(/complement\)\n/, "retired)\n")),
+    expect: /ios\.yml\/ios-ui-smoke: RelayiumUITests\/LocalSessionUITests is selected by no shard/,
+  },
+  {
+    name: "the complement shard loses its -skip-testing exclusion",
+    mutate: (world) => withIosUiSmokeRun(world, (run) => run
+      .replace(/[ \t]*-skip-testing:RelayiumUITests\/AppShellUITests \\\n/, "")),
+    expect: /RelayiumUITests\/AppShellUITests is selected by both shards \[app-shell, complement\]/,
+  },
+  {
+    // Prose is not selection: the exclusion survives only as a comment.
+    name: "the complement's exclusion survives only as a comment",
+    mutate: (world) => withIosUiSmokeRun(world, (run) => run
+      .replace(/([ \t]*)(-skip-testing:RelayiumUITests\/AppShellUITests \\\n)/, "$1# $2")),
+    expect: /RelayiumUITests\/AppShellUITests is selected by both shards/,
+  },
+  {
+    name: "the app-shell shard is widened to the whole target",
+    mutate: (world) => withIosUiSmokeRun(world, (run) => run
+      .replace("-only-testing:RelayiumUITests/AppShellUITests test", "-only-testing:RelayiumUITests test")),
+    expect: /is selected by both shards \[app-shell, complement\]/,
+  },
+  {
+    // Green today, wrong tomorrow: the complement spelled as today's classes.
+    name: "the complement is written as a hand-kept class list",
+    mutate: (world) => withIosUiSmokeRun(world, (run) => run.replace(
+      /-skip-testing:RelayiumUITests\/AppShellUITests \\\n([ \t]*)-only-testing:RelayiumUITests test/,
+      (_, indent) => world.uiTestClasses.filter((name) => name !== IOS_COMPACT_BOUNDARY_CLASS)
+        .map((name) => `-only-testing:RelayiumUITests/${name}`).join(` \\\n${indent}`) + " test",
+    )),
+    expect: /the `complement` shard selects only .*Naming the remaining classes instead/,
+  },
+  {
+    // The same hand-kept list, the day after a class is added.
+    name: "a class is added while the complement is a hand-kept list",
+    mutate: (world) => {
+      withIosUiSmokeRun(world, (run) => run.replace(
+        /-skip-testing:RelayiumUITests\/AppShellUITests \\\n([ \t]*)-only-testing:RelayiumUITests test/,
+        (_, indent) => world.uiTestClasses.filter((name) => name !== IOS_COMPACT_BOUNDARY_CLASS)
+          .map((name) => `-only-testing:RelayiumUITests/${name}`).join(` \\\n${indent}`) + " test",
+      ));
+      world.uiTestClasses = [...world.uiTestClasses, "NewlyAddedUITests"];
+      return world;
+    },
+    expect: /RelayiumUITests\/NewlyAddedUITests is selected by no shard/,
+  },
+  {
+    // The legitimate shape: a new class lands in the complement with no edit.
+    name: "a new UI test class is added to the target",
+    mutate: (world) => {
+      world.uiTestClasses = [...world.uiTestClasses, "NewlyAddedUITests"];
+      return world;
+    },
+    refute: /ios\.yml\/ios-ui-smoke/,
+  },
+  {
+    name: "the boundary class is renamed out from under both shards",
+    mutate: (world) => {
+      world.uiTestClasses = world.uiTestClasses.filter((name) => name !== IOS_COMPACT_BOUNDARY_CLASS);
+      return world;
+    },
+    expect: /the shards split at `AppShellUITests`, but apps\/ios\/RelayiumUITests declares no such class/,
+  },
+  {
+    name: "a shard narrows to a single test method",
+    mutate: (world) => withIosUiSmokeRun(world, (run) => run
+      .replace("-only-testing:RelayiumUITests/AppShellUITests test",
+        "-only-testing:RelayiumUITests/AppShellUITests/testLaunch test")),
+    expect: /a method-level identifier is a partition this policy cannot evaluate/,
+  },
+  {
+    name: "an unknown shard falls through instead of failing",
+    mutate: (world) => withIosUiSmokeRun(world, (run) => run.replace(/exit 1\n([ \t]*;;\n[ \t]*esac)/, "true\n$1")),
+    expect: /the default `\*\)` branch does not exit non-zero/,
+  },
+  {
+    name: "the shard proof is deleted",
+    mutate: (world) => withNamedJob(world, IOS, IOS_COMPACT_JOB, (job) => {
+      job.steps = job.steps.filter((step) => step?.id !== IOS_COMPACT_PROOF_ID);
+    }),
+    expect: /no step after the test has `id: ui_shard_proof`/,
+  },
+  {
+    // Empty execution: zero of zero is not a failure to a class check alone.
+    name: "the shard proof stops requiring that anything ran",
+    mutate: (world) => withNamedJob(world, IOS, IOS_COMPACT_JOB, (job) => {
+      const step = job.steps.find((entry) => entry?.id === IOS_COMPACT_PROOF_ID);
+      step.run = String(step.run).replace(/totalTestCount/g, "expectedFailures");
+    }),
+    expect: /the shard proof does not require both `totalTestCount` and `passedTests`/,
+  },
+  {
+    name: "the shard proof accepts an all-skipped shard",
+    mutate: (world) => withNamedJob(world, IOS, IOS_COMPACT_JOB, (job) => {
+      const step = job.steps.find((entry) => entry?.id === IOS_COMPACT_PROOF_ID);
+      step.run = String(step.run).replace(/passedTests/g, "skippedTests");
+    }),
+    expect: /the shard proof does not require both `totalTestCount` and `passedTests`/,
+  },
+  {
+    name: "the shard proof stops reading which classes ran",
+    mutate: (world) => withNamedJob(world, IOS, IOS_COMPACT_JOB, (job) => {
+      const step = job.steps.find((entry) => entry?.id === IOS_COMPACT_PROOF_ID);
+      step.run = String(step.run).replace(/test-results tests/g, "test-results summary");
+    }),
+    expect: /the shard proof does not read the executed cases' classes/,
+  },
+  {
+    name: "both shards upload their diagnosis under one artifact name",
+    mutate: (world) => withNamedJob(world, IOS, IOS_COMPACT_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.uses ?? "").includes("upload-artifact"));
+      step.with.name = "ios-ui-smoke-diagnosis";
+    }),
+    expect: /the diagnosis artifact is named "ios-ui-smoke-diagnosis", which does not carry/,
+  },
+  {
+    name: "a failed shard proof keeps no result bundle",
+    mutate: (world) => withNamedJob(world, IOS, IOS_COMPACT_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.uses ?? "").includes("upload-artifact"));
+      step.if = String(step.if).replace(/ \|\| always\(\) && steps\.ui_shard_proof\.outcome == 'failure'/, "");
+    }),
+    expect: /the diagnosis upload does not run when the shard proof fails/,
+  },
+  {
+    name: "the iPad job is sharded too",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      job.strategy = { "fail-fast": "false", matrix: { shard: ["app-shell", "complement"] } };
+    }),
+    expect: /ios\.yml\/ios-ipad-shell gained a `strategy`/,
+  },
+  {
+    // Changed iPad: the complement's shape copied onto the regular-width job.
+    name: "the iPad job adopts the complement selection",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      step.run = String(step.run).replace("-only-testing:RelayiumUITests/AdaptiveShellUITests test",
+        "-skip-testing:RelayiumUITests/AppShellUITests \\\n            -only-testing:RelayiumUITests test");
+    }),
+    expect: /ios\.yml\/ios-ipad-shell: a step passes `-only-testing:RelayiumUITests test`, the whole UI target/,
+  },
+  {
+    name: "the shard count budgeted for the iPhone UI job is raised",
+    mutate: (world) => {
+      const budget = RUNNER_BUDGETS.find((b) => b.file === IOS).jobs[IOS_COMPACT_JOB];
+      const saved = budget.shards;
+      budget.shards = 3;
+      try { return { ...world, __budgetFailures: iosCompactShardFailures(world) }; } finally { budget.shards = saved; }
+    },
+    expect: /ios\.yml\/ios-ui-smoke: this policy budgets 3 runner\(s\) per run for this job, want 2/,
+  },
   {
     // 6t. A release input the expression forgets: the step still reaches its
     // release branch, now on Ubuntu, where the guard fails the release.
@@ -8550,6 +9002,7 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       ...iosParallelLaneFailures(world),
       ...appGuardCoverageFailures(world),
       ...iosRegularWidthShellFailures(world),
+      ...iosCompactShardFailures(world),
       ...macosBudgetFailures(world),
       ...macosContractRunnerFailures(world),
       ...(world.__budgetFailures ?? []),
