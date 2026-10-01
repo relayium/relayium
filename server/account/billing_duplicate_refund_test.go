@@ -47,6 +47,7 @@ type duplicateStripeState struct {
 	historyEmptyMore                                  bool
 	historyNonadvancing                               bool
 	refundActionMetadata                              bool
+	onInvoiceGet                                      func()
 }
 
 func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (*stripeClient, func()) {
@@ -87,6 +88,9 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 			state.active = false
 			io.WriteString(w, `{"id":"sub_dup","customer":"cus_dup","status":"canceled","latest_invoice":"in_dup"}`)
 		case "GET /v1/invoices/in_dup":
+			if state.onInvoiceGet != nil {
+				state.onInvoiceGet()
+			}
 			io.WriteString(w, `{"id":"in_dup","status":"paid","customer":"cus_dup","parent":{"subscription_details":{"subscription":"sub_dup"}},"amount_paid":500,"created":90}`)
 		case "GET /v1/invoices/in_late_b":
 			io.WriteString(w, `{"id":"in_late_b","status":"paid","customer":"cus_dup","parent":{"subscription_details":{"subscription":"sub_dup"}},"amount_paid":300,"created":190}`)
@@ -340,7 +344,7 @@ func TestDuplicateWithoutAnyInvoiceEndsNoRefundNeeded(t *testing.T) {
 	// Completion needs an inspection that started after the recorded cancellation.
 	job, err = store.PutDuplicateRefundInspection(context.Background(), DuplicateRefundPlan{
 		UserID: "user_empty", CustomerID: "cus_dup", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_dup",
-	}, true, 102)
+	}, duplicateInspectionStart{Canceled: true}, 102)
 	if err != nil {
 		t.Fatal(err)
 	}

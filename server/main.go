@@ -147,16 +147,6 @@ func newID() string {
 // the repository's loopback acceptance server. Production keeps newID. The
 // three guards are deliberately redundant: this hook controls the link-role
 // ordering and must never be usable by a public or normally configured server.
-// formatDuplicateRefundEvidence is the -billing-duplicate-list summary line.
-// consecutive_failures is the job's attempts counter, which counts consecutive
-// failures and resets on success. liabilities_unknown=true means no complete
-// inspection is recorded yet: the
-// liability list is unknown, not empty. cancel_hold and hold_evidence show why
-// automatic cancellation is held and its append-only history.
-func formatDuplicateRefundEvidence(evidence account.DuplicateRefundEvidence) string {
-	return fmt.Sprintf("billing duplicate evidence: job=%s duplicate_subscription=%s canonical_subscription=%s invoice=%s state=%s canceled=%t resolution=%s consecutive_failures=%d revision=%d liability_revision=%d liability_digest=%s manual_reason=%s has_error=%t payments=%d action=%s action_state=%s action_generation=%d discovered_at=%d liabilities_unknown=%t post_cancel_inspected=%t cancel_hold=%q hold_evidence=%s", evidence.JobID, evidence.DuplicateSubscriptionID, evidence.CanonicalSubscriptionID, evidence.InvoiceID, evidence.State, evidence.SubscriptionCanceled, evidence.Resolution, evidence.Attempts, evidence.Revision, evidence.LiabilityRevision, evidence.LiabilityDigest, evidence.ManualReason, evidence.HasError, len(evidence.Payments), evidence.ActionID, evidence.ActionState, evidence.ActionGeneration, evidence.DiscoveredAt, evidence.LiabilitiesUnknown, evidence.PostCancelInspected, evidence.CancelHold, evidence.HoldEvidence)
-}
-
 func acceptancePeerIDGenerator(raw, addr, mailTransport string, releaseCheck bool) (func() string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return newID, nil
@@ -181,6 +171,17 @@ func acceptancePeerIDGenerator(raw, addr, mailTransport string, releaseCheck boo
 	return func() string {
 		return ids[(next.Add(1)-1)%uint64(len(ids))]
 	}, nil
+}
+
+// formatDuplicateRefundEvidence is the -billing-duplicate-list summary line.
+// consecutive_failures is the job's attempts counter, which counts consecutive
+// failures and resets on success. liabilities_unknown=true means no complete
+// inspection is recorded yet: the liability list is unknown, not empty.
+// cancel_contradictions > cancel_reconfirmed means Stripe reported the duplicate
+// live after it was recorded canceled. cancel_hold and hold_evidence show why
+// automatic cancellation is held and its append-only history.
+func formatDuplicateRefundEvidence(evidence account.DuplicateRefundEvidence) string {
+	return fmt.Sprintf("billing duplicate evidence: job=%s duplicate_subscription=%s canonical_subscription=%s invoice=%s state=%s canceled=%t resolution=%s consecutive_failures=%d revision=%d liability_revision=%d liability_digest=%s manual_reason=%s has_error=%t payments=%d action=%s action_state=%s action_generation=%d discovered_at=%d liabilities_unknown=%t post_cancel_inspected=%t cancel_contradictions=%d cancel_reconfirmed=%d cancel_hold=%q hold_evidence=%s", evidence.JobID, evidence.DuplicateSubscriptionID, evidence.CanonicalSubscriptionID, evidence.InvoiceID, evidence.State, evidence.SubscriptionCanceled, evidence.Resolution, evidence.Attempts, evidence.Revision, evidence.LiabilityRevision, evidence.LiabilityDigest, evidence.ManualReason, evidence.HasError, len(evidence.Payments), evidence.ActionID, evidence.ActionState, evidence.ActionGeneration, evidence.DiscoveredAt, evidence.LiabilitiesUnknown, evidence.PostCancelInspected, evidence.CancelContradictions, evidence.CancelReconfirmed, evidence.CancelHold, evidence.HoldEvidence)
 }
 
 // splitURLs parses a comma-separated URL flag, trimming spaces and dropping empties.

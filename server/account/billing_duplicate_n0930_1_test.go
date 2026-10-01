@@ -53,6 +53,8 @@ type n0930Stripe struct {
 	failListCall      int  // 1-based invoice-list call that fails; 0 never
 	failLists         map[int]bool
 	failReadback      bool // the first GET of sub_d after a DELETE fails once
+	dupMissing        bool // every GET of sub_d answers 404
+	readbackMissing   bool // GETs of sub_d after a DELETE answer 404
 	deleted           bool
 
 	dupGets, deletes, canonicalGets, invoiceLists, refundPosts int
@@ -77,6 +79,10 @@ func newN0930(t *testing.T, cfg Config) (*n0930Stripe, *stripeClient, *SQLiteSto
 			if f.failReadback && f.deleted {
 				f.failReadback = false
 				http.Error(w, `{"error":{"message":"readback unavailable"}}`, http.StatusInternalServerError)
+				return
+			}
+			if f.dupMissing || (f.readbackMissing && f.deleted) {
+				http.Error(w, `{"error":{"message":"No such subscription"}}`, http.StatusNotFound)
 				return
 			}
 			if f.onDupGet != nil {
@@ -425,7 +431,7 @@ func TestN0930_1UnknownLiabilitiesCannotTerminateOrRefund(t *testing.T) {
 	if pending, _, _ := store.DuplicateRefundBySubscription(ctx, "sub_empty"); pending.State != "pending" || pending.RefundComplete || !pending.SubscriptionCanceled {
 		t.Fatalf("canceled without a post-cancel inspection must stay open: %+v", pending)
 	}
-	empty, err = store.PutDuplicateRefundInspection(ctx, DuplicateRefundPlan{UserID: n0930User, CustomerID: n0930Customer, CanonicalSubscriptionID: n0930Canonical, DuplicateSubscriptionID: "sub_empty"}, true, 105)
+	empty, err = store.PutDuplicateRefundInspection(ctx, DuplicateRefundPlan{UserID: n0930User, CustomerID: n0930Customer, CanonicalSubscriptionID: n0930Canonical, DuplicateSubscriptionID: "sub_empty"}, duplicateInspectionStart{Canceled: true}, 105)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -683,6 +689,9 @@ func TestN0930_1MigrationBackfillsLegacyRowsOnce(t *testing.T) {
 		`DELETE FROM schema_migrations WHERE id='billing_duplicate_refund_responsibility_v1'`,
 		`ALTER TABLE billing_duplicate_refunds DROP COLUMN post_cancel_inspected`,
 		`DELETE FROM schema_migrations WHERE id='billing_duplicate_refund_post_cancel_inspection_v1'`,
+		`ALTER TABLE billing_duplicate_refunds DROP COLUMN cancel_contradictions`,
+		`ALTER TABLE billing_duplicate_refunds DROP COLUMN cancel_reconfirmed`,
+		`DELETE FROM schema_migrations WHERE id='billing_duplicate_refund_cancel_contradiction_v1'`,
 		`INSERT INTO billing_duplicate_refunds(id,user_id,customer_id,canonical_subscription_id,duplicate_subscription_id,state,created_at,updated_at) VALUES('bdup_legacy_open','u','cus','sub_keep','sub_legacy_open','pending',500,500)`,
 		`INSERT INTO billing_duplicate_refunds(id,user_id,customer_id,canonical_subscription_id,duplicate_subscription_id,state,subscription_canceled,refund_complete,created_at,updated_at) VALUES('bdup_legacy_done','u','cus','sub_keep','sub_legacy_done','terminal',1,1,700,700)`,
 	} {
@@ -698,7 +707,7 @@ func TestN0930_1MigrationBackfillsLegacyRowsOnce(t *testing.T) {
 	}
 	for sub, want := range map[string]int64{"sub_legacy_open": 500, "sub_legacy_done": 700} {
 		job, ok, err := store.DuplicateRefundBySubscription(context.Background(), sub)
-		if err != nil || !ok || job.DiscoveredAt != want || job.CancelHold != "" || job.HoldEvidence != "[]" || job.PostCancelInspected {
+		if err != nil || !ok || job.DiscoveredAt != want || job.CancelHold != "" || job.HoldEvidence != "[]" || job.PostCancelInspected || job.CancelContradictions != 0 || job.CancelReconfirmed != 0 {
 			t.Fatalf("%s backfill: job=%+v ok=%t err=%v", sub, job, ok, err)
 		}
 	}
@@ -848,7 +857,7 @@ func postCancelInspectForTest(t *testing.T, store *SQLiteStore, client *stripeCl
 	if err != nil {
 		t.Fatal(err)
 	}
-	job, err := store.PutDuplicateRefundInspection(context.Background(), plan, true, 102)
+	job, err := store.PutDuplicateRefundInspection(context.Background(), plan, duplicateInspectionStart{Canceled: true}, 102)
 	if err != nil || !job.PostCancelInspected {
 		t.Fatalf("post-cancel inspection job=%+v err=%v", job, err)
 	}
@@ -863,12 +872,12 @@ type n0930BarrierStore struct {
 	reached, release chan struct{}
 }
 
-func (b *n0930BarrierStore) PutDuplicateRefundInspection(ctx context.Context, plan DuplicateRefundPlan, startedAfterCancel bool, now int64) (DuplicateRefundJob, error) {
+func (b *n0930BarrierStore) PutDuplicateRefundInspection(ctx context.Context, plan DuplicateRefundPlan, start duplicateInspectionStart, now int64) (DuplicateRefundJob, error) {
 	b.once.Do(func() {
 		close(b.reached)
 		<-b.release
 	})
-	return b.SQLiteStore.PutDuplicateRefundInspection(ctx, plan, startedAfterCancel, now)
+	return b.SQLiteStore.PutDuplicateRefundInspection(ctx, plan, start, now)
 }
 
 // Codex finding 1: run A inspects (nothing owed yet) and pauses before
@@ -1027,5 +1036,182 @@ func TestN0930_1StaleSaveCannotUncancel(t *testing.T) {
 	}
 	if got := n0930Load2(t, store, "sub_dup"); !got.SubscriptionCanceled {
 		t.Fatalf("stale not-canceled Save cleared the recorded cancellation: %+v", got)
+	}
+}
+
+// Codex round 2, finding 1: a cancellation recorded while an operator refund
+// is in flight (it does not move liability_revision) without a following
+// inspection must stop the refund POST itself, not only the finish.
+func TestN0930_1RefundMutationRechecksPostCancelGate(t *testing.T) {
+	store := newTestStore(t)
+	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
+	client, closeServer := newDuplicateStripe(t, state, false)
+	defer closeServer()
+	job := prepareDuplicateJob(t, store, client)
+	// A discovered, NOT canceled manual job with a supported payment (reachable
+	// e.g. when a processing invoice settles while auto-cancel is disabled).
+	if _, err := store.db.Exec(`UPDATE billing_duplicate_refunds SET state='manual',manual_reason='invoice_payment_pending' WHERE id=?`, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	job = n0930Load2(t, store, "sub_dup")
+	var once sync.Once
+	// The operator command reads the invoice after preparing its action and
+	// before taking the mutation lock; the worker cancels in that gap and its
+	// post-cancel inspection fails (nothing more is recorded).
+	state.onInvoiceGet = func() {
+		once.Do(func() {
+			state.active = false
+			if err := store.SaveDuplicateRefundBeforeReinspection(context.Background(), job, DuplicateRefundResult{SubscriptionCanceled: true}, 150); err != nil {
+				t.Errorf("worker cancellation: %v", err)
+			}
+		})
+	}
+	_, err := resolveDuplicateRefundCurrent(context.Background(), store, client, job.ID, "operator", "verified")
+	state.mu.Lock()
+	posts := state.refundAttempts
+	state.mu.Unlock()
+	got := n0930Load2(t, store, "sub_dup")
+	if err == nil || posts != 0 || !got.SubscriptionCanceled || got.PostCancelInspected || got.State == "terminal" {
+		t.Fatalf("refund must not be posted without a post-cancel inspection: err=%v posts=%d job=%+v", err, posts, got)
+	}
+}
+
+// Codex round 2, finding 2: the row records the duplicate canceled (run B), B's
+// post-cancel inspection failed, and Stripe now reports it live. Run A, which
+// inspected before B's cancellation, must not finish on any branch that does
+// not DELETE (hold, auto-cancel disabled); the contradiction is durable until a
+// FRESH confirmation is followed by a new inspection.
+func TestN0930_1CanceledThenLiveFailsClosed(t *testing.T) {
+	for _, branch := range []string{"hold", "auto_cancel_disabled"} {
+		t.Run(branch, func(t *testing.T) {
+			f, client, store, svc := newN0930(t, Config{})
+			f.paid = false
+			seedDuplicateOwner(t, store, n0930User, n0930Customer, n0930Canonical)
+			snapshot := n0930Job(t, store, client) // invoice list #1
+			runA := svc
+			if branch == "auto_cancel_disabled" {
+				runA = NewService(store, nil, Config{DisableBillingDuplicateAutoCancel: true})
+				runA.biller = client
+			}
+			f.failLists = map[int]bool{4: true} // #2 A, #3 B, #4 B's post-cancel inspection
+			barrier := &n0930BarrierStore{SQLiteStore: store, reached: make(chan struct{}), release: make(chan struct{})}
+			aDone := make(chan error, 1)
+			go func() { aDone <- runA.runDuplicateRefund(context.Background(), barrier, client, snapshot) }()
+			<-barrier.reached
+			if err := svc.runDuplicateRefund(context.Background(), store, client, snapshot); err == nil {
+				t.Fatal("B's post-cancel inspection was meant to fail")
+			}
+			f.mu.Lock()
+			f.dupStatus = "active" // Stripe now contradicts the recorded cancellation
+			if branch == "hold" {
+				f.canonicalStatus = "past_due"
+			}
+			f.mu.Unlock()
+			close(barrier.release)
+			aErr := <-aDone
+			a := n0930Load(t, store)
+			_, deletes, _, _, _ := f.counts()
+			if aErr == nil || a.State == "terminal" || a.RefundComplete || a.PostCancelInspected || a.CancelContradictions != 1 || a.CancelReconfirmed != 0 || !a.SubscriptionCanceled || deletes != 1 {
+				t.Fatalf("contradiction must fail closed: aErr=%v deletes=%d job=%+v", aErr, deletes, a)
+			}
+			// Stripe reports it canceled again. The next run's first inspection
+			// started while the contradiction was open, so it cannot count; an
+			// invoice that appears before that run's provider read must be found
+			// by the re-inspection that follows the fresh confirmation.
+			f.mu.Lock()
+			f.dupStatus = "canceled"
+			reads := f.dupGets
+			f.onDupGet = func(n int) {
+				if n == reads+2 { // #1 this run's inspection, #2 the provider read
+					f.late = true
+				}
+			}
+			f.mu.Unlock()
+			if err := runA.runDuplicateRefund(context.Background(), store, client, n0930Load(t, store)); err != nil {
+				t.Fatal(err)
+			}
+			d := n0930Load(t, store)
+			if d.State != "manual" || d.RefundComplete || len(d.Liabilities) != 1 || d.Liabilities[0].InvoiceID != "in_late" || d.CancelReconfirmed != 1 || !d.PostCancelInspected {
+				t.Fatalf("fresh confirmation must be followed by a new inspection: %+v", d)
+			}
+		})
+	}
+}
+
+// A contradiction recorded after a run read the row but before its fresh
+// confirmation is saved must not be closed by that run's (older) evidence.
+func TestN0930_1ReconfirmationFencedOnContradictionCount(t *testing.T) {
+	f, client, store, svc := newN0930(t, Config{})
+	f.paid, f.dupStatus = false, "canceled"
+	seedDuplicateOwner(t, store, n0930User, n0930Customer, n0930Canonical)
+	job := n0930Job(t, store, client)
+	// Left by earlier runs: recorded canceled, one open contradiction.
+	if _, err := store.db.Exec(`UPDATE billing_duplicate_refunds SET subscription_canceled=1,cancel_contradictions=1,cancel_reconfirmed=0 WHERE id=?`, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := n0930Load(t, store)
+	reads := f.dupGets
+	f.onDupGet = func(n int) {
+		if n == reads+2 { // this run's provider read: another run records a contradiction
+			if err := store.RecordDuplicateCancelContradiction(context.Background(), snapshot, errors.New("concurrent live observation"), 200); err != nil {
+				t.Errorf("record contradiction: %v", err)
+			}
+		}
+	}
+	_ = svc.runDuplicateRefund(context.Background(), store, client, snapshot)
+	got := n0930Load(t, store)
+	if got.State == "terminal" || got.RefundComplete || got.PostCancelInspected || got.CancelContradictions != 2 || got.CancelReconfirmed != 0 {
+		t.Fatalf("a newer contradiction must stay open: %+v", got)
+	}
+}
+
+// Fable round 2, LOW 1: the stale-snapshot merge must not reopen a terminal
+// (already refunded) job.
+func TestN0930_1StaleSaveCannotReopenTerminal(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	stale, err := store.PutDuplicateRefund(ctx, DuplicateRefundPlan{UserID: "u", CustomerID: "cus", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_dup",
+		Liabilities: []DuplicateRefundLiability{{InvoiceID: "in_1", Status: "paid", AmountPaid: 100}}}, true, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Later: more liability, cancellation, operator refund -> terminal at a
+	// higher liability revision.
+	if _, err := store.db.Exec(`UPDATE billing_duplicate_refunds SET state='terminal',manual_reason='',refund_complete=1,subscription_canceled=1,post_cancel_inspected=1,liability_revision=liability_revision+1 WHERE id=?`, stale.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveDuplicateRefund(ctx, stale, DuplicateRefundResult{SubscriptionCanceled: true}, nil, 200); err == nil {
+		t.Fatal("stale save must report staleness")
+	}
+	if got := n0930Load2(t, store, "sub_dup"); got.State != "terminal" || !got.RefundComplete {
+		t.Fatalf("stale merge reopened a terminal job: %+v", got)
+	}
+}
+
+// Fable round 2, LOW 2: a 404 for the duplicate is not evidence of
+// cancellation, before or after the DELETE. Inspection still records
+// liabilities; nothing completes.
+func TestN0930_1DuplicateNotFoundIsNotCancellation(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		set         func(f *n0930Stripe)
+		wantDeletes int
+	}{
+		{"before_delete", func(f *n0930Stripe) { f.dupMissing = true }, 0},
+		{"after_delete", func(f *n0930Stripe) { f.readbackMissing = true }, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, client, store, svc := newN0930(t, Config{})
+			f.paid = false
+			seedDuplicateOwner(t, store, n0930User, n0930Customer, n0930Canonical)
+			tc.set(f)
+			job := n0930Job(t, store, client)
+			err := svc.runDuplicateRefund(context.Background(), store, client, job)
+			_, deletes, _, _, _ := f.counts()
+			got := n0930Load(t, store)
+			if err == nil || !strings.Contains(err.Error(), "not found") || deletes != tc.wantDeletes || got.SubscriptionCanceled || got.State == "terminal" || got.Attempts != 1 || got.DiscoveredAt == 0 {
+				t.Fatalf("404 must be a retryable unknown: err=%v deletes=%d job=%+v", err, deletes, got)
+			}
+		})
 	}
 }

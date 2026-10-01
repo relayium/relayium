@@ -24,7 +24,7 @@ func TestN0930_1DuplicateListPrintsDiscoveryAndHold(t *testing.T) {
 		t.Fatal(err)
 	}
 	line := formatDuplicateRefundEvidence(evidence)
-	for _, want := range []string{"consecutive_failures=0", "resolution=liabilities_unknown", "discovered_at=0", "liabilities_unknown=true", "post_cancel_inspected=false", `cancel_hold=""`, "hold_evidence=[]"} {
+	for _, want := range []string{"consecutive_failures=0", "resolution=liabilities_unknown", "discovered_at=0", "liabilities_unknown=true", "post_cancel_inspected=false", "cancel_contradictions=0 cancel_reconfirmed=0", `cancel_hold=""`, "hold_evidence=[]"} {
 		if !strings.Contains(line, want) {
 			t.Fatalf("missing %q in %s", want, line)
 		}

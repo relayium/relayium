@@ -898,18 +898,29 @@ func (c *stripeClient) DuplicateCanonicalSubscription(ctx context.Context, subID
 	return SubscriptionInfo{ID: sub.ID, CustomerID: sub.Customer, Status: sub.Status}, false, nil
 }
 
+var errDuplicateSubscriptionNotFound = errors.New("stripe: duplicate subscription not found; not treated as canceled")
+
 // ReconcileDuplicateSubscription stops one duplicate subscription. The DELETE is
 // issued only after authorize -- called after the duplicate is read and
 // immediately before the DELETE -- returns no hold and no error. A nil
 // authorize fails closed. A duplicate that is already canceled needs no
 // authority: nothing is mutated, and liability discovery continues.
 func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob, authorize func(context.Context) (string, error)) (DuplicateRefundResult, error) {
-	result := DuplicateRefundResult{SubscriptionCanceled: job.SubscriptionCanceled, RefundComplete: job.RefundComplete, ManualReason: job.ManualReason}
+	// SubscriptionCanceled and RefundComplete describe THIS call's provider
+	// observation only, never the stored (historical) flags: a stored
+	// cancellation the provider now contradicts must not drive completion.
+	result := DuplicateRefundResult{ManualReason: job.ManualReason}
+	// Cancellation is accepted only from a subscription body with this id and
+	// customer whose status is canceled or incomplete_expired. A 404 is NOT
+	// cancellation evidence: Stripe keeps canceled subscriptions retrievable,
+	// so a missing object means a wrong account/key or another anomaly. It is a
+	// retryable unknown (no DELETE, no completion); a persistently missing
+	// duplicate surfaces through the repeated_failures alert for an operator.
 	readSubscription := func() (string, bool, error) {
 		body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(job.DuplicateSubscriptionID), nil)
 		if err != nil {
 			if stripeDeletionObjectGone(err) {
-				return "", true, nil
+				return "", false, errDuplicateSubscriptionNotFound
 			}
 			return "", false, err
 		}
@@ -928,6 +939,7 @@ func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job D
 	if err != nil {
 		return result, err
 	}
+	result.ObservedLive = !canceled
 	if !canceled {
 		if authorize == nil {
 			return result, errors.New("stripe: duplicate subscription cancellation requires authorization")
