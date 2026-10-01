@@ -4473,8 +4473,12 @@ var relayAttribOwedBlocked sync.Map
 // arbitrary alloc ids, so a legacy row under that id may exist and belong to
 // someone else; the upsert adds only to a row whose user_id, node_id and
 // billable all match. On a mismatch nothing is written, the bytes stay owed
-// (user-favourable: never attributed to anyone else, never lost), draining
-// stops for this pair, and it is logged once.
+// (user-favourable: never attributed to anyone else, never lost), and it is
+// logged once. Draining then SKIPS that period and continues with the pair's
+// later ones (N-0930-9): each period drains into its own (alloc id, period)
+// row, so one blocked month must not freeze every later month's owed bytes
+// behind it; only the blocked period's bytes stay owed, and a pair with any
+// blocked row is never reported exhausted.
 func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID string, limit int64) (moved int64, exhausted bool, err error) {
 	type owedRow struct {
 		period   string
@@ -4501,6 +4505,7 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 		return 0, false, err
 	}
 	allocID := relayAttribOwedAllocID(nodeID, userID)
+	blocked := false
 	for _, o := range owed {
 		if moved >= limit {
 			return moved, false, nil
@@ -4527,7 +4532,8 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 					log.Printf("WARNING: relay attribution: usage_periods row %s/%s belongs to another owner; %d owed bytes for node %s user %s kept owed (A-M8)",
 						allocID, o.period, o.bytes, nodeID, userID)
 				}
-				return moved, false, nil
+				blocked = true
+				continue
 			}
 		}
 		if take >= o.bytes {
@@ -4540,8 +4546,9 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 		}
 		moved += max(take, 0)
 	}
-	// Every row was consumed; moved < limit means nothing is left to owe.
-	return moved, moved < limit, nil
+	// Every unblocked row was consumed; moved < limit means nothing is left to
+	// owe unless a blocked row is still owed.
+	return moved, !blocked && moved < limit, nil
 }
 
 // chargeRelayAttribTx charges a report's delta bytes to the (nodeID, userID)
