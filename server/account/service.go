@@ -841,18 +841,18 @@ func (s *Service) RequestMagicLink(ctx context.Context, email string) error {
 }
 
 func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session, error) {
-	tok, ok, err := s.store.UseMagicToken(ctx, authx.HashToken(rawToken), s.now().Unix())
+	// The link is spent and the account's epoch read in one transaction, so
+	// the epoch names the generation the proof was made in. Everything this
+	// login issues — a reactivation offer or a session — is fenced by it: a
+	// recovery, password reset/change or new deletion committing after the
+	// spend leaves nothing behind. (No account yet: epoch 0, the value the
+	// account created below starts at.)
+	tok, epoch, ok, err := s.store.UseMagicTokenWithEpoch(ctx, authx.HashToken(rawToken), s.now().Unix())
 	if err != nil {
 		return Session{}, err
 	}
 	if !ok {
 		return Session{}, fmt.Errorf("invalid or expired token")
-	}
-	// Read before the account state below: a frozen account's reactivation
-	// offer is minted only while this epoch still holds.
-	epoch, err := s.store.CredentialEpochByEmail(ctx, tok.Email)
-	if err != nil {
-		return Session{}, err
 	}
 	u, err := s.store.UpsertUserByEmail(ctx, tok.Email, "")
 	if err != nil {
@@ -875,12 +875,30 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 		return Session{}, err
 	}
 	// Pre-hijack defense: a password planted on this email while it was
-	// unverified is untrusted once ownership is proven via the magic link.
-	if err := s.dropUnverifiedPassword(ctx, u.ID); err != nil {
+	// unverified is untrusted once ownership is proven via the magic link. It
+	// is cleared and the address verified in one transaction guarded by the
+	// epoch read when the link was spent, the active state and the address,
+	// so a password reset committing after the spend is never overwritten.
+	verifiedOK, err := s.store.VerifyEmailForEmailProof(ctx, u.ID, tok.Email, epoch)
+	if err != nil {
 		return Session{}, err
 	}
-	if err := s.store.SetEmailVerified(ctx, u.ID); err != nil {
+	if !verifiedOK {
+		return Session{}, ErrCredentialsChanged
+	}
+	now := s.now()
+	sess := Session{
+		ID:        authx.RandToken(),
+		UserID:    u.ID,
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
+	}
+	issued, err := s.store.CreateSessionAtEpoch(ctx, sess, epoch)
+	if err != nil {
 		return Session{}, err
 	}
-	return s.IssueSession(ctx, u.ID)
+	if !issued {
+		return Session{}, ErrCredentialsChanged
+	}
+	return sess, nil
 }

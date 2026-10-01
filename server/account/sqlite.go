@@ -3773,7 +3773,7 @@ func (s *SQLiteStore) CreateReactivateTokenAtEpoch(ctx context.Context, t EmailT
 }
 
 // VerifyEmailForIdentityLogin is the provider-login form of
-// dropUnverifiedPassword + SetEmailVerified, in one transaction whose every
+// the pre-hijack password drop + SetEmailVerified, in one transaction whose every
 // write is guarded by the state the login was decided on: the account is
 // active, still at epoch, still holds email, and identities(provider, subject)
 // still maps to it. A password planted while the address was unverified is
@@ -3781,14 +3781,30 @@ func (s *SQLiteStore) CreateReactivateTokenAtEpoch(ctx context.Context, t EmailT
 // unverified at that epoch, so a password reset that committed in between —
 // it bumps the epoch — is never overwritten; the call then reports false.
 func (s *SQLiteStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error) {
+	return s.verifyEmailGuarded(ctx, userID, email, epoch,
+		` AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = users.id)`,
+		provider, subject)
+}
+
+// VerifyEmailForEmailProof is VerifyEmailForIdentityLogin for a login that
+// proved the address itself (a magic link): the same single transaction and
+// guards — active account, still at epoch, still holding email, password
+// cleared only while the address is still unverified — without a provider
+// subject. epoch is the one read when the proof was spent.
+func (s *SQLiteStore) VerifyEmailForEmailProof(ctx context.Context, userID, email string, epoch int64) (bool, error) {
+	return s.verifyEmailGuarded(ctx, userID, email, epoch, "")
+}
+
+// verifyEmailGuarded is the shared body of the guarded verifications; extra
+// (with extraArgs) adds a predicate on the users row.
+func (s *SQLiteStore) verifyEmailGuarded(ctx context.Context, userID, email string, epoch int64, extra string, extraArgs ...any) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
-	const guard = ` WHERE id = ? AND email = ? AND credential_epoch = ? AND deleted_at = 0
-	   AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = users.id)`
-	args := []any{userID, normEmail(email), epoch, provider, subject}
+	guard := ` WHERE id = ? AND email = ? AND credential_epoch = ? AND deleted_at = 0` + extra
+	args := append([]any{userID, normEmail(email), epoch}, extraArgs...)
 	res, err := tx.ExecContext(ctx,
 		`UPDATE users SET password_hash = NULL`+guard+` AND email_verified = 0 AND password_hash IS NOT NULL AND password_hash != ''`, args...)
 	if err != nil {
@@ -4016,6 +4032,44 @@ func (s *SQLiteStore) UseMagicToken(ctx context.Context, tokenHash string, now i
 		`SELECT token_hash, email, created_at, expires_at, used_at FROM magic_tokens WHERE token_hash = ?`, tokenHash,
 	).Scan(&t.TokenHash, &t.Email, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
 	return t, err == nil, err
+}
+
+// UseMagicTokenWithEpoch is UseMagicToken that also returns the
+// credential_epoch of the account holding the token's address (0 when no
+// account holds it yet), read in the same transaction that spends the token.
+// That epoch is the generation the link's proof belongs to: a recovery,
+// password reset/change or deletion that commits after the spend moves it,
+// so every credential the login later issues at this epoch is refused.
+func (s *SQLiteStore) UseMagicTokenWithEpoch(ctx context.Context, tokenHash string, now int64) (MagicToken, int64, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return MagicToken{}, 0, false, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx,
+		`UPDATE magic_tokens SET used_at = ? WHERE token_hash = ? AND used_at = 0 AND expires_at > ?`,
+		now, tokenHash, now)
+	if err != nil {
+		return MagicToken{}, 0, false, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return MagicToken{}, 0, false, err
+	}
+	var t MagicToken
+	if err := tx.QueryRowContext(ctx,
+		`SELECT token_hash, email, created_at, expires_at, used_at FROM magic_tokens WHERE token_hash = ?`, tokenHash,
+	).Scan(&t.TokenHash, &t.Email, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt); err != nil {
+		return MagicToken{}, 0, false, err
+	}
+	var epoch int64
+	err = tx.QueryRowContext(ctx, `SELECT credential_epoch FROM users WHERE email = ?`, normEmail(t.Email)).Scan(&epoch)
+	if err != nil && err != sql.ErrNoRows {
+		return MagicToken{}, 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return MagicToken{}, 0, false, err
+	}
+	return t, epoch, true, nil
 }
 
 // DeleteSpentMagicTokens reclaims one-time login tokens that are no longer

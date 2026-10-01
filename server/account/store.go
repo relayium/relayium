@@ -2107,6 +2107,10 @@ type Store interface {
 	// magic tokens
 	CreateMagicToken(ctx context.Context, t MagicToken) error
 	UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error)
+	// UseMagicTokenWithEpoch spends the token like UseMagicToken and, in the
+	// same transaction, reads the credential_epoch of the account holding its
+	// address (0 when none does yet).
+	UseMagicTokenWithEpoch(ctx context.Context, tokenHash string, now int64) (MagicToken, int64, bool, error)
 	DeleteSpentMagicTokens(ctx context.Context, now int64) error
 	// email tokens (verify + reset)
 	CreateEmailToken(ctx context.Context, t EmailToken) error
@@ -2806,6 +2810,9 @@ type Store interface {
 	// and marks the email verified, in one transaction guarded by epoch, active
 	// state, unchanged email and the subject mapping (false = state moved).
 	VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error)
+	// VerifyEmailForEmailProof is VerifyEmailForIdentityLogin for a login that
+	// proved the address itself (magic link): no subject predicate.
+	VerifyEmailForEmailProof(ctx context.Context, userID, email string, epoch int64) (bool, error)
 	// CreateReactivateTokenAtEpoch inserts a "reactivate" token in one
 	// statement only while the account is still at epoch and holds t.Email
 	// (and, when requested, is pending deletion / has that password hash).

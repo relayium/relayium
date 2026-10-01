@@ -305,3 +305,237 @@ func TestReactivateN0930PasswordLoginAfterRecoveryMintsNothing(t *testing.T) {
 		t.Fatalf("no reactivate token may be minted for an active account, found %d", n)
 	}
 }
+
+// n5MagicHooks fires once immediately after the magic link is spent — before
+// any later epoch read — whichever consumption call the login uses.
+type n5MagicHooks struct {
+	*SQLiteStore
+	afterConsume func()
+}
+
+func (s *n5MagicHooks) fire() {
+	if s.afterConsume != nil {
+		hook := s.afterConsume
+		s.afterConsume = nil
+		hook()
+	}
+}
+
+func (s *n5MagicHooks) UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error) {
+	t, ok, err := s.SQLiteStore.UseMagicToken(ctx, tokenHash, now)
+	s.fire()
+	return t, ok, err
+}
+
+func (s *n5MagicHooks) UseMagicTokenWithEpoch(ctx context.Context, tokenHash string, now int64) (MagicToken, int64, bool, error) {
+	t, e, ok, err := s.SQLiteStore.UseMagicTokenWithEpoch(ctx, tokenHash, now)
+	s.fire()
+	return t, e, ok, err
+}
+
+func n5MagicLink(t *testing.T, store *SQLiteStore, email string) string {
+	t.Helper()
+	raw := "n5-magic2-" + email
+	if err := store.CreateMagicToken(context.Background(), MagicToken{TokenHash: authx.HashToken(raw), Email: email,
+		CreatedAt: n5Now, ExpiresAt: n5Now + 600}); err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+// Codex r2: a magic link spent in G1, paused right after the spend (before any
+// later epoch read) while the owner recovers, resets the password and deletes
+// again into G2, mints nothing for G2.
+func TestReactivateN0930MagicLinkPausedAfterConsumptionMintsNothing(t *testing.T) {
+	ctx := context.Background()
+	svc, store := n5Service(t)
+	u := n5Account(t, store, "magicspent@example.com")
+	if err := store.SetPassword(ctx, u.ID, "old-hash"); err != nil {
+		t.Fatal(err)
+	}
+	g1 := n5Delete(t, store, u.ID, "g1", n5Now-1000)
+	raw := n5MagicLink(t, store, u.Email)
+	var g2 string
+	hs := &n5MagicHooks{SQLiteStore: store}
+	hs.afterConsume = func() { g2 = n5OwnerRecoversAndRedeletes(t, store, u.ID, true) }
+	svc.store = hs
+	_, err := svc.VerifyMagicLink(ctx, raw)
+	if hs.afterConsume != nil {
+		t.Fatal("the magic login never reached the interleaving point")
+	}
+	var pd *PendingDeletionError
+	if errors.As(err, &pd) || err == nil {
+		t.Fatalf("a magic link spent in G1 must mint nothing for G2, got %v", err)
+	}
+	if n := n5IssuedTokens(t, store, u.ID, g1, g2); n != 0 {
+		t.Fatalf("no reactivate token may be minted, found %d", n)
+	}
+}
+
+// The same pause on an active account: a password reset committing after the
+// spend leaves the magic login without a session (session fence at the
+// consumption epoch).
+func TestReactivateN0930MagicLinkSessionFencedAtConsumptionEpoch(t *testing.T) {
+	ctx := context.Background()
+	svc, store := n5Service(t)
+	u := n5Account(t, store, "magicsess@example.com")
+	if err := store.SetPassword(ctx, u.ID, "old-hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetEmailVerified(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	raw := n5MagicLink(t, store, u.Email)
+	hs := &n5MagicHooks{SQLiteStore: store}
+	hs.afterConsume = func() {
+		resetHash := authx.HashToken("n5-mreset-" + u.ID)
+		if err := store.CreateEmailToken(ctx, EmailToken{TokenHash: resetHash, UserID: u.ID, Email: u.Email,
+			Purpose: "reset", CreatedAt: n5Now, ExpiresAt: n5Now + 3600}); err != nil {
+			t.Fatal(err)
+		}
+		if outcome, _, _, err := store.ResetPasswordWithToken(ctx, resetHash, n5Now, "owner-new-hash"); err != nil || outcome != ResetApplied {
+			t.Fatalf("owner reset: outcome=%v err=%v", outcome, err)
+		}
+	}
+	svc.store = hs
+	if _, err := svc.VerifyMagicLink(ctx, raw); err == nil {
+		t.Fatal("a magic link spent before a password reset must not sign in after it")
+	}
+	if hs.afterConsume != nil {
+		t.Fatal("the magic login never reached the interleaving point")
+	}
+	if n := liveSessions(t, store, u.ID); n != 0 {
+		t.Fatalf("no session may survive the reset, found %d", n)
+	}
+}
+
+// A magic link for an address with no account still creates the account and
+// signs in (epoch 0, the new account's starting value).
+func TestReactivateN0930MagicLinkNewAccountStillSignsIn(t *testing.T) {
+	svc, store := n5Service(t)
+	raw := n5MagicLink(t, store, "fresh@example.com")
+	sess, err := svc.VerifyMagicLink(context.Background(), raw)
+	if err != nil || sess.UserID == "" {
+		t.Fatalf("a first magic login must create the account and sign in: %v", err)
+	}
+	if n := liveSessions(t, store, sess.UserID); n != 1 {
+		t.Fatalf("want one session, got %d", n)
+	}
+}
+
+// n5MagicVerifyHooks fires once at the magic login's password-drop decision:
+// after the verification-state read of the legacy two-step path, or right
+// before the guarded VerifyEmailForEmailProof transaction.
+type n5MagicVerifyHooks struct {
+	*SQLiteStore
+	beforePasswordWrite func()
+}
+
+func (s *n5MagicVerifyHooks) fire() {
+	if s.beforePasswordWrite != nil {
+		hook := s.beforePasswordWrite
+		s.beforePasswordWrite = nil
+		hook()
+	}
+}
+
+func (s *n5MagicVerifyHooks) EmailVerified(ctx context.Context, userID string) (bool, error) {
+	v, err := s.SQLiteStore.EmailVerified(ctx, userID)
+	s.fire()
+	return v, err
+}
+
+func (s *n5MagicVerifyHooks) VerifyEmailForEmailProof(ctx context.Context, userID, email string, epoch int64) (bool, error) {
+	s.fire()
+	return s.SQLiteStore.VerifyEmailForEmailProof(ctx, userID, email, epoch)
+}
+
+// A password reset committing between the magic link's spend and its
+// password drop survives: the stale login neither clears nor overwrites the
+// reset password, and gets no session.
+func TestReactivateN0930MagicLinkResetBeforeClearSurvives(t *testing.T) {
+	ctx := context.Background()
+	svc, store := n5Service(t)
+	u := n5Account(t, store, "magicplant@example.com")
+	if err := store.SetPassword(ctx, u.ID, "planted-hash"); err != nil {
+		t.Fatal(err)
+	}
+	raw := n5MagicLink(t, store, u.Email)
+	resetHash := authx.HashToken("n5-mplant-" + u.ID)
+	if err := store.CreateEmailToken(ctx, EmailToken{TokenHash: resetHash, UserID: u.ID, Email: u.Email,
+		Purpose: "reset", CreatedAt: n5Now, ExpiresAt: n5Now + 3600}); err != nil {
+		t.Fatal(err)
+	}
+	hs := &n5MagicVerifyHooks{SQLiteStore: store}
+	hs.beforePasswordWrite = func() {
+		if outcome, _, _, err := store.ResetPasswordWithToken(ctx, resetHash, n5Now, "owner-reset-hash"); err != nil || outcome != ResetApplied {
+			t.Fatalf("owner reset: outcome=%v err=%v", outcome, err)
+		}
+	}
+	svc.store = hs
+	_, err := svc.VerifyMagicLink(ctx, raw)
+	if hs.beforePasswordWrite != nil {
+		t.Fatal("the magic login never reached the password-drop decision")
+	}
+	if got := passwordHash(t, store, u.ID); got != "owner-reset-hash" {
+		t.Fatalf("a completed password reset must never be overwritten, password is now %q", got)
+	}
+	if err == nil || liveSessions(t, store, u.ID) != 0 {
+		t.Fatalf("the stale magic login must get no session: err=%v", err)
+	}
+}
+
+// Without interference the magic login still applies the pre-hijack defense:
+// the planted password is dropped and the address verified, and it signs in.
+func TestReactivateN0930MagicLinkDropsPlantedPassword(t *testing.T) {
+	ctx := context.Background()
+	svc, store := n5Service(t)
+	u := n5Account(t, store, "magicdrop@example.com")
+	if err := store.SetPassword(ctx, u.ID, "planted-hash"); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := svc.VerifyMagicLink(ctx, n5MagicLink(t, store, u.Email))
+	if err != nil || sess.UserID != u.ID {
+		t.Fatalf("magic login must sign in: %v", err)
+	}
+	if passwordHash(t, store, u.ID) != "" || !mustVerified(t, store, u.ID) {
+		t.Fatal("the planted password must be dropped and the address verified")
+	}
+}
+
+// A password change that leaves the address unverified (epoch bump only)
+// between the spend and the drop is not overwritten either: the guarded
+// transaction requires the epoch captured at the spend.
+func TestReactivateN0930MagicLinkPasswordChangeBeforeClearSurvives(t *testing.T) {
+	ctx := context.Background()
+	svc, store := n5Service(t)
+	u := n5Account(t, store, "magicchg@example.com")
+	if err := store.SetPassword(ctx, u.ID, "planted-hash"); err != nil {
+		t.Fatal(err)
+	}
+	raw := n5MagicLink(t, store, u.Email)
+	hs := &n5MagicVerifyHooks{SQLiteStore: store}
+	hs.beforePasswordWrite = func() {
+		epoch, err := store.CredentialEpoch(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.ChangePasswordAndRevokeSessions(ctx, u.ID, "changed-hash", "", "", epoch); err != nil {
+			t.Fatalf("change password: %v", err)
+		}
+	}
+	svc.store = hs
+	_, err := svc.VerifyMagicLink(ctx, raw)
+	if hs.beforePasswordWrite != nil {
+		t.Fatal("the magic login never reached the password-drop decision")
+	}
+	if got := passwordHash(t, store, u.ID); got != "changed-hash" {
+		t.Fatalf("a concurrent password change must not be overwritten, password is now %q", got)
+	}
+	if mustVerified(t, store, u.ID) {
+		t.Fatal("a stale magic login must not verify the address")
+	}
+	if err == nil || liveSessions(t, store, u.ID) != 0 {
+		t.Fatalf("the stale magic login must get no session: err=%v", err)
+	}
+}
