@@ -195,7 +195,7 @@ func (c *clearPwFailStore) ClearPassword(ctx context.Context, userID string) err
 	return errors.New("injected ClearPassword failure")
 }
 
-func (c *clearPwFailStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error) {
+func (c *clearPwFailStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	return false, errors.New("injected password-drop failure")
 }
 

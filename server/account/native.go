@@ -124,12 +124,13 @@ func (s *Service) finishNativeLogin(w http.ResponseWriter, r *http.Request, user
 // finishNativeIdentityLogin is finishNativeLogin for a login proven by a
 // linked provider identity: the bearer is inserted only while the epoch still
 // holds, the account is not pending deletion and identities(provider, subject)
-// still maps to userID (CreateCLITokenForIdentityAtEpoch), all in one
+// still maps to userID and the account was created no later than proofAt (the
+// login's proof-time fence) (CreateCLITokenForIdentityAtEpoch), all in one
 // statement.
-func (s *Service) finishNativeIdentityLogin(w http.ResponseWriter, r *http.Request, userID, deviceName string, epoch int64, provider, subject string) {
+func (s *Service) finishNativeIdentityLogin(w http.ResponseWriter, r *http.Request, userID, deviceName string, epoch int64, provider, subject string, proofAt int64) {
 	ctx := r.Context()
 	token, err := s.issueBearerVia(ctx, userID, deviceName, func(t CLIToken) (bool, error) {
-		return s.store.CreateCLITokenForIdentityAtEpoch(ctx, t, epoch, provider, subject)
+		return s.store.CreateCLITokenForIdentityAtEpoch(ctx, t, epoch, provider, subject, proofAt)
 	})
 	s.writeNativeLogin(w, r, userID, token, err)
 }

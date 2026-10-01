@@ -240,6 +240,10 @@ type Service struct {
 	// oauthStartLimiter caps browser OAuth start redirects (Google, Apple web)
 	// per IP; each one writes a server-side state row. nil = unlimited.
 	oauthStartLimiter rateLimiter
+	// wallNow is the clock users.created_at is written with (the store uses
+	// time.Now). A login's proof-time fence compares against it, so it must
+	// not follow now, which tests move freely. nil = time.Now.
+	wallNow func() time.Time
 	// downloadLimiter caps GET /api/files/{id}/blob starts per IP. Every download
 	// is proxied through central, so an unbounded request rate against a public
 	// link amplifies central egress; this blunts a single source before the
@@ -855,6 +859,10 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 	if !ok {
 		return Session{}, fmt.Errorf("invalid or expired token")
 	}
+	// Deadline half of the proof-time fence (loginProof). The created_at half
+	// holds by construction here: the account was resolved or created in the
+	// spending transaction and every write below is keyed on its id.
+	proof := s.newLoginProof(0)
 	// Frozen-login guard (Task 4): a pending-deletion account must not get a
 	// live session via magic link. Mint a fresh reactivate token right here,
 	// while we still have u — handleMagicVerify has no other way to recover
@@ -862,6 +870,9 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 	// is fenced by the epoch read above, pending state and the address the
 	// link proved (issueReactivateTokenAtEpoch).
 	if u.DeletedAt > 0 {
+		if !s.proofLive(proof) {
+			return Session{}, ErrCredentialsChanged
+		}
 		raw, terr := s.issueReactivateTokenAtEpoch(ctx, u.ID, u.Email, epoch, "")
 		if terr != nil {
 			return Session{}, terr
@@ -876,6 +887,9 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 	// is cleared and the address verified in one transaction guarded by the
 	// epoch read when the link was spent, the active state and the address,
 	// so a password reset committing after the spend is never overwritten.
+	if !s.proofLive(proof) {
+		return Session{}, ErrCredentialsChanged
+	}
 	verifiedOK, err := s.store.VerifyEmailForEmailProof(ctx, u.ID, tok.Email, epoch)
 	if err != nil {
 		return Session{}, err
@@ -889,6 +903,9 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 		UserID:    u.ID,
 		CreatedAt: now.Unix(),
 		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
+	}
+	if !s.proofLive(proof) {
+		return Session{}, ErrCredentialsChanged
 	}
 	issued, err := s.store.CreateSessionAtEpoch(ctx, sess, epoch)
 	if err != nil {

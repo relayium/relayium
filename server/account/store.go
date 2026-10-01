@@ -1710,6 +1710,9 @@ type AuditEntry struct {
 type Store interface {
 	// users + identities
 	UpsertUserByEmail(ctx context.Context, email, displayName string) (User, error)
+	// UpsertUserByEmailForLogin is UpsertUserByEmail that also reports
+	// whether this call created the account.
+	UpsertUserByEmailForLogin(ctx context.Context, email, displayName string) (User, bool, error)
 	GetUserByID(ctx context.Context, id string) (User, error)
 	LinkIdentity(ctx context.Context, provider, subject, userID string) error
 	GetUserByIdentity(ctx context.Context, provider, subject string) (User, bool, error)
@@ -2799,17 +2802,19 @@ type Store interface {
 	// CreateSessionForIdentityAtEpoch inserts sess in one statement only while
 	// the user's credential_epoch still equals epoch, the account is not pending
 	// deletion, and identities(provider, subject) still maps to sess.UserID
-	// (false = any of those changed since the caller checked them).
-	CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error)
+	// (false = any of those changed since the caller checked them). Every
+	// *ForIdentity* write also requires users.created_at <= proofAt, the
+	// login's proof-time fence (see loginProof).
+	CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string, proofAt int64) (bool, error)
 	// CreateReactivateTokenForIdentityLogin inserts a "reactivate" token in one
 	// statement only while the account is pending deletion at epoch and the
 	// subject predicate holds (linked: mapped to t.UserID; unseen: mapped to no
 	// account and the account email still t.Email). false = state moved.
-	CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool) (bool, error)
+	CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool, proofAt int64) (bool, error)
 	// VerifyEmailForIdentityLogin clears a password planted while unverified
 	// and marks the email verified, in one transaction guarded by epoch, active
 	// state, unchanged email and the subject mapping (false = state moved).
-	VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error)
+	VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, proofAt int64) (bool, error)
 	// VerifyEmailForEmailProof is VerifyEmailForIdentityLogin for a login that
 	// proved the address itself (magic link): no subject predicate.
 	VerifyEmailForEmailProof(ctx context.Context, userID, email string, epoch int64) (bool, error)
@@ -2820,7 +2825,7 @@ type Store interface {
 	// CreateCLITokenForIdentityAtEpoch inserts t in one statement only while
 	// the user's credential_epoch still equals epoch, the account is not
 	// pending deletion and identities(provider, subject) maps to t.UserID.
-	CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string) (bool, error)
+	CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string, proofAt int64) (bool, error)
 	// RedeemReactivateToken spends a reactivate token, checks it belongs to the
 	// account's current pending-deletion generation, recovers the account and
 	// inserts sess, in one transaction; it returns the account id (ok=false:

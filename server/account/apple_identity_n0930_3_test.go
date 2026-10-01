@@ -28,11 +28,11 @@ type n3Hooks struct {
 	beforeBearer func()
 }
 
-func (s *n3Hooks) CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string) (bool, error) {
+func (s *n3Hooks) CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	if s.beforeBearer != nil {
 		s.beforeBearer()
 	}
-	return s.SQLiteStore.CreateCLITokenForIdentityAtEpoch(ctx, t, epoch, provider, subject)
+	return s.SQLiteStore.CreateCLITokenForIdentityAtEpoch(ctx, t, epoch, provider, subject, proofAt)
 }
 
 func n3NewHooks(store *SQLiteStore) *n3Hooks {

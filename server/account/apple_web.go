@@ -142,7 +142,7 @@ func (s *Service) handleAppleWebCallback(w http.ResponseWriter, r *http.Request)
 	// cleared only in the guarded verification transaction. Apple marks relay
 	// and ordinary addresses verified, so the verified-email requirement
 	// refuses only an anomalous token.
-	s.finishWebIdentityLogin(w, r, "apple", claims.Sub, normEmail(claims.Email), claims.EmailVerified,
+	s.finishWebIdentityLogin(w, r, s.newLoginProof(claims.Exp), "apple", claims.Sub, normEmail(claims.Email), claims.EmailVerified,
 		appleNameFromForm(r.FormValue("user")))
 }
 

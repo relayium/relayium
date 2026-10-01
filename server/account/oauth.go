@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -162,6 +163,9 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		fail()
 		return
 	}
+	// The proof (code exchange + userinfo) is validated: fence it now, before
+	// any account is resolved (loginProof).
+	proof := s.newLoginProof(0)
 	// The subject is the account key and the email the only linking and
 	// verification evidence; a response missing either is not a usable login.
 	email = normEmail(email)
@@ -169,14 +173,17 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		fail()
 		return
 	}
-	s.finishWebIdentityLogin(w, r, "google", sub, email, verified, name)
+	s.finishWebIdentityLogin(w, r, proof, "google", sub, email, verified, name)
 }
 
 // finishWebIdentityLogin turns a verified provider identity (Google, Apple web)
 // into a browser session, a pending-deletion recovery redirect, or a login
 // error. email must be normalized ("" when the provider sent none); verified
 // is the provider's claim that the caller controls it.
-func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request, provider, sub, email string, verified bool, name string) {
+//
+// proof is the login's proof-time fence (loginProof): every credential written
+// here requires the deadline to hold and the account to predate the proof.
+func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request, proof loginProof, provider, sub, email string, verified bool, name string) {
 	fail := func() { http.Redirect(w, r, "/?login=error", http.StatusFound) }
 	// Resolve by the provider subject first. The email a provider reports is
 	// mutable (a user can rename their address, and a released address can be
@@ -187,6 +194,7 @@ func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request,
 		fail()
 		return
 	}
+	created := false
 	if !found {
 		// Unseen subject: keep verified-email linking, so a user who recreated
 		// their provider account with the same verified address still reaches
@@ -196,7 +204,7 @@ func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request,
 			fail()
 			return
 		}
-		resolved, err = s.store.UpsertUserByEmail(r.Context(), email, name)
+		resolved, created, err = s.store.UpsertUserByEmailForLogin(r.Context(), email, name)
 		if err != nil {
 			fail()
 			return
@@ -230,6 +238,16 @@ func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request,
 		fail()
 		return
 	}
+	// Proof-time fence for every credential below (loginProof): u must predate
+	// the proof unless this request's own first sign-in created it. created_at
+	// never changes for an id and everything below is keyed on u.ID, so this
+	// early check is exact; it also keeps the subject from being linked to a
+	// replacement. The writes repeat it atomically.
+	fenceAt := proof.fence(u, created)
+	if u.CreatedAt > fenceAt || !s.proofLive(proof) {
+		fail()
+		return
+	}
 	// Frozen-login guard (Task 4): a pending-deletion account must not get a
 	// live session via OAuth either — checked right after u is resolved,
 	// before any of LinkIdentity/SetEmailVerified/IssueSession run.
@@ -244,7 +262,11 @@ func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request,
 		//     subject must still be linked to no account (a concurrent login
 		//     that linked it elsewhere wins) and the account must still hold
 		//     exactly this address.
-		raw, ok, err := s.issueReactivateTokenForIdentityLogin(r.Context(), u.ID, u.Email, epoch, provider, sub, found)
+		if !s.proofLive(proof) {
+			fail()
+			return
+		}
+		raw, ok, err := s.issueReactivateTokenForIdentityLogin(r.Context(), u.ID, u.Email, epoch, provider, sub, found, fenceAt)
 		if err == nil && !ok {
 			err = errIdentityMoved
 		}
@@ -282,7 +304,11 @@ func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request,
 		// guarded by the epoch, active state, stored email and subject mapping,
 		// so a password reset that commits after the epoch read is never
 		// overwritten (see VerifyEmailForIdentityLogin).
-		ok, err := s.store.VerifyEmailForIdentityLogin(r.Context(), u.ID, email, epoch, provider, sub)
+		if !s.proofLive(proof) {
+			fail()
+			return
+		}
+		ok, err := s.store.VerifyEmailForIdentityLogin(r.Context(), u.ID, email, epoch, provider, sub, fenceAt)
 		if err != nil || !ok {
 			fail()
 			return
@@ -298,7 +324,11 @@ func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request,
 	// One statement: epoch unchanged, account not pending deletion, subject
 	// still linked to u. Any of those failing means a deletion, reset or unlink
 	// committed after the checks above, and no session may exist for it.
-	ok, err := s.store.CreateSessionForIdentityAtEpoch(r.Context(), sess, epoch, provider, sub)
+	if !s.proofLive(proof) {
+		fail()
+		return
+	}
+	ok, err := s.store.CreateSessionForIdentityAtEpoch(r.Context(), sess, epoch, provider, sub, fenceAt)
 	if err != nil || !ok {
 		fail()
 		return
@@ -314,7 +344,7 @@ var errIdentityMoved = errors.New("identity no longer linked to the resolved acc
 // issueReactivateTokenForIdentityLogin mints a "reactivate" token for a
 // provider login through CreateReactivateTokenForIdentityLogin (ok=false: the
 // account or subject state moved since it was read, and nothing was minted).
-func (s *Service) issueReactivateTokenForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, linked bool) (string, bool, error) {
+func (s *Service) issueReactivateTokenForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, linked bool, proofAt int64) (string, bool, error) {
 	raw := authx.RandToken()
 	now := s.now()
 	st := s.ResolveSettings(ctx)
@@ -325,9 +355,62 @@ func (s *Service) issueReactivateTokenForIdentityLogin(ctx context.Context, user
 		Purpose:   "reactivate",
 		CreatedAt: now.Unix(),
 		ExpiresAt: now.Unix() + st.AccountGraceDays*86400,
-	}, epoch, provider, subject, linked)
+	}, epoch, provider, subject, linked, proofAt)
 	if err != nil || !ok {
 		return "", false, err
 	}
 	return raw, true, nil
+}
+
+// loginProofTTL bounds how long a provider login may take from the moment its
+// proof was validated to its last credential write.
+const loginProofTTL = 10 * time.Minute
+
+// loginProof is the proof-time fence of a provider login (Google, Apple web,
+// Apple native). It is taken the moment the provider's proof was validated —
+// the code exchange and identity-token verification — and before the account
+// is resolved, so it binds the proof to the accounts that existed then:
+//
+//   - at (wall clock, the clock users.created_at is written with): every
+//     credential write requires the account's created_at <= the fence. An
+//     account created after the proof — say the address was deleted, purged
+//     and re-registered while this request was paused, so that the unseen-
+//     subject fallback now resolves to the replacement — is never bound to it.
+//     The one exception is the account this request's own first sign-in
+//     created after the proof (fence); the writes are keyed on its id, which a
+//     replacement could not share.
+//   - deadline (the service clock): every credential write happens no later
+//     than loginProofTTL after the proof, nor after the provider token expires.
+type loginProof struct {
+	at       int64
+	deadline int64
+}
+
+func (s *Service) wallClock() time.Time {
+	if s.wallNow != nil {
+		return s.wallNow()
+	}
+	return time.Now()
+}
+
+// newLoginProof records a proof validated now; tokenExp (0 = none) caps the
+// deadline at the provider token's own expiry.
+func (s *Service) newLoginProof(tokenExp int64) loginProof {
+	deadline := s.now().Add(loginProofTTL).Unix()
+	if tokenExp > 0 && tokenExp < deadline {
+		deadline = tokenExp
+	}
+	return loginProof{at: s.wallClock().Unix(), deadline: deadline}
+}
+
+// live reports whether a credential may still be written on this proof.
+func (s *Service) proofLive(p loginProof) bool { return s.now().Unix() <= p.deadline }
+
+// fence is the created_at bound for u: the proof time, or u's own creation
+// time when this request's first sign-in created u (created == true).
+func (p loginProof) fence(u User, created bool) int64 {
+	if created && u.CreatedAt > p.at {
+		return u.CreatedAt
+	}
+	return p.at
 }

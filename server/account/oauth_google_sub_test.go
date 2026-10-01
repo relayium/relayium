@@ -309,18 +309,18 @@ func (s *credentialHookStore) GetUserByID(ctx context.Context, id string) (User,
 	return u, err
 }
 
-func (s *credentialHookStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error) {
+func (s *credentialHookStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	if s.beforeSession != nil {
 		s.beforeSession()
 	}
-	return s.SQLiteStore.CreateSessionForIdentityAtEpoch(ctx, sess, epoch, provider, subject)
+	return s.SQLiteStore.CreateSessionForIdentityAtEpoch(ctx, sess, epoch, provider, subject, proofAt)
 }
 
-func (s *credentialHookStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool) (bool, error) {
+func (s *credentialHookStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool, proofAt int64) (bool, error) {
 	if s.beforeToken != nil {
 		s.beforeToken()
 	}
-	return s.SQLiteStore.CreateReactivateTokenForIdentityLogin(ctx, t, epoch, provider, subject, linked)
+	return s.SQLiteStore.CreateReactivateTokenForIdentityLogin(ctx, t, epoch, provider, subject, linked, proofAt)
 }
 
 // beforePasswordWrite fires once, at the first of: right after the
@@ -340,9 +340,9 @@ func (s *credentialHookStore) EmailVerified(ctx context.Context, userID string) 
 	return v, err
 }
 
-func (s *credentialHookStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error) {
+func (s *credentialHookStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	s.firePasswordHook()
-	return s.SQLiteStore.VerifyEmailForIdentityLogin(ctx, userID, email, epoch, provider, subject)
+	return s.SQLiteStore.VerifyEmailForIdentityLogin(ctx, userID, email, epoch, provider, subject, proofAt)
 }
 
 // commitDeletion runs the real account-deletion transaction (session purge,

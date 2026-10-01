@@ -2556,6 +2556,15 @@ func (s *SQLiteStore) Close() error {
 func normEmail(e string) string { return strings.ToLower(strings.TrimSpace(e)) }
 
 func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName string) (User, error) {
+	u, _, err := s.upsertUserByEmailOn(ctx, s.db, email, displayName)
+	return u, err
+}
+
+// UpsertUserByEmailForLogin is UpsertUserByEmail that also reports whether
+// this call created the account. A provider login uses it to tell the account
+// its own first sign-in created (bound to the proof by construction) from one
+// someone else created after the proof (see loginProof).
+func (s *SQLiteStore) UpsertUserByEmailForLogin(ctx context.Context, email, displayName string) (User, bool, error) {
 	return s.upsertUserByEmailOn(ctx, s.db, email, displayName)
 }
 
@@ -2568,7 +2577,7 @@ type userUpsertExecer interface {
 
 // upsertUserByEmailOn is UpsertUserByEmail on q, so a caller can resolve or
 // create the account inside its own transaction (UseMagicTokenForUser).
-func (s *SQLiteStore) upsertUserByEmailOn(ctx context.Context, q userUpsertExecer, email, displayName string) (User, error) {
+func (s *SQLiteStore) upsertUserByEmailOn(ctx context.Context, q userUpsertExecer, email, displayName string) (User, bool, error) {
 	email = normEmail(email)
 	var u User
 	err := q.QueryRowContext(ctx,
@@ -2578,16 +2587,16 @@ func (s *SQLiteStore) upsertUserByEmailOn(ctx context.Context, q userUpsertExece
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
 		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.ScheduledCycle, &u.BillingCycle)
 	if err == nil {
-		return u, nil
+		return u, false, nil
 	}
 	if err != sql.ErrNoRows {
-		return User{}, err
+		return User{}, false, err
 	}
 	u = User{ID: authx.NewID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
 	_, err = q.ExecContext(ctx,
 		`INSERT INTO users (id, email, display_name, created_at, canonical_email, billing_hold_hmac) VALUES (?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonicalEmail(email), s.billingEmailHMAC(email))
-	return u, err
+	return u, err == nil, err
 }
 
 // UserByCanonicalEmail finds any existing account whose canonical_email matches
@@ -3715,13 +3724,16 @@ func (s *SQLiteStore) CreateSessionAtEpoch(ctx context.Context, sess Session, ep
 // by a linked provider identity: the epoch fence, the not-pending-deletion
 // check and the subject mapping are evaluated in the same INSERT, so a deletion
 // or an unlink that commits after the caller's checks leaves no session.
-func (s *SQLiteStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error) {
+// proofAt is the login's proof-time fence (loginProof.fence): the account must
+// have been created no later than it, so an account created after the proof
+// was validated — a replacement at the same address — is never bound to it.
+func (s *SQLiteStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked)
 		 SELECT ?, u.id, ?, ?, 0 FROM users u
-		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0 AND u.created_at <= ?
 		    AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`,
-		authx.HashToken(sess.ID), sess.CreatedAt, sess.ExpiresAt, sess.UserID, epoch, provider, subject)
+		authx.HashToken(sess.ID), sess.CreatedAt, sess.ExpiresAt, sess.UserID, epoch, proofAt, provider, subject)
 	if err != nil {
 		return false, err
 	}
@@ -3737,7 +3749,8 @@ func (s *SQLiteStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess 
 // true requires identities(provider, subject) to map to t.UserID; false (an
 // unseen subject recovering by verified email) requires the subject to still be
 // linked to NO account and the account's email to still equal t.Email.
-func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool) (bool, error) {
+// proofAt is the proof-time fence, as in CreateSessionForIdentityAtEpoch.
+func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool, proofAt int64) (bool, error) {
 	subjectCond := `EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`
 	args := []any{provider, subject}
 	if !linked {
@@ -3747,8 +3760,8 @@ func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context,
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, credential_epoch, created_at, expires_at, used_at)
 		 SELECT ?, u.id, ?, 'reactivate', u.credential_epoch, ?, ?, 0 FROM users u
-		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at > 0 AND `+subjectCond,
-		append([]any{t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt, t.UserID, epoch}, args...)...)
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at > 0 AND u.created_at <= ? AND `+subjectCond,
+		append([]any{t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt, t.UserID, epoch, proofAt}, args...)...)
 	if err != nil {
 		return false, err
 	}
@@ -3793,10 +3806,11 @@ func (s *SQLiteStore) CreateReactivateTokenAtEpoch(ctx context.Context, t EmailT
 // cleared (with its "password" identity) only while the address is still
 // unverified at that epoch, so a password reset that committed in between —
 // it bumps the epoch — is never overwritten; the call then reports false.
-func (s *SQLiteStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error) {
+// proofAt is the proof-time fence, as in CreateSessionForIdentityAtEpoch.
+func (s *SQLiteStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	return s.verifyEmailGuarded(ctx, userID, email, epoch,
-		` AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = users.id)`,
-		provider, subject)
+		` AND created_at <= ? AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = users.id)`,
+		proofAt, provider, subject)
 }
 
 // VerifyEmailForEmailProof is VerifyEmailForIdentityLogin for a login that
@@ -3844,15 +3858,16 @@ func (s *SQLiteStore) verifyEmailGuarded(ctx context.Context, userID, email stri
 // CreateCLITokenForIdentityAtEpoch is CreateCLITokenAtEpoch for a native login
 // proven by a linked provider identity: the epoch fence, the not-pending-
 // deletion check and the subject mapping are evaluated in the same INSERT (as
-// CreateSessionForIdentityAtEpoch does for a browser session).
-func (s *SQLiteStore) CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string) (bool, error) {
+// CreateSessionForIdentityAtEpoch does for a browser session), plus the same
+// proof-time fence.
+func (s *SQLiteStore) CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at, idle_expires_at)
 		 SELECT ?, u.id, ?, ?, ?, ? FROM users u
-		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0 AND u.created_at <= ?
 		    AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`,
 		t.TokenHash, t.DeviceID, t.CreatedAt, t.LastSeenAt, t.CreatedAt+cliTokenIdleTTLSeconds,
-		t.UserID, epoch, provider, subject)
+		t.UserID, epoch, proofAt, provider, subject)
 	if err != nil {
 		return false, err
 	}
@@ -4077,7 +4092,7 @@ func (s *SQLiteStore) UseMagicTokenForUser(ctx context.Context, tokenHash string
 	).Scan(&t.TokenHash, &t.Email, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt); err != nil {
 		return MagicToken{}, User{}, 0, false, err
 	}
-	u, err := s.upsertUserByEmailOn(ctx, tx, t.Email, "")
+	u, _, err := s.upsertUserByEmailOn(ctx, tx, t.Email, "")
 	if err != nil {
 		return MagicToken{}, User{}, 0, false, err
 	}

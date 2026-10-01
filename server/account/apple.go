@@ -36,6 +36,9 @@ type appleClaims struct {
 	Email          string // present on first authorization (and while unchanged)
 	EmailVerified  bool
 	IsPrivateEmail bool // true = Apple private-relay address (…@privaterelay.appleid.com)
+	// Exp is the token's expiry (unix seconds, the clock verification checked
+	// it against): a login built on this token must finish before it.
+	Exp int64
 }
 
 // flexBool unmarshals a JSON value that Apple emits inconsistently as either a
@@ -124,6 +127,7 @@ func (s *Service) verifyAppleIDToken(ctx context.Context, idToken, expectedNonce
 	return appleClaims{
 		Sub: c.Sub, Aud: c.Aud, Email: normEmail(c.Email),
 		EmailVerified: bool(c.EmailVerified), IsPrivateEmail: bool(c.IsPrivateEmail),
+		Exp: c.Exp,
 	}, nil
 }
 

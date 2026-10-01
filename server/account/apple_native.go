@@ -148,6 +148,13 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 		claims.EmailVerified = exchanged.EmailVerified
 		claims.IsPrivateEmail = exchanged.IsPrivateEmail
 	}
+	// Both proofs are validated: fence them now, before any account is
+	// resolved (loginProof), and finish before either token expires.
+	tokenExp := claims.Exp
+	if exchanged.Exp < tokenExp {
+		tokenExp = exchanged.Exp
+	}
+	proof := s.newLoginProof(tokenExp)
 
 	ctx := r.Context()
 	serverError := func() { http.Error(w, "server error", http.StatusInternalServerError) }
@@ -160,6 +167,7 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 		serverError()
 		return
 	}
+	created := false
 	if !found {
 		// First sign-in for this Apple id. Apple only gives us the email now, so
 		// this is our one chance to create/link the account by it.
@@ -172,7 +180,7 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "email_not_verified"})
 			return
 		}
-		resolved, err = s.store.UpsertUserByEmail(ctx, claims.Email, in.Name)
+		resolved, created, err = s.store.UpsertUserByEmailForLogin(ctx, claims.Email, in.Name)
 		if err != nil {
 			serverError()
 			return
@@ -200,11 +208,22 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 		conflict()
 		return
 	}
+	// Proof-time fence for every credential below (loginProof); exact here for
+	// the reason given in finishWebIdentityLogin, and repeated by the writes.
+	fenceAt := proof.fence(u, created)
+	if u.CreatedAt > fenceAt || !s.proofLive(proof) {
+		conflict()
+		return
+	}
 	if u.DeletedAt > 0 {
 		// Pending deletion: no bearer, a reactivation offer instead — minted in
 		// one statement that re-checks pending state, epoch and the subject
 		// predicate (see CreateReactivateTokenForIdentityLogin).
-		raw, ok, err := s.issueReactivateTokenForIdentityLogin(ctx, u.ID, u.Email, epoch, "apple", claims.Sub, found)
+		if !s.proofLive(proof) {
+			conflict()
+			return
+		}
+		raw, ok, err := s.issueReactivateTokenForIdentityLogin(ctx, u.ID, u.Email, epoch, "apple", claims.Sub, found, fenceAt)
 		if err != nil {
 			serverError()
 			return
@@ -240,7 +259,11 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 		// Pre-hijack defense: drop a password planted on this address while it
 		// was unverified and verify it, in the guarded transaction that never
 		// overwrites a password reset committing after the epoch read.
-		ok, err := s.store.VerifyEmailForIdentityLogin(ctx, u.ID, email, epoch, "apple", claims.Sub)
+		if !s.proofLive(proof) {
+			conflict()
+			return
+		}
+		ok, err := s.store.VerifyEmailForIdentityLogin(ctx, u.ID, email, epoch, "apple", claims.Sub, fenceAt)
 		if err != nil {
 			serverError()
 			return
@@ -250,5 +273,9 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.finishNativeIdentityLogin(w, r, u.ID, "App (Apple)", epoch, "apple", claims.Sub)
+	if !s.proofLive(proof) {
+		conflict()
+		return
+	}
+	s.finishNativeIdentityLogin(w, r, u.ID, "App (Apple)", epoch, "apple", claims.Sub, fenceAt)
 }
