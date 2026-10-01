@@ -29,7 +29,7 @@ func allowDuplicateCancelForTest(context.Context) (string, error) { return "", n
 // not deleting.
 func seedDuplicateOwner(t *testing.T, store *SQLiteStore, userID, customerID, canonicalID string) {
 	t.Helper()
-	if _, err := store.db.Exec(`INSERT INTO users(id,email,created_at,stripe_customer_id,stripe_subscription_id,plan_source) VALUES(?,?,1,?,?,'stripe')`, userID, userID+"@example.com", customerID, canonicalID); err != nil {
+	if _, err := store.db.Exec(`INSERT INTO users(id,email,display_name,created_at,stripe_customer_id,stripe_subscription_id,plan_source) VALUES(?,?,'',1,?,?,'stripe')`, userID, userID+"@example.com", customerID, canonicalID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -58,8 +58,14 @@ type n0930Stripe struct {
 	deleted           bool
 
 	dupGets, deletes, canonicalGets, invoiceLists, refundPosts int
-	onDupGet                                                   func(n int)
-	onDelete                                                   func()
+	// Step 2: the customer's subscription list, a second duplicate sub_e, and
+	// DELETE counts per subscription.
+	live      []string
+	eStatus   string
+	failE     bool
+	deletesBy map[string]int
+	onDupGet  func(n int)
+	onDelete  func()
 }
 
 func (f *n0930Stripe) invoiceJSON(id string, amount int) string {
@@ -90,6 +96,10 @@ func newN0930(t *testing.T, cfg Config) (*n0930Stripe, *stripeClient, *SQLiteSto
 			}
 			fmt.Fprintf(w, `{"id":"sub_d","customer":"cus_n","status":%q,"latest_invoice":"in_d"}`, f.dupStatus)
 		case "DELETE /v1/subscriptions/sub_d":
+			if f.deletesBy == nil {
+				f.deletesBy = map[string]int{}
+			}
+			f.deletesBy["sub_d"]++
 			f.deletes++
 			f.deleted = true
 			f.dupStatus = "canceled"
@@ -97,6 +107,39 @@ func newN0930(t *testing.T, cfg Config) (*n0930Stripe, *stripeClient, *SQLiteSto
 				f.onDelete()
 			}
 			io.WriteString(w, `{"id":"sub_d","customer":"cus_n","status":"canceled"}`)
+		case "GET /v1/subscriptions":
+			var items []string
+			for _, id := range f.live {
+				status, created := f.canonicalStatus, 100
+				switch id {
+				case "sub_d":
+					status, created = f.dupStatus, 200
+				case "sub_e":
+					status, created = f.eStatus, 300
+				}
+				if status == "" {
+					continue
+				}
+				items = append(items, fmt.Sprintf(`{"id":%q,"customer":"cus_n","status":%q,"created":%d,"current_period_end":9999999999,"items":{"data":[{"price":{"id":"price_pro_m"}}]}}`, id, status, created))
+			}
+			fmt.Fprintf(w, `{"object":"list","data":[%s],"has_more":false}`, strings.Join(items, ","))
+		case "GET /v1/subscriptions/sub_e":
+			if f.failE {
+				http.Error(w, `{"error":{"message":"sub_e unavailable"}}`, http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprintf(w, `{"id":"sub_e","customer":"cus_n","status":%q}`, f.eStatus)
+		case "DELETE /v1/subscriptions/sub_e", "DELETE /v1/subscriptions/sub_c":
+			if f.deletesBy == nil {
+				f.deletesBy = map[string]int{}
+			}
+			f.deletesBy[strings.TrimPrefix(r.URL.Path, "/v1/subscriptions/")]++
+			if r.URL.Path == "/v1/subscriptions/sub_e" {
+				f.eStatus = "canceled"
+			} else {
+				f.canonicalStatus = "canceled"
+			}
+			io.WriteString(w, `{"status":"canceled"}`)
 		case "GET /v1/subscriptions/sub_c":
 			f.canonicalGets++
 			if f.canonicalStatus == "" {
@@ -105,6 +148,10 @@ func newN0930(t *testing.T, cfg Config) (*n0930Stripe, *stripeClient, *SQLiteSto
 			}
 			fmt.Fprintf(w, `{"id":"sub_c","customer":%q,"status":%q}`, f.canonicalCustomer, f.canonicalStatus)
 		case "GET /v1/invoices":
+			if sub := r.URL.Query().Get("subscription"); sub == "sub_e" || sub == "sub_c" {
+				io.WriteString(w, `{"data":[],"has_more":false}`)
+				return
+			}
 			f.invoiceLists++
 			if (f.failListCall != 0 && f.invoiceLists == f.failListCall) || f.failLists[f.invoiceLists] {
 				http.Error(w, `{"error":{"message":"invoice list unavailable"}}`, http.StatusInternalServerError)

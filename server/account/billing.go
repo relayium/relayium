@@ -925,27 +925,54 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 	// 500 → Stripe redelivers, and the conflict stays visible in its dashboard
 	// rather than being ACKed into silence.
 	bind := canonical.ID
+	// Every duplicate in this complete list becomes a durable responsibility in
+	// the SAME transaction as the Bind (FINAL §4.1): once the Bind commits,
+	// nothing -- a failed inspection, a crash, a lost response -- can leave a
+	// discovered duplicate without one. CAS loss, an ownership conflict or any
+	// SQL error commits nothing.
+	var duplicates []DuplicateResponsibilityRef
+	for _, sub := range subs {
+		if sub.ID != canonical.ID {
+			duplicates = append(duplicates, DuplicateResponsibilityRef{UserID: u.ID, CustomerID: u.StripeCustomerID, CanonicalSubscriptionID: canonical.ID, DuplicateSubscriptionID: sub.ID})
+		}
+	}
 	bound, err := s.Store().ApplyStripeSourceIfUnchanged(ctx, StripeSourceWrite{
 		UserID: u.ID, Observed: obs, ObservedExists: obsExists, Bind: &bind,
 		ExpectUser: true, UserSubscriptionID: u.StripeSubscriptionID, UserPlanSource: u.PlanSource,
-		Now: now,
+		Now: now, DuplicateResponsibilities: duplicates,
 	})
 	if err != nil {
+		var conflict *DuplicateResponsibilityOwnershipConflict
+		if errors.As(err, &conflict) {
+			// Logged outside the rolled-back transaction, with what an operator
+			// needs to act on.
+			log.Printf("%s: user=%s customer=%s canonical=%s duplicate=%s existing_user=%s existing_customer=%s (Bind rolled back; nothing canceled)", duplicateResponsibilityOwnershipLog, u.ID, u.StripeCustomerID, canonical.ID, conflict.Ref.DuplicateSubscriptionID, conflict.ExistingUserID, conflict.ExistingCustomerID)
+		}
 		log.Printf("billing: reconcile could not adopt canonical subscription %s for user %s: %v (no cancel/refund performed)", canonical.ID, u.ID, err)
 		return false, false, err
 	}
 	if !bound.Unchanged {
 		return false, true, nil // nothing destructive has happened yet
 	}
-	// Every duplicate becomes a durable cancellation/refund responsibility before
-	// the provider is mutated. A failure is returned so Stripe retries; the
-	// periodic worker also keeps going after the duplicate leaves the active list.
+	// Inline attempt for each duplicate (FINAL §4.3). A per-duplicate failure
+	// is already recorded on its own committed row and becomes worker work; it
+	// neither stops the next duplicate nor blocks the canonical entitlement.
+	// Only a cancelled context (or an ownership conflict, which no committed
+	// responsibility can resolve inline) stops the attempt.
 	for _, sub := range subs {
 		if sub.ID == canonical.ID {
 			continue
 		}
-		if err := s.reconcileDuplicateSubscription(ctx, u, canonical.ID, sub.ID); err != nil {
+		if err := ctx.Err(); err != nil {
 			return false, false, err
+		}
+		if err := s.reconcileDuplicateSubscription(ctx, u, canonical.ID, sub.ID); err != nil {
+			var conflict *DuplicateResponsibilityOwnershipConflict
+			if ctx.Err() != nil || errors.As(err, &conflict) {
+				return false, false, err
+			}
+			log.Printf("billing: duplicate subscription %s for user %s not reconciled inline (responsibility committed; worker continues): %v", sub.ID, u.ID, err)
+			continue
 		}
 		log.Printf("billing: reconciled duplicate subscription %s for user %s (kept earliest %s)", sub.ID, u.ID, canonical.ID)
 	}
