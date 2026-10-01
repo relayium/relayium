@@ -173,6 +173,17 @@ func acceptancePeerIDGenerator(raw, addr, mailTransport string, releaseCheck boo
 	}, nil
 }
 
+// formatDuplicateRefundEvidence is the -billing-duplicate-list summary line.
+// consecutive_failures is the job's attempts counter, which counts consecutive
+// failures and resets on success. liabilities_unknown=true means no complete
+// inspection is recorded yet: the liability list is unknown, not empty.
+// cancel_contradictions > cancel_reconfirmed means Stripe reported the duplicate
+// live after it was recorded canceled. cancel_hold and hold_evidence show why
+// automatic cancellation is held and its append-only history.
+func formatDuplicateRefundEvidence(evidence account.DuplicateRefundEvidence) string {
+	return fmt.Sprintf("billing duplicate evidence: job=%s duplicate_subscription=%s canonical_subscription=%s invoice=%s state=%s canceled=%t resolution=%s consecutive_failures=%d revision=%d liability_revision=%d liability_digest=%s manual_reason=%s has_error=%t payments=%d action=%s action_state=%s action_generation=%d discovered_at=%d liabilities_unknown=%t post_cancel_inspected=%t cancel_contradictions=%d cancel_reconfirmed=%d cancel_hold=%q hold_evidence=%s", evidence.JobID, evidence.DuplicateSubscriptionID, evidence.CanonicalSubscriptionID, evidence.InvoiceID, evidence.State, evidence.SubscriptionCanceled, evidence.Resolution, evidence.Attempts, evidence.Revision, evidence.LiabilityRevision, evidence.LiabilityDigest, evidence.ManualReason, evidence.HasError, len(evidence.Payments), evidence.ActionID, evidence.ActionState, evidence.ActionGeneration, evidence.DiscoveredAt, evidence.LiabilitiesUnknown, evidence.PostCancelInspected, evidence.CancelContradictions, evidence.CancelReconfirmed, evidence.CancelHold, evidence.HoldEvidence)
+}
+
 // splitURLs parses a comma-separated URL flag, trimming spaces and dropping empties.
 func splitURLs(s string) []string {
 	var out []string
@@ -400,6 +411,7 @@ func main() {
 	billingDuplicateActor := flag.String("billing-duplicate-actor", "", "operator-only: accountable actor for a duplicate refund")
 	billingDuplicateReason := flag.String("billing-duplicate-reason", "", "operator-only: audited reason for a duplicate refund")
 	billingDuplicateExpectedLiabilityRevision := flag.Int64("billing-duplicate-expected-liability-revision", -1, "operator-only: exact liability revision printed by -billing-duplicate-list")
+	billingDuplicateAutoCancel := flag.Bool("billing-duplicate-auto-cancel", envBool("RELAYIUM_BILLING_DUPLICATE_AUTO_CANCEL", true), "automatically cancel a discovered duplicate Stripe subscription (inline webhook and worker); false keeps liability inspection but never cancels")
 	billingDuplicateExpectedDigest := flag.String("billing-duplicate-expected-digest", "", "operator-only: exact liability digest printed by -billing-duplicate-list")
 	billingAppleLegacyList := flag.String("billing-apple-legacy-list", "", "operator-only: list sanitized recovery evidence for one supported Apple attempt id or account email, then exit")
 	billingAppleLegacyRelease := flag.String("billing-apple-legacy-release", "", "operator-only: release one evidence-approved Apple attempt id or account email, then exit")
@@ -781,7 +793,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("billing duplicate list: %v", err)
 		}
-		log.Printf("billing duplicate evidence: job=%s duplicate_subscription=%s canonical_subscription=%s invoice=%s state=%s canceled=%t resolution=%s attempts=%d revision=%d liability_revision=%d liability_digest=%s manual_reason=%s has_error=%t payments=%d action=%s action_state=%s action_generation=%d", evidence.JobID, evidence.DuplicateSubscriptionID, evidence.CanonicalSubscriptionID, evidence.InvoiceID, evidence.State, evidence.SubscriptionCanceled, evidence.Resolution, evidence.Attempts, evidence.Revision, evidence.LiabilityRevision, evidence.LiabilityDigest, evidence.ManualReason, evidence.HasError, len(evidence.Payments), evidence.ActionID, evidence.ActionState, evidence.ActionGeneration)
+		log.Print(formatDuplicateRefundEvidence(evidence))
 		for _, liability := range evidence.Liabilities {
 			log.Printf("billing duplicate invoice: invoice=%s status=%s amount_paid=%d manual_reason=%s payments=%d", liability.InvoiceID, liability.Status, liability.AmountPaid, liability.ManualReason, len(liability.Payments))
 			for _, payment := range liability.Payments {
@@ -934,6 +946,8 @@ func main() {
 			StripePortalConfig:   *stripePortalConfig,
 			BillingHoldSecret:    *billingHoldSecret,
 			ReleaseCheck:         *releaseCheck,
+
+			DisableBillingDuplicateAutoCancel: !*billingDuplicateAutoCancel,
 		})
 		// Device-IP retention is an account privacy obligation, not a stored-file
 		// feature, so it runs even if blob storage (and its GC) is disabled.
@@ -1228,6 +1242,7 @@ func main() {
 				for {
 					acct.ReconcileStripeSubscriptions(ctx)
 					acct.ReconcileBillingCancellations(ctx)
+					acct.DiscoverStripeDuplicates(ctx) // enqueue-only (N-0930-11); the worker below acts
 					acct.ReconcileDuplicateRefunds(ctx)
 					select {
 					case <-ctx.Done():

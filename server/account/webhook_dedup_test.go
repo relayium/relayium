@@ -48,7 +48,7 @@ func (d *dedupBiller) InspectDuplicateSubscription(_ context.Context, userID, cu
 	return DuplicateRefundPlan{UserID: userID, CustomerID: customerID, CanonicalSubscriptionID: canonicalID, DuplicateSubscriptionID: duplicateID}, nil
 }
 
-func TestWebhookDuplicateInspectionFailureIsRetryableBeforeCancellation(t *testing.T) {
+func TestWebhookDuplicateInspectionFailureLeavesPlaceholderWithoutCancellation(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_dedup_prepare"
 	biller := &dedupBiller{stripeClient: NewStripeClient("sk_test", secret, ""), inspectErr: errors.New("canonical invoice unavailable"), active: []SubscriptionInfo{
@@ -64,16 +64,20 @@ func TestWebhookDuplicateInspectionFailureIsRetryableBeforeCancellation(t *testi
 	_ = store.SetUserStripeSubscription(ctx, uid, "sub_A")
 	resp := postWebhook(t, ts, secret, webhookEnv("customer.subscription.created", "cus_prepare", "sub_B", "", "active", "price_pro_m", 1<<40))
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError || len(biller.canceled) != 0 {
+	// N-0930-1 step 2: the duplicate's responsibility is committed with the
+	// Bind, so a failed inline inspection is worker work, not a redelivery
+	// requirement: 200, nothing canceled, the placeholder is durable, still
+	// unknown, and carries the failure.
+	if resp.StatusCode != http.StatusOK || len(biller.canceled) != 0 {
 		t.Fatalf("status=%d canceled=%v", resp.StatusCode, biller.canceled)
 	}
-	var rows int
-	if err := store.db.QueryRow(`SELECT COUNT(*) FROM billing_duplicate_refunds WHERE duplicate_subscription_id='sub_B'`).Scan(&rows); err != nil || rows != 0 {
-		t.Fatalf("rows=%d err=%v", rows, err)
+	job, ok, err := store.DuplicateRefundBySubscription(ctx, "sub_B")
+	if err != nil || !ok || job.DiscoveredAt != 0 || job.Attempts == 0 || job.LastError == "" || job.CanonicalSubscriptionID != "sub_A" {
+		t.Fatalf("placeholder job=%+v ok=%t err=%v", job, ok, err)
 	}
 }
 
-func (d *dedupBiller) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob) (DuplicateRefundResult, error) {
+func (d *dedupBiller) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob, _ func(context.Context) (string, error)) (DuplicateRefundResult, error) {
 	if err := d.CancelSubscription(ctx, job.DuplicateSubscriptionID, true); err != nil {
 		return DuplicateRefundResult{}, err
 	}

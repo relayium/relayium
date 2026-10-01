@@ -2047,6 +2047,10 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		db.Close()
 		return nil, err
 	}
+	if err := migrateDuplicateRefundResponsibility(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The transfers table backed the retired share-link mode (one-time
 	// rendezvous tokens). Dropping it is idempotent and safe: tokens lived
 	// at most one hour, so nothing in an existing deployment still needs it.

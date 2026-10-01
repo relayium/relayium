@@ -1014,6 +1014,12 @@ type StripeSourceWrite struct {
 	UserPlanSource     string
 	// Now stamps the authority check when there is no Event (bind-only).
 	Now int64
+	// DuplicateResponsibilities, recorded only together with a successful
+	// Bind, in the same transaction: every duplicate the complete
+	// reconciliation list discovered gets a durable responsibility (a
+	// placeholder when new), or nothing commits (FINAL §4.1-4.2). An ownership
+	// conflict returns *DuplicateResponsibilityOwnershipConflict.
+	DuplicateResponsibilities []DuplicateResponsibilityRef
 }
 
 // StripeSourceWriteResult reports a conditional write.
@@ -1065,14 +1071,23 @@ func (s *SQLiteStore) ApplyStripeSourceIfUnchanged(ctx context.Context, in Strip
 		return StripeSourceWriteResult{}, nil // moved since the evidence was fetched
 	}
 	if in.ExpectUser {
-		var subID, planSource string
-		if err := tx.QueryRowContext(ctx, `SELECT stripe_subscription_id, plan_source FROM users WHERE id = ?`, in.UserID).
-			Scan(&subID, &planSource); err != nil {
+		var subID, planSource, customerID string
+		if err := tx.QueryRowContext(ctx, `SELECT stripe_subscription_id, plan_source, stripe_customer_id FROM users WHERE id = ?`, in.UserID).
+			Scan(&subID, &planSource, &customerID); err != nil {
 			return StripeSourceWriteResult{}, err
 		}
 		if subID != in.UserSubscriptionID || planSource != in.UserPlanSource {
 			return StripeSourceWriteResult{}, nil // the decision's users snapshot is stale
 		}
+		// Duplicate responsibilities freeze the customer they were discovered
+		// under; a customer changed since the decision's snapshot is stale too.
+		for _, ref := range in.DuplicateResponsibilities {
+			if ref.CustomerID != customerID {
+				return StripeSourceWriteResult{}, nil
+			}
+		}
+	} else if len(in.DuplicateResponsibilities) > 0 {
+		return StripeSourceWriteResult{}, errors.New("account: duplicate responsibilities require ExpectUser")
 	}
 	if in.Bind != nil {
 		if _, err := tx.ExecContext(ctx,
@@ -1106,6 +1121,19 @@ func (s *SQLiteStore) ApplyStripeSourceIfUnchanged(ctx context.Context, in Strip
 			}
 		}
 		out.Apply = res
+	}
+	if len(in.DuplicateResponsibilities) > 0 {
+		if in.Bind == nil {
+			return StripeSourceWriteResult{}, errors.New("account: duplicate responsibilities require a Bind")
+		}
+		for _, ref := range in.DuplicateResponsibilities {
+			if ref.UserID != in.UserID || ref.CanonicalSubscriptionID != *in.Bind {
+				return StripeSourceWriteResult{}, errors.New("account: duplicate responsibility does not match the Bind")
+			}
+		}
+		if err := recordDuplicateResponsibilitiesTx(ctx, tx, in.DuplicateResponsibilities, now); err != nil {
+			return StripeSourceWriteResult{}, err
+		}
 	}
 	if out.After, out.AfterExists, err = stripeSourceRowTx(ctx, tx, in.UserID); err != nil {
 		return StripeSourceWriteResult{}, err
