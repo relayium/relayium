@@ -476,19 +476,21 @@ func TestResetSessionIsNotIssuedPastALaterReset(t *testing.T) {
 }
 
 // recoverAndResetFirst runs the owner's own recovery and a password reset right
-// before the attacker's in-flight reactivation clears the pending deletion.
+// before the attacker's in-flight reactivation reaches the store. Redemption is
+// one transaction (RedeemReactivateToken, N-0930-5), so the last point at which
+// anything can overtake it is just before that call.
 type recoverAndResetFirst struct {
 	*SQLiteStore
 	fired bool
 	owner func()
 }
 
-func (w *recoverAndResetFirst) ClearAccountDeletion(ctx context.Context, userID string) error {
+func (w *recoverAndResetFirst) RedeemReactivateToken(ctx context.Context, tokenHash string, now int64, sess Session) (string, bool, error) {
 	if !w.fired {
 		w.fired = true
 		w.owner()
 	}
-	return w.SQLiteStore.ClearAccountDeletion(ctx, userID)
+	return w.SQLiteStore.RedeemReactivateToken(ctx, tokenHash, now, sess)
 }
 
 // reactivateToken mints the token a password login of a pending account hands

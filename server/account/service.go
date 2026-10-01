@@ -130,6 +130,11 @@ type Config struct {
 	StripeWebhookSecret string
 	StripePortalConfig  string
 	BillingHoldSecret   string
+	// DisableBillingDuplicateAutoCancel turns off the automatic DELETE of a
+	// duplicate Stripe subscription on BOTH the inline webhook path and the
+	// worker, while liability inspection continues (flag
+	// -billing-duplicate-auto-cancel=false). Zero value keeps auto-cancel on.
+	DisableBillingDuplicateAutoCancel bool
 	// ReleaseCheck enables the hourly poll for a newer upstream release and the
 	// admin notice built on it. On by default; RELAYIUM_RELEASE_CHECK=false
 	// turns it off, and when off no request is made at all.
@@ -237,6 +242,13 @@ type Service struct {
 	// records a throttle fail on FINISH, so without this a begin-flood fills the
 	// shared ceremony cap and starves legit passkey login/step-up. nil = unlimited.
 	passkeyBeginLimiter rateLimiter
+	// oauthStartLimiter caps browser OAuth start redirects (Google, Apple web)
+	// per IP; each one writes a server-side state row. nil = unlimited.
+	oauthStartLimiter rateLimiter
+	// wallNow is the clock users.created_at is written with (the store uses
+	// time.Now). A login's proof-time fence compares against it, so it must
+	// not follow now, which tests move freely. nil = time.Now.
+	wallNow func() time.Time
 	// downloadLimiter caps GET /api/files/{id}/blob starts per IP. Every download
 	// is proxied through central, so an unbounded request rate against a public
 	// link amplifies central egress; this blunts a single source before the
@@ -838,23 +850,35 @@ func (s *Service) RequestMagicLink(ctx context.Context, email string) error {
 }
 
 func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session, error) {
-	tok, ok, err := s.store.UseMagicToken(ctx, authx.HashToken(rawToken), s.now().Unix())
+	// One transaction spends the link and resolves — or, on a first sign-in,
+	// creates — the account it proves, returning that account's id and epoch.
+	// The login continues strictly by that id, and everything it issues — a
+	// reactivation offer, the verification, the session — is fenced on (id,
+	// epoch): a recovery, password reset/change or new deletion committing
+	// after the spend, or the address being deleted, purged and re-created as
+	// another account, leaves nothing behind.
+	tok, u, epoch, ok, err := s.store.UseMagicTokenForUser(ctx, authx.HashToken(rawToken), s.now().Unix())
 	if err != nil {
 		return Session{}, err
 	}
 	if !ok {
 		return Session{}, fmt.Errorf("invalid or expired token")
 	}
-	u, err := s.store.UpsertUserByEmail(ctx, tok.Email, "")
-	if err != nil {
-		return Session{}, err
-	}
+	// Deadline half of the proof-time fence (loginProof). The created_at half
+	// holds by construction here: the account was resolved or created in the
+	// spending transaction and every write below is keyed on its id.
+	proof := s.newLoginProof(0)
 	// Frozen-login guard (Task 4): a pending-deletion account must not get a
 	// live session via magic link. Mint a fresh reactivate token right here,
 	// while we still have u — handleMagicVerify has no other way to recover
-	// the account's email from just the (now-consumed) magic token.
+	// the account's email from just the (now-consumed) magic token. The token
+	// is fenced by the epoch read above, pending state and the address the
+	// link proved (issueReactivateTokenAtEpoch).
 	if u.DeletedAt > 0 {
-		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
+		if !s.proofLive(proof) {
+			return Session{}, ErrCredentialsChanged
+		}
+		raw, terr := s.issueReactivateTokenAtEpoch(ctx, u.ID, u.Email, epoch, "")
 		if terr != nil {
 			return Session{}, terr
 		}
@@ -864,12 +888,36 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 		return Session{}, err
 	}
 	// Pre-hijack defense: a password planted on this email while it was
-	// unverified is untrusted once ownership is proven via the magic link.
-	if err := s.dropUnverifiedPassword(ctx, u.ID); err != nil {
+	// unverified is untrusted once ownership is proven via the magic link. It
+	// is cleared and the address verified in one transaction guarded by the
+	// epoch read when the link was spent, the active state and the address,
+	// so a password reset committing after the spend is never overwritten.
+	if !s.proofLive(proof) {
+		return Session{}, ErrCredentialsChanged
+	}
+	verifiedOK, err := s.store.VerifyEmailForEmailProof(ctx, u.ID, tok.Email, epoch)
+	if err != nil {
 		return Session{}, err
 	}
-	if err := s.store.SetEmailVerified(ctx, u.ID); err != nil {
+	if !verifiedOK {
+		return Session{}, ErrCredentialsChanged
+	}
+	now := s.now()
+	sess := Session{
+		ID:        authx.RandToken(),
+		UserID:    u.ID,
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
+	}
+	if !s.proofLive(proof) {
+		return Session{}, ErrCredentialsChanged
+	}
+	issued, err := s.store.CreateSessionAtEpoch(ctx, sess, epoch)
+	if err != nil {
 		return Session{}, err
 	}
-	return s.IssueSession(ctx, u.ID)
+	if !issued {
+		return Session{}, ErrCredentialsChanged
+	}
+	return sess, nil
 }

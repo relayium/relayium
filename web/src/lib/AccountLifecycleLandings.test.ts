@@ -127,15 +127,19 @@ describe("routes exist for the links the server mails", () => {
   });
 
   it("the frozen-account OAuth redirect fragment opens the reactivation page", () => {
-    // oauth.go / apple_web.go redirect a frozen account to "/#account=pending_deletion&token=…".
-    // Matched as the redirect statement itself, with the token query-escaped
-    // onto the end — the only shape routeFromLocation is then asked about.
+    // Google (oauth.go) and Apple web (apple_web.go) both resolve the browser
+    // login through finishWebIdentityLogin in oauth.go, which redirects a
+    // frozen account to "/#account=pending_deletion&token=…". Matched as the
+    // redirect statement itself, with the token query-escaped onto the end —
+    // the only shape routeFromLocation is then asked about — and Apple web is
+    // pinned to that shared helper so it cannot drift to a different landing.
+    const m = /http\.Redirect\(w, r, "(\/#account=pending_deletion&token=)"\+url\.QueryEscape\(raw\), http\.StatusFound\)/
+      .exec(goFunc(goSource("oauth.go"), /^func \(s \*Service\) finishWebIdentityLogin\(/m));
+    expect(m, "oauth.go finishWebIdentityLogin: frozen-account redirect not found").not.toBeNull();
+    const target = new URL(`https://relayium.test${m![1]}${encodeURIComponent("frag/tok+=")}`);
+    expect(routeFromLocation(target.pathname, target.hash)).toBe("account-reactivate");
     for (const f of ["oauth.go", "apple_web.go"]) {
-      const m = /http\.Redirect\(w, r, "(\/#account=pending_deletion&token=)"\+url\.QueryEscape\(raw\), http\.StatusFound\)/
-        .exec(goSource(f));
-      expect(m, `${f}: frozen-account redirect not found`).not.toBeNull();
-      const target = new URL(`https://relayium.test${m![1]}${encodeURIComponent("frag/tok+=")}`);
-      expect(routeFromLocation(target.pathname, target.hash), f).toBe("account-reactivate");
+      expect(goSource(f), `${f}: browser login must go through finishWebIdentityLogin`).toMatch(/\bs\.finishWebIdentityLogin\(w, r, [^\n]*?"(google|apple)"/);
     }
     expect(isReactivateFragment("#account=pending_deletion")).toBe(false); // no token, nothing to offer
     expect(routeFromLocation("/", "#compare")).toBe("lan");

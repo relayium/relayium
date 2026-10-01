@@ -136,6 +136,10 @@ type WebhookEvent struct {
 	// whose mode doesn't match the configured key (see wantLive), so a test-mode
 	// event can never assign a real plan on a live deployment and vice versa.
 	LiveMode bool
+	// Refreshed is set (never parsed) when the subscription fields were replaced
+	// by Stripe's CURRENT object, read after the account's row was observed
+	// (canonical refresh). Such evidence is not "as old as Created".
+	Refreshed bool `json:"-"`
 }
 
 // ErrWebhookWrongMode is returned by VerifyWebhook for a correctly-signed event
@@ -872,13 +876,71 @@ func (c *stripeClient) InspectDuplicateSubscription(ctx context.Context, userID,
 	return plan, nil
 }
 
-func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob) (DuplicateRefundResult, error) {
-	result := DuplicateRefundResult{SubscriptionCanceled: job.SubscriptionCanceled, RefundComplete: job.RefundComplete, ManualReason: job.ManualReason}
+// DuplicateCanonicalSubscription reads the canonical subscription a duplicate
+// cancellation depends on. Unlike canonicalSubscription it is not gated on the
+// webhook-refresh setting: the cancellation authority check must always see
+// Stripe's current object. A 404 is reported as missing, never as live.
+func (c *stripeClient) DuplicateCanonicalSubscription(ctx context.Context, subID string) (SubscriptionInfo, bool, error) {
+	if subID == "" {
+		return SubscriptionInfo{}, false, errors.New("stripe: canonical subscription id is required")
+	}
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(subID), nil)
+	if err != nil {
+		if stripeDeletionObjectGone(err) {
+			return SubscriptionInfo{}, true, nil
+		}
+		return SubscriptionInfo{}, false, err
+	}
+	var sub struct {
+		ID       string `json:"id"`
+		Customer string `json:"customer"`
+		Status   string `json:"status"`
+	}
+	if json.Unmarshal(body, &sub) != nil || sub.ID != subID || sub.Status == "" {
+		return SubscriptionInfo{}, false, errors.New("stripe: canonical subscription identity is invalid")
+	}
+	return SubscriptionInfo{ID: sub.ID, CustomerID: sub.Customer, Status: sub.Status}, false, nil
+}
+
+// errDuplicateSubscriptionNotFound: Stripe answered 404 for a duplicate this
+// customer's own subscription list once returned. It is never treated as
+// cancellation, and nothing automatic resolves it; there is deliberately no
+// force-complete command. Operator escalation before rollout, when the
+// repeated_failures alert names a job whose last_error carries this message:
+//  1. Confirm the deployment uses the live Stripe account/key the duplicate was
+//     created in (a wrong key or test/live mix-up is the expected cause); fix
+//     configuration and let the worker retry -- it converges on its own.
+//  2. If the key is right, look the subscription and customer up in the Stripe
+//     dashboard. No DELETE can happen without a readable object, so
+//     auto-cancel need not be disabled. If Stripe support confirms the object
+//     is gone, record that in the incident log and review money owed with
+//     -billing-duplicate-list; an operator refund still requires a recorded
+//     post-cancel inspection, so it stays blocked.
+//  3. A job that must be closed without that evidence needs an owner-approved,
+//     audited one-off data correction; it is out of scope for automation.
+var errDuplicateSubscriptionNotFound = errors.New("stripe: duplicate subscription not found; not treated as canceled")
+
+// ReconcileDuplicateSubscription stops one duplicate subscription. The DELETE is
+// issued only after authorize -- called after the duplicate is read and
+// immediately before the DELETE -- returns no hold and no error. A nil
+// authorize fails closed. A duplicate that is already canceled needs no
+// authority: nothing is mutated, and liability discovery continues.
+func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job DuplicateRefundJob, authorize func(context.Context) (string, error)) (DuplicateRefundResult, error) {
+	// SubscriptionCanceled and RefundComplete describe THIS call's provider
+	// observation only, never the stored (historical) flags: a stored
+	// cancellation the provider now contradicts must not drive completion.
+	result := DuplicateRefundResult{ManualReason: job.ManualReason}
+	// Cancellation is accepted only from a subscription body with this id and
+	// customer whose status is canceled or incomplete_expired. A 404 is NOT
+	// cancellation evidence: Stripe keeps canceled subscriptions retrievable,
+	// so a missing object means a wrong account/key or another anomaly. It is a
+	// retryable unknown (no DELETE, no completion); a persistently missing
+	// duplicate surfaces through the repeated_failures alert for an operator.
 	readSubscription := func() (string, bool, error) {
 		body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(job.DuplicateSubscriptionID), nil)
 		if err != nil {
 			if stripeDeletionObjectGone(err) {
-				return "", true, nil
+				return "", false, errDuplicateSubscriptionNotFound
 			}
 			return "", false, err
 		}
@@ -897,7 +959,25 @@ func (c *stripeClient) ReconcileDuplicateSubscription(ctx context.Context, job D
 	if err != nil {
 		return result, err
 	}
+	result.ObservedLive = !canceled
 	if !canceled {
+		if authorize == nil {
+			return result, errors.New("stripe: duplicate subscription cancellation requires authorization")
+		}
+		hold, err := authorize(ctx)
+		if errors.Is(err, errDuplicateAutoCancelDisabled) {
+			result.RefundComplete = false
+			result.CancelSkipped = true
+			return result, nil
+		}
+		if err != nil {
+			return result, err
+		}
+		if hold != "" {
+			result.RefundComplete = false
+			result.HoldReason = hold
+			return result, nil
+		}
 		if _, err := c.request(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(job.DuplicateSubscriptionID), nil); err != nil && !stripeDeletionObjectGone(err) {
 			return result, err
 		}

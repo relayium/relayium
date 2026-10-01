@@ -61,6 +61,9 @@ func newAppleNativeFixture(t *testing.T) *appleNativeFixture {
 		ApplePrivateKey: priv,
 	})
 	svc.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	// The provider proof is validated after the fixture's accounts exist: the
+	// proof-time fence refuses accounts created in the proof's own second.
+	svc.wallNow = func() time.Time { return time.Now().Add(2 * time.Second) }
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)

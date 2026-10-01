@@ -47,6 +47,7 @@ type duplicateStripeState struct {
 	historyEmptyMore                                  bool
 	historyNonadvancing                               bool
 	refundActionMetadata                              bool
+	onInvoiceGet                                      func()
 }
 
 func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (*stripeClient, func()) {
@@ -74,6 +75,10 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 				status = "active"
 			}
 			fmt.Fprintf(w, `{"id":"sub_dup","customer":"cus_dup","status":%q,"latest_invoice":"in_dup"}`, status)
+		case "GET /v1/subscriptions/sub_canonical":
+			// The canonical subscription the N-0930-1 cancellation authority reads
+			// immediately before DELETE.
+			io.WriteString(w, `{"id":"sub_canonical","customer":"cus_dup","status":"active"}`)
 		case "DELETE /v1/subscriptions/sub_dup":
 			if state.liabilitiesAtDelete != nil && state.liabilitiesAtDelete() < 2 {
 				http.Error(w, "liabilities were not durable before cancellation", http.StatusConflict)
@@ -83,6 +88,9 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 			state.active = false
 			io.WriteString(w, `{"id":"sub_dup","customer":"cus_dup","status":"canceled","latest_invoice":"in_dup"}`)
 		case "GET /v1/invoices/in_dup":
+			if state.onInvoiceGet != nil {
+				state.onInvoiceGet()
+			}
 			io.WriteString(w, `{"id":"in_dup","status":"paid","customer":"cus_dup","parent":{"subscription_details":{"subscription":"sub_dup"}},"amount_paid":500,"created":90}`)
 		case "GET /v1/invoices/in_late_b":
 			io.WriteString(w, `{"id":"in_late_b","status":"paid","customer":"cus_dup","parent":{"subscription_details":{"subscription":"sub_dup"}},"amount_paid":300,"created":190}`)
@@ -268,14 +276,14 @@ func newDuplicateStripe(t *testing.T, state *duplicateStripeState, multi bool) (
 func prepareCanceledManualDuplicate(t *testing.T, store *SQLiteStore, client *stripeClient, state *duplicateStripeState) DuplicateRefundJob {
 	t.Helper()
 	job := prepareDuplicateJob(t, store, client)
-	result, err := client.ReconcileDuplicateSubscription(context.Background(), job)
+	result, err := client.ReconcileDuplicateSubscription(context.Background(), job, allowDuplicateCancelForTest)
 	if err != nil || !result.SubscriptionCanceled || result.RefundComplete {
 		t.Fatalf("manual reconcile=%+v err=%v", result, err)
 	}
 	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 101); err != nil {
 		t.Fatal(err)
 	}
-	job, _, _ = store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
+	job = postCancelInspectForTest(t, store, client, "user_dup", "cus_dup", "sub_canonical", "sub_dup")
 	if !job.SubscriptionCanceled || job.State != "manual" || state.deletes != 1 {
 		t.Fatalf("job=%+v deletes=%d", job, state.deletes)
 	}
@@ -292,6 +300,7 @@ func resolveDuplicateRefundCurrent(ctx context.Context, store *SQLiteStore, bill
 
 func TestWorkerNeverRefundsSinglePaymentAndLeavesOperatorAction(t *testing.T) {
 	store := newTestStore(t)
+	seedDuplicateOwner(t, store, "user_dup", "cus_dup", "sub_canonical")
 	state := &duplicateStripeState{active: true, refunds: map[string]int64{}}
 	client, closeServer := newDuplicateStripe(t, state, false)
 	defer closeServer()
@@ -299,7 +308,7 @@ func TestWorkerNeverRefundsSinglePaymentAndLeavesOperatorAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	job, err := store.PutDuplicateRefund(context.Background(), plan, 100)
+	job, err := store.PutDuplicateRefund(context.Background(), plan, true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,15 +330,25 @@ func TestDuplicateWithoutAnyInvoiceEndsNoRefundNeeded(t *testing.T) {
 	defer closeServer()
 	job, err := store.PutDuplicateRefund(context.Background(), DuplicateRefundPlan{
 		UserID: "user_empty", CustomerID: "cus_dup", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_dup",
-	}, 100)
+	}, true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := client.ReconcileDuplicateSubscription(context.Background(), job)
+	result, err := client.ReconcileDuplicateSubscription(context.Background(), job, allowDuplicateCancelForTest)
 	if err != nil || !result.SubscriptionCanceled || !result.RefundComplete {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 101); err != nil {
+		t.Fatal(err)
+	}
+	// Completion needs an inspection that started after the recorded cancellation.
+	job, err = store.PutDuplicateRefundInspection(context.Background(), DuplicateRefundPlan{
+		UserID: "user_empty", CustomerID: "cus_dup", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_dup",
+	}, duplicateInspectionStart{Canceled: true}, 102)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 103); err != nil {
 		t.Fatal(err)
 	}
 	evidence, err := ListDuplicateRefundEvidence(context.Background(), store, job.ID)
@@ -345,6 +364,7 @@ func TestWorkerNeverCallsRefundForAnyProviderRefundOutcome(t *testing.T) {
 	}{{"pending", "pending", false}, {"failed", "", true}, {"canceled", "canceled", false}} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := newTestStore(t)
+			seedDuplicateOwner(t, store, "user_dup", "cus_dup", "sub_canonical")
 			state := &duplicateStripeState{active: true, refunds: map[string]int64{}, nextRefundStatus: tc.status, providerRefundFailedOnce: tc.failed}
 			client, closeServer := newDuplicateStripe(t, state, false)
 			defer closeServer()
@@ -352,7 +372,7 @@ func TestWorkerNeverCallsRefundForAnyProviderRefundOutcome(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			job, err := store.PutDuplicateRefund(context.Background(), plan, 100)
+			job, err := store.PutDuplicateRefund(context.Background(), plan, true, 100)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -371,6 +391,7 @@ func TestWorkerNeverCallsRefundForAnyProviderRefundOutcome(t *testing.T) {
 
 func TestDuplicateRefundPersistsEveryHistoricalInvoiceBeforeCancellation(t *testing.T) {
 	store := newTestStore(t)
+	seedDuplicateOwner(t, store, "user_dup", "cus_dup", "sub_canonical")
 	state := &duplicateStripeState{active: true, refunds: map[string]int64{}, historicalRenewal: true}
 	state.liabilitiesAtDelete = func() int {
 		var count int
@@ -383,7 +404,7 @@ func TestDuplicateRefundPersistsEveryHistoricalInvoiceBeforeCancellation(t *test
 	if err != nil || len(plan.Liabilities) != 1 {
 		t.Fatalf("initial plan=%+v err=%v", plan, err)
 	}
-	job, err := store.PutDuplicateRefund(context.Background(), plan, 100)
+	job, err := store.PutDuplicateRefund(context.Background(), plan, true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +451,7 @@ func TestAccountPurgePreservesDuplicateRefundLiabilities(t *testing.T) {
 		UserID: userID, CustomerID: "cus_purge", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_purge",
 		Liabilities: []DuplicateRefundLiability{{InvoiceID: "in_purge", Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_purge", PaymentType: "payment_intent", PaymentIntentID: "pi_purge", ChargeID: "ch_purge", AmountPaid: 100, ChargeAmount: 100}}}},
 	}
-	job, err := store.PutDuplicateRefund(context.Background(), plan, 100)
+	job, err := store.PutDuplicateRefund(context.Background(), plan, true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +470,7 @@ func TestDuplicateRefundLiabilitiesAppendNewPaymentAndInvalidatePreparedSnapshot
 		UserID: "user_append", CustomerID: "cus_append", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_dup_append",
 		Liabilities: []DuplicateRefundLiability{{InvoiceID: "in_append", Status: "open", ManualReason: "invoice_payment_pending"}},
 	}
-	job, err := store.PutDuplicateRefund(context.Background(), base, 100)
+	job, err := store.PutDuplicateRefund(context.Background(), base, true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +487,7 @@ func TestDuplicateRefundLiabilitiesAppendNewPaymentAndInvalidatePreparedSnapshot
 		InvoiceID: "in_append", Status: "paid", AmountPaid: 500,
 		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_a", PaymentType: "payment_intent", PaymentIntentID: "pi_a", ChargeID: "ch_a", AmountPaid: 500, ChargeAmount: 500, PaidAt: 103}},
 	}}
-	updated, err := store.PutDuplicateRefund(context.Background(), paid, 103)
+	updated, err := store.PutDuplicateRefund(context.Background(), paid, true, 103)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,12 +501,12 @@ func TestDuplicateRefundLiabilitiesAppendNewPaymentAndInvalidatePreparedSnapshot
 
 	paid.Liabilities[0].AmountPaid = 800
 	paid.Liabilities[0].Payments = append(paid.Liabilities[0].Payments, CanonicalStripeInvoicePayment{InvoicePaymentID: "inpay_b", PaymentType: "payment_intent", PaymentIntentID: "pi_b", ChargeID: "ch_b", AmountPaid: 300, ChargeAmount: 300, PaidAt: 104})
-	updated, err = store.PutDuplicateRefund(context.Background(), paid, 104)
+	updated, err = store.PutDuplicateRefund(context.Background(), paid, true, 104)
 	if err != nil || len(updated.Liabilities[0].Payments) != 2 {
 		t.Fatalf("second payment=%+v err=%v", updated, err)
 	}
 	paid.Liabilities[0].Payments[0].ChargeID = "ch_forged"
-	if _, err := store.PutDuplicateRefund(context.Background(), paid, 105); err == nil {
+	if _, err := store.PutDuplicateRefund(context.Background(), paid, true, 105); err == nil {
 		t.Fatal("existing payment identity drift was accepted")
 	}
 }
@@ -494,7 +515,7 @@ func TestStaleWorkerSaveCannotEraseLatePaidLiability(t *testing.T) {
 	store := newTestStore(t)
 	job, err := store.PutDuplicateRefund(context.Background(), DuplicateRefundPlan{
 		UserID: "purged-worker", CustomerID: "cus_race", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_race",
-	}, 100)
+	}, true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +552,7 @@ func TestExpandedLiabilityAllowsNewOperatorGenerationAndReason(t *testing.T) {
 		InvoiceID: "in_late_generation", Status: "paid", AmountPaid: 300,
 		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_late_generation", PaymentType: "payment_intent", PaymentIntentID: "pi_late_generation", ChargeID: "ch_late_generation", AmountPaid: 300, ChargeAmount: 300, PaidAt: 200}},
 	})
-	updated, err := store.PutDuplicateRefund(context.Background(), expanded, 200)
+	updated, err := store.PutDuplicateRefund(context.Background(), expanded, true, 200)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -559,7 +580,7 @@ func TestDuplicateRefundRequiresExactListedRevisionAndDigestBeforeProvider(t *te
 		InvoiceID: "in_after_list", Status: "paid", AmountPaid: 100,
 		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_after_list", PaymentType: "payment_intent", PaymentIntentID: "pi_after_list", ChargeID: "ch_after_list", AmountPaid: 100, ChargeAmount: 100, PaidAt: 200}},
 	})
-	if _, err := store.PutDuplicateRefund(context.Background(), expanded, 200); err != nil {
+	if _, err := store.PutDuplicateRefund(context.Background(), expanded, true, 200); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ResolveDuplicateRefund(context.Background(), store, client, job.ID, "operator", "listed liability", evidence.LiabilityRevision, evidence.LiabilityDigest); err == nil || !strings.Contains(err.Error(), "list evidence again") || state.refundPosts != 0 {
@@ -578,7 +599,7 @@ func TestPrepareDuplicateRefundActionAtomicallyRejectsLiabilityAddedAfterList(t 
 		InvoiceID: "in_after_approval", Status: "paid", AmountPaid: 100,
 		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_after_approval", PaymentType: "payment_intent", PaymentIntentID: "pi_after_approval", ChargeID: "ch_after_approval", AmountPaid: 100, ChargeAmount: 100, PaidAt: 200}},
 	})
-	if _, err := store.PutDuplicateRefund(context.Background(), expanded, 200); err != nil {
+	if _, err := store.PutDuplicateRefund(context.Background(), expanded, true, 200); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := prepareDuplicateRefundAction(context.Background(), store, listed, "operator", "stale listed evidence", 201); err == nil || !strings.Contains(err.Error(), "list evidence again") {
@@ -654,7 +675,7 @@ func TestActionErrorCannotReviveActionFailedByLiabilityExpansion(t *testing.T) {
 		InvoiceID: "in_barrier", Status: "paid", AmountPaid: 100,
 		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_barrier", PaymentType: "payment_intent", PaymentIntentID: "pi_barrier", ChargeID: "ch_barrier", AmountPaid: 100, ChargeAmount: 100, PaidAt: 200}},
 	})
-	if _, err := store.PutDuplicateRefund(context.Background(), expanded, 200); err != nil {
+	if _, err := store.PutDuplicateRefund(context.Background(), expanded, true, 200); err != nil {
 		t.Fatal(err)
 	}
 	if err := markDuplicateRefundActionError(context.Background(), store, action, "provider error", false, 201); err == nil || !strings.Contains(err.Error(), "stale") {
@@ -716,7 +737,7 @@ func TestCanonicalPaidInvoiceReopensPurgedDuplicateResponsibility(t *testing.T) 
 		UserID: "purged-subject", CustomerID: "cus_late", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_late",
 		Liabilities: []DuplicateRefundLiability{{InvoiceID: "in_late", Status: "open", ManualReason: "invoice_payment_pending"}},
 	}
-	job, err := store.PutDuplicateRefund(context.Background(), plan, 100)
+	job, err := store.PutDuplicateRefund(context.Background(), plan, true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -905,7 +926,7 @@ func TestLateFailureRecoverySnapshotsCurrentExpandedLiabilityBeforeNewOperator(t
 		InvoiceID: "in_late_b", Status: "paid", AmountPaid: 300,
 		Payments: []CanonicalStripeInvoicePayment{{InvoicePaymentID: "inpay_late_b", PaymentType: "payment_intent", PaymentIntentID: "pi_late_b", ChargeID: "ch_late_b", AmountPaid: 300, ChargeAmount: 300, PaidAt: 200}},
 	})
-	current, err := store.PutDuplicateRefund(context.Background(), expanded, 200)
+	current, err := store.PutDuplicateRefund(context.Background(), expanded, true, 200)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1057,7 +1078,7 @@ func TestDuplicateRefundOperatorRejectsIdentityDriftAndMissingInvoice(t *testing
 		t.Fatal("blocked action actor changed")
 	}
 
-	missing, err := store.PutDuplicateRefund(context.Background(), DuplicateRefundPlan{UserID: "purged-subject", CustomerID: "cus_missing", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_missing", ManualReason: "latest_invoice_unavailable"}, 100)
+	missing, err := store.PutDuplicateRefund(context.Background(), DuplicateRefundPlan{UserID: "purged-subject", CustomerID: "cus_missing", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_missing", ManualReason: "latest_invoice_unavailable"}, true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1465,7 +1486,7 @@ func prepareDuplicateJob(t *testing.T, store *SQLiteStore, client *stripeClient)
 	if err != nil {
 		t.Fatal(err)
 	}
-	job, err := store.PutDuplicateRefund(context.Background(), plan, 100)
+	job, err := store.PutDuplicateRefund(context.Background(), plan, true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1494,6 +1515,7 @@ func TestDuplicateRefundInspectionFailureNeverCancels(t *testing.T) {
 
 func TestDuplicateRefundWorkerLeavesProviderRefundFailureToOperator(t *testing.T) {
 	store := newTestStore(t)
+	seedDuplicateOwner(t, store, "user_dup", "cus_dup", "sub_canonical")
 	state := &duplicateStripeState{active: true, failRefund: true, refunds: map[string]int64{}}
 	client, closeServer := newDuplicateStripe(t, state, false)
 	defer closeServer()
@@ -1520,6 +1542,7 @@ func TestDuplicateRefundWorkerLeavesProviderRefundFailureToOperator(t *testing.T
 
 func TestDuplicateRefundMultiPaymentIsDurableManual(t *testing.T) {
 	store := newTestStore(t)
+	seedDuplicateOwner(t, store, "user_dup", "cus_dup", "sub_canonical")
 	state := &duplicateStripeState{active: true}
 	client, closeServer := newDuplicateStripe(t, state, true)
 	defer closeServer()
@@ -1543,14 +1566,14 @@ func TestDuplicateRefundCrashBeforeLocalSaveReplaysWithoutDoubleRefund(t *testin
 	client, closeServer := newDuplicateStripe(t, state, false)
 	defer closeServer()
 	job := prepareDuplicateJob(t, store, client)
-	result, err := client.ReconcileDuplicateSubscription(context.Background(), job)
+	result, err := client.ReconcileDuplicateSubscription(context.Background(), job, allowDuplicateCancelForTest)
 	if err != nil || !result.SubscriptionCanceled || result.RefundComplete {
 		t.Fatalf("cancel=%+v err=%v", result, err)
 	}
 	if err := store.SaveDuplicateRefund(context.Background(), job, result, nil, 101); err != nil {
 		t.Fatal(err)
 	}
-	job, _, _ = store.DuplicateRefundBySubscription(context.Background(), "sub_dup")
+	job = postCancelInspectForTest(t, store, client, "user_dup", "cus_dup", "sub_canonical", "sub_dup")
 	action, err := prepareDuplicateRefundAction(context.Background(), store, job, "operator", "verified duplicate payment", 102)
 	if err != nil {
 		t.Fatal(err)
@@ -1570,6 +1593,7 @@ func TestDuplicateRefundCrashBeforeLocalSaveReplaysWithoutDoubleRefund(t *testin
 func TestDuplicateRefundWorkerKeepsCanceledLiabilityManual(t *testing.T) {
 	ts, svc, store, _ := newBillingServer(t)
 	defer ts.Close()
+	seedDuplicateOwner(t, store, "user_dup", "cus_dup", "sub_canonical")
 	state := &duplicateStripeState{active: true, failRefund: true}
 	client, closeServer := newDuplicateStripe(t, state, false)
 	defer closeServer()

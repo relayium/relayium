@@ -254,6 +254,24 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "your storage node is offline", http.StatusServiceUnavailable)
 		return
 	}
+	// N-0930-6: the node as this upload found it. Nothing durable names the
+	// node while Put runs, so it can be deleted — row and all — under the
+	// upload; its blob's queued delete then needs this snapshot to stay
+	// resolvable (dropPlacedBlob). Gone already means it was deleted between
+	// placement and here, before any body byte moved: refuse, nothing to undo.
+	var placed Node
+	if nodeID != "" {
+		n, found, err := s.store.GetNode(r.Context(), nodeID)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if !found {
+			http.Error(w, "storage node unavailable — try again", http.StatusServiceUnavailable)
+			return
+		}
+		placed = n
+	}
 
 	// M3b: global blob-volume soft cap. Per-account quota × unbounded accounts is
 	// still unbounded, so refuse new uploads once the volume crosses the high-water
@@ -420,7 +438,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	if err != nil {
 		// Reclaim a committed-but-response-lost blob; if the node is unreachable
 		// the pending-delete queue ensures GC retries instead of orphaning it.
-		s.dropBlob(bs, blobKey, nodeID)
+		s.dropPlacedBlob(bs, blobKey, placed)
 		if errors.Is(err, errTooLarge) {
 			refuse("file too large", http.StatusRequestEntityTooLarge)
 			return
@@ -437,7 +455,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// persist time below (persistStoredFile); only traffic is rechecked here.
 	if billable {
 		if over, err := s.overTraffic(r.Context(), u.ID, size); err == nil && over {
-			s.dropBlob(bs, blobKey, nodeID)
+			s.dropPlacedBlob(bs, blobKey, placed)
 			refuse("monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
 			return
 		}
@@ -466,7 +484,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		// drop the blob and 500, never admit an upload against an unknown cap.
 		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
 		if err != nil {
-			s.dropBlob(bs, blobKey, nodeID)
+			s.dropPlacedBlob(bs, blobKey, placed)
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -502,7 +520,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		// debit — so its blob goes, and it answers with the committed result.
 		// The bytes it moved stay billed (the deferred meter), because they did
 		// move.
-		s.dropBlob(bs, blobKey, nodeID)
+		s.dropPlacedBlob(bs, blobKey, placed)
 		if !s.answerUploadOperation(w, r, u.ID, opKey, opDigest, true) {
 			// The winner's row is gone again already (an account purge); there
 			// is no result to give and this request created nothing.
@@ -512,23 +530,23 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	case errors.Is(err, ErrUploadAccountFenced):
 		// The account was deleted while this upload was in flight: nothing
 		// was written, and nothing may be. Its credential is gone too.
-		s.dropBlob(bs, blobKey, nodeID)
+		s.dropPlacedBlob(bs, blobKey, placed)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	case err != nil:
-		s.dropBlob(bs, blobKey, nodeID)
+		s.dropPlacedBlob(bs, blobKey, placed)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	case persisted.Reason == "quota":
-		s.dropBlob(bs, blobKey, nodeID)
+		s.dropPlacedBlob(bs, blobKey, placed)
 		refuse("daily quota exceeded", http.StatusTooManyRequests)
 		return
 	case persisted.Reason == "global":
-		s.dropBlob(bs, blobKey, nodeID)
+		s.dropPlacedBlob(bs, blobKey, placed)
 		refuse("server storage is full", http.StatusInsufficientStorage)
 		return
 	case persisted.Reason == "storage":
-		s.dropBlob(bs, blobKey, nodeID)
+		s.dropPlacedBlob(bs, blobKey, placed)
 		refuse("storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -677,6 +695,25 @@ func (s *Service) dropBlob(bs storage.BlobStore, blobKey, nodeID string) {
 	defer cancel()
 	if err := bs.Delete(ctx, blobKey); err != nil {
 		_ = s.store.EnqueueNodeDelete(ctx, blobKey, nodeID, s.now().Unix())
+	}
+}
+
+// dropPlacedBlob is dropBlob for a single-shot upload, which holds no durable
+// reference to its node: a failed delete is queued through
+// EnqueueNodeDeleteRetainingNode with the node row the upload saw, so the
+// queued delete stays resolvable even if the node was deleted mid-upload
+// (N-0930-6). Central-local placement (placed.ID == "") is plain dropBlob.
+func (s *Service) dropPlacedBlob(bs storage.BlobStore, blobKey string, placed Node) {
+	if placed.ID == "" {
+		s.dropBlob(bs, blobKey, "")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := bs.Delete(ctx, blobKey); err != nil {
+		if qerr := s.store.EnqueueNodeDeleteRetainingNode(ctx, blobKey, placed, s.now().Unix()); qerr != nil {
+			log.Printf("upload: queueing the delete of orphaned blob %s on node %s failed: %v", blobKey, placed.ID, qerr)
+		}
 	}
 }
 

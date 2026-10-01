@@ -547,6 +547,20 @@ type UsageEvent struct {
 	Billable     bool
 }
 
+// RetiredNode is one retired node row (see the deleted_at migration) and what
+// still keeps it: the references PurgeRetiredNodes waits for. Read-only view
+// for the admin panel; it carries no endpoint or secret.
+type RetiredNode struct {
+	ID            string
+	OwnerType     string
+	OwnerUserID   string // "" for fleet
+	Label         string
+	DeletedAt     int64
+	QueuedDeletes int64 // pending_node_deletes rows naming it
+	Sessions      int64 // upload_sessions rows naming it
+	Files         int64 // stored_files rows naming it, expired-uncollected included
+}
+
 // RelayAttribBudget is the per-(node, user) relay-attribution policy the
 // caller holds a heartbeat entry to (A-M8): a leaky bucket that drains at
 // RatePerSec and holds RatePerSec x WindowSecs. See relayAttribRatePerSec.
@@ -1710,6 +1724,9 @@ type AuditEntry struct {
 type Store interface {
 	// users + identities
 	UpsertUserByEmail(ctx context.Context, email, displayName string) (User, error)
+	// UpsertUserByEmailForLogin is UpsertUserByEmail that also reports
+	// whether this call created the account.
+	UpsertUserByEmailForLogin(ctx context.Context, email, displayName string) (User, bool, error)
 	GetUserByID(ctx context.Context, id string) (User, error)
 	LinkIdentity(ctx context.Context, provider, subject, userID string) error
 	GetUserByIdentity(ctx context.Context, provider, subject string) (User, bool, error)
@@ -2107,6 +2124,10 @@ type Store interface {
 	// magic tokens
 	CreateMagicToken(ctx context.Context, t MagicToken) error
 	UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error)
+	// UseMagicTokenForUser spends the token like UseMagicToken and, in the
+	// same transaction, resolves or creates the account holding its address,
+	// returning that account and its credential_epoch.
+	UseMagicTokenForUser(ctx context.Context, tokenHash string, now int64) (MagicToken, User, int64, bool, error)
 	DeleteSpentMagicTokens(ctx context.Context, now int64) error
 	// email tokens (verify + reset)
 	CreateEmailToken(ctx context.Context, t EmailToken) error
@@ -2616,6 +2637,11 @@ type Store interface {
 	// pending_node_deletes, upload_sessions or stored_files row names any more,
 	// and reports how many. Their tombstones stay (A-M3).
 	PurgeRetiredNodes(ctx context.Context) (int64, error)
+	// ListRetiredNodes lists up to limit retired node rows (deleted_at != 0),
+	// newest deletion first, each with how many queued node deletes, upload
+	// sessions and stored objects still name it, plus the total number of
+	// retired rows. For the admin fleet panel (N-0930-7).
+	ListRetiredNodes(ctx context.Context, limit int) ([]RetiredNode, int64, error)
 	// CountLiveUserNodes counts a user's owner_type='user' nodes that are not
 	// deregistered (removed_at = 0) — the population the BYO rollout governs and
 	// the per-user registration cap (maxLiveNodesPerUser) is checked against.
@@ -2724,6 +2750,14 @@ type Store interface {
 	BumpNodeUpdateAttempts(ctx context.Context, nodeID string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
+	// EnqueueNodeDeleteRetainingNode is EnqueueNodeDelete for a blob whose
+	// node may have been deleted — row and all — while the blob was being
+	// written (a single-shot upload holds no durable reference to its node).
+	// `placed` is the node row as the upload saw it; if the row is gone, a
+	// RETIRED row carrying only its storage endpoint is restored in the same
+	// transaction so GC can still resolve the queued delete. See
+	// SQLiteStore.EnqueueNodeDeleteRetainingNode (N-0930-6).
+	EnqueueNodeDeleteRetainingNode(ctx context.Context, blobKey string, placed Node, at int64) error
 	// PrepareRefusedUploadReclaim is a refused finalize's settle-first ownership
 	// step for its blob; see SQLiteStore.PrepareRefusedUploadReclaim.
 	PrepareRefusedUploadReclaim(ctx context.Context, sessionID, blobKey, nodeID string, at int64) (bool, error)
@@ -2795,17 +2829,41 @@ type Store interface {
 	// CreateSessionForIdentityAtEpoch inserts sess in one statement only while
 	// the user's credential_epoch still equals epoch, the account is not pending
 	// deletion, and identities(provider, subject) still maps to sess.UserID
-	// (false = any of those changed since the caller checked them).
-	CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error)
+	// (false = any of those changed since the caller checked them). Every
+	// *ForIdentity* write also requires users.created_at < proofAt, the
+	// login's proof-time fence (see loginProof).
+	CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string, proofAt int64) (bool, error)
 	// CreateReactivateTokenForIdentityLogin inserts a "reactivate" token in one
 	// statement only while the account is pending deletion at epoch and the
 	// subject predicate holds (linked: mapped to t.UserID; unseen: mapped to no
 	// account and the account email still t.Email). false = state moved.
-	CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool) (bool, error)
+	CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool, proofAt int64) (bool, error)
 	// VerifyEmailForIdentityLogin clears a password planted while unverified
 	// and marks the email verified, in one transaction guarded by epoch, active
 	// state, unchanged email and the subject mapping (false = state moved).
-	VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error)
+	VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, proofAt int64) (bool, error)
+	// VerifyEmailForEmailProof is VerifyEmailForIdentityLogin for a login that
+	// proved the address itself (magic link): no subject predicate.
+	VerifyEmailForEmailProof(ctx context.Context, userID, email string, epoch int64) (bool, error)
+	// CreateReactivateTokenAtEpoch inserts a "reactivate" token in one
+	// statement only while the account is still at epoch and holds t.Email
+	// (and, when requested, is pending deletion / has that password hash).
+	CreateReactivateTokenAtEpoch(ctx context.Context, t EmailToken, epoch int64, requirePending bool, passwordHash string) (bool, error)
+	// CreateCLITokenForIdentityAtEpoch inserts t in one statement only while
+	// the user's credential_epoch still equals epoch, the account is not
+	// pending deletion and identities(provider, subject) maps to t.UserID.
+	CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string, proofAt int64) (bool, error)
+	// RedeemReactivateToken spends a reactivate token, checks it belongs to the
+	// account's current pending-deletion generation, recovers the account and
+	// inserts sess, in one transaction; it returns the account id (ok=false:
+	// nothing recovered and no session).
+	RedeemReactivateToken(ctx context.Context, tokenHash string, now int64, sess Session) (userID string, ok bool, err error)
+	// CreateOAuthState / ConsumeOAuthState keep the hash of each browser OAuth
+	// state server-side; create refuses (false) once budget unexpired rows
+	// exist; consume deletes an unexpired row and reports whether it existed,
+	// so a state works at most once.
+	CreateOAuthState(ctx context.Context, stateHash string, now, expiresAt int64, budget int) (bool, error)
+	ConsumeOAuthState(ctx context.Context, stateHash string, now int64) (bool, error)
 	// CredentialEpoch / CredentialEpochByEmail read users.credential_epoch
 	// (0 for an unknown address).
 	CredentialEpoch(ctx context.Context, userID string) (int64, error)

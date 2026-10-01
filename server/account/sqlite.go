@@ -128,6 +128,15 @@ CREATE TABLE IF NOT EXISTS magic_tokens (
   expires_at INTEGER NOT NULL,
   used_at    INTEGER NOT NULL DEFAULT 0
 );
+-- One row per browser OAuth attempt (Google, Apple web): the hash of the state
+-- the start handler issued. The callback deletes it before anything else, so a
+-- copied state/cookie pair works at most once. Live rows are capped by a
+-- global budget and the start routes are throttled per IP; see CreateOAuthState.
+CREATE TABLE IF NOT EXISTS oauth_states (
+  state_hash TEXT PRIMARY KEY,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
 CREATE TABLE IF NOT EXISTS devices (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES users(id),
@@ -1898,6 +1907,16 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		// prefix makes the "how many machine rows are there" pre-check an index
 		// seek, and at/id carry the newest-first ordering the cap needs.
 		`CREATE INDEX IF NOT EXISTS idx_admin_audit_machine ON admin_audit(auth, at DESC, id DESC)`,
+		// N-0930-7: "does anything still name this node" (retireOrDeleteNodeTx,
+		// DeleteFleetNode, NodeIDReuseState on every register of an unknown id,
+		// the per-row correlated probes of PurgeRetiredNodes on every GC sweep,
+		// NodeDeleteBlockers on every fleet-panel render) looks rows up by
+		// node_id. upload_sessions had no index on it and pending_node_deletes
+		// only the (blob_key, node_id) primary key, whose leading column is the
+		// wrong one, so each probe was a full-table scan. stored_files already
+		// has idx_stored_files_node.
+		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_node ON upload_sessions(node_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_pending_node_deletes_node ON pending_node_deletes(node_id)`,
 		// idx_nodes_owner_type(owner_type) is now a strict prefix of
 		// idx_nodes_byo_rank(owner_type, removed_at, draining DESC,
 		// last_seen_at DESC, id ASC): any lookup the single-column index could
@@ -2025,6 +2044,10 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		return nil, err
 	}
 	if err := migrateDeviceIPRetention(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := migrateDuplicateRefundResponsibility(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -2547,25 +2570,47 @@ func (s *SQLiteStore) Close() error {
 func normEmail(e string) string { return strings.ToLower(strings.TrimSpace(e)) }
 
 func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName string) (User, error) {
+	u, _, err := s.upsertUserByEmailOn(ctx, s.db, email, displayName)
+	return u, err
+}
+
+// UpsertUserByEmailForLogin is UpsertUserByEmail that also reports whether
+// this call created the account. A provider login uses it to tell the account
+// its own first sign-in created (bound to the proof by construction) from one
+// someone else created after the proof (see loginProof).
+func (s *SQLiteStore) UpsertUserByEmailForLogin(ctx context.Context, email, displayName string) (User, bool, error) {
+	return s.upsertUserByEmailOn(ctx, s.db, email, displayName)
+}
+
+// userUpsertExecer is what upsertUserByEmailOn needs: the writer pool or a
+// caller's transaction.
+type userUpsertExecer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// upsertUserByEmailOn is UpsertUserByEmail on q, so a caller can resolve or
+// create the account inside its own transaction (UseMagicTokenForUser).
+func (s *SQLiteStore) upsertUserByEmailOn(ctx context.Context, q userUpsertExecer, email, displayName string) (User, bool, error) {
 	email = normEmail(email)
 	var u User
-	err := s.db.QueryRowContext(ctx,
+	err := q.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
 		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, scheduled_cycle, billing_cycle
 		   FROM users WHERE email = ?`, email,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
 		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.ScheduledCycle, &u.BillingCycle)
 	if err == nil {
-		return u, nil
+		return u, false, nil
 	}
 	if err != sql.ErrNoRows {
-		return User{}, err
+		return User{}, false, err
 	}
 	u = User{ID: authx.NewID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
-	_, err = s.db.ExecContext(ctx,
+	_, err = q.ExecContext(ctx,
 		`INSERT INTO users (id, email, display_name, created_at, canonical_email, billing_hold_hmac) VALUES (?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonicalEmail(email), s.billingEmailHMAC(email))
-	return u, err
+	return u, err == nil, err
 }
 
 // UserByCanonicalEmail finds any existing account whose canonical_email matches
@@ -3063,6 +3108,16 @@ func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) e
 		return err
 	}
 	defer tx.Rollback()
+	if err := clearAccountDeletionTx(ctx, tx, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// clearAccountDeletionTx is ClearAccountDeletion inside the caller's
+// transaction, so reactivation can recover the account in the same commit that
+// spends its token and issues its session (RedeemReactivateToken).
+func clearAccountDeletionTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	var provider string
 	_ = tx.QueryRowContext(ctx, `SELECT provider FROM billing_deletion_holds WHERE billing_subject_id=?`, userID).Scan(&provider)
 	if provider == ProviderStripe {
@@ -3090,7 +3145,7 @@ func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) e
 		`DELETE FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate' AND used_at = 0`, userID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 // MarkPurgeReminderSent records when the pre-purge reminder email was sent.
@@ -3683,13 +3738,17 @@ func (s *SQLiteStore) CreateSessionAtEpoch(ctx context.Context, sess Session, ep
 // by a linked provider identity: the epoch fence, the not-pending-deletion
 // check and the subject mapping are evaluated in the same INSERT, so a deletion
 // or an unlink that commits after the caller's checks leaves no session.
-func (s *SQLiteStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error) {
+// proofAt is the login's proof-time fence (loginProof.fence): the account must
+// have been created strictly before it, so an account created after the proof
+// was validated — a replacement at the same address, even within the proof's
+// own second — is never bound to it.
+func (s *SQLiteStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked)
 		 SELECT ?, u.id, ?, ?, 0 FROM users u
-		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0 AND u.created_at < ?
 		    AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`,
-		authx.HashToken(sess.ID), sess.CreatedAt, sess.ExpiresAt, sess.UserID, epoch, provider, subject)
+		authx.HashToken(sess.ID), sess.CreatedAt, sess.ExpiresAt, sess.UserID, epoch, proofAt, provider, subject)
 	if err != nil {
 		return false, err
 	}
@@ -3705,7 +3764,8 @@ func (s *SQLiteStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess 
 // true requires identities(provider, subject) to map to t.UserID; false (an
 // unseen subject recovering by verified email) requires the subject to still be
 // linked to NO account and the account's email to still equal t.Email.
-func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool) (bool, error) {
+// proofAt is the proof-time fence, as in CreateSessionForIdentityAtEpoch.
+func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool, proofAt int64) (bool, error) {
 	subjectCond := `EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`
 	args := []any{provider, subject}
 	if !linked {
@@ -3715,8 +3775,37 @@ func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context,
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, credential_epoch, created_at, expires_at, used_at)
 		 SELECT ?, u.id, ?, 'reactivate', u.credential_epoch, ?, ?, 0 FROM users u
-		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at > 0 AND `+subjectCond,
-		append([]any{t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt, t.UserID, epoch}, args...)...)
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at > 0 AND u.created_at < ? AND `+subjectCond,
+		append([]any{t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt, t.UserID, epoch, proofAt}, args...)...)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+// CreateReactivateTokenAtEpoch inserts a "reactivate" token in one statement
+// only while the account still has credential_epoch == epoch and still holds
+// t.Email, and — when requirePending — is still pending deletion, and — when
+// passwordHash != "" — still has exactly that password hash. The row records
+// that epoch. It is the fenced form of every non-provider issuer: the caller
+// passes the epoch it read BEFORE checking the credential (password, magic,
+// reset or verify link) and the account state, so a recovery, password change
+// or fresh deletion that committed since leaves no token. false = state moved.
+func (s *SQLiteStore) CreateReactivateTokenAtEpoch(ctx context.Context, t EmailToken, epoch int64, requirePending bool, passwordHash string) (bool, error) {
+	cond := ""
+	args := []any{t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt, t.UserID, epoch, normEmail(t.Email)}
+	if requirePending {
+		cond += ` AND u.deleted_at > 0`
+	}
+	if passwordHash != "" {
+		cond += ` AND u.password_hash = ?`
+		args = append(args, passwordHash)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, credential_epoch, created_at, expires_at, used_at)
+		 SELECT ?, u.id, ?, 'reactivate', u.credential_epoch, ?, ?, 0 FROM users u
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.email = ?`+cond, args...)
 	if err != nil {
 		return false, err
 	}
@@ -3725,22 +3814,39 @@ func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context,
 }
 
 // VerifyEmailForIdentityLogin is the provider-login form of
-// dropUnverifiedPassword + SetEmailVerified, in one transaction whose every
+// the pre-hijack password drop + SetEmailVerified, in one transaction whose every
 // write is guarded by the state the login was decided on: the account is
 // active, still at epoch, still holds email, and identities(provider, subject)
 // still maps to it. A password planted while the address was unverified is
 // cleared (with its "password" identity) only while the address is still
 // unverified at that epoch, so a password reset that committed in between —
 // it bumps the epoch — is never overwritten; the call then reports false.
-func (s *SQLiteStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error) {
+// proofAt is the proof-time fence, as in CreateSessionForIdentityAtEpoch.
+func (s *SQLiteStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, proofAt int64) (bool, error) {
+	return s.verifyEmailGuarded(ctx, userID, email, epoch,
+		` AND created_at < ? AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = users.id)`,
+		proofAt, provider, subject)
+}
+
+// VerifyEmailForEmailProof is VerifyEmailForIdentityLogin for a login that
+// proved the address itself (a magic link): the same single transaction and
+// guards — active account, still at epoch, still holding email, password
+// cleared only while the address is still unverified — without a provider
+// subject. epoch is the one read when the proof was spent.
+func (s *SQLiteStore) VerifyEmailForEmailProof(ctx context.Context, userID, email string, epoch int64) (bool, error) {
+	return s.verifyEmailGuarded(ctx, userID, email, epoch, "")
+}
+
+// verifyEmailGuarded is the shared body of the guarded verifications; extra
+// (with extraArgs) adds a predicate on the users row.
+func (s *SQLiteStore) verifyEmailGuarded(ctx context.Context, userID, email string, epoch int64, extra string, extraArgs ...any) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
-	const guard = ` WHERE id = ? AND email = ? AND credential_epoch = ? AND deleted_at = 0
-	   AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = users.id)`
-	args := []any{userID, normEmail(email), epoch, provider, subject}
+	guard := ` WHERE id = ? AND email = ? AND credential_epoch = ? AND deleted_at = 0` + extra
+	args := append([]any{userID, normEmail(email), epoch}, extraArgs...)
 	res, err := tx.ExecContext(ctx,
 		`UPDATE users SET password_hash = NULL`+guard+` AND email_verified = 0 AND password_hash IS NOT NULL AND password_hash != ''`, args...)
 	if err != nil {
@@ -3762,6 +3868,141 @@ func (s *SQLiteStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, e
 		return false, err
 	}
 	return true, tx.Commit()
+}
+
+// CreateCLITokenForIdentityAtEpoch is CreateCLITokenAtEpoch for a native login
+// proven by a linked provider identity: the epoch fence, the not-pending-
+// deletion check and the subject mapping are evaluated in the same INSERT (as
+// CreateSessionForIdentityAtEpoch does for a browser session), plus the same
+// proof-time fence.
+func (s *SQLiteStore) CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string, proofAt int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at, idle_expires_at)
+		 SELECT ?, u.id, ?, ?, ?, ? FROM users u
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0 AND u.created_at < ?
+		    AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`,
+		t.TokenHash, t.DeviceID, t.CreatedAt, t.LastSeenAt, t.CreatedAt+cliTokenIdleTTLSeconds,
+		t.UserID, epoch, proofAt, provider, subject)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+// RedeemReactivateToken spends a "reactivate" token, recovers the account and
+// inserts sess for it, in one transaction, and returns the account id.
+//
+// The token is honoured only for the pending-deletion generation it was issued
+// in. Every account deletion bumps credential_epoch in its own commit
+// (purgeTransientUserDataTx) and a recovery does not, so the epoch recorded on
+// the token names that generation:
+//
+//   - token epoch == account epoch, with the account pending: this generation.
+//   - token epoch 0 (a row written before issuers recorded the epoch, or a
+//     fixture): honoured only while the account is pending and the token was
+//     created at or after the current deleted_at, i.e. inside the current
+//     pending generation. A token minted before the current deletion began —
+//     an earlier generation, or one that slipped in while the account was
+//     active — is refused, so 0 is never a standing bypass. Such legacy rows
+//     expire within AccountGraceDays of the upgrade. Residual: timestamps are
+//     whole seconds, so a legacy stale token created in the very second a later
+//     deletion committed would still pass.
+//
+// ok=false means nothing usable: unknown, spent or expired token (nothing
+// changed), or a token of another generation or an account no longer pending
+// (the token is spent, nothing else changes). The session's UserID is taken
+// from the token.
+func (s *SQLiteStore) RedeemReactivateToken(ctx context.Context, tokenHash string, now int64, sess Session) (string, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", false, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx,
+		`UPDATE email_tokens SET used_at = ?
+		 WHERE token_hash = ? AND purpose = 'reactivate' AND used_at = 0 AND expires_at > ?`,
+		now, tokenHash, now)
+	if err != nil {
+		return "", false, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return "", false, err
+	}
+	var userID string
+	var tokEpoch, tokCreated int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT user_id, credential_epoch, created_at FROM email_tokens WHERE token_hash = ?`, tokenHash,
+	).Scan(&userID, &tokEpoch, &tokCreated); err != nil {
+		return "", false, err
+	}
+	var deletedAt, epoch int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT deleted_at, credential_epoch FROM users WHERE id = ?`, userID).Scan(&deletedAt, &epoch)
+	if err == sql.ErrNoRows {
+		return "", false, tx.Commit()
+	}
+	if err != nil {
+		return "", false, err
+	}
+	sameGeneration := tokEpoch == epoch || (tokEpoch == 0 && tokCreated >= deletedAt)
+	if deletedAt == 0 || !sameGeneration {
+		// Spent either way: a leaked token of another generation is now dead.
+		return "", false, tx.Commit()
+	}
+	if err := clearAccountDeletionTx(ctx, tx, userID); err != nil {
+		return "", false, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, 0)`,
+		authx.HashToken(sess.ID), userID, sess.CreatedAt, sess.ExpiresAt); err != nil {
+		return "", false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", false, err
+	}
+	return userID, true, nil
+}
+
+// oauthStateSweepBatch bounds the expired-row cleanup CreateOAuthState does
+// on each insert.
+const oauthStateSweepBatch = 100
+
+// CreateOAuthState records the hash of a browser OAuth state until expiresAt.
+// It first deletes up to oauthStateSweepBatch expired rows (an index range
+// scan on expires_at), then inserts only while fewer than budget unexpired
+// rows exist — one statement, so concurrent starts cannot overshoot it.
+// ok=false: the budget is exhausted and nothing was inserted. The table is
+// therefore bounded by budget live rows plus expired rows awaiting the sweep,
+// each start removing up to oauthStateSweepBatch of those while adding one.
+func (s *SQLiteStore) CreateOAuthState(ctx context.Context, stateHash string, now, expiresAt int64, budget int) (bool, error) {
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM oauth_states WHERE rowid IN
+		   (SELECT rowid FROM oauth_states WHERE expires_at <= ? LIMIT ?)`, now, oauthStateSweepBatch); err != nil {
+		return false, err
+	}
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO oauth_states (state_hash, expires_at)
+		 SELECT ?, ? WHERE (SELECT COUNT(*) FROM oauth_states WHERE expires_at > ?) < ?`,
+		stateHash, expiresAt, now, budget)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+// ConsumeOAuthState deletes an unexpired state row in one statement and
+// reports whether it existed, so of any number of callbacks presenting the
+// same state at most one gets true.
+func (s *SQLiteStore) ConsumeOAuthState(ctx context.Context, stateHash string, now int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM oauth_states WHERE state_hash = ? AND expires_at > ?`, stateHash, now)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }
 
 func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool, error) {
@@ -3834,6 +4075,50 @@ func (s *SQLiteStore) UseMagicToken(ctx context.Context, tokenHash string, now i
 		`SELECT token_hash, email, created_at, expires_at, used_at FROM magic_tokens WHERE token_hash = ?`, tokenHash,
 	).Scan(&t.TokenHash, &t.Email, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
 	return t, err == nil, err
+}
+
+// UseMagicTokenForUser spends a magic token and, in the same transaction,
+// resolves — or creates, exactly as UpsertUserByEmail does — the account
+// holding the token's address, returning that account and its
+// credential_epoch. The pair names one account incarnation in one credential
+// generation: the caller continues strictly by this user id and fences every
+// later write on (id, epoch), so neither a recovery, password change or new
+// deletion of this account, nor a deletion, hard purge and re-creation of the
+// address as a different account, can be reached by the spent proof.
+// ok=false: the token was unknown, spent or expired, and nothing changed.
+func (s *SQLiteStore) UseMagicTokenForUser(ctx context.Context, tokenHash string, now int64) (MagicToken, User, int64, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return MagicToken{}, User{}, 0, false, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx,
+		`UPDATE magic_tokens SET used_at = ? WHERE token_hash = ? AND used_at = 0 AND expires_at > ?`,
+		now, tokenHash, now)
+	if err != nil {
+		return MagicToken{}, User{}, 0, false, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return MagicToken{}, User{}, 0, false, err
+	}
+	var t MagicToken
+	if err := tx.QueryRowContext(ctx,
+		`SELECT token_hash, email, created_at, expires_at, used_at FROM magic_tokens WHERE token_hash = ?`, tokenHash,
+	).Scan(&t.TokenHash, &t.Email, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt); err != nil {
+		return MagicToken{}, User{}, 0, false, err
+	}
+	u, _, err := s.upsertUserByEmailOn(ctx, tx, t.Email, "")
+	if err != nil {
+		return MagicToken{}, User{}, 0, false, err
+	}
+	var epoch int64
+	if err := tx.QueryRowContext(ctx, `SELECT credential_epoch FROM users WHERE id = ?`, u.ID).Scan(&epoch); err != nil {
+		return MagicToken{}, User{}, 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return MagicToken{}, User{}, 0, false, err
+	}
+	return t, u, epoch, true, nil
 }
 
 // DeleteSpentMagicTokens reclaims one-time login tokens that are no longer
@@ -4463,8 +4748,12 @@ var relayAttribOwedBlocked sync.Map
 // arbitrary alloc ids, so a legacy row under that id may exist and belong to
 // someone else; the upsert adds only to a row whose user_id, node_id and
 // billable all match. On a mismatch nothing is written, the bytes stay owed
-// (user-favourable: never attributed to anyone else, never lost), draining
-// stops for this pair, and it is logged once.
+// (user-favourable: never attributed to anyone else, never lost), and it is
+// logged once. Draining then SKIPS that period and continues with the pair's
+// later ones (N-0930-9): each period drains into its own (alloc id, period)
+// row, so one blocked month must not freeze every later month's owed bytes
+// behind it; only the blocked period's bytes stay owed, and a pair with any
+// blocked row is never reported exhausted.
 func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID string, limit int64) (moved int64, exhausted bool, err error) {
 	type owedRow struct {
 		period   string
@@ -4491,6 +4780,7 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 		return 0, false, err
 	}
 	allocID := relayAttribOwedAllocID(nodeID, userID)
+	blocked := false
 	for _, o := range owed {
 		if moved >= limit {
 			return moved, false, nil
@@ -4517,7 +4807,8 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 					log.Printf("WARNING: relay attribution: usage_periods row %s/%s belongs to another owner; %d owed bytes for node %s user %s kept owed (A-M8)",
 						allocID, o.period, o.bytes, nodeID, userID)
 				}
-				return moved, false, nil
+				blocked = true
+				continue
 			}
 		}
 		if take >= o.bytes {
@@ -4530,8 +4821,9 @@ func drainRelayAttribOwedTx(ctx context.Context, tx *sql.Tx, nodeID, userID stri
 		}
 		moved += max(take, 0)
 	}
-	// Every row was consumed; moved < limit means nothing is left to owe.
-	return moved, moved < limit, nil
+	// Every unblocked row was consumed; moved < limit means nothing is left to
+	// owe unless a blocked row is still owed.
+	return moved, !blocked && moved < limit, nil
 }
 
 // chargeRelayAttribTx charges a report's delta bytes to the (nodeID, userID)
@@ -8139,6 +8431,41 @@ func (s *SQLiteStore) PurgeRetiredNodes(ctx context.Context) (int64, error) {
 	return res.RowsAffected()
 }
 
+// ListRetiredNodes: see Store.ListRetiredNodes. The three counts are
+// correlated probes on idx_pending_node_deletes_node, idx_upload_sessions_node
+// and idx_stored_files_node, and the number of retired rows is small (each is
+// purged as soon as nothing names it), so this is cheap per panel render.
+func (s *SQLiteStore) ListRetiredNodes(ctx context.Context, limit int) ([]RetiredNode, int64, error) {
+	var total int64
+	if err := s.reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM nodes WHERE deleted_at != 0`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 {
+		limit = 1
+	}
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT n.id, n.owner_type, COALESCE(n.owner_user_id, ''), n.label, n.deleted_at,
+		        (SELECT COUNT(*) FROM pending_node_deletes p WHERE p.node_id = n.id),
+		        (SELECT COUNT(*) FROM upload_sessions u WHERE u.node_id = n.id),
+		        (SELECT COUNT(*) FROM stored_files f WHERE f.node_id = n.id)
+		   FROM nodes n WHERE n.deleted_at != 0
+		  ORDER BY n.deleted_at DESC, n.id ASC LIMIT ?`, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []RetiredNode
+	for rows.Next() {
+		var r RetiredNode
+		if err := rows.Scan(&r.ID, &r.OwnerType, &r.OwnerUserID, &r.Label, &r.DeletedAt,
+			&r.QueuedDeletes, &r.Sessions, &r.Files); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, r)
+	}
+	return out, total, rows.Err()
+}
+
 // CountLiveUserNodes: see Store.CountLiveUserNodes.
 func (s *SQLiteStore) CountLiveUserNodes(ctx context.Context, userID string) (int, error) {
 	return countLiveUserNodesOn(ctx, s.db, userID)
@@ -8351,6 +8678,68 @@ func queryNodesOn(ctx context.Context, qr nodeRowQueryer, q string, args ...any)
 func (s *SQLiteStore) EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error {
 	return enqueueNodeDeleteOn(ctx, s.db, blobKey, nodeID, at, 0)
 }
+
+// EnqueueNodeDeleteRetainingNode: see Store.EnqueueNodeDeleteRetainingNode
+// (N-0930-6).
+//
+// The race it closes: a single-shot upload (POST /api/files) has no session,
+// object or queue row naming its node while Put runs, so a node delete in
+// that window finds nothing referencing the node and removes the row
+// (retireOrDeleteNodeTx). The upload's persist is then refused by the node
+// fence and its blob dropped; when that immediate DELETE fails too, a plain
+// enqueue names an id blobFor can never resolve again, so the row can never
+// drain and the ciphertext stays on the machine with nothing able to remove
+// it.
+//
+// Here the queue row and, when the node row is gone, a RETIRED node row are
+// written in ONE transaction. The restored row is exactly what
+// retireOrDeleteNodeTx would have left had the upload been visible to the
+// delete: deleted_at and removed_at set (so every pool, listing, ICE and the
+// rollout keep excluding it), last_seen_at 0, no TURN urls/secret, and only the
+// storage endpoint the upload itself was using. GC drains the delete through
+// it and PurgeRetiredNodes removes it once nothing names it. It is restored
+// only when:
+//   - the id is tombstoned with the SAME owner the upload saw — i.e. the row
+//     went through an A-M3 delete of that very node, never an id that was not
+//     deleted or that belongs to someone else;
+//   - for a user node, the owning account exists and is not being deleted
+//     (both account purges drop their own nodes' cleanup by design — they
+//     forgive the owner's bill and leave the owner's ciphertext on the owner's
+//     machine — and a deleted account's node secret is not brought back);
+//   - the upload actually had a storage endpoint.
+//
+// A row that still exists (live, retired, or re-registered by the same owner)
+// is left untouched: the insert is a no-op and this is a plain enqueue.
+func (s *SQLiteStore) EnqueueNodeDeleteRetainingNode(ctx context.Context, blobKey string, placed Node, at int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+	if err := enqueueNodeDeleteOn(ctx, tx, blobKey, placed.ID, at, 0); err != nil {
+		return err
+	}
+	if placed.ID != "" && placed.StorageEnabled && placed.StorageURL != "" {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO nodes (id, owner_type, owner_user_id, region, urls, turn_secret, version, created_at, last_seen_at,
+			                    storage_url, storage_secret, storage_fp, storage_enabled, removed_at, deleted_at)
+			 SELECT t.id, t.owner_type, NULLIF(t.owner_user_id, ''), '', '[]', '', '', ?, 0,
+			        ?, ?, ?, 1, `+retiredAtSQL+`, `+retiredAtSQL+`
+			   FROM node_tombstones t
+			  WHERE t.id = ? AND t.owner_type = ? AND t.owner_user_id = ?
+			    AND NOT EXISTS (SELECT 1 FROM nodes n WHERE n.id = t.id)
+			    AND (t.owner_type = 'fleet' OR EXISTS (SELECT 1 FROM users u WHERE u.id = t.owner_user_id AND u.deleted_at = 0))`,
+			at, placed.StorageURL, placed.StorageSecret, placed.StorageFP,
+			placed.ID, placed.OwnerType, placed.OwnerUserID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// retiredAtSQL is the retirement stamp of a row restored from its tombstone:
+// the tombstone's own deletion time (never 0, which would read as live).
+const retiredAtSQL = `CASE WHEN t.deleted_at > 0 THEN t.deleted_at ELSE CAST(strftime('%s','now') AS INTEGER) END`
 
 // enqueueNodeDeleteOn is EnqueueNodeDelete's body against any executor, so a
 // caller that must queue the responsibility INSIDE its own transaction — a pair
