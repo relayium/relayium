@@ -2806,6 +2806,20 @@ type Store interface {
 	// and marks the email verified, in one transaction guarded by epoch, active
 	// state, unchanged email and the subject mapping (false = state moved).
 	VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error)
+	// CreateCLITokenForIdentityAtEpoch inserts t in one statement only while
+	// the user's credential_epoch still equals epoch, the account is not
+	// pending deletion and identities(provider, subject) maps to t.UserID.
+	CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string) (bool, error)
+	// RedeemReactivateToken spends a reactivate token, checks it belongs to the
+	// account's current pending-deletion generation, recovers the account and
+	// inserts sess, in one transaction; it returns the account id (ok=false:
+	// nothing recovered and no session).
+	RedeemReactivateToken(ctx context.Context, tokenHash string, now int64, sess Session) (userID string, ok bool, err error)
+	// CreateOAuthState / ConsumeOAuthState keep the hash of each browser OAuth
+	// state server-side; consume deletes an unexpired row and reports whether
+	// it existed, so a state works at most once.
+	CreateOAuthState(ctx context.Context, stateHash string, now, expiresAt int64) error
+	ConsumeOAuthState(ctx context.Context, stateHash string, now int64) (bool, error)
 	// CredentialEpoch / CredentialEpochByEmail read users.credential_epoch
 	// (0 for an unknown address).
 	CredentialEpoch(ctx context.Context, userID string) (int64, error)

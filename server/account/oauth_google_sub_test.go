@@ -31,6 +31,7 @@ func googleSubService(t *testing.T, store Store, sub, email string, verified boo
 
 func googleSubCallback(t *testing.T, svc *Service) *httptest.ResponseRecorder {
 	t.Helper()
+	seedOAuthState(t, svc, "st")
 	req := httptest.NewRequest("GET", "/api/auth/google/callback?code=abc&state=st", nil)
 	req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "st"})
 	rec := httptest.NewRecorder()

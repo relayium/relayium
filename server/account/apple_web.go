@@ -63,12 +63,17 @@ const appleTokenURL = "https://appleid.apple.com/auth/token"
 // authorization endpoint. response_mode=form_post is required whenever the
 // "name email" scope is requested.
 func (s *Service) handleAppleWebStart(w http.ResponseWriter, r *http.Request) {
-	state, nonce := authx.RandToken(), authx.RandToken()
+	state, err := s.mintOAuthState(r.Context())
+	if err != nil {
+		http.Redirect(w, r, "/?login=error", http.StatusFound)
+		return
+	}
+	nonce := authx.RandToken()
 	for _, c := range []struct{ name, val string }{
 		{oauthStateCookie, state}, {oauthNonceCookie, nonce},
 	} {
 		http.SetCookie(w, &http.Cookie{
-			Name: c.name, Value: c.val, Path: "/", MaxAge: 600,
+			Name: c.name, Value: c.val, Path: "/", MaxAge: oauthStateTTL,
 			// Apple's callback is a cross-site top-level POST (response_mode=form_post
 			// from appleid.apple.com) — SameSite=Lax cookies are NOT sent on
 			// cross-site POST navigations, so this MUST be None (requires Secure)
@@ -106,6 +111,11 @@ func (s *Service) handleAppleWebCallback(w http.ResponseWriter, r *http.Request)
 		fail()
 		return
 	}
+	// Spent server-side before the code is redeemed (see consumeOAuthState).
+	if !s.consumeOAuthState(r.Context(), sc.Value) {
+		fail()
+		return
+	}
 	nc, err := r.Cookie(oauthNonceCookie)
 	if err != nil || nc.Value == "" {
 		// The start handler always sets this cookie; a missing/empty value is
@@ -126,69 +136,15 @@ func (s *Service) handleAppleWebCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	u, found, err := s.store.GetUserByIdentity(r.Context(), "apple", claims.Sub)
-	if err != nil {
-		fail()
-		return
-	}
-	if !found {
-		if claims.Email == "" {
-			fail()
-			return
-		}
-		// Creating or linking an account by email is only as trustworthy as the
-		// email: an address the IdP has not verified must not attach this Apple
-		// id to whichever account holds it (or reserve it for a later owner).
-		// Apple marks relay and ordinary addresses verified, so this refuses only
-		// an anomalous token.
-		if !claims.EmailVerified {
-			fail()
-			return
-		}
-		u, err = s.store.UpsertUserByEmail(r.Context(), claims.Email, appleNameFromForm(r.FormValue("user")))
-		if err != nil {
-			fail()
-			return
-		}
-	}
-	// Frozen-account guard: pending-deletion accounts never get a live session.
-	if u.DeletedAt > 0 {
-		raw, terr := s.issueReactivateToken(r.Context(), u.ID, u.Email)
-		if terr != nil {
-			fail()
-			return
-		}
-		// Fragment, not query: keeps the reactivate token out of server logs and
-		// Referer (see oauth.go's frozen-login redirect).
-		http.Redirect(w, r, "/#account=pending_deletion&token="+url.QueryEscape(raw), http.StatusFound)
-		return
-	}
-	if err := s.store.LinkIdentity(r.Context(), "apple", claims.Sub, u.ID); err != nil {
-		fail()
-		return
-	}
-	if claims.EmailVerified {
-		// Pre-hijack defense: drop any password planted on this email while
-		// unverified, before Apple verifies it (see dropUnverifiedPassword).
-		// Gate verification on the drop succeeding — verifying while a planted
-		// password survives is exactly the takeover we're closing, so on error
-		// we must NOT flip the account to verified (mirrors oauth.go).
-		if err := s.dropUnverifiedPassword(r.Context(), u.ID); err != nil {
-			fail()
-			return
-		}
-		if err := s.store.SetEmailVerified(r.Context(), u.ID); err != nil {
-			fail()
-			return
-		}
-	}
-	sess, err := s.IssueSession(r.Context(), u.ID)
-	if err != nil {
-		fail()
-		return
-	}
-	s.setSessionCookie(w, sess)
-	http.Redirect(w, r, "/", http.StatusFound)
+	// Resolved exactly as a Google login is (finishWebIdentityLogin): by the
+	// stable Apple subject first, falling back to the verified email only for
+	// an unseen subject; every credential it issues is fenced by the account's
+	// epoch, lifecycle and the subject mapping, and a planted password is
+	// cleared only in the guarded verification transaction. Apple marks relay
+	// and ordinary addresses verified, so the verified-email requirement
+	// refuses only an anomalous token.
+	s.finishWebIdentityLogin(w, r, "apple", claims.Sub, normEmail(claims.Email), claims.EmailVerified,
+		appleNameFromForm(r.FormValue("user")))
 }
 
 // appleNameFromForm pulls a display name out of Apple's first-authorization

@@ -154,6 +154,7 @@ func TestAppleWebCallback_HappyPath(t *testing.T) {
 		return idToken, nil
 	}
 
+	seedOAuthState(t, svc, "STATE1")
 	form := url.Values{"code": {"CODE1"}, "state": {"STATE1"},
 		"user": {`{"name":{"firstName":"Ada","lastName":"Lovelace"}}`}}
 	req := httptest.NewRequest("POST", "/api/auth/apple/web/callback", strings.NewReader(form.Encode()))
@@ -182,8 +183,10 @@ func TestAppleWebCallback_HappyPath(t *testing.T) {
 	}
 }
 
-// clearPwFailStore wraps a Store and makes ClearPassword fail, to exercise the
-// error path of dropUnverifiedPassword during an IdP login.
+// clearPwFailStore wraps a Store and makes the password drop fail, to exercise
+// its error path during an IdP login. The drop happens inside the guarded
+// VerifyEmailForIdentityLogin transaction (N-0930-3), so that is where the
+// failure is injected; ClearPassword fails too, for any legacy caller.
 type clearPwFailStore struct {
 	Store
 }
@@ -192,7 +195,11 @@ func (c *clearPwFailStore) ClearPassword(ctx context.Context, userID string) err
 	return errors.New("injected ClearPassword failure")
 }
 
-// If dropUnverifiedPassword fails during an Apple web login, the account must NOT
+func (c *clearPwFailStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error) {
+	return false, errors.New("injected password-drop failure")
+}
+
+// If the password drop fails during an Apple web login, the account must NOT
 // be flipped to verified — flipping it while an attacker's planted password
 // survives is exactly the pre-hijack takeover. Verification is gated on the drop
 // succeeding (mirrors the Google/oauth.go path).
@@ -224,6 +231,7 @@ func TestAppleWebCallback_VerifyGatedOnPasswordDrop(t *testing.T) {
 	svc.appleKey = func(_ context.Context, _ string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }
 	svc.exchangeAppleCode = func(_ context.Context, _ string) (string, error) { return idToken, nil }
 
+	seedOAuthState(t, svc, "STATE1")
 	form := url.Values{"code": {"CODE1"}, "state": {"STATE1"}}
 	req := httptest.NewRequest("POST", "/api/auth/apple/web/callback", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -305,6 +313,7 @@ func TestAppleWebCallback_MissingNonceRejected(t *testing.T) {
 		return idToken, nil
 	}
 
+	seedOAuthState(t, svc, "STATE1")
 	form := url.Values{"code": {"CODE1"}, "state": {"STATE1"}}
 	req := httptest.NewRequest("POST", "/api/auth/apple/web/callback", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -324,6 +333,7 @@ func TestAppleWebCallback_MissingNonceRejected(t *testing.T) {
 
 func TestAppleWebCallback_StateMismatch(t *testing.T) {
 	svc, _ := newAppleWebTestService(t)
+	seedOAuthState(t, svc, "STATE1")
 	form := url.Values{"code": {"CODE1"}, "state": {"WRONG"}}
 	req := httptest.NewRequest("POST", "/api/auth/apple/web/callback", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

@@ -374,6 +374,7 @@ func TestOAuthCallbackFrozenWhenPendingDeletion(t *testing.T) {
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
+	seedOAuthState(t, svc, "s1")
 	req, _ := http.NewRequest("GET", ts.URL+"/api/auth/google/callback?code=abc&state=s1", nil)
 	req.AddCookie(&http.Cookie{Name: "relayium_oauth_state", Value: "s1"})
 	resp, err := client.Do(req)

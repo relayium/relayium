@@ -54,21 +54,51 @@ func (s *Service) realFetchGoogleUser(ctx context.Context, code string) (sub, em
 
 const oauthStateCookie = "relayium_oauth_state"
 
-func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
+// oauthStateTTL is how long a browser OAuth attempt may take, from the start
+// redirect to the provider's callback. The state cookie and the server-side
+// state row share it.
+const oauthStateTTL = 600 // seconds
+
+// mintOAuthState issues a fresh state for a browser OAuth attempt and records
+// its hash server-side until oauthStateTTL, so the callback can spend it
+// exactly once (consumeOAuthState).
+func (s *Service) mintOAuthState(ctx context.Context) (string, error) {
 	state := authx.RandToken()
+	now := s.now().Unix()
+	if err := s.store.CreateOAuthState(ctx, authx.HashToken(state), now, now+oauthStateTTL); err != nil {
+		return "", err
+	}
+	return state, nil
+}
+
+// consumeOAuthState spends a state the callback has already matched against
+// its cookie. It deletes the server-side row in one statement, so a copied
+// state/cookie pair — replayed, or raced against the original — is honoured at
+// most once, and an expired or never-issued state not at all. Callers spend it
+// before redeeming the provider's code.
+func (s *Service) consumeOAuthState(ctx context.Context, state string) bool {
+	ok, err := s.store.ConsumeOAuthState(ctx, authx.HashToken(state), s.now().Unix())
+	return err == nil && ok
+}
+
+func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
+	state, err := s.mintOAuthState(r.Context())
+	if err != nil {
+		http.Redirect(w, r, "/?login=error", http.StatusFound)
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
-		Name: oauthStateCookie, Value: state, Path: "/", MaxAge: 600,
+		Name: oauthStateCookie, Value: state, Path: "/", MaxAge: oauthStateTTL,
 		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, s.googleConfig().AuthCodeURL(state), http.StatusFound)
 }
 
 // clearOAuthCookie expires a login cookie (state or nonce). A callback clears it
-// on every outcome so the browser drops it after its first use. This is not a
-// server-side one-use guarantee: a copied state/cookie pair is not invalidated
-// on the server (the provider's authorization code is single-use on its side).
-// The attributes mirror the ones it was set with, which is what makes browsers
-// replace rather than add.
+// on every outcome so the browser drops it after its first use. The one-use
+// guarantee itself is server-side (consumeOAuthState); this only keeps the
+// browser from holding a spent value. The attributes mirror the ones it was set
+// with, which is what makes browsers replace rather than add.
 func (s *Service) clearOAuthCookie(w http.ResponseWriter, name string, sameSite http.SameSite) {
 	http.SetCookie(w, &http.Cookie{
 		Name: name, Value: "", Path: "/", MaxAge: -1,
@@ -84,6 +114,10 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		fail()
 		return
 	}
+	if !s.consumeOAuthState(r.Context(), stateCookie.Value) {
+		fail()
+		return
+	}
 	sub, email, name, verified, err := s.fetchGoogleUser(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
 		fail()
@@ -96,18 +130,33 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		fail()
 		return
 	}
-	// Resolve by the Google subject first. The email Google reports is mutable
-	// (a user can rename their Google address, and a released address can be
+	s.finishWebIdentityLogin(w, r, "google", sub, email, verified, name)
+}
+
+// finishWebIdentityLogin turns a verified provider identity (Google, Apple web)
+// into a browser session, a pending-deletion recovery redirect, or a login
+// error. email must be normalized ("" when the provider sent none); verified
+// is the provider's claim that the caller controls it.
+func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request, provider, sub, email string, verified bool, name string) {
+	fail := func() { http.Redirect(w, r, "/?login=error", http.StatusFound) }
+	// Resolve by the provider subject first. The email a provider reports is
+	// mutable (a user can rename their address, and a released address can be
 	// re-registered by someone else), so once a subject is linked it — not the
 	// email — decides which account signs in.
-	resolved, found, err := s.store.GetUserByIdentity(r.Context(), "google", sub)
+	resolved, found, err := s.store.GetUserByIdentity(r.Context(), provider, sub)
 	if err != nil {
 		fail()
 		return
 	}
 	if !found {
 		// Unseen subject: keep verified-email linking, so a user who recreated
-		// their Google account with the same verified address still reaches it.
+		// their provider account with the same verified address still reaches
+		// it. An address the provider has not verified must not attach this
+		// subject to whichever account holds it.
+		if email == "" || !verified {
+			fail()
+			return
+		}
 		resolved, err = s.store.UpsertUserByEmail(r.Context(), email, name)
 		if err != nil {
 			fail()
@@ -129,12 +178,13 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		fail()
 		return
 	}
-	// emailProven: Google has verified that this caller controls u's stored
-	// address. Only then may the login verify that address or clear a password
-	// planted on it while unverified. A linked subject whose Google email has
-	// changed signs in to its own account but proves nothing about that
-	// account's stored address, and never touches the account holding the new one.
-	emailProven := normEmail(u.Email) == email
+	// emailProven: the provider has verified that this caller controls u's
+	// stored address. Only then may the login verify that address or clear a
+	// password planted on it while unverified. A linked subject whose provider
+	// email has changed signs in to its own account but proves nothing about
+	// that account's stored address, and never touches the account holding the
+	// new one.
+	emailProven := verified && email != "" && normEmail(u.Email) == email
 	if !found && !emailProven {
 		// Email-based linking needs the account to still hold the address it
 		// was selected by; an address change in between voids the match.
@@ -148,14 +198,14 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		// The token is minted in one statement that re-checks, at insert time,
 		// that the account is still pending deletion at the epoch read above and
 		// that the subject predicate this decision rests on still holds:
-		//   - subject-resolved: the linked Google credential itself earns the
-		//     token (like a password login of a pending account), whatever
-		//     address Google reports now — so the link must still stand;
+		//   - subject-resolved: the linked credential itself earns the token
+		//     (like a password login of a pending account), whatever address
+		//     the provider reports now — so the link must still stand;
 		//   - unseen subject: the verified email is the credential, so the
 		//     subject must still be linked to no account (a concurrent login
 		//     that linked it elsewhere wins) and the account must still hold
 		//     exactly this address.
-		raw, ok, err := s.issueReactivateTokenForIdentityLogin(r.Context(), u.ID, u.Email, epoch, "google", sub, found)
+		raw, ok, err := s.issueReactivateTokenForIdentityLogin(r.Context(), u.ID, u.Email, epoch, provider, sub, found)
 		if err == nil && !ok {
 			err = errIdentityMoved
 		}
@@ -171,7 +221,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
-		if err := s.store.LinkIdentity(r.Context(), "google", sub, u.ID); err != nil {
+		if err := s.store.LinkIdentity(r.Context(), provider, sub, u.ID); err != nil {
 			fail()
 			return
 		}
@@ -182,18 +232,18 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// another account, and a linked subject may have been unlinked since it was
 	// read. Either way this login is refused. The session insert below repeats
 	// the check atomically, so a change after this point is caught there too.
-	owner, linked, err := s.store.GetUserByIdentity(r.Context(), "google", sub)
+	owner, linked, err := s.store.GetUserByIdentity(r.Context(), provider, sub)
 	if err != nil || !linked || owner.ID != u.ID {
 		fail()
 		return
 	}
 	if emailProven {
 		// Pre-hijack defense: drop any password planted on this email while it
-		// was unverified, then verify it via Google (verified == true was checked
-		// above) — one transaction guarded by the epoch, active state, stored
-		// email and subject mapping, so a password reset that commits after the
-		// epoch read is never overwritten (see VerifyEmailForIdentityLogin).
-		ok, err := s.store.VerifyEmailForIdentityLogin(r.Context(), u.ID, email, epoch, "google", sub)
+		// was unverified, then verify it via the provider — one transaction
+		// guarded by the epoch, active state, stored email and subject mapping,
+		// so a password reset that commits after the epoch read is never
+		// overwritten (see VerifyEmailForIdentityLogin).
+		ok, err := s.store.VerifyEmailForIdentityLogin(r.Context(), u.ID, email, epoch, provider, sub)
 		if err != nil || !ok {
 			fail()
 			return
@@ -209,7 +259,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// One statement: epoch unchanged, account not pending deletion, subject
 	// still linked to u. Any of those failing means a deletion, reset or unlink
 	// committed after the checks above, and no session may exist for it.
-	ok, err := s.store.CreateSessionForIdentityAtEpoch(r.Context(), sess, epoch, "google", sub)
+	ok, err := s.store.CreateSessionForIdentityAtEpoch(r.Context(), sess, epoch, provider, sub)
 	if err != nil || !ok {
 		fail()
 		return

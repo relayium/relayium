@@ -1,7 +1,6 @@
 package account
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -150,9 +149,15 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 		claims.IsPrivateEmail = exchanged.IsPrivateEmail
 	}
 
-	u, found, err := s.store.GetUserByIdentity(r.Context(), "apple", claims.Sub)
+	ctx := r.Context()
+	serverError := func() { http.Error(w, "server error", http.StatusInternalServerError) }
+	// The account, the Apple link or the lifecycle moved between this
+	// request's checks and its write; nothing was issued, and a retry resolves
+	// against the new state.
+	conflict := func() { httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "login_conflict"}) }
+	resolved, found, err := s.store.GetUserByIdentity(ctx, "apple", claims.Sub)
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		serverError()
 		return
 	}
 	if !found {
@@ -167,60 +172,83 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "email_not_verified"})
 			return
 		}
-		u, err = s.store.UpsertUserByEmail(r.Context(), claims.Email, in.Name)
+		resolved, err = s.store.UpsertUserByEmail(ctx, claims.Email, in.Name)
 		if err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
+			serverError()
 			return
 		}
-		if s.frozenBlocked(w, u) {
-			return
-		}
-		if err := s.store.LinkIdentity(r.Context(), "apple", claims.Sub, u.ID); err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
-		}
-		if claims.EmailVerified {
-			// Pre-hijack defense: drop any password planted on this email while
-			// unverified, before Apple verifies it (see dropUnverifiedPassword).
-			// Gate verification on the drop succeeding — verifying while a planted
-			// password survives is exactly the takeover we're closing, so on error
-			// we must NOT flip the account to verified (mirrors oauth.go).
-			if err := s.dropUnverifiedPassword(r.Context(), u.ID); err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
-			}
-			if err := s.store.SetEmailVerified(r.Context(), u.ID); err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
-			}
-		}
-	} else if s.frozenBlocked(w, u) {
+	}
+	// Credential fence, as in the browser flows (finishWebIdentityLogin): the
+	// epoch is read BEFORE the account state this login acts on, and every
+	// credential below — reactivate token, verification, bearer — is written
+	// only while that epoch, the lifecycle and the Apple subject mapping still
+	// hold.
+	epoch, err := s.store.CredentialEpoch(ctx, resolved.ID)
+	if err != nil {
+		serverError()
 		return
 	}
-	// Sign in with Apple proves a different credential than the password, so a
-	// reset does not invalidate it; the epoch is read here only so that a reset
-	// committing from now on still revokes the bearer minted below.
-	epoch, err := s.store.CredentialEpoch(r.Context(), u.ID)
+	u, err := s.store.GetUserByID(ctx, resolved.ID)
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		serverError()
 		return
 	}
-	s.finishNativeLogin(w, r, u.ID, "App (Apple)", epoch)
-}
-
-// frozenBlocked writes the pending-deletion response and reports true when the
-// account is scheduled for deletion, so a frozen account never gets a token.
-func (s *Service) frozenBlocked(w http.ResponseWriter, u User) bool {
-	if u.DeletedAt == 0 {
-		return false
+	email := normEmail(claims.Email)
+	emailProven := claims.EmailVerified && email != "" && normEmail(u.Email) == email
+	if !found && !emailProven {
+		// The account selected by email no longer holds that address.
+		conflict()
+		return
 	}
-	raw, err := s.issueReactivateToken(context.Background(), u.ID, u.Email)
+	if u.DeletedAt > 0 {
+		// Pending deletion: no bearer, a reactivation offer instead — minted in
+		// one statement that re-checks pending state, epoch and the subject
+		// predicate (see CreateReactivateTokenForIdentityLogin).
+		raw, ok, err := s.issueReactivateTokenForIdentityLogin(ctx, u.ID, u.Email, epoch, "apple", claims.Sub, found)
+		if err != nil {
+			serverError()
+			return
+		}
+		if !ok {
+			conflict()
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
+			"status": "pending_deletion", "purgeAfter": u.PurgeAfter, "reactivateToken": raw,
+		})
+		return
+	}
+	if !found {
+		if err := s.store.LinkIdentity(ctx, "apple", claims.Sub, u.ID); err != nil {
+			serverError()
+			return
+		}
+	}
+	// LinkIdentity is INSERT OR IGNORE: confirm the subject is ours before
+	// anything is verified (a concurrent first login may have linked it
+	// elsewhere, or it was unlinked since it was read).
+	owner, linked, err := s.store.GetUserByIdentity(ctx, "apple", claims.Sub)
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return true
+		serverError()
+		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"status": "pending_deletion", "purgeAfter": u.PurgeAfter, "reactivateToken": raw,
-	})
-	return true
+	if !linked || owner.ID != u.ID {
+		conflict()
+		return
+	}
+	if emailProven {
+		// Pre-hijack defense: drop a password planted on this address while it
+		// was unverified and verify it, in the guarded transaction that never
+		// overwrites a password reset committing after the epoch read.
+		ok, err := s.store.VerifyEmailForIdentityLogin(ctx, u.ID, email, epoch, "apple", claims.Sub)
+		if err != nil {
+			serverError()
+			return
+		}
+		if !ok {
+			conflict()
+			return
+		}
+	}
+	s.finishNativeIdentityLogin(w, r, u.ID, "App (Apple)", epoch, "apple", claims.Sub)
 }

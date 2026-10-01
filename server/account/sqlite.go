@@ -128,6 +128,13 @@ CREATE TABLE IF NOT EXISTS magic_tokens (
   expires_at INTEGER NOT NULL,
   used_at    INTEGER NOT NULL DEFAULT 0
 );
+-- One row per browser OAuth attempt (Google, Apple web): the hash of the state
+-- the start handler issued. The callback deletes it before anything else, so a
+-- copied state/cookie pair works at most once. See CreateOAuthState.
+CREATE TABLE IF NOT EXISTS oauth_states (
+  state_hash TEXT PRIMARY KEY,
+  expires_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS devices (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES users(id),
@@ -3063,6 +3070,16 @@ func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) e
 		return err
 	}
 	defer tx.Rollback()
+	if err := clearAccountDeletionTx(ctx, tx, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// clearAccountDeletionTx is ClearAccountDeletion inside the caller's
+// transaction, so reactivation can recover the account in the same commit that
+// spends its token and issues its session (RedeemReactivateToken).
+func clearAccountDeletionTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	var provider string
 	_ = tx.QueryRowContext(ctx, `SELECT provider FROM billing_deletion_holds WHERE billing_subject_id=?`, userID).Scan(&provider)
 	if provider == ProviderStripe {
@@ -3090,7 +3107,7 @@ func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) e
 		`DELETE FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate' AND used_at = 0`, userID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 // MarkPurgeReminderSent records when the pre-purge reminder email was sent.
@@ -3762,6 +3779,130 @@ func (s *SQLiteStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, e
 		return false, err
 	}
 	return true, tx.Commit()
+}
+
+// CreateCLITokenForIdentityAtEpoch is CreateCLITokenAtEpoch for a native login
+// proven by a linked provider identity: the epoch fence, the not-pending-
+// deletion check and the subject mapping are evaluated in the same INSERT (as
+// CreateSessionForIdentityAtEpoch does for a browser session).
+func (s *SQLiteStore) CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CLIToken, epoch int64, provider, subject string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at, idle_expires_at)
+		 SELECT ?, u.id, ?, ?, ?, ? FROM users u
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0
+		    AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`,
+		t.TokenHash, t.DeviceID, t.CreatedAt, t.LastSeenAt, t.CreatedAt+cliTokenIdleTTLSeconds,
+		t.UserID, epoch, provider, subject)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+// RedeemReactivateToken spends a "reactivate" token, recovers the account and
+// inserts sess for it, in one transaction, and returns the account id.
+//
+// The token is honoured only for the pending-deletion generation it was issued
+// in. Every account deletion bumps credential_epoch in its own commit
+// (purgeTransientUserDataTx) and a recovery does not, so the epoch recorded on
+// the token names that generation:
+//
+//   - token epoch == account epoch, with the account pending: this generation.
+//   - token epoch 0 (a row written before issuers recorded the epoch, or a
+//     fixture): honoured only while the account is pending and the token was
+//     created at or after the current deleted_at, i.e. inside the current
+//     pending generation. A token minted before the current deletion began —
+//     an earlier generation, or one that slipped in while the account was
+//     active — is refused, so 0 is never a standing bypass. Such legacy rows
+//     expire within AccountGraceDays of the upgrade. Residual: timestamps are
+//     whole seconds, so a legacy stale token created in the very second a later
+//     deletion committed would still pass.
+//
+// ok=false means nothing usable: unknown, spent or expired token (nothing
+// changed), or a token of another generation or an account no longer pending
+// (the token is spent, nothing else changes). The session's UserID is taken
+// from the token.
+func (s *SQLiteStore) RedeemReactivateToken(ctx context.Context, tokenHash string, now int64, sess Session) (string, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", false, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx,
+		`UPDATE email_tokens SET used_at = ?
+		 WHERE token_hash = ? AND purpose = 'reactivate' AND used_at = 0 AND expires_at > ?`,
+		now, tokenHash, now)
+	if err != nil {
+		return "", false, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return "", false, err
+	}
+	var userID string
+	var tokEpoch, tokCreated int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT user_id, credential_epoch, created_at FROM email_tokens WHERE token_hash = ?`, tokenHash,
+	).Scan(&userID, &tokEpoch, &tokCreated); err != nil {
+		return "", false, err
+	}
+	var deletedAt, epoch int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT deleted_at, credential_epoch FROM users WHERE id = ?`, userID).Scan(&deletedAt, &epoch)
+	if err == sql.ErrNoRows {
+		return "", false, tx.Commit()
+	}
+	if err != nil {
+		return "", false, err
+	}
+	sameGeneration := tokEpoch == epoch || (tokEpoch == 0 && tokCreated >= deletedAt)
+	if deletedAt == 0 || !sameGeneration {
+		// Spent either way: a leaked token of another generation is now dead.
+		return "", false, tx.Commit()
+	}
+	if err := clearAccountDeletionTx(ctx, tx, userID); err != nil {
+		return "", false, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, 0)`,
+		authx.HashToken(sess.ID), userID, sess.CreatedAt, sess.ExpiresAt); err != nil {
+		return "", false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", false, err
+	}
+	return userID, true, nil
+}
+
+// oauthStateSweepBatch bounds the expired-row cleanup CreateOAuthState does
+// on each insert.
+const oauthStateSweepBatch = 100
+
+// CreateOAuthState records the hash of a browser OAuth state until expiresAt,
+// first deleting up to oauthStateSweepBatch expired rows so the table stays
+// bounded by the attempts of the last expiry window.
+func (s *SQLiteStore) CreateOAuthState(ctx context.Context, stateHash string, now, expiresAt int64) error {
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM oauth_states WHERE rowid IN
+		   (SELECT rowid FROM oauth_states WHERE expires_at <= ? LIMIT ?)`, now, oauthStateSweepBatch); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO oauth_states (state_hash, expires_at) VALUES (?, ?)`, stateHash, expiresAt)
+	return err
+}
+
+// ConsumeOAuthState deletes an unexpired state row in one statement and
+// reports whether it existed, so of any number of callbacks presenting the
+// same state at most one gets true.
+func (s *SQLiteStore) ConsumeOAuthState(ctx context.Context, stateHash string, now int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM oauth_states WHERE state_hash = ? AND expires_at > ?`, stateHash, now)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }
 
 func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool, error) {
