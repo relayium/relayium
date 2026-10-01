@@ -210,6 +210,25 @@ const adminByoRemovedShown = 5
 // the search and the LIMIT): the lookup set is bounded by the page size, not
 // by the unbounded BYO population, so this can never become the per-row query
 // the rest of this file works hard to avoid.
+// adminRetiredNodeView is one row of the fleet panel's read-only "deleted,
+// still being cleaned up" table (N-0930-7): a retired node (deleted by its
+// owner or an admin while something still named it) and the references GC is
+// still working through before PurgeRetiredNodes removes it.
+type adminRetiredNodeView struct {
+	ID            string
+	OwnerType     string
+	OwnerUserID   string
+	OwnerEmail    string // resolved for user nodes; empty when unknown
+	Label         string
+	DeletedAt     int64
+	QueuedDeletes int64
+	Sessions      int64
+	Files         int64
+}
+
+// adminRetiredNodesShown caps the retired table; the heading carries the total.
+const adminRetiredNodesShown = 50
+
 func fillByoOwnerEmails(ctx context.Context, byo []adminNodeView, emails func(ctx context.Context, ids []string) (map[string]string, error)) []adminNodeView {
 	if len(byo) == 0 {
 		return byo
@@ -1041,6 +1060,32 @@ func (s *Service) buildAdminFleetData(r *http.Request, data adminHomeData) (admi
 	data.ByoPages = byoPageLinks(q, search, byoPageParam, page, totalPages)
 	data.ByoRemovedPages = byoPageLinks(q, search, byoRemPageParam, removedPage, removedTotalPages)
 	data.ByoClearHref, data.ByoErr, data.ByoRemovedErr = adminByoClearHref(q), byoErr != nil, removedErr != nil
+	if retired, total, err := s.Store().ListRetiredNodes(r.Context(), adminRetiredNodesShown); err != nil {
+		// Unknown is rendered as a failure, never as "no retired nodes".
+		log.Printf("admin: ListRetiredNodes failed: %v", err)
+		data.RetiredErr = true
+	} else {
+		data.RetiredNodeCount = total
+		var ids []string
+		for _, rn := range retired {
+			data.RetiredNodes = append(data.RetiredNodes, adminRetiredNodeView{ID: rn.ID, OwnerType: rn.OwnerType,
+				OwnerUserID: rn.OwnerUserID, Label: rn.Label, DeletedAt: rn.DeletedAt,
+				QueuedDeletes: rn.QueuedDeletes, Sessions: rn.Sessions, Files: rn.Files})
+			data.RetiredQueuedDeletes += rn.QueuedDeletes
+			if rn.OwnerUserID != "" {
+				ids = append(ids, rn.OwnerUserID)
+			}
+		}
+		if len(ids) > 0 {
+			if emails, err := s.Store().AdminUserEmailsByIDs(r.Context(), ids); err != nil {
+				log.Printf("admin: AdminUserEmailsByIDs (retired nodes) failed: %v", err)
+			} else {
+				for i := range data.RetiredNodes {
+					data.RetiredNodes[i].OwnerEmail = emails[data.RetiredNodes[i].OwnerUserID]
+				}
+			}
+		}
+	}
 	if tokens, err := s.Store().ListActiveFleetTokens(r.Context()); err != nil {
 		log.Printf("admin: ListActiveFleetTokens failed: %v", err)
 	} else {

@@ -547,6 +547,20 @@ type UsageEvent struct {
 	Billable     bool
 }
 
+// RetiredNode is one retired node row (see the deleted_at migration) and what
+// still keeps it: the references PurgeRetiredNodes waits for. Read-only view
+// for the admin panel; it carries no endpoint or secret.
+type RetiredNode struct {
+	ID            string
+	OwnerType     string
+	OwnerUserID   string // "" for fleet
+	Label         string
+	DeletedAt     int64
+	QueuedDeletes int64 // pending_node_deletes rows naming it
+	Sessions      int64 // upload_sessions rows naming it
+	Files         int64 // stored_files rows naming it, expired-uncollected included
+}
+
 // RelayAttribBudget is the per-(node, user) relay-attribution policy the
 // caller holds a heartbeat entry to (A-M8): a leaky bucket that drains at
 // RatePerSec and holds RatePerSec x WindowSecs. See relayAttribRatePerSec.
@@ -2616,6 +2630,11 @@ type Store interface {
 	// pending_node_deletes, upload_sessions or stored_files row names any more,
 	// and reports how many. Their tombstones stay (A-M3).
 	PurgeRetiredNodes(ctx context.Context) (int64, error)
+	// ListRetiredNodes lists up to limit retired node rows (deleted_at != 0),
+	// newest deletion first, each with how many queued node deletes, upload
+	// sessions and stored objects still name it, plus the total number of
+	// retired rows. For the admin fleet panel (N-0930-7).
+	ListRetiredNodes(ctx context.Context, limit int) ([]RetiredNode, int64, error)
 	// CountLiveUserNodes counts a user's owner_type='user' nodes that are not
 	// deregistered (removed_at = 0) — the population the BYO rollout governs and
 	// the per-user registration cap (maxLiveNodesPerUser) is checked against.

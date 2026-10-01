@@ -8156,6 +8156,41 @@ func (s *SQLiteStore) PurgeRetiredNodes(ctx context.Context) (int64, error) {
 	return res.RowsAffected()
 }
 
+// ListRetiredNodes: see Store.ListRetiredNodes. The three counts are
+// correlated probes on idx_pending_node_deletes_node, idx_upload_sessions_node
+// and idx_stored_files_node, and the number of retired rows is small (each is
+// purged as soon as nothing names it), so this is cheap per panel render.
+func (s *SQLiteStore) ListRetiredNodes(ctx context.Context, limit int) ([]RetiredNode, int64, error) {
+	var total int64
+	if err := s.reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM nodes WHERE deleted_at != 0`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 {
+		limit = 1
+	}
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT n.id, n.owner_type, COALESCE(n.owner_user_id, ''), n.label, n.deleted_at,
+		        (SELECT COUNT(*) FROM pending_node_deletes p WHERE p.node_id = n.id),
+		        (SELECT COUNT(*) FROM upload_sessions u WHERE u.node_id = n.id),
+		        (SELECT COUNT(*) FROM stored_files f WHERE f.node_id = n.id)
+		   FROM nodes n WHERE n.deleted_at != 0
+		  ORDER BY n.deleted_at DESC, n.id ASC LIMIT ?`, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []RetiredNode
+	for rows.Next() {
+		var r RetiredNode
+		if err := rows.Scan(&r.ID, &r.OwnerType, &r.OwnerUserID, &r.Label, &r.DeletedAt,
+			&r.QueuedDeletes, &r.Sessions, &r.Files); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, r)
+	}
+	return out, total, rows.Err()
+}
+
 // CountLiveUserNodes: see Store.CountLiveUserNodes.
 func (s *SQLiteStore) CountLiveUserNodes(ctx context.Context, userID string) (int, error) {
 	return countLiveUserNodesOn(ctx, s.db, userID)

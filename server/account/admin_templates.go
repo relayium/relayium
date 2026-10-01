@@ -156,6 +156,16 @@ type adminHomeData struct {
 	ByoRemovedNextHref   string
 	ByoRemovedPages      []adminPageLink
 	ByoRemovedErr        bool // same contract as ByoErr, for the removed query
+	// RetiredNodes (N-0930-7) lists retired nodes — deleted while something
+	// still named them — newest first, capped at adminRetiredNodesShown, with
+	// the queued deletes, upload sessions and objects GC is still working
+	// through. Every other node list hides them (deleted_at = 0), so without
+	// this an operator could not see why a deleted node's id lingers or that a
+	// queue is stuck behind an unreachable machine. Read-only.
+	RetiredNodes         []adminRetiredNodeView
+	RetiredNodeCount     int64 // all retired rows, not just the ones shown
+	RetiredQueuedDeletes int64 // queued deletes across the rows shown
+	RetiredErr           bool  // the query failed: render a failure, not an empty table
 	FleetTokens          []adminFleetTokenView
 	FleetNodeCount       int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
 	MintedToken          string // set once, right after minting; shown inline then gone
@@ -1087,6 +1097,34 @@ td .off{color:var(--muted);opacity:.7}
 {{if .ByoRemovedNextHref}}<a href="{{.ByoRemovedNextHref}}">{{t $.Lang "下一页 →"}}</a>{{else}}<span class="off">{{t $.Lang "下一页 →"}}</span>{{end}}
 </div>
 {{end}}
+</section>
+{{end}}
+
+{{/* N-0930-7：已删除但仍在清理的节点（retired）。其它节点列表都按 deleted_at = 0
+     过滤，所以没有这张表时，操作员看不到被删节点为什么还占着 id、它的排队删除是不是
+     卡在一台连不上的机器上。只读：这里没有任何操作，清理由 GC 完成后行会自动消失。
+     只在有行或查询出错时渲染。 */}}
+{{if or .RetiredNodes .RetiredErr}}
+<section class="nodes retired-nodes">
+<h2>{{t $.Lang "已删除、等待清理的节点"}}</h2>
+<p class="sub">{{if .RetiredErr}}{{t $.Lang "查询失败"}}{{else}}{{t $.Lang "节点数："}}{{.RetiredNodeCount}} · {{t $.Lang "排队删除"}} {{.RetiredQueuedDeletes}}{{end}}</p>
+<p class="byo-warn">{{t $.Lang "这些节点已被删除，不再参与放置、ICE、直连下载或滚动更新；保留它们只是为了让 GC 还能连到机器上删完残留的密文。下面的引用全部清零后，这一行会被自动移除。"}}</p>
+<table>
+<thead><tr><th>{{t $.Lang "备注 / ID"}}</th><th>{{t $.Lang "所属用户"}}</th><th>{{t $.Lang "删除时间(UTC)"}}</th><th>{{t $.Lang "排队删除"}}</th><th>{{t $.Lang "上传会话"}}</th><th>{{t $.Lang "文件记录"}}</th></tr></thead>
+<tbody>
+{{range .RetiredNodes}}
+<tr>
+<td>{{if .Label}}<b>{{.Label}}</b><br>{{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span></td>
+<td><span style="color:var(--muted);font-size:12px">{{if eq .OwnerType "fleet"}}{{t $.Lang "官方节点"}}{{else if .OwnerEmail}}{{.OwnerEmail}}{{else}}{{.OwnerUserID}}{{end}}</span></td>
+<td>{{if .DeletedAt}}{{ts .DeletedAt}}{{else}}—{{end}}</td>
+<td>{{.QueuedDeletes}}</td>
+<td>{{.Sessions}}</td>
+<td>{{.Files}}</td>
+</tr>
+{{else}}
+<tr><td colspan="6" style="color:var(--muted)">{{t $.Lang "查询失败，结果未知"}}</td></tr>
+{{end}}
+</tbody></table>
 </section>
 {{end}}
 

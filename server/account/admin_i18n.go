@@ -366,6 +366,16 @@ var adminEN = map[string]string{
 	// A-M3: shown instead of a fleet node's delete button while rows still block it.
 	"条记录待清理（含已过期未回收的文件与上传会话），归零后才能删除": "record(s) left to clear (expired, not-yet-collected files and upload sessions count too); delete becomes available at zero",
 	"无法读取剩余记录数，暂不提供删除":                "Could not read what is left on this node, so delete is not offered",
+
+	// N-0930-7: retired (deleted, still being cleaned up) nodes.
+	"已删除、等待清理的节点": "Deleted nodes still being cleaned up",
+	"节点数：":        "Nodes:",
+	"排队删除":        "Queued deletes",
+	"删除时间(UTC)":   "Deleted (UTC)",
+	"上传会话":        "Upload sessions",
+	"文件记录":        "File records",
+	"官方节点":        "Official node",
+	"这些节点已被删除，不再参与放置、ICE、直连下载或滚动更新；保留它们只是为了让 GC 还能连到机器上删完残留的密文。下面的引用全部清零后，这一行会被自动移除。": "These nodes have been deleted and take no part in placement, ICE, direct downloads or rollouts; they are kept only so GC can still reach the machine to delete the remaining ciphertext. Each row is removed automatically once all of its references below reach zero.",
 }
 
 // adminLangCookie holds an explicit choice made in the console's header.
