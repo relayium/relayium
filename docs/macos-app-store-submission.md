@@ -1,5 +1,42 @@
 # macOS App Store submission
 
+## macOS 1.4.5 (42) — candidate PREPARED in source only
+
+**Status, 2026-10-01.** `1.4.5 (42)` is a source candidate and nothing more:
+all ten `MARKETING_VERSION` and ten `CURRENT_PROJECT_VERSION` settings — the
+direct app and its Share extension, the App Store app and its Share extension,
+and the UI test bundle, each in Debug and Release — read `1.4.5` and `42`. No
+signed Release build, notarization, App Store package, upload, TestFlight
+build, GitHub release, tag, website or Sparkle change exists for it. The README
+files, the web release manifest, server catalog, client policy, appcast and
+generated pages still describe the issued versions and change only with formal
+publication metadata.
+
+- Current issued versions, unchanged by this preparation: the public GitHub
+  direct release is `macos-v1.4.4` (published 2026-09-28, source
+  `f37a96d9b`); internal TestFlight holds `1.4.4 (41)` (App Store Connect build
+  `2d0433e7-f4f1-4e74-9db9-caf2dbba43e0`, read back `VALID` with
+  `usesNonExemptEncryption` `false`); the public Mac App Store still sells
+  `1.4.0`.
+- Why this number: `1.4.4 (41)` is issued in both channels and is never
+  reused. Read-back on 2026-10-01 found no `macos-v1.4.5` release or tag. The
+  owner selected `1.4.5 (42)`: a patch increment, major and minor unchanged,
+  build strictly above `41`.
+- What changes against `1.4.4 (41)` (all already on `main`): Sparkle verifies
+  an update archive before extracting it (`66427f7fe`); every copy of a
+  key-bearing `#k=` link marks the pasteboard transient and concealed so the
+  key does not reach Universal Clipboard or clipboard history (`6f5ef71ee`);
+  active Device Inbox deliveries stay trackable across a relaunch
+  (`0c449dfbd`); and the Device Inbox launch sweep handles shared-root and
+  retired jobs' keys and copies more conservatively (`3599257c0`, `eac46cfa8`,
+  `ecce0a122`, `12b409a95`, `83bf5912a`). The StoreKit and subscription sources
+  are byte-identical to `1.4.4 (41)`.
+- Still pending, exactly as for `40` and `41`: the owner's actual StoreKit
+  sandbox acceptance (C03). It blocks external TestFlight, App Store submission
+  and any public store release. The owner's earlier exception allowing an
+  internal TestFlight upload before that acceptance applies to an internal
+  candidate only; nothing here claims an external or public store build.
+
 ## macOS 1.4.4 (41) — direct release published; store candidate in internal TestFlight
 
 **Status, 2026-09-28.** `1.4.4 (41)` is built from one source commit,
