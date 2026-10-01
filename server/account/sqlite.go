@@ -3725,13 +3725,14 @@ func (s *SQLiteStore) CreateSessionAtEpoch(ctx context.Context, sess Session, ep
 // check and the subject mapping are evaluated in the same INSERT, so a deletion
 // or an unlink that commits after the caller's checks leaves no session.
 // proofAt is the login's proof-time fence (loginProof.fence): the account must
-// have been created no later than it, so an account created after the proof
-// was validated — a replacement at the same address — is never bound to it.
+// have been created strictly before it, so an account created after the proof
+// was validated — a replacement at the same address, even within the proof's
+// own second — is never bound to it.
 func (s *SQLiteStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked)
 		 SELECT ?, u.id, ?, ?, 0 FROM users u
-		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0 AND u.created_at <= ?
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0 AND u.created_at < ?
 		    AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`,
 		authx.HashToken(sess.ID), sess.CreatedAt, sess.ExpiresAt, sess.UserID, epoch, proofAt, provider, subject)
 	if err != nil {
@@ -3760,7 +3761,7 @@ func (s *SQLiteStore) CreateReactivateTokenForIdentityLogin(ctx context.Context,
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, credential_epoch, created_at, expires_at, used_at)
 		 SELECT ?, u.id, ?, 'reactivate', u.credential_epoch, ?, ?, 0 FROM users u
-		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at > 0 AND u.created_at <= ? AND `+subjectCond,
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at > 0 AND u.created_at < ? AND `+subjectCond,
 		append([]any{t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt, t.UserID, epoch, proofAt}, args...)...)
 	if err != nil {
 		return false, err
@@ -3809,7 +3810,7 @@ func (s *SQLiteStore) CreateReactivateTokenAtEpoch(ctx context.Context, t EmailT
 // proofAt is the proof-time fence, as in CreateSessionForIdentityAtEpoch.
 func (s *SQLiteStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	return s.verifyEmailGuarded(ctx, userID, email, epoch,
-		` AND created_at <= ? AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = users.id)`,
+		` AND created_at < ? AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = users.id)`,
 		proofAt, provider, subject)
 }
 
@@ -3864,7 +3865,7 @@ func (s *SQLiteStore) CreateCLITokenForIdentityAtEpoch(ctx context.Context, t CL
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at, idle_expires_at)
 		 SELECT ?, u.id, ?, ?, ?, ? FROM users u
-		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0 AND u.created_at <= ?
+		  WHERE u.id = ? AND u.credential_epoch = ? AND u.deleted_at = 0 AND u.created_at < ?
 		    AND EXISTS (SELECT 1 FROM identities i WHERE i.provider = ? AND i.subject = ? AND i.user_id = u.id)`,
 		t.TokenHash, t.DeviceID, t.CreatedAt, t.LastSeenAt, t.CreatedAt+cliTokenIdleTTLSeconds,
 		t.UserID, epoch, proofAt, provider, subject)

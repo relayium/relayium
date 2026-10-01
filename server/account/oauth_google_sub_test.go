@@ -26,6 +26,9 @@ func googleSubService(t *testing.T, store Store, sub, email string, verified boo
 	svc.fetchGoogleUser = func(context.Context, string) (string, string, string, bool, error) {
 		return sub, email, "Google Name", verified, nil
 	}
+	// The provider proof is validated after the fixture's accounts exist: the
+	// proof-time fence refuses accounts created in the proof's own second.
+	svc.wallNow = func() time.Time { return time.Now().Add(2 * time.Second) }
 	return svc
 }
 

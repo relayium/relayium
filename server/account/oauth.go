@@ -244,7 +244,7 @@ func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request,
 	// early check is exact; it also keeps the subject from being linked to a
 	// replacement. The writes repeat it atomically.
 	fenceAt := proof.fence(u, created)
-	if u.CreatedAt > fenceAt || !s.proofLive(proof) {
+	if u.CreatedAt >= fenceAt || !s.proofLive(proof) {
 		fail()
 		return
 	}
@@ -266,7 +266,7 @@ func (s *Service) finishWebIdentityLogin(w http.ResponseWriter, r *http.Request,
 			fail()
 			return
 		}
-		raw, ok, err := s.issueReactivateTokenForIdentityLogin(r.Context(), u.ID, u.Email, epoch, provider, sub, found, fenceAt)
+		raw, ok, err := s.issueReactivateTokenForIdentityLogin(r.Context(), u.ID, u.Email, epoch, provider, sub, found, proof, fenceAt)
 		if err == nil && !ok {
 			err = errIdentityMoved
 		}
@@ -344,10 +344,15 @@ var errIdentityMoved = errors.New("identity no longer linked to the resolved acc
 // issueReactivateTokenForIdentityLogin mints a "reactivate" token for a
 // provider login through CreateReactivateTokenForIdentityLogin (ok=false: the
 // account or subject state moved since it was read, and nothing was minted).
-func (s *Service) issueReactivateTokenForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, linked bool, proofAt int64) (string, bool, error) {
+func (s *Service) issueReactivateTokenForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, linked bool, proof loginProof, proofAt int64) (string, bool, error) {
 	raw := authx.RandToken()
 	now := s.now()
 	st := s.ResolveSettings(ctx)
+	// Settings resolution is database work: recheck the deadline right before
+	// the insert.
+	if !s.proofLive(proof) {
+		return "", false, nil
+	}
 	ok, err := s.store.CreateReactivateTokenForIdentityLogin(ctx, EmailToken{
 		TokenHash: authx.HashToken(raw),
 		UserID:    userID,
@@ -372,15 +377,23 @@ const loginProofTTL = 10 * time.Minute
 // is resolved, so it binds the proof to the accounts that existed then:
 //
 //   - at (wall clock, the clock users.created_at is written with): every
-//     credential write requires the account's created_at <= the fence. An
-//     account created after the proof — say the address was deleted, purged
-//     and re-registered while this request was paused, so that the unseen-
-//     subject fallback now resolves to the replacement — is never bound to it.
-//     The one exception is the account this request's own first sign-in
-//     created after the proof (fence); the writes are keyed on its id, which a
-//     replacement could not share.
-//   - deadline (the service clock): every credential write happens no later
-//     than loginProofTTL after the proof, nor after the provider token expires.
+//     credential write requires the account's created_at < the fence, i.e. a
+//     whole second before the proof. An account created after the proof — say
+//     the address was deleted, purged and re-registered while this request was
+//     paused, so that the unseen-subject fallback now resolves to the
+//     replacement — is never bound to it, not even one created within the
+//     proof's own second (created_at has whole-second resolution, so an equal
+//     value cannot be ordered and is refused). The cost is that an account
+//     created in the same second as an unrelated proof is refused once; a
+//     retry a second later succeeds. The one exception is the account this
+//     request's own first sign-in created (fence); the writes are keyed on its
+//     id, which a replacement could not share.
+//   - deadline (the service clock, exclusive): every credential write happens
+//     before loginProofTTL has passed since the proof and before the provider
+//     token expires (Apple's own validation rejects now >= exp, so must this).
+//     Helpers that do database work before their write (the bearer's device
+//     row, the reactivation token's settings) recheck it immediately before
+//     the write.
 type loginProof struct {
 	at       int64
 	deadline int64
@@ -404,13 +417,14 @@ func (s *Service) newLoginProof(tokenExp int64) loginProof {
 }
 
 // live reports whether a credential may still be written on this proof.
-func (s *Service) proofLive(p loginProof) bool { return s.now().Unix() <= p.deadline }
+func (s *Service) proofLive(p loginProof) bool { return s.now().Unix() < p.deadline }
 
-// fence is the created_at bound for u: the proof time, or u's own creation
-// time when this request's first sign-in created u (created == true).
+// fence is the exclusive created_at bound for u (writes require created_at <
+// fence): the proof time, or — only when this request's first sign-in created
+// u (created == true) — one past u's own creation time.
 func (p loginProof) fence(u User, created bool) int64 {
-	if created && u.CreatedAt > p.at {
-		return u.CreatedAt
+	if created && u.CreatedAt >= p.at {
+		return u.CreatedAt + 1
 	}
 	return p.at
 }

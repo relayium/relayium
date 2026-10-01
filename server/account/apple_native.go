@@ -211,7 +211,7 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 	// Proof-time fence for every credential below (loginProof); exact here for
 	// the reason given in finishWebIdentityLogin, and repeated by the writes.
 	fenceAt := proof.fence(u, created)
-	if u.CreatedAt > fenceAt || !s.proofLive(proof) {
+	if u.CreatedAt >= fenceAt || !s.proofLive(proof) {
 		conflict()
 		return
 	}
@@ -223,7 +223,7 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 			conflict()
 			return
 		}
-		raw, ok, err := s.issueReactivateTokenForIdentityLogin(ctx, u.ID, u.Email, epoch, "apple", claims.Sub, found, fenceAt)
+		raw, ok, err := s.issueReactivateTokenForIdentityLogin(ctx, u.ID, u.Email, epoch, "apple", claims.Sub, found, proof, fenceAt)
 		if err != nil {
 			serverError()
 			return
@@ -277,5 +277,5 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 		conflict()
 		return
 	}
-	s.finishNativeIdentityLogin(w, r, u.ID, "App (Apple)", epoch, "apple", claims.Sub, fenceAt)
+	s.finishNativeIdentityLogin(w, r, u.ID, "App (Apple)", epoch, "apple", claims.Sub, proof, fenceAt)
 }

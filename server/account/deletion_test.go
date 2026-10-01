@@ -369,6 +369,10 @@ func TestOAuthCallbackFrozenWhenPendingDeletion(t *testing.T) {
 	svc.fetchGoogleUser = func(context.Context, string) (string, string, string, bool, error) {
 		return "google-sub-frozen", "gfrozen@example.com", "Frozen", true, nil
 	}
+	// The provider proof is validated after the fixture's accounts exist: the
+	// proof-time fence refuses accounts created in the proof's own second.
+	svc.wallNow = func() time.Time { return time.Now().Add(2 * time.Second) }
+
 	ts := httptest.NewServer(svc.Routes())
 	defer ts.Close()
 	client := ts.Client()

@@ -199,3 +199,167 @@ func TestProofFenceN0930FirstSignInStillWorks(t *testing.T) {
 		}
 	})
 }
+
+// ---- round 5 ----
+
+// pfReplaceSameSecond is pfReplace with the replacement's created_at forced to
+// the proof's own second — an original already due for purge, purged and
+// replaced within the second the proof was validated in.
+func pfReplaceSameSecond(t *testing.T, store *SQLiteStore, old User, proofAt time.Time) User {
+	t.Helper()
+	rep := pfReplace(t, store, old)
+	if _, err := store.db.Exec(`UPDATE users SET created_at = ? WHERE id = ?`, proofAt.Unix(), rep.ID); err != nil {
+		t.Fatal(err)
+	}
+	return rep
+}
+
+func TestProofFenceN0930SameSecondReplacementRefused(t *testing.T) {
+	for _, provider := range []string{"google", "apple web", "apple native"} {
+		t.Run(provider, func(t *testing.T) {
+			proofAt := time.Now()
+			var rep User
+			switch provider {
+			case "google":
+				store := newTestStore(t)
+				old := pfOldAccount(t, store, "ss-g@example.com", proofAt)
+				hs := newPFHooks(store)
+				hs.beforeResolve = func() { rep = pfReplaceSameSecond(t, store, old, proofAt) }
+				svc := googleSubService(t, hs, "sub-ss", "ss-g@example.com", true)
+				svc.wallNow = func() time.Time { return proofAt }
+				rec := googleSubCallback(t, svc)
+				if hs.beforeResolve != nil || rec.Header().Get("Location") != "/?login=error" {
+					t.Fatalf("want a refused login after the interleaving, got %q", rec.Header().Get("Location"))
+				}
+				pfAssertReplacementUntouched(t, store, rep)
+			case "apple web":
+				store := newTestStore(t)
+				old := pfOldAccount(t, store, "ss-a@example.com", proofAt)
+				hs := newPFHooks(store)
+				hs.beforeResolve = func() { rep = pfReplaceSameSecond(t, store, old, proofAt) }
+				svc := n3WebService(t, hs, "ss-a@example.com")
+				svc.wallNow = func() time.Time { return proofAt }
+				rec := n3WebCallback(t, svc)
+				if hs.beforeResolve != nil || rec.Header().Get("Location") != "/?login=error" {
+					t.Fatalf("want a refused login after the interleaving, got %q", rec.Header().Get("Location"))
+				}
+				pfAssertReplacementUntouched(t, store, rep)
+			case "apple native":
+				f, body := n3NativeFixture(t, "ss-n@example.com")
+				old := pfOldAccount(t, f.store, "ss-n@example.com", proofAt)
+				hs := newPFHooks(f.store)
+				hs.beforeResolve = func() { rep = pfReplaceSameSecond(t, f.store, old, proofAt) }
+				f.svc.store = hs
+				f.svc.wallNow = func() time.Time { return proofAt }
+				rec := f.post(body)
+				if hs.beforeResolve != nil || rec.Code == http.StatusOK {
+					t.Fatalf("want a refused login after the interleaving: %d %s", rec.Code, rec.Body.String())
+				}
+				pfAssertReplacementUntouched(t, f.store, rep)
+			}
+		})
+	}
+}
+
+// pfDeviceHooks moves the clock while the native bearer's device row is
+// written — after every earlier deadline check, before the bearer insert.
+type pfDeviceHooks struct {
+	*SQLiteStore
+	duringDevice func()
+}
+
+func (s *pfDeviceHooks) UpsertDevice(ctx context.Context, d Device) (Device, error) {
+	out, err := s.SQLiteStore.UpsertDevice(ctx, d)
+	if s.duringDevice != nil {
+		hook := s.duringDevice
+		s.duringDevice = nil
+		hook()
+	}
+	return out, err
+}
+
+func TestProofFenceN0930NativeExpiryDuringDeviceWrite(t *testing.T) {
+	f, body := n3NativeFixture(t, "pfdev@example.com")
+	u := n3NativeAccount(t, f.store, "pfdev@example.com", "", true)
+	now := f.svc.now()
+	hs := &pfDeviceHooks{SQLiteStore: f.store}
+	hs.duringDevice = func() { f.svc.now = func() time.Time { return now.Add(loginProofTTL) } }
+	f.svc.store = hs
+	rec := f.post(body)
+	if hs.duringDevice != nil {
+		t.Fatal("the login never wrote its device row")
+	}
+	n3AssertNoBearer(t, f.store, rec, u.ID)
+}
+
+// pfSettingsHooks moves the clock while the reactivation issuer resolves its
+// settings — after the caller's deadline check, before the token insert.
+type pfSettingsHooks struct {
+	*SQLiteStore
+	duringSettings func()
+}
+
+func (s *pfSettingsHooks) GetSetting(ctx context.Context, key string) (int64, bool, error) {
+	if s.duringSettings != nil {
+		hook := s.duringSettings
+		s.duringSettings = nil
+		hook()
+	}
+	return s.SQLiteStore.GetSetting(ctx, key)
+}
+
+func TestProofFenceN0930ReactivationExpiryDuringSettings(t *testing.T) {
+	store := newTestStore(t)
+	u := googleSubAccount(t, store, "pfset@example.com", "sub-pfset", "")
+	if err := store.SetAccountDeletion(context.Background(), u.ID, 100, 100+30*86400); err != nil {
+		t.Fatal(err)
+	}
+	hs := &pfSettingsHooks{SQLiteStore: store}
+	svc := googleSubService(t, hs, "sub-pfset", "pfset@example.com", true)
+	base := time.Now()
+	svc.now = func() time.Time { return base }
+	hs.duringSettings = func() { svc.now = func() time.Time { return base.Add(loginProofTTL) } }
+	rec := googleSubCallback(t, svc)
+	if hs.duringSettings != nil {
+		t.Fatal("the issuer never resolved its settings")
+	}
+	if loc := rec.Header().Get("Location"); loc != "/?login=error" {
+		t.Fatalf("want login error, got %q", loc)
+	}
+	if n := googleSubCount(t, store, `SELECT COUNT(*) FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate'`, u.ID); n != 0 {
+		t.Fatalf("no reactivate token after the deadline, found %d", n)
+	}
+}
+
+// Exactly at the Apple token's exp the proof is dead (Apple's own validation
+// rejects now >= exp); one second earlier it is live.
+func TestProofFenceN0930AppleExactExpiryBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		offset time.Duration
+		want   bool
+	}{{"at exp", 0, false}, {"one second before exp", -time.Second, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAppleNativeFixture(t)
+			now := f.svc.now()
+			exp := now.Add(time.Minute)
+			f.setExchange(func(_ context.Context, clientID, code string) (string, error) {
+				return f.token(t, map[string]any{"aud": clientID, "email": "pfe@example.com", "exp": exp.Unix()}), nil
+			})
+			body := f.validBody(t)
+			body["idToken"] = f.token(t, map[string]any{"email": "pfe@example.com", "exp": exp.Unix()})
+			u := n3NativeAccount(t, f.store, "pfe@example.com", "", true)
+			hs := newPFHooks(f.store)
+			hs.afterGetUser = func() { f.svc.now = func() time.Time { return exp.Add(tc.offset) } }
+			f.svc.store = hs
+			rec := f.post(body)
+			if !tc.want {
+				n3AssertNoBearer(t, f.store, rec, u.ID)
+				return
+			}
+			if rec.Code != http.StatusOK {
+				t.Fatalf("a proof one second before exp must still log in: %d %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}

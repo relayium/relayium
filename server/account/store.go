@@ -2803,7 +2803,7 @@ type Store interface {
 	// the user's credential_epoch still equals epoch, the account is not pending
 	// deletion, and identities(provider, subject) still maps to sess.UserID
 	// (false = any of those changed since the caller checked them). Every
-	// *ForIdentity* write also requires users.created_at <= proofAt, the
+	// *ForIdentity* write also requires users.created_at < proofAt, the
 	// login's proof-time fence (see loginProof).
 	CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string, proofAt int64) (bool, error)
 	// CreateReactivateTokenForIdentityLogin inserts a "reactivate" token in one
