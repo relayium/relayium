@@ -15,7 +15,20 @@ const n0930DropText = "dropped over the owed cap in the last"
 // A flood that overflows the owed cap: every dropped byte is reported, summed
 // per pair, once the interval has passed — not per heartbeat, and not only the
 // report that happened to trigger the window's single budget warning.
+// isolateRelayAttribDrops gives the test a fresh process-wide drop log and
+// restores the previous one afterwards. relayAttribDrops is package state: a
+// pair another test flooded earlier is still pending in it and would be
+// flushed — and logged — by this test's heartbeat once its clock passes the
+// interval, which made these assertions depend on test order.
+func isolateRelayAttribDrops(t *testing.T) {
+	t.Helper()
+	prev := relayAttribDrops
+	relayAttribDrops = &relayAttribDropLog{pending: map[relayAttribPair]*relayAttribDropped{}}
+	t.Cleanup(func() { relayAttribDrops = prev })
+}
+
 func TestN0930_8_DroppedBytesAreLoggedPerPairPerInterval(t *testing.T) {
+	isolateRelayAttribDrops(t)
 	logs := a_m8CaptureLog(t)
 	e := newA_M8Env(t)
 	node, quiet := e.fleetNode(), e.fleetNode()
@@ -64,6 +77,7 @@ func TestN0930_8_DroppedBytesAreLoggedPerPairPerInterval(t *testing.T) {
 
 // A pair that never overflows the owed cap produces no drop line.
 func TestN0930_8_NoDropsNoDropLine(t *testing.T) {
+	isolateRelayAttribDrops(t)
 	logs := a_m8CaptureLog(t)
 	e := newA_M8Env(t)
 	node := e.fleetNode()
@@ -74,8 +88,10 @@ func TestN0930_8_NoDropsNoDropLine(t *testing.T) {
 	}
 	e.set(a_m8Base + relayAttribDropLogEvery)
 	e.heartbeat(node, nil)
-	if strings.Contains(logs.String(), n0930DropText) {
-		t.Fatalf("a drop line without dropped bytes:\n%s", logs)
+	for _, line := range strings.Split(logs.String(), "\n") {
+		if strings.Contains(line, n0930DropText) && strings.Contains(line, node) {
+			t.Fatalf("a drop line without dropped bytes:\n%s", logs)
+		}
 	}
 }
 
