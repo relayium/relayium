@@ -546,11 +546,14 @@ func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash strin
 			return nil, false, err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO email_tokens(token_hash,user_id,email,purpose,created_at,expires_at,used_at) VALUES(?,?,?,?,?,?,0)`, reactivate.TokenHash, reactivate.UserID, normEmail(reactivate.Email), reactivate.Purpose, reactivate.CreatedAt, reactivate.ExpiresAt); err != nil {
-		return nil, false, err
-	}
 	blobs, err := purgeTransientUserDataTx(ctx, tx, u.ID)
 	if err != nil {
+		return nil, false, err
+	}
+	// After the purge, which bumped credential_epoch: the token records the
+	// epoch of the pending generation this deletion starts, the one
+	// RedeemReactivateToken will honour it for.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO email_tokens(token_hash,user_id,email,purpose,credential_epoch,created_at,expires_at,used_at) SELECT ?,id,?,?,credential_epoch,?,?,0 FROM users WHERE id=?`, reactivate.TokenHash, normEmail(reactivate.Email), reactivate.Purpose, reactivate.CreatedAt, reactivate.ExpiresAt, u.ID); err != nil {
 		return nil, false, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE users SET deleted_at=?,purge_after=?,purge_reminder_sent=0 WHERE id=? AND deleted_at=0`, now, purgeAfter, u.ID); err != nil {

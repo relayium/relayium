@@ -369,11 +369,16 @@ func TestOAuthCallbackFrozenWhenPendingDeletion(t *testing.T) {
 	svc.fetchGoogleUser = func(context.Context, string) (string, string, string, bool, error) {
 		return "google-sub-frozen", "gfrozen@example.com", "Frozen", true, nil
 	}
+	// The provider proof is validated after the fixture's accounts exist: the
+	// proof-time fence refuses accounts created in the proof's own second.
+	svc.wallNow = func() time.Time { return time.Now().Add(2 * time.Second) }
+
 	ts := httptest.NewServer(svc.Routes())
 	defer ts.Close()
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
+	seedOAuthState(t, svc, "s1")
 	req, _ := http.NewRequest("GET", ts.URL+"/api/auth/google/callback?code=abc&state=s1", nil)
 	req.AddCookie(&http.Cookie{Name: "relayium_oauth_state", Value: "s1"})
 	resp, err := client.Do(req)

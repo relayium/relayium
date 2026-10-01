@@ -29,6 +29,7 @@ func TestGoogleCallbackClearsStateCookie(t *testing.T) {
 	svc.fetchGoogleUser = func(context.Context, string) (string, string, string, bool, error) {
 		return "google-sub-t4", "t4@example.com", "T4", true, nil
 	}
+	seedOAuthState(t, svc, "s1")
 	for _, state := range []string{"s1", "evil"} {
 		req := httptest.NewRequest("GET", "/api/auth/google/callback?code=abc&state="+state, nil)
 		req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "s1"})
@@ -56,7 +57,9 @@ func appleWebT4Service(t *testing.T, claims map[string]any) (*Service, *SQLiteSt
 	return svc, store
 }
 
-func appleWebT4Callback(svc *Service) *httptest.ResponseRecorder {
+func appleWebT4Callback(t *testing.T, svc *Service) *httptest.ResponseRecorder {
+	t.Helper()
+	seedOAuthState(t, svc, "STATE1")
 	form := url.Values{"code": {"CODE1"}, "state": {"STATE1"}}
 	req := httptest.NewRequest("POST", "/api/auth/apple/web/callback", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -72,7 +75,7 @@ func TestAppleWebCallbackClearsStateAndNonceCookies(t *testing.T) {
 	claims := validAppleClaims(svc.now())
 	claims["aud"], claims["nonce"] = "com.relayium.web", "NONCE1"
 	svc, _ = appleWebT4Service(t, claims)
-	rec := appleWebT4Callback(svc)
+	rec := appleWebT4Callback(t, svc)
 	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/" {
 		t.Fatalf("want 302 -> /, got %d -> %q", rec.Code, rec.Header().Get("Location"))
 	}
@@ -95,7 +98,7 @@ func TestAppleWebCallbackRefusesUnverifiedEmailLink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := appleWebT4Callback(svc)
+	rec := appleWebT4Callback(t, svc)
 	if loc := rec.Header().Get("Location"); rec.Code != http.StatusFound || loc != "/?login=error" {
 		t.Fatalf("want 302 -> /?login=error, got %d -> %q", rec.Code, loc)
 	}

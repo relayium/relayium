@@ -145,27 +145,76 @@ func (s *Service) reclaimDeletedAccountBlobs(ctx context.Context, blobs []BlobRe
 	}
 }
 
-// issueReactivateToken mints a fresh "reactivate" email_tokens row for userID,
-// valid for a full grace window (Settings.AccountGraceDays, in days) from
-// now, and returns the raw token. Shared by ConfirmAccountDeletion's
-// scheduled-deletion email and every frozen-login guard (Task 4:
-// password/magic/OAuth) — each pending-deletion login attempt hands back its
-// own independently-expiring token rather than depending on the original
-// confirm email having survived or still being at hand.
-func (s *Service) issueReactivateToken(ctx context.Context, userID, email string) (string, error) {
+// errReactivationStateMoved: the account's epoch, lifecycle, address or
+// password changed after the caller read the state it decided on, so no
+// reactivate token was minted.
+var errReactivationStateMoved = errors.New("account: state moved before the reactivate token was minted")
+
+// issueReactivateTokenAtEpoch mints a fresh "reactivate" token for a frozen
+// login or link (password, magic link, reset, verify), valid for a full grace
+// window (Settings.AccountGraceDays, in days), and returns the raw token. Each
+// pending-deletion attempt hands back its own independently-expiring token
+// rather than depending on the confirm email having survived.
+//
+// epoch is the credential_epoch the caller read BEFORE it checked its
+// credential and the account's pending state. The insert is one statement that
+// requires that epoch, pending deletion, the same address and — for a password
+// login, passwordHash != "" — the very hash the password was checked against
+// (CreateReactivateTokenAtEpoch). So a proof made in one deletion generation
+// can never mint a token for the next: a recovery, password reset/change or
+// fresh deletion committing in between moves the epoch (or the hash) and the
+// call returns errReactivationStateMoved.
+func (s *Service) issueReactivateTokenAtEpoch(ctx context.Context, userID, email string, epoch int64, passwordHash string) (string, error) {
 	raw := authx.RandToken()
 	now := s.now()
 	st := s.ResolveSettings(ctx)
-	tok := EmailToken{
+	ok, err := s.store.CreateReactivateTokenAtEpoch(ctx, EmailToken{
 		TokenHash: authx.HashToken(raw),
 		UserID:    userID,
 		Email:     email,
 		Purpose:   "reactivate",
 		CreatedAt: now.Unix(),
 		ExpiresAt: now.Unix() + st.AccountGraceDays*86400,
-	}
-	if err := s.store.CreateEmailToken(ctx, tok); err != nil {
+	}, epoch, true, passwordHash)
+	if err != nil {
 		return "", err
+	}
+	if !ok {
+		return "", errReactivationStateMoved
+	}
+	return raw, nil
+}
+
+// issueReactivateToken mints a reactivate token that no login proof stands
+// behind: the GC pre-purge reminder (IssueReactivateLink), mailed to the
+// account's own address. It records the account's current credential_epoch,
+// which names the pending-deletion generation it may undo (see
+// RedeemReactivateToken), and is inserted only while the account still holds
+// email at that epoch, so it can never reach a changed address or outlive a
+// later deletion. Pending state is not required: a token minted for an
+// account recovered in the meantime is dead, because the next deletion moves
+// the epoch.
+func (s *Service) issueReactivateToken(ctx context.Context, userID, email string) (string, error) {
+	epoch, err := s.store.CredentialEpoch(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	raw := authx.RandToken()
+	now := s.now()
+	st := s.ResolveSettings(ctx)
+	ok, err := s.store.CreateReactivateTokenAtEpoch(ctx, EmailToken{
+		TokenHash: authx.HashToken(raw),
+		UserID:    userID,
+		Email:     email,
+		Purpose:   "reactivate",
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Unix() + st.AccountGraceDays*86400,
+	}, epoch, false, "")
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", errReactivationStateMoved
 	}
 	return raw, nil
 }
@@ -207,7 +256,24 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	tok, ok, err := s.store.UseEmailToken(r.Context(), authx.HashToken(in.Token), "reactivate", s.now().Unix())
+	// One transaction spends the token, checks it belongs to the account's
+	// current pending-deletion generation (its recorded epoch), recovers the
+	// account and inserts the session. Nothing can land between those steps: a
+	// recovery followed by a fresh deletion, a reset or a second reactivation
+	// either commits first — and this token no longer matches or no longer
+	// exists — or after, and finds the session already in place to revoke.
+	//
+	// A reactivate token authorizes UNDOING a pending deletion — not a general
+	// passwordless login — so a token presented against an account that is no
+	// longer pending mints nothing, and is spent. Same generic error as a bad
+	// token (no enumeration of account state).
+	now := s.now()
+	sess := Session{
+		ID:        authx.RandToken(),
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
+	}
+	userID, ok, err := s.store.RedeemReactivateToken(r.Context(), authx.HashToken(in.Token), now.Unix(), sess)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -216,57 +282,10 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
-	// Read before the pending check: a reactivate token can be obtained with the
-	// account's password (a password login of a pending account returns one), so
-	// if this request is overtaken — the owner recovers the account and resets or
-	// changes the password before it finishes — its session must not appear
-	// after that reset. The session below is inserted only at this epoch.
-	epoch, err := s.store.CredentialEpoch(r.Context(), tok.UserID)
+	sess.UserID = userID
+	u, err := s.store.GetUserByID(r.Context(), userID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	u, err := s.store.GetUserByID(r.Context(), tok.UserID)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	// A reactivate token authorizes UNDOING a pending deletion — not a general
-	// passwordless login. If the account is no longer pending (already recovered),
-	// a leftover token must NOT mint a session: otherwise any one of the several
-	// tokens minted across the grace window stays a 30-day backdoor login that
-	// survives recovery and a password change. The token is already burned above,
-	// so a leaked one is now spent. Same generic error as a bad token (no
-	// enumeration of account state).
-	if u.DeletedAt == 0 {
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
-		return
-	}
-	if err := s.store.ClearAccountDeletion(r.Context(), tok.UserID); err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	// Re-read so the returned user JSON reflects the now-active (non-pending) state.
-	u, err = s.store.GetUserByID(r.Context(), tok.UserID)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	now := s.now()
-	sess := Session{
-		ID:        authx.RandToken(),
-		UserID:    u.ID,
-		CreatedAt: now.Unix(),
-		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
-	}
-	issued, err := s.store.CreateSessionAtEpoch(r.Context(), sess, epoch)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	if !issued {
-		// Overtaken by a reset/change: same generic answer as a spent token.
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
 	s.setSessionCookie(w, sess)

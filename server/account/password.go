@@ -135,51 +135,23 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	return u, nil
 }
 
-// dropUnverifiedPassword removes any password credential on an account that is
-// about to be email-verified through an external identity provider (Google,
-// Apple, magic link) rather than through the password flow's own email
-// verification.
+// Pre-hijack defense (applied by every login that proves the address through
+// another channel — Google, Apple, magic link — rather than the password
+// flow's own email verification): a password planted on an unverified address
+// is dropped, with its "password" identity, before that address is verified.
 //
-// This closes an account pre-hijacking hole. Register (above) lets anyone set a
-// password on an *unverified* email they do not own; login is blocked only by
-// the unverified flag. Without this, the first time the real owner signs in via
-// an IdP the account is flipped to verified while that planted password stays
-// live — so the attacker can then log in with the password they chose and take
-// the account over. A password set before the email was ever proven is
-// therefore untrusted: when a different channel proves ownership we drop it (and
-// the "password" identity), and the legitimate owner re-establishes one via
-// password reset. An already-verified account keeps its password — the owner
-// proved that email themselves, so the credential is trusted.
+// Register (above) lets anyone set a password on an *unverified* email they do
+// not own; login is blocked only by the unverified flag. Without this, the
+// first time the real owner signs in via another channel the account is
+// flipped to verified while that planted password stays live — so the
+// attacker can then log in with the password they chose and take the account
+// over. An already-verified account keeps its password: the owner proved that
+// email themselves, so the credential is trusted.
 //
-// Verification state is re-read from the store (not taken from a possibly-stale
-// User struct) so the decision is authoritative, and this MUST be called before
-// SetEmailVerified — once verified, it correctly becomes a no-op.
-func (s *Service) dropUnverifiedPassword(ctx context.Context, userID string) error {
-	verified, err := s.store.EmailVerified(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if verified {
-		return nil
-	}
-	has, err := s.store.HasPassword(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if !has {
-		return nil
-	}
-	if err := s.store.ClearPassword(ctx, userID); err != nil {
-		return err
-	}
-	// Also drop the "password" identity so ListIdentityProviders / the
-	// last-login-method guard stay consistent with HasPassword. The IdP that
-	// triggered this has already been linked, so the account keeps a login method.
-	if err := s.store.UnlinkIdentity(ctx, "password", userID); err != nil && !errors.Is(err, ErrNotFound) {
-		return err
-	}
-	return nil
-}
+// The drop and the verification happen in one guarded transaction
+// (VerifyEmailForIdentityLogin, VerifyEmailForEmailProof) that re-reads the
+// verification state and requires the epoch the login captured, so a password
+// reset committing in between is never overwritten.
 
 // verifyDropsPassword decides the fate of a password that was set at
 // registration (before the email was ever proven) at the moment the email is
@@ -231,6 +203,14 @@ func (s *Service) verifyDropsPassword(ctx context.Context, u User, password stri
 // byte-for-byte identical credential/verification/frozen guards.
 func (s *Service) authenticate(ctx context.Context, email, password string) (string, error) {
 	email = normEmail(email)
+	// Read before the password and the account state are checked: a frozen
+	// account's reactivation offer is minted only while this epoch still holds
+	// (see issueReactivateTokenAtEpoch). The caller's own session/bearer fence
+	// reads its epoch separately, also before this call.
+	epoch, err := s.store.CredentialEpochByEmail(ctx, email)
+	if err != nil {
+		return "", err
+	}
 	uid, hash, ok, err := s.store.GetCredentials(ctx, email)
 	if err != nil {
 		return "", err
@@ -258,7 +238,14 @@ func (s *Service) authenticate(ctx context.Context, email, password string) (str
 		return "", err
 	}
 	if u.DeletedAt > 0 {
-		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
+		// Bound to the proof just made: the epoch read above, the pending state,
+		// the address and the exact hash the password matched. A recovery,
+		// password reset/change or new deletion since then mints nothing, and the
+		// stale password proof fails like a wrong password.
+		raw, terr := s.issueReactivateTokenAtEpoch(ctx, u.ID, u.Email, epoch, hash)
+		if errors.Is(terr, errReactivationStateMoved) {
+			return "", ErrBadCredentials
+		}
 		if terr != nil {
 			return "", terr
 		}

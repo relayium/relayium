@@ -25,6 +25,14 @@ var errCredentialsChanged = errors.New("account: credentials changed during logi
 // credential. The insert is refused if a password reset/change has bumped it
 // since, which is what keeps a login racing that reset from outliving it.
 func (s *Service) issueBearer(ctx context.Context, userID, deviceName string, epoch int64) (string, error) {
+	return s.issueBearerVia(ctx, userID, deviceName, func(t CLIToken) (bool, error) {
+		return s.store.CreateCLITokenAtEpoch(ctx, t, epoch)
+	})
+}
+
+// issueBearerVia is issueBearer with the guarded token insert supplied by the
+// caller (false = the guard refused, and the new device row is removed).
+func (s *Service) issueBearerVia(ctx context.Context, userID, deviceName string, insert func(CLIToken) (bool, error)) (string, error) {
 	if deviceName == "" {
 		deviceName = "App"
 	}
@@ -36,9 +44,9 @@ func (s *Service) issueBearer(ctx context.Context, userID, deviceName string, ep
 	if err != nil {
 		return "", err
 	}
-	ok, err := s.store.CreateCLITokenAtEpoch(ctx, CLIToken{
+	ok, err := insert(CLIToken{
 		TokenHash: authx.HashToken(raw), UserID: userID, DeviceID: dev.ID, CreatedAt: now,
-	}, epoch)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -110,6 +118,29 @@ func (s *Service) handleNativeLogin(w http.ResponseWriter, r *http.Request) {
 // native Sign in with Apple handler, so both hand back the same shape.
 func (s *Service) finishNativeLogin(w http.ResponseWriter, r *http.Request, userID, deviceName string, epoch int64) {
 	token, err := s.issueBearer(r.Context(), userID, deviceName, epoch)
+	s.writeNativeLogin(w, r, userID, token, err)
+}
+
+// finishNativeIdentityLogin is finishNativeLogin for a login proven by a
+// linked provider identity: the bearer is inserted only while the epoch still
+// holds, the account is not pending deletion and identities(provider, subject)
+// still maps to userID and the account was created before proofAt (the
+// login's proof-time fence) (CreateCLITokenForIdentityAtEpoch), all in one
+// statement. The proof's deadline is rechecked after the device row is
+// written, immediately before the bearer insert.
+func (s *Service) finishNativeIdentityLogin(w http.ResponseWriter, r *http.Request, userID, deviceName string, epoch int64, provider, subject string, proof loginProof, proofAt int64) {
+	ctx := r.Context()
+	token, err := s.issueBearerVia(ctx, userID, deviceName, func(t CLIToken) (bool, error) {
+		if !s.proofLive(proof) {
+			return false, nil
+		}
+		return s.store.CreateCLITokenForIdentityAtEpoch(ctx, t, epoch, provider, subject, proofAt)
+	})
+	s.writeNativeLogin(w, r, userID, token, err)
+}
+
+// writeNativeLogin writes the native login response for an issueBearer result.
+func (s *Service) writeNativeLogin(w http.ResponseWriter, r *http.Request, userID, token string, err error) {
 	if errors.Is(err, errCredentialsChanged) {
 		// The password this login proved is no longer the account's password.
 		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})

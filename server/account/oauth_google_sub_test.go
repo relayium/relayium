@@ -26,11 +26,15 @@ func googleSubService(t *testing.T, store Store, sub, email string, verified boo
 	svc.fetchGoogleUser = func(context.Context, string) (string, string, string, bool, error) {
 		return sub, email, "Google Name", verified, nil
 	}
+	// The provider proof is validated after the fixture's accounts exist: the
+	// proof-time fence refuses accounts created in the proof's own second.
+	svc.wallNow = func() time.Time { return time.Now().Add(2 * time.Second) }
 	return svc
 }
 
 func googleSubCallback(t *testing.T, svc *Service) *httptest.ResponseRecorder {
 	t.Helper()
+	seedOAuthState(t, svc, "st")
 	req := httptest.NewRequest("GET", "/api/auth/google/callback?code=abc&state=st", nil)
 	req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "st"})
 	rec := httptest.NewRecorder()
@@ -308,18 +312,18 @@ func (s *credentialHookStore) GetUserByID(ctx context.Context, id string) (User,
 	return u, err
 }
 
-func (s *credentialHookStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string) (bool, error) {
+func (s *credentialHookStore) CreateSessionForIdentityAtEpoch(ctx context.Context, sess Session, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	if s.beforeSession != nil {
 		s.beforeSession()
 	}
-	return s.SQLiteStore.CreateSessionForIdentityAtEpoch(ctx, sess, epoch, provider, subject)
+	return s.SQLiteStore.CreateSessionForIdentityAtEpoch(ctx, sess, epoch, provider, subject, proofAt)
 }
 
-func (s *credentialHookStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool) (bool, error) {
+func (s *credentialHookStore) CreateReactivateTokenForIdentityLogin(ctx context.Context, t EmailToken, epoch int64, provider, subject string, linked bool, proofAt int64) (bool, error) {
 	if s.beforeToken != nil {
 		s.beforeToken()
 	}
-	return s.SQLiteStore.CreateReactivateTokenForIdentityLogin(ctx, t, epoch, provider, subject, linked)
+	return s.SQLiteStore.CreateReactivateTokenForIdentityLogin(ctx, t, epoch, provider, subject, linked, proofAt)
 }
 
 // beforePasswordWrite fires once, at the first of: right after the
@@ -339,9 +343,9 @@ func (s *credentialHookStore) EmailVerified(ctx context.Context, userID string) 
 	return v, err
 }
 
-func (s *credentialHookStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string) (bool, error) {
+func (s *credentialHookStore) VerifyEmailForIdentityLogin(ctx context.Context, userID, email string, epoch int64, provider, subject string, proofAt int64) (bool, error) {
 	s.firePasswordHook()
-	return s.SQLiteStore.VerifyEmailForIdentityLogin(ctx, userID, email, epoch, provider, subject)
+	return s.SQLiteStore.VerifyEmailForIdentityLogin(ctx, userID, email, epoch, provider, subject, proofAt)
 }
 
 // commitDeletion runs the real account-deletion transaction (session purge,

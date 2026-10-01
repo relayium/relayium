@@ -24,6 +24,7 @@ func TestGoogleCallbackCreatesSession(t *testing.T) {
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	// Simulate the state cookie the start handler would have set.
+	seedOAuthState(t, svc, "s1")
 	req, _ := http.NewRequest("GET", ts.URL+"/api/auth/google/callback?code=abc&state=s1", nil)
 	req.AddCookie(&http.Cookie{Name: "relayium_oauth_state", Value: "s1"})
 	resp, err := client.Do(req)
@@ -62,6 +63,7 @@ func TestGoogleCallbackRejectsBadState(t *testing.T) {
 	defer ts.Close()
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	seedOAuthState(t, svc, "real")
 	req, _ := http.NewRequest("GET", ts.URL+"/api/auth/google/callback?code=abc&state=evil", nil)
 	req.AddCookie(&http.Cookie{Name: "relayium_oauth_state", Value: "real"})
 	resp, _ := client.Do(req)
@@ -85,6 +87,7 @@ func TestGoogleCallbackRejectsUnverifiedEmail(t *testing.T) {
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
+	seedOAuthState(t, svc, "s2")
 	req, _ := http.NewRequest("GET", ts.URL+"/api/auth/google/callback?code=abc&state=s2", nil)
 	req.AddCookie(&http.Cookie{Name: "relayium_oauth_state", Value: "s2"})
 	resp, err := client.Do(req)

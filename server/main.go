@@ -728,6 +728,12 @@ func main() {
 	passkeyBeginLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(10, div), time.Minute, func() int64 { return time.Now().Unix() })
 	bg.Go(func(ctx context.Context) { passkeyBeginLimiter.Run(ctx, time.Minute) })
 
+	// Browser OAuth starts (Google, Apple web): each writes a ten-minute
+	// server-side state row. 20/min/IP leaves room for a human retrying while
+	// capping a single-source flood; the store adds a global outstanding budget.
+	oauthStartLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(20, div), time.Minute, func() int64 { return time.Now().Unix() })
+	bg.Go(func(ctx context.Context) { oauthStartLimiter.Run(ctx, time.Minute) })
+
 	// Blob downloads are proxied through central, so bound the per-IP request rate
 	// on the public /api/files/{id}/blob endpoint. 120/min/IP is generous for a
 	// human (or a resuming multi-GET download of one big file) yet blunts a single
@@ -1064,6 +1070,7 @@ func main() {
 		acct.SetGuessBreaker(guessBreaker) // shared /ws breaker: /api/ice feeds it, /ws sheds on it
 		acct.SetRegisterLimiter(registerLimiter)
 		acct.SetPasskeyBeginLimiter(passkeyBeginLimiter)
+		acct.SetOAuthStartLimiter(oauthStartLimiter)
 		acct.SetDownloadLimiter(downloadLimiter)
 		acct.SetDirectDownload(*directDownload)
 		// The App Store verifier, if one was configured. Installed HERE, after
