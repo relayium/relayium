@@ -182,6 +182,7 @@ type duplicateRefundStore interface {
 	PutDuplicateRefund(context.Context, DuplicateRefundPlan, bool, int64) (DuplicateRefundJob, error)
 	PutDuplicateRefundInspection(context.Context, DuplicateRefundPlan, duplicateInspectionStart, int64) (DuplicateRefundJob, error)
 	RecordDuplicateCancelContradiction(context.Context, DuplicateRefundJob, error, int64) error
+	ReconfirmDuplicateCancellation(context.Context, DuplicateRefundJob, int64) error
 	SaveDuplicateRefund(context.Context, DuplicateRefundJob, DuplicateRefundResult, error, int64) error
 	SaveDuplicateRefundBeforeReinspection(context.Context, DuplicateRefundJob, DuplicateRefundResult, int64) error
 	RecordDuplicateRefundError(context.Context, DuplicateRefundJob, error, int64) error
@@ -1296,7 +1297,7 @@ func (s *SQLiteStore) saveDuplicateRefund(ctx context.Context, job DuplicateRefu
 			// ends any run of consecutive failures. Fenced on terminal state and the
 			// same liability revision; state, liabilities, discovery, cancellation
 			// and holds are untouched.
-			cleared, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET attempts=0,last_error='' WHERE id=? AND state='terminal' AND liability_revision=?`, job.ID, job.LiabilityRevision)
+			cleared, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET attempts=0,last_error='' WHERE id=? AND state='terminal' AND liability_revision=? AND cancel_contradictions=cancel_reconfirmed`, job.ID, job.LiabilityRevision)
 			if err != nil {
 				return err
 			}
@@ -1371,6 +1372,18 @@ func (s *SQLiteStore) RecordDuplicateCancelContradiction(ctx context.Context, jo
 		return errors.New("account: duplicate refund responsibility disappeared")
 	}
 	return nil
+}
+
+// ReconfirmDuplicateCancellation closes an open contradiction after THIS run's
+// provider read freshly confirmed the duplicate canceled. Fenced on the
+// contradiction count in job, which was read before the provider call: a
+// contradiction recorded since then stays open. Works for terminal rows and
+// touches nothing else (state, liabilities, refund/action proofs, holds); the
+// post-cancel inspection that follows is what can re-set post_cancel_inspected.
+// A fence miss is not an error: the contradiction simply stays open.
+func (s *SQLiteStore) ReconfirmDuplicateCancellation(ctx context.Context, job DuplicateRefundJob, now int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE billing_duplicate_refunds SET cancel_reconfirmed=cancel_contradictions,revision=revision+1 WHERE id=? AND subscription_canceled=1 AND cancel_contradictions=? AND cancel_reconfirmed<cancel_contradictions`, job.ID, job.CancelContradictions)
+	return err
 }
 
 // duplicateCancelAuthority is the CURRENT persisted local state a duplicate
@@ -1672,8 +1685,19 @@ func (s *Service) runDuplicateRefund(ctx context.Context, store duplicateRefundS
 		// later inspection may conclude there is nothing to refund. The SQL
 		// completion gate (post_cancel_inspected) enforces this even if another
 		// run interleaves.
-		if err := store.SaveDuplicateRefundBeforeReinspection(ctx, job, result, s.Now().Unix()); err != nil {
-			return persistFail("save_canceled", err)
+		if job.State != "terminal" {
+			if err := store.SaveDuplicateRefundBeforeReinspection(ctx, job, result, s.Now().Unix()); err != nil {
+				return persistFail("save_canceled", err)
+			}
+		}
+		if job.CancelContradictions > job.CancelReconfirmed {
+			// This run freshly confirmed the cancellation. Close the open
+			// contradiction -- for terminal rows too, which the save above cannot
+			// touch -- but only if no newer contradiction was recorded since job
+			// was read (before the provider call).
+			if err := store.ReconfirmDuplicateCancellation(ctx, job, s.Now().Unix()); err != nil {
+				return persistFail("reconfirm_canceled", err)
+			}
 		}
 		persisted, found, err := store.DuplicateRefundBySubscription(ctx, job.DuplicateSubscriptionID)
 		if err != nil || !found {
@@ -1693,6 +1717,12 @@ func (s *Service) runDuplicateRefund(ctx context.Context, store duplicateRefundS
 		job = current
 		result.RefundComplete = len(job.Liabilities) == 0
 		result.ManualReason = job.ManualReason
+	}
+	if job.CancelContradictions > job.CancelReconfirmed {
+		// Still open (a newer contradiction was recorded during this run): not a
+		// clean outcome. Keep it visible as a failure instead of saving.
+		log.Printf("%s: job=%s duplicate=%s reason=cancel_contradiction contradictions=%d reconfirmed=%d", duplicateResponsibilityAlert, job.ID, job.DuplicateSubscriptionID, job.CancelContradictions, job.CancelReconfirmed)
+		return fail("cancel_contradiction_open", errors.New("billing: duplicate cancellation contradiction is still open"))
 	}
 	if err := store.SaveDuplicateRefund(ctx, job, result, nil, s.Now().Unix()); err != nil {
 		return persistFail("save", err)
@@ -1732,6 +1762,9 @@ func duplicateResponsibilityAttention(job DuplicateRefundJob, now int64) []strin
 	var reasons []string
 	if job.Attempts >= 4 {
 		reasons = append(reasons, "repeated_failures")
+	}
+	if job.CancelContradictions > job.CancelReconfirmed {
+		reasons = append(reasons, "cancel_contradiction")
 	}
 	if job.DiscoveredAt == 0 && now-job.CreatedAt > 24*60*60 {
 		reasons = append(reasons, "liabilities_unknown")

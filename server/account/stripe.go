@@ -898,6 +898,22 @@ func (c *stripeClient) DuplicateCanonicalSubscription(ctx context.Context, subID
 	return SubscriptionInfo{ID: sub.ID, CustomerID: sub.Customer, Status: sub.Status}, false, nil
 }
 
+// errDuplicateSubscriptionNotFound: Stripe answered 404 for a duplicate this
+// customer's own subscription list once returned. It is never treated as
+// cancellation, and nothing automatic resolves it; there is deliberately no
+// force-complete command. Operator escalation before rollout, when the
+// repeated_failures alert names a job whose last_error carries this message:
+//  1. Confirm the deployment uses the live Stripe account/key the duplicate was
+//     created in (a wrong key or test/live mix-up is the expected cause); fix
+//     configuration and let the worker retry -- it converges on its own.
+//  2. If the key is right, look the subscription and customer up in the Stripe
+//     dashboard. No DELETE can happen without a readable object, so
+//     auto-cancel need not be disabled. If Stripe support confirms the object
+//     is gone, record that in the incident log and review money owed with
+//     -billing-duplicate-list; an operator refund still requires a recorded
+//     post-cancel inspection, so it stays blocked.
+//  3. A job that must be closed without that evidence needs an owner-approved,
+//     audited one-off data correction; it is out of scope for automation.
 var errDuplicateSubscriptionNotFound = errors.New("stripe: duplicate subscription not found; not treated as canceled")
 
 // ReconcileDuplicateSubscription stops one duplicate subscription. The DELETE is

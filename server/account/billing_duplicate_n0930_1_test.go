@@ -868,15 +868,16 @@ func postCancelInspectForTest(t *testing.T, store *SQLiteStore, client *stripeCl
 // inspection, so another run can interleave.
 type n0930BarrierStore struct {
 	*SQLiteStore
-	once             sync.Once
 	reached, release chan struct{}
+	pauseOn, calls   int // pause on the pauseOn-th call (0 means the first)
 }
 
 func (b *n0930BarrierStore) PutDuplicateRefundInspection(ctx context.Context, plan DuplicateRefundPlan, start duplicateInspectionStart, now int64) (DuplicateRefundJob, error) {
-	b.once.Do(func() {
+	b.calls++
+	if b.calls == b.pauseOn || (b.pauseOn == 0 && b.calls == 1) {
 		close(b.reached)
 		<-b.release
-	})
+	}
 	return b.SQLiteStore.PutDuplicateRefundInspection(ctx, plan, start, now)
 }
 
@@ -1213,5 +1214,135 @@ func TestN0930_1DuplicateNotFoundIsNotCancellation(t *testing.T) {
 				t.Fatalf("404 must be a retryable unknown: err=%v deletes=%d job=%+v", err, deletes, got)
 			}
 		})
+	}
+}
+
+// Codex round 3: a TERMINAL job that saw Stripe report the duplicate live must
+// be able to recover once Stripe freshly confirms the cancellation, and an
+// open contradiction must stay visible rather than pass as a clean audit.
+func TestN0930_1TerminalContradictionRecovers(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		newerDuringIt bool
+	}{{"fresh_confirmation_recovers", false}, {"newer_contradiction_stays_open", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, client, store, svc := newN0930(t, Config{})
+			f.paid = false
+			seedDuplicateOwner(t, store, n0930User, n0930Customer, n0930Canonical)
+			if err := svc.runDuplicateRefund(context.Background(), store, client, n0930Job(t, store, client)); err != nil {
+				t.Fatal(err)
+			}
+			done := n0930Load(t, store)
+			if done.State != "terminal" || !done.PostCancelInspected || !done.RefundComplete {
+				t.Fatalf("setup: %+v", done)
+			}
+			// Audit: Stripe reports the duplicate live.
+			f.mu.Lock()
+			f.dupStatus = "active"
+			f.mu.Unlock()
+			if err := svc.runDuplicateRefund(context.Background(), store, client, n0930Load(t, store)); err == nil {
+				t.Fatal("contradiction must fail the audit")
+			}
+			open := n0930Load(t, store)
+			if open.State != "terminal" || open.PostCancelInspected || open.CancelContradictions != 1 || open.CancelReconfirmed != 0 || !open.RefundComplete || len(duplicateResponsibilityAttention(open, 0)) == 0 {
+				t.Fatalf("terminal contradiction must be recorded and visible: %+v", open)
+			}
+			// Later audit: Stripe freshly reports canceled.
+			f.mu.Lock()
+			f.dupStatus = "canceled"
+			if tc.newerDuringIt {
+				reads := f.dupGets
+				f.onDupGet = func(n int) {
+					if n == reads+2 { // the provider read: another run records a newer contradiction
+						if err := store.RecordDuplicateCancelContradiction(context.Background(), open, errors.New("concurrent live observation"), 300); err != nil {
+							t.Errorf("record: %v", err)
+						}
+					}
+				}
+			}
+			f.mu.Unlock()
+			err := svc.runDuplicateRefund(context.Background(), store, client, n0930Load(t, store))
+			got := n0930Load(t, store)
+			if tc.newerDuringIt {
+				if err == nil || got.CancelContradictions != 2 || got.CancelReconfirmed != 0 || got.PostCancelInspected || got.Attempts == 0 || got.LastError == "" || !strings.Contains(strings.Join(duplicateResponsibilityAttention(got, 0), ","), "cancel_contradiction") {
+					t.Fatalf("a newer contradiction must stay open and visible: err=%v job=%+v", err, got)
+				}
+				return
+			}
+			if err != nil || got.State != "terminal" || got.CancelReconfirmed != 1 || !got.PostCancelInspected || got.Attempts != 0 || got.LastError != "" || !got.RefundComplete || len(duplicateResponsibilityAttention(got, 0)) != 0 {
+				t.Fatalf("fresh confirmation must close the contradiction and restore post-cancel evidence: err=%v job=%+v", err, got)
+			}
+		})
+	}
+}
+
+// Fable round 3, finding 1 (i): the post_cancel_inspected write in Put is
+// fenced on the pre-inspection contradiction count and on no open
+// contradiction, independently of the caller's claim.
+func TestN0930_1PostCancelFlagFencedOnContradictionCount(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		cc, cr int64
+		start  int64
+		want   bool
+	}{
+		{"contradiction_recorded_and_closed_since_read", 1, 1, 0, false},
+		{"contradiction_open", 1, 0, 1, false},
+		{"positive_control", 1, 1, 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newTestStore(t)
+			plan := DuplicateRefundPlan{UserID: "u", CustomerID: "cus", CanonicalSubscriptionID: "sub_keep", DuplicateSubscriptionID: "sub_dup"}
+			job, err := store.PutDuplicateRefund(context.Background(), plan, true, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.db.Exec(`UPDATE billing_duplicate_refunds SET subscription_canceled=1,cancel_contradictions=?,cancel_reconfirmed=? WHERE id=?`, tc.cc, tc.cr, job.ID); err != nil {
+				t.Fatal(err)
+			}
+			got, err := store.PutDuplicateRefundInspection(context.Background(), plan, duplicateInspectionStart{Canceled: true, Contradictions: tc.start}, 101)
+			if err != nil || got.PostCancelInspected != tc.want {
+				t.Fatalf("post_cancel_inspected=%t want %t err=%v", got.PostCancelInspected, tc.want, err)
+			}
+		})
+	}
+}
+
+// Fable round 3, finding 1 (ii): a contradiction recorded while the
+// re-inspection's Put is paused must keep that Put from setting the flag.
+func TestN0930_1ContradictionDuringReinspectionPutKeepsFlagClear(t *testing.T) {
+	f, client, store, svc := newN0930(t, Config{})
+	f.paid = false
+	seedDuplicateOwner(t, store, n0930User, n0930Customer, n0930Canonical)
+	job := n0930Job(t, store, client)
+	barrier := &n0930BarrierStore{SQLiteStore: store, reached: make(chan struct{}), release: make(chan struct{}), pauseOn: 2}
+	done := make(chan error, 1)
+	go func() { done <- svc.runDuplicateRefund(context.Background(), barrier, client, job) }()
+	<-barrier.reached // after DELETE, interim save and re-inspection; before its Put
+	if err := store.RecordDuplicateCancelContradiction(context.Background(), n0930Load(t, store), errors.New("concurrent live observation"), 200); err != nil {
+		t.Fatal(err)
+	}
+	close(barrier.release)
+	err := <-done
+	got := n0930Load(t, store)
+	if err == nil || got.PostCancelInspected || got.State == "terminal" || got.CancelContradictions != 1 || got.CancelReconfirmed != 0 {
+		t.Fatalf("contradiction recorded during the Put must win: err=%v job=%+v", err, got)
+	}
+}
+
+// Fable round 3, finding 2: the provider's result never inherits the stored
+// cancellation; a live read that ends in a hold or a disabled auto-cancel
+// reports SubscriptionCanceled=false, ObservedLive=true.
+func TestN0930_1ProviderResultIsThisReadOnly(t *testing.T) {
+	_, client, _, _ := newN0930(t, Config{})
+	stored := DuplicateRefundJob{DuplicateRefundPlan: DuplicateRefundPlan{UserID: n0930User, CustomerID: n0930Customer, CanonicalSubscriptionID: n0930Canonical, DuplicateSubscriptionID: n0930Duplicate}, SubscriptionCanceled: true, RefundComplete: true}
+	for name, authorize := range map[string]func(context.Context) (string, error){
+		"hold":     func(context.Context) (string, error) { return duplicateHoldCanonicalPastDue, nil },
+		"disabled": func(context.Context) (string, error) { return "", errDuplicateAutoCancelDisabled },
+	} {
+		result, err := client.ReconcileDuplicateSubscription(context.Background(), stored, authorize)
+		if err != nil || result.SubscriptionCanceled || result.RefundComplete || !result.ObservedLive {
+			t.Fatalf("%s: result=%+v err=%v", name, result, err)
+		}
 	}
 }
