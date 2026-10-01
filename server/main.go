@@ -24,6 +24,7 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"github.com/relayium/relayium/account"
+	coturnwire "github.com/relayium/relayium/internal/coturnbridge/wire"
 	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/storage"
 	"github.com/relayium/relayium/selfupdate"
@@ -328,6 +329,9 @@ func main() {
 	stunURLs := flag.String("stun-urls", envStr("RELAYIUM_STUN_URLS", ""), "comma-separated STUN URLs (empty: derived from -turn-urls, since coturn answers STUN on the same host:port)")
 	turnRelays := flag.String("turn-relays", envStr("RELAYIUM_TURN_RELAYS", ""), `JSON array of TURN relays for the multi-relay pool, e.g. [{"id":"asia-tok","region":"asia","urls":["turn:tok:3478"],"secret":"..."}]; empty uses -turn-urls only`)
 	redisAddr := flag.String("redis-addr", envStr("RELAYIUM_REDIS_ADDR", ""), "DISABLED, ignored: the direct coturn->Redis relay-byte ingest keys usage by coturn's restart-reset session id and would bill the wrong user; it stays off until a re-keyed ingest (F02) replaces it. Setting it only logs a warning at startup.")
+	coturnMeteringRelays := flag.String("coturn-metering-relays", envStr("RELAYIUM_COTURN_METERING_RELAYS", ""), "coturn metering bridges allowed to report relay bytes (F02), as <relay-id>=<sha256 hex of its token>[,...]; empty disables the ingest route")
+	coturnMeteringMode := flag.String("coturn-metering-mode", envStr("RELAYIUM_COTURN_METERING_MODE", account.CoturnMeteringShadow), "coturn metering ingest mode: shadow (measure only, never writes the billable ledger) or billable (needs -coturn-metering-billable-since)")
+	coturnMeteringSince := flag.Int64("coturn-metering-billable-since", envInt64("RELAYIUM_COTURN_METERING_BILLABLE_SINCE", 0), "unix seconds: billable mode bills only coturn allocations first observed and first received at or after this time (no retroactive billing)")
 	nodeToken := flag.String("node-token", envStr("RELAYIUM_NODE_TOKEN", ""), "fleet bootstrap bearer token for relay-node /api/nodes/* (empty disables the node API)")
 	enableUserNodes := flag.Bool("enable-user-nodes", envBool("RELAYIUM_ENABLE_USER_NODES", true), "serve per-user BYO node tokens (account-bound relay/storage nodes)")
 	directDownload := flag.Bool("direct-download", envBool("RELAYIUM_DIRECT_DOWNLOAD", false), "allow a user's own storage node to serve their stored downloads directly to clients that opt in (default off = central proxies everything). Fleet-hosted downloads are always proxied regardless of this flag; see docs/direct-download-deploy.md before enabling on an upgrade")
@@ -1226,6 +1230,15 @@ func main() {
 		// guardCoturnRedisMetering. The flag stays parseable so an existing
 		// unit file or env keeps booting; it just no longer starts anything.
 		guardCoturnRedisMetering(*redisAddr, log.Printf)
+		// The re-keyed coturn ingest (F02): a dedicated, metering-only route.
+		// Misconfiguration stops startup rather than running a billing ingest
+		// in an unintended mode.
+		if h, err := coturnMeteringRoute(acct, *coturnMeteringRelays, *coturnMeteringMode, *coturnMeteringSince); err != nil {
+			log.Fatalf("coturn metering: %v", err)
+		} else if h != nil {
+			mux.Handle("POST "+coturnwire.Path, h)
+			log.Printf("coturn metering ingest enabled at %s (mode %s)", coturnwire.Path, *coturnMeteringMode)
+		}
 		mux.Handle("/api/", acct.Routes())
 		acct.RegisterAdmin(mux)
 		acct.RegisterDevicePage(mux) // GET /device on the root mux (see RegisterDevicePage)
@@ -1470,4 +1483,22 @@ func guardCoturnRedisMetering(redisAddr string, logf func(format string, args ..
 	}
 	logf("%s", coturnRedisMeteringDisabledLog)
 	return false
+}
+
+// coturnMeteringRoute builds the coturn metering ingest handler, or returns
+// nil when no relay identity is configured (the route then does not exist
+// and a bridge's reports stay spooled on its host).
+func coturnMeteringRoute(acct *account.Service, relays, mode string, billableSince int64) (http.Handler, error) {
+	if strings.TrimSpace(relays) == "" {
+		return nil, nil
+	}
+	ids, err := account.ParseCoturnMeteringRelays(relays)
+	if err != nil {
+		return nil, err
+	}
+	h, err := acct.CoturnMeteringHandler(account.CoturnMeteringConfig{Relays: ids, Mode: mode, BillableSince: billableSince})
+	if err != nil {
+		return nil, err
+	}
+	return h, nil
 }

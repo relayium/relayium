@@ -145,23 +145,56 @@ ICE/TURN credentials for a pairing-code transfer. It:
    that report to the same accept-as-reported path an expired code has always
    taken. Nothing is lost.
 
-**Ingesting what coturn relayed** is a separate, one-way pipeline that is
-**currently disabled** (details at the end of this paragraph). As designed,
-coturn (the TURN server) would report each allocation's cumulative relayed
-bytes over Redis pub/sub and `internal/metering/metering.go` would ingest them.
-`Worker.handle` (`internal/metering/metering.go:81`) parses the coturn
-username via `relayusage.TokenFromUsername` and `relayusage.SplitAttrib`
+**Ingesting what coturn relayed** has two pipelines: an old one that is
+**disabled and never starts**, and its replacement, which is **off unless an
+operator explicitly configures it** and, even then, measures without billing
+until a separate activation time is set.
+
+*The old Redis worker (disabled).* As designed, coturn (the TURN server)
+would report each allocation's cumulative relayed bytes over Redis pub/sub and
+`internal/metering/metering.go` would ingest them. `Worker.handle`
+(`internal/metering/metering.go:81`) parses the coturn username via
+`relayusage.TokenFromUsername` and `relayusage.SplitAttrib`
 (`internal/relayusage/parse.go:18` and `:21`) to recover the owner's user ID,
 and records a `UsageEvent{RelayedBytes, Billable: true}` against that user.
 A username with no owner prefix (a legacy/anonymous code) is recorded but
 never attributed to any account and never billed — see the
-`SplitAttrib` doc comment. **This pipeline is currently disabled and never
-starts**, whether or not `-redis-addr` / `RELAYIUM_REDIS_ADDR` is set:
-`guardCoturnRedisMetering` (`main.go:1467`) only logs a warning. The ingest
-keyed usage by coturn's session id, which restarts from zero on every coturn
-restart, so a reused id would have billed one account for another's relay
-bytes. Until a re-keyed ingest replaces it, relay traffic through coturn is not
-ingested or metered at all — transfers still work, they're simply not metered.
+`SplitAttrib` doc comment. **This worker never starts**, whether or not
+`-redis-addr` / `RELAYIUM_REDIS_ADDR` is set: `guardCoturnRedisMetering`
+(`main.go:1480`) only logs a warning. It keyed usage by coturn's session id,
+which restarts from zero on every coturn restart, so a reused id would have
+billed one account for another's relay bytes.
+
+*The re-keyed coturn metering bridge (opt-in).* A separate program on the
+coturn host, `relayium-coturn-bridge` (`cmd/relayium-coturn-bridge`), follows
+coturn's own byte counters and reports each allocation's cumulative total to a
+dedicated, metering-only route (`POST /api/coturn-metering/v1/snapshots`).
+That route exists only when `-coturn-metering-relays` /
+`RELAYIUM_COTURN_METERING_RELAYS` (`main.go:332`) lists the bridges allowed to
+report, each with its own token (central keeps only the token's SHA-256;
+`coturnMeteringRoute`, `main.go:1491`); unset — the default — there is no
+route and nothing is ingested. An allocation is keyed by the relay machine's
+boot id, the coturn process id and start time, and coturn's session number, so
+a coturn restart can't reuse an earlier allocation's key, and its bytes are
+attributed only to the account its relay username names, which must exist.
+The ingest runs in one of two modes (`-coturn-metering-mode`, `main.go:333`):
+
+- **shadow** (the default) records what each allocation relayed and never
+  writes the billable ledger (`usage_events` / `usage_periods`);
+- **billable** additionally needs an explicit activation time,
+  `-coturn-metering-billable-since` (`main.go:334`), and bills an allocation
+  only if the bridge first observed it at or after that time: nothing that
+  started earlier is billed retroactively, and a report received while the
+  ingest is in shadow mode keeps that allocation shadow for good.
+
+**An allocation whose start the bridge never saw is never billed.** When the
+bridge meets an allocation without coturn's "new" status and without a start
+time in coturn's session listing — for example a session coturn refused to
+allocate for, whose few hundred bytes of request/refusal traffic coturn still
+counts — it reports a reserved "start unknown" value, and central keeps that
+allocation shadow whatever the activation time is (`ApplyCoturnSnapshot`,
+`account/coturn_metering_store.go:100`, the condition at `:183`). Its bytes
+stay visible as a measurement; they never reach your bill.
 
 **Self-hosted relay nodes are recorded but never billed.** If you point
 Relayium at your own TURN node (BYO), its relay traffic is reported over a
@@ -181,7 +214,7 @@ against three separate limits in that handler: the storage cap
 (`s.overStorage`, `account/files.go:377`), the monthly traffic cap
 (`s.overTraffic`, `account/files.go:381`) and the rolling daily quota, whose
 debit is written by the stored file's own insert transaction
-(`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:6564`). Only the traffic one is shared with
+(`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:6616`). Only the traffic one is shared with
 relay: `currentMonthTraffic` (`account/plan_enforce.go:54-69`) sums
 `usage_monthly` — hosted upload/download — plus billable `usage_events` —
 relay. Storage is occupancy, not throughput, and is not something a relay
@@ -207,23 +240,23 @@ migrations that follow it) — not a summary of intent, the actual columns.
 |---|---|---|
 | `users` (`sqlite.go:88`) | id, email, display name, creation time, plan tier, Stripe customer/subscription IDs and status, subscription period end, plan-change bookkeeping, and an upload-fence counter that account deletion increments (so an upload in flight across a deletion cannot be stored). **No card data** — Stripe Checkout is a hosted redirect (`account/stripe.go:1466`, `EnsureCustomer`/`CreateCheckoutSession`); Relayium's server never sees a card number. |
 | `devices` (`sqlite.go:140`) | id, owning user, a **name** (nickname), creation and last-seen time, device kind (browser/CLI). This is the persistent paired-device list (settings page), not the realtime signaling room — see below. |
-| `usage_events` (`sqlite.go:154`) | per-TURN-allocation relayed-byte totals: alloc ID, token, user ID, bytes, timestamp, later `node_id` and `billable` (`sqlite.go:537`). |
-| `usage_periods` (`sqlite.go:1934`) | the same relay data bucketed by calendar month (`YYYYMM`), which is what billing/cap queries actually read (`account/plan_enforce.go:64`, `UserRelayedSince`). |
-| `usage_monthly` (`sqlite.go:238`) | per-user, per-month upload/download byte totals for **stored transfers** (not relay). |
-| `stored_files` (`sqlite.go:190`) | id, owner, an opaque `blob_key` (pointer to ciphertext on disk), an opaque `enc_manifest` blob (the encrypted filename/size manifest — server can't read it), plaintext **size in bytes**, burn-after-read flag, created/expires timestamps, download count. |
-| `upload_events` (`sqlite.go:203`) | rolling 24h ledger of upload sizes per user, for the daily-quota check. |
-| `upload_operations` (`sqlite.go:1681`) | single-shot upload `Idempotency-Key` records: owner, the client's key, the id of the file it created, a SHA-256 of the request's retention parameters and declared length, and when it was made. No file content, name or key material. |
-| `nodes` (`sqlite.go:294`) | self-hosted or fleet relay/storage node registry: owner, region, URLs, per-node relayed/stored byte totals, online status. |
-| `cli_device_auth` (`sqlite.go:370`) | the CLI's device-code login flow: **the requesting CLI's origin IP and user-agent**, shown on the browser approval page so a user can spot a phishing attempt (`sqlite.go:369-370`). This is the one place a general client IP is persisted — see [What the server could know but chooses not to keep](#what-the-server-could-know-but-chooses-not-to-keep). |
-| `admin_audit` (`sqlite.go:427`) | every admin-console mutation: actor, **the admin's IP**, action, target, and a diff of what changed. Kept for up to 2 years by default — see [Retention](#retention-how-long-anything-is-kept). |
-| `plans` (`sqlite.go:405`) | the tier table itself: storage/traffic/retention caps, prices, Stripe price IDs. No user data. |
+| `usage_events` (`sqlite.go:154`) | per-TURN-allocation relayed-byte totals: alloc ID, token, user ID, bytes, timestamp, later `node_id` and `billable` (`sqlite.go:572`). |
+| `usage_periods` (`sqlite.go:1969`) | the same relay data bucketed by calendar month (`YYYYMM`), which is what billing/cap queries actually read (`account/plan_enforce.go:64`, `UserRelayedSince`). |
+| `usage_monthly` (`sqlite.go:273`) | per-user, per-month upload/download byte totals for **stored transfers** (not relay). |
+| `stored_files` (`sqlite.go:225`) | id, owner, an opaque `blob_key` (pointer to ciphertext on disk), an opaque `enc_manifest` blob (the encrypted filename/size manifest — server can't read it), plaintext **size in bytes**, burn-after-read flag, created/expires timestamps, download count. |
+| `upload_events` (`sqlite.go:238`) | rolling 24h ledger of upload sizes per user, for the daily-quota check. |
+| `upload_operations` (`sqlite.go:1716`) | single-shot upload `Idempotency-Key` records: owner, the client's key, the id of the file it created, a SHA-256 of the request's retention parameters and declared length, and when it was made. No file content, name or key material. |
+| `nodes` (`sqlite.go:329`) | self-hosted or fleet relay/storage node registry: owner, region, URLs, per-node relayed/stored byte totals, online status. |
+| `cli_device_auth` (`sqlite.go:405`) | the CLI's device-code login flow: **the requesting CLI's origin IP and user-agent**, shown on the browser approval page so a user can spot a phishing attempt (`sqlite.go:404-405`). This is the one place a general client IP is persisted — see [What the server could know but chooses not to keep](#what-the-server-could-know-but-chooses-not-to-keep). |
+| `admin_audit` (`sqlite.go:462`) | every admin-console mutation: actor, **the admin's IP**, action, target, and a diff of what changed. Kept for up to 2 years by default — see [Retention](#retention-how-long-anything-is-kept). |
+| `plans` (`sqlite.go:440`) | the tier table itself: storage/traffic/retention caps, prices, Stripe price IDs. No user data. |
 
 Two things worth being explicit about, because a privacy-conscious reader
 would reasonably ask:
 
 - **Byte counts are the metered quantity, not access logs.** There's no table
   of "user X downloaded file Y at time Z from IP W" for ordinary transfers.
-  `download_receipts` (`sqlite.go:640`) exists, but it is a 24-hour dedup table
+  `download_receipts` (`sqlite.go:675`) exists, but it is a 24-hour dedup table
   keyed by an opaque per-download nonce, and it no longer receives new rows at
   all: the node-direct download accounting it belonged to has been withdrawn,
   so downloads are metered from the bytes the server itself served (see
@@ -266,7 +299,7 @@ Some of this is architectural, not a promise the server keeps by policy:
   manifest (which holds the real filenames) and the file bytes, and that key
   lives only in the URL **fragment** (`#k=...`) — which by construction is
   never sent in an HTTP request, so the server that stores the ciphertext
-  never receives the key. `stored_files.enc_manifest` (`sqlite.go:194`) is
+  never receives the key. `stored_files.enc_manifest` (`sqlite.go:229`) is
   exactly that opaque blob. The server can see the **size** of what's stored
   (it has to, to enforce storage caps) but not the name or contents of a
   single file inside a multi-file batch.
@@ -321,7 +354,7 @@ The dimensions actually checked, each fail-closed at write time:
 - **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:344`,
   `remainingDailyQuota`). The debit is checked and written in the **same
   database transaction that inserts the stored file**
-  (`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:6564`), so
+  (`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:6616`), so
   concurrent uploads can't race past it, and a file that is not stored — a
   refusal by a later cap, a closed pairing room, a database error, a server
   crash mid-upload — never leaves a debit behind; there is no separate
@@ -342,8 +375,8 @@ The dimensions actually checked, each fail-closed at write time:
   never extended by asking. At that expiry the file can no longer be
   recovered or sent to a device, and both are then removed by the periodic
   cleanup, which retries a sweep that fails rather than deleting on a deadline
-  (`recoverableTombstoneSQL`, `account/sqlite.go:6021`;
-  `recoverableTaskObjectSQL`, `account/sqlite.go:6979`). Until then that
+  (`recoverableTombstoneSQL`, `account/sqlite.go:6073`;
+  `recoverableTaskObjectSQL`, `account/sqlite.go:7031`). Until then that
   unattached file is invisible (no link, not in the file list, not deletable
   by its owner) and still counts toward the account's storage. After the
   record is gone, and for an upload completed by a server version that
@@ -535,21 +568,22 @@ including the admin-audit prune below — see the residual noted at
 
 | Data | Kept for | Where |
 |---|---|---|
-| Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `GC.expireStoredFiles` (`account/gc.go:287`): `ListExpiredStoredFiles`, then per file `removeStoredFileQueuingBlob` deletes the row and durably queues its blob's delete intent in one transaction (`DeleteStoredFileQueuingBlob` (`account/sqlite.go:8777`)); the blob is deleted in the same pass or retried by `GC.drainPending` |
+| Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `GC.expireStoredFiles` (`account/gc.go:287`): `ListExpiredStoredFiles`, then per file `removeStoredFileQueuingBlob` deletes the row and durably queues its blob's delete intent in one transaction (`DeleteStoredFileQueuingBlob` (`account/sqlite.go:8829`)); the blob is deleted in the same pass or retried by `GC.drainPending` |
 | Rolling daily-quota ledger (`upload_events`) | ~25 hours (a small margin past the 24h window it backs) | `pruneMargin`, `account/gc.go:18`, applied at `account/gc.go:321` |
-| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:7078`), in the same prune as `upload_events` |
+| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:7130`), in the same prune as `upload_events` |
 | Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:22`, applied at `account/gc.go:326` |
 | Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:394`) | `auditRetentionDefault`, `account/gc.go:66`, applied at `account/gc.go:332` |
 | Monthly relay/traffic history (`usage_events`, `usage_periods`, `usage_monthly`) | **Not pruned by age at all** while the account is active — this is the billing history the quota math depends on | No prune call for these tables exists in `GC.sweep`; confirmed by reading the full sweep function |
+| coturn relay metering records (`coturn_metering_bindings`), when a coturn metering bridge is configured | While the account exists: one row per coturn relay allocation, holding its owner's user id, a SHA-256 of the relay username (the username contains the user id, so the hash identifies the account — it is not anonymous), the latest delivered byte total and receipt, and timestamps; **not pruned by age**, like the relay history it backs. At the hard purge each row is redacted, in the same transaction, to a tombstone that keeps only coturn's identification of the allocation (the relay machine's boot id, the coturn process id and start time, coturn's session number) and the reporting relay's name — no user id, username or hash of it, byte counts, receipt or time. The tombstone has no expiry: it makes any late or replayed report for that allocation refused, so it can never recreate the account's data or bill it | `ApplyCoturnSnapshot` and `coturnPurgeBindingsSQL`, `account/coturn_metering_store.go`; `ArchiveAndPurgeUser`, `account/sqlite.go` |
 | Abandoned chunked-upload session + its partial ciphertext (`upload_sessions`) | 1 hour idle, then the blob is re-read and the bytes it holds are billed. Only once that bill is recorded does one transaction remove the row and hand the partial blob to the durable pending-delete queue; the blob itself is deleted by the next GC sweep (every 10 minutes), which keeps retrying until the node accepts the delete — the reaper never deletes a blob itself. **Unreachable-node exception:** the row and partial blob are kept for as long as it takes, because the blob is the only exact byte count; it is re-probed hourly and settled when the node answers. **An upload that never became a stored object is billed for what its blob physically holds before the blob is deleted, capped at its authorized size, whether it was abandoned, refused at finalize, or its finalize crashed. This applies to uploads started after this change. Uploads already in progress when it was deployed keep the rules they started under: when such an upload is abandoned, refused at finalize, or its finalize crashed, only its acknowledged bytes are billed; if it belongs to a pairing room that ends, the room's existing rule still applies, and what its blob holds is billed, capped at its authorized size. Bytes a late append left past a completed object's size are never billed.** **Account-deletion exception:** an explicit deletion request overrides that evidence hold, removes the user-attributed row immediately, and deletes or queues deletion of the partial blob, and any residual not yet measured is forgiven | `ReapPendingUploads` / `claimUploadCleanup` / `recoverUnresolvedUploads` + `upload_sessions.unresolved_at`, `account/uploads_resumable.go`; `GC.drainPending`, `account/gc.go`; `PurgeTransientUserData`, `account/sqlite.go` |
 | A pre-upload's session + partial ciphertext when its **pairing room times out** | Not 1 hour — the room's own deadline. Voiding a room ends every artifact bound to it in one transaction: the finalized objects' rows and the unfinished uploads' sessions are deleted, the bytes each session had recorded are billed, and every blob gets a durable delete intent. For a billable upload that intent also carries the obligation to bill anything its blob holds beyond the recorded bytes (capped at the upload's authorized size) before the blob may be deleted. At that commit the ciphertext is unreachable and storage and the account's open-session budget are free. The bytes themselves are then deleted best-effort in the same pass, each partial blob only after it has been re-read and any extra bytes billed durably — to the meter, or to an owed-bill record GC settles later, never twice; anything not deleted there stays queued and GC retries it every sweep. An append that was already streaming when the room ended and lands afterwards is billed and deleted under the same rule, whether or not the append itself succeeded. **Two cases keep unreachable, unlisted ciphertext on the node past the deadline:** if the node cannot be reached, its blob can be neither sized nor deleted, so it stays queued and GC asks again each sweep, billing the extra bytes when the node answers and then deleting; and if the database refuses every billing write, the blob is kept as the only evidence of the bill until GC can record it, then deleted. No timer writes the extra bytes off, and deleting the node does not either: an operator (or a BYO owner) deleting a node that still has queued deletions retires it instead of removing it — it leaves every pool and listing, but GC keeps working through its queue, billing and deleting as above, and the row is only removed once nothing names it. The one exception is the owner's own account deletion, which drops the queued deletions naming that account's own nodes; any bill still riding on them is forgiven in the same step (see the account-deletion exception above) | `Service.voidPairRoom` / `settleReclaimedUpload` + `Store.ClosePairRoom`, `account/pairroom.go`, `account/sqlite_pairroom.go`; `settleAppendIntoAVoidedRoom`, `account/uploads_resumable.go`; `GC.drainPending`, `account/gc.go` |
 | A pre-upload's finalized ciphertext once **somebody has joined that pairing room** | **No timer at all, and that is deliberate** (`account/pairroom.go` invariant 5): a joined transfer is never cut off by a clock, so nothing ages this out — not GC, not a plan retention cap, not a fallback expiry. It leaves in exactly three ways, each of them somebody acting. **(1) The receiver completes it:** it proves it holds the file key, and the authoritative row is deleted in the same transaction that queues the blob's durable delete intent, so the storage is released at commit rather than at the next sweep. **(2) The owning account releases the whole room** from its own list — this is the exit that always exists, because a receiver whose browser hands the bytes to a download rather than writing them itself can never complete. Release first refuses a room with any upload session still bound; otherwise the object rows are deleted, delete intents are queued, and quota is free when the transaction commits. **(3) The account is deleted.** Bytes already uploaded stay billed in all three cases — traffic is metered per committed append, and releasing storage is not a traffic refund. Pre-upload is off by default (`-enable-preupload`), so on a default deployment no such object exists | `Store.CompletePairRoomObject`, `account/pairroom_complete.go`; `Service.releasePairRoom` + `Store.CloseOwnedPairRoom` (`GET /api/pair-rooms`, `DELETE /api/pair-rooms/{id}`), `account/pairroom_owner.go`, `account/sqlite_pairroom.go` |
-| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:382`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:3397` |
+| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:382`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:3432` |
 
 **What "hard-purged" actually does**, read directly from
-`ArchiveAndPurgeUser` (`account/sqlite.go:3342-3550`): the user's monthly
+`ArchiveAndPurgeUser` (`account/sqlite.go:3377-3589`): the user's monthly
 stored-transfer totals are folded into `usage_archive` — **period totals
-only, with no user ID retained** (`sqlite.go:3325-3326`, `3350-3360`) — and then every
+only, with no user ID retained** (`sqlite.go:3360-3361`, `3350-3360`) — and then every
 user-linked row (sessions, devices, identities, Device Inbox tasks,
 `usage_events`, `usage_periods`, `stored_files`, `upload_sessions`,
 `pair_rooms`, `upload_events`, `user_stats`, `usage_monthly`, per-provider
@@ -561,12 +595,20 @@ keeps the node id, its owner type, the (now-deleted) account's user id and the
 deletion time, with no expiry. It exists to prevent node-ID takeover: node ids
 are client-chosen and fleet ids are public, so without it a deleted id could
 be registered by someone else and receive download and cleanup traffic still
-addressed to it. It holds no file, name, address, key or usage data. The comment at `sqlite.go:3379-3384` is explicit that leaving
+addressed to it. It holds no file, name, address, key or usage data. **coturn metering records are
+redacted, not deleted:** each keeps only coturn's own identification of the relay
+allocation and the reporting relay's name (see the table above), so a late or replayed
+report from the coturn host is refused rather than recreating the account's data; the
+user id, the username hash, byte counts, receipts and times are erased. The metering
+bridge on the coturn host deletes its own record of such an allocation when the server
+answers that the account is gone, keeping only the same identification and a time for
+ten minutes. The coturn host's own logs, outside this database, may still name that
+session; their retention is set by whoever operates that host. The comment at `sqlite.go:3414-3419` is explicit that leaving
 `usage_periods` behind would "retain user-attributed relay history
 indefinitely after the hard purge" and calls that out as contradicting the
 stated model — so it's deleted too, not just anonymized. The purge is
 guarded so a reactivation during the grace window aborts it entirely
-(`sqlite.go:3533-3547`).
+(`sqlite.go:3572-3586`).
 
 One place the code is honestly conservative rather than aggressive:
 `PruneAudit`'s age-based deletion is **not** scoped to machine-written rows
@@ -580,13 +622,18 @@ discovered months later to still have evidence attached to it.
 Everything above is what the code *can* do; what actually runs depends on
 which flags a given deployment sets (`main.go`):
 
-- **coturn relay metering** is off in every deployment. `-redis-addr` /
-  `RELAYIUM_REDIS_ADDR` (`main.go:330`) no longer starts anything:
-  `guardCoturnRedisMetering` (`main.go:1467`) only logs a warning, so the
-  metering worker never starts and coturn-relayed bytes are never ingested or
-  attributed to anyone, full stop.
+- **coturn relay metering** is off by default. The old path never runs:
+  `-redis-addr` / `RELAYIUM_REDIS_ADDR` (`main.go:331`) no longer starts
+  anything, and `guardCoturnRedisMetering` (`main.go:1480`) only logs a
+  warning. The re-keyed bridge ingest exists only if
+  `-coturn-metering-relays` is set (`main.go:332`), runs in shadow mode — no
+  billing — unless `-coturn-metering-mode billable` is chosen together with an
+  explicit `-coturn-metering-billable-since`, and even then never bills an
+  allocation whose start it didn't see (see
+  [What actually costs money](#what-actually-costs-money-relayed-bytes-and-hosted-storage)). With none of
+  these set, coturn-relayed bytes are not ingested or attributed to anyone.
 - **TURN relay itself** is off unless `-turn-secret` /
-  `RELAYIUM_TURN_SECRET` is set (`main.go:325`) — without it there's simply no
+  `RELAYIUM_TURN_SECRET` is set (`main.go:326`) — without it there's simply no
   relay to meter. What still works is LAN browser transfers and the CLI's
   direct paths (daemon-direct push/sync, and pairing-code sessions that find a
   direct path); cross-network browser transfers do not, because the relay they depend on

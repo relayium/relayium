@@ -187,6 +187,41 @@ CREATE TABLE IF NOT EXISTS relay_attrib_owed (
   bytes    INTEGER NOT NULL,
   PRIMARY KEY (node_id, user_id, period)
 );
+-- F02: one row per coturn allocation reported by an authenticated coturn
+-- metering bridge, keyed GLOBALLY by the provider epoch (boot id, coturn PID,
+-- process start) and coturn's raw session id, which alone is reused across
+-- restarts and hosts. relay_id is the first reporter, not part of the key: a
+-- second relay identity reporting the same provider allocation is refused, so
+-- one allocation can never become two ledger rows.
+-- alloc_id is central's random ledger key for the allocation (usage_events /
+-- usage_periods when ledger='billable'; never written when 'shadow').
+-- last_* is the latest receipt; accepted is the ledger (or shadow) high water
+-- acknowledged to the bridge. user_id/username_hash link the row to its owner
+-- while the account exists; the hard purge (ArchiveAndPurgeUser) redacts the
+-- row to a replay-denial tombstone (purged=1) that keeps only the provider key
+-- and the owning relay: no user id, username hash, counters or timestamps.
+CREATE TABLE IF NOT EXISTS coturn_metering_bindings (
+  relay_id        TEXT    NOT NULL,
+  boot_id         TEXT    NOT NULL,
+  pid             INTEGER NOT NULL,
+  start_ticks     INTEGER NOT NULL,
+  session_id      TEXT    NOT NULL,
+  user_id         TEXT,
+  username_hash   TEXT,
+  alloc_id        TEXT    UNIQUE,
+  ledger          TEXT    NOT NULL CHECK (ledger IN ('shadow', 'billable')),
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL,
+  last_seq        INTEGER NOT NULL,
+  last_hash       TEXT    NOT NULL,
+  last_cumulative INTEGER NOT NULL,
+  accepted        INTEGER NOT NULL,
+  terminal        INTEGER NOT NULL DEFAULT 0,
+  last_state      TEXT    NOT NULL,
+  purged          INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (boot_id, pid, start_ticks, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_coturn_metering_bindings_user ON coturn_metering_bindings(user_id);
 CREATE TABLE IF NOT EXISTS stored_files (
   id              TEXT PRIMARY KEY,
   user_id         TEXT NOT NULL REFERENCES users(id),
@@ -3438,6 +3473,10 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// contradicting the "no user_id retained" privacy model, and leak an
 		// unbounded orphan row per deleted account.
 		{`DELETE FROM usage_periods WHERE user_id=?`, []any{userID}},
+		// F02 coturn metering bindings: redacted, not deleted, to a
+		// replay-denial tombstone keeping only the provider key and relay, so
+		// a late or replayed bridge report can never recreate user data.
+		{coturnPurgeBindingsSQL, []any{userID}},
 		// A-M8 relay-attribution budget rows name the user; no FK, so explicit.
 		{`DELETE FROM relay_attrib_budget WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM relay_attrib_owed WHERE user_id=?`, []any{userID}},
@@ -4574,18 +4613,34 @@ func satMul(a, b int64) int64 {
 // high-water left by an older binary is treated as 0, so no subtraction here
 // can wrap.
 func (s *SQLiteStore) recordUsage(ctx context.Context, e UsageEvent, b *RelayAttribBudget) (UsageRecordResult, error) {
-	var res UsageRecordResult
-	if e.RelayedBytes < 0 {
-		return res, ErrUsageNegativeBytes
-	}
-	if strings.HasPrefix(e.AllocID, relayAttribOwedPrefix) {
-		return res, ErrUsageReservedAllocID
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return res, err
+		return UsageRecordResult{}, err
 	}
 	defer tx.Rollback()
+	res, _, err := recordUsageTx(ctx, tx, e, b)
+	if err != nil {
+		return UsageRecordResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return UsageRecordResult{}, err
+	}
+	return res, nil
+}
+
+// recordUsageTx is recordUsage's ledger write inside the caller's write
+// transaction, with no commit. Besides the result it returns the alloc's
+// high-water after the write (the clamped cumulative the ledger now holds),
+// which the coturn metering ingest acknowledges. On any error the caller
+// must roll back.
+func recordUsageTx(ctx context.Context, tx *sql.Tx, e UsageEvent, b *RelayAttribBudget) (UsageRecordResult, int64, error) {
+	var res UsageRecordResult
+	if e.RelayedBytes < 0 {
+		return res, 0, ErrUsageNegativeBytes
+	}
+	if strings.HasPrefix(e.AllocID, relayAttribOwedPrefix) {
+		return res, 0, ErrUsageReservedAllocID
+	}
 
 	var prev, prevRec int64
 	var ownerUser string
@@ -4598,11 +4653,11 @@ func (s *SQLiteStore) recordUsage(ctx context.Context, e UsageEvent, b *RelayAtt
 	case sql.ErrNoRows:
 		exists = false
 	default:
-		return res, err
+		return res, 0, err
 	}
 	if exists && (ownerUser != e.UserID || ownerNode.String != e.NodeID) {
-		// Nothing written: the deferred Rollback ends the read transaction.
-		return res, ErrUsageAllocOwnerMismatch
+		// Nothing written: the caller's Rollback ends the read transaction.
+		return res, 0, ErrUsageAllocOwnerMismatch
 	}
 	if prev < 0 {
 		prev = 0
@@ -4642,7 +4697,7 @@ func (s *SQLiteStore) recordUsage(ctx context.Context, e UsageEvent, b *RelayAtt
 	if b != nil && delta > 0 {
 		c, err := chargeRelayAttribTx(ctx, tx, e.NodeID, e.UserID, e.RecordedAt, e.Billable, delta, *b)
 		if err != nil {
-			return res, err
+			return res, 0, err
 		}
 		periodDelta = delta - c.deferred - c.dropped
 		res.Deferred, res.Dropped, res.Drained, res.Warn = c.deferred, c.dropped, c.drained, c.warn
@@ -4653,14 +4708,14 @@ func (s *SQLiteStore) recordUsage(ctx context.Context, e UsageEvent, b *RelayAtt
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE usage_events SET relayed_bytes = ?, recorded_at = ? WHERE alloc_id = ?`,
 			newCum, e.RecordedAt, e.AllocID); err != nil {
-			return UsageRecordResult{}, err
+			return UsageRecordResult{}, 0, err
 		}
 	} else {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at, node_id, billable)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			e.AllocID, e.Token, e.UserID, newCum, e.RecordedAt, nullStr(e.NodeID), b2i(e.Billable)); err != nil {
-			return UsageRecordResult{}, err
+			return UsageRecordResult{}, 0, err
 		}
 	}
 
@@ -4671,13 +4726,10 @@ func (s *SQLiteStore) recordUsage(ctx context.Context, e UsageEvent, b *RelayAtt
 			 VALUES (?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(alloc_id, period) DO UPDATE SET bytes = bytes + excluded.bytes`,
 			e.AllocID, periodOf(e.RecordedAt), e.UserID, nullStr(e.NodeID), b2i(e.Billable), periodDelta); err != nil {
-			return UsageRecordResult{}, err
+			return UsageRecordResult{}, 0, err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return UsageRecordResult{}, err
-	}
-	return res, nil
+	return res, newCum, nil
 }
 
 // relayAttribOwedPrefix starts the synthetic usage_periods alloc id owed
