@@ -54,7 +54,7 @@ on:
   # Release metadata is generated after the signed/notarized artifact exists,
   # so the frozen candidate commit cannot arrive through an ordinary PR event.
   #
-  # Two dispatch modes, chosen by `mode` and nothing else:
+  # Three dispatch modes, chosen by `mode` and nothing else:
   #
   #   pull-request             the original: an operator opened a PR for the
   #                            candidate; identity checks bind the dispatch to
@@ -69,16 +69,28 @@ on:
   #                            is exactly a release-metadata candidate. Any
   #                            failure fails the gate; it never widens to "run
   #                            every lane" the way the PR selector does.
+  #   internal-full-candidate  the root operator's internal change, proven by
+  #                            the FULL gate before main moves, with no pull
+  #                            request. Strict like the frozen mode: the run
+  #                            must be on `internal-candidate/<head_sha>`, check
+  #                            out exactly `head_sha`, whose ONE parent is
+  #                            `base_sha` == current main, and BASE's own
+  #                            `ci-evidence.mjs internal-candidate` must find a
+  #                            complete change set that touches none of BASE's
+  #                            trust inputs (scripts/ci/ci-evidence.mjs,
+  #                            `internalTrustClosure`). Every lane is selected;
+  #                            any doubt fails the gate.
   workflow_dispatch:
     inputs:
       mode:
-        description: Dispatch mode (pull-request, or frozen-release-metadata from macos-release.yml)
+        description: Dispatch mode (pull-request, frozen-release-metadata from macos-release.yml, or internal-full-candidate)
         required: true
         default: pull-request
         type: choice
         options:
           - pull-request
           - frozen-release-metadata
+          - internal-full-candidate
       pr_number:
         description: Frozen release-candidate pull request number (pull-request mode only)
         required: false
@@ -202,6 +214,22 @@ jobs:
             grep -qx 'status=ok' "$RUNNER_TEMP/frozen.out" || {
               echo "::error::the frozen release-metadata judge returned no verdict"; exit 1; }
             cat "$RUNNER_TEMP/frozen.out" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The internal full candidate: the same shape, judged by BASE's copy of
+          # the evidence verifier (whose closure rules the candidate therefore
+          # cannot have rewritten), and FULL — its verdict is the status the
+          # selector turns into every lane.
+          if [ "$DISPATCHED" = true ] && [ "$MODE" = internal-full-candidate ]; then
+            [[ "$EXPECTED_BASE" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::base_sha is not a full SHA"; exit 1; }
+            judge="$RUNNER_TEMP/internal-base"
+            git worktree add --detach "$judge" "$EXPECTED_BASE" || {
+              echo "::error::base_sha $EXPECTED_BASE is not the candidate's parent in this checkout"; exit 1; }
+            node "$judge/scripts/ci/ci-evidence.mjs" internal-candidate --output "$RUNNER_TEMP/internal.out" || {
+              echo "::error::the dispatched commit is not an internal full candidate"; exit 1; }
+            grep -qx 'status=internal-full-candidate' "$RUNNER_TEMP/internal.out" || {
+              echo "::error::the internal full candidate judge returned no verdict"; exit 1; }
+            cat "$RUNNER_TEMP/internal.out" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$DISPATCHED" = true ] && [ "$MODE" != pull-request ]; then
@@ -597,6 +625,20 @@ jobs:
               note "frozen release-metadata mode: this run checked $CHECKED_SHA on $GITHUB_REF, not head_sha $EXPECTED_HEAD on a release-candidate/macos-v* branch."
             fi
           fi
+          # The internal full candidate, likewise: the dispatched head on the
+          # branch named for it, and FULL — a lane that was not selected is a run
+          # that proves less than its mode claims.
+          if [ "$DISPATCHED" = true ] && [ "$MODE" = internal-full-candidate ]; then
+            if [ "$CHECKED_SHA" != "$EXPECTED_HEAD" ] || [ "$GITHUB_REF" != "refs/heads/internal-candidate/$EXPECTED_HEAD" ]; then
+              note "internal full candidate mode: this run checked $CHECKED_SHA on $GITHUB_REF, not head_sha $EXPECTED_HEAD on refs/heads/internal-candidate/$EXPECTED_HEAD."
+            fi
+            while IFS= read -r lane; do
+              selected=$(printf '%s' "$SELECTED" | jq -r --arg l "$lane" 'if has($l) then .[$l] else "missing" end')
+              if [ "$selected" != true ]; then
+                note "internal full candidate mode: $lane was selected=\"$selected\"; this mode runs every lane."
+              fi
+            done <<< "$conditional_lanes"
+          fi
 
           echo
           if [ -n "$problems" ]; then
@@ -615,7 +657,11 @@ jobs:
       # merge ref; its proof is the second, separately named kind, and producer
       # and consumer each re-judge the candidate with BASE's release-metadata
       # whitelist and its branch version rather than trusting this mode name
-      # (scripts/ci/ci-evidence.mjs, DISPATCH_KIND). The producer records what
+      # (scripts/ci/ci-evidence.mjs, DISPATCH_KIND). The `internal-full-candidate`
+      # dispatch is the third kind (INTERNAL_KIND): its candidate on its own
+      # `internal-candidate/<sha>` branch, every lane run, and a change set that
+      # producer and consumer each re-derive and judge against BASE's trust
+      # closure. The producer records what
       # this run actually proved — the commit and tree it checked out, the pull
       # request or candidate and run identity, every
       # job's final result, per-lane input fingerprints, the tag set and the
@@ -628,12 +674,12 @@ jobs:
       # verifier's own test suite DOES fail it, because a verifier nothing has
       # seen fail is not one this gate may mint proofs for.
       - name: Check out the merge commit this run tested
-        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'frozen-release-metadata' || inputs.mode == 'internal-full-candidate'))
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - name: Node for the evidence verifier
-        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'frozen-release-metadata' || inputs.mode == 'internal-full-candidate'))
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24
@@ -641,12 +687,12 @@ jobs:
       # guard projection controls) on this same pull request and on every main
       # push, and this job is on every merge's critical path.
       - name: Evidence verifier tests
-        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'frozen-release-metadata' || inputs.mode == 'internal-full-candidate'))
         env:
           CI_EVIDENCE_TEST_SCOPE: verifier
         run: node scripts/test/ci-evidence-test.mjs
       - name: Record this run's full proof for main
-        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'frozen-release-metadata' || inputs.mode == 'internal-full-candidate'))
         env:
           GH_TOKEN: ${{ github.token }}
           CI_EVIDENCE_NEEDS: ${{ toJSON(needs) }}
@@ -657,7 +703,7 @@ jobs:
           CI_EVIDENCE_DISPATCH_HEAD: ${{ inputs.head_sha }}
         run: node scripts/ci/ci-evidence.mjs produce
       - name: Keep the proof
-        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'frozen-release-metadata' || inputs.mode == 'internal-full-candidate'))
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: relayium-ci-evidence-proof-attempt-${{ github.run_attempt }}

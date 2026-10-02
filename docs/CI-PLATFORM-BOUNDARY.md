@@ -100,6 +100,28 @@ macOS wherever the branch is reached and Ubuntu for ordinary runs; 6l counts a
 `runs-on` that can name macOS as paid. `test` stays on `macos-15`: it compiles
 real Mach-O fixtures and needs Apple tools.
 
+**`ui-smoke` waits for `contract`, not for `test` (2026-10-02).** The two UI
+shards used to wait for the macOS unit suite as well, which serialised the lane:
+in run 36968703508 `contract` was ready at 05:24:28 and `test` at 05:34:33, so the
+shards could not start for about 605 s after their real prerequisite. That is a
+nominal figure, assuming the same queue times; it is not a measured gain, and a
+fresh before/after measurement from the API, including the macOS jobs running
+alongside, is still owed. `contract` remains the gate in front of the Developer
+ID key import, so a red contract and a fork pull request still skip both shards,
+and a failed, timed-out or skipped `evidence` job still runs them in full on
+`macos-15`. `signed-build` still needs both `test` and `contract`. What this
+costs: when `test` is red, the two shards still run (about 13 to 17 minutes
+each) and the key is materialised in their temporary keychain before that
+verdict, while the red `test` still fails the workflow, its `merge-gate` call
+and the release lane's `notarize-stage` (which requires a successful `build`).
+`ci-event-policy-test.mjs` pins this order explicitly (`ui-smoke` original needs
+exactly `[contract]`, `signed-build` exactly `[test, contract]`), because its
+generic checks derive each condition from the job's own needs and would accept a
+consistent reintroduction of `test`. `scripts/release/macos-evidence.mjs`
+accepts, for release reuse only, the previous `ui-smoke` triple as one frozen
+whole (`LEGACY_ADOPTED_UI_SMOKE_CONDITIONS`), so a signed build produced under
+it can still be judged; the current workflow must carry the new triple.
+
 **Three details that are load-bearing rather than stylistic:**
 
 * The call forwards its four secrets **one line each**, never `secrets:
@@ -1665,7 +1687,7 @@ the merged pull request's proof covers exactly this tree:
    `continue-on-error` job reported both ways, and proves revision 2's graph
    fails each named outcome.
 
-5. **Two proof sources, never both.** Besides a merged pull request's merge-gate
+5. **A second proof source, never two at once.** Besides a merged pull request's merge-gate
    run, the frozen release-metadata dispatch that `macos-release.yml` starts
    (`mode: frozen-release-metadata`, branch `release-candidate/macos-v…`, the
    candidate SHA itself, one commit on the CURRENT main, touching nothing under
@@ -1682,6 +1704,60 @@ the merged pull request's proof covers exactly this tree:
    consumer's own judgement must reproduce. A candidate of app code, web app
    code or `go.mod` is refused on both sides. A commit with both kinds of
    source, or a pull request that did not merge it, runs in full.
+
+6. **A third source: the internal full candidate.** An internal change can be
+   proven by the FULL gate before `main` moves, with no pull request and without
+   posing as release metadata. The operator pushes exactly one commit on the
+   CURRENT protected `main` to `internal-candidate/<that commit's SHA>` and
+   dispatches `merge-gate.yml` with `mode: internal-full-candidate`,
+   `base_sha` = current main and `head_sha` = the candidate. The select job
+   checks BASE out into a worktree and runs **BASE's**
+   `scripts/ci/ci-evidence.mjs internal-candidate`; any doubt fails the select
+   job and the gate, and its verdict makes the selector choose EVERY lane. The
+   aggregate re-checks the head, the branch named for it and that every lane
+   was selected. The proof is its own kind (`INTERNAL_KIND`) and schema
+   (`relayium.ci-evidence.internal-proof/v1`), and the `main` push that
+   fast-forwards from exactly that base to exactly that SHA may witness from it.
+
+   The select judge, the producer and the consumer each derive the change set
+   twice and require the two to agree: the compare API (both sides of every
+   rename) and the checkout's own tree against BASE's tree read through the API
+   (which also catches mode-only changes); the select judge adds git's own
+   `diff-tree` of its depth-2 checkout. They then require the change set to
+   touch nothing in BASE's **trust closure** (`internalTrustClosure`), DERIVED
+   from BASE rather than listed by hand: every file under `.github/`,
+   `scripts/ci/` and `scripts/release/`; the ten selector control files; the
+   release-metadata whitelist; every module that machinery executes,
+   transitively — today that includes `web/e2e/harness.mjs`, which the
+   toolchain probe loads, and its three imports (a load the walker cannot name
+   is a refusal, not a gap); the macOS artifact-derived release files
+   (`RELEASE_ARTIFACT_FILES`, which only the frozen mode may carry); and every
+   workflow guard, meaning any file under `scripts/test/` whose BASE or candidate
+   bytes read `.github/`. Every closure member checked out is byte-compared
+   with BASE's blob. Ordinary application, runtime and public-copy changes and
+   their owning tests (for example `README.md`, the release history
+   `web/scripts/pages/content/releases.mjs`, `scripts/test/cli-public-truth-test.sh`)
+   are allowed.
+
+   **Bootstrap.** Because the closure contains the machinery itself, no proof
+   can certify a change to it. The commit that introduced this mode changes
+   `scripts/ci/ci-evidence.mjs`, so it, and any later change to the closure,
+   lands through an ordinary fast-forward and runs every lane in full on
+   `main`. A BASE without the judge (any commit before this mode) prints its
+   usage and exits non-zero, which fails the select step. Dispatch this mode
+   only on a candidate whose BASE already contains it.
+
+   **What it costs.** This is not a reduction in total CI work. A candidate
+   pays a FULL gate run (every lane, macOS and Windows included), then the
+   `main` push pays its evidence and screen jobs, the paid macOS/Windows
+   certify probes when eligible, and the fresh jobs listed below. That is at
+   least as much as one full run on `main`. What it buys is order: the full
+   result exists before `main` moves, and the witnessed `main` run is short.
+   Report it with the producer, consumer, bootstrap, failure, download and wait
+   times included, never as a saving against one full `main` run. A fast-forward
+   by the repository's existing administrator bypass is that bypass, not
+   protection recognising the dispatched `merge-gate` check, which has not been
+   observed.
 
 What stays fresh on every `main` push: `repo-hygiene` and `windows` (not
 adopted), the macOS `signed-build` (it mints the source-bound artifact the
@@ -1719,7 +1795,16 @@ iOS UI witness fall to full (fail-safe, unmeasured);
 the merge gate and lanes must grant `actions: read` and `pull-requests: read` to
 the read-only `evidence` job, and so must `macos-release.yml`'s call to
 `macos.yml`; and reuse has been proved against mocked and local-HTTP APIs, not
-yet by a hosted merge.
+yet by a hosted merge. The internal full candidate has likewise been proved
+only against real local git (depth-1 and depth-2 clones of real commits) and a
+mocked or local-HTTP API — no hosted dispatch, proof or witness of it exists yet.
+Its guard rule reads `scripts/test/` only, so a workflow-reading check that
+lives elsewhere (Swift guard tests, `web/e2e` contract tests) is an ordinary
+path to it; such a change still runs its own lane in the full gate. Shell
+helpers that `scripts/release/` scripts call outside that tree (for example
+`apps/mac/scripts/verify-apple-silicon.sh`) are macOS publication tools run by
+`macos-release.yml`, not by the gate or the verifier, and are not in the
+closure.
 
 ## CI architecture is executable policy, not prose
 

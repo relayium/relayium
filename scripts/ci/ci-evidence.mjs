@@ -13,11 +13,12 @@
 //
 // ## What this file is, and what it never is
 //
-// It is the ONLY place that decides "reuse". Five commands:
+// It is the ONLY place that decides "reuse". Six commands:
 //
 //   produce        In the merge gate's aggregate job, after every lane has been
 //                  judged, on `pull_request` (and the frozen release-metadata
-//                  dispatch, see DISPATCH_KIND) only. Records what the run proved
+//                  and internal full candidate dispatches, see DISPATCH_KIND
+//                  and INTERNAL_KIND) only. Records what the run proved
 //                  (exact checkout SHA and tree, PR identity, run/attempt, every
 //                  job's final result, per-lane input fingerprints, the tag set,
 //                  the verifier/registry hashes, the producer's toolchain) as a
@@ -56,10 +57,18 @@
 //                  Mismatch FAILS the job — a witness path cannot fall back to
 //                  platform commands, because it is not on that platform.
 //
+//   internal-candidate --output FILE
+//                  In the merge gate's select job, as BASE's copy of this file
+//                  from a BASE worktree, for the `internal-full-candidate`
+//                  dispatch only. Judges the checked-out candidate against BASE's
+//                  trust closure and writes the verdict the selector turns into
+//                  every lane. Unlike the commands above it FAILS on any doubt.
+//
 // What it never does: let a pull-request event, a dispatch, a release input or
 // a called (nested) run reuse anything; accept a PR head SHA as the thing that
 // was tested; accept a proof that was itself produced by a witness run (proofs
-// come only from `pull_request` runs, which never witness); turn an API error
+// come only from `pull_request` runs and the two strict merge-gate dispatches,
+// none of which ever witnesses); turn an API error
 // into approval; run code from the downloaded artifact.
 //
 // ## Dependency-free, on purpose
@@ -74,7 +83,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, posix, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { inflateRawSync } from "node:zlib";
@@ -124,6 +133,42 @@ export const NATIVE_RELEASES_FILE = "web/native-releases.json";
 const DISPATCH_FORBIDDEN = (path) => path.startsWith(".github/") || path.startsWith("scripts/");
 /** BASE's release-metadata whitelist, imported from the checkout (whose bytes `frozenCandidateScope` proves are BASE's). */
 const importScope = () => import(pathToFileURL(resolve(repoRoot, SCOPE_FILE)).href);
+/**
+ * The third, separately named proof: an INTERNAL FULL CANDIDATE. The root
+ * operator pushes one commit on the current protected main to
+ * `internal-candidate/<its own SHA>` and dispatches the gate with mode
+ * `internal-full-candidate`, which selects EVERY lane; main then fast-forwards
+ * to exactly that SHA. It exists so an internal change can be proven green by
+ * the full gate BEFORE main moves, without a pull request and without
+ * pretending to be release metadata.
+ *
+ * Unlike the frozen mode it may carry ordinary application, runtime, public
+ * copy and owning-test changes — but never a trust input: the gate's own
+ * workflows, the selector, the verifier and its registries, the toolchain probe
+ * and every module it executes, the release helpers, the workflow guards and
+ * the macOS artifact-derived release files (`internalTrustClosure`). The
+ * closure is DERIVED from BASE's tree, and every member is byte-compared with
+ * BASE's blob. Its proof can therefore never certify a change to the machinery
+ * that certifies it; a commit that changes that machinery is bootstrapped by a
+ * full run on main.
+ *
+ * Neither the mode name nor protected main is trusted: the select job (BASE's
+ * copy of this file, from a BASE worktree), the producer and the consumer each
+ * derive the change set twice — the compare API, and the candidate's own
+ * checked-out tree against BASE's tree from the API — and judge it.
+ */
+export const INTERNAL_KIND = "merge-gate-internal-full-candidate-run";
+export const INTERNAL_SCHEMA = "relayium.ci-evidence.internal-proof/v1";
+export const INTERNAL_MODE = "internal-full-candidate";
+/** The branch names the candidate it carries: `internal-candidate/<head_sha>`. A moved branch no longer matches its name. */
+export const INTERNAL_REF = /^refs\/heads\/internal-candidate\/([0-9a-f]{40})$/;
+/** Path prefixes whose every file is a trust input. */
+export const TRUST_PREFIXES = Object.freeze([".github/", "scripts/ci/", "scripts/release/"]);
+/** Where the repository's workflow guards live; a file here that reads `.github/` is one. */
+export const GUARD_DIR = "scripts/test/";
+const GUARD_MARK = ".github/";
+/** Cap on one BASE blob read through the API for the guard judgement. */
+const BLOB_MAX = 4 * 1024 * 1024;
 export const WITNESS_SCHEMA = "relayium.ci-evidence.witness/v1";
 export const REGISTRY_SCHEMA = "relayium.ci-evidence.registry/v1";
 
@@ -248,22 +293,30 @@ const eq = (want) => (v) => v === want;
 
 /** The proof document, structurally. Values are cross-checked separately. */
 export function validateManifest(m) {
-  const dispatched = m?.kind === DISPATCH_KIND;
+  const internal = m?.kind === INTERNAL_KIND;
+  const dispatched = m?.kind === DISPATCH_KIND || internal;
+  const candidateRef = internal ? INTERNAL_REF : FROZEN_REF;
+  const sortedPaths = (max) => (v) => Array.isArray(v) && v.length > 0 && v.length < max && v.every(str(400))
+    && v.every((p, i) => i === 0 || v[i - 1] < p);
   const holds = (spec) => (v) => { try { shape(v, spec, "x"); return true; } catch { return false; } };
   shape(m, {
-    schema: eq(MANIFEST_SCHEMA),
-    kind: (v) => v === MANIFEST_KIND || v === DISPATCH_KIND,
+    schema: eq(internal ? INTERNAL_SCHEMA : MANIFEST_SCHEMA),
+    kind: (v) => v === MANIFEST_KIND || v === DISPATCH_KIND || v === INTERNAL_KIND,
     produced_at: iso,
     repository: { id: isInt, full_name: (v) => typeof v === "string" && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(v) },
     pull_request: dispatched ? (v) => v === null : holds({
       number: isInt, head_sha: hex40, base_sha: hex40, base_ref: str(255),
       head_repository_id: isInt, same_repository: (v) => v === true,
     }),
-    dispatch: dispatched ? holds({
+    dispatch: internal ? holds({
+      mode: eq(INTERNAL_MODE), base_sha: hex40, head_sha: hex40, ref: (v) => typeof v === "string" && INTERNAL_REF.test(v),
+      // Both sides of up to 299 renames.
+      paths: sortedPaths(600),
+      closure_sha256: hex64,
+    }) : dispatched ? holds({
       mode: eq(DISPATCH_MODE), base_sha: hex40, head_sha: hex40, ref: (v) => typeof v === "string" && FROZEN_REF.test(v),
       version: (v) => typeof v === "string" && /^[0-9]+(\.[0-9]+){1,2}$/.test(v),
-      paths: (v) => Array.isArray(v) && v.length > 0 && v.length < 300 && v.every(str(400))
-        && v.every((p, i) => i === 0 || v[i - 1] < p),
+      paths: sortedPaths(300),
       scope_sha256: hex64,
     }) : (v) => v === null,
     run: {
@@ -272,7 +325,7 @@ export function validateManifest(m) {
     },
     checkout: {
       sha: hex40, tree: hex40,
-      ref: (v) => typeof v === "string" && (dispatched ? FROZEN_REF.test(v) : /^refs\/pull\/[1-9][0-9]*\/merge$/.test(v)),
+      ref: (v) => typeof v === "string" && (dispatched ? candidateRef.test(v) : /^refs\/pull\/[1-9][0-9]*\/merge$/.test(v)),
       parents: (v) => Array.isArray(v) && v.length === (dispatched ? 1 : 2) && v.every(hex40),
     },
     referenced_workflows: (v) => Array.isArray(v) && v.length > 0 && v.length <= LIMITS.referencedWorkflows
@@ -298,6 +351,13 @@ export function validateManifest(m) {
   need(ids.size === m.jobs.length, "manifest.jobs lists a job id twice");
   const names = new Set(m.jobs.map((j) => j.name));
   need(names.size === m.jobs.length, "manifest.jobs lists a job name twice");
+  if (internal) {
+    // "Full" is the mode's whole claim: every lane the gate calls ran and passed.
+    const want = [...SELECTOR_LANES.map((l) => l.id), ...UNCONDITIONAL_LANES].sort();
+    need(JSON.stringify(Object.keys(m.lanes).sort()) === JSON.stringify(want)
+      && Object.values(m.lanes).every((l) => l.selected === true && l.result === "success"),
+    "manifest.lanes of an internal full candidate is not every lane selected and successful");
+  }
   return m;
 }
 
@@ -309,7 +369,7 @@ export function validateWitness(w) {
     verified_at: iso,
     target: { repository_id: isInt, sha: hex40, tree: hex40, run_id: isInt, run_attempt: isInt, workflow_ref: str(400) },
     source: {
-      kind: (v) => v === MANIFEST_KIND || v === DISPATCH_KIND,
+      kind: (v) => v === MANIFEST_KIND || v === DISPATCH_KIND || v === INTERNAL_KIND,
       pull_request: (v) => v === null || isInt(v), head_sha: hex40, merge_sha: hex40, run_id: isInt, run_attempt: isInt,
       artifact_id: isInt, artifact_digest: (v) => typeof v === "string" && /^sha256:[0-9a-f]{64}$/.test(v),
       produced_at: iso,
@@ -689,6 +749,9 @@ export async function produce({ env, api, git, registry, now, workflowsDir, read
   const dispatched = env.GITHUB_EVENT_NAME === "workflow_dispatch";
   need(env.GITHUB_EVENT_NAME === "pull_request" || dispatched,
     `event ${env.GITHUB_EVENT_NAME} produces no proof; only pull_request runs and frozen release-metadata dispatches do`);
+  if (dispatched && env.CI_EVIDENCE_DISPATCH_MODE === INTERNAL_MODE) {
+    return produceInternal({ env, api, git, registry, now, workflowsDir, readFile, loadScope });
+  }
   if (dispatched) return produceDispatch({ env, api, git, registry, now, workflowsDir, readFile, loadScope });
   const repository = env.GITHUB_REPOSITORY;
   const repositoryId = envInt(env.GITHUB_REPOSITORY_ID);
@@ -849,6 +912,299 @@ async function frozenCandidateScope({ api, repository, base, candidate, ref, rea
   return { version: branch[1], paths: [...paths].sort(), scope_sha256: sha256(scopeBytes) };
 }
 
+// ── the internal full candidate ─────────────────────────────────────────────
+
+const ENTRY = /^([0-7]{6}) (blob|commit) ([0-9a-f]{40})$/;
+
+/** Every non-tree entry of HEAD's tree as `mode type object`, read from git — no file is opened. */
+function localTree(git) {
+  const out = new Map();
+  for (const line of git(["ls-tree", "-r", "-z", "--full-tree", "HEAD"]).toString("utf8").split("\0")) {
+    if (line === "") continue;
+    const tab = line.indexOf("\t");
+    need(tab > 0 && ENTRY.test(line.slice(0, tab)), `git ls-tree printed an unreadable entry ${JSON.stringify(line.slice(0, 120))}`);
+    out.set(line.slice(tab + 1), line.slice(0, tab));
+  }
+  need(out.size > 0, "git ls-tree listed nothing");
+  return out;
+}
+
+/** A commit and its complete, untruncated tree as the API reports them (`mode type object` per path). */
+async function apiTree(api, repository, sha, what) {
+  const commit = await api.json(`repos/${repository}/git/commits/${sha}`);
+  need(isObject(commit) && commit.sha === sha && HEX40.test(commit.tree?.sha ?? "") && Array.isArray(commit.parents)
+    && commit.parents.every((p) => HEX40.test(p?.sha ?? "")), `the API's ${what} ${sha} is not a commit`);
+  const tree = await api.json(`repos/${repository}/git/trees/${commit.tree.sha}?recursive=1`);
+  need(isObject(tree) && tree.sha === commit.tree.sha && tree.truncated === false && Array.isArray(tree.tree),
+    `the API's tree of the ${what} ${sha} is truncated or malformed`);
+  const entries = new Map();
+  for (const e of tree.tree) {
+    need(isObject(e) && typeof e.path === "string" && e.path.length > 0, `the API's tree of the ${what} lists an entry without a path`);
+    if (e.type === "tree") continue;
+    const entry = `${e.mode} ${e.type} ${e.sha}`;
+    need(ENTRY.test(entry) && !entries.has(e.path), `the API's tree of the ${what} lists ${JSON.stringify(e.path)} malformed or twice`);
+    entries.set(e.path, entry);
+  }
+  return { commit, entries };
+}
+
+const MODULE = /\.(mjs|js)$/;
+
+/**
+ * The repository modules `text` (the module at `path`) loads: static and
+ * re-export specifiers that are relative, a literal relative dynamic load, and
+ * the two repository-root shapes this tree uses — a literal path, or a
+ * same-file string constant — passed through `pathToFileURL(resolve|join(root, …))`.
+ * Any other dynamic load is a module this closure cannot name, and that is a
+ * refusal: an underived closure is an incomplete one.
+ */
+export function moduleImports(path, text, exists) {
+  const out = new Set();
+  // A relative specifier starts with "." (a bare one names a package, outside the
+  // repository). A path that climbs out of the tree is not a tracked file, so
+  // `exists` already drops it.
+  const relative = (spec) => {
+    if (!spec.startsWith(".")) return;
+    const target = posix.normalize(posix.join(posix.dirname(path), spec));
+    if (exists(target)) out.add(target);
+  };
+  for (const m of text.matchAll(/\bfrom\s*["']([^"'\n]+)["']/g)) relative(m[1]);
+  for (const m of text.matchAll(/\bimport\s*["']([^"'\n]+)["']/g)) relative(m[1]);
+  for (const m of text.matchAll(/\bimport\(\s*([^\n]*)/g)) {
+    const arg = m[1];
+    const literal = /^["']([^"'\n]+)["']/.exec(arg);
+    if (literal) { if (!literal[1].startsWith("node:")) relative(literal[1]); continue; }
+    const rooted = /^pathToFileURL\(\s*(?:resolve|join)\(\s*[A-Za-z_$][\w$]*\s*,\s*(?:["']([^"'\n]+)["']|([A-Z][A-Z0-9_]*))\s*\)\s*\)/.exec(arg);
+    let target = rooted?.[1];
+    if (rooted?.[2]) target = new RegExp(`\\bconst ${rooted[2]} = "([^"\\n]+)";`).exec(text)?.[1];
+    need(typeof target === "string" && exists(target),
+      `${path} loads a module this trust closure cannot name (${oneLine(arg).slice(0, 80)})`);
+    out.add(target);
+  }
+  return [...out];
+}
+
+/**
+ * The trust closure of an internal full candidate, derived from BASE's tree,
+ * refusing as soon as the candidate touches a member. `changed` is the
+ * candidate's complete change set (both sides of every rename); every file it
+ * does not list is BASE's, so reading it here reads BASE. Returns the closure,
+ * each member byte-compared with BASE's blob.
+ */
+async function internalTrustClosure({ api, repository, baseEntries, localEntries, changed, readFile, loadScope }) {
+  const closure = new Map();
+  const member = (path, why) => {
+    need(!changed.has(path), `the candidate touches ${JSON.stringify(path)}, a trust input (${why}); its run can never be a proof`);
+    if (!closure.has(path)) closure.set(path, why);
+  };
+  const everyPath = [...new Set([...baseEntries.keys(), ...localEntries.keys(), ...changed])].sort();
+
+  // 1. The gate's workflows, the CI machinery and the release helpers, whole;
+  //    the selector's own control files; the release-metadata whitelist.
+  for (const path of everyPath) {
+    const prefix = TRUST_PREFIXES.find((p) => path.startsWith(p));
+    if (prefix) member(path, `under ${prefix}`);
+  }
+  for (const path of CONTROL_FILES) member(path, "a merge-gate control file");
+  member(SCOPE_FILE, "the release-metadata whitelist");
+
+  // 2. Every module that machinery executes, transitively — the toolchain probe
+  //    loads the browser harness, and the harness its own helpers. Walked from
+  //    the machinery, not from the tests: a test module is itself a member (it
+  //    is a control file or a guard below) and is judged by running it.
+  const exists = (p) => baseEntries.has(p);
+  const queue = [...closure.keys()].filter((p) => MODULE.test(p) && exists(p) && !p.startsWith(".github/") && !p.startsWith(GUARD_DIR));
+  for (let i = 0; i < queue.length; i += 1) {
+    const from = queue[i];
+    for (const path of moduleImports(from, Buffer.from(readFile(from)).toString("utf8"), exists)) {
+      if (closure.has(path)) continue;
+      member(path, `loaded by ${from}`);
+      if (MODULE.test(path)) queue.push(path);
+    }
+  }
+
+  // 3. The macOS release files written from the signed build's own upload:
+  //    only the frozen release-metadata mode may carry them.
+  let artifactFiles;
+  try { artifactFiles = (await loadScope()).RELEASE_ARTIFACT_FILES; } catch (err) {
+    fail(`BASE's ${SCOPE_FILE} could not be loaded: ${err.message}`);
+  }
+  need(Array.isArray(artifactFiles) && artifactFiles.length > 0 && artifactFiles.every((p) => typeof p === "string" && p.length > 0),
+    `${SCOPE_FILE} does not export RELEASE_ARTIFACT_FILES`);
+  for (const path of artifactFiles) member(path, "an artifact-derived macOS release file");
+
+  // 4. The workflow guards: a file under scripts/test/ whose BASE or candidate
+  //    bytes read `.github/`. A changed one is judged on both sides.
+  for (const path of everyPath.filter((p) => p.startsWith(GUARD_DIR))) {
+    const sides = [];
+    if (changed.has(path)) {
+      const before = baseEntries.get(path);
+      if (before) sides.push(await baseBlob(api, repository, before, path));
+      if (localEntries.has(path)) sides.push(Buffer.from(readFile(path)));
+    } else {
+      sides.push(Buffer.from(readFile(path)));
+    }
+    if (sides.some((bytes) => bytes.includes(GUARD_MARK))) member(path, "a workflow guard");
+  }
+
+  // 5. Byte for byte: what this checkout would execute IS BASE's.
+  for (const [path] of closure) {
+    const before = baseEntries.get(path);
+    need(before === localEntries.get(path), `the candidate's ${path} is not BASE's`);
+    if (before === undefined || !before.startsWith("100")) continue;
+    let bytes;
+    try { bytes = Buffer.from(readFile(path)); } catch (err) { fail(`${path} is unreadable: ${err.message}`); }
+    need(gitBlobSha(bytes) === before.slice(-40), `the ${path} checked out here is not BASE's blob`);
+  }
+  return closure;
+}
+
+/** BASE's bytes of one blob, through the API, checked against its object id. */
+async function baseBlob(api, repository, entry, path) {
+  const oid = entry.slice(-40);
+  const blob = await api.json(`repos/${repository}/git/blobs/${oid}`);
+  need(isObject(blob) && blob.sha === oid && blob.encoding === "base64" && typeof blob.content === "string"
+    && Number.isSafeInteger(blob.size) && blob.size <= BLOB_MAX, `BASE's ${path} is unreadable through the API`);
+  const bytes = Buffer.from(blob.content, "base64");
+  need(gitBlobSha(bytes) === oid, `BASE's ${path} from the API is not its own blob`);
+  return bytes;
+}
+
+/**
+ * The internal full candidate `base`→`candidate` on `ref`, judged without
+ * trusting the mode name or protected main: one commit, on its own branch, whose
+ * change set the compare API AND this checkout's tree against BASE's API tree
+ * both report identically (renames as both paths, mode changes included), and
+ * which touches no member of BASE's trust closure. Returns what the proof records.
+ */
+async function internalCandidateScope({ api, repository, base, candidate, ref, git, readFile, loadScope }) {
+  need(HEX40.test(base ?? "") && HEX40.test(candidate ?? "") && base !== candidate, "the candidate does not name a distinct base and head SHA");
+  need(INTERNAL_REF.exec(ref ?? "")?.[1] === candidate, `${ref} is not internal-candidate/${candidate}, the branch of exactly this candidate`);
+  const head = headFacts(git);
+  need(head.sha === candidate && head.parents.length === 1 && head.parents[0] === base,
+    "the checkout is not the candidate exactly one commit on its base");
+
+  const cmp = await api.json(`repos/${repository}/compare/${base}...${candidate}`);
+  need(cmp?.status === "ahead" && cmp.ahead_by === 1 && cmp.behind_by === 0 && Array.isArray(cmp.files)
+    && cmp.files.length > 0 && cmp.files.length < 300, "the compare API does not show exactly one commit of a bounded change");
+  const compared = new Set();
+  for (const f of cmp.files) {
+    need(isObject(f) && typeof f.filename === "string" && f.filename.length > 0, "the compare API lists a file without a name");
+    for (const path of [f.filename, f.previous_filename].filter((x) => x !== undefined && x !== null)) {
+      need(typeof path === "string" && path.length > 0, "the compare API lists a malformed previous name");
+      compared.add(path);
+    }
+  }
+
+  const { commit: baseCommit, entries: baseEntries } = await apiTree(api, repository, base, "base");
+  need(baseCommit.sha === base, "the API's base is another commit");
+  const cand = await api.json(`repos/${repository}/git/commits/${candidate}`);
+  need(isObject(cand) && cand.sha === candidate && cand.tree?.sha === head.tree && Array.isArray(cand.parents)
+    && cand.parents.length === 1 && cand.parents[0]?.sha === base, "the API's view of the candidate is not this checkout's tree on its base");
+  const localEntries = localTree(git);
+  const changed = new Set();
+  for (const path of new Set([...baseEntries.keys(), ...localEntries.keys()])) {
+    if (baseEntries.get(path) !== localEntries.get(path)) changed.add(path);
+  }
+  need(changed.size > 0, "the candidate changes nothing");
+  const onlyTree = [...changed].filter((p) => !compared.has(p));
+  const onlyCompare = [...compared].filter((p) => !changed.has(p));
+  need(onlyTree.length === 0 && onlyCompare.length === 0, "the compare API and this checkout's tree against BASE's disagree on "
+    + `the change set (tree only: ${onlyTree.slice(0, 3).join(", ") || "-"}; compare only: ${onlyCompare.slice(0, 3).join(", ") || "-"})`);
+
+  const closure = await internalTrustClosure({ api, repository, baseEntries, localEntries, changed, readFile, loadScope });
+  const lines = [...closure.keys()].sort().map((p) => `${p} ${baseEntries.get(p) ?? "absent"}`);
+  return { paths: [...changed].sort(), closure_sha256: sha256(`${lines.join("\n")}\n`), closure: [...closure.keys()].sort() };
+}
+
+/** main is exactly `base` and the candidate's branch is exactly `candidate`, now. */
+async function internalPinned(api, repository, base, candidate) {
+  const mainRef = await api.json(`repos/${repository}/git/ref/heads/main`);
+  need(mainRef?.object?.sha === base, `main is at ${mainRef?.object?.sha}, not the candidate's base ${base}`);
+  const branch = await api.json(`repos/${repository}/git/ref/heads/internal-candidate/${candidate}`);
+  need(branch?.object?.sha === candidate, `internal-candidate/${candidate} points at ${branch?.object?.sha}, not its own candidate`);
+}
+
+/**
+ * merge-gate's `internal-full-candidate` select step, run as BASE's copy of
+ * this file from a BASE worktree against the candidate checkout. Every
+ * condition is a hard stop: the select job fails, and so does the gate.
+ * Besides the shared judgement it derives the change set a third way, from the
+ * local objects the select job's depth-2 checkout holds.
+ */
+export async function judgeInternalCandidate({ env, api, git, readFile, loadScope = importScope }) {
+  need(env.GITHUB_EVENT_NAME === "workflow_dispatch", "the internal full candidate mode is reachable only by workflow_dispatch");
+  need(env.MODE === INTERNAL_MODE, `mode is ${JSON.stringify(env.MODE ?? null)}, not ${INTERNAL_MODE}`);
+  const base = env.EXPECTED_BASE;
+  const candidate = env.EXPECTED_HEAD;
+  need(HEX40.test(base ?? "") && HEX40.test(candidate ?? ""), "base_sha and head_sha must be full lowercase SHAs");
+  need(env.GITHUB_SHA === candidate, `this run checked out ${env.GITHUB_SHA}, not head_sha ${candidate}`);
+  const repository = env.GITHUB_REPOSITORY;
+  need(/^[^/]+\/[^/]+$/.test(repository ?? ""), "the runner did not name the repository");
+  await internalPinned(api, repository, base, candidate);
+  const scope = await internalCandidateScope({ api, repository, base, candidate, ref: env.GITHUB_REF, git, readFile, loadScope });
+  const local = git(["diff-tree", "-r", "-z", "--no-commit-id", "--no-renames", "--name-only", base, candidate])
+    .toString("utf8").split("\0").filter((p) => p !== "").sort();
+  need(JSON.stringify([...new Set(local)]) === JSON.stringify(scope.paths),
+    "git's own diff of the candidate against BASE disagrees with the API-derived change set");
+  return scope;
+}
+
+/**
+ * The internal full candidate's proof: the gate checked out the candidate on
+ * its own `internal-candidate/<sha>` branch, every lane selected and passed,
+ * main is still its base and the branch still names it — read before and after
+ * everything else.
+ */
+async function produceInternal({ env, api, git, registry, now, workflowsDir, readFile, loadScope }) {
+  const repository = env.GITHUB_REPOSITORY;
+  const repositoryId = envInt(env.GITHUB_REPOSITORY_ID);
+  const runId = envInt(env.GITHUB_RUN_ID);
+  const attempt = envInt(env.GITHUB_RUN_ATTEMPT);
+  need(isInt(repositoryId) && isInt(runId) && isInt(attempt) && /^[^/]+\/[^/]+$/.test(repository ?? ""),
+    "the runner did not describe this run");
+  const base = env.CI_EVIDENCE_DISPATCH_BASE;
+  const candidate = env.CI_EVIDENCE_DISPATCH_HEAD;
+  need(HEX40.test(base ?? "") && HEX40.test(candidate ?? ""), "the dispatch did not name a base and a head SHA");
+  need(INTERNAL_REF.exec(env.GITHUB_REF ?? "")?.[1] === candidate,
+    `${env.GITHUB_REF} is not internal-candidate/${candidate}, the branch of exactly this candidate`);
+  const head = headFacts(git);
+  need(head.sha === candidate && env.GITHUB_SHA === candidate, `checked out ${head.sha}, the dispatch is for ${candidate}`);
+  need(head.parents.length === 1 && head.parents[0] === base, "the candidate is not exactly one commit on the dispatched base");
+  need(env.GITHUB_WORKFLOW_SHA === candidate, "the gate's own workflow file is not from the candidate");
+  await internalPinned(api, repository, base, candidate);
+  const scope = await internalCandidateScope({ api, repository, base, candidate, ref: env.GITHUB_REF, git, readFile, loadScope });
+  const run = await api.json(`repos/${repository}/actions/runs/${runId}`);
+  need(run.id === runId && run.run_attempt === attempt && run.event === "workflow_dispatch"
+    && run.path === ".github/workflows/merge-gate.yml" && run.head_sha === candidate
+    && `refs/heads/${run.head_branch}` === env.GITHUB_REF && run.head_repository?.id === repositoryId,
+  "the API's view of this dispatch disagrees with the runner's");
+  const at = referencedAt(run, repository, env.GITHUB_REF);
+  need(at.sha === candidate, `the referenced workflows ran ${at.sha}, this checkout is ${candidate}`);
+  const facts = await judgedRunFacts({ env, api, git, registry, workflowsDir, repository, runId, attempt });
+  const partial = Object.entries(facts.lanes).filter(([, l]) => !l.selected).map(([id]) => id);
+  need(partial.length === 0, `an internal full candidate ran without ${partial.join(", ")}; only a run of every lane is its proof`);
+  await internalPinned(api, repository, base, candidate);
+  return validateManifest({
+    schema: INTERNAL_SCHEMA,
+    kind: INTERNAL_KIND,
+    produced_at: isoSeconds(now()),
+    repository: { id: repositoryId, full_name: repository },
+    pull_request: null,
+    dispatch: { mode: INTERNAL_MODE, base_sha: base, head_sha: candidate, ref: env.GITHUB_REF, paths: scope.paths,
+      closure_sha256: scope.closure_sha256 },
+    run: {
+      id: runId, attempt, event: "workflow_dispatch", workflow_path: run.path,
+      workflow_ref: String(env.GITHUB_WORKFLOW_REF), workflow_sha: env.GITHUB_WORKFLOW_SHA,
+    },
+    checkout: { sha: head.sha, tree: head.tree, ref: env.GITHUB_REF, parents: head.parents },
+    referenced_workflows: at.refs,
+    ...facts,
+    certification: certificationOf(readFile),
+    toolchain: producerToolchain(env),
+  });
+}
+
 const certificationOf = (readFile) => ({
   registry_sha256: sha256(readFile(REGISTRY_FILE)),
   verifier_sha256: sha256(readFile(VERIFIER_FILE)),
@@ -979,7 +1335,7 @@ export async function witness({
     "workflow_runs", LIMITS.runs);
   const src = candidates.length > 0
     ? await pullRequestSource({ api, repository, repositoryId, registry, sha, head, candidates, onMain, lane })
-    : await dispatchSource({ api, repository, repositoryId, registry, sha, head, event, pulls, onMain, lane, readFile, loadScope });
+    : await dispatchSource({ api, repository, repositoryId, registry, sha, head, event, pulls, onMain, lane, readFile, loadScope, git });
   const { run, runs, runsPath, latest, attempt } = src;
   const prHead = src.runHead;
 
@@ -1046,6 +1402,11 @@ export async function witness({
     need(m.pull_request.number === src.prNumber && m.pull_request.head_sha === prHead
       && m.pull_request.head_repository_id === repositoryId && m.pull_request.base_ref === "main",
     "the proof names another pull request or head");
+  } else if (src.kind === INTERNAL_KIND) {
+    need(m.dispatch.head_sha === sha && m.dispatch.base_sha === src.base && m.dispatch.ref === src.testedRef,
+      "the proof names another candidate, base or branch");
+    need(JSON.stringify(m.dispatch.paths) === JSON.stringify(src.scope.paths) && m.dispatch.closure_sha256 === src.scope.closure_sha256,
+      "the proof's change set or trust closure disagrees with this commit's own judgement");
   } else {
     need(m.dispatch.head_sha === sha && m.dispatch.base_sha === src.base && m.dispatch.ref === src.testedRef,
       "the proof names another candidate, base or branch");
@@ -1191,7 +1552,7 @@ async function pullRequestSource({ api, repository, repositoryId, registry, sha,
   };
 }
 
-async function dispatchSource({ api, repository, repositoryId, registry, sha, head, event, pulls, onMain, lane, readFile, loadScope }) {
+async function dispatchSource({ api, repository, repositoryId, registry, sha, head, event, pulls, onMain, lane, readFile, loadScope, git }) {
   need(pulls.length === 0, `${pulls.length} pull request(s) are associated with this commit but none merged it; `
     + "neither kind of source applies");
   // Main fast-forwarded from exactly the candidate's base to exactly the candidate.
@@ -1201,8 +1562,11 @@ async function dispatchSource({ api, repository, repositoryId, registry, sha, he
   const latest = latestOf(onMain, sha, "this commit");
   need(latest.event === "workflow_dispatch", `the latest merge-gate run on ${sha} is a ${latest.event} run`);
   need(latest.conclusion === "success", `the latest merge-gate run on ${sha} concluded ${latest.conclusion}`);
+  if (INTERNAL_REF.test(`refs/heads/${latest.head_branch}`)) {
+    return internalSource({ api, repository, repositoryId, registry, sha, head, git, event, onMain, latest, runsPath, lane, readFile, loadScope });
+  }
   need(FROZEN_REF.test(`refs/heads/${latest.head_branch}`), `merge-gate run ${latest.id} ran on ${latest.head_branch}, `
-    + "not a frozen release-candidate branch");
+    + "not a frozen release-candidate branch (nor this commit's internal-candidate branch)");
   const run = await sourceRun(api, repository, repositoryId, registry, latest, "workflow_dispatch", sha);
   const ref = `refs/heads/${run.head_branch}`;
   need(FROZEN_REF.test(ref), `merge-gate run ${run.id} ran on ${ref}, not a frozen release-candidate branch`);
@@ -1219,6 +1583,34 @@ async function dispatchSource({ api, repository, repositoryId, registry, sha, he
   const scope = await frozenCandidateScope({ api, repository, base: event.before, candidate: sha, ref, readFile, loadScope });
   return {
     kind: DISPATCH_KIND, prNumber: null, runHead: sha, runsPath, runs: onMain, latest, run, attempt: run.run_attempt,
+    testedSha: sha, testedRef: ref, refs: at.refs, testedTree: head.tree, testedParents: [event.before], base: event.before, scope,
+  };
+}
+
+/**
+ * The internal full candidate main just fast-forwarded to. Every merge-gate
+ * run on this commit must be on its own `internal-candidate/<sha>` branch — a
+ * frozen or pull-request-mode run beside it is a second kind of source — and the
+ * consumer re-judges the candidate itself, with the producer's rules.
+ */
+async function internalSource({ api, repository, repositoryId, registry, sha, head, git, event, onMain, latest, runsPath, lane, readFile, loadScope }) {
+  const branch = `internal-candidate/${sha}`;
+  const strays = onMain.filter((r) => r.head_branch !== branch);
+  need(strays.length === 0, `merge-gate run ${strays[0]?.id} on this commit ran on ${strays[0]?.head_branch}, not ${branch}; `
+    + "two kinds of source is ambiguous");
+  const run = await sourceRun(api, repository, repositoryId, registry, latest, "workflow_dispatch", sha);
+  const ref = `refs/heads/${run.head_branch}`;
+  need(ref === `refs/heads/${branch}`, `merge-gate run ${run.id} ran on ${ref}, not refs/heads/${branch}`);
+  const at = referencedAt(run, repository, ref);
+  need(at.sha === sha, `merge-gate run ${run.id} checked out ${at.sha}, not this commit`);
+  need(at.refs.some((r) => r.path === `${repository}/.github/workflows/${lane.workflow}@${sha}`),
+    `merge-gate run ${run.id} never called ${lane.workflow}`);
+  // headFacts already bound the one parent to `event.before`; the consumer's own
+  // judgement of the candidate repeats the producer's against that base.
+  const scope = await internalCandidateScope({ api, repository, base: event.before, candidate: sha, ref,
+    git, readFile, loadScope });
+  return {
+    kind: INTERNAL_KIND, prNumber: null, runHead: sha, runsPath, runs: onMain, latest, run, attempt: run.run_attempt,
     testedSha: sha, testedRef: ref, refs: at.refs, testedTree: head.tree, testedParents: [event.before], base: event.before, scope,
   };
 }
@@ -1468,7 +1860,8 @@ async function runProduce(env, deps) {
     const manifest = await produce({ ...deps, env, api, registry });
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, `${JSON.stringify(manifest, null, 2)}\n`);
-    const what = manifest.pull_request ? `PR #${manifest.pull_request.number}` : `frozen candidate ${manifest.dispatch.ref}`;
+    const what = manifest.pull_request ? `PR #${manifest.pull_request.number}`
+      : `${manifest.kind === INTERNAL_KIND ? "internal full" : "frozen"} candidate ${manifest.dispatch.ref}`;
     log(`produced proof for ${what} commit ${manifest.checkout.sha} `
       + `tree ${manifest.checkout.tree}, run ${manifest.run.id} attempt ${manifest.run.attempt}, `
       + `lanes ${Object.keys(manifest.fingerprints).join(", ")}`);
@@ -1505,7 +1898,28 @@ export async function main(argv, env = process.env, out = process.stdout, deps =
       return 1;
     }
   }
-  log("usage: ci-evidence.mjs produce | witness LANE | screen LANE | handover | confirm LANE");
+  if (command === "internal-candidate" && laneId === "--output" && rest.length === 1) {
+    // merge-gate's internal-full-candidate select step: BASE's copy of this file,
+    // judging the candidate checked out in the working directory. Unlike every
+    // other command it FAILS on doubt — the select job, and so the gate, with it.
+    try {
+      const cwd = process.cwd();
+      const scope = await judgeInternalCandidate({
+        env, api: deps.api ?? gitHubApi({ token: env.GH_TOKEN, baseUrl: env.GITHUB_API_URL || undefined }),
+        git: deps.candidateGit ?? ((args) => realGit(args, cwd)),
+        readFile: deps.candidateReadFile ?? ((path) => readFileSync(resolve(cwd, path))),
+        ...(deps.loadScope ? { loadScope: deps.loadScope } : {}),
+      });
+      writeFileSync(rest[0], `status=${INTERNAL_MODE}\npayload=\nchanged_files=${scope.paths.length}\n`);
+      log(`internal full candidate ${env.EXPECTED_HEAD} on ${env.EXPECTED_BASE}: ${scope.paths.length} changed path(s), `
+        + `${scope.closure.length} trust input(s) unchanged (closure ${scope.closure_sha256}); every lane will run`);
+      return 0;
+    } catch (err) {
+      process.stderr.write(`::error::ci-evidence: not an internal full candidate: ${oneLine(err instanceof NoReuse ? err.message : err?.stack ?? err)}\n`);
+      return 1;
+    }
+  }
+  log("usage: ci-evidence.mjs produce | witness LANE | screen LANE | handover | confirm LANE | internal-candidate --output FILE");
   return 2;
 }
 

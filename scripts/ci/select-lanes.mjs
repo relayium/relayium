@@ -150,6 +150,15 @@ export const CONTROL_FILES = [
  */
 export const CHANGED_FILE_CAP = 3000;
 
+/**
+ * The status merge-gate's `internal-full-candidate` select step reports once
+ * BASE's judge (`ci-evidence.mjs internal-candidate`) has accepted the
+ * candidate. Such a run is FULL by definition, so it selects every lane. A pull
+ * request never reports it, and any other non-`ok` status still selects every
+ * lane as the fail-closed default it always was.
+ */
+export const INTERNAL_FULL_STATUS = "internal-full-candidate";
+
 /** Selecting every lane is a decision, not a crash; it carries its reason. */
 export class SelectAll extends Error {}
 
@@ -419,6 +428,9 @@ export function changedPathsOf(payload) {
  */
 export function decide(env, { workflowsDir = defaultWorkflowsDir, readFile = readFileSync } = {}) {
   const status = env.LANE_SELECTOR_STATUS;
+  if (status === INTERNAL_FULL_STATUS) {
+    throw new SelectAll("this dispatch is an internal full candidate, which BASE's judge accepted; it runs every lane by design");
+  }
   if (status !== "ok") {
     throw new SelectAll(`the step that called the pull request files API reported `
       + `${JSON.stringify(status ?? null)} rather than "ok"`);
@@ -556,6 +568,7 @@ function selfTest() {
   const payload = (value) => ({ readFile: () => JSON.stringify(value) });
   for (const [why, env, options] of [
     ["a failed API step", { ...ok, LANE_SELECTOR_STATUS: "api-error" }, payload([])],
+    ["an accepted internal full candidate", { ...ok, LANE_SELECTOR_STATUS: INTERNAL_FULL_STATUS }, payload([{ filename: "README.md" }])],
     ["a missing changed_files", { ...ok, LANE_SELECTOR_CHANGED_FILES: undefined }, payload([])],
     ["a non-numeric changed_files", { ...ok, LANE_SELECTOR_CHANGED_FILES: "many" }, payload([])],
     ["the 3000-file cap", { ...ok, LANE_SELECTOR_CHANGED_FILES: String(CHANGED_FILE_CAP) }, payload([])],

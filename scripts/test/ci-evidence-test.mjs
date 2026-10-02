@@ -31,18 +31,20 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { deflateRawSync } from "node:zlib";
 
 import {
-  FROZEN_REF, LIMITS, MANIFEST_SCHEMA, NATIVE_RELEASES_FILE, NoReuse, REGISTRY_FILE, SCOPE_FILE, confirm, crc32, gitHubApi,
-  headFacts, listCounted, loadRegistry, main, produce, realGit, readSingleEntryZip, requiredJobs, validateManifest, validateWitness, witness,
+  FROZEN_REF, INTERNAL_KIND, LIMITS, MANIFEST_SCHEMA, NATIVE_RELEASES_FILE, NoReuse, REGISTRY_FILE, SCOPE_FILE, confirm, crc32, gitHubApi,
+  headFacts, judgeInternalCandidate, listCounted, loadRegistry, main, moduleImports, produce, realGit, readSingleEntryZip, requiredJobs,
+  validateManifest, validateWitness, witness,
 } from "../ci/ci-evidence.mjs";
+import { CONTROL_FILES } from "../ci/select-lanes.mjs";
 import { CANDIDATE_REF } from "../release/macos-evidence.mjs";
 import { CANDIDATE_PATHS, OPTIONAL_GENERATED_PAGES } from "../../web/scripts/macos-release-candidate.mjs";
 import { TOOLCHAIN_SCHEMA, loadToolchainRegistry, toolchainDigest } from "../ci/ci-evidence-toolchain.mjs";
@@ -1199,6 +1201,617 @@ for (const [name, raw, expect] of [
   check(got instanceof NoReuse && expect.test(got.message), `a mock commit with ${name}: want NoReuse ${expect}; got ${got ? got.message : "acceptance"}`);
 }
 
+// ── 2f. the internal full candidate: BASE's trust closure, real git on all three sides ──
+//
+// The third proof kind (INTERNAL_KIND). Its world is built from REAL objects:
+// BASE is a commit of this repository's own trust machinery — every tracked
+// file under .github/, scripts/ and web/e2e/, the release-metadata whitelist,
+// the macOS artifact-derived files — plus the ordinary files a real internal
+// change touches (README.md, apps/README.md, the release history, a CLI public
+// truth test). Each candidate is one more real commit. The API world is read
+// from that repository (commits, recursive trees, blobs, the compare with
+// GitHub's rename shape), and the producer and consumer judge depth-1 clones
+// through the real git adapter, the select-job judge a depth-2 clone — and, at
+// the end, BASE's own CLI from a BASE worktree over HTTP, exactly as
+// merge-gate.yml runs it.
+
+const IORIGIN = join(tmp, "internal-origin");
+const IRUN = 36995000001;
+const ICUR = CUR_RUN;
+const INTERNAL_GUARD_MARK = ".github/";
+const { RELEASE_ARTIFACT_FILES } = await import(pathToFileURL(resolve(repoRoot, SCOPE_FILE)).href);
+const ORDINARY_INTERNAL_PATHS = ["README.md", "apps/README.md", "web/scripts/pages/content/releases.mjs", "scripts/test/cli-public-truth-test.sh"];
+const INTERNAL_FIXTURE_PATHS = (() => {
+  const listed = spawnSync("git", ["ls-files", "-z", "--", ".github", "scripts", "web/e2e", SCOPE_FILE,
+    ...RELEASE_ARTIFACT_FILES, ...ORDINARY_INTERNAL_PATHS], { cwd: repoRoot, encoding: "utf8" });
+  if (listed.status !== 0) throw new Error(`git ls-files: ${listed.stderr}`);
+  return listed.stdout.split("\0").filter(Boolean).sort();
+})();
+const igit = (args, input) => fixtureGit(args, IORIGIN, input);
+const IBASE = (() => {
+  mkdirSync(IORIGIN);
+  igit(["init", "-q", "--object-format=sha1", "-b", "fixture"]);
+  for (const path of INTERNAL_FIXTURE_PATHS) {
+    mkdirSync(dirname(join(IORIGIN, path)), { recursive: true });
+    cpSync(join(repoRoot, path), join(IORIGIN, path));
+  }
+  igit(["add", "-A"]);
+  // The modes the repository records, not the ones a copy happened to get.
+  const modes = spawnSync("git", ["ls-files", "-s", "-z", "--", ...INTERNAL_FIXTURE_PATHS], { cwd: repoRoot, encoding: "utf8" }).stdout;
+  for (const rec of modes.split("\0").filter(Boolean)) {
+    const [mode] = rec.split(" ");
+    igit(["update-index", `--chmod=${mode === "100755" ? "+x" : "-x"}`, rec.slice(rec.indexOf("\t") + 1)]);
+  }
+  const tree = igit(["write-tree"]);
+  const base = igit(["commit-tree", tree, "-m", "internal base"]);
+  igit(["update-ref", "refs/heads/ibase", base]);
+  return base;
+})();
+
+/** One real commit on `parent` (default BASE) whose tree is BASE's after `edit(dir)`; its branch `name`. */
+function internalCommit(name, edit, { parent = IBASE, parents } = {}) {
+  const dir = mkdtempSync(join(tmp, `icand-${name}-`));
+  fixtureGit(["worktree", "add", "-q", "--detach", dir, parent], IORIGIN);
+  edit(dir);
+  fixtureGit(["add", "-A"], dir);
+  const tree = fixtureGit(["write-tree"], dir);
+  const ps = parents ?? [parent];
+  const sha = fixtureGit(["commit-tree", tree, ...ps.flatMap((p) => ["-p", p]), "-m", `internal candidate ${name}`], dir);
+  fixtureGit(["update-ref", `refs/heads/${name}`, sha], IORIGIN);
+  fixtureGit(["checkout", "-q", "--detach", sha], dir);
+  return { sha, dir, name };
+}
+const at = (dir, path) => join(dir, path);
+const appendTo = (path, text) => (dir) => writeFileSync(at(dir, path), Buffer.concat([readFileSync(at(dir, path)), Buffer.from(text)]));
+
+// The genuine candidate: public copy, the release history, a CLI owning test,
+// one new web file, a rename between ordinary paths and a mode-only change.
+const IGOOD = internalCommit("igood", (dir) => {
+  appendTo("README.md", "\nAn internal change.\n")(dir);
+  appendTo("apps/README.md", "\nAn internal change.\n")(dir);
+  appendTo("web/scripts/pages/content/releases.mjs", "\n// an internal release-history note\n")(dir);
+  appendTo("scripts/test/cli-public-truth-test.sh", "\n# an owning-test change\n")(dir);
+  mkdirSync(at(dir, "web/src"), { recursive: true });
+  writeFileSync(at(dir, "web/src/internal-note.ts"), "export const note = 1;\n");
+  fixtureGit(["mv", "apps/README.md", "apps/README-internal.md"], dir);
+  chmodSync(at(dir, "README.md"), 0o755);
+});
+
+/** Git objects never change, so each git-derived answer is computed once (patches apply per world). */
+const INTERNAL_GIT_CACHE = new Map();
+/** The API's view of the fixture repository, the shapes ci-evidence.mjs reads. */
+function internalRepoApi(world) {
+  const raw = (args) => {
+    const key = args.join("\0");
+    if (!INTERNAL_GIT_CACHE.has(key)) INTERNAL_GIT_CACHE.set(key, spawnSync("git", args, { cwd: IORIGIN, encoding: "buffer", maxBuffer: 256 * 1024 * 1024 }));
+    return INTERNAL_GIT_CACHE.get(key);
+  };
+  const ok = (r, what) => { if (r.status !== 0) throw new NoReuse(`mock: GET ${what} returned HTTP 404`); return r.stdout; };
+  const commitOf = (sha) => {
+    const text = ok(raw(["cat-file", "commit", sha]), `git/commits/${sha}`).toString("utf8");
+    const header = text.slice(0, text.indexOf("\n\n")).split("\n");
+    return { sha, tree: { sha: header[0].slice(5) }, parents: header.filter((l) => l.startsWith("parent ")).map((l) => ({ sha: l.slice(7) })) };
+  };
+  return async (p, q) => {
+    const base = `repos/${REPO}/`;
+    let m;
+    // A ref may move WHILE the producer works: `mainRefAt`/`branchRefAt` answer the
+    // n-th read (1-based), so a late move is seen only by the reads after it.
+    world.refReads ??= {};
+    if (p === `${base}git/ref/heads/main`) {
+      const n = (world.refReads.main = (world.refReads.main ?? 0) + 1);
+      return structuredClone(world.mainRefAt?.(n) ?? world.mainRef ?? { object: { sha: world.base } });
+    }
+    if ((m = new RegExp(`^${base}git/ref/heads/internal-candidate/([0-9a-f]{40})$`).exec(p))) {
+      const n = (world.refReads.branch = (world.refReads.branch ?? 0) + 1);
+      return structuredClone(world.branchRefAt?.(n) ?? world.branchRef ?? { object: { sha: m[1] } });
+    }
+    if ((m = new RegExp(`^${base}git/commits/([0-9a-f]{40})$`).exec(p))) {
+      const c = commitOf(m[1]);
+      return world.commitPatch ? world.commitPatch(c) : c;
+    }
+    if ((m = new RegExp(`^${base}git/trees/([0-9a-f]{40})$`).exec(p)) && q.get("recursive") === "1") {
+      const listing = ok(raw(["ls-tree", "-r", "-t", "-z", m[1]]), p).toString("utf8").split("\0").filter(Boolean);
+      const tree = listing.map((line) => {
+        const [meta, path] = [line.slice(0, line.indexOf("\t")), line.slice(line.indexOf("\t") + 1)];
+        const [mode, type, sha] = meta.split(" ");
+        return { path, mode, type, sha };
+      });
+      const body = { sha: m[1], truncated: false, tree };
+      return world.treePatch ? world.treePatch(body) : body;
+    }
+    if ((m = new RegExp(`^${base}git/blobs/([0-9a-f]{40})$`).exec(p))) {
+      const bytes = ok(raw(["cat-file", "blob", m[1]]), p);
+      const body = { sha: m[1], encoding: "base64", content: bytes.toString("base64"), size: bytes.length };
+      return world.blobPatch ? world.blobPatch(body) : body;
+    }
+    if ((m = new RegExp(`^${base}compare/([0-9a-f]{40})\\.\\.\\.([0-9a-f]{40})$`).exec(p))) {
+      const ahead = Number(ok(raw(["rev-list", "--count", `${m[1]}..${m[2]}`]), p).toString().trim());
+      const behind = Number(ok(raw(["rev-list", "--count", `${m[2]}..${m[1]}`]), p).toString().trim());
+      const fields = ok(raw(["diff-tree", "-r", "-z", "-M", "--name-status", m[1], m[2]]), p).toString("utf8").split("\0").filter(Boolean);
+      const files = [];
+      for (let i = 0; i < fields.length;) {
+        const status = fields[i];
+        if (status.startsWith("R")) { files.push({ filename: fields[i + 2], previous_filename: fields[i + 1], status: "renamed" }); i += 3; }
+        else { files.push({ filename: fields[i + 1], status: { A: "added", D: "removed", M: "modified", T: "changed" }[status] }); i += 2; }
+      }
+      const body = { status: ahead > 0 && behind === 0 ? "ahead" : "diverged", ahead_by: ahead, behind_by: behind, files };
+      return world.comparePatch ? world.comparePatch(body) : body;
+    }
+    return undefined;
+  };
+}
+
+/** The whole mock API of an internal world: the fixture repository first, then the shared run/job/artifact world. */
+function internalApi(world) {
+  const repoApi = internalRepoApi(world);
+  const shared = mockApi(world);
+  const calls = shared.calls;
+  return {
+    calls,
+    async json(path) {
+      const url = new URL(path, "https://api.test/");
+      const p = url.pathname.replace(/^\//, "");
+      const fromRepo = await repoApi(p, url.searchParams);
+      if (fromRepo !== undefined) { calls.set(p, (calls.get(p) ?? 0) + 1); return fromRepo; }
+      // The shared world names "this main commit" MAIN; here it is the candidate.
+      return shared.json(path.replace(`commits/${world.head}/pulls`, `commits/${MAIN}/pulls`)
+        .replace(`head_sha=${world.head}`, `head_sha=${MAIN}`));
+    },
+    download: shared.download,
+  };
+}
+
+const iref = (sha) => `refs/heads/internal-candidate/${sha}`;
+function internalWorld(cand = IGOOD) {
+  const w = baseWorld();
+  const branch = `internal-candidate/${cand.sha}`;
+  w.base = IBASE;
+  w.head = cand.sha;
+  w.pulls = [];
+  w.runs = [];
+  w.run = { ...w.run, id: IRUN, event: "workflow_dispatch", head_sha: cand.sha, head_branch: branch,
+    referenced_workflows: referenced(cand.sha, iref(cand.sha)) };
+  w.mainRuns = [{ id: IRUN, head_sha: cand.sha, created_at: "2026-10-01T14:06:59Z", run_started_at: "2026-10-01T14:06:59Z",
+    run_attempt: 1, event: "workflow_dispatch", status: "completed", conclusion: "success", head_branch: branch }];
+  w.current = { ...w.current, head_sha: cand.sha };
+  w.certSha = cand.sha;
+  w.certRef = iref(cand.sha);
+  return w;
+}
+const internalEnv = (cand, patch = {}) => produceEnv({
+  GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF: iref(cand.sha), GITHUB_SHA: cand.sha, GITHUB_WORKFLOW_SHA: cand.sha,
+  GITHUB_RUN_ID: String(IRUN), GITHUB_WORKFLOW_REF: `${REPO}/.github/workflows/merge-gate.yml@${iref(cand.sha)}`,
+  CI_EVIDENCE_DISPATCH_MODE: "internal-full-candidate", CI_EVIDENCE_DISPATCH_BASE: IBASE, CI_EVIDENCE_DISPATCH_HEAD: cand.sha, ...patch,
+});
+const dirReader = (dir) => (path) => readFileSync(join(dir, path));
+const dirScope = (dir) => () => import(pathToFileURL(join(dir, SCOPE_FILE)).href);
+function shallowAt(name, depth = 1) {
+  const dir = mkdtempSync(join(tmp, `ishallow-${name}-${depth}-`));
+  fixtureGit(["clone", "-q", "--depth", String(depth), "--no-tags", "--branch", name, `file://${IORIGIN}`, dir], tmp);
+  return dir;
+}
+async function mintInternal(world, cand, { env = internalEnv(cand), dir = cand.dir } = {}) {
+  // The API patches are functions, which producerWorld's clone cannot carry.
+  const { comparePatch, treePatch, commitPatch, blobPatch, mainRefAt, branchRefAt, ...data } = world;
+  const pw = Object.assign(producerWorld(data), { comparePatch, treePatch, commitPatch, blobPatch, mainRefAt, branchRefAt });
+  world.producerSaw = pw;
+  return produce({ env, api: internalApi(pw), git: realAt(dir), registry: REGISTRY, now: () => new Date("2026-10-01T14:29:30Z"),
+    workflowsDir, readFile: dirReader(dir), loadScope: dirScope(dir) });
+}
+async function runInternalWitness(world, laneId, { cand = IGOOD, dir = cand.dir, env: envPatch = {} } = {}) {
+  const w = { ...world, current: { ...world.current, path: `.github/workflows/${REGISTRY.lanes[laneId].workflow}` } };
+  const api = internalApi(w);
+  const env = pushEnv(laneId, {
+    GITHUB_SHA: cand.sha,
+    GITHUB_EVENT_PATH: writeJson(`push-internal-${cand.name}.json`, { ref: "refs/heads/main", after: cand.sha, before: IBASE,
+      created: false, deleted: false, forced: false, repository: { id: REPO_ID } }),
+    ...(laneId === "web" ? { CI_EVIDENCE_SCOPE_LIGHT: "true" } : {}),
+    ...envPatch,
+  });
+  try {
+    const out = await witness({ env, api, git: realAt(dir), registry: REGISTRY, readFile: dirReader(dir), loadScope: dirScope(dir),
+      laneId, now: () => w.now, workflowsDir, toolchainRegistry: TOOLREG,
+      currentCertificates: w.noCurrentCerts ? undefined : currentCerts(w, laneId, env), screen: w.screen === true });
+    return { ok: true, witness: out, api };
+  } catch (err) {
+    return { ok: false, error: err, api };
+  }
+}
+
+// The producer, from a depth-1 checkout of the genuine candidate.
+const IGOOD_SHALLOW = shallowAt("igood");
+check(realGit(["rev-parse", "--is-shallow-repository"], IGOOD_SHALLOW).toString().trim() === "true"
+  && realGit(["show", "-s", "--format=%P", "HEAD"], IGOOD_SHALLOW).toString().trim() === "",
+"the internal candidate clone is not the depth-1 shape actions/checkout gives the aggregate job");
+let internalManifest = null;
+try { internalManifest = await mintInternal(internalWorld(), IGOOD, { dir: IGOOD_SHALLOW }); } catch (err) {
+  check(false, `the genuine internal full candidate was refused by the producer: ${err.message}`);
+  throw new Error(`the internal world cannot be built: ${err.stack}`);
+}
+const IGOOD_PATHS = ["README.md", "apps/README-internal.md", "apps/README.md", "scripts/test/cli-public-truth-test.sh",
+  "web/scripts/pages/content/releases.mjs", "web/src/internal-note.ts"];
+if (internalManifest) {
+  check(internalManifest.schema === "relayium.ci-evidence.internal-proof/v1" && internalManifest.kind === INTERNAL_KIND
+    && internalManifest.pull_request === null && internalManifest.dispatch.mode === "internal-full-candidate"
+    && internalManifest.dispatch.base_sha === IBASE && internalManifest.dispatch.head_sha === IGOOD.sha
+    && internalManifest.dispatch.ref === iref(IGOOD.sha) && internalManifest.checkout.parents.join() === IBASE
+    && JSON.stringify(internalManifest.dispatch.paths) === JSON.stringify(IGOOD_PATHS)
+    && Object.values(internalManifest.lanes).every((l) => l.selected && l.result === "success"),
+  `the internal proof did not record the candidate, its base, branch, full selection and both sides of the rename: ${JSON.stringify(internalManifest.dispatch)}`);
+}
+const internalProofWorld = (patchManifest, cand = IGOOD) => {
+  const w = internalWorld(cand);
+  const m = structuredClone(internalManifest ?? {});
+  if (patchManifest) patchManifest(m);
+  w.zip = zipManifest(m);
+  return w;
+};
+
+// The consumer, every certifiable lane, from a depth-1 main checkout.
+for (const laneId of LANE_IDS.filter((id) => !UNCERTIFIABLE_LANES.includes(id))) {
+  const r = await runInternalWitness(internalProofWorld(), laneId, { dir: IGOOD_SHALLOW });
+  check(r.ok && r.witness.source.kind === INTERNAL_KIND && r.witness.source.pull_request === null
+    && r.witness.source.merge_sha === IGOOD.sha && r.witness.target.sha === IGOOD.sha && r.witness.source.run_id === IRUN,
+  `lane ${laneId}: a depth-1 main push refused the genuine internal full candidate: ${r.error?.message ?? JSON.stringify(r.witness?.source)}`);
+}
+{
+  const w = internalProofWorld();
+  w.screen = true;
+  w.noCurrentCerts = true;
+  const r = await runInternalWitness(w, "ios", { dir: IGOOD_SHALLOW });
+  check(r.ok && r.witness?.eligible === true, `the screen refused the genuine internal candidate: ${r.error?.message}`);
+}
+
+// The closure itself, derived from BASE on the real tree: everything the
+// machinery executes, including the toolchain probe's browser harness and the
+// harness's own imports, the guards and the artifact-derived release files — and
+// none of the ordinary paths an internal change legitimately carries.
+{
+  const guards = INTERNAL_FIXTURE_PATHS.filter((p) => p.startsWith("scripts/test/") && readFileSync(join(repoRoot, p)).includes(INTERNAL_GUARD_MARK));
+  const want = [...CONTROL_FILES, SCOPE_FILE, ...RELEASE_ARTIFACT_FILES.filter((p) => INTERNAL_FIXTURE_PATHS.includes(p)),
+    "web/e2e/harness.mjs", "web/e2e/chrome-process.mjs", "web/e2e/chrome-close.mjs", "web/e2e/stale-cleanup.mjs",
+    "scripts/release/checks-green.sh", "scripts/ci/web-lane-scope.mjs", ".github/workflows/merge-gate.yml", ...guards];
+  let scope = null;
+  try {
+    scope = await judgeInternalCandidate({ env: { GITHUB_EVENT_NAME: "workflow_dispatch", MODE: "internal-full-candidate", EXPECTED_BASE: IBASE,
+      EXPECTED_HEAD: IGOOD.sha, GITHUB_SHA: IGOOD.sha, GITHUB_REPOSITORY: REPO, GITHUB_REF: iref(IGOOD.sha) },
+    api: internalApi(internalWorld()), git: realAt(IGOOD.dir), readFile: dirReader(IGOOD.dir), loadScope: dirScope(IGOOD.dir) });
+  } catch (err) { check(false, `the select judge refused the genuine internal candidate: ${err.message}`); }
+  if (scope) {
+    const missing = want.filter((p) => !scope.closure.includes(p));
+    check(missing.length === 0, `the derived trust closure misses ${missing.join(", ")}`);
+    const leaked = ORDINARY_INTERNAL_PATHS.filter((p) => scope.closure.includes(p));
+    check(leaked.length === 0, `the derived trust closure blocks ordinary internal paths: ${leaked.join(", ")}`);
+    const webE2e = scope.closure.filter((p) => p.startsWith("web/e2e/")).sort();
+    check(JSON.stringify(webE2e) === JSON.stringify(["web/e2e/chrome-close.mjs", "web/e2e/chrome-process.mjs", "web/e2e/harness.mjs",
+      "web/e2e/stale-cleanup.mjs"]), `the toolchain probe's module closure is ${JSON.stringify(webE2e)}, want the harness and its three imports`);
+    check(JSON.stringify(scope.paths) === JSON.stringify(IGOOD_PATHS) && scope.closure_sha256 === internalManifest?.dispatch.closure_sha256,
+      "the select judge and the producer derived different change sets or closures for the same candidate");
+  }
+}
+
+// A load the closure cannot name is a refusal, never a silent gap. (Spelled in
+// pieces: this file is itself a closure module the walker reads.)
+{
+  const call = ["imp", "ort("].join("");
+  for (const [name, text, expect] of [
+    ["a variable path", `const view = await ${call}viewPath);\n`, /cannot name/],
+    ["a computed root path", `await ${call}pathToFileURL(resolve(root, name)).href);\n`, /cannot name/],
+    ["a constant that is not a literal", `const X_FILE = name;\nawait ${call}pathToFileURL(resolve(root, X_FILE)).href);\n`, /cannot name/],
+  ]) {
+    const got = await refusal(() => moduleImports("scripts/ci/x.mjs", text, () => true));
+    check(got instanceof NoReuse && expect.test(got.message), `moduleImports with ${name}: want NoReuse ${expect}; got ${got ? got.message : "acceptance"}`);
+  }
+  const named = moduleImports("scripts/ci/x.mjs", `import a from "./a.mjs";\nexport { b } from "../release/b.mjs";\n`
+    + `const S_FILE = "web/s.mjs";\nawait ${call}pathToFileURL(resolve(repoRoot, S_FILE)).href);\n`
+    + `await ${call}pathToFileURL(join(root, "web/e2e/h.mjs")).href);\nawait ${call}"node:fs");\nimport x from "yaml";\n`, () => true).sort();
+  check(JSON.stringify(named) === JSON.stringify(["scripts/ci/a.mjs", "scripts/release/b.mjs", "web/e2e/h.mjs", "web/s.mjs"]),
+    `moduleImports named ${JSON.stringify(named)}`);
+}
+
+// One real commit per way to touch the trust closure. Each is refused by the
+// producer, the consumer and the select judge, every time by its own reason.
+const CLOSURE_BREAKS = [
+  ["a workflow edit", (d) => appendTo(".github/workflows/web.yml", "# x\n")(d), /"\.github\/workflows\/web\.yml", a trust input \(under \.github\/\)/],
+  ["the selector", (d) => appendTo("scripts/ci/select-lanes.mjs", "// x\n")(d), /"scripts\/ci\/select-lanes\.mjs", a trust input \(under scripts\/ci\/\)/],
+  ["a release helper", (d) => appendTo("scripts/release/checks-green.sh", "# x\n")(d), /"scripts\/release\/checks-green\.sh", a trust input \(under scripts\/release\/\)/],
+  ["the browser harness the toolchain probe loads", (d) => appendTo("web/e2e/harness.mjs", "// x\n")(d),
+    /"web\/e2e\/harness\.mjs", a trust input \(loaded by scripts\/ci\/ci-evidence-toolchain\.mjs\)/],
+  ["a module the harness imports", (d) => appendTo("web/e2e/chrome-close.mjs", "// x\n")(d), /"web\/e2e\/chrome-close\.mjs", a trust input \(loaded by web\/e2e\/harness\.mjs\)/],
+  ["a deleted harness import", (d) => rmSync(at(d, "web/e2e/stale-cleanup.mjs")), /"web\/e2e\/stale-cleanup\.mjs", a trust input \(loaded by web\/e2e\/harness\.mjs\)/],
+  ["the release-metadata whitelist", (d) => appendTo(SCOPE_FILE, "// x\n")(d), /macos-release-candidate\.mjs", a trust input \(the release-metadata whitelist\)/],
+  ["an artifact-derived macOS release file", (d) => appendTo("web/native-releases.json", "\n")(d), /"web\/native-releases\.json", a trust input \(an artifact-derived macOS release file\)/],
+  ["a selector control test", (d) => appendTo("scripts/test/fixtures/ci-path-selection.mjs", "// x\n")(d), /"scripts\/test\/fixtures\/ci-path-selection\.mjs", a trust input \(a merge-gate control file\)/],
+  ["a workflow guard", (d) => appendTo("scripts/test/ci-lane-closure-test.mjs", "// x\n")(d), /"scripts\/test\/ci-lane-closure-test\.mjs", a trust input \(a workflow guard\)/],
+  ["an ordinary test made to read .github/", (d) => appendTo("scripts/test/cli-public-truth-test.sh", "# see .github/workflows\n")(d),
+    /"scripts\/test\/cli-public-truth-test\.sh", a trust input \(a workflow guard\)/],
+  ["a guard whose .github/ mention is removed (judged on BASE's blob)", (d) => {
+    const p = at(d, "scripts/test/uninstall-node-test.sh");
+    writeFileSync(p, readFileSync(p, "utf8").split(".github/").join("gh/"));
+  }, /"scripts\/test\/uninstall-node-test\.sh", a trust input \(a workflow guard\)/],
+  ["a guard renamed out of scripts/test", (d) => fixtureGit(["mv", "scripts/test/go-race-shard-test.sh", "web/moved-test.sh"], d),
+    /"scripts\/test\/go-race-shard-test\.sh", a trust input \(a workflow guard\)/],
+  ["an ordinary file renamed into .github", (d) => fixtureGit(["mv", "README.md", ".github/README.md"], d), /"\.github\/README\.md", a trust input \(under \.github\/\)/],
+  // The selector is recorded 100755; dropping its execute bit changes nothing but the mode.
+  ["a mode-only change to the selector", (d) => chmodSync(at(d, "scripts/ci/select-lanes.mjs"), 0o644),
+    /"scripts\/ci\/select-lanes\.mjs", a trust input/],
+];
+const CLOSURE_CANDS = CLOSURE_BREAKS.map(([name, edit], i) => internalCommit(`iclosure-${i}`, (d) => {
+  appendTo("README.md", "\nordinary too\n")(d);
+  edit(d);
+}));
+for (const [i, [name, , expect]] of CLOSURE_BREAKS.entries()) {
+  const cand = CLOSURE_CANDS[i];
+  const produced = await refusal(() => mintInternal(internalWorld(cand), cand));
+  check(produced instanceof NoReuse && expect.test(produced.message), `the internal producer with ${name}: want NoReuse ${expect}; got ${produced?.message ?? "a manifest"}`);
+  // The consumer judges on its own: the proof it is handed agrees with the run, and it still refuses.
+  const r = await runInternalWitness(internalProofWorld((m) => {
+    m.dispatch.head_sha = cand.sha; m.dispatch.ref = iref(cand.sha); m.checkout.sha = cand.sha; m.checkout.ref = iref(cand.sha);
+  }, cand), "go", { cand });
+  check(!r.ok && r.error instanceof NoReuse && expect.test(r.error.message), `the internal consumer with ${name}: want its own NoReuse ${expect}; got ${r.ok ? "REUSE" : r.error?.message}`);
+  const judged = await refusal(() => judgeInternalCandidate({ env: { GITHUB_EVENT_NAME: "workflow_dispatch", MODE: "internal-full-candidate",
+    EXPECTED_BASE: IBASE, EXPECTED_HEAD: cand.sha, GITHUB_SHA: cand.sha, GITHUB_REPOSITORY: REPO, GITHUB_REF: iref(cand.sha) },
+  api: internalApi(internalWorld(cand)), git: realAt(cand.dir), readFile: dirReader(cand.dir), loadScope: dirScope(cand.dir) }));
+  check(judged instanceof NoReuse && expect.test(judged.message), `the select judge with ${name}: want NoReuse ${expect}; got ${judged?.message ?? "acceptance"}`);
+}
+
+// Ancestry, identity, mode, branch and API disagreement: the producer refuses.
+const ITWO = internalCommit("itwo", (d) => appendTo("README.md", "\nsecond\n")(d), { parent: IGOOD.sha });
+const IROOT = (() => {
+  const tree = fixtureGit(["rev-parse", `${IGOOD.sha}^{tree}`], IORIGIN);
+  const sha = fixtureGit(["commit-tree", tree, "-m", "a root candidate"], IORIGIN);
+  fixtureGit(["update-ref", "refs/heads/iroot", sha], IORIGIN);
+  const dir = mkdtempSync(join(tmp, "icand-iroot-"));
+  fixtureGit(["worktree", "add", "-q", "--detach", dir, sha], IORIGIN);
+  return { sha, dir, name: "iroot" };
+})();
+const IMERGE = internalCommit("imerge", (d) => appendTo("README.md", "\nmerge\n")(d), { parents: [IBASE, IGOOD.sha] });
+const OTHER = hex("internal-other");
+for (const [name, cand, envPatch, worldPatch, expect, dirOverride] of [
+  ["a candidate two commits on its base", ITWO, {}, null, /not exactly one commit on the dispatched base/],
+  ["a root candidate", IROOT, {}, null, /not exactly one commit on the dispatched base/],
+  ["a two-parent candidate", IMERGE, {}, null, /not exactly one commit on the dispatched base/],
+  ["a dispatched base that is not the parent", IGOOD, { CI_EVIDENCE_DISPATCH_BASE: OTHER }, null, /not exactly one commit on the dispatched base/],
+  ["a checkout of another commit than the dispatch", IGOOD, {}, null, /checked out .*, the dispatch is for/, ITWO.dir],
+  ["a branch not named for its candidate", IGOOD, { GITHUB_REF: iref(OTHER) }, null, /is not internal-candidate\/[0-9a-f]{40}, the branch of exactly this candidate/],
+  ["a frozen release-candidate branch", IGOOD, { GITHUB_REF: "refs/heads/release-candidate/macos-v1.4.5-42-1" }, null, /is not internal-candidate\//],
+  ["the frozen mode on the internal branch", IGOOD, { CI_EVIDENCE_DISPATCH_MODE: "frozen-release-metadata" }, null, /is not a frozen release-candidate branch/],
+  ["an unknown dispatch mode", IGOOD, { CI_EVIDENCE_DISPATCH_MODE: "hotfix" }, null, /only frozen-release-metadata does/],
+  ["the pull-request dispatch mode", IGOOD, { CI_EVIDENCE_DISPATCH_MODE: "pull-request" }, null, /only frozen-release-metadata does/],
+  ["a gate workflow from elsewhere", IGOOD, { GITHUB_WORKFLOW_SHA: OTHER }, null, /gate's own workflow file is not from the candidate/],
+  ["a branch that moved to another commit", IGOOD, {}, (w) => { w.branchRef = { object: { sha: OTHER } }; }, /points at [0-9a-f]{40}, not its own candidate/],
+  ["a main that moved off the base", IGOOD, {}, (w) => { w.mainRef = { object: { sha: OTHER } }; }, /main is at [0-9a-f]{40}, not the candidate's base/],
+  ["a compare API with an extra file", IGOOD, {}, (w) => { w.comparePatch = (b) => ({ ...b, files: [...b.files, { filename: "web/ghost.ts" }] }); },
+    /disagree on the change set \(tree only: -; compare only: web\/ghost\.ts\)/],
+  ["a compare API that drops a file", IGOOD, {}, (w) => { w.comparePatch = (b) => ({ ...b, files: b.files.filter((f) => f.filename !== "web/src/internal-note.ts") }); },
+    /disagree on the change set \(tree only: web\/src\/internal-note\.ts/],
+  ["a compare API that loses a rename's old side", IGOOD, {}, (w) => { w.comparePatch = (b) => ({ ...b, files: b.files.map(({ previous_filename, ...f }) => f) }); },
+    /disagree on the change set \(tree only: apps\/README\.md/],
+  ["a compare of two commits", IGOOD, {}, (w) => { w.comparePatch = (b) => ({ ...b, ahead_by: 2 }); }, /exactly one commit of a bounded change/],
+  ["a compare at the 300-file cap", IGOOD, {}, (w) => { w.comparePatch = (b) => ({ ...b, files: Array.from({ length: 300 }, (_, i) => ({ filename: `web/f${i}` })) }); },
+    /exactly one commit of a bounded change/],
+  ["a truncated BASE tree", IGOOD, {}, (w) => { w.treePatch = (t) => ({ ...t, truncated: true }); }, /truncated or malformed/],
+  ["an API candidate commit with another tree", IGOOD, {}, (w) => { w.commitPatch = (c) => (c.sha === IGOOD.sha ? { ...c, tree: { sha: OTHER } } : c); },
+    /the API's view of the candidate is not this checkout's tree on its base/],
+  ["the API's run on another branch", IGOOD, {}, (w) => { w.run.head_branch = "internal-candidate/x"; }, /disagrees with the runner's/],
+  ["referenced workflows from another commit", IGOOD, {}, (w) => { w.run.referenced_workflows = referenced(OTHER, iref(IGOOD.sha)); }, /referenced workflows ran/],
+  ["a run that skipped a lane", IGOOD, (() => {
+    const e = internalEnv(IGOOD);
+    const s = JSON.parse(e.CI_EVIDENCE_SELECTED); s.ios = "false";
+    const n = JSON.parse(e.CI_EVIDENCE_NEEDS); n.ios = { result: "skipped" };
+    return { CI_EVIDENCE_SELECTED: JSON.stringify(s), CI_EVIDENCE_NEEDS: JSON.stringify(n) };
+  })(), null, /an internal full candidate ran without ios/],
+  ["a failed lane", IGOOD, (() => {
+    const n = JSON.parse(internalEnv(IGOOD).CI_EVIDENCE_NEEDS); n.go = { result: "failure" };
+    return { CI_EVIDENCE_NEEDS: JSON.stringify(n) };
+  })(), null, /lane go is selected=true with result failure/],
+]) {
+  const w = internalWorld(cand);
+  if (worldPatch) worldPatch(w);
+  const got = await refusal(() => mintInternal(w, cand, { env: internalEnv(cand, envPatch), dir: dirOverride ?? cand.dir }));
+  check(got instanceof NoReuse && expect.test(got.message), `the internal producer with ${name}: want NoReuse ${expect}; got ${got?.message ?? "a manifest"}`);
+}
+// Refs that move WHILE the producer works. Both read correctly at the start —
+// the begin pin, the scope, the run, every job and fingerprint pass — and move
+// before the end: the proof must die at the END pin, its second read, and
+// nowhere else. Deleting only that end pin turns both into a minted proof.
+{
+  const LATE = hex("internal-late-move");
+  // produceInternal reads main and the branch ONLY in its two pins, so read 2 is
+  // the end pin: main-then-branch, so a late main stops before the branch's 2nd read.
+  for (const [name, worldPatch, reads, expect] of [
+    ["main that moves to another commit after the run was read", (w) => { w.mainRefAt = (n) => (n >= 2 ? { object: { sha: LATE } } : undefined); },
+      { main: 2, branch: 1 }, new RegExp(`^main is at ${LATE}, not the candidate's base ${IBASE}$`)],
+    ["a branch that moves to another commit after the run was read", (w) => { w.branchRefAt = (n) => (n >= 2 ? { object: { sha: LATE } } : undefined); },
+      { main: 2, branch: 2 }, new RegExp(`^internal-candidate/${IGOOD.sha} points at ${LATE}, not its own candidate$`)],
+  ]) {
+    const w = internalWorld();
+    worldPatch(w);
+    const got = await refusal(() => mintInternal(w, IGOOD));
+    const seen = w.producerSaw?.refReads ?? {};
+    check(got instanceof NoReuse && expect.test(got.message) && seen.main === reads.main && seen.branch === reads.branch,
+      `the internal producer with ${name}: want the END pin's NoReuse ${expect} after reads ${JSON.stringify(reads)}; `
+      + `got ${got?.message ?? "a manifest"} after reads ${JSON.stringify(seen)}`);
+  }
+}
+
+// A guard judged on BASE's blob: the API's blob must be BASE's own bytes.
+{
+  const cand = CLOSURE_CANDS[CLOSURE_BREAKS.findIndex(([n]) => n.startsWith("a guard whose"))];
+  const w = internalWorld(cand);
+  w.blobPatch = (b) => ({ ...b, content: Buffer.from("not the blob\n").toString("base64") });
+  const got = await refusal(() => mintInternal(w, cand));
+  check(got instanceof NoReuse && /BASE's scripts\/test\/uninstall-node-test\.sh from the API is not its own blob/.test(got.message),
+    `a forged BASE blob: got ${got?.message ?? "a manifest"}`);
+}
+// What executes is the checked-out bytes: a working tree whose closure file
+// differs from the committed tree is refused even though git's tree agrees.
+{
+  const dir = mkdtempSync(join(tmp, "icand-tampered-"));
+  fixtureGit(["worktree", "add", "-q", "--detach", dir, IGOOD.sha], IORIGIN);
+  appendTo("web/e2e/harness.mjs", "// tampered after checkout\n")(dir);
+  const got = await refusal(() => mintInternal(internalWorld(), IGOOD, { dir }));
+  check(got instanceof NoReuse && /the web\/e2e\/harness\.mjs checked out here is not BASE's blob/.test(got.message),
+    `a tampered checkout of a closure module: got ${got?.message ?? "a manifest"}`);
+}
+
+// The consumer: every source-run, proof and toolchain fact, for this third kind.
+const IGOOD_DIR = IGOOD_SHALLOW;
+for (const [name, laneId, breakIt, expect, opts] of [
+  ["a pull-request proof", "go", (w) => { w.zip = zipManifest(manifest); },
+    /the proof is a merge-gate-pull-request-full-run, this commit's source is a merge-gate-internal-full-candidate-run/],
+  ["a frozen release-metadata proof", "go", (w) => { w.zip = zipManifest(dispatchManifest); },
+    /the proof is a merge-gate-frozen-dispatch-full-run, this commit's source is a merge-gate-internal-full-candidate-run/],
+  ["a proof naming another base", "go", (w) => { const m = structuredClone(internalManifest); m.dispatch.base_sha = OTHER; w.zip = zipManifest(m); },
+    /names another candidate, base or branch/],
+  ["a proof recording another change set", "go", (w) => { const m = structuredClone(internalManifest); m.dispatch.paths = [...m.dispatch.paths, "zz"].sort(); w.zip = zipManifest(m); },
+    /change set or trust closure disagrees/],
+  ["a proof judged against another closure", "go", (w) => { const m = structuredClone(internalManifest); m.dispatch.closure_sha256 = "e".repeat(64); w.zip = zipManifest(m); },
+    /change set or trust closure disagrees/],
+  ["an internal proof under the ordinary schema", "go", (w) => { const m = structuredClone(internalManifest); m.schema = MANIFEST_SCHEMA; w.zip = zipManifest(m); },
+    /manifest\.schema is malformed/],
+  ["an internal proof that skipped a lane", "go", (w) => { const m = structuredClone(internalManifest); m.lanes.ios = { selected: false, result: "skipped" }; w.zip = zipManifest(m); },
+    /is not every lane selected and successful/],
+  ["an internal proof without its closure", "go", (w) => { const m = structuredClone(internalManifest); delete m.dispatch.closure_sha256; w.zip = zipManifest(m); },
+    /manifest\.dispatch is malformed/],
+  ["a frozen-mode run beside the internal one", "go", (w) => {
+    w.mainRuns.push({ ...w.mainRuns[0], id: IRUN - 1, created_at: "2026-10-01T13:00:00Z", run_started_at: "2026-10-01T13:00:00Z",
+      head_branch: "release-candidate/macos-v1.4.5-42-1" });
+  }, /ran on release-candidate\/macos-v1\.4\.5-42-1, not internal-candidate\/[0-9a-f]{40}; two kinds of source is ambiguous/],
+  ["a pull-request-mode run beside the internal one", "go", (w) => {
+    w.mainRuns.push({ ...w.mainRuns[0], id: IRUN - 1, created_at: "2026-10-01T13:00:00Z", run_started_at: "2026-10-01T13:00:00Z", head_branch: "feature/x" });
+  }, /two kinds of source is ambiguous/],
+  ["a run on another candidate's internal branch", "go", (w) => { w.mainRuns[0].head_branch = `internal-candidate/${OTHER}`; w.run.head_branch = `internal-candidate/${OTHER}`; },
+    /two kinds of source is ambiguous/],
+  ["an API run on another branch than its listing", "go", (w) => { w.run.head_branch = "release-candidate/macos-v1.4.5-42-1"; },
+    /ran on refs\/heads\/release-candidate\/macos-v1\.4\.5-42-1, not refs\/heads\/internal-candidate\//],
+  ["the latest run failed", "go", (w) => { w.mainRuns[0].conclusion = "failure"; }, /concluded failure/],
+  ["a later run pending", "go", (w) => { w.mainRuns.push({ ...w.mainRuns[0], id: IRUN + 1, run_started_at: "2026-10-01T14:40:00Z", status: "in_progress", conclusion: null }); },
+    /still in_progress/],
+  ["an older run re-run later and failed", "go", (w) => {
+    w.mainRuns.push({ ...w.mainRuns[0], id: IRUN - 1, created_at: "2026-10-01T13:00:00Z", run_started_at: "2026-10-01T14:45:00Z", run_attempt: 2, conclusion: "failure" });
+  }, /concluded failure/],
+  ["a partial re-run (jobs carried from attempt 1)", "go", (w) => {
+    w.run.run_attempt = 2; w.mainRuns[0].run_attempt = 2;
+    // "Re-run failed jobs": attempt 2's inventory lists the re-run go jobs and the carried rest.
+    const list = w.jobs.map((j) => (j.name.startsWith("go / ") ? { ...j, run_attempt: 2 } : j));
+    w.hooks[`repos/${REPO}/actions/runs/${IRUN}/attempts/2/jobs`] = (_, q) => ({ total_count: list.length, jobs: page(list, q) });
+  }, /job \d+ is from attempt 1, want 2/],
+  ["an old attempt's proof", "go", (w) => {
+    w.run.run_attempt = 2; w.mainRuns[0].run_attempt = 2; w.jobs = w.jobs.map((j) => ({ ...j, run_attempt: 2 })); w.certAttempt = 2;
+  }, /carries 0 artifact\(s\) named relayium-ci-evidence-proof-attempt-2/],
+  ["a missing matrix job", "go", (w) => { w.jobs = w.jobs.filter((j) => j.name !== "go / race account shard 7"); }, /no "go \/ race account shard 7"/],
+  ["a red matrix job", "go", (w) => { w.jobs.find((j) => j.name === "go / race account shard 3").conclusion = "failure"; },
+    /"go \/ race account shard 3" concluded failure in the source run/],
+  ["a proof artifact whose bytes are not its digest", "go", (w) => { w.artifactPatch = { digest: `sha256:${"f".repeat(64)}` }; }, /bytes do not match its API digest/],
+  ["a source certificate from another commit", "go", (w) => { w.certSha = OTHER; }, /is not go\/[a-z-]+ entry 0 of \d+ from merge-gate run 36995000001/],
+  ["a toolchain that changed since the source run", "go", drift("linux-go", (t) => { t.go.cc_version = "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"; }),
+    /different toolchain than this runner family offers now \(linux-go: go\.cc_version\)/],
+  ["a source run whose screen RAN (a recursive witness)", "ios", (w) => { w.jobs.find((j) => j.name === "ios / screen").conclusion = "success"; },
+    /"ios \/ screen" success instead of being skipped/],
+  ["a main push from another base", "go", null, /main did not fast-forward by exactly one commit/,
+    { env: { GITHUB_EVENT_PATH: writeJson("push-internal-other-base.json", { ref: "refs/heads/main", after: IGOOD.sha, before: OTHER,
+      created: false, deleted: false, forced: false, repository: { id: REPO_ID } }) } }],
+  ["a force push", "go", null, /not an ordinary fast-forward/,
+    { env: { GITHUB_EVENT_PATH: writeJson("push-internal-forced.json", { ref: "refs/heads/main", after: IGOOD.sha, before: IBASE,
+      created: false, deleted: false, forced: true, repository: { id: REPO_ID } }) } }],
+  ["an associated but unmerged pull request", "go", (w) => { w.pulls = [{ number: 9, merged_at: null, merge_commit_sha: OTHER, base: { ref: "main", repo: { id: REPO_ID } } }]; },
+    /pull request\(s\) are associated with this commit but none merged it/],
+  ["a compare API disagreeing at the consumer", "go", (w) => { w.comparePatch = (b) => ({ ...b, files: [...b.files, { filename: "web/ghost.ts" }] }); },
+    /disagree on the change set/],
+  ["a main push checking out another commit", "go", null, /checked out [0-9a-f]{40}, the push is/, { dir: ITWO.dir }],
+]) {
+  const w = internalProofWorld();
+  if (breakIt) breakIt(w);
+  const r = await runInternalWitness(w, laneId, { dir: opts?.dir ?? IGOOD_DIR, env: opts?.env ?? {} });
+  check(!r.ok && r.error instanceof NoReuse && expect.test(r.error.message),
+    `internal consumer "${name}" (lane ${laneId}): want NoReuse ${expect}; got ${r.ok ? "REUSE" : r.error?.message}`);
+}
+
+// The select judge: its own conditions, and git's local diff as a third derivation.
+const judgeEnv = (cand, patch = {}) => ({ GITHUB_EVENT_NAME: "workflow_dispatch", MODE: "internal-full-candidate", EXPECTED_BASE: IBASE,
+  EXPECTED_HEAD: cand.sha, GITHUB_SHA: cand.sha, GITHUB_REPOSITORY: REPO, GITHUB_REF: iref(cand.sha), ...patch });
+const IGOOD_DEPTH2 = shallowAt("igood", 2);
+{
+  let scope = null;
+  try {
+    scope = await judgeInternalCandidate({ env: judgeEnv(IGOOD), api: internalApi(internalWorld()), git: realAt(IGOOD_DEPTH2),
+      readFile: dirReader(IGOOD_DEPTH2), loadScope: dirScope(IGOOD_DEPTH2) });
+  } catch (err) { check(false, `the select judge refused the genuine candidate from a depth-2 checkout: ${err.message}`); }
+  check(scope && JSON.stringify(scope.paths) === JSON.stringify(IGOOD_PATHS), "the depth-2 select judge derived another change set");
+}
+for (const [name, envPatch, worldPatch, expect, gitOverride] of [
+  ["a pull_request event", { GITHUB_EVENT_NAME: "pull_request" }, null, /reachable only by workflow_dispatch/],
+  ["the frozen mode", { MODE: "frozen-release-metadata" }, null, /not internal-full-candidate/],
+  ["an unknown mode", { MODE: "hotfix" }, null, /not internal-full-candidate/],
+  ["a short base", { EXPECTED_BASE: IBASE.slice(0, 12) }, null, /full lowercase SHAs/],
+  ["a run that checked out another commit", { GITHUB_SHA: OTHER }, null, /checked out [0-9a-f]{40}, not head_sha/],
+  ["a base that is no longer main", {}, (w) => { w.mainRef = { object: { sha: OTHER } }; }, /main is at/],
+  ["a moved branch", {}, (w) => { w.branchRef = { object: { sha: OTHER } }; }, /not its own candidate/],
+  ["a frozen branch", { GITHUB_REF: "refs/heads/release-candidate/macos-v1.4.5-42-1" }, null, /is not internal-candidate\//],
+  // The judge's only binding of the branch name to the candidate is the shared scope's.
+  ["an internal branch named for another commit", { GITHUB_REF: iref(OTHER) }, null,
+    /is not internal-candidate\/[0-9a-f]{40}, the branch of exactly this candidate/],
+  ["a git diff that disagrees with the API", {}, null, /git's own diff of the candidate against BASE disagrees/,
+    (args) => (args[0] === "diff-tree" ? Buffer.from("README.md\0") : realGit(args, IGOOD_DEPTH2))],
+]) {
+  const w = internalWorld();
+  if (worldPatch) worldPatch(w);
+  const got = await refusal(() => judgeInternalCandidate({ env: judgeEnv(IGOOD, envPatch), api: internalApi(w), git: gitOverride ?? realAt(IGOOD_DEPTH2),
+    readFile: dirReader(IGOOD_DEPTH2), loadScope: dirScope(IGOOD_DEPTH2) }));
+  check(got instanceof NoReuse && expect.test(got.message), `the select judge with ${name}: want NoReuse ${expect}; got ${got?.message ?? "acceptance"}`);
+}
+
+// merge-gate.yml's select step, literally: BASE's CLI from a BASE worktree of a
+// depth-2 checkout of the candidate, against the API over HTTP. It writes the
+// status the selector turns into every lane — or FAILS, and so does the gate.
+async function internalSelectStep(cand, world = internalWorld(cand)) {
+  const checkout = shallowAt(cand.name, 2);
+  const api = internalApi(world);
+  const server = createServer(async (req, res) => {
+    try {
+      if (req.headers.authorization !== "Bearer test-token") { res.writeHead(401); res.end("{}"); return; }
+      const body = await api.json(req.url.replace(/^\//, ""));
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    } catch (err) { res.writeHead(404, { "content-type": "application/json" }); res.end(JSON.stringify({ message: err.message })); }
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const judge = join(checkout, "..", `${cand.name}-judge-${Math.random().toString(16).slice(2)}`);
+  fixtureGit(["worktree", "add", "-q", "--detach", judge, IBASE], checkout);
+  const out = join(tmp, `internal-select-${cand.name}-${Math.random().toString(16).slice(2)}.out`);
+  const result = await new Promise((done) => {
+    import("node:child_process").then(({ spawn }) => {
+      // The real path: the CLI runs only as its own main module, which Node names by its real path.
+      const child = spawn(process.execPath, [realpathSync(join(judge, "scripts/ci/ci-evidence.mjs")), "internal-candidate", "--output", out], {
+        cwd: checkout,
+        env: { PATH: process.env.PATH, HOME: process.env.HOME, ...judgeEnv(cand), GH_TOKEN: "test-token",
+          GITHUB_API_URL: `http://127.0.0.1:${server.address().port}` },
+      });
+      let stderr = "";
+      child.stderr.on("data", (d) => { stderr += d; });
+      child.on("close", (status) => done({ status, stderr }));
+    });
+  });
+  server.close();
+  let written = null;
+  try { written = readFileSync(out, "utf8"); } catch { /* none */ }
+  return { ...result, written };
+}
+{
+  const good = await internalSelectStep(IGOOD);
+  check(good.status === 0 && good.written === `status=internal-full-candidate\npayload=\nchanged_files=${IGOOD_PATHS.length}\n`,
+    `BASE's CLI in the select step refused or misreported the genuine candidate (exit ${good.status}): ${good.written ?? ""} ${good.stderr.slice(-400)}`);
+  const bad = await internalSelectStep(CLOSURE_CANDS[0]);
+  check(bad.status === 1 && bad.written === null && /::error::ci-evidence: not an internal full candidate: .*a trust input/.test(bad.stderr),
+    `BASE's CLI in the select step did not FAIL a workflow edit (exit ${bad.status}): ${bad.stderr.slice(-400)}`);
+  const selected = spawnSync(process.execPath, [resolve(repoRoot, "scripts/ci/select-lanes.mjs")], { encoding: "utf8",
+    env: { PATH: process.env.PATH, LANE_SELECTOR_STATUS: "internal-full-candidate", LANE_SELECTOR_FILES: "", LANE_SELECTOR_CHANGED_FILES: "6" } });
+  check(selected.status === 0 && selected.stdout === `${CONDITIONAL.map((id) => `${id}=true`).join("\n")}\n`,
+    `the selector did not turn the internal verdict into every lane: ${selected.stdout}`);
+}
+
 // ── 3. produce, confirm, the archive and the schema ─────────────────────────
 
 for (const [name, mutateEnv, mutateWorld, expect] of [
@@ -1647,5 +2260,6 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(`ci-evidence-test: OK (${checks} checks: `
-  + `${LANE_IDS.length - UNCERTIFIABLE_LANES.length} lanes reuse, ${UNCERTIFIABLE_LANES.length} uncertifiable refused; ${NEGATIVES.length} single-fact breaks refused; produce/confirm/zip/schema/registry refusals; depth-1 real-git ancestry; HTTP CLI end to end; `
+  + `${LANE_IDS.length - UNCERTIFIABLE_LANES.length} lanes reuse, ${UNCERTIFIABLE_LANES.length} uncertifiable refused; ${NEGATIVES.length} single-fact breaks refused; produce/confirm/zip/schema/registry refusals; depth-1 real-git ancestry; `
+  + `internal full candidate: real-git producer/consumer/select judge, ${CLOSURE_BREAKS.length} trust-closure breaks on all three sides; HTTP CLI end to end; `
   + `${process.env.CI_EVIDENCE_TEST_SCOPE === "verifier" ? "guard projection controls skipped (verifier scope)" : `${PROJECTION_CONTROLS.length} guard projection controls`})`);

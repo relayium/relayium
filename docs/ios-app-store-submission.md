@@ -2,7 +2,62 @@
 
 ## iOS 0.5.0 (11) candidate preparation
 
-Fresh 2026-09-26 provider reading: highest uploaded iOS build10 is 0.4.1 and VALID. The editable public iOS version remains0.4.0, PREPARE_FOR_SUBMISSION and manual release. This source candidate adds browser sign-in, recovery/help and received-file actions, input/draft and LAN consent fixes, and renewal/refusal hardening. No candidate archive or upload is claimed by this version change. Existing universal products and distribution territories are reused.
+**Current state, 2026-10-02: an internal TestFlight candidate, not yet built
+from its final source.** The source already declares `0.5.0 (11)` for the app
+and the Share extension; no version change is part of this preparation. A
+complete App Store Connect build read-back at 2026-10-02 07:34:40Z showed the
+highest iOS build as `10` (`0.4.1`, VALID) and no build `11`, so `11` is still
+the next number — and it must be read back again, fresh, immediately before any
+upload, because an upload consumes it. The final combined source for this round
+has not been archived, exported, uploaded or configured in TestFlight, and
+nothing in this section performs or authorizes any of those steps.
+
+An earlier `0.5.0 (11)` archive and App Store export do exist: on 2026-09-26
+they were built from source commit `e96dc9e6c` and verified, and they were never
+uploaded. That candidate carries the same version and build number but older
+source — none of the native changes described below — so it cannot be reused
+for this round. The candidate for this round must be archived from the clean,
+pushed final combined source, with its export verified and its digest bound to
+that source and to the What to Test text it ships with.
+
+The TestFlight *What to Test* text in `docs/app-store-metadata-ios.json` was
+rewritten for this round on 2026-10-02. It describes the native changes that
+reached the source after the 2026-09-26 draft (Device Inbox sends that are never
+uploaded twice after an interrupted finish, deliveries still followed after the
+sender relaunches, stricter key clean-up and conflict protection in the pending
+stores, stored-link key salvage, and key-bearing links copied local-only with an
+expiry); it no longer asks testers to cancel a StoreKit restore or to switch to
+cellular. `scripts/test/ios-app-store-metadata-validate-test.mjs` holds the
+text to that round's terms.
+
+What is still open before this candidate exists, and after it:
+
+- **Sandbox purchase acceptance is pending.** Actual sandbox purchase,
+  cancellation and account-switch verification of the StoreKit paths has not
+  been done. Distributing `0.5.0 (11)` to the existing internal TestFlight group
+  for owner and device QA is a separate, explicit decision for this candidate
+  only; it is not an extension of the earlier macOS internal-TestFlight
+  exception, it does not mark purchase acceptance as passed, and it does not ask
+  anyone to purchase or restore. The pending acceptance still blocks external
+  TestFlight and any public App Store submission.
+- **The native gate.** The original iOS 18.5 largest-text UI test failure has no
+  established cause and is not fixed. The exact final combined source must pass
+  that original test on the hosted 18.5 lane before archiving; a pass on a
+  diagnostic branch or on a local iOS 26.5 simulator is not a substitute, and a
+  retry that turns it green does not close it.
+- **Physical acceptance is not done.** No `0.5.0 (11)` build has been installed
+  on a device and no hands-on UI result exists. Device testing follows internal
+  availability. Wi-Fi is enough for the LAN and Device Inbox checks; a real
+  cross-network check needs a peer on a different network, and cellular is not
+  required.
+
+**Historical, 2026-09-26.** The provider reading of that day: highest uploaded
+iOS build10 is 0.4.1 and VALID. The editable public iOS version remains0.4.0,
+PREPARE_FOR_SUBMISSION and manual release. This source candidate adds browser
+sign-in, recovery/help and received-file actions, input/draft and LAN consent
+fixes, and renewal/refusal hardening. No candidate archive or upload is claimed
+by this version change. Existing universal products and distribution territories
+are reused.
 
 
 This is the release operator's source of truth for Relayium's iOS App Store

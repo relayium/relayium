@@ -419,10 +419,16 @@ final class MacSurfaceGuardTests: XCTestCase {
         // this file still gates.
         // `evidence` is the PR→main evidence decision (scripts/ci/ci-evidence.mjs):
         // the UI shards read its output to witness a verified merge instead of
-        // re-running. It does not replace the two gates they wait for.
-        XCTAssertNotNil(ci.range(of: #"needs: \[test, contract(, evidence)?\]"#, options: .regularExpression,
+        // re-running. It replaces no gate. The UI shards wait for `contract`
+        // alone (it gates their Developer ID key import), NOT for `test`, so the
+        // unit suite no longer serialises them; signed packaging still waits for
+        // BOTH `test` and `contract`.
+        XCTAssertNotNil(ci.range(of: #"\n    needs: \[contract(, evidence)?\]\n"#, options: .regularExpression,
                                  range: uiJob.lowerBound..<signedJob.lowerBound),
-                        "the UI shards no longer wait for the cheap contract gates")
+                        "the UI shards no longer wait for the contract gate")
+        XCTAssertNil(ci.range(of: #"\n    needs: [^\n]*\btest\b"#, options: .regularExpression,
+                              range: uiJob.lowerBound..<signedJob.lowerBound),
+                     "the UI shards wait for the unit suite again; only signed packaging should")
         XCTAssertNotNil(ci.range(of: "needs: [test, contract]",
                                  range: signedJob.lowerBound..<ci.endIndex),
                         "signed packaging must wait for cheap contract gates")

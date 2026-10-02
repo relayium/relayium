@@ -209,6 +209,15 @@ const RUNNER_LABELS = {
  * lane honest when the auxiliary jobs fail: an explicit `!cancelled()` over
  * each job's OWN needs, so a failed, timed-out or skipped `evidence` leaves
  * `reuse` empty and every gate runs in full on its own runner.
+ *
+ * ONE exception to "every pin equals the generator": `ui-smoke` used to wait
+ * for `test` as well as `contract`. The generator, the drift check and
+ * `CANONICAL_JOB_CONDITIONS` know only the current shape;
+ * `LEGACY_ADOPTED_UI_SMOKE_CONDITIONS` freezes the previous one so a signed
+ * build produced under it can still be judged. `workflowShape` accepts either
+ * WHOLE triple and never a mix. It is a verifier-only allowance: the CI policy
+ * (`scripts/test/ci-event-policy-test.mjs`) still refuses the old shape in the
+ * current workflow, and every other check of a reused build is unchanged.
  */
 export const CANONICAL_SCREEN_JOB = [
   "  screen:",
@@ -349,8 +358,8 @@ export const CANONICAL_JOB_CONDITIONS = {
     "    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}"
   ],
   "ui-smoke": [
-    "    needs: [test, contract, evidence]",
-    "    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}",
+    "    needs: [contract, evidence]",
+    "    if: ${{ !cancelled() && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}",
     "    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}"
   ],
   "signed-build": [
@@ -359,6 +368,15 @@ export const CANONICAL_JOB_CONDITIONS = {
     "    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}"
   ]
 };
+/**
+ * The adopted `ui-smoke` triple before it stopped waiting for `test`: frozen,
+ * whole, and read only by `workflowShape`. Never a generator target.
+ */
+export const LEGACY_ADOPTED_UI_SMOKE_CONDITIONS = Object.freeze([
+  "    needs: [test, contract, evidence]",
+  "    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}",
+  "    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}",
+]);
 /** The jobs the canonical adoption gives the witness prefix; signed-build is `fresh`. */
 const ADOPTED_JOB_IDS = ["contract", "test", "ui-smoke"];
 
@@ -397,8 +415,9 @@ export function workflowShape(text) {
   if (JSON.stringify(body("evidence")) !== JSON.stringify(CANONICAL_EVIDENCE_JOB)) return "non-canonical";
   for (const [id, want] of Object.entries(CANONICAL_JOB_CONDITIONS)) {
     const b = body(id);
-    const conditions = b.slice(0, b.indexOf("    steps:")).filter((l) => /^ {4}(needs|if|runs-on):/.test(l));
-    if (JSON.stringify(conditions) !== JSON.stringify(want)) return "non-canonical";
+    const conditions = JSON.stringify(b.slice(0, b.indexOf("    steps:")).filter((l) => /^ {4}(needs|if|runs-on):/.test(l)));
+    const legacy = id === "ui-smoke" && conditions === JSON.stringify(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS);
+    if (conditions !== JSON.stringify(want) && !legacy) return "non-canonical";
   }
   const witness = JSON.stringify(CANONICAL_WITNESS_STEPS);
   for (const id of ADOPTED_JOB_IDS) {

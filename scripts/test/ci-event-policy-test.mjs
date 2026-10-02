@@ -1279,6 +1279,25 @@ function evidenceAdoptionFailures(world) {
       continue;
     }
 
+    // macOS's serial order, pinned EXPLICITLY. Every generic check above derives
+    // the wanted condition from the job's own original `needs`, so a change that
+    // consistently re-adds `test` to ui-smoke's needs AND condition is a valid
+    // adoption to all of them. ui-smoke waits for `contract` (the Developer ID
+    // key's gate) and NOT for `test`; signed-build waits for both.
+    if (laneId === "macos") {
+      const asList = (n) => (Array.isArray(n) ? n : n === undefined ? [] : [n]);
+      for (const [jobId, original, adopted] of [
+        ["ui-smoke", ["contract"], ["contract", "evidence"]],
+        ["signed-build", ["test", "contract"], ["test", "contract"]],
+      ]) {
+        need(deepEqual(asList(fullDoc?.jobs?.[jobId]?.needs), original) && deepEqual(asList(doc.jobs?.[jobId]?.needs), adopted),
+          `${where}/${jobId}: needs ${JSON.stringify(asList(fullDoc?.jobs?.[jobId]?.needs))} (adopted `
+          + `${JSON.stringify(asList(doc.jobs?.[jobId]?.needs))}), want exactly ${JSON.stringify(original)} (adopted `
+          + `${JSON.stringify(adopted)}). ui-smoke waits for the contract that gates its Developer ID key, not for the `
+          + "unit suite; signed-build needs both.");
+      }
+    }
+
     // The evidence job, whole.
     const ev = doc.jobs?.evidence;
     const wantEv = canonicalEvidenceJob(laneId, lane, plan);
@@ -1470,13 +1489,14 @@ function evidenceAdoptionFailures(world) {
   need(deepEqual(agg?.permissions, { contents: "read", actions: "read" }), `${AGGREGATE}/${GATE_JOB}: permissions `
     + `are ${JSON.stringify(agg?.permissions)}, want exactly {contents: read, actions: read}.`);
   const steps = agg?.steps ?? [];
-  // The frozen release-metadata dispatch is the second proof kind; the gate's
-  // other dispatch mode (`pull-request`) and every other event produce nothing.
-  const pr = "github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')";
+  // The frozen release-metadata dispatch is the second proof kind and the
+  // internal full candidate the third; the gate's other dispatch mode
+  // (`pull-request`) and every other event produce nothing.
+  const pr = "github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'frozen-release-metadata' || inputs.mode == 'internal-full-candidate'))";
   const modeOptions = gate.on?.workflow_dispatch?.inputs?.mode?.options;
-  need(deepEqual(modeOptions, ["pull-request", "frozen-release-metadata"]), `${AGGREGATE}: the dispatch modes are `
-    + `${JSON.stringify(modeOptions)}, want exactly [pull-request, frozen-release-metadata]; the producer is wired to the `
-    + "accepted frozen mode and a new mode must not inherit it.");
+  need(deepEqual(modeOptions, ["pull-request", "frozen-release-metadata", "internal-full-candidate"]), `${AGGREGATE}: the dispatch modes are `
+    + `${JSON.stringify(modeOptions)}, want exactly [pull-request, frozen-release-metadata, internal-full-candidate]; the producer is `
+    + "wired to the accepted frozen and internal modes and a new mode must not inherit it.");
   const want = [
     { name: "Check out the merge commit this run tested", if: pr, uses: EV_CHECKOUT, with: { "persist-credentials": "false" } },
     { name: "Node for the evidence verifier", if: pr, uses: EV_NODE, with: { "node-version": "24" } },
@@ -1572,6 +1592,20 @@ function evidenceWorld() {
     toolReg: structuredClone(evidenceToolchain),
     controlFiles: [...SELECTOR_CONTROL_FILES],
   };
+}
+
+/**
+ * Rewrite exactly one occurrence of `from` in a lane's TEXT and re-parse it, so a
+ * mutation is a consistent source edit rather than a parsed-document patch. A
+ * stale anchor throws instead of passing as a no-op.
+ */
+function evRewrite(w, file, from, to) {
+  const text = w.texts.get(file);
+  const n = text.split(from).length - 1;
+  if (n !== 1) throw new Error(`stale anchor in ${file}: ${JSON.stringify(from.slice(0, 80))} occurs ${n} time(s)`);
+  const next = text.replace(from, to);
+  w.texts.set(file, next);
+  w.docs.set(file, parseYaml(next));
 }
 
 const EVIDENCE_MUTATIONS = [
@@ -1737,6 +1771,21 @@ const EVIDENCE_MUTATIONS = [
   ["an original job's condition forgets one of its needs", (w) => {
     w.docs.get("macos.yml").jobs["ui-smoke"].if = w.docs.get("macos.yml").jobs["ui-smoke"].if.replace(" && needs.contract.result == 'success'", "");
   }, /macos\.yml \(evidence lane macos\)\/ui-smoke: the job condition is/],
+  // Consistent source-level edits: the TEXT is changed (so its full path and the
+  // adoption round trip agree with it) and re-parsed, so every generic check that
+  // derives the condition from the job's own needs is satisfied. Only the explicit
+  // macOS order assertion can refuse them.
+  ["ui-smoke consistently waits for test again (needs AND condition)", (w) => {
+    const ui = "  ui-smoke:\n    needs: [contract, evidence]\n    if: ${{ !cancelled() && needs.contract.result == 'success' && (";
+    evRewrite(w, "macos.yml", ui, ui.replace("[contract, evidence]", "[test, contract, evidence]")
+      .replace("!cancelled() && needs.contract.result", "!cancelled() && needs.test.result == 'success' && needs.contract.result"));
+  }, /macos\.yml \(evidence lane macos\)\/ui-smoke: needs \["test","contract"\] \(adopted \["test","contract","evidence"\]\), want exactly \["contract"\]/],
+  ["signed-build consistently stops waiting for test (needs AND condition)", (w) => {
+    const sb = "  signed-build:\n    needs: [test, contract]\n";
+    evRewrite(w, "macos.yml", sb, "  signed-build:\n    needs: contract\n");
+    evRewrite(w, "macos.yml", "    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (",
+      "    if: ${{ !cancelled() && needs.contract.result == 'success' && (");
+  }, /macos\.yml \(evidence lane macos\)\/signed-build: needs \["contract"\] \(adopted \["contract"\]\), want exactly \["test","contract"\]/],
   ["an original job's own condition is dropped", (w) => { w.docs.get("web.yml").jobs.test.if = "${{ !cancelled() && needs.scope.result == 'success' }}"; },
     /web\.yml \(evidence lane web\)\/test: the job condition is/],
   ["a fresh job downstream of a witness stays on implicit success()", (w) => {
@@ -1747,8 +1796,13 @@ const EVIDENCE_MUTATIONS = [
   }, /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
   ["the producer loses the dispatched base", (w) => { delete w.docs.get(AGGREGATE).jobs[GATE_JOB].steps[4].env.CI_EVIDENCE_DISPATCH_BASE; },
     /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
+  ["the producer stops running on the internal full candidate", (w) => {
+    for (const st of w.docs.get(AGGREGATE).jobs[GATE_JOB].steps.slice(1)) {
+      st.if = "github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'frozen-release-metadata')";
+    }
+  }, /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
   ["a new dispatch mode inherits the producer", (w) => { w.docs.get(AGGREGATE).on.workflow_dispatch.inputs.mode.options.push("hotfix"); },
-    /merge-gate\.yml: the dispatch modes are .*want exactly \[pull-request, frozen-release-metadata\]/],
+    /merge-gate\.yml: the dispatch modes are .*want exactly \[pull-request, frozen-release-metadata, internal-full-candidate\]/],
   ["a lane loses the toolchain registry from its filter", (w) => {
     const on = w.docs.get("ios.yml").on.push;
     on.paths = on.paths.filter((p) => p !== "scripts/ci/ci-evidence-toolchain-registry.json");
@@ -1852,7 +1906,7 @@ function evalLaneGraph(doc, scenario, coeFailureReportsAs) {
   const state = new Map();
   const ancestors = (id, seen = new Set()) => { for (const n of needsOf(id)) if (!seen.has(n)) { seen.add(n); ancestors(n, seen); } return seen; };
   const github = { event_name: scenario.event, ref: scenario.ref, repository: "relayium/relayium",
-    event: { pull_request: scenario.event === "pull_request" ? { head: { repo: { full_name: "relayium/relayium" } } } : null } };
+    event: { pull_request: scenario.event === "pull_request" ? { head: { repo: { full_name: scenario.headRepo ?? "relayium/relayium" } } } : null } };
   const visit = (id) => {
     if (state.has(id)) return state.get(id);
     for (const n of needsOf(id)) visit(n);
@@ -2006,9 +2060,56 @@ if (evidenceRegistry) {
       + `${got.length === 0 ? "no failures at all" : JSON.stringify(got)}. A rule about what a witness may skip `
       + "that cannot fail is the most expensive kind of green.");
   }
+  // The two consistent edits are a valid adoption to every GENERIC rule: the
+  // explicit macOS order assertion is the only thing that refuses them.
+  for (const [name, mutate] of EVIDENCE_MUTATIONS.filter(([n]) => / consistently /.test(n))) {
+    const w = evidenceWorld();
+    let got;
+    try { mutate(w); got = evidenceAdoptionFailures(w); } catch (err) { check(false, `6x "${name}" threw instead of reporting: ${err.message}`); continue; }
+    check(got.length > 0 && got.every((m) => /^macos\.yml \(evidence lane macos\)\/(ui-smoke|signed-build): needs /.test(m)),
+      `6x "${name}" was refused by something other than the explicit macOS order alone: ${JSON.stringify(got)}`);
+  }
 
   // The graph, on the real adopted workflows: every scenario, both reporting conventions.
   for (const message of evidenceGraphFailures(evidenceWorld())) check(false, message);
+
+  // macOS's serial order, through the same evaluator over the REAL adopted
+  // macos.yml (its own needs and conditions, not a mirror of them): ui-smoke
+  // waits for contract and evidence only, so a red `test` no longer holds it
+  // back, while a red contract and a fork still skip it and signed-build still
+  // needs both. What a red `test` does to the CALLERS is not simulated here: it
+  // is GitHub's rule that a failed job fails its workflow, read against the
+  // callers' own conditions (merge-gate.yml judges each called lane's result;
+  // macos-release.yml's notarize-stage requires `needs.build.result == 'success'`).
+  {
+    const mac = evidenceWorld().docs.get("macos.yml");
+    const outputs = (reuse) => (id) => (id === "evidence" ? { reuse, witness: "" } : id === "screen" ? { eligible: "false" } : {});
+    const noProof = { event: "push", ref: "refs/heads/main", verdict: "false", defaultOutputs: outputs("false") };
+    const pr = { event: "pull_request", ref: "refs/pull/1/merge", defaultOutputs: outputs("") };
+    for (const [name, scenario, want] of [
+      ["a main push whose contract is red", { ...noProof, jobs: { contract: { result: "failure" } } }, { "ui-smoke": null, "signed-build": null, red: ["contract"] }],
+      ["a main push whose unit suite is red", { ...noProof, jobs: { test: { result: "failure" } } }, { "ui-smoke": "macos-15", "signed-build": null, red: ["test"] }],
+      ["a main push whose evidence job failed", { ...noProof, jobs: { evidence: { result: "failure" } }, defaultOutputs: outputs("true") },
+        { "ui-smoke": "macos-15", "signed-build": "macos-15", red: [] }],
+      ["a same-repository pull request", pr, { "ui-smoke": "macos-15", "signed-build": "macos-15", red: [] }],
+      ["a fork pull request", { ...pr, headRepo: "someone/relayium" }, { "ui-smoke": null, "signed-build": null, red: [] }],
+      ["a fork pull request whose unit suite is red", { ...pr, headRepo: "someone/relayium", jobs: { test: { result: "failure" } } },
+        { "ui-smoke": null, "signed-build": null, red: ["test"] }],
+    ]) {
+      for (const coe of ["failure", "success"]) {
+        let g;
+        try { g = evalLaneGraph(structuredClone(mac), scenario, coe); } catch (err) { check(false, `macOS order: ${name}: ${err.message}`); continue; }
+        for (const id of ["ui-smoke", "signed-build"]) {
+          const st = g.get(id);
+          const got = st?.runs ? st.runsOn : null;
+          check(got === want[id], `macOS order: ${name} (continue-on-error failure reported as ${coe}): ${id} `
+            + `${got === null ? "is skipped" : `runs on ${got}`}, want ${want[id] === null ? "skipped" : want[id]}`);
+        }
+        const red = [...g].filter(([, st]) => st.red).map(([id]) => id).sort();
+        check(JSON.stringify(red) === JSON.stringify(want.red), `macOS order: ${name}: red jobs ${JSON.stringify(red)}, want ${JSON.stringify(want.red)}`);
+      }
+    }
+  }
   // ...and the graph rule fails for the stated reason when the execution graph
   // is broken the ways this revision fixed: each control below must produce
   // exactly the named failure, or the graph rule is a harness that cannot fail.
@@ -6960,9 +7061,9 @@ function aggregateGateFailures(world) {
   need(
     modeInput?.type === "choice" && modeInput?.required === "true"
       && modeInput?.default === "pull-request"
-      && deepEqual(modeInput?.options, ["pull-request", "frozen-release-metadata"]),
+      && deepEqual(modeInput?.options, ["pull-request", "frozen-release-metadata", "internal-full-candidate"]),
     `${AGGREGATE}'s dispatch \`mode\` must be a required choice of exactly [pull-request, `
-    + `frozen-release-metadata] defaulting to pull-request; got ${JSON.stringify(modeInput)}.`,
+    + `frozen-release-metadata, internal-full-candidate] defaulting to pull-request; got ${JSON.stringify(modeInput)}.`,
   );
   need(
     gateDispatchInputs.pr_number?.type === "string" && gateDispatchInputs.pr_number?.required === "false",
@@ -6983,15 +7084,34 @@ function aggregateGateFailures(world) {
         "a frozen candidate that fails the judge no longer FAILS the selector"],
       ['echo "::error::unknown dispatch mode ${MODE:-empty}"',
         "an unknown dispatch mode no longer fails the selector"],
+      ['judge="$RUNNER_TEMP/internal-base"\n  git worktree add --detach "$judge" "$EXPECTED_BASE"',
+        "the internal judge no longer runs from BASE's tree, so the candidate judges itself"],
+      ['node "$judge/scripts/ci/ci-evidence.mjs" internal-candidate --output "$RUNNER_TEMP/internal.out"',
+        "the internal mode no longer runs base's ci-evidence.mjs internal-candidate judge"],
+      ['echo "::error::the dispatched commit is not an internal full candidate"; exit 1; }',
+        "an internal candidate that fails the judge no longer FAILS the selector"],
+      ["grep -qx 'status=internal-full-candidate' \"$RUNNER_TEMP/internal.out\" || {",
+        "an internal judge that wrote no verdict no longer fails the selector"],
     ]) {
       need(body.includes(needle), `${AGGREGATE}/${SELECT_JOB}: ${why} (missing \`${needle}\`).`);
     }
     const judge = String((jobs[GATE_JOB]?.steps ?? []).map((step) => step?.run ?? "").join("\n"));
     need(
-      judge.includes('if [ "$DISPATCHED" = true ] && [ "$MODE" = frozen-release-metadata ]; then')
-        && judge.includes('[ "$CHECKED_SHA" != "$EXPECTED_HEAD" ]'),
+      judge.includes('if [ "$DISPATCHED" = true ] && [ "$MODE" = frozen-release-metadata ]; then\n'
+        + '  if [ "$CHECKED_SHA" != "$EXPECTED_HEAD" ]'),
       `${AGGREGATE}/${GATE_JOB} no longer re-checks, where the verdict is given, that a frozen `
       + `release-metadata run checked the dispatched head on a release-candidate branch.`,
+    );
+    need(
+      judge.includes('if [ "$DISPATCHED" = true ] && [ "$MODE" = internal-full-candidate ]; then\n'
+        + '  if [ "$CHECKED_SHA" != "$EXPECTED_HEAD" ] || [ "$GITHUB_REF" != "refs/heads/internal-candidate/$EXPECTED_HEAD" ]; then'),
+      `${AGGREGATE}/${GATE_JOB} no longer re-checks, where the verdict is given, that an internal full `
+      + `candidate run checked the dispatched head on the internal-candidate branch named for it.`,
+    );
+    need(
+      judge.includes('    if [ "$selected" != true ]; then\n'
+        + '      note "internal full candidate mode: $lane was selected=\\"$selected\\"; this mode runs every lane."'),
+      `${AGGREGATE}/${GATE_JOB} no longer requires an internal full candidate run to have selected every lane.`,
     );
   }
   for (const name of ["base_sha", "head_sha"]) {
@@ -9756,7 +9876,7 @@ const MUTATIONS = [
     expect: /pull-request mode no longer requires a pull request number/,
   },
   {
-    name: "merge-gate grows a third dispatch mode",
+    name: "merge-gate grows a fourth dispatch mode",
     mutate: (world) => {
       world.docs.get(AGGREGATE).on.workflow_dispatch.inputs.mode.options.push("anything");
       return world;
@@ -9770,6 +9890,56 @@ const MUTATIONS = [
       step.run = step.run.replace('[ "$CHECKED_SHA" != "$EXPECTED_HEAD" ]', "false");
     }),
     expect: /no longer re-checks, where the verdict is given/,
+  },
+  {
+    name: "merge-gate's internal judge runs from the candidate's own tree",
+    mutate: (world) => withGateJob(world, "select", (job) => {
+      const step = job.steps.find((s) => s.id === "files");
+      step.run = step.run.replace('node "$judge/scripts/ci/ci-evidence.mjs" internal-candidate',
+        "node scripts/ci/ci-evidence.mjs internal-candidate");
+    }),
+    expect: /no longer runs base's ci-evidence\.mjs internal-candidate judge/,
+  },
+  {
+    name: "merge-gate's internal judge is no longer a BASE worktree",
+    mutate: (world) => withGateJob(world, "select", (job) => {
+      const step = job.steps.find((s) => s.id === "files");
+      step.run = step.run.replace('judge="$RUNNER_TEMP/internal-base"', 'judge="$GITHUB_WORKSPACE"');
+    }),
+    expect: /the internal judge no longer runs from BASE's tree/,
+  },
+  {
+    name: "merge-gate's internal mode stops failing a candidate the judge refuses",
+    mutate: (world) => withGateJob(world, "select", (job) => {
+      const step = job.steps.find((s) => s.id === "files");
+      step.run = step.run.replace('echo "::error::the dispatched commit is not an internal full candidate"; exit 1; }',
+        "status=internal-error; }");
+    }),
+    expect: /an internal candidate that fails the judge no longer FAILS the selector/,
+  },
+  {
+    name: "merge-gate's internal mode accepts a judge that wrote no verdict",
+    mutate: (world) => withGateJob(world, "select", (job) => {
+      const step = job.steps.find((s) => s.id === "files");
+      step.run = step.run.replace("grep -qx 'status=internal-full-candidate' \"$RUNNER_TEMP/internal.out\" || {", "true || {");
+    }),
+    expect: /an internal judge that wrote no verdict no longer fails the selector/,
+  },
+  {
+    name: "the aggregate stops re-checking the internal head and branch",
+    mutate: (world) => withGateJob(world, "merge-gate", (job) => {
+      const step = job.steps.find((s) => String(s.run ?? "").includes("CHECKED_SHA"));
+      step.run = step.run.replace('[ "$GITHUB_REF" != "refs/heads/internal-candidate/$EXPECTED_HEAD" ]', "false");
+    }),
+    expect: /internal-candidate branch named for it/,
+  },
+  {
+    name: "the aggregate stops requiring every lane of an internal full candidate",
+    mutate: (world) => withGateJob(world, "merge-gate", (job) => {
+      const step = job.steps.find((s) => String(s.run ?? "").includes("CHECKED_SHA"));
+      step.run = step.run.replace('    if [ "$selected" != true ]; then', '    if false; then');
+    }),
+    expect: /no longer requires an internal full candidate run to have selected every lane/,
   },
   {
     // 6l reaching the BUDGET-ONLY files. Before the split this sweep covered the

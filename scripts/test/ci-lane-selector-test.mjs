@@ -55,6 +55,7 @@ import { PATH_MATRIX } from "./fixtures/ci-path-selection.mjs";
 import {
   CHANGED_FILE_CAP,
   CONTROL_FILES,
+  INTERNAL_FULL_STATUS,
   LANES,
   SelectAll,
   classifyPattern,
@@ -274,9 +275,17 @@ const FAIL_CLOSED = [
     name: `${control} is part of the change set`,
     env: response({ filename: control }),
   })),
+  {
+    // Not a doubt but a decision: BASE's judge accepted an internal full
+    // candidate, and that mode runs every lane by definition — even when its
+    // change set alone would select one.
+    name: "an internal full candidate whose change set would select one lane",
+    env: { ...response({ filename: "contracts/ops-deploy-v1.json" }), LANE_SELECTOR_STATUS: INTERNAL_FULL_STATUS },
+    reason: /internal full candidate/,
+  },
 ];
 
-for (const { name, env } of FAIL_CLOSED) {
+for (const { name, env, reason } of FAIL_CLOSED) {
   let thrown = null;
   try {
     run(env);
@@ -284,7 +293,7 @@ for (const { name, env } of FAIL_CLOSED) {
     thrown = err;
   }
   check(
-    thrown instanceof SelectAll,
+    thrown instanceof SelectAll && (reason === undefined || reason.test(thrown.message)),
     `${name}: the selector did not fail closed — it `
     + `${thrown === null ? "returned a selection" : `threw ${thrown}`}. Every uncertainty here `
     + `must select EVERY conditional lane. Over-selection costs runner minutes; under-selection `

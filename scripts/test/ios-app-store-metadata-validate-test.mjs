@@ -1098,7 +1098,7 @@ rejects(
   "the English What to Test losing the signed-out join check",
   (p) => {
     p.testFlight.whatToTest["en-US"] = p.testFlight.whatToTest["en-US"].replace(
-      " Confirm the asymmetry explicitly — signed out, joining a code somebody else is showing works, and showing a code does not; signed in, showing a code works.",
+      "Signed out, joining a code somebody else is showing works, and showing a code does not; signed in, showing a code works. ",
       "",
     );
   },
@@ -1109,7 +1109,7 @@ rejects(
   "the Chinese What to Test losing the signed-out join check",
   (p) => {
     p.testFlight.whatToTest["zh-Hans"] = p.testFlight.whatToTest["zh-Hans"].replace(
-      "并且明确验证这个不对称：未登录时可以加入别人出示的码，但不能出示码；登录后才能出示码。",
+      "未登录时可以加入别人出示的码，但不能出示码；登录后才能出示码。",
       "",
     );
   },
@@ -2678,6 +2678,406 @@ manifestRejects(
   "the Share extension's manifest dropping its collected-data claim",
   { share: (text) => text.replace("<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>", "") },
   "declares no NSPrivacyCollectedDataTypes",
+);
+
+// ── the What to Test contract for the 0.5.0 (11) internal round ──────────────
+//
+// The validator holds the What to Test text to Apple's limits, to the pinned
+// account and two-device disclosures, to one version and to no background or
+// notification promise. It cannot hold it to what THIS round may ask of a
+// tester, and that is where the 0.5.0 (11) draft was wrong when it was read on
+// 2026-10-02: it told testers to cancel a StoreKit restore while sandbox
+// purchase and cancellation verification had not been done, it made a
+// Wi-Fi-to-cellular switch a numbered step on devices that have only Wi-Fi, and
+// it described none of the native fixes that reached main after it was drafted.
+//
+// So this suite carries the round's contract itself, as concepts rather than
+// sentences, and proves it the same way as everything above: the shipped text
+// passes, and each hostile edit below fails for its own named reason. The
+// validator is deliberately not changed by this; when the round's terms change,
+// this section changes with them.
+//
+//   internal-only     the text says this round is internal testing only;
+//   identity          it names 0.5.0 (11) and calls the previous build (10);
+//   c03-pending       it says sandbox purchase/cancellation verification is
+//                     still pending;
+//   no-purchase       it tells testers not to purchase and not to restore;
+//   purchase-step     no clause instructs a purchase, a restore, a
+//                     subscription or an upgrade, and StoreKit is not named;
+//   cellular-optional every mention of cellular says it is not required;
+//   network-optional  every instruction to change networks says it is optional;
+//   wan-truth         a same-Wi-Fi Cross-network pairing is said NOT to prove a
+//                     cross-network path, and a different network is named;
+//   lost-finalize, tracking, local-copy, link-salvage, conflict, discard-cleanup
+//                     one tester-observable statement for each native change
+//                     since the draft: an interrupted Device Inbox send is never
+//                     uploaded again and an unconfirmed one says so; a delivery
+//                     is still followed after the sender relaunches; a copied
+//                     stored link stays on the device and expires; a link listed
+//                     after an interrupted finish opens; a send found in two
+//                     places deletes nothing; discarding a send cleans up.
+//
+// The test-harness-only changes of the same period are compiled out of Release
+// builds and are deliberately NOT described to testers.
+
+const NOTES_CONTRACT = {
+  "en-US": {
+    sentences: (text) => text.split(/[.!?\n]+/),
+    clauses: (text) => text.split(/[.!?;:,\n]+|\bbut\b|\band then\b/i),
+    lead: /^\s*(?:[A-Z0-9]{1,2}\s+)?(?:(?:please|also|then|now|and|or|so)\s+)*/i,
+    instructs: /^(?:buy|purchase|restore|subscribe|upgrade|cancel|tap|try|test|check|verify|make|start|confirm|complete)\s/i,
+    money: /purchas|\bbuy|restor|subscri|entitlement|upgrade/i,
+    storekit: /StoreKit/i,
+    whole: [
+      ["internal-only", /\binternal (?:testing|testers?) only\b/i],
+      ["identity", /\b0\.5\.0 \(11\)/],
+      ["identity", /\(10\)/],
+      ["no-purchase", /\b(?:do not|don't|never)\b[^.]*\b(?:purchase|buy)\b/i],
+      ["no-purchase", /\b(?:do not|don't|never|nor)\b[^.]*\brestor(?:e|ing) purchases?\b/i],
+      ["wan-truth", /\bdifferent network\b/i],
+      ["lost-finalize", /\b(?:never|not|won't)\b[^.]*\bupload(?:ed)? again\b/i],
+      ["lost-finalize", /\b(?:could not|couldn't) confirm\b/i],
+    ],
+    sentence: [
+      ["c03-pending", [/\bpurchase\b/i, /\b(?:verification|acceptance)\b/i, /\b(?:pending|not (?:yet )?(?:done|complete|completed))\b/i]],
+      ["wan-truth", [/\b(?:same|one) Wi-Fi\b/i, /\b(?:does not|doesn't) prove\b/i, /cross-network/i]],
+      ["tracking", [/\b(?:reopen|relaunch)\b/i, /\bsender\b/i]],
+      ["tracking", [/\bstill (?:be )?listed\b/i, /\bupdate/i]],
+      // Sentence-level on purpose: the renewal paragraph also says "ten minutes".
+      ["local-copy", [/\bpast(?:e|es|ing)\b/i, /\b(?:10|ten) minutes\b/i]],
+      ["local-copy", [/\bUniversal Clipboard\b/, /\b(?:not|never)\b/i]],
+      ["link-salvage", [/\bstored[- ]link\b/i, /\b(?:closed|force-quit|quit)\b/i, /\bmust open\b/i]],
+      ["conflict", [/\btwo places\b/i, /\bnothing (?:was|has been|is) deleted\b/i]],
+      ["discard-cleanup", [/\bclean-?up\b/i, /\bdiscard/i]],
+    ],
+    cellular: /cellular/i,
+    optional: /\b(?:optional|not required|not needed|no need)\b/i,
+    networkChange: /\b(?:switch|switching|change|changing)\b[^.]*\bnetworks?\b/i,
+  },
+  "zh-Hans": {
+    sentences: (text) => text.split(/[。！？\n]+/),
+    clauses: (text) => text.split(/[。！？；：，、\n]+/),
+    lead: /^\s*(?:[A-Z0-9]{1,2}\.\s*)?(?:请|再|然后|并且|并|也|同时|所以)*/,
+    instructs: /^(?:购买|订阅|恢复购买|升级|取消|点按|尝试|测试|检查|验证|进行|完成|确认)/,
+    money: /购买|订阅|权益|升级/,
+    storekit: /StoreKit/i,
+    whole: [
+      ["internal-only", /仅(?:供|限)内部测试/],
+      ["identity", /0\.5\.0 \(11\)/],
+      ["identity", /\(10\)/],
+      ["no-purchase", /(?:请勿|不要|勿)[^。]*购买/],
+      ["no-purchase", /(?:请勿|不要|勿)[^。]*恢复购买/],
+      ["wan-truth", /不同的网络/],
+      ["lost-finalize", /不会(?:自动)?(?:再次|重复)上传/],
+      ["lost-finalize", /无法确认/],
+    ],
+    sentence: [
+      ["c03-pending", [/购买/, /验收|验证/, /尚未完成|未完成|待完成/]],
+      ["wan-truth", [/同一 ?Wi-Fi/, /不能证明/, /跨网络/]],
+      ["tracking", [/重新打开/, /发送端/]],
+      ["tracking", [/仍(?:应|会)?[^。]*列出/, /更新/]],
+      // Sentence-level on purpose: the renewal paragraph also says 十分钟.
+      ["local-copy", [/粘贴/, /(?:10|十) ?分钟/]],
+      ["local-copy", [/通用剪贴板/, /不得|不会|不能/]],
+      ["link-salvage", [/存储链接/, /关闭|强制退出/, /必须能打开/]],
+      ["conflict", [/两个位置/, /没有删除/]],
+      ["discard-cleanup", [/丢弃/, /清理/]],
+    ],
+    cellular: /蜂窝/,
+    optional: /可选|不需要|无需|不必/,
+    networkChange: /切换网络|更换网络|网络切换/,
+  },
+};
+
+function notesContractFindings(packet) {
+  const findings = new Set();
+  for (const [locale, rules] of Object.entries(NOTES_CONTRACT)) {
+    const text = packet.testFlight.whatToTest[locale];
+    const add = (rule) => findings.add(`${locale}:${rule}`);
+    const sentences = rules.sentences(text).map((s) => s.trim()).filter(Boolean);
+    for (const [rule, pattern] of rules.whole) if (!pattern.test(text)) add(rule);
+    for (const [rule, patterns] of rules.sentence) {
+      if (!sentences.some((s) => patterns.every((p) => p.test(s)))) add(rule);
+    }
+    if (rules.storekit.test(text)) add("purchase-step");
+    for (const clause of rules.clauses(text)) {
+      const body = clause.replace(rules.lead, "");
+      if (rules.instructs.test(body) && rules.money.test(body)) add("purchase-step");
+    }
+    for (const s of sentences) {
+      if (rules.cellular.test(s) && !rules.optional.test(s)) add("cellular-optional");
+      if (rules.networkChange.test(s) && !rules.optional.test(s)) add("network-optional");
+    }
+  }
+  return [...findings].sort();
+}
+
+cases += 1;
+{
+  const found = notesContractFindings(clone());
+  if (found.length !== 0) bad("the shipped What to Test meets the internal-round contract", found.join(", "));
+  else ok("the shipped What to Test meets the internal-round contract");
+}
+
+// Each hostile edit must change the text, must be refused by the contract for
+// the named rule, and must not be "refused" only because the edit also broke
+// something unrelated: the rule named is the one the edit was written to break.
+function contractRejects(label, locale, edit, rule) {
+  cases += 1;
+  const packet = clone();
+  const before = packet.testFlight.whatToTest[locale];
+  const after = edit(before);
+  if (typeof after !== "string" || after === before) {
+    bad(label, "the edit was a no-op; the contract rule it targets was never exercised");
+    return;
+  }
+  packet.testFlight.whatToTest[locale] = after;
+  const found = notesContractFindings(packet);
+  if (!found.includes(`${locale}:${rule}`)) {
+    bad(label, `expected ${locale}:${rule}, found [${found.join(", ")}]`);
+    return;
+  }
+  ok(label);
+}
+
+// `replaceOnce` refuses a target that is absent or ambiguous, so a later wording
+// change cannot quietly turn one of these cases into a no-op or a different edit.
+function replaceOnce(text, from, to) {
+  const parts = text.split(from);
+  return parts.length === 2 ? parts.join(to) : undefined;
+}
+
+// Purchases and restores: C03 is still open.
+contractRejects(
+  "What to Test asking testers to cancel a StoreKit restore again",
+  "en-US",
+  (t) => replaceOnce(t, "then open, share and export it.", "then open, share and export it. Cancel a StoreKit restore without changing your entitlement."),
+  "purchase-step",
+);
+contractRejects(
+  "a restore instruction camouflaged by a negation later in the sentence",
+  "en-US",
+  (t) => replaceOnce(t, "C. Receive an Inbox file", "C. Restore purchases, but do not buy anything. Receive an Inbox file"),
+  "purchase-step",
+);
+contractRejects(
+  "a sandbox purchase added as a step",
+  "en-US",
+  (t) => replaceOnce(t, "8. As before:", "8. Make a sandbox purchase of Plus. As before:"),
+  "purchase-step",
+);
+contractRejects(
+  "the English text claiming purchase verification is done",
+  "en-US",
+  (t) => replaceOnce(t, "but sandbox purchase and cancellation verification is still pending", "and sandbox purchase and cancellation have been verified"),
+  "c03-pending",
+);
+contractRejects(
+  "the English text dropping the do-not-purchase instruction",
+  "en-US",
+  (t) => replaceOnce(t, " This round does not cover it, so do not make a purchase or restore purchases.", ""),
+  "no-purchase",
+);
+contractRejects(
+  "the Chinese text inviting a purchase and a restore",
+  "zh-Hans",
+  (t) => replaceOnce(t, "请勿购买，也不要恢复购买", "请购买一个订阅，并恢复购买"),
+  "purchase-step",
+);
+contractRejects(
+  "the Chinese text bringing back the StoreKit restore step",
+  "zh-Hans",
+  (t) => replaceOnce(t, "接收收件箱文件后打开、分享、导出。", "接收收件箱文件后打开、分享、导出。取消 StoreKit 恢复时权益不得改变。"),
+  "purchase-step",
+);
+contractRejects(
+  "the Chinese text claiming purchase acceptance is complete",
+  "zh-Hans",
+  (t) => replaceOnce(t, "但沙盒购买与取消的验收尚未完成", "沙盒购买与取消的验收已经通过"),
+  "c03-pending",
+);
+contractRejects(
+  "the Chinese text dropping the do-not-restore instruction",
+  "zh-Hans",
+  (t) => replaceOnce(t, "，也不要恢复购买", ""),
+  "no-purchase",
+);
+
+// Networks: the owner's devices have Wi-Fi only.
+contractRejects(
+  "the English step 4 made a mandatory Wi-Fi-to-cellular switch again",
+  "en-US",
+  (t) => replaceOnce(t, "4. Optional, needs a second network: change networks during that transfer and report whether it recovers or ends, and what the app said.",
+    "4. Change networks during that long transfer. While a large cross-network transfer is running, switch the iPhone between Wi-Fi and cellular. Report whether it recovers or ends."),
+  "cellular-optional",
+);
+contractRejects(
+  "the English step 4 losing only its optional marker",
+  "en-US",
+  (t) => replaceOnce(t, "4. Optional, needs a second network: change networks", "4. Change networks"),
+  "network-optional",
+);
+contractRejects(
+  "the Chinese step 4 made a mandatory Wi-Fi-to-cellular switch again",
+  "zh-Hans",
+  (t) => replaceOnce(t, "4. 可选，仅在有第二个网络时：在该传输中切换网络", "4. 在该长传输过程中切换网络。把 iPhone 在 Wi-Fi 与蜂窝网络之间切换"),
+  "cellular-optional",
+);
+contractRejects(
+  "the Chinese step 4 losing only its optional marker",
+  "zh-Hans",
+  (t) => replaceOnce(t, "4. 可选，仅在有第二个网络时：在该传输中切换网络", "4. 在该传输中切换网络"),
+  "network-optional",
+);
+contractRejects(
+  "the English text claiming a same-Wi-Fi pairing proves the cross-network path",
+  "en-US",
+  (t) => replaceOnce(t, "does not prove a real cross-network path", "proves the real cross-network path"),
+  "wan-truth",
+);
+contractRejects(
+  "the Chinese text claiming a same-Wi-Fi pairing proves the cross-network path",
+  "zh-Hans",
+  (t) => replaceOnce(t, "不能证明真实的跨网络路径", "可以证明真实的跨网络路径"),
+  "wan-truth",
+);
+
+// Scope and identity.
+contractRejects(
+  "the English text no longer saying internal testing only",
+  "en-US",
+  (t) => replaceOnce(t, " For internal testing only.", ""),
+  "internal-only",
+);
+contractRejects(
+  "the Chinese text no longer saying internal testing only",
+  "zh-Hans",
+  (t) => replaceOnce(t, "，仅供内部测试。", "。"),
+  "internal-only",
+);
+contractRejects(
+  "the previous build no longer named as (10)",
+  "en-US",
+  (t) => replaceOnce(t, "compared with the previous build (10)", "compared with the previous build"),
+  "identity",
+);
+
+// Coverage of the native changes since the draft.
+contractRejects(
+  "the interrupted Device Inbox send no longer promised not to upload again",
+  "en-US",
+  (t) => replaceOnce(t, " and never upload again by itself", ""),
+  "lost-finalize",
+);
+contractRejects(
+  "the unconfirmed-upload message no longer described",
+  "zh-Hans",
+  (t) => replaceOnce(t, "若提示无法确认上传是否完成，重试应向服务器确认。", ""),
+  "lost-finalize",
+);
+contractRejects(
+  "the relaunched sender no longer expected to keep following its delivery",
+  "en-US",
+  (t) => replaceOnce(t, "E. Send through Device Inbox to a device that is offline, then force-quit and reopen the sender. The delivery must still be listed and update once the other device receives it.\n", ""),
+  "tracking",
+);
+contractRejects(
+  "the Chinese relaunch check left without its expected update",
+  "zh-Hans",
+  (t) => replaceOnce(t, "这项投递仍应列出，并在对方接收后更新。", "这项投递会消失。"),
+  "tracking",
+);
+contractRejects(
+  "the copied stored link no longer kept off Universal Clipboard",
+  "en-US",
+  (t) => replaceOnce(t, ", and the link must not appear on your other devices through Universal Clipboard", ""),
+  "local-copy",
+);
+contractRejects(
+  "the Chinese copied link no longer said to expire",
+  "zh-Hans",
+  (t) => replaceOnce(t, "10 分钟内可在本机粘贴，并且", ""),
+  "local-copy",
+);
+contractRejects(
+  "a link listed after an interrupted finish no longer required to open",
+  "en-US",
+  (t) => replaceOnce(t, "any link it then lists must open", "any link it then lists may not open"),
+  "link-salvage",
+);
+contractRejects(
+  "a send found in two places no longer said to delete nothing",
+  "zh-Hans",
+  (t) => replaceOnce(t, "说明没有删除任何内容，", ""),
+  "conflict",
+);
+contractRejects(
+  "the discard clean-up no longer mentioned",
+  "en-US",
+  (t) => replaceOnce(t, " stricter clean-up when a send is discarded,", ""),
+  "discard-cleanup",
+);
+contractRejects(
+  "the Chinese discard clean-up no longer mentioned",
+  "zh-Hans",
+  (t) => replaceOnce(t, "丢弃发送时的清理更严格；", ""),
+  "discard-cleanup",
+);
+
+contractRejects(
+  "the English copied link no longer said to expire",
+  "en-US",
+  (t) => replaceOnce(t, " for up to 10 minutes", ""),
+  "local-copy",
+);
+
+// And the limits the validator itself owns, exercised on THIS text: the round's
+// additions are what pushed the English draft to its ceiling, so the ceiling is
+// proven against the shipped wording rather than assumed.
+for (const locale of ["en-US", "zh-Hans"]) {
+  rejects(
+    `the ${locale} What to Test one character past Apple's 4000`,
+    (p) => {
+      const text = p.testFlight.whatToTest[locale];
+      p.testFlight.whatToTest[locale] = text + (locale === "en-US" ? "x" : "测").repeat(4001 - Array.from(text).length);
+    },
+    `testFlight.whatToTest.${locale}: is 4001 characters, over Apple's limit of 4000`,
+  );
+}
+
+rejects(
+  "the English What to Test naming the previous build by its version",
+  (p) => {
+    p.testFlight.whatToTest["en-US"] = p.testFlight.whatToTest["en-US"].replace("the previous build (10)", "the previous build 0.4.1 (10)");
+  },
+  "testFlight.whatToTest.en-US: names version '0.4.1'",
+);
+
+rejects(
+  "the English What to Test promising background receiving",
+  (p) => {
+    p.testFlight.whatToTest["en-US"] = p.testFlight.whatToTest["en-US"].replace(
+      "Relayium transfers only while it is open and in the foreground.",
+      "Relayium now receives files in the background.",
+    );
+  },
+  "testFlight.whatToTest.en-US: makes a background-receiving claim",
+);
+
+rejects(
+  "the English What to Test losing its two-device disclosure",
+  (p) => {
+    p.testFlight.whatToTest["en-US"] = p.testFlight.whatToTest["en-US"].replaceAll("two devices", "devices");
+  },
+  "testFlight.whatToTest.en-US: must state 'two devices'",
+);
+
+rejects(
+  "the Chinese What to Test losing its Files disclosure",
+  (p) => {
+    p.testFlight.whatToTest["zh-Hans"] = p.testFlight.whatToTest["zh-Hans"].replaceAll("文件", "内容");
+  },
+  "testFlight.whatToTest.zh-Hans: must state '文件'",
 );
 
 // ── the CLI contract ─────────────────────────────────────────────────────────

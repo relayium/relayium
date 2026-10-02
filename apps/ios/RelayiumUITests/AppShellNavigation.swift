@@ -219,13 +219,30 @@ extension XCTestCase {
             XCTAssertTrue(row.waitForExistence(timeout: 10),
                           "the sidebar has no \(surface.id) destination", file: file, line: line)
         }
+        // nil unless this is a Debug build whose launch carries BOTH
+        // `--relayium-ui-testing` and the trace flag — the app's own gate — and
+        // then nothing below differs from a plain tap-and-wait. When it is not
+        // nil, the before-tap record spends real time querying and capturing
+        // before the tap, so an instrumented run is not timing-identical to an
+        // ordinary one: a pass with the trace on does not show the original
+        // failure is fixed.
+        let diagnostics = NavigationDiagnostics(requested: surface, row: row, in: app)
+        diagnostics?.record(.beforeTap)
         row.tap()
         // SwiftUI may replace the labelled tab accessibility element with its
         // selected icon after the tap, so holding the old element and waiting on
         // `selected == true` observes a stale object even though the real
         // destination rendered. The navigation bar is the user-visible task
         // state, so it is the synchronization point and the assertion.
-        XCTAssertTrue(app.navigationBars[surface.title].waitForExistence(timeout: 15),
+        //
+        // The one tap and the one 15-second wait are the original ones. The
+        // wait's answer is captured before the after-wait record is collected
+        // and is what the assertion judges, so time spent collecting AFTER the
+        // wait cannot turn a destination that missed its 15 seconds into a
+        // pass. (Collection BEFORE the tap can still shift when the tap lands.)
+        let rendered = app.navigationBars[surface.title].waitForExistence(timeout: 15)
+        diagnostics?.record(.afterWait(rendered: rendered))
+        XCTAssertTrue(rendered,
                       "\(surface.id) was selected but its screen did not render",
                       file: file, line: line)
         return row
@@ -274,5 +291,200 @@ extension XCTestCase {
                       "opening the receiving-consent row did not reveal its control",
                       file: file, line: line)
         return policy
+    }
+}
+
+// MARK: - opt-in navigation diagnostics
+
+extension Shell {
+    /// Opts ONE launch in to the app's navigation trace. The app honours it only
+    /// in a Debug build and only beside `--relayium-ui-testing`; the same
+    /// string is `NavigationTrace.argument` in `RootView.swift`.
+    static let navigationTraceArgument = "--relayium-ui-testing-navigation-trace"
+    /// The offline acceptance flag the app's trace gate also requires.
+    static let uiTestingArgument = "--relayium-ui-testing"
+    /// The app's 1-point trace element, `NavigationTrace.identifier`.
+    static let navigationTraceIdentifier = "relayium-navigation-trace"
+}
+
+/// Evidence around one `open(_:in:)` tap, for a launch that asked for it.
+///
+/// It exists for one hosted failure: a tap at the Device Inbox tab's centre
+/// after which Nearby stayed selected. What it records is what that failure
+/// could not answer — the row's frame, hittability and selected state before
+/// the tap, the tab buttons' state before and after, the windows and
+/// navigation bars, a screenshot, and the app's own trace of whether the
+/// selection setter ran.
+///
+/// **Gate.** The same as the app's: a Debug build, and a launch carrying BOTH
+/// `--relayium-ui-testing` and `--relayium-ui-testing-navigation-trace`.
+/// Either flag alone, or a Release build, yields nil and records nothing — so
+/// no screenshot or accessibility text is collected from a launch that is not
+/// the offline acceptance launch.
+///
+/// **What it can and cannot change.** It never taps, waits, scrolls, retries
+/// or asserts, and it reads through `snapshot()`, which throws rather than
+/// recording a failure; `isHittable` is read only before the tap, on the row
+/// `open` has just waited for — the one live getter it uses. It is
+/// NOT free of timing effects: the before-tap queries, `isHittable` and
+/// screenshot take real time before the tap is sent, and that can change when
+/// the tap lands relative to the app's own work. What it preserves is the
+/// original single tap, the original 15-second wait, and the rule that the
+/// assertion judges the wait's own captured answer.
+///
+/// **Bounds.** At most `maxVisited` nodes are walked in the tab bar, every
+/// field is clipped to `maxField` characters, and the whole text attachment to
+/// `maxText`; each truncation is marked. The app trace is fetched by its
+/// identifier, not by reading the hierarchy's text. Attachments are kept on
+/// success too, because a passing run's trace is the comparison a failing one
+/// needs; each call adds one text file and one screenshot.
+struct NavigationDiagnostics {
+    enum Phase {
+        case beforeTap
+        case afterWait(rendered: Bool)
+
+        var name: String {
+            switch self {
+            case .beforeTap: return "before-tap"
+            case .afterWait(let rendered): return rendered ? "after-wait-rendered"
+                                                           : "after-wait-not-rendered"
+            }
+        }
+    }
+
+    static let maxVisited = 128
+    static let maxTabButtons = 12
+    static let maxField = 160
+    static let maxTrace = 8_192
+    static let maxText = 24_576
+
+    private let requested: Shell.Surface
+    private let row: XCUIElement
+    private let app: XCUIApplication
+
+    /// nil unless the gate above is open.
+    init?(requested: Shell.Surface, row: XCUIElement, in app: XCUIApplication) {
+        guard Self.isEnabled(launchArguments: app.launchArguments) else { return nil }
+        self.requested = requested
+        self.row = row
+        self.app = app
+    }
+
+    /// The gate, separate so it reads as one rule: Debug, and BOTH flags.
+    static func isEnabled(launchArguments: [String]) -> Bool {
+        #if DEBUG
+        return launchArguments.contains(Shell.uiTestingArgument)
+            && launchArguments.contains(Shell.navigationTraceArgument)
+        #else
+        return false
+        #endif
+    }
+
+    func record(_ phase: Phase) {
+        let name = "navigation-\(requested.id)-\(phase.name)"
+        var lines = ["requested=\(requested.id) title=\(requested.title) phase=\(phase.name)",
+                     "uptime=\(String(format: "%.3f", ProcessInfo.processInfo.systemUptime))"]
+        if let row = try? row.snapshot() {
+            lines.append("row " + Self.describe(row))
+            if case .beforeTap = phase { lines.append("row hittable=\(self.row.isHittable)") }
+        } else {
+            lines.append("row unresolved")
+        }
+        lines += Self.tabButtons(in: app)
+        lines += Self.windows(in: app, limit: 4)
+        lines += Self.navigationBars(in: app, limit: 4)
+        if let trace = try? app.descendants(matching: .any)[Shell.navigationTraceIdentifier]
+            .firstMatch.snapshot() {
+            lines.append("app-trace " + Self.clip(String(describing: trace.value ?? "-"),
+                                                  to: Self.maxTrace))
+        } else {
+            lines.append("app-trace unresolved")
+        }
+        XCTContext.runActivity(named: name) { activity in
+            let text = XCTAttachment(string: Self.clip(lines.joined(separator: "\n"),
+                                                       to: Self.maxText))
+            text.name = name + ".txt"
+            text.lifetime = .keepAlways
+            activity.add(text)
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = name + ".png"
+            shot.lifetime = .keepAlways
+            activity.add(shot)
+        }
+    }
+
+    /// `text` unchanged when it fits, otherwise its first `limit` characters
+    /// and a marker saying how much was dropped.
+    static func clip(_ text: String, to limit: Int) -> String {
+        guard text.count > limit else { return text }
+        return String(text.prefix(limit)) + "…[truncated \(text.count - limit) chars]"
+    }
+
+    private static func describe(_ e: XCUIElementSnapshot) -> String {
+        "type=\(e.elementType.rawValue) id=\(clip(e.identifier, to: maxField)) "
+            + "label=\(clip(e.label, to: maxField)) "
+            + "selected=\(e.isSelected) enabled=\(e.isEnabled) frame=\(e.frame)"
+    }
+
+    /// The tab bar's buttons, in order, from one snapshot of the bar alone —
+    /// never the whole app. Breadth-first with TWO caps: buttons kept, and
+    /// nodes visited, so a bar with arbitrarily many non-button descendants
+    /// still stops, and says so.
+    private static func tabButtons(in app: XCUIApplication) -> [String] {
+        guard let bar = try? app.tabBars.firstMatch.snapshot() else { return ["tabbar unresolved"] }
+        var buttons: [XCUIElementSnapshot] = []
+        var queue = bar.children
+        var visited = 0
+        while !queue.isEmpty, buttons.count < maxTabButtons, visited < maxVisited {
+            let next = queue.removeFirst()
+            visited += 1
+            if next.elementType == .button { buttons.append(next) } else { queue += next.children }
+        }
+        let truncated = !queue.isEmpty
+            ? " truncated(visited=\(visited) pending=\(queue.count))" : ""
+        return ["tabbar frame=\(bar.frame) buttons=\(buttons.count)\(truncated)"]
+            + buttons.enumerated().map { "tab[\($0.offset)] " + describe($0.element) }
+    }
+
+    /// Window count, and the first `limit` windows' own top-level metadata.
+    ///
+    /// Read through `try? snapshot()` rather than live getters: `exists` then
+    /// `frame` is two resolutions, and a window gone between them makes `frame`
+    /// record an XCTest failure — which, before the tap, would abort the test
+    /// before its original tap, and after the wait would turn a rendered
+    /// destination into a FAIL. A snapshot that throws is `unresolved` instead.
+    ///
+    /// Bounded in what is RECORDED, not in what XCTest fetches: taking a
+    /// window's snapshot may materialise the hierarchy under it inside the
+    /// framework. Only the window's own fields are read — `children` is never
+    /// touched — and no more than `limit` windows are taken.
+    private static func windows(in app: XCUIApplication, limit: Int) -> [String] {
+        let query = app.windows
+        let count = query.count
+        var lines = ["windows count=\(count)"]
+        for index in 0..<min(count, limit) {
+            if let window = try? query.element(boundBy: index).snapshot() {
+                lines.append("window[\(index)] " + describe(window))
+            } else {
+                lines.append("window[\(index)] unresolved")
+            }
+        }
+        return lines
+    }
+
+    /// Navigation bars: each bar's own snapshot (a bar's subtree is its title
+    /// and items), top-level fields only, clipped.
+    private static func navigationBars(in app: XCUIApplication, limit: Int) -> [String] {
+        let query = app.navigationBars
+        let count = query.count
+        var lines = ["navbars count=\(count)"]
+        for index in 0..<min(count, limit) {
+            if let e = try? query.element(boundBy: index).snapshot() {
+                lines.append("navbar[\(index)] " + describe(e))
+            } else {
+                lines.append("navbar[\(index)] unresolved")
+            }
+        }
+        return lines
     }
 }

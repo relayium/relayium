@@ -37,6 +37,7 @@ import {
   CANONICAL_JOB_CONDITIONS,
   CANONICAL_SCREEN_JOB,
   CANONICAL_WITNESS_STEPS,
+  LEGACY_ADOPTED_UI_SMOKE_CONDITIONS,
   evidenceIdentity,
   Refused,
   Unavailable,
@@ -213,6 +214,21 @@ function adoptedText(legacy = LEGACY_WORKFLOW) {
   }
   return out.join("\n");
 }
+
+/**
+ * `text` with exactly one occurrence of `from` replaced. A missing or repeated
+ * anchor THROWS: a mutation whose anchor went stale must not pass as a no-op.
+ */
+function replaceOnce(text, from, to) {
+  const n = text.split(from).length - 1;
+  if (n !== 1) throw new Error(`stale anchor: ${JSON.stringify(from.slice(0, 80))} occurs ${n} time(s)`);
+  return text.replace(from, to);
+}
+/** The adopted ui-smoke condition triple as one text block (current or frozen legacy). */
+const UI_SMOKE_TRIPLE = (lines) => `  ui-smoke:\n${lines.join("\n")}\n`;
+/** A canonical adoption whose ui-smoke still carries the frozen pre-change triple. */
+const legacyUiSmokeText = () => replaceOnce(adoptedText(), UI_SMOKE_TRIPLE(CANONICAL_JOB_CONDITIONS["ui-smoke"]),
+  UI_SMOKE_TRIPLE(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS));
 
 /** A complete, valid reuse world. Every case mutates one thing. */
 function reuseWorld({ adopted = false } = {}) {
@@ -777,13 +793,16 @@ async function executionCases() {
   for (const [name, adopted, shape, jobs, mutate] of [
     ["a legacy five-job full producer", false, "legacy", 5, () => {}],
     ["a canonical adopted producer (screen no, certify skipped) that executed natively", true, "adopted", 8, () => {}],
+    // Built before ui-smoke stopped waiting for test: the frozen legacy triple, whole.
+    ["an adopted producer under the frozen legacy ui-smoke triple", true, "adopted", 8, (w) => { w.workflowText = legacyUiSmokeText(); }],
     ["a canonical adopted producer whose screen failed (never red)", true, "adopted", 8, (w) => { jobOf(w, "screen").conclusion = "failure"; }],
     ["a canonical adopted producer whose screen was skipped", true, "adopted", 8, (w) => { jobOf(w, "screen").conclusion = "skipped"; }],
     ["a canonical adopted producer whose certify ran but the proof did not cover", true, "adopted", 8, (w) => { jobOf(w, "certify-macos").conclusion = "success"; }],
     ["a canonical adopted producer whose certify failed (never red)", true, "adopted", 8, (w) => { jobOf(w, "certify-macos").conclusion = "failure"; }],
   ]) {
     const w = reuseWorld({ adopted });
-    mutate(w);
+    // A stale anchor throws (never a silent no-op); it is reported, not fatal to the suite.
+    try { mutate(w); } catch (err) { check(false, `execution: ${name}: ${err.message}`); continue; }
     const got = await decideIn(w);
     check(got.value?.source === "reuse" && got.value.evidence.workflow.shape === shape
       && got.value.evidence.jobs.length === jobs,
@@ -860,14 +879,16 @@ async function executionCases() {
     ["a non-canonical adoption (outputs promoted from verify, not the handover)", true, (w) => { w.workflowText = w.workflowText.replace("      reuse: ${{ steps.handover.outputs.reuse }}", "      reuse: ${{ steps.verify.outputs.reuse }}"); }, /not the canonical one/],
     ["a non-canonical adoption (contract on implicit success())", true, (w) => { w.workflowText = w.workflowText.replace(/(  contract:\n(?:.*\n)*?)    if: \$\{\{ !cancelled\(\) \}\}\n/, "$1"); }, /not the canonical one/],
     ["a non-canonical adoption (signed-build without !cancelled())", true, (w) => { const at = "  signed-build:\n" + CANONICAL_JOB_CONDITIONS["signed-build"].join("\n"); w.workflowText = w.workflowText.replace(at, at.replace("${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (", "${{ (")); }, /not the canonical one/],
-    ["a non-canonical adoption (ui-smoke stops waiting for its own gates)", true, (w) => { w.workflowText = w.workflowText.replace("    needs: [test, contract, evidence]", "    needs: evidence"); }, /not the canonical one/],
+    ["a non-canonical adoption (ui-smoke stops waiting for its own gates)", true, (w) => { w.workflowText = replaceOnce(w.workflowText, "    needs: [contract, evidence]", "    needs: evidence"); }, /not the canonical one/],
+    ["a non-canonical adoption (legacy ui-smoke needs, current condition)", true, (w) => { w.workflowText = replaceOnce(w.workflowText, "    needs: [contract, evidence]", LEGACY_ADOPTED_UI_SMOKE_CONDITIONS[0]); }, /not the canonical one/],
+    ["a non-canonical adoption (current ui-smoke needs, legacy condition)", true, (w) => { w.workflowText = replaceOnce(w.workflowText, CANONICAL_JOB_CONDITIONS["ui-smoke"][1], LEGACY_ADOPTED_UI_SMOKE_CONDITIONS[1]); }, /not the canonical one/],
     ["the revision-3 six-job adoption (no screen, no certify, no handover)", true, (w) => { w.workflowText = w.workflowText.replace(CANONICAL_SCREEN_JOB.join("\n") + "\n" + CANONICAL_CERTIFY_JOB.join("\n") + "\n", ""); }, /not the canonical one/],
     ["a release fallback (workflow_dispatch) run, full but not a push", true, (w) => { w.runs[0] = { ...w.run, event: "workflow_dispatch" }; }, /no push run of \.github\/workflows\/macos\.yml on main exists/],
   ];
   for (const [name, adopted, mutate, reason] of cases) {
     for (const mode of ["auto", "reuse"]) {
       const w = reuseWorld({ adopted });
-      mutate(w);
+      try { mutate(w); } catch (err) { check(false, `execution ${mode}: ${name}: ${err.message}`); continue; }
       const got = await decideIn(w, { mode });
       if (mode === "auto") {
         check(got.value?.source === "build",
@@ -897,6 +918,41 @@ async function executionCases() {
   // The shape judge itself, and agreement with the adoption generator.
   check(workflowShape(LEGACY_WORKFLOW) === "legacy", "shape: this tree's macos.yml is not judged legacy");
   check(workflowShape(adoptedText()) === "adopted", "shape: the canonical adoption is not judged adopted");
+  // ui-smoke: the current triple or the frozen legacy one, each WHOLE; no mix, no weaker condition.
+  {
+    let legacyShape;
+    try { legacyShape = workflowShape(legacyUiSmokeText()); } catch (err) { legacyShape = `unbuildable (${err.message})`; }
+    check(legacyShape === "adopted", `shape: the frozen legacy ui-smoke triple is not judged adopted (got ${legacyShape})`);
+  }
+  check(JSON.stringify(CANONICAL_JOB_CONDITIONS["ui-smoke"]) !== JSON.stringify(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS)
+    && Object.isFrozen(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS), "shape: the legacy ui-smoke triple is not a separate frozen constant");
+  {
+    const [needs, cond] = CANONICAL_JOB_CONDITIONS["ui-smoke"];
+    const fork = " && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)";
+    for (const [what, from, to] of [
+      ["legacy needs with the current condition", needs, LEGACY_ADOPTED_UI_SMOKE_CONDITIONS[0]],
+      ["current needs with the legacy condition", cond, LEGACY_ADOPTED_UI_SMOKE_CONDITIONS[1]],
+      ["the contract term removed", cond, cond.replace(" && needs.contract.result == 'success'", "")],
+      ["the fork guard removed", cond, cond.replace(fork, "")],
+      ["the fork guard unparenthesized", cond, cond.replace(fork, fork.replace(" && (", " && ").replace(/\)$/, ""))],
+      ["!cancelled() removed", cond, cond.replace("!cancelled() && ", "")],
+      ["needs without contract", needs, "    needs: evidence"],
+      ["needs with test only re-added", needs, "    needs: [test, contract, evidence]"],
+    ]) {
+      check(from !== to, `shape: the ui-smoke control "${what}" changes nothing (stale anchor)`);
+      let text = null;
+      try { text = replaceOnce(adoptedText(), `  ui-smoke:\n${needs}\n${cond}\n`, `  ui-smoke:\n${needs === from ? to : needs}\n${cond === from ? to : cond}\n`); } catch (err) { check(false, `shape: ${what}: ${err.message}`); }
+      if (text !== null) check(workflowShape(text) === "non-canonical", `shape: ui-smoke with ${what} is judged ${workflowShape(text)}, want non-canonical`);
+    }
+  }
+  // The legacy allowance is the verifier's alone: the live workflow carries the CURRENT triple.
+  {
+    const live = LIVE_WORKFLOW.split("\n");
+    const at = live.indexOf("  ui-smoke:");
+    const triple = at < 0 ? [] : live.slice(at + 1, live.indexOf("    steps:", at)).filter((l) => /^ {4}(needs|if|runs-on):/.test(l));
+    check(JSON.stringify(triple) === JSON.stringify(CANONICAL_JOB_CONDITIONS["ui-smoke"]),
+      `shape: the live macos.yml ui-smoke is ${JSON.stringify(triple)}, not the current triple (the legacy one is for old producers only)`);
+  }
   check(workflowShape(adoptedText().replace("  screen:\n", "  screen:\n    # a new comment\n")) === "adopted"
     && workflowShape(adoptedText().replace("  evidence:\n", "  evidence:\n    # a new comment\n")) === "adopted"
     && workflowShape(adoptedText().replace("    steps:\n", "    steps:\n      # a new comment\n")) === "adopted",

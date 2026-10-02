@@ -355,7 +355,10 @@ jobs:
     # or publish_release. Everything else (every push, pull request and
     # merge-gate call, which passes no inputs) only checks out, and spent ~7
     # minutes queueing for a macOS runner to do it (run 36736501756: 13 s of
-    # work) while `ui-smoke` and `signed-build`, which need it, waited.
+    # work) while `ui-smoke` and `signed-build`, which need it, waited. Since
+    # `ui-smoke` stopped waiting for `test`, this job is the ONLY thing the UI
+    # shards wait for besides `evidence`, so its cheap runner is on their
+    # critical path.
     # `inputs.release_version` is truthy exactly when `-n` is true; on push
     # and pull_request `inputs` is empty, so both inputs are falsy. The
     # step's first release-branch line refuses a non-macOS runner, so a
@@ -549,9 +552,20 @@ jobs:
   # skip cleanly.
   # The complete product-flow suite is split only at XCTest class boundaries.
   # Both shards are mandatory; neither changes, skips, or weakens a test.
+  #
+  # It waits for `contract`, NOT for `test`. `contract` is still the gate in
+  # front of the Developer ID key import below, so a contract that did not
+  # pass still skips both shards. `test` is not what authorises the key, and
+  # waiting for it serialised the whole lane: the UI shards could not start
+  # until the macOS unit suite finished (run 36968703508: contract ready at
+  # 05:24:28, test at 05:34:33). The cost is deliberate and bounded: when
+  # `test` is red, the two UI shards still run (13-17 minutes each) and the key
+  # is materialised in their temporary keychain before that verdict. A red
+  # `test` still fails this workflow, its caller (`merge-gate` and the release
+  # lane's `build`) and `signed-build`, which keeps BOTH `test` and `contract`.
   ui-smoke:
-    needs: [test, contract, evidence]
-    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [contract, evidence]
+    if: ${{ !cancelled() && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     strategy:
       fail-fast: false
       matrix:
