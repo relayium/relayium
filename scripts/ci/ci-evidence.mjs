@@ -534,11 +534,33 @@ export function realGit(args, cwd = process.cwd()) {
   return r.stdout;
 }
 
-/** HEAD's commit, tree and parents, read from git. */
+/**
+ * HEAD's commit, tree and parents, read from git. The parents come from the
+ * commit object's own header, not `%P`: in actions/checkout's default depth-1
+ * clone the parents are shallow boundaries, and `%P` reports none at all —
+ * while the raw `parent` lines, which the commit's SHA covers, are intact.
+ * Only the header (up to the first blank line) counts, in git's own order:
+ * one tree, its parents, then author and committer. A message that mentions a
+ * parent is not a parent.
+ */
 export function headFacts(git) {
-  const [sha, tree, parents = ""] = git(["show", "-s", "--format=%H%n%T%n%P", "HEAD"]).toString().trim().split("\n");
+  const [sha, tree] = git(["show", "-s", "--format=%H%n%T", "HEAD"]).toString().trim().split("\n");
   need(HEX40.test(sha ?? "") && HEX40.test(tree ?? ""), "git did not report HEAD's commit and tree");
-  return { sha, tree, parents: parents.split(" ").filter(Boolean) };
+  const raw = git(["cat-file", "commit", sha]).toString("utf8");
+  const end = raw.indexOf("\n\n");
+  need(end > 0, `commit ${sha} has no header`);
+  const lines = raw.slice(0, end).split("\n");
+  need(lines[0] === `tree ${tree}`, `commit ${sha}'s header does not open with its tree ${tree}`);
+  let i = 1;
+  const parents = [];
+  for (; lines[i]?.startsWith("parent "); i += 1) {
+    const parent = lines[i].slice("parent ".length);
+    need(HEX40.test(parent), `commit ${sha} has a malformed parent line ${JSON.stringify(lines[i])}`);
+    parents.push(parent);
+  }
+  need(lines[i]?.startsWith("author ") && lines[i + 1]?.startsWith("committer ")
+    && lines.slice(i).every((line) => !/^(tree|parent) /.test(line)), `commit ${sha}'s header is malformed`);
+  return { sha, tree, parents };
 }
 
 /**

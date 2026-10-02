@@ -41,7 +41,7 @@ import { deflateRawSync } from "node:zlib";
 
 import {
   FROZEN_REF, LIMITS, MANIFEST_SCHEMA, NATIVE_RELEASES_FILE, NoReuse, REGISTRY_FILE, SCOPE_FILE, confirm, crc32, gitHubApi,
-  listCounted, loadRegistry, main, produce, readSingleEntryZip, requiredJobs, validateManifest, validateWitness, witness,
+  headFacts, listCounted, loadRegistry, main, produce, realGit, readSingleEntryZip, requiredJobs, validateManifest, validateWitness, witness,
 } from "../ci/ci-evidence.mjs";
 import { CANDIDATE_REF } from "../release/macos-evidence.mjs";
 import { CANDIDATE_PATHS, OPTIONAL_GENERATED_PAGES } from "../../web/scripts/macos-release-candidate.mjs";
@@ -62,18 +62,60 @@ const check = (ok, message) => { checks += 1; if (!ok) failures.push(message); }
 const REPO = "relayium/relayium";
 const REPO_ID = 1282331342;
 const hex = (seed) => createHash("sha1").update(String(seed)).digest("hex");
-const MAIN = hex("main-commit");
-const TREE = hex("tree");
-const HEAD = hex("pr-head");
-const BASE = hex("pr-base");
-const MERGE = hex("synthetic-merge");
+const tmp = mkdtempSync(join(tmpdir(), "ci-evidence-test-"));
+
+/**
+ * git for building fixtures: this user's configuration, hooks, signing and
+ * clock never shape an object, so every SHA below is reproducible.
+ */
+const FIXTURE_GIT_ENV = {
+  ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t",
+  GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t", GIT_AUTHOR_DATE: "1790000000 +0000", GIT_COMMITTER_DATE: "1790000000 +0000",
+};
+function fixtureGit(args, cwd, input) {
+  const r = spawnSync("git", args, { cwd, env: FIXTURE_GIT_ENV, encoding: "utf8", input });
+  if (r.status !== 0) throw new Error(`fixture git ${args.join(" ")}: ${r.stderr}`);
+  return r.stdout.trim();
+}
+
+/**
+ * The world's commits are REAL git objects, so a shallow clone of them can be
+ * judged by the real git adapter against the same API world:
+ *   BASE  — main before the change, a root commit;
+ *   HEAD  — the pull request head, one commit on BASE;
+ *   MERGE — the synthetic merge `refs/pull/N/merge` the gate checks out: [BASE, HEAD];
+ *   MAIN  — main after it: one commit on BASE with the same TREE (the frozen
+ *           dispatch candidate too), whose MESSAGE names HEAD as a "parent" —
+ *           text after the header that no reader may take for one.
+ */
+const ORIGIN = join(tmp, "origin");
+const { BASE, HEAD, MERGE, MAIN, TREE } = (() => {
+  mkdirSync(ORIGIN);
+  fixtureGit(["init", "-q", "--object-format=sha1", "-b", "fixture"], ORIGIN);
+  const put = (path, text) => { mkdirSync(dirname(join(ORIGIN, path)), { recursive: true }); writeFileSync(join(ORIGIN, path), text); };
+  for (const id of Object.keys(REGISTRY.lanes)) put(`.github/workflows/${REGISTRY.lanes[id].workflow}`, `# ${id}\n`);
+  for (const path of ["server/main.go", "web/src/main.ts", "apps/ios/App.swift", "apps/mac/App.swift", "README.md"]) put(path, `${path}\n`);
+  fixtureGit(["add", "-A"], ORIGIN);
+  const baseTree = fixtureGit(["write-tree"], ORIGIN);
+  const base = fixtureGit(["commit-tree", baseTree, "-m", "base"], ORIGIN);
+  put("server/main.go", "package main\n");
+  put("web/src/main.ts", "export {};\n");
+  fixtureGit(["add", "-A"], ORIGIN);
+  const tree = fixtureGit(["write-tree"], ORIGIN);
+  const head = fixtureGit(["commit-tree", tree, "-p", base, "-m", "pull request head"], ORIGIN);
+  const merge = fixtureGit(["commit-tree", tree, "-p", base, "-p", head, "-m", "Merge pull request head into base"], ORIGIN);
+  const main = fixtureGit(["commit-tree", tree, "-p", base, "-F", "-"], ORIGIN, `release metadata\n\nparent ${head}\n`);
+  for (const [branch, sha] of [["base", base], ["head", head], ["merge", merge], ["main", main]]) {
+    fixtureGit(["update-ref", `refs/heads/${branch}`, sha], ORIGIN);
+  }
+  return { BASE: base, HEAD: head, MERGE: merge, MAIN: main, TREE: tree };
+})();
 const PR = 156;
 const RUN = 36873812806;
 const CUR_RUN = 36900000001;
 const ART = 11200000001;
 const TAGS_ART = 11200000002;
 const NOW = new Date("2026-10-01T15:00:00Z");
-const tmp = mkdtempSync(join(tmpdir(), "ci-evidence-test-"));
 
 const LANE_IDS = Object.keys(REGISTRY.lanes);
 const CONDITIONAL = ["web", "go", "macos", "ios", "ios-transfer-interop", "android", "android-interop", "windows",
@@ -314,10 +356,23 @@ function currentCerts(world, laneId, env) {
   return map;
 }
 
+/** A raw commit object as `git cat-file commit` prints it: header, blank line, message. */
+const rawCommit = (tree, parents, message = "fixture\n") => `tree ${tree}\n${parents.map((p) => `parent ${p}\n`).join("")}`
+  + "author t <t@t> 1790000000 +0000\ncommitter t <t@t> 1790000000 +0000\n\n" + message;
+
+/**
+ * git as the verifier calls it, with real git's semantics: `%H`/`%T` from the
+ * commit, the parents only in the raw object (a `world.gitRaw` replaces it).
+ */
 function gitFor(world, sha) {
   return (args) => {
     const cmd = args.join(" ");
+    if (cmd === "show -s --format=%H%n%T HEAD") return Buffer.from(`${sha}\n${world.gitTree}\n`);
+    // What a FULL clone prints. The verifier must not ask: a shallow one prints no parents (section 2e).
     if (cmd === "show -s --format=%H%n%T%n%P HEAD") return Buffer.from(`${sha}\n${world.gitTree}\n${world.gitParents ?? `${BASE} ${HEAD}`}\n`);
+    if (cmd === `cat-file commit ${sha}`) {
+      return Buffer.from(world.gitRaw ?? rawCommit(world.gitTree, (world.gitParents ?? `${BASE} ${HEAD}`).split(" ").filter(Boolean)));
+    }
     if (cmd === "ls-tree -r -z --full-tree HEAD") return Buffer.from(world.lsTree ?? LS_TREE);
     throw new Error(`mock git: unexpected ${cmd}`);
   };
@@ -423,7 +478,7 @@ function pushEnv(laneId, overrides = {}) {
 }
 
 async function runWitness(world, laneId, envOverrides = {}) {
-  const { hooks, zip, certPatch, currentPatch2, toolchainRegistry, tagsZipOverride, loadScope, ...data } = world;
+  const { hooks, zip, certPatch, currentPatch2, toolchainRegistry, tagsZipOverride, loadScope, git, ...data } = world;
   const w = structuredClone(data);
   w.hooks = hooks;
   w.zip = zip;
@@ -435,7 +490,7 @@ async function runWitness(world, laneId, envOverrides = {}) {
   const api = mockApi(w);
   const env = pushEnv(laneId, envOverrides);
   try {
-    const out = await witness({ env, api, git: gitFor(w, MAIN), registry: world.registry ?? REGISTRY, readFile: worldReadFile(world),
+    const out = await witness({ env, api, git: git ?? gitFor(w, MAIN), registry: world.registry ?? REGISTRY, readFile: worldReadFile(world),
       ...(world.loadScope ? { loadScope: world.loadScope } : {}), screen: world.screen === true,
       laneId, now: () => world.now, workflowsDir, toolchainRegistry: world.toolchainRegistry === undefined ? TOOLREG : world.toolchainRegistry,
       currentCertificates: world.noCurrentCerts ? undefined : currentCerts(w, laneId, env) });
@@ -741,10 +796,10 @@ const dispatchEnv = (patch = {}) => produceEnv({
   GITHUB_RUN_ID: String(DRUN), GITHUB_WORKFLOW_REF: `${REPO}/.github/workflows/merge-gate.yml@refs/heads/${FROZEN_BRANCH}`,
   CI_EVIDENCE_DISPATCH_MODE: "frozen-release-metadata", CI_EVIDENCE_DISPATCH_BASE: BASE, CI_EVIDENCE_DISPATCH_HEAD: MAIN, ...patch,
 });
-async function mintDispatch(world, envPatch) {
+async function mintDispatch(world, envPatch, git) {
   const { loadScope, ...w } = world;
   const pw = producerWorld(w);
-  return produce({ env: dispatchEnv(envPatch), api: mockApi(pw), git: gitFor(pw, MAIN), registry: REGISTRY,
+  return produce({ env: dispatchEnv(envPatch), api: mockApi(pw), git: git ?? gitFor(pw, MAIN), registry: REGISTRY,
     now: () => new Date("2026-10-01T14:29:30Z"), workflowsDir, readFile: worldReadFile(pw), ...(loadScope ? { loadScope } : {}) });
 }
 const dispatchManifest = await mintDispatch(dispatchBase());
@@ -1011,6 +1066,138 @@ for (const [name, overrides, expect] of [
 check(JSON.stringify(Object.keys(requiredJobs(REGISTRY.lanes.web, "false")).sort())
   === JSON.stringify(["device-inbox-e2e", "mixed-link-e2e", "scope", "sealed-box-interop"]),
 "requiredJobs(web, light=false) is not exactly the ungated jobs");
+
+// ── 2e. actions/checkout's real depth-1 clone, through the real git adapter ──
+//
+// The gate and every main push check out ONE commit: its parents are shallow
+// boundaries and `git show --format=%P` reports none, which once refused every
+// genuine candidate ("not exactly one commit on the dispatched base"). The raw
+// commit header still names them. Each case below clones the world's own
+// commits with `--depth 1` over file:// and drives produce and witness through
+// `realGit` against the matching API world.
+
+function shallowClone(branch) {
+  const dir = mkdtempSync(join(tmp, `shallow-${branch}-`));
+  fixtureGit(["clone", "-q", "--depth", "1", "--no-tags", "--branch", branch, `file://${ORIGIN}`, dir], tmp);
+  return dir;
+}
+const CLONES = Object.fromEntries(["base", "head", "merge", "main"].map((b) => [b, shallowClone(b)]));
+const realAt = (dir) => (args) => realGit(args, dir);
+const refusal = async (fn) => { try { await fn(); return null; } catch (err) { return err; } };
+
+for (const [branch, sha, parents] of [["merge", MERGE, [BASE, HEAD]], ["main", MAIN, [BASE]], ["head", HEAD, [BASE]]]) {
+  const dir = CLONES[branch];
+  const shallow = realGit(["rev-parse", "--is-shallow-repository"], dir).toString().trim();
+  const listed = realGit(["show", "-s", "--format=%P", "HEAD"], dir).toString().trim();
+  check(shallow === "true" && listed === "", `the ${branch} clone is not the depth-1 shape it stands for (shallow ${shallow}, %P "${listed}")`);
+  let facts;
+  try { facts = headFacts(realAt(dir)); } catch (err) { facts = { error: err.message }; }
+  check(facts.sha === sha && facts.tree === TREE && facts.parents.join() === parents.join(),
+    `headFacts read the depth-1 ${branch} clone as ${JSON.stringify(facts)}; want ${sha} on [${parents.join(", ")}]`);
+}
+{
+  let facts;
+  try { facts = headFacts(realAt(CLONES.base)); } catch (err) { facts = { error: err.message }; }
+  check(facts.sha === BASE && facts.parents?.length === 0, `headFacts read the root commit as ${JSON.stringify(facts)}`);
+}
+
+// The producer, both kinds of proof.
+// A refusal here is recorded, and the consumer then judges the mock-minted proof of the same world.
+const mintedOr = async (mintIt, fallback, what) => {
+  try { return await mintIt(); } catch (err) { check(false, `${what} was refused: ${err.message}`); return fallback; }
+};
+const shallowPull = await mintedOr(() => produce({ env: produceEnv(), api: mockApi(producerWorld(baseWorld())), git: realAt(CLONES.merge),
+  registry: REGISTRY, now: () => new Date("2026-10-01T14:29:30Z"), workflowsDir }), manifest, "the pull-request proof from a depth-1 merge checkout");
+check(shallowPull.checkout.sha === MERGE && shallowPull.checkout.tree === TREE && shallowPull.checkout.parents.join() === `${BASE},${HEAD}`,
+  `the pull-request proof from a depth-1 merge checkout recorded ${JSON.stringify(shallowPull.checkout)}`);
+const shallowDispatch = await mintedOr(() => mintDispatch(dispatchBase(), {}, realAt(CLONES.main)), dispatchManifest,
+  "the frozen proof from a depth-1 candidate checkout");
+check(shallowDispatch.checkout.sha === MAIN && shallowDispatch.checkout.parents.join() === BASE
+  && shallowDispatch.dispatch.base_sha === BASE && shallowDispatch.dispatch.head_sha === MAIN,
+`the frozen proof from a depth-1 candidate checkout recorded ${JSON.stringify(shallowDispatch.checkout)}`);
+
+// The consumer: a depth-1 main push witnesses the frozen candidate's proof.
+const shallowDispatchWorld = () => { const w = dispatchBase(); w.zip = zipManifest(shallowDispatch); w.git = realAt(CLONES.main); return w; };
+for (const laneId of LANE_IDS.filter((id) => !UNCERTIFIABLE_LANES.includes(id))) {
+  const r = await runWitness(shallowDispatchWorld(), laneId, laneId === "web" ? { CI_EVIDENCE_SCOPE_LIGHT: "true" } : {});
+  check(r.ok && r.witness.source.kind === "merge-gate-frozen-dispatch-full-run" && r.witness.target.sha === MAIN
+    && r.witness.target.tree === TREE,
+  `lane ${laneId}: a depth-1 main push refused the genuine frozen candidate: ${r.error?.message ?? JSON.stringify(r.witness?.source)}`);
+}
+{
+  const w = baseWorld();
+  w.zip = zipManifest(shallowPull);
+  w.git = realAt(CLONES.main);
+  const r = await runWitness(w, "go");
+  check(r.ok && r.witness.source.merge_sha === MERGE, `a depth-1 main push refused the pull-request proof: ${r.error?.message}`);
+}
+
+// Still strict: the real ancestry, not a substituted one, must be exactly right.
+for (const [name, clone, run, expect] of [
+  ["a frozen candidate on another base", "main", () => mintDispatch(dispatchBase(), { CI_EVIDENCE_DISPATCH_BASE: HEAD }, realAt(CLONES.main)),
+    /not exactly one commit on the dispatched base/],
+  ["a two-parent frozen candidate", "merge", () => mintDispatch(dispatchBase(), { GITHUB_SHA: MERGE, GITHUB_WORKFLOW_SHA: MERGE,
+    CI_EVIDENCE_DISPATCH_HEAD: MERGE }, realAt(CLONES.merge)), /not exactly one commit on the dispatched base/],
+  ["a root frozen candidate", "base", () => mintDispatch(dispatchBase(), { GITHUB_SHA: BASE, GITHUB_WORKFLOW_SHA: BASE,
+    CI_EVIDENCE_DISPATCH_HEAD: BASE, CI_EVIDENCE_DISPATCH_BASE: HEAD }, realAt(CLONES.base)), /not exactly one commit on the dispatched base/],
+  ["a frozen checkout of another commit", "merge", () => mintDispatch(dispatchBase(), {}, realAt(CLONES.merge)), /checked out .*, the dispatch is for/],
+  ["a pull-request proof from a one-parent checkout", "main", () => produce({ env: produceEnv({ GITHUB_SHA: MAIN, GITHUB_WORKFLOW_SHA: MAIN }),
+    api: mockApi(producerWorld(baseWorld())), git: realAt(CLONES.main), registry: REGISTRY, now: () => NOW, workflowsDir }),
+  /not a two-parent merge commit/],
+  ["a pull-request proof from a root checkout", "base", () => produce({ env: produceEnv({ GITHUB_SHA: BASE, GITHUB_WORKFLOW_SHA: BASE }),
+    api: mockApi(producerWorld(baseWorld())), git: realAt(CLONES.base), registry: REGISTRY, now: () => NOW, workflowsDir }),
+  /not a two-parent merge commit/],
+  ["a pull-request proof whose second parent is not the head", "merge", () => produce({
+    env: produceEnv({ GITHUB_EVENT_PATH: writeJson("pr-event-other-head.json", { pull_request: { number: PR, head: { sha: MAIN, repo: { id: REPO_ID } },
+      base: { sha: BASE, ref: "main", repo: { id: REPO_ID } } } }) }),
+    api: mockApi(producerWorld(baseWorld())), git: realAt(CLONES.merge), registry: REGISTRY, now: () => NOW, workflowsDir }),
+  /second parent is not the pull request head/],
+  ["a main push from another base", "main", async () => {
+    const r = await runWitness(shallowDispatchWorld(), "go", { GITHUB_EVENT_PATH: writeJson("push-shallow-other-base.json",
+      { ref: "refs/heads/main", after: MAIN, before: HEAD, created: false, deleted: false, forced: false, repository: { id: REPO_ID } }) });
+    if (!r.ok) throw r.error;
+  }, /main did not fast-forward by exactly one commit/],
+  ["a main push of a two-parent commit", "merge", async () => {
+    const w = shallowDispatchWorld();
+    w.git = realAt(CLONES.merge);
+    const r = await runWitness(w, "go");
+    if (!r.ok) throw r.error;
+  }, /checked out .*, the push is/],
+]) {
+  const got = await refusal(run);
+  check(got instanceof NoReuse && expect.test(got.message),
+    `depth-1 ${clone} clone, ${name}: want NoReuse ${expect}; got ${got ? got.message : "acceptance"}`);
+}
+
+// A header git itself does not write: refused, never repaired. Real objects,
+// stored without git's own checks, at a detached HEAD of a full repository.
+{
+  const dir = mkdtempSync(join(tmp, "malformed-"));
+  fixtureGit(["clone", "-q", `file://${ORIGIN}`, dir], tmp);
+  const author = "author t <t@t> 1790000000 +0000\ncommitter t <t@t> 1790000000 +0000\n";
+  for (const [name, raw, expect] of [
+    ["a parent line after the committer", `tree ${TREE}\nparent ${BASE}\n${author}parent ${HEAD}\n\nx\n`, /header is malformed/],
+    ["no committer", `tree ${TREE}\nparent ${BASE}\nauthor t <t@t> 1790000000 +0000\n\nx\n`, /header is malformed/],
+    ["a second tree", `tree ${TREE}\ntree ${TREE}\nparent ${BASE}\n${author}\nx\n`, /header is malformed/],
+  ]) {
+    const sha = fixtureGit(["hash-object", "-t", "commit", "--literally", "-w", "--stdin"], dir, raw);
+    fixtureGit(["update-ref", "--no-deref", "HEAD", sha], dir);
+    const got = await refusal(() => headFacts(realAt(dir)));
+    check(got instanceof NoReuse && expect.test(got.message), `a real commit with ${name}: want NoReuse ${expect}; got ${got ? got.message : "acceptance"}`);
+  }
+}
+
+// The same header rules on the mock, for shapes real git cannot be made to print.
+for (const [name, raw, expect] of [
+  ["a header naming another tree", rawCommit(hex("another-tree"), [BASE]), /does not open with its tree/],
+  ["a short parent", rawCommit(TREE, [BASE.slice(0, 12)]), /malformed parent line/],
+  ["an upper-case parent", rawCommit(TREE, [BASE.toUpperCase()]), /malformed parent line/],
+  ["no blank line after the header", rawCommit(TREE, [BASE]).replace("\n\n", "\n"), /has no header/],
+  ["a header that opens with a parent", `parent ${BASE}\ntree ${TREE}\nauthor a\ncommitter c\n\nx\n`, /does not open with its tree/],
+]) {
+  const got = await refusal(() => headFacts(gitFor({ gitTree: TREE, gitRaw: raw }, MAIN)));
+  check(got instanceof NoReuse && expect.test(got.message), `a mock commit with ${name}: want NoReuse ${expect}; got ${got ? got.message : "acceptance"}`);
+}
 
 // ── 3. produce, confirm, the archive and the schema ─────────────────────────
 
@@ -1460,5 +1647,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(`ci-evidence-test: OK (${checks} checks: `
-  + `${LANE_IDS.length - UNCERTIFIABLE_LANES.length} lanes reuse, ${UNCERTIFIABLE_LANES.length} uncertifiable refused; ${NEGATIVES.length} single-fact breaks refused; produce/confirm/zip/schema/registry refusals; HTTP CLI end to end; `
+  + `${LANE_IDS.length - UNCERTIFIABLE_LANES.length} lanes reuse, ${UNCERTIFIABLE_LANES.length} uncertifiable refused; ${NEGATIVES.length} single-fact breaks refused; produce/confirm/zip/schema/registry refusals; depth-1 real-git ancestry; HTTP CLI end to end; `
   + `${process.env.CI_EVIDENCE_TEST_SCOPE === "verifier" ? "guard projection controls skipped (verifier scope)" : `${PROJECTION_CONTROLS.length} guard projection controls`})`);
