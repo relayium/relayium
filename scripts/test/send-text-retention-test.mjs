@@ -8,6 +8,28 @@ import assert from "node:assert/strict";
 import article from "../../web/scripts/pages/content/articles/howto-send-text-between-devices.mjs";
 import { LANGS } from "../../web/scripts/pages/shared.mjs";
 
+// The README's text paragraph names three paths. The CLI one changed with the
+// published CLI v0.27.0: its text joined the pairing-code relay rule, and
+// direct-only became the limit of v0.26.0 and earlier and of an older CLI peer.
+// Line breaks in the README are layout, so the checks read it with runs of
+// whitespace collapsed.
+const FIRST_RELAYED_CLI = [0, 27, 0];
+const LAST_DIRECT_ONLY_CLI = "v0.26.0";
+const flat = (text) => text.replace(/\s+/g, " ");
+const atLeast = (version, floor) => {
+  const v = version.split(".").map(Number);
+  for (let i = 0; i < floor.length; i += 1) if (v[i] !== floor[i]) return v[i] > floor[i];
+  return true;
+};
+/** The CLI clause that follows the browser cross-network clause, up to its full stop. */
+function cliTextClause(readme) {
+  const anchor = "cross-network browser sessions use TURN that carries only ciphertext; ";
+  const at = readme.indexOf(anchor);
+  if (at < 0) return null;
+  const rest = readme.slice(at + anchor.length);
+  return rest.slice(0, rest.search(/\.(?:\s|$)/) + 1);
+}
+
 const NO_SERVER_HISTORY = {
   en: /Relayium servers keep no message bodies or server-side history/i,
   zh: /Relayium 服务器不保存消息正文或服务端历史/,
@@ -61,7 +83,21 @@ describe("text guide scopes storage claims to Relayium servers", () => {
     assert.ok(readme.includes("opens an independent end-to-end encrypted connection"));
     assert.ok(readme.includes("On a LAN, browser messages move directly"));
     assert.ok(readme.includes("cross-network browser sessions use TURN that carries only ciphertext"));
-    assert.ok(readme.includes("CLI text is direct-only"));
+    const r = flat(readme);
+    const clause = cliTextClause(r);
+    assert.ok(clause?.startsWith("CLI text "), "the CLI text clause no longer follows the browser cross-network clause");
+    const current = /^CLI text follows the pairing-code relay rule\b[^.]*? in the published CLI \(v(\d+\.\d+\.\d+)\)/.exec(clause);
+    assert.ok(current && atLeast(current[1], FIRST_RELAYED_CLI),
+      `the published CLI's text is not stated to follow the pairing-code relay rule: ${clause}`);
+    assert.ok(clause.includes(`direct-only in CLI ${LAST_DIRECT_ONLY_CLI} and earlier`),
+      `CLI text's direct-only limit lost its historical version scope: ${clause}`);
+    assert.ok(clause.includes("direct-only") && clause.slice(clause.indexOf("direct-only")).includes("with an older CLI peer"),
+      `CLI text's direct-only limit no longer covers an older CLI peer: ${clause}`);
+    for (const sentence of r.split(/(?<=[.!?])\s+/)) {
+      if (/\bCLI text\b/.test(sentence) && /direct-only/.test(sentence)) {
+        assert.ok(sentence.includes(`CLI ${LAST_DIRECT_ONLY_CLI} and earlier`), `unscoped CLI text direct-only claim: ${sentence}`);
+      }
+    }
     assert.ok(!readme.includes("a message session\nopens a peer-to-peer connection of its own"));
   });
 });
