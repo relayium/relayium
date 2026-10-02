@@ -5,6 +5,7 @@
     "jobs.<job-id>.checks: the EXACT check names that job reports on a main push (GitHub's own names, including matrix expansion and its 100-character truncation). On a pull request each is prefixed `<lane> / `.",
     "jobs.<job-id>.runner: the runner the job uses on an ordinary pull request (the run whose proof is reused); the verifier requires the source job's labels to equal [runner].",
     "jobs.<job-id>.mode: reuse (default; main may witness it) or fresh (never witnessed; it runs its original steps on every main push).",
+    "jobs.<job-id>.dispatchRunner: a FRESH job only. The runner it uses when the source run is one of the two strict merge-gate workflow_dispatch modes (frozen release-metadata, internal full candidate), whose event selects a different runner than a pull request does (macOS contract: its runs-on picks macos-15 for any dispatch). The verifier picks runner or dispatchRunner from the source run's own API-verified event, never accepts either; every job without it must run on runner under every source.",
     "jobs.<job-id>.freshSteps: in a reuse job, the steps that still run on the witness path (live vulnerability queries and what they need). Allowed only on ubuntu-latest jobs, so a witness never runs a platform command.",
     "scope: the lane's main-push obligation is event-sensitive. The witness reads <job>.outputs.<output> computed FRESH on main; when it is not exactly 'false' the gated jobs must have succeeded in the source run.",
     "externalInputs: non-tree inputs a job read. git-tags: <job> records the tag set it checked out (its own step, right after checkout) as artifact <artifactPrefix><attempt> holding <entry>; whenever <job> is required on main, the repository's current tag set must equal that recorded set.",
@@ -49,7 +50,7 @@
     "macos": {
       "workflow": "macos.yml",
       "jobs": {
-        "contract": { "checks": ["contract"], "runner": "ubuntu-latest" },
+        "contract": { "checks": ["contract"], "runner": "ubuntu-latest", "dispatchRunner": "macos-15", "mode": "fresh" },
         "test": { "checks": ["test"], "runner": "macos-15" },
         "ui-smoke": {
           "checks": [

@@ -250,6 +250,12 @@ export function loadRegistry(text) {
       `the registry job ${id}/${jobId} has malformed freshSteps`);
       need(!job.freshSteps || job.runner === "ubuntu-latest",
         `the registry job ${id}/${jobId} keeps steps fresh on ${job.runner}; a witness runs only on ubuntu-latest`);
+      // A second runner, for a dispatched source only, exists solely for a job
+      // whose own runs-on reads the event (macOS `contract`). Never on a job a
+      // witness may vouch for: a reused job is certified on ONE toolchain family.
+      need(job.dispatchRunner === undefined || (job.mode === "fresh" && typeof job.dispatchRunner === "string"
+        && /^[a-z0-9.-]+$/.test(job.dispatchRunner) && job.dispatchRunner !== job.runner),
+      `the registry job ${id}/${jobId} has a dispatchRunner but is not a fresh job with a second, different runner`);
     }
     if (lane.scope !== undefined) {
       const s = lane.scope;
@@ -1262,6 +1268,18 @@ async function judgedRunFacts({ env, api, git, registry, workflowsDir, repositor
 // ── witness ─────────────────────────────────────────────────────────────────
 
 /** The check names the CURRENT main push requires from the source run. */
+/**
+ * The ONE runner `job` must have reported in a source run of `sourceEvent`:
+ * `dispatchRunner` for a `workflow_dispatch` source when the registry names
+ * one, else `runner`. `sourceEvent` is the event the verifier re-read from the
+ * API for the source run and bound to its kind, never a caller's claim.
+ */
+export function expectedRunner(job, sourceEvent) {
+  need(sourceEvent === "pull_request" || sourceEvent === "workflow_dispatch",
+    `a source run of event ${JSON.stringify(sourceEvent)} selects no runner`);
+  return sourceEvent === "workflow_dispatch" && job.dispatchRunner !== undefined ? job.dispatchRunner : job.runner;
+}
+
 export function requiredJobs(lane, scopeValue) {
   const gated = new Set(lane.scope && scopeValue === "false" ? lane.scope.gates : []);
   const out = {};
@@ -1371,12 +1389,17 @@ export async function witness({
   }
   const scopeValue = lane.scope ? env[`CI_EVIDENCE_SCOPE_${lane.scope.output.toUpperCase()}`] : undefined;
   const required = requiredJobs(lane, scopeValue);
+  // The source run's event, as `sourceRun` re-read it by id and as its kind
+  // demands: a pull-request proof is a `pull_request` run, both dispatch kinds
+  // a `workflow_dispatch` run. Both must agree, or no runner is expected at all.
+  const sourceEvent = src.kind === MANIFEST_KIND ? "pull_request" : "workflow_dispatch";
+  need(run.event === sourceEvent, `the source run is a ${run.event} run, its ${src.kind} source must be a ${sourceEvent} run`);
   for (const [jobId, checks] of Object.entries(required)) {
     for (const check of checks) {
       const job = byName.get(`${prefix}${check}`);
       need(job !== undefined, `the source run has no ${JSON.stringify(prefix + check)}`);
       need(job.conclusion === "success", `${JSON.stringify(prefix + check)} concluded ${job.conclusion} in the source run`);
-      const runner = lane.jobs[jobId].runner;
+      const runner = expectedRunner(lane.jobs[jobId], run.event);
       need(job.labels.length === 1 && job.labels[0] === runner,
         `${JSON.stringify(prefix + check)} ran on [${job.labels.join(", ")}], want [${runner}]`);
     }

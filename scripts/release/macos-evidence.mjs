@@ -42,9 +42,11 @@
 //   * exactly the five expected jobs in that attempt — contract, test, both
 //     ui-smoke shards and signed-build — every one completed `success` and
 //     EXECUTED (judged from its step records, never witnessed). A skipped UI
-//     shard is not a pass. Under the canonical PR→main evidence adoption the
+//     shard is not a pass. Under a canonical PR→main evidence adoption the
 //     run also has exactly the three auxiliary jobs `screen`, `certify-macos`
-//     and `evidence` — no other job, ever;
+//     and `evidence` — no other job, ever. That adoption is the current one
+//     (`contract` always fresh) or, whole, the frozen one before it (`contract`
+//     witnessed and certified on Ubuntu), never a mix;
 //   * exactly ONE artifact named for the commit, unexpired with margin, created
 //     while `signed-build` ran, whose downloaded zip hashes to the API digest
 //     and holds exactly four files;
@@ -164,9 +166,11 @@ export const REQUIRED_STEPS = {
  * job runs when the merged pull request's proof is accepted INSTEAD of
  * executing it; a job that ran them did not execute the gate and is not
  * evidence for a signed build, however green it is. Under the legacy shape
- * they must not appear at all; under the canonical adoption they must be
- * reported skipped (or omitted). Each UI shard must not have run the OTHER
- * shard's suite, and the evidence job must not have kept a witness.
+ * they must not appear at all; under an adoption they must be reported
+ * skipped (or omitted) — except in the current adoption's `contract`, which
+ * has no witness path at all, so there they must not appear either. Each UI
+ * shard must not have run the OTHER shard's suite, and the evidence job must
+ * not have kept a witness.
  */
 export const WITNESS_STEPS = [
   "Check out the verifier (witness path only)",
@@ -210,14 +214,19 @@ const RUNNER_LABELS = {
  * each job's OWN needs, so a failed, timed-out or skipped `evidence` leaves
  * `reuse` empty and every gate runs in full on its own runner.
  *
- * ONE exception to "every pin equals the generator": `ui-smoke` used to wait
- * for `test` as well as `contract`. The generator, the drift check and
- * `CANONICAL_JOB_CONDITIONS` know only the current shape;
- * `LEGACY_ADOPTED_UI_SMOKE_CONDITIONS` freezes the previous one so a signed
- * build produced under it can still be judged. `workflowShape` accepts either
- * WHOLE triple and never a mix. It is a verifier-only allowance: the CI policy
- * (`scripts/test/ci-event-policy-test.mjs`) still refuses the old shape in the
- * current workflow, and every other check of a reused build is unchanged.
+ * The generator, the drift check and these pins know only the CURRENT
+ * adoption, in which `contract` is always fresh: its runner follows the event
+ * (macos-15 for any dispatch), so it has no witness prefix, no step guards and
+ * no toolchain capture, and the evidence job has no Ubuntu probe. Every signed
+ * build produced before that was produced under the PREVIOUS adoption, frozen
+ * whole as `adopted-witnessed-contract`: `WITNESSED_CONTRACT_EVIDENCE_JOB` plus
+ * the witness prefix on `contract` as well. Inside that frozen adoption only,
+ * `ui-smoke` may also carry the older triple that still waited for `test`
+ * (`LEGACY_ADOPTED_UI_SMOKE_CONDITIONS`), again as a WHOLE triple. No part of
+ * one adoption is ever accepted beside a part of the other. These are
+ * verifier-only allowances: the CI policy (`scripts/test/ci-event-policy-test.mjs`)
+ * still refuses every old shape in the current workflow, and every other check
+ * of a reused build is unchanged.
  */
 export const CANONICAL_SCREEN_JOB = [
   "  screen:",
@@ -293,10 +302,6 @@ export const CANONICAL_EVIDENCE_JOB = [
   "        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0",
   "        with:",
   "          node-version: 24",
-  "      - name: Certify this runner's toolchain now (ordinary main push only)",
-  "        if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
-  "        shell: bash",
-  "        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles linux-base --dir \"$RUNNER_TEMP/ci-evidence-current\"",
   "      - name: Take the certify jobs' certificates (ordinary main push only)",
   "        if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
   "        shell: bash",
@@ -328,6 +333,21 @@ export const CANONICAL_EVIDENCE_JOB = [
   "          CI_EVIDENCE_WITNESS_FILE: ${{ runner.temp }}/ci-evidence-witness/macos.json",
   "        run: node scripts/ci/ci-evidence.mjs handover >> \"$GITHUB_OUTPUT\"",
 ];
+/**
+ * The frozen PREVIOUS adoption's evidence job: identical but for one more step,
+ * the Ubuntu toolchain probe it ran while `contract` was witnessed and certified
+ * under `linux-base`. Read only by `workflowShape`, never a generator target:
+ * it lets a signed build produced under that adoption still be judged, and
+ * only together with every other part of that same adoption.
+ */
+export const WITNESSED_CONTRACT_EVIDENCE_JOB = Object.freeze([
+  ...CANONICAL_EVIDENCE_JOB.slice(0, CANONICAL_EVIDENCE_JOB.indexOf("      - name: Take the certify jobs' certificates (ordinary main push only)")),
+  "      - name: Certify this runner's toolchain now (ordinary main push only)",
+  "        if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
+  "        shell: bash",
+  "        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles linux-base --dir \"$RUNNER_TEMP/ci-evidence-current\"",
+  ...CANONICAL_EVIDENCE_JOB.slice(CANONICAL_EVIDENCE_JOB.indexOf("      - name: Take the certify jobs' certificates (ordinary main push only)")),
+]);
 export const CANONICAL_WITNESS_STEPS = [
   "      - name: Check out the verifier (witness path only)",
   "        if: needs.evidence.outputs.reuse == 'true'",
@@ -377,14 +397,24 @@ export const LEGACY_ADOPTED_UI_SMOKE_CONDITIONS = Object.freeze([
   "    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}",
   "    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}",
 ]);
-/** The jobs the canonical adoption gives the witness prefix; signed-build is `fresh`. */
-const ADOPTED_JOB_IDS = ["contract", "test", "ui-smoke"];
+/** The current adoption, and the frozen one before it (see `workflowShape`). */
+export const ADOPTED_SHAPE = "adopted";
+export const WITNESSED_CONTRACT_SHAPE = "adopted-witnessed-contract";
+const isAdopted = (shape) => shape === ADOPTED_SHAPE || shape === WITNESSED_CONTRACT_SHAPE;
+/** The jobs each adoption gives the witness prefix. signed-build is `fresh` in
+ *  both; `contract` is `fresh` in the current one (its runner follows the event). */
+const WITNESSED_JOB_IDS = Object.freeze({
+  [ADOPTED_SHAPE]: Object.freeze(["test", "ui-smoke"]),
+  [WITNESSED_CONTRACT_SHAPE]: Object.freeze(["contract", "test", "ui-smoke"]),
+});
 
 const structural = (lines) => lines.filter((l) => l.trim() !== "" && !l.trim().startsWith("#"));
 
 /**
- * `legacy` (no evidence adoption at all), `adopted` (exactly the canonical
- * one), or `non-canonical` (anything else that mentions the evidence path).
+ * `legacy` (no evidence adoption at all), `adopted` (exactly the current
+ * canonical one), `adopted-witnessed-contract` (exactly the frozen previous
+ * one, as a whole), or `non-canonical` (anything else that mentions the
+ * evidence path, including any mix of the two adoptions).
  * Read from `macos.yml` AT THE PRODUCER'S COMMIT, which is the definition
  * that run executed.
  */
@@ -412,15 +442,22 @@ export function workflowShape(text) {
   };
   if (JSON.stringify(body("screen")) !== JSON.stringify(CANONICAL_SCREEN_JOB)) return "non-canonical";
   if (JSON.stringify(body("certify-macos")) !== JSON.stringify(CANONICAL_CERTIFY_JOB)) return "non-canonical";
-  if (JSON.stringify(body("evidence")) !== JSON.stringify(CANONICAL_EVIDENCE_JOB)) return "non-canonical";
+  // The evidence job names the adoption; every other part must then be THAT
+  // adoption's. The frozen ui-smoke triple predates the current adoption, so it
+  // belongs to the frozen one only.
+  const evidence = JSON.stringify(body("evidence"));
+  const shape = evidence === JSON.stringify(CANONICAL_EVIDENCE_JOB) ? ADOPTED_SHAPE
+    : evidence === JSON.stringify(WITNESSED_CONTRACT_EVIDENCE_JOB) ? WITNESSED_CONTRACT_SHAPE : null;
+  if (shape === null) return "non-canonical";
   for (const [id, want] of Object.entries(CANONICAL_JOB_CONDITIONS)) {
     const b = body(id);
     const conditions = JSON.stringify(b.slice(0, b.indexOf("    steps:")).filter((l) => /^ {4}(needs|if|runs-on):/.test(l)));
-    const legacy = id === "ui-smoke" && conditions === JSON.stringify(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS);
+    const legacy = shape === WITNESSED_CONTRACT_SHAPE && id === "ui-smoke"
+      && conditions === JSON.stringify(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS);
     if (conditions !== JSON.stringify(want) && !legacy) return "non-canonical";
   }
   const witness = JSON.stringify(CANONICAL_WITNESS_STEPS);
-  for (const id of ADOPTED_JOB_IDS) {
+  for (const id of WITNESSED_JOB_IDS[shape]) {
     const b = body(id);
     const at = b.indexOf("    steps:");
     if (at < 0 || JSON.stringify(b.slice(at + 1, at + 1 + CANONICAL_WITNESS_STEPS.length)) !== witness) return "non-canonical";
@@ -429,10 +466,17 @@ export function workflowShape(text) {
     if (!/^ {6}- /.test(b[at + 1 + CANONICAL_WITNESS_STEPS.length] ?? "")) return "non-canonical";
     if (b.join("\n").split("node scripts/ci/ci-evidence.mjs confirm macos").length !== 2) return "non-canonical";
   }
-  // `fresh`: no witness, no capture, no reading of the decision.
+  // `fresh`: no witness, no capture, no reading of the decision. The current
+  // contract keeps its `needs: evidence` edge (its place in the graph) and
+  // nothing else of the evidence path: no witness step, no step guard, no capture.
   const signed = body("signed-build").join("\n");
   if (signed.includes("evidence") || signed.includes("ci-evidence")) return "non-canonical";
-  return "adopted";
+  if (shape === ADOPTED_SHAPE) {
+    const contract = body("contract").join("\n");
+    if (contract.includes("needs.evidence") || contract.includes("ci-evidence")
+      || WITNESS_STEPS.some((name) => contract.includes(name))) return "non-canonical";
+  }
+  return shape;
 }
 
 /**
@@ -456,9 +500,12 @@ export function judgeExecution(id, job, shape) {
     unavailable(ran[0].status === "completed" && ran[0].conclusion === "success",
       `${where} did not execute "${name}" (${ran[0].status}/${ran[0].conclusion})`);
   }
+  // Reported-but-skipped witness steps exist only where that adoption put a
+  // witness path: never in the current adoption's always-fresh contract.
+  const witnessable = shape === WITNESSED_CONTRACT_SHAPE || (shape === ADOPTED_SHAPE && id !== "contract");
   for (const name of MUST_NOT_RUN[id]) {
     const ran = job.steps.filter((step) => step.name === name);
-    const allowed = shape === "adopted" || !WITNESS_STEPS.includes(name)
+    const allowed = witnessable || !WITNESS_STEPS.includes(name)
       ? ran.every((step) => step.conclusion === "skipped")
       : ran.length === 0;
     unavailable(allowed, `${where} ran "${name}" (${ran.map((s) => s.conclusion).join(", ") || "present"}); `
@@ -654,7 +701,7 @@ export async function selectProducerRun(api, { repository, repositoryId, sha, no
   const shape = workflowShape(Buffer.from(file.content, "base64").toString("utf8"));
   unavailable(shape !== "non-canonical",
     `${PRODUCER_WORKFLOW} at ${sha} carries a PR→main evidence adoption that is not the canonical one`);
-  const expectedJobs = shape === "adopted" ? [...AUXILIARY_JOBS, ...EXPECTED_JOBS] : EXPECTED_JOBS;
+  const expectedJobs = isAdopted(shape) ? [...AUXILIARY_JOBS, ...EXPECTED_JOBS] : EXPECTED_JOBS;
   const byExpected = new Map(expectedJobs.map((e) => [e.id, []]));
   const strays = [];
   for (const job of jobs) {
@@ -693,7 +740,7 @@ export async function selectProducerRun(api, { repository, repositoryId, sha, no
     jobs: EXPECTED_JOBS.map((e) => byExpected.get(e.id)[0]),
     shape,
     workflowBlob: file.sha,
-    auxiliaryJobs: shape === "adopted" ? AUXILIARY_JOBS.map((e) => byExpected.get(e.id)[0]) : [],
+    auxiliaryJobs: isAdopted(shape) ? AUXILIARY_JOBS.map((e) => byExpected.get(e.id)[0]) : [],
   };
 }
 

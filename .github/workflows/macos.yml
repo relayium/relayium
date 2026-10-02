@@ -313,10 +313,6 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24
-      - name: Certify this runner's toolchain now (ordinary main push only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        run: node scripts/ci/ci-evidence-toolchain.mjs current --profiles linux-base --dir "$RUNNER_TEMP/ci-evidence-current"
       - name: Take the certify jobs' certificates (ordinary main push only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
@@ -365,6 +361,16 @@ jobs:
     # widened `if` that this expression does not follow fails rather than
     # running `xcodebuild` nowhere. ci-event-policy-test.mjs (6t) runs the step
     # against both runners for each event/input case and holds the two equal.
+    # ALWAYS FRESH (the PR→main evidence registry marks it `fresh`): never
+    # witnessed and never certified, so a main push always runs exactly these
+    # steps on exactly this runner choice. The runner is event-dependent — a
+    # dispatched gate (frozen release-metadata or internal full candidate) puts
+    # it on macos-15, a pull request on ubuntu-latest — which no single
+    # toolchain certificate can describe; the verifier instead requires the
+    # check to have SUCCEEDED in the source run, on the runner the source
+    # run's own verified event selects (`dispatchRunner`). It keeps
+    # `needs: evidence` and `!cancelled()` so its place in the graph and its
+    # behaviour when the evidence job fails are unchanged.
     needs: evidence
     if: ${{ !cancelled() }}
     runs-on: ${{ (github.event_name == 'workflow_dispatch' || inputs.release_version || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}
@@ -377,31 +383,8 @@ jobs:
     # in minutes instead of holding it for GitHub's 6-hour default.
     timeout-minutes: 10
     steps:
-      # Witness path (main push whose pull request proof was verified by the
-      # `evidence` job): bind this job's check run to that proof, then run
-      # nothing else that is not marked fresh in scripts/ci/ci-evidence-registry.json.
-      # Every original step below is guarded by `reuse != 'true'`, so an empty,
-      # false or unknown decision runs exactly the original job.
-      - name: Check out the verifier (witness path only)
-        if: needs.evidence.outputs.reuse == 'true'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - name: Node for the verifier (witness path only)
-        if: needs.evidence.outputs.reuse == 'true'
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 24
-      - name: Witness — the pull request's full proof covers this job
-        if: needs.evidence.outputs.reuse == 'true'
-        shell: bash
-        env:
-          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}
-        run: node scripts/ci/ci-evidence.mjs confirm macos
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: needs.evidence.outputs.reuse != 'true'
       - name: Validate release contract
-        if: needs.evidence.outputs.reuse != 'true'
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
           NOTARIZE: ${{ inputs.notarize }}
@@ -432,26 +415,6 @@ jobs:
               node apps/mac/scripts/check-release-readiness.mjs --require-approved
             fi
           fi
-      # PR→main evidence: the toolchain this job actually ran on, captured after
-      # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
-      # toolchain uploads nothing, and a job without a certificate is never
-      # witnessed; the tests above are unaffected either way.
-      - name: Certify this job's toolchain
-        if: needs.evidence.outputs.reuse != 'true'
-        shell: bash
-        env:
-          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}
-          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}
-          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}
-        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile linux-base --lane macos --job contract --out "$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json"
-      - name: Keep this job's toolchain certificate
-        if: needs.evidence.outputs.reuse != 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: relayium-ci-evidence-toolchain-macos-contract-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json
-          if-no-files-found: ignore
-          retention-days: 7
 
   # No secrets, so this runs on pull requests from forks like any other check.
   test:

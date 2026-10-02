@@ -1611,6 +1611,25 @@ function evRewrite(w, file, from, to) {
   w.docs.set(file, parseYaml(next));
 }
 
+/**
+ * Edit a lane's FULL PATH (the original workflow, as `fullPathText` projects it
+ * from the real adopted text under this world's registries) exactly once, then
+ * re-adopt it canonically and re-parse: the mutant is what the generator itself
+ * would write for that source edit, so only a rule about the edit can refuse it.
+ * A text that is not canonical, or a stale anchor, throws.
+ */
+function evFullPathRewrite(w, file, laneId, from, to) {
+  const lane = w.evidenceRegistry.lanes[laneId];
+  const raw = w.texts.get(file);
+  const full = fullPathText(raw, laneId, lane, w.toolReg);
+  if (full === raw) throw new Error(`${file} is not the canonical adoption of a full path`);
+  const n = full.split(from).length - 1;
+  if (n !== 1) throw new Error(`stale anchor in ${file}'s full path: ${JSON.stringify(from.slice(0, 80))} occurs ${n} time(s)`);
+  const next = adoptText(full.replace(from, to), laneId, lane, w.toolReg);
+  w.texts.set(file, next);
+  w.docs.set(file, parseYaml(next));
+}
+
 const EVIDENCE_MUTATIONS = [
   ["an original step loses its evidence guard", (w) => { delete w.docs.get("go.yml").jobs["race-account"].steps.find((st) => /^go test -race/.test(st.name ?? "")).if; },
     /go\.yml \(evidence lane go\)\/race-account: step .* carries `if: \(none\)`/],
@@ -1783,11 +1802,13 @@ const EVIDENCE_MUTATIONS = [
     evRewrite(w, "macos.yml", ui, ui.replace("[contract, evidence]", "[test, contract, evidence]")
       .replace("!cancelled() && needs.contract.result", "!cancelled() && needs.test.result == 'success' && needs.contract.result"));
   }, /macos\.yml \(evidence lane macos\)\/ui-smoke: needs \["test","contract"\] \(adopted \["test","contract","evidence"\]\), want exactly \["contract"\]/],
+  // Built through the full path, not by patching adopted text: `contract` is
+  // always fresh, so once signed-build stops needing `test` it has no witnessable
+  // ancestor left and the generator writes its condition differently. Only the
+  // generator knows that; the source edit is the one dependency (the full-path
+  // condition never named `test`).
   ["signed-build consistently stops waiting for test (needs AND condition)", (w) => {
-    const sb = "  signed-build:\n    needs: [test, contract]\n";
-    evRewrite(w, "macos.yml", sb, "  signed-build:\n    needs: contract\n");
-    evRewrite(w, "macos.yml", "    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (",
-      "    if: ${{ !cancelled() && needs.contract.result == 'success' && (");
+    evFullPathRewrite(w, "macos.yml", "macos", "  signed-build:\n    needs: [test, contract]\n", "  signed-build:\n    needs: contract\n");
   }, /macos\.yml \(evidence lane macos\)\/signed-build: needs \["contract"\] \(adopted \["contract"\]\), want exactly \["test","contract"\]/],
   ["an original job's own condition is dropped", (w) => { w.docs.get("web.yml").jobs.test.if = "${{ !cancelled() && needs.scope.result == 'success' }}"; },
     /web\.yml \(evidence lane web\)\/test: the job condition is/],

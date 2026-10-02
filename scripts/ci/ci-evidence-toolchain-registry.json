@@ -3,7 +3,7 @@
     "Read by scripts/ci/ci-evidence-toolchain.mjs and scripts/ci/ci-evidence.mjs; judged by scripts/test/ci-evidence-toolchain-test.mjs.",
     "profiles.<name>: runner family + the components a certificate of that profile carries (image is always first). Every component is a fact both the source job and a current probe on that family can observe after the same setup actions.",
     "lanes.<lane>.jobs.<jobId>: the profile the job's toolchain is certified under, or `uncertifiable` with the reason: such a job is never witnessed, so its whole lane runs in full on every main push.",
-    "Fresh jobs (macOS signed-build, Web scope) are absent: they always run their original steps.",
+    "Fresh jobs (macOS contract and signed-build, Web scope) are absent: they always run their original steps.",
     "A profile must cover EVERY tool the job uses that the tree does not pin exactly: image (ImageVersion covers image-provided gcc/git/jq/python), go (setup-go + cgo CC), node/npm (setup-node 24 floats), java (setup-java 17 floats), the Android packages the job installs, the Chrome binary web/e2e/harness.mjs resolves (CHROME_PATH first, then its candidate order; path, real path, sha256 and version), the Xcode inventory and default selection, and the simulator destination the job's own selection rule picks.",
     "destinations.<id>: a job's own simulator selection program (`python3 -c '…'` over `xcrun simctl list devices available -j`) — in a workflow step (`file` + `step`) or a script the job runs (`file`) — pinned by sha256 of `interpreter NUL program`. The probe runs exactly that program with exactly that interpreter on the runner's listing and records the destination it picks (name, device type, runtime identifier, version and build, and its position in the listing; the UDID only in the audit block, because a UDID is minted per device set and says nothing comparable across runners). A changed program without a new pin, or any doubt, is unknown: the lane runs in full. The three rules differ on purpose (iPhone first-in-listing with /usr/bin/python3; iPad sorted by name, runtime, UDID; the session acceptance script's PATH python3 with an empty default) and are never shared.",
     "lanes.<lane>.ubuntuSetup: source steps (job + step identity: name, else action without @ref, else run) the lane's `evidence` job copies — with:-inputs minus cache keys, unchanged otherwise — before it captures the current Ubuntu certificates. lanes.<lane>.certify.<runner>: the same for the lane's `certify-macos` / `certify-windows` job. Each copied step must be EXACTLY the setup/selection every job of that family in the lane runs (scripts/test/ci-event-policy-test.mjs 6x), so the current probe resolves the toolchain by the job's own rule, never a new one."
@@ -192,9 +192,6 @@
         "macos-15": []
       },
       "jobs": {
-        "contract": {
-          "profile": "linux-base"
-        },
         "test": {
           "profile": "macos-xcode"
         },

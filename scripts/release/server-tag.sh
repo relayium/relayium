@@ -38,6 +38,22 @@
 #                         because the incident above was arithmetic performed
 #                         on a string that was never a server version.
 #
+#     previous CURRENT [REV]
+#                         the server release before CURRENT: the highest
+#                         canonical server tag that is reachable from
+#                         CURRENT's commit and numerically LOWER than
+#                         CURRENT. CURRENT must be canonical, must exist as a
+#                         tag, and must point at REV (default HEAD) — the
+#                         commit actually being released. Unlike `latest`,
+#                         finding nothing is an ERROR, as is any failed git
+#                         query: this answer becomes GoReleaser's previous
+#                         tag, i.e. the range of the published release notes,
+#                         and on 2026-10-02 GoReleaser's own guess picked
+#                         `macos-v1.4.5` for v0.27.0 and listed 11 commits of
+#                         the wrong family instead of the 384 since v0.26.0.
+#                         There is no fallback to another family and no
+#                         invented first release.
+#
 #     validate-ref REF    prints the tag name and exits 0 when REF is
 #                         `refs/tags/<canonical>`; fails otherwise. This is the
 #                         other end of the same rule: fixing auto-release stops
@@ -59,6 +75,7 @@ set -eu
 usage() {
   echo "usage: $0 latest [REV]" >&2
   echo "       $0 next BASE_TAG [REV]" >&2
+  echo "       $0 previous CURRENT_TAG [REV]" >&2
   echo "       $0 validate-ref REF" >&2
   exit 2
 }
@@ -188,6 +205,121 @@ cmd_next() {
   printf '%s\n' "$next"
 }
 
+# digits_cmp A B — prints lt, eq or gt for two non-empty digit strings,
+# compared as unbounded decimal numbers. Neither `$(( ))` nor `[ -lt ]` is
+# used on the components themselves: shell arithmetic may read a leading zero
+# as octal (`08` is an error), and test(1) fails with status 2 — which a caller
+# would read as "not lower" — on any component past its integer range
+# (`[ 9223372036854775808 -lt 1 ]`). Leading zeros are stripped, then the
+# lengths decide, then the first differing digit; only single digits and
+# lengths ever reach test(1).
+digits_cmp() {
+  _x=$1
+  _y=$2
+  while :; do
+    case $_x in 0?*) _x=${_x#0} ;; *) break ;; esac
+  done
+  while :; do
+    case $_y in 0?*) _y=${_y#0} ;; *) break ;; esac
+  done
+  if [ "${#_x}" -lt "${#_y}" ]; then
+    echo lt
+    return 0
+  fi
+  if [ "${#_x}" -gt "${#_y}" ]; then
+    echo gt
+    return 0
+  fi
+  while [ -n "$_x" ]; do
+    _cx=${_x%"${_x#?}"}
+    _cy=${_y%"${_y#?}"}
+    if [ "$_cx" -lt "$_cy" ]; then
+      echo lt
+      return 0
+    fi
+    if [ "$_cx" -gt "$_cy" ]; then
+      echo gt
+      return 0
+    fi
+    _x=${_x#?}
+    _y=${_y#?}
+  done
+  echo eq
+}
+
+# version_lt A B — true when canonical version A is numerically lower than B,
+# component by component, at any length (see digits_cmp).
+version_lt() {
+  parse_version "$1"
+  _a_maj=$VER_MAJOR
+  _a_min=$VER_MINOR
+  _a_pat=$VER_PATCH
+  parse_version "$2"
+  _c=$(digits_cmp "$_a_maj" "$VER_MAJOR")
+  [ "$_c" = eq ] || { [ "$_c" = lt ]; return; }
+  _c=$(digits_cmp "$_a_min" "$VER_MINOR")
+  [ "$_c" = eq ] || { [ "$_c" = lt ]; return; }
+  [ "$(digits_cmp "$_a_pat" "$VER_PATCH")" = lt ]
+}
+
+# cmd_previous CURRENT [REV] — the release-notes anchor. See the header.
+cmd_previous() {
+  if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+    echo "server-tag.sh: previous takes CURRENT_TAG [REV]" >&2
+    return 2
+  fi
+  current=$1
+  rev=${2:-HEAD}
+  if ! is_canonical "$current"; then
+    echo "server-tag.sh: refusing to find the release before '$current': not a canonical server tag (want v<major>.<minor>.<patch>)" >&2
+    return 1
+  fi
+  # The tag must exist and name exactly the commit being released. A release
+  # built from one commit under another commit's tag would anchor its notes to
+  # the wrong history.
+  if ! tagged=$(git rev-parse --verify --quiet "refs/tags/$current^{commit}"); then
+    echo "server-tag.sh: tag '$current' does not exist or does not name a commit" >&2
+    return 1
+  fi
+  if ! built=$(git rev-parse --verify --quiet "$rev^{commit}"); then
+    echo "server-tag.sh: '$rev' is not a commit" >&2
+    return 1
+  fi
+  if [ "$tagged" != "$built" ]; then
+    echo "server-tag.sh: tag '$current' names $tagged, but the release is being built from $built" >&2
+    return 1
+  fi
+
+  tmp=$(mktemp "${TMPDIR:-/tmp}/server-tag.XXXXXX")
+  trap 'rm -f "$tmp"' EXIT
+  # Reachable from the released commit only (as in `latest`): a tag on a branch
+  # that never reached this commit is not a release this one follows. A failed
+  # query is not "no previous release" — it stops the release here.
+  if ! git tag --list --merged "$tagged" >"$tmp"; then
+    echo "server-tag.sh: could not list the tags reachable from $tagged" >&2
+    return 1
+  fi
+
+  # Strictly lower than CURRENT, so re-releasing an older tag ignores every
+  # later release, and a commit carrying several versions picks the one below.
+  # Highest number, not nearest ancestor: after a hotfix merge the nearest tag
+  # can be an older line than the release that actually came before.
+  best=''
+  while IFS= read -r tag; do
+    is_canonical "$tag" || continue
+    version_lt "$tag" "$current" || continue
+    if [ -z "$best" ] || version_lt "$best" "$tag"; then
+      best=$tag
+    fi
+  done <"$tmp"
+
+  if [ -z "$best" ]; then
+    echo "server-tag.sh: no canonical server tag below '$current' is reachable from $tagged; refusing to invent a range" >&2
+    return 1
+  fi
+  printf '%s\n' "$best"
+}
+
 # cmd_validate_ref REF — the release gate. REF is a full git ref, normally
 # GITHUB_REF, which is `refs/tags/<name>` for both a tag push and a
 # workflow_dispatch aimed at a tag, and `refs/heads/<name>` for one aimed at a
@@ -225,6 +357,7 @@ shift
 case $mode in
   latest) cmd_latest "$@" ;;
   next) cmd_next "$@" ;;
+  previous) cmd_previous "$@" ;;
   validate-ref) cmd_validate_ref "$@" ;;
   *) usage ;;
 esac

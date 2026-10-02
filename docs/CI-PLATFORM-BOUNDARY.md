@@ -1611,8 +1611,13 @@ the merged pull request's proof covers exactly this tree:
    counts as newer — (a failure, cancellation, dispatch or any pending run means
    no reuse), reads that run's latest attempt and every paged job, requires the
    tested merge commit's tree to equal this commit's whole tree, requires every
-   registered check of the lane to have succeeded on its registered runner,
-   downloads the proof by artifact id, checks its bytes against the API digest,
+   registered check of the lane to have succeeded on its registered runner —
+   exactly one runner per check, chosen by the source run's own event as the
+   API re-reads it and as its source kind demands: the macOS `contract`, whose
+   `runs-on` follows the event, on `ubuntu-latest` in a pull-request source and
+   on `macos-15` in either dispatch source (`dispatchRunner` in the registry,
+   allowed only on a fresh job); every other check on its one registered runner
+   under every source — then downloads the proof by artifact id, checks its bytes against the API digest,
    reads it without executing anything, cross-checks every field, bounds its age
    (48 h), requires the repository's tags to equal the tag set Web's `test` job
    recorded right after its own checkout (artifact
@@ -1821,7 +1826,11 @@ the merged pull request's proof covers exactly this tree:
 
 What stays fresh on every `main` push: `repo-hygiene` and `windows` (not
 adopted), the macOS `signed-build` (it mints the source-bound artifact the
-release reuses), Web's `scope` job (it computes `main`'s own obligation from
+release reuses), the macOS `contract` (its runner follows the event, so no
+single toolchain certificate describes it: it has no witness steps and no
+capture, keeps its original needs, condition, runner choice and release
+checks, and its check must still have succeeded in the source run on the
+runner that run's event selects), Web's `scope` job (it computes `main`'s own obligation from
 `before`→tip, and gated jobs are required from the proof only when it is not
 `'false'`), Go's two `govulncheck` queries and Web's `npm audit` (live
 vulnerability databases). Release callers, dispatches and any non-default input

@@ -84,6 +84,26 @@ jobs:
             exit 1
           fi
           echo "Building release **$tag** from \`$GITHUB_REF\`" >> "$GITHUB_STEP_SUMMARY"
+      # The release-notes range, decided here and handed to GoReleaser rather
+      # than left to its own guess. GoReleaser's default previous tag is the
+      # nearest tag of ANY family, and for v0.27.0 that was `macos-v1.4.5`: the
+      # published notes listed 11 commits instead of the 384 since v0.26.0.
+      # `previous` takes the highest canonical server tag below this one that is
+      # reachable from the commit being built, after checking that the tag
+      # names exactly that commit; a failed git query or no earlier release
+      # stops the run here, before any signing key exists on this runner.
+      - name: Pin the current and previous server release tags
+        id: tags
+        run: |
+          set -eu
+          current="$(sh scripts/release/server-tag.sh validate-ref "$GITHUB_REF")"
+          if ! previous="$(sh scripts/release/server-tag.sh previous "$current" "$GITHUB_SHA")"; then
+            echo "::error::no previous server release could be established for $current at $GITHUB_SHA; refusing to publish notes over a guessed range"
+            exit 1
+          fi
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "Release notes cover **$previous..$current**" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: server/go.mod
@@ -116,6 +136,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # https://goreleaser.com/resources/cookbooks/set-a-custom-git-tag/
+          GORELEASER_CURRENT_TAG: ${{ steps.tags.outputs.current }}
+          GORELEASER_PREVIOUS_TAG: ${{ steps.tags.outputs.previous }}
       - name: Remove release signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/relayium-release.key"

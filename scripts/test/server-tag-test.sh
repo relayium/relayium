@@ -288,6 +288,279 @@ run "$long" next v0.5.2
 assert_eq 'a breaking change is found without truncating a long log' "$out" 'v0.6.0'
 
 # ---------------------------------------------------------------------------
+# previous: the release-notes anchor GoReleaser is handed. On 2026-10-02 its own
+# guess (the nearest tag of ANY family) made v0.27.0's notes the 11 commits since
+# `macos-v1.4.5` instead of the 384 since v0.26.0.
+# ---------------------------------------------------------------------------
+echo 'previous (the release-notes anchor)'
+rev_of() { git -C "$1" rev-parse "$2^{commit}"; }
+
+fam=$(newrepo prev-family)
+cmt "$fam" 'chore: seed'
+tg "$fam" v0.25.0
+cmt "$fam" 'feat: 0.26'
+git -C "$fam" tag -a -m 'v0.26.0' v0.26.0
+cmt "$fam" 'chore(app): macOS 1.4.5'
+tg "$fam" macos-v1.4.5
+cmt "$fam" 'fix: since the mac tag'
+git -C "$fam" tag -a -m 'v0.27.0' v0.27.0
+# The trap, reproduced: what GoReleaser's default asked git.
+trap_prev=$(git -C "$fam" describe --tags --abbrev=0 'v0.27.0^')
+assert_eq 'fixture reproduces the notes trap: the nearest tag is the macOS one' "$trap_prev" 'macos-v1.4.5'
+run "$fam" previous v0.27.0 "$(rev_of "$fam" v0.27.0)"
+assert_rc 'previous succeeds for a canonical tag at its own commit' "$rc" 0
+assert_eq 'previous is the earlier SERVER release, not the newer macOS tag' "$out" 'v0.26.0'
+assert_canonical 'previous returns a canonical tag' "$out"
+run "$fam" previous v0.27.0
+assert_eq 'previous defaults REV to HEAD (the checked-out tag)' "$out" 'v0.26.0'
+run "$fam" previous v0.26.0 "$(rev_of "$fam" v0.26.0)"
+assert_eq 'previous of an older release is the one before it (annotated tags peel)' "$out" 'v0.25.0'
+
+# Several versions on one commit: each one's previous is the next lower, and a
+# HIGHER version on the same commit is never the anchor of a lower one.
+same=$(newrepo prev-same-commit)
+cmt "$same" 'chore: seed'
+tg "$same" v0.25.0
+cmt "$same" 'feat: one commit, three versions'
+tg "$same" v0.26.0
+tg "$same" v0.27.0
+tg "$same" v0.28.0
+run "$same" previous v0.27.0
+assert_eq 'same commit: v0.27.0 follows v0.26.0, ignoring v0.28.0 beside it' "$out" 'v0.26.0'
+run "$same" previous v0.26.0
+assert_eq 'same commit: v0.26.0 follows v0.25.0' "$out" 'v0.25.0'
+run "$same" previous v0.28.0
+assert_eq 'same commit: v0.28.0 follows v0.27.0' "$out" 'v0.27.0'
+
+# A historical (re-)release is bounded below: a higher version reachable from
+# it — an out-of-order number in its own history — is ignored.
+hist=$(newrepo prev-history)
+cmt "$hist" 'chore: seed'
+tg "$hist" v0.26.0
+cmt "$hist" 'chore: a mis-numbered old release'
+tg "$hist" v0.30.0
+cmt "$hist" 'fix: later'
+tg "$hist" v0.27.0
+run "$hist" previous v0.27.0
+assert_eq 'a higher version earlier in history is not the previous release' "$out" 'v0.26.0'
+
+# Numbers, not strings: v0.10.0 outranks v0.9.0, and a zero-padded `08` is
+# eight (shell arithmetic would read it as invalid octal).
+num=$(newrepo prev-numeric)
+cmt "$num" 'chore: seed'
+tg "$num" v0.9.0
+cmt "$num" 'feat: ten'
+tg "$num" v0.10.0
+cmt "$num" 'feat: eleven'
+tg "$num" v0.11.0
+run "$num" previous v0.11.0
+assert_eq 'numeric: v0.11.0 follows v0.10.0, not v0.9.0' "$out" 'v0.10.0'
+oct=$(newrepo prev-octal)
+cmt "$oct" 'chore: seed'
+tg "$oct" v0.7.0
+cmt "$oct" 'feat: padded'
+tg "$oct" v0.08.0
+cmt "$oct" 'feat: nine'
+tg "$oct" v0.9.0
+run "$oct" previous v0.9.0
+assert_rc 'numeric: a zero-padded component is not octal' "$rc" 0
+assert_eq 'numeric: v0.08.0 is eight, so it precedes v0.9.0' "$out" 'v0.08.0'
+
+# Components past the shell's integer range, and zero-padded spellings: the
+# comparison is decimal at any length, never test(1) on a whole component
+# (status 2 there would read as "not lower" and keep a wrong anchor).
+big=$(newrepo prev-bigint)
+cmt "$big" 'chore: seed'
+tg "$big" v0.27.0
+cmt "$big" 'feat: a long minor'
+tg "$big" v0.999999999999999999999999.0
+cmt "$big" 'feat: one'
+tg "$big" v1.0.0
+run "$big" previous v1.0.0
+assert_rc 'oversized components: previous succeeds' "$rc" 0
+assert_eq 'oversized components: v0.999999999999999999999999.0 outranks v0.27.0 below v1.0.0' "$out" 'v0.999999999999999999999999.0'
+run "$big" previous v0.999999999999999999999999.0 "$(rev_of "$big" v0.999999999999999999999999.0)"
+assert_eq 'oversized current: the release below it is still found' "$out" 'v0.27.0'
+same_len=$(newrepo prev-bigint-same-length)
+cmt "$same_len" 'chore: seed'
+tg "$same_len" v0.18446744073709551615.0
+cmt "$same_len" 'feat: next'
+tg "$same_len" v0.18446744073709551616.0
+cmt "$same_len" 'feat: next again'
+tg "$same_len" v0.18446744073709551617.0
+run "$same_len" previous v0.18446744073709551617.0
+assert_eq 'oversized, equal length: the first differing digit decides' "$out" 'v0.18446744073709551616.0'
+pad=$(newrepo prev-padded)
+cmt "$pad" 'chore: seed'
+tg "$pad" v0.9.0
+cmt "$pad" 'feat: ten, spelled twice'
+tg "$pad" v0.010.0
+tg "$pad" v0.10.0
+cmt "$pad" 'feat: eleven'
+tg "$pad" v0.11.0
+run "$pad" previous v0.11.0
+case $out in
+  v0.10.0 | v0.010.0) ok 'zero-padded: ten (either spelling) precedes eleven' ;;
+  *) bad "zero-padded: ten (either spelling) precedes eleven (got [$out])" ;;
+esac
+run "$pad" previous v0.10.0 "$(rev_of "$pad" v0.10.0)"
+assert_eq 'zero-padded: v0.010.0 equals v0.10.0, so it is not lower; v0.9.0 is' "$out" 'v0.9.0'
+
+# A tag on a branch that never reached the released commit is not its previous.
+side=$(newrepo prev-unmerged)
+cmt "$side" 'chore: seed'
+tg "$side" v0.26.0
+git -C "$side" checkout -q -b side
+cmt "$side" 'feat: never merged'
+tg "$side" v0.26.5
+git -C "$side" checkout -q main
+cmt "$side" 'fix: mainline'
+tg "$side" v0.27.0
+run "$side" previous v0.27.0
+assert_eq 'previous ignores a lower tag that is not reachable' "$out" 'v0.26.0'
+
+# A hotfix line merged back: the highest lower version, not the nearest ancestor.
+hot=$(newrepo prev-hotfix)
+cmt "$hot" 'chore: seed'
+tg "$hot" v0.20.0
+git -C "$hot" checkout -q -b hotfix
+# Three hotfix commits against one mainline commit to v0.21.0, so after the
+# merge `git describe` (fewest commits since the tag) answers with the hotfix.
+cmt "$hot" 'fix: hotfix 1'
+cmt "$hot" 'fix: hotfix 2'
+cmt "$hot" 'fix: hotfix 3'
+tg "$hot" v0.20.1
+git -C "$hot" checkout -q main
+cmt "$hot" 'feat: 0.21'
+tg "$hot" v0.21.0
+cmt "$hot" 'chore: after 0.21'
+cmt "$hot" 'chore: more after 0.21'
+git -C "$hot" merge -q --no-ff -m 'merge hotfix' hotfix
+cmt "$hot" 'feat: 0.22 after the merge'
+tg "$hot" v0.22.0
+near=$(git -C "$hot" describe --tags --abbrev=0 'v0.22.0^')
+assert_eq 'fixture: the nearest tag after the hotfix merge is the hotfix' "$near" 'v0.20.1'
+run "$hot" previous v0.22.0
+assert_eq 'after a hotfix merge, previous is the highest lower release' "$out" 'v0.21.0'
+run "$hot" previous v0.20.1 "$(rev_of "$hot" v0.20.1)"
+assert_eq 'the hotfix release itself follows v0.20.0' "$out" 'v0.20.0'
+
+# A release tag on a detached commit (on no branch at all).
+det=$(newrepo prev-detached)
+cmt "$det" 'chore: seed'
+tg "$det" v0.27.0
+git -C "$det" checkout -q --detach
+cmt "$det" 'fix: detached release'
+tg "$det" v0.27.1
+git -C "$det" checkout -q main
+run "$det" previous v0.27.1 "$(rev_of "$det" v0.27.1)"
+assert_eq 'a detached release tag finds its previous release' "$out" 'v0.27.0'
+
+# Refusals: no fallback, no empty first release, no other family.
+first=$(newrepo prev-first)
+cmt "$first" 'chore: seed'
+tg "$first" macos-v1.4.5
+cmt "$first" 'feat: first server release'
+tg "$first" v0.1.0
+run "$first" previous v0.1.0
+assert_rc 'no earlier server release is an error' "$rc" 1
+assert_eq 'no earlier server release prints nothing (never the macOS tag)' "$out" ''
+lower_unreachable=$(newrepo prev-only-unreachable)
+cmt "$lower_unreachable" 'chore: seed'
+git -C "$lower_unreachable" checkout -q -b side
+cmt "$lower_unreachable" 'feat: side'
+tg "$lower_unreachable" v0.1.0
+git -C "$lower_unreachable" checkout -q main
+cmt "$lower_unreachable" 'feat: main'
+tg "$lower_unreachable" v0.2.0
+run "$lower_unreachable" previous v0.2.0
+assert_rc 'a lower tag that is only on another branch is not a previous release' "$rc" 1
+
+for cur in 'macos-v1.4.5' 'vmacos-v1.2.0' 'v1.2' 'v1.2.3-rc1' 'v1.2.3.4' 'refs/tags/v0.27.0' 'v' ''; do
+  run "$fam" previous "$cur"
+  assert_rc "previous rejects the current tag [$cur]" "$rc" 1
+  assert_eq "previous prints nothing for [$cur]" "$out" ''
+done
+# Non-canonical tags AT the release commit: only the shape check refuses these
+# (each exists and names the built commit, and v0.26.0 is reachable below them).
+tg "$fam" v0.27.0-rc1
+tg "$fam" macos-v1.4.6
+for cur in v0.27.0-rc1 macos-v1.4.6; do
+  run "$fam" previous "$cur" "$(rev_of "$fam" v0.27.0)"
+  assert_rc "previous rejects [$cur] although it names the built commit" "$rc" 1
+  assert_eq "previous prints nothing for [$cur] at the built commit" "$out" ''
+done
+run "$fam" previous
+assert_rc 'previous without a current tag is a usage error' "$rc" 2
+run "$fam" previous v0.27.0 HEAD extra
+assert_rc 'previous with an extra argument is a usage error' "$rc" 2
+run "$fam" previous v9.9.9
+assert_rc 'previous refuses a canonical tag that does not exist' "$rc" 1
+run "$fam" previous v0.27.0 "$(rev_of "$fam" v0.26.0)"
+assert_rc 'previous refuses a tag that does not name the commit being released' "$rc" 1
+assert_eq 'previous prints nothing for a tag/commit mismatch' "$out" ''
+run "$fam" previous v0.27.0 not-a-revision
+assert_rc 'previous refuses a revision that is not a commit' "$rc" 1
+treetag=$(newrepo prev-tree-tag)
+cmt "$treetag" 'chore: seed'
+tg "$treetag" v0.1.0
+cmt "$treetag" 'chore: more'
+git -C "$treetag" tag v0.2.0 'HEAD^{tree}'
+run "$treetag" previous v0.2.0
+assert_rc 'previous refuses a tag that names a tree, not a commit' "$rc" 1
+
+# A failed git query is a failure, not "no previous release" and not a guess.
+# The wrapper fails exactly one git subcommand and is otherwise the real git.
+fakebin="$TMPROOT/fake-git-bin"
+mkdir -p "$fakebin"
+real_git=$(command -v git)
+# shellcheck disable=SC2016 # the wrapper's own expansions, written literally
+{
+  printf '#!/bin/sh\n'
+  printf 'for a in "$@"; do\n'
+  printf '  if [ "$a" = "$FAIL_GIT_SUBCOMMAND" ]; then\n'
+  # PARTIAL: the real answer is written first, then the read fails — the
+  # shape in which a swallowed error would still yield a plausible tag.
+  printf '    [ -n "${FAIL_GIT_PARTIAL:-}" ] && "%s" "$@"\n' "$real_git"
+  printf '    echo "fatal: unable to read refs: Input/output error" >&2\n'
+  printf '    exit 128\n'
+  printf '  fi\n'
+  printf 'done\n'
+  printf 'exec "%s" "$@"\n' "$real_git"
+} >"$fakebin/git"
+chmod +x "$fakebin/git"
+failing_git() {
+  # failing_git REPO SUBCOMMAND ARGS... → sets $out and $rc
+  r=$1
+  sub=$2
+  shift 2
+  out=$(cd "$r" && PATH="$fakebin:$PATH" FAIL_GIT_SUBCOMMAND=$sub sh "$SCRIPT" "$@" 2>"$TMPROOT/err")
+  rc=$?
+}
+failing_git "$fam" never previous v0.27.0
+assert_eq 'the failing-git wrapper is transparent when nothing fails (control)' "$out" 'v0.26.0'
+for sub in tag rev-parse; do
+  failing_git "$fam" "$sub" previous v0.27.0
+  assert_rc "previous fails when git $sub fails (EIO)" "$rc" 1
+  assert_eq "previous prints nothing when git $sub fails" "$out" ''
+done
+failing_git "$fam" tag previous v0.27.0
+if grep -q 'could not list the tags reachable from' "$TMPROOT/err"; then
+  ok 'a failed tag query is reported as a failed query, not as "no previous release"'
+else
+  bad 'a failed tag query is reported as a failed query, not as "no previous release"'
+  sed 's/^/       | /' "$TMPROOT/err"
+fi
+out=$(cd "$fam" && PATH="$fakebin:$PATH" FAIL_GIT_SUBCOMMAND=tag FAIL_GIT_PARTIAL=1 sh "$SCRIPT" previous v0.27.0 2>"$TMPROOT/err")
+rc=$?
+assert_rc 'previous fails when the tag query fails after a complete-looking answer' "$rc" 1
+assert_eq 'previous prints nothing when the tag query fails after a complete-looking answer' "$out" ''
+
+# latest is unchanged by the new mode: still the newest server tag.
+run "$fam" latest
+assert_eq 'latest still returns the newest server tag' "$out" 'v0.27.0'
+
+# ---------------------------------------------------------------------------
 # The other end of the same rule: which refs release.yml agrees to build and
 # sign. Fixing auto-release stops this repo from creating `vmacos-v1.2.0`; it
 # does not stop that tag, or a hand-pushed one, from being built if it exists.
@@ -359,6 +632,90 @@ if [ -n "$gate" ] && [ -n "$gorel" ] && [ "$gate" -lt "$gorel" ]; then
 else
   bad "the gate runs before GoReleaser (gate=$gate goreleaser=$gorel)"
 fi
+
+# The release-notes range: computed by `previous` before the key exists, and
+# handed to GoReleaser explicitly — not left to its nearest-tag guess.
+pin=$(line_of 'id: tags')
+# shellcheck disable=SC2016 # the workflow's literal text
+prevcall=$(line_of 'server-tag.sh previous "$current" "$GITHUB_SHA"')
+if [ -n "$prevcall" ] && [ -n "$pin" ] && [ "$pin" -lt "$prevcall" ] &&
+  [ "$(grep -c 'id: tags' "$RELEASE_WORKFLOW")" = 1 ]; then
+  ok 'release.yml computes the previous tag in the one step whose id is tags, from the built commit'
+else
+  bad "release.yml computes the previous tag in the one step whose id is tags (id=$pin previous=$prevcall)"
+fi
+if [ -n "$prevcall" ] && [ -n "$keystep" ] && [ "$prevcall" -lt "$keystep" ]; then
+  ok 'the previous tag is established before the signing key is materialized'
+else
+  bad "the previous tag is established before the signing key is materialized (previous=$prevcall key=$keystep)"
+fi
+# The GoReleaser step's own block: from its `uses:` line to the next step.
+gorel_block=$(awk -v start="$gorel" 'NR == start { inblk = 1; print; next }
+  inblk && /^      - / { exit }
+  inblk { print }' "$RELEASE_WORKFLOW")
+# shellcheck disable=SC2016 # the workflow's literal text
+for want in 'GORELEASER_CURRENT_TAG: ${{ steps.tags.outputs.current }}' \
+  'GORELEASER_PREVIOUS_TAG: ${{ steps.tags.outputs.previous }}'; do
+  if printf '%s\n' "$gorel_block" | grep -qxF "          $want"; then
+    ok "GoReleaser's own env carries [$want]"
+  else
+    bad "GoReleaser's own env carries [$want]"
+  fi
+done
+if grep -n 'GORELEASER_\(CURRENT\|PREVIOUS\)_TAG' "$RELEASE_WORKFLOW" | grep -v '^[0-9]*:          GORELEASER_' | grep -q .; then
+  bad 'GORELEASER_CURRENT_TAG/PREVIOUS_TAG are set only in the GoReleaser step'
+else
+  ok 'GORELEASER_CURRENT_TAG/PREVIOUS_TAG are set only in the GoReleaser step'
+fi
+
+# The step itself, RUN: its script extracted from release.yml and executed in
+# a real repository, so what it writes for GoReleaser is observed, not read.
+pin_script="$TMPROOT/pin-step.sh"
+awk 'index($0, "- name: Pin the current and previous server release tags") { found = 1; next }
+  found && !inrun && /^        run: \|$/ { inrun = 1; next }
+  found && inrun && /^          / { sub(/^          /, ""); print; next }
+  found && inrun && /^[[:space:]]*$/ { print ""; next }
+  found && inrun { exit }' "$RELEASE_WORKFLOW" >"$pin_script"
+pinrepo=$(newrepo pin-step)
+cmt "$pinrepo" 'chore: seed'
+tg "$pinrepo" v0.26.0
+cmt "$pinrepo" 'chore(app): macOS 1.4.5'
+tg "$pinrepo" macos-v1.4.5
+cmt "$pinrepo" 'fix: release'
+tg "$pinrepo" v0.27.0
+cmt "$pinrepo" 'chore: after the release'
+mkdir -p "$pinrepo/scripts/release"
+cp "$SCRIPT" "$pinrepo/scripts/release/server-tag.sh"
+run_pin() {
+  # run_pin REF SHA [FAIL_GIT_SUBCOMMAND] → sets $rc; outputs in $TMPROOT/pin-out
+  : >"$TMPROOT/pin-out"
+  (cd "$pinrepo" && GITHUB_REF=$1 GITHUB_SHA=$2 GITHUB_OUTPUT="$TMPROOT/pin-out" \
+    GITHUB_STEP_SUMMARY="$TMPROOT/pin-summary" FAIL_GIT_SUBCOMMAND=${3:-never} PATH="$fakebin:$PATH" \
+    sh "$pin_script" >"$TMPROOT/pin-log" 2>&1)
+  rc=$?
+}
+tagsha=$(rev_of "$pinrepo" v0.27.0)
+if [ -s "$pin_script" ] && grep -q 'server-tag.sh previous' "$pin_script"; then
+  ok 'the pin step script was extracted from release.yml'
+else
+  bad 'the pin step script was extracted from release.yml'
+fi
+run_pin refs/tags/v0.27.0 "$tagsha"
+assert_rc 'the pin step succeeds for a canonical tag at its own commit' "$rc" 0
+assert_eq 'the pin step hands GoReleaser exactly current and previous' "$(cat "$TMPROOT/pin-out")" \
+  "$(printf 'current=v0.27.0\nprevious=v0.26.0')"
+run_pin refs/tags/v0.27.0 "$(rev_of "$pinrepo" HEAD)"
+assert_rc 'the pin step fails when the built commit is not the tag'"'"'s' "$rc" 1
+assert_eq 'the pin step writes nothing when the built commit is not the tag'"'"'s' "$(cat "$TMPROOT/pin-out")" ''
+run_pin refs/heads/main "$tagsha"
+assert_rc 'the pin step fails for a branch ref' "$rc" 1
+assert_eq 'the pin step writes nothing for a branch ref' "$(cat "$TMPROOT/pin-out")" ''
+run_pin refs/tags/v0.27.0 "$tagsha" tag
+assert_rc 'the pin step fails when the tag query fails (EIO)' "$rc" 1
+assert_eq 'the pin step writes nothing when the tag query fails' "$(cat "$TMPROOT/pin-out")" ''
+run_pin refs/tags/v0.26.0 "$(rev_of "$pinrepo" v0.26.0)"
+assert_rc 'the pin step fails when there is no earlier server release' "$rc" 1
+assert_eq 'the pin step writes nothing when there is no earlier server release' "$(cat "$TMPROOT/pin-out")" ''
 
 # `v*` is the filter that let `vmacos-v1.2.0` start a build. The glob is not
 # trusted to be sufficient — that is what the gate above is for — but it must
