@@ -10,6 +10,7 @@
 // 挪到 navigate 之后仍然全绿）。下面的用例改成真发一个 mode:"navigate" 的请求。
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
+import { File as NodeFile } from "node:buffer";
 import { resolve } from "node:path";
 import { STREAM_ROUTE, streamURL, contentDisposition } from "./lib/sw-stream";
 
@@ -193,7 +194,10 @@ function loadSW(
       return Response.redirect(new URL(url, ORIGIN).href, status);
     }
   }
-  new Function("self", "caches", "fetch", "Response", src)(swSelf, cachesStub, fetchStub, SWResponse);
+  // File has to come from the same realm as Response and the share form's
+  // files (see shareForm below): jsdom's global File is a different class, so
+  // the SW's `instanceof File` filter would drop Node's files.
+  new Function("self", "caches", "fetch", "Response", "File", src)(swSelf, cachesStub, fetchStub, SWResponse, NodeFile);
 
   return {
     put,
@@ -915,9 +919,20 @@ describe("sw-template 分享缓存的过期清理", () => {
 // bare "/" — the app opened as if nothing had been shared, and whatever had
 // already been written stayed in the cache as plaintext until the 24 h sweep.
 describe("sw-template share-target hand-off", () => {
+  // What request.formData() hands a real SW: one realm's FormData holding that
+  // realm's Files, the same realm as the Response the SW parks them in. Under
+  // jsdom the global FormData/File are jsdom's, and Node's Response does not read
+  // a jsdom File's bytes (it parked the literal "[object File]"). Node's own
+  // multipart parser can't be used either: it builds files from whatever
+  // globalThis.File is, which here is jsdom's again. So take Node's FormData
+  // from a body it parses without files, and fill it with node:buffer Files.
   const shareForm = (n: number) => async () => {
-    const fd = new FormData();
-    for (let i = 0; i < n; i++) fd.append("files", new File([`body-${i}`], `f${i}.txt`, { type: "text/plain" }));
+    const urlencoded = { "content-type": "application/x-www-form-urlencoded" };
+    const NodeFormData = (await new Response("", { headers: urlencoded }).formData()).constructor as typeof FormData;
+    const fd = new NodeFormData();
+    for (let i = 0; i < n; i++) {
+      fd.append("files", new NodeFile([`body-${i}`], `f${i}.txt`, { type: "text/plain" }) as unknown as Blob);
+    }
     return fd;
   };
   const post = (sw: ReturnType<typeof loadSW>, formData: () => Promise<FormData>) =>
@@ -932,6 +947,7 @@ describe("sw-template share-target hand-off", () => {
     expect(token).toBeTruthy();
     const keys = [...sw.shareEntries.keys()].map((u) => new URL(u).pathname);
     expect(keys).toEqual([`/__shared__/${token}/count`, `/__shared__/${token}/0`, `/__shared__/${token}/1`]);
+    expect(sw.put.map((p) => p.body), "the parked bytes are the shared files' contents").toEqual(["2", "body-0", "body-1"]);
   });
 
   it("on a failed write deletes what it already cached and tells the app", async () => {
@@ -942,6 +958,7 @@ describe("sw-template share-target hand-off", () => {
     expect(loc.searchParams.get("share-target-error"), "the app must be told").toBe("1");
     expect(loc.searchParams.has("share-target")).toBe(false);
     expect(sw.put.length, "the failure really came after partial writes").toBe(2);
+    expect(sw.put.map((p) => p.body), "count and file 0 were really written").toEqual(["3", "body-0"]);
     expect([...sw.shareEntries.keys()], "partial plaintext left in the cache").toEqual([]);
   });
 
