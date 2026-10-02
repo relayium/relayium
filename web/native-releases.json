@@ -1,9 +1,9 @@
 {
   "macos": {
     "available": true,
-    "version": "1.4.4",
-    "build": 41,
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/macos-v1.4.4/Relayium.dmg",
+    "version": "1.4.5",
+    "build": 42,
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/macos-v1.4.5/Relayium.dmg",
     "architectures": [
       "arm64"
     ]
