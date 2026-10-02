@@ -15,12 +15,14 @@ name: account-race-nightly
 #
 # ## Why this is not a gate
 #
-# It is the ~44-minute lane the split replaced, and putting it back in front of
-# every pull request would undo the change. It runs on a schedule and on
-# demand, on `main`'s current state, and reports by failing — not by blocking a
-# merge. That is a deliberate trade: ordering defects are rare and are not
-# usually introduced by the commit that reveals them, so finding one a day late
-# is acceptable where a 44-minute PR wait is not.
+# It is the serial lane the split replaced — about 44 minutes when the split
+# was made, and close to two hours of serial work now (see the bounds below) —
+# and putting it back in front of every pull request would undo the change. It
+# runs on a schedule and on demand, on `main`'s current state, and reports by
+# failing — not by blocking a merge. That is a deliberate trade: ordering
+# defects are rare and are not usually introduced by the commit that reveals
+# them, so finding one a day late is acceptable where a PR wait of this length
+# is not.
 #
 # It must never be given a `push:` or `pull_request:` trigger. If it acquires
 # one it becomes the monolithic gate again, and
@@ -45,13 +47,24 @@ concurrency:
 jobs:
   serial-shuffled:
     runs-on: ubuntu-latest
-    # Diagnostic, not a budget with margin. The monolithic lane measured
-    # ~43m35s hosted and `-shuffle=on` does not change the work, only its
-    # order; the bounds below are roughly 2.5x that, because the point of this
-    # lane is to produce a goroutine dump or a race report, and a run cut short
-    # at its own measurement produces neither. Nothing waits on it, so a long
-    # bound costs only runner minutes once a day.
-    timeout-minutes: 130
+    # Diagnostic bounds, sized from the current package rather than from the
+    # ~43m35s the monolithic lane measured when the split was made. The
+    # package has grown since: the frozen account timing profile the race
+    # shards are weighted from sums to ~119.9 minutes of serial work, a second
+    # hosted measurement summed its top-level tests to ~117.2 minutes, one
+    # hosted nightly passed in 86m57s, and one ran straight into a 120-minute
+    # `go test -timeout` — a budget equal to its own expected runtime, not
+    # evidence of a hang. `-shuffle=on` changes the order, not the work.
+    #
+    # So Go's deadline is 140m, ~20 minutes (~17%) over that baseline, and the
+    # job's is 150m, ten minutes above Go's. The order matters: when Go's own
+    # deadline fires, the test binary panics and prints every goroutine, which
+    # is the evidence a hang leaves. If the runner cancels the job before Go's
+    # deadline, that dump can be lost, so the job bound must stay above it.
+    # The point of this lane is a race report or that dump. Both bounds stay
+    # finite: a real deadlock still ends the run. Nothing waits on it, so the
+    # longer bound costs only runner minutes once a day.
+    timeout-minutes: 150
     steps:
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
@@ -68,4 +81,4 @@ jobs:
       # itself, so a failing order can be replayed with -shuffle=<seed>.
       - name: go test -race -shuffle=on (full serial account)
         working-directory: server
-        run: go test -race -count=1 -shuffle=on -timeout 120m ./account
+        run: go test -race -count=1 -shuffle=on -timeout 140m ./account
