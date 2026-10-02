@@ -127,9 +127,14 @@ json.dump({
 PLAN
 
 web_message="  web → android (UI):   你好 🌍   "
+# `ui-session`: this round runs on the server's production random ids, so the
+# browser half takes none of the role-coverage lane's barrier arguments (it
+# refuses them). It still requires its own single socket and single welcome,
+# and this round makes no claim about which link role either side played.
 ( cd "$repo/web" && exec node e2e/android-interop.mjs \
     --origin "$origin" --code "$code" --out "$browser_out" \
-    --verify default --message "$web_message" --plan "$plan" ) \
+    --verify default --message "$web_message" --plan "$plan" \
+    --welcome-mode ui-session ) \
   >"$run_root/browser.log" 2>&1 &
 browser_pid=$!
 register_child "browser-ui" "$browser_pid"

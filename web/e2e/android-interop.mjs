@@ -38,6 +38,106 @@ import {
   SAVE_STUB, VERIFY_DEFAULT, VERIFY_ON, setWideViewport, withWatchdog,
 } from "./harness.mjs";
 
+/**
+ * The ONE argument contract of this file, classified before anything else
+ * happens — before the plan is read, before Chrome, before any file.
+ *
+ * Two callers, two welcome modes, each chosen EXPLICITLY:
+ *
+ *   * `strict` (the default when `--welcome-mode` is absent) —
+ *     `android-interop-acceptance.sh`, the role-coverage lane. All four
+ *     barrier arguments are required: the round, a fresh nonce, the exclusive
+ *     receipt path, and the id the server's deterministic schedule will give
+ *     this page. The page must be welcomed with exactly that id and drops the
+ *     0600 receipt the shell waits for before the Android half starts.
+ *   * `ui-session` — `android-ui-session-acceptance.sh`, the real-picker UI
+ *     round on production random ids. NONE of the four barrier arguments may
+ *     be passed (a mixed set is refused, never half-honoured); the page still
+ *     requires its own real single socket and single welcome with a 16-hex id,
+ *     but writes no receipt, expects no planned id and makes no role claim.
+ *
+ * Two print-only diagnostic seams exit before anything else runs, and neither
+ * real caller may pass them (`scripts/test/role-coverage-cap-test.mjs`):
+ *   * `--check-args` prints this classification;
+ *   * `--check-welcome FILE` prints `welcomeVerdict` for a recorded wire
+ *     history. Neither reads the plan, starts a browser, or writes anything —
+ *     in particular never a receipt.
+ */
+const WELCOME_MODES = ["strict", "ui-session"];
+const BARRIER_FLAGS = ["--round", "--nonce", "--ready", "--expect-self"];
+const ID16 = /^[0-9a-f]{16}$/;
+
+function classifyArgs(args) {
+  const flag = (name) => {
+    const i = args.indexOf(name);
+    return i >= 0 ? args[i + 1] : undefined;
+  };
+  const problems = [];
+  const mode = args.includes("--welcome-mode") ? flag("--welcome-mode") : "strict";
+  if (!WELCOME_MODES.includes(mode)) {
+    problems.push(`--welcome-mode must be one of ${WELCOME_MODES.join(", ")}, not ${JSON.stringify(mode ?? null)}`);
+  }
+  for (const name of ["--origin", "--code", "--out", "--plan"]) {
+    if (!flag(name)) problems.push(`${name} is required`);
+  }
+  if (mode === "strict") {
+    for (const name of ["--round", "--nonce", "--ready"]) {
+      if (!flag(name)) problems.push(`strict mode requires ${name}`);
+    }
+    if (!ID16.test(flag("--expect-self") ?? "")) problems.push("strict mode requires --expect-self as 16 lowercase hex");
+  } else if (mode === "ui-session") {
+    const mixed = BARRIER_FLAGS.filter((name) => args.includes(name));
+    if (mixed.length) problems.push(`ui-session mode refuses the strict barrier arguments ${mixed.join(", ")}`);
+  }
+  return {
+    ok: problems.length === 0,
+    problems,
+    welcomeMode: mode,
+    round: flag("--round") ?? "",
+    nonce: flag("--nonce") ?? "",
+    ready: flag("--ready") ?? "",
+    expectSelf: flag("--expect-self") ?? "",
+  };
+}
+
+/**
+ * Is this page's OWN welcome acceptable? A pure judgement over the recorded
+ * wire history, used by the real barrier (`awaitOwnWelcome`) and by the
+ * print-only `--check-welcome` seam alike. It never needs the Android peer.
+ */
+function welcomeVerdict(wire, mode, expectSelf) {
+  const sockets = Array.isArray(wire?.sockets) ? wire.sockets : [];
+  const welcomes = sockets.flatMap((s) => (Array.isArray(s?.welcomes) ? s.welcomes : []));
+  if (sockets.length !== 1) return { ok: false, problem: `the page opened ${sockets.length} websockets before its welcome, not one` };
+  if (welcomes.length !== 1) return { ok: false, problem: `the page saw ${welcomes.length} welcomes before the barrier, not one` };
+  const selfId = welcomes[0];
+  if (typeof selfId !== "string" || !ID16.test(selfId)) {
+    return { ok: false, problem: `the server welcomed this page with a malformed id ${JSON.stringify(selfId)}` };
+  }
+  if (mode === "strict" && selfId !== expectSelf) {
+    return { ok: false, problem: `the server welcomed this page as ${JSON.stringify(selfId)}, but the schedule planned ${expectSelf}` };
+  }
+  return { ok: true, selfId, sockets: sockets.length, welcomes: welcomes.length };
+}
+
+const ARGS = classifyArgs(process.argv.slice(2));
+if (!ARGS.ok) {
+  console.error("usage: android-interop.mjs --origin URL --code CODE --out FILE --plan FILE [--welcome-mode strict|ui-session] "
+    + "(strict: --round N --nonce HEX --ready FILE --expect-self ID16; ui-session: none of those) [...]");
+  for (const problem of ARGS.problems) console.error(`  - ${problem}`);
+  process.exit(2);
+}
+if (argPresent("--check-args")) {
+  console.log(JSON.stringify({ welcomeMode: ARGS.welcomeMode, round: ARGS.round, hasNonce: ARGS.nonce !== "",
+                               hasReady: ARGS.ready !== "", expectSelf: ARGS.expectSelf }));
+  process.exit(0);
+}
+if (argPresent("--check-welcome")) {
+  const wire = JSON.parse(readFileSync(argFlag("--check-welcome", ""), "utf8"));
+  console.log(JSON.stringify(welcomeVerdict(wire, ARGS.welcomeMode, ARGS.expectSelf)));
+  process.exit(0);
+}
+
 const ORIGIN = argFlag("--origin", "");
 const CODE = argFlag("--code", "");
 const MESSAGE = argFlag("--message", "");
@@ -83,22 +183,19 @@ const OUT = argFlag("--out", "");
 const VERIFY = argFlag("--verify", "default");
 const KEEP = argPresent("--keep");
 /**
- * The welcome barrier (see `awaitOwnWelcome`). The shell hands each round a
- * fresh nonce, the round number, the id the acceptance server's deterministic
- * schedule will give THIS page's socket, and where to drop the receipt; it
- * starts the Android half only after that receipt exists and checks out.
+ * The welcome barrier (see `awaitOwnWelcome`), from the classified contract
+ * above. In strict mode the shell hands each round a fresh nonce, the round
+ * number, the id the acceptance server's deterministic schedule will give THIS
+ * page's socket, and where to drop the receipt; it starts the Android half
+ * only after that receipt exists and checks out. In ui-session mode all four
+ * are empty and no receipt is written.
  */
-const ROUND = argFlag("--round", "");
-const NONCE = argFlag("--nonce", "");
-const READY = argFlag("--ready", "");
-const EXPECT_SELF = argFlag("--expect-self", "");
+const WELCOME_MODE = ARGS.welcomeMode;
+const ROUND = ARGS.round;
+const NONCE = ARGS.nonce;
+const READY = ARGS.ready;
+const EXPECT_SELF = ARGS.expectSelf;
 const GLOBAL_TIMEOUT_MS = 12 * 60_000;
-
-if (!ORIGIN || !CODE || !OUT || !ROUND || !NONCE || !READY || !/^[0-9a-f]{16}$/.test(EXPECT_SELF)) {
-  console.error("usage: android-interop.mjs --origin URL --code CODE --out FILE --round N --nonce HEX "
-    + "--ready FILE --expect-self ID16 [...]");
-  process.exit(2);
-}
 
 const HEAD = ".workspace-head";
 const HEAD_SAS = ".workspace-head .sas code";
@@ -116,6 +213,9 @@ const observed = {
   selfId: "",
   peerId: "",
   round: ROUND,
+  /** Which welcome contract this run was held to. Only `strict` runs carry a
+   *  planned id and a receipt; a `ui-session` run makes no role claim. */
+  welcomeMode: WELCOME_MODE,
   /** Every websocket this page constructed, with every welcome, roster, left
    *  and link signal it carried — METADATA only (see `WIRE_OBSERVER`). The
    *  oracle judges the round's identities and its wire roles from this
@@ -504,20 +604,21 @@ async function snapshotWire(tab) {
  * an old or foreign receipt can neither be overwritten nor read half-written.
  */
 async function awaitOwnWelcome(tab, deadline) {
+  // This page's OWN welcome only — never the Android peer, which the shell
+  // starts AFTER the strict receipt exists (waiting for it here would deadlock).
   await tab.waitFor("(window.__relayiumWire?.sockets ?? []).some((s) => s.welcomes.length > 0)",
                     "this page's own welcome", Math.max(1, deadline - Date.now()));
   const wire = await snapshotWire(tab);
-  const sockets = wire?.sockets ?? [];
-  const welcomes = sockets.flatMap((s) => s.welcomes);
-  if (sockets.length !== 1) throw new Error(`the page opened ${sockets.length} websockets before its welcome, not one`);
-  if (welcomes.length !== 1) throw new Error(`the page saw ${welcomes.length} welcomes before the barrier, not one`);
-  const selfId = welcomes[0];
-  if (selfId !== EXPECT_SELF) {
-    throw new Error(`the server welcomed this page as ${JSON.stringify(selfId)}, `
-      + `but round ${ROUND}'s schedule planned ${EXPECT_SELF}`);
+  const verdict = welcomeVerdict(wire, WELCOME_MODE, EXPECT_SELF);
+  if (!verdict.ok) throw new Error(`${verdict.problem} (round ${ROUND || "-"}, ${WELCOME_MODE})`);
+  const { selfId, sockets, welcomes } = verdict;
+  if (WELCOME_MODE !== "strict") {
+    // ui-session: production random ids, no schedule, no receipt, no role claim.
+    ok(`browser welcomed as ${selfId} (ui-session: one socket, one welcome; no receipt)`);
+    return;
   }
   const receipt = JSON.stringify({ round: ROUND, nonce: NONCE, selfId, expectedSelfId: EXPECT_SELF,
-                                   sockets: sockets.length, welcomes: welcomes.length }) + "\n";
+                                   sockets, welcomes }) + "\n";
   const temp = `${READY}.${process.pid}.tmp`;
   writeFileSync(temp, receipt, { flag: "wx", mode: 0o600 });
   try { linkSync(temp, READY); } finally { unlinkSync(temp); }

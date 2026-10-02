@@ -33,6 +33,18 @@
 //     writes its exclusive 0600 receipt before waiting for the peer); the plan
 //     handed to the oracle; the oracle still judging identities; and the final
 //     accepted-socket count.
+//   - The browser half's TWO real callers, run through the browser half's OWN
+//     argument classifier (`node web/e2e/android-interop.mjs … --check-args`,
+//     print-only, nothing read, spawned or written): the argv each caller's
+//     source actually passes, with every shell variable replaced by a fixed
+//     placeholder, must classify as `strict` for `android-interop-acceptance.sh`
+//     and as `ui-session` for `android-ui-session-acceptance.sh` — the d5216a55d
+//     regression, where the UI caller passed none of the strict barrier
+//     arguments and its browser half exited 2 before Chrome, is RED here by
+//     name. Neither caller may pass a diagnostic seam flag. The welcome
+//     judgement itself is exercised through the print-only `--check-welcome`
+//     seam on recorded wire histories (wrong id, repeated welcome, two
+//     sockets, malformed id), never by writing a receipt.
 //
 // Every statistical cap — only Windows samples now — must be equal to every
 // other and at least FLOOR. It does not check what an environment override can
@@ -55,7 +67,11 @@
 // text, and each must turn exactly its own claim red. There is deliberately no
 // statistical test here: a random check on CI is a flake by construction.
 
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import process from "node:process";
 
 /** Rounds every role-coverage lane must be able to run. At 10 a healthy run
  *  misses a role in 2^-9 (~0.2%), the value W-N19 chose. A statistical lane may
@@ -68,7 +84,79 @@ const LANES = {
   android: "scripts/android-interop-acceptance.sh",
   androidOracle: "scripts/test/android-interop-oracle.py",
   androidBrowser: "web/e2e/android-interop.mjs",
+  uiShell: "scripts/android-ui-session-acceptance.sh",
 };
+
+const FIXTURE = new URL("../../web/e2e/android-interop.mjs", import.meta.url).pathname;
+const scratch = mkdtempSync(join(tmpdir(), "role-coverage-cap-"));
+process.on("exit", () => { try { rmSync(scratch, { recursive: true, force: true }); } catch { /* best effort */ } });
+
+/** Fixed placeholders for every shell variable a caller passes. A variable
+ *  with no placeholder is a failure, never silently dropped. None of these
+ *  paths is created: `--check-args` reads, spawns and writes nothing. */
+const PLACEHOLDERS = {
+  origin: "http://127.0.0.1:9",
+  code: "123456",
+  browser_out: join(scratch, "browser.json"),
+  verify_mode: "default",
+  web_message_text: "message",
+  web_message: "message",
+  plan: join(scratch, "plan.json"),
+  round: "2",
+  nonce: "0123456789abcdef0123456789abcdef",
+  receipt: join(scratch, "welcome.json"),
+  browser_planned_id: "0222222222222222",
+};
+
+/** The argv a caller's source passes to the browser half, substituted. */
+function callerArgv(text) {
+  const found = [...(text ?? "").matchAll(/exec node e2e\/android-interop\.mjs \\\n([\s\S]*?)\)/g)];
+  if (found.length !== 1) return { error: `found ${found.length} invocations of the browser half, not one` };
+  const argv = [];
+  for (const m of found[0][1].replace(/\\\n/g, " ").matchAll(/"([^"]*)"|(\S+)/g)) {
+    const token = m[1] ?? m[2];
+    const variable = /^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$/.exec(token);
+    if (variable) {
+      if (!(variable[1] in PLACEHOLDERS)) return { error: `no placeholder for $${variable[1]}` };
+      argv.push(PLACEHOLDERS[variable[1]]);
+    } else if (token.includes("$")) {
+      return { error: `cannot substitute ${JSON.stringify(token)}` };
+    } else {
+      argv.push(token);
+    }
+  }
+  return { argv };
+}
+
+/** The browser half's OWN classification of an argv (print-only seam). */
+function classify(argv) {
+  const r = spawnSync(process.execPath, [FIXTURE, ...argv, "--check-args"], { encoding: "utf8", timeout: 20_000 });
+  let parsed = null;
+  try { parsed = r.status === 0 ? JSON.parse(r.stdout) : null; } catch { parsed = null; }
+  return { status: r.status, out: parsed, err: (r.stderr ?? "").trim() };
+}
+
+/** Both real callers, run through the real classifier. */
+function evaluateCallers(w, problems) {
+  for (const [lane, key, want, who] of [
+    ["android", "callers:main", "strict", "the role-coverage lane's caller"],
+    ["uiShell", "callers:ui", "ui-session", "the UI session caller"],
+  ]) {
+    const { argv, error } = callerArgv(w[lane]);
+    if (error) {
+      problems.push({ key, message: `${LANES[lane]}: ${error}` });
+      continue;
+    }
+    const r = classify(argv);
+    if (r.status !== 0 || r.out?.welcomeMode !== want) {
+      problems.push({ key, message: `${who}'s argv is refused or misclassified by the browser half `
+        + `(exit ${r.status}, mode ${JSON.stringify(r.out?.welcomeMode ?? null)}, want ${want}): ${r.err.split("\n").slice(1).join(" ")}` });
+    }
+    if (/--check-(?:args|welcome)\b/.test(w[lane] ?? "")) {
+      problems.push({ key: "callers:seam", message: `${LANES[lane]} passes a diagnostic seam flag to the browser half` });
+    }
+  }
+}
 
 /** A lane file that cannot be read is reported as that lane's parse failure
  *  (with the reason) rather than as a stack trace. */
@@ -119,6 +207,7 @@ function evaluate(w) {
   exactlyOne("windows:loop", w.windows, WINDOWS_LOOP, `${LANES.windows} round loop bounded by MAX_ROUNDS`);
 
   evaluateAndroid(w, problems, exactlyOne);
+  evaluateCallers(w, problems);
   exactlyOne("native:deterministic-rounds", w.native, NATIVE_DETERMINISTIC, `${LANES.native} deterministic two-round declaration`);
   exactlyOne("native:deterministic-ids", w.native, NATIVE_IDS, `${LANES.native} opposite peer-id schedule`);
   if (!(w.native ?? "").includes('|| fail "round $round assigned browser role $role, want deterministic $expected_role"')) {
@@ -330,11 +419,105 @@ const MUTATIONS = [
   ["android file unreadable (empty)",
     () => ({ ...world, android: "" }),
     ["android:rounds", "android:loop", "android:ids", "android:roles", "android:barrier",
-     "android:plan-binding", "android:plan-binding", "android:plan-binding", "android:count"]],
+     "android:plan-binding", "android:plan-binding", "android:plan-binding", "android:count", "callers:main"]],
+  ["UI caller without its welcome mode (the d5216a55d regression)",
+    () => mutate("uiShell", '--plan "$plan" \\\n    --welcome-mode ui-session ) \\', '--plan "$plan" ) \\'),
+    ["callers:ui"]],
+  ["UI caller passes a strict barrier argument too (mixed)",
+    () => mutate("uiShell", "    --welcome-mode ui-session ) \\", '    --welcome-mode ui-session --round "$round" ) \\'),
+    ["callers:ui"]],
+  ["UI caller asks for strict",
+    () => mutate("uiShell", "    --welcome-mode ui-session ) \\", "    --welcome-mode strict ) \\"),
+    ["callers:ui"]],
+  ["UI caller passes a diagnostic seam",
+    () => mutate("uiShell", "    --welcome-mode ui-session ) \\", "    --welcome-mode ui-session --check-args ) \\"),
+    ["callers:seam"]],
+  ["role-coverage caller downgraded to ui-session",
+    () => mutate("android", '--expect-self "$browser_planned_id"', '--expect-self "$browser_planned_id" --welcome-mode ui-session'),
+    ["callers:main"]],
+  ["role-coverage caller loses --round",
+    () => mutate("android", ' --round "$round" --nonce', " --nonce"),
+    ["callers:main"]],
+  ["role-coverage caller loses --nonce",
+    () => mutate("android", ' --nonce "$nonce"', ""),
+    ["callers:main"]],
+  ["role-coverage caller loses --ready",
+    () => mutate("android", ' --ready "$receipt"', ""),
+    ["callers:main"]],
+  ["role-coverage caller loses --expect-self",
+    () => mutate("android", ' --expect-self "$browser_planned_id"', ""),
+    ["callers:main", "android:barrier"]],
+  ["role-coverage caller passes a variable with no placeholder",
+    () => mutate("android", '--code "$code"', '--code "$mystery_code"'),
+    ["callers:main"]],
   ["windows file missing",
     () => ({ ...world, windows: undefined }),
     ["windows:parse", "windows:loop"]],
 ];
+
+// ── the browser half's own contract, run directly ──────────────────────────
+//
+// Not per-mutation: these exercise the fixture's classifier and its welcome
+// judgement on fixed inputs. Every case names what it must produce.
+const BASE = ["--origin", PLACEHOLDERS.origin, "--code", "123456", "--out", PLACEHOLDERS.browser_out,
+              "--plan", PLACEHOLDERS.plan];
+const STRICT = ["--round", "2", "--nonce", PLACEHOLDERS.nonce, "--ready", PLACEHOLDERS.receipt,
+                "--expect-self", "0222222222222222"];
+let contracts = 0;
+const contract = (name, argv, want) => {
+  const r = classify(argv);
+  const ok = want.mode ? (r.status === 0 && r.out?.welcomeMode === want.mode)
+    : (r.status === 2 && want.reason.test(r.err));
+  if (ok) contracts++;
+  else fail(`contract "${name}": exit ${r.status}, mode ${JSON.stringify(r.out?.welcomeMode ?? null)}: ${r.err.slice(0, 300)}`);
+};
+if (failed === 0) {
+  contract("strict, default mode", [...BASE, ...STRICT], { mode: "strict" });
+  contract("strict, explicit mode", [...BASE, ...STRICT, "--welcome-mode", "strict"], { mode: "strict" });
+  contract("ui-session", [...BASE, "--welcome-mode", "ui-session"], { mode: "ui-session" });
+  contract("no mode and no barrier arguments (the UI caller before this fix)", [...BASE],
+    { reason: /strict mode requires --round/ });
+  for (let i = 0; i < STRICT.length; i += 2) {
+    const without = [...STRICT.slice(0, i), ...STRICT.slice(i + 2)];
+    contract(`strict without ${STRICT[i]}`, [...BASE, ...without],
+      { reason: new RegExp(`strict mode requires ${STRICT[i]}`) });
+  }
+  for (let i = 0; i < STRICT.length; i += 2) {
+    contract(`ui-session with ${STRICT[i]}`, [...BASE, "--welcome-mode", "ui-session", STRICT[i], STRICT[i + 1]],
+      { reason: new RegExp(`ui-session mode refuses the strict barrier arguments ${STRICT[i]}`) });
+  }
+  contract("strict with a malformed --expect-self", [...BASE, ...STRICT.slice(0, 6), "--expect-self", "0222"],
+    { reason: /--expect-self as 16 lowercase hex/ });
+  contract("an unknown mode", [...BASE, "--welcome-mode", "relaxed"], { reason: /must be one of strict, ui-session/ });
+  contract("a mode flag with no value", [...BASE, "--welcome-mode"], { reason: /must be one of strict, ui-session/ });
+  contract("no plan", ["--origin", PLACEHOLDERS.origin, "--code", "1", "--out", PLACEHOLDERS.browser_out, ...STRICT],
+    { reason: /--plan is required/ });
+
+  // The welcome judgement, through the print-only seam: never a receipt.
+  const SELF = "0222222222222222";
+  const wire = (sockets) => ({ sockets: sockets.map((welcomes) => ({ path: "/ws", welcomes, rosters: [], lefts: [], signals: [] })) });
+  const verdict = (name, mode, history, want) => {
+    const file = join(scratch, `wire-${contracts}-${name.replace(/[^a-z]+/gi, "-")}.json`);
+    writeFileSync(file, JSON.stringify(history));
+    const argv = mode === "strict" ? [...BASE, ...STRICT] : [...BASE, "--welcome-mode", "ui-session"];
+    const r = spawnSync(process.execPath, [FIXTURE, ...argv, "--check-welcome", file], { encoding: "utf8", timeout: 20_000 });
+    let v = null;
+    try { v = JSON.parse(r.stdout); } catch { v = null; }
+    const ok = r.status === 0 && v && (want.ok ? v.ok === true && v.selfId === want.selfId : v.ok === false && want.reason.test(v.problem));
+    if (ok) contracts++;
+    else fail(`welcome "${name}" (${mode}): exit ${r.status}, verdict ${r.stdout.trim().slice(0, 300)} ${r.stderr.trim().slice(0, 200)}`);
+  };
+  verdict("the planned id, one socket, one welcome", "strict", wire([[SELF]]), { ok: true, selfId: SELF });
+  verdict("another id than planned", "strict", wire([["f333333333333333"]]), { reason: /but the schedule planned 0222222222222222/ });
+  verdict("a repeated welcome", "strict", wire([[SELF, SELF]]), { reason: /saw 2 welcomes/ });
+  verdict("two sockets", "strict", wire([[SELF], []]), { reason: /opened 2 websockets/ });
+  verdict("a malformed id", "strict", wire([["0222"]]), { reason: /malformed id/ });
+  verdict("no welcome at all", "strict", wire([[]]), { reason: /saw 0 welcomes/ });
+  verdict("a random production id", "ui-session", wire([["9a8b7c6d5e4f3a2b"]]), { ok: true, selfId: "9a8b7c6d5e4f3a2b" });
+  verdict("a repeated welcome", "ui-session", wire([["9a8b7c6d5e4f3a2b", "1111111111111111"]]), { reason: /saw 2 welcomes/ });
+  verdict("two sockets", "ui-session", wire([["9a8b7c6d5e4f3a2b"], ["1111111111111111"]]), { reason: /opened 2 websockets/ });
+  verdict("a malformed id", "ui-session", wire([["NOT-HEX-AT-ALL!!"]]), { reason: /malformed id/ });
+}
 
 let caught = 0;
 if (failed === 0) {
@@ -360,4 +543,4 @@ if (failed > 0) {
   process.exit(1);
 }
 console.log(`ok role-coverage-cap: ${real.caps.map((c) => `${c.key}=${c.value}`).join(" ")} (floor ${FLOOR}); `
-  + `${caught} mutations each red for its own claim`);
+  + `${caught} mutations each red for its own claim; ${contracts} browser-half contract cases`);
