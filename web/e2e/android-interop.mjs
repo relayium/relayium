@@ -28,7 +28,7 @@
  * precondition (no workspace, no composer): that is reported by failing.
  */
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { linkSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -82,10 +82,21 @@ const EXPECT_SAVED = PLAN.expectSaved ?? [];
 const OUT = argFlag("--out", "");
 const VERIFY = argFlag("--verify", "default");
 const KEEP = argPresent("--keep");
+/**
+ * The welcome barrier (see `awaitOwnWelcome`). The shell hands each round a
+ * fresh nonce, the round number, the id the acceptance server's deterministic
+ * schedule will give THIS page's socket, and where to drop the receipt; it
+ * starts the Android half only after that receipt exists and checks out.
+ */
+const ROUND = argFlag("--round", "");
+const NONCE = argFlag("--nonce", "");
+const READY = argFlag("--ready", "");
+const EXPECT_SELF = argFlag("--expect-self", "");
 const GLOBAL_TIMEOUT_MS = 12 * 60_000;
 
-if (!ORIGIN || !CODE || !OUT) {
-  console.error("usage: android-interop.mjs --origin URL --code CODE --out FILE [...]");
+if (!ORIGIN || !CODE || !OUT || !ROUND || !NONCE || !READY || !/^[0-9a-f]{16}$/.test(EXPECT_SELF)) {
+  console.error("usage: android-interop.mjs --origin URL --code CODE --out FILE --round N --nonce HEX "
+    + "--ready FILE --expect-self ID16 [...]");
   process.exit(2);
 }
 
@@ -104,6 +115,13 @@ const observed = {
   role: "",
   selfId: "",
   peerId: "",
+  round: ROUND,
+  /** Every websocket this page constructed, with every welcome, roster, left
+   *  and link signal it carried — METADATA only (see `WIRE_OBSERVER`). The
+   *  oracle judges the round's identities and its wire roles from this
+   *  history, never from the `role` field above, which is this file's own
+   *  arithmetic. `null` until the page has been read at least once. */
+  wire: null,
   verify: VERIFY,
   receivedMessages: [],
   /** One record per COMPLETED save: `{name, size, sha256}`. The shell compares
@@ -375,36 +393,136 @@ async function readSaves(tab, cache) {
   return out;
 }
 
-/** Publish the page's own peer ids without changing any behaviour, so a round
- *  can REPORT which role assignment it exercised. The clients decide the role
- *  themselves by `selfId < peerId`; nothing here influences it. */
-const EXPOSE_IDS = `
+/**
+ * Record what the page's own websocket carries, without changing any behaviour.
+ *
+ * The role a round exercised is NOT taken from this file's arithmetic: the
+ * clients decide it themselves by `selfId < peerId`, and what each then does
+ * on the wire is the independent evidence. The responder ASKS (`linkRequest`)
+ * and the initiator OFFERS (`sdp.type == "offer"`) — `web/src/lib/peer-link`
+ * accepts an offer only as responder and acts on a request only as initiator —
+ * so the direction of the offers says which role this page actually played.
+ *
+ * History, never last-write-wins: every constructed socket is its own record,
+ * and every welcome, roster, departure and link signal is appended to it. A
+ * reconnect, a second welcome, a foreign peer or a peer that left and came
+ * back therefore stays visible to the oracle instead of being overwritten.
+ *
+ * METADATA ONLY. A signal is reduced to its direction, the peer id it was
+ * addressed to or stamped from, and a kind derived from three boolean tests;
+ * no SDP, ICE candidate, auth tag, key, code or payload is copied anywhere,
+ * and a socket keeps only its URL PATH (the query carries the pairing code).
+ *
+ * `__relayiumSelfId` and `__relayiumPeers` remain as the latest values for the
+ * waits below; they are conveniences, not evidence.
+ */
+const WIRE_OBSERVER = `
   (() => {
     window.__relayiumSelfId = '';
+    window.__relayiumPeers = [];
+    window.__relayiumWire = { sockets: [] };
+    const kindOf = (data) => {
+      if (!data || typeof data !== 'object' || data.link !== true) return 'other';
+      if (data.linkRequest === true) return 'request';
+      const type = data.sdp && typeof data.sdp === 'object' ? data.sdp.type : undefined;
+      if (type === 'offer') return 'offer';
+      if (type === 'answer') return 'answer';
+      return 'other';
+    };
     const seen = new WeakSet();
-    const hook = (ws) => {
+    const hook = (ws, url) => {
       if (seen.has(ws)) return;
       seen.add(ws);
+      let path = '';
+      try { path = new URL(String(url), location.href).pathname; } catch { path = '?'; }
+      const record = { path, welcomes: [], rosters: [], lefts: [], signals: [] };
+      window.__relayiumWire.sockets.push(record);
       ws.addEventListener('message', (ev) => {
-        try {
-          const m = JSON.parse(ev.data);
-          if (m && m.type === 'welcome' && typeof m.name === 'string') window.__relayiumSelfId = m.name;
-          if (m && m.type === 'peers' && Array.isArray(m.peers)) {
-            window.__relayiumPeers = m.peers.map((p) => p.id);
-          }
-        } catch { /* not ours */ }
+        let m;
+        try { m = JSON.parse(ev.data); } catch { return; }
+        if (!m || typeof m !== 'object') return;
+        if (m.type === 'welcome') {
+          record.welcomes.push(typeof m.name === 'string' ? m.name : '');
+          if (typeof m.name === 'string') window.__relayiumSelfId = m.name;
+        } else if (m.type === 'peers') {
+          const ids = Array.isArray(m.peers) ? m.peers.map((p) => (p && typeof p.id === 'string' ? p.id : '')) : [];
+          record.rosters.push(ids);
+          window.__relayiumPeers = ids;
+        } else if (m.type === 'left') {
+          record.lefts.push(typeof m.peer === 'string' ? m.peer : '');
+        } else if (m.type === 'signal') {
+          record.signals.push({ dir: 'in', kind: kindOf(m.data), peer: typeof m.from === 'string' ? m.from : '' });
+        }
       });
+      const nativeSend = ws.send;
+      ws.send = function (frame) {
+        try {
+          const m = typeof frame === 'string' ? JSON.parse(frame) : null;
+          if (m && m.type === 'signal') {
+            record.signals.push({ dir: 'out', kind: kindOf(m.data), peer: typeof m.to === 'string' ? m.to : '' });
+          }
+        } catch { /* not a JSON frame; nothing to record */ }
+        return nativeSend.apply(this, arguments);
+      };
     };
     const Native = window.WebSocket;
     window.WebSocket = function (...args) {
       const ws = new Native(...args);
-      hook(ws);
+      hook(ws, args[0]);
       return ws;
     };
     window.WebSocket.prototype = Native.prototype;
     Object.assign(window.WebSocket, Native);
   })();
 `;
+
+/** The page's wire history, as plain JSON. */
+const READ_WIRE = "JSON.parse(JSON.stringify(window.__relayiumWire ?? null))";
+
+/** Copy the page's wire history into the observation. Best effort only where
+ *  the page may already be gone; the oracle requires the field regardless. */
+async function snapshotWire(tab) {
+  const wire = await tab.evaluate(READ_WIRE);
+  if (wire && Array.isArray(wire.sockets)) observed.wire = wire;
+  return observed.wire;
+}
+
+/**
+ * The welcome barrier: the round's causal ordering made observable.
+ *
+ * The acceptance server's deterministic schedule hands ids out in ACCEPT
+ * order, so the browser's socket must be accepted before Android's. This waits
+ * for this page's own welcome — the server's statement of the id it assigned —
+ * and only then drops a receipt the shell waits for before it starts the
+ * Android half. Before writing it, the page must have constructed exactly ONE
+ * socket and seen exactly ONE welcome, carrying exactly the id the schedule
+ * planned; anything else fails here, before any expensive transfer.
+ *
+ * The receipt is metadata (round, nonce, ids, counts), mode 0600, and appears
+ * ATOMICALLY under an exclusive name: it is written to a private temporary
+ * file and hard-linked into place, and `link` refuses an existing target, so
+ * an old or foreign receipt can neither be overwritten nor read half-written.
+ */
+async function awaitOwnWelcome(tab, deadline) {
+  await tab.waitFor("(window.__relayiumWire?.sockets ?? []).some((s) => s.welcomes.length > 0)",
+                    "this page's own welcome", Math.max(1, deadline - Date.now()));
+  const wire = await snapshotWire(tab);
+  const sockets = wire?.sockets ?? [];
+  const welcomes = sockets.flatMap((s) => s.welcomes);
+  if (sockets.length !== 1) throw new Error(`the page opened ${sockets.length} websockets before its welcome, not one`);
+  if (welcomes.length !== 1) throw new Error(`the page saw ${welcomes.length} welcomes before the barrier, not one`);
+  const selfId = welcomes[0];
+  if (selfId !== EXPECT_SELF) {
+    throw new Error(`the server welcomed this page as ${JSON.stringify(selfId)}, `
+      + `but round ${ROUND}'s schedule planned ${EXPECT_SELF}`);
+  }
+  const receipt = JSON.stringify({ round: ROUND, nonce: NONCE, selfId, expectedSelfId: EXPECT_SELF,
+                                   sockets: sockets.length, welcomes: welcomes.length }) + "\n";
+  const temp = `${READY}.${process.pid}.tmp`;
+  writeFileSync(temp, receipt, { flag: "wx", mode: 0o600 });
+  try { linkSync(temp, READY); } finally { unlinkSync(temp); }
+  ok(`browser welcomed as ${selfId} (round ${ROUND}); receipt written before the Android half starts`);
+}
 
 /** The in-band request for this side's next batch. The Android half sends it
  *  as an ordinary text message once it is ready for one — after a cancelled
@@ -563,20 +681,30 @@ async function run() {
   try {
     const preference = VERIFY === "on" ? VERIFY_ON : VERIFY_DEFAULT;
     tab = await newTab(browser, `${ORIGIN}/cross-network#c=${CODE}`,
-                       preference + EXPOSE_IDS + SAVE_STUB + SAVE_LEDGER);
+                       preference + WIRE_OBSERVER + SAVE_STUB + SAVE_LEDGER);
     await setWideViewport(tab, 1280, 900);
 
+    // ONE connection budget for the welcome AND the Android peer's arrival —
+    // the same 90 seconds the peer alone used to get. The barrier spends part
+    // of it; it does not add a second one.
+    const joinDeadline = Date.now() + 90_000;
+    await awaitOwnWelcome(tab, joinDeadline);
     await tab.waitFor("(window.__relayiumPeers ?? []).length >= 2",
-                      "the Android peer to join the code room", 90_000);
-    const ids = await tab.evaluate(`(() => {
-      const peers = window.__relayiumPeers ?? [];
-      const self = window.__relayiumSelfId ?? '';
-      return { self, peer: peers.find((p) => p !== self) ?? '' };
-    })()`);
-    observed.selfId = ids.self;
-    observed.peerId = ids.peer;
-    observed.role = ids.self && ids.peer ? (ids.self < ids.peer ? "initiator" : "responder") : "";
-    ok(`browser is ${observed.role} (self ${ids.self}, peer ${ids.peer})`);
+                      "the Android peer to join the code room", Math.max(1, joinDeadline - Date.now()));
+    // The peer is the ONE id in the roster history that is not this page's
+    // welcome. Not `find` over the latest roster: the hub sorts rosters by
+    // name, so a first-match pick could name a stale copy of this page.
+    const wire = await snapshotWire(tab);
+    const self = wire.sockets[0].welcomes[0];
+    const others = [...new Set(wire.sockets.flatMap((s) => s.rosters.flat()).filter((id) => id !== self))];
+    if (others.length !== 1) throw new Error(`the room's rosters named ${others.length} peers besides this page, not one`);
+    observed.selfId = self;
+    observed.peerId = others[0];
+    // This file's own arithmetic, kept for the log line. The oracle does NOT
+    // take the role from here: it requires the wire's offer direction, the real
+    // ids and the planned schedule to agree.
+    observed.role = self < others[0] ? "initiator" : "responder";
+    ok(`browser is ${observed.role} by id order (self ${self}, peer ${others[0]})`);
 
     const opened = await tab.evaluate(`(() => {
       const b = document.querySelector('${OPEN_WORKSPACE}');
@@ -756,12 +884,14 @@ async function run() {
       "the Android peer to leave after the done handshake", 120_000);
     observed.peerLeft = true;
     ok("browser observed the peer leave; the teardown was sequenced, not raced");
+    await snapshotWire(tab);
   } finally {
     // Safety net only: the hold is normally released in-loop on the peer's
     // CANCEL_REQUESTED. If the round ended before that (an early failure), this
     // settles any still-pending forbidden write so no promise leaks; by now the
     // batch is long aborted, so it closes nothing.
     await tab?.evaluate?.("window.__releaseForbidden = true").catch(() => {});
+    if (tab) await snapshotWire(tab).catch(() => {});
     writeObservation();
     if (!KEEP) await closeOwned();
   }

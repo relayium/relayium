@@ -42,13 +42,32 @@
 # unsequenced run would sample one arbitrary interleaving and report it as
 # though the ordering space had been covered.
 #
-# ## Both role assignments
+# ## Both role assignments, by schedule
 #
-# `linkRole` gives the smaller hub id the offer and the hub assigns ids per
-# socket at random, so one round exercises one assignment and says nothing
-# about the other. Rounds run until the browser has been observed as initiator
-# AND as responder, and the run FAILS if it has not seen both within its bound
-# rather than reporting the half it got.
+# `linkRole` gives the smaller hub id the offer. With the hub's random ids each
+# round was a coin flip, and on 2026-10-02 (run 36990034609, main 672e46a2f)
+# ten functionally green rounds all left the browser RESPONDER — a 2^-10 event
+# whose cause is still UNKNOWN; the ids it saw were not kept. So the run no
+# longer samples: the loopback acceptance server's guarded deterministic hook
+# (`RELAYIUM_ACCEPTANCE_PEER_IDS`, refused anywhere but here) hands out six
+# globally distinct ids in accept order, and exactly three rounds PLAN the
+# browser as responder, initiator, responder.
+#
+# A plan is only proof once it is observed, so every round checks it three
+# independent ways (`scripts/test/android-interop-oracle.py`): the ids the
+# server actually assigned (the browser's welcome and the rosters it saw), the
+# role those real ids imply, and what the clients actually DID on the wire —
+# the initiator offers, the responder asks. Ordering is made causal rather
+# than hoped for: the Android half starts only after the browser's own welcome
+# receipt names its planned id. And because the id list cycles, the server
+# logs every accepted websocket with its own sequence number, and the run ends
+# by requiring exactly six — a reconnect, an extra socket or a refused join
+# anywhere is RED, never a retry.
+#
+# What the schedule does NOT cover: the SAS comparison happens only in round 1,
+# with the browser responder. Initiator × SAS is not claimed. A failure in the
+# initiator round is a finding about the clients — this lane never exercised
+# that assignment in the 2026-10-02 run — to investigate, not to re-roll.
 #
 # ## What a green run does NOT prove
 #
@@ -74,24 +93,20 @@ repo="$(cd "$here/.." && pwd)"
 # shellcheck source=lib/local-acceptance.sh
 source "$here/lib/local-acceptance.sh"
 
-# How many pairings to run before giving up on seeing both role assignments.
-# The role is `selfId < peerId` over the hub's random ids (`newID()` is 8 random
-# bytes), so each round is an independent coin flip and N rounds miss a side with
-# probability 2^-(N-1).
+# The deterministic schedule. Exactly three rounds, unconditionally: there is
+# no round override, no statistical tail and no random fallback — every round
+# after the third would only re-use the cycled ids, so a "cap" here would
+# claim sampling that never happens. `scripts/test/role-coverage-cap-test.mjs`
+# parses these three declarations and holds them to this shape.
 #
-# **Extra rounds are free on a run that would have passed.** The loop breaks as
-# soon as both roles have been seen AND round >= 3, so a raised cap is spent only
-# on runs that are already unlucky — exactly the ones that would otherwise go red
-# with every functional assertion green. That happened on 2026-09-22: six rounds,
-# all six passed, browser responder in all six, lane red. At six the miss rate is
-# 2^-5 (~3%) on a lane that gates merges; at ten it is 2^-9 (~0.2%), for no added
-# wall clock on a green run and about four extra minutes on an unlucky one, well
-# inside the job's 60-minute timeout.
-#
-# This does NOT mask anything: the assertion is unchanged, so a role that is
-# genuinely stuck still fails it — four minutes later. Matches
-# `native-web-pairing-acceptance.sh`, which asserts the same thing.
-max_rounds="${RELAYIUM_ANDROID_ROUNDS:-10}"
+# Two ids per round, browser first: the browser's socket is accepted before
+# Android's (the welcome barrier below enforces it), so round r gives the
+# browser entry 2r-1 and Android entry 2r. Distinct across the WHOLE list, so a
+# receipt, a welcome or a roster from another round can never match this one.
+max_rounds=3
+acceptance_peer_ids="f111111111111111,0111111111111111,0222222222222222,f222222222222222,f333333333333333,0333333333333333"
+planned_roles=(responder initiator responder)
+IFS=, read -r -a peer_id_schedule <<<"$acceptance_peer_ids"
 gradle_bin="${RELAYIUM_GRADLE:-$repo/apps/android/gradlew}"
 adb="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}/platform-tools/adb"
 serial="${ANDROID_SERIAL:-}"
@@ -146,6 +161,106 @@ require_emulator() {
 }
 
 adbs() { "$adb" -s "$serial" "$@"; }
+
+# Is this OWNED child still running? `kill -0` answers yes for any process that
+# has exited but not been reaped (a zombie), so the process state is read
+# instead. Only ever asked about PIDs this run started, and only between their
+# start and their confirmed exit. A state query cannot prove the PID still
+# names OUR child once the kernel has reused it; that is why every exited
+# child's registry slot is retired at once (`retire_owned_child`), which
+# narrows the reuse window rather than eliminating it.
+owned_pid_running() {
+  local state
+  state="$(ps -o stat= -p "$1" 2>/dev/null || true)"
+  state="${state#"${state%%[![:space:]]*}"}"
+  [ -n "$state" ] && [ "${state#Z}" = "$state" ]
+}
+
+# Retire an EXITED owned child from the cleanup registry: blank exactly the one
+# slot whose label AND pid both match, leave every other slot untouched, and
+# fail if there is not exactly one. bash reaps its children as they exit, so
+# from that moment the PID may be reused; the cleanup trap TERMs and KILLs
+# every PID still registered, and a stale slot could reach an unrelated
+# process. Called straight after `wait` collects the status — before any
+# verdict, oracle, adb call, log read or next round.
+retire_owned_child() {
+  local label="$1" pid="$2" i matched=0
+  for i in "${!child_pids[@]}"; do
+    if [ "${child_pids[$i]}" = "$pid" ] && [ "${child_labels[$i]}" = "$label" ]; then
+      child_pids[i]=""
+      matched=$((matched + 1))
+    fi
+  done
+  [ "$matched" -eq 1 ] || fail "the exited $label (pid $pid) matched $matched registry slots, not one"
+}
+
+# Collect an exited browser half's status and retire its slot, in that order,
+# whatever the status was. The status is returned for the caller to judge.
+reap_browser_half() {
+  local status=0
+  wait "$browser_pid" || status=$?
+  retire_owned_child "browser-$round" "$browser_pid"
+  browser_pid=""
+  return "$status"
+}
+
+# The welcome barrier, shell side (`awaitOwnWelcome` in the browser half is the
+# other). The Android half must not start until the browser's socket has been
+# accepted and welcomed with its planned id, because the schedule hands ids
+# out in ACCEPT order. Bounded by the same 90 seconds the browser gives the
+# whole join, and cut short the moment the browser half exits: this is the one
+# connection budget, observed from outside, not a second one.
+await_browser_welcome() {
+  local receipt="$1" waited=0
+  local status
+  while [ ! -e "$receipt" ]; do
+    if ! owned_pid_running "$browser_pid"; then
+      status=0
+      reap_browser_half || status=$?
+      fail "the browser half exited (status $status) before its welcome receipt: $(tail -40 "$run_root/browser-$round.log")"
+    fi
+    [ "$waited" -lt 360 ] \
+      || fail "no welcome receipt from the browser within 90s: $(tail -40 "$run_root/browser-$round.log")"
+    sleep 0.25
+    waited=$((waited + 1))
+  done
+  python3 "$repo/scripts/test/android-interop-oracle.py" ready-receipt \
+      "$receipt" "$round" "$nonce" "$browser_planned_id" \
+    || fail "round $round's welcome receipt does not prove the planned barrier"
+  say "-- browser welcomed as $browser_planned_id before the Android half starts"
+}
+
+# Stop THIS run's server before the final count, so nothing can append to its
+# log after it has been read. TERM, a bounded wait for the process to actually
+# exit, a reap, and only THEN its slot in the child registry is cleared — the
+# cleanup trap must never signal a PID the kernel may already have handed to an
+# unrelated process. A server that is already gone, will not exit, or cannot
+# be found in the registry exactly once fails the run.
+stop_owned_server() {
+  local pid="${server_pid:-}" waited=0 i matched=0
+  [ -n "$pid" ] || fail "no owned server PID to stop before the final count"
+  owned_pid_running "$pid" \
+    || fail "the owned server (pid $pid) was not running before the final count: $(tail -5 "$run_root/server.log")"
+  kill -TERM "$pid" 2>/dev/null || fail "could not signal the owned server (pid $pid)"
+  while owned_pid_running "$pid"; do
+    [ "$waited" -lt 100 ] || fail "the owned server (pid $pid) did not exit within 10s of SIGTERM"
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  # The server's own exit status under TERM is not what this run judges; its
+  # log is. bash reaps its own children as they exit, so this PID may be
+  # reusable already: `wait` only collects the status, and the slot is cleared
+  # straight away, before anything else in this run can signal it.
+  wait "$pid" 2>/dev/null || true
+  for i in "${!child_pids[@]}"; do
+    if [ "${child_pids[$i]}" = "$pid" ] && [ "${child_labels[$i]}" = server ]; then
+      child_pids[i]=""
+      matched=$((matched + 1))
+    fi
+  done
+  [ "$matched" -eq 1 ] || fail "the owned server (pid $pid) matched $matched registry slots, not one"
+  say "-- stopped this run's server (pid $pid) before the final count"
+}
 
 acceptance_begin
 say_payloads
@@ -245,8 +360,16 @@ while [ "$round" -lt "$max_rounds" ]; do
     3) cancel_mode=send ;;
   esac
 
+  # This round's plan: two consecutive schedule entries, browser first.
+  browser_planned_id="${peer_id_schedule[$((2 * round - 2))]:-}"
+  android_planned_id="${peer_id_schedule[$((2 * round - 1))]:-}"
+  planned_role="${planned_roles[$((round - 1))]:-}"
+  [ -n "$browser_planned_id" ] && [ -n "$android_planned_id" ] && [ -n "$planned_role" ] \
+    || fail "the schedule has no plan for round $round"
+
   say ""
   say "== round $round: one code, one emulator, one browser (verify=$verify_mode, cancel=$cancel_mode) =="
+  say "-- planned: browser $planned_role (browser $browser_planned_id, Android $android_planned_id)"
 
   code="$(mint_code)" || fail "could not mint a pairing code"
   [ -n "$code" ] || fail "the server minted no pairing code"
@@ -299,13 +422,14 @@ while [ "$round" -lt "$max_rounds" ]; do
   python3 - "$plan" "$expect" "$verify_mode" "$cancel_mode" "$emulator_origin" \
       "$big_size" "$big_seed" "$small_size" "$small_seed" \
       "$second_size" "$second_seed" "$android_size" "$android_seed" \
-      "$android_name" "$round" <<'PLAN' || fail "could not build round $round's descriptors"
+      "$android_name" "$round" "$browser_planned_id" "$android_planned_id" "$planned_role" \
+      <<'PLAN' || fail "could not build round $round's descriptors"
 import hashlib, json, os, sys
 
 (plan_path, expect_path, verify, cancel, origin,
  big_size, big_seed, small_size, small_seed,
  second_size, second_seed, android_size, android_seed,
- android_name, rnd) = sys.argv[1:]
+ android_name, rnd, browser_planned_id, android_planned_id, planned_role) = sys.argv[1:]
 
 ints = lambda *v: [int(x) for x in v]
 big_size, big_seed, small_size, small_seed, second_size, second_seed, android_size, android_seed = \
@@ -399,8 +523,22 @@ json.dump({
     # The cancelled file's FULL size, so the oracle can require the browser's
     # leftover to be a strictly-smaller PARTIAL rather than a completed save.
     "cancelledFullSize": (android_size if cancel == "send" else 0),
+    # The round's PLAN, from the one schedule above. The oracle requires the
+    # assigned ids, the role they imply and the wire's offer direction to
+    # agree with it; it never takes the browser's own role field as proof.
+    "round": rnd,
+    "plannedRole": planned_role,
+    "expectedBrowserId": browser_planned_id,
+    "expectedAndroidId": android_planned_id,
 }, open(expect_path, "w"), ensure_ascii=False, indent=2)
 PLAN
+
+  # A fresh nonce and a fresh receipt name per round: a receipt from another
+  # round, or one left behind, can never satisfy this one.
+  nonce="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+  [ "${#nonce}" -eq 32 ] || fail "could not draw round $round's barrier nonce"
+  receipt="$run_root/welcome-$round-$nonce.json"
+  [ ! -e "$receipt" ] || fail "round $round's welcome receipt exists before its browser started"
 
   # ── the browser half ────────────────────────────────────────────────────
   #
@@ -413,10 +551,13 @@ PLAN
   (
     cd "$repo/web" && exec node e2e/android-interop.mjs \
       --origin "$origin" --code "$code" --out "$browser_out" \
-      --verify "$verify_mode" --message "$web_message_text" --plan "$plan"
+      --verify "$verify_mode" --message "$web_message_text" --plan "$plan" \
+      --round "$round" --nonce "$nonce" --ready "$receipt" --expect-self "$browser_planned_id"
   ) >"$run_root/browser-$round.log" 2>&1 &
   browser_pid=$!
   register_child "browser-$round" "$browser_pid"
+
+  await_browser_welcome "$receipt"
 
   # ── the Android half ────────────────────────────────────────────────────
   #
@@ -480,8 +621,13 @@ PLAN
     fail "the Android half FAILED: $(sed -n '/INSTRUMENTATION_STATUS: stack=/,/^INSTRUMENTATION_STATUS_CODE/p' "$run_root/instrument-$round.log" | head -40)"
   fi
 
-  wait "$browser_pid" \
-    || fail "the browser half failed: $(tail -40 "$run_root/browser-$round.log")"
+  # Status first, registry second, verdict third: a failed browser half is
+  # still a FAILED round, but its slot is retired before the failure is
+  # reported, so the cleanup trap that `fail` triggers cannot signal its PID.
+  browser_status=0
+  reap_browser_half || browser_status=$?
+  [ "$browser_status" -eq 0 ] \
+    || fail "the browser half failed (exit $browser_status): $(tail -40 "$run_root/browser-$round.log")"
   [ -f "$browser_out" ] || fail "the browser half wrote no observation"
 
   adbs exec-out run-as "$app_id" cat "files/$device_out" >"$android_out" 2>/dev/null \
@@ -514,15 +660,12 @@ print(d.get("role", ""), "1" if d.get("sas") else "0")
   esac
 
   adbs shell am force-stop "$app_id" >/dev/null 2>&1 || true
-  say "-- round $round passed (browser was $role)"
-
-  # Both roles AND both cancels. Stopping at the first pair of roles would
-  # leave a cancel round unexecuted, which is the shape the comment above
-  # claims to have covered.
-  if [ "$seen_initiator" = "1" ] && [ "$seen_responder" = "1" ] && [ "$round" -ge 3 ]; then
-    break
-  fi
+  say "-- round $round passed (browser was $role, as planned)"
 done
+
+# All three rounds, never fewer: each one carries a scenario (SAS, receive
+# cancel, send cancel) as well as a role.
+[ "$round" -eq 3 ] || fail "ran $round rounds, not the scheduled three"
 
 [ "$seen_initiator" = "1" ] \
   || fail "never observed the browser as INITIATOR in $round rounds; half the role space is unproved"
@@ -531,10 +674,27 @@ done
 [ "$compared_sas" = "1" ] \
   || fail "no round compared the two clients' SAS digits; the one cell nothing else covers is unproved"
 
+# ── every accepted websocket, counted ────────────────────────────────────
+#
+# Only once every owned client is gone: each round already waited for its
+# browser half, and the app is stopped (and confirmed stopped) here. Then the
+# server itself is stopped and reaped, so the log read below is COMPLETE — a
+# count taken while anything could still connect would miss exactly the late
+# reconnect it exists to catch. Read before `completed=1`: on success the run
+# root, log included, is deleted by the cleanup trap.
+adbs shell am force-stop "$app_id" >/dev/null 2>&1 \
+  || fail "could not stop the app before the final count"
+[ -z "$(adbs shell pidof "$app_id" 2>/dev/null | tr -d '\r')" ] \
+  || fail "the app is still running after force-stop; the final count could miss its reconnect"
+stop_owned_server
+python3 "$repo/scripts/test/android-interop-oracle.py" peer-id-log \
+    "$run_root/server.log" "$acceptance_peer_ids" \
+  || fail "the server did not accept exactly the scheduled websockets"
+
 assert_run_was_local
 
 say ""
-say "== Android emulator ↔ real browser: both role assignments, text and files, both directions,"
+say "== Android emulator ↔ real browser: both role assignments by schedule (observed on the wire), text and files, both directions,"
 say "   a >192KiB body, a zero-byte file, a multi-file batch, and both cancels with a fresh retry =="
 say "   NOT physical-device evidence: this is an AOSP emulator image with no Google Play services."
 completed=1

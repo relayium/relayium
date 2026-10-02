@@ -103,6 +103,11 @@ const observed = {
     role: "", selfId: "", peerId: "", sas: "", peerName: "",
     receivedMessages: [], saves: [], sendStatuses: {}, recvStatuses: {},
     endState: "", sdp: null, errors: [],
+    // The page's EARLIEST link-establishment signalling, as metadata only (see
+    // OBSERVE). Diagnostics: read back on success and on failure, judged by
+    // nothing.
+    establishment: null,
+    establishmentStatus: "",
   },
   cli: null,
   cancel: { stopped: false, resumed: false, webCancelClicked: false },
@@ -118,6 +123,19 @@ function writeObservation() {
 }
 const step = (name) => { observed.steps.push(name); ok(name); };
 
+/** The establishment timeline, read best-effort: a diagnostic that cannot be
+ *  read is recorded as null with its status, and never turns a round's result
+ *  either way. */
+async function readEstablishment(tab) {
+  try {
+    observed.web.establishment = await tab.evaluate("window.__establish ?? null");
+    observed.web.establishmentStatus = observed.web.establishment ? "read" : "absent";
+  } catch (err) {
+    observed.web.establishment = null;
+    observed.web.establishmentStatus = `unreadable: ${String(err?.message ?? err).slice(0, 120)}`;
+  }
+}
+
 async function ephemeralPort() {
   const server = createServer();
   await new Promise((res) => server.listen(0, "127.0.0.1", res));
@@ -130,11 +148,55 @@ async function ephemeralPort() {
 
 /** The page's own ids (for the role it took) and the SDP both ends advertised
  *  (for the A10 question: what `a=max-message-size` does a browser offer the
- *  CLI). Observation only: nothing here changes what the page sends. */
+ *  CLI). Observation only: nothing here changes what the page sends.
+ *
+ *  `window.__establish` is the link-establishment timeline: the EARLIEST 64
+ *  whitelisted entries — later ones only raise `omitted`, because the race this
+ *  exists for happens in the first second — each a relative time and inert
+ *  metadata: the roster (ids and count), `welcome`/`left`, and the KIND of a
+ *  `caps`/`request`/`offer`/`busy` signal with its peer id, plus the page's own
+ *  outgoing `busy`. No payload, SDP, ICE, code, key, account or path is copied.
+ *  Every hook is best-effort and cannot throw into the page; `send` keeps its
+ *  receiver, arguments, return value and exceptions. It is not claimed to cost
+ *  zero time. */
 const OBSERVE = `
   (() => {
     window.__relayiumSelfId = '';
     window.__sdp = { local: [], remote: [] };
+    const EST_MAX = 64;
+    const est = window.__establish = { max: EST_MAX, entries: [], omitted: 0 };
+    const note = (e) => {
+      if (est.entries.length < EST_MAX) est.entries.push(Object.assign({ t: Math.round(performance.now()) }, e));
+      else est.omitted += 1;
+    };
+    window.__establishMark = (label) => {
+      if (typeof label === 'string' && /^[a-z0-9:-]{1,40}$/.test(label)) note({ dir: 'mark', type: label });
+    };
+    const idOf = (v) => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : null);
+    const kindOf = (d) => {
+      if (!d || typeof d !== 'object') return null;
+      if (Array.isArray(d.caps)) return 'caps';
+      if (d.busy === true) return 'busy';
+      if (d.linkRequest === true && !d.sdp) return 'request';
+      if (d.sdp && d.sdp.type === 'offer' && !d.resume) return 'offer';
+      return null;
+    };
+    const capsOf = (d) => d.caps.filter((c) => typeof c === 'string' && /^[a-z0-9-]{1,16}\\/[0-9]{1,3}$/.test(c)).slice(0, 8);
+    const inbound = (m) => {
+      if (!m || typeof m !== 'object') return;
+      if (m.type === 'welcome') note({ dir: 'in', type: 'welcome', self: idOf(m.name) });
+      else if (m.type === 'peers') {
+        const list = Array.isArray(m.peers) ? m.peers : [];
+        note({ dir: 'in', type: 'peers', count: list.length, ids: list.slice(0, 16).map((p) => idOf(p && p.id)) });
+      } else if (m.type === 'left') note({ dir: 'in', type: 'left', peer: idOf(m.peer) });
+      else if (m.type === 'signal') {
+        const kind = kindOf(m.data);
+        if (!kind) return;
+        const e = { dir: 'in', type: 'signal', kind, peer: idOf(m.from), link: m.data.link === true };
+        if (kind === 'caps') e.caps = capsOf(m.data);
+        note(e);
+      }
+    };
     const Native = window.WebSocket;
     const seen = new WeakSet();
     window.WebSocket = function (...args) {
@@ -146,6 +208,7 @@ const OBSERVE = `
             const m = JSON.parse(ev.data);
             if (m && m.type === 'welcome' && typeof m.name === 'string') window.__relayiumSelfId = m.name;
             if (m && m.type === 'peers' && Array.isArray(m.peers)) window.__relayiumPeers = m.peers.map((p) => p.id);
+            try { inbound(m); } catch { /* diagnostics never throw into the page */ }
           } catch { /* not ours */ }
         });
       }
@@ -153,6 +216,18 @@ const OBSERVE = `
     };
     window.WebSocket.prototype = Native.prototype;
     Object.assign(window.WebSocket, Native);
+    const nativeSend = Native.prototype.send;
+    Native.prototype.send = function (...args) {
+      try {
+        if (seen.has(this) && typeof args[0] === 'string') {
+          const m = JSON.parse(args[0]);
+          if (m && m.type === 'signal' && m.data && m.data.busy === true) {
+            note({ dir: 'out', type: 'signal', kind: 'busy', peer: idOf(m.to), link: m.data.link === true });
+          }
+        }
+      } catch { /* diagnostics never throw into the page */ }
+      return nativeSend.apply(this, args);
+    };
     const mms = (sdp) => {
       const m = /a=max-message-size:(\\d+)/i.exec(sdp || '');
       return m ? Number(m[1]) : null;
@@ -433,7 +508,7 @@ async function run() {
       await tab.send("Page.navigate", { url: `${ORIGIN}/cross-network` });
       await tab.waitFor(`(() => { const b = document.querySelector('.create-code'); return !!b && !b.disabled; })()`,
         "the page's create-code control", 45_000);
-      await tab.evaluate("(() => { document.querySelector('.create-code').click(); return true; })()");
+      await tab.evaluate("(() => { window.__establishMark?.('create-code:before'); document.querySelector('.create-code').click(); window.__establishMark?.('create-code:after'); return true; })()");
       await tab.waitFor(`/^\\S{4,}$/.test((document.querySelector('.code')?.textContent ?? '').trim())`,
         "the page to show the code it minted", 45_000);
       observed.code = await tab.evaluate("document.querySelector('.code').textContent.trim()");
@@ -453,7 +528,7 @@ async function run() {
       selfId: ids.self, peerId: ids.peer,
       role: ids.self && ids.peer ? (ids.self < ids.peer ? "initiator" : "responder") : "",
     });
-    await tab.evaluate(`(() => { const b = document.querySelector('${OPEN_WORKSPACE}'); if (b) b.click(); return !!b; })()`)
+    await tab.evaluate(`(() => { window.__establishMark?.('open-workspace:before'); const b = document.querySelector('${OPEN_WORKSPACE}'); if (b) b.click(); window.__establishMark?.(b ? 'open-workspace:after' : 'open-workspace:absent'); return !!b; })()`)
       .catch(() => false);
     const linked = await cli.waitLine(LINKED_RE, "the CLI's linked line", { timeoutMs: 90_000 });
     const sasLine = await cli.waitLine(SAS_RE, "the CLI's SAS line", { timeoutMs: 30_000 });
@@ -614,6 +689,7 @@ async function run() {
     observed.web.messagesAfterEnd = await tab.evaluate(msgBodies);
     observed.web.saves = await readSaves(tab);
     observed.web.sdp = await tab.evaluate("window.__sdp");
+    await readEstablishment(tab);
     observed.web.errors = tab.errors.slice(0, 50);
     observed.complete = true;
   } finally {
@@ -624,6 +700,9 @@ async function run() {
         observed.web.sdp = await tab.evaluate("window.__sdp");
         observed.web.errors = tab.errors.slice(0, 50);
       } catch { /* best effort on the failure path */ }
+      // Separately, so a failed read above cannot cost the timeline the
+      // failure path most needs.
+      await readEstablishment(tab);
     }
     if (cli) {
       await cli.kill();

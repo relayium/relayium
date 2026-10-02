@@ -22,14 +22,23 @@
 //     the default of `Math.min(<clamp>, Number(process.env.RT_ROUNDS ?? <default>))`,
 //     independently. Lowering either one lowers the effective cap — the clamp
 //     is what actually capped the 2026-09-23 run — so each is its own claim.
-//   - `scripts/android-interop-acceptance.sh`: the `${VAR:-<default>}` default.
 //   - `scripts/native-web-pairing-acceptance.sh`: exactly two rounds with
 //     opposite deterministic peer-id orderings and an expected-role assertion.
+//   - `scripts/android-interop-acceptance.sh`: DETERMINISTIC since 2026-10-02,
+//     when ten green rounds all left the browser responder (run 36990034609;
+//     cause unknown). Exactly three rounds with no override and no early
+//     break; six globally distinct ids whose consecutive pairs imply exactly
+//     the planned roles (responder, initiator, responder); the welcome barrier
+//     ahead of the Android half, on both sides (`web/e2e/android-interop.mjs`
+//     writes its exclusive 0600 receipt before waiting for the peer); the plan
+//     handed to the oracle; the oracle still judging identities; and the final
+//     accepted-socket count.
 //
-// Every statistical cap must be equal to every other and at least FLOOR. It does
-// not check what an environment override can do: the Windows override is
-// downward-only by construction (the clamp), and overrides are diagnostic knobs
-// that no workflow sets.
+// Every statistical cap — only Windows samples now — must be equal to every
+// other and at least FLOOR. It does not check what an environment override can
+// do: the Windows override is downward-only by construction (the clamp), and
+// overrides are diagnostic knobs that no workflow sets. A deterministic lane has
+// no override at all.
 //
 // ## Why it lives here
 //
@@ -49,14 +58,16 @@
 import { readFileSync } from "node:fs";
 
 /** Rounds every role-coverage lane must be able to run. At 10 a healthy run
- *  misses a role in 2^-9 (~0.2%), the value W-N19 chose. The lanes may run more
- *  rounds than this as long as all four caps move together. */
+ *  misses a role in 2^-9 (~0.2%), the value W-N19 chose. A statistical lane may
+ *  run more rounds than this as long as all its caps move together. */
 const FLOOR = 10;
 
 const LANES = {
   windows: "apps/windows/test/smoke/realtime-pairing-acceptance.mjs",
   native: "scripts/native-web-pairing-acceptance.sh",
   android: "scripts/android-interop-acceptance.sh",
+  androidOracle: "scripts/test/android-interop-oracle.py",
+  androidBrowser: "web/e2e/android-interop.mjs",
 };
 
 /** A lane file that cannot be read is reported as that lane's parse failure
@@ -76,9 +87,13 @@ const realWorld = () => Object.fromEntries(Object.entries(LANES).map(([k, p]) =>
 const WINDOWS_CAP =
   /^const MAX_ROUNDS = Math\.max\(1, Math\.min\((\d+), Number\(process\.env\.RT_ROUNDS \?\? (\d+)\)\)\);$/gm;
 const WINDOWS_LOOP = /^\s*for \(let index = 1; index <= MAX_ROUNDS; index \+= 1\) \{$/gm;
-const shellCap = (v) => new RegExp(`^max_rounds="\\$\\{${v}:-(\\d+)\\}"$`, "gm");
 const SHELL_LOOP = /^while \[ "\$round" -lt "\$max_rounds" \]; do$/gm;
-const SHELL_VARS = { native: "RELAYIUM_PAIRING_ROUNDS", android: "RELAYIUM_ANDROID_ROUNDS" };
+const ANDROID_ROUNDS = /^max_rounds=(\S*)$/gm;
+const ANDROID_IDS = /^acceptance_peer_ids="([^"\n]*)"$/gm;
+const ANDROID_ROLES = /^planned_roles=\(([^)\n]*)\)$/gm;
+const ID16 = /^[0-9a-f]{16}$/;
+/** `linkRole` (web/src/lib/peer-link.svelte.ts): the smaller id offers. */
+const roleOf = (self, peer) => (self < peer ? "initiator" : "responder");
 const NATIVE_DETERMINISTIC = /^max_rounds=2$/gm;
 const NATIVE_IDS = /^acceptance_peer_ids="ffffffffffffffff,0000000000000000,0000000000000000,ffffffffffffffff"$/gm;
 
@@ -103,11 +118,7 @@ function evaluate(w) {
   }
   exactlyOne("windows:loop", w.windows, WINDOWS_LOOP, `${LANES.windows} round loop bounded by MAX_ROUNDS`);
 
-  for (const lane of ["android"]) {
-    const m = exactlyOne(`${lane}:parse`, w[lane], shellCap(SHELL_VARS[lane]), `${LANES[lane]} max_rounds default`);
-    if (m) caps.push({ key: `${lane}:default`, value: Number(m[1]) });
-    exactlyOne(`${lane}:loop`, w[lane], SHELL_LOOP, `${LANES[lane]} round loop bounded by max_rounds`);
-  }
+  evaluateAndroid(w, problems, exactlyOne);
   exactlyOne("native:deterministic-rounds", w.native, NATIVE_DETERMINISTIC, `${LANES.native} deterministic two-round declaration`);
   exactlyOne("native:deterministic-ids", w.native, NATIVE_IDS, `${LANES.native} opposite peer-id schedule`);
   if (!(w.native ?? "").includes('|| fail "round $round assigned browser role $role, want deterministic $expected_role"')) {
@@ -126,6 +137,93 @@ function evaluate(w) {
   return { problems, caps };
 }
 
+/**
+ * The Android lane's deterministic schedule, read from its real source. Each
+ * claim has its own key, so a mutation must fail for ITS reason.
+ */
+function evaluateAndroid(w, problems, exactlyOne) {
+  const text = w.android ?? "";
+  const bad = (key, message) => problems.push({ key, message: `${LANES.android}: ${message}` });
+
+  const rounds = exactlyOne("android:rounds", text, ANDROID_ROUNDS, `${LANES.android} max_rounds declaration`);
+  if (rounds && rounds[1] !== "3") bad("android:rounds", `max_rounds is ${rounds[1]}, not exactly 3`);
+  if (text.includes("RELAYIUM_ANDROID_ROUNDS")) {
+    bad("android:override", "the round count can be overridden again; a deterministic lane runs exactly its schedule");
+  }
+
+  const loop = exactlyOne("android:loop", text, SHELL_LOOP, `${LANES.android} round loop bounded by max_rounds`);
+  if (loop) {
+    const body = text.slice(loop.index, text.indexOf("\ndone\n", loop.index));
+    const code = body.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
+    if (/\bbreak\b/.test(code)) bad("android:no-break", "the round loop can break early; a round it skips is a scenario never run");
+  }
+
+  let ids = null;
+  const idsMatch = exactlyOne("android:ids", text, ANDROID_IDS, `${LANES.android} peer-id schedule`);
+  if (idsMatch) {
+    const list = idsMatch[1].split(",");
+    if (list.length !== 6) bad("android:ids", `the schedule has ${list.length} ids, not six (two per round)`);
+    else if (!list.every((id) => ID16.test(id))) bad("android:ids", "a schedule id is not 16 lowercase hex characters");
+    else if (new Set(list).size !== list.length) bad("android:ids", "the schedule repeats an id; rounds could match each other's evidence");
+    else ids = list;
+  }
+
+  let roles = null;
+  const rolesMatch = exactlyOne("android:roles", text, ANDROID_ROLES, `${LANES.android} planned roles`);
+  if (rolesMatch) {
+    const list = rolesMatch[1].trim().split(/\s+/);
+    if (list.length !== 3 || !list.every((r) => r === "initiator" || r === "responder")) {
+      bad("android:roles", `planned roles ${JSON.stringify(list)} are not three of initiator/responder`);
+    } else if (!list.includes("initiator") || !list.includes("responder")) {
+      bad("android:roles", `planned roles ${JSON.stringify(list)} never plan both roles`);
+    } else {
+      roles = list;
+    }
+  }
+  if (ids && roles) {
+    roles.forEach((want, r) => {
+      const got = roleOf(ids[2 * r], ids[2 * r + 1]);
+      if (got !== want) bad("android:schedule", `round ${r + 1}'s ids ${ids[2 * r]}/${ids[2 * r + 1]} make the browser ${got}, not the planned ${want}`);
+    });
+  }
+
+  // The welcome barrier sits between the browser launch and the Android half.
+  const launch = text.indexOf('--expect-self "$browser_planned_id"');
+  const barrier = text.indexOf('\n  await_browser_welcome "$receipt"\n');
+  const instrument = text.indexOf("adbs shell am instrument");
+  if (!(launch >= 0 && barrier > launch && instrument > barrier)) {
+    bad("android:barrier", "the Android half is no longer started only after the browser's welcome receipt");
+  }
+
+  for (const line of ['"plannedRole": planned_role,', '"expectedBrowserId": browser_planned_id,',
+                      '"expectedAndroidId": android_planned_id,']) {
+    if (!text.includes(line)) bad("android:plan-binding", `the round's expectation no longer carries ${line}`);
+  }
+
+  const stop = text.indexOf("\nstop_owned_server\n");
+  const count = text.indexOf('android-interop-oracle.py" peer-id-log');
+  const done = text.indexOf("\ncompleted=1");
+  if (!(stop >= 0 && count > stop && done > count)) {
+    bad("android:count", "the accepted-socket count no longer runs after the server stops and before the PASS");
+  }
+
+  // The browser half's side of the barrier: its own welcome is awaited (and
+  // the receipt written, exclusively and 0600) BEFORE it waits for the Android
+  // peer. That file needs a real Chrome to run, so its order is held here.
+  const page = w.androidBrowser ?? "";
+  const welcome = page.indexOf("\n    await awaitOwnWelcome(tab, joinDeadline);\n");
+  const peerWait = page.indexOf('"the Android peer to join the code room"');
+  if (!(welcome >= 0 && peerWait > welcome)
+      || !page.includes('writeFileSync(temp, receipt, { flag: "wx", mode: 0o600 });')
+      || !page.includes("linkSync(temp, READY);")) {
+    problems.push({ key: "browser:barrier", message: `${LANES.androidBrowser} no longer writes its exclusive 0600 welcome receipt before waiting for the Android peer` });
+  }
+
+  if (!(w.androidOracle ?? "").includes("    problems.extend(judge_identity(browser, expect))\n")) {
+    problems.push({ key: "oracle:identity", message: `${LANES.androidOracle} no longer judges each round's identities and wire roles` });
+  }
+}
+
 let failed = 0;
 const fail = (msg) => { failed++; console.error(`FAIL ${msg}`); };
 
@@ -133,7 +231,7 @@ const world = realWorld();
 const real = evaluate(world);
 for (const u of unreadable) fail(`cannot read ${u}`);
 for (const p of real.problems) fail(`[${p.key}] ${p.message}`);
-if (real.problems.length === 0 && real.caps.length !== 3) fail(`read ${real.caps.length} statistical caps, expected 3`);
+if (real.problems.length === 0 && real.caps.length !== 2) fail(`read ${real.caps.length} statistical caps, expected 2`);
 
 /** Replace exactly one occurrence in one lane's real text. An anchor that is
  *  absent or ambiguous would make the mutation vacuous, so it throws. */
@@ -143,7 +241,7 @@ const mutate = (lane, from, to) => {
   return { ...world, [lane]: text.replace(from, to) };
 };
 
-// Mutations only run once the real evaluation is clean, so all four caps are
+// Mutations only run once the real evaluation is clean, so both caps are
 // read and equal. Anchors are built from those parsed values, not from FLOOR:
 // lanes legitimately raised together above the floor must still find them.
 const CAP = real.caps[0]?.value;
@@ -151,7 +249,9 @@ const LOW = FLOOR - 2; // below the floor; at 10 this is the 2026-09-23 value, 8
 const HIGH = CAP + 2; // above the live cap, so it differs from the other three
 const winLine = (clamp, dflt) => `Math.min(${clamp}, Number(process.env.RT_ROUNDS ?? ${dflt}))`;
 const WIN_LINE = winLine(CAP, CAP);
-const androidDefault = (n) => `RELAYIUM_ANDROID_ROUNDS:-${n}}`;
+const ANDROID_ID_LINE = /^acceptance_peer_ids="([^"\n]*)"$/m.exec(world.android ?? "")?.[1] ?? "";
+const swapIds = (csv, i, j) => { const l = csv.split(","); [l[i], l[j]] = [l[j], l[i]]; return l.join(","); };
+const setId = (csv, i, v) => { const l = csv.split(","); l[i] = v; return l.join(","); };
 // Each mutation: the world, and the exact set of problem keys it must produce.
 const MUTATIONS = [
   ["windows clamp lowered alone (the 2026-09-23 shape)",
@@ -163,16 +263,9 @@ const MUTATIONS = [
   ["windows clamp raised alone (equality, not only the floor)",
     () => mutate("windows", WIN_LINE, winLine(HIGH, CAP)),
     ["equal"]],
-  ["android default lowered",
-    () => mutate("android", androidDefault(CAP), androidDefault(LOW)),
-    ["android:default:floor", "equal"]],
-  ["all four lowered together (equal, but below the floor)",
-    () => {
-      let w = mutate("windows", WIN_LINE, winLine(LOW, LOW));
-      w = { ...w, android: w.android.replace(androidDefault(CAP), androidDefault(LOW)) };
-      return w;
-    },
-    ["windows:clamp:floor", "windows:default:floor", "android:default:floor"]],
+  ["both windows caps lowered together (equal, but below the floor)",
+    () => mutate("windows", WIN_LINE, winLine(LOW, LOW)),
+    ["windows:clamp:floor", "windows:default:floor"]],
   ["windows declaration rewritten into a form the parser does not know",
     () => mutate("windows", WIN_LINE, `Number(process.env.RT_ROUNDS ?? ${CAP})`),
     ["windows:parse"]],
@@ -194,9 +287,50 @@ const MUTATIONS = [
   ["android loop bounded by a literal",
     () => mutate("android", `-lt "$max_rounds" ]; do`, `-lt 8 ]; do`),
     ["android:loop"]],
+  ["android runs a fourth round",
+    () => mutate("android", "\nmax_rounds=3\n", "\nmax_rounds=4\n"),
+    ["android:rounds"]],
+  ["android round count overridable again (the old statistical tail)",
+    () => mutate("android", "\nmax_rounds=3\n", '\nmax_rounds="${RELAYIUM_ANDROID_ROUNDS:-3}"\n'),
+    ["android:override", "android:rounds"]],
+  ["android loop breaks early (the third round skipped)",
+    () => mutate("android", '  say "-- round $round passed (browser was $role, as planned)"\ndone\n',
+                 '  say "-- round $round passed (browser was $role, as planned)"\n  [ "$round" -lt 2 ] || break\ndone\n'),
+    ["android:no-break"]],
+  ["android schedule repeats an id across rounds",
+    () => mutate("android", ANDROID_ID_LINE, setId(ANDROID_ID_LINE, 2, ANDROID_ID_LINE.split(",")[1])),
+    ["android:ids"]],
+  ["android schedule loses a round's ids",
+    () => mutate("android", ANDROID_ID_LINE, ANDROID_ID_LINE.split(",").slice(0, 4).join(",")),
+    ["android:ids"]],
+  ["android schedule pair reordered (round 2 no longer plans the browser initiator)",
+    () => mutate("android", ANDROID_ID_LINE, swapIds(ANDROID_ID_LINE, 2, 3)),
+    ["android:schedule"]],
+  ["android plans the browser responder in every round",
+    () => mutate("android", "planned_roles=(responder initiator responder)", "planned_roles=(responder responder responder)"),
+    ["android:roles"]],
+  ["android welcome barrier removed",
+    () => mutate("android", '\n  await_browser_welcome "$receipt"\n', "\n"),
+    ["android:barrier"]],
+  ["android plan no longer handed to the oracle",
+    () => mutate("android", '"plannedRole": planned_role,', '"plannedRole": "responder",'),
+    ["android:plan-binding"]],
+  ["android accepted-socket count removed",
+    () => mutate("android", 'android-interop-oracle.py" peer-id-log', 'android-interop-oracle.py" --version'),
+    ["android:count"]],
+  ["browser half waits for the peer without its own welcome first",
+    () => mutate("androidBrowser", "\n    await awaitOwnWelcome(tab, joinDeadline);\n", "\n"),
+    ["browser:barrier"]],
+  ["browser half writes a receipt others can read",
+    () => mutate("androidBrowser", 'writeFileSync(temp, receipt, { flag: "wx", mode: 0o600 });', 'writeFileSync(temp, receipt, { mode: 0o644 });'),
+    ["browser:barrier"]],
+  ["android oracle stops judging identities",
+    () => mutate("androidOracle", "    problems.extend(judge_identity(browser, expect))\n", "\n"),
+    ["oracle:identity"]],
   ["android file unreadable (empty)",
     () => ({ ...world, android: "" }),
-    ["android:parse", "android:loop"]],
+    ["android:rounds", "android:loop", "android:ids", "android:roles", "android:barrier",
+     "android:plan-binding", "android:plan-binding", "android:plan-binding", "android:count"]],
   ["windows file missing",
     () => ({ ...world, windows: undefined }),
     ["windows:parse", "windows:loop"]],

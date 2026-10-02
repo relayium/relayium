@@ -24,7 +24,7 @@ import { MAX_FILES } from "./manifest";
 export const EXPLICIT_DISCONNECT_SUPPRESS_MS = 60_000;
 
 export interface PeerWorkspaceDeps extends Omit<MixedSessionDeps,
-  "supportsLink" | "canAcceptLink" | "now" | "onLinkState" | "joined"
+  "supportsLink" | "canAcceptLink" | "requestAwaitsRoster" | "now" | "onLinkState" | "joined"
 > {
   joined(): boolean;
   peerIds(): readonly string[];
@@ -232,6 +232,21 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       // that as busy would reject the very offer it requested.
       return deps.joined() && deps.selfId() !== ""
         && deps.peerIds().includes(peerId)
+        && !deps.unsupported()
+        && !isSuppressed(peerId);
+    },
+    requestAwaitsRoster(peerId) {
+      // The ONE refusal that is only "not yet": everything else that makes
+      // `canAcceptLink` false still answers busy. A peer a `left` frame has
+      // already taken out of the room is gone, not late; one that merely
+      // dropped off a roster without that frame is indistinguishable from one
+      // the roster has not named yet, and is treated the same — silently, and
+      // admitted only by a later request once a roster names it. No history is
+      // kept to tell them apart.
+      return deps.joined() && deps.selfId() !== ""
+        && !deps.peerIds().includes(peerId)
+        && !departed.has(peerId)
+        && supports(peerId)
         && !deps.unsupported()
         && !isSuppressed(peerId);
     },

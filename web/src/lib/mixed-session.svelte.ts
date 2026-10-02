@@ -75,6 +75,8 @@ export interface MixedSessionDeps {
   supportsLink?(peerId: string): boolean;
   /** Resource admission only; content consent remains lane-local. */
   canAcceptLink?(peerId: string): boolean;
+  /** See `PeerLinkDeps.requestAwaitsRoster`: request-only, admits nothing. */
+  requestAwaitsRoster?(peerId: string): boolean;
   connect?: PeerLinkDeps["connect"];
   resume?: PeerLinkDeps["resume"];
   pickSaveTarget?: MixedFileSessionDeps["pickSaveTarget"];
@@ -676,6 +678,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     rtcConfig: deps.rtcConfig,
     supportsLink: supports,
     canAcceptLink: deps.canAcceptLink,
+    requestAwaitsRoster: deps.requestAwaitsRoster,
     connect: deps.connect,
     resume: deps.resume,
     onLinkChange,

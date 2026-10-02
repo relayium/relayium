@@ -29,12 +29,38 @@ neither may grant itself a pass. This file:
   * requires the round's declared shape (cancels, retries, repeated batches)
     to have actually happened, rather than accepting a flag that says so.
 
-Usage: android-interop-oracle.py <browser.json> <android.json> <expect.json>
-Exit 0 means the round agreed. Anything else prints every problem it found.
+## Who played which role, and how that is known
+
+The acceptance server runs a deterministic, loopback-only peer-id schedule
+(`RELAYIUM_ACCEPTANCE_PEER_IDS`), so each round PLANS which role the browser
+plays. `judge_identity` requires three independent things to agree with that
+plan: the ids the server actually assigned (the browser's own welcome and the
+room rosters it received), the role those real ids imply (`self < peer`), and
+what the two clients actually DID on the wire -- the responder asks
+(`linkRequest`), the initiator offers. The browser's `role` field is that
+file's own arithmetic and is never accepted as proof on its own.
+
+Three subcommands share these rules:
+
+  android-interop-oracle.py <browser.json> <android.json> <expect.json>
+      judge one round.
+  android-interop-oracle.py ready-receipt <receipt> <round> <nonce> <id16>
+      check the browser's welcome-barrier receipt before Android starts.
+  android-interop-oracle.py peer-id-log <server.log> <ids-csv>
+      check that the acceptance server assigned EXACTLY one id per scheduled
+      socket: every accepted websocket logged, none missing, none extra.
+
+Exit 0 means the check passed. Anything else prints every problem it found.
 """
 import hashlib
 import json
+import os
+import re
+import stat
 import sys
+
+ID16 = re.compile(r"[0-9a-f]{16}")
+ROLES = ("initiator", "responder")
 
 
 def sha256_hex(hex_bytes):
@@ -270,12 +296,307 @@ def judge(browser, android, expect):
         if not expect["androidSent"] and not expect["webSent"]:
             problems.append("a cancel round with no successful transfer proves no retry")
 
+    problems.extend(judge_identity(browser, expect))
     return problems
 
 
+def planned_role_of(self_id, peer_id):
+    """`linkRole` from web/src/lib/peer-link.svelte.ts: the smaller id offers."""
+    return "initiator" if self_id < peer_id else "responder"
+
+
+def judge_identity(browser, expect):
+    """The round's identities and roles: planned, assigned, and played.
+
+    Every rule reads the browser's recorded HISTORY, so a reconnect, a second
+    welcome, a foreign peer or a peer that left and came back cannot be
+    overwritten into a clean-looking last value."""
+    problems = []
+    planned = expect.get("plannedRole")
+    want_self = expect.get("expectedBrowserId")
+    want_peer = expect.get("expectedAndroidId")
+    if planned not in ROLES:
+        problems.append("the round has no planned role (%r); a round that plans nothing proves "
+                        "no role" % (planned,))
+        return problems
+    for what, value in (("browser", want_self), ("Android", want_peer)):
+        if not isinstance(value, str) or not ID16.fullmatch(value):
+            problems.append("the round's planned %s id %r is not 16 lowercase hex characters"
+                            % (what, value))
+    if problems:
+        return problems
+    if want_self == want_peer:
+        problems.append("the round planned the SAME id %s for both clients" % want_self)
+        return problems
+    if planned_role_of(want_self, want_peer) != planned:
+        problems.append("the schedule is inconsistent: planned ids %s/%s make the browser %s, "
+                        "not the planned %s"
+                        % (want_self, want_peer, planned_role_of(want_self, want_peer), planned))
+        return problems
+
+    wire = browser.get("wire")
+    if not isinstance(wire, dict) or not isinstance(wire.get("sockets"), list):
+        problems.append("the browser report carries no wire history")
+        return problems
+    sockets = wire["sockets"]
+    if len(sockets) != 1:
+        problems.append("the browser page opened %d websockets, not one; a reconnect or a second "
+                        "socket consumes a scheduled id" % len(sockets))
+        return problems
+    sock = sockets[0]
+    for key in ("welcomes", "rosters", "lefts", "signals"):
+        if not isinstance(sock.get(key), list):
+            problems.append("the browser socket record has no %r history" % key)
+    if problems:
+        return problems
+
+    # -- the id the server actually assigned to the browser ------------------
+    welcomes = sock["welcomes"]
+    if len(welcomes) != 1:
+        problems.append("the browser saw %d welcomes, not exactly one" % len(welcomes))
+        return problems
+    self_id = welcomes[0]
+    if not isinstance(self_id, str) or not ID16.fullmatch(self_id):
+        problems.append("the browser's welcome id %r is not 16 lowercase hex characters" % (self_id,))
+        return problems
+    if self_id != want_self:
+        problems.append("the server welcomed the browser as %s, not the planned %s (a foreign round, "
+                        "an extra accepted socket, or a reordered join)" % (self_id, want_self))
+
+    # -- the Android id, from the rosters the browser actually received ------
+    rosters = sock["rosters"]
+    if not rosters:
+        problems.append("the browser received no room roster at all")
+        return problems
+    others = set()
+    for roster in rosters:
+        if not isinstance(roster, list) or not all(isinstance(i, str) for i in roster):
+            problems.append("a roster record is malformed: %r" % (roster,))
+            return problems
+        if self_id not in roster:
+            problems.append("a roster omitted the browser's own id %s: %r" % (self_id, roster))
+        if len(set(roster)) != len(roster):
+            problems.append("a roster named the same id twice: %r" % (roster,))
+        others.update(i for i in roster if i != self_id)
+    if len(others) != 1:
+        problems.append("the rosters named %d peers besides the browser (%s), not exactly the "
+                        "Android app" % (len(others), sorted(others)))
+        return problems
+    peer_id = next(iter(others))
+    if not ID16.fullmatch(peer_id):
+        problems.append("the Android id %r is not 16 lowercase hex characters" % (peer_id,))
+        return problems
+    if peer_id != want_peer:
+        problems.append("the room's Android id was %s, not the planned %s" % (peer_id, want_peer))
+    present = [peer_id in roster for roster in rosters]
+    first = present.index(True) if True in present else -1
+    last = len(present) - 1 - present[::-1].index(True) if True in present else -1
+    if first < 0 or not all(present[first:last + 1]):
+        problems.append("the Android peer left the roster and came back within one round: %r"
+                        % (rosters,))
+    for gone in sock["lefts"]:
+        if gone != peer_id:
+            problems.append("the hub reported a departure of %r, which is not this round's Android "
+                            "peer" % (gone,))
+
+    # -- the role those REAL ids imply ---------------------------------------
+    real_role = planned_role_of(self_id, peer_id)
+    if real_role != planned:
+        problems.append("the assigned ids %s/%s make the browser %s, not the planned %s"
+                        % (self_id, peer_id, real_role, planned))
+
+    # -- the role the browser actually PLAYED on the wire --------------------
+    counts = {}
+    for sig in sock["signals"]:
+        if not isinstance(sig, dict) or sig.get("dir") not in ("in", "out") \
+                or sig.get("kind") not in ("request", "offer", "answer", "other"):
+            problems.append("a signal record is malformed: %r" % (sig,))
+            continue
+        if sig.get("peer") != peer_id:
+            problems.append("a %s %s signal was %s %r, not this round's Android peer"
+                            % (sig["dir"], sig["kind"], "addressed to" if sig["dir"] == "out" else "from",
+                               sig.get("peer")))
+        key = (sig["dir"], sig["kind"])
+        counts[key] = counts.get(key, 0) + 1
+    out_offer, in_offer = counts.get(("out", "offer"), 0), counts.get(("in", "offer"), 0)
+    out_req, in_req = counts.get(("out", "request"), 0), counts.get(("in", "request"), 0)
+    out_ans, in_ans = counts.get(("out", "answer"), 0), counts.get(("in", "answer"), 0)
+    if out_offer and in_offer:
+        problems.append("offers went in BOTH directions (%d out, %d in); one link has one initiator"
+                        % (out_offer, in_offer))
+    elif out_offer:
+        wire_role = "initiator"
+    elif in_offer:
+        wire_role = "responder"
+    else:
+        problems.append("no link offer crossed the browser's socket in either direction")
+    if not (out_offer and in_offer) and (out_offer or in_offer):
+        if wire_role != planned:
+            problems.append("the browser's wire role %r is not the planned %r (%d offer(s) out, "
+                            "%d in)" % (wire_role, planned, out_offer, in_offer))
+        # The asking and the answering must point the same way as the offers.
+        if wire_role == "initiator" and (out_req or out_ans):
+            problems.append("the browser offered yet also sent %d link request(s) and %d answer(s), "
+                            "which only a responder sends" % (out_req, out_ans))
+        if wire_role == "responder" and (in_req or in_ans):
+            problems.append("the browser received offers yet also received %d link request(s) and "
+                            "%d answer(s), which only an initiator receives" % (in_req, in_ans))
+
+    # -- this file's arithmetic must merely agree, never decide --------------
+    for key, want in (("selfId", self_id), ("peerId", peer_id), ("role", planned)):
+        if browser.get(key) != want:
+            problems.append("the browser report's %s %r disagrees with its own wire history (%r)"
+                            % (key, browser.get(key), want))
+    return problems
+
+
+def identity_summary(browser, expect):
+    """One CI log line per round: the real ids, the plan and the wire."""
+    sock = browser["wire"]["sockets"][0]
+    counts = {}
+    for sig in sock["signals"]:
+        counts[(sig["dir"], sig["kind"])] = counts.get((sig["dir"], sig["kind"]), 0) + 1
+    return ("-- round %s identities: browser %s (planned %s), Android %s (planned %s), planned role "
+            "%s, wire offers out %d / in %d, requests out %d / in %d, sockets %d, welcomes %d"
+            % (expect.get("round"), sock["welcomes"][0], expect["expectedBrowserId"],
+               browser["peerId"], expect["expectedAndroidId"], expect["plannedRole"],
+               counts.get(("out", "offer"), 0), counts.get(("in", "offer"), 0),
+               counts.get(("out", "request"), 0), counts.get(("in", "request"), 0),
+               len(browser["wire"]["sockets"]), len(sock["welcomes"])))
+
+
+# -- the welcome barrier's receipt --------------------------------------------
+
+def judge_receipt(path, rnd, nonce, want_id):
+    problems = []
+    try:
+        st = os.lstat(path)
+    except OSError as err:
+        return ["the welcome receipt %s is absent (%s); the browser was never welcomed" % (path, err)]
+    if not stat.S_ISREG(st.st_mode):
+        return ["the welcome receipt %s is not a regular file" % path]
+    if stat.S_IMODE(st.st_mode) != 0o600:
+        problems.append("the welcome receipt has mode %o, not 0600" % stat.S_IMODE(st.st_mode))
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        receipt = json.loads(text)
+    except (OSError, ValueError) as err:
+        return problems + ["the welcome receipt is unreadable or not JSON: %s" % err]
+    if not text.endswith("\n") or not isinstance(receipt, dict):
+        return problems + ["the welcome receipt is truncated or not an object"]
+    want = {"round": rnd, "nonce": nonce, "selfId": want_id, "expectedSelfId": want_id,
+            "sockets": 1, "welcomes": 1}
+    if set(receipt) != set(want):
+        problems.append("the welcome receipt carries fields %s, want exactly %s"
+                        % (sorted(receipt), sorted(want)))
+    for key, value in want.items():
+        if receipt.get(key) != value:
+            problems.append("the welcome receipt's %s is %r, want %r" % (key, receipt.get(key), value))
+    return problems
+
+
+# -- every accepted websocket, counted ----------------------------------------
+#
+# The server's deterministic hook logs one line per accepted /ws through its
+# injected logger, `acceptancePeerIDLogFormat` in server/main.go, after Go's
+# standard log prefix. The ids CYCLE, so the ids alone cannot tell six accepted
+# sockets from twelve; the sequence numbers can. Lines from concurrent accepts
+# may be written out of order, so the judgement is over the SET of sequence
+# numbers, never over physical line order.
+
+PEER_ID_MARKER = "relayium-acceptance-peer-id"
+PEER_ID_LINE = re.compile(
+    r"(?:\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,9})? )?"
+    + re.escape(PEER_ID_MARKER) + r" seq=([1-9][0-9]*) id=([0-9a-f]{16})")
+
+
+def parse_schedule(ids_csv):
+    ids = ids_csv.split(",")
+    problems = []
+    if len(ids) < 2 or not all(ID16.fullmatch(i) for i in ids):
+        problems.append("the schedule %r is not a list of 16-lowercase-hex ids" % (ids_csv,))
+    elif len(set(ids)) != len(ids):
+        problems.append("the schedule repeats an id; a repeated id cannot tell rounds apart")
+    return ids, problems
+
+
+def judge_peer_id_log(text, ids):
+    """Returns (problems, table) for a complete server log."""
+    problems = []
+    if not text:
+        return ["the server log is empty; no accepted socket was recorded"], []
+    if not text.endswith("\n"):
+        problems.append("the server log does not end with a newline; it was truncated or read "
+                        "while still being written")
+    seen = {}
+    for line in text.split("\n"):
+        if PEER_ID_MARKER not in line:
+            continue
+        m = PEER_ID_LINE.fullmatch(line)
+        if not m:
+            problems.append("a peer-id log line is malformed: %r" % line)
+            continue
+        seq, got = int(m.group(1)), m.group(2)
+        if seq in seen:
+            problems.append("sequence %d was logged twice" % seq)
+            continue
+        seen[seq] = got
+    want = list(range(1, len(ids) + 1))
+    if sorted(seen) != want:
+        missing = [s for s in want if s not in seen]
+        extra = sorted(s for s in seen if s > len(ids))
+        problems.append("the server accepted %d websocket(s), not exactly the %d scheduled "
+                        "(missing %s, extra %s)" % (len(seen), len(ids), missing, extra))
+    for seq in sorted(seen):
+        want_id = ids[(seq - 1) % len(ids)]
+        if seen[seq] != want_id:
+            problems.append("sequence %d carried %s, but the schedule's %s entry is %s"
+                            % (seq, seen[seq], ordinal(seq), want_id))
+    table = [(seq, seen[seq]) for seq in sorted(seen)]
+    return problems, table
+
+
+def ordinal(n):
+    return "%d%s" % (n, "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th"))
+
+
+def report(problems):
+    for p in problems:
+        print("  - %s" % p, file=sys.stderr)
+    return 1 if problems else 0
+
+
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "ready-receipt":
+        if len(sys.argv) != 6:
+            print("usage: android-interop-oracle.py ready-receipt <receipt> <round> <nonce> <id16>",
+                  file=sys.stderr)
+            return 2
+        return report(judge_receipt(*sys.argv[2:6]))
+    if len(sys.argv) >= 2 and sys.argv[1] == "peer-id-log":
+        if len(sys.argv) != 4:
+            print("usage: android-interop-oracle.py peer-id-log <server.log> <ids-csv>", file=sys.stderr)
+            return 2
+        ids, problems = parse_schedule(sys.argv[3])
+        if problems:
+            return report(problems)
+        try:
+            with open(sys.argv[2], encoding="utf-8", errors="strict") as fh:
+                text = fh.read()
+        except (OSError, ValueError) as err:
+            return report(["the server log is unreadable: %s" % err])
+        problems, table = judge_peer_id_log(text, ids)
+        for seq, got in table:
+            print("-- accepted websocket seq=%d id=%s" % (seq, got), file=sys.stderr)
+        if problems:
+            return report(problems)
+        print("-- the server accepted exactly the %d scheduled websockets, one id each" % len(ids),
+              file=sys.stderr)
+        return 0
     if len(sys.argv) != 4:
-        print(__doc__.strip().splitlines()[-2], file=sys.stderr)
+        print("usage: android-interop-oracle.py <browser.json> <android.json> <expect.json>",
+              file=sys.stderr)
         return 2
     browser = json.load(open(sys.argv[1]))
     android = json.load(open(sys.argv[2]))
@@ -289,6 +610,7 @@ def main():
         print("android: %s" % json.dumps(android, ensure_ascii=False)[:2000], file=sys.stderr)
         return 1
 
+    print(identity_summary(browser, expect), file=sys.stderr)
     print("-- round agreed: %s, both directions, files byte-identical (browser was %s)"
           % ("SAS %s on both sides" % browser["sas"] if expect.get("verify") == "on"
              else "verification at its shipped default", browser.get("role")),
