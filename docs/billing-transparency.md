@@ -172,7 +172,7 @@ A username with no owner prefix (a legacy/anonymous code) is recorded but
 never attributed to any account and never billed — see the
 `SplitAttrib` doc comment. **This worker never starts**, whether or not
 `-redis-addr` / `RELAYIUM_REDIS_ADDR` is set: `guardCoturnRedisMetering`
-(`main.go:1480`) only logs a warning. It keyed usage by coturn's session id,
+(`main.go:1505`) only logs a warning. It keyed usage by coturn's session id,
 which restarts from zero on every coturn restart, so a reused id would have
 billed one account for another's relay bytes.
 
@@ -181,20 +181,20 @@ coturn host, `relayium-coturn-bridge` (`cmd/relayium-coturn-bridge`), follows
 coturn's own byte counters and reports each allocation's cumulative total to a
 dedicated, metering-only route (`POST /api/coturn-metering/v1/snapshots`).
 That route exists only when `-coturn-metering-relays` /
-`RELAYIUM_COTURN_METERING_RELAYS` (`main.go:332`) lists the bridges allowed to
+`RELAYIUM_COTURN_METERING_RELAYS` (`main.go:357`) lists the bridges allowed to
 report, each with its own token (central keeps only the token's SHA-256;
-`coturnMeteringRoute`, `main.go:1491`); unset — the default — there is no
+`coturnMeteringRoute`, `main.go:1516`); unset — the default — there is no
 route and nothing is ingested. An allocation is keyed by the relay machine's
 boot id, the coturn process id and start time, and coturn's session number, so
 a coturn restart can't reuse an earlier allocation's key, and its bytes are
 attributed only to the account its relay username names, which must exist.
 When configured, the ingest runs in one of two modes (`-coturn-metering-mode`,
-`main.go:333`):
+`main.go:358`):
 
 - **shadow** (the default) records what each allocation relayed and never
   writes the billable ledger (`usage_events` / `usage_periods`);
 - **billable** additionally needs an explicit activation time,
-  `-coturn-metering-billable-since` (`main.go:334`), and bills an allocation
+  `-coturn-metering-billable-since` (`main.go:359`), and bills an allocation
   only if the bridge first observed it at or after that time: nothing that
   started earlier is billed retroactively, and a report received while the
   ingest is in shadow mode keeps that allocation shadow for good.
@@ -572,7 +572,7 @@ above, which an admin can edit live.
 ## Retention: how long anything is kept
 
 `account/gc.go`'s `GC.sweep` (`account/gc.go:257`) runs every 10 minutes
-(`main.go:1112`) and is the only thing that prunes any of this **on a clock**.
+(`main.go:1200`) and is the only thing that prunes any of this **on a clock**.
 Deletions somebody asks for do not wait for it: a share deleted from the file
 list, a pair-room object a receiver completes, a pair room its owner releases and
 an account deletion all remove the authoritative row inline, in their own
@@ -588,13 +588,13 @@ including the admin-audit prune below — see the residual noted at
 | Rolling daily-quota ledger (`upload_events`) | ~25 hours (a small margin past the 24h window it backs) | `pruneMargin`, `account/gc.go:18`, applied at `account/gc.go:321` |
 | Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:7130`), in the same prune as `upload_events` |
 | Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:22`, applied at `account/gc.go:326` |
-| Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:394`) | `auditRetentionDefault`, `account/gc.go:66`, applied at `account/gc.go:332` |
+| Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:423`) | `auditRetentionDefault`, `account/gc.go:66`, applied at `account/gc.go:332` |
 | Monthly relay/traffic history (`usage_events`, `usage_periods`, `usage_monthly`) | **Not pruned by age at all** while the account is active — this is the billing history the quota math depends on | No prune call for these tables exists in `GC.sweep`; confirmed by reading the full sweep function |
 | coturn relay metering records (`coturn_metering_bindings`), when a coturn metering bridge is configured | While the account exists: one row per coturn relay allocation, holding its owner's user id, a SHA-256 of the relay username (the username contains the user id, so the hash identifies the account — it is not anonymous), the latest delivered byte total and receipt, and timestamps; **not pruned by age**, like the relay history it backs. At the hard purge each row is redacted, in the same transaction, to a tombstone that keeps only coturn's identification of the allocation (the relay machine's boot id, the coturn process id and start time, coturn's session number) and the reporting relay's name — no user id, username or hash of it, byte counts, receipt or time. The tombstone has no expiry: it makes any late or replayed report for that allocation refused, so it can never recreate the account's data or bill it | `ApplyCoturnSnapshot` and `coturnPurgeBindingsSQL`, `account/coturn_metering_store.go`; `ArchiveAndPurgeUser`, `account/sqlite.go` |
 | Abandoned chunked-upload session + its partial ciphertext (`upload_sessions`) | 1 hour idle, then the blob is re-read and the bytes it holds are billed. Only once that bill is recorded does one transaction remove the row and hand the partial blob to the durable pending-delete queue; the blob itself is deleted by the next GC sweep (every 10 minutes), which keeps retrying until the node accepts the delete — the reaper never deletes a blob itself. **Unreachable-node exception:** the row and partial blob are kept for as long as it takes, because the blob is the only exact byte count; it is re-probed hourly and settled when the node answers. **An upload that never became a stored object is billed for what its blob physically holds before the blob is deleted, capped at its authorized size, whether it was abandoned, refused at finalize, or its finalize crashed. This applies to uploads started after this change. Uploads already in progress when it was deployed keep the rules they started under: when such an upload is abandoned, refused at finalize, or its finalize crashed, only its acknowledged bytes are billed; if it belongs to a pairing room that ends, the room's existing rule still applies, and what its blob holds is billed, capped at its authorized size. Bytes a late append left past a completed object's size are never billed.** **Account-deletion exception:** an explicit deletion request overrides that evidence hold, removes the user-attributed row immediately, and deletes or queues deletion of the partial blob, and any residual not yet measured is forgiven | `ReapPendingUploads` / `claimUploadCleanup` / `recoverUnresolvedUploads` + `upload_sessions.unresolved_at`, `account/uploads_resumable.go`; `GC.drainPending`, `account/gc.go`; `PurgeTransientUserData`, `account/sqlite.go` |
 | A pre-upload's session + partial ciphertext when its **pairing room times out** | Not 1 hour — the room's own deadline. Voiding a room ends every artifact bound to it in one transaction: the finalized objects' rows and the unfinished uploads' sessions are deleted, the bytes each session had recorded are billed, and every blob gets a durable delete intent. For a billable upload that intent also carries the obligation to bill anything its blob holds beyond the recorded bytes (capped at the upload's authorized size) before the blob may be deleted. At that commit the ciphertext is unreachable and storage and the account's open-session budget are free. The bytes themselves are then deleted best-effort in the same pass, each partial blob only after it has been re-read and any extra bytes billed durably — to the meter, or to an owed-bill record GC settles later, never twice; anything not deleted there stays queued and GC retries it every sweep. An append that was already streaming when the room ended and lands afterwards is billed and deleted under the same rule, whether or not the append itself succeeded. **Two cases keep unreachable, unlisted ciphertext on the node past the deadline:** if the node cannot be reached, its blob can be neither sized nor deleted, so it stays queued and GC asks again each sweep, billing the extra bytes when the node answers and then deleting; and if the database refuses every billing write, the blob is kept as the only evidence of the bill until GC can record it, then deleted. No timer writes the extra bytes off, and deleting the node does not either: an operator (or a BYO owner) deleting a node that still has queued deletions retires it instead of removing it — it leaves every pool and listing, but GC keeps working through its queue, billing and deleting as above, and the row is only removed once nothing names it. The one exception is the owner's own account deletion, which drops the queued deletions naming that account's own nodes; any bill still riding on them is forgiven in the same step (see the account-deletion exception above) | `Service.voidPairRoom` / `settleReclaimedUpload` + `Store.ClosePairRoom`, `account/pairroom.go`, `account/sqlite_pairroom.go`; `settleAppendIntoAVoidedRoom`, `account/uploads_resumable.go`; `GC.drainPending`, `account/gc.go` |
 | A pre-upload's finalized ciphertext once **somebody has joined that pairing room** | **No timer at all, and that is deliberate** (`account/pairroom.go` invariant 5): a joined transfer is never cut off by a clock, so nothing ages this out — not GC, not a plan retention cap, not a fallback expiry. It leaves in exactly three ways, each of them somebody acting. **(1) The receiver completes it:** it proves it holds the file key, and the authoritative row is deleted in the same transaction that queues the blob's durable delete intent, so the storage is released at commit rather than at the next sweep. **(2) The owning account releases the whole room** from its own list — this is the exit that always exists, because a receiver whose browser hands the bytes to a download rather than writing them itself can never complete. Release first refuses a room with any upload session still bound; otherwise the object rows are deleted, delete intents are queued, and quota is free when the transaction commits. **(3) The account is deleted.** Bytes already uploaded stay billed in all three cases — traffic is metered per committed append, and releasing storage is not a traffic refund. Pre-upload is off by default (`-enable-preupload`), so on a default deployment no such object exists | `Store.CompletePairRoomObject`, `account/pairroom_complete.go`; `Service.releasePairRoom` + `Store.CloseOwnedPairRoom` (`GET /api/pair-rooms`, `DELETE /api/pair-rooms/{id}`), `account/pairroom_owner.go`, `account/sqlite_pairroom.go` |
-| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:382`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:3432` |
+| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:411`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:3432` |
 
 **What "hard-purged" actually does**, read directly from
 `ArchiveAndPurgeUser` (`account/sqlite.go:3377-3589`): the user's monthly
@@ -639,23 +639,23 @@ Everything above is what the code *can* do; what actually runs depends on
 which flags a given deployment sets (`main.go`):
 
 - **coturn relay metering** is off by default. The old path never runs:
-  `-redis-addr` / `RELAYIUM_REDIS_ADDR` (`main.go:331`) no longer starts
-  anything, and `guardCoturnRedisMetering` (`main.go:1480`) only logs a
+  `-redis-addr` / `RELAYIUM_REDIS_ADDR` (`main.go:356`) no longer starts
+  anything, and `guardCoturnRedisMetering` (`main.go:1505`) only logs a
   warning. The re-keyed bridge ingest exists only if
-  `-coturn-metering-relays` is set (`main.go:332`), runs in shadow mode — no
+  `-coturn-metering-relays` is set (`main.go:357`), runs in shadow mode — no
   billing — unless `-coturn-metering-mode billable` is chosen together with an
   explicit `-coturn-metering-billable-since`, and even then never bills an
   allocation whose start it didn't see (see
   [What actually costs money](#what-actually-costs-money-relayed-bytes-and-hosted-storage)). With none of
   these set, coturn-relayed bytes are not ingested or attributed to anyone.
 - **TURN relay itself** is off unless `-turn-secret` /
-  `RELAYIUM_TURN_SECRET` is set (`main.go:326`) — without it there's simply no
+  `RELAYIUM_TURN_SECRET` is set (`main.go:351`) — without it there's simply no
   relay to meter. What still works is LAN browser transfers and the CLI's
   direct paths (daemon-direct push/sync, and pairing-code sessions that find a
   direct path); cross-network browser transfers do not, because the relay they depend on
   is the thing that is switched off.
 - **Billing (Stripe)** is entirely off unless `-stripe-secret-key` /
-  `RELAYIUM_STRIPE_SECRET_KEY` is set (`main.go:399`); every
+  `RELAYIUM_STRIPE_SECRET_KEY` is set (`main.go:428`); every
   `/api/billing/*` route 404s otherwise (`account/billing.go:19-22`) and
   every account is, functionally, unlimited-by-payment (still subject to
   whatever plan caps an admin has configured locally).

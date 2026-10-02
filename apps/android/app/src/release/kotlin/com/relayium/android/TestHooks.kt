@@ -33,4 +33,13 @@ object TestHooks {
      * shift the deadline that ends a presence claim.
      */
     fun clockOffsetMillis(): Long = 0L
+
+    /**
+     * The plain, real [com.relayium.android.storage.ReceiveStore], with NO
+     * field behind it. The debug variant wraps the same store in a gate the
+     * instrumentation can arm; a release build has no gate type, no stored
+     * reference and nothing that can hold a write.
+     */
+    fun receiveStore(stagingRoot: java.io.File): com.relayium.android.storage.ReceiveStore =
+        com.relayium.android.storage.ReceiveStore(stagingRoot)
 }

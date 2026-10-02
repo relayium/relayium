@@ -17,6 +17,9 @@ import re
 import sys
 
 SEND_AGAIN = "relayium-e2e:send-again"
+# One flow window (linkwire.FlowWindowBytes / RealtimeFrame.FLOW_WINDOW_BYTES).
+FLOW_WINDOW = 8 * 1024 * 1024
+STOP_LINE = "not delivered: the other side stopped the transfer"
 
 
 def body(size, seed):
@@ -101,6 +104,8 @@ def judge(plan, cli_obs, android):
     for extra in sorted(set(files) - set(want)):
         p("the CLI's destination holds an entry it must not: %s" % extra)
 
+    gate = judge_gate(plan, cli_obs, android, p)
+
     # the CLI's own account, counted
     def count(rx):
         return sum(1 for l in stderr if re.search(rx, l))
@@ -108,7 +113,20 @@ def judge(plan, cli_obs, android):
     stopped = count(r"^not delivered: the other side stopped the transfer$")
     saved = count(r"^saved: every file verified and written to disk in ")
     declined = count(r"^not sent: the other side declined the files$")
-    if plan["cancel"] == "receive":
+    if gate:
+        # An ACTIVE receive cancel: the first write was held, so the CLI was
+        # mid-send when the refusal arrived. Exactly a STOP — a DECLINE (before
+        # acceptance) or "could not save" (after the last byte) are impossible
+        # for a cancel that really was active, so either one is a failure.
+        if (delivered, stopped, declined) != (1, 1, 0):
+            p("active receive-cancel round: CLI reported delivered %d / stopped %d / declined %d, not 1 / 1 / 0"
+              % (delivered, stopped, declined))
+        if count(r"^not delivered: the other side could not save the files$"):
+            p("active receive-cancel round: the CLI reported a save failure")
+        if cli_obs.get("firstBatchOutcome") != STOP_LINE:
+            p("active receive-cancel round: the CLI's first batch ended %r, not the stop"
+              % (cli_obs.get("firstBatchOutcome"),))
+    elif plan["cancel"] == "receive":
         # Android cancels on acceptance: a STOP if bytes had started, a DECLINE
         # if both landed before the first byte. Exactly one, never a delivery.
         if delivered != 1 or stopped + declined != 1:
@@ -138,6 +156,102 @@ def judge(plan, cli_obs, android):
     if (cli.get("exit") or {}).get("code") != want_exit:
         p("the CLI exited %r, not %d (ending: %s)" % (cli.get("exit"), want_exit, ending or "?"))
     return problems, role, ending
+
+
+def is_int(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def judge_gate(plan, cli_obs, android, p):
+    """The plan's receive gate, and — when it is on — the Android half's typed
+    record of an ACTIVE receive cancel. Returns whether the gate is on.
+
+    Every field is required with its exact type; nothing absent is defaulted.
+    The record is what the instrumentation observed on the real store and the
+    real controller state, in the order the store numbered it."""
+    if "receiveGate" not in plan:
+        p("the plan does not say whether the receive gate is on")
+        return False
+    mode = plan["receiveGate"]
+    if mode is None:
+        if "activeReceiveCancel" in android:
+            p("Android reported an active receive cancel in a round that did not plan one")
+        return False
+    if mode != "first-write":
+        p("the plan names an unknown receive gate %r" % (mode,))
+        return True
+    if plan["cancel"] != "receive":
+        p("the receive gate is planned for a %r round" % (plan["cancel"],))
+    first = plan["first"]
+    if not first or not is_int(first[0].get("size")) or first[0]["size"] <= FLOW_WINDOW:
+        p("the gated batch's first body is not larger than one flow window (%r)"
+          % (first[0].get("size") if first else None,))
+    rec = android.get("activeReceiveCancel")
+    if not isinstance(rec, dict):
+        p("Android reported no active receive-cancel record")
+        return True
+    names = [e["name"] for e in first]
+
+    def need(key, ok, what):
+        if key not in rec:
+            p("the active receive-cancel record has no %r" % key)
+        elif not ok(rec[key]):
+            p("the active receive-cancel record's %s is %r: %s" % (key, rec[key], what))
+
+    need("mode", lambda v: v == "first-write", "not the first-write gate")
+    need("storeSerial", lambda v: is_int(v) and is_int(rec.get("storeSerialBefore")) and v == rec["storeSerialBefore"] + 1,
+         "not the one store this launch built")
+    need("storeSerialBefore", is_int, "not an integer")
+    need("token", lambda v: is_int(v) and v >= 1, "no owner token")
+    need("boundGeneration", lambda v: is_int(v) and v >= 1, "the gate never bound to a batch")
+    need("manifest", lambda v: v == names, "not the CLI's first batch")
+    need("heldIndex", lambda v: is_int(v) and v == 0, "not the batch's first file")
+    need("heldBytes", lambda v: is_int(v) and v > 0, "nothing was held")
+    need("okWritesBeforeHold", lambda v: is_int(v) and v == 0, "bytes were durable (and acknowledged) before the hold")
+    need("incomingAtCancel", lambda v: v == names, "the cancel was not of the held batch")
+    need("progressNullAtCancel", lambda v: v is True, "progress was already reported at the cancel")
+    need("errorKeyAtCancel", lambda v: v is None, "an error stood before the cancel")
+    need("laneDownAtCancel", lambda v: v is False, "the file lane was down at the cancel")
+    need("phaseAtCancel", lambda v: v == "CONNECTED", "the link was not connected")
+    need("linkAtCancel", lambda v: is_int(v) and v == android.get("linkId"), "not this round's link")
+    need("effectWhileHeld", lambda v: v is True, "the cancel's effect was not observed while the write was held")
+    need("errorKeyAfterEffect", lambda v: v is None, "the cancel left an error (a save failure is not a cancel)")
+    need("laneDownAfterEffect", lambda v: v is False, "the cancel took the file lane down")
+    need("phaseAfterEffect", lambda v: v == "CONNECTED", "the link did not stay connected")
+    need("linkAfterEffect", lambda v: is_int(v) and v == android.get("linkId"), "not this round's link")
+    need("releasedBy", lambda v: v == "test", "the hold was not released by the test after the cancel")
+    need("heldWriteOutcome", lambda v: v == "ok",
+         "the held write did not complete cleanly (a storage failure must not hide behind the cancel)")
+    need("discardGeneration", lambda v: is_int(v) and v == rec.get("boundGeneration"), "not the cancelled batch's rollback")
+    need("discardDuringBegin", lambda v: v is False, "a begin's defensive discard, not the cancellation's rollback")
+    need("discardOutcome", lambda v: v == "ok", "the cancelled batch's rollback did not complete")
+    marks = rec.get("marks")
+    if not isinstance(marks, dict):
+        p("the active receive-cancel record has no event marks")
+        marks = {}
+    order = [("holdSeq", rec.get("holdSeq")), ("cancelCalled", marks.get("cancelCalled")),
+             ("cancelEffectObserved", marks.get("cancelEffectObserved")), ("releaseSeq", rec.get("releaseSeq")),
+             ("heldWriteSeq", rec.get("heldWriteSeq")), ("discardSeq", rec.get("discardSeq"))]
+    missing = [k for k, v in order if not is_int(v)]
+    if missing:
+        p("the active receive-cancel record is missing events %r" % missing)
+    else:
+        seqs = [v for _, v in order]
+        if seqs != sorted(seqs) or len(set(seqs)) != len(seqs):
+            p("the active receive-cancel events are out of order: %r" % order)
+    # The rollback and the retry, as the instrumentation saw them.
+    after = android.get("treeAfterCancel")
+    if not isinstance(after, list) or not all(isinstance(x, str) for x in after):
+        p("the gated round has no post-cancel tree")
+    else:
+        leaked = [n for n in names if n in after]
+        if leaked:
+            p("the cancelled receive left files behind: %r" % leaked)
+        if "sentinel-do-not-touch.txt" not in after:
+            p("the rollback removed content it did not own")
+    if android.get("cleanupIncompleteAfterCancel") is not False:
+        p("the cancelled batch's rollback was not complete (%r)" % (android.get("cleanupIncompleteAfterCancel"),))
+    return True
 
 
 def main(argv):

@@ -48,6 +48,20 @@ if (!OUT || !CLI_BIN || !XDG || !ORIGIN || !CODE_FILE) {
 const SEND_AGAIN = "relayium-e2e:send-again";
 const DONE = "relayium-e2e:done";
 
+/**
+ * Every terminal line `relayium pair` prints for an OUTBOUND batch — the
+ * families of `linkUI.report` (server/cmd/relayium/pair.go, lane "file"):
+ * delivered / not sent / not delivered / not confirmed / cancelled after every
+ * byte was sent, and the `file transfer: <code>` fallback for a code it does
+ * not name. The receive-cancel round waits for ANY of them, so an outcome the
+ * round does not accept ends it at once instead of after the whole bound.
+ */
+const OUTBOUND_TERMINAL_RE =
+  /^(delivered: |not sent: |not delivered: |not confirmed: |cancelled after every byte was sent|file transfer: )/;
+/** The only two terminal lines a receive-cancel round accepts (unchanged). */
+const RECEIVE_CANCEL_ACCEPTED_RE =
+  /^(not delivered: the other side stopped the transfer|not sent: the other side declined the files)$/;
+
 const observed = { round: PLAN.round, codeRole: PLAN.codeRole, cancel: PLAN.cancel, code: "", steps: [], cli: null, complete: false };
 const write = () => {
   const tmp = `${OUT}.${process.pid}.tmp`;
@@ -92,8 +106,27 @@ async function run() {
     // STOP (bytes had started) or a DECLINE (the accept and the cancel both
     // landed before the first byte) is the receiver's timing, and both mean
     // "nothing of this batch was delivered"; the oracle accepts exactly one.
-    const { line } = await cli.waitLine(/^(not delivered: the other side stopped the transfer|not sent: the other side declined the files)$/,
+    //
+    // Any OTHER terminal line is refused here, at once — it is never a pass.
+    // Notably, the CLI labels a refusal that arrives after its last byte went
+    // out "could not save the files" whatever the receiver's reason was (the
+    // refusal frame carries none), so that line alone cannot tell a receiver's
+    // cancel from a real save failure: the exact line is kept for diagnosis,
+    // with whether Android had already asked for the retry. No second batch is
+    // sent and the round is not complete.
+    const { line } = await cli.waitLine(OUTBOUND_TERMINAL_RE,
       "Android to stop or decline the first batch", { from, timeoutMs: 180_000 });
+    observed.firstBatchOutcome = line.text;
+    if (!RECEIVE_CANCEL_ACCEPTED_RE.test(line.text)) {
+      // A snapshot of what is already on stdout; the predicate answers at
+      // once, so this adds no wait.
+      let seen = false;
+      await cli.waitStdout((s) => { seen = s.includes(SEND_AGAIN + "\n"); return true; },
+        "a snapshot of the CLI's stdout", { timeoutMs: 0 });
+      observed.sendAgainSeenAtRefusal = seen;
+      throw new Error(`the first batch of a receive-cancel round ended "${line.text}", not a stop or a decline `
+        + `(Android had ${seen ? "already" : "not yet"} asked for the retry)\n${cli.describe()}`);
+    }
     step(`first batch refused by the receiving app: "${line.text}"`);
   } else {
     await cli.waitLine(/^delivered: the other side verified and saved the files$/, "Android to save the first batch", { from, timeoutMs: 180_000 });

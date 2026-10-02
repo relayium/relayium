@@ -176,6 +176,17 @@ export interface PeerLinkDeps {
   /** Resource-admission gate only. File batches and text conversations still
    *  have their own user-consent state machines after the link opens. */
   canAcceptLink?: (peerId: string) => boolean;
+  /** REQUEST-only, consulted only after `canAcceptLink` refused an inbound
+   *  link REQUEST and only while this manager holds no phase at all: true when
+   *  the refusal is merely that the requester is not on the roster YET. The hub
+   *  relays a signal and broadcasts a roster from different goroutines, so a
+   *  peer's request can arrive before the roster that names it; a `busy` then
+   *  ENDS that peer's request (it is terminal for every requester), while
+   *  silence lets the peer's own existing retry — every 3 s for 30 s — arrive
+   *  after the roster and be admitted then. Admits nothing: no establishment,
+   *  no gate note, nothing held. Absent: the strict `busy`. Never consulted for
+   *  an OFFER. */
+  requestAwaitsRoster?: (peerId: string) => boolean;
   /** Test seam. Production always uses the full commit-reveal connectLink. */
   connect?: typeof connectLink;
   /** Test seam for the transport-only rebuild. Production always uses the
@@ -472,6 +483,16 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
    *  so a fourth arrival is either that same peer — idempotent — or busy. */
   const gatedPeerId = (): string | undefined =>
     gatedRequest?.peerId ?? gatedEnsure?.peerId ?? heldOffer?.peerId;
+  /** A `requesting`/`connecting` published for gated phases that have all just
+   *  ended with nothing built. Called by whichever release ends LAST, so it
+   *  never reaches a status a live phase still stands behind. */
+  const idleIfUnbound = () => {
+    if (!current && !opening && !requested && !recovering && !replacing
+      && gatedPeerId() === undefined
+      && (status === "requesting" || status === "connecting")) {
+      status = "idle";
+    }
+  };
 
   /**
    * A `SignalingClient` that replays `frames` into the next handler registered
@@ -1166,6 +1187,13 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         if (isLinkRequest(data)) {
           if (!supports(from) || linkRole(deps.selfId(), from) !== "initiator") return;
           if (deps.canAcceptLink && !deps.canAcceptLink(from)) {
+            // Not yet on the roster, and nothing here is bound to anyone: say
+            // nothing, so the requester's own retry is still alive when the
+            // roster arrives. Any phase at all keeps the answer `busy`, so a
+            // claim on somebody else is never hidden behind the silence.
+            const unbound = !current && !opening && !requested && !recovering && !replacing
+              && gatedPeerId() === undefined;
+            if (unbound && deps.requestAwaitsRoster?.(from) === true) return;
             deps.signaling().sendSignal(from, { busy: true, link: true });
             return;
           }
@@ -1196,16 +1224,30 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
               if (bound !== from) deps.signaling().sendSignal(from, { busy: true, link: true });
               return;
             }
-            gatedRequest = { peerId: from };
+            const record = { peerId: from };
+            gatedRequest = record;
             relayGate?.whenReady(() => {
               // Retired under us — a departure, a room reset — so this release
-              // belongs to nothing.
-              if (gatedRequest?.peerId !== from) return;
+              // belongs to nothing. By IDENTITY: a fresh request from the same
+              // peer, parked after this one was retired (perhaps behind another
+              // gate), is not this callback's to consume.
+              if (gatedRequest !== record) return;
               gatedRequest = null;
               // A peer pruned from the roster while this was parked fails
               // `supports`, which is the same answer a departure gives anywhere
               // else here: this peer is not part of the feature any more.
-              if (!supports(from) || !(deps.canAcceptLink?.(from) ?? true)) return;
+              if (!supports(from) || !(deps.canAcceptLink?.(from) ?? true)) {
+                // The same peer's gated `ensure`, revoked at its own release
+                // just before this one, left its `requesting` to whoever ends
+                // last.
+                idleIfUnbound();
+                return;
+              }
+              // This side's own `ensure` for the SAME peer — still parked, or
+              // already released into `opening` — is the other half of this
+              // very exchange, and builds the one establishment both want. Not
+              // a competing claim, so not `busy`.
+              if (gatedEnsure?.peerId === from || opening?.peerId === from) return;
               if (current || opening || requested || gatedEnsure || heldOffer) {
                 // Answered rather than dropped. Silence here would leave the
                 // peer waiting out its own thirty-second request timeout for an
@@ -1416,11 +1458,30 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         let resolve!: (link: MixedPeerLink) => void;
         let reject!: (err: unknown) => void;
         const promise = new Promise<MixedPeerLink>((res, rej) => { resolve = res; reject = rej; });
-        gatedEnsure = { peerId, promise, resolve, reject };
+        const record = { peerId, promise, resolve, reject };
+        gatedEnsure = record;
         relayGate?.whenReady(() => {
-          const held = gatedEnsure;
-          if (!held || held.peerId !== peerId) return;
+          // By IDENTITY, for the same reason as the parked request above: a new
+          // intent for this peer after this one was settled is not ours.
+          if (gatedEnsure !== record) return;
+          const held = record;
           gatedEnsure = null;
+          // Re-asked, not remembered: the capability and the admission this
+          // intent was raised under may have been revoked while it waited on
+          // the gate, and a released intent is a NEW connection attempt. A
+          // revoked one is settled — rejected, once — and puts nothing on the
+          // wire. A live link is never touched here; only this intent ends.
+          const refusal = !supports(peerId) ? new UnsupportedLinkError()
+            : !(deps.canAcceptLink?.(peerId) ?? true) ? new LinkBusyError("local")
+              : null;
+          if (refusal) {
+            // `requesting` was published for this intent; with nothing left
+            // underneath it, it is a status nobody can get out of. A parked
+            // request still bound here releases after us and settles it.
+            idleIfUnbound();
+            held.reject(refusal);
+            return;
+          }
           (linkRole(deps.selfId(), peerId) === "initiator"
             ? establish(peerId, "initiator")
             : request(peerId)).then(held.resolve, held.reject);

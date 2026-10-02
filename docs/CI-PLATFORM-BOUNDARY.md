@@ -1759,6 +1759,66 @@ the merged pull request's proof covers exactly this tree:
    protection recognising the dispatched `merge-gate` check, which has not been
    observed.
 
+7. **Not a source: the full bootstrap of `main`.** A change can touch a trust
+   input the internal mode refuses (a workflow, or a test that reads
+   `.github/`) while its ordinary `push: main` triggers do not select every
+   lane: each lane's own `push.paths` decides, and only changes to the shared
+   evidence files (`scripts/ci/ci-evidence.mjs`, `select-lanes.mjs`,
+   `scripts/test/ci-evidence-test.mjs` and their siblings, named in every
+   adopted lane's filter) start all of them — `windows` excepted, which is not
+   adopted. For that gap `merge-gate.yml` has a fourth dispatch mode,
+   `full-bootstrap`, which runs every original lane, unchanged, over a commit
+   that is ALREADY protected `main`. It judges no candidate and mints no proof.
+
+   The operator dispatches it on `main` with `base_sha` = `head_sha` = that
+   commit X (the run's own `github.sha`) and no `pr_number`. The select step
+   requires `refs/heads/main`, full lowercase SHAs, base = head = the run's
+   commit = its own checkout's `HEAD`, a positive integer `github.run_attempt`,
+   and the branches API reporting `main` with `protected` the boolean `true`
+   at a full SHA. On attempt 1 that SHA must be X. A GitHub rerun (attempt 2 or
+   later) keeps X as its commit while `main` may have moved on, so it may
+   instead prove X a true ancestor: `compare/<current>...<X>` must be `behind`
+   with `ahead_by` 0, `behind_by` at least 1, `base_commit` = current and
+   `merge_base_commit` = X. Every SHA is shape-checked before it reaches an API
+   path. Any failure fails the select step, every lane is skipped and the gate
+   is red; the selector turns the step's `status=full-bootstrap` into every
+   lane. At the END, on every attempt, the aggregate repeats the identity
+   checks, requires every lane selected and successful, and reads the branches
+   API again: still X is green; moved on PAST X (the same compare rule) is
+   green with a notice and a step-summary line naming X as validated and the
+   newer main as NOT validated; anything else — diverged, unprotected, an API
+   failure or a malformed answer — is red. Moving on is not red because a red
+   `merge-gate` on a `main` commit would refuse every later promotion whose
+   range holds it.
+
+   No proof, on either side. The five producer steps keep their original
+   conditions (pull request, frozen or internal mode only), and
+   `scripts/ci/ci-evidence.mjs` refuses the mode both ways without knowing it:
+   the dispatch producer accepts only `frozen-release-metadata`, and a consumer
+   whose latest merge-gate run on its commit ran on `main` finds no source kind
+   and runs in full. A bootstrap run on a commit therefore costs that commit's
+   lanes their reuse; dispatch it only after that commit's ordinary `main`
+   evidence jobs have finished.
+
+   What it is not. It is additional validation of one commit, never a waiver:
+   the ordinary `push: main` runs and their bare `wire-vectors` keep deciding
+   promotion exactly as before, and a red ordinary result is fixed through the
+   normal path, not outvoted. Its own check runs land on X. On the evidence of
+   the internal mode (a merge-gate call's `compat` job reported as
+   `compat / wire-vectors`, disjoint from `main`'s bare `wire-vectors`), its
+   names are expected to carry the caller's job prefix, but that is an
+   inference until a bootstrap run has been observed. Either way, while it is
+   pending, failed or cancelled, `relayium-ops`' promotion and the release
+   checks that read every check run on X — and on any range that holds X —
+   refuse; so run it between promotions and releases, do not cancel it
+   casually, and recover a transient failure or cancellation by rerunning the
+   same run, which the rerun rule above allows even after `main` has moved on
+   (within GitHub's own rerun window). It pays a FULL run (every lane, macOS
+   and Windows included, the macOS `contract` job on a macOS runner because
+   the event is a dispatch); no duration, queue time or saving is claimed for
+   it until a real run is measured. It is never started automatically, and a
+   change whose ordinary push already starts every lane does not need it.
+
 What stays fresh on every `main` push: `repo-hygiene` and `windows` (not
 adopted), the macOS `signed-build` (it mints the source-bound artifact the
 release reuses), Web's `scope` job (it computes `main`'s own obligation from

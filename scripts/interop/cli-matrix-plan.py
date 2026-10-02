@@ -20,6 +20,11 @@ The body sizes are chosen, not arbitrary:
   * zero-byte files ride in the MIDDLE of a batch (no chunk at all);
   * the cancel bodies are 12 MiB + 4 KiB, larger than one 8 MiB flow window,
     so a receiver that acknowledges nothing holds the sender short of DONE.
+    The Android receive-cancel round's FIRST body is one of them for the same
+    reason: its plan carries `receiveGate: "first-write"`, the instrumentation
+    holds that batch's first real write (nothing durable, nothing
+    acknowledged), and the CLI therefore cannot have sent its last byte when
+    Android cancels — the cancel is of an ACTIVE transfer by construction.
 """
 import json
 import os
@@ -151,8 +156,12 @@ def android_plan(run_root, rnd, code_role, cancel, code=""):
         # Whitespace-significant and multi-line; it travels to the device as hex.
         "androidMessage": "android → cli %d: 你好 مرحبا 🌍\n\tsecond line   " % r,
         "postMessage": "android → cli %d: 取消之后仍然可用\t— still usable" % r,
+        # The one place the gate is decided: the shell passes the opt-in to the
+        # instrumentation and the oracle judges by THIS field, never by the
+        # cancel mode alone. `None` is an explicit "ungated" round.
+        "receiveGate": "first-write" if cancel == "receive" else None,
         "first": [
-            cli_entry("cli-big-%d.bin" % r, 199_000, r),
+            cli_entry("cli-big-%d.bin" % r, FLOW_BEYOND if cancel == "receive" else 199_000, r),
             cli_entry("cli-zero-%d.bin" % r, 0, 0),
             cli_entry("cli-small-%d.bin" % r, 1024, r + 7),
         ],

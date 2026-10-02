@@ -113,11 +113,45 @@ class InteropAcceptanceTest {
         val sendSeed = requireArg("relayium.sendSeed").toInt()
         val textRole = arg("relayium.textRole") ?: "accept"
         val cancelMode = arg("relayium.cancel") ?: "none"
+        // OPT-IN, and only from the CLI ↔ Android cell's receive-cancel round:
+        // hold the first real write of the accepted batch so the cancel is of
+        // an ACTIVE transfer by construction (see `HeldFirstWriteStore`). The
+        // browser cell never passes this; any other value is a test error.
+        val receiveGate = when (val g = arg("relayium.receiveGate")) {
+            null -> false
+            "first-write" -> true
+            else -> error("unknown relayium.receiveGate value '$g'")
+        }
+        check(!receiveGate || cancelMode == "receive") {
+            "relayium.receiveGate=first-write needs relayium.cancel=receive, not '$cancelMode'"
+        }
 
         val observations = LinkedHashMap<String, Any?>()
+        // The gate, owned by THIS round: bound to the store THIS launch's
+        // Activity created, released and disarmed in the `finally` whatever
+        // happened, and reported there with what this side observed.
+        val storeSerialBefore = TestHooks.receiveStoreSerial
+        var gateStore: HeldFirstWriteStore? = null
+        var gateToken = 0L
+        val active = LinkedHashMap<String, Any?>()
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
             val vm = InteropDriver.viewModel()
+            if (receiveGate) {
+                val serial = TestHooks.receiveStoreSerial
+                assertEquals(
+                    "this launch must have built exactly one receive store; binding to an older one " +
+                        "would hold a write nobody here is waiting on",
+                    storeSerialBefore + 1,
+                    serial,
+                )
+                val store = TestHooks.lastReceiveStore ?: error("the debug variant built no gated receive store")
+                gateToken = store.arm(30_000)
+                gateStore = store
+                active["mode"] = "first-write"
+                active["storeSerial"] = serial
+                active["storeSerialBefore"] = storeSerialBefore
+            }
 
             // ── preflight, BEFORE anything is joined ────────────────────────
             assertEquals(
@@ -166,7 +200,81 @@ class InteropAcceptanceTest {
             observations["offered"] = firstOffer
 
             val cancelledReceive = cancelMode == "receive"
-            if (cancelledReceive) {
+            val gate = gateStore
+            if (cancelledReceive && gate != null) {
+                // ── an ACTIVE receive cancel, by construction ───────────────
+                //
+                // The first real write of this batch is held before it writes,
+                // so nothing is durable and nothing is acknowledged; the first
+                // file is larger than one flow window, so the sender cannot
+                // reach its last byte and the batch cannot leave RECEIVING.
+                awaitTrue("the accepted batch's first write is held", 60_000) { gate.holding(gateToken) }
+                val atCancel = state(vm)
+                active["incomingAtCancel"] = atCancel.incoming.map { it.name }
+                active["progressNullAtCancel"] = atCancel.receiveProgress == null
+                active["errorKeyAtCancel"] = atCancel.errorKey
+                active["laneDownAtCancel"] = atCancel.fileLaneDown
+                active["phaseAtCancel"] = atCancel.phase.name
+                active["linkAtCancel"] = atCancel.linkId
+                assertEquals("the held batch is the one this side accepted",
+                    firstOffer, gate.report(gateToken)["manifest"])
+                assertEquals(firstOffer, atCancel.incoming.map { it.name })
+                assertTrue("nothing may be durable while the first write is held",
+                    atCancel.receiveProgress == null)
+                assertEquals(null, atCancel.errorKey)
+                assertTrue(!atCancel.fileLaneDown)
+                assertEquals(link, atCancel.linkId)
+
+                gate.mark(gateToken, "cancelCalled")
+                vm.cancelReceive()
+                // The cancellation's EFFECT on the session thread: the lane's
+                // DiscardIncoming retires the batch from state at once, while
+                // the real discard is still queued behind the held write.
+                awaitTrue("the cancel took effect while the write was still held", 10_000) {
+                    state(vm).incoming.isEmpty()
+                }
+                active["effectWhileHeld"] = gate.holding(gateToken)
+                gate.mark(gateToken, "cancelEffectObserved")
+                val afterEffect = state(vm)
+                active["errorKeyAfterEffect"] = afterEffect.errorKey
+                active["laneDownAfterEffect"] = afterEffect.fileLaneDown
+                active["phaseAfterEffect"] = afterEffect.phase.name
+                active["linkAfterEffect"] = afterEffect.linkId
+                assertTrue("the cancel's effect must be observed WHILE the write is held",
+                    active["effectWhileHeld"] == true)
+                assertEquals(null, afterEffect.errorKey)
+                assertTrue(!afterEffect.fileLaneDown)
+                assertEquals(link, afterEffect.linkId)
+                assertEquals(TransferController.Phase.CONNECTED, afterEffect.phase)
+
+                gate.release(gateToken)
+                // The cleanup barrier is the cancelled batch's OWN rollback —
+                // the real store's discard of this generation, after the
+                // release, outside any begin — never an empty list or a sleep.
+                awaitTrue("the cancelled batch's own rollback completed", 30_000) {
+                    gate.cancelDiscard(gateToken) != null
+                }
+                val rollback = gate.cancelDiscard(gateToken)!!
+                assertTrue("the real rollback of the cancelled batch reported a failure", rollback.ok)
+
+                val after = InteropDriver.listTree()
+                observations["treeAfterCancel"] = after
+                val leaked = firstOffer.filter { it in after }
+                assertTrue(
+                    "a cancelled receive must leave none of its own files behind; found $leaked",
+                    leaked.isEmpty(),
+                )
+                assertTrue(
+                    "the rollback must not touch content it does not own: $sentinelName is gone",
+                    sentinelName in after,
+                )
+                assertEquals(
+                    "the unrelated file's bytes were modified by the rollback",
+                    sha256(sentinelBytes),
+                    sha256(InteropDriver.readSaved(sentinelName) ?: ByteArray(0)),
+                )
+                observations["cleanupIncompleteAfterCancel"] = state(vm).cleanupIncomplete
+            } else if (cancelledReceive) {
                 // Cancel is available from ACCEPTANCE onward, not only once
                 // bytes have arrived — the R15a rule, exercised for real.
                 vm.cancelReceive()
@@ -339,6 +447,15 @@ class InteropAcceptanceTest {
             failure = t
             throw t
         } finally {
+            // The gate's record and its release come FIRST, before anything
+            // else that could throw: the storage thread must never stay held
+            // past this round, and a failed round's report still says how far
+            // the active cancel got.
+            gateStore?.let { store ->
+                runCatching { active.putAll(store.report(gateToken)) }
+                store.disarm(gateToken)
+                observations["activeReceiveCancel"] = active
+            }
             // A FAILED round's report otherwise carries only the fields added
             // before the throw — run 5's timeout reported no errorKey, no
             // phase, no counters, and the product error (if any) was invisible

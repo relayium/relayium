@@ -48,6 +48,145 @@ runner="androidx.test.runner.AndroidJUnitRunner"
 hex_of() { printf '%s' "$1" | od -An -tx1 | tr -d ' \n'; }
 adbs() { "$adb" -s "$serial" "$@"; }
 
+# >>> diagnostics: owned CLI-peer lifecycle
+#
+# Is this owned child still running? `kill -0` also answers yes for an exited,
+# unreaped process, so the process state is read. A state query is NOT proof
+# of identity once the kernel has reused a PID; it is only asked between this
+# run starting the child and confirming its exit, and every exited child's
+# registry slot is retired at once, which narrows the reuse window.
+owned_child_running() {
+  local state
+  state="$(ps -o stat= -p "$1" 2>/dev/null || true)"
+  state="${state#"${state%%[![:space:]]*}"}"
+  [ -n "$state" ] && [ "${state#Z}" = "$state" ]
+}
+
+# Blank exactly the one cleanup-registry slot whose label AND pid match; leave
+# every other slot alone; fail on zero or several. bash reaps its children as
+# they exit, so an exited child's PID may be reused, and the cleanup trap
+# signals every PID still registered.
+retire_owned_child() {
+  local label="$1" pid="$2" i matched=0
+  for i in "${!child_pids[@]}"; do
+    if [ "${child_pids[$i]}" = "$pid" ] && [ "${child_labels[$i]}" = "$label" ]; then
+      child_pids[i]=""
+      matched=$((matched + 1))
+    fi
+  done
+  [ "$matched" -eq 1 ] || fail "the exited $label (pid $pid) matched $matched registry slots, not one"
+}
+
+# Before a FAILURE while this round's CLI peer may still be running: TERM it
+# (its handler writes its observation), give it 5 seconds, KILL it if it is
+# still there, collect it, and retire its slot — so the `fail` that follows
+# never waits out the peer's own multi-minute bounds and the cleanup trap never
+# signals its reaped PID.
+stop_cli_peer() {
+  local waited=0
+  [ -n "${peer_pid:-}" ] || return 0
+  if owned_child_running "$peer_pid"; then
+    kill -TERM "$peer_pid" 2>/dev/null || true
+    while owned_child_running "$peer_pid" && [ "$waited" -lt 50 ]; do
+      sleep 0.1
+      waited=$((waited + 1))
+    done
+    if owned_child_running "$peer_pid"; then
+      kill -KILL "$peer_pid" 2>/dev/null || true
+    fi
+  fi
+  wait "$peer_pid" 2>/dev/null || true
+  retire_owned_child "cli-peer-$round" "$peer_pid"
+  peer_pid=""
+}
+
+# On the SUCCESS path: collect the peer's status, retire its slot at once, and
+# hand the status back for the caller's verdict.
+reap_cli_peer() {
+  local status=0
+  wait "$peer_pid" || status=$?
+  retire_owned_child "cli-peer-$round" "$peer_pid"
+  peer_pid=""
+  return "$status"
+}
+# <<< diagnostics: owned CLI-peer lifecycle
+
+# >>> diagnostics: bounded report capture
+#
+# The early, diagnosis-only read of the Android half's report, with its OWN
+# 10-second budget: a wedged `adb exec-out` must never stand between the round
+# and its primary verdict. One fixed argv (no shell, no pipe), stdout straight
+# into the private file, stderr discarded. On timeout Python kills and reaps
+# only that adb client process — never the adb server, the daemon or the
+# device. Exit 0 = read, 3 = timed out, anything else = not read.
+capture_android_report() {
+  python3 - "$adb" "$serial" "$app_id" "files/$device_out" "$1" <<'PY'
+import subprocess, sys
+adb, serial, app_id, path, dest = sys.argv[1:6]
+try:
+    with open(dest, "wb") as fh:
+        done = subprocess.run([adb, "-s", serial, "exec-out", "run-as", app_id, "cat", path],
+                              stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.DEVNULL, timeout=10)
+except subprocess.TimeoutExpired:
+    sys.exit(3)
+except OSError:
+    sys.exit(4)
+sys.exit(0 if done.returncode == 0 else 1)
+PY
+}
+# <<< diagnostics: bounded report capture
+
+# >>> diagnostics: android report summary
+#
+# The Android half writes its report from a `finally`, so a FAILED round still
+# leaves one — with the app's terminal phase, error key and counters. This
+# prints a type-checked, limited summary of it BEFORE any instrumentation
+# verdict. It is diagnosis only: it never decides anything, a missing or
+# malformed report is reported as such, and no file name, transcript or
+# message text is echoed — lists are counted, scalars are validated, and
+# anything else is shown as `invalid`.
+summarize_android_report() {
+  python3 - "$1" <<'PY'
+import json, re, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        d = json.load(fh)
+except Exception as err:
+    print("unreadable (%s)" % type(err).__name__)
+    sys.exit(0)
+if not isinstance(d, dict):
+    print("unreadable (not an object)")
+    sys.exit(0)
+out = []
+def show(key, check):
+    if key not in d:
+        out.append("%s=absent" % key)
+        return
+    v = d[key]
+    ok, text = check(v)
+    out.append("%s=%s" % (key, text if ok else "invalid"))
+boolean = lambda v: (isinstance(v, bool), "true" if v is True else "false")
+count = lambda v: (isinstance(v, int) and not isinstance(v, bool) and 0 <= v < 10**9, str(v))
+listed = lambda v: (isinstance(v, list) and all(isinstance(x, str) for x in v), "%d" % len(v) if isinstance(v, list) else "")
+phase = lambda v: (isinstance(v, str) and re.fullmatch(r"[A-Z_]{1,40}", v) is not None, str(v))
+errkey = lambda v: (v is None or (isinstance(v, str) and re.fullmatch(r"[a-z0-9_]{1,64}", v) is not None),
+                    "null" if v is None else str(v))
+show("complete", boolean)
+show("offered", listed)
+show("treeAfterCancel", listed)
+show("cleanupIncompleteAfterCancel", boolean)
+show("finalPhase", phase)
+show("finalErrorKey", errkey)
+show("finalPromptId", count)
+show("finalAwaitingFolder", boolean)
+show("finalSavedBatchCount", count)
+show("finalFileLaneDown", boolean)
+show("finalCleanupIncomplete", boolean)
+print(" ".join(out))
+PY
+}
+# <<< diagnostics: android report summary
+
 acceptance_begin
 
 say "== building the local server and the CLI under test =="
@@ -137,6 +276,16 @@ while [ "$round" -lt "$max_rounds" ]; do
   send_name="$(read_plan 'd["android"]["sendName"]')"
   send_size="$(read_plan 'd["android"]["sendSize"]')"
   send_seed="$(read_plan 'd["android"]["sendSeed"]')"
+  # The plan alone decides the receive gate (an ACTIVE receive cancel: the
+  # instrumentation holds the accepted batch's first real write). Only this
+  # CLI cell ever passes the opt-in; the browser cell never does.
+  receive_gate="$(read_plan 'd["receiveGate"] or ""')"
+  gate_args=()
+  case "$receive_gate" in
+    "") ;;
+    first-write) gate_args=(-e relayium.receiveGate first-write) ;;
+    *) fail "the plan names an unknown receive gate '$receive_gate'" ;;
+  esac
 
   cli_out="$run_root/cli-$round.json"
   code_file="$run_root/code-$round.txt"
@@ -145,10 +294,18 @@ while [ "$round" -lt "$max_rounds" ]; do
   peer_pid=$!
   register_child "cli-peer-$round" "$peer_pid"
   for _ in $(seq 1 120); do [ -s "$code_file" ] && break; kill -0 "$peer_pid" 2>/dev/null || break; sleep 0.25; done
-  [ -s "$code_file" ] || fail "the CLI half never produced a code: $(tail -30 "$run_root/cli-peer-$round.log")"
+  # >>> diagnostics: code-file and reset failures
+  if [ ! -s "$code_file" ]; then
+    stop_cli_peer
+    fail "the CLI half never produced a code: $(tail -30 "$run_root/cli-peer-$round.log")"
+  fi
   code="$(cat "$code_file")"
 
-  adbs shell pm clear "$app_id" >/dev/null 2>&1 || fail "could not reset the app's data"
+  if ! adbs shell pm clear "$app_id" >/dev/null 2>&1; then
+    stop_cli_peer
+    fail "could not reset the app's data"
+  fi
+  # <<< diagnostics: code-file and reset failures
   device_out="cli-interop-$round.json"
   set +e
   adbs shell am instrument -w -r \
@@ -163,17 +320,43 @@ while [ "$round" -lt "$max_rounds" ]; do
     -e relayium.sendSeed "$send_seed" \
     -e relayium.textRole accept \
     -e relayium.cancel "$cancel" \
+    ${gate_args[@]+"${gate_args[@]}"} \
     "$test_pkg/$runner" >"$run_root/instrument-$round.log" 2>&1
   instrument_status=$?
   set -e
-  [ "$instrument_status" -eq 0 ] || fail "adb could not run the Android half: $(tail -20 "$run_root/instrument-$round.log")"
-  grep -q '^INSTRUMENTATION_CODE: -1$' "$run_root/instrument-$round.log" \
-    || fail "the Android half did not run to completion: $(tail -40 "$run_root/instrument-$round.log")"
+  # >>> diagnostics: instrumentation verdicts
+  #
+  # The Android half's own report, read and summarised BEFORE any verdict
+  # below, so a failed round says which state the app ended in. Best-effort and
+  # diagnosis only: the read or the summary failing changes nothing, and the
+  # authoritative read after the CLI half still decides the round.
+  early_report="$run_root/android-$round.early.json"
+  capture_status=0
+  capture_android_report "$early_report" || capture_status=$?
+  if [ "$capture_status" -eq 0 ] && [ -s "$early_report" ]; then
+    say "-- Android report, round $round (diagnostic only): $(summarize_android_report "$early_report" || echo 'unreadable (summary failed)')"
+  elif [ "$capture_status" -eq 3 ]; then
+    say "-- Android report, round $round (diagnostic only): not retrievable (read timed out after 10s)"
+  else
+    say "-- Android report, round $round (diagnostic only): not retrievable"
+  fi
+  if [ "$instrument_status" -ne 0 ]; then
+    stop_cli_peer
+    fail "adb could not run the Android half: $(tail -20 "$run_root/instrument-$round.log")"
+  fi
+  if ! grep -q '^INSTRUMENTATION_CODE: -1$' "$run_root/instrument-$round.log"; then
+    stop_cli_peer
+    fail "the Android half did not run to completion: $(tail -40 "$run_root/instrument-$round.log")"
+  fi
   if grep -qE '^INSTRUMENTATION_STATUS_CODE: (-1|-2)$' "$run_root/instrument-$round.log"; then
+    stop_cli_peer
     fail "the Android half FAILED: $(sed -n '/INSTRUMENTATION_STATUS: stack=/,/^INSTRUMENTATION_STATUS_CODE/p' "$run_root/instrument-$round.log" | head -40)
 CLI half: $(tail -40 "$run_root/cli-peer-$round.log")"
   fi
-  wait "$peer_pid" || fail "the CLI half failed: $(tail -60 "$run_root/cli-peer-$round.log")"
+  peer_status=0
+  reap_cli_peer || peer_status=$?
+  [ "$peer_status" -eq 0 ] || fail "the CLI half failed (exit $peer_status): $(tail -60 "$run_root/cli-peer-$round.log")"
+  # <<< diagnostics: instrumentation verdicts
   sed 's/^/   /' "$run_root/cli-peer-$round.log" >&2
   android_out="$run_root/android-$round.json"
   adbs exec-out run-as "$app_id" cat "files/$device_out" >"$android_out" 2>/dev/null \

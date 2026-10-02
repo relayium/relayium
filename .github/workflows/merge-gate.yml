@@ -48,13 +48,15 @@ on:
   # `push: branches: [main]` trigger, which every lane keeps: `relayium-ops`'
   # `deploy/promote.sh` refuses to promote a `main` commit without a green
   # check-run named `wire-vectors` ON THAT COMMIT, and this workflow never runs
-  # on `main`. A future cleanup that routed `main` through the gate would wedge
-  # every production promotion with `required check absent`.
+  # on `main` by itself. A future cleanup that routed `main` through the gate
+  # would wedge every production promotion with `required check absent`. The
+  # one exception is the operator-started `full-bootstrap` dispatch below,
+  # which ADDS a run on a `main` commit and replaces nothing.
   pull_request:
   # Release metadata is generated after the signed/notarized artifact exists,
   # so the frozen candidate commit cannot arrive through an ordinary PR event.
   #
-  # Three dispatch modes, chosen by `mode` and nothing else:
+  # Four dispatch modes, chosen by `mode` and nothing else:
   #
   #   pull-request             the original: an operator opened a PR for the
   #                            candidate; identity checks bind the dispatch to
@@ -80,10 +82,24 @@ on:
   #                            trust inputs (scripts/ci/ci-evidence.mjs,
   #                            `internalTrustClosure`). Every lane is selected;
   #                            any doubt fails the gate.
+  #   full-bootstrap           a full run of protected `main` ITSELF, for a
+  #                            change whose ordinary `push: main` triggers do
+  #                            not select every lane (a trust input the
+  #                            internal mode refuses, say). No candidate, no
+  #                            pull request and NO proof: it only validates.
+  #                            Strict: on `refs/heads/main`, with
+  #                            base_sha == head_sha == the run's commit X ==
+  #                            the select checkout, pr_number empty, and the
+  #                            branches API reporting `main` protected at X.
+  #                            Only a rerun (run_attempt >= 2) may find `main`
+  #                            moved on, and then only past X: the compare API
+  #                            must show X a true ancestor. Every lane is
+  #                            selected; the aggregate repeats the check at the
+  #                            end. docs/CI-PLATFORM-BOUNDARY.md has its rules.
   workflow_dispatch:
     inputs:
       mode:
-        description: Dispatch mode (pull-request, frozen-release-metadata from macos-release.yml, or internal-full-candidate)
+        description: Dispatch mode (pull-request, frozen-release-metadata from macos-release.yml, internal-full-candidate, or full-bootstrap of protected main)
         required: true
         default: pull-request
         type: choice
@@ -91,13 +107,14 @@ on:
           - pull-request
           - frozen-release-metadata
           - internal-full-candidate
+          - full-bootstrap
       pr_number:
         description: Frozen release-candidate pull request number (pull-request mode only)
         required: false
         default: ''
         type: string
       base_sha:
-        description: Exact protected-main SHA the candidate must extend
+        description: Exact protected-main SHA the candidate must extend (full-bootstrap - the run's own main commit, equal to head_sha)
         required: true
         type: string
       head_sha:
@@ -189,6 +206,7 @@ jobs:
           EXPECTED_BASE: ${{ inputs.base_sha }}
           EXPECTED_HEAD: ${{ inputs.head_sha }}
           CHECKED_SHA: ${{ github.sha }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -uo pipefail
           payload="$RUNNER_TEMP/pr-files.json"
@@ -230,6 +248,48 @@ jobs:
             grep -qx 'status=internal-full-candidate' "$RUNNER_TEMP/internal.out" || {
               echo "::error::the internal full candidate judge returned no verdict"; exit 1; }
             cat "$RUNNER_TEMP/internal.out" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The full bootstrap of protected main. No judge and no change set:
+          # the commit IS main, so this step proves exactly that - from the
+          # run's context, its own checkout and the API - and FAILS otherwise.
+          # Every SHA is checked for shape before it reaches an API path.
+          # Attempt 1 needs main still at X. A rerun (attempt >= 2, GitHub's
+          # own counter) keeps X as its commit while main may have moved on,
+          # so it may instead prove X a true ancestor: compare CURRENT...X is
+          # `behind`, ahead_by 0, and the merge base is X itself.
+          if [ "$DISPATCHED" = true ] && [ "$MODE" = full-bootstrap ]; then
+            hex40='^[0-9a-f]{40}$'
+            [ "${GITHUB_REF:-}" = refs/heads/main ] || {
+              echo "::error::full bootstrap runs on refs/heads/main only, not ${GITHUB_REF:-empty}"; exit 1; }
+            [[ "$CHECKED_SHA" =~ $hex40 && "$EXPECTED_BASE" =~ $hex40 && "$EXPECTED_HEAD" =~ $hex40 ]] || {
+              echo "::error::full bootstrap needs full lowercase SHAs for base_sha, head_sha and the run's commit"; exit 1; }
+            [ "$EXPECTED_BASE" = "$EXPECTED_HEAD" ] && [ "$EXPECTED_HEAD" = "$CHECKED_SHA" ] || {
+              echo "::error::full bootstrap needs base_sha == head_sha == the run's commit $CHECKED_SHA"; exit 1; }
+            [ -z "$PR_NUMBER" ] || { echo "::error::full bootstrap takes no pr_number"; exit 1; }
+            [[ "$RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]] || { echo "::error::run attempt ${RUN_ATTEMPT:-empty} is not a positive integer"; exit 1; }
+            checkout=$(git rev-parse --verify --quiet 'HEAD^{commit}') && [ "$checkout" = "$CHECKED_SHA" ] || {
+              echo "::error::the select checkout is ${checkout:-unreadable}, not the run's commit $CHECKED_SHA"; exit 1; }
+            branch="$RUNNER_TEMP/bootstrap-main.json"
+            gh api "repos/$REPOSITORY/branches/main" > "$branch" || {
+              echo "::error::the branches API did not answer for main"; exit 1; }
+            current=$(jq -er 'if (.name == "main") and ((.protected | type) == "boolean") and (.protected == true)
+              and ((.commit.sha | type) == "string") then .commit.sha else error("unprotected") end' "$branch") \
+              && [[ "$current" =~ $hex40 ]] || {
+              echo "::error::the branches API does not report main protected at a full SHA"; exit 1; }
+            if [ "$current" != "$CHECKED_SHA" ]; then
+              [ "$RUN_ATTEMPT" != 1 ] || {
+                echo "::error::main is $current, not $CHECKED_SHA; a first attempt validates current main only"; exit 1; }
+              compare="$RUNNER_TEMP/bootstrap-compare.json"
+              gh api "repos/$REPOSITORY/compare/$current...$CHECKED_SHA" > "$compare" || {
+                echo "::error::the compare API did not answer for $current...$CHECKED_SHA"; exit 1; }
+              jq -e --arg cur "$current" --arg x "$CHECKED_SHA" '(.status == "behind") and ((.ahead_by | type) == "number")
+                and (.ahead_by == 0) and ((.behind_by | type) == "number") and (.behind_by >= 1) and (.behind_by == (.behind_by | floor))
+                and (.base_commit.sha == $cur) and (.merge_base_commit.sha == $x)' "$compare" > /dev/null || {
+                echo "::error::$CHECKED_SHA is not a true ancestor of current main $current"; exit 1; }
+              echo "::notice::rerun attempt $RUN_ATTEMPT validates $CHECKED_SHA, an ancestor of current main $current; it does not validate $current"
+            fi
+            printf 'status=full-bootstrap\npayload=\nchanged_files=\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$DISPATCHED" = true ] && [ "$MODE" != pull-request ]; then
@@ -538,6 +598,11 @@ jobs:
           MODE: ${{ inputs.mode }}
           EXPECTED_HEAD: ${{ inputs.head_sha }}
           CHECKED_SHA: ${{ github.sha }}
+          # Read by the full-bootstrap branch only.
+          EXPECTED_BASE: ${{ inputs.base_sha }}
+          PR_INPUT: ${{ inputs.pr_number }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
 
@@ -636,6 +701,51 @@ jobs:
               selected=$(printf '%s' "$SELECTED" | jq -r --arg l "$lane" 'if has($l) then .[$l] else "missing" end')
               if [ "$selected" != true ]; then
                 note "internal full candidate mode: $lane was selected=\"$selected\"; this mode runs every lane."
+              fi
+            done <<< "$conditional_lanes"
+          fi
+          # The full bootstrap of main, judged again at the END, on every
+          # attempt: the same identity the select step proved, every lane
+          # selected, and main still protected and either still X or moved on
+          # PAST X (X a true ancestor). Moved on is green with a notice - the
+          # run validated X, not the newer main - because a red merge-gate on a
+          # main commit would refuse every later promotion whose range holds it.
+          # Every API answer is read inside an `if`, so `set -e` cannot turn a
+          # failed call into a silent stop instead of a named problem.
+          if [ "$DISPATCHED" = true ] && [ "$MODE" = full-bootstrap ]; then
+            hex40='^[0-9a-f]{40}$'
+            if [ "${GITHUB_REF:-}" != refs/heads/main ] || ! [[ "$CHECKED_SHA" =~ $hex40 ]] \
+              || [ "$EXPECTED_HEAD" != "$CHECKED_SHA" ] || [ "$EXPECTED_BASE" != "$CHECKED_SHA" ] || [ -n "$PR_INPUT" ]; then
+              note "full bootstrap mode: this run checked $CHECKED_SHA on ${GITHUB_REF:-empty} with base_sha $EXPECTED_BASE, head_sha $EXPECTED_HEAD and pr_number \"$PR_INPUT\"; want base == head == the run's commit on refs/heads/main and no pr_number."
+            else
+              branch="$RUNNER_TEMP/bootstrap-main-end.json"
+              compare="$RUNNER_TEMP/bootstrap-compare-end.json"
+              current=''
+              if ! gh api "repos/$REPOSITORY/branches/main" > "$branch"; then
+                note "full bootstrap mode: the branches API did not answer for main at the end of the run."
+              elif ! current=$(jq -er 'if (.name == "main") and ((.protected | type) == "boolean") and (.protected == true)
+                and ((.commit.sha | type) == "string") then .commit.sha else error("unprotected") end' "$branch") \
+                || ! [[ "$current" =~ $hex40 ]]; then
+                note "full bootstrap mode: the branches API does not report main protected at a full SHA at the end of the run."
+              elif [ "$current" = "$CHECKED_SHA" ]; then
+                echo "full bootstrap: protected main is still $CHECKED_SHA."
+              elif ! gh api "repos/$REPOSITORY/compare/$current...$CHECKED_SHA" > "$compare"; then
+                note "full bootstrap mode: the compare API did not answer for $current...$CHECKED_SHA."
+              elif ! jq -e --arg cur "$current" --arg x "$CHECKED_SHA" '(.status == "behind") and ((.ahead_by | type) == "number")
+                and (.ahead_by == 0) and ((.behind_by | type) == "number") and (.behind_by >= 1) and (.behind_by == (.behind_by | floor))
+                and (.base_commit.sha == $cur) and (.merge_base_commit.sha == $x)' "$compare" > /dev/null; then
+                note "full bootstrap mode: $CHECKED_SHA is not a true ancestor of current main $current."
+              else
+                echo "::notice::full bootstrap validated $CHECKED_SHA; protected main has since moved on to $current, of which $CHECKED_SHA is an ancestor. This run does not validate $current."
+                if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                  printf 'full bootstrap: validated %s; latest observed main %s (not validated by this run)\n' "$CHECKED_SHA" "$current" >> "$GITHUB_STEP_SUMMARY"
+                fi
+              fi
+            fi
+            while IFS= read -r lane; do
+              selected=$(printf '%s' "$SELECTED" | jq -r --arg l "$lane" 'if has($l) then .[$l] else "missing" end')
+              if [ "$selected" != true ]; then
+                note "full bootstrap mode: $lane was selected=\"$selected\"; this mode runs every lane."
               fi
             done <<< "$conditional_lanes"
           fi

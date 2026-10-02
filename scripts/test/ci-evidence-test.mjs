@@ -825,6 +825,11 @@ for (const laneId of LANE_IDS.filter((id) => !UNCERTIFIABLE_LANES.includes(id)))
 
 for (const [name, envPatch, worldPatch, expect] of [
   ["a pull-request mode dispatch", { CI_EVIDENCE_DISPATCH_MODE: "pull-request" }, null, /only frozen-release-metadata does/],
+  // merge-gate's `full-bootstrap` validates main and proves nothing: should its
+  // producer step ever run, the mode alone refuses, on its own main branch too.
+  ["a full-bootstrap dispatch", { CI_EVIDENCE_DISPATCH_MODE: "full-bootstrap" }, null, /dispatch mode "full-bootstrap" produces no proof; only frozen-release-metadata does/],
+  ["a full-bootstrap dispatch on main", { CI_EVIDENCE_DISPATCH_MODE: "full-bootstrap", GITHUB_REF: "refs/heads/main" }, null,
+    /dispatch mode "full-bootstrap" produces no proof/],
   ["a development branch", { GITHUB_REF: "refs/heads/feature/x" }, null, /is not a frozen release-candidate branch/],
   ["a candidate two commits on its base", {}, (w) => { w.gitParents = `${BASE} ${HEAD}`; }, /not exactly one commit on the dispatched base/],
   ["a base that is no longer main", {}, (w) => { w.mainRef = { object: { sha: hex("moved-main") } }; }, /not the candidate's base/],
@@ -852,6 +857,14 @@ for (const [name, laneId, breakIt, expect, envOverrides] of [
   ["a later dispatch on main is pending", "go", (w) => { w.mainRuns.push({ ...w.mainRuns[0], id: DRUN + 1, run_started_at: "2026-10-01T14:40:00Z", status: "in_progress", conclusion: null }); }, /still in_progress/],
   ["an older dispatch re-run later failed", "go", (w) => { w.mainRuns.push({ ...w.mainRuns[0], id: DRUN - 1, created_at: "2026-10-01T13:00:00Z", run_started_at: "2026-10-01T14:45:00Z", run_attempt: 2, conclusion: "failure" }); }, /concluded failure/],
   ["a dispatch from a development branch", "go", (w) => { w.mainRuns[0].head_branch = "feature/x"; }, /not a frozen release-candidate branch/],
+  // A full-bootstrap run of main on this commit is a later merge-gate dispatch
+  // on `main`: it is the latest run, and no source kind accepts it.
+  ["a later full-bootstrap run on main", "go", (w) => {
+    w.mainRuns.push({ ...w.mainRuns[0], id: DRUN + 1, run_started_at: "2026-10-01T14:40:00Z", head_branch: "main" });
+  }, /ran on main, not a frozen release-candidate branch \(nor this commit's internal-candidate branch\)/],
+  ["a full-bootstrap run on main still pending", "go", (w) => {
+    w.mainRuns.push({ ...w.mainRuns[0], id: DRUN + 1, run_started_at: "2026-10-01T14:40:00Z", head_branch: "main", status: "in_progress", conclusion: null });
+  }, /still in_progress/],
   ["referenced workflows on another ref", "go", (w) => { w.run.referenced_workflows = referenced(MAIN, "refs/heads/release-candidate/macos-v1.4.5-42-999"); }, /is not refs\/heads\/release-candidate\/macos-v1\.4\.5-42-36990000000/],
   ["a pull-request proof on a dispatch source", "go", (w) => { w.zip = zipManifest(manifest); }, /the proof is a merge-gate-pull-request-full-run, this commit's source is a merge-gate-frozen-dispatch-full-run/],
   ["a proof naming another base", "go", (w) => { const m = structuredClone(dispatchManifest); m.dispatch.base_sha = hex("b2"); w.zip = zipManifest(m); }, /names another candidate, base or branch/],
@@ -1578,6 +1591,9 @@ for (const [name, cand, envPatch, worldPatch, expect, dirOverride] of [
   ["a frozen release-candidate branch", IGOOD, { GITHUB_REF: "refs/heads/release-candidate/macos-v1.4.5-42-1" }, null, /is not internal-candidate\//],
   ["the frozen mode on the internal branch", IGOOD, { CI_EVIDENCE_DISPATCH_MODE: "frozen-release-metadata" }, null, /is not a frozen release-candidate branch/],
   ["an unknown dispatch mode", IGOOD, { CI_EVIDENCE_DISPATCH_MODE: "hotfix" }, null, /only frozen-release-metadata does/],
+  ["the full-bootstrap mode", IGOOD, { CI_EVIDENCE_DISPATCH_MODE: "full-bootstrap" }, null, /dispatch mode "full-bootstrap" produces no proof/],
+  ["the full-bootstrap mode on main", IGOOD, { CI_EVIDENCE_DISPATCH_MODE: "full-bootstrap", GITHUB_REF: "refs/heads/main" }, null,
+    /dispatch mode "full-bootstrap" produces no proof/],
   ["the pull-request dispatch mode", IGOOD, { CI_EVIDENCE_DISPATCH_MODE: "pull-request" }, null, /only frozen-release-metadata does/],
   ["a gate workflow from elsewhere", IGOOD, { GITHUB_WORKFLOW_SHA: OTHER }, null, /gate's own workflow file is not from the candidate/],
   ["a branch that moved to another commit", IGOOD, {}, (w) => { w.branchRef = { object: { sha: OTHER } }; }, /points at [0-9a-f]{40}, not its own candidate/],
@@ -1682,6 +1698,9 @@ for (const [name, laneId, breakIt, expect, opts] of [
   ["a pull-request-mode run beside the internal one", "go", (w) => {
     w.mainRuns.push({ ...w.mainRuns[0], id: IRUN - 1, created_at: "2026-10-01T13:00:00Z", run_started_at: "2026-10-01T13:00:00Z", head_branch: "feature/x" });
   }, /two kinds of source is ambiguous/],
+  ["a later full-bootstrap run of main beside the internal one", "go", (w) => {
+    w.mainRuns.push({ ...w.mainRuns[0], id: IRUN + 1, run_started_at: "2026-10-01T14:40:00Z", head_branch: "main" });
+  }, /ran on main, not a frozen release-candidate branch/],
   ["a run on another candidate's internal branch", "go", (w) => { w.mainRuns[0].head_branch = `internal-candidate/${OTHER}`; w.run.head_branch = `internal-candidate/${OTHER}`; },
     /two kinds of source is ambiguous/],
   ["an API run on another branch than its listing", "go", (w) => { w.run.head_branch = "release-candidate/macos-v1.4.5-42-1"; },
@@ -1745,6 +1764,7 @@ for (const [name, envPatch, worldPatch, expect, gitOverride] of [
   ["a pull_request event", { GITHUB_EVENT_NAME: "pull_request" }, null, /reachable only by workflow_dispatch/],
   ["the frozen mode", { MODE: "frozen-release-metadata" }, null, /not internal-full-candidate/],
   ["an unknown mode", { MODE: "hotfix" }, null, /not internal-full-candidate/],
+  ["the full-bootstrap mode", { MODE: "full-bootstrap" }, null, /not internal-full-candidate/],
   ["a short base", { EXPECTED_BASE: IBASE.slice(0, 12) }, null, /full lowercase SHAs/],
   ["a run that checked out another commit", { GITHUB_SHA: OTHER }, null, /checked out [0-9a-f]{40}, not head_sha/],
   ["a base that is no longer main", {}, (w) => { w.mainRef = { object: { sha: OTHER } }; }, /main is at/],

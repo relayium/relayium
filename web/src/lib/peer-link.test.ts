@@ -2554,6 +2554,242 @@ describe("the relay gate", () => {
     vi.useRealTimers();
   });
 
+  /**
+   * **The same peer, from both ends, behind the gate (cli-web phase 1).** A
+   * peer's request can be parked here BEFORE this side's own `ensure` for that
+   * peer — the roster that triggers the ensure can trail the request — and
+   * `ensure` deliberately joins it rather than refusing ("for the same peer it
+   * is the other half of this exchange"). The gate then releases two callbacks
+   * for ONE exchange, in whichever order it holds them. The target: one
+   * establishment, no `busy` to the peer it is being built with, and the local
+   * caller settled. Current runtime: the parked request's release answers
+   * `busy` whenever any phase exists — the same-peer `gatedEnsure`, or the
+   * `opening` that ensure's release just started. The `busy` expectation is soft
+   * so each order reports exactly that and the rest still runs. Not claimed as
+   * the hosted failure's cause: no fixture ensure has been observed there.
+   */
+  describe("a parked request and the same peer's ensure", () => {
+    /** `manualGate`, but releasing its parked callbacks in a chosen order. */
+    function orderedGate(order: "fifo" | "reverse") {
+      let open = false;
+      let waiters: Array<() => void> = [];
+      return {
+        gate: {
+          ready: () => open,
+          notePeer() {},
+          whenReady(cb: () => void) { if (open) cb(); else waiters.push(cb); },
+        },
+        get parked() { return waiters.length; },
+        release() {
+          open = true;
+          const parked = order === "fifo" ? waiters : [...waiters].reverse();
+          waiters = [];
+          for (const cb of parked) cb();
+        },
+      };
+    }
+    const request = { link: true, linkRequest: true } as InboundSignal;
+    const busyTo = (sent: { to: string; data: InboundSignal }[], peer: string) =>
+      sent.filter((s) => s.to === peer && s.data.busy === true);
+    /** Bounded: a waiter that has not settled within 50 ms of the release is reported, never awaited forever; the timer is cleared either way. */
+    const settledWithin = async (p: Promise<unknown>) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          p.then(() => "resolved", () => "rejected"),
+          new Promise<string>((r) => { timer = setTimeout(() => r("pending"), 50); }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    it.each([["fifo"], ["reverse"]] as const)(
+      "settles as ONE establishment with no busy to that peer (gate releases %s)", async (order) => {
+        const sig = signalingHarness();
+        const transport = recordingTransport();
+        const g = orderedGate(order);
+        // "a" < "z": this side is the initiator, the peer is the one that asks.
+        const manager = createPeerLinkManager({
+          selfId: () => "a", signaling: () => sig.signaling,
+          rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+          connect: transport.connect,
+        });
+        manager.setRelayGate(g.gate);
+        manager.listen();
+
+        sig.inject("z", request);
+        const waiting = manager.ensure("z");
+        void waiting.catch(() => {});
+        expect(g.parked).toBe(2);
+        expect(sig.sent).toEqual([]);
+
+        try {
+          g.release();
+          const settled = await settledWithin(waiting);
+
+          expect.soft(busyTo(sig.sent, "z"), `the same peer was told busy (gate released ${order})`).toEqual([]);
+          expect(transport.connect).toHaveBeenCalledTimes(1);
+          expect(settled).toBe("resolved");
+        } finally {
+          manager.stop();
+        }
+      });
+
+    const initiator = (sig: ReturnType<typeof signalingHarness>, connect: Parameters<typeof createPeerLinkManager>[0]["connect"],
+      supportsLink: (peerId: string) => boolean = () => true) => createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink, connect,
+    });
+
+    it("lets a stale parked REQUEST callback from a retired gate consume nothing of a fresh request", async () => {
+      const sig = signalingHarness();
+      const transport = recordingTransport();
+      const g1 = orderedGate("fifo");
+      const g2 = orderedGate("fifo");
+      const manager = initiator(sig, transport.connect);
+      try {
+        manager.setRelayGate(g1.gate);
+        manager.listen();
+        sig.inject("z", request);
+        manager.rosterPeerGone("z");        // retires the first record
+        manager.setRelayGate(g2.gate);       // a new room/relay agreement
+        sig.inject("z", request);            // a fresh record, parked on g2
+        expect(g2.parked).toBe(1);
+        g1.release();                        // the OLD callback fires
+        await Promise.resolve();
+        expect(transport.connect).not.toHaveBeenCalled();
+        expect(busyTo(sig.sent, "z")).toEqual([]);
+        g2.release();
+        await Promise.resolve();
+        expect(transport.connect).toHaveBeenCalledTimes(1);
+      } finally {
+        manager.stop();
+      }
+    });
+
+    it("lets a stale ENSURE callback from a retired gate consume nothing of a fresh ensure", async () => {
+      const sig = signalingHarness();
+      const transport = recordingTransport();
+      const g1 = orderedGate("fifo");
+      const g2 = orderedGate("fifo");
+      const manager = initiator(sig, transport.connect);
+      try {
+        manager.setRelayGate(g1.gate);
+        manager.listen();
+        const first = manager.ensure("z");
+        void first.catch(() => {});
+        manager.rosterPeerGone("z");
+        await expect(first).rejects.toThrow();
+        manager.setRelayGate(g2.gate);
+        const fresh = manager.ensure("z");
+        void fresh.catch(() => {});
+        g1.release();
+        await Promise.resolve();
+        expect(transport.connect).not.toHaveBeenCalled();
+        g2.release();
+        expect(await settledWithin(fresh)).toBe("resolved");
+        expect(transport.connect).toHaveBeenCalledTimes(1);
+      } finally {
+        manager.stop();
+      }
+    });
+
+    /**
+     * **Revoked while parked.** A released `ensure` is a NEW connection attempt,
+     * so the capability and the admission it was raised under are asked again
+     * at the release. Either one gone: the local waiter is REJECTED, once, with
+     * the existing error for that refusal; no transport, no request, no `busy`,
+     * nothing on the wire at all; and the manager is left idle and unbound. Both
+     * roles (the initiator's release establishes, the responder's requests),
+     * and — where a peer's request is parked beside it — both release orders.
+     */
+    it.each([
+      ["initiator, capability revoked, FIFO", "a", "z", true, "fifo", "caps"],
+      ["initiator, capability revoked, reverse", "a", "z", true, "reverse", "caps"],
+      ["initiator, admission revoked, FIFO", "a", "z", true, "fifo", "admission"],
+      ["initiator, admission revoked, reverse", "a", "z", true, "reverse", "admission"],
+      ["responder, capability revoked", "z", "a", false, "fifo", "caps"],
+      ["responder, admission revoked", "z", "a", false, "fifo", "admission"],
+    ] as const)("rejects a gated ensure whose peer was revoked while parked (%s): no connect, nothing sent, idle", async (
+      _label, self, peer, withRequest, order, revoke,
+    ) => {
+      const sig = signalingHarness();
+      const transport = recordingTransport();
+      const g = orderedGate(order);
+      let capable = true;
+      let admitted = true;
+      const manager = createPeerLinkManager({
+        selfId: () => self, signaling: () => sig.signaling,
+        rtcConfig: () => ({ iceServers: [] }),
+        supportsLink: () => capable,
+        canAcceptLink: () => admitted,
+        connect: transport.connect,
+      });
+      try {
+        manager.setRelayGate(g.gate);
+        manager.listen();
+        if (withRequest) sig.inject(peer, request);
+        let outcomes = 0;
+        const waiting = manager.ensure(peer);
+        waiting.then(() => { outcomes += 1; }, () => { outcomes += 1; });
+        expect(g.parked).toBe(withRequest ? 2 : 1);
+        if (revoke === "caps") capable = false; else admitted = false;
+        g.release();
+
+        await expect(waiting).rejects.toBeInstanceOf(revoke === "caps" ? UnsupportedLinkError : LinkBusyError);
+        if (revoke === "admission") await expect(waiting).rejects.toMatchObject({ side: "local" });
+        await Promise.resolve();
+        expect(outcomes).toBe(1);
+        expect(transport.connect).not.toHaveBeenCalled();
+        expect(sig.sent).toEqual([]);
+        expect(manager.status).toBe("idle");
+        expect(manager.boundPeerId).toBe("");
+        expect(g.parked).toBe(0);
+      } finally {
+        manager.stop();
+      }
+    });
+
+    it("rejects the local waiter on a connect failure, with no busy and no unhandled rejection", async () => {
+      const sig = signalingHarness();
+      const g = orderedGate("reverse");
+      const connect = vi.fn(async (): Promise<Conn> => { throw new Error("ice failed"); });
+      const manager = initiator(sig, connect);
+      try {
+        manager.setRelayGate(g.gate);
+        manager.listen();
+        sig.inject("z", request);
+        const waiting = manager.ensure("z");
+        void waiting.catch(() => {});
+        g.release();
+        expect(await settledWithin(waiting)).toBe("rejected");
+        expect(connect).toHaveBeenCalledTimes(1);
+        expect(busyTo(sig.sent, "z")).toEqual([]);
+      } finally {
+        manager.stop();
+      }
+    });
+
+    it("still refuses a DIFFERENT peer's ensure while one peer's request is parked", async () => {
+      const sig = signalingHarness();
+      const transport = recordingTransport();
+      const g = orderedGate("fifo");
+      const manager = createPeerLinkManager({
+        selfId: () => "a", signaling: () => sig.signaling,
+        rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+        connect: transport.connect,
+      });
+      manager.setRelayGate(g.gate);
+      manager.listen();
+      sig.inject("z", request);
+      await expect(manager.ensure("y")).rejects.toBeInstanceOf(LinkBusyError);
+      expect(g.parked).toBe(1);
+      expect(transport.connect).not.toHaveBeenCalled();
+      manager.stop();
+    });
+  });
+
   it("still tells a genuinely different peer the room is taken while a request is gated", async () => {
     const sig = signalingHarness();
     const transport = recordingTransport();

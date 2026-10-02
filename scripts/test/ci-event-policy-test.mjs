@@ -1494,8 +1494,11 @@ function evidenceAdoptionFailures(world) {
   // (`pull-request`) and every other event produce nothing.
   const pr = "github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'frozen-release-metadata' || inputs.mode == 'internal-full-candidate'))";
   const modeOptions = gate.on?.workflow_dispatch?.inputs?.mode?.options;
-  need(deepEqual(modeOptions, ["pull-request", "frozen-release-metadata", "internal-full-candidate"]), `${AGGREGATE}: the dispatch modes are `
-    + `${JSON.stringify(modeOptions)}, want exactly [pull-request, frozen-release-metadata, internal-full-candidate]; the producer is `
+  // `full-bootstrap` is a fourth mode that validates main and proves NOTHING:
+  // the producer condition below names only the frozen and internal modes, so
+  // it can never mint a proof for it.
+  need(deepEqual(modeOptions, ["pull-request", "frozen-release-metadata", "internal-full-candidate", "full-bootstrap"]), `${AGGREGATE}: the dispatch modes are `
+    + `${JSON.stringify(modeOptions)}, want exactly [pull-request, frozen-release-metadata, internal-full-candidate, full-bootstrap]; the producer is `
     + "wired to the accepted frozen and internal modes and a new mode must not inherit it.");
   const want = [
     { name: "Check out the merge commit this run tested", if: pr, uses: EV_CHECKOUT, with: { "persist-credentials": "false" } },
@@ -1802,7 +1805,12 @@ const EVIDENCE_MUTATIONS = [
     }
   }, /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
   ["a new dispatch mode inherits the producer", (w) => { w.docs.get(AGGREGATE).on.workflow_dispatch.inputs.mode.options.push("hotfix"); },
-    /merge-gate\.yml: the dispatch modes are .*want exactly \[pull-request, frozen-release-metadata, internal-full-candidate\]/],
+    /merge-gate\.yml: the dispatch modes are .*want exactly \[pull-request, frozen-release-metadata, internal-full-candidate, full-bootstrap\]/],
+  ["the producer runs on the full bootstrap", (w) => {
+    for (const st of w.docs.get(AGGREGATE).jobs[GATE_JOB].steps.slice(1)) {
+      st.if = st.if.replace("inputs.mode == 'internal-full-candidate'", "inputs.mode == 'internal-full-candidate' || inputs.mode == 'full-bootstrap'");
+    }
+  }, /merge-gate\.yml\/merge-gate: the steps after the judgement are not the canonical proof producer/],
   ["a lane loses the toolchain registry from its filter", (w) => {
     const on = w.docs.get("ios.yml").on.push;
     on.paths = on.paths.filter((p) => p !== "scripts/ci/ci-evidence-toolchain-registry.json");
@@ -7061,9 +7069,9 @@ function aggregateGateFailures(world) {
   need(
     modeInput?.type === "choice" && modeInput?.required === "true"
       && modeInput?.default === "pull-request"
-      && deepEqual(modeInput?.options, ["pull-request", "frozen-release-metadata", "internal-full-candidate"]),
+      && deepEqual(modeInput?.options, ["pull-request", "frozen-release-metadata", "internal-full-candidate", "full-bootstrap"]),
     `${AGGREGATE}'s dispatch \`mode\` must be a required choice of exactly [pull-request, `
-    + `frozen-release-metadata, internal-full-candidate] defaulting to pull-request; got ${JSON.stringify(modeInput)}.`,
+    + `frozen-release-metadata, internal-full-candidate, full-bootstrap] defaulting to pull-request; got ${JSON.stringify(modeInput)}.`,
   );
   need(
     gateDispatchInputs.pr_number?.type === "string" && gateDispatchInputs.pr_number?.required === "false",
@@ -11151,6 +11159,369 @@ for (const message of unregisteredLaneFailures(workflowTexts, GOVERNED, SELECTOR
     `6r did NOT complain about a lane the selector calls but GOVERNED omits; got `
     + `${JSON.stringify(selectorOnly)}.`,
   );
+}
+
+// ── 6v. the full-bootstrap dispatch, EXECUTED against real git and a fake API ─
+//
+// `full-bootstrap` validates protected `main` itself with every lane and mints
+// no proof. Its two judgements — the select step at the START and the aggregate
+// at the END — are shell over the branches and compare APIs, so nothing here is
+// read from the text: both scripts are taken out of the parsed workflow, their
+// `env:` is evaluated from a modelled run context (an expression this file does
+// not model is a failure, not a guess), and they are RUN with bash against a
+// real git repository and a fake `gh` that records every argv and answers the
+// compare API from that repository's own history, in GitHub's direction:
+// `compare/BASE...HEAD` is `behind` with ahead_by 0 when HEAD is an ancestor.
+//
+// History: R <- X <- Y (main moved on past X) and R <- Z (main rewritten).
+// The run's commit is X throughout. Attempt 1 needs main == X; a rerun
+// (attempt >= 2) may find main at Y and prove X its ancestor; Z never passes.
+// The END is the same on every attempt and is GREEN with a notice when main
+// moved on past X, because a red merge-gate on a main commit would refuse every
+// later promotion whose range holds it.
+const BOOT_SELECT_STEP = "Collect the pull request's cumulative file list";
+const BOOT_JUDGE_STEP = "Judge every lane";
+const BOOT_REPO = "relayium/relayium";
+
+/** The fixture: real commits, a checkout at X and one at Y, and the fake gh. */
+function bootstrapFixture() {
+  const root = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/full-bootstrap.XXXXXX`], { encoding: "utf8" })
+    .stdout.trim();
+  const git = (args, cwd = `${root}/repo`) => {
+    const r = spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.invalid", GIT_COMMITTER_NAME: "t",
+      GIT_COMMITTER_EMAIL: "t@example.invalid", GIT_AUTHOR_DATE: "2026-10-02T00:00:00Z", GIT_COMMITTER_DATE: "2026-10-02T00:00:00Z" } });
+    if (r.status !== 0) throw new Error(`fixture git ${args.join(" ")}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  spawnSync("mkdir", ["-p", `${root}/repo`, `${root}/bin`]);
+  git(["init", "-q", "-b", "main"]);
+  const commit = (msg) => { git(["commit", "-q", "--allow-empty", "-m", msg]); return git(["rev-parse", "HEAD"]); };
+  const R = commit("R");
+  const X = commit("X");
+  const Y = commit("Y");
+  git(["checkout", "-q", "--detach", R]);
+  const Z = commit("Z");
+  git(["checkout", "-q", "--detach", X]);
+  git(["worktree", "add", "-q", "--detach", `${root}/at-y`, Y]);
+  const fakeGh = [
+    "#!/usr/bin/env node",
+    'const { appendFileSync } = require("node:fs");',
+    'const { spawnSync } = require("node:child_process");',
+    "const argv = process.argv.slice(2);",
+    "appendFileSync(process.env.FAKE_GH_LOG, JSON.stringify(argv) + '\\n');",
+    "const plan = JSON.parse(process.env.FAKE_GH_PLAN);",
+    "if (process.env.GH_TOKEN !== 'test-token') { console.error('no token'); process.exit(4); }",
+    "if (argv.length !== 2 || argv[0] !== 'api') { console.error('unexpected argv'); process.exit(2); }",
+    "const path = argv[1];",
+    "if (path === `repos/${plan.repo}/branches/main`) {",
+    "  if (plan.branch === 'fail') { console.error('HTTP 502'); process.exit(1); }",
+    "  process.stdout.write(JSON.stringify(plan.branch)); process.exit(0);",
+    "}",
+    "const m = /^repos\\/([^/]+\\/[^/]+)\\/compare\\/([0-9a-f]{40})\\.\\.\\.([0-9a-f]{40})$/.exec(path);",
+    "if (!m || m[1] !== plan.repo) { console.error('HTTP 404 ' + path); process.exit(1); }",
+    "if (plan.compare === 'fail') { console.error('HTTP 500'); process.exit(1); }",
+    "if (plan.compare && typeof plan.compare === 'object') { process.stdout.write(JSON.stringify(plan.compare)); process.exit(0); }",
+    "const g = (...a) => spawnSync('git', a, { cwd: plan.gitDir, encoding: 'utf8' }).stdout.trim();",
+    "const [, , base, head] = m;",
+    "const ahead = Number(g('rev-list', '--count', `${base}..${head}`));",
+    "const behind = Number(g('rev-list', '--count', `${head}..${base}`));",
+    "const mb = g('merge-base', base, head);",
+    "const status = ahead === 0 && behind === 0 ? 'identical' : ahead === 0 ? 'behind' : behind === 0 ? 'ahead' : 'diverged';",
+    "process.stdout.write(JSON.stringify({ status, ahead_by: ahead, behind_by: behind, base_commit: { sha: base },",
+    "  merge_base_commit: { sha: mb }, commits: [] }));",
+  ].join("\n");
+  spawnSync("bash", ["-c", 'printf "%s\\n" "$2" > "$1/gh" && chmod +x "$1/gh"', "_", `${root}/bin`, fakeGh]);
+  return { root, R, X, Y, Z, atX: `${root}/repo`, atY: `${root}/at-y`, gitDir: `${root}/repo` };
+}
+
+/** Evaluate one `env:` value of the two steps from a modelled context; throws on anything else. */
+function bootstrapEnvValue(raw, ctx) {
+  const v = String(raw);
+  const m = /^\$\{\{ (.+) \}\}$/.exec(v);
+  if (!m) return v;
+  const table = {
+    "secrets.GITHUB_TOKEN": "test-token",
+    "github.token": "test-token",
+    "github.repository": ctx.repository,
+    "github.sha": ctx.sha,
+    "github.run_attempt": ctx.runAttempt,
+    "github.event_name == 'workflow_dispatch'": String(ctx.event === "workflow_dispatch"),
+    "github.event.pull_request.number || inputs.pr_number": ctx.inputs.pr_number,
+    "inputs.mode": ctx.inputs.mode,
+    "inputs.pr_number": ctx.inputs.pr_number,
+    "inputs.base_sha": ctx.inputs.base_sha,
+    "inputs.head_sha": ctx.inputs.head_sha,
+    "toJSON(needs)": JSON.stringify(ctx.needs),
+    "toJSON(needs.select.outputs)": JSON.stringify(ctx.selected),
+  };
+  if (!(m[1] in table)) throw new Error(`unmodelled env expression ${v}`);
+  return table[m[1]];
+}
+
+/** Run one of the two steps for one case; returns { status, stdout, stderr, output, summary, calls }. */
+function runBootstrapStep(world, fx, which, ctx, plan, cwd) {
+  const gate = world.docs.get(AGGREGATE);
+  const job = gate?.jobs?.[which === "select" ? SELECT_JOB : GATE_JOB];
+  const step = (job?.steps ?? []).find((s) => s?.name === (which === "select" ? BOOT_SELECT_STEP : BOOT_JUDGE_STEP));
+  if (typeof step?.run !== "string") throw new Error(`${AGGREGATE}/${which}: no step with a run script`);
+  // The only inline expression either script may carry is the pull request's
+  // own changed_files, empty on a dispatch.
+  const inline = step.run.match(/\$\{\{[^}]*\}\}/g) ?? [];
+  const allowed = which === "select" ? ["${{ github.event.pull_request.changed_files }}"] : [];
+  if (JSON.stringify(inline) !== JSON.stringify(allowed)) throw new Error(`${AGGREGATE}/${which}: inline expressions ${JSON.stringify(inline)}`);
+  const script = step.run.replace("${{ github.event.pull_request.changed_files }}", "");
+  const dir = spawnSync("mktemp", ["-d", `${fx.root}/run.XXXXXX`], { encoding: "utf8" }).stdout.trim();
+  const env = { PATH: `${fx.root}/bin:${process.env.PATH}`, HOME: process.env.HOME ?? "/tmp", GITHUB_REF: ctx.ref,
+    RUNNER_TEMP: dir, GITHUB_OUTPUT: `${dir}/output`, GITHUB_STEP_SUMMARY: `${dir}/summary`, FAKE_GH_LOG: `${dir}/gh.log`,
+    FAKE_GH_PLAN: JSON.stringify({ repo: BOOT_REPO, gitDir: fx.gitDir, ...plan }) };
+  for (const [k, raw] of Object.entries(step.env ?? {})) env[k] = bootstrapEnvValue(raw, ctx);
+  spawnSync("bash", ["-c", 'printf "%s" "$2" > "$1/step.sh" && : > "$1/output" && : > "$1/gh.log"', "_", dir, script]);
+  const r = spawnSync("bash", [`${dir}/step.sh`], { cwd, env, encoding: "utf8" });
+  const read = (f) => spawnSync("cat", [`${dir}/${f}`], { encoding: "utf8" }).stdout;
+  const calls = read("gh.log").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr, output: read("output"), summary: read("summary"), calls };
+}
+
+/** Every full-bootstrap case, GREEN and RED, against one (possibly mutated) world. */
+function fullBootstrapFailures(world, fx, only = null) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const { X, Y, Z } = fx;
+  const lanes = [...GATE_LANES.keys()];
+  const base = { event: "workflow_dispatch", ref: "refs/heads/main", sha: X, runAttempt: "1", repository: BOOT_REPO,
+    inputs: { mode: "full-bootstrap", pr_number: "", base_sha: X, head_sha: X } };
+  const protectedAt = (sha) => ({ name: "main", protected: true, commit: { sha } });
+  const branchCall = ["api", `repos/${BOOT_REPO}/branches/main`];
+  const compareCall = (cur) => ["api", `repos/${BOOT_REPO}/compare/${cur}...${X}`];
+  const merge = (patch) => ({ ...base, ...patch, inputs: { ...base.inputs, ...(patch.inputs ?? {}) } });
+
+  // ── START: the select step ──
+  const select = (label, patch, plan, expect, cwd = fx.atX) => {
+    if (only && !only(`select, ${label}`)) return;
+    let r;
+    try { r = runBootstrapStep(world, fx, "select", merge(patch), plan, cwd); } catch (err) { need(false, `full bootstrap select, ${label}: ${err.message}`); return; }
+    if (expect.ok) {
+      need(r.status === 0 && r.output === "status=full-bootstrap\npayload=\nchanged_files=\n",
+        `full bootstrap select, ${label}: want exit 0 and status=full-bootstrap; got exit ${r.status}, output ${JSON.stringify(r.output)}, stderr ${r.stdout.slice(-300)}${r.stderr.slice(-300)}`);
+    } else {
+      need(r.status === 1 && r.output === "" && expect.reason.test(r.stdout),
+        `full bootstrap select, ${label}: want exit 1 for ${expect.reason} with no output; got exit ${r.status}, output ${JSON.stringify(r.output)}, ${r.stdout.slice(-300)}`);
+    }
+    if (expect.calls) {
+      need(JSON.stringify(r.calls) === JSON.stringify(expect.calls),
+        `full bootstrap select, ${label}: want API calls ${JSON.stringify(expect.calls)}; got ${JSON.stringify(r.calls)}`);
+    }
+    return r;
+  };
+  const green = select("attempt 1 on current protected main", {}, { branch: protectedAt(X) }, { ok: true, calls: [branchCall] });
+  if (green?.status === 0) {
+    // ...and the selector turns that status into every lane.
+    const sel = spawnSync(process.execPath, [resolve(repoRoot, "scripts/ci/select-lanes.mjs")], { encoding: "utf8",
+      env: { PATH: process.env.PATH, LANE_SELECTOR_STATUS: "full-bootstrap", LANE_SELECTOR_FILES: "", LANE_SELECTOR_CHANGED_FILES: "" } });
+    need(sel.status === 0 && sel.stdout === `${lanes.map((l) => `${l}=true`).join("\n")}\n`,
+      `full bootstrap select: the selector did not turn status=full-bootstrap into every lane: ${sel.stdout}${sel.stderr}`);
+  }
+  select("attempt 2 on current protected main", { runAttempt: "2" }, { branch: protectedAt(X) }, { ok: true, calls: [branchCall] });
+  select("attempt 2 with main moved on past X", { runAttempt: "2" }, { branch: protectedAt(Y) }, { ok: true, calls: [branchCall, compareCall(Y)] });
+  select("attempt 7 with main moved on past X", { runAttempt: "7" }, { branch: protectedAt(Y) }, { ok: true, calls: [branchCall, compareCall(Y)] });
+  const no = (reason, calls) => ({ ok: false, reason, calls });
+  select("attempt 1 with main moved on past X", {}, { branch: protectedAt(Y) }, no(/a first attempt validates current main only/, [branchCall]));
+  select("attempt 2 with main rewritten (diverged)", { runAttempt: "2" }, { branch: protectedAt(Z) }, no(/is not a true ancestor/, [branchCall, compareCall(Z)]));
+  select("attempt 2 when the compare API fails", { runAttempt: "2" }, { branch: protectedAt(Y), compare: "fail" }, no(/compare API did not answer/));
+  for (const [what, compare] of [
+    ["status ahead", { status: "ahead", ahead_by: 0, behind_by: 1, base_commit: { sha: Y }, merge_base_commit: { sha: X } }],
+    ["ahead_by a string", { status: "behind", ahead_by: "0", behind_by: 1, base_commit: { sha: Y }, merge_base_commit: { sha: X } }],
+    ["behind_by 0", { status: "behind", ahead_by: 0, behind_by: 0, base_commit: { sha: Y }, merge_base_commit: { sha: X } }],
+    ["fractional behind_by 1.5", { status: "behind", ahead_by: 0, behind_by: 1.5, base_commit: { sha: Y }, merge_base_commit: { sha: X } }],
+    ["another base", { status: "behind", ahead_by: 0, behind_by: 1, base_commit: { sha: Z }, merge_base_commit: { sha: X } }],
+    ["another merge base", { status: "behind", ahead_by: 0, behind_by: 1, base_commit: { sha: Y }, merge_base_commit: { sha: fx.R } }],
+    ["no merge base", { status: "behind", ahead_by: 0, behind_by: 1, base_commit: { sha: Y } }],
+  ]) {
+    select(`attempt 2 with a compare answer of ${what}`, { runAttempt: "2" }, { branch: protectedAt(Y), compare }, no(/is not a true ancestor/, [branchCall, compareCall(Y)]));
+  }
+  select("a ref other than main", { ref: "refs/heads/internal-candidate/x" }, { branch: protectedAt(X) }, no(/refs\/heads\/main only/, []));
+  select("a pull_request ref", { ref: "refs/pull/7/merge" }, { branch: protectedAt(X) }, no(/refs\/heads\/main only/, []));
+  select("a short head_sha", { inputs: { head_sha: X.slice(0, 12), base_sha: X.slice(0, 12) } }, { branch: protectedAt(X) }, no(/full lowercase SHAs/, []));
+  select("an uppercase SHA", { inputs: { head_sha: X.toUpperCase(), base_sha: X.toUpperCase() } }, { branch: protectedAt(X) }, no(/full lowercase SHAs/, []));
+  select("base_sha unequal to head_sha", { inputs: { base_sha: fx.R } }, { branch: protectedAt(X) }, no(/base_sha == head_sha == the run's commit/, []));
+  select("inputs naming another commit than the run's", { inputs: { base_sha: Y, head_sha: Y } }, { branch: protectedAt(Y) }, no(/base_sha == head_sha == the run's commit/, []));
+  select("a pr_number", { inputs: { pr_number: "7" } }, { branch: protectedAt(X) }, no(/takes no pr_number/, []));
+  for (const attempt of ["0", "", "x", "-1", "1 "]) {
+    select(`run attempt ${JSON.stringify(attempt)}`, { runAttempt: attempt }, { branch: protectedAt(X) }, no(/not a positive integer/, []));
+  }
+  select("a checkout of another commit", {}, { branch: protectedAt(X) }, no(/the select checkout is/, []), fx.atY);
+  select("a failing branches API", {}, { branch: "fail" }, no(/branches API did not answer/, [branchCall]));
+  for (const [what, branch] of [
+    ["unprotected", { name: "main", protected: false, commit: { sha: X } }],
+    ["protected as a string", { name: "main", protected: "true", commit: { sha: X } }],
+    ["no protected field", { name: "main", commit: { sha: X } }],
+    ["another branch", { name: "dev", protected: true, commit: { sha: X } }],
+    ["no commit", { name: "main", protected: true }],
+    ["a short commit", { name: "main", protected: true, commit: { sha: X.slice(0, 7) } }],
+    ["a shell payload as its commit", { name: "main", protected: true, commit: { sha: `$(touch ${fx.root}/pwned)` } }],
+    ["a path payload as its commit", { name: "main", protected: true, commit: { sha: `${Y}/../../x` } }],
+  ]) {
+    // Attempt 2, so that a SHA the shape check missed would reach the compare API.
+    select(`attempt 2 with main ${what}`, { runAttempt: "2" }, { branch }, no(/does not report main protected at a full SHA/, [branchCall]));
+  }
+  need(only || spawnSync("test", ["-e", `${fx.root}/pwned`]).status !== 0, "full bootstrap select: a branches API answer was EXECUTED by the shell.");
+
+  // ── END: the aggregate ──
+  const allNeeds = () => Object.fromEntries([[SELECT_JOB, { result: "success" }], ...lanes.map((l) => [l, { result: "success" }]),
+    ...GATE_ALWAYS.map((l) => [l, { result: "success" }])]);
+  const allSelected = () => Object.fromEntries(lanes.map((l) => [l, "true"]));
+  const judge = (label, patch, plan, expect, mutate) => {
+    if (only && !only(`aggregate, ${label}`)) return;
+    const ctx = merge(patch);
+    ctx.needs = allNeeds();
+    ctx.selected = allSelected();
+    if (mutate) mutate(ctx);
+    let r;
+    try { r = runBootstrapStep(world, fx, "judge", ctx, plan, fx.atX); } catch (err) { need(false, `full bootstrap aggregate, ${label}: ${err.message}`); return; }
+    const text = `${r.stdout}${r.stderr}`;
+    if (expect.ok) {
+      need(r.status === 0 && expect.say.test(text), `full bootstrap aggregate, ${label}: want exit 0 saying ${expect.say}; got exit ${r.status}: ${text.slice(-500)}`);
+    } else {
+      need(r.status === 1 && expect.reason.test(r.stderr), `full bootstrap aggregate, ${label}: want exit 1 for ${expect.reason}; got exit ${r.status}: ${text.slice(-500)}`);
+    }
+    if (expect.calls) {
+      need(JSON.stringify(r.calls) === JSON.stringify(expect.calls),
+        `full bootstrap aggregate, ${label}: want API calls ${JSON.stringify(expect.calls)}; got ${JSON.stringify(r.calls)}`);
+    }
+    if (expect.summary) need(expect.summary.test(r.summary), `full bootstrap aggregate, ${label}: step summary ${JSON.stringify(r.summary)} does not match ${expect.summary}`);
+    return r;
+  };
+  judge("main still at X", {}, { branch: protectedAt(X) }, { ok: true, say: new RegExp(`protected main is still ${X}`), calls: [branchCall] });
+  const movedSay = new RegExp(`::notice::full bootstrap validated ${X}; protected main has since moved on to ${Y}, of which ${X} is an ancestor\\. This run does not validate ${Y}\\.`);
+  for (const attempt of ["1", "3"]) {
+    judge(`attempt ${attempt}, main moved on past X`, { runAttempt: attempt }, { branch: protectedAt(Y) },
+      { ok: true, say: movedSay, calls: [branchCall, compareCall(Y)], summary: new RegExp(`validated ${X}; latest observed main ${Y} \\(not validated by this run\\)`) });
+  }
+  const bad = (reason, calls) => ({ ok: false, reason, calls });
+  judge("main rewritten (diverged)", {}, { branch: protectedAt(Z) }, bad(/is not a true ancestor of current main/, [branchCall, compareCall(Z)]));
+  judge("a failing branches API", {}, { branch: "fail" }, bad(/branches API did not answer for main at the end/, [branchCall]));
+  judge("main unprotected", {}, { branch: { name: "main", protected: false, commit: { sha: X } } }, bad(/does not report main protected/, [branchCall]));
+  judge("protected as a string", {}, { branch: { name: "main", protected: "true", commit: { sha: X } } }, bad(/does not report main protected/, [branchCall]));
+  judge("a shell payload as main's commit", {}, { branch: { name: "main", protected: true, commit: { sha: `$(touch ${fx.root}/pwned-end)` } } },
+    bad(/does not report main protected/, [branchCall]));
+  judge("a failing compare API", {}, { branch: protectedAt(Y), compare: "fail" }, bad(/compare API did not answer/));
+  judge("a compare answer of fractional behind_by 1.5", {}, { branch: protectedAt(Y), compare: { status: "behind", ahead_by: 0, behind_by: 1.5,
+    base_commit: { sha: Y }, merge_base_commit: { sha: X } } }, bad(/is not a true ancestor of current main/, [branchCall, compareCall(Y)]));
+  judge("a compare answer of status ahead", {}, { branch: protectedAt(Y), compare: { status: "ahead", ahead_by: 1, behind_by: 0,
+    base_commit: { sha: Y }, merge_base_commit: { sha: Y } } }, bad(/is not a true ancestor/));
+  judge("a ref other than main", { ref: "refs/heads/feature" }, { branch: protectedAt(X) }, bad(/want base == head == the run's commit on refs\/heads\/main/, []));
+  judge("base_sha unequal to head_sha", { inputs: { base_sha: fx.R } }, { branch: protectedAt(X) }, bad(/want base == head/, []));
+  judge("head_sha not the run's commit", { inputs: { head_sha: Y, base_sha: Y } }, { branch: protectedAt(X) }, bad(/want base == head/, []));
+  judge("a pr_number", { inputs: { pr_number: "7" } }, { branch: protectedAt(X) }, bad(/no pr_number/, []));
+  judge("a lane not selected (and so skipped)", {}, { branch: protectedAt(X) }, bad(/full bootstrap mode: windows was selected="false"; this mode runs every lane/),
+    (ctx) => { ctx.selected.windows = "false"; ctx.needs.windows.result = "skipped"; });
+  judge("a lane with no selection", {}, { branch: protectedAt(X) }, bad(/full bootstrap mode: macos was selected="missing"/),
+    (ctx) => { delete ctx.selected.macos; });
+  for (const result of ["failure", "cancelled", "skipped"]) {
+    judge(`a called lane ${result}`, {}, { branch: protectedAt(X) }, bad(new RegExp(`ios: selected by this change set, but its result is "${result}"`)),
+      (ctx) => { ctx.needs.ios.result = result; });
+  }
+  judge("an unconditional lane failed", {}, { branch: protectedAt(X) }, bad(/compat: result is "failure"/), (ctx) => { ctx.needs.compat.result = "failure"; });
+  judge("select failed", {}, { branch: protectedAt(X) }, bad(/select: result is "failure"/), (ctx) => { ctx.needs.select.result = "failure"; });
+  judge("a lane dropped from needs", {}, { branch: protectedAt(X) }, bad(/this job depends on/), (ctx) => { delete ctx.needs["swift-package"]; });
+  judge("a fake lane added to needs", {}, { branch: protectedAt(X) }, bad(/this job depends on/), (ctx) => { ctx.needs.fake = { result: "success" }; });
+  need(only || spawnSync("test", ["-e", `${fx.root}/pwned-end`]).status !== 0, "full bootstrap aggregate: a branches API answer was EXECUTED by the shell.");
+
+  // The other modes never reach the API: a pull request run makes no call.
+  judge("an ordinary pull request run", { event: "pull_request", ref: "refs/pull/7/merge", inputs: { mode: "", base_sha: "", head_sha: "" } },
+    { branch: "fail" }, { ok: true, say: /every selected lane succeeded/, calls: [] });
+
+  // The wiring the cases above stand on: the attempt is GitHub's own counter,
+  // and the token, repository and identity come from the run, not a free input.
+  const gate = world.docs.get(AGGREGATE);
+  const selEnv = (gate?.jobs?.[SELECT_JOB]?.steps ?? []).find((s) => s?.name === BOOT_SELECT_STEP)?.env ?? {};
+  const judgeEnv = (gate?.jobs?.[GATE_JOB]?.steps ?? []).find((s) => s?.name === BOOT_JUDGE_STEP)?.env ?? {};
+  need(selEnv.RUN_ATTEMPT === "${{ github.run_attempt }}" && selEnv.CHECKED_SHA === "${{ github.sha }}"
+    && selEnv.REPOSITORY === "${{ github.repository }}",
+  `${AGGREGATE}/${SELECT_JOB}: RUN_ATTEMPT, CHECKED_SHA and REPOSITORY must come from github.run_attempt, github.sha and github.repository; got ${JSON.stringify(selEnv)}.`);
+  need(judgeEnv.CHECKED_SHA === "${{ github.sha }}" && judgeEnv.REPOSITORY === "${{ github.repository }}"
+    && judgeEnv.GH_TOKEN === "${{ github.token }}" && judgeEnv.EXPECTED_BASE === "${{ inputs.base_sha }}"
+    && judgeEnv.PR_INPUT === "${{ inputs.pr_number }}",
+  `${AGGREGATE}/${GATE_JOB}: the full-bootstrap END must read the run's own sha, repository and token and the dispatch inputs; got ${JSON.stringify(judgeEnv)}.`);
+  return out;
+}
+
+{
+  const fx = bootstrapFixture();
+  const original = docs.get(AGGREGATE);
+  const originalBytes = readFileSync(resolve(workflowsDir, AGGREGATE));
+  const world = { docs: new Map([[AGGREGATE, original]]) };
+  const got = fullBootstrapFailures(world, fx);
+  for (const message of got) check(false, message);
+
+  // The proof each rule can fail: one edit of the actual script per rule, in a
+  // copy of the parsed workflow, each refused for its own reason.
+  const stepOf = (w, which) => w.docs.get(AGGREGATE).jobs[which === "select" ? SELECT_JOB : GATE_JOB].steps
+    .find((s) => s.name === (which === "select" ? BOOT_SELECT_STEP : BOOT_JUDGE_STEP));
+  const edit = (which, from, to) => (w) => {
+    const st = stepOf(w, which);
+    if (!st.run.includes(from)) throw new Error(`control edit not found: ${from}`);
+    st.run = st.run.split(from).join(to);
+  };
+  for (const [name, mutate, expect] of [
+    ["the first attempt accepts an ancestor", edit("select", '[ "$RUN_ATTEMPT" != 1 ] ||', "true ||"),
+      /select, attempt 1 with main moved on past X: want exit 1/],
+    ["the compare direction is reversed", edit("select", '"repos/$REPOSITORY/compare/$current...$CHECKED_SHA"', '"repos/$REPOSITORY/compare/$CHECKED_SHA...$current"'),
+      /select, attempt 2 with main moved on past X: want exit 0/],
+    ["the start accepts an unprotected main", edit("select", "and (.protected == true)\n", "\n"),
+      /select, attempt 2 with main unprotected: want exit 1/],
+    ["the start forgets the shape of main's SHA", edit("select", '&& [[ "$current" =~ $hex40 ]] || {', '|| {'),
+      /select, attempt 2 with main a short commit: want exit 1/],
+    ["the start forgets its checkout", edit("select", '[ "$checkout" = "$CHECKED_SHA" ]', "true"),
+      /select, a checkout of another commit: want exit 1/],
+    ["the start accepts a pr_number", edit("select", '[ -z "$PR_NUMBER" ] ||', "true ||"),
+      /select, a pr_number: want exit 1/],
+    ["the start accepts another ref", edit("select", '[ "${GITHUB_REF:-}" = refs/heads/main ] ||', "true ||"),
+      /select, a ref other than main: want exit 1/],
+    ["the start accepts an ahead answer", edit("select", '(.status == "behind") and', '(.status == "behind" or .status == "ahead") and'),
+      /select, attempt 2 with a compare answer of status ahead: want exit 1/],
+    ["the end turns red when main moved on", edit("judge", 'echo "::notice::full bootstrap validated', 'note "moved"; echo "::notice::full bootstrap validated'),
+      /aggregate, attempt 1, main moved on past X: want exit 0/],
+    ["the end skips the ancestry predicate", edit("judge", `and (.merge_base_commit.sha == $x)' "$compare"`, `or true' "$compare"`),
+      /aggregate, main rewritten \(diverged\): want exit 1/],
+    ["the end forgets protection", edit("judge", "and (.protected == true)\n", "\n"),
+      /aggregate, main unprotected: want exit 1/],
+    ["the end forgets every lane is selected", edit("judge", 'note "full bootstrap mode: $lane was selected', 'true "full bootstrap mode: $lane was selected'),
+      /aggregate, a lane not selected \(and so skipped\): want exit 1/],
+    ["the end forgets base == head", edit("judge", '|| [ "$EXPECTED_BASE" != "$CHECKED_SHA" ] ', ""),
+      /aggregate, base_sha unequal to head_sha: want exit 1/],
+    // The integer half of `behind_by >= 1`, deleted from one branch at a time.
+    ["the start accepts a fractional behind_by", edit("select", " and (.behind_by == (.behind_by | floor))", ""),
+      /select, attempt 2 with a compare answer of fractional behind_by 1\.5: want exit 1/],
+    ["the end accepts a fractional behind_by", edit("judge", " and (.behind_by == (.behind_by | floor))", ""),
+      /aggregate, a compare answer of fractional behind_by 1\.5: want exit 1/],
+    ["the attempt becomes a caller input", (w) => { stepOf(w, "select").env.RUN_ATTEMPT = "${{ inputs.pr_number }}"; },
+      /RUN_ATTEMPT, CHECKED_SHA and REPOSITORY must come from github\.run_attempt/],
+  ]) {
+    const copy = { docs: new Map([[AGGREGATE, structuredClone(original)]]) };
+    let failuresOf;
+    try {
+      mutate(copy);
+      // Only the case the control's reason names (the wiring checks always run):
+      // every case is already proven GREEN/RED on the unmutated workflow above.
+      failuresOf = fullBootstrapFailures(copy, fx, (label) => expect.test(`full bootstrap ${label}: want exit 0`)
+        || expect.test(`full bootstrap ${label}: want exit 1`));
+    } catch (err) {
+      failuresOf = null;
+      check(false, `6v control "${name}" could not be applied: ${err.message}`);
+    }
+    if (failuresOf) {
+      check(failuresOf.some((m) => expect.test(m)),
+        `6v control "${name}" was NOT refused for its own reason ${expect}; got ${JSON.stringify(failuresOf.slice(0, 4))}. `
+        + "A full-bootstrap rule nothing has seen fail is one the gate cannot rely on.");
+    }
+  }
+  // And nothing above touched the workflow it judged.
+  check(Buffer.compare(originalBytes, readFileSync(resolve(workflowsDir, AGGREGATE))) === 0
+    && fullBootstrapFailures(world, fx).length === 0,
+  `6v: ${AGGREGATE} changed on disk, or the unmutated cases stopped passing after the controls.`);
+  spawnSync("rm", ["-rf", fx.root]);
 }
 
 // ── report ──────────────────────────────────────────────────────────────────

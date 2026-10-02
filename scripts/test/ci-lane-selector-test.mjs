@@ -55,6 +55,7 @@ import { PATH_MATRIX } from "./fixtures/ci-path-selection.mjs";
 import {
   CHANGED_FILE_CAP,
   CONTROL_FILES,
+  FULL_BOOTSTRAP_STATUS,
   INTERNAL_FULL_STATUS,
   LANES,
   SelectAll,
@@ -282,6 +283,13 @@ const FAIL_CLOSED = [
     name: "an internal full candidate whose change set would select one lane",
     env: { ...response({ filename: "contracts/ops-deploy-v1.json" }), LANE_SELECTOR_STATUS: INTERNAL_FULL_STATUS },
     reason: /internal full candidate/,
+  },
+  {
+    // Likewise a decision: the full-bootstrap select step proved the run is
+    // protected main, and that mode runs every lane whatever the payload says.
+    name: "a full bootstrap of main whose change set would select one lane",
+    env: { ...response({ filename: "contracts/ops-deploy-v1.json" }), LANE_SELECTOR_STATUS: FULL_BOOTSTRAP_STATUS },
+    reason: /full bootstrap of protected main/,
   },
 ];
 

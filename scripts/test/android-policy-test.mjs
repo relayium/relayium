@@ -99,6 +99,9 @@ const REQUIRED = [
   "app/src/debug/kotlin/com/relayium/android/TestHooks.kt",
   "app/src/release/kotlin/com/relayium/android/TestHooks.kt",
   "app/src/debug/kotlin/com/relayium/android/TestDocumentsProvider.kt",
+  "app/src/debug/kotlin/com/relayium/android/HeldFirstWriteStore.kt",
+  "app/src/testDebug/kotlin/com/relayium/android/HeldFirstWriteStoreTest.kt",
+  "app/src/main/kotlin/com/relayium/android/RealDeps.kt",
   "app/src/main/kotlin/com/relayium/android/account/KeystoreTokenStore.kt",
   "app/src/main/kotlin/com/relayium/android/account/OkHttpAccountTransport.kt",
   "app/src/main/kotlin/com/relayium/android/ui/AccountScreen.kt",
@@ -1539,6 +1542,43 @@ check(
   /fun updateLauncher\(\)/.test(releaseHooks) && !/\bvar\s+installedLauncher/.test(releaseHooks),
   "the RELEASE `TestHooks` exposes a settable update launcher. Its answer must be a constant null "
   + "with no field behind it, so no in-process surface can redirect where an update link sends the user.",
+);
+
+// The receive store's write gate (the CLI ↔ Android cell's ACTIVE receive
+// cancel) is a DEBUG-ONLY test surface. A release build gets the plain, real
+// store from a factory with no field behind it; the gate type exists nowhere
+// but the debug source set; and RealDeps builds the store ONLY through the
+// variant's factory, so the release fence cannot be stepped around by
+// constructing a store directly.
+const debugHooks = codeOf(read("app/src/debug/kotlin/com/relayium/android/TestHooks.kt") ?? "");
+check(
+  /fun receiveStore\(stagingRoot: java\.io\.File\): com\.relayium\.android\.storage\.ReceiveStore =\s*com\.relayium\.android\.storage\.ReceiveStore\(stagingRoot\)\s*\}?\s*$/m.test(releaseHooks)
+    && !/HeldFirstWriteStore/.test(releaseHooks)
+    && !/\bvar\b/.test(releaseHooks),
+  "the RELEASE `TestHooks.receiveStore` is not the plain real ReceiveStore with no field behind it. "
+  + "A release APK must contain no write gate, no stored store and nothing that can hold a write.",
+);
+check(
+  /fun receiveStore\(stagingRoot: java\.io\.File\)[\s\S]{0,200}?HeldFirstWriteStore\(stagingRoot\)/.test(debugHooks),
+  "the DEBUG `TestHooks.receiveStore` no longer wraps the real store in its inert gate; the CLI ↔ "
+  + "Android active receive-cancel round would have nothing to arm.",
+);
+for (const set of ["main", "release", "test", "androidTest"]) {
+  check(
+    !existsSync(resolve(android, `app/src/${set}/kotlin/com/relayium/android/HeldFirstWriteStore.kt`)),
+    `a HeldFirstWriteStore source exists in the ${set} source set; the write gate is debug-only.`,
+  );
+}
+check(
+  !existsSync(resolve(android, "app/src/test/kotlin/com/relayium/android/HeldFirstWriteStoreTest.kt")),
+  "the gate's JVM test is in src/test, which the RELEASE unit tests also compile; it belongs in "
+  + "src/testDebug, which `:app:testDebugUnitTest` owns.",
+);
+check(
+  /store = TestHooks\.receiveStore\(File\(app\.cacheDir, "incoming"\)\)/.test(realDeps)
+    && !/\bReceiveStore\(/.test(realDeps),
+  "RealDeps no longer builds the receive store only through the variant's `TestHooks.receiveStore`. "
+  + "Constructing it directly would bypass the release fence (or silently drop the debug gate).",
 );
 
 // The two halves of the version must move together. `versionCode` is the only

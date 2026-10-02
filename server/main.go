@@ -144,11 +144,30 @@ func newID() string {
 	return hex.EncodeToString(b)
 }
 
+// acceptancePeerIDLogFormat is the one line the deterministic hook writes per
+// invocation. `scripts/test/android-interop-oracle.py` parses exactly this
+// shape out of the acceptance server's log, and
+// `scripts/test/android-interop-oracle-test.mjs` reads this constant from this
+// file, so the producer and the consumer cannot drift apart silently.
+const acceptancePeerIDLogFormat = "relayium-acceptance-peer-id seq=%d id=%s"
+
 // acceptancePeerIDGenerator installs deterministic websocket peer ids only for
 // the repository's loopback acceptance server. Production keeps newID. The
 // three guards are deliberately redundant: this hook controls the link-role
 // ordering and must never be usable by a public or normally configured server.
-func acceptancePeerIDGenerator(raw, addr, mailTransport string, releaseCheck bool) (func() string, error) {
+//
+// The deterministic branch also logs EVERY invocation through logf, one line
+// per accepted websocket, with the invocation's own sequence number. The id
+// list cycles, so six ids cannot tell six accepted sockets from twelve; the
+// sequence can. idgen runs once per accepted /ws before any join check, so the
+// count includes sockets that never joined, were refused or reconnected. The
+// sequence is the atomic counter's value, so concurrent accepts may log out of
+// order but never share or skip a number.
+//
+// The default branch (no ids configured, which is every real server) returns
+// newID itself: no wrapper, no counter, and logf is never called. An unsafe or
+// malformed configuration is refused before anything is logged.
+func acceptancePeerIDGenerator(raw, addr, mailTransport string, releaseCheck bool, logf func(format string, args ...any)) (func() string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return newID, nil
 	}
@@ -168,9 +187,15 @@ func acceptancePeerIDGenerator(raw, addr, mailTransport string, releaseCheck boo
 	if len(ids) < 2 {
 		return nil, errors.New("RELAYIUM_ACCEPTANCE_PEER_IDS requires at least two ids")
 	}
+	if logf == nil {
+		return nil, errors.New("RELAYIUM_ACCEPTANCE_PEER_IDS requires a logger for its per-socket sequence")
+	}
 	var next atomic.Uint64
 	return func() string {
-		return ids[(next.Add(1)-1)%uint64(len(ids))]
+		seq := next.Add(1)
+		id := ids[(seq-1)%uint64(len(ids))]
+		logf(acceptancePeerIDLogFormat, seq, id)
+		return id
 	}, nil
 }
 
@@ -613,7 +638,7 @@ func main() {
 	// relayed transfer simply runs out its credential and ends truthfully,
 	// exactly as it does today.
 	var grants atomic.Pointer[signal.GrantRegistry]
-	peerIDGenerator, err := acceptancePeerIDGenerator(envStr("RELAYIUM_ACCEPTANCE_PEER_IDS", ""), *addr, *mailTransport, *releaseCheck)
+	peerIDGenerator, err := acceptancePeerIDGenerator(envStr("RELAYIUM_ACCEPTANCE_PEER_IDS", ""), *addr, *mailTransport, *releaseCheck, log.Printf)
 	if err != nil {
 		log.Fatal(err)
 	}

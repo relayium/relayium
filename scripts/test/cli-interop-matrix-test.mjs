@@ -214,11 +214,20 @@ try {
           mutate: (w) => { w.obs.cli.stderr = w.obs.cli.stderr.map((l) => l === "the other side ended the session" ? "the connection to the other side was lost" : l); } },
       ],
     });
-    // The receive-cancel round has its own expectations.
-    const rc = good("receive");
-    rc.obs.cli.stderr = rc.obs.cli.stderr.filter((l, i, a) => !(l.startsWith("delivered") && a.indexOf(l) === i));
-    rc.obs.cli.stderr.push("not delivered: the other side stopped the transfer");
-    rc.obs.cli.exit.code = 1;
+    // The receive-cancel round has its own expectations. Its plan is GATED
+    // (an active cancel, below); the original, ungated expectations are kept
+    // against an explicitly ungated plan (`receiveGate: null`), so the rules
+    // for a round that does not hold a write stay exactly as they were.
+    const STOP = "not delivered: the other side stopped the transfer";
+    const ungated = () => {
+      const w = good("receive");
+      w.plan.receiveGate = null;
+      w.obs.cli.stderr = w.obs.cli.stderr.filter((l, i, a) => !(l.startsWith("delivered") && a.indexOf(l) === i));
+      w.obs.cli.stderr.push(STOP);
+      w.obs.cli.exit.code = 1;
+      return w;
+    };
+    const rc = ungated();
     need(run(rc).code === 0, `cli-android-oracle: a correct receive-cancel round must PASS: ${run(rc).err.slice(0, 400)}`);
     const rcDecline = clone(rc);
     rcDecline.obs.cli.stderr = rcDecline.obs.cli.stderr.map((l) => l.startsWith("not delivered") ? "not sent: the other side declined the files" : l);
@@ -232,8 +241,111 @@ try {
     drop.obs.cli.stderr = drop.obs.cli.stderr.map((l) => l === "the other side ended the session" ? "the connection to the other side was lost" : l);
     drop.obs.cli.exit.code = 1;
     need(run(drop).code === 0, `cli-android-oracle: a clean round ended by Android's drop must PASS: ${run(drop).err.slice(0, 400)}`);
-    rc.android.saved.push({ name: "cli-big-2.bin", size: 199000, sha256: sha(body(199000, 2)) });
+    const big = rc.plan.first[0];
+    rc.android.saved.push({ name: big.name, size: big.size, sha256: sha(body(big.size, big.seed)) });
     need(run(rc).code !== 0, "cli-android-oracle: a receive-cancel round in which Android kept the stopped batch was judged green");
+
+    // ── the ACTIVE receive cancel (plan receiveGate: "first-write") ─────────
+    //
+    // A typed record of what the instrumentation observed on the real store
+    // and the real controller state, in the store's own event order.
+    const active = () => {
+      const w = ungated();
+      w.plan = JSON.parse(execFileSync("python3", [join(interop, "cli-matrix-plan.py"), "android", join(scratch, `android-${n++}`), "2", "cli", "receive"], { encoding: "utf8" }));
+      for (const e of w.plan.android.expectSaved) writeFileSync(join(w.plan.dest, e.name), body(e.size, e.seed));
+      w.android.saved = w.plan.second.map((e) => ({ name: e.name, size: e.size, sha256: sha(body(e.size, e.seed)) }));
+      const names = w.plan.first.map((e) => e.name);
+      w.obs.firstBatchOutcome = STOP;
+      w.android.linkId = 3;
+      w.android.offered = names;
+      w.android.treeAfterCancel = ["sentinel-do-not-touch.txt"];
+      w.android.cleanupIncompleteAfterCancel = false;
+      w.android.activeReceiveCancel = {
+        mode: "first-write", storeSerial: 1, storeSerialBefore: 0, token: 1, boundGeneration: 1,
+        manifest: [...names], heldIndex: 0, heldBytes: 65536, okWritesBeforeHold: 0,
+        incomingAtCancel: [...names], progressNullAtCancel: true, errorKeyAtCancel: null, laneDownAtCancel: false,
+        phaseAtCancel: "CONNECTED", linkAtCancel: 3, effectWhileHeld: true, errorKeyAfterEffect: null,
+        laneDownAfterEffect: false, phaseAfterEffect: "CONNECTED", linkAfterEffect: 3,
+        holdSeq: 3, marks: { cancelCalled: 4, cancelEffectObserved: 5 }, releaseSeq: 6, releasedBy: "test",
+        heldWriteSeq: 7, heldWriteOutcome: "ok", discardSeq: 8, discardGeneration: 1, discardDuringBegin: false,
+        discardOutcome: "ok", discardsObserved: 2,
+      };
+      return w;
+    };
+    const rec = (w) => w.android.activeReceiveCancel;
+    judgeCases("cli-android-oracle (active receive cancel)", {
+      good: active, run, expectOut: "responder",
+      mutations: [
+        { name: "the plan does not say whether the gate is on", expect: /does not say whether the receive gate is on/,
+          mutate: (w) => { delete w.plan.receiveGate; } },
+        { name: "an unknown gate", expect: /unknown receive gate/, mutate: (w) => { w.plan.receiveGate = "first-byte"; } },
+        { name: "the gated first body fits in one window", expect: /not larger than one flow window/,
+          mutate: (w) => { w.plan.first[0].size = 8 * 1024 * 1024; } },
+        { name: "no active record at all", expect: /no active receive-cancel record/,
+          mutate: (w) => { delete w.android.activeReceiveCancel; } },
+        { name: "a record bound to another store", expect: /storeSerial.*not the one store this launch built/,
+          mutate: (w) => { rec(w).storeSerial = 2; } },
+        { name: "the write was never held", expect: /missing events \[.holdSeq.\]/,
+          mutate: (w) => { delete rec(w).holdSeq; } },
+        { name: "a different batch was held", expect: /manifest.*not the CLI's first batch/,
+          mutate: (w) => { rec(w).manifest = ["cli-second-2.bin"]; } },
+        { name: "a different file was held", expect: /heldIndex.*not the batch's first file/,
+          mutate: (w) => { rec(w).heldIndex = 2; } },
+        { name: "bytes were acknowledged before the hold", expect: /okWritesBeforeHold.*durable/,
+          mutate: (w) => { rec(w).okWritesBeforeHold = 1; } },
+        { name: "the cancel was of a different batch", expect: /incomingAtCancel.*not of the held batch/,
+          mutate: (w) => { rec(w).incomingAtCancel = []; } },
+        { name: "progress was already durable at the cancel", expect: /progressNullAtCancel/,
+          mutate: (w) => { rec(w).progressNullAtCancel = false; } },
+        { name: "the cancel was only called, its effect never seen while held", expect: /effectWhileHeld/,
+          mutate: (w) => { rec(w).effectWhileHeld = false; } },
+        { name: "the effect was seen only after the release", expect: /events are out of order/,
+          mutate: (w) => { rec(w).marks.cancelEffectObserved = 9; } },
+        { name: "the hold ended by timeout", expect: /releasedBy.*not released by the test/,
+          mutate: (w) => { rec(w).releasedBy = "timeout"; } },
+        { name: "the cancel surfaced a save failure", expect: /errorKeyAfterEffect.*save failure is not a cancel/,
+          mutate: (w) => { rec(w).errorKeyAfterEffect = "error_save_failed"; } },
+        { name: "an error already stood before the cancel", expect: /errorKeyAtCancel/,
+          mutate: (w) => { rec(w).errorKeyAtCancel = "error_save_failed"; } },
+        { name: "the cancel took the file lane down", expect: /laneDownAfterEffect/,
+          mutate: (w) => { rec(w).laneDownAfterEffect = true; } },
+        { name: "the cancel was on another link", expect: /linkAfterEffect.*not this round's link/,
+          mutate: (w) => { rec(w).linkAfterEffect = 4; } },
+        { name: "the released held write failed", expect: /heldWriteOutcome/,
+          mutate: (w) => { rec(w).heldWriteOutcome = "failed"; } },
+        { name: "the rollback did not complete", expect: /discardOutcome.*did not complete/,
+          mutate: (w) => { rec(w).discardOutcome = "failed"; } },
+        { name: "the rollback seen was of another generation", expect: /discardGeneration.*not the cancelled batch's rollback/,
+          mutate: (w) => { rec(w).discardGeneration = 2; } },
+        { name: "the rollback seen was a begin's defensive discard", expect: /discardDuringBegin/,
+          mutate: (w) => { rec(w).discardDuringBegin = true; } },
+        { name: "no rollback was seen at all", expect: /missing events \[.discardSeq.\]/,
+          mutate: (w) => { rec(w).discardSeq = null; } },
+        { name: "a boolean field carried a truthy number", expect: /effectWhileHeld/,
+          mutate: (w) => { rec(w).effectWhileHeld = 1; } },
+        { name: "the cancelled batch leaked into the tree", expect: /cancelled receive left files behind/,
+          mutate: (w) => { w.android.treeAfterCancel.push(w.plan.first[0].name); } },
+        { name: "the rollback removed the sentinel", expect: /removed content it did not own/,
+          mutate: (w) => { w.android.treeAfterCancel = []; } },
+        { name: "the rollback reported leftovers", expect: /rollback was not complete/,
+          mutate: (w) => { w.android.cleanupIncompleteAfterCancel = true; } },
+        { name: "the retry arrived with the wrong bytes", expect: /Android did not save cli-second-2\.bin exactly/,
+          mutate: (w) => { w.android.saved[0].sha256 = "00"; } },
+        { name: "the CLI saw a DECLINE", expect: /delivered 1 \/ stopped 0 \/ declined 1, not 1 \/ 1 \/ 0/,
+          mutate: (w) => { w.obs.cli.stderr = w.obs.cli.stderr.map((l) => l === STOP ? "not sent: the other side declined the files" : l); } },
+        { name: "the CLI saw 'could not save' (a late refusal)", expect: /reported a save failure/,
+          mutate: (w) => { w.obs.cli.stderr = w.obs.cli.stderr.map((l) => l === STOP ? "not delivered: the other side could not save the files" : l); } },
+        { name: "the peer's first-batch outcome is not the stop", expect: /first batch ended/,
+          mutate: (w) => { delete w.obs.firstBatchOutcome; } },
+      ],
+    });
+    // A record in a round that did not plan the gate is a failure too.
+    const stray = clone(rc);
+    stray.android.saved = stray.android.saved.filter((s) => s.name !== big.name);
+    stray.android.activeReceiveCancel = { mode: "first-write" };
+    const strayRun = run(stray);
+    need(strayRun.code !== 0 && /did not plan one/.test(strayRun.err),
+      `cli-android-oracle: an active record in an ungated round was not refused for that reason: ${strayRun.err.slice(0, 300)}`);
   }
 
   // ── cli-mac-oracle.py ─────────────────────────────────────────────────

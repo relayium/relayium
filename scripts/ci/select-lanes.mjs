@@ -159,6 +159,16 @@ export const CHANGED_FILE_CAP = 3000;
  */
 export const INTERNAL_FULL_STATUS = "internal-full-candidate";
 
+/**
+ * The status merge-gate's `full-bootstrap` select step reports once it has
+ * proved, from the run's own context, its checkout and the branches/compare
+ * API, that the dispatched commit IS protected `main` (or, on a rerun, a true
+ * ancestor of it). That mode validates `main` in full with every original lane;
+ * it judges no candidate and mints no proof. Like the internal status it
+ * selects every lane by design, and the aggregate re-checks that it did.
+ */
+export const FULL_BOOTSTRAP_STATUS = "full-bootstrap";
+
 /** Selecting every lane is a decision, not a crash; it carries its reason. */
 export class SelectAll extends Error {}
 
@@ -431,6 +441,9 @@ export function decide(env, { workflowsDir = defaultWorkflowsDir, readFile = rea
   if (status === INTERNAL_FULL_STATUS) {
     throw new SelectAll("this dispatch is an internal full candidate, which BASE's judge accepted; it runs every lane by design");
   }
+  if (status === FULL_BOOTSTRAP_STATUS) {
+    throw new SelectAll("this dispatch is a full bootstrap of protected main, which the select step proved; it runs every lane by design");
+  }
   if (status !== "ok") {
     throw new SelectAll(`the step that called the pull request files API reported `
       + `${JSON.stringify(status ?? null)} rather than "ok"`);
@@ -569,6 +582,7 @@ function selfTest() {
   for (const [why, env, options] of [
     ["a failed API step", { ...ok, LANE_SELECTOR_STATUS: "api-error" }, payload([])],
     ["an accepted internal full candidate", { ...ok, LANE_SELECTOR_STATUS: INTERNAL_FULL_STATUS }, payload([{ filename: "README.md" }])],
+    ["a proved full bootstrap of main", { ...ok, LANE_SELECTOR_STATUS: FULL_BOOTSTRAP_STATUS }, payload([{ filename: "README.md" }])],
     ["a missing changed_files", { ...ok, LANE_SELECTOR_CHANGED_FILES: undefined }, payload([])],
     ["a non-numeric changed_files", { ...ok, LANE_SELECTOR_CHANGED_FILES: "many" }, payload([])],
     ["the 3000-file cap", { ...ok, LANE_SELECTOR_CHANGED_FILES: String(CHANGED_FILE_CAP) }, payload([])],

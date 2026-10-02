@@ -7,7 +7,6 @@ import com.relayium.android.nearby.LocalPeerAdvertisement
 import com.relayium.android.nearby.LocalPeerSignalingChannel
 import com.relayium.android.nearby.NsdLocalPeerTransport
 import com.relayium.android.storage.ProviderOps
-import com.relayium.android.storage.ReceiveStore
 import com.relayium.android.transport.IceConfig
 import com.relayium.android.transport.LinkTransport
 import com.relayium.android.transport.SignalingClient
@@ -38,7 +37,10 @@ object RealDeps {
             transports = { profile, servers, executor, send, events ->
                 LinkTransport(app, profile, servers, executor, send, events)
             },
-            store = ReceiveStore(File(app.cacheDir, "incoming")),
+            // The real store, built by the variant's factory: plain in a
+            // release build; in a debug build wrapped in an inert, test-armed
+            // gate (see the debug `TestHooks.receiveStore`).
+            store = TestHooks.receiveStore(File(app.cacheDir, "incoming")),
             providerOps = saf,
             verifyPeers = verifyPeers,
         )

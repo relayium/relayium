@@ -244,15 +244,27 @@ describe("peer workspace capability routing", () => {
   });
 
 
-  it("rejects unknown-roster and unsupported-environment inbound links", () => {
+  // Split (cli-web phase 2): the two refusals no longer share an answer. A
+  // requester the roster has not named YET is not admitted and is not told
+  // `busy` either — its own retry, after the roster, is the one admitted. An
+  // unsupported environment still answers `busy`. Neither is ever linked.
+  it("does not admit an unknown-roster inbound request, and answers it with silence", () => {
     const h = setup();
     h.workspace.start();
     h.setPeers(["a"]);
     h.inject("z", { link: true, linkRequest: true });
+    expect(h.sent.filter((frame) => frame.data.busy)).toHaveLength(0);
+    expect(h.connect).not.toHaveBeenCalled();
+    h.workspace.stop();
+  });
+
+  it("rejects an unsupported-environment inbound link with busy", () => {
+    const h = setup();
+    h.workspace.start();
     h.setPeers(["a", "z"]);
     h.setUnsupported(true);
     h.inject("z", { link: true, linkRequest: true });
-    expect(h.sent.filter((frame) => frame.data.busy)).toHaveLength(2);
+    expect(h.sent.filter((frame) => frame.data.busy)).toHaveLength(1);
     expect(h.connect).not.toHaveBeenCalled();
     h.workspace.stop();
   });
@@ -1209,6 +1221,163 @@ describe("a peer that does not announce exact link/1 is terminal", () => {
     expect(h.workspace.routes("z")).toBe(false);
     recordPeerCaps("z", { caps: [] });
     expect(h.workspace.routes("z")).toBe(false);
+    h.workspace.stop();
+  });
+});
+
+// ── link establishment against the roster (cli-web phase 1) ────────────────────
+//
+// The hub relays a signal and broadcasts a roster from two different goroutines
+// (App.svelte, the held-map note), so a peer's `caps` and its first link REQUEST
+// can reach this page before the roster that names it. These pin what the
+// workspace does with that order, with its REAL admission rule and the shipped
+// capability check, in a pairing-code room — the shape of the cli-web round that
+// failed (run 36990034565: the page was the initiator, the CLI was told
+// `peer-busy(requeue)` 274 ms after joining and gave up, because a `busy` is
+// terminal for a requester).
+//
+// The membership boundary is not in question and is asserted hard: nobody who
+// is not on the roster gets a link. What these probe is the ANSWER. The target
+// contract (root-decided, phase 1) is that a request from a peer this page has
+// simply not been told about yet is dropped SILENTLY — every requester already
+// re-sends every 3 s for 30 s, so its next request, after the roster, is the one
+// admitted. That half is a soft expectation: on the current runtime it fails for
+// exactly one reason, the terminal `busy`, and the rest of the case still runs.
+// Nothing here adds a retry, a buffer or a state; the retry is the peer's own.
+describe("link establishment against the roster", () => {
+  beforeEach(() => { clearRoom(); resetPeerCaps(); });
+
+  const request = { link: true, linkRequest: true } as unknown as InboundSignal;
+  const busyTo = (h: ReturnType<typeof setup>, peer: string) =>
+    h.sent.filter((frame) => frame.to === peer && (frame.data as { busy?: boolean }).busy === true);
+
+  it("does not answer a not-yet-listed requester busy, and admits its own retry once the roster names it", () => {
+    const h = setup({ realLinkCaps: true });
+    enterRoom({ code: "123456" });
+    h.setPeers(["a"]);
+    h.workspace.start();
+    // caps first, then the request — both ahead of the roster that names "z".
+    recordPeerCaps("z", { caps: [CAP_LINK] });
+    h.inject("z", request);
+
+    // The boundary, hard: no establishment for a peer nobody listed.
+    expect(h.connect).not.toHaveBeenCalled();
+    // The target answer: silence, so the requester keeps retrying. Current
+    // runtime: a terminal `busy` (peer-link `canAcceptLink` refusal).
+    expect.soft(busyTo(h, "z"), "a not-yet-listed requester was told busy, which ends its request").toEqual([]);
+
+    // The roster arrives; the peer's own next retry is admitted, once.
+    h.setPeers(["a", "z"]);
+    h.workspace.syncPeers();
+    h.inject("z", request);
+    expect(h.connect).toHaveBeenCalledTimes(1);
+    h.workspace.stop();
+  });
+
+  it("still refuses, and never links, a requester that WAS listed and has left", () => {
+    // A distinct scenario on purpose: "not yet listed" and "left" look the same
+    // to a membership test, and a future silent-drop contract for the first
+    // must not quietly admit — or newly silence — the second. Current behaviour,
+    // pinned: a refusal on the wire and no establishment.
+    const h = setup({ realLinkCaps: true });
+    enterRoom({ code: "123456" });
+    h.setPeers(["a", "z"]);
+    h.workspace.start();
+    recordPeerCaps("z", { caps: [CAP_LINK] });
+    h.setPeers(["a"]);
+    h.workspace.syncPeers();
+    h.workspace.peerLeft("z");
+    h.inject("z", request);
+    expect(h.connect).not.toHaveBeenCalled();
+    expect(busyTo(h, "z")).toHaveLength(1);
+    h.workspace.stop();
+  });
+
+  it("treats a ROSTER-ONLY disappearance (no left frame) like not-yet-listed: silent, never linked, no history", () => {
+    // Only a `left` frame records a departure; a roster that merely stopped
+    // naming the peer is not told apart from one that has not named it yet,
+    // and no history is kept to do so. Either way nothing is admitted, and the
+    // peer is linked only by a request made once a roster names it again.
+    const h = setup({ realLinkCaps: true });
+    enterRoom({ code: "123456" });
+    h.setPeers(["a", "z"]);
+    h.workspace.start();
+    recordPeerCaps("z", { caps: [CAP_LINK] });
+    h.setPeers(["a"]);
+    h.workspace.syncPeers();
+    h.workspace.rosterPeerGone("z");
+    h.inject("z", request);
+    expect(h.connect).not.toHaveBeenCalled();
+    expect(busyTo(h, "z")).toEqual([]);
+    h.setPeers(["a", "z"]);
+    h.inject("z", request);
+    expect(h.connect).toHaveBeenCalledTimes(1);
+    h.workspace.stop();
+  });
+
+  it.each([
+    ["this page is not joined", (h: ReturnType<typeof setup>) => { h.setJoined(false); }],
+    ["this page has no id yet", (h: ReturnType<typeof setup>) => { h.setSelfId(""); }],
+    ["the environment is unsupported", (h: ReturnType<typeof setup>) => { h.setUnsupported(true); }],
+  ])("still answers an unlisted requester busy, and never links, when %s", (_why, arrange) => {
+    const h = setup({ realLinkCaps: true });
+    enterRoom({ code: "123456" });
+    h.setPeers(["a"]);
+    h.workspace.start();
+    recordPeerCaps("z", { caps: [CAP_LINK] });
+    arrange(h);
+    h.inject("z", request);
+    expect(h.connect).not.toHaveBeenCalled();
+    expect(busyTo(h, "z")).toHaveLength(1);
+    h.workspace.stop();
+  });
+
+  it("still answers a suppressed unlisted requester busy, and never links", async () => {
+    const h = setup({ realLinkCaps: true });
+    enterRoom({ code: "123456" });
+    h.setPeers(["a", "z"]);
+    h.workspace.start();
+    recordPeerCaps("z", { caps: [CAP_LINK] });
+    await h.workspace.mixed.ensure("z");
+    h.workspace.disconnect();
+    // Off the roster, but the explicit-disconnect suppression has not been
+    // swept yet (no syncPeers): suppression, not lateness, is the refusal.
+    h.setPeers(["a"]);
+    const before = h.connect.mock.calls.length;
+    h.inject("z", request);
+    expect(h.connect.mock.calls.length).toBe(before);
+    expect(busyTo(h, "z")).toHaveLength(1);
+    h.workspace.stop();
+  });
+
+  it("still answers an unlisted requester busy while this page is linked to someone else", async () => {
+    const h = setup({ realLinkCaps: true });
+    enterRoom({ code: "123456" });
+    h.setPeers(["a", "y"]);
+    h.workspace.start();
+    recordPeerCaps("y", { caps: [CAP_LINK] });
+    recordPeerCaps("z", { caps: [CAP_LINK] });
+    await h.workspace.mixed.ensure("y");
+    h.inject("z", request);
+    expect(h.connect).toHaveBeenCalledTimes(1);
+    expect(busyTo(h, "z")).toHaveLength(1);
+    h.workspace.stop();
+  });
+
+  it("characterizes the mirrored OFFER from a not-yet-listed initiator: refused, never linked", () => {
+    // Characterization only, NOT a contract: an initiator's offer may not be
+    // retried the way a request is, so silencing it could strand a link, and
+    // its design is deferred (residual risk). What is pinned is today's answer
+    // and the boundary: no establishment for an unlisted peer.
+    const h = setup({ realLinkCaps: true });
+    enterRoom({ code: "123456" });
+    h.setSelfId("z");
+    h.setPeers(["z"]);
+    h.workspace.start();
+    recordPeerCaps("a", { caps: [CAP_LINK] });
+    h.inject("a", { link: true, sdp: { type: "offer", sdp: "v=0" } } as InboundSignal);
+    expect(h.connect).not.toHaveBeenCalled();
+    expect(busyTo(h, "a")).toHaveLength(1);
     h.workspace.stop();
   });
 });

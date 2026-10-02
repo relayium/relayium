@@ -73,4 +73,28 @@ object TestHooks {
             installed(url)
         }
     }
+
+    /**
+     * The receive store the app's controller uses. In this variant it is the
+     * REAL [ReceiveStore] wrapped in [HeldFirstWriteStore] — inert unless the
+     * instrumentation arms it — and the latest one is kept, numbered, so a test
+     * can bind to the store THIS process's Activity created and not to an
+     * older one. The RELEASE variant returns a plain [ReceiveStore] and keeps
+     * nothing.
+     */
+    @Volatile
+    var lastReceiveStore: HeldFirstWriteStore? = null
+        private set
+
+    @Volatile
+    var receiveStoreSerial: Long = 0L
+        private set
+
+    @Synchronized
+    fun receiveStore(stagingRoot: java.io.File): com.relayium.android.storage.ReceiveStore {
+        val store = HeldFirstWriteStore(stagingRoot)
+        receiveStoreSerial += 1
+        lastReceiveStore = store
+        return store
+    }
 }
