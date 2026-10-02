@@ -1,27 +1,31 @@
 # macOS App Store submission
 
-## macOS 1.4.5 (42) — candidate PREPARED in source only
+## macOS 1.4.5 (42) — store build in internal TestFlight
 
-**Status, 2026-10-01.** `1.4.5 (42)` is a source candidate and nothing more:
-all ten `MARKETING_VERSION` and ten `CURRENT_PROJECT_VERSION` settings — the
-direct app and its Share extension, the App Store app and its Share extension,
-and the UI test bundle, each in Debug and Release — read `1.4.5` and `42`. No
-signed Release build, notarization, App Store package, upload, TestFlight
-build, GitHub release, tag, website or Sparkle change exists for it. The README
-files, the web release manifest, server catalog, client policy, appcast and
-generated pages still describe the issued versions and change only with formal
-publication metadata.
+**Status, 2026-10-02.** The App Store package of `1.4.5 (42)` is in **internal
+TestFlight testing**. This section records that store build only; the
+Developer ID (direct-download) channel is recorded separately, and nothing
+here states or implies its publication state. Nothing in this section claims
+an external TestFlight build, an App Store submission or a StoreKit sandbox
+result.
 
-- Current issued versions, unchanged by this preparation: the public GitHub
-  direct release is `macos-v1.4.4` (published 2026-09-28, source
-  `f37a96d9b`); internal TestFlight holds `1.4.4 (41)` (App Store Connect build
-  `2d0433e7-f4f1-4e74-9db9-caf2dbba43e0`, read back `VALID` with
-  `usesNonExemptEncryption` `false`); the public Mac App Store still sells
-  `1.4.0`.
+- Version settings: all ten `MARKETING_VERSION` and ten
+  `CURRENT_PROJECT_VERSION` settings — the direct app and its Share extension,
+  the App Store app and its Share extension, and the UI test bundle, each in
+  Debug and Release — read `1.4.5` and `42`.
+- Issued before this candidate, as read back when it was prepared on
+  2026-10-01: the public GitHub direct release was `macos-v1.4.4` (published
+  2026-09-28, source `f37a96d9b`); internal TestFlight held `1.4.4 (41)` (App
+  Store Connect build `2d0433e7-f4f1-4e74-9db9-caf2dbba43e0`, source
+  `f37a96d9b`); the public Mac App Store sold `1.4.0`. Uploading `42` changed
+  none of them.
 - Why this number: `1.4.4 (41)` is issued in both channels and is never
   reused. Read-back on 2026-10-01 found no `macos-v1.4.5` release or tag. The
   owner selected `1.4.5 (42)`: a patch increment, major and minor unchanged,
-  build strictly above `41`.
+  build strictly above `41`. Version `1.4.5` and build `42` are now consumed by
+  the App Store record; the next new distributed macOS candidate must use a
+  marketing version strictly above `1.4.5` and a build number strictly above
+  `42`.
 - What changes against `1.4.4 (41)` (all already on `main`): Sparkle verifies
   an update archive before extracting it (`66427f7fe`); every copy of a
   key-bearing `#k=` link marks the pasteboard transient and concealed so the
@@ -31,11 +35,49 @@ publication metadata.
   retired jobs' keys and copies more conservatively (`3599257c0`, `eac46cfa8`,
   `ecce0a122`, `12b409a95`, `83bf5912a`). The StoreKit and subscription sources
   are byte-identical to `1.4.4 (41)`.
+- Source provenance is recorded per channel, never inferred from a shared
+  version number. The App Store package was built from
+  `855ebc5ae86a2c8f6f9db782b17b6a20f2d03856`. A later direct-download release
+  of the same marketing version states its own source in its own section; it
+  does not establish this package's source, and this package does not
+  establish its source.
+
+**Internal TestFlight — delivered.**
+
+- Package: `Relayium.pkg`, 19,178,964 bytes, SHA-256
+  `8c06cb678d8eb912cce287f3fadfbbfa3ed69e200890038a8d89ee62270389ea`, built
+  from `855ebc5ae`. Before upload it was verified: main app and Share extension
+  `1.4.5 (42)`, `arm64` only, distribution-signed, sandboxed, privacy manifest
+  present, no debug build and no Sparkle. Apple's pre-upload validation
+  reported no errors, and the single upload reported no errors.
+- App Store Connect records build `a0754ab1-adf6-46d9-9bbe-97968ef9d2ca`,
+  train `1.4.5`, `CFBundleVersion` `42`, platform `MAC_OS`, uploaded
+  `2026-10-01T17:27:38-07:00` (2026-10-02 UTC), minimum macOS `13.0`, not
+  expired.
+- Provider state after internal configuration, which completed at 00:31:19
+  UTC on 2026-10-02. The configuration helper's own read-back and a separate
+  independent read-back at 00:48:48 UTC agree: processing state `VALID`;
+  `usesNonExemptEncryption` `false`; internal build state `IN_BETA_TESTING` in
+  the internal group `Relayium Internal` only, which held its previous 28
+  builds plus `42`, builds `40` and `41` among them; tester notification off;
+  What to Test notes set for `en-US` and `zh-Hans`. The build was in no
+  external group — the external group `Relayium External Beta` held the same
+  four builds as before — no beta review was requested, and its external build
+  state was `READY_FOR_BETA_SUBMISSION` (eligible, not submitted). All seven
+  App Store versions and their selected builds read back unchanged, with macOS
+  `1.4.0` still `READY_FOR_SALE`.
 - Still pending, exactly as for `40` and `41`: the owner's actual StoreKit
-  sandbox acceptance (C03). It blocks external TestFlight, App Store submission
-  and any public store release. The owner's earlier exception allowing an
-  internal TestFlight upload before that acceptance applies to an internal
-  candidate only; nothing here claims an external or public store build.
+  sandbox acceptance (C03) — cancellation and account-switch recovery with the
+  main window open — has not been performed on `40`, `41` or `42`. It blocks
+  external TestFlight, App Store submission and any public store release. The
+  owner's earlier exception allowing an internal TestFlight upload before that
+  acceptance applies to an internal candidate only; the What to Test notes say
+  so in both languages.
+
+**Direct (Developer ID).** Not described by this section; that channel's
+publication and its own source and artifact evidence belong to its own entry.
+
+The public Mac App Store version (`1.4.0`) is unchanged by this candidate.
 
 ## macOS 1.4.4 (41) — direct release published; store candidate in internal TestFlight
 

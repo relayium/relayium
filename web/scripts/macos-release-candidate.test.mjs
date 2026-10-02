@@ -588,6 +588,55 @@ describe("bumping the documents that name the published macOS release", () => {
     expect(await readFile(resolve(root, "README.md"), "utf8"))
       .toBe(`macos-v${NEXT} and ${PUBLISHED}1 and ${PUBLISHED}.7 and 11${PUBLISHED}\n${claim}\n`);
   });
+
+  it("leaves apps/README.md's internal TestFlight record and its source untouched", async () => {
+    // The TestFlight record is a fact about a different artifact, and the bump
+    // runs on the document that states it. The 1.4.5 (42) delivery found the
+    // shape this holds: the record said its `1.4.4 (41)` build was "built from
+    // the same source as the 1.4.4 direct download", and the bump to 1.4.5
+    // would have moved the bare `1.4.4` and turned it into a claim that build
+    // 41 came from the 1.4.5 source. So the record states its source by commit,
+    // never through a direct-download version, and every version in it carries
+    // its build. Read from the REAL document, as everything here is: the
+    // record names whichever build is current, and the bump it must survive is
+    // the one to that build's own marketing version — the publication that
+    // usually follows an internal TestFlight delivery — and then the next one.
+    const RECORD = /\*\*Internal TestFlight, read back [^*]+\.\*\*[\s\S]*?(?=\n\n)/;
+    const staged = await readFile(resolve(repoRoot, "apps/README.md"), "utf8");
+    const record = staged.match(RECORD)?.[0];
+    expect(record, "apps/README.md has no internal TestFlight record").toBeTruthy();
+    const current = flat(record).match(
+      /The current internal TestFlight build is `([0-9]+\.[0-9]+\.[0-9]+) \(([0-9]+)\)`: App Store Connect build `([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})`, built from source `([0-9a-f]{7,40})`/,
+    );
+    expect(current, "the record does not name its build, App Store Connect id and source commit").toBeTruthy();
+    const [, version, build, buildId, source] = current;
+
+    // Every version in the record is a "version (build)" record, so no direct
+    // bump of any version can reach it.
+    const versions = flat(record).match(/(?<![0-9.v])[0-9]+\.[0-9]+\.[0-9]+(?![0-9])(?!\.[0-9])(?: \([0-9]+\))?/g);
+    expect(versions.length).toBeGreaterThan(0);
+    for (const named of versions) {
+      expect(named, "the TestFlight record names a version without its build").toMatch(/ \([0-9]+\)$/);
+    }
+    // Nothing in the document ties a build's source to a direct-download
+    // version, which is the sentence a bump silently falsifies.
+    expect(
+      flat(staged).match(/same source as the `?[0-9]+\.[0-9]+\.[0-9]+(?! \()[^.]*/)?.[0],
+      "a build's source is stated through a direct-download version",
+    ).toBeUndefined();
+
+    const root = await stagedDocs();
+    const path = resolve(root, "apps/README.md");
+    const first = version === PUBLISHED ? NEXT : version;
+    await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: first });
+    await bumpReleaseDocs({ repoRoot: root, from: first, to: LATER });
+    const after = await readFile(path, "utf8");
+    expect(after, "the bump rewrote the internal TestFlight record").toContain(record);
+    for (const fact of [`\`${version} (${build})\``, buildId, source]) {
+      expect(after.match(RECORD)?.[0], `the record lost ${fact}`).toContain(fact);
+    }
+    expect(flat(after), "the direct-download headline did not move").toContain(directHeadline(LATER));
+  });
 });
 
 describe("synchronizing immutable CLI tags into the public release ledger", () => {
