@@ -126,13 +126,23 @@ function match(text, pattern, what) {
 
 // ── components ──────────────────────────────────────────────────────────────
 
+/**
+ * ImageOS, as capture reads it AND as the schema accepts it — one grammar, so
+ * the two cannot drift apart. The family+release shape (ubuntu24, macos15,
+ * win25) plus, as one complete literal, the Windows Server 2025 image that
+ * ships Visual Studio 2026 (`windows-latest` reports `win25-vs2026`). Any other
+ * suffix or VS generation is an image this probe has never seen, so unknown.
+ * No `m` flag: `$` is the end of the whole value, never a line end.
+ */
+const IMAGE_OS = /^(?:[a-z]+[0-9]+|win25-vs2026)$/;
+
 /** Runner image and OS identity. ImageVersion is what makes image tools (gcc, git, jq) comparable. */
 function image(ctx) {
   const env = ctx.env;
   const out = {
     runner_os: match(env.RUNNER_OS ?? "", /^(Linux|macOS|Windows)$/, "RUNNER_OS")[1],
     runner_arch: match(env.RUNNER_ARCH ?? "", /^(X64|ARM64|X86|ARM)$/, "RUNNER_ARCH")[1],
-    image_os: match(env.ImageOS ?? "", /^[a-z]+[0-9]+$/, "ImageOS")[0],
+    image_os: match(env.ImageOS ?? "", IMAGE_OS, "ImageOS")[0],
     image_version: match(env.ImageVersion ?? "", /^[0-9]{8}\.[0-9]+(\.[0-9]+)?$/, "ImageVersion")[0],
   };
   if (out.runner_os === "Linux") {
@@ -178,11 +188,18 @@ function go(ctx) {
   return { version: ver[1], goos: ver[4], goarch: ver[5], cgo_enabled: cgo, cc, cc_path: path, cc_version: ccVersion, cc_target: target };
 }
 
-/** Node and npm, as setup-node (or the image) left them. */
+/**
+ * Node and npm, as setup-node (or the image) left them. On Windows npm is the
+ * batch file npm.cmd, which Node refuses to spawn without a shell (EINVAL, see
+ * "Spawning .bat and .cmd files on Windows" in the child_process docs), so it
+ * goes through cmd.exe as one fixed argv: /d skips AutoRun, every token is a
+ * literal, and npm.cmd is still resolved on the job's own PATH.
+ */
 function node(ctx) {
+  const npm = ctx.env.RUNNER_OS === "Windows" ? ["cmd", "/d", "/c", "npm.cmd", "--version"] : ["npm", "--version"];
   return {
     version: match(firstLine(run(ctx, ["node", "--version"])), /^v[0-9]+\.[0-9]+\.[0-9]+$/, "node --version")[0],
-    npm: match(firstLine(run(ctx, [ctx.env.RUNNER_OS === "Windows" ? "npm.cmd" : "npm", "--version"])), /^[0-9]+\.[0-9]+\.[0-9]+$/, "npm --version")[0],
+    npm: match(firstLine(run(ctx, npm)), /^[0-9]+\.[0-9]+\.[0-9]+$/, "npm --version")[0],
   };
 }
 
@@ -542,7 +559,7 @@ export const toolchainDigest = (profileName, toolchain) => sha256(canonical({ pr
 const str = (re) => (v) => typeof v === "string" && re.test(v);
 const nonEmpty = str(/^[^\n]{1,300}$/);
 const COMPONENT_SHAPES = {
-  image: { runner_os: str(/^(Linux|macOS|Windows)$/), runner_arch: str(/^(X64|ARM64|X86|ARM)$/), image_os: str(/^[a-z]+[0-9]+$/),
+  image: { runner_os: str(/^(Linux|macOS|Windows)$/), runner_arch: str(/^(X64|ARM64|X86|ARM)$/), image_os: str(IMAGE_OS),
     image_version: str(/^[0-9]{8}\.[0-9]+(\.[0-9]+)?$/), os_release: nonEmpty },
   go: { version: str(/^go[0-9.]+(rc[0-9]+)?$/), goos: str(/^[a-z0-9]+$/), goarch: str(/^[a-z0-9]+$/), cgo_enabled: str(/^[01]$/),
     cc: nonEmpty, cc_path: nonEmpty, cc_version: nonEmpty, cc_target: str(/^(absent|[A-Za-z0-9_]+(-[A-Za-z0-9_.]+){1,4})$/) },

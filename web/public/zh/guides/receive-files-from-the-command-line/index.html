@@ -230,7 +230,7 @@ relayium receive 483920 ./downloads</code></pre>
       <div class="cbox ok" data-block="success"><p class="cbox-t">一次成功的接收长什么样</p><p>path 那一行会写明字节怎么走——relay，或者表示点对点的 direct / lan——并且两端显示相同的验证码。验证码不同是唯一一种你绝不能接受的结果——立刻停下，跟发送方核对他到底在哪台机器上。</p><pre tabindex="0"><code>$ relayium receive 483920
 verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
 path: relay (selected pair …)</code></pre></div>
-      <ul><li>连接是端到端加密的；一旦连上，两端会打印出同一个 SAS（简短认证串）。通过带外方式与发送方核对，可以确认双方交换的密钥没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。</li><li>不指定目标目录时，文件会落到当前目录。</li><li>中继规则和 send 一样：只要服务器为这个码签发了中继，每个字节都经这条加密中继传输，并计入生成配对码那个账号的每月流量额度——是发送方的，不是你的。只有在没有签发中继时，两端才点对点连接，这时如果没有直连路径，传输就会失败。</li><li>这个码和应用、网页用的是同一种配对码：在 relayium.com 或 Relayium 应用里发送的人可以把码念给你，你在这里接收；relayium send 生成的码，也可以在网页上加入，而不必用 CLI。</li><li>接收方无论在哪个网络上，都不需要账号。只有发送方需要登录，好让发送端的 CLI 生成配对码。</li></ul></section>
+      <ul><li>连接是端到端加密的；一旦连上，两端会打印出同一个 SAS（简短认证串）。通过带外方式与发送方核对，可以确认双方交换的密钥没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。</li><li>不指定目标目录时，文件会落到当前目录。</li><li>中继规则和 send 一样：只要服务器为这个码签发了中继，每个字节都经这条加密中继传输；中继把它们上报为计费用量时，计入生成配对码那个账号的每月流量额度——是发送方的，不是你的。Relayium 运营的中继节点会这样上报，而 Relayium 的 coturn TURN 服务器目前不计费——旧的用量采集已停用，可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值，不写入计费账本、用量周期或任何额度。只有在没有签发中继时，两端才点对点连接，这时如果没有直连路径，传输就会失败。</li><li>这个码和应用、网页用的是同一种配对码：在 relayium.com 或 Relayium 应用里发送的人可以把码念给你，你在这里接收；relayium send 生成的码，也可以在网页上加入，而不必用 CLI。</li><li>接收方无论在哪个网络上，都不需要账号。只有发送方需要登录，好让发送端的 CLI 生成配对码。</li></ul></section>
       <section class="sheet"><h2>serve：把这台机器变成一个监听收件箱</h2>
       <p>serve 的方向正相反：不是你去连别人，而是其他机器通过 relayium:// 直接推送给你——专为你已经信任的机器设计，比如你自己的笔记本推给一台 NAS，或者构建服务器把产物投递到你的机器上——走的是证书固定的 TLS 1.3 连接，无需 SSH，无需会合。</p>
       <pre tabindex="0"><code>relayium serve

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>用 Relayium CLI 跨网络把文件发给对方 · Relayium</title>
-    <meta name="description" content="使用 relayium send 和 receive，凭一个简短的配对码，在两个不同网络上的人之间传输文件。端到端加密，可选用 SAS 码验证。只要服务器为这个码签发了中继，文件就以密文经它传输，并计入生成配对码那个账号的每月流量额度。" />
+    <meta name="description" content="使用 relayium send 和 receive，凭一个简短的配对码，在两个不同网络上的人之间传输文件。端到端加密，可选用 SAS 码验证。只要服务器为这个码签发了中继，文件就以密文经它传输；中继上报为计费用量时，计入生成配对码那个账号的每月流量额度。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/guides/send-a-file-to-someone/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/send-a-file-to-someone/" />
@@ -22,7 +22,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="用 Relayium CLI 跨网络把文件发给对方" />
-    <meta property="og:description" content="使用 relayium send 和 receive，凭一个简短的配对码，在两个不同网络上的人之间传输文件。端到端加密，可选用 SAS 码验证。只要服务器为这个码签发了中继，文件就以密文经它传输，并计入生成配对码那个账号的每月流量额度。" />
+    <meta property="og:description" content="使用 relayium send 和 receive，凭一个简短的配对码，在两个不同网络上的人之间传输文件。端到端加密，可选用 SAS 码验证。只要服务器为这个码签发了中继，文件就以密文经它传输；中继上报为计费用量时，计入生成配对码那个账号的每月流量额度。" />
     <meta property="og:url" content="https://relayium.com/zh/guides/send-a-file-to-someone/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -32,9 +32,9 @@
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="用 Relayium CLI 跨网络把文件发给对方" />
-    <meta name="twitter:description" content="使用 relayium send 和 receive，凭一个简短的配对码，在两个不同网络上的人之间传输文件。端到端加密，可选用 SAS 码验证。只要服务器为这个码签发了中继，文件就以密文经它传输，并计入生成配对码那个账号的每月流量额度。" />
+    <meta name="twitter:description" content="使用 relayium send 和 receive，凭一个简短的配对码，在两个不同网络上的人之间传输文件。端到端加密，可选用 SAS 码验证。只要服务器为这个码签发了中继，文件就以密文经它传输；中继上报为计费用量时，计入生成配对码那个账号的每月流量额度。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 跨网络把文件发给对方","description":"使用 relayium send 和 receive，凭一个简短的配对码，在两个不同网络上的人之间传输文件。端到端加密，可选用 SAS 码验证。只要服务器为这个码签发了中继，文件就以密文经它传输，并计入生成配对码那个账号的每月流量额度。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 跨网络把文件发给对方"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"配对码是从哪来的？","acceptedAnswer":{"@type":"Answer","text":"由 Relayium 生成。登录后运行 relayium send ./release.zip，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。"}},{"@type":"Question","name":"文件会上传到什么地方吗？","acceptedAnswer":{"@type":"Answer","text":"不会被存储。文件在你们两个之间流式传输，端到端加密。Relayium 服务器上的一次很小的会合握手负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节就以它读不了的密文经这条中继传输——计入生成配对码那个账号的每月流量额度，而且从不留存。"}},{"@type":"Question","name":"如果连接不上怎么办？","acceptedAnswer":{"@type":"Answer","text":"只要服务器为这个码签发了中继，会话就经它传输，严格 NAT 挡不住。没有签发中继时——没有配置中继，或生成配对码那个账号的额度已用尽——两端需要一条直连路径，没有的话传输会失败。这时可以改用 relayium up 创建存储链接，或者在你运行的两台可达服务器之间用 relayium serve 配合 push / sync。"}},{"@type":"Question","name":"我怎么知道对面真的是对的人？","acceptedAnswer":{"@type":"Answer","text":"两边的终端会打印出一个从双方交换的密钥派生的相同 6 位 SAS 码。通过带外方式核对；一致就能确认密钥没有被替换、会合服务没有冒充任一端。它认证的是端点，而不是网络路径上的每一跳。加上 --verify 可以要求在任何字节移动之前先完成这个确认。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 跨网络把文件发给对方","description":"使用 relayium send 和 receive，凭一个简短的配对码，在两个不同网络上的人之间传输文件。端到端加密，可选用 SAS 码验证。只要服务器为这个码签发了中继，文件就以密文经它传输；中继上报为计费用量时，计入生成配对码那个账号的每月流量额度。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 跨网络把文件发给对方"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"配对码是从哪来的？","acceptedAnswer":{"@type":"Answer","text":"由 Relayium 生成。登录后运行 relayium send ./release.zip，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。"}},{"@type":"Question","name":"文件会上传到什么地方吗？","acceptedAnswer":{"@type":"Answer","text":"不会被存储。文件在你们两个之间流式传输，端到端加密。Relayium 服务器上的一次很小的会合握手负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节就以它读不了的密文经这条中继传输——中继上报为计费用量时计入生成配对码那个账号的每月流量额度（Relayium 运营的中继节点会上报，其 coturn TURN 服务器目前不计费：可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值），而且从不留存。"}},{"@type":"Question","name":"如果连接不上怎么办？","acceptedAnswer":{"@type":"Answer","text":"只要服务器为这个码签发了中继，会话就经它传输，严格 NAT 挡不住。没有签发中继时——没有配置中继，或生成配对码那个账号的额度已用尽——两端需要一条直连路径，没有的话传输会失败。这时可以改用 relayium up 创建存储链接，或者在你运行的两台可达服务器之间用 relayium serve 配合 push / sync。"}},{"@type":"Question","name":"我怎么知道对面真的是对的人？","acceptedAnswer":{"@type":"Answer","text":"两边的终端会打印出一个从双方交换的密钥派生的相同 6 位 SAS 码。通过带外方式核对；一致就能确认密钥没有被替换、会合服务没有冒充任一端。它认证的是端点，而不是网络路径上的每一跳。加上 --verify 可以要求在任何字节移动之前先完成这个确认。"}}]}]}</script>
     <style>
 :root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
@@ -215,7 +215,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="updated">最近更新: <bdi>2026-08-07</bdi></p>
       
       <p class="lead">有时候对方的机器不是你的，你也没法用 SSH 登录进去——给另一个办公室的同事发个文件，给客户发个构建产物，给国外的朋友发个压缩包。relayium send 和 receive 会跨网络把文件送到你们两个之间，靠的只是发送时 CLI 为你生成的一个简短配对码。</p>
-      <p class="lead">会话是端到端加密的。Relayium 服务器上的一次简短会合负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节随后就经这条中继以它读不了的密文传输，并计入生成配对码那个账号的每月流量额度。</p>
+      <p class="lead">会话是端到端加密的。Relayium 服务器上的一次简短会合负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节随后就经这条中继以它读不了的密文传输；中继把它们上报为计费用量时，计入生成配对码那个账号的每月流量额度——Relayium 运营的中继节点会上报，其 coturn TURN 服务器目前不计费：可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值。</p>
       <section class="sheet"><h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
@@ -237,10 +237,10 @@ path: relay (selected pair …)</code></pre></div>
       <p>为获得最强保护，加上 --verify：传输会等你确认两边的码一致后，才会移动哪怕一个字节。</p>
       <pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre></section>
       <section class="sheet"><h2>走中继还是点对点——以及计入什么</h2>
-      <p>path 那一行会告诉你字节走的是哪条路：relay，或者表示点对点的 direct / lan。两种情况下文件都是端到端加密的，也都不按次收费——经中继的字节只是计入生成配对码那个账号每月流量额度的用量。</p>
-      <p>Relayium CLI 的配对码会话（send / receive、text 和 pair）只要服务器为这个码签发了 TURN 中继，每个字节就都经这条加密中继传输——即使两端本可直接连通——并计入生成配对码那个账号的每月流量额度；中继只经手它读不了的密文。只有在没有签发中继时（没有配置中继，或该额度已用尽），两端才点对点连接，而此时如果两端之间没有直连路径，会话就会失败。</p>
+      <p>path 那一行会告诉你字节走的是哪条路：relay，或者表示点对点的 direct / lan。两种情况下文件都是端到端加密的，也都不按次收费——中继上报为计费用量的字节只是计入生成配对码那个账号每月流量额度的用量；Relayium 运营的中继节点会这样上报，而 Relayium 的 coturn TURN 服务器目前不计费——旧的用量采集已停用，可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值，不写入计费账本、用量周期或任何额度。</p>
+      <p>Relayium CLI 的配对码会话（send / receive、text 和 pair）只要服务器为这个码签发了 TURN 中继，每个字节就都经这条加密中继传输——即使两端本可直接连通；中继只经手它读不了的密文。中继把这些字节上报为计费用量时，它们才计入生成配对码那个账号的每月流量额度——Relayium 运营的中继节点会这样上报，而 Relayium 的 coturn TURN 服务器目前不计费——旧的用量采集已停用，可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值，不写入计费账本、用量周期或任何额度——所以会话经过中继并不等于被计费。只有在没有签发中继时（没有配置中继，或该额度已用尽），两端才点对点连接，而此时如果两端之间没有直连路径，会话就会失败。</p>
       <p>如果传输连不上，可靠的办法是用 relayium up 创建存储链接，用 relayium inbox send 发给你自己那台此刻不在线的设备，或者在你运行的两台可达服务器之间用 relayium serve 配合 push / sync——这条路径是直连的，不计量。</p>
-      <ul><li>签发了中继 → 每个字节都经加密中继传输，并计入生成配对码那个账号的每月流量额度。</li><li>没有签发中继 → 有直连路径时两端点对点连接；否则会话失败。</li></ul></section>
+      <ul><li>签发了中继 → 每个字节都经加密中继传输；中继上报为计费用量时，计入生成配对码那个账号的每月流量额度。</li><li>没有签发中继 → 有直连路径时两端点对点连接；否则会话失败。</li></ul></section>
       <section class="sheet"><h2>传不过去的时候</h2>
       <p>几乎所有失败都落在下面四种里。每一种都有一行可读的输出或一条可执行的命令来判定，你不必靠猜来判断是哪一端出了问题。</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>发送方直接拒绝启动：“minting a pairing code needs an account”。</dt><dd><pre tabindex="0"><code>relayium whoami
@@ -252,7 +252,7 @@ Code: 483920   (valid 5 minutes)</code></pre><p>码过期了。在发送方按 C
       <h3>配对码是从哪来的？</h3>
       <p>由 Relayium 生成。登录后运行 relayium send ./release.zip，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。</p>
       <h3>文件会上传到什么地方吗？</h3>
-      <p>不会被存储。文件在你们两个之间流式传输，端到端加密。Relayium 服务器上的一次很小的会合握手负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节就以它读不了的密文经这条中继传输——计入生成配对码那个账号的每月流量额度，而且从不留存。</p>
+      <p>不会被存储。文件在你们两个之间流式传输，端到端加密。Relayium 服务器上的一次很小的会合握手负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节就以它读不了的密文经这条中继传输——中继上报为计费用量时计入生成配对码那个账号的每月流量额度（Relayium 运营的中继节点会上报，其 coturn TURN 服务器目前不计费：可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值），而且从不留存。</p>
       <h3>如果连接不上怎么办？</h3>
       <p>只要服务器为这个码签发了中继，会话就经它传输，严格 NAT 挡不住。没有签发中继时——没有配置中继，或生成配对码那个账号的额度已用尽——两端需要一条直连路径，没有的话传输会失败。这时可以改用 relayium up 创建存储链接，或者在你运行的两台可达服务器之间用 relayium serve 配合 push / sync。</p>
       <h3>我怎么知道对面真的是对的人？</h3>

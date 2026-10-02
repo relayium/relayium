@@ -5,8 +5,12 @@
 // cliDirectFacts keeps its historical name so every article that composes it
 // keeps one reference, but its maintained en/zh text is the CLI relay policy
 // (server/cmd/relayium/help.go linkRelayPolicy): a pairing-code session relays
-// every byte whenever the server issues a TURN relay and meters it to the code
-// owner; it goes peer to peer only when no relay is issued. The seven frozen
+// every byte whenever the server issues a TURN relay; it goes peer to peer only
+// when no relay is issued. Routing is not billing: relayed bytes count toward
+// the code owner's allowance only when the relay reports billable usage (fleet
+// node heartbeats do; coturn's Redis ingest is disabled and its metering bridge
+// defaults to shadow, which never writes the billable ledger —
+// server/account/coturn_metering_store.go ApplyCoturnSnapshot). The seven frozen
 // locales carry the same fact as a translated archived erratum (DECISION-LOG
 // 2026-09-30 item 2; archived-fact-errata.test.mjs), not the retired
 // direct-only wording.
@@ -36,8 +40,8 @@ export const browserRelayFacts = {
 };
 
 export const cliDirectFacts = {
-  en: "Relayium's CLI pairing-code sessions (send / receive, text and pair) send every byte through an encrypted TURN relay whenever the server issues one for the code — even when the two ends could reach each other directly — and those relayed bytes count toward the monthly traffic allowance of the account that minted the code; the relay carries only ciphertext it cannot read. Only when no relay is issued (none is configured, or that allowance is used up) do the two ends connect peer to peer, and then the session fails if they have no direct path.",
-  zh: "Relayium CLI 的配对码会话（send / receive、text 和 pair）只要服务器为这个码签发了 TURN 中继，每个字节就都经这条加密中继传输——即使两端本可直接连通——并计入生成配对码那个账号的每月流量额度；中继只经手它读不了的密文。只有在没有签发中继时（没有配置中继，或该额度已用尽），两端才点对点连接，而此时如果两端之间没有直连路径，会话就会失败。",
+  en: "Relayium's CLI pairing-code sessions (send / receive, text and pair) send every byte through an encrypted TURN relay whenever the server issues one for the code — even when the two ends could reach each other directly; the relay carries only ciphertext it cannot read. Those relayed bytes count toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage — the relay nodes Relayium operates do, while Relayium's coturn TURN servers bill nothing today — their legacy usage ingest is disabled, and their optional accounting ingest is off by default and, if configured in shadow mode, records measurements without writing to the billing ledger, usage periods or any allowance — so a relayed session is not by itself a billed one. Only when no relay is issued (none is configured, or that allowance is used up) do the two ends connect peer to peer, and then the session fails if they have no direct path.",
+  zh: "Relayium CLI 的配对码会话（send / receive、text 和 pair）只要服务器为这个码签发了 TURN 中继，每个字节就都经这条加密中继传输——即使两端本可直接连通；中继只经手它读不了的密文。中继把这些字节上报为计费用量时，它们才计入生成配对码那个账号的每月流量额度——Relayium 运营的中继节点会这样上报，而 Relayium 的 coturn TURN 服务器目前不计费——旧的用量采集已停用，可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值，不写入计费账本、用量周期或任何额度——所以会话经过中继并不等于被计费。只有在没有签发中继时（没有配置中继，或该额度已用尽），两端才点对点连接，而此时如果两端之间没有直连路径，会话就会失败。",
   ja: "Relayium CLI のペアリングコードによるセッション（send / receive、text、pair）は、サーバーがそのコードに TURN リレーを発行した場合、両端が直接つながれる状況であっても、すべてのバイトを暗号化された TURN リレー経由で送ります。中継されたバイトは、そのコードを発行したアカウントの月間転送量の枠に計上され、リレーが運ぶのは読むことのできない暗号文だけです。リレーが発行されないとき（リレーが設定されていない、またはその枠を使い切ったとき）に限り両端は P2P で直接つながり、そのとき直接の経路がなければセッションは失敗します。",
   ko: "Relayium CLI의 페어링 코드 세션(send / receive, text, pair)은 서버가 해당 코드에 TURN 릴레이를 발급하면, 두 기기가 직접 연결될 수 있는 경우에도 모든 바이트를 암호화된 TURN 릴레이로 보냅니다. 릴레이된 바이트는 코드를 발급한 계정의 월간 전송량 한도에 집계되며, 릴레이는 읽을 수 없는 암호문만 전달합니다. 릴레이가 발급되지 않을 때(릴레이가 구성되지 않았거나 그 한도를 모두 쓴 경우)에만 두 기기가 P2P로 직접 연결되며, 이때 직접 경로가 없으면 세션이 실패합니다.",
   de: "Die Pairing-Code-Sitzungen der Relayium CLI (send / receive, text und pair) leiten jedes Byte über ein verschlüsseltes TURN-Relay, sobald der Server für den Code eines ausstellt – auch wenn sich beide Endpunkte direkt erreichen könnten –, und diese weitergeleiteten Bytes zählen zum monatlichen Datenvolumen des Kontos, das den Code erzeugt hat; das Relay transportiert nur Chiffretext, den es nicht lesen kann. Nur wenn kein Relay ausgestellt wird (keines ist konfiguriert oder dieses Kontingent ist aufgebraucht), verbinden sich die beiden Endpunkte direkt per P2P, und fehlt dann ein direkter Weg, schlägt die Sitzung fehl.",

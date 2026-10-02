@@ -75,6 +75,20 @@ describe("llms.txt file and ephemeral text product facts", () => {
     assert.ok(llms.includes("cross-network browser file and text sessions carry end-to-end encrypted ciphertext through TURN by design"));
     assert.ok(llms.includes("CLI text uses a separate direct-only protocol"));
     assert.ok(llms.includes("CLI text is direct-only and does not use TURN"));
+    // Direct-only is a fact about the published CLI (v0.26.0) and its older
+    // pairing, not about the CLI: the next release candidate's pairing-code
+    // sessions relay whenever a TURN relay is issued. Every sentence that calls
+    // CLI pairing or CLI text direct-only must carry that version scope, and the
+    // candidate must not be presented as a published version.
+    assert.ok(llms.includes("In the published CLI (v0.26.0), CLI text uses a separate direct-only protocol"));
+    assert.ok(llms.includes("in the published CLI (v0.26.0), CLI text is direct-only and does not use TURN"));
+    for (const sentence of llms.split(/(?<=[.!?])\s+/)) {
+      if (/\bCLI\b/.test(sentence) && /direct-only/.test(sentence)) {
+        assert.match(sentence, /published CLI \(v0\.26\.0\)/, `unscoped CLI direct-only claim: ${sentence}`);
+      }
+    }
+    assert.ok(llms.includes("from the next CLI release candidate (source on main, not yet a published release)"));
+    assert.doesNotMatch(llms, /\bv?0\.27(\.\d+)?\b/);
     assert.doesNotMatch(llms, /(?:file|message|realtime) bytes (?:never|do not) touch the server/i);
     assert.doesNotMatch(llms, /all realtime transfers .*need no account/i);
   });
@@ -82,6 +96,12 @@ describe("llms.txt file and ephemeral text product facts", () => {
   it("keeps browser and CLI SAS constructions protocol-specific", () => {
     assert.ok(llms.includes("derived from the two X25519 endpoint public keys"));
     assert.ok(llms.includes("derived from the two pinned TLS certificate fingerprints"));
+    // The pinned-TLS SAS belongs to the published CLI's direct pairing; the
+    // candidate's link derives its SAS from the exchanged keys. Neither is the
+    // browser's X25519 construction.
+    assert.ok(llms.includes("The pinned-TLS SAS belongs to the published CLI's (v0.26.0) direct pairing"));
+    assert.ok(llms.includes("whose 6-digit SAS is derived from the keys the two ends exchanged"));
+    assert.doesNotMatch(llms, /CLI[^.]{0,80}X25519/);
     assert.ok(llms.includes("authenticate endpoints rather than proving that no server or TURN relay exists"));
     assert.doesNotMatch(llms, /SAS\) is derived from the session keys/i);
   });
@@ -174,6 +194,40 @@ describe("llms.txt file and ephemeral text product facts", () => {
     // saying `up` is bounded exactly as a browser stored link is.
     assert.equal((llms.match(/browser stored link/g) ?? []).length, 2);
     assert.equal((llms.match(/four (?:separate )?plan limits/g) ?? []).length, 2);
+  });
+
+  // Routing is not billing. The next CLI release candidate relays a pairing-code
+  // session whenever a TURN relay is issued, but its bytes count toward the code
+  // creator's allowance only when the relay reports billable usage: fleet relay
+  // nodes do; coturn's Redis ingest is disabled and its metering bridge defaults
+  // to shadow, which never writes the billable ledger
+  // (server/account/coturn_metering_store.go ApplyCoturnSnapshot). Both
+  // overclaims are wrong: "every relayed byte counts" and "relaying is free".
+  it("makes CLI relay billing conditional, neither unconditional nor all-free", () => {
+    assert.ok(llms.includes("count toward the code creator's monthly traffic allowance only when the relay reports them as billable usage"));
+    assert.ok(llms.includes("Relayium's fleet relay nodes do, while Relayium's coturn TURN servers bill nothing today"));
+    assert.ok(llms.includes("Being relayed is not by itself being billed"));
+    assert.ok(llms.includes("billable relay usage comes from the fleet relay nodes"));
+    // coturn's accounting ingest is off by default (production configures no
+    // bridge route); shadow mode is only what happens IF it is configured.
+    assert.ok(llms.includes("its legacy Redis relay-byte ingest is disabled; its optional accounting ingest is off by default and, if configured in shadow mode, records measurements without billing anyone"));
+    for (const re of [/currently only measure/i, /\bruns measure-only\b/i, /\b(bridge|ingest) (runs|is running|is active|is on)\b/i])
+      assert.doesNotMatch(llms, re);
+    for (const s of llms.split(/(?<=[.!?;])\s+/))
+      if (/coturn|bridge|\bingest\b/i.test(s) && /measure/i.test(s))
+        assert.match(s, /if configured in shadow mode/i, `coturn measurement without the IF-configured qualifier: ${s}`);
+    // The generic relay statements are billable-only too.
+    assert.ok(llms.includes("Billable relay usage and hosted storage usage are counted against four separate plan limits"));
+    assert.ok(llms.includes("Billable cross-network relay bandwidth (fleet relay nodes report it; Relayium's coturn TURN servers bill nothing today)"));
+    assert.ok(!llms.includes("Hosted relay/storage usage is counted"));
+    assert.ok(!llms.includes("Cross-network browser relay bandwidth and temporary hosted storage draw"));
+    for (const clause of llms.split(/[.;](?=\s)/)) {
+      if (/(code creator|minted the code|code owner)/i.test(clause) && /\bcount/i.test(clause)) {
+        assert.match(clause, /billable/, `unconditional relay billing clause: ${clause}`);
+      }
+    }
+    assert.doesNotMatch(llms, /\b(all|every|any) relay(ed)? (traffic|bytes?|sessions?|transfers?)\b[^.]{0,40}\b(free|unmetered|never (counted|metered|billed))\b/i);
+    assert.doesNotMatch(llms, /\brelay(ing|ed traffic)? is (always |)free\b/i);
   });
 
   // "An account stores only an email and display name" was a data-minimisation

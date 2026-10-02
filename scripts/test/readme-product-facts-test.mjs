@@ -131,9 +131,16 @@ describe("README product facts", () => {
       /daily upload quota/i,
     ])
       assert.match(readme, dimension, `${dimension} is missing`);
-    // What monthly traffic actually sums, said once rather than implied.
-    assert.match(readme, /hosted uploads?,? hosted downloads? and relayed bytes/i);
-    assert.match(readme, /occupancy rather than a monthly total|hosted uploads \+ hosted downloads \+ relayed bytes/i);
+    // What monthly traffic actually sums, said once rather than implied — and
+    // only BILLABLE relayed bytes: a relay counts toward the allowance only
+    // when it reports billable usage (fleet relay nodes do; coturn bills
+    // nothing today, its accounting ingest being off by default).
+    assert.match(readme, /hosted uploads?,? hosted downloads? and billable relayed bytes/i);
+    assert.match(readme, /occupancy rather than a monthly total|hosted uploads \+ hosted downloads \+ billable relayed bytes/i);
+    // The unconditional forms this replaced.
+    assert.doesNotMatch(readme, /hosted uploads?,? hosted downloads? and relayed bytes/i);
+    assert.doesNotMatch(readme, /hosted uploads \+ hosted downloads \+ relayed bytes/i);
+    assert.doesNotMatch(readme, /Metered: cross-network browser \*\*relay bandwidth\*\*/);
     // The retired shape, and the shapes it could return as.
     assert.ok(!readme.includes("gets a monthly allowance of both"));
     assert.doesNotMatch(readme, /monthly[^.\n]{0,40}\bstorage\b/i);

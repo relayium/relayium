@@ -62,6 +62,64 @@ type ldHub struct {
 	ice      http.HandlerFunc
 	iceMu    sync.Mutex
 	iceCodes []string
+
+	// Diagnostics only, read when a pairing overruns (ldAwait): a timeline of
+	// joins and /api/ice requests, plus the relay's state when the test runs
+	// one. Nothing here feeds an assertion.
+	trail ldTrail
+	diag  func() string
+}
+
+// ldTrail is a bounded, timestamped event log that is safe to read while the
+// fixture is still writing it.
+type ldTrail struct {
+	mu     sync.Mutex
+	t0     time.Time
+	events []string
+	lost   int
+}
+
+const ldTrailMax = 256
+
+func (l *ldTrail) note(format string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	if l.t0.IsZero() {
+		l.t0 = now
+	}
+	if len(l.events) >= ldTrailMax {
+		l.lost++
+		return
+	}
+	l.events = append(l.events, fmt.Sprintf("+%.3fs ", now.Sub(l.t0).Seconds())+fmt.Sprintf(format, args...))
+}
+
+func (l *ldTrail) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var b strings.Builder
+	for _, e := range l.events {
+		b.WriteString("  " + e + "\n")
+	}
+	if l.lost > 0 {
+		fmt.Fprintf(&b, "  (%d later events not kept)\n", l.lost)
+	}
+	if len(l.events) == 0 {
+		b.WriteString("  (none)\n")
+	}
+	return b.String()
+}
+
+// diagnostics is the fixture's side of an overrun: what the hub saw and, when
+// set, what the relay saw.
+func (h *ldHub) diagnostics() string {
+	var b strings.Builder
+	b.WriteString("hub events (joins, /api/ice):\n" + h.trail.String())
+	if h.diag != nil {
+		b.WriteString(h.diag())
+	}
+	return b.String()
 }
 
 func (h *ldHub) iceHits() []string {
@@ -85,7 +143,10 @@ func startLinkDevHubICE(t *testing.T, ice http.HandlerFunc) *ldHub {
 	hub := signal.NewHub()
 	var seq int32
 	handle := signal.ServeWSObserved(hub, func() string { return fmt.Sprintf("peer%d", atomic.AddInt32(&seq, 1)) },
-		func(room, id string, peers int, members []string) { h.joins <- id })
+		func(room, id string, peers int, members []string) {
+			h.trail.note("join %s room=%s peers=%d members=%v", id, room, peers, members)
+			h.joins <- id
+		})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)
@@ -99,6 +160,7 @@ func startLinkDevHubICE(t *testing.T, ice http.HandlerFunc) *ldHub {
 		h.iceMu.Lock()
 		h.iceCodes = append(h.iceCodes, r.URL.Query().Get("code"))
 		h.iceMu.Unlock()
+		h.trail.note("/api/ice code=%q from %s", r.URL.Query().Get("code"), r.RemoteAddr)
 		h.ice(w, r)
 	})
 	srv := httptest.NewServer(mux)
@@ -219,21 +281,58 @@ func (r ldResult) String() string {
 	return fmt.Sprintf("exit %d\n--- stderr\n%s--- stdout\n%s", r.code, r.stderr, r.stdout)
 }
 
+// ldBuf is an end's stdout or stderr: a bytes.Buffer behind a mutex, so a
+// diagnostic can read what an end has written so far while it is still
+// writing. The result an end returns is still the complete buffer, read after
+// it finished, exactly as before.
+type ldBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *ldBuf) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *ldBuf) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
+}
+
+// ldLive is a running end's output so far.
+type ldLive struct{ out, errb ldBuf }
+
+// pending is the end as it stands while still running: code -9 and whatever
+// it has written up to now.
+func (l *ldLive) pending() ldResult {
+	return ldResult{-9, l.out.String(), l.errb.String()}
+}
+
 func ldStart(ctx context.Context, t *testing.T, bin string, p ldPeer) <-chan ldResult {
 	t.Helper()
+	ch, _ := ldStartLive(ctx, t, bin, p)
+	return ch
+}
+
+// ldStartLive is ldStart that also hands back the end's live output.
+func ldStartLive(ctx context.Context, t *testing.T, bin string, p ldPeer) (<-chan ldResult, *ldLive) {
+	t.Helper()
 	ch := make(chan ldResult, 1)
+	live := &ldLive{}
 	if !p.old {
 		argv := append([]string{"__link", p.cmd, "--server", p.via}, p.args...)
 		go func() {
-			var out, errb bytes.Buffer
-			code := Run(argv, &out, &errb)
-			ch <- ldResult{code, out.String(), errb.String()}
+			code := Run(argv, &live.out, &live.errb)
+			ch <- ldResult{code, live.out.String(), live.errb.String()}
 		}()
-		return ch
+		return ch, live
 	}
 	cmd := exec.CommandContext(ctx, bin, append([]string{p.cmd, "--server", p.via}, p.args...)...)
-	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
+	out, errb := &live.out, &live.errb
+	cmd.Stdout, cmd.Stderr = out, errb
 	cmd.Env = append(os.Environ(), "HOME="+t.TempDir(), "XDG_CONFIG_HOME="+t.TempDir())
 	if p.cmd == "text" {
 		cmd.Stdin = strings.NewReader(ldOldText)
@@ -245,7 +344,7 @@ func ldStart(ctx context.Context, t *testing.T, bin string, p ldPeer) <-chan ldR
 		_ = cmd.Wait()
 		ch <- ldResult{cmd.ProcessState.ExitCode(), out.String(), errb.String()}
 	}()
-	return ch
+	return ch, live
 }
 
 // ldPairUp runs first until the hub has admitted it, then second, and waits
@@ -254,14 +353,40 @@ func ldPairUp(t *testing.T, hub *ldHub, bin string, first, second ldPeer) (ldRes
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	a := ldStart(ctx, t, bin, first)
+	a, la := ldStartLive(ctx, t, bin, first)
 	select {
 	case <-hub.joins:
 	case <-ctx.Done():
 		t.Fatal("first peer never joined")
 	}
-	b := ldStart(ctx, t, bin, second)
-	ra, rb := ldResult{code: -9}, ldResult{code: -9} // -9: still running
+	b, lb := ldStartLive(ctx, t, bin, second)
+	ra, rb, report, late := ldAwait(ctx, 5*time.Second, a, b, la, lb, hub.diagnostics)
+	if late {
+		t.Logf("%s", report)
+		t.Fatalf("pairing did not end in time\nfirst: %s\nsecond: %s", ra, rb)
+	}
+	t.Logf("first:\n%s\nsecond:\n%s", ra, rb)
+	return ra, rb
+}
+
+// ldAwait waits for both ends. When ctx expires first it gives them grace to
+// finish (an old binary is killed by ctx; an in-process end cannot be), and
+// returns late with each end's result -- or, for an end still running, code
+// -9 and the output it had written so far -- and a diagnostic report: the
+// fixture snapshots requested at the deadline and after the wait, and every
+// goroutine's stack (bounded) while anything is still running. A pairing
+// that ends in time returns the ends' own results untouched and no report.
+//
+// The grace starts the moment ctx expires, before any diagnostic work, and
+// fixture snapshots are best-effort and asynchronous, off that path: each is
+// REQUESTED at the labelled point, but the callback may take its snapshot
+// later (scheduling, the fixture's own locks), so a section shows the state
+// at some moment after its request, not exactly at it. A slow capture never
+// moves the grace, and a capture whose result is not obtained within the
+// shared ldFixtureWait budget after the wait is reported as unavailable
+// rather than holding the failure back.
+func ldAwait(ctx context.Context, grace time.Duration, a, b <-chan ldResult, la, lb *ldLive, fixture func() string) (ra, rb ldResult, report string, late bool) {
+	ra, rb = ldResult{code: -9}, ldResult{code: -9} // -9: still running
 	for i := 0; i < 2; i++ {
 		select {
 		case ra = <-a:
@@ -269,24 +394,96 @@ func ldPairUp(t *testing.T, hub *ldHub, bin string, first, second ldPeer) (ldRes
 		case rb = <-b:
 			b = nil
 		case <-ctx.Done():
-			// Kills an old binary still running; an in-process end that is
-			// still running is reported as such.
-			grace := time.After(5 * time.Second)
+			after := time.After(grace)
+			atDeadline := ldStartCapture(fixture)
+			stuck := false
+		wait:
 			for a != nil || b != nil {
 				select {
 				case ra = <-a:
 					a = nil
 				case rb = <-b:
 					b = nil
-				case <-grace:
-					a, b = nil, nil
+				case <-after:
+					stuck = true
+					break wait
 				}
 			}
-			t.Fatalf("pairing did not end in time\nfirst: %s\nsecond: %s", ra, rb)
+			if stuck {
+				if a != nil {
+					ra = la.pending()
+				}
+				if b != nil {
+					rb = lb.pending()
+				}
+			}
+			// One bound for every capture still outstanding.
+			bound, cancel := context.WithTimeout(context.Background(), ldFixtureWait)
+			defer cancel()
+			var r strings.Builder
+			r.WriteString("=== link-dev pairing overran its deadline: diagnostics ===\n")
+			atDeadline.section(&r, "fixture capture requested at the deadline", bound)
+			if stuck {
+				fmt.Fprintf(&r, "--- after %s grace: first still running=%t, second still running=%t\n", grace, a != nil, b != nil)
+				ldStartCapture(fixture).section(&r, "fixture capture requested after the grace", bound)
+				r.WriteString("--- goroutines\n" + ldStacks(ldStackMax))
+			} else {
+				fmt.Fprintf(&r, "--- both ends returned within the %s grace\n", grace)
+				ldStartCapture(fixture).section(&r, "fixture capture requested after both ends returned", bound)
+			}
+			r.WriteString("=== end link-dev diagnostics ===")
+			return ra, rb, r.String(), true
 		}
 	}
-	t.Logf("first:\n%s\nsecond:\n%s", ra, rb)
-	return ra, rb
+	return ra, rb, "", false
+}
+
+// ldFixtureWait is the shared budget an overrun report spends, after the
+// ends' wait is over, waiting for fixture capture results not yet obtained.
+const ldFixtureWait = time.Second
+
+// ldCapture is one fixture capture running on its own goroutine; nil when
+// the test has no fixture to capture.
+type ldCapture struct{ ch chan string }
+
+func ldStartCapture(fixture func() string) *ldCapture {
+	if fixture == nil {
+		return nil
+	}
+	c := &ldCapture{ch: make(chan string, 1)}
+	go func() { c.ch <- fixture() }()
+	return c
+}
+
+// section writes the capture's result under title, waiting for it until
+// bound ends. If no result was obtained by then it is reported as
+// unavailable; that says only that this report did not get a result within
+// the budget (the select may even pick the expired bound when a result is
+// ready at the same moment), not that the callback had not returned.
+func (c *ldCapture) section(r *strings.Builder, title string, bound context.Context) {
+	if c == nil {
+		return
+	}
+	select {
+	case s := <-c.ch:
+		r.WriteString("--- " + title + "\n" + s)
+	case <-bound.Done():
+		fmt.Fprintf(r, "--- %s: unavailable (no capture result was obtained within the shared %s budget after the wait)\n", title, ldFixtureWait)
+	}
+}
+
+// ldStackMax bounds the goroutine dump an overrun logs.
+const ldStackMax = 1 << 20
+
+// ldStacks is every goroutine's stack, at most max bytes of it.
+func ldStacks(max int) string {
+	buf := make([]byte, max)
+	n := runtime.Stack(buf, true)
+	s := string(buf[:n])
+	if n == max {
+		s += fmt.Sprintf("\n[goroutine dump truncated at %d bytes]\n", max)
+	}
+	return s
 }
 
 var ldSASLine = regexp.MustCompile(`verification code \(SAS\): (\S+)`)
@@ -998,6 +1195,10 @@ type ldTURN struct {
 	// MESSAGE-INTEGRITY is checked against the key afterwards).
 	authOK   map[string]int
 	authDeny map[string]int
+
+	// trail is diagnostics only (ldAwait): when each key lookup, refusal and
+	// allocation happened.
+	trail ldTrail
 }
 
 type ldCountingConn struct {
@@ -1036,6 +1237,7 @@ func (g *ldCountingGen) AllocatePacketConn(network string, port int) (net.Packet
 	g.t.mu.Lock()
 	g.t.allocs = append(g.t.allocs, c)
 	g.t.mu.Unlock()
+	g.t.trail.note("allocation %s/%d relay %s", network, port, addr)
 	return c, addr, nil
 }
 
@@ -1073,9 +1275,11 @@ func startLinkDevTURN(t *testing.T) *ldTURN {
 			defer lt.mu.Unlock()
 			if ldRESTExpired(username, time.Now().Unix()) {
 				lt.authDeny[username]++
+				lt.trail.note("auth lookup %q refused", username)
 				return nil, false
 			}
 			lt.authOK[username]++
+			lt.trail.note("auth lookup %q", username)
 			return turnv4.GenerateAuthKey(username, realm, ldRESTPassword(lt.secret, username)), true
 		},
 		PacketConnConfigs: []turnv4.PacketConnConfig{{PacketConn: udp, RelayAddressGenerator: gen}},
@@ -1121,6 +1325,15 @@ func (lt *ldTURN) auths() (ok, deny map[string]int) {
 		deny[k] = v
 	}
 	return
+}
+
+// diagnostics is the relay's side of an overrun (ldAwait): live and created
+// allocations, each allocation's byte counter, key lookups and refusals per
+// username, and their timeline.
+func (lt *ldTURN) diagnostics() string {
+	ok, deny := lt.auths()
+	return fmt.Sprintf("relay %s: live allocations %d, created %d, bytes per allocation %v\n  auth lookups %v, refused %v\nrelay events:\n%s",
+		lt.addr, lt.srv.AllocationCount(), lt.created(), lt.counters(), ok, deny, lt.trail.String())
 }
 
 func (lt *ldTURN) waitAllocations(t *testing.T, want int, d time.Duration) {
@@ -1256,6 +1469,7 @@ func TestLinkDevRelayedThroughPatchedTURN(t *testing.T) {
 	hub := startLinkDevHubICE(t, ldJSONICE(map[string]any{
 		"iceServers": []any{map[string]any{"urls": "stun:" + lt.addr}, lt.cred(exp, "owner1.tagA")},
 	}))
+	hub.diag = lt.diagnostics
 	x := newLDBidi(t, hub.url, 3<<20)
 	ra, rb := ldPairUp(t, hub, "", x.a, x.b)
 	x.check(t, ra, rb)
@@ -1820,5 +2034,313 @@ func TestLinkDevShutdownReleasesBlockedInput(t *testing.T) {
 	n, err := pr.Read(buf)
 	if err != nil || string(buf[:n]) != "later\n" {
 		t.Fatalf("the ended run still read the input: next reader got %q (%v)", buf[:n], err)
+	}
+}
+
+// ---------------------------------------------------------------- overrun diagnostics
+
+// An end's output can be read while the end is still writing it (the
+// overrun report reads a running end), and reading never alters it: every
+// read is a prefix of the complete output, no write is torn, and the
+// complete output is every write, once. Run with -race: the race detector,
+// not the number of reads taken, is what checks the reads against the
+// concurrent writes (removing either lock in ldBuf makes this test fail).
+func TestLinkDevLiveOutputReadableWhileWriting(t *testing.T) {
+	const writers, lines = 8, 400
+	live := &ldLive{}
+	var wg sync.WaitGroup
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < lines; i++ {
+				fmt.Fprintf(&live.errb, "writer %d line %d %s\n", w, i, strings.Repeat("x", i%37))
+				if i%50 == 0 {
+					fmt.Fprintf(&live.out, "out %d %d\n", w, i)
+				}
+			}
+		}(w)
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	var reads []ldResult
+	for running := true; running; {
+		select {
+		case <-done:
+			running = false
+		default:
+		}
+		r := live.pending()
+		if r.code != -9 {
+			t.Fatalf("a running end reads as exit %d, want -9", r.code)
+		}
+		reads = append(reads, r)
+	}
+	final := live.pending()
+	for i, r := range reads {
+		if !strings.HasPrefix(final.stderr, r.stderr) || !strings.HasPrefix(final.stdout, r.stdout) {
+			t.Fatalf("read %d is not a prefix of the complete output", i)
+		}
+	}
+	seen := map[string]int{}
+	for _, l := range strings.Split(strings.TrimSuffix(final.stderr, "\n"), "\n") {
+		seen[l]++
+	}
+	for w := 0; w < writers; w++ {
+		for i := 0; i < lines; i++ {
+			if l := fmt.Sprintf("writer %d line %d %s", w, i, strings.Repeat("x", i%37)); seen[l] != 1 {
+				t.Fatalf("line %q appears %d times in the complete output", l, seen[l])
+			}
+		}
+	}
+	if len(seen) != writers*lines {
+		t.Fatalf("%d distinct stderr lines, want %d (a torn write)", len(seen), writers*lines)
+	}
+	if got := strings.Count(final.stdout, "\n"); got != writers*lines/50 {
+		t.Fatalf("%d stdout lines, want %d", got, writers*lines/50)
+	}
+	t.Logf("%d reads taken while %d writers ran (a count, not a measure of interleaving)", len(reads), writers)
+}
+
+// A pairing that ends in time is reported exactly as the ends returned it,
+// with no diagnostics.
+func TestLinkDevAwaitInTimeIsUntouched(t *testing.T) {
+	a, b := make(chan ldResult, 1), make(chan ldResult, 1)
+	wa, wb := ldResult{0, "a out\n", "a err\n"}, ldResult{3, "", "b failed\n"}
+	a <- wa
+	b <- wb
+	called := false
+	ra, rb, report, late := ldAwait(context.Background(), time.Second, a, b, &ldLive{}, &ldLive{},
+		func() string { called = true; return "" })
+	if late || report != "" || called || ra != wa || rb != wb {
+		t.Fatalf("late=%t report=%q fixture read=%t\nfirst: %s\nsecond: %s", late, report, called, ra, rb)
+	}
+}
+
+// ldParkedEnd stands in for an end that never returns; its name is what the
+// goroutine dump must show.
+func ldParkedEnd(release <-chan struct{}, ch chan<- ldResult) {
+	<-release
+	ch <- ldResult{code: 1}
+}
+
+// An overrun is still a failure (late), an end that returned keeps its own
+// result, a still-running end reads as -9 with the output it had written,
+// and the report carries the fixture captures requested at the deadline and
+// after the grace plus a goroutine dump that includes the stuck end. Seconds, not the 95 s of the
+// real ceiling.
+func TestLinkDevAwaitOverrunReportsWhatIsStuck(t *testing.T) {
+	a, b := make(chan ldResult, 1), make(chan ldResult, 1)
+	la, lb := &ldLive{}, &ldLive{}
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	go ldParkedEnd(release, b)
+	fmt.Fprint(&lb.errb, "second: waiting for the peer\n")
+	fmt.Fprint(&lb.out, "partial")
+	wa := ldResult{0, "first done\n", "first ok\n"}
+	var fixtureReads atomic.Int32
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	go func() {
+		<-ctx.Done()
+		a <- wa // the first end finishes inside the grace
+	}()
+	ra, rb, report, late := ldAwait(ctx, 300*time.Millisecond, a, b, la, lb,
+		func() string { return fmt.Sprintf("fixture read %d\n", fixtureReads.Add(1)) })
+	if !late {
+		t.Fatal("an overrun was not reported as late")
+	}
+	if ra != wa {
+		t.Errorf("the end that returned in the grace lost its result: %s", ra)
+	}
+	if want := (ldResult{-9, "partial", "second: waiting for the peer\n"}); rb != want {
+		t.Errorf("the running end reads %s, want %s", rb, want)
+	}
+	for _, want := range []string{
+		"--- fixture capture requested at the deadline\nfixture read 1\n",
+		"first still running=false, second still running=true",
+		"--- fixture capture requested after the grace\nfixture read 2\n",
+		"--- goroutines\n",
+		"cmd/relayium.ldParkedEnd(",
+		"=== end link-dev diagnostics ===",
+	} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report lacks %q\n%s", want, report)
+		}
+	}
+}
+
+// ldSlowFixture is a fixture whose first capture (the one at the deadline)
+// takes d; later captures return at once.
+func ldSlowFixture(d time.Duration) func() string {
+	var calls atomic.Int32
+	return func() string {
+		if calls.Add(1) == 1 {
+			time.Sleep(d)
+			return "slow capture done\n"
+		}
+		return "later capture\n"
+	}
+}
+
+// The grace starts when the deadline passes, not after the deadline capture:
+// with a 600 ms capture and a 200 ms grace, an end that finishes 500 ms after
+// the deadline is past the grace and is reported still running. (Had the
+// grace waited for the capture, it would have run to 800 ms and taken that
+// end's result.) The slow capture's result, obtained within the shared
+// budget, is still reported.
+func TestLinkDevAwaitGraceNotDelayedBySlowCapture(t *testing.T) {
+	a, b := make(chan ldResult, 1), make(chan ldResult, 1)
+	la := &ldLive{}
+	fmt.Fprint(&la.errb, "first: partial\n")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	go func() {
+		<-ctx.Done()
+		b <- ldResult{code: 0} // the second end ends at the deadline
+		time.Sleep(500 * time.Millisecond)
+		a <- ldResult{code: 0, stderr: "first: finished late\n"}
+	}()
+	ra, rb, report, late := ldAwait(ctx, 200*time.Millisecond, a, b, la, &ldLive{}, ldSlowFixture(600*time.Millisecond))
+	if !late || rb.code != 0 {
+		t.Fatalf("late=%t second=%s", late, rb)
+	}
+	if want := (ldResult{-9, "", "first: partial\n"}); ra != want {
+		t.Errorf("the end that finished after the grace reads %s, want %s (the grace waited for the capture)", ra, want)
+	}
+	for _, want := range []string{
+		"--- fixture capture requested at the deadline\nslow capture done\n",
+		"first still running=true, second still running=false",
+		"--- fixture capture requested after the grace\nlater capture\n",
+	} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report lacks %q\n%s", want, report)
+		}
+	}
+}
+
+// ldHungFixture is a fixture capture that never returns (until the test
+// ends); its name is what the goroutine dump must show.
+func ldHungFixture(release <-chan struct{}) func() string {
+	return func() string {
+		<-release
+		return "released\n"
+	}
+}
+
+// A capture that never returns does not hold the failure back: the report
+// arrives within the grace plus ldFixtureWait, reports that no capture
+// result was obtained instead of inventing a state, and the dump shows the
+// stuck capture.
+func TestLinkDevAwaitHungCaptureCannotHoldFailure(t *testing.T) {
+	a, b := make(chan ldResult, 1), make(chan ldResult, 1)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	go ldParkedEnd(release, b)
+	a <- ldResult{code: 0}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, rb, report, late := ldAwait(ctx, 200*time.Millisecond, a, b, &ldLive{}, &ldLive{}, ldHungFixture(release))
+	took := time.Since(start)
+	if !late || rb.code != -9 {
+		t.Fatalf("late=%t second=%s", late, rb)
+	}
+	// Deadline 50 ms + grace 200 ms + ldFixtureWait, with generous slack;
+	// without the bound this call never returns.
+	if limit := 250*time.Millisecond + ldFixtureWait + 3*time.Second; took > limit {
+		t.Errorf("the report took %s, want under %s", took, limit)
+	}
+	for _, want := range []string{
+		"--- fixture capture requested at the deadline: unavailable (no capture result was obtained within the shared 1s budget after the wait)",
+		"--- fixture capture requested after the grace: unavailable",
+		"ldHungFixture.func",
+		"cmd/relayium.ldStartCapture.func1(",
+	} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report lacks %q\n%s", want, report)
+		}
+	}
+	if strings.Contains(report, "released") {
+		t.Errorf("an unavailable capture was reported with a state\n%s", report)
+	}
+}
+
+// Both ends returning inside the grace is still late, without a dump.
+func TestLinkDevAwaitOverrunWithinGrace(t *testing.T) {
+	a, b := make(chan ldResult, 1), make(chan ldResult, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	go func() { time.Sleep(50 * time.Millisecond); a <- ldResult{code: 0}; b <- ldResult{code: 2} }()
+	ra, rb, report, late := ldAwait(ctx, 5*time.Second, a, b, &ldLive{}, &ldLive{}, nil)
+	if !late || ra.code != 0 || rb.code != 2 {
+		t.Fatalf("late=%t first=%d second=%d", late, ra.code, rb.code)
+	}
+	if strings.Contains(report, "--- goroutines") || !strings.Contains(report, "both ends returned within the 5s grace") {
+		t.Errorf("report:\n%s", report)
+	}
+}
+
+// The goroutine dump is bounded.
+func TestLinkDevStacksBounded(t *testing.T) {
+	s := ldStacks(512)
+	if !strings.HasPrefix(s, "goroutine ") || !strings.Contains(s, "[goroutine dump truncated at 512 bytes]") || len(s) > 512+64 {
+		t.Fatalf("%d bytes:\n%s", len(s), s)
+	}
+	if s := ldStacks(ldStackMax); strings.Contains(s, "truncated") || !strings.Contains(s, "TestLinkDevStacksBounded") {
+		t.Fatalf("an unbounded-enough dump was truncated or lacks this goroutine")
+	}
+}
+
+// The real fixture end to end: a real in-process end against the real hub
+// and the patched TURN, with no second end yet, overruns a short deadline.
+// The report reads that running end and shows its join, the relay's state
+// and the stuck Run; then a second end arrives and both finish, so nothing
+// is left running.
+func TestLinkDevOverrunDiagnosticsOnRealFixture(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub := startLinkDevHubICE(t, ldJSONICE(map[string]any{
+		"iceServers": []any{map[string]any{"urls": "stun:" + lt.addr}, lt.cred(time.Now().Add(time.Hour), "owner1.tagA")},
+	}))
+	hub.diag = lt.diagnostics
+	end := func() ldPeer {
+		return ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--dest", t.TempDir(),
+			"--script", ldScript(t, "text ping", "wait-texts 1"), ldCode}}
+	}
+	a, la := ldStartLive(context.Background(), t, "", end())
+	select {
+	case <-hub.joins:
+	case <-time.After(30 * time.Second):
+		t.Fatal("first peer never joined")
+	}
+	never := make(chan ldResult)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	ra, _, report, late := ldAwait(ctx, 200*time.Millisecond, a, never, la, &ldLive{}, hub.diagnostics)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("%s", report)
+		}
+	})
+	fixture, _, _ := strings.Cut(report, "--- goroutines")
+	t.Logf("%s(goroutine dump: %d bytes)", fixture, len(report)-len(fixture))
+	if !late || ra.code != -9 {
+		t.Errorf("late=%t first=%s", late, ra)
+	}
+	for _, want := range []string{"join peer1 room=testroom peers=1", "relay " + lt.addr + ": live allocations ", "first still running=true", "cmd/relayium.Run("} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report lacks %q", want)
+		}
+	}
+	b, _ := ldStartLive(context.Background(), t, "", end())
+	for i, ch := range []<-chan ldResult{a, b} {
+		select {
+		case r := <-ch:
+			if r.code != 0 || !strings.Contains(r.stdout, "ping") {
+				t.Errorf("end %d after the overrun:\n%s", i+1, r)
+			}
+		case <-time.After(90 * time.Second):
+			t.Fatalf("end %d never finished after the overrun", i+1)
+		}
 	}
 }

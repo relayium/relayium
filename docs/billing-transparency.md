@@ -77,19 +77,29 @@ first" and the difference is what decides whether anything is billed:
   P2P first: on a cross-network path the direct candidates are going to fail
   anyway, and waiting out their checks costs about 20 seconds before ICE reaches
   the relay it would have used. So **there is no STUN-P2P rung for the browser**,
-  and a cross-network browser transfer is a metered transfer.
+  and a cross-network browser transfer is a relayed transfer, metered when
+  the relay reports billable usage.
 - **CLI:** in the **published CLI (v0.26.0)** the pairing-code modes are
   direct-only: that binary has no ICE or TURN path for file or text bytes.
   **From the next CLI release candidate** (source on `main`), pairing-code
   sessions — `send`/`receive`, `text` and `pair` — relay every byte through the
   same ciphertext-only TURN relay whenever the server issues one for the code,
-  even on one LAN, and those relayed bytes count toward the monthly traffic
-  allowance of the account that minted the code; they go peer to peer (and are
-  unmetered) only when no relay is issued. Against an older relayium the old
+  even on one LAN. Those relayed bytes count toward the monthly traffic
+  allowance of the account that minted the code only when the relay that
+  carries them reports them as billable usage: a Relayium fleet relay node
+  does (its heartbeat rows are stored `billable` — see below), while bytes
+  through Relayium's coturn TURN servers are billed by neither coturn path:
+  the legacy Redis worker is disabled, and the optional coturn metering
+  bridge ingest is off unless an operator configures it — if configured in
+  its default shadow mode, it records measurements and never bills (see
+  below). Routing through a relay is
+  therefore not by itself proof that anything was billed, nor proof that
+  nothing was. They go peer to peer (and are unmetered) only when
+  no relay is issued. Against an older relayium the old
   direct-only pairing is used. What IS invariant, and what this document is
   really about, is that no path lets relayium.com read a file — a relayed
-  transfer is metered precisely because the relay forwards ciphertext it cannot
-  decrypt. Its server-to-server **direct** modes (`serve` with `push`/`sync`
+  transfer can be metered precisely because the relay forwards ciphertext it
+  cannot decrypt. Its server-to-server **direct** modes (`serve` with `push`/`sync`
   over daemon-direct) never touch a relay, and neither do the published CLI's
   pairing-code modes, so they carry nothing
 relayium.com can meter. Its **hosted** modes are the exception, and they are
@@ -101,7 +111,8 @@ relayium.com can meter. Its **hosted** modes are the exception, and they are
 The root [`README.md`](../README.md#how-it-works) states the same thing
 ("LAN: direct · browser cross-network: TURN carries ciphertext only"). Relayed
 bytes and hosted storage are the two things that run through infrastructure
-relayium.com pays for, and between them they are what is metered. The direct
+relayium.com pays for, and between them — relayed bytes only when the relay
+reports billable usage — they are what is metered. The direct
 paths — LAN browser, and the CLI's direct modes — run through neither.
 
 **Getting a relay credential at all requires being signed in and under quota.**
@@ -177,7 +188,8 @@ route and nothing is ingested. An allocation is keyed by the relay machine's
 boot id, the coturn process id and start time, and coturn's session number, so
 a coturn restart can't reuse an earlier allocation's key, and its bytes are
 attributed only to the account its relay username names, which must exist.
-The ingest runs in one of two modes (`-coturn-metering-mode`, `main.go:333`):
+When configured, the ingest runs in one of two modes (`-coturn-metering-mode`,
+`main.go:333`):
 
 - **shadow** (the default) records what each allocation relayed and never
   writes the billable ledger (`usage_events` / `usage_periods`);
@@ -538,8 +550,12 @@ transfers until that allowance runs out and pays nothing. Paying is what you
 do when you want a bigger one.
 
 The cross-network paths that consume no relay allowance at all are the CLI's
-**direct** modes — `send`/`receive`, `text`, `push`/`pull`/`sync` over your own
-SSH, and daemon-direct — which never ask for a relay. `relayium up` and
+**direct** modes — daemon-direct `push`/`sync`, and in the published CLI
+(v0.26.0) also `send`/`receive`, `text` and `push`/`pull`/`sync` over your own
+SSH — which never ask for a relay. From the next CLI release candidate,
+`send`/`receive`, `text` and `pair` do ask for one, and their relayed bytes
+follow the conditional rule above: billable only when the relay reports them
+as billable usage. `relayium up` and
 `relayium down` are cross-network too, but they are hosted rather than direct,
 so they draw on the same limits a browser stored link does.
 

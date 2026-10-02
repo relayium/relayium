@@ -20,7 +20,23 @@
 //   1. the confidentiality invariant stays absolute and unqualified — nothing
 //      Relayium runs can read a user's files, on ANY path, relayed included;
 //   2. the path fact is attributed to the MODE and in the present tense;
-//   3. the retired product-level pledges do not come back.
+//   3. the retired product-level pledges do not come back;
+//   4. routing is not billing. Which wire carries the bytes says nothing about
+//      whether they are billed: relayed bytes count toward the code owner's
+//      allowance only when the relay reports them as billable usage. Fleet
+//      relay-node heartbeats do (account/nodes.go stores billable for fleet
+//      nodes); coturn bills nothing today: its legacy Redis ingest is disabled
+//      (main.go guardCoturnRedisMetering), and its re-keyed accounting ingest
+//      is off by default — the route exists only when -coturn-metering-relays
+//      is configured, and IF configured its default shadow mode never writes
+//      the billable ledger (account/coturn_metering_store.go
+//      ApplyCoturnSnapshot). So no maintained public surface may say every
+//      relayed byte counts, none may say every relayed byte is free, and none
+//      may say the coturn ingest is running or measuring now.
+//
+// The CLI help's own billing sentence (help.go linkRelayPolicy) is owned by
+// help_test.go and scripts/test/cli-public-truth-test.sh, not by this file:
+// claim 4 below pins only the routing half of it.
 //
 // ## What it deliberately does NOT do
 //
@@ -52,7 +68,7 @@
 
 import { readFileSync } from "node:fs";
 
-const EXPECTED_CLAIMS = 10;
+const EXPECTED_CLAIMS = 19;
 
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
 
@@ -97,9 +113,10 @@ function evaluate(w) {
   claim("help|text-mode-scoped", has(w.help, "older CLI pairing is used unchanged, and it is direct-only: with no direct path\nbetween the two machines the session cannot open"),
     "`relayium text --help` does not state the direct-only limit of the older pairing");
 
-  // 4. The help text names what DOES relay, so the reader can place the limit
-  // (and the relay allowance it spends; help_test.go ties this sentence to
-  // linkrtc.ChooseRTCConfig).
+  // 4. The help text names what DOES relay, so the reader can place the limit.
+  // This pins routing only — whether the relayed bytes are billed is a separate
+  // fact (see 11-18) that help_test.go owns for the help text; help_test.go also
+  // ties this sentence to linkrtc.ChooseRTCConfig.
   claim("help|names-the-relayed-path", has(w.help, "whenever the server issues a TURN relay for the\ncode, a link sends every byte through that relay"),
     "the CLI help no longer tells the reader which paths are relayed");
 
@@ -139,6 +156,77 @@ function evaluate(w) {
   claim("all|no-retired-pledge", offenders.length === 0,
     `a retired product-level pledge is back: ${offenders.join("; ")}`);
 
+  // 11-16. Each maintained public surface states the CONDITIONAL billing fact
+  // in its own words. Without a positive anchor, deleting the topic would pass
+  // the structural check below vacuously.
+  claim("billing-scope|readme-conditional", has(w.readme, "reports them as billable usage — the relay nodes Relayium operates do, while Relayium's coturn TURN servers bill nothing today"),
+    "README no longer says relayed CLI bytes count only when the relay reports billable usage");
+  claim("billing-scope|cli-page-en-conditional", has(w.en, "Those bytes count toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage: the relay nodes Relayium operates do"),
+    "/cli's English send/receive note no longer states the conditional billing fact");
+  claim("billing-scope|cli-page-zh-conditional", has(w.zh, "中继把这些字节上报为计费用量时，它们才计入生成配对码那个账号的每月流量额度：Relayium 运营的中继节点会这样上报"),
+    "/cli's Simplified Chinese send/receive note no longer states the conditional billing fact");
+  claim("billing-scope|facts-conditional", has(factsMaintained, "when the relay reports them as billable usage") && has(factsMaintained, "中继把这些字节上报为计费用量时"),
+    "realtime-facts en/zh cliDirectFacts no longer state the conditional billing fact");
+  claim("billing-scope|cli-shell-conditional", has(w.spa, "when the relay reports it as billable usage (the relay nodes Relayium operates do"),
+    "the crawlable /cli shell no longer states the conditional billing fact");
+  claim("billing-scope|billing-doc-conditional", has(w.billing, "Routing through a relay is\n  therefore not by itself proof that anything was billed"),
+    "billing-transparency no longer separates routing from billing for the CLI");
+
+  // 17. Structural: no clause on a maintained surface says the code owner's
+  // allowance is charged without the billable-usage condition in that clause.
+  const unconditional = [];
+  const scan = (name, text) => {
+    for (const clause of text.split(/[.;](?=\s)|[。；]/)) {
+      const en = /(minted the code|code's minter|code creator's (monthly|account))/.test(clause) && /\b(count|counts|counted|counting|metered)\b/.test(clause);
+      const zh = /(生成配对码那个账号|生成码的账号|配对码创建端的?账号)/.test(clause) && /计入/.test(clause);
+      if ((en && !/billable (relay )?usage/.test(clause)) || (zh && !/计费用量/.test(clause))) unconditional.push(`${name}: ${clause.trim().slice(0, 120)}`);
+    }
+  };
+  scan("README.md", w.readme);
+  scan("i18n/en.ts", w.en);
+  scan("i18n/zh.ts", w.zh);
+  scan("realtime-facts en/zh", factsMaintained);
+  scan("spa-pages.mjs", w.spa);
+  scan("billing-transparency.md", w.billing);
+  claim("all|relay-billing-conditional", unconditional.length === 0,
+    `a surface says relayed bytes count unconditionally: ${unconditional.join(" | ")}`);
+
+  // 18. The opposite overclaim: no maintained surface says relaying is free.
+  // Fleet relay nodes really do bill.
+  const ALL_RELAY_FREE = [
+    /\b(all|every|any) relay(ed)? (traffic|bytes?|sessions?|transfers?)\b[^.]{0,40}\b(free|unmetered|never (counted|metered|billed)|not (counted|metered|billed))\b/i,
+    /\brelay(ing|ed traffic)? is (always |never |)free\b/i,
+    /\brelayed bytes (are|is) never (counted|metered|billed)\b/i,
+    /所有(经)?中继(的)?(流量|字节|会话)?[^。]{0,20}(免费|不计)/,
+    /中继(流量)?(始终|总是|一律|永远)免费/,
+  ];
+  const freeOffenders = [];
+  for (const [name, text] of [["README.md", w.readme], ["i18n/en.ts", w.en], ["i18n/zh.ts", w.zh], ["realtime-facts en/zh", factsMaintained], ["spa-pages.mjs", w.spa], ["billing-transparency.md", w.billing]]) {
+    for (const re of ALL_RELAY_FREE) { const m = text.match(re); if (m) freeOffenders.push(`${name}: ${m[0]}`); }
+  }
+  claim("all|no-all-relay-free", freeOffenders.length === 0,
+    `a surface says relaying is free: ${freeOffenders.join(" | ")}`);
+
+  // 19. The coturn accounting ingest is off by default; shadow mode is only
+  // what happens IF it is configured. No surface may say it runs or measures
+  // now, and every public sentence about its measurements carries the
+  // qualifier. billing-transparency's technical config section is checked for
+  // the false present-tense forms only.
+  const FALSE_STATE = [/currently only measure/i, /is currently only measured/i, /\bruns measure-only\b/i,
+    /(?<!When configured, the )\b(bridge|ingest) (runs|is running|is active|is on)\b/i, /目前只测量/, /目前只做测量/, /(正在|已经)以影子模式运行/];
+  const stateOffenders = [];
+  for (const [name, text, qualify] of [["README.md", w.readme, true], ["i18n/en.ts", w.en, true], ["i18n/zh.ts", w.zh, true],
+    ["realtime-facts en/zh", factsMaintained, true], ["spa-pages.mjs", w.spa, true], ["billing-transparency.md", w.billing, false]]) {
+    for (const re of FALSE_STATE) { const m = text.match(re); if (m) stateOffenders.push(`${name}: ${m[0]}`); }
+    if (!qualify) continue;
+    for (const s of text.split(/(?<=[.!?])\s+|(?<=[。！？])/)) {
+      if (/coturn|bridge|\bingest\b|采集/i.test(s) && /measure|测量/i.test(s) && !/if configured in shadow mode|如果配置为影子模式/i.test(s))
+        stateOffenders.push(`${name}: unqualified: ${s.trim().slice(0, 100)}`);
+    }
+  }
+  claim("all|coturn-ingest-conditional", stateOffenders.length === 0,
+    `a surface states the coturn ingest as running/measuring now: ${stateOffenders.join(" | ")}`);
+
   return out;
 }
 
@@ -154,6 +242,17 @@ const MUTATIONS = {
   "cli-page|zh-mode-scoped": (w) => ({ ...w, zh: w.zh.replace("会原样使用旧的 CLI 对 CLI 配对：它需要一条直连路径，找不到时传输失败，而不是回落到中继", "CLI 需要一条直连路径，找不到时传输失败，而不是回落到中继") }),
   "billing|invariant-separate": (w) => ({ ...w, billing: w.billing.replace("no path lets relayium.com read a file", "relayium.com cannot meter a direct transfer") }),
   "all|no-retired-pledge": (w) => ({ ...w, readme: `${w.readme}\n\nthe CLI never relays file bytes\n` }),
+  "billing-scope|readme-conditional": (w) => ({ ...w, readme: w.readme.replace("reports them as billable usage — the relay nodes Relayium operates do, while Relayium's coturn TURN servers bill nothing today", "reports them as billable usage") }),
+  "billing-scope|cli-page-en-conditional": (w) => ({ ...w, en: w.en.replace("Those bytes count toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage: the relay nodes Relayium operates do", "Those bytes count toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage") }),
+  "billing-scope|cli-page-zh-conditional": (w) => ({ ...w, zh: w.zh.replace("中继把这些字节上报为计费用量时，它们才计入生成配对码那个账号的每月流量额度：Relayium 运营的中继节点会这样上报", "中继把这些字节上报为计费用量时，它们才计入生成配对码那个账号的每月流量额度") }),
+  "billing-scope|facts-conditional": (w) => ({ ...w, facts: w.facts.replace("中继把这些字节上报为计费用量时", "中继把这些字节上报成计费用量时") }),
+  "billing-scope|cli-shell-conditional": (w) => ({ ...w, spa: w.spa.replace("when the relay reports it as billable usage (the relay nodes Relayium operates do", "when the relay reports it as billable usage (fleet nodes do") }),
+  "billing-scope|billing-doc-conditional": (w) => ({ ...w, billing: w.billing.replace("Routing through a relay is\n  therefore not by itself proof that anything was billed", "Routing through a relay is\n  how it was billed") }),
+  // The exact sentence this batch retired from /cli (en.ts cliPage.securityPoints).
+  "all|relay-billing-conditional": (w) => ({ ...w, en: `${w.en}\n"When a pairing-code session (pair, send / receive, text) is relayed, the relay cannot read what it carries, and every byte counts toward the traffic allowance of the account that minted the code."\n` }),
+  "all|no-all-relay-free": (w) => ({ ...w, zh: `${w.zh}\n"所有中继流量都免费。"\n` }),
+  // Deleting the IF-configured qualifier from the maintained facts.
+  "all|coturn-ingest-conditional": (w) => ({ ...w, facts: w.facts.replace("如果配置为影子模式，", "") }),
 };
 
 let failed = 0;

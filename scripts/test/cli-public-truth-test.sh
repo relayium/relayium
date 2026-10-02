@@ -42,6 +42,8 @@ fi
 "$BIN" help pull >"$TMPROOT/pull"
 "$BIN" help pair >"$TMPROOT/pair"
 "$BIN" help send >"$TMPROOT/send"
+"$BIN" help receive >"$TMPROOT/receive"
+"$BIN" help text >"$TMPROOT/text"
 "$BIN" help inbox >"$TMPROOT/inbox"
 "$BIN" help up >"$TMPROOT/up"
 "$BIN" help update >"$TMPROOT/update"
@@ -97,6 +99,24 @@ must_have "$TMPROOT/up" "plan's cap still applies"
 must_have "$TMPROOT/update" 'downgrade guard'
 must_have "$TMPROOT/top" 'relayium pair \[code\]'
 must_have "$TMPROOT/top" 'whoami, up,'
+
+# Routing is not billing (help.go linkRelayPolicy). Every command that can link
+# says which relay traffic spends the code owner's allowance, read from the
+# help with its line breaks folded so a rewrap cannot hide or fake a sentence.
+# Rejected: the old claim that all relayed traffic counts, and any claim that
+# relaying is free. Accurate scope statements (an older pairing is
+# direct-only, a direct link uses none of the allowance) are not matched.
+for c in pair send receive text; do
+  tr '\n' ' ' <"$TMPROOT/$c" | tr -s ' ' >"$TMPROOT/$c.flat"
+  must_have "$TMPROOT/$c.flat" 'whenever the server issues a TURN relay for the code, a link sends every byte through that relay'
+  must_have "$TMPROOT/$c.flat" 'Being relayed is not the same as being billed'
+  must_have "$TMPROOT/$c.flat" "only relay traffic the server records as billable counts toward the code owner's relay allowance"
+  must_have "$TMPROOT/$c.flat" 'only measured without being billed \(shadow mode\), does not count'
+  must_have "$TMPROOT/$c.flat" 'a direct link uses none of it'
+  must_have "$TMPROOT/$c.flat" 'There is no per-transfer charge'
+  must_lack "$TMPROOT/$c.flat" 'relayed traffic counts toward|every relayed byte counts|all relay(ed)? traffic counts'
+  must_lack "$TMPROOT/$c.flat" 'relay(ed|ing)? (traffic )?(is|are) (always )?free|relays (are|is) free|relaying costs nothing'
+done
 
 # block FILE START_REGEX END_REGEX: the lines from START up to (not including)
 # the next END, so an assertion reads the /cli copy and not the whole locale.

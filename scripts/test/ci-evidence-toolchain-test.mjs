@@ -53,7 +53,6 @@ const OUT = {
   "clang -dumpmachine": "arm64-apple-darwin24.6.0\n",
   "node --version": "v24.9.0\n",
   "npm --version": "11.6.0\n",
-  "npm.cmd --version": "11.6.0\n",
   "/usr/bin/google-chrome --version": "Google Chrome 141.0.7390.54 \n",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --version": "Google Chrome 141.0.7390.54\n",
   "/usr/bin/python3 --version": "Python 3.9.6\n",
@@ -97,7 +96,9 @@ const BINDING_ENV = {
 function runner(os, overrides = {}) {
   const calls = [];
   const out = { ...OUT, ...(os === "macOS" ? { "go version": "go version go1.26.3 darwin/arm64\n", "go env CGO_ENABLED CC": "1\nclang\n" } : {}),
-    ...(os === "Windows" ? { "go version": "go version go1.26.3 windows/amd64\n", "go env CGO_ENABLED CC": "1\ngcc\n" } : {}), ...overrides.out };
+    // Windows npm is the batch file npm.cmd, reached only through cmd.exe (which answers in CRLF).
+    ...(os === "Windows" ? { "go version": "go version go1.26.3 windows/amd64\n", "go env CGO_ENABLED CC": "1\ngcc\n", "cmd /d /c npm.cmd --version": "11.6.0\r\n" } : {}),
+    ...overrides.out };
   const files = {
     "/etc/os-release": 'NAME="Ubuntu"\nVERSION_ID="24.04"\nID=ubuntu\n',
     "/usr/local/lib/android/sdk/platforms/android-37.0/source.properties": "Pkg.Desc=Android SDK Platform 37\nPkg.Revision=1\n",
@@ -113,6 +114,14 @@ function runner(os, overrides = {}) {
     env: { ...ENV[os], ...BINDING_ENV, PATH: os === "Windows" ? "/usr/bin;/bin" : "/opt/homebrew/bin:/usr/bin:/bin", ...overrides.env },
     exec: (argv, env = {}, input = undefined) => {
       calls.push({ argv, env, input });
+      if (os === "Windows") {
+        // What realExec meets on a real Windows runner: Node refuses to spawn a
+        // batch file without a shell (spawnSync reports EINVAL, realExec turns it
+        // into this unknown); a bare `npm`, or a whole command line passed as the
+        // program name, is no executable PATH resolves.
+        if (/\.(cmd|bat)$/i.test(argv[0])) throw new ToolchainUnknown(`${argv[0]} could not run: EINVAL`);
+        if (argv[0] === "npm" || /\s/.test(argv[0])) return { status: 127, stdout: "", stderr: "" };
+      }
       // A job's selection program is EXECUTED, by a real Python, on the listing —
       // the rule the job runs, not a re-implementation of it.
       if (argv[1] === "-c" && /python3$/.test(argv[0])) {
@@ -199,7 +208,7 @@ try {
   check(noCc.cc === "gcc" && noCc.cc_path === "absent" && noCc.cc_target === "absent" && noCc.cc_version === "absent",
     `a CC that is not installed must be recorded absent on every field: ${JSON.stringify(noCc)}`);
   check(certFor("macos-xcode-go").toolchain.go.cc_version.startsWith("Apple clang version 17"), "the macOS cgo compiler was not recorded");
-  check(certFor("windows-node").toolchain.node.npm === "11.6.0", "Windows npm (npm.cmd) was not recorded");
+  check(certFor("windows-node").toolchain.node.npm === "11.6.0", "Windows npm (npm.cmd through cmd.exe) was not recorded");
   check(certFor("linux-java-android").toolchain["android-sdk"]["build-tools;36.0.0"] === "36.0.0", "an Android package revision was not recorded");
   const src = certFor("linux-go", { env: { CI_EVIDENCE_JOB_INDEX: "3", CI_EVIDENCE_JOB_TOTAL: "8", DEVELOPER_DIR: "/x" } });
   check(src.binding.job_index === 3 && src.binding.job_total === 8 && src.audit.developer_dir === "/x", "the source binding lost its matrix index");
@@ -310,6 +319,11 @@ const UNKNOWNS = [
   ["linux-go", "a C compiler that is not on PATH", { env: { PATH: "/nowhere" } }, /gcc is not on PATH/],
   ["linux-node", "a node version with a suffix", { out: { "node --version": "v24.9.0-nightly\n" } }, /node --version/],
   ["linux-node", "npm missing", { status: { "npm --version": 127 } }, /npm --version exited 127/],
+  ["windows-node", "no npm.cmd for cmd.exe to find", { status: { "cmd /d /c npm.cmd --version": 9009 } }, /^cmd \/d \/c npm\.cmd --version exited 9009$/],
+  ["windows-node", "npm.cmd failing under cmd.exe", { status: { "cmd /d /c npm.cmd --version": 1 } }, /^cmd \/d \/c npm\.cmd --version exited 1$/],
+  ["windows-node", "an npm.cmd version with a suffix", { out: { "cmd /d /c npm.cmd --version": "11.6.0-pre\r\n" } }, /^npm --version is not in a recognised shape: "11\.6\.0-pre"$/],
+  ["windows-node", "cmd.exe printing its not-found text", { out: { "cmd /d /c npm.cmd --version": "'npm.cmd' is not recognized as an internal or external command,\r\n" } }, /^npm --version is not in a recognised shape/],
+  ["windows-node", "cmd.exe printing nothing", { out: { "cmd /d /c npm.cmd --version": "\r\n" } }, /^npm --version is not in a recognised shape: ""$/],
   ["linux-java", "java missing", { java: { status: 127, stdout: "", stderr: "" } }, /java -version exited 127/],
   ["linux-java", "java with no runtime line", { java: { status: 0, stdout: "", stderr: 'openjdk version "17.0.16"\n' } }, /java -version runtime/],
   ["linux-java-android", "an Android package not installed", { files: { "/usr/local/lib/android/sdk/build-tools/36.0.0/source.properties": undefined } }, /source\.properties is unreadable/],
@@ -401,6 +415,185 @@ try {
   check(false, `the schema/digest/comparison checks could not run: ${err.message}`);
 }
 
+// ── 3b. the Windows Server 2025 + Visual Studio 2026 image ──────────────────
+// windows-latest moved to ImageOS `win25-vs2026`, which the family+release
+// grammar refused, so no Windows certificate was ever written. Exactly that
+// literal is admitted, at capture AND in the schema; it never compares equal
+// to `win25`, and every near-miss — a suffix, another VS generation, a line
+// end or any control byte anywhere in the value — is still unknown.
+
+const VS2026 = "win25-vs2026";
+const IMAGE_OS_REFUSED = [
+  ...["\n", "\r\n", "\r", "\u0000", "\t", "\u000b", "\u000c", "\u001b", "\u007f", "\u0085", "\u2028", "\u2029", " "]
+    .flatMap((c) => [`${VS2026}${c}`, `${c}${VS2026}`, `win25${c}vs2026`, `win25-${c}vs2026`]),
+  "win25\n", "win25\r\n", "ubuntu24\n", "win25-vs2026\nwin25", "win25\nwin25-vs2026", "win25-vs2026win25-vs2026",
+  "win25-vs2026x", "win25-vs2026-arm64", "win25-vs20260", "win25-vs2026.1", "win25-vs2026-", "win25-vs2026/x",
+  "win25-vs2022", "win25-vs2025", "win25-vs2027", "win25-vs3026", "win25-vs", "win25-", "-vs2026", "-win25",
+  "win26-vs2026", "win24-vs2026", "win2025-vs2026", "win25-vs-2026", "win25_vs2026", "win25vs2026x",
+  "WIN25-VS2026", "Win25-vs2026", "win25-VS2026", "win25\uff0dvs2026", "",
+];
+// `vs2026` alone is the legacy family+release shape, admitted like any other.
+const IMAGE_OS_ADMITTED = ["ubuntu24", "macos15", "win25", "win22", "vs2026", VS2026];
+// Each part runs on its own, so a helper broken in one place cannot hide the others.
+const part = (what, fn) => { try { fn(); } catch (err) { check(false, `the ${VS2026} ${what} checks could not run: ${err.message}`); } };
+
+part("round-trip", () => {
+  // The actual shape, through the real capture of both Windows profiles: the
+  // certificate validates, survives a JSON round trip, is stable, and a source
+  // and a current capture of one runner compare equal (the reuse decision).
+  for (const profile of ["windows-go", "windows-node"]) {
+    for (const ImageVersion of ["20260928.1", "20260907.229.1"]) {
+      const env = { ImageOS: VS2026, ImageVersion };
+      let cert = null;
+      const err = threw(() => { cert = certFor(profile, { env }); });
+      check(err === null && cert?.toolchain.image.image_os === VS2026 && cert.toolchain.image.image_version === ImageVersion,
+        `${profile} on ${VS2026}/${ImageVersion} did not capture: ${err?.message}`);
+      if (!cert) continue;
+      const parsed = JSON.parse(JSON.stringify(cert));
+      const roundTrip = threw(() => validateCertificate(parsed, REGISTRY));
+      check(roundTrip === null && parsed.digest === toolchainDigest(profile, parsed.toolchain),
+        `${profile} on ${VS2026} did not survive a JSON round trip: ${roundTrip?.message}`);
+      check(certFor(profile, { env }).digest === cert.digest, `${profile} on ${VS2026}: two captures of the same runner differ`);
+      const current = certFor(profile, { env: { ...env, CI_EVIDENCE_JOB_INDEX: undefined, CI_EVIDENCE_JOB_TOTAL: undefined } }, "current");
+      check(threw(() => validateCertificate(current, REGISTRY)) === null && current.digest === cert.digest && toolchainDifferences(cert, current).length === 0,
+        `${profile} on ${VS2026}: a source and a current capture of one toolchain do not compare equal`);
+    }
+  }
+});
+
+part("command", () => {
+  // The CLI writes it, and what it wrote validates.
+  const dir = mkdtempSync(join(tmpdir(), "ci-evidence-toolchain-vs2026-"));
+  const r = runner("Windows", { env: { ImageOS: VS2026 } });
+  const deps = { registry: REGISTRY, exec: r.exec, readFile: r.readFile, exists: r.exists, listDir: r.listDir, realpath: r.realpath,
+    now: () => new Date(), resolveChrome: r.resolveChrome, digestFile: r.digestFile };
+  for (const profile of ["windows-go", "windows-node"]) {
+    const out = join(dir, `${profile}.json`);
+    const code = main(["capture", "--role", "source", "--profile", profile, "--out", out, "--lane", "cli", "--job", "cli-windows"], r.env, deps);
+    let written = null;
+    try { written = validateCertificate(JSON.parse(readFileSync(out, "utf8")), REGISTRY); } catch { /* checked */ }
+    check(code === 0 && written?.toolchain.image.image_os === VS2026, `the capture command wrote no valid ${profile} certificate on ${VS2026}`);
+  }
+  rmSync(dir, { recursive: true, force: true });
+});
+
+part("inequality", () => {
+  // Different images never compare equal: the image identity is a compared,
+  // digested fact, field by field.
+  for (const profile of ["windows-go", "windows-node"]) {
+    const legacy = certFor(profile);
+    const vs = certFor(profile, { env: { ImageOS: VS2026 } });
+    check(legacy.toolchain.image.image_os === "win25" && JSON.stringify(toolchainDifferences(legacy, vs)) === JSON.stringify(["image.image_os"])
+      && legacy.digest !== vs.digest, `${profile}: win25 and ${VS2026} must differ in exactly image.image_os and by digest`);
+    const later = certFor(profile, { env: { ImageOS: VS2026, ImageVersion: "20260929.1" } });
+    check(JSON.stringify(toolchainDifferences(vs, later)) === JSON.stringify(["image.image_version"]) && vs.digest !== later.digest,
+      `${profile}: two ${VS2026} builds must differ in exactly image.image_version and by digest`);
+    const both = certFor(profile, { env: { ImageVersion: "20260929.1" } });
+    check(JSON.stringify(toolchainDifferences(both, vs)) === JSON.stringify(["image.image_os", "image.image_version"]),
+      `${profile}: another image and build must differ in both image facts`);
+  }
+});
+
+part("capture refusal", () => {
+  // Capture refuses every near-miss, by name.
+  for (const profile of ["windows-go", "windows-node"]) {
+    for (const ImageOS of IMAGE_OS_REFUSED) {
+      const err = threw(() => certFor(profile, { env: { ImageOS } }));
+      check(err instanceof ToolchainUnknown && /^ImageOS is not in a recognised shape/.test(err.message),
+        `${profile} captured ImageOS ${JSON.stringify(ImageOS)}: ${err?.message ?? "a certificate"}`);
+    }
+  }
+});
+
+// The schema, independently of capture: a legacy certificate re-labelled and
+// re-digested, so only the image_os shape can refuse it.
+const relabel = (profile, imageOs) => {
+  const c = structuredClone(certFor(profile));
+  c.toolchain.image.image_os = imageOs;
+  c.digest = toolchainDigest(c.binding.profile, c.toolchain);
+  return threw(() => validateCertificate(c, REGISTRY));
+};
+part("schema", () => {
+  for (const profile of ["windows-go", "windows-node"]) {
+    const ok = relabel(profile, VS2026);
+    check(ok === null, `the schema refused a ${profile} certificate on ${VS2026}: ${ok?.message}`);
+    for (const imageOs of IMAGE_OS_REFUSED) {
+      const err = relabel(profile, imageOs);
+      check(err instanceof ToolchainUnknown && err.message === `a ${profile} certificate's image component is malformed`,
+        `the schema accepted a ${profile} certificate with image_os ${JSON.stringify(imageOs)}: ${err?.message}`);
+    }
+  }
+});
+
+part("one-grammar", () => {
+  // Capture and schema are one grammar: each value is admitted by both or by neither.
+  for (const imageOs of [...IMAGE_OS_ADMITTED, ...IMAGE_OS_REFUSED]) {
+    const captured = threw(() => certFor("windows-go", { env: { ImageOS: imageOs } })) === null;
+    const schema = relabel("windows-go", imageOs) === null;
+    check(captured === schema && captured === IMAGE_OS_ADMITTED.includes(imageOs),
+      `ImageOS ${JSON.stringify(imageOs)}: capture ${captured ? "admits" : "refuses"}, schema ${schema ? "admits" : "refuses"}`);
+  }
+});
+
+// ── 3c. Windows npm, through cmd.exe ────────────────────────────────────────
+// npm on Windows is npm.cmd; spawned directly (no shell) Node refuses it with
+// EINVAL, so no windows-node certificate could ever be written. It runs as one
+// fixed argv through cmd.exe; Unix keeps `npm --version`. The mock above refuses
+// a direct batch spawn exactly as realExec on Windows does.
+
+const NPM_CMD = ["cmd", "/d", "/c", "npm.cmd", "--version"];
+const traced = (profile, overrides = {}) => {
+  const r = runner(osOf(profile), overrides);
+  const cert = capture({ registry: REGISTRY, profileName: profile, role: "source", laneId: "web", jobId: "test", env: r.env, exec: r.exec,
+    readFile: r.readFile, exists: r.exists, listDir: r.listDir, realpath: r.realpath, now: () => new Date("2026-10-01T14:20:00Z"),
+    resolveChrome: r.resolveChrome, digestFile: r.digestFile, root: repoRoot });
+  return { cert, calls: r.calls.map((c) => c.argv) };
+};
+const npmCalls = (calls) => calls.filter((a) => a.some((t) => /npm/i.test(t)));
+
+part("Windows mock semantics", () => {
+  const w = runner("Windows");
+  for (const argv of [["npm.cmd", "--version"], ["NPM.CMD", "--version"], ["npm.bat", "--version"]]) {
+    const err = threw(() => w.exec(argv));
+    check(err instanceof ToolchainUnknown && err.message === `${argv[0]} could not run: EINVAL`, `the Windows mock spawned the batch file ${argv[0]} directly`);
+  }
+  check(w.exec(["npm", "--version"]).status === 127, "the Windows mock resolved a bare npm");
+  const fixed = w.exec(NPM_CMD);
+  check(fixed.status === 0 && fixed.stdout === "11.6.0\r\n", "the Windows mock does not answer the fixed cmd.exe route");
+  check(w.exec(["cmd /d /c npm.cmd --version"]).status === 127, "the Windows mock ran a whole command line as a program name");
+  check(runner("Linux").exec(["npm", "--version"]).status === 0 && runner("Linux").exec(NPM_CMD).status === 127,
+    "the Unix mock does not answer exactly npm --version");
+});
+
+part("Windows npm argv", () => {
+  for (const ImageOS of ["win25", VS2026]) {
+    const { cert, calls } = traced("windows-node", { env: { ImageOS } });
+    check(cert.toolchain.node.npm === "11.6.0", `windows-node on ${ImageOS} did not record npm through cmd.exe`);
+    check(JSON.stringify(npmCalls(calls)) === JSON.stringify([NPM_CMD]),
+      `windows-node on ${ImageOS} ran npm as ${JSON.stringify(npmCalls(calls))}, want exactly the fixed ${JSON.stringify(NPM_CMD)}`);
+    check(calls.every((a) => Array.isArray(a) && a.length > 0 && a.every((t) => typeof t === "string") && !/\s/.test(a[0]) && !/\.(cmd|bat)$/i.test(a[0])),
+      `windows-node on ${ImageOS} spawned a batch file or a command string: ${JSON.stringify(calls)}`);
+  }
+  for (const profile of ["linux-node", "linux-node-chrome", "linux-node-go-chrome", "macos-xcode-node-go-chrome"]) {
+    const { calls } = traced(profile);
+    check(JSON.stringify(npmCalls(calls)) === JSON.stringify([["npm", "--version"]]) && !calls.some((a) => a[0] === "cmd"),
+      `${profile} ran npm as ${JSON.stringify(npmCalls(calls))}, want exactly ["npm","--version"]`);
+  }
+});
+
+part("Windows npm equality", () => {
+  for (const ImageOS of ["win25", VS2026]) {
+    const env = { ImageOS };
+    const source = certFor("windows-node", { env });
+    const current = certFor("windows-node", { env: { ...env, CI_EVIDENCE_JOB_INDEX: undefined, CI_EVIDENCE_JOB_TOTAL: undefined } }, "current");
+    check(source.digest === current.digest && toolchainDifferences(source, current).length === 0 && current.binding.role === "current",
+      `windows-node on ${ImageOS}: a source and a current capture of one toolchain do not compare equal`);
+    const newer = certFor("windows-node", { env, out: { "cmd /d /c npm.cmd --version": "11.6.1\r\n" } });
+    check(JSON.stringify(toolchainDifferences(source, newer)) === JSON.stringify(["node.npm"]) && source.digest !== newer.digest,
+      `windows-node on ${ImageOS}: another npm must differ in exactly node.npm and by digest`);
+  }
+});
+
 // ── 4. the registry ─────────────────────────────────────────────────────────
 
 for (const [what, patch, expect] of [
@@ -482,4 +675,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(`ci-evidence-toolchain-test: OK (${checks} checks: ${Object.keys(REGISTRY.profiles).length} profiles captured and stable; `
-  + `${UNKNOWNS.length} unknown toolchains refused; schema/digest/comparison/registry/CLI/budget controls; live: ${live})`);
+  + `${UNKNOWNS.length} unknown toolchains refused; ${VS2026} admitted and ${IMAGE_OS_REFUSED.length} near-miss ImageOS values refused at capture and schema; `
+  + `schema/digest/comparison/registry/CLI/budget controls; live: ${live})`);

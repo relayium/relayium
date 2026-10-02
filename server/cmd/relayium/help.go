@@ -18,19 +18,32 @@ import (
 // at the bottom of this file are what make every one of them reachable through
 // all three forms.
 
-// linkRelayPolicy states, once for every command that can link, what decides
-// whether the bytes are relayed — which is also what decides whether the code
-// owner's relay allowance is spent. It mirrors linkrtc.ChooseRTCConfig (the
-// Web's chooseRtcConfig): relay-only WHENEVER a TURN relay was issued, with no
-// direct-first attempt, even on one LAN. TestLinkRelayPolicyHelpMatchesTheCode
-// holds the two together; change them together (A09c ice-direct/1 owns any
-// direct-first policy).
+// linkRelayPolicy states, once for every command that can link, two separate
+// things. Routing: what decides whether the bytes are relayed. It mirrors
+// linkrtc.ChooseRTCConfig (the Web's chooseRtcConfig): relay-only WHENEVER a
+// TURN relay was issued, with no direct-first attempt, even on one LAN.
+// TestLinkRelayPolicyHelpMatchesTheCode holds the two together; change them
+// together (A09c ice-direct/1 owns any direct-first policy). Billing: being
+// relayed is not what spends the code owner's relay allowance — only relay
+// traffic the server records as billable does. Relay bytes that are not
+// metered, or only measured (coturn metering in shadow mode, or its billable
+// mode before the activation time), are never written to the billable ledger
+// (usage_events / usage_periods) and never spend the allowance — shadow
+// measurements and coturn bindings are still recorded, just not billed; see
+// docs/billing-transparency.md. The help states that condition rather than
+// today's rollout, so it stays true when metering is activated.
+// TestLinkRelayPolicyHelpSeparatesRoutingFromBilling pins that wording.
 const linkRelayPolicy = `Relay and your allowance: whenever the server issues a TURN relay for the
 code, a link sends every byte through that relay, even when the two ends could
-reach each other directly (on one LAN, too), and relayed traffic counts toward
-the code owner's relay allowance; the relay carries only ciphertext it cannot
-read. Only when no relay is issued (none configured, or the allowance is used
-up) does the link go peer to peer, and then it needs a direct path.`
+reach each other directly (on one LAN, too); the relay carries only ciphertext
+it cannot read. Only when no relay is issued (none configured, or the
+allowance is used up) does the link go peer to peer, and then it needs a
+direct path. Being relayed is not the same as being billed: only relay traffic
+the server records as billable counts toward the code owner's relay allowance.
+Relay traffic that is not metered, or only measured without being billed
+(shadow mode), does not count, and a direct link uses none of it. There is no
+per-transfer charge: billable relay traffic draws down that monthly allowance,
+which a plan sets.`
 
 const pairUsage = `relayium pair — a live, two-way session with another device
 

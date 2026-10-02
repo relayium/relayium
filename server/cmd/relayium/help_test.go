@@ -286,12 +286,13 @@ func TestUsageListsPairAndHidesTheDeveloperCommand(t *testing.T) {
 	}
 }
 
-// The relay sentence is a billing statement: it says when the code owner's
-// relay allowance is spent. It must say what linkrtc.ChooseRTCConfig does —
-// relay-only whenever a TURN server was issued, peer to peer otherwise — in
-// every command that can link, and no help may claim a direct-first policy.
-// If the policy changes (A09c ice-direct/1), this test fails until the help
-// changes with it.
+// The relay sentence is a routing statement: it says when the bytes go through
+// a relay. It must say what linkrtc.ChooseRTCConfig does — relay-only whenever
+// a TURN server was issued, peer to peer otherwise — in every command that can
+// link, and no help may claim a direct-first policy. If the policy changes
+// (A09c ice-direct/1), this test fails until the help changes with it. Whether
+// relayed bytes spend the code owner's allowance is a separate, billing
+// question; TestLinkRelayPolicyHelpSeparatesRoutingFromBilling owns it.
 func TestLinkRelayPolicyHelpMatchesTheCode(t *testing.T) {
 	turn := linkrtc.ICEConfig{ICEServers: []linkrtc.ICEServer{
 		{URLs: []string{"stun:stun.example:3478"}},
@@ -324,6 +325,51 @@ func TestLinkRelayPolicyHelpMatchesTheCode(t *testing.T) {
 			"otherwise through a TURN relay", "direct-first"} {
 			if strings.Contains(flat, banned) {
 				t.Errorf("%s -h claims a direct-first policy (%q) the code does not have", cmd, banned)
+			}
+		}
+	}
+}
+
+// Routing is not billing. Only relay traffic the server records as billable
+// spends the code owner's allowance: a relay with no metering, or metering
+// that only measures (coturn shadow mode, docs/billing-transparency.md), bills
+// nothing, a direct link spends nothing, and nothing is charged per transfer.
+// The help must say so in every command that can link, without promising that
+// relaying is free and without the old claim that every relayed byte counts.
+func TestLinkRelayPolicyHelpSeparatesRoutingFromBilling(t *testing.T) {
+	for _, cmd := range []string{"pair", "send", "receive", "text"} {
+		var stdout, stderr bytes.Buffer
+		if rc := Run([]string{cmd, "-h"}, &stdout, &stderr); rc != 0 {
+			t.Fatalf("%s -h: rc = %d", cmd, rc)
+		}
+		flat := strings.Join(strings.Fields(stdout.String()), " ")
+		for _, n := range []string{
+			"Being relayed is not the same as being billed",
+			"only relay traffic the server records as billable counts toward the code owner's relay allowance",
+			"only measured without being billed (shadow mode), does not count",
+			"a direct link uses none of it",
+			"There is no per-transfer charge",
+			"billable relay traffic draws down that monthly allowance",
+		} {
+			if !strings.Contains(flat, n) {
+				t.Errorf("%s -h does not state %q", cmd, n)
+			}
+		}
+		lower := strings.ToLower(flat)
+		for _, banned := range []string{
+			"relayed traffic counts toward",
+			"every relayed byte counts",
+			"all relayed traffic counts",
+			"relay traffic is free",
+			"relayed traffic is free",
+			"relaying is free",
+			"relays are free",
+			"relay is free",
+			"never billed",
+			"never counts",
+		} {
+			if strings.Contains(lower, banned) {
+				t.Errorf("%s -h makes an unconditional billing claim (%q)", cmd, banned)
 			}
 		}
 	}

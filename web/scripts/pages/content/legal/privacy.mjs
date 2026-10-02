@@ -53,13 +53,13 @@ const en = {
     {
       heading: "Cross-network relay (TURN)",
       body: [
-        "Cross-network browser file and text sessions use a TURN server by design. TURN carries only end-to-end encrypted ciphertext and transport metadata. We attribute relayed-byte totals and timestamps to the code creator's account for quotas and abuse prevention, without inspecting message or file plaintext. CLI pairing-code sessions (files, text and pair) use TURN whenever the server issues a relay for the code, and their relayed bytes are attributed the same way. Live text requires both participants to be online; Relayium provides no offline delivery or server-side message history, though either endpoint may copy or retain what it receives.",
+        "Cross-network browser file and text sessions use a TURN server by design. TURN carries only end-to-end encrypted ciphertext and transport metadata. CLI pairing-code sessions (files, text and pair) use TURN whenever the server issues a relay for the code. For either kind of session, attribution depends on the relay: when a relay node Relayium operates reports billable usage, we attribute those relayed-byte totals and timestamps to the code creator's account for quotas and abuse prevention, without inspecting message or file plaintext. Relayium's coturn TURN servers bill nothing today and count toward no quota: their legacy usage ingest is disabled, and their optional accounting ingest is off by default. If configured in shadow mode, that ingest records per-allocation measurements that are kept with the code creator's account but never written to the billing ledger, usage periods or any quota. Live text requires both participants to be online; Relayium provides no offline delivery or server-side message history, though either endpoint may copy or retain what it receives.",
       ],
     },
     {
       heading: "Usage metering and quotas",
       body: [
-        "Paid plans mean the service has to count how much of it each account uses. While you are signed in, we keep a running per-account record of the bytes you upload and download through Relayium, the size of the ciphertext your stored links are holding, and the relayed-byte totals attributed to pairing codes you created. These counters outlive the transfer that produced them — we keep them as monthly per-account totals — because they are what enforces the usage, storage and relay quotas included in your plan, and what our billing and account records rest on. A paid subscription is a fixed price for a plan, not a per-byte charge.",
+        "Paid plans mean the service has to count how much of it each account uses. While you are signed in, we keep a running per-account record of the bytes you upload and download through Relayium, the size of the ciphertext your stored links are holding, and the billable relayed-byte totals that relays report for pairing codes you created. These counters outlive the transfer that produced them — we keep them as monthly per-account totals — because they are what enforces the usage, storage and relay quotas included in your plan, and what our billing and account records rest on. A paid subscription is a fixed price for a plan, not a per-byte charge.",
       ],
       bullets: [
         "What is recorded: byte volumes, stored-object sizes, and the times they were measured, linked to your account.",
@@ -185,13 +185,13 @@ const zh = {
     {
       heading: "跨网络中继（TURN）",
       body: [
-        "浏览器的跨网络文件与文本会话按设计使用 TURN。TURN 只承载端到端加密的密文和传输元数据。为执行配额并防止滥用，我们把中继字节总量与时间戳归属到配对码创建端的账号，但不检查消息或文件明文。CLI 配对码会话（文件、文本和 pair）在服务器为该码签发中继时使用 TURN，其中继字节按同样方式归属。实时文本要求双方同时在线；Relayium 不提供离线投递或服务器端消息历史，但任一端都可能复制或保留收到的内容。",
+        "浏览器的跨网络文件与文本会话按设计使用 TURN。TURN 只承载端到端加密的密文和传输元数据。CLI 配对码会话（文件、文本和 pair）在服务器为该码签发中继时使用 TURN。两种会话的归属都取决于中继：Relayium 运营的中继节点上报计费用量时，为执行配额并防止滥用，我们把这些中继字节总量与时间戳归属到配对码创建端的账号，但不检查消息或文件明文。Relayium 的 coturn TURN 服务器目前不计费，也不计入任何配额：它们旧的用量采集已停用，可选的计量采集默认关闭。如果配置为影子模式，这项采集会记录按分配统计的测量值，随配对码创建端的账号保存，但从不写入计费账本、用量周期或任何配额。实时文本要求双方同时在线；Relayium 不提供离线投递或服务器端消息历史，但任一端都可能复制或保留收到的内容。",
       ],
     },
     {
       heading: "用量计量与配额",
       body: [
-        "有付费套餐，服务就必须统计每个账号用了多少。在你登录期间，我们会按账号持续记录你经由 Relayium 上传和下载的字节量、你的暂存链接当前占用的密文大小，以及归属到你所创建配对码的中继字节总量。这些计数会在产生它们的那次传输结束后继续保留——我们按月以账号为单位保存这些累计值——因为正是它们在执行你套餐所含的用量、存储与中继配额，也是我们计费与账户记录的依据。付费订阅按套餐收取固定价格，不是按字节计费。",
+        "有付费套餐，服务就必须统计每个账号用了多少。在你登录期间，我们会按账号持续记录你经由 Relayium 上传和下载的字节量、你的暂存链接当前占用的密文大小，以及中继上报、归属到你所创建配对码的计费中继字节总量。这些计数会在产生它们的那次传输结束后继续保留——我们按月以账号为单位保存这些累计值——因为正是它们在执行你套餐所含的用量、存储与中继配额，也是我们计费与账户记录的依据。付费订阅按套餐收取固定价格，不是按字节计费。",
       ],
       bullets: [
         "会记录的：字节量、暂存对象大小，以及测量发生的时间，并与你的账号关联。",

@@ -49,11 +49,11 @@ const en = {
     {
       heading: "When browser files and text are relayed (TURN)",
       body: [
-        "Browser file and text transfers across networks — pairing-code sessions, including their join links — run through a TURN server by design, not as a fallback. Restrictive NATs and firewalls make a genuinely direct path unlikely there, so the app forces the relay route outright. Same-network browser sessions receive no relay credentials and connect directly. CLI pairing-code sessions (files, text and pair) use TURN whenever the server issues a relay for the code, even when a direct path exists, and their relayed bytes count toward the code creator's monthly relay allowance; only when no relay is issued do they connect directly, failing if no direct path can be found. The CLI's server-to-server push and sync never use TURN.",
+        "Browser file and text transfers across networks — pairing-code sessions, including their join links — run through a TURN server by design, not as a fallback. Restrictive NATs and firewalls make a genuinely direct path unlikely there, so the app forces the relay route outright. Same-network browser sessions receive no relay credentials and connect directly. CLI pairing-code sessions (files, text and pair) use TURN whenever the server issues a relay for the code, even when a direct path exists, and their relayed bytes count toward the code creator's monthly relay allowance when the relay reports them as billable usage — the relay nodes Relayium operates do, while Relayium's coturn TURN servers bill nothing today — their legacy usage ingest is disabled, and their optional accounting ingest is off by default and, if configured in shadow mode, records measurements without writing to the billing ledger, usage periods or any allowance; only when no relay is issued do they connect directly, failing if no direct path can be found. The CLI's server-to-server push and sync never use TURN.",
       ],
       bullets: [
         "The relay forwards only ciphertext — it cannot read your files or messages, which stay end-to-end encrypted.",
-        "We record the number of relayed bytes per account, to enforce a monthly relay allowance and prevent abuse — we never inspect what is relayed, only the byte count.",
+        "We record billable relayed-byte counts per account — those the relay nodes Relayium operates report — to enforce a monthly relay allowance and prevent abuse; we never inspect what is relayed, only the byte count. Relayium's coturn TURN servers bill nothing today — their legacy usage ingest is disabled, and their optional accounting ingest is off by default and, if configured in shadow mode, records measurements without writing to the billing ledger, usage periods or any allowance.",
         "We never inspect relayed content.",
       ],
     },
@@ -168,11 +168,11 @@ const zh = {
     {
       heading: "浏览器文件与文本何时会经中继转发（TURN）",
       body: [
-        "浏览器的跨网络文件和文本传输——即配对码会话（含其生成的加入链接）——按设计经 TURN 服务器中继，而不是作为兜底手段。受限的 NAT 与防火墙让真正的直连希望渺茫，因此应用直接强制走中继路径。同一网络的浏览器会话不会获发中继凭证，走的是直连。CLI 配对码会话（文件、文本和 pair）只要服务器为该码签发了中继，就使用 TURN，即使存在直连路径也是如此，其中继字节计入配对码创建端账号的每月中继额度；只有在没有签发中继时才直连，找不到直连路径就失败。CLI 的服务器对服务器 push 与 sync 从不使用 TURN。",
+        "浏览器的跨网络文件和文本传输——即配对码会话（含其生成的加入链接）——按设计经 TURN 服务器中继，而不是作为兜底手段。受限的 NAT 与防火墙让真正的直连希望渺茫，因此应用直接强制走中继路径。同一网络的浏览器会话不会获发中继凭证，走的是直连。CLI 配对码会话（文件、文本和 pair）只要服务器为该码签发了中继，就使用 TURN，即使存在直连路径也是如此；中继把其中继字节上报为计费用量时，计入配对码创建端账号的每月中继额度——Relayium 运营的中继节点会上报，而 Relayium 的 coturn TURN 服务器目前不计费——旧的用量采集已停用，可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值，不写入计费账本、用量周期或任何额度；只有在没有签发中继时才直连，找不到直连路径就失败。CLI 的服务器对服务器 push 与 sync 从不使用 TURN。",
       ],
       bullets: [
         "中继只转发密文——它无法读取你的文件或消息，内容始终保持端到端加密。",
-        "我们按账号记录中继字节数，用于执行每月中继额度限制并防止滥用——我们绝不检查中继的内容，只记录字节数。",
+        "我们按账号记录计费中继字节数——即 Relayium 运营的中继节点上报的部分——用于执行每月中继额度限制并防止滥用；我们绝不检查中继的内容，只记录字节数。Relayium 的 coturn TURN 服务器目前不计费——旧的用量采集已停用，可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值，不写入计费账本、用量周期或任何额度。",
         "我们绝不检查中继内容。",
       ],
     },
