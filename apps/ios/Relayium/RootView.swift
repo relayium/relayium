@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import RelayiumAppKit
 
@@ -126,6 +127,11 @@ struct RootView: View {
 
     var body: some View {
         shellBody
+            // Acceptance diagnostics only, and absent from every other launch:
+            // `NavigationTrace.shared` is nil unless a Debug build was launched
+            // with BOTH the UI-testing flag and the trace flag, and then this
+            // builds nothing. See `NavigationTrace` for what it may record.
+            .background(alignment: .topLeading) { navigationTraceProbe }
             // Applied to the shell itself, so it reaches every control on every
             // surface AND the tab bar or sidebar — a surface the user could
             // still switch to would be a surface they could still act in. It is
@@ -451,7 +457,15 @@ struct RootView: View {
     /// surface's route by construction.
     private var surfaceSelection: Binding<AppDestination> {
         Binding(get: { shell.placement.backgroundRoute },
-                set: { navigation.select($0) })
+                set: { next in
+                    // Inert unless the acceptance trace is on; the write itself
+                    // is the same single `select` either way.
+                    NavigationTrace.shared?.record("tab-before", requested: next,
+                                                   navigation: navigation, shell: shell)
+                    navigation.select(next)
+                    NavigationTrace.shared?.record("tab-after", requested: next,
+                                                   navigation: navigation, shell: shell)
+                })
     }
 
     /// The sidebar's selection. The same binding as the tab bar's, made optional
@@ -460,7 +474,14 @@ struct RootView: View {
     /// there is no "no destination" state for the detail column to draw.
     private var sidebarSelection: Binding<AppDestination?> {
         Binding(get: { shell.placement.backgroundRoute },
-                set: { if let next = $0 { navigation.select(next) } })
+                set: {
+                    guard let next = $0 else { return }
+                    NavigationTrace.shared?.record("side-before", requested: next,
+                                                   navigation: navigation, shell: shell)
+                    navigation.select(next)
+                    NavigationTrace.shared?.record("side-after", requested: next,
+                                                   navigation: navigation, shell: shell)
+                })
     }
 
     /// Whether the stored-link screen is up.
@@ -476,6 +497,21 @@ struct RootView: View {
                     guard !presented else { return }
                     navigation.select(shell.placement.backgroundRoute)
                 })
+    }
+
+    // MARK: - opt-in acceptance trace
+
+    /// The trace's only on-screen footprint: one 1-point, non-hit-testable
+    /// accessibility element in the top-leading corner, behind the shell. It
+    /// exists only while `NavigationTrace.shared` does, so every ordinary
+    /// launch — Release, the app run by hand, every other UI test — builds
+    /// nothing here at all.
+    @ViewBuilder
+    private var navigationTraceProbe: some View {
+        if let trace = NavigationTrace.shared {
+            NavigationTraceProbe(trace: trace)
+                .onAppear { trace.attach(navigation: navigation, shell: shell) }
+        }
     }
 
     // MARK: - what each surface is called
@@ -512,5 +548,172 @@ struct RootView: View {
         case .account:              return L10n.t(.navAccountSubtitle)
         case .storedReceive:        return L10n.t(.navStoredReceive)
         }
+    }
+}
+
+// MARK: - opt-in acceptance navigation trace
+
+/// A bounded record of navigation writes, for one acceptance case that needs to
+/// see whether a tab tap reached the selection setter at all.
+///
+/// **What it may contain, and nothing else:** route and surface names, the
+/// navigation model's `selectionWrites` counter, and the shell placement's
+/// background and presented surfaces. No account, token, file, link, peer or
+/// content value is read, so none can be recorded. It is not a log: the app
+/// layer does not log (`IOSSurfaceGuardTests`), and nothing here writes to one.
+/// The only way out is the accessibility value of `NavigationTraceProbe`, which
+/// the UI-test helper reads and attaches to its own result.
+///
+/// **When it exists:** a Debug build, launched with `--relayium-ui-testing` AND
+/// `--relayium-ui-testing-navigation-trace`. Either flag alone resolves `shared`
+/// to nil, and every call site is `shared?.…`. A Release build compiles the
+/// argument check out and resolves `shared` to nil unconditionally; the two
+/// string constants remain, unread.
+///
+/// It decides nothing: it never writes the selection and never gates or
+/// rejects a write, and the root view does not observe it — only the 1-point
+/// probe does — so recording does not re-render the shell. It is not free of
+/// timing effects when ON: each setter records synchronously before and after
+/// its one `select`, two extra subscribers run on every selection and
+/// placement change, and the probe re-renders as entries arrive. When OFF
+/// (`shared` nil) each setter only evaluates a nil optional twice and the
+/// background builds no view.
+@MainActor
+final class NavigationTrace: ObservableObject {
+    // nonlocalized: a test-only launch argument; only a Debug build reads it
+    static let argument = "--relayium-ui-testing-navigation-trace"
+    // nonlocalized: an accessibility identifier only acceptance reads
+    static let identifier = "relayium-navigation-trace"
+    /// In memory: oldest entries are dropped beyond this. The exported value
+    /// is bounded separately, by `NavigationTraceSummary.budget`.
+    static let capacity = 32
+
+    static let shared: NavigationTrace? = {
+        #if DEBUG
+        guard UITestMode.isActive,
+              ProcessInfo.processInfo.arguments.contains(argument) else { return nil }
+        return NavigationTrace()
+        #else
+        return nil
+        #endif
+    }()
+
+    @Published private(set) var entries: [String] = []
+    private var sequence = 0
+    private var attached = false
+    private var subscriptions: Set<AnyCancellable> = []
+
+    private init() {}
+
+    /// Observe later selection and placement changes as well as the writes the
+    /// bindings report. Idempotent: a rebuilt root re-appears and must not
+    /// subscribe twice.
+    func attach(navigation: AppNavigationModel, shell: IOSShellModel) {
+        guard !attached else { return }
+        attached = true
+        append("attach", requested: nil, navigation: navigation, shell: shell)
+        // `@Published` emits in `willSet`, so the emitted value is the NEW one
+        // while the model still holds the old; both are recorded.
+        navigation.$selection
+            .sink { [weak self, weak navigation, weak shell] next in
+                guard let self, let navigation, let shell else { return }
+                self.append("sel-will", requested: next,
+                            navigation: navigation, shell: shell)
+            }
+            .store(in: &subscriptions)
+        shell.$placement
+            .sink { [weak self, weak navigation] next in
+                guard let self, let navigation else { return }
+                self.append("plc-will", requested: nil, navigation: navigation,
+                            placement: next)
+            }
+            .store(in: &subscriptions)
+    }
+
+    func record(_ event: String, requested: AppDestination,
+                navigation: AppNavigationModel, shell: IOSShellModel) {
+        append(event, requested: requested, navigation: navigation, shell: shell)
+    }
+
+    /// What the probe exports: newest entries first, whole entries only, within
+    /// `NavigationTraceSummary.budget` characters. A real iOS 26.5 readback
+    /// of the oldest-first r3 join returned the same 512-character PREFIX at
+    /// every phase — boot events only, never a tab write — so the export is
+    /// both bounded below that and ordered so a cut can only lose the oldest.
+    var summary: String {
+        NavigationTraceSummary.render(newestLast: entries, total: sequence)
+    }
+
+    private func append(_ event: String, requested: AppDestination?,
+                        navigation: AppNavigationModel, shell: IOSShellModel) {
+        append(event, requested: requested, navigation: navigation,
+               placement: shell.placement)
+    }
+
+    private func append(_ event: String, requested: AppDestination?,
+                        navigation: AppNavigationModel, placement: IOSShellPlacement) {
+        sequence += 1
+        // Short keys so more whole entries fit the export budget:
+        // r = requested route, s = navigation.selection, w = selectionWrites,
+        // bg / pr = the shell placement's background / presented surface.
+        let entry = "#\(sequence) \(event)"
+            + " r=\(requested?.rawValue ?? "-")"
+            + " s=\(navigation.selection.rawValue)"
+            + " w=\(navigation.selectionWrites)"
+            + " bg=\(placement.background.rawValue)"
+            + " pr=\(placement.presented?.rawValue ?? "-")"
+        entries.append(entry)
+        if entries.count > Self.capacity {
+            entries.removeFirst(entries.count - Self.capacity)
+        }
+    }
+}
+
+/// The trace's export format, kept free of any app type so it can be compiled
+/// and exercised on its own.
+///
+/// Output: `n=<total> newest-first: <newest> | <older> | … | +<k> older
+/// omitted`. Entries are taken newest first and only ever whole; the marker
+/// appears whenever anything — including entries already dropped from the
+/// in-memory ring — is not shown, and its length is reserved before an entry
+/// is admitted, so the result never exceeds `budget`.
+enum NavigationTraceSummary {
+    /// Comfortably below the 512 characters a real readback returned.
+    static let budget = 480
+
+    static func render(newestLast entries: [String], total: Int,
+                       budget: Int = budget) -> String {
+        let header = "n=\(total) newest-first:"
+        func marker(_ omitted: Int) -> String {
+            // nonlocalized: acceptance-only diagnostic marker, never shown to a user
+            omitted > 0 ? " | +\(omitted) older omitted" : ""
+        }
+        var shown: [String] = []
+        var used = header.count
+        for entry in entries.reversed() {
+            let cost = 1 + (shown.isEmpty ? 0 : 2) + entry.count
+            let omittedAfter = total - (shown.count + 1)
+            if used + cost + marker(omittedAfter).count > budget { break }
+            shown.append(entry)
+            used += cost
+        }
+        let body = shown.isEmpty ? "" : " " + shown.joined(separator: " | ")
+        return header + body + marker(total - shown.count)
+    }
+}
+
+/// The trace's one accessibility element. Not hit-testable, one point square,
+/// and drawn as `Color.clear` behind the shell, so it takes no touch, covers no
+/// control and moves no layout.
+private struct NavigationTraceProbe: View {
+    @ObservedObject var trace: NavigationTrace
+
+    var body: some View {
+        Color.clear
+            .frame(width: 1, height: 1)
+            .allowsHitTesting(false)
+            .accessibilityElement()
+            .accessibilityIdentifier(NavigationTrace.identifier)
+            .accessibilityValue(trace.summary)
     }
 }

@@ -1474,7 +1474,15 @@ final class AppShellUITests: XCTestCase {
                // The stored-link screen is presented rather than browsed to, so
                // it is reached at launch and dismissed below before the
                // browseable destinations are visited.
-               "--relayium-ui-testing-open-stored-link"]
+               "--relayium-ui-testing-open-stored-link",
+               // Diagnostics only: the hosted iOS 18.5 run tapped the Device
+               // Inbox tab here and stayed on Nearby. Beside the
+               // `--relayium-ui-testing` above, this makes `open` attach the
+               // tab state and the app's own record of selection writes. The
+               // tap, the waits and the assertions are the original ones, but
+               // the extra queries shift timing, so a pass here does not show
+               // the hosted failure is fixed.
+               Shell.navigationTraceArgument]
         app.launch()
 
         // The stored link's Open, the Device Inbox's account route, Nearby's
