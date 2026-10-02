@@ -328,22 +328,48 @@ final class RelayNegotiatorTests: XCTestCase {
     /// `waited=` field conflates: time spent on our OWN probes, independent of
     /// whether or when the peer shows up. Nil until `start()`'s measurement
     /// actually finishes, then latched.
+    ///
+    /// A returned choice is NOT that finish. A sole relay that has answered
+    /// settles the room through `RelayChoice.dominates` from inside `record`,
+    /// before `measure` has returned and `finishMeasurement` has run — the
+    /// order this test used to assume the other way round, and lost on CI. So
+    /// the measurement holds itself open behind `returned` after publishing,
+    /// and the test pins both sides of that edge rather than racing it. The
+    /// clock is injected so the latched value is exact rather than "some".
+    ///
+    /// Nothing between `start()` and `returned.open()` can leave the test early:
+    /// every wait before it is bounded and every check is a non-throwing
+    /// assertion, so a failure still releases the measurement.
     func testMeasuredMsIsNilUntilOurOwnMeasurementFinishesThenLatches() async {
         let ch = FakeWebSocketChannel()
         let sig = SignalingClient(channel: ch, name: "Mac")
         ch.fireOpen()
+        let clock = TestClock()
+        let returned = Gate()
         let n = RelayNegotiator(signaling: sig, pool: pool(["slow"]),
+                                now: clock.read,
                                 measure: { _, publish in
-            try? await Task.sleep(nanoseconds: 200_000_000)
             publish("slow", 5)
+            await returned.wait()
         })
         n.start()
         XCTAssertNil(n.measuredMs(), "our own measurement has not finished yet")
-        // A peer map already in hand means `waitForChoice` wakes the instant
-        // our own measurement finishes rather than running the full deadline.
+
+        let published = await eventually { n.maps().mine == ["slow": 5] }
+        XCTAssertTrue(published, "the sole relay's result must be recorded")
         n.handleSignal(from: "peer", data: RelayRttMessage.encode(["slow": 8]))
-        _ = await n.waitForChoice(deadline: 2.0)
-        XCTAssertNotNil(n.measuredMs(), "our own measurement has finished by now")
+        let chosen = await n.waitForChoice(deadline: 2.0)
+        XCTAssertEqual(chosen?.id, "slow")
+        XCTAssertNil(n.measuredMs(),
+                     "a settled choice is not a finished measurement: `measure` has not returned")
+
+        clock.advance(ms: 1_000)
+        await returned.open()
+        let finished = await eventually { n.measuredMs() != nil }
+        XCTAssertTrue(finished, "our own measurement has finished by now")
+        XCTAssertEqual(n.measuredMs(), 1_000, "start() to finishMeasurement, on the injected clock")
+        clock.advance(ms: 1_000)
+        XCTAssertEqual(n.measuredMs(), 1_000, "latched once, never recomputed from the clock")
     }
 
     /// The case the log line's "unfinished" representation exists for: the

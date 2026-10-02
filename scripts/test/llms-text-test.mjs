@@ -9,6 +9,18 @@ import { readFileSync } from "node:fs";
 const llms = readFileSync(new URL("../../web/public/llms.txt", import.meta.url), "utf8");
 const homepage = readFileSync(new URL("../../web/index.html", import.meta.url), "utf8");
 const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
+const billing = readFileSync(new URL("../../docs/billing-transparency.md", import.meta.url), "utf8");
+// The newest published CLI is the top row of /releases, which releases.test.mjs
+// holds to the real `v*` tags. Read as text: the module resolves a manifest from
+// the web root at import, and this check runs from the repository root.
+const releasesSource = readFileSync(new URL("../../web/scripts/pages/content/releases.mjs", import.meta.url), "utf8");
+const PUBLISHED_CLI = /export const RELEASES = \[\s*\{ version: "(v\d+\.\d+\.\d+)"/.exec(releasesSource)?.[1];
+// History, not the newest release: the last CLI whose pairing-code modes are
+// direct-only, and the first that pairs over the relayed link. A v0.27.0 binary
+// still falls back to the direct-only pairing against an older CLI peer.
+const LAST_DIRECT_ONLY_CLI = "v0.26.0";
+const FIRST_LINK_CLI = "v0.27.0";
+const flat = (text) => text.replace(/\s+/g, " ");
 
 describe("llms.txt file and ephemeral text product facts", () => {
   it("positions text as online-only, bounded, and not server-stored", () => {
@@ -75,20 +87,29 @@ describe("llms.txt file and ephemeral text product facts", () => {
     assert.ok(llms.includes("cross-network browser file and text sessions carry end-to-end encrypted ciphertext through TURN by design"));
     assert.ok(llms.includes("CLI text uses a separate direct-only protocol"));
     assert.ok(llms.includes("CLI text is direct-only and does not use TURN"));
-    // Direct-only is a fact about the published CLI (v0.26.0) and its older
-    // pairing, not about the CLI: the next release candidate's pairing-code
-    // sessions relay whenever a TURN relay is issued. Every sentence that calls
-    // CLI pairing or CLI text direct-only must carry that version scope, and the
-    // candidate must not be presented as a published version.
-    assert.ok(llms.includes("In the published CLI (v0.26.0), CLI text uses a separate direct-only protocol"));
-    assert.ok(llms.includes("in the published CLI (v0.26.0), CLI text is direct-only and does not use TURN"));
+    // Direct-only is a fact about CLI v0.26.0 and earlier, and about the older
+    // pairing a current CLI falls back to against such a peer — not about the
+    // CLI: since v0.27.0 pairing-code sessions relay whenever a TURN relay is
+    // issued. Every sentence that calls CLI pairing or CLI text direct-only must
+    // carry that historical scope, and the relayed link must be described as the
+    // newest published release, not as an unreleased candidate.
+    assert.match(PUBLISHED_CLI ?? "", /^v\d+\.\d+\.\d+$/, "the newest /releases row could not be read");
+    assert.notEqual(PUBLISHED_CLI, LAST_DIRECT_ONLY_CLI, "the newest published CLI is still the direct-only one");
+    assert.ok(llms.includes(`In the published CLI (${PUBLISHED_CLI}), CLI pairing-code sessions use an end-to-end encrypted link that goes through a TURN relay whenever the server issues one`));
+    assert.ok(llms.includes(`In CLI ${LAST_DIRECT_ONLY_CLI} and earlier, and with an older CLI peer, CLI text uses a separate direct-only protocol`));
+    assert.ok(llms.includes(`in CLI ${LAST_DIRECT_ONLY_CLI} and earlier, and with an older CLI peer, CLI text is direct-only and does not use TURN`));
     for (const sentence of llms.split(/(?<=[.!?])\s+/)) {
       if (/\bCLI\b/.test(sentence) && /direct-only/.test(sentence)) {
-        assert.match(sentence, /published CLI \(v0\.26\.0\)/, `unscoped CLI direct-only claim: ${sentence}`);
+        assert.ok(sentence.includes(`CLI ${LAST_DIRECT_ONLY_CLI} and earlier`), `unscoped CLI direct-only claim: ${sentence}`);
       }
     }
-    assert.ok(llms.includes("from the next CLI release candidate (source on main, not yet a published release)"));
-    assert.doesNotMatch(llms, /\bv?0\.27(\.\d+)?\b/);
+    // Every "published CLI" names the newest release, and the pre-release
+    // wording is gone rather than left beside it.
+    const named = [...llms.matchAll(/published CLI(?:'s)?(?: \(([^)]*)\))?/g)];
+    assert.ok(named.length > 0);
+    for (const m of named) assert.equal(m[1], PUBLISHED_CLI, `"${m[0]}" does not name the newest published CLI`);
+    for (const stale of [/next CLI release/i, /release candidate/i, /source on main/i, /not yet a published release/i])
+      assert.doesNotMatch(llms, stale);
     assert.doesNotMatch(llms, /(?:file|message|realtime) bytes (?:never|do not) touch the server/i);
     assert.doesNotMatch(llms, /all realtime transfers .*need no account/i);
   });
@@ -96,10 +117,12 @@ describe("llms.txt file and ephemeral text product facts", () => {
   it("keeps browser and CLI SAS constructions protocol-specific", () => {
     assert.ok(llms.includes("derived from the two X25519 endpoint public keys"));
     assert.ok(llms.includes("derived from the two pinned TLS certificate fingerprints"));
-    // The pinned-TLS SAS belongs to the published CLI's direct pairing; the
-    // candidate's link derives its SAS from the exchanged keys. Neither is the
+    // The pinned-TLS SAS belongs to the older direct CLI pairing; the published
+    // CLI's link derives its SAS from the exchanged keys. Neither is the
     // browser's X25519 construction.
-    assert.ok(llms.includes("The pinned-TLS SAS belongs to the published CLI's (v0.26.0) direct pairing"));
+    assert.ok(llms.includes(`The pinned-TLS SAS belongs to the older direct CLI pairing (CLI ${LAST_DIRECT_ONLY_CLI} and earlier, or an older CLI peer)`));
+    assert.ok(llms.includes(`in the published CLI (${PUBLISHED_CLI}), a CLI session with a current relayium, an app or the web page runs over an end-to-end encrypted link`));
+    assert.ok(llms.includes("The older CLI-to-CLI pairing uses a separate SAS derived from the two pinned TLS certificate fingerprints"));
     assert.ok(llms.includes("whose 6-digit SAS is derived from the keys the two ends exchanged"));
     assert.doesNotMatch(llms, /CLI[^.]{0,80}X25519/);
     assert.ok(llms.includes("authenticate endpoints rather than proving that no server or TURN relay exists"));
@@ -294,6 +317,47 @@ describe("llms.txt file and ephemeral text product facts", () => {
     ]) {
       assert.ok(llms.includes(url), `${url} is not linked`);
     }
+  });
+
+  // The README and the billing document make the same publication claims as
+  // this file, and went stale together when v0.27.0 shipped: both kept calling
+  // the relayed link, `pair` and `inbox send` an unreleased "next CLI release
+  // candidate" after it was the published CLI. Same rule here: the newest
+  // published CLI is named, older behavior carries its version scope, and the
+  // pre-release wording does not come back.
+  it("states the CLI publication state in the README and the billing document", () => {
+    const r = flat(readme);
+    const b = flat(billing);
+    for (const [name, text] of [["README.md", r], ["billing-transparency.md", b]]) {
+      const named = [...text.matchAll(/published CLI(?:'s)?(?:,? \(?(v\d+\.\d+\.\d+)\)?)?/g)];
+      assert.ok(named.length > 0, `${name}: never names the published CLI`);
+      for (const m of named) assert.equal(m[1], PUBLISHED_CLI, `${name}: "${m[0]}" does not name the newest published CLI`);
+      for (const stale of [/next CLI release/i, /CLI release candidate/i, /not (?:yet )?in a published CLI release/i,
+        /in the source on `main` but not yet/i, /only the next release's help/i])
+        assert.doesNotMatch(text, stale, `${name}: pre-release CLI wording is back`);
+    }
+    // The README's direct-only sentence is the older pairing's limit, so the
+    // version scope has to come right before it.
+    const scope = `In CLI ${LAST_DIRECT_ONLY_CLI} and earlier, and in ${FIRST_LINK_CLI} against an older \`relayium\` CLI, it is cross-network and direct peer-to-peer`;
+    const at = r.indexOf(scope);
+    assert.ok(at >= 0, "README send/receive lost the version scope of the direct-only pairing");
+    const limit = r.indexOf("This mode is direct-only: with no direct path", at);
+    assert.ok(limit > at && limit - at < 400, "README's direct-only limit is not attached to the older pairing");
+    assert.ok(r.includes(`**In the published CLI (${PUBLISHED_CLI})**, the other end may be a current \`relayium\``));
+    assert.ok(r.includes(`**\`pair\` — a live two-way session (since CLI ${FIRST_LINK_CLI})**`));
+    assert.ok(r.includes(`In CLI ${LAST_DIRECT_ONLY_CLI} and earlier, the CLI's **Device Inbox is the receive side only**`));
+    assert.ok(r.includes(`adds the sending side: \`relayium inbox send --to <device> <path...>\``));
+    assert.ok(r.includes(`SSH transport is **retired in the published CLI (${PUBLISHED_CLI})**`));
+    // The installer relayium.com serves follows the website deployment, not the
+    // CLI release, so its source-versus-served wording stays.
+    assert.ok(r.includes("The `install.sh` one-liner checks the same signature with `openssl`. In the source on `main` it refuses to install when `openssl` is missing"));
+    assert.ok(r.includes("the copy relayium.com serves changes when the site is next deployed"));
+    // billing-transparency: the relayed link is the published CLI's, and the
+    // direct-only pairing is scoped to the older binaries.
+    assert.ok(b.includes(`- **CLI:** in the **published CLI (${PUBLISHED_CLI})**, pairing-code sessions — \`send\`/\`receive\`, \`text\` and \`pair\` — relay every byte`));
+    assert.ok(b.includes(`In CLI ${LAST_DIRECT_ONLY_CLI} and earlier the pairing-code modes are direct-only: those binaries have no ICE or TURN path for file or text bytes`));
+    assert.ok(b.includes(`and in CLI ${LAST_DIRECT_ONLY_CLI} and earlier also \`send\`/\`receive\`, \`text\` and \`push\`/\`pull\`/\`sync\` over your own SSH`));
+    assert.doesNotMatch(b, /\(source on `main`\)/);
   });
 
   it("keeps the buffered-browser warning consistent across crawler sources", () => {

@@ -125,6 +125,7 @@ const ANDROID_TAG = ANDROID_AVAILABLE ? `android-v${ANDROID.versionName}` : null
  * 2026-08-03 needs no translation and cannot be read as 2026-03-08.
  */
 export const RELEASES = [
+  { version: "v0.27.0", date: "2026-10-02" },
   { version: "v0.26.0", date: "2026-09-21" },
   { version: "v0.25.1", date: "2026-09-20" },
   { version: "v0.25.0", date: "2026-09-14" },
@@ -177,7 +178,7 @@ const en = {
     ANDROID_AVAILABLE
       ? `Relayium ships in four rhythms, and this page is honest about all four: the web app is deployed continuously, the command-line tools are numbered and tagged, the macOS app is released on its own — macOS 1.4.5 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own — and the Android app is a direct-APK preview released under ${ANDROID_TAG}.`
       : "Relayium ships in three rhythms, and this page is honest about all three: the web app is deployed continuously, the command-line tools are numbered and tagged, and the macOS app is released on its own — macOS 1.4.5 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own.",
-    "Every version below was tagged automatically from the main branch, and only after the checks on that exact commit passed. A version's complete notes — every commit it contains — are one click away on GitHub.",
+    "A new version is now tagged by hand from the main branch, and only after the checks on that exact commit have passed. A version's complete notes — every commit it contains — are one click away on GitHub.",
   ],
   sections: [
     {
@@ -197,11 +198,11 @@ const en = {
     {
       heading: "How a release is cut",
       body: [
-        "Releases run on a schedule rather than on someone remembering. Once a week a workflow looks at what has landed since the last version, and stops without tagging in two cases: when the code that actually gets published has not changed, and when the checks on that commit are not green.",
+        "A maintainer cuts a release by tagging a commit on the main branch, and does so only when the code that actually gets published — the command-line tool or the node — has changed since the last version, and only after every check on that exact commit has passed. The tag then builds and publishes the archives, the checksum file and its signature, and the GitHub release names its source commit and lists every commit since the previous version.",
       ],
       bullets: [
-        "Both stops are deliberate. Relying on memory once left a finished feature unreleased for months, and tagging an unverified commit would ship exactly the breakage a schedule is meant to prevent.",
-        "Weeks that change only documentation or the apps produce no version, because the published programs would be byte-for-byte the previous ones.",
+        "The checks come first because tagging an unverified commit would ship exactly the breakage they exist to catch.",
+        "Changes that touch only documentation or the apps produce no version, because the published programs would be byte-for-byte the previous ones.",
       ],
     },
     {
@@ -232,7 +233,7 @@ const zh = {
     ANDROID_AVAILABLE
       ? `Relayium 有四种发布节奏，这一页对四种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.4.5 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线——Android 应用则以 APK 直接分发的预览版形式，用 ${ANDROID_TAG} 标签发布。`
       : "Relayium 有三种发布节奏，这一页对三种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.4.5 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线。",
-    "下面每一个版本都是从 main 分支自动打标签的，而且只在该提交的检查全部通过之后才发布。某个版本的完整说明——它包含的每一条提交——在 GitHub 上一点即达。",
+    "现在，新版本由维护者从 main 分支手动打标签，而且只在该提交的检查全部通过之后才打。某个版本的完整说明——它包含的每一条提交——在 GitHub 上一点即达。",
   ],
   sections: [
     {
@@ -252,11 +253,11 @@ const zh = {
     {
       heading: "一次发布是怎么切出来的",
       body: [
-        "发布按排期进行，不靠谁记得。每周有一个工作流检查上个版本之后合并了什么，并在两种情况下停下、不打标签：真正会被发布的代码没有改动，以及该提交的检查没有全绿。",
+        "维护者通过给 main 分支上的一个提交打标签来切出发布，而且只在真正会被发布的代码——命令行工具或节点——自上个版本以来有改动、并且该提交上的每一项检查都已通过时才这样做。打标签之后会构建并发布压缩包、校验和文件及其签名，GitHub 上的发布页会注明它的源提交，并列出自上个版本以来的每一条提交。",
       ],
       bullets: [
-        "这两个停止条件都刻意如此。靠记性的结果，是一个早就写完的功能被搁置了好几个月没发布；而给一个没验证过的提交打标签，恰恰会发出排期本来要挡住的故障。",
-        "只改了文档或应用的那几周不会产生新版本，因为发布出来的程序会和上一版逐字节相同。",
+        "检查必须先通过，因为给一个没验证过的提交打标签，恰恰会发出这些检查本来要挡住的故障。",
+        "只改了文档或应用的改动不会产生新版本，因为发布出来的程序会和上一版逐字节相同。",
       ],
     },
     {
