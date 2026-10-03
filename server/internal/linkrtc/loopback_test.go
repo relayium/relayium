@@ -446,9 +446,48 @@ func TestEarlyRemoteCandidatesAreHeldThenFlushed(t *testing.T) {
 	for _, e := range b.events(EventProgress) {
 		keys = append(keys, e.Key)
 	}
-	if len(keys) == 0 || keys[0] != "sdp:offer" || !strings.Contains(strings.Join(keys, ","), "ice:0") {
-		t.Fatalf("responder progress keys %v", keys)
+	if err := responderProgressOrder(keys); err != nil {
+		t.Fatalf("responder progress keys %v: %v", keys, err)
 	}
+}
+
+// responderProgressOrder is what the responder's progress keys must show when
+// candidates were held and then flushed: the offer applied exactly once, the
+// first flushed candidate added exactly once, and the offer FIRST — SetRemote
+// reports the description before it flushes anything held. A `state:` key may
+// come earlier: connection state arrives on Pion's own goroutine, which nothing
+// orders against SetRemote, so a hosted run can see `state:connecting` before
+// `sdp:offer`. Nothing else may.
+func responderProgressOrder(keys []string) error {
+	sdp, ice := -1, -1
+	for i, k := range keys {
+		switch k {
+		case "sdp:offer":
+			if sdp >= 0 {
+				return fmt.Errorf("sdp:offer reported twice")
+			}
+			sdp = i
+		case "ice:0":
+			if ice >= 0 {
+				return fmt.Errorf("ice:0 reported twice")
+			}
+			ice = i
+		}
+	}
+	switch {
+	case sdp < 0:
+		return fmt.Errorf("no sdp:offer: the offer was never applied")
+	case ice < 0:
+		return fmt.Errorf("no ice:0: no held candidate was flushed")
+	case ice < sdp:
+		return fmt.Errorf("ice:0 before sdp:offer: a candidate was added before the offer")
+	}
+	for _, k := range keys[:sdp] {
+		if !strings.HasPrefix(k, "state:") {
+			return fmt.Errorf("%s before sdp:offer: only connection state may precede the offer", k)
+		}
+	}
+	return nil
 }
 
 func TestHeldCandidateOverflowFailsTransport(t *testing.T) {

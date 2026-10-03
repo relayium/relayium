@@ -473,9 +473,13 @@ class RelayRenewControllerTest {
      */
     @Test
     fun `a relayed link ends on its boundary with a named reason`() {
-        // 61 seconds, against a 60-second clock-skew margin: a boundary about a
-        // second out.
-        val rig = rig(turnTtlSeconds = 61)
+        // 64 seconds, against a 60-second clock-skew margin: a boundary three to
+        // four seconds out. The expiry is a whole second, floored as the server
+        // floors it, so 61 left anything from one second down to nothing, and
+        // the rig's real key generation and connect could spend all of it — the
+        // grant was then already over when the relayed pair arrived, ended at
+        // once, and was never seen bounded. Still well inside the warning window.
+        val rig = rig(turnTtlSeconds = 64)
         observeRelay(rig)
         awaitTrue("bounded") { rig.controller.state.value.relayExpiresAt != null }
         assertTrue(
