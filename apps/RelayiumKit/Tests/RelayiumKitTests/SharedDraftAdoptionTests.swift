@@ -813,6 +813,56 @@ final class SharedDraftAdoptionTests: XCTestCase {
         }
     }
 
+    /// A `FileManager` that parks the removal of ONE retirement record until the
+    /// test lets it go.
+    ///
+    /// `retire` removes a draft's bytes and only then its record, both under the
+    /// store's own lock. A test reading the disk from outside that lock can land
+    /// between the two unlinks — the draft gone, the record not yet — and a
+    /// check made there fails although nothing is wrong. This holds that window
+    /// open on purpose, so the test can prove it waits past it rather than
+    /// hoping the scheduler never stops inside it.
+    ///
+    /// Bounded however the test ends: the park gives up after five seconds, so a
+    /// failing test cannot leave the sweep's thread — and the store lock it is
+    /// holding — parked for the rest of the run.
+    private final class MarkerGateFileManager: FileManager, @unchecked Sendable {
+        private let gatedPath: String
+        private let condition = NSCondition()
+        private var reached = false
+        private var released = false
+
+        init(gating url: URL) {
+            gatedPath = url.standardizedFileURL.path
+            super.init()
+        }
+
+        /// The sweep has asked to remove the gated record and is parked.
+        var entered: Bool {
+            condition.lock(); defer { condition.unlock() }
+            return reached
+        }
+
+        /// Idempotent, synchronous, and safe from a `defer`.
+        func release() {
+            condition.lock()
+            released = true
+            condition.broadcast()
+            condition.unlock()
+        }
+
+        override func removeItem(at url: URL) throws {
+            if url.standardizedFileURL.path == gatedPath {
+                condition.lock()
+                reached = true
+                let deadline = Date().addingTimeInterval(5)
+                while !released, condition.wait(until: deadline) {}
+                condition.unlock()
+            }
+            try super.removeItem(at: url)
+        }
+    }
+
     /// **The invariant with teeth: one durable job, one send.**
     ///
     /// The plan and its Keychain key are committed, so the draft is redundant —
@@ -869,15 +919,41 @@ final class SharedDraftAdoptionTests: XCTestCase {
         // plan — which this upload has already purged.
         XCTAssertNil(pendingStore.plan(for: "acct-1"),
                      "the successful upload should have purged its pending bytes")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: drafts.retiredURL(id: plan.id).path),
+                      "the test did not actually leave a retirement record behind")
+        // The relaunched store parks its sweep between the two unlinks. Released
+        // on every path out of this test; nothing below may call a lock-taking
+        // method of `relaunchedDrafts` on the main actor while it is held.
+        let gate = MarkerGateFileManager(gating: drafts.retiredURL(id: plan.id))
+        defer { gate.release() }
+        let relaunchedDrafts = SharedDraftStore(root: root.appendingPathComponent("SharedDrafts"),
+                                                fileManager: gate)
         let relaunchedUpload = makeUpload(store: pendingStore)
         let relaunched = SendSelectionModel(
             upload: relaunchedUpload,
             photos: PhotoStagingArea(root: root.appendingPathComponent("photos2")),
             inbox: root.appendingPathComponent("inbox2"),
-            drafts: SharedDraftStore(root: root.appendingPathComponent("SharedDrafts")),
+            drafts: relaunchedDrafts,
             fetchConfig: { ServerConfig(maxFileSize: 0) })
         relaunched.refreshSharedDrafts()
-        await waitUntil { !FileManager.default.fileExists(atPath: drafts.draftURL(id: plan.id).path) }
+
+        // Inside the window: the bytes are already gone and the record is not.
+        // That is the order `retire` promises — the record outlives the bytes,
+        // never the reverse — and it is exactly where a check that waited only
+        // for the draft used to land.
+        await waitUntil { gate.entered }
+        XCTAssertTrue(gate.entered, "the launch sweep never reached the record's removal")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: drafts.draftURL(id: plan.id).path),
+                       "the record must outlive the bytes, not go before them")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: drafts.retiredURL(id: plan.id).path),
+                      "the record went while its removal was still parked")
+        gate.release()
+
+        // The sweep is finished only when BOTH are gone, so wait for both.
+        await waitUntil {
+            !FileManager.default.fileExists(atPath: drafts.draftURL(id: plan.id).path)
+                && !FileManager.default.fileExists(atPath: drafts.retiredURL(id: plan.id).path)
+        }
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: drafts.draftURL(id: plan.id).path),
                        "the leftover bytes were never reclaimed")
