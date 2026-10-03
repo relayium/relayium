@@ -127,6 +127,17 @@ func (x *IPExtractor) RateLimitKey(r *http.Request) string {
 }
 
 // RoomKey groups clients sharing a public IP into one room (pseudo-LAN discovery).
+//
+// IPv6 has no NAT. Every device on one network holds its own global address in
+// the /64 that network shares, so keying on the exact address gives each device
+// a room of its own and LAN discovery never connects two of them. Group by /64
+// instead: that prefix is the IPv6 equivalent of the single NATed IPv4 address
+// an IPv4 room is already built on. IPv4 is unchanged, and so is any value that
+// is not an address at all.
 func (x *IPExtractor) RoomKey(r *http.Request) string {
-	return x.IP(r)
+	ip := x.IP(r)
+	if parsed := net.ParseIP(ip); parsed != nil && parsed.To4() == nil {
+		return parsed.Mask(net.CIDRMask(64, 128)).String() + "/64"
+	}
+	return ip
 }

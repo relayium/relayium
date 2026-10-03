@@ -144,14 +144,58 @@ func TestRateLimitKeyNormalizesAddressFamilies(t *testing.T) {
 	}
 }
 
-func TestRateLimitKeyUsesTrustedProxyResultWithoutChangingRoomKey(t *testing.T) {
+// RateLimitKey and RoomKey now agree on what an IPv6 address is: both group by
+// the network's /64. They still differ in their fallback for a value that is not
+// an address at all (RoomKey returns it unchanged; RateLimitKey collapses it to
+// "invalid-ip"), which is the separation the previous form of this test
+// protected. The room half is covered by TestRoomKeyGroupsIPv6ByPrefix.
+func TestRateLimitKeyAndRoomKeyAgreeOnIPv6Prefix(t *testing.T) {
 	x := NewIPExtractor(nil)
 	r := &http.Request{RemoteAddr: "[::1]:443", Header: http.Header{}}
 	r.Header.Set("X-Forwarded-For", "2001:db8:1234:5678::beef")
 	if got := x.RateLimitKey(r); got != "2001:db8:1234:5678::/64" {
 		t.Fatalf("RateLimitKey = %q", got)
 	}
-	if got := x.RoomKey(r); got != "2001:db8:1234:5678::beef" {
-		t.Fatalf("RoomKey changed to %q", got)
+	if got := x.RoomKey(r); got != "2001:db8:1234:5678::/64" {
+		t.Fatalf("RoomKey = %q", got)
+	}
+}
+
+// A network shares one /64, so every device on it must land in one LAN room.
+// Keying on the exact address gave each device a room of its own, which silently
+// disabled LAN discovery on every IPv6 network: both clients reached a ready
+// state and simply never saw each other.
+func TestRoomKeyGroupsIPv6ByPrefix(t *testing.T) {
+	x := NewIPExtractor(nil)
+	room := func(ip string) string {
+		r := &http.Request{RemoteAddr: net.JoinHostPort(ip, "443"), Header: http.Header{}}
+		return x.RoomKey(r)
+	}
+
+	// Addresses in one /64 are one network and must share a room.
+	const want = "2001:db8:1234:5678::/64"
+	for _, ip := range []string{
+		"2001:db8:1234:5678::1",
+		"2001:db8:1234:5678::abcd",
+		"2001:db8:1234:5678::beef",
+	} {
+		if got := room(ip); got != want {
+			t.Errorf("RoomKey(%q) = %q, want %q", ip, got, want)
+		}
+	}
+
+	// A different /64 is a different network and must never be merged with it.
+	if got := room("2001:db8:1234:5679::1"); got != "2001:db8:1234:5679::/64" {
+		t.Errorf("different /64: RoomKey = %q", got)
+	}
+
+	// IPv4 is unchanged — one NATed address was already one room.
+	if got := room("203.0.113.7"); got != "203.0.113.7" {
+		t.Errorf("IPv4: RoomKey = %q, want 203.0.113.7", got)
+	}
+
+	// A value that is not an address is returned as-is, not guessed at.
+	if got := room("not-an-address"); got != "not-an-address" {
+		t.Errorf("non-address: RoomKey = %q, want it unchanged", got)
 	}
 }
