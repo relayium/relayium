@@ -929,7 +929,8 @@ jobs:
           # would make a rerun of the same SHA a different run. The tuple is
           # (name, runtime, udid) so the choice is stable by product name first
           # and only tie-broken by things that rotate.
-          selection="$(xcrun simctl list devices available -j \
+          echo "iPad selection: BEGIN" >&2
+          selection="$(xcrun --log simctl list devices available -j \
             | /usr/bin/python3 -c 'import json, sys
           data = json.load(sys.stdin)
           pads = sorted(
@@ -941,6 +942,7 @@ jobs:
           if pads:
               name, runtime, udid = pads[0]
               print(udid, name, runtime)')"
+          echo "iPad selection: END" >&2
           [ -n "$selection" ] || {
             echo "::error::no available iPad Simulator runtime; the regular-width shell has no destination on this image and this job must not fall back to a compact one"
             exit 1; }
