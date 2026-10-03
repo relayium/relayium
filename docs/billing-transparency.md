@@ -79,9 +79,7 @@ first" and the difference is what decides whether anything is billed:
   the relay it would have used. So **there is no STUN-P2P rung for the browser**,
   and a cross-network browser transfer is a relayed transfer, metered when
   the relay reports billable usage.
-- **CLI:** in the **published CLI (v0.26.0)** the pairing-code modes are
-  direct-only: that binary has no ICE or TURN path for file or text bytes.
-  **From the next CLI release candidate** (source on `main`), pairing-code
+- **CLI:** in the **published CLI (v0.27.0)**, pairing-code
   sessions — `send`/`receive`, `text` and `pair` — relay every byte through the
   same ciphertext-only TURN relay whenever the server issues one for the code,
   even on one LAN. Those relayed bytes count toward the monthly traffic
@@ -95,18 +93,22 @@ first" and the difference is what decides whether anything is billed:
   below). Routing through a relay is
   therefore not by itself proof that anything was billed, nor proof that
   nothing was. They go peer to peer (and are unmetered) only when
-  no relay is issued. Against an older relayium the old
-  direct-only pairing is used. What IS invariant, and what this document is
+  no relay is issued. In CLI v0.26.0 and earlier the pairing-code modes are
+  direct-only: those binaries have no ICE or TURN path for file or text bytes,
+  and against such an older relayium the old direct-only pairing is used. What IS invariant, and what this document is
   really about, is that no path lets relayium.com read a file — a relayed
   transfer can be metered precisely because the relay forwards ciphertext it
   cannot decrypt. Its server-to-server **direct** modes (`serve` with `push`/`sync`
-  over daemon-direct) never touch a relay, and neither do the published CLI's
-  pairing-code modes, so they carry nothing
+  over daemon-direct) never touch a relay, and neither do the pairing-code
+  modes of CLI v0.26.0 and earlier, so they carry nothing
 relayium.com can meter. Its **hosted** modes are the exception, and they are
   not relayed either: `relayium up` and `relayium down` write and read the same
   encrypted server-side storage a browser stored link uses, so they count
   toward monthly traffic — and `up`, being an upload, also against the storage
-  cap and the daily upload quota.
+  cap and the daily upload quota. `relayium inbox send` in the published CLI
+  (v0.27.0) is hosted too: it queues ciphertext for a Device Inbox, metered as
+  any Device Inbox delivery is (see
+  [How quotas are enforced](#how-quotas-are-enforced)).
 
 The root [`README.md`](../README.md#how-it-works) states the same thing
 ("LAN: direct · browser cross-network: TURN carries ciphertext only"). Relayed
@@ -550,10 +552,10 @@ transfers until that allowance runs out and pays nothing. Paying is what you
 do when you want a bigger one.
 
 The cross-network paths that consume no relay allowance at all are the CLI's
-**direct** modes — daemon-direct `push`/`sync`, and in the published CLI
-(v0.26.0) also `send`/`receive`, `text` and `push`/`pull`/`sync` over your own
-SSH — which never ask for a relay. From the next CLI release candidate,
-`send`/`receive`, `text` and `pair` do ask for one, and their relayed bytes
+**direct** modes — daemon-direct `push`/`sync`, and in CLI v0.26.0 and
+earlier also `send`/`receive`, `text` and `push`/`pull`/`sync` over your own
+SSH — which never ask for a relay. In the published CLI (v0.27.0), which
+retires the SSH transport, `send`/`receive`, `text` and `pair` do ask for one, and their relayed bytes
 follow the conditional rule above: billable only when the relay reports them
 as billable usage. `relayium up` and
 `relayium down` are cross-network too, but they are hosted rather than direct,

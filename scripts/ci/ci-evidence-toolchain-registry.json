@@ -137,12 +137,12 @@
   "destinations": {
     "ios-ui-smoke-iphone": {
       "file": ".github/workflows/ios.yml",
-      "step": "Run iOS primary-task UI smoke",
+      "step": "Boot the selected iPhone simulator",
       "sha256": "be25526fe433db586e0cce0023de2c6c4ad4ba8df8aee4d3eb340a5af9ef179d"
     },
     "ios-ipad-shell-ipad": {
       "file": ".github/workflows/ios.yml",
-      "step": "Run the regular-width adaptive shell on an iPad simulator",
+      "step": "Boot the selected iPad simulator",
       "sha256": "251b8d0c38c689731110d79660bd3757cb7933dbdeae49dd6e5caedb67bee478"
     },
     "session-acceptance-iphone": {

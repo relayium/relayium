@@ -617,16 +617,19 @@ jobs:
   #
   # Budgets, from the last ten `main` runs (2026-09-28) of the unsharded job:
   # 28.1–39.9 min, so the old 45-minute ceiling was within five minutes of an
-  # ordinary slow runner. 55 for the job; 48 for the test step inside it, so a
-  # hang ends as a FAILED step with its result bundle written rather than as a
-  # job timeout (reported `cancelled`); and 300 s per test, five times the
-  # slowest single case observed. Each shard keeps the unsharded bounds until
-  # hosted shard timings justify lowering them.
+  # ordinary slow runner. 48 for the test step inside it, so a hang ends as a
+  # FAILED step with its result bundle written rather than as a job timeout
+  # (reported `cancelled`); and 300 s per test, five times the slowest single
+  # case observed. Each shard keeps the unsharded bounds until hosted shard
+  # timings justify lowering them. 65 for the job: the step bounds in order —
+  # Xcode selection 10, simulator preparation 5, test 48 — plus 2 for checkout,
+  # the shard proof and the uploads, so no earlier step's ceiling can spend the
+  # test step's 48.
   ios-ui-smoke:
     needs: evidence
     if: ${{ !cancelled() }}
     runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}
-    timeout-minutes: 55
+    timeout-minutes: 65
     strategy:
       # One shard failing must not cancel the other: its own result, and its
       # own result bundle, are the other half of the evidence.
@@ -664,12 +667,19 @@ jobs:
         if: needs.evidence.outputs.reuse != 'true'
         timeout-minutes: 10
         run: ${{ env.RELAYIUM_SELECT_XCODE }}
-      - name: Run iOS primary-task UI smoke
+      # The simulator the test step drives is booted, and waited for, here:
+      # `simctl bootstatus -b` boots the device if it is not booted yet and
+      # returns once it has finished booting. That is a boot barrier and nothing
+      # more — it does not promise the accessibility services UI testing needs
+      # are ready. Its own 5-minute bound means a boot that never finishes fails
+      # this step, so the test step (no status function in its `if`) is skipped
+      # instead of spending its 48 minutes. The device is handed on only after
+      # the boot succeeded. Selection rule unchanged: the first available iPhone
+      # of the listing, the rule the toolchain registry pins.
+      - name: Boot the selected iPhone simulator
         if: needs.evidence.outputs.reuse != 'true'
-        id: ui_smoke
-        timeout-minutes: 48
-        env:
-          UI_SHARD: ${{ matrix.shard }}
+        id: iphone_sim
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           device_id="$(xcrun simctl list devices available -j \
@@ -682,6 +692,39 @@ jobs:
                      and device.get("name", "").startswith("iPhone")))')"
           [ -n "$device_id" ] || {
             echo "::error::no available iPhone Simulator runtime"; exit 1; }
+          # The listing travels as an argument: with `python3 -` the heredoc is
+          # the program on stdin, so stdin cannot also carry the JSON.
+          listing="$(xcrun simctl list devices available -j)"
+          device_label="$(/usr/bin/python3 - "$device_id" "$listing" <<'PY'
+          import json, sys
+          udid = sys.argv[1]
+          data = json.loads(sys.argv[2])
+          hits = [(device.get("name", ""), runtime)
+                  for runtime, devices in data["devices"].items()
+                  for device in devices
+                  if device.get("udid") == udid]
+          if len(hits) != 1:
+              sys.exit(f"::error::the selected simulator {udid} is not exactly one listed device")
+          print(f"{hits[0][0]} {hits[0][1]}")
+          PY
+          )"
+          echo "Compact destination: $device_label ($device_id)"
+          echo "Boot started $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          xcrun simctl bootstatus "$device_id" -b
+          echo "Boot finished $(date -u +%Y-%m-%dT%H:%M:%SZ) after ${SECONDS}s"
+          echo "device_id=$device_id" >> "$GITHUB_OUTPUT"
+      - name: Run iOS primary-task UI smoke
+        if: needs.evidence.outputs.reuse != 'true'
+        id: ui_smoke
+        timeout-minutes: 48
+        env:
+          UI_SHARD: ${{ matrix.shard }}
+          DEVICE_ID: ${{ steps.iphone_sim.outputs.device_id }}
+        run: |
+          set -euo pipefail
+          [[ "${DEVICE_ID:-}" =~ ^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$ ]] || {
+            echo "::error::no booted iPhone Simulator was handed over (DEVICE_ID '${DEVICE_ID:-}')"; exit 1; }
+          device_id="$DEVICE_ID"
           ui_test=(-project apps/ios/Relayium.xcodeproj -scheme Relayium
             -destination "platform=iOS Simulator,id=$device_id"
             -derivedDataPath "$RUNNER_TEMP/dd-ios"
@@ -839,7 +882,7 @@ jobs:
     needs: evidence
     if: ${{ !cancelled() }}
     runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}
-    timeout-minutes: 40
+    timeout-minutes: 50
     steps:
       # Witness path (main push whose pull request proof was verified by the
       # `evidence` job): bind this job's check run to that proof, then run
@@ -871,12 +914,13 @@ jobs:
         if: needs.evidence.outputs.reuse != 'true'
         timeout-minutes: 10
         run: ${{ env.RELAYIUM_SELECT_XCODE }}
-      # 30 of the job's 40 minutes: the last ten `main` runs took 6.8–12.6 min
-      # for the whole job. Same per-test allowance as ios-ui-smoke.
-      - name: Run the regular-width adaptive shell on an iPad simulator
+      # Same boot barrier as ios-ui-smoke, and the same limits: it waits for
+      # the boot to finish, makes no promise about UI-testing readiness, and
+      # hands the device on only after it booted. Selection rule unchanged.
+      - name: Boot the selected iPad simulator
         if: needs.evidence.outputs.reuse != 'true'
-        id: ipad_shell
-        timeout-minutes: 30
+        id: ipad_sim
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           # SORTED, not "the first one the JSON happens to list". The image's
@@ -901,6 +945,25 @@ jobs:
             exit 1; }
           read -r device_id device_label <<<"$selection"
           echo "Regular-width destination: $device_label ($device_id)"
+          echo "Boot started $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          xcrun simctl bootstatus "$device_id" -b
+          echo "Boot finished $(date -u +%Y-%m-%dT%H:%M:%SZ) after ${SECONDS}s"
+          echo "device_id=$device_id" >> "$GITHUB_OUTPUT"
+      # 30 of the job's 50 minutes: the last ten `main` runs took 6.8–12.6 min
+      # for the whole job. The job bound is the step bounds in order — Xcode
+      # selection 10, simulator preparation 5, test 30 — plus 5 for checkout,
+      # the run proof and the uploads. Same per-test allowance as ios-ui-smoke.
+      - name: Run the regular-width adaptive shell on an iPad simulator
+        if: needs.evidence.outputs.reuse != 'true'
+        id: ipad_shell
+        timeout-minutes: 30
+        env:
+          DEVICE_ID: ${{ steps.ipad_sim.outputs.device_id }}
+        run: |
+          set -euo pipefail
+          [[ "${DEVICE_ID:-}" =~ ^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$ ]] || {
+            echo "::error::no booted iPad Simulator was handed over (DEVICE_ID '${DEVICE_ID:-}')"; exit 1; }
+          device_id="$DEVICE_ID"
           xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
             -destination "platform=iOS Simulator,id=$device_id" \
             -derivedDataPath "$RUNNER_TEMP/dd-ios-ipad" \
@@ -928,7 +991,7 @@ jobs:
                   "so this destination is not a full-width iPad and the job proved nothing.")
           print(f"regular-width shell: {total} case(s), 0 skipped")'
       - name: Retain iPad shell diagnosis
-        if: needs.evidence.outputs.reuse != 'true' && (failure() || (always() && steps.ipad_shell.outcome == 'cancelled'))
+        if: always() && needs.evidence.outputs.reuse != 'true' && (contains(fromJSON('["failure","cancelled"]'), steps.ipad_shell.outcome))
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-ipad-shell-diagnosis

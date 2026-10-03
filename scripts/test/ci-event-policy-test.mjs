@@ -3714,20 +3714,24 @@ const RUNNER_BUDGETS = [
         max: 40,
         why: "a PAID macOS runner is held by either of the two unsigned compile graphs",
       },
-      // Declared 55 PER SHARD, and two shards. `shards` is the number of PAID
+      // Declared 65 PER SHARD, and two shards. `shards` is the number of PAID
       // runners one run of this job starts; 6u holds the matrix to exactly it.
       // The split adds about 6.9 runner-minutes per run (~20%, an estimate
       // until hosted runs measure it) for a ~12-minute shorter critical path.
+      // 65 is the step bounds in order — Xcode selection 10, simulator boot
+      // barrier 5 (6v), test 48 — plus 2 for checkout, the shard proof and the
+      // uploads. It is a ceiling for a hang, not a nominal run time.
       "ios-ui-smoke": {
-        max: 55,
+        max: 65,
         shards: 2,
         why: "a PAID macOS runner is held by an iPhone simulator or UI test that never exits",
       },
-      // Declared 40. One class of six cases against one booted iPad simulator,
-      // plus the same UI-test-target build `ios-ui-smoke` pays for. Strictly
-      // less work than that job, so its 55 bounds this from above; 50 is that
-      // number brought down to what this scope actually justifies while still
-      // absorbing a cold build and a slow first boot.
+      // Declared 50: Xcode selection 10, simulator boot barrier 5 (6v), test 30,
+      // plus 5 for checkout, the run proof and the uploads. One class of six
+      // cases against one booted iPad simulator, plus the same UI-test-target
+      // build `ios-ui-smoke` pays for. Strictly less work than that job, so its
+      // bound is an upper limit here; 50 is what this scope justifies while
+      // still absorbing a cold build and a slow first boot.
       "ios-ipad-shell": {
         max: 50,
         why: "a PAID macOS runner is held by an iPad simulator that never boots, or by a "
@@ -5628,11 +5632,19 @@ function iosRegularWidthShellFailures(world) {
     + `needs it more, not less.`,
   );
   if (retain) {
+    // Keyed to the TEST step's own outcome, not to `failure()`: since 6v a
+    // failed simulator boot fails the job before the test step runs, and a bare
+    // `failure()` would then upload a bundle that was never written and add a
+    // second, misleading error to the real one.
+    const condition = String(retain.if ?? "");
     need(
-      String(retain.if ?? "").includes("failure()"),
-      `${where}: the result-bundle upload declares \`if: ${JSON.stringify(retain.if)}\`, want a `
-      + `\`failure()\` condition. Uploading on every run pays for an artifact nobody opens; `
-      + `uploading on none leaves the red run undiagnosable.`,
+      /always\(\)/.test(condition) && condition.includes("steps.ipad_shell.outcome")
+        && /['"]failure['"]/.test(condition) && /['"]cancelled['"]/.test(condition)
+        && !/['"]success['"]/.test(condition) && !/\bfailure\(\)/.test(condition),
+      `${where}: the result-bundle upload declares \`if: ${JSON.stringify(retain.if)}\`, want \`always()\` `
+      + `gated on \`steps.ipad_shell.outcome\` being 'failure' or 'cancelled'. Uploading on every run pays for `
+      + `an artifact nobody opens; uploading on none leaves the red run undiagnosable; a bare \`failure()\` `
+      + `uploads a bundle that does not exist when the simulator never booted.`,
     );
     const path = String(retain.with?.path ?? "");
     need(
@@ -10712,7 +10724,8 @@ const MUTATIONS = [
     // scope, boots a compact simulator, and every case skips.
     name: "the iPad job's destination drifts back to an iPhone",
     mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
-      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      // The selection lives in the boot step since 6v; the program is unchanged.
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes('startswith("iPad")'));
       step.run = String(step.run).replace(/"iPad"/g, '"iPhone"');
     }),
     expect: /ios\.yml\/ios-ipad-shell: a step names `iPhone`/,
@@ -10722,7 +10735,7 @@ const MUTATIONS = [
     // simulator, so the sorted pick becomes whatever the image lists first.
     name: "the iPad job stops filtering its destination by name",
     mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
-      const step = job.steps.find((entry) => String(entry?.run ?? "").includes("xcodebuild"));
+      const step = job.steps.find((entry) => String(entry?.run ?? "").includes('startswith("iPad")'));
       step.run = String(step.run).replace(/"iPad"/g, '""');
     }),
     expect: /no step selects its simulator by an `iPad` name at all/,
@@ -10805,6 +10818,14 @@ const MUTATIONS = [
       delete step.if;
     }),
     expect: /the result-bundle upload declares `if: undefined`/,
+  },
+  {
+    name: "the iPad job's diagnosis upload goes back to a bare failure()",
+    mutate: (world) => withNamedJob(world, IOS, IOS_REGULAR_WIDTH_JOB, (job) => {
+      const step = job.steps.find((entry) => String(entry?.uses ?? "").includes("upload-artifact"));
+      step.if = `${EV_FULL} && (failure() || (always() && steps.ipad_shell.outcome == 'cancelled'))`;
+    }),
+    expect: /a bare `failure\(\)` uploads a bundle that does not exist/,
   },
   {
     name: "the iPad job is serialized behind the build job",
@@ -11114,6 +11135,368 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
       + `Expected NO message matching ${refute}; got ${rendered}.`,
     );
   }
+}
+
+// ── 6v. both iOS UI jobs boot their simulator behind a bounded barrier ───────
+//
+// II's complement shard compiled, signed, and then lost its runner before the
+// first test case: XCTDaemonError 19, AXDisableAccessibilityOnTermination,
+// kAXErrorCannotComplete. Nothing in the job had waited for the simulator it
+// had just picked; `xcodebuild` booted it on demand inside the 48-minute test
+// step. The repair is a separate preparation step per UI job that runs the
+// job's own, unchanged selection program, then `xcrun simctl bootstatus
+// "$device_id" -b` — which boots the device if it is not booted and returns
+// once it has FINISHED booting — under its own 5-minute bound, and hands the
+// device to the test step only after that succeeded.
+//
+// It is a boot barrier, not a cure. It makes no claim that the accessibility
+// services UI testing needs are up, and none that a run is faster. What it
+// guarantees, and what is held here:
+//
+//   * the barrier exists, targets the selected device, and passes `-b`;
+//   * a boot that fails, or never finishes, fails the preparation step, hands
+//     nothing on, and the test step — with no status function in its `if` —
+//     is skipped instead of spending its budget;
+//   * the selection rules are the ones the toolchain registry pins (iPhone:
+//     first in the listing; iPad: sorted (name, runtime, udid)), and neither
+//     job falls back to the other kind;
+//   * the test step refuses an empty or malformed device before `xcodebuild`,
+//     and drives exactly the device that was booted;
+//   * the job bound covers its step bounds in order, so the preparation step's
+//     ceiling cannot be paid for out of the test step's.
+//
+// The structural half below is checked on every mutation in section 8. The
+// executable half runs the workflow's own step scripts with stub `xcrun` and
+// `xcodebuild`, once for the real files and once per mutation in 8v.
+
+/** The two UI jobs: their preparation step, their test step, and the device kind. */
+const IOS_BOOT_JOBS = [
+  { job: IOS_COMPACT_JOB, prep: "iphone_sim", test: "ui_smoke", kind: "iPhone", other: "iPad", shard: "complement" },
+  { job: IOS_REGULAR_WIDTH_JOB, prep: "ipad_sim", test: "ipad_shell", kind: "iPad", other: "iPhone", shard: "" },
+];
+const IOS_BOOT_PREP_MAX_MINUTES = 5;
+const IOS_BOOT_BARRIER = 'xcrun simctl bootstatus "$device_id" -b';
+const IOS_BOOT_HANDOVER = 'echo "device_id=$device_id" >> "$GITHUB_OUTPUT"';
+
+function iosSimulatorBootFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const doc = world.docs.get(IOS);
+  if (!doc) return out;
+  for (const { job: jobId, prep, test } of IOS_BOOT_JOBS) {
+    const job = doc.jobs?.[jobId];
+    if (!job) continue; // a missing job is reported by its own section
+    const where = `${IOS}/${jobId}`;
+    const steps = job.steps ?? [];
+    const prepAt = steps.findIndex((s) => s?.id === prep);
+    const testAt = steps.findIndex((s) => s?.id === test);
+    need(prepAt !== -1,
+      `${where}: no step has \`id: ${prep}\`, so nothing boots the selected simulator before \`xcodebuild\` `
+      + `and a slow or failed boot is spent inside the test step's budget.`);
+    if (prepAt === -1 || testAt === -1) continue;
+    const prepStep = steps[prepAt];
+    const testStep = steps[testAt];
+    const prepRun = String(prepStep.run ?? "").split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+    const testRun = String(testStep.run ?? "").split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+    need(prepAt < testAt, `${where}: the \`${prep}\` step runs after the \`${test}\` step it prepares.`);
+    // Read from the full-path view (6x), where an original step's evidence guard
+    // is already unwrapped: no condition here means exactly the guard there,
+    // and 6x holds the adopted file to that canonical form.
+    need(prepStep.if === undefined,
+      `${where}: the \`${prep}\` step's condition is ${JSON.stringify(prepStep.if)}, want none on the full path `
+      + `(only the evidence guard). A condition here can skip the barrier while the test step still runs.`);
+    const minutes = Number(prepStep["timeout-minutes"]);
+    need(Number.isInteger(minutes) && minutes > 0 && minutes <= IOS_BOOT_PREP_MAX_MINUTES,
+      `${where}: the \`${prep}\` step's timeout-minutes is ${JSON.stringify(prepStep["timeout-minutes"])}, want an `
+      + `integer in 1..${IOS_BOOT_PREP_MAX_MINUTES}. Without its own bound a boot that never finishes holds the PAID `
+      + `runner until the job times out (reported \`cancelled\`).`);
+    need(prepStep["continue-on-error"] === undefined && testStep["continue-on-error"] === undefined,
+      `${where}: the \`${prep}\` or \`${test}\` step sets \`continue-on-error\`, so a failed boot no longer stops `
+      + `the job before \`xcodebuild\`.`);
+    need(prepRun.split(IOS_BOOT_BARRIER).length === 2,
+      `${where}: the \`${prep}\` step does not run \`${IOS_BOOT_BARRIER}\` exactly once. That command is the `
+      + `barrier: it boots the selected device if needed and returns only once the boot finished.`);
+    need(!/\bsimctl\s+boot\b/.test(prepRun) && !/\bsleep\b/.test(prepRun),
+      `${where}: the \`${prep}\` step boots separately or sleeps. A separate \`simctl boot\` invites ignoring its `
+      + `"already booted" error, and a sleep is a guess where the barrier is a fact.`);
+    const barrierAt = prepRun.indexOf(IOS_BOOT_BARRIER);
+    const handoverAt = prepRun.indexOf(IOS_BOOT_HANDOVER);
+    need(handoverAt !== -1 && barrierAt !== -1 && handoverAt > barrierAt,
+      `${where}: the \`${prep}\` step does not hand the device on (\`${IOS_BOOT_HANDOVER}\`) after the barrier, `
+      + `so the test step could receive a device whose boot never succeeded.`);
+    need(testStep.if === undefined,
+      `${where}: the \`${test}\` step's condition is ${JSON.stringify(testStep.if)}, want none on the full path `
+      + `(only the evidence guard). Any status function there (\`always()\`, \`failure()\`) runs \`xcodebuild\` `
+      + `after the boot failed.`);
+    need(String(testStep.env?.DEVICE_ID ?? "") === `\${{ steps.${prep}.outputs.device_id }}`,
+      `${where}: the \`${test}\` step does not receive \`DEVICE_ID: \${{ steps.${prep}.outputs.device_id }}\`, so `
+      + `it does not drive the device the barrier booted.`);
+    need(!/simctl\s+list/.test(testRun),
+      `${where}: the \`${test}\` step selects a simulator itself, so it can drive a device that was never booted.`);
+    const jobMinutes = Number(job["timeout-minutes"]);
+    const bounded = steps.slice(0, testAt + 1).reduce((sum, s) => sum + (Number(s?.["timeout-minutes"]) || 0), 0);
+    need(Number.isFinite(jobMinutes) && jobMinutes >= bounded,
+      `${where}: the job's timeout-minutes ${JSON.stringify(job["timeout-minutes"])} is below the ${bounded} minutes `
+      + `its steps up to \`${test}\` may take in order, so a slow Xcode selection or boot would be paid for out of `
+      + `the test step's budget and end as a job timeout.`);
+  }
+  return out;
+}
+
+/** A simulator in a `simctl list devices available -j` listing. */
+const bootUdid = (n) => `0000000${n}-AAAA-BBBB-CCCC-DDDDEEEEFFF${n}`;
+const bootDev = (name, n) => ({ name, udid: bootUdid(n), isAvailable: true, state: "Shutdown" });
+const BOOT_RT_NEW = "com.apple.CoreSimulator.SimRuntime.iOS-26-0";
+const BOOT_RT_OLD = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
+/** Newer runtime first and not in name order, so the two rules disagree. */
+const BOOT_LISTING = {
+  devices: {
+    [BOOT_RT_NEW]: [bootDev("iPad Pro 13-inch (M4)", 1), bootDev("iPhone 17 Pro", 2), bootDev("iPhone 17", 3)],
+    [BOOT_RT_OLD]: [bootDev("iPad Air 11-inch (M2)", 4), bootDev("iPhone 16", 5)],
+  },
+};
+const BOOT_LISTING_REORDERED = { devices: Object.fromEntries(Object.entries(BOOT_LISTING.devices).reverse()) };
+const bootOnly = (kind) => ({
+  devices: Object.fromEntries(Object.entries(BOOT_LISTING.devices)
+    .map(([rt, list]) => [rt, list.filter((d) => d.name.startsWith(kind))])),
+});
+/** What each rule picks: [listing, iPhone pick, iPad pick] (null: must refuse). */
+const BOOT_CASES = [
+  ["listing", BOOT_LISTING, { iPhone: [2, "iPhone 17 Pro", BOOT_RT_NEW], iPad: [4, "iPad Air 11-inch (M2)", BOOT_RT_OLD] }],
+  // The iPhone rule is first-in-listing by design (and pinned so): reordering
+  // the listing moves its answer. The iPad rule is sorted: it does not move.
+  ["reordered listing", BOOT_LISTING_REORDERED, { iPhone: [5, "iPhone 16", BOOT_RT_OLD], iPad: [4, "iPad Air 11-inch (M2)", BOOT_RT_OLD] }],
+  ["no iPhone available", bootOnly("iPad"), { iPhone: null, iPad: [4, "iPad Air 11-inch (M2)", BOOT_RT_OLD] }],
+  ["no iPad available", bootOnly("iPhone"), { iPhone: [2, "iPhone 17 Pro", BOOT_RT_NEW], iPad: null }],
+];
+const BOOT_UTC = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/;
+
+/**
+ * Run both UI jobs' preparation and test steps, as written, against stub
+ * `xcrun`/`xcodebuild`. Every run is bounded here (a stub boot that "hangs"
+ * sleeps briefly with its output detached and is killed at the bound), and the
+ * scratch directory is removed before returning. The hang case waits out its
+ * bound, so it runs for the real workflow only; no 8v mutation targets it.
+ */
+function iosSimulatorBootExecutionFailures(world, { hang = true } = {}) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const doc = world.docs.get(IOS);
+  if (!doc) return out;
+  const dir = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/ios-boot.XXXXXX`], { encoding: "utf8" }).stdout.trim();
+  if (!dir) return ["6v: could not create a scratch directory for the iOS boot fixtures."];
+  try {
+    const xcrun = [
+      "#!/bin/bash",
+      'echo "xcrun $*" >> "$TOOL_CALLS"',
+      'if [ "$1 $2 $3 $4" = "simctl list devices available" ]; then cat "$BOOT_LISTING_FILE"; exit 0; fi',
+      'if [ "$1 $2" = "simctl bootstatus" ]; then',
+      '  case "$BOOT_MODE" in',
+      '    ok) echo "Device already booted, nothing to do."; exit 0 ;;',
+      '    fail) echo "Unable to boot device" >&2; exit 149 ;;',
+      '    hang) exec sleep 6 </dev/null >/dev/null 2>&1 ;;',
+      '  esac',
+      'fi',
+      'echo "unexpected xcrun call: $*" >&2; exit 2',
+      "",
+    ].join("\n");
+    const xcodebuild = '#!/bin/bash\necho "xcodebuild $*" >> "$TOOL_CALLS"\nexit 0\n';
+    spawnSync("bash", ["-c", 'mkdir -p "$1/bin" && printf "%s" "$2" > "$1/bin/xcrun" && printf "%s" "$3" > "$1/bin/xcodebuild" '
+      + '&& chmod +x "$1/bin/xcrun" "$1/bin/xcodebuild"', "_", dir, xcrun, xcodebuild]);
+    let n = 0;
+    const run = (script, { listing = BOOT_LISTING, mode = "ok", env = {}, bound = 20000 } = {}) => {
+      n += 1;
+      const calls = `${dir}/calls-${n}`;
+      const output = `${dir}/output-${n}`;
+      spawnSync("bash", ["-c", `printf '%s' "$1" > "${dir}/listing-${n}.json" && printf '%s' "$2" > "${dir}/step-${n}.sh" && : > "${calls}" && : > "${output}"`,
+        "_", JSON.stringify(listing), script]);
+      const r = spawnSync("bash", ["-e", `${dir}/step-${n}.sh`], {
+        encoding: "utf8",
+        timeout: bound,
+        killSignal: "SIGKILL",
+        env: {
+          PATH: `${dir}/bin:${process.env.PATH}`, TOOL_CALLS: calls, BOOT_LISTING_FILE: `${dir}/listing-${n}.json`,
+          BOOT_MODE: mode, GITHUB_OUTPUT: output, RUNNER_TEMP: dir, ...env,
+        },
+      });
+      const read = (f) => spawnSync("cat", [f], { encoding: "utf8" }).stdout ?? "";
+      return { status: r.status, signal: r.signal, log: `${r.stdout ?? ""}${r.stderr ?? ""}`, calls: read(calls), output: read(output) };
+    };
+    const boots = (calls) => calls.split("\n").filter((l) => l.startsWith("xcrun simctl bootstatus"));
+    for (const { job: jobId, prep, test, kind, shard } of IOS_BOOT_JOBS) {
+      const steps = doc.jobs?.[jobId]?.steps ?? [];
+      const prepStep = steps.find((s) => s?.id === prep);
+      const testStep = steps.find((s) => s?.id === test);
+      const where = `${IOS}/${jobId}`;
+      if (typeof prepStep?.run !== "string" || typeof testStep?.run !== "string") {
+        need(false, `${where}: no \`${prep}\` and \`${test}\` steps with run scripts to execute.`);
+        continue;
+      }
+      for (const [label, listing, picks] of BOOT_CASES) {
+        const want = picks[kind];
+        const r = run(prepStep.run, { listing });
+        if (want === null) {
+          need(r.status !== 0 && boots(r.calls).length === 0 && r.output === "",
+            `${where} (${label}): with no available ${kind} the \`${prep}\` step must fail before any boot and hand `
+            + `nothing on; got exit ${r.status}, boots [${boots(r.calls)}], output ${JSON.stringify(r.output)}. A `
+            + `${kind} job that boots another kind instead duplicates a run at full price, or skips every case.`);
+          continue;
+        }
+        const [k, name, runtime] = want;
+        const udid = bootUdid(k);
+        need(r.status === 0,
+          `${where} (${label}): the \`${prep}\` step failed on a listing with an available ${kind}; exit ${r.status}.\n${r.log}`);
+        need(boots(r.calls).length === 1 && boots(r.calls)[0] === `xcrun simctl bootstatus ${udid} -b`,
+          `${where} (${label}): the \`${prep}\` step ran boot barriers [${boots(r.calls).join(" | ")}]; want exactly `
+          + `\`xcrun simctl bootstatus ${udid} -b\` — the device the job's own rule selects (${name}, ${runtime}).`);
+        need(r.output === `device_id=${udid}\n`,
+          `${where} (${label}): the \`${prep}\` step handed on ${JSON.stringify(r.output)}; want exactly "device_id=${udid}".`);
+        need(r.log.includes(name) && r.log.includes(runtime) && r.log.includes(udid)
+          && /Boot started/.test(r.log) && /Boot finished .* after \d+s/.test(r.log)
+          && (r.log.match(new RegExp(BOOT_UTC.source, "g")) ?? []).length >= 2,
+          `${where} (${label}): the \`${prep}\` step's log does not name the selected model, runtime and UDID and the `
+          + `UTC start/finish of the boot with its elapsed time.\n${r.log}`);
+      }
+      const udid = bootUdid(kind === "iPhone" ? 2 : 4);
+      const failed = run(prepStep.run, { mode: "fail" });
+      need(failed.status !== 0 && failed.output === "",
+        `${where}: a failing \`simctl bootstatus\` must fail the \`${prep}\` step and hand nothing on; got exit `
+        + `${failed.status}, output ${JSON.stringify(failed.output)}. A swallowed boot failure lets \`xcodebuild\` `
+        + `drive a device that never booted.`);
+      const hung = hang ? run(prepStep.run, { mode: "hang", bound: 1500 }) : { status: 1, output: "" };
+      need(hung.status !== 0 && hung.output === "",
+        `${where}: a boot that never finishes must not hand the device on before the step's bound ends it; got exit `
+        + `${hung.status} (signal ${hung.signal}), output ${JSON.stringify(hung.output)}.`);
+      const testEnv = { UI_SHARD: shard };
+      const ran = run(testStep.run, { env: { ...testEnv, DEVICE_ID: udid } });
+      const builds = ran.calls.split("\n").filter((l) => l.startsWith("xcodebuild "));
+      need(ran.status === 0 && builds.length === 1
+        && builds[0].includes(`-destination platform=iOS Simulator,id=${udid} `) && / test$/.test(builds[0]),
+        `${where}: given DEVICE_ID ${udid}, the \`${test}\` step ran [${builds.join(" | ")}] (exit ${ran.status}); want `
+        + `one \`xcodebuild … test\` whose destination is exactly that device.`);
+      for (const bad of ["", "booted", udid.toLowerCase(), `${udid}x`]) {
+        const refused = run(testStep.run, { env: { ...testEnv, DEVICE_ID: bad } });
+        need(refused.status !== 0 && !refused.calls.includes("xcodebuild"),
+          `${where}: given DEVICE_ID ${JSON.stringify(bad)}, the \`${test}\` step ran xcodebuild or passed `
+          + `(exit ${refused.status}); want a refusal before \`xcodebuild\`.`);
+      }
+    }
+  } finally {
+    spawnSync("rm", ["-rf", dir]);
+  }
+  return out;
+}
+
+for (const message of iosSimulatorBootFailures(realWorld())) failures.push(message);
+for (const message of iosSimulatorBootExecutionFailures(realWorld())) failures.push(message);
+
+// ── 8v. each way the boot barrier silently stops being one ──────────────────
+//
+// Each mutation edits the parsed workflow and must be reported, by the
+// structural half or by actually running the edited step, for its own reason.
+
+/** Edit one step's run script of one UI job; throws when the edit did not apply. */
+function withBootStepRun(world, jobId, stepId, edit) {
+  const step = world.docs.get(IOS)?.jobs?.[jobId]?.steps?.find((s) => s?.id === stepId);
+  if (step === undefined) throw new Error(`${IOS}/${jobId} has no ${stepId} step`);
+  const before = String(step.run);
+  step.run = edit(before);
+  if (step.run === before) throw new Error(`${IOS}/${jobId}: the ${stepId} mutation did not apply`);
+  return world;
+}
+function withBootStep(world, jobId, stepId, edit) {
+  const step = world.docs.get(IOS)?.jobs?.[jobId]?.steps?.find((s) => s?.id === stepId);
+  if (step === undefined) throw new Error(`${IOS}/${jobId} has no ${stepId} step`);
+  edit(step);
+  return world;
+}
+
+const BOOT_MUTATIONS = [
+  {
+    name: "the iPhone boot barrier is removed",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "iphone_sim", (r) => r.replace(`${IOS_BOOT_BARRIER}\n`, "")),
+    expect: /ios-ui-smoke: the `iphone_sim` step does not run `xcrun simctl bootstatus "\$device_id" -b` exactly once/,
+  },
+  {
+    name: "the iPad boot failure is swallowed",
+    mutate: (w) => withBootStepRun(w, IOS_REGULAR_WIDTH_JOB, "ipad_sim", (r) => r.replace(IOS_BOOT_BARRIER, `${IOS_BOOT_BARRIER} || true`)),
+    expect: /ios-ipad-shell: a failing `simctl bootstatus` must fail the `ipad_sim` step and hand nothing on/,
+  },
+  {
+    name: "the iPhone barrier loses -b and only watches",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "iphone_sim", (r) => r.replace(IOS_BOOT_BARRIER, 'xcrun simctl bootstatus "$device_id"')),
+    expect: /ios-ui-smoke \(listing\): the `iphone_sim` step ran boot barriers \[xcrun simctl bootstatus 00000002-AAAA-BBBB-CCCC-DDDDEEEEFFF2\]/,
+  },
+  {
+    name: "the iPhone barrier boots a different device",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "iphone_sim", (r) => r.replace(IOS_BOOT_BARRIER, `${IOS_BOOT_BARRIER.replace('"$device_id"', "booted")} ; : "$device_id"`)),
+    expect: /ios-ui-smoke \(listing\): the `iphone_sim` step ran boot barriers \[xcrun simctl bootstatus booted -b\]/,
+  },
+  {
+    name: "the iPad device is handed on before its boot succeeded",
+    mutate: (w) => withBootStepRun(w, IOS_REGULAR_WIDTH_JOB, "ipad_sim", (r) => {
+      const lines = r.split("\n");
+      const at = lines.indexOf(IOS_BOOT_HANDOVER);
+      const [handover] = lines.splice(at, 1);
+      lines.splice(lines.indexOf(IOS_BOOT_BARRIER), 0, handover);
+      return lines.join("\n");
+    }),
+    expect: /ios-ipad-shell: a failing `simctl bootstatus` must fail the `ipad_sim` step and hand nothing on; got exit \d+, output "device_id=/,
+  },
+  {
+    name: "the iPad selection falls back to an iPhone",
+    mutate: (w) => withBootStepRun(w, IOS_REGULAR_WIDTH_JOB, "ipad_sim", (r) => r.replace('.startswith("iPad"))', '.startswith(("iPad", "Phone", "iPhone")))')),
+    expect: /ios-ipad-shell \(no iPad available\): with no available iPad the `ipad_sim` step must fail before any boot/,
+  },
+  {
+    name: "the iPhone preparation continues on error",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "iphone_sim", (s) => { s["continue-on-error"] = "true"; }),
+    expect: /ios-ui-smoke: the `iphone_sim` or `ui_smoke` step sets `continue-on-error`/,
+  },
+  {
+    name: "the iPhone test step runs whatever the boot did",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s.if = "always()"; }),
+    expect: /ios-ui-smoke: the `ui_smoke` step's condition is "always\(\)", want none on the full path/,
+  },
+  {
+    name: "the iPad preparation loses its bound",
+    mutate: (w) => withBootStep(w, IOS_REGULAR_WIDTH_JOB, "ipad_sim", (s) => { delete s["timeout-minutes"]; }),
+    expect: /ios-ipad-shell: the `ipad_sim` step's timeout-minutes is undefined, want an integer in 1\.\.5/,
+  },
+  {
+    name: "the iPhone preparation bound is raised past five minutes",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "iphone_sim", (s) => { s["timeout-minutes"] = "10"; }),
+    expect: /ios-ui-smoke: the `iphone_sim` step's timeout-minutes is "10", want an integer in 1\.\.5/,
+  },
+  {
+    name: "the iPhone test step stops validating DEVICE_ID",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace(/\[\[ "\$\{DEVICE_ID:-\}" =~ [^\n]*\n[^\n]*\n/, "")),
+    expect: /ios-ui-smoke: given DEVICE_ID "", the `ui_smoke` step ran xcodebuild or passed/,
+  },
+  {
+    name: "the iPad test step drives a device other than the booted one",
+    mutate: (w) => withBootStepRun(w, IOS_REGULAR_WIDTH_JOB, "ipad_shell", (r) => r.replace('device_id="$DEVICE_ID"', `device_id="${bootUdid(9)}"`)),
+    expect: /ios-ipad-shell: given DEVICE_ID 00000004-AAAA-BBBB-CCCC-DDDDEEEEFFF4, the `ipad_shell` step ran \[xcodebuild .*id=00000009/,
+  },
+  {
+    name: "the iPhone job bound no longer covers its step bounds",
+    mutate: (w) => withNamedJob(w, IOS, IOS_COMPACT_JOB, (job) => { job["timeout-minutes"] = "60"; }),
+    expect: /ios-ui-smoke: the job's timeout-minutes "60" is below the 63 minutes/,
+  },
+];
+
+for (const { name, mutate, expect } of BOOT_MUTATIONS) {
+  let got;
+  try {
+    const world = mutate(realWorld());
+    got = [...iosSimulatorBootFailures(world), ...iosSimulatorBootExecutionFailures(world, { hang: false })];
+  } catch (err) {
+    check(false, `the iOS boot mutation "${name}" threw instead of reporting: ${err.message}`);
+    continue;
+  }
+  check(got.some((message) => expect.test(message)),
+    `the iOS boot barrier check did NOT complain about "${name}". Expected a message matching ${expect}; got `
+    + `${got.length === 0 ? "no failures at all" : `[\n    ${got.join("\n    ")}\n  ]`}.`);
 }
 
 // ── 6r. every path-filtered reusable lane on disk is registered ─────────────

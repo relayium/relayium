@@ -85,6 +85,9 @@ on:
       - 'apps/RelayiumKit/**'
       - '!apps/RelayiumKit/Tests/**'
       - '.github/workflows/macos.yml'
+      # Run by the `ui-smoke` job (the crash-report marker and the failure-only
+      # capture), so a change to it is a change to this lane.
+      - 'scripts/ci/macos-ui-crash-diagnostics.py'
       # The PR→main evidence verifier, its registry, the filter reader it imports,
       # the adoption transform, the toolchain certificate probe and registry, and
       # their tests decide whether a main push may witness this lane instead of
@@ -595,6 +598,24 @@ jobs:
           mkdir -p "$dir"
           ( umask 077; printf '%s' "$PROFILE_BASE64" | base64 --decode > "$dir/relayium.provisionprofile" )
           ( umask 077; printf '%s' "$SHARE_PROFILE_BASE64" | base64 --decode > "$dir/relayium-share.provisionprofile" )
+      # Crash-report diagnostics, 1 of 2: the time this job's UI smoke began,
+      # bound to this commit, run id, attempt and shard. Run 37072256451 lost the one
+      # object that held the crashing app's stack: ReportCrash wrote
+      # `Relayium-2026-10-02-224143.ips` after the test's own teardown had looked
+      # for it, so the `.xcresult` never held it and the runner took it away.
+      # The capture after the keychain cleanup below keeps only reports newer
+      # than this marker. Writes one small file under `$RUNNER_TEMP`; a failure
+      # here changes nothing about the smoke step or its verdict.
+      - name: Mark the UI smoke start for crash diagnostics
+        if: needs.evidence.outputs.reuse != 'true'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          CRASH_DIAG_SHA: ${{ github.sha }}
+          CRASH_DIAG_RUN_ID: ${{ github.run_id }}
+          CRASH_DIAG_ATTEMPT: ${{ github.run_attempt }}
+          CRASH_DIAG_SHARD: ${{ matrix.shard }}
+        run: /usr/bin/python3 scripts/ci/macos-ui-crash-diagnostics.py mark --runner-temp "$RUNNER_TEMP" --head "$CRASH_DIAG_SHA" --run-id "$CRASH_DIAG_RUN_ID" --attempt "$CRASH_DIAG_ATTEMPT" --shard "$CRASH_DIAG_SHARD"
       # A STEP budget below the job's, and a per-test one inside it, so a hang
       # ends as a FAILED step with its result bundle on disk rather than as a
       # job-level timeout, which GitHub reports as `cancelled` and which used
@@ -645,6 +666,38 @@ jobs:
       - name: Remove UI signing keychain
         if: always() && needs.evidence.outputs.reuse != 'true'
         run: security delete-keychain "$RUNNER_TEMP/ui-signing.keychain-db" || true
+      # Crash-report diagnostics, 2 of 2, ONLY when the smoke step failed or was
+      # cancelled — a green run skips both steps and pays nothing. After the
+      # keychain cleanup above, so neither step can delay or prevent it. The
+      # helper polls at most 60 s for a report newer than the marker (once a
+      # second, only while none is found, then one 5 s settle rescan), reads
+      # only `~/Library/Logs/DiagnosticReports` and its `Retired` directory, one
+      # level each, and keeps exact `Relayium-*.ips` / `RelayiumUITests-Runner-*.ips`
+      # crash reports byte for byte with a manifest of allowlisted fields and
+      # the LC_UUIDs of the binaries this job built. No symbolication, no
+      # binaries, no environment. Both steps continue on error, so a
+      # diagnostics failure can neither turn this job green nor red: the smoke
+      # step's own failure is the verdict.
+      - name: Capture crash reports after a failed UI smoke
+        if: always() && needs.evidence.outputs.reuse != 'true' && (contains(fromJSON('["failure","cancelled"]'), steps.ui_smoke.outcome))
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          CRASH_DIAG_SHA: ${{ github.sha }}
+          CRASH_DIAG_RUN_ID: ${{ github.run_id }}
+          CRASH_DIAG_ATTEMPT: ${{ github.run_attempt }}
+          CRASH_DIAG_SHARD: ${{ matrix.shard }}
+        run: /usr/bin/python3 scripts/ci/macos-ui-crash-diagnostics.py capture --runner-temp "$RUNNER_TEMP" --home "$HOME" --head "$CRASH_DIAG_SHA" --run-id "$CRASH_DIAG_RUN_ID" --attempt "$CRASH_DIAG_ATTEMPT" --shard "$CRASH_DIAG_SHARD"
+      - name: Upload crash diagnostics after a failed UI smoke
+        if: always() && needs.evidence.outputs.reuse != 'true' && (contains(fromJSON('["failure","cancelled"]'), steps.ui_smoke.outcome))
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-crash-diagnostics-${{ matrix.shard }}-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/macos-crash-diagnostics/capture
+          if-no-files-found: ignore
+          retention-days: 7
       # PR→main evidence: the toolchain this job actually ran on, captured after
       # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
       # toolchain uploads nothing, and a job without a certificate is never

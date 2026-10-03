@@ -1,7 +1,8 @@
 # Temporary retirement of CLI SSH transfers
 
-Status: disabled in source, 2026-09-24. This does not modify already published
-binaries or authorize a new release.
+Status: disabled in source on 2026-09-24, and first published in CLI v0.27.0
+(tagged 2026-10-02). Already published binaries — v0.26.0 and earlier — are
+unchanged and still carry SSH transfers.
 
 The CLI rejects SSH targets for `push` and `sync`, the `pull` command, and the
 former `__recv` / `__send` remote helpers with exit code 2 and a migration hint.
@@ -36,16 +37,20 @@ installation guides and the feature's billing/privacy claims at the same time.
 
 ## Release coordination
 
-The public website currently documents the published CLI. Before a release that
-contains this change, update the English and Simplified Chinese CLI page,
-comparison tables, flags and guide navigation; remove SSH command examples from
-current tutorials, and label historical SSH tutorials (including archived
-translations) with their version scope and a link to the supported direct
-transfer guide. Update generated pages and crawler metadata together.
+Planned before the release, and done in source before v0.27.0 was tagged: the
+English and Simplified Chinese CLI page, comparison tables, flags and guide
+navigation describe the CLI without SSH; current tutorials carry no SSH
+commands; and historical SSH tutorials (including archived translations) are
+labelled as retired, with a pointer to the supported direct transfer. The
+repository's README and `llms.txt` were corrected to name v0.27.0 as the
+published release after it was published. After publication, the repository's
+`install.sh` and `relayium update` were verified to install v0.27.0.
 
 Relevant sources: `web/src/lib/cli-page-data.ts`, `CliPage.svelte`, maintained
 locale strings, `web/scripts/pages/content/articles/cli-backup-server-ssh.mjs`
-and other CLI/sync/backup articles, README and `llms.txt`. Verify the installer
-resolves the release containing this change before claiming the retirement is
-live. No public release, website deployment or fleet change is part of this
-source-only delivery.
+and other CLI/sync/backup articles, README and `llms.txt`.
+`scripts/test/cli-public-truth-test.sh` keeps the generated pages free of SSH
+commands. The website relayium.com serves changes only when it is next
+deployed; this document does not record that deployment. Neither the CLI
+release nor this note changes the reopening decision above, and neither
+involves a fleet change.

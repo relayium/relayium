@@ -353,6 +353,16 @@ jobs:
       - name: every role-coverage lane runs the same number of rounds
         run: node scripts/test/role-coverage-cap-test.mjs
 
+      # `macos.yml`'s failure-only crash-report capture runs on a hosted macOS
+      # runner only after a UI smoke step has failed, so nothing there proves
+      # what it refuses. Proven here instead, on every change: synthetic `.ips`
+      # reports and Mach-O files in a temporary directory, the real helper, and
+      # the workflow steps that call it. Python 3.9 standard library only — no
+      # install, no Apple tooling.
+      - name: macOS UI crash-report capture keeps only what it may
+        timeout-minutes: 2
+        run: python3 scripts/test/macos-ui-crash-diagnostics-test.py
+
       # And the one that makes the four steps above impossible to forget again.
       # Every `scripts/test/*-test.{mjs,sh}` must be named by some workflow; the
       # four above had passed for months while being run by nothing.
