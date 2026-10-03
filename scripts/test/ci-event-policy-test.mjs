@@ -11290,6 +11290,13 @@ function iosSimulatorBootExecutionFailures(world, { hang = true } = {}) {
       "#!/bin/bash",
       'echo "xcrun $*" >> "$TOOL_CALLS"',
       'if [ "$1 $2 $3 $4" = "simctl list devices available" ]; then cat "$BOOT_LISTING_FILE"; exit 0; fi',
+      // The iPad listing runs as `xcrun --log …`, a timing diagnostic: xcrun names
+      // the command it invokes on stderr. Exactly that argv and nothing looser —
+      // any other option (`--find`, `--verbose`, …) still falls through and fails.
+      'if [ "$#" -eq 6 ] && [ "$1 $2 $3 $4 $5 $6" = "--log simctl list devices available -j" ]; then',
+      '  echo "/fake/Xcode.app/Contents/Developer/usr/bin/simctl list devices available -j" >&2',
+      '  cat "$BOOT_LISTING_FILE"; exit 0',
+      'fi',
       'if [ "$1 $2" = "simctl bootstatus" ]; then',
       '  case "$BOOT_MODE" in',
       '    ok) echo "Device already booted, nothing to do."; exit 0 ;;',
@@ -11356,6 +11363,20 @@ function iosSimulatorBootExecutionFailures(world, { hang = true } = {}) {
           && (r.log.match(new RegExp(BOOT_UTC.source, "g")) ?? []).length >= 2,
           `${where} (${label}): the \`${prep}\` step's log does not name the selected model, runtime and UDID and the `
           + `UTC start/finish of the boot with its elapsed time.\n${r.log}`);
+      }
+      if (kind === "iPad") {
+        // The diagnostic option is accepted by exact argv only: the same listing
+        // under any other xcrun option is refused and fails the step closed.
+        const logged = "xcrun --log simctl list devices available -j";
+        need(prepStep.run.split(logged).length === 2,
+          `${where}: the \`${prep}\` step does not list through \`${logged}\` exactly once.`);
+        for (const option of ["--verbose", "--find"]) {
+          const other = run(prepStep.run.replace(logged, logged.replace("--log", option)));
+          need(other.status !== 0 && boots(other.calls).length === 0 && other.output === ""
+            && other.log.includes(`unexpected xcrun call: ${option} simctl list devices available -j`),
+            `${where}: the \`${prep}\` listing under \`xcrun ${option}\` was not refused by the stub; got exit `
+            + `${other.status}, boots [${boots(other.calls)}], output ${JSON.stringify(other.output)}.`);
+        }
       }
       const udid = bootUdid(kind === "iPhone" ? 2 : 4);
       const failed = run(prepStep.run, { mode: "fail" });

@@ -15,10 +15,36 @@ final class AppShellUITests: XCTestCase {
         "--relayium-ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
     ]
 
+    /// The one case whose first launch is a fresh stored download. Setup launches
+    /// it that way directly, rather than launching the default shell only for
+    /// the case to end it at once and launch again: the same arguments reach the
+    /// same first launch, with one fewer app lifecycle in between.
+    private static let freshDownloadLaunchArguments = [
+        "--relayium-ui-testing-sign-in",
+        "--relayium-ui-testing-valid-download-link",
+        "--relayium-ui-testing-fresh-received-folder",
+        "--relayium-ui-testing-open-stored-link",
+    ]
+
+    /// Exactly that case's XCTest name, `-[Class selector]`, compared whole.
+    /// XCTest has spelled the class bare (`AppShellUITests`, measured on Xcode
+    /// 27) and module-qualified, so both whole spellings are accepted and
+    /// nothing shorter. `#selector` stops a rename compiling past it; any other
+    /// spelling leaves the case on the default launch, which its own first
+    /// assertion then refuses rather than passing quietly.
+    private var launchesFreshDownload: Bool {
+        let selector = NSStringFromSelector(
+            #selector(testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile))
+        return [String(describing: Self.self), NSStringFromClass(Self.self)]
+            .contains { name == "-[\($0) \(selector)]" }
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = offlineLaunchArguments
+        app.launchArguments = launchesFreshDownload
+            ? offlineLaunchArguments + Self.freshDownloadLaunchArguments
+            : offlineLaunchArguments
         app.launch()
     }
 
@@ -374,31 +400,6 @@ final class AppShellUITests: XCTestCase {
     /// The system document browser is presented as a remote view inside the
     /// app's own element tree, not as a separate `DocumentManagerUICore`
     /// process, so every step below addresses `app`.
-    private func tapInBrowser(_ label: String, timeout: TimeInterval = 15) {
-        let element = app.descendants(matching: .any)[label].firstMatch
-        guard element.waitForExistence(timeout: timeout) else {
-            return XCTFail("""
-                the system document browser has no "\(label)".
-                \(app.debugDescription)
-                """)
-        }
-        element.tap()
-    }
-
-    /// Files hides a known extension, so match the fixture by the stem it is
-    /// guaranteed to render rather than by a display name the OS may shorten.
-    private func tapStagedFixture(named stem: String, timeout: TimeInterval = 15) {
-        let element = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH %@", stem)).firstMatch
-        guard element.waitForExistence(timeout: timeout) else {
-            return XCTFail("""
-                the staged fixture "\(stem)" is not in the browser.
-                \(app.debugDescription)
-                """)
-        }
-        element.tap()
-    }
-
     /// Land the system picker on Browse, whichever shape iOS presented it in.
     ///
     /// Compact widths present a browsing-mode chooser —
@@ -428,37 +429,67 @@ final class AppShellUITests: XCTestCase {
             """)
     }
 
-    /// Select the staged document without assuming which directory the system
-    /// browser remembered from an earlier import. Files may reopen inside the
-    /// app folder, at the app folder's parent, or at the Locations root; all
-    /// three are valid system states and expose the same production importer.
-    /// The Locations root names the device it is on — "On My iPhone" or
-    /// "On My iPad" — so match either rather than encode one device idiom.
+    /// Select the staged document by looking at where the system browser
+    /// actually is, every time it looks, rather than assuming where a tap left it.
+    ///
+    /// Files may reopen inside the app folder, at the app folder's parent, or at
+    /// the Locations root, and a tap on the device can land in any of them: a
+    /// hosted run (37104393492) tapped "On My iPhone" and the browser was already
+    /// inside `Relayium` with the fixture on screen while this helper still waited
+    /// for a `Relayium` row to tap. A local run (r2) then met a folder view that
+    /// existed for a fraction of a second during the Browse transition, and
+    /// asking whether its row was hittable failed the test.
+    ///
+    /// So each look is ONE read-only snapshot of the app, classified by the plain
+    /// `PickerSelection` core: the fixture in the browser's `File View` cells
+    /// first, then the app folder among them, then an on-device Location among
+    /// the `Browse View` cells. Nothing is touched until the same candidate has
+    /// been seen on two consecutive looks; only then is the live element asked
+    /// whether it is hittable, and that same element is the one tapped. One
+    /// deadline covers the whole selection and is never restarted. It bounds
+    /// starting anything new, not a running query, which cannot be interrupted.
     private func selectStagedFixture(named stem: String) {
-        let fixture = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH %@", stem)).firstMatch
-        if fixture.waitForExistence(timeout: 2) {
-            return fixture.tap()
-        }
-
-        let appFolder = app.descendants(matching: .any)["Relayium"].firstMatch
-        if appFolder.waitForExistence(timeout: 2) {
-            appFolder.tap()
-            return tapStagedFixture(named: stem)
-        }
-
-        let device = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label == %@ OR label == %@",
-                        "On My iPhone", "On My iPad")).firstMatch
-        guard device.waitForExistence(timeout: 15) else {
-            return XCTFail("""
-                the system document browser offers no on-device location.
+        var guarded: XCUIElement?
+        let outcome = PickerSelection.run(
+            within: 15,
+            now: { ProcessInfo.processInfo.systemUptime },
+            look: { progress in
+                // The one place an error is handled: a look that could not be
+                // taken is a look that found nothing, and is waited past.
+                guard let snapshot = try? app.snapshot() else { return .unavailable }
+                return PickerSelection.classify(PickerNode(snapshot), stem: stem, progress: progress)
+            },
+            guardHittable: { candidate in
+                guarded = nil
+                let matches = app.collectionViews.matching(identifier: candidate.container).cells
+                    .matching(NSPredicate(format: "identifier == %@ AND label == %@",
+                                          candidate.identifier, candidate.label))
+                let count = matches.count
+                guard count == 1 else { return count == 0 ? .missing : .ambiguous(count) }
+                let element = matches.element(boundBy: 0)
+                guard element.isHittable else { return .notHittable }
+                guarded = element
+                return .hittable
+            },
+            perform: { _ in guarded?.tap() },
+            pause: { RunLoop.current.run(until: Date().addingTimeInterval(0.25)) })
+        switch outcome.result {
+        case .selected:
+            return
+        case .refused(let why):
+            XCTFail("""
+                the system document browser is ambiguous: \(why).
+                looks: \(outcome.trace.joined(separator: "; "))
+                \(app.debugDescription)
+                """)
+        case .timedOut(let done):
+            XCTFail("""
+                the staged fixture "\(stem)" was not selectable within 15 s \
+                (on-device location tapped: \(done.deviceTapped), app folder tapped: \(done.folderTapped)).
+                looks: \(outcome.trace.joined(separator: "; "))
                 \(app.debugDescription)
                 """)
         }
-        device.tap()
-        tapInBrowser("Relayium")
-        tapStagedFixture(named: stem)
     }
 
     /// **Connect first (A25): Nearby stages nothing before a device is chosen.**
@@ -1218,15 +1249,7 @@ final class AppShellUITests: XCTestCase {
     /// product itself: a relaunch WITHOUT that argument opens the same link
     /// again and must be refused, by name, because the file is still there.
     func testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + [
-            "--relayium-ui-testing-sign-in",
-            "--relayium-ui-testing-valid-download-link",
-            "--relayium-ui-testing-fresh-received-folder",
-            "--relayium-ui-testing-open-stored-link",
-        ]
-        app.launch()
-
+        // Setup already launched with `freshDownloadLaunchArguments`.
         waitForPresentedStoredReceive(app)
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 15))
@@ -1951,3 +1974,228 @@ final class AppShellUITests: XCTestCase {
 
 
 }
+
+/// The public snapshot's standard attributes, as the plain values the core
+/// classifies. Only the element types the classification names are kept by
+/// name; every other type is "Other".
+extension PickerNode {
+    init(_ snapshot: XCUIElementSnapshot) {
+        let type: String
+        switch snapshot.elementType {
+        case .collectionView: type = "CollectionView"
+        case .cell: type = "Cell"
+        case .staticText: type = "StaticText"
+        case .button: type = "Button"
+        case .navigationBar: type = "NavigationBar"
+        case .application: type = "Application"
+        default: type = "Other"
+        }
+        let frame = snapshot.frame
+        self.init(type: type, identifier: snapshot.identifier, label: snapshot.label,
+                  frame: PickerFrame(x: Double(frame.origin.x), y: Double(frame.origin.y),
+                                     width: Double(frame.size.width), height: Double(frame.size.height)),
+                  enabled: snapshot.isEnabled, children: snapshot.children.map { PickerNode($0) })
+    }
+}
+
+// BEGIN PickerSelection core — plain Swift, no XCTest; the picker controls compile these exact bytes.
+
+/// A rectangle in points.
+struct PickerFrame: Equatable {
+    var x = 0.0, y = 0.0, width = 0.0, height = 0.0
+
+    /// Whole points: a row that has stopped moving keeps its rounded frame.
+    /// A heuristic for "the same row, at rest", not proof of identity.
+    var rounded: PickerFrame {
+        PickerFrame(x: x.rounded(), y: y.rounded(), width: width.rounded(), height: height.rounded())
+    }
+}
+
+/// One element of one snapshot, as plain values.
+struct PickerNode: Equatable {
+    var type: String
+    var identifier = ""
+    var label = ""
+    var frame = PickerFrame()
+    var enabled = true
+    var children: [PickerNode] = []
+}
+
+/// The navigation the selection has already made. Each happens at most once.
+struct PickerProgress: Equatable {
+    var deviceTapped = false
+    var folderTapped = false
+}
+
+enum PickerKind: String, Equatable {
+    case fixture, folder, device
+}
+
+/// What one look proposes to tap, identified by everything the snapshot says
+/// about it: two looks agree only if every field agrees.
+struct PickerCandidate: Equatable {
+    var kind: PickerKind
+    var container: String
+    var ancestors: [String]
+    var identifier: String
+    var label: String
+    var frame: PickerFrame
+    var enabled: Bool
+}
+
+enum PickerLook: Equatable {
+    /// No snapshot could be taken.
+    case unavailable
+    /// The browser is mid-change: more than one view of a kind.
+    case unsettled
+    /// Nothing to act on.
+    case nothing
+    case candidate(PickerCandidate)
+    case ambiguous(String)
+}
+
+/// What the live element said when asked, once a candidate was stable.
+enum PickerGuard: Equatable {
+    case hittable, notHittable, missing
+    case ambiguous(Int)
+}
+
+enum PickerSelection {
+    enum Result: Equatable {
+        case selected
+        case refused(String)
+        case timedOut(PickerProgress)
+    }
+
+    struct Outcome: Equatable {
+        var result: Result
+        var trace: [String]
+    }
+
+    static let fileView = "File View"
+    static let browseView = "Browse View"
+    static let traceLimit = 32
+
+    /// Classify one snapshot. The fixture is decided first, wherever the
+    /// browser is; the app folder only inside a folder's item area and only
+    /// while no fixture is visible; an on-device Location only where no item
+    /// area is. More than one match is ambiguous, never guessed between.
+    static func classify(_ root: PickerNode, stem: String, progress: PickerProgress) -> PickerLook {
+        let items = containers(named: fileView, in: root)
+        let places = containers(named: browseView, in: root)
+        if items.count > 1 || places.count > 1 { return .unsettled }
+        if let area = items.first {
+            let cells = area.node.children.flatMap { cellsBelow($0) }
+            let fixtures = cells.filter { $0.label.hasPrefix(stem) }
+            if fixtures.count > 1 { return .ambiguous("\(fixtures.count) items match the fixture") }
+            if let fixture = fixtures.first { return .candidate(candidate(.fixture, fixture, area)) }
+            if progress.folderTapped { return .nothing }
+            let folders = cells.filter { cell in cell.children.contains { contains($0, exactly: "Relayium") } }
+            if folders.count > 1 { return .ambiguous("\(folders.count) items match the app folder") }
+            if let folder = folders.first { return .candidate(candidate(.folder, folder, area)) }
+            return .nothing
+        }
+        if let place = places.first, !progress.deviceTapped {
+            let devices = place.node.children.flatMap { cellsBelow($0) }
+                .filter { $0.label == "On My iPhone" || $0.label == "On My iPad" }
+            if devices.count > 1 { return .ambiguous("\(devices.count) on-device locations") }
+            if let device = devices.first { return .candidate(candidate(.device, device, place)) }
+        }
+        return .nothing
+    }
+
+    /// Every CollectionView with this identifier, with the (type, identifier)
+    /// path of the elements above it.
+    private static func containers(named name: String, in root: PickerNode)
+        -> [(node: PickerNode, ancestors: [String])] {
+        var found: [(node: PickerNode, ancestors: [String])] = []
+        func walk(_ node: PickerNode, _ path: [String]) {
+            if node.type == "CollectionView" && node.identifier == name { found.append((node, path)) }
+            let here = node.identifier.isEmpty ? path : path + ["\(node.type):\(node.identifier)"]
+            for child in node.children { walk(child, here) }
+        }
+        walk(root, [])
+        return found
+    }
+
+    private static func cellsBelow(_ node: PickerNode) -> [PickerNode] {
+        node.type == "Cell" ? [node] : node.children.flatMap { cellsBelow($0) }
+    }
+
+    private static func contains(_ node: PickerNode, exactly text: String) -> Bool {
+        node.identifier == text || node.label == text || node.children.contains { contains($0, exactly: text) }
+    }
+
+    private static func candidate(_ kind: PickerKind, _ cell: PickerNode,
+                                  _ area: (node: PickerNode, ancestors: [String])) -> PickerCandidate {
+        PickerCandidate(kind: kind, container: area.node.identifier, ancestors: area.ancestors,
+                        identifier: cell.identifier, label: cell.label, frame: cell.frame.rounded,
+                        enabled: cell.enabled)
+    }
+
+    /// The whole selection under ONE deadline, fixed on entry and never reset.
+    /// Nothing starts after it: it is checked before each look, after each
+    /// look, and after the live guard, immediately before the tap. A candidate
+    /// is acted on only after two consecutive looks found it unchanged; any
+    /// other look in between, and every tap, starts the count again.
+    static func run(within limit: Double, now: () -> Double, look: (PickerProgress) -> PickerLook,
+                    guardHittable: (PickerCandidate) -> PickerGuard, perform: (PickerCandidate) -> Void,
+                    pause: () -> Void) -> Outcome {
+        let start = now()
+        let deadline = start + limit
+        var done = PickerProgress()
+        var previous: PickerLook?
+        var trace: [String] = []
+        func note(_ step: String) {
+            let centiseconds = Int(((now() - start) * 100).rounded())
+            trace.append("\(centiseconds / 100).\(centiseconds % 100 < 10 ? "0" : "")\(centiseconds % 100)s \(step)")
+            if trace.count > traceLimit { trace.removeFirst() }
+        }
+        looking: while now() < deadline {
+            let seen = look(done)
+            guard now() < deadline else { note("look ended at the deadline"); break looking }
+            let stable = previous == seen
+            previous = seen
+            switch seen {
+            case .unavailable:
+                note("no snapshot")
+                previous = nil
+            case .unsettled:
+                note("unsettled")
+                previous = nil
+            case .nothing:
+                note("nothing")
+                previous = nil
+            case .ambiguous(let why):
+                note("ambiguous")
+                if stable { return Outcome(result: .refused(why), trace: trace) }
+            case .candidate(let candidate):
+                guard stable else { note("\(candidate.kind.rawValue) in \(candidate.container), first sighting"); break }
+                guard candidate.enabled else { note("\(candidate.kind.rawValue) disabled"); previous = nil; break }
+                let live = guardHittable(candidate)
+                guard now() < deadline else { note("guard ended at the deadline"); break looking }
+                switch live {
+                case .hittable:
+                    note("\(candidate.kind.rawValue) in \(candidate.container), tap")
+                    perform(candidate)
+                    previous = nil
+                    switch candidate.kind {
+                    case .fixture: return Outcome(result: .selected, trace: trace)
+                    case .folder: done.folderTapped = true
+                    case .device: done.deviceTapped = true
+                    }
+                case .notHittable, .missing:
+                    note("\(candidate.kind.rawValue) in \(candidate.container), not hittable or gone")
+                    previous = nil
+                case .ambiguous(let count):
+                    note("live ambiguous")
+                    return Outcome(result: .refused("\(count) live elements match the candidate"), trace: trace)
+                }
+            }
+            pause()
+        }
+        return Outcome(result: .timedOut(done), trace: trace)
+    }
+}
+
+// END PickerSelection core

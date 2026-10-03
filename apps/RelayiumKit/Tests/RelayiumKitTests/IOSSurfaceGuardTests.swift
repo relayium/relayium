@@ -312,15 +312,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(browse.contains("if sidebar.exists { return }"),
                       "the full-width iPad Files picker observes its sidebar but never accepts it")
 
-        let selector = try XCTUnwrap(ui.components(
-            separatedBy: "private func selectStagedFixture(named stem: String)")
-            .dropFirst().first?.components(separatedBy: "\n    /// ").first,
-            "the deterministic browser-state selector is gone")
-        XCTAssertTrue(selector.contains("tapStagedFixture(named:"),
-                      "the browser-state selector no longer chooses the real fixture")
-        XCTAssertTrue(selector.contains("\"On My iPhone\", \"On My iPad\""),
-                      "the browser-state selector cannot enter on-device storage "
-                      + "on both compact and regular-width devices")
+        // The selector reads the real browser and taps the real fixture: what
+        // that takes is `realPickerSelectionBreaks`, read from code, not comments.
+        for broken in Self.realPickerSelectionBreaks(in: ui) {
+            XCTFail(broken)
+        }
         // Nearby's own pre-connect chooser is gone (connect first, A25) — not a
         // coverage trade, there is no such control to pick through — so its
         // dedicated picker test became `testNearbyStagesNothingBeforeADeviceIsChosen`
@@ -394,6 +390,87 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(workspace.components(separatedBy: "UITestMode.").count - 1, 1,
                        "the workspace reaches into UITestMode more than once")
     }
+
+    // BEGIN real-picker selection contract — the picker controls compile these exact bytes.
+
+    /// What the Stored Send picker selection must still do for real, as broken
+    /// promises (empty when it keeps all of them). Read from code only: a
+    /// requirement that survives only as a comment is a requirement removed.
+    ///
+    /// The selector looks at the real system browser through ONE snapshot per
+    /// look, hands it to the plain `PickerSelection` core, asks the captured
+    /// live element whether it is hittable, and taps that element. The core
+    /// finds the fixture by its stem among the browser's `File View` cells and
+    /// the on-device location among its `Browse View` cells, on a phone
+    /// ("On My iPhone") and a pad ("On My iPad"). Neither ever takes the
+    /// Debug-only preselection seam.
+    static func realPickerSelectionBreaks(in ui: String) -> [String] {
+        var broken: [String] = []
+        func need(_ ok: Bool, _ message: String) { if !ok { broken.append(message) } }
+        let code = codeOnly(ui)
+        guard let selectorStart = code.range(of: "private func selectStagedFixture(named stem: String) {"),
+              let selectorEnd = code.range(of: "\n    }\n", range: selectorStart.upperBound..<code.endIndex),
+              let coreStart = code.range(of: "enum PickerSelection {"),
+              let coreEnd = code.range(of: "\n}\n", range: coreStart.upperBound..<code.endIndex)
+        else { return ["the browser-state selector or the PickerSelection core is gone"] }
+        let selector = String(code[selectorStart.upperBound..<selectorEnd.lowerBound])
+        let core = String(code[coreStart.upperBound..<coreEnd.lowerBound])
+
+        need(selector.contains("PickerSelection.run("),
+             "the browser-state selector no longer runs the PickerSelection core")
+        need(selector.components(separatedBy: "app.snapshot()").count - 1 == 1
+             && selector.contains("PickerSelection.classify(PickerNode(snapshot)"),
+             "a look is no longer ONE app snapshot classified by the core")
+        let hittable = selector.range(of: "guard element.isHittable else")
+        let captured = selector.range(of: "guarded = element")
+        need(hittable != nil && captured != nil && hittable!.upperBound <= captured!.lowerBound,
+             "the selector no longer asks the live element whether it is hittable before keeping it")
+        need(selector.contains("guarded?.tap()") && selector.components(separatedBy: ".tap()").count - 1 == 1,
+             "the selector no longer taps exactly the element it checked")
+        for seam in ["--relayium-ui-testing-preselect", "preselectPendingFixture"] {
+            need(!selector.contains(seam) && !core.contains(seam),
+                 "the picker selection reaches the Debug-only preselection seam (\(seam))")
+        }
+
+        need(core.contains("static let fileView = \"File View\"")
+             && core.contains("containers(named: fileView, in: root)"),
+             "the core no longer finds the fixture among the browser's File View cells")
+        need(core.contains("static let browseView = \"Browse View\"")
+             && core.contains("containers(named: browseView, in: root)"),
+             "the core no longer finds on-device storage among the browser's Browse View cells")
+        need(core.contains("$0.label.hasPrefix(stem)")
+             && core.contains(".candidate(candidate(.fixture,"),
+             "the core no longer chooses the real fixture by its stem")
+        let device = core.range(of: "if let place = places.first").map { String(core[$0.lowerBound...]) } ?? ""
+        let deviceBlock = device.components(separatedBy: "return .nothing").first ?? ""
+        need(deviceBlock.contains("$0.label == \"On My iPhone\"")
+             && deviceBlock.contains("$0.label == \"On My iPad\"")
+             && deviceBlock.contains(".candidate(candidate(.device,"),
+             "the core cannot enter on-device storage on both compact and regular-width devices")
+        return broken
+    }
+
+    /// `text` with every `//` comment removed, line by line, outside string literals.
+    static func codeOnly(_ text: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            var out = ""
+            var inString = false
+            var previous: Character = " "
+            let characters = Array(line)
+            var index = 0
+            while index < characters.count {
+                let character = characters[index]
+                if character == "\"" && previous != "\\" { inString.toggle() }
+                if !inString && character == "/" && index + 1 < characters.count && characters[index + 1] == "/" { break }
+                out.append(character)
+                previous = character
+                index += 1
+            }
+            return out
+        }.joined(separator: "\n")
+    }
+
+    // END real-picker selection contract
 
     /// The refused-link seam, and the coverage it must not quietly replace.
     ///
