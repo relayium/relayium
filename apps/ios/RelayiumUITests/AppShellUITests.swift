@@ -15,10 +15,36 @@ final class AppShellUITests: XCTestCase {
         "--relayium-ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
     ]
 
+    /// The one case whose first launch is a fresh stored download. Setup launches
+    /// it that way directly, rather than launching the default shell only for
+    /// the case to end it at once and launch again: the same arguments reach the
+    /// same first launch, with one fewer app lifecycle in between.
+    private static let freshDownloadLaunchArguments = [
+        "--relayium-ui-testing-sign-in",
+        "--relayium-ui-testing-valid-download-link",
+        "--relayium-ui-testing-fresh-received-folder",
+        "--relayium-ui-testing-open-stored-link",
+    ]
+
+    /// Exactly that case's XCTest name, `-[Class selector]`, compared whole.
+    /// XCTest has spelled the class bare (`AppShellUITests`, measured on Xcode
+    /// 27) and module-qualified, so both whole spellings are accepted and
+    /// nothing shorter. `#selector` stops a rename compiling past it; any other
+    /// spelling leaves the case on the default launch, which its own first
+    /// assertion then refuses rather than passing quietly.
+    private var launchesFreshDownload: Bool {
+        let selector = NSStringFromSelector(
+            #selector(testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile))
+        return [String(describing: Self.self), NSStringFromClass(Self.self)]
+            .contains { name == "-[\($0) \(selector)]" }
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = offlineLaunchArguments
+        app.launchArguments = launchesFreshDownload
+            ? offlineLaunchArguments + Self.freshDownloadLaunchArguments
+            : offlineLaunchArguments
         app.launch()
     }
 
@@ -1218,15 +1244,7 @@ final class AppShellUITests: XCTestCase {
     /// product itself: a relaunch WITHOUT that argument opens the same link
     /// again and must be refused, by name, because the file is still there.
     func testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + [
-            "--relayium-ui-testing-sign-in",
-            "--relayium-ui-testing-valid-download-link",
-            "--relayium-ui-testing-fresh-received-folder",
-            "--relayium-ui-testing-open-stored-link",
-        ]
-        app.launch()
-
+        // Setup already launched with `freshDownloadLaunchArguments`.
         waitForPresentedStoredReceive(app)
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 15))

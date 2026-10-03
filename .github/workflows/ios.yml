@@ -735,6 +735,7 @@ jobs:
           case "$UI_SHARD" in
             app-shell)
               xcodebuild "${ui_test[@]}" \
+                -collect-test-diagnostics never \
                 -only-testing:RelayiumUITests/AppShellUITests test
               ;;
             complement)
