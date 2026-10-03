@@ -16,7 +16,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -26,6 +26,8 @@ import {
   COMPONENTS, PROBE_LIMITS, TOOLCHAIN_SCHEMA, ToolchainUnknown, canonical, capture, harnessChromeResolver, loadToolchainRegistry,
   main, realExec, readToolchainRegistry, selectionProgram, toolchainDifferences, toolchainDigest, validateCertificate,
 } from "../ci/ci-evidence-toolchain.mjs";
+// The timing trace through the namespace, so an older probe without it fails these checks by name rather than at import.
+import * as toolchainModule from "../ci/ci-evidence-toolchain.mjs";
 import { resolveChrome as harnessResolveChrome } from "../../web/e2e/harness.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -649,6 +651,315 @@ check(Object.keys(COMPONENTS).sort().join() === "android-sdk,chrome,destination,
   check(realExec()(["definitely-not-a-command-xyz"]).status === 127, "a missing command is not reported as 127");
 }
 
+// ── 5b. timing diagnostics ──────────────────────────────────────────────────
+//
+// Two iOS UI jobs lost their certificate to "xcrun could not run: ETIMEDOUT"
+// at the end of the 150 s budget, and that line cannot say which xcrun — an
+// Xcode's SDK or a simctl listing — nor where the time went. Each capture now
+// prints ONE timing line (stderr only): per-component time and calls, the
+// three slowest call points and the failing call's applied bound. These checks
+// drive the real realExec through a fake spawn and clock, so the bounds are
+// the production ones and nothing real is spawned; section 5c meets real
+// processes at the boundary. The certificate, its digest, every fact, the
+// probe order and every old message stay exactly as they were.
+
+const TIMING = typeof toolchainModule.probeTrace === "function" && typeof toolchainModule.timingSummary === "function";
+const NOW = () => new Date("2026-10-01T14:20:00Z");
+const timingLines = (text) => text.split("\n").filter((l) => l.startsWith("ci-evidence-toolchain: timing"));
+const field = (line, name) => (new RegExp(` ${name}=([^ ]*)`).exec(line ?? "") ?? [])[1];
+
+/** The mocked runner behind a fake spawnSync: each command takes cost(argv, env) ms of a fake clock, or times out at its bound. */
+function fakeSpawn(profile, { costs = () => 10, overrides = {} } = {}) {
+  const r = runner(osOf(profile), overrides);
+  const clock = { t: 1_000_000 };
+  const spawned = [];
+  const spawn = (cmd, args, opts) => {
+    const argv = [cmd, ...args];
+    spawned.push({ argv, timeout: opts.timeout, maxBuffer: opts.maxBuffer });
+    const cost = costs(argv, opts.env);
+    if (cost > opts.timeout) {
+      clock.t += opts.timeout;
+      return { error: Object.assign(new Error(`spawnSync ${cmd} ETIMEDOUT`), { code: "ETIMEDOUT" }), status: null, signal: "SIGTERM", stdout: "", stderr: "" };
+    }
+    clock.t += cost;
+    let res;
+    try { res = r.exec(argv, opts.env, opts.input); } catch { return { error: Object.assign(new Error("EINVAL"), { code: "EINVAL" }), status: null, signal: null, stdout: "", stderr: "" }; }
+    if (res.status === 127 && res.stdout === "") return { error: Object.assign(new Error(`spawnSync ${cmd} ENOENT`), { code: "ENOENT" }), status: null, signal: null, stdout: "", stderr: "" };
+    return { status: res.status, signal: null, stdout: res.stdout, stderr: res.stderr };
+  };
+  return { r, spawn, spawned, clock: () => clock.t };
+}
+
+/** main() with its stderr captured. */
+function mainOut(argv, env, deps) {
+  const chunks = [];
+  const write = process.stderr.write;
+  process.stderr.write = (chunk) => { chunks.push(String(chunk)); return true; };
+  let code;
+  try { code = main(argv, env, deps); } finally { process.stderr.write = write; }
+  return { code, text: chunks.join("") };
+}
+
+const depsOf = (f) => ({ registry: REGISTRY, readFile: f.r.readFile, exists: f.r.exists, listDir: f.r.listDir, realpath: f.r.realpath, now: NOW,
+  resolveChrome: f.r.resolveChrome, digestFile: f.r.digestFile, spawn: f.spawn, clock: f.clock });
+
+// The cost of each call point on the fake runner. The default macOS inventory
+// discovers Xcode.app (→ Xcode_26.0.1, ordinal 1) before Xcode_16.4 (ordinal 2).
+const MAC_COSTS = ({ sdk = 10, sdk16sim, devices = 10, runtimes = 10, xcodebuild = 10, xcodebuild1, python = 10 } = {}) => (argv, env) => {
+  const k = argv.join(" ");
+  if (/\/usr\/bin\/xcodebuild -version$/.test(k)) return xcodebuild1 !== undefined && k.includes("Xcode_26.0.1") ? xcodebuild1 : xcodebuild;
+  if (k === "xcrun --sdk iphonesimulator --show-sdk-version" && sdk16sim !== undefined && String(env?.DEVELOPER_DIR).includes("Xcode_16.4")) return sdk16sim;
+  if (k.startsWith("xcrun --sdk ")) return sdk;
+  if (k === "xcrun simctl list devices available -j") return devices;
+  if (k === "xcrun simctl list runtimes -j") return runtimes;
+  if (argv[1] === "-c") return python;
+  return 10;
+};
+
+const CAPTURE = (profile, lane = "go", job = "test") => ["capture", "--role", "source", "--profile", profile, "--out", "OUT", "--lane", lane, "--job", job];
+
+function scenario(name, profile, costs, overrides = {}) {
+  const dir = mkdtempSync(join(tmpdir(), "ci-evidence-toolchain-timing-"));
+  try {
+    const f = fakeSpawn(profile, { costs, overrides });
+    const out = join(dir, "toolchain.json");
+    const argv = CAPTURE(profile).map((a) => (a === "OUT" ? out : a));
+    const { code, text } = mainOut(argv, f.r.env, depsOf(f));
+    let written = null;
+    try { written = readFileSync(out, "utf8"); } catch { /* none */ }
+    return { name, f, code, text, written, lines: timingLines(text), warning: text.split("\n").find((l) => l.startsWith("::warning::")) ?? null };
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+const TIMING_SCENARIOS = [
+  "an instrumented capture is the same certificate, probe order and bounds",
+  "a successful capture prints one timing line with its components and slowest call points",
+  "a budget-remainder timeout in a simctl listing is named with its bound",
+  "a per-command timeout in one Xcode's SDK is named by ordinal",
+  "a remaining budget equal to the command bound is per-command",
+  "an exhausted budget names the call it refused",
+  "a refusal after a successful call names its component",
+  "private paths, argv and environment never reach the timing line",
+  "a forged trace or an unregistered profile cannot inject into the line",
+  "each current profile has its own budget and timing line",
+];
+if (!TIMING) {
+  for (const name of TIMING_SCENARIOS) check(false, `timing: ${name} — the probe has no timing trace (probeTrace/timingSummary not exported)`);
+}
+
+// Through main with the mocked exec (a seam the old CLI already had): one timing line per capture, success or not.
+{
+  const r = runner("Linux");
+  const deps = { registry: REGISTRY, exec: r.exec, readFile: r.readFile, exists: r.exists, listDir: r.listDir, realpath: r.realpath, now: NOW,
+    resolveChrome: r.resolveChrome, digestFile: r.digestFile };
+  const dir = mkdtempSync(join(tmpdir(), "ci-evidence-toolchain-timing-"));
+  const ok = mainOut(["capture", "--role", "source", "--profile", "linux-go", "--out", join(dir, "a.json"), "--lane", "go", "--job", "test"], r.env, deps);
+  const okLines = timingLines(ok.text);
+  check(ok.code === 0 && okLines.length === 1 && field(okLines[0], "outcome") === "certificate" && field(okLines[0], "profile") === "linux-go"
+    && field(okLines[0], "role") === "source" && /^image:0:\d+,go:4:\d+$/.test(field(okLines[0], "components") ?? ""),
+  `a successful capture must print exactly one timing line naming its profile and components: ${JSON.stringify(okLines)}`);
+  const bad = runner("Linux", { status: { "go version": 2 } });
+  const no = mainOut(["capture", "--role", "current", "--profile", "linux-go", "--out", join(dir, "b.json")], bad.env, { ...deps, exec: bad.exec });
+  const noLines = timingLines(no.text);
+  check(no.code === 0 && no.text.includes("::warning::ci-evidence-toolchain: no current certificate: go version exited 2\n") && noLines.length === 1
+    && field(noLines[0], "outcome") === "no-certificate" && field(noLines[0], "role") === "current" && field(noLines[0], "failure") === "go.refused",
+  `an unknown capture must keep its warning and print exactly one timing line naming the refusing component: ${JSON.stringify(noLines)}`);
+  rmSync(dir, { recursive: true, force: true });
+}
+
+if (TIMING) {
+  const { probeTrace, timingSummary } = toolchainModule;
+
+  part("instrumented identity", () => {
+    // Every profile, both roles: the capture through realExec + trace is byte for
+    // byte the plain capture, runs the same argv in the same order, under the
+    // production bounds.
+    for (const profile of Object.keys(REGISTRY.profiles)) {
+      for (const role of ["source", "current"]) {
+        const plainRunner = runner(osOf(profile));
+        const plain = capture({ registry: REGISTRY, profileName: profile, role, laneId: "go", jobId: "test", env: plainRunner.env, exec: plainRunner.exec,
+          readFile: plainRunner.readFile, exists: plainRunner.exists, listDir: plainRunner.listDir, realpath: plainRunner.realpath, now: NOW,
+          resolveChrome: plainRunner.resolveChrome, digestFile: plainRunner.digestFile, root: repoRoot });
+        const f = fakeSpawn(profile);
+        const trace = probeTrace(f.clock);
+        const traced = capture({ registry: REGISTRY, profileName: profile, role, laneId: "go", jobId: "test", env: f.r.env,
+          exec: realExec(undefined, { trace, spawn: f.spawn, clock: f.clock }), readFile: f.r.readFile, exists: f.r.exists, listDir: f.r.listDir,
+          realpath: f.r.realpath, now: NOW, resolveChrome: f.r.resolveChrome, digestFile: f.r.digestFile, root: repoRoot, trace });
+        check(JSON.stringify(traced, null, 2) === JSON.stringify(plain, null, 2) && traced.digest === plain.digest,
+          `${profile}/${role}: the traced certificate differs from the plain one`);
+        check(JSON.stringify(f.spawned.map((s) => s.argv)) === JSON.stringify(plainRunner.calls.map((c) => c.argv)),
+          `${profile}/${role}: the traced capture ran other commands or another order`);
+        check(f.spawned.every((s) => s.timeout === Math.min(30_000, 150_000 - 10 * f.spawned.indexOf(s))
+          && s.maxBuffer === (s.argv[0] === "xcrun" ? 4 * 1024 * 1024 : 64 * 1024)),
+        `${profile}/${role}: a command ran under other bounds than 30 s / the remaining 150 s budget and 64 KiB / 4 MiB`);
+        check(trace.calls === f.spawned.length && Object.values(trace.components).reduce((n, c) => n + c.calls, 0) === f.spawned.length,
+          `${profile}/${role}: the trace counted ${trace.calls} calls for ${f.spawned.length} commands`);
+      }
+    }
+    check(PROBE_LIMITS.commandMs === 30_000 && PROBE_LIMITS.totalMs === 150_000 && PROBE_LIMITS.outputBytes === 64 * 1024
+      && PROBE_LIMITS.listingBytes === 4 * 1024 * 1024 && Object.isFrozen(PROBE_LIMITS), "the probe's production bounds changed");
+  });
+
+  part("success line", () => {
+    const s = scenario("success", "macos-xcode-iphone", MAC_COSTS({ xcodebuild1: 5000, sdk16sim: 7000, devices: 9000 }));
+    const plain = JSON.stringify(certFor("macos-xcode-iphone"), null, 2);
+    check(s.code === 0 && s.written === `${plain}\n`, "the timed capture command did not write the plain certificate byte for byte");
+    check(s.lines.length === 1 && s.text.includes(`ci-evidence-toolchain: source macos-xcode-iphone certificate ${JSON.parse(plain).digest}\n`),
+      `want the unchanged certificate line and exactly one timing line: ${JSON.stringify(s.text)}`);
+    const l = s.lines[0];
+    check(field(l, "outcome") === "certificate" && field(l, "profile") === "macos-xcode-iphone" && field(l, "failure") === "-"
+      && field(l, "calls") === "13" && field(l, "wall_ms") === "21100" && field(l, "budget_ms") === "150000" && field(l, "budget_left_ms") === "128900"
+      && field(l, "components") === "image:2:20,xcode:7:12050,destination:4:9030"
+      && field(l, "slowest") === "destination.simctl-devices:9000:ok,xcode.sdk-iphonesimulator#2:7000:ok,xcode.xcodebuild-version#1:5000:ok",
+    `the success line does not account for the capture's time: ${l}`);
+  });
+
+  part("simctl budget remainder", () => {
+    // About the observed shape: the inventory takes most of the budget and a
+    // listing meets the remainder. Old line: generic; new line: which and how.
+    const s = scenario("simctl", "macos-xcode-iphone", MAC_COSTS({ sdk: 25_000, devices: 29_000, runtimes: 25_000 }));
+    check(s.code === 0 && s.written === null && s.warning === "::warning::ci-evidence-toolchain: no source certificate: xcrun could not run: ETIMEDOUT",
+      `a timed-out listing must keep the old unknown: no certificate, exit 0, the same warning: ${s.warning}`);
+    check(s.lines.length === 1 && field(s.lines[0], "outcome") === "no-certificate"
+      && field(s.lines[0], "failure") === "destination.simctl-runtimes:timeout:elapsed_ms=20950:applied_ms=20950:bound=budget-remainder:budget_before_ms=20950:budget_after_ms=0"
+      && field(s.lines[0], "components") === "image:2:20,xcode:7:100030,destination:2:49950" && field(s.lines[0], "wall_ms") === "150000",
+    `the timed-out simctl runtimes listing is not named with its bound: ${s.lines[0]}`);
+    const runtimes = s.f.spawned.filter((x) => x.argv.join(" ") === "xcrun simctl list runtimes -j");
+    check(runtimes.length === 1 && s.f.spawned.at(-1) === runtimes[0], "a timed-out command was retried, or the probe went on after it");
+  });
+
+  part("sdk per-command", () => {
+    const s = scenario("sdk", "macos-xcode-iphone", MAC_COSTS({ sdk16sim: 40_000 }));
+    const simctl = scenario("simctl", "macos-xcode-iphone", MAC_COSTS({ sdk: 25_000, devices: 29_000, runtimes: 25_000 }));
+    check(s.written === null && s.warning === simctl.warning, "an SDK and a simctl timeout no longer share the old message (it must stay unchanged)");
+    check(field(s.lines[0], "failure") === "xcode.sdk-iphonesimulator#2:timeout:elapsed_ms=30000:applied_ms=30000:bound=per-command:budget_before_ms=149930:budget_after_ms=119930",
+      `the Xcode SDK timeout is not named by call point, ordinal and bound: ${s.lines[0]}`);
+    check(field(s.lines[0], "failure") !== field(simctl.lines[0], "failure"), "the timing line cannot tell an SDK timeout from a simctl one");
+    // With most of the budget left, a timed-out command is still not retried, and nothing runs after it.
+    const sims = s.f.spawned.filter((x) => x.argv.join(" ") === "xcrun --sdk iphonesimulator --show-sdk-version");
+    check(sims.length === 2 && s.f.spawned.at(-1) === sims[1] && field(s.lines[0], "calls") === "8",
+      "a timed-out command with budget left was retried, or the probe went on after it");
+  });
+
+  part("tie", () => {
+    const s = scenario("tie", "macos-xcode-iphone", MAC_COSTS({ sdk: 25_000, devices: 19_950, runtimes: 40_000 }));
+    check(/^destination\.simctl-runtimes:timeout:elapsed_ms=30000:applied_ms=30000:bound=per-command:budget_before_ms=30000:/.test(field(s.lines[0], "failure") ?? ""),
+      `a remaining budget exactly equal to the 30 s bound must be per-command: ${s.lines[0]}`);
+  });
+
+  part("exhausted", () => {
+    const s = scenario("exhausted", "macos-xcode-iphone", MAC_COSTS({ sdk: 25_000, devices: 29_000, runtimes: 20_950 }));
+    check(s.written === null && s.warning === "::warning::ci-evidence-toolchain: no source certificate: the probe ran out of its time budget"
+      && field(s.lines[0], "failure") === "destination.selection-program:budget-exhausted:elapsed_ms=0:applied_ms=0:budget_before_ms=0:budget_after_ms=0"
+      && field(s.lines[0], "budget_left_ms") === "0",
+    `an exhausted budget must keep its message and name the refused call: ${s.warning} / ${s.lines[0]}`);
+    check(!s.f.spawned.some((x) => x.argv[1] === "-c"), "a command was spawned with no budget left");
+  });
+
+  part("refusal", () => {
+    const s = scenario("refusal", "macos-xcode-iphone", MAC_COSTS(), { xcodebuild: () => ({ status: 0, stdout: "Xcode beta\n", stderr: "" }) });
+    check(s.written === null && /^::warning::ci-evidence-toolchain: no source certificate: Xcode\.app xcodebuild -version is not in a recognised shape/.test(s.warning ?? "")
+      && field(s.lines[0], "failure") === "xcode.refused:last=xcode.xcodebuild-version#1:ok",
+    `a parse refusal must keep its message and name the component and its last call: ${s.lines[0]}`);
+    const exit = scenario("exit", "macos-xcode-iphone", MAC_COSTS(), { status: { "xcrun simctl list devices available -j": 1 } });
+    check(/simctl list devices available -j exited 1$/.test(exit.warning ?? "") && field(exit.lines[0], "failure") === "destination.refused:last=destination.simctl-devices:exit:1",
+      `a nonzero exit must keep its message and name its call: ${exit.lines[0]}`);
+  });
+
+  part("privacy", () => {
+    // Canaries in a private Xcode path (which the old message prints, unchanged),
+    // in the environment, in DEVELOPER_DIR and in the C compiler command.
+    const canary = "CANARY7q";
+    const xcodes = { [`/Applications/Xcode_${canary}.app`]: { version: "26.0.1", build: "17A400", macosx: "26.0", sim: "26.0" } };
+    const priv = scenario("private Xcode", "macos-xcode-go", MAC_COSTS({ xcodebuild: 40_000 }), {
+      xcodes, realpaths: { [`/Applications/Xcode_${canary}.app`]: `/Users/owner-${canary}/Private/Xcode_${canary}.app` },
+      env: { SECRET_TOKEN: `tok-${canary}`, DEVELOPER_DIR: `/Users/owner-${canary}/Private/Xcode_${canary}.app/Contents/Developer` },
+      out: { "go env CGO_ENABLED CC": `1\nclang-${canary} --sysroot=/Users/owner-${canary}\n` },
+    });
+    check(priv.warning?.includes(canary) && field(priv.lines[0], "failure")?.startsWith("xcode.xcodebuild-version#1:timeout:"),
+      `the private-path scenario did not time out in the private Xcode (it must, to test the line): ${priv.warning} / ${priv.lines[0]}`);
+    const cc = scenario("private CC", "macos-xcode-go", MAC_COSTS({ xcodebuild: 10 }), {
+      env: { SECRET_TOKEN: `tok-${canary}` }, out: { "go env CGO_ENABLED CC": `1\nclang-${canary} --sysroot=/Users/owner-${canary}\n` },
+    });
+    for (const s of [priv, cc]) {
+      check(s.lines.length === 1 && !/[/\\%]|canary|import json|Xcode_|Users|tok-/i.test(s.lines[0]),
+        `${s.name}: the timing line carries a path, argv, program or environment value: ${s.lines[0]}`);
+    }
+  });
+
+  part("injection", () => {
+    const forged = probeTrace(() => 0);
+    forged.top = [{ component: "xcode", op: "sdk-macosx\n::error::x", ordinal: 0, ms: 1, outcome: "ok" }];
+    check(timingSummary(forged, { role: "source", profile: "linux-go", registry: REGISTRY, outcome: "certificate" }) === "ci-evidence-toolchain: timing unavailable",
+      "a line with a line end or a workflow command in it was printed");
+    forged.top = [{ component: "xcode", op: "sdk%0A", ordinal: 0, ms: 1, outcome: "ok" }];
+    check(timingSummary(forged, { role: "source", profile: "linux-go", registry: REGISTRY, outcome: "certificate" }) === "ci-evidence-toolchain: timing unavailable",
+      "a line with a percent escape in it was printed");
+    const clean = probeTrace(() => 0);
+    for (const profile of ["linux-go%0A::warning::x", "linux-nope", "../linux-go", "Linux-Go"]) {
+      check(field(timingSummary(clean, { role: "source", profile, registry: REGISTRY, outcome: "certificate" }), "profile") === "unregistered",
+        `the unregistered profile ${JSON.stringify(profile)} was printed`);
+    }
+    check(field(timingSummary(clean, { role: "witness", profile: "linux-go", registry: REGISTRY, outcome: "certificate" }), "role") === "unknown",
+      "an unknown role was printed");
+    const f = fakeSpawn("linux-go");
+    const { text } = mainOut(["capture", "--role", "source", "--profile", "linux-go%0A::warning::x", "--out", join(tmpdir(), "never-written.json"), "--lane", "go", "--job", "test"],
+      f.r.env, depsOf(f));
+    check(timingLines(text).length === 1 && field(timingLines(text)[0], "profile") === "unregistered", `an unregistered CLI profile reached the timing line: ${text}`);
+  });
+
+  part("current budgets", () => {
+    // Two current profiles in one run: the first times out at its budget's end;
+    // the second starts with a whole new budget and its own trace.
+    const dir = mkdtempSync(join(tmpdir(), "ci-evidence-toolchain-timing-"));
+    const f = fakeSpawn("macos-xcode-iphone", { costs: MAC_COSTS({ sdk: 25_000, devices: 29_000, runtimes: 25_000 }) });
+    const { code, text } = mainOut(["current", "--profiles", "macos-xcode-iphone,macos-xcode", "--dir", dir], f.r.env, depsOf(f));
+    const lines = timingLines(text);
+    let files = [];
+    try { files = readdirSync(dir).sort(); } catch { /* none */ }
+    check(code === 0 && lines.length === 2 && JSON.stringify(files) === JSON.stringify(["macos-xcode.json"]),
+      `want two timing lines and only the second profile's certificate: ${JSON.stringify(files)} ${JSON.stringify(lines)}`);
+    check(field(lines[0], "profile") === "macos-xcode-iphone" && field(lines[0], "outcome") === "no-certificate" && field(lines[0], "budget_left_ms") === "0"
+      && field(lines[1], "profile") === "macos-xcode" && field(lines[1], "outcome") === "certificate" && field(lines[1], "role") === "current"
+      && field(lines[1], "budget_left_ms") === "49950" && field(lines[1], "calls") === "9" && field(lines[1], "wall_ms") === "100050",
+    `the second profile did not get its own budget and trace: ${JSON.stringify(lines)}`);
+    rmSync(dir, { recursive: true, force: true });
+  });
+}
+
+// ── 5c. timing at the real process boundary ─────────────────────────────────
+// Real child processes, all finite (the slowest is cut at 100 ms).
+if (TIMING) {
+  const { probeTrace } = toolchainModule;
+  const at = (component, op) => { const t = probeTrace(); t.current = { component, op, ordinal: 0 }; return t; };
+  part("real boundary", () => {
+    const slowTrace = at("destination", "simctl-runtimes");
+    const slow = threw(() => realExec({ left: 100 }, { trace: slowTrace })(["sleep", "2"]));
+    check(slow instanceof ToolchainUnknown && slow.message === "sleep could not run: ETIMEDOUT" && slowTrace.failure?.outcome === "timeout"
+      && slowTrace.failure.applied === 100 && slowTrace.failure.op === "simctl-runtimes" && slowTrace.failure.ms >= 90,
+    `a real timeout was not traced with its applied bound: ${slow?.message} ${JSON.stringify(slowTrace.failure)}`);
+    const bufTrace = at("go", "go-version");
+    const buf = threw(() => realExec(undefined, { trace: bufTrace })([process.execPath, "-e", "process.stdout.write('x'.repeat(200000))"]));
+    check(buf instanceof ToolchainUnknown && / could not run: ENOBUFS$/.test(buf.message) && bufTrace.failure?.outcome === "enobufs",
+      `real output past its cap was not refused and traced: ${buf?.message} ${JSON.stringify(bufTrace.failure)}`);
+    const sigTrace = at("image", "sw-vers-product");
+    const sig = realExec(undefined, { trace: sigTrace })(["/bin/sh", "-c", "kill -TERM $$"]);
+    check(sig.status === null && sigTrace.last?.outcome === "signal:SIGTERM" && sigTrace.failure === null,
+      `a real signal death was not traced as one (status ${sig.status}, ${JSON.stringify(sigTrace.last)})`);
+    const goneTrace = at("go", "cc-version");
+    check(realExec(undefined, { trace: goneTrace })(["definitely-not-a-command-xyz"]).status === 127 && goneTrace.last?.outcome === "enoent" && goneTrace.failure === null,
+      "a missing command is not still 127, traced as enoent");
+    const exitTrace = at("go", "cc-target");
+    check(realExec(undefined, { trace: exitTrace })(["/bin/sh", "-c", "exit 3"]).status === 3 && exitTrace.last?.outcome === "exit:3",
+      "a real nonzero exit is not returned and traced");
+    let spawned = 0;
+    const zeroTrace = at("xcode", "sdk-macosx");
+    const zero = threw(() => realExec({ left: 0 }, { trace: zeroTrace, spawn: () => { spawned += 1; return { status: 0 }; } })(["true"]));
+    check(zero instanceof ToolchainUnknown && /time budget/.test(zero.message) && spawned === 0 && zeroTrace.failure?.outcome === "budget-exhausted",
+      "a zero budget spawned something, or was not traced");
+  });
+}
+
 // ── 6. a real hosted Ubuntu runner, when this runs on one ────────────────────
 
 let live = "skipped (not a hosted Ubuntu runner)";
@@ -676,4 +987,4 @@ if (failures.length > 0) {
 }
 console.log(`ci-evidence-toolchain-test: OK (${checks} checks: ${Object.keys(REGISTRY.profiles).length} profiles captured and stable; `
   + `${UNKNOWNS.length} unknown toolchains refused; ${VS2026} admitted and ${IMAGE_OS_REFUSED.length} near-miss ImageOS values refused at capture and schema; `
-  + `schema/digest/comparison/registry/CLI/budget controls; live: ${live})`);
+  + `schema/digest/comparison/registry/CLI/budget controls; timing diagnostics; live: ${live})`);

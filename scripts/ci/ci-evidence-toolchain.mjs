@@ -77,6 +77,104 @@ const unknown = (message) => { throw new ToolchainUnknown(message); };
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
+// ── timing diagnostics ──────────────────────────────────────────────────────
+//
+// Where a probe's time went, for the log only: never in a certificate, never a
+// reason to accept or refuse one. Everything printed comes from a fixed
+// vocabulary — the component, the semantic call point, the Xcode's discovery
+// ordinal — or is an integer, so no argv, path, environment value, program,
+// command output or error text can reach the line. A timeout is described by
+// the bound that was applied, not by a cause: `per-command` when the command's
+// own 30 s bound applied (including a remaining budget exactly equal to it),
+// `budget-remainder` when the profile's remaining budget was the smaller bound.
+
+/** The call points a probe runs a command from. Anything else is traced as `none`. */
+export const PROBE_OPS = Object.freeze([
+  "sw-vers-product", "sw-vers-build", "windows-ver", "go-version", "go-env", "cc-version", "cc-target",
+  "node-version", "npm-version", "java-version", "chrome-version", "xcodebuild-version", "sdk-macosx",
+  "sdk-iphonesimulator", "xcode-select-print", "simctl-devices", "simctl-runtimes", "selection-program",
+  "interpreter-version",
+]);
+const SIGNALS = new Set(["SIGTERM", "SIGKILL", "SIGINT", "SIGHUP", "SIGQUIT", "SIGABRT", "SIGSEGV", "SIGBUS", "SIGPIPE",
+  "SIGILL", "SIGTRAP", "SIGFPE", "SIGALRM", "SIGXCPU", "SIGXFSZ", "SIGSYS"]);
+const SPAWN_ERRORS = new Set(["EACCES", "EPERM", "EINVAL", "EAGAIN", "EMFILE", "ENFILE", "ENOMEM", "E2BIG", "ENOTDIR", "EISDIR", "ELOOP"]);
+const msOf = (n) => (Number.isSafeInteger(Math.round(n)) && n > 0 ? Math.round(n) : 0);
+
+/**
+ * One capture's timing record: per-component wall time and call count, the
+ * three slowest commands, the last command's outcome and the first command
+ * failure. Fixed size whatever the probe runs.
+ */
+export function probeTrace(clock = Date.now) {
+  return {
+    clock, started: clock(), current: { component: "none", op: "none", ordinal: 0 },
+    components: {}, calls: 0, top: [], last: null, failure: null, budgetLeft: null,
+  };
+}
+
+function traceAt(trace, component, op, ordinal) {
+  if (!trace) return;
+  const c = Object.hasOwn(COMPONENTS, component) ? component : "none";
+  trace.current = { component: c, op: PROBE_OPS.includes(op) ? op : "none", ordinal: Number.isSafeInteger(ordinal) && ordinal > 0 && ordinal <= PROBE_LIMITS.xcodes ? ordinal : 0 };
+  if (op !== "none") {
+    trace.calls += 1;
+    trace.components[c] = { ms: trace.components[c]?.ms ?? 0, calls: (trace.components[c]?.calls ?? 0) + 1 };
+  }
+}
+
+/** A spawnSync result as a fixed-vocabulary outcome. */
+function outcomeOf(r) {
+  if (r.error?.code === "ENOENT") return "enoent";
+  if (r.error?.code === "ETIMEDOUT") return "timeout";
+  if (r.error?.code === "ENOBUFS") return "enobufs";
+  if (r.error) return `spawn-error:${SPAWN_ERRORS.has(r.error.code) ? r.error.code : "other"}`;
+  if (r.status === null) return `signal:${SIGNALS.has(r.signal) ? r.signal : "other"}`;
+  return Number.isSafeInteger(r.status) && r.status >= 0 && r.status <= 65535 ? (r.status === 0 ? "ok" : `exit:${r.status}`) : "exit:other";
+}
+
+function traceCall(trace, entry) {
+  if (!trace) return;
+  trace.last = entry;
+  trace.budgetLeft = entry.after;
+  trace.top = [...trace.top, entry].sort((a, b) => b.ms - a.ms).slice(0, 3);
+  if (!trace.failure && entry.outcome !== "ok" && entry.outcome !== "enoent" && !entry.outcome.startsWith("exit:") && !entry.outcome.startsWith("signal:")) {
+    trace.failure = entry;
+  }
+}
+
+const opName = (e) => `${e.component}.${e.op}${e.ordinal ? `#${e.ordinal}` : ""}`;
+
+/**
+ * The one timing line for a capture, or a fixed fallback when anything in it is
+ * not plain printable ASCII (no `%`, no `::`, no line end) or is over its cap.
+ */
+export function timingSummary(trace, { role, profile, registry, outcome }) {
+  const fallback = "ci-evidence-toolchain: timing unavailable";
+  if (!trace) return fallback;
+  const r = role === "source" || role === "current" ? role : "unknown";
+  const p = typeof profile === "string" && /^[a-z0-9-]{1,60}$/.test(profile) && Object.hasOwn(registry?.profiles ?? {}, profile) ? profile : "unregistered";
+  const comps = Object.keys(COMPONENTS).concat("none").filter((c) => trace.components[c])
+    .map((c) => `${c}:${trace.components[c].calls}:${msOf(trace.components[c].ms)}`).join(",") || "-";
+  const top = trace.top.map((e) => `${opName(e)}:${msOf(e.ms)}:${e.outcome}`).join(",") || "-";
+  let fail = "-";
+  if (outcome !== "certificate") {
+    const f = trace.failure;
+    if (f) {
+      const bound = f.outcome === "timeout" ? `:bound=${f.applied < PROBE_LIMITS.commandMs ? "budget-remainder" : "per-command"}` : "";
+      fail = `${opName(f)}:${f.outcome}:elapsed_ms=${msOf(f.ms)}:applied_ms=${msOf(f.applied)}${bound}`
+        + `:budget_before_ms=${msOf(f.before)}:budget_after_ms=${msOf(f.after)}`;
+    } else {
+      const last = trace.last ? `:last=${opName(trace.last)}:${trace.last.outcome}` : "";
+      fail = `${trace.current.component}.refused${last}`;
+    }
+  }
+  const budget = trace.budgetLeft === null ? "-" : msOf(trace.budgetLeft);
+  const line = `ci-evidence-toolchain: timing role=${r} profile=${p} outcome=${outcome === "certificate" ? "certificate" : "no-certificate"}`
+    + ` wall_ms=${msOf(trace.clock() - trace.started)} budget_ms=${PROBE_LIMITS.totalMs} budget_left_ms=${budget} calls=${trace.calls}`
+    + ` components=${comps} slowest=${top} failure=${fail}`;
+  return /^[ -$&-~]{1,1024}$/.test(line) && !line.includes("::") ? line : fallback;
+}
+
 /** JSON with sorted keys at every level — the only form that is hashed or compared. */
 export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -91,27 +189,37 @@ export function canonical(value) {
 /**
  * Runs argv (never a shell) with a per-command and an overall time bound.
  * Returns `{ status, stdout, stderr }`; a timeout or spawn error is unknown.
+ * `trace` (probeTrace) records each command's timing; `spawn` and `clock` are
+ * seams for tests only — the bounds are always PROBE_LIMITS.
  */
-export function realExec(budget = { left: PROBE_LIMITS.totalMs }) {
+export function realExec(budget = { left: PROBE_LIMITS.totalMs }, { trace = null, spawn = spawnSync, clock = Date.now } = {}) {
   return (argv, env = {}, input = undefined) => {
-    if (budget.left <= 0) unknown("the probe ran out of its time budget");
-    const started = Date.now();
-    const r = spawnSync(argv[0], argv.slice(1), {
+    const at = trace ? { ...trace.current } : null;
+    if (budget.left <= 0) {
+      traceCall(trace, { ...at, ms: 0, applied: 0, before: budget.left, after: budget.left, outcome: "budget-exhausted" });
+      unknown("the probe ran out of its time budget");
+    }
+    const started = clock();
+    const before = budget.left;
+    const applied = Math.min(PROBE_LIMITS.commandMs, budget.left);
+    const r = spawn(argv[0], argv.slice(1), {
       encoding: "utf8",
-      timeout: Math.min(PROBE_LIMITS.commandMs, budget.left),
+      timeout: applied,
       maxBuffer: argv[0] === "xcrun" ? PROBE_LIMITS.listingBytes : PROBE_LIMITS.outputBytes,
       env: { ...process.env, ...env },
       ...(input === undefined ? {} : { input }),
     });
-    budget.left -= Date.now() - started;
+    const ms = clock() - started;
+    budget.left -= ms;
+    traceCall(trace, { ...at, ms, applied, before, after: budget.left, outcome: outcomeOf(r) });
     if (r.error?.code === "ENOENT") return { status: 127, stdout: "", stderr: "" };
     if (r.error) unknown(`${argv[0]} could not run: ${r.error.code ?? r.error.message}`);
     return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
   };
 }
 
-function run(ctx, argv, env, input) {
-  const r = ctx.exec(argv, env, input);
+function run(ctx, op, argv, env, input) {
+  const r = ctx.call(op, argv, env, input);
   if (r.status !== 0) unknown(`${argv.join(" ")} exited ${r.status}`);
   return `${r.stdout}`;
 }
@@ -151,11 +259,11 @@ function image(ctx) {
     const ver = match(rel, /^VERSION_ID=("?)([0-9.]+)\1$/m, "/etc/os-release VERSION_ID")[2];
     out.os_release = `${id} ${ver}`;
   } else if (out.runner_os === "macOS") {
-    const v = match(run(ctx, ["sw_vers", "-productVersion"]).trim(), /^[0-9]+(\.[0-9]+){1,2}$/, "sw_vers -productVersion")[0];
-    const b = match(run(ctx, ["sw_vers", "-buildVersion"]).trim(), /^[0-9A-Za-z]+$/, "sw_vers -buildVersion")[0];
+    const v = match(run(ctx, "sw-vers-product", ["sw_vers", "-productVersion"]).trim(), /^[0-9]+(\.[0-9]+){1,2}$/, "sw_vers -productVersion")[0];
+    const b = match(run(ctx, "sw-vers-build", ["sw_vers", "-buildVersion"]).trim(), /^[0-9A-Za-z]+$/, "sw_vers -buildVersion")[0];
     out.os_release = `macOS ${v} (${b})`;
   } else {
-    out.os_release = match(run(ctx, ["cmd", "/d", "/c", "ver"]), /Version ([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?)/, "ver")[1];
+    out.os_release = match(run(ctx, "windows-ver", ["cmd", "/d", "/c", "ver"]), /Version ([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?)/, "ver")[1];
   }
   return out;
 }
@@ -171,19 +279,19 @@ function image(ctx) {
  * recorded as absent on every field, which compares unequal to any compiler.
  */
 function go(ctx) {
-  const ver = match(firstLine(run(ctx, ["go", "version"])), /^go version (go[0-9]+\.[0-9]+(\.[0-9]+)?(rc[0-9]+)?) ([a-z0-9]+)\/([a-z0-9]+)$/, "go version");
-  const lines = run(ctx, ["go", "env", "CGO_ENABLED", "CC"]).split(/\r?\n/);
+  const ver = match(firstLine(run(ctx, "go-version", ["go", "version"])), /^go version (go[0-9]+\.[0-9]+(\.[0-9]+)?(rc[0-9]+)?) ([a-z0-9]+)\/([a-z0-9]+)$/, "go version");
+  const lines = run(ctx, "go-env", ["go", "env", "CGO_ENABLED", "CC"]).split(/\r?\n/);
   const cgo = match((lines[0] ?? "").trim(), /^[01]$/, "go env CGO_ENABLED")[0];
   const cc = (lines[1] ?? "").trim();
   const absent = { version: ver[1], goos: ver[4], goarch: ver[5], cgo_enabled: cgo, cc: "absent", cc_path: "absent", cc_version: "absent", cc_target: "absent" };
   if (cc === "") return absent;
   const bin = cc.split(/\s+/)[0];
-  const probe = ctx.exec([bin, "--version"]);
+  const probe = ctx.call("cc-version", [bin, "--version"]);
   if (probe.status === 127) return { ...absent, cc };
   if (probe.status !== 0) unknown(`${cc} --version exited ${probe.status}`);
   const ccVersion = match(firstLine(probe.stdout), /^.*\b[0-9]+\.[0-9]+(\.[0-9]+)?.*$/, `${cc} --version`)[0];
   const path = ctx.realpath(/[\\/]/.test(bin) ? bin : ctx.which(bin));
-  const target = match(firstLine(run(ctx, [bin, ...cc.split(/\s+/).slice(1), "-dumpmachine"])),
+  const target = match(firstLine(run(ctx, "cc-target", [bin, ...cc.split(/\s+/).slice(1), "-dumpmachine"])),
     /^[A-Za-z0-9_]+(-[A-Za-z0-9_.]+){1,4}$/, `${cc} -dumpmachine`)[0];
   return { version: ver[1], goos: ver[4], goarch: ver[5], cgo_enabled: cgo, cc, cc_path: path, cc_version: ccVersion, cc_target: target };
 }
@@ -198,14 +306,14 @@ function go(ctx) {
 function node(ctx) {
   const npm = ctx.env.RUNNER_OS === "Windows" ? ["cmd", "/d", "/c", "npm.cmd", "--version"] : ["npm", "--version"];
   return {
-    version: match(firstLine(run(ctx, ["node", "--version"])), /^v[0-9]+\.[0-9]+\.[0-9]+$/, "node --version")[0],
-    npm: match(firstLine(run(ctx, npm)), /^[0-9]+\.[0-9]+\.[0-9]+$/, "npm --version")[0],
+    version: match(firstLine(run(ctx, "node-version", ["node", "--version"])), /^v[0-9]+\.[0-9]+\.[0-9]+$/, "node --version")[0],
+    npm: match(firstLine(run(ctx, "npm-version", npm)), /^[0-9]+\.[0-9]+\.[0-9]+$/, "npm --version")[0],
   };
 }
 
 /** The JDK setup-java selected (`java -version` reports on stderr). */
 function java(ctx) {
-  const r = ctx.exec(["java", "-version"]);
+  const r = ctx.call("java-version", ["java", "-version"]);
   if (r.status !== 0) unknown(`java -version exited ${r.status}`);
   const text = `${r.stderr}${r.stdout}`.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const v = match(text[0] ?? "", /^(openjdk|java) version "([0-9][0-9._+a-z-]*)"/, "java -version");
@@ -243,7 +351,7 @@ function chrome(ctx) {
   try { path = ctx.resolveChrome(); } catch (err) { unknown(`the browser harness resolves no Chrome: ${String(err?.message ?? err).split("\n")[0]}`); }
   if (typeof path !== "string" || !path.startsWith("/")) unknown(`the browser harness resolved ${JSON.stringify(path)}`);
   const real = ctx.realpath(path);
-  const v = match(firstLine(run(ctx, [path, "--version"])), /^(Google Chrome|Chromium) ([0-9]+(\.[0-9]+){3})\b/, `${path} --version`);
+  const v = match(firstLine(run(ctx, "chrome-version", [path, "--version"])), /^(Google Chrome|Chromium) ([0-9]+(\.[0-9]+){3})\b/, `${path} --version`);
   return {
     pinned: typeof ctx.env.CHROME_PATH === "string" && ctx.env.CHROME_PATH !== "",
     path,
@@ -266,14 +374,16 @@ function xcode(ctx) {
     if (seen.has(real)) continue;
     if (seen.size >= PROBE_LIMITS.xcodes) unknown(`more than ${PROBE_LIMITS.xcodes} Xcodes installed`);
     const dev = join(real, "Contents/Developer");
-    const text = run(ctx, [join(dev, "usr/bin/xcodebuild"), "-version"], { DEVELOPER_DIR: dev });
+    ctx.ordinal = seen.size + 1;
+    const text = run(ctx, "xcodebuild-version", [join(dev, "usr/bin/xcodebuild"), "-version"], { DEVELOPER_DIR: dev });
     const v = match(text, /^Xcode ([0-9]+(\.[0-9]+){0,2})\s*\nBuild version ([0-9A-Za-z]+)\s*$/m, `${app} xcodebuild -version`);
-    const sdk = (name) => match(run(ctx, ["xcrun", "--sdk", name, "--show-sdk-version"], { DEVELOPER_DIR: dev }).trim(),
+    const sdk = (name, op) => match(run(ctx, op, ["xcrun", "--sdk", name, "--show-sdk-version"], { DEVELOPER_DIR: dev }).trim(),
       /^[0-9]+(\.[0-9]+){1,2}$/, `${app} ${name} SDK`)[0];
-    seen.set(real, { app: real, version: v[1], build: v[3], macosx_sdk: sdk("macosx"), iphonesimulator_sdk: sdk("iphonesimulator") });
+    seen.set(real, { app: real, version: v[1], build: v[3], macosx_sdk: sdk("macosx", "sdk-macosx"), iphonesimulator_sdk: sdk("iphonesimulator", "sdk-iphonesimulator") });
   }
+  ctx.ordinal = 0;
   if (seen.size === 0) unknown("no Xcode is installed");
-  const byDefault = run(ctx, ["xcode-select", "-p"], { DEVELOPER_DIR: "" }).trim();
+  const byDefault = run(ctx, "xcode-select-print", ["xcode-select", "-p"], { DEVELOPER_DIR: "" }).trim();
   match(byDefault, /^\/[A-Za-z0-9 _./-]+$/, "xcode-select -p");
   // The Xcode this job USED: the lane's own selection exports DEVELOPER_DIR
   // (the iOS lanes), every other job uses the image default. Never re-derived
@@ -354,12 +464,12 @@ function destination(ctx, params) {
   const { interpreter, program } = selectionProgram(ctx.readFile(resolve(ctx.repoRoot, d.file)), d);
   const programSha = sha256(`${interpreter}\0${program}`);
   if (programSha !== d.sha256) unknown(`the ${d.id} selection program is not the one the registry pins (${programSha})`);
-  const listing = run(ctx, ["xcrun", "simctl", "list", "devices", "available", "-j"]);
+  const listing = run(ctx, "simctl-devices", ["xcrun", "simctl", "list", "devices", "available", "-j"]);
   let devices;
   let runtimes;
   try {
     devices = JSON.parse(listing).devices;
-    runtimes = JSON.parse(run(ctx, ["xcrun", "simctl", "list", "runtimes", "-j"])).runtimes;
+    runtimes = JSON.parse(run(ctx, "simctl-runtimes", ["xcrun", "simctl", "list", "runtimes", "-j"])).runtimes;
   } catch (err) {
     if (err instanceof ToolchainUnknown) throw err;
     unknown(`simctl did not return JSON: ${err.message}`);
@@ -372,7 +482,7 @@ function destination(ctx, params) {
   }
   if (flat.length > PROBE_LIMITS.devices) unknown("the simctl device listing is above its cap");
   const exe = interpreter.startsWith("/") ? interpreter : ctx.which(interpreter);
-  const printed = firstLine(run(ctx, [exe, "-c", program], {}, listing));
+  const printed = firstLine(run(ctx, "selection-program", [exe, "-c", program], {}, listing));
   const udid = match(printed.split(/\s+/)[0] ?? "", /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/, `the ${d.id} selection`)[0];
   const hits = flat.map((x, position) => ({ ...x, position })).filter((x) => isObject(x.dev) && x.dev.udid === udid);
   if (hits.length !== 1) unknown(`the ${d.id} selection printed ${udid}, which the listing has ${hits.length} times`);
@@ -388,7 +498,7 @@ function destination(ctx, params) {
   return {
     rule: d.id,
     program_sha256: programSha,
-    interpreter: { path: ctx.realpath(exe), version: match(firstLine(run(ctx, [exe, "--version"])), /^Python [0-9]+\.[0-9]+\.[0-9]+$/, `${exe} --version`)[0] },
+    interpreter: { path: ctx.realpath(exe), version: match(firstLine(run(ctx, "interpreter-version", [exe, "--version"])), /^Python [0-9]+\.[0-9]+\.[0-9]+$/, `${exe} --version`)[0] },
     selected: {
       name: dev.name, device_type: dev.deviceTypeIdentifier, listing_position: position,
       runtime, runtime_version: rt[0].version, runtime_build: rt[0].buildversion,
@@ -481,13 +591,15 @@ const intOf = (v, what) => {
  */
 export function capture({
   registry, profileName, role, laneId, jobId, env, exec, readFile, exists, listDir, realpath, now,
-  resolveChrome, digestFile = fileDigest, root = repoRoot,
+  resolveChrome, digestFile = fileDigest, root = repoRoot, trace = null,
 }) {
   const profile = registry.profiles[profileName];
   if (!profile) unknown(`profile ${profileName} is not in the toolchain registry`);
   if (role !== "source" && role !== "current") unknown(`role ${role} is neither source nor current`);
   const ctx = {
-    env, exec, resolveChrome, repoRoot: root, audit: { simulator_udid: "" },
+    env, exec, resolveChrome, repoRoot: root, audit: { simulator_udid: "" }, component: "none", ordinal: 0,
+    // Every command a component runs, named by its call point for the timing trace.
+    call: (op, argv, cmdEnv, input) => { traceAt(trace, ctx.component, op, ctx.ordinal); return exec(argv, cmdEnv, input); },
     readFile: (p) => { try { return readFile(p); } catch { return unknown(`${p} is unreadable`); } },
     exists, listDir: (p) => { try { return listDir(p); } catch { return unknown(`${p} is unlistable`); } },
     realpath: (p) => { try { return realpath(p); } catch { return unknown(`${p} does not resolve`); } },
@@ -510,10 +622,17 @@ export function capture({
   if (env.RUNNER_OS !== expectedOs) unknown(`profile ${profileName} is for ${expectedOs}, this runner is ${env.RUNNER_OS}`);
   const toolchain = {};
   for (const name of profile.components) {
-    toolchain[name] = COMPONENTS[name](ctx, {
-      packages: profile.androidPackages,
-      destination: profile.destination === undefined ? undefined : { id: profile.destination, ...registry.destinations[profile.destination] },
-    });
+    ctx.component = name;
+    traceAt(trace, name, "none", 0);
+    const begun = trace ? trace.clock() : 0;
+    try {
+      toolchain[name] = COMPONENTS[name](ctx, {
+        packages: profile.androidPackages,
+        destination: profile.destination === undefined ? undefined : { id: profile.destination, ...registry.destinations[profile.destination] },
+      });
+    } finally {
+      if (trace) trace.components[name] = { calls: trace.components[name]?.calls ?? 0, ms: (trace.components[name]?.ms ?? 0) + trace.clock() - begun };
+    }
   }
   const binding = {
     role,
@@ -732,11 +851,15 @@ export function main(argv, env = process.env, deps = {}) {
       + "[--lane L --job J]\n");
     return 2;
   }
+  // Every capture — each profile of a `current` run too — has its own budget
+  // and its own timing trace, and prints one timing line whatever its outcome.
+  const trace = probeTrace(deps.clock);
+  let registry;
   try {
-    const registry = deps.registry ?? readToolchainRegistry();
+    registry = deps.registry ?? readToolchainRegistry();
     const cert = capture({
       registry, profileName: a.profile, role: a.role, laneId: a.lane ?? "-", jobId: a.job ?? "-", env,
-      exec: deps.exec ?? realExec(),
+      exec: deps.exec ?? realExec(undefined, { trace, spawn: deps.spawn, clock: deps.clock }),
       readFile: deps.readFile ?? ((p) => readFileSync(p, "utf8")),
       exists: deps.exists ?? existsSync,
       listDir: deps.listDir ?? ((p) => readdirSync(p)),
@@ -745,10 +868,12 @@ export function main(argv, env = process.env, deps = {}) {
       resolveChrome: deps.resolveChrome,
       digestFile: deps.digestFile ?? fileDigest,
       root: deps.root ?? repoRoot,
+      trace,
     });
     mkdirSync(dirname(a.out), { recursive: true });
     writeFileSync(a.out, `${JSON.stringify(cert, null, 2)}\n`);
     process.stderr.write(`ci-evidence-toolchain: ${a.role} ${a.profile} certificate ${cert.digest}\n`);
+    process.stderr.write(`${timingSummary(trace, { role: a.role, profile: a.profile, registry, outcome: "certificate" })}\n`);
     return 0;
   } catch (err) {
     // A probe that cannot describe its runner writes NO certificate and exits 0.
@@ -757,6 +882,7 @@ export function main(argv, env = process.env, deps = {}) {
     // toolchain costs a full run, never a red job and never a reuse. Only a
     // malformed invocation (exit 2) is the workflow's own contract failing.
     process.stderr.write(`::warning::ci-evidence-toolchain: no ${a.role} certificate: ${err.message}\n`);
+    process.stderr.write(`${timingSummary(trace, { role: a.role, profile: a.profile, registry, outcome: "no-certificate" })}\n`);
     return 0;
   }
 }
