@@ -14,6 +14,7 @@ import com.relayium.protocol.LinkProtocol
 import com.relayium.protocol.PairCode
 import com.relayium.protocol.Signal
 import com.relayium.protocol.legacy.WireProfile
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
@@ -53,9 +54,13 @@ class RoomIceOverlapTest {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val controllers = ArrayList<TransferController>()
+    private val gates = ArrayList<IceGate>()
 
     @After
     fun tearDown() {
+        // A fetch a test left parked in a gap is let go first, so nothing the
+        // test injected outlives it.
+        gates.forEach { it.releaseAll() }
         controllers.forEach { it.shutdown() }
         scope.cancel()
     }
@@ -114,21 +119,46 @@ class RoomIceOverlapTest {
      * real race in `IceConfig.fetch`, where `call.cancel()` is best effort and
      * a response already in hand has nothing left to abort.
      */
-    private class IceGate(private val cooperative: Boolean = true) {
+    private class IceGate(private val cooperative: Boolean = true, private val gap: Gap = Gap.NONE) {
         val calls = ConcurrentLinkedQueue<(IceConfig.Result) -> Unit>()
         val started = AtomicInteger(0)
+        /** How many fetches have PUBLISHED their callback into [calls] — the
+         *  thing [settle] needs. Counted after the publication, so it never runs
+         *  ahead of it; [started] alone can (it is counted first). */
+        val published = AtomicInteger(0)
+        private val entered = AtomicInteger(0)
+        private val gaps = ConcurrentHashMap<Int, Gap>()
+        private val releases = ConcurrentHashMap<Int, CompletableDeferred<Unit>>()
         @Volatile var throwInstead = false
 
+        /** Park fetch number [n] (1-based) at [where] instead of the gate-wide gap. */
+        fun hold(n: Int, where: Gap) { gaps[n] = where }
+
+        /** Let fetch number [n] past its gap, whether or not it has reached it. */
+        fun release(n: Int) { releaseOf(n).complete(Unit) }
+
+        fun releaseAll() {
+            for (n in 1..entered.get()) release(n)
+        }
+
+        private fun releaseOf(n: Int) = releases.computeIfAbsent(n) { CompletableDeferred() }
+
         suspend fun fetch(): IceConfig.Result {
+            val n = entered.incrementAndGet()
+            val parked = gaps[n] ?: gap
+            if (parked == Gap.BEFORE_START) releaseOf(n).await()
             started.incrementAndGet()
             if (throwInstead) throw IllegalStateException("injected ICE failure")
+            if (parked == Gap.BEFORE_PUBLISH) releaseOf(n).await()
             if (!cooperative) {
                 return suspendCoroutine { continuation ->
                     calls.add { result -> continuation.resume(result) }
+                    published.incrementAndGet()
                 }
             }
             val pending = CompletableDeferred<IceConfig.Result>()
             calls.add { result -> pending.complete(result) }
+            published.incrementAndGet()
             return pending.await()
         }
 
@@ -137,6 +167,15 @@ class RoomIceOverlapTest {
             pending(result)
         }
     }
+
+    /**
+     * Where a fetch may be held back, so the order a slow runner happens to
+     * produce is produced on purpose: BEFORE it starts (the launch is still
+     * queued behind the socket), or after it started but BEFORE its callback is
+     * published. [NONE] adds no suspension at all — the scheduling is exactly
+     * the dependency's own.
+     */
+    private enum class Gap { NONE, BEFORE_START, BEFORE_PUBLISH }
 
     private class Rig(
         val controller: TransferController,
@@ -170,10 +209,11 @@ class RoomIceOverlapTest {
         ),
         welcome: Boolean = true,
         cooperativeIce: Boolean = true,
+        iceGap: Gap = Gap.NONE,
     ): Rig {
         val signaling = FakeSignaling()
         val transports = ConcurrentLinkedQueue<FakeTransport>()
-        val ice = IceGate(cooperativeIce)
+        val ice = IceGate(cooperativeIce, iceGap).also(gates::add)
         val failOnSignalForNew = AtomicInteger(0)
         val deps = TransferController.Deps(
             fetchIce = { ice.fetch() },
@@ -214,6 +254,21 @@ class RoomIceOverlapTest {
         throw AssertionError("timed out waiting for: $what")
     }
 
+    /**
+     * The room's fetch number [n] has PUBLISHED its callback, so [IceGate.settle]
+     * has something to answer. Not "started" — a fetch is counted as started
+     * before its callback exists — and not "the grant landed": nothing is
+     * answered here. A second room waits for its OWN publication (n = 2); the
+     * first room's callback, still queued, does not count for it.
+     *
+     * [releaseGap] lets fetch [n] past an injected gap first, which is what a
+     * slow runner eventually does on its own; with no gap it is a no-op.
+     */
+    private fun awaitIcePublished(rig: Rig, n: Int, releaseGap: Boolean = true, timeoutMs: Long = 5_000) {
+        if (releaseGap) rig.ice.release(n)
+        awaitTrue("ICE fetch #$n has published its callback", timeoutMs) { rig.ice.published.get() == n }
+    }
+
     /** Let the session executor drain far enough that "nothing happened" means
      *  it, rather than "not yet". */
     private fun quiesce() = Thread.sleep(250)
@@ -244,6 +299,7 @@ class RoomIceOverlapTest {
         // it has not even STARTED when the client is already wired, which is
         // the whole of the change — the join no longer waits on `/api/ice`.
         awaitTrue("the fetch is genuinely outstanding") { rig.ice.started.get() == 1 }
+        awaitIcePublished(rig, 1)
         assertTrue("and no fetch has answered", rig.ice.calls.isNotEmpty())
         assertEquals(0, rig.transports.size)
         // The welcome and the roster land on a room that joined without waiting.
@@ -283,6 +339,7 @@ class RoomIceOverlapTest {
             "a connection built now would have no STUN and no relay",
             rig.transports.isEmpty(),
         )
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
         awaitTrue("the held decision runs on the grant") { rig.transports.isNotEmpty() }
         assertEquals(
@@ -300,6 +357,7 @@ class RoomIceOverlapTest {
         rig.events.onSignal("bbbbbbbb", Signal.candidate("candidate:1 1 udp 1 10.0.0.1 1 typ host", "0", 0).toJson())
         quiesce()
         assertTrue("held, not acted on", rig.transports.isEmpty())
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
         awaitTrue("the offer establishes once the grant is in") { rig.transports.isNotEmpty() }
         awaitTrue("and both frames reached it") { rig.transport.signals.size == 2 }
@@ -319,6 +377,7 @@ class RoomIceOverlapTest {
         rig.events.onSignal("bbbbbbbb", offerFrom())
         quiesce()
         assertNull("a held frame raises nothing yet", rig.state.nearby.incomingId)
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
         awaitTrue("the replayed ask raises the prompt") {
             rig.state.nearby.incomingId == "bbbbbbbb"
@@ -337,14 +396,29 @@ class RoomIceOverlapTest {
     }
 
     @Test
-    fun `a room retry drops the old grant, asks again, and keeps a consented offer`() {
-        val rig = rig(selfId = "zzzzzzzz", source = ConnectionSource.Hub)
+    fun `a room retry drops the old grant, asks again, and keeps a consented offer`() = roomRetry(Gap.NONE)
+
+    /** The same retry when each room's fetch is still queued behind its socket:
+     *  every room's callback is waited for by its own publication. */
+    @Test
+    fun `a room retry keeps its semantics when each grant request starts late`() = roomRetry(Gap.BEFORE_START)
+
+    /** …and when each fetch has started but not yet published its callback. */
+    @Test
+    fun `a room retry keeps its semantics when each callback is published late`() = roomRetry(Gap.BEFORE_PUBLISH)
+
+    private fun roomRetry(gap: Gap) {
+        val rig = rig(selfId = "zzzzzzzz", source = ConnectionSource.Hub, iceGap = gap)
+        awaitIcePublished(rig, 1)
         assertEquals(1, rig.ice.started.get())
         // The room drops before its grant ever landed. Retrying must not leave
         // the first fetch owning the gate of the room that replaced it.
         rig.events.onClosed(1006, "dropped")
         rig.controller.retryNearby()
-        awaitTrue("the retry asks for its own grant") { rig.ice.started.get() == 2 }
+        // Its OWN callback: the first room's is still queued (FIFO), and must
+        // not satisfy this wait.
+        awaitIcePublished(rig, 2)
+        assertEquals("the retry asks for its own grant", 2, rig.ice.started.get())
         rig.ice.calls.poll()!!.invoke(IceConfig.Result(emptyList(), ""))
         quiesce()
 
@@ -381,11 +455,13 @@ class RoomIceOverlapTest {
         rig.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
         rig.events.onSignal("bbbbbbbb", offerFrom())
         quiesce()
+        awaitIcePublished(rig, 1)
         val stale = rig.ice.calls.poll() ?: error("no fetch in flight")
         // The user leaves and joins a different code. The old room's frames
         // belong to a room identity that no longer exists.
         rig.controller.join(PairCode("654321"), TransferController.Intent.JOINER)
         awaitTrue("the new room asks for its own grant") { rig.ice.started.get() == 2 }
+        awaitIcePublished(rig, 2)
         stale(IceConfig.Result(listOf(staleTurn), "quota"))
         quiesce()
         assertTrue(
@@ -424,6 +500,7 @@ class RoomIceOverlapTest {
         rig.events.onSignal("bbbbbbbb", offerFrom())
         quiesce()
         assertTrue(rig.transports.isEmpty())
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(staleTurn), "quota"))
         awaitTrue("the answer reached the room") { rig.transports.isNotEmpty() }
         assertEquals(listOf(staleTurn), rig.transport.servers)
@@ -462,6 +539,9 @@ class RoomIceOverlapTest {
     @Test
     fun `the held-frame buffer is bounded and fails closed`() {
         val rig = rig(selfId = "zzzzzzzz")
+        // Published BEFORE the flood: an ended session must not be what decides
+        // whether the fetch ever got as far as asking.
+        awaitIcePublished(rig, 1)
         rig.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
         // REAL asks, every one of which would build a connection on replay.
         repeat(LinkProtocol.HELD_SIGNAL_MAX + 1) { rig.events.onSignal("bbbbbbbb", offerFrom()) }
@@ -497,6 +577,7 @@ class RoomIceOverlapTest {
         assertNull(rig.state.errorKey)
         // …and the hold is still free for the ask that matters.
         rig.events.onSignal("bbbbbbbb", offerFrom())
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
         awaitTrue("the real offer still establishes") { rig.transports.isNotEmpty() }
         assertEquals(listOf(turn), rig.transport.servers)
@@ -507,14 +588,25 @@ class RoomIceOverlapTest {
     }
 
     @Test
-    fun `a candidate chasing a held ask keeps its place in the queue`() {
-        val rig = rig(selfId = "zzzzzzzz")
+    fun `a candidate chasing a held ask keeps its place in the queue`() = chasingCandidate(Gap.NONE)
+
+    /** The same frames arriving while the fetch is still queued behind the socket… */
+    @Test
+    fun `a chasing candidate keeps its place when the grant request starts late`() = chasingCandidate(Gap.BEFORE_START)
+
+    /** …and while it has started but not yet published its callback. */
+    @Test
+    fun `a chasing candidate keeps its place when the callback is published late`() = chasingCandidate(Gap.BEFORE_PUBLISH)
+
+    private fun chasingCandidate(gap: Gap) {
+        val rig = rig(selfId = "zzzzzzzz", iceGap = gap)
         rig.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
         // A bare candidate BEFORE any ask is dropped — it belongs to no offer,
         // exactly as it is dropped today when the grant is already in hand.
         rig.events.onSignal("bbbbbbbb", candidateFrom(1))
         rig.events.onSignal("bbbbbbbb", offerFrom())
         rig.events.onSignal("bbbbbbbb", candidateFrom(2))
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
         awaitTrue("established") { rig.transports.isNotEmpty() }
         awaitTrue("two frames reached it") { rig.transport.signals.size == 2 }
@@ -539,6 +631,7 @@ class RoomIceOverlapTest {
         // The grant this room asked for must still be able to land. Cancelling
         // it with the buffer would leave the gate shut for the room's whole
         // life: every later establishment would be held and never replayed.
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
         rig.events.onSignal("bbbbbbbb", capsHello())
         rig.events.onSignal("bbbbbbbb", offerFrom())
@@ -568,6 +661,7 @@ class RoomIceOverlapTest {
         rig.events.onPeerLeft("bbbbbbbb")
         rig.events.onPeers(emptyList())
         quiesce()
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
         quiesce()
         assertTrue(
@@ -603,6 +697,7 @@ class RoomIceOverlapTest {
         assertTrue("the decision is held, not acted on", rig.transports.isEmpty())
         rig.events.onPeerLeft("bbbbbbbb")
         quiesce()
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
         quiesce()
         assertTrue(
@@ -633,6 +728,7 @@ class RoomIceOverlapTest {
         rig.events.onSignal("bbbbbbbb", offerFrom())
         rig.failOnSignalForNew.set(1)
 
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
         awaitTrue("the held decision built the connection") { rig.transports.isNotEmpty() }
         awaitTrue("and the first held frame failed it") {
@@ -656,6 +752,73 @@ class RoomIceOverlapTest {
             rig.state.nearby.devices.singleOrNull()?.supportsLink == true
         }
         assertNull(rig.transports.peek())
+        awaitIcePublished(rig, 1)
         rig.ice.settle(IceConfig.Result(listOf(turn), ""))
+    }
+
+    // ── the harness's own readiness ─────────────────────────────────────────
+    //
+    // Every wait above is for a fetch's PUBLISHED callback. These pin what that
+    // wait is, so it cannot quietly become "the fetch started", "some callback
+    // exists" or "the grant landed".
+
+    @Test
+    fun `the readiness wait is the callback's publication, not the fetch's start`() {
+        val rig = rig(selfId = "zzzzzzzz", iceGap = Gap.BEFORE_PUBLISH)
+        awaitTrue("the fetch has started") { rig.ice.started.get() == 1 }
+        assertEquals("started, but nothing is published yet", 0, rig.ice.published.get())
+        val strict = runCatching { rig.ice.settle(IceConfig.Result(listOf(turn), "")) }.exceptionOrNull()
+        assertTrue(
+            "settle stays strict while nothing is published",
+            strict is IllegalStateException && strict.message == "no ICE fetch is in flight",
+        )
+        val early = runCatching { awaitIcePublished(rig, 1, releaseGap = false, timeoutMs = 300) }.exceptionOrNull()
+        assertTrue("the wait must not return on a start alone", early is AssertionError)
+        rig.ice.release(1)
+        awaitIcePublished(rig, 1, releaseGap = false)
+        // Published is not granted: the frames are still held for the answer.
+        rig.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        rig.events.onSignal("bbbbbbbb", offerFrom())
+        quiesce()
+        assertTrue("a published request is not a grant", rig.transports.isEmpty())
+        rig.ice.settle(IceConfig.Result(listOf(turn), ""))
+        awaitTrue("the grant then establishes") { rig.transports.isNotEmpty() }
+        assertEquals(listOf(turn), rig.transport.servers)
+    }
+
+    @Test
+    fun `a fetch that never publishes is refused within the wait's bound`() {
+        val rig = rig(selfId = "zzzzzzzz", iceGap = Gap.BEFORE_START)
+        val refused = runCatching { awaitIcePublished(rig, 1, releaseGap = false, timeoutMs = 300) }.exceptionOrNull()
+        assertTrue(
+            "a callback that never comes is a bounded failure, not a pass",
+            refused is AssertionError && refused.message == "timed out waiting for: ICE fetch #1 has published its callback",
+        )
+        assertEquals("and the held fetch never started", 0, rig.ice.started.get())
+    }
+
+    @Test
+    fun `a second room waits for its own callback, not the first room's`() {
+        val rig = rig(selfId = "zzzzzzzz")
+        awaitIcePublished(rig, 1)
+        rig.ice.hold(2, Gap.BEFORE_PUBLISH)
+        rig.controller.join(PairCode("654321"), TransferController.Intent.JOINER)
+        awaitTrue("the new room's fetch has started") { rig.ice.started.get() == 2 }
+        assertEquals("the left room's callback is still queued", 1, rig.ice.calls.size)
+        val early = runCatching { awaitIcePublished(rig, 2, releaseGap = false, timeoutMs = 300) }.exceptionOrNull()
+        assertTrue("the first room's callback must not satisfy the second room's wait", early is AssertionError)
+        rig.ice.release(2)
+        awaitIcePublished(rig, 2, releaseGap = false)
+        // First in, first answered: the left room's callback, which opens nothing.
+        rig.ice.settle(IceConfig.Result(listOf(staleTurn), "quota"))
+        rig.events.onSelfId("zzzzzzzz", "203.0.113.9")
+        rig.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        rig.events.onSignal("bbbbbbbb", offerFrom())
+        quiesce()
+        assertTrue("the left room's answer opened nothing here", rig.transports.isEmpty())
+        assertNull("nor wrote this room's relay note", rig.state.relayNote)
+        rig.ice.settle(IceConfig.Result(listOf(turn), ""))
+        awaitTrue("this room's own answer establishes") { rig.transports.isNotEmpty() }
+        assertEquals(listOf(turn), rig.transport.servers)
     }
 }
