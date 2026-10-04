@@ -52,6 +52,26 @@ final class AppShellUITests: XCTestCase {
         app?.terminate()
     }
 
+    /// Wait for `predicate` on `element` for at most `timeout` seconds, and not
+    /// at all when nothing remains of a caller's deadline.
+    private static func wait(for element: XCUIElement, _ predicate: String,
+                             timeout: TimeInterval) -> Bool {
+        guard timeout > 0 else { return false }
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: predicate), object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    /// Wait for `condition` for at most `timeout` seconds, and not at all when
+    /// nothing remains of a caller's deadline.
+    private static func wait(until condition: @escaping () -> Bool,
+                             timeout: TimeInterval) -> Bool {
+        guard timeout > 0 else { return false }
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in condition() }, object: nil)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
     private func scrollUntilHittable(_ element: XCUIElement, maxSwipes: Int = 6) {
         for _ in 0..<maxSwipes where !element.isHittable {
             app.swipeUp()
@@ -1276,10 +1296,65 @@ final class AppShellUITests: XCTestCase {
                       "a completed download offers no system share")
         scrollUntilHittable(share, maxSwipes: 10)
         share.tap()
-        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 20),
-                      "Share did not open the system share sheet")
+        // One deadline for the whole sheet, the 20 + 5 seconds the two waits
+        // here always had between them. The wrapper exists before its content
+        // is drawn, so an optional five-second look for Close could expire on a
+        // sheet that was still arriving and leave it covering Done; here the
+        // sheet's own way out must be on screen AND hittable, is tapped once,
+        // and the sheet must be gone before the case goes on.
+        //
+        // Two forms of that way out have been observed, and only these two:
+        // the full-screen sheet's header Close (hosted iOS 26.3), and — when
+        // the system presents the sheet as a popover instead (Xcode 27 SDK on
+        // iOS 26.5) — the popover's own `PopoverDismissRegion`, with no Close
+        // anywhere in the app or SpringBoard tree. The region is only chosen
+        // while a popover is actually holding the share sheet, so an unrelated
+        // popup can never be what this dismisses.
+        let sheet = app.otherElements["ActivityListView"]
+        let remote = app.otherElements["ShareSheet.RemoteContainerView"]
         let close = app.buttons["Close"]
-        if close.waitForExistence(timeout: 5) { close.tap() }
+        let region = app.otherElements["PopoverDismissRegion"]
+        let sharePopover = app.popovers.otherElements["ActivityListView"]
+        let clock = { ProcessInfo.processInfo.systemUptime }
+        let outcome = ShareSheetDismissal.run(
+            budget: 25, now: clock,
+            opened: { Self.wait(for: sheet, "exists == true", timeout: $0) },
+            readiness: {
+                ShareSheetDismissal.Readiness(
+                    close: close.exists && close.isHittable,
+                    region: region.exists && region.isHittable,
+                    sharePopover: sharePopover.exists)
+            },
+            overlays: {
+                ShareSheetDismissal.Overlays(
+                    sheet: sheet.exists, remote: remote.exists, region: region.exists)
+            },
+            waitUntil: { timeout, condition in Self.wait(until: condition, timeout: timeout) },
+            tap: { target in
+                switch target {
+                case .close: close.tap()
+                case .popoverRegion: region.tap()
+                }
+            })
+        if !outcome.isDismissed {
+            // Diagnostic only: what was actually on screen when the sheet did
+            // not leave, in this app and in SpringBoard. Changes no verdict.
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            XCTContext.runActivity(named: "share sheet not dismissed: \(outcome)") { activity in
+                let attachments = [
+                    XCTAttachment(string: "app.state = \(app.state.rawValue)"),
+                    XCTAttachment(string: app.debugDescription),
+                    XCTAttachment(string: springboard.debugDescription),
+                ]
+                for (attachment, name) in zip(attachments, ["app-state", "app-tree",
+                                                            "springboard-tree"]) {
+                    attachment.name = name
+                    attachment.lifetime = .keepAlways
+                    activity.add(attachment)
+                }
+            }
+        }
+        XCTAssertTrue(outcome.isDismissed, "the system share sheet: \(outcome)")
 
         let done = app.buttons["receive.done"]
         XCTAssertTrue(done.waitForExistence(timeout: 15),
@@ -2199,3 +2274,91 @@ enum PickerSelection {
 }
 
 // END PickerSelection core
+
+/// The one control that dismisses the system share sheet in the form it took.
+enum ShareSheetDismissTarget: Equatable {
+    /// The full-screen sheet's header button.
+    case close
+    /// The popover's own outside-dismiss region.
+    case popoverRegion
+}
+
+/// How a system share sheet left the screen — or the stage it stopped at.
+///
+/// Pure over its observations and a monotonic clock, so the choice of target
+/// and the deadline arithmetic are exercised without a simulator. Every wait
+/// is given only what remains of ONE budget, and the clock is read again after
+/// every observation and the tap: a target that turns hittable after the
+/// budget is spent, or a sheet that leaves late, is a failure rather than a
+/// pass.
+enum ShareSheetDismissal: Equatable {
+    case dismissed(ShareSheetDismissTarget)
+    case neverOpened
+    case dismissNeverReady
+    case targetLost(ShareSheetDismissTarget)
+    case deadlinePassed(stage: String)
+    case neverDismissed(ShareSheetDismissTarget)
+
+    var isDismissed: Bool {
+        if case .dismissed = self { return true }
+        return false
+    }
+
+    /// What can be tapped now: each control both exists and is hittable.
+    struct Readiness: Equatable {
+        var close: Bool
+        var region: Bool
+        /// A popover is holding the share sheet itself.
+        var sharePopover: Bool
+    }
+
+    /// What is still on screen after the tap.
+    struct Overlays: Equatable {
+        var sheet: Bool
+        var remote: Bool
+        var region: Bool
+    }
+
+    /// Close when it is there; the popover region only while a popover is
+    /// actually holding the share sheet; otherwise nothing.
+    static func target(_ ready: Readiness) -> ShareSheetDismissTarget? {
+        if ready.close { return .close }
+        if ready.region && ready.sharePopover { return .popoverRegion }
+        return nil
+    }
+
+    /// The sheet, its remote content and — for a popover — its dismiss region
+    /// are all gone.
+    static func isGone(_ overlays: Overlays, after target: ShareSheetDismissTarget) -> Bool {
+        !overlays.sheet && !overlays.remote
+            && (target != .popoverRegion || !overlays.region)
+    }
+
+    static func run(budget: TimeInterval,
+                    now: () -> TimeInterval,
+                    opened: (TimeInterval) -> Bool,
+                    readiness: @escaping () -> Readiness,
+                    overlays: @escaping () -> Overlays,
+                    waitUntil: (TimeInterval, @escaping () -> Bool) -> Bool,
+                    tap: (ShareSheetDismissTarget) -> Void) -> ShareSheetDismissal {
+        let deadline = now() + budget
+        func remaining() -> TimeInterval { max(0, deadline - now()) }
+        func late() -> Bool { now() > deadline }
+
+        guard opened(remaining()) else { return .neverOpened }
+        if late() { return .deadlinePassed(stage: "open") }
+        guard waitUntil(remaining(), { target(readiness()) != nil }),
+              let chosen = target(readiness()) else { return .dismissNeverReady }
+        if late() { return .deadlinePassed(stage: "dismiss ready") }
+        // The chosen control again, immediately before the one tap.
+        guard target(readiness()) == chosen else { return .targetLost(chosen) }
+        if late() { return .deadlinePassed(stage: "before tap") }
+        tap(chosen)
+        if late() { return .deadlinePassed(stage: "tap") }
+        guard waitUntil(remaining(), { isGone(overlays(), after: chosen) }) else {
+            return .neverDismissed(chosen)
+        }
+        if late() { return .deadlinePassed(stage: "dismissed") }
+        return .dismissed(chosen)
+    }
+}
