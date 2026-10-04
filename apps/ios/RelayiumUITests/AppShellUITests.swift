@@ -26,6 +26,99 @@ final class AppShellUITests: XCTestCase {
         "--relayium-ui-testing-open-stored-link",
     ]
 
+    /// The cases whose first launch is a fixture, each with the arguments it
+    /// launched with after `offlineLaunchArguments`, in their original order.
+    /// Setup launches them that way directly instead of launching the default
+    /// shell only for the case to end it at once. `#selector` stops a rename
+    /// compiling past an entry.
+    private static let firstLaunchFixtures: [Selector: [String]] = [
+        #selector(AppShellUITests.testASignedInLaunchRendersItsAccountAndUngatesSend):
+            ["--relayium-ui-testing-signed-in"],
+        #selector(AppShellUITests.testSubscriptionsRenderAndPurchaseWithoutAWebCheckout):
+            [
+                "--relayium-ui-testing-signed-in",
+                "--relayium-ui-testing-subscriptions",
+            ],
+        #selector(AppShellUITests.testStoppedNearbyReceivingAsksForActionWithoutPretendingToWork):
+            ["--relayium-ui-testing-off-receiving"],
+        #selector(AppShellUITests.testNearbyStagesNothingBeforeADeviceIsChosen):
+            ["--relayium-ui-testing-pending-fixture"],
+        #selector(AppShellUITests.testRevokeConfirmationNamesTheDeviceAndItsRealConsequence):
+            ["--relayium-ui-testing-signed-in"],
+        #selector(AppShellUITests.testDeleteConfirmationStatesWhatItErasesAndForWhom):
+            ["--relayium-ui-testing-signed-in"],
+        #selector(AppShellUITests.testSigningOutReturnsToTheSignedOutSurfaces):
+            ["--relayium-ui-testing-signed-in"],
+        #selector(AppShellUITests.testCreatingACodeStaysOnCrossNetworkAndShowsEveryHandoff):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"],
+        #selector(AppShellUITests.testCancellingAGeneratedCodeReturnsDirectlyToTheStartControls):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"],
+        #selector(AppShellUITests.testAFailedCodeMustBeDismissedBeforeStartingAgain):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-mint-failure"],
+        #selector(AppShellUITests.testATerminalNearbySessionNamesItsPeerAndReturnsToTheRoster):
+            ["--relayium-ui-testing-terminal-nearby"],
+        #selector(AppShellUITests.testASignedInStoredSendNamesTheFileItWouldUpload):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture"],
+        #selector(AppShellUITests.testEditingARefusedLinkClearsTheRefusalWithIt):
+            ["--relayium-ui-testing-invalid-download-link",
+                "--relayium-ui-testing-open-stored-link"],
+        #selector(AppShellUITests.testACompletedStoredSendHandsOverItsLinkAndOffersAnother):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture"],
+        #selector(AppShellUITests.testCancellingAnUploadInFlightReturnsTheTask):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture",
+                "--relayium-ui-testing-stall-upload"],
+        #selector(AppShellUITests.testSigningInThroughTheFormOpensTheAccount):
+            ["--relayium-ui-testing-sign-in"],
+        #selector(AppShellUITests.testAFailedUploadKeepsTheWorkAndOffersToCarryOn):
+            ["--relayium-ui-testing-signed-in",
+                "--relayium-ui-testing-preselect-fixture",
+                "--relayium-ui-testing-fail-upload"],
+        #selector(AppShellUITests.testOpeningAValidStoredLinkDecryptsAndNamesTheManifest):
+            [
+                "--relayium-ui-testing-sign-in",
+                "--relayium-ui-testing-valid-download-link",
+                "--relayium-ui-testing-open-stored-link",
+            ],
+        #selector(AppShellUITests.testEveryTaskReachesItsActionAtTheLargestTextSize):
+            ["-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityXXL",
+                // The stored-link screen is presented rather than browsed to, so
+                // it is reached at launch and dismissed below before the
+                // browseable destinations are visited.
+                "--relayium-ui-testing-open-stored-link",
+                // Diagnostics only: the hosted iOS 18.5 run tapped the Device
+                // Inbox tab here and stayed on Nearby. Beside the
+                // `--relayium-ui-testing` above, this makes `open` attach the
+                // tab state and the app's own record of selection writes. The
+                // tap, the waits and the assertions are the original ones, but
+                // the extra queries shift timing, so a pass here does not show
+                // the hosted failure is fixed.
+                Shell.navigationTraceArgument],
+        #selector(AppShellUITests.testShareOpensTheSystemShareSheet):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"],
+    ]
+
+    private struct UnrecognizedTestName: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    /// The running case's selector, read from its whole XCTest name
+    /// `-[Class selector]` with the class spelled bare or module-qualified — the
+    /// two whole spellings `launchesFreshDownload` accepts, and nothing shorter.
+    /// Any other shape throws before the first launch rather than falling back
+    /// to the default one, under which an absence assertion could pass vacuously.
+    private static func recognizedSelector(in name: String) throws -> Selector {
+        for spelling in [String(describing: Self.self), NSStringFromClass(Self.self)] {
+            let prefix = "-[\(spelling) "
+            guard name.hasPrefix(prefix), name.hasSuffix("]") else { continue }
+            let candidate = String(name.dropFirst(prefix.count).dropLast())
+            guard candidate.hasPrefix("test"), !candidate.contains(" "), !candidate.contains("]"),
+                  Self.instancesRespond(to: NSSelectorFromString(candidate)) else { continue }
+            return NSSelectorFromString(candidate)
+        }
+        throw UnrecognizedTestName(description: "unrecognized XCTest name: \(name)")
+    }
+
     /// Exactly that case's XCTest name, `-[Class selector]`, compared whole.
     /// XCTest has spelled the class bare (`AppShellUITests`, measured on Xcode
     /// 27) and module-qualified, so both whole spellings are accepted and
@@ -41,10 +134,11 @@ final class AppShellUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        let selector = try Self.recognizedSelector(in: name)   // before any launch
         app = XCUIApplication()
         app.launchArguments = launchesFreshDownload
             ? offlineLaunchArguments + Self.freshDownloadLaunchArguments
-            : offlineLaunchArguments
+            : offlineLaunchArguments + (Self.firstLaunchFixtures[selector] ?? [])
         app.launch()
     }
 
@@ -276,10 +370,6 @@ final class AppShellUITests: XCTestCase {
     /// deterministic in-process transport, so this reaches no server and no real
     /// credential exists anywhere in it.
     func testASignedInLaunchRendersItsAccountAndUngatesSend() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in"]
-        app.launch()
 
         open(Shell.account, in: app)
         XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
@@ -342,12 +432,6 @@ final class AppShellUITests: XCTestCase {
     /// submission orchestration while replacing only StoreKit with a local
     /// deterministic adapter. No request or Apple account leaves the simulator.
     func testSubscriptionsRenderAndPurchaseWithoutAWebCheckout() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + [
-            "--relayium-ui-testing-signed-in",
-            "--relayium-ui-testing-subscriptions",
-        ]
-        app.launch()
 
         open(Shell.account, in: app)
         let monthly = app.buttons["subscription-buy-uitest.subscription.month"]
@@ -390,10 +474,6 @@ final class AppShellUITests: XCTestCase {
     /// listener that is already off. Look again, in the roster below, is the
     /// one recovery that matches it.
     func testStoppedNearbyReceivingAsksForActionWithoutPretendingToWork() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-off-receiving"]
-        app.launch()
 
         open(Shell.lanTransfer, in: app)
 
@@ -523,10 +603,6 @@ final class AppShellUITests: XCTestCase {
     /// driven, on the one surface that stages before sending:
     /// `testASignedInStoredSendNamesTheFileItWouldUpload`.
     func testNearbyStagesNothingBeforeADeviceIsChosen() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-pending-fixture"]
-        app.launch()
 
         open(Shell.lanTransfer, in: app)
         // The screen rendered: its verification setting is always there.
@@ -610,10 +686,6 @@ final class AppShellUITests: XCTestCase {
     /// destructive button lying about itself, and nothing before this drove the
     /// two arms in the running app.
     func testRevokeConfirmationNamesTheDeviceAndItsRealConsequence() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in"]
-        app.launch()
         open(Shell.account, in: app)
 
         let other = app.buttons.matching(
@@ -656,10 +728,6 @@ final class AppShellUITests: XCTestCase {
     /// everyone holding the link. The dialog must say both, and cancelling it
     /// must leave the object alone.
     func testDeleteConfirmationStatesWhatItErasesAndForWhom() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in"]
-        app.launch()
         open(Shell.account, in: app)
 
         // By the delete action itself, not merely by the row's id: a rebuildable
@@ -691,10 +759,6 @@ final class AppShellUITests: XCTestCase {
     /// This is the one way out of a signed-in session, and until the acceptance
     /// account existed there was no way to reach it at all.
     func testSigningOutReturnsToTheSignedOutSurfaces() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in"]
-        app.launch()
         open(Shell.account, in: app)
 
         XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
@@ -733,10 +797,6 @@ final class AppShellUITests: XCTestCase {
     /// lane — a `?mode=` there would tell a connect-first peer to make a choice
     /// it no longer has.
     func testCreatingACodeStaysOnCrossNetworkAndShowsEveryHandoff() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"]
-        app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
         let create = app.buttons["Create a code"]
@@ -772,10 +832,6 @@ final class AppShellUITests: XCTestCase {
     /// an empty terminal task would make the user dismiss something that never
     /// happened.
     func testCancellingAGeneratedCodeReturnsDirectlyToTheStartControls() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"]
-        app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
         let create = app.buttons["Create a code"]
@@ -805,10 +861,6 @@ final class AppShellUITests: XCTestCase {
     /// back; a second start over an unread failure would replace the one
     /// sentence explaining why nothing happened.
     func testAFailedCodeMustBeDismissedBeforeStartingAgain() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-mint-failure"]
-        app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
         let create = app.buttons["Create a code"]
@@ -861,10 +913,6 @@ final class AppShellUITests: XCTestCase {
     /// from the retained terminal surface and must actually release it. macOS
     /// has covered this since batch 12; iOS had no runtime evidence.
     func testATerminalNearbySessionNamesItsPeerAndReturnsToTheRoster() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-terminal-nearby"]
-        app.launch()
 
         XCTAssertTrue(app.staticTexts["Session with Studio Mac · 19af02"]
             .waitForExistence(timeout: 20),
@@ -900,10 +948,6 @@ final class AppShellUITests: XCTestCase {
     /// document browser, so the picker, the security scope and the expansion are
     /// production code.
     func testASignedInStoredSendNamesTheFileItWouldUpload() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture"]
-        app.launch()
 
         open(Shell.storedSend, in: app)
         XCTAssertFalse(app.buttons["Go to Account"].exists,
@@ -952,11 +996,6 @@ final class AppShellUITests: XCTestCase {
     /// `testTheKeyboardGoKeyResolvesTheLink` keep the real typing and the real
     /// submission, so nothing here removes that coverage.
     func testEditingARefusedLinkClearsTheRefusalWithIt() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-invalid-download-link",
-               "--relayium-ui-testing-open-stored-link"]
-        app.launch()
 
         waitForPresentedStoredReceive(app)
 
@@ -1024,10 +1063,6 @@ final class AppShellUITests: XCTestCase {
     /// upload fixture could get here. The encryption, chunking, manifest and
     /// link construction are all production code; only the transport is local.
     func testACompletedStoredSendHandsOverItsLinkAndOffersAnother() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture"]
-        app.launch()
 
         open(Shell.storedSend, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
@@ -1070,11 +1105,6 @@ final class AppShellUITests: XCTestCase {
     /// The fixture holds the chunk request open, so the surface under test is
     /// the real in-flight one and Cancel ends the real request.
     func testCancellingAnUploadInFlightReturnsTheTask() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture",
-               "--relayium-ui-testing-stall-upload"]
-        app.launch()
 
         open(Shell.storedSend, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
@@ -1116,9 +1146,6 @@ final class AppShellUITests: XCTestCase {
     /// signed in. The transition itself — the one a first-time user actually
     /// performs — had no runtime evidence on either platform.
     func testSigningInThroughTheFormOpensTheAccount() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
-        app.launch()
 
         open(Shell.account, in: app)
         XCTAssertTrue(app.staticTexts["Welcome back"].waitForExistence(timeout: 15),
@@ -1177,12 +1204,6 @@ final class AppShellUITests: XCTestCase {
     /// selection never arrived, instead of letting Send be tapped with nothing
     /// staged and reporting a missing Resume upload.
     func testAFailedUploadKeepsTheWorkAndOffersToCarryOn() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in",
-               "--relayium-ui-testing-preselect-fixture",
-               "--relayium-ui-testing-fail-upload"]
-        app.launch()
 
         open(Shell.storedSend, in: app)
 
@@ -1221,13 +1242,6 @@ final class AppShellUITests: XCTestCase {
     /// `CloudDownloadModelTests` and macOS's runtime save test; this test has
     /// never tapped Receive and must not claim that it does.
     func testOpeningAValidStoredLinkDecryptsAndNamesTheManifest() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + [
-            "--relayium-ui-testing-sign-in",
-            "--relayium-ui-testing-valid-download-link",
-            "--relayium-ui-testing-open-stored-link",
-        ]
-        app.launch()
 
         waitForPresentedStoredReceive(app)
         let link = app.textFields["receive.link"]
@@ -1565,23 +1579,6 @@ final class AppShellUITests: XCTestCase {
     /// falls off is usually the one the task ends with. Several surfaces in this
     /// product were rearranged for exactly this reason; nothing asserted it.
     func testEveryTaskReachesItsActionAtTheLargestTextSize() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["-UIPreferredContentSizeCategoryName",
-               "UICTContentSizeCategoryAccessibilityXXL",
-               // The stored-link screen is presented rather than browsed to, so
-               // it is reached at launch and dismissed below before the
-               // browseable destinations are visited.
-               "--relayium-ui-testing-open-stored-link",
-               // Diagnostics only: the hosted iOS 18.5 run tapped the Device
-               // Inbox tab here and stayed on Nearby. Beside the
-               // `--relayium-ui-testing` above, this makes `open` attach the
-               // tab state and the app's own record of selection writes. The
-               // tap, the waits and the assertions are the original ones, but
-               // the extra queries shift timing, so a pass here does not show
-               // the hosted failure is fixed.
-               Shell.navigationTraceArgument]
-        app.launch()
 
         // The stored link's Open, the Device Inbox's account route, Nearby's
         // verification setting and Account's registration path are the four
@@ -1650,10 +1647,6 @@ final class AppShellUITests: XCTestCase {
     /// and this is the control the whole pairing handoff depends on, because it
     /// is how the code reaches the other person at all.
     func testShareOpensTheSystemShareSheet() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"]
-        app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
         let create = app.buttons["Create a code"]
