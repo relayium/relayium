@@ -203,16 +203,18 @@ function sourceJobs() {
 
 /**
  * What a DISPATCHED gate's jobs report. macos.yml's `contract` picks its runner
- * from the event (`github.event_name == 'workflow_dispatch' || …` → macos-15),
- * so under either strict merge-gate dispatch it runs on macos-15, while every
- * other job keeps its pull-request runner. Written out here, not read from the
- * registry, so the verifier's runner choice is judged against the workflow's
- * real behaviour rather than against itself.
+ * from release INPUTS only (`inputs.release_version || inputs.notarize ||
+ * inputs.publish_release` → macos-15), and the merge gate passes none, so under
+ * either strict merge-gate dispatch it runs on ubuntu-latest exactly as under a
+ * pull request; every other job keeps its pull-request runner too. Written out
+ * here, not read from the registry, so the verifier's runner choice is judged
+ * against the workflow's real behaviour rather than against itself. (Until the
+ * event stopped counting, it was macos-15 here: `dispatchRunner`.)
  */
 function asDispatched(w) {
   const contract = w.jobs.filter((j) => j.name === "macos / contract");
   if (contract.length !== 1) throw new Error("fixture: the source run has no single macos / contract");
-  contract[0].labels = ["macos-15"];
+  contract[0].labels = ["ubuntu-latest"];
   return w;
 }
 
@@ -1846,30 +1848,33 @@ async function internalSelectStep(cand, world = internalWorld(cand)) {
     `the selector did not turn the internal verdict into every lane: ${selected.stdout}`);
 }
 
-// ── 2g. the always-fresh macOS contract: one runner, chosen by the source's event ──
+// ── 2g. the always-fresh macOS contract: one runner under every source ─────
 //
-// macos.yml's `contract` reads the event to pick its runner: ubuntu-latest for a
-// pull request, macos-15 for ANY workflow_dispatch (both strict merge-gate
-// dispatch modes). No single certificate describes that, so the job is fresh:
-// never witnessed, never certified. What main still requires is that the source
-// run's contract SUCCEEDED on exactly the runner the source run's own event
-// selects — that event re-read from the API by id and bound to the source kind,
-// never a fixture bit or a caller's claim — and every other job keeps its one
-// runner under every source.
+// macos.yml's `contract` picks its runner from release INPUTS: macos-15 only
+// for a non-empty release_version, notarize or publish_release, which only
+// macos-release.yml passes. Every source the verifier reads — a pull request
+// and both strict merge-gate dispatch modes — passes none, so the contract runs
+// on ubuntu-latest under all of them. It stays fresh: never witnessed, never
+// certified. What main still requires is that the source run's contract
+// SUCCEEDED on exactly ubuntu-latest, whatever its event. The generic
+// `dispatchRunner` mechanism stays in ci-evidence.mjs untouched; no shipped job
+// uses it, and its own refusals are held below against an isolated registry
+// that re-declares it, never against the shipped one.
 {
   const contractJob = REGISTRY.lanes.macos.jobs.contract;
-  // The shipped registry: exactly one job has a second runner, and it is this one.
+  // The shipped registry: no job has a second runner any more.
   const withDispatch = Object.entries(REGISTRY.lanes).flatMap(([laneId, lane]) =>
     Object.entries(lane.jobs).filter(([, j]) => j.dispatchRunner !== undefined).map(([jobId]) => `${laneId}/${jobId}`));
-  check(JSON.stringify(withDispatch) === JSON.stringify(["macos/contract"]) && contractJob.mode === "fresh"
-    && contractJob.runner === "ubuntu-latest" && contractJob.dispatchRunner === "macos-15"
+  check(JSON.stringify(withDispatch) === "[]" && contractJob.mode === "fresh"
+    && contractJob.runner === "ubuntu-latest" && !("dispatchRunner" in contractJob)
+    && JSON.stringify(Object.keys(contractJob).sort()) === JSON.stringify(["checks", "mode", "runner"])
     && JSON.stringify(contractJob.checks) === JSON.stringify(["contract"]),
-  `the registry's event-dependent runner is ${JSON.stringify(withDispatch)} / ${JSON.stringify(contractJob)}; want only macos/contract, fresh, ubuntu-latest on a pull request and macos-15 on a dispatch`);
+  `the registry's event-dependent runners are ${JSON.stringify(withDispatch)} / ${JSON.stringify(contractJob)}; want none, and macos/contract fresh on ubuntu-latest only`);
   check(TOOLREG.lanes.macos.jobs.contract === undefined && Object.keys(TOOLREG.lanes.macos.jobs).sort().join() === "test,ui-smoke",
     "the toolchain registry still certifies the always-fresh macOS contract");
 
-  // The runner choice, as a function of an event, and only of a source event.
-  check(expectedRunner(contractJob, "pull_request") === "ubuntu-latest" && expectedRunner(contractJob, "workflow_dispatch") === "macos-15"
+  // The runner choice: one runner per job, under each source event.
+  check(expectedRunner(contractJob, "pull_request") === "ubuntu-latest" && expectedRunner(contractJob, "workflow_dispatch") === "ubuntu-latest"
     && expectedRunner(REGISTRY.lanes.macos.jobs.test, "workflow_dispatch") === "macos-15"
     && expectedRunner(REGISTRY.lanes.go.jobs.test, "workflow_dispatch") === "ubuntu-latest"
     && expectedRunner(REGISTRY.lanes.macos.jobs["signed-build"], "pull_request") === "macos-15",
@@ -1878,6 +1883,43 @@ async function internalSelectStep(cand, world = internalWorld(cand)) {
     let err = null;
     try { expectedRunner(contractJob, event); } catch (e) { err = e; }
     check(err instanceof NoReuse && /selects no runner/.test(err.message), `expectedRunner accepted the source event ${JSON.stringify(event)}`);
+  }
+  // The generic mechanism, against an ISOLATED registry that re-declares the
+  // old dispatch runner: it still loads, still picks per event, and still
+  // refuses the wrong runner under a dispatch. The shipped registry is untouched.
+  const OLD = (() => { const r = JSON.parse(registryText); r.lanes.macos.jobs.contract.dispatchRunner = "macos-15"; return loadRegistry(JSON.stringify(r)); })();
+  const oldContract = OLD.lanes.macos.jobs.contract;
+  check(oldContract.dispatchRunner === "macos-15" && REGISTRY.lanes.macos.jobs.contract.dispatchRunner === undefined
+    && expectedRunner(oldContract, "pull_request") === "ubuntu-latest" && expectedRunner(oldContract, "workflow_dispatch") === "macos-15",
+  "the generic dispatchRunner mechanism no longer picks its second runner for a dispatch source (or leaked into the shipped registry)");
+  for (const event of ["push", "WORKFLOW_DISPATCH", undefined]) {
+    let err = null;
+    try { expectedRunner(oldContract, event); } catch (e) { err = e; }
+    check(err instanceof NoReuse && /selects no runner/.test(err.message), `expectedRunner (isolated dispatch registry) accepted the source event ${JSON.stringify(event)}`);
+  }
+  {
+    const contractOf = (w) => w.jobs.find((j) => j.name === "macos / contract");
+    // The source as it ran under the old runner choice: the API and the proof's
+    // own inventory both record the contract on macos-15.
+    const asOld = (w) => {
+      w.registry = OLD;
+      contractOf(w).labels = ["macos-15"];
+      rezip(w, (m) => { m.jobs.find((j) => j.name === "macos / contract").labels = ["macos-15"]; });
+      return w;
+    };
+    const ok = await runWitness(asOld(dispatchWorld()), "macos");
+    check(ok.ok, `the isolated dispatch registry refused a frozen dispatch whose contract ran on its dispatchRunner: ${ok.error?.message}`);
+    for (const [name, breakIt, expect] of [
+      ["ran on Ubuntu", (w) => { contractOf(w).labels = ["ubuntu-latest"]; }, /"macos \/ contract" ran on \[ubuntu-latest\], want \[macos-15\]/],
+      ["claims both runners", (w) => { contractOf(w).labels = ["macos-15", "ubuntu-latest"]; }, /"macos \/ contract" ran on \[macos-15, ubuntu-latest\], want \[macos-15\]/],
+      ["reports no runner", (w) => { contractOf(w).labels = []; }, /"macos \/ contract" ran on \[\], want \[macos-15\]/],
+    ]) {
+      const w = asOld(dispatchWorld());
+      breakIt(w);
+      const r = await runWitness(w, "macos");
+      check(!r.ok && r.error instanceof NoReuse && expect.test(r.error.message),
+        `isolated dispatch registry: a frozen dispatch whose contract ${name} must be refused for ${expect}; got ${r.ok ? "REUSE" : r.error?.message}`);
+    }
   }
 
   // Positives: the witness never vouches for the contract, nor certifies it,
@@ -1910,12 +1952,14 @@ async function internalSelectStep(cand, world = internalWorld(cand)) {
   for (const [name, src, breakIt, expect] of [
     // The runner is the one the source event selects: never the other one, never both, never none.
     ["a pull request whose contract ran on macOS", "pr", (w) => { contractOf(w).labels = ["macos-15"]; }, runnerWant("macos-15", "ubuntu-latest")],
-    ["a frozen dispatch whose contract ran on Ubuntu", "frozen", (w) => { contractOf(w).labels = ["ubuntu-latest"]; }, runnerWant("ubuntu-latest", "macos-15")],
-    ["an internal candidate whose contract ran on Ubuntu", "internal", (w) => { contractOf(w).labels = ["ubuntu-latest"]; }, runnerWant("ubuntu-latest", "macos-15")],
+    ["a frozen dispatch whose contract ran on macOS", "frozen", (w) => { contractOf(w).labels = ["macos-15"]; }, runnerWant("macos-15", "ubuntu-latest")],
+    ["an internal candidate whose contract ran on macOS", "internal", (w) => { contractOf(w).labels = ["macos-15"]; }, runnerWant("macos-15", "ubuntu-latest")],
     ["a pull request whose contract claims both runners", "pr", (w) => { contractOf(w).labels = ["ubuntu-latest", "macos-15"]; }, runnerWant("ubuntu-latest, macos-15", "ubuntu-latest")],
-    ["a frozen dispatch whose contract claims both runners", "frozen", (w) => { contractOf(w).labels = ["macos-15", "ubuntu-latest"]; }, runnerWant("macos-15, ubuntu-latest", "macos-15")],
+    ["a frozen dispatch whose contract claims both runners", "frozen", (w) => { contractOf(w).labels = ["macos-15", "ubuntu-latest"]; }, runnerWant("macos-15, ubuntu-latest", "ubuntu-latest")],
+    ["an internal candidate whose contract claims both runners", "internal", (w) => { contractOf(w).labels = ["ubuntu-latest", "macos-15"]; }, runnerWant("ubuntu-latest, macos-15", "ubuntu-latest")],
     ["a pull request whose contract reports no runner", "pr", (w) => { contractOf(w).labels = []; }, runnerWant("", "ubuntu-latest")],
-    ["a frozen dispatch whose contract reports no runner", "frozen", (w) => { contractOf(w).labels = []; }, runnerWant("", "macos-15")],
+    ["a frozen dispatch whose contract reports no runner", "frozen", (w) => { contractOf(w).labels = []; }, runnerWant("", "ubuntu-latest")],
+    ["an internal candidate whose contract reports no runner", "internal", (w) => { contractOf(w).labels = []; }, runnerWant("", "ubuntu-latest")],
     // Fresh is not optional: main requires the source's contract to have succeeded.
     ["a pull request whose contract failed", "pr", (w) => { contractOf(w).conclusion = "failure"; }, /"macos \/ contract" concluded failure in the source run/],
     ["a frozen dispatch whose contract failed", "frozen", (w) => { contractOf(w).conclusion = "failure"; }, /"macos \/ contract" concluded failure in the source run/],
@@ -1930,9 +1974,9 @@ async function internalSelectStep(cand, world = internalWorld(cand)) {
     ["an internal candidate whose UI shard ran on Ubuntu", "internal", (w) => { w.jobs.find((j) => j.name.startsWith("macos / ui-smoke (app-shell")).labels = ["ubuntu-latest"]; }, /"macos \/ ui-smoke \(app-shell, [^"]*" ran on \[ubuntu-latest\], want \[macos-15\]/],
     ["a frozen dispatch whose signed build ran on Ubuntu", "frozen", (w) => { w.jobs.find((j) => j.name === "macos / signed-build").labels = ["ubuntu-latest"]; }, /"macos \/ signed-build" ran on \[ubuntu-latest\], want \[macos-15\]/],
     // The event is the source run's own, re-read by id: a forged one cannot move the runner.
-    ["a pull-request source whose run claims a dispatch", "pr", (w) => { w.run.event = "workflow_dispatch"; contractOf(w).labels = ["macos-15"]; }, /is not a completed same-repository pull_request success/],
-    ["a frozen source whose run claims a pull request", "frozen", (w) => { w.run.event = "pull_request"; contractOf(w).labels = ["ubuntu-latest"]; }, /is not a completed same-repository workflow_dispatch success/],
-    ["an internal source whose run claims a pull request", "internal", (w) => { w.run.event = "pull_request"; contractOf(w).labels = ["ubuntu-latest"]; }, /is not a completed same-repository workflow_dispatch success/],
+    ["a pull-request source whose run claims a dispatch", "pr", (w) => { w.run.event = "workflow_dispatch"; }, /is not a completed same-repository pull_request success/],
+    ["a frozen source whose run claims a pull request", "frozen", (w) => { w.run.event = "pull_request"; }, /is not a completed same-repository workflow_dispatch success/],
+    ["an internal source whose run claims a pull request", "internal", (w) => { w.run.event = "pull_request"; }, /is not a completed same-repository workflow_dispatch success/],
     // The proof's own inventory cannot launder a runner the API disagrees with.
     ["a pull-request proof that records the contract on macOS", "pr", (w) => rezip(w, (m) => { m.jobs.find((j) => j.name === "macos / contract").labels = ["macos-15"]; }), /job inventory disagrees/],
   ]) {
@@ -1983,9 +2027,9 @@ async function internalSelectStep(cand, world = internalWorld(cand)) {
       "  contract:",
       "    needs: evidence",
       "    if: ${{ !cancelled() }}",
-      "    runs-on: ${{ (github.event_name == 'workflow_dispatch' || inputs.release_version || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}",
+      "    runs-on: ${{ (inputs.release_version || inputs.notarize || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}",
       "    timeout-minutes: 10",
-    ]), `macos.yml contract header is ${JSON.stringify(header)}; want its original needs, !cancelled(), event runner ternary and 10-minute bound`);
+    ]), `macos.yml contract header is ${JSON.stringify(header)}; want its original needs, !cancelled(), release-intent runner ternary and 10-minute bound`);
     const steps = block.slice(block.indexOf("    steps:") + 1).filter((l) => /^ {6}- /.test(l));
     check(JSON.stringify(steps) === JSON.stringify([
       "      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2",
@@ -2164,7 +2208,7 @@ for (const [name, mutateEnv, mutateWorld, expect] of [
     // A second runner exists only for a FRESH job (never witnessed, never certified).
     ["a dispatch runner on a reusable job", (r) => { r.lanes.macos.jobs.test.dispatchRunner = "ubuntu-latest"; },
       /the registry job macos\/test has a dispatchRunner but is not a fresh job/],
-    ["a dispatch runner on a contract that is no longer fresh", (r) => { delete r.lanes.macos.jobs.contract.mode; },
+    ["a dispatch runner on a contract that is no longer fresh", (r) => { r.lanes.macos.jobs.contract.dispatchRunner = "macos-15"; delete r.lanes.macos.jobs.contract.mode; },
       /the registry job macos\/contract has a dispatchRunner but is not a fresh job/],
     ["a dispatch runner that is the same runner", (r) => { r.lanes.macos.jobs.contract.dispatchRunner = "ubuntu-latest"; },
       /macos\/contract has a dispatchRunner but is not a fresh job with a second, different runner/],

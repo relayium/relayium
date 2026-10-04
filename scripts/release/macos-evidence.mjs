@@ -45,7 +45,9 @@
 //     shard is not a pass. Under a canonical PR→main evidence adoption the
 //     run also has exactly the three auxiliary jobs `screen`, `certify-macos`
 //     and `evidence` — no other job, ever. That adoption is the current one
-//     (`contract` always fresh) or, whole, the frozen one before it (`contract`
+//     (`contract` always fresh, its runner chosen by release inputs) or, each
+//     whole, one of the two frozen ones before it (`contract` always fresh but
+//     its runner chosen by the caller's event too; before that, `contract`
 //     witnessed and certified on Ubuntu), never a mix;
 //   * exactly ONE artifact named for the commit, unexpired with margin, created
 //     while `signed-build` ran, whose downloaded zip hashes to the API digest
@@ -215,12 +217,16 @@ const RUNNER_LABELS = {
  * `reuse` empty and every gate runs in full on its own runner.
  *
  * The generator, the drift check and these pins know only the CURRENT
- * adoption, in which `contract` is always fresh: its runner follows the event
- * (macos-15 for any dispatch), so it has no witness prefix, no step guards and
- * no toolchain capture, and the evidence job has no Ubuntu probe. Every signed
- * build produced before that was produced under the PREVIOUS adoption, frozen
- * whole as `adopted-witnessed-contract`: `WITNESSED_CONTRACT_EVIDENCE_JOB` plus
- * the witness prefix on `contract` as well. Inside that frozen adoption only,
+ * adoption, in which `contract` is always fresh: its runner follows release
+ * inputs (macos-15 only for a non-empty release_version, notarize or
+ * publish_release), so it has no witness prefix, no step guards and no
+ * toolchain capture, and the evidence job has no Ubuntu probe. Two frozen
+ * generations precede it, each judged WHOLE: `adopted-event-contract` (the same
+ * fresh contract, but runner and release branch also reading the caller's
+ * event: `EVENT_CONTRACT_JOB`) and, before that, `adopted-witnessed-contract`
+ * (`WITNESSED_CONTRACT_EVIDENCE_JOB` plus the entire historical
+ * `WITNESSED_CONTRACT_JOB`, witness prefix, guards and capture included).
+ * Inside the witnessed adoption only,
  * `ui-smoke` may also carry the older triple that still waited for `test`
  * (`LEGACY_ADOPTED_UI_SMOKE_CONDITIONS`), again as a WHOLE triple. No part of
  * one adoption is ever accepted beside a part of the other. These are
@@ -370,7 +376,7 @@ export const CANONICAL_JOB_CONDITIONS = {
   "contract": [
     "    needs: evidence",
     "    if: ${{ !cancelled() }}",
-    "    runs-on: ${{ (github.event_name == 'workflow_dispatch' || inputs.release_version || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}"
+    "    runs-on: ${{ (inputs.release_version || inputs.notarize || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}"
   ],
   "test": [
     "    needs: evidence",
@@ -397,16 +403,165 @@ export const LEGACY_ADOPTED_UI_SMOKE_CONDITIONS = Object.freeze([
   "    if: ${{ !cancelled() && needs.test.result == 'success' && needs.contract.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}",
   "    runs-on: ${{ needs.evidence.outputs.reuse == 'true' && 'ubuntu-latest' || 'macos-15' }}",
 ]);
-/** The current adoption, and the frozen one before it (see `workflowShape`). */
+/**
+ * The current adoption's `contract` job, WHOLE (structure only): its runner and
+ * its release branch both read release INTENT — a non-empty release_version,
+ * notarize or publish_release — and never the event. `workflowShape` requires
+ * exactly these lines, so a runner of one generation can never sit beside the
+ * release branch of another.
+ */
+export const CANONICAL_CONTRACT_JOB = Object.freeze([
+  "  contract:",
+  ...CANONICAL_JOB_CONDITIONS.contract,
+  "    timeout-minutes: 10",
+  "    steps:",
+  "      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2",
+  "      - name: Validate release contract",
+  "        env:",
+  "          RELEASE_VERSION: ${{ inputs.release_version }}",
+  "          NOTARIZE: ${{ inputs.notarize }}",
+  "          PUBLISH_RELEASE: ${{ inputs.publish_release }}",
+  "        run: |",
+  "          set -euo pipefail",
+  "          if [ -n \"$RELEASE_VERSION\" ] || [ \"$NOTARIZE\" = true ] \\",
+  "            || [ \"$PUBLISH_RELEASE\" = true ]; then",
+  "            [ \"$RUNNER_OS\" = macOS ] || { echo \"::error::release contract reached on $RUNNER_OS; runs-on must select macos-15 for it\"; exit 1; }",
+  "            if [ -n \"$RELEASE_VERSION\" ]; then",
+  "              printf '%s' \"$RELEASE_VERSION\" | grep -Eq '^[0-9]+(\\.[0-9]+){1,2}$' || exit 1",
+  "              [ \"$NOTARIZE\" = true ] || exit 1",
+  "              actual=\"$(xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium -showBuildSettings | awk '/MARKETING_VERSION =/{print $3; exit}')\"",
+  "              [ \"$actual\" = \"$RELEASE_VERSION\" ] || { echo \"::error::release $RELEASE_VERSION != MARKETING_VERSION $actual\"; exit 1; }",
+  "            fi",
+  "            if [ \"$PUBLISH_RELEASE\" = true ]; then",
+  "              [ -n \"$RELEASE_VERSION\" ] && [ \"$GITHUB_REF\" = refs/heads/main ] || exit 1",
+  "              node apps/mac/scripts/check-release-readiness.mjs --require-approved",
+  "            fi",
+  "          fi",
+]);
+/** The release-branch test, per generation: the current one (intent only) and
+ *  the frozen one every earlier adoption carried (the caller's event too). */
+export const RELEASE_INTENT_BRANCH = Object.freeze(CANONICAL_CONTRACT_JOB.slice(14, 16));
+export const EVENT_CONTRACT_BRANCH = Object.freeze([
+  "          if [ \"$GITHUB_EVENT_NAME\" = workflow_dispatch ] \\",
+  "            || [ -n \"$RELEASE_VERSION\" ] || [ \"$PUBLISH_RELEASE\" = true ]; then",
+]);
+/** The frozen contract triple every earlier adoption carried: macos-15 for any
+ *  dispatch of the caller. Read only by `workflowShape`; never a generator target. */
+export const EVENT_CONTRACT_CONDITIONS = Object.freeze([
+  "    needs: evidence",
+  "    if: ${{ !cancelled() }}",
+  "    runs-on: ${{ (github.event_name == 'workflow_dispatch' || inputs.release_version || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}",
+]);
+/**
+ * The frozen PREVIOUS adoption's `contract`, WHOLE: always fresh like the
+ * current one, but with the event-reading runner AND the event-reading release
+ * branch — exactly what `macos.yml` carried at 3ce8c939. Read only by
+ * `workflowShape`, so a signed build produced under it can still be judged.
+ */
+export const EVENT_CONTRACT_JOB = Object.freeze([
+  "  contract:",
+  ...EVENT_CONTRACT_CONDITIONS,
+  ...CANONICAL_CONTRACT_JOB.slice(4, 14),
+  ...EVENT_CONTRACT_BRANCH,
+  ...CANONICAL_CONTRACT_JOB.slice(16),
+]);
+/**
+ * The frozen adoption before that, `adopted-witnessed-contract`: its WHOLE
+ * `contract` job (structure only), exactly as `macos.yml` carried it at
+ * 672e46a2 and 3f2e92dd (the only two commits of that generation) — the
+ * witness prefix, the step guards, the event runner, the event release branch
+ * with every original check (version format, notarize for a version, the
+ * MARKETING_VERSION match, publication only with a version from main after the
+ * approved readiness check, the non-macOS guard) and the Ubuntu toolchain
+ * capture tail. A frozen signed build is judged against all of it, never
+ * against a selection of its lines. Read only by `workflowShape`.
+ */
+export const WITNESSED_CONTRACT_JOB = Object.freeze([
+  "  contract:",
+  "    needs: evidence",
+  "    if: ${{ !cancelled() }}",
+  "    runs-on: ${{ (github.event_name == 'workflow_dispatch' || inputs.release_version || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}",
+  "    timeout-minutes: 10",
+  "    steps:",
+  "      - name: Check out the verifier (witness path only)",
+  "        if: needs.evidence.outputs.reuse == 'true'",
+  "        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2",
+  "        with:",
+  "          persist-credentials: false",
+  "      - name: Node for the verifier (witness path only)",
+  "        if: needs.evidence.outputs.reuse == 'true'",
+  "        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0",
+  "        with:",
+  "          node-version: 24",
+  "      - name: Witness — the pull request's full proof covers this job",
+  "        if: needs.evidence.outputs.reuse == 'true'",
+  "        shell: bash",
+  "        env:",
+  "          CI_EVIDENCE_WITNESS: ${{ needs.evidence.outputs.witness }}",
+  "        run: node scripts/ci/ci-evidence.mjs confirm macos",
+  "      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2",
+  "        if: needs.evidence.outputs.reuse != 'true'",
+  "      - name: Validate release contract",
+  "        if: needs.evidence.outputs.reuse != 'true'",
+  "        env:",
+  "          RELEASE_VERSION: ${{ inputs.release_version }}",
+  "          NOTARIZE: ${{ inputs.notarize }}",
+  "          PUBLISH_RELEASE: ${{ inputs.publish_release }}",
+  "        run: |",
+  "          set -euo pipefail",
+  "          if [ \"$GITHUB_EVENT_NAME\" = workflow_dispatch ] \\",
+  "            || [ -n \"$RELEASE_VERSION\" ] || [ \"$PUBLISH_RELEASE\" = true ]; then",
+  "            [ \"$RUNNER_OS\" = macOS ] || { echo \"::error::release contract reached on $RUNNER_OS; runs-on must select macos-15 for it\"; exit 1; }",
+  "            if [ -n \"$RELEASE_VERSION\" ]; then",
+  "              printf '%s' \"$RELEASE_VERSION\" | grep -Eq '^[0-9]+(\\.[0-9]+){1,2}$' || exit 1",
+  "              [ \"$NOTARIZE\" = true ] || exit 1",
+  "              actual=\"$(xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium -showBuildSettings | awk '/MARKETING_VERSION =/{print $3; exit}')\"",
+  "              [ \"$actual\" = \"$RELEASE_VERSION\" ] || { echo \"::error::release $RELEASE_VERSION != MARKETING_VERSION $actual\"; exit 1; }",
+  "            fi",
+  "            if [ \"$PUBLISH_RELEASE\" = true ]; then",
+  "              [ -n \"$RELEASE_VERSION\" ] && [ \"$GITHUB_REF\" = refs/heads/main ] || exit 1",
+  "              node apps/mac/scripts/check-release-readiness.mjs --require-approved",
+  "            fi",
+  "          fi",
+  "      - name: Certify this job's toolchain",
+  "        if: needs.evidence.outputs.reuse != 'true'",
+  "        shell: bash",
+  "        env:",
+  "          CI_EVIDENCE_JOB_INDEX: ${{ strategy.job-index }}",
+  "          CI_EVIDENCE_JOB_TOTAL: ${{ strategy.job-total }}",
+  "          CI_EVIDENCE_MATRIX: ${{ toJSON(matrix) }}",
+  "        run: node scripts/ci/ci-evidence-toolchain.mjs capture --role source --profile linux-base --lane macos --job contract --out \"$RUNNER_TEMP/ci-evidence-toolchain/toolchain.json\"",
+  "      - name: Keep this job's toolchain certificate",
+  "        if: needs.evidence.outputs.reuse != 'true'",
+  "        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+  "        with:",
+  "          name: relayium-ci-evidence-toolchain-macos-contract-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}",
+  "          path: ${{ runner.temp }}/ci-evidence-toolchain/toolchain.json",
+  "          if-no-files-found: ignore",
+  "          retention-days: 7",
+]);
+/** The current adoption, and the two frozen ones before it (see `workflowShape`). */
 export const ADOPTED_SHAPE = "adopted";
+export const EVENT_CONTRACT_SHAPE = "adopted-event-contract";
 export const WITNESSED_CONTRACT_SHAPE = "adopted-witnessed-contract";
-const isAdopted = (shape) => shape === ADOPTED_SHAPE || shape === WITNESSED_CONTRACT_SHAPE;
+const isAdopted = (shape) => shape === ADOPTED_SHAPE || shape === EVENT_CONTRACT_SHAPE || shape === WITNESSED_CONTRACT_SHAPE;
+/** The adoptions whose `contract` is always fresh (no witness path at all). */
+const freshContract = (shape) => shape === ADOPTED_SHAPE || shape === EVENT_CONTRACT_SHAPE;
 /** The jobs each adoption gives the witness prefix. signed-build is `fresh` in
- *  both; `contract` is `fresh` in the current one (its runner follows the event). */
+ *  all three; `contract` is `fresh` in the current one and the one before it. */
 const WITNESSED_JOB_IDS = Object.freeze({
   [ADOPTED_SHAPE]: Object.freeze(["test", "ui-smoke"]),
+  [EVENT_CONTRACT_SHAPE]: Object.freeze(["test", "ui-smoke"]),
   [WITNESSED_CONTRACT_SHAPE]: Object.freeze(["contract", "test", "ui-smoke"]),
 });
+/** `lines` contains `seq` as one consecutive run exactly once. */
+const containsOnce = (lines, seq) => {
+  let n = 0;
+  for (let i = 0; i + seq.length <= lines.length; i += 1) {
+    if (seq.every((l, k) => lines[i + k] === l)) n += 1;
+  }
+  return n === 1;
+};
 
 const structural = (lines) => lines.filter((l) => l.trim() !== "" && !l.trim().startsWith("#"));
 
@@ -446,10 +601,27 @@ export function workflowShape(text) {
   // adoption's. The frozen ui-smoke triple predates the current adoption, so it
   // belongs to the frozen one only.
   const evidence = JSON.stringify(body("evidence"));
-  const shape = evidence === JSON.stringify(CANONICAL_EVIDENCE_JOB) ? ADOPTED_SHAPE
+  let shape = evidence === JSON.stringify(CANONICAL_EVIDENCE_JOB) ? ADOPTED_SHAPE
     : evidence === JSON.stringify(WITNESSED_CONTRACT_EVIDENCE_JOB) ? WITNESSED_CONTRACT_SHAPE : null;
   if (shape === null) return "non-canonical";
-  for (const [id, want] of Object.entries(CANONICAL_JOB_CONDITIONS)) {
+  // The always-fresh contract names its generation WHOLE: the current job
+  // (release-intent runner AND branch), or the frozen one before it (event
+  // runner AND branch). A runner of one beside the branch of the other is
+  // neither. The frozen witnessed adoption predates both: its contract must be
+  // WITNESSED_CONTRACT_JOB whole (every original check, guard and capture
+  // step), so the event branch is there exactly once and the intent one never.
+  const contract = body("contract");
+  if (shape === ADOPTED_SHAPE) {
+    const whole = JSON.stringify(contract);
+    if (whole === JSON.stringify(EVENT_CONTRACT_JOB)) shape = EVENT_CONTRACT_SHAPE;
+    else if (whole !== JSON.stringify(CANONICAL_CONTRACT_JOB)) return "non-canonical";
+  } else if (JSON.stringify(contract) !== JSON.stringify(WITNESSED_CONTRACT_JOB)
+    || !containsOnce(contract, EVENT_CONTRACT_BRANCH)
+    || RELEASE_INTENT_BRANCH.some((line) => contract.includes(line))) {
+    return "non-canonical";
+  }
+  for (const [id, current] of Object.entries(CANONICAL_JOB_CONDITIONS)) {
+    const want = id === "contract" && shape !== ADOPTED_SHAPE ? EVENT_CONTRACT_CONDITIONS : current;
     const b = body(id);
     const conditions = JSON.stringify(b.slice(0, b.indexOf("    steps:")).filter((l) => /^ {4}(needs|if|runs-on):/.test(l)));
     const legacy = shape === WITNESSED_CONTRACT_SHAPE && id === "ui-smoke"
@@ -471,7 +643,7 @@ export function workflowShape(text) {
   // nothing else of the evidence path: no witness step, no step guard, no capture.
   const signed = body("signed-build").join("\n");
   if (signed.includes("evidence") || signed.includes("ci-evidence")) return "non-canonical";
-  if (shape === ADOPTED_SHAPE) {
+  if (freshContract(shape)) {
     const contract = body("contract").join("\n");
     if (contract.includes("needs.evidence") || contract.includes("ci-evidence")
       || WITNESS_STEPS.some((name) => contract.includes(name))) return "non-canonical";
@@ -501,8 +673,8 @@ export function judgeExecution(id, job, shape) {
       `${where} did not execute "${name}" (${ran[0].status}/${ran[0].conclusion})`);
   }
   // Reported-but-skipped witness steps exist only where that adoption put a
-  // witness path: never in the current adoption's always-fresh contract.
-  const witnessable = shape === WITNESSED_CONTRACT_SHAPE || (shape === ADOPTED_SHAPE && id !== "contract");
+  // witness path: never in an always-fresh contract (current or event generation).
+  const witnessable = shape === WITNESSED_CONTRACT_SHAPE || (freshContract(shape) && id !== "contract");
   for (const name of MUST_NOT_RUN[id]) {
     const ran = job.steps.filter((step) => step.name === name);
     const allowed = witnessable || !WITNESS_STEPS.includes(name)

@@ -152,7 +152,7 @@ step records: every gate step (contract's `Validate release contract`, test's
 `Toolchain versions`/`Release script tests`, each UI shard's certificate,
 profiles and own smoke step, all thirteen signed-build steps) exactly once
 `completed`/`success` on the expected runner (`macos-15`; contract also
-`ubuntu-latest`), and no PR→main witness step run. A producer whose `macos.yml`
+`ubuntu-latest`, as release intent decides), and no PR→main witness step run. A producer whose `macos.yml`
 at that SHA carries the canonical PR→main evidence adoption (structurally equal
 to `scripts/ci/ci-evidence-view.mjs`'s `adopt(fullPathText(macos.yml))`: the
 `screen`, `certify-macos` and `evidence` jobs, the handover-promoted outputs,
@@ -161,6 +161,18 @@ the witness prefix) has exactly those three auxiliary jobs besides the five:
 `screen` and `certify-macos` exactly once each, completed `success`, `failure`
 or `skipped` (never `cancelled`, never missing); `evidence` exactly once,
 `success`, decided on Ubuntu, and neither kept a witness nor ran the handover.
+The adoption is judged WHOLE, one of three generations: the current one
+(`contract` always fresh, its `runs-on` and its release branch both reading
+release intent only), or one of two frozen ones that earlier signed builds were
+produced under — `adopted-event-contract` (`contract` always fresh, but its
+`runs-on` and release branch both also reading the caller's
+`workflow_dispatch` event, exactly as at `3ce8c939`) and
+`adopted-witnessed-contract` (`contract` witnessed and certified on Ubuntu,
+with the event runner and branch). These allowances are the signed-artifact
+verifier's alone and only for a whole generation: a runner of one generation
+beside the release branch of another, or any evidence/witness/UI part of one
+beside another's, is non-canonical; the CI policy and the generic PR→main
+proof accept only the current workflow and registry.
 Any other job is unavailable — no unknown job is waived; a witnessed job is
 never accepted as executed, any other adoption is unavailable, and transitive
 native reuse stays uncertified. All eight job records are bound into the
@@ -1612,12 +1624,18 @@ the merged pull request's proof covers exactly this tree:
    no reuse), reads that run's latest attempt and every paged job, requires the
    tested merge commit's tree to equal this commit's whole tree, requires every
    registered check of the lane to have succeeded on its registered runner —
-   exactly one runner per check, chosen by the source run's own event as the
-   API re-reads it and as its source kind demands: the macOS `contract`, whose
-   `runs-on` follows the event, on `ubuntu-latest` in a pull-request source and
-   on `macos-15` in either dispatch source (`dispatchRunner` in the registry,
-   allowed only on a fresh job); every other check on its one registered runner
-   under every source — then downloads the proof by artifact id, checks its bytes against the API digest,
+   exactly one runner per check under every source. The macOS `contract` picks
+   `macos-15` only for release INTENT — a non-empty `release_version`,
+   `notarize` or `publish_release`, the three `workflow_call` inputs only
+   `macos-release.yml` passes — and no evidence source passes any of them
+   (the merge gate calls `macos.yml` without inputs, dispatched or not), so it
+   is registered, and required, on `ubuntu-latest` in a pull-request source and
+   in both dispatch sources alike. Until 2026-10-04 its `runs-on` also read the
+   caller's event, so a dispatched gate queued a macOS runner for a checkout
+   (run 37175317336: 308 s queued, 9 s executed); the generic `dispatchRunner`
+   registry field that described that (a fresh job only, chosen by the source
+   run's API-verified event) remains in `ci-evidence.mjs` but no shipped job
+   uses it — then downloads the proof by artifact id, checks its bytes against the API digest,
    reads it without executing anything, cross-checks every field, bounds its age
    (48 h), requires the repository's tags to equal the tag set Web's `test` job
    recorded right after its own checkout (artifact
@@ -1819,18 +1837,22 @@ the merged pull request's proof covers exactly this tree:
    casually, and recover a transient failure or cancellation by rerunning the
    same run, which the rerun rule above allows even after `main` has moved on
    (within GitHub's own rerun window). It pays a FULL run (every lane, macOS
-   and Windows included, the macOS `contract` job on a macOS runner because
-   the event is a dispatch); no duration, queue time or saving is claimed for
+   and Windows included). The macOS `contract` job runs on `ubuntu-latest`:
+   the gate calls `macos.yml` with no `release_version`, `notarize` or
+   `publish_release`, and `contract` picks `macos-15` only for one of those
+   release inputs, whatever the caller's event; no duration, queue time or saving is claimed for
    it until a real run is measured. It is never started automatically, and a
    change whose ordinary push already starts every lane does not need it.
 
 What stays fresh on every `main` push: `repo-hygiene` and `windows` (not
 adopted), the macOS `signed-build` (it mints the source-bound artifact the
-release reuses), the macOS `contract` (its runner follows the event, so no
-single toolchain certificate describes it: it has no witness steps and no
-capture, keeps its original needs, condition, runner choice and release
-checks, and its check must still have succeeded in the source run on the
-runner that run's event selects), Web's `scope` job (it computes `main`'s own obligation from
+release reuses), the macOS `contract` (its runner follows release inputs — `macos-15` only
+for a non-empty `release_version`, `notarize` or `publish_release`, which only
+`macos-release.yml` passes — so no single toolchain certificate describes it:
+it has no witness steps and no capture, keeps its original needs, condition
+and release checks, and its check must still have succeeded in the source run
+on `ubuntu-latest`, the runner every evidence source selects because none
+passes a release input, whatever its event), Web's `scope` job (it computes `main`'s own obligation from
 `before`→tip, and gated jobs are required from the proof only when it is not
 `'false'`), Go's two `govulncheck` queries and Web's `npm audit` (live
 vulnerability databases). Release callers, dispatches and any non-default input

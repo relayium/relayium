@@ -39,7 +39,14 @@ import {
   CANONICAL_WITNESS_STEPS,
   LEGACY_ADOPTED_UI_SMOKE_CONDITIONS,
   WITNESSED_CONTRACT_EVIDENCE_JOB,
+  WITNESSED_CONTRACT_JOB,
+  CANONICAL_CONTRACT_JOB,
+  EVENT_CONTRACT_JOB,
+  EVENT_CONTRACT_CONDITIONS,
+  EVENT_CONTRACT_BRANCH,
+  RELEASE_INTENT_BRANCH,
   ADOPTED_SHAPE,
+  EVENT_CONTRACT_SHAPE,
   WITNESSED_CONTRACT_SHAPE,
   evidenceIdentity,
   Refused,
@@ -225,8 +232,28 @@ function adoptedText(legacy = LEGACY_WORKFLOW, { witnessedContract = false } = {
   }
   return out.join("\n");
 }
-/** The frozen previous adoption: contract witnessed and certified on Ubuntu. */
-const witnessedContractText = () => adoptedText(LEGACY_WORKFLOW, { witnessedContract: true });
+/** The contract's event-reading runner line and release branch, each WHOLE,
+ *  in place of the current release-intent ones. A stale anchor THROWS. */
+const CONTRACT_RUNS_ON = { intent: CANONICAL_JOB_CONDITIONS.contract[2], event: EVENT_CONTRACT_CONDITIONS[2] };
+const CONTRACT_BRANCH = { intent: RELEASE_INTENT_BRANCH.join("\n"), event: EVENT_CONTRACT_BRANCH.join("\n") };
+const withEventRunsOn = (text) => replaceOnce(text, `${CONTRACT_RUNS_ON.intent}\n`, `${CONTRACT_RUNS_ON.event}\n`);
+const withEventBranch = (text) => replaceOnce(text, `${CONTRACT_BRANCH.intent}\n`, `${CONTRACT_BRANCH.event}\n`);
+const withIntentRunsOn = (text) => replaceOnce(text, `${CONTRACT_RUNS_ON.event}\n`, `${CONTRACT_RUNS_ON.intent}\n`);
+const withIntentBranch = (text) => replaceOnce(text, `${CONTRACT_BRANCH.event}\n`, `${CONTRACT_BRANCH.intent}\n`);
+/** The frozen previous adoption: contract always fresh, runner AND branch read the caller's event. */
+const eventContractText = () => withEventBranch(withEventRunsOn(adoptedText()));
+/** `text` with job `id`'s whole block (its key up to the next job key) replaced by `lines`; a missing job THROWS. */
+function withJob(text, id, lines) {
+  const all = text.split("\n");
+  const at = all.indexOf(`  ${id}:`);
+  if (at < 0) throw new Error(`stale anchor: no job ${id}`);
+  let end = at + 1;
+  while (end < all.length && !/^ {2}[a-z0-9-]+:\s*$/.test(all[end])) end += 1;
+  all.splice(at, end - at, ...lines, "");
+  return all.join("\n");
+}
+/** The frozen adoption before that: contract witnessed and certified on Ubuntu — its WHOLE historical contract job. */
+const witnessedContractText = () => withJob(adoptedText(LEGACY_WORKFLOW, { witnessedContract: true }), "contract", WITNESSED_CONTRACT_JOB);
 
 /**
  * `text` with exactly one occurrence of `from` replaced. A missing or repeated
@@ -267,8 +294,8 @@ const legacyUiSmokeText = () => replaceOnce(witnessedContractText(), UI_SMOKE_TR
  * A complete, valid reuse world. Every case mutates one thing. `adopted` is the
  * current adoption (contract fresh); `witnessedContract` the frozen previous one.
  */
-function reuseWorld({ adopted = false, witnessedContract = false } = {}) {
-  if (witnessedContract) adopted = true;
+function reuseWorld({ adopted = false, witnessedContract = false, eventContract = false } = {}) {
+  if (witnessedContract || eventContract) adopted = true;
   const witnessedIds = witnessedContract ? JOB_IDS.filter((id) => id !== "signed-build")
     : JOB_IDS.filter((id) => id !== "signed-build" && id !== "contract");
   const run = {
@@ -338,7 +365,7 @@ function reuseWorld({ adopted = false, witnessedContract = false } = {}) {
     artifacts: [artifact],
     zip,
     runsTotal: null,
-    workflowText: witnessedContract ? witnessedContractText() : adopted ? adoptedText() : LEGACY_WORKFLOW,
+    workflowText: witnessedContract ? witnessedContractText() : eventContract ? eventContractText() : adopted ? adoptedText() : LEGACY_WORKFLOW,
   };
 }
 
@@ -832,6 +859,7 @@ async function executionCases() {
   // state those auxiliaries legitimately end in on a main push the merged pull
   // request did not prove (the screen said no / was red / the probe ran or failed).
   const FROZEN = { witnessedContract: true };
+  const EVENT = { eventContract: true };
   for (const [name, adopted, shape, jobs, mutate] of [
     ["a legacy five-job full producer", false, "legacy", 5, () => {}],
     ["a canonical adopted producer (screen no, certify skipped) that executed natively", true, ADOPTED_SHAPE, 8, () => {}],
@@ -839,6 +867,10 @@ async function executionCases() {
       check(JSON.stringify(jobOf(w, "contract").steps.map((st) => st.name)) === JSON.stringify(REAL_STEPS.contract),
         "execution: the current adoption's contract fixture is not exactly its original steps");
     }],
+    // Every signed build produced while the fresh contract still read the caller's event: that adoption, whole.
+    ["a producer under the frozen event-contract adoption", EVENT, EVENT_CONTRACT_SHAPE, 8, () => {}],
+    ["a frozen event-contract producer whose contract ran on macOS", EVENT, EVENT_CONTRACT_SHAPE, 8, (w) => { jobOf(w, "contract").labels = ["macos-15"]; }],
+    ["a frozen event-contract producer whose certify failed (never red)", EVENT, EVENT_CONTRACT_SHAPE, 8, (w) => { jobOf(w, "certify-macos").conclusion = "failure"; }],
     // Every signed build produced before the contract became fresh: the frozen previous adoption, whole.
     ["a producer under the frozen witnessed-contract adoption", FROZEN, WITNESSED_CONTRACT_SHAPE, 8, () => {}],
     // Built before ui-smoke stopped waiting for test: the frozen previous adoption with that triple, whole.
@@ -849,7 +881,7 @@ async function executionCases() {
     ["a canonical adopted producer whose certify failed (never red)", true, ADOPTED_SHAPE, 8, (w) => { jobOf(w, "certify-macos").conclusion = "failure"; }],
     ["a frozen witnessed-contract producer whose certify failed (never red)", FROZEN, WITNESSED_CONTRACT_SHAPE, 8, (w) => { jobOf(w, "certify-macos").conclusion = "failure"; }],
   ]) {
-    const w = reuseWorld(adopted === FROZEN ? FROZEN : { adopted });
+    const w = reuseWorld(typeof adopted === "object" ? adopted : { adopted });
     // A stale anchor throws (never a silent no-op); it is reported, not fatal to the suite.
     try { mutate(w); } catch (err) { check(false, `execution: ${name}: ${err.message}`); continue; }
     const got = await decideIn(w);
@@ -904,6 +936,20 @@ async function executionCases() {
     // Never a mix of the two adoptions, and never an unknown third.
     ["the current evidence job beside a witnessed contract", true, (w) => { w.workflowText = withAfterSteps(w.workflowText, "contract", CANONICAL_WITNESS_STEPS); }, /not the canonical one/],
     ["the frozen evidence job beside a fresh contract", FROZEN, (w) => { w.workflowText = withoutWitness(w.workflowText, "contract"); }, /not the canonical one/],
+    // Never a mix of contract generations: each runner only beside its own release branch.
+    ["the current release branch beside the event runner", true, (w) => { w.workflowText = withEventRunsOn(w.workflowText); }, /not the canonical one/],
+    ["the event release branch beside the current runner", true, (w) => { w.workflowText = withEventBranch(w.workflowText); }, /not the canonical one/],
+    ["the frozen event contract with the current runner", EVENT, (w) => { w.workflowText = withIntentRunsOn(w.workflowText); }, /not the canonical one/],
+    ["the frozen event contract with the current branch", EVENT, (w) => { w.workflowText = withIntentBranch(w.workflowText); }, /not the canonical one/],
+    ["the frozen witnessed contract with the current runner", FROZEN, (w) => { w.workflowText = withIntentRunsOn(w.workflowText); }, /not the canonical one/],
+    ["the frozen witnessed contract with the current branch", FROZEN, (w) => { w.workflowText = withIntentBranch(w.workflowText); }, /not the canonical one/],
+    ["the frozen witnessed contract with both current lines", FROZEN, (w) => { w.workflowText = withIntentBranch(withIntentRunsOn(w.workflowText)); }, /not the canonical one/],
+    ["the frozen event contract with a witnessed contract", EVENT, (w) => { w.workflowText = withAfterSteps(w.workflowText, "contract", CANONICAL_WITNESS_STEPS); }, /not the canonical one/],
+    ["the frozen event contract with the frozen evidence job", EVENT, (w) => { w.workflowText = replaceOnce(w.workflowText, CANONICAL_EVIDENCE_JOB.join("\n") + "\n", WITNESSED_CONTRACT_EVIDENCE_JOB.join("\n") + "\n"); }, /not the canonical one/],
+    ["the frozen event contract with the legacy ui-smoke triple", EVENT, (w) => { w.workflowText = replaceOnce(w.workflowText, UI_SMOKE_TRIPLE(CANONICAL_JOB_CONDITIONS["ui-smoke"]), UI_SMOKE_TRIPLE(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS)); }, /not the canonical one/],
+    ["a skipped witness step in the frozen event contract", EVENT, (w) => jobOf(w, "contract").steps.unshift({ name: WITNESS[0], status: "completed", conclusion: "skipped" }), /job 900 \(contract\) ran "Check out the verifier \(witness path only\)" \(skipped\)/],
+    ["a release branch that drops a check inside the current contract", true, (w) => { w.workflowText = replaceOnce(w.workflowText, "              [ \"$NOTARIZE\" = true ] || exit 1\n", ""); }, /not the canonical one/],
+    ["a release branch that drops the readiness check inside the frozen event contract", EVENT, (w) => { w.workflowText = replaceOnce(w.workflowText, "              node apps/mac/scripts/check-release-readiness.mjs --require-approved\n", ""); }, /not the canonical one/],
     ["the frozen evidence job inside the current adoption", true, (w) => { w.workflowText = replaceOnce(w.workflowText, CANONICAL_EVIDENCE_JOB.join("\n") + "\n", WITNESSED_CONTRACT_EVIDENCE_JOB.join("\n") + "\n"); }, /not the canonical one/],
     ["the legacy ui-smoke triple on the current adoption", true, (w) => { w.workflowText = replaceOnce(w.workflowText, UI_SMOKE_TRIPLE(CANONICAL_JOB_CONDITIONS["ui-smoke"]), UI_SMOKE_TRIPLE(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS)); }, /not the canonical one/],
     ["a fresh contract whose steps still read the decision", true, (w) => { w.workflowText = replaceOnce(w.workflowText, "      - name: Validate release contract\n", "      - name: Validate release contract\n        if: needs.evidence.outputs.reuse != 'true'\n"); }, /not the canonical one/],
@@ -951,7 +997,7 @@ async function executionCases() {
   ];
   for (const [name, adopted, mutate, reason] of cases) {
     for (const mode of ["auto", "reuse"]) {
-      const w = reuseWorld(adopted === FROZEN ? FROZEN : { adopted });
+      const w = reuseWorld(typeof adopted === "object" ? adopted : { adopted });
       try { mutate(w); } catch (err) { check(false, `execution ${mode}: ${name}: ${err.message}`); continue; }
       const got = await decideIn(w, { mode });
       if (mode === "auto") {
@@ -984,6 +1030,97 @@ async function executionCases() {
   check(workflowShape(adoptedText()) === ADOPTED_SHAPE, "shape: the canonical adoption is not judged adopted");
   check(workflowShape(witnessedContractText()) === WITNESSED_CONTRACT_SHAPE,
     `shape: the frozen witnessed-contract adoption is judged ${workflowShape(witnessedContractText())}`);
+  check(workflowShape(eventContractText()) === EVENT_CONTRACT_SHAPE,
+    `shape: the frozen event-contract adoption is judged ${workflowShape(eventContractText())}`);
+  // The frozen witnessed contract, WHOLE: removing any one original check,
+  // guard or capture step from it — or carrying any other generation's
+  // part — is not that adoption. Each anchor must exist exactly once.
+  {
+    const W = WITNESSED_CONTRACT_JOB;
+    const want = (needle) => { const i = W.findIndex((l) => l.includes(needle)); if (i < 0 || W.findIndex((l, k) => k > i && l.includes(needle)) >= 0) throw new Error(`stale anchor ${needle}`); return i; };
+    const without = (...needles) => { const drop = new Set(needles.map(want)); return W.filter((_, i) => !drop.has(i)); };
+    const capture = W.findIndex((l) => l === "      - name: Certify this job's toolchain");
+    const keep = W.findIndex((l) => l === "      - name: Keep this job's toolchain certificate");
+    const guardIdx = W.findIndex((l, i) => l === "        if: needs.evidence.outputs.reuse != 'true'" && W[i - 1] === "      - name: Validate release contract");
+    for (const [what, lines] of [
+      ["no version-format check", without("grep -Eq '^[0-9]+")],
+      ["no notarize requirement", without('[ "$NOTARIZE" = true ] || exit 1')],
+      ["no MARKETING_VERSION read", without("-showBuildSettings")],
+      ["no MARKETING_VERSION match", without('[ "$actual" = "$RELEASE_VERSION" ]')],
+      ["no publish version/main requirement", without("refs/heads/main ] || exit 1")],
+      ["no readiness check", without("check-release-readiness.mjs --require-approved")],
+      ["no non-macOS runner guard", without('[ "$RUNNER_OS" = macOS ]')],
+      ["no notarize and no readiness", without('[ "$NOTARIZE" = true ] || exit 1', "check-release-readiness.mjs --require-approved")],
+      ["no step guard on the release contract", W.filter((_, i) => i !== guardIdx)],
+      ["no toolchain capture tail", W.slice(0, capture)],
+      ["no kept certificate", W.slice(0, keep)],
+      ["the current runner", W.map((l) => (l === EVENT_CONTRACT_CONDITIONS[2] ? CANONICAL_JOB_CONDITIONS.contract[2] : l))],
+      ["the current release branch", (() => { const i = W.indexOf(EVENT_CONTRACT_BRANCH[0]); return [...W.slice(0, i), ...RELEASE_INTENT_BRANCH, ...W.slice(i + 2)]; })()],
+      ["the current (fresh) contract job", [...CANONICAL_CONTRACT_JOB]],
+      ["the frozen event (fresh) contract job", [...EVENT_CONTRACT_JOB]],
+      ["an extra step", [...W, "      - run: true"]],
+    ]) {
+      check(guardIdx > 0 && capture > 0 && keep > capture && JSON.stringify(lines) !== JSON.stringify(W),
+        `shape: the witnessed control "${what}" changes nothing (stale anchor)`);
+      let got;
+      try { got = workflowShape(withJob(witnessedContractText(), "contract", lines)); } catch (err) { got = `unbuildable (${err.message})`; }
+      check(got === "non-canonical", `shape: the frozen witnessed contract with ${what} is judged ${got}, want non-canonical`);
+    }
+    // Comment-only edits (YAML and shell) keep every generation.
+    for (const [what, text, wantShape] of [
+      ["witnessed, YAML comment", () => replaceOnce(witnessedContractText(), "  contract:\n", "  contract:\n    # a new comment\n"), WITNESSED_CONTRACT_SHAPE],
+      ["witnessed, shell comment", () => replaceOnce(witnessedContractText(), "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n", "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n          # a new shell comment\n"), WITNESSED_CONTRACT_SHAPE],
+      ["event, shell comment", () => replaceOnce(eventContractText(), "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n", "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n          # a new shell comment\n"), EVENT_CONTRACT_SHAPE],
+      ["current, shell comment", () => replaceOnce(adoptedText(), "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n", "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n          # a new shell comment\n"), ADOPTED_SHAPE],
+    ]) {
+      let got;
+      try { got = workflowShape(text()); } catch (err) { got = `unbuildable (${err.message})`; }
+      check(got === wantShape, `shape: a comment-only change (${what}) is judged ${got}, want ${wantShape}`);
+    }
+    check(Object.isFrozen(WITNESSED_CONTRACT_JOB), "shape: WITNESSED_CONTRACT_JOB is not frozen");
+  }
+  // Contract generations, each WHOLE. The current job is the live one; the
+  // frozen event one differs from it by exactly its runner line and its
+  // two-line release branch, and is frozen so the current pin cannot drag it.
+  {
+    const liveLines = LIVE_WORKFLOW.split("\n");
+    const at = liveLines.indexOf("  contract:");
+    let end = at + 1;
+    while (end < liveLines.length && !/^ {2}[a-z0-9-]+:\s*$/.test(liveLines[end])) end += 1;
+    const live = liveLines.slice(at, end).filter((l) => l.trim() !== "" && !l.trim().startsWith("#"));
+    check(at >= 0 && JSON.stringify(live) === JSON.stringify(CANONICAL_CONTRACT_JOB),
+      "shape: CANONICAL_CONTRACT_JOB drifted from the live macos.yml contract job");
+    const diff = CANONICAL_CONTRACT_JOB.map((l, i) => (l === EVENT_CONTRACT_JOB[i] ? null : i)).filter((i) => i !== null);
+    check(Object.isFrozen(EVENT_CONTRACT_JOB) && Object.isFrozen(EVENT_CONTRACT_CONDITIONS) && Object.isFrozen(EVENT_CONTRACT_BRANCH)
+      && EVENT_CONTRACT_JOB.length === CANONICAL_CONTRACT_JOB.length && JSON.stringify(diff) === JSON.stringify([3, 14, 15])
+      && EVENT_CONTRACT_JOB[3].includes("github.event_name == 'workflow_dispatch'") && !CANONICAL_CONTRACT_JOB.join("\n").includes("workflow_dispatch")
+      && JSON.stringify(CANONICAL_CONTRACT_JOB.slice(14, 16)) === JSON.stringify(RELEASE_INTENT_BRANCH)
+      && JSON.stringify(EVENT_CONTRACT_JOB.slice(14, 16)) === JSON.stringify(EVENT_CONTRACT_BRANCH),
+    `shape: the frozen event contract is not the current one with exactly its runner and release branch swapped (lines ${diff})`);
+    // Each generation alone, and every cross-generation mix, by the judge directly.
+    for (const [what, text, want] of [
+      ["the current adoption", () => adoptedText(), ADOPTED_SHAPE],
+      ["the frozen event-contract adoption", () => eventContractText(), EVENT_CONTRACT_SHAPE],
+      ["the frozen witnessed-contract adoption", () => witnessedContractText(), WITNESSED_CONTRACT_SHAPE],
+      ["the event runner with the current branch", () => withEventRunsOn(adoptedText()), "non-canonical"],
+      ["the current runner with the event branch", () => withEventBranch(adoptedText()), "non-canonical"],
+      ["the witnessed adoption with the current runner", () => withIntentRunsOn(witnessedContractText()), "non-canonical"],
+      ["the witnessed adoption with the current branch", () => withIntentBranch(witnessedContractText()), "non-canonical"],
+      ["the witnessed adoption with both current lines", () => withIntentBranch(withIntentRunsOn(witnessedContractText())), "non-canonical"],
+      ["the witnessed adoption with the branch twice", () => replaceOnce(witnessedContractText(), `${CONTRACT_BRANCH.event}\n`, `${CONTRACT_BRANCH.event}\n          fi\n${CONTRACT_BRANCH.event}\n`), "non-canonical"],
+      ["the event contract with a witness prefix", () => withAfterSteps(eventContractText(), "contract", CANONICAL_WITNESS_STEPS), "non-canonical"],
+      ["the event contract with the frozen evidence job", () => replaceOnce(eventContractText(), CANONICAL_EVIDENCE_JOB.join("\n") + "\n", WITNESSED_CONTRACT_EVIDENCE_JOB.join("\n") + "\n"), "non-canonical"],
+      ["the event contract with the legacy ui-smoke triple", () => replaceOnce(eventContractText(), UI_SMOKE_TRIPLE(CANONICAL_JOB_CONDITIONS["ui-smoke"]), UI_SMOKE_TRIPLE(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS)), "non-canonical"],
+      ["the event contract with a fresh test", () => withoutWitness(eventContractText(), "test"), "non-canonical"],
+      ["the current contract with an extra step", () => replaceOnce(adoptedText(), "\n  test:\n", "\n      - run: true\n  test:\n"), "non-canonical"],
+      ["the event contract with an extra step", () => replaceOnce(eventContractText(), "\n  test:\n", "\n      - run: true\n  test:\n"), "non-canonical"],
+      ["the event contract with a comment-only change", () => replaceOnce(eventContractText(), "  contract:\n", "  contract:\n    # a new comment\n"), EVENT_CONTRACT_SHAPE],
+    ]) {
+      let got;
+      try { got = workflowShape(text()); } catch (err) { got = `unbuildable (${err.message})`; }
+      check(got === want, `shape: ${what} is judged ${got}, want ${want}`);
+    }
+  }
   // The frozen previous adoption differs from the current one by exactly the
   // Ubuntu probe in the evidence job and the contract's witness prefix.
   {
@@ -1021,7 +1158,7 @@ async function executionCases() {
   }
   check(JSON.stringify(CANONICAL_JOB_CONDITIONS["ui-smoke"]) !== JSON.stringify(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS)
     && Object.isFrozen(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS), "shape: the legacy ui-smoke triple is not a separate frozen constant");
-  for (const base of [adoptedText, witnessedContractText]) {
+  for (const base of [adoptedText, eventContractText, witnessedContractText]) {
     const [needs, cond] = CANONICAL_JOB_CONDITIONS["ui-smoke"];
     const fork = " && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)";
     for (const [what, from, to] of [
@@ -1097,6 +1234,8 @@ async function executionCases() {
       check(JSON.stringify(got) === JSON.stringify(want),
         `shape: CANONICAL_JOB_CONDITIONS.${id} drifted from the generator's ${id} job`);
     }
+    check(JSON.stringify(job("contract")) === JSON.stringify(CANONICAL_CONTRACT_JOB),
+      "shape: CANONICAL_CONTRACT_JOB drifted from the generator's contract job");
     check(workflowShape(generated) === ADOPTED_SHAPE, "shape: the generator's own adoption of this tree is not judged adopted");
     check(workflowShape(LIVE_WORKFLOW) === ADOPTED_SHAPE, "shape: the live macos.yml is not judged adopted");
     generatorChecked = true;

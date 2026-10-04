@@ -3759,7 +3759,7 @@ const RUNNER_BUDGETS = [
     why: "a PAID macOS runner is held by work that will never finish",
     jobs: {
       // Declared 10. A checkout on Ubuntu for push, pull request and the merge
-      // gate; on macOS only when a dispatch or release input reaches
+      // gate (dispatched or not); on macOS only when a release input reaches
       // `xcodebuild -showBuildSettings` (6t). Still budgeted: on those runs it
       // is a PAID runner, and 6l counts any `runs-on` that can name macOS.
       contract: {
@@ -6040,40 +6040,63 @@ function macosBudgetFailures(world) {
   return out;
 }
 
-// ── 6t. macos.yml `contract`: Apple runner exactly when the release branch runs ─
+// ── 6t. macos.yml `contract`: Apple runner exactly when a release is intended ─
 //
-// `contract` is a checkout on every push, pull request and merge-gate call; its
-// one step reaches `xcodebuild -showBuildSettings` and the readiness check only
-// on a dispatch, a non-empty `release_version` or `publish_release`. It used to
-// wait ~7 minutes for a macOS runner to do 13 s of checkout (run 36736501756)
-// while `ui-smoke` and `signed-build` waited on it, so `runs-on` now picks
-// `ubuntu-latest` unless one of those three holds.
+// `contract` is a checkout on every push, pull request and merge-gate call —
+// including a merge-gate call whose caller was DISPATCHED, because the gate
+// passes no inputs; its one step reaches `xcodebuild -showBuildSettings` and the
+// readiness check only on release INTENT: a non-empty `release_version`,
+// `notarize`, or `publish_release`. It used to wait ~7 minutes for a macOS
+// runner to do 13 s of checkout (run 36736501756) while `ui-smoke` and
+// `signed-build` waited on it, and until the event stopped counting as intent a
+// dispatched gate still did (run 37175317336: 308 s queued, 9 s of work), so
+// `runs-on` now picks `ubuntu-latest` unless one of the three inputs holds.
 //
-// The two conditions are written twice — once as a GitHub expression, once as
-// shell — and nothing but this section keeps them equal. So nothing is taken
-// from the text: the expression is evaluated, and the step's script is RUN, for
-// each event/input shape a caller can produce, against stub `xcodebuild` and
-// `node`. A case reaches the release branch iff, run as Linux, the script calls
-// a tool, exits non-zero or trips its runner guard; every such case must have
-// evaluated to `macos-15`. Separately, no script run as Linux may call a tool at
-// all — the guard that makes a future widened `if` fail instead of running
-// `xcodebuild` on a runner without one.
+// The intent is written twice — once as a GitHub expression, once as shell —
+// and nothing but this section keeps them equal. So nothing is taken from the
+// text: the expression is evaluated, and the step's script is RUN, for EVERY
+// event and EVERY combination of the three inputs (and for each event with no
+// inputs at all), against stub `xcodebuild` and `node`. The runner must be
+// exactly `macos-15` iff an input names a release. Run as Linux, an intent-free
+// case must call no tool and pass, and an intent case must trip the runner guard
+// before any tool; run as macOS, each intent case must reach exactly the
+// original checks: version format, notarize=true for a version, the
+// MARKETING_VERSION match, and publication only with a version from main after
+// the approved readiness check. `notarize` alone is intent — the Apple runner,
+// conservatively — and on macOS checks nothing further, as it always did.
 const CONTRACT_STEP = "Validate release contract";
-const CONTRACT_CASES = [
-  // [label, event, inputs (undefined: the event supplies none), ordinary?]
-  ["push to main", "push", undefined, true],
-  ["pull request", "pull_request", undefined, true],
-  ["merge-gate call under a pull request (no `with:`)", "pull_request",
-    { release_version: "", notarize: false, publish_release: false }, true],
-  ["merge-gate call under a push", "push", { release_version: "", notarize: false, publish_release: false }, true],
-  ["dispatch with no release inputs", "workflow_dispatch",
-    { release_version: "", notarize: false, publish_release: false }, false],
-  ["release candidate", "workflow_dispatch", { release_version: "1.4.5", notarize: true, publish_release: false }, false],
-  ["release inputs under a push event", "push", { release_version: "1.4.5", notarize: true, publish_release: false }, false],
-  ["publish without a version", "push", { release_version: "", notarize: false, publish_release: true }, false],
-  ["notarize alone", "push", { release_version: "", notarize: true, publish_release: false }, false],
-  ["publish release", "workflow_dispatch", { release_version: "1.4.5", notarize: true, publish_release: true }, false],
-];
+const CONTRACT_EVENTS = ["push", "pull_request", "workflow_dispatch"];
+const CONTRACT_CASES = (() => {
+  // [label, event, inputs (undefined: the event supplies none), intent?]
+  const out = [];
+  for (const event of CONTRACT_EVENTS) {
+    out.push([`${event} with no inputs`, event, undefined, false]);
+    for (const release_version of ["", "1.4.5"]) {
+      for (const notarize of [false, true]) {
+        for (const publish_release of [false, true]) {
+          const inputs = { release_version, notarize, publish_release };
+          const intent = release_version !== "" || notarize || publish_release;
+          out.push([`${event} version=${JSON.stringify(release_version)} notarize=${notarize} publish=${publish_release}`, event, inputs, intent]);
+        }
+      }
+    }
+  }
+  return out;
+})();
+/** What the macOS run of an intent case must do: [exit 0?, xcodebuild?, readiness?]. */
+function contractMacExpect(inputs, ref = "refs/heads/main", marketing = "1.4.5") {
+  const version = inputs.release_version;
+  if (version !== "") {
+    if (!/^[0-9]+(\.[0-9]+){1,2}$/.test(version)) return [false, false, false];
+    if (!inputs.notarize) return [false, false, false];
+    if (version !== marketing) return [false, true, false];
+  }
+  if (inputs.publish_release) {
+    if (version === "" || ref !== "refs/heads/main") return [false, version !== "", false];
+    return [true, true, true];
+  }
+  return [true, version !== "", false];
+}
 
 /** Evaluate a `${{ }}` runs-on for one case; throws on anything it does not model. */
 function evalRunsOn(runsOn, event, inputs) {
@@ -6101,17 +6124,17 @@ function macosContractRunnerFailures(world) {
   const dir = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/macos-contract.XXXXXX`], { encoding: "utf8" })
     .stdout.trim();
   const stub = (tool) => `#!/bin/sh\necho "${tool} $*" >> "$TOOL_CALLS"\n`
-    + (tool === "xcodebuild" ? "echo '    MARKETING_VERSION = 1.4.5'\n" : "");
+    + (tool === "xcodebuild" ? "echo '    MARKETING_VERSION = 1.4.5'\n" : "exit \"${READINESS_EXIT:-0}\"\n");
   spawnSync("bash", ["-c", `mkdir -p "$1/bin" && printf '%s' "$2" > "$1/bin/xcodebuild" && printf '%s' "$3" > "$1/bin/node" `
     + `&& chmod +x "$1/bin/xcodebuild" "$1/bin/node" && printf '%s' "$4" > "$1/step.sh"`,
   "_", dir, stub("xcodebuild"), stub("node"), step.run]);
-  const run = (os, event, inputs, n) => {
-    const calls = `${dir}/calls-${n}-${os}`;
+  const run = (os, event, inputs, n, { ref = "refs/heads/main", readiness = 0, tag = "" } = {}) => {
+    const calls = `${dir}/calls-${n}-${os}${tag}`;
     const r = spawnSync("bash", [`${dir}/step.sh`], {
       encoding: "utf8",
       env: {
-        PATH: `${dir}/bin:${process.env.PATH}`, TOOL_CALLS: calls, RUNNER_OS: os,
-        GITHUB_EVENT_NAME: event, GITHUB_REF: "refs/heads/main",
+        PATH: `${dir}/bin:${process.env.PATH}`, TOOL_CALLS: calls, RUNNER_OS: os, READINESS_EXIT: String(readiness),
+        GITHUB_EVENT_NAME: event, GITHUB_REF: ref,
         // How GitHub renders `${{ inputs.x }}`: absent inputs are empty, booleans are words.
         RELEASE_VERSION: inputs ? String(inputs.release_version) : "",
         NOTARIZE: inputs ? String(inputs.notarize) : "",
@@ -6121,7 +6144,13 @@ function macosContractRunnerFailures(world) {
     const tools = spawnSync("cat", [calls], { encoding: "utf8" }).stdout ?? "";
     return { status: r.status, out: `${r.stdout}${r.stderr}`, tools };
   };
-  CONTRACT_CASES.forEach(([label, event, inputs, ordinary], n) => {
+  const macMatches = (label, mac, [ok, xcode, ready]) => {
+    need((mac.status === 0) === ok && /^xcodebuild /m.test(mac.tools) === xcode
+      && /check-release-readiness\.mjs --require-approved/.test(mac.tools) === ready,
+    `${MACOS}/contract (${label}): on macOS the step must ${ok ? "pass" : "refuse"}${xcode ? ", read MARKETING_VERSION" : ", read no MARKETING_VERSION"}`
+      + `${ready ? " and run the readiness check" : " and run no readiness check"}; got exit ${mac.status}, tools [${mac.tools.trim()}].\n${mac.out}`);
+  };
+  CONTRACT_CASES.forEach(([label, event, inputs, intent], n) => {
     let runner;
     try {
       runner = evalRunsOn(job["runs-on"], event, inputs);
@@ -6139,16 +6168,29 @@ function macosContractRunnerFailures(world) {
     need(!reached || runner === "macos-15",
       `${MACOS}/contract (${label}): the step reaches its release branch, but runs-on picks `
       + `${JSON.stringify(runner)}. Every release reachability must keep the Apple runner.`);
-    need(!ordinary || (!reached && runner === "ubuntu-latest"),
+    need(intent || (!reached && runner === "ubuntu-latest"),
       `${MACOS}/contract (${label}): an ordinary run picks ${JSON.stringify(runner)}${reached ? " and reaches the release branch" : ""}; `
       + `want ubuntu-latest and a checkout only, so it does not queue for a macOS runner.`);
-    if (runner === "macos-15" && label === "publish release") {
-      const mac = run("macOS", event, inputs, n);
-      need(mac.status === 0 && /^xcodebuild /m.test(mac.tools) && /check-release-readiness\.mjs --require-approved/.test(mac.tools),
-        `${MACOS}/contract (${label}): on macOS the step must still read MARKETING_VERSION and run the readiness `
-        + `check, and pass with matching stubs; got exit ${mac.status}, tools [${mac.tools.trim()}].\n${mac.out}`);
-    }
+    need(!intent || (runner === "macos-15" && reached && /release contract reached on Linux/.test(linux.out)),
+      `${MACOS}/contract (${label}): a release intent picks ${JSON.stringify(runner)}${reached ? "" : " and never reaches the release branch"}; `
+      + `want macos-15 and the release branch (its Linux run refused by the runner guard).`);
+    if (intent && runner === "macos-15") macMatches(label, run("macOS", event, inputs, n), contractMacExpect(inputs));
   });
+  // The original release checks, each refusing on macOS for its own reason.
+  for (const [label, inputs, opts, expect] of [
+    ["invalid version format", { release_version: "1.4.5-beta", notarize: true, publish_release: false }, {}, [false, false, false]],
+    ["a one-part version", { release_version: "2", notarize: true, publish_release: false }, {}, [false, false, false]],
+    ["a version without notarize", { release_version: "1.4.5", notarize: false, publish_release: false }, {}, [false, false, false]],
+    ["a version that is not MARKETING_VERSION", { release_version: "1.4.6", notarize: true, publish_release: false }, {}, [false, true, false]],
+    ["publish without a version", { release_version: "", notarize: true, publish_release: true }, {}, [false, false, false]],
+    ["publish from a branch other than main", { release_version: "1.4.5", notarize: true, publish_release: true }, { ref: "refs/heads/release" }, [false, true, false]],
+    ["publish whose readiness check refuses", { release_version: "1.4.5", notarize: true, publish_release: true }, { readiness: 1 }, [false, true, true]],
+    ["notarize alone (no new version required)", { release_version: "", notarize: true, publish_release: false }, {}, [true, false, false]],
+  ]) {
+    const want = opts.readiness ? expect : contractMacExpect(inputs, opts.ref);
+    need(JSON.stringify(want) === JSON.stringify(expect), `${MACOS}/contract (${label}): 6t's own expectation table disagrees with its control`);
+    macMatches(label, run("macOS", "workflow_dispatch", inputs, `x-${label.replace(/[^a-z0-9]+/gi, "-")}`, { ...opts, tag: "-x" }), expect);
+  }
   spawnSync("rm", ["-rf", dir]);
   return out;
 }
@@ -11035,16 +11077,81 @@ const MUTATIONS = [
     mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
       job["runs-on"] = job["runs-on"].replace(" || inputs.publish_release", "");
     }),
-    expect: /macos\.yml\/contract \(publish without a version\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+    expect: /macos\.yml\/contract \(push version="" notarize=false publish=true\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
   },
   {
-    // 6t. The shell `if` grows a reach the expression does not follow.
-    name: "macos.yml contract's release branch becomes reachable by notarize alone",
+    // 6t. Notarize alone is release intent: forgetting it in the expression
+    // leaves the branch reachable on Ubuntu, where the guard fails the release.
+    name: "macos.yml contract's runs-on forgets notarize",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      job["runs-on"] = job["runs-on"].replace(" || inputs.notarize", "");
+    }),
+    expect: /macos\.yml\/contract \(push version="" notarize=true publish=false\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+  },
+  {
+    // 6t. The shell forgets notarize: the expression still pays for macOS but
+    // the branch never runs — intent without its checks.
+    name: "macos.yml contract's release branch forgets notarize",
     mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
       const step = job.steps.find((s) => s.name === CONTRACT_STEP);
-      step.run = step.run.replace('|| [ "$PUBLISH_RELEASE" = true ]; then', '|| [ "$PUBLISH_RELEASE" = true ] || [ "$NOTARIZE" = true ]; then');
+      step.run = step.run.replace('if [ -n "$RELEASE_VERSION" ] || [ "$NOTARIZE" = true ] \\\n', 'if [ -n "$RELEASE_VERSION" ] \\\n');
     }),
-    expect: /macos\.yml\/contract \(notarize alone\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+    expect: /macos\.yml\/contract \(push version="" notarize=true publish=false\): a release intent picks "macos-15" and never reaches the release branch/,
+  },
+  {
+    // 6t. THE GAP: the caller's event comes back into the expression, and a
+    // dispatched merge gate (no inputs) queues for macOS again.
+    name: "macos.yml contract's runs-on reads the caller's event again",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      job["runs-on"] = job["runs-on"].replace("(inputs.release_version", "(github.event_name == 'workflow_dispatch' || inputs.release_version");
+    }),
+    expect: /macos\.yml\/contract \(workflow_dispatch with no inputs\): an ordinary run picks "macos-15"/,
+  },
+  {
+    // 6t. The shell `if` grows the event back: a dispatched gate reaches the
+    // release branch on Ubuntu, and the guard fails it.
+    name: "macos.yml contract's release branch reads the caller's event again",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace('if [ -n "$RELEASE_VERSION" ]', 'if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] || [ -n "$RELEASE_VERSION" ]');
+    }),
+    expect: /macos\.yml\/contract \(workflow_dispatch with no inputs\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+  },
+  {
+    // 6t. Each original release check keeps its refusal: notarize no longer required for a version.
+    name: "macos.yml contract no longer requires notarize for a version",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(/^ *\[ "\$NOTARIZE" = true \] \|\| exit 1\n/m, "");
+    }),
+    expect: /macos\.yml\/contract \(a version without notarize\): on macOS the step must refuse/,
+  },
+  {
+    // 6t. The version-format check is gone.
+    name: "macos.yml contract no longer checks the version format",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(/^ *printf '%s' "\$RELEASE_VERSION" \| grep -Eq .*\n/m, "");
+    }),
+    expect: /macos\.yml\/contract \(invalid version format\): on macOS the step must refuse/,
+  },
+  {
+    // 6t. The MARKETING_VERSION match is gone.
+    name: "macos.yml contract no longer matches MARKETING_VERSION",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(/^ *\[ "\$actual" = "\$RELEASE_VERSION" \] .*\n/m, "");
+    }),
+    expect: /macos\.yml\/contract \(a version that is not MARKETING_VERSION\): on macOS the step must refuse/,
+  },
+  {
+    // 6t. Publication from a non-main ref is no longer refused.
+    name: "macos.yml contract publishes from any ref",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(' && [ "$GITHUB_REF" = refs/heads/main ]', "");
+    }),
+    expect: /macos\.yml\/contract \(publish from a branch other than main\): on macOS the step must refuse/,
   },
   {
     // 6t. Without the guard, a Linux run that reaches the branch calls xcodebuild.
@@ -11053,19 +11160,19 @@ const MUTATIONS = [
       const step = job.steps.find((s) => s.name === CONTRACT_STEP);
       step.run = step.run.replace(/^ *\[ "\$RUNNER_OS" = macOS \].*\n/m, "");
     }),
-    expect: /macos\.yml\/contract \(release candidate\): run as Linux, the release-contract step called \[xcodebuild/,
+    expect: /macos\.yml\/contract \(push version="1\.4\.5" notarize=true publish=false\): run as Linux, the release-contract step called \[xcodebuild/,
   },
   {
     // 6t. The optimisation itself: ordinary runs stop queueing for macOS.
     name: "macos.yml contract goes back to macos-15 for every run",
     mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => { job["runs-on"] = "macos-15"; }),
-    expect: /macos\.yml\/contract \(push to main\): an ordinary run picks "macos-15"/,
+    expect: /macos\.yml\/contract \(push with no inputs\): an ordinary run picks "macos-15"/,
   },
   {
     // 6t. An expression the evaluator does not model is refused, not guessed.
     name: "macos.yml contract's runs-on reads a context 6t does not model",
     mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
-      job["runs-on"] = job["runs-on"].replace("github.event_name", "github.event.action");
+      job["runs-on"] = job["runs-on"].replace("inputs.notarize", "github.event.action");
     }),
     expect: /macos\.yml\/contract: cannot evaluate runs-on/,
   },
@@ -11077,7 +11184,7 @@ const MUTATIONS = [
       const step = job.steps.find((s) => s.name === CONTRACT_STEP);
       step.run = step.run.replace(/^ *node apps\/mac\/scripts\/check-release-readiness\.mjs --require-approved\n/m, "");
     }),
-    expect: /macos\.yml\/contract \(publish release\): on macOS the step must still read MARKETING_VERSION and run the readiness/,
+    expect: /macos\.yml\/contract \(push version="1\.4\.5" notarize=true publish=true\): on macOS the step must pass, read MARKETING_VERSION and run the readiness check/,
   },
   {
     // 6l. A conditional runs-on that can pick macOS is still a paid job.
