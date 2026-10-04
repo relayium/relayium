@@ -137,7 +137,7 @@
   "destinations": {
     "ios-ui-smoke-iphone": {
       "file": ".github/workflows/ios.yml",
-      "step": "Boot the selected iPhone simulator",
+      "step": "Run iOS primary-task UI smoke",
       "sha256": "be25526fe433db586e0cce0023de2c6c4ad4ba8df8aee4d3eb340a5af9ef179d"
     },
     "ios-ipad-shell-ipad": {

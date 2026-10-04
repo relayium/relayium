@@ -77,6 +77,8 @@ const DEVICES = () => ({ devices: {
   "com.apple.CoreSimulator.SimRuntime.iOS-18-5": [dev("iPad Air 11-inch (M2)", 4, "iPad-Air-11-inch-M2"), dev("iPhone 16", 5, "iPhone-16")],
 } });
 OUT["xcrun simctl list devices available -j"] = JSON.stringify(DEVICES());
+const IOS_YML = resolve(repoRoot, ".github/workflows/ios.yml");
+const IOS_TEXT = readFileSync(IOS_YML, "utf8");
 const DESTINATION_FILES = Object.fromEntries(Object.values(REGISTRY.destinations).map((d) => [resolve(repoRoot, d.file), readFileSync(resolve(repoRoot, d.file), "utf8")]));
 const CHROME = { Linux: "/usr/bin/google-chrome", macOS: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" };
 const XCODES = {
@@ -503,6 +505,13 @@ const UNKNOWNS = [
   ["macos-xcode-iphone", "a selection program that changed under its pin", { files: { [resolve(repoRoot, ".github/workflows/ios.yml")]: DESTINATION_FILES[resolve(repoRoot, ".github/workflows/ios.yml")].replace('startswith("iPhone")))\')"', 'startswith("iPhone 1")))\')"') } }, /not the one the registry pins/],
   ["macos-xcode-iphone", "a workflow without the step", { files: { [resolve(repoRoot, ".github/workflows/ios.yml")]: "jobs: {}\n" } }, /does not name the step/],
   ["macos-xcode-go-iphone", "a script that grew a second program", { files: { [resolve(repoRoot, "scripts/ios-ui-session-acceptance.sh")]: `${DESTINATION_FILES[resolve(repoRoot, "scripts/ios-ui-session-acceptance.sh")]}\nx="$(echo | python3 -c 'import json, sys\nprint(1)')"\n` } }, /runs 2 selection programs/],
+  // The iPhone program now lives in the ui_smoke step's quoted heredoc (the supervisor executes it); each way that
+  // copy stops being the pinned program is refused by name, and the real file passes the pin loop above.
+  ["macos-xcode-iphone", "the ui_smoke step grows a second selection program", { files: { [IOS_YML]: IOS_TEXT.replace("          set -euo pipefail\n          common=(", "          set -euo pipefail\n          x=\"$(echo {} \\\n            | /usr/bin/python3 -c 'import json, sys\n          print(1)')\"\n          common=(") } }, /runs 2 selection programs/],
+  ["macos-xcode-iphone", "the iPhone program sits in a step of another name", { files: { [IOS_YML]: IOS_TEXT.replace("- name: Run iOS primary-task UI smoke", "- name: Run iOS UI smoke") } }, /does not name the step/],
+  ["macos-xcode-iphone", "the iPhone program runs under another interpreter", { files: { [IOS_YML]: IOS_TEXT.replace("| /usr/bin/python3 -c 'import json, sys", "| python3 -c 'import json, sys") } }, /not the one the registry pins/],
+  ["macos-xcode-iphone", "the iPhone program loses its relative indentation", { files: { [IOS_YML]: IOS_TEXT.replace("          data = json.load(sys.stdin)\n          print(next(", "            data = json.load(sys.stdin)\n          print(next(") } }, /not uniformly indented/],
+  ["macos-xcode-iphone", "the iPhone program closes differently", { files: { [IOS_YML]: IOS_TEXT.replace('startswith("iPhone")))\')"', 'startswith("iPhone")))\') "') } }, /does not close where it is read/],
   ["windows-go", "a Windows ver in an unknown shape", { out: { "cmd /d /c ver": "Windows\r\n" } }, /ver is not in a recognised shape/],
   ["linux-go", "a source job with no matrix index", { env: { CI_EVIDENCE_JOB_INDEX: undefined } }, /CI_EVIDENCE_JOB_INDEX/],
   ["linux-go", "a matrix index past its total", { env: { CI_EVIDENCE_JOB_INDEX: "2", CI_EVIDENCE_JOB_TOTAL: "2" } }, /job index is outside the job total/],

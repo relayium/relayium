@@ -363,6 +363,16 @@ jobs:
         timeout-minutes: 2
         run: python3 scripts/test/macos-ui-crash-diagnostics-test.py
 
+      # `ios.yml`'s iPhone UI stage is supervised by scripts/ci/ios-ui-smoke.py: selection, then boot and
+      # build-for-testing together, then test-without-building only after both succeeded, under the original
+      # budgets, with every child in an owned process group. A hosted macOS run exercises only the happy path, so
+      # the barrier, the shared and cumulative budgets, the stage clamp, cancellation and the bounded cleanup are
+      # proven here instead: real processes, fake `xcrun`/`xcodebuild` in a temporary directory, the real helper.
+      # Python standard library only — no install, no Apple tooling.
+      - name: iOS UI stage supervisor keeps its barrier, budgets and cleanup
+        timeout-minutes: 3
+        run: python3 scripts/test/ios-ui-smoke-test.py
+
       # And the one that makes the four steps above impossible to forget again.
       # Every `scripts/test/*-test.{mjs,sh}` must be named by some workflow; the
       # four above had passed for months while being run by nothing.

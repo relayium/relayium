@@ -177,8 +177,21 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "ios.yml has no step that drives the iOS shell")
         XCTAssertTrue(smokeStep.contains("-project apps/ios/Relayium.xcodeproj"),
                       "the runtime smoke no longer drives the iOS project")
-        XCTAssertTrue(smokeStep.contains("-only-testing:RelayiumUITests test"),
-                      "CI compiles iOS but never runs its shell")
+        // The step runs the shell through its supervisor: the step's OWN arrays (the complement's whole-target
+        // selection among them) are handed to scripts/ci/ios-ui-smoke.py, which builds for testing and then runs
+        // `test-without-building` with exactly that selection. Bind the invocation, the arrays and the helper's
+        // test command, so neither half can drift into a step that builds but never runs the shell.
+        XCTAssertTrue(smokeStep.contains("/usr/bin/python3 scripts/ci/ios-ui-smoke.py --shard \"$UI_SHARD\""),
+                      "the runtime smoke no longer runs its supervisor")
+        XCTAssertTrue(smokeStep.contains("-- \"${common[@]}\" -- \"${test_limits[@]}\" -- \"${selection[@]}\""),
+                      "the runtime smoke no longer hands its own arrays to the supervisor")
+        XCTAssertTrue(smokeStep.contains("-only-testing:RelayiumUITests)"),
+                      "CI compiles iOS but never selects its shell")
+        let supervisor = try RepoRoot.text("scripts/ci/ios-ui-smoke.py")
+        XCTAssertTrue(supervisor.contains("*limits, *selection, \"test-without-building\"]"),
+                      "the supervisor no longer runs the step's selection as the test")
+        XCTAssertTrue(supervisor.contains("\"build-for-testing\"]") && supervisor.contains("wait_for([boot, build])"),
+                      "the supervisor no longer builds for testing behind the boot barrier")
         // And the move must have been a MOVE. If `macos.yml` reaches into the
         // iOS project again, the split is cosmetic: two workflows drive the same
         // simulator and every macOS-only change pays for an iOS runner.

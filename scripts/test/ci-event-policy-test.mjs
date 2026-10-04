@@ -5454,7 +5454,7 @@ function iosParallelLaneFailures(world) {
 
   const ui = body("ios-ui-smoke");
   need(
-    ui.includes("-only-testing:RelayiumUITests test")
+    ui.includes("-only-testing:RelayiumUITests)") && ui.includes("scripts/ci/ios-ui-smoke.py")
       && !ui.includes("local-transfer-acceptance.sh")
       && !ui.includes("actions/setup-go"),
     `${IOS}/ios-ui-smoke must independently own the offline primary-task UI test and no transfer `
@@ -5777,9 +5777,11 @@ function iosCompactShardFailures(world) {
     + `entry and the selection it runs are not connected.`,
   );
   need(
-    /-resultBundlePath\s+"?[^"\s]*\$UI_SHARD/.test(code),
+    code.includes('--test-result "$RUNNER_TEMP/ios-ui-smoke-$UI_SHARD.xcresult"')
+      && code.includes('--build-result "$RUNNER_TEMP/ios-ui-build-$UI_SHARD.xcresult"'),
     `${where}: the result bundle path does not carry \`$UI_SHARD\`. Each shard's bundle is the `
-    + `evidence for its half, and the proof and upload steps read it by that name.`,
+    + `evidence for its half, and the proof and upload steps read it by that name (the build gets its own, `
+    + `\`ios-ui-build-$UI_SHARD.xcresult\`, never accepted as test evidence).`,
   );
 
   const branches = caseBranches(code);
@@ -5804,8 +5806,9 @@ function iosCompactShardFailures(world) {
     // exactly the classes that stopped running.
     if (branch === undefined) { selections.set(shard, null); continue; }
     need(
-      /xcodebuild[^\n]*(?:\\\n[^\n]*)*\btest\s*$/m.test(branch),
-      `${where}: the \`${shard}\` branch runs no \`xcodebuild … test\`.`,
+      /^[ \t]*selection=\(/m.test(branch),
+      `${where}: the \`${shard}\` branch assigns no \`selection=(…)\` array, so the helper's test runs no `
+      + `selection of this shard's own.`,
     );
     const selection = testSelection(branch);
     selections.set(shard, selection);
@@ -10881,29 +10884,29 @@ const MUTATIONS = [
   {
     name: "the complement shard loses its -skip-testing exclusion",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run
-      .replace(/[ \t]*-skip-testing:RelayiumUITests\/AppShellUITests \\\n/, "")),
+      .replace("selection=(-skip-testing:RelayiumUITests/AppShellUITests\n", "selection=(\n")),
     expect: /RelayiumUITests\/AppShellUITests is selected by both shards \[app-shell, complement\]/,
   },
   {
     // Prose is not selection: the exclusion survives only as a comment.
     name: "the complement's exclusion survives only as a comment",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run
-      .replace(/([ \t]*)(-skip-testing:RelayiumUITests\/AppShellUITests \\\n)/, "$1# $2")),
+      .replace(/([ \t]*)selection=\((-skip-testing:RelayiumUITests\/AppShellUITests\n)/, "$1selection=(\n$1  # $2")),
     expect: /RelayiumUITests\/AppShellUITests is selected by both shards/,
   },
   {
     name: "the app-shell shard is widened to the whole target",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run
-      .replace("-only-testing:RelayiumUITests/AppShellUITests test", "-only-testing:RelayiumUITests test")),
+      .replace("-only-testing:RelayiumUITests/AppShellUITests)", "-only-testing:RelayiumUITests)")),
     expect: /is selected by both shards \[app-shell, complement\]/,
   },
   {
     // Green today, wrong tomorrow: the complement spelled as today's classes.
     name: "the complement is written as a hand-kept class list",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run.replace(
-      /-skip-testing:RelayiumUITests\/AppShellUITests \\\n([ \t]*)-only-testing:RelayiumUITests test/,
+      /-skip-testing:RelayiumUITests\/AppShellUITests\n([ \t]*)-only-testing:RelayiumUITests\)/,
       (_, indent) => world.uiTestClasses.filter((name) => name !== IOS_COMPACT_BOUNDARY_CLASS)
-        .map((name) => `-only-testing:RelayiumUITests/${name}`).join(` \\\n${indent}`) + " test",
+        .map((name) => `-only-testing:RelayiumUITests/${name}`).join(`\n${indent}`) + ")",
     )),
     expect: /the `complement` shard selects only .*Naming the remaining classes instead/,
   },
@@ -10912,9 +10915,9 @@ const MUTATIONS = [
     name: "a class is added while the complement is a hand-kept list",
     mutate: (world) => {
       withIosUiSmokeRun(world, (run) => run.replace(
-        /-skip-testing:RelayiumUITests\/AppShellUITests \\\n([ \t]*)-only-testing:RelayiumUITests test/,
+        /-skip-testing:RelayiumUITests\/AppShellUITests\n([ \t]*)-only-testing:RelayiumUITests\)/,
         (_, indent) => world.uiTestClasses.filter((name) => name !== IOS_COMPACT_BOUNDARY_CLASS)
-          .map((name) => `-only-testing:RelayiumUITests/${name}`).join(` \\\n${indent}`) + " test",
+          .map((name) => `-only-testing:RelayiumUITests/${name}`).join(`\n${indent}`) + ")",
       ));
       world.uiTestClasses = [...world.uiTestClasses, "NewlyAddedUITests"];
       return world;
@@ -10941,8 +10944,8 @@ const MUTATIONS = [
   {
     name: "a shard narrows to a single test method",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run
-      .replace("-only-testing:RelayiumUITests/AppShellUITests test",
-        "-only-testing:RelayiumUITests/AppShellUITests/testLaunch test")),
+      .replace("-only-testing:RelayiumUITests/AppShellUITests)",
+        "-only-testing:RelayiumUITests/AppShellUITests/testLaunch)")),
     expect: /a method-level identifier is a partition this policy cannot evaluate/,
   },
   {
@@ -11169,9 +11172,9 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
 // executable half runs the workflow's own step scripts with stub `xcrun` and
 // `xcodebuild`, once for the real files and once per mutation in 8v.
 
-/** The two UI jobs: their preparation step, their test step, and the device kind. */
+/** The iPad UI job: its preparation step, its test step, and the device kind. The iPhone job no longer has a
+ *  separate preparation step: its selection, boot barrier and build run in ONE supervised stage (6v-iPhone). */
 const IOS_BOOT_JOBS = [
-  { job: IOS_COMPACT_JOB, prep: "iphone_sim", test: "ui_smoke", kind: "iPhone", other: "iPad", shard: "complement" },
   { job: IOS_REGULAR_WIDTH_JOB, prep: "ipad_sim", test: "ipad_shell", kind: "iPad", other: "iPhone", shard: "" },
 ];
 const IOS_BOOT_PREP_MAX_MINUTES = 5;
@@ -11434,24 +11437,9 @@ function withBootStep(world, jobId, stepId, edit) {
 
 const BOOT_MUTATIONS = [
   {
-    name: "the iPhone boot barrier is removed",
-    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "iphone_sim", (r) => r.replace(`${IOS_BOOT_BARRIER}\n`, "")),
-    expect: /ios-ui-smoke: the `iphone_sim` step does not run `xcrun simctl bootstatus "\$device_id" -b` exactly once/,
-  },
-  {
     name: "the iPad boot failure is swallowed",
     mutate: (w) => withBootStepRun(w, IOS_REGULAR_WIDTH_JOB, "ipad_sim", (r) => r.replace(IOS_BOOT_BARRIER, `${IOS_BOOT_BARRIER} || true`)),
     expect: /ios-ipad-shell: a failing `simctl bootstatus` must fail the `ipad_sim` step and hand nothing on/,
-  },
-  {
-    name: "the iPhone barrier loses -b and only watches",
-    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "iphone_sim", (r) => r.replace(IOS_BOOT_BARRIER, 'xcrun simctl bootstatus "$device_id"')),
-    expect: /ios-ui-smoke \(listing\): the `iphone_sim` step ran boot barriers \[xcrun simctl bootstatus 00000002-AAAA-BBBB-CCCC-DDDDEEEEFFF2\]/,
-  },
-  {
-    name: "the iPhone barrier boots a different device",
-    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "iphone_sim", (r) => r.replace(IOS_BOOT_BARRIER, `${IOS_BOOT_BARRIER.replace('"$device_id"', "booted")} ; : "$device_id"`)),
-    expect: /ios-ui-smoke \(listing\): the `iphone_sim` step ran boot barriers \[xcrun simctl bootstatus booted -b\]/,
   },
   {
     name: "the iPad device is handed on before its boot succeeded",
@@ -11470,39 +11458,14 @@ const BOOT_MUTATIONS = [
     expect: /ios-ipad-shell \(no iPad available\): with no available iPad the `ipad_sim` step must fail before any boot/,
   },
   {
-    name: "the iPhone preparation continues on error",
-    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "iphone_sim", (s) => { s["continue-on-error"] = "true"; }),
-    expect: /ios-ui-smoke: the `iphone_sim` or `ui_smoke` step sets `continue-on-error`/,
-  },
-  {
-    name: "the iPhone test step runs whatever the boot did",
-    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s.if = "always()"; }),
-    expect: /ios-ui-smoke: the `ui_smoke` step's condition is "always\(\)", want none on the full path/,
-  },
-  {
     name: "the iPad preparation loses its bound",
     mutate: (w) => withBootStep(w, IOS_REGULAR_WIDTH_JOB, "ipad_sim", (s) => { delete s["timeout-minutes"]; }),
     expect: /ios-ipad-shell: the `ipad_sim` step's timeout-minutes is undefined, want an integer in 1\.\.5/,
   },
   {
-    name: "the iPhone preparation bound is raised past five minutes",
-    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "iphone_sim", (s) => { s["timeout-minutes"] = "10"; }),
-    expect: /ios-ui-smoke: the `iphone_sim` step's timeout-minutes is "10", want an integer in 1\.\.5/,
-  },
-  {
-    name: "the iPhone test step stops validating DEVICE_ID",
-    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace(/\[\[ "\$\{DEVICE_ID:-\}" =~ [^\n]*\n[^\n]*\n/, "")),
-    expect: /ios-ui-smoke: given DEVICE_ID "", the `ui_smoke` step ran xcodebuild or passed/,
-  },
-  {
     name: "the iPad test step drives a device other than the booted one",
     mutate: (w) => withBootStepRun(w, IOS_REGULAR_WIDTH_JOB, "ipad_shell", (r) => r.replace('device_id="$DEVICE_ID"', `device_id="${bootUdid(9)}"`)),
     expect: /ios-ipad-shell: given DEVICE_ID 00000004-AAAA-BBBB-CCCC-DDDDEEEEFFF4, the `ipad_shell` step ran \[xcodebuild .*id=00000009/,
-  },
-  {
-    name: "the iPhone job bound no longer covers its step bounds",
-    mutate: (w) => withNamedJob(w, IOS, IOS_COMPACT_JOB, (job) => { job["timeout-minutes"] = "60"; }),
-    expect: /ios-ui-smoke: the job's timeout-minutes "60" is below the 63 minutes/,
   },
 ];
 
@@ -11517,6 +11480,236 @@ for (const { name, mutate, expect } of BOOT_MUTATIONS) {
   }
   check(got.some((message) => expect.test(message)),
     `the iOS boot barrier check did NOT complain about "${name}". Expected a message matching ${expect}; got `
+    + `${got.length === 0 ? "no failures at all" : `[\n    ${got.join("\n    ")}\n  ]`}.`);
+}
+
+// ── 6v-iPhone. the iPhone shard: one supervised stage, selection → boot ∥ build → test ──
+//
+// The iPhone job no longer boots in a separate step. Its `ui_smoke` step hands the job's own selection script
+// (a quoted heredoc; the pinned program, hashed by this step's name in the toolchain registry) to
+// scripts/ci/ios-ui-smoke.py, which supervises selection, then `xcrun simctl bootstatus UDID -b` and `xcodebuild …
+// build-for-testing` together, then `test-without-building` only after BOTH succeeded — under the original 300 s
+// (selection + boot), 2880 s (build + test) and a 3170 s stage inside the original 53 minutes. What is held here:
+//
+//   * there is no separate iPhone preparation step and nothing is handed through step outputs;
+//   * the step is the original one (name, id, evidence guard only, 53 minutes, no continue-on-error), and the job
+//     bound still covers the step bounds in order;
+//   * the step passes its OWN inline arrays and the selection heredoc to the helper, and runs no xcodebuild or
+//     bootstrap itself;
+//   * executed against stub tools: the selected device is booted exactly once, built for testing exactly once and
+//     tested exactly once, the test starts only after the boot and the build both ENDED, a missing iPhone or a
+//     failed boot/build runs no test, and nothing is written to GITHUB_OUTPUT;
+//   * the helper's own process, budget and cleanup behaviour is owned by scripts/test/ios-ui-smoke-test.py, which
+//     repo-hygiene runs; its trigger is watched by ios.yml.
+const IOS_UI_HELPER = "scripts/ci/ios-ui-smoke.py";
+const IOS_UI_HELPER_TEST = "scripts/test/ios-ui-smoke-test.py";
+const IOS_UI_HELPER_ARGS = '-- "${common[@]}" -- "${test_limits[@]}" -- "${selection[@]}" <<\'SELECT\'';
+
+function iosCompactOverlapFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const doc = world.docs.get(IOS);
+  const job = doc?.jobs?.[IOS_COMPACT_JOB];
+  if (!job) return out;
+  const where = `${IOS}/${IOS_COMPACT_JOB}`;
+  const steps = job.steps ?? [];
+  need(!steps.some((s) => s?.id === "iphone_sim" || s?.name === "Boot the selected iPhone simulator"),
+    `${where}: a separate iPhone preparation step is back. Selection, boot and build run in ONE supervised stage; `
+    + `a separate step would hand a device on through outputs and pay its own budget out of the test's.`);
+  const at = steps.findIndex((s) => s?.id === "ui_smoke");
+  const step = steps[at];
+  need(step !== undefined, `${where}: no step has \`id: ui_smoke\`.`);
+  if (!step) return out;
+  need(step.name === "Run iOS primary-task UI smoke",
+    `${where}: the \`ui_smoke\` step is named ${JSON.stringify(step.name)}; the toolchain registry locates the pinned `
+    + `iPhone selection program by the name "Run iOS primary-task UI smoke".`);
+  need(step.if === undefined,
+    `${where}: the \`ui_smoke\` step's condition is ${JSON.stringify(step.if)}, want none on the full path (only the evidence guard).`);
+  need(step["continue-on-error"] === undefined, `${where}: the \`ui_smoke\` step sets \`continue-on-error\`, so a failed boot, build or test no longer fails the job.`);
+  need(Number(step["timeout-minutes"]) === 53,
+    `${where}: the \`ui_smoke\` step's timeout-minutes is ${JSON.stringify(step["timeout-minutes"])}, want 53 — the original 5 + 48 `
+    + `minutes, which the helper's 3170 s stage plus its 10 s cleanup reserve fits inside.`);
+  need(JSON.stringify(Object.keys(step.env ?? {})) === JSON.stringify(["UI_SHARD"]),
+    `${where}: the \`ui_smoke\` step's env is ${JSON.stringify(step.env)}, want only UI_SHARD (no device is handed in).`);
+  const run = String(step.run ?? "");
+  const code = run.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+  need(code.split(`/usr/bin/python3 ${IOS_UI_HELPER} --shard "$UI_SHARD"`).length === 2 && code.includes(IOS_UI_HELPER_ARGS),
+    `${where}: the \`ui_smoke\` step does not run \`/usr/bin/python3 ${IOS_UI_HELPER}\` exactly once with its own arrays and `
+    + `the selection heredoc (\`${IOS_UI_HELPER_ARGS}\`).`);
+  need(!/GITHUB_OUTPUT/.test(code), `${where}: the \`ui_smoke\` step writes GITHUB_OUTPUT; nothing is handed on from this stage.`);
+  need(!/^\s*xcodebuild\b/m.test(code) && !/simctl\s+bootstatus/.test(code) && !/simctl\s+boot\b/.test(code) && !/\bsleep\b/.test(code),
+    `${where}: the \`ui_smoke\` step runs xcodebuild, boots or sleeps itself; only the supervisor may, under its budgets.`);
+  need(code.includes("xcrun simctl list devices available -j") && code.includes('startswith("iPhone")'),
+    `${where}: the \`ui_smoke\` step no longer carries the job's own iPhone selection script.`);
+  const xcodeAt = steps.findIndex((s) => SELECT_REF_RE.test(String(s?.run ?? "")));
+  need(xcodeAt !== -1 && xcodeAt < at, `${where}: the Xcode selection does not run before the \`ui_smoke\` stage.`);
+  const jobMinutes = Number(job["timeout-minutes"]);
+  const bounded = steps.slice(0, at + 1).reduce((sum, s) => sum + (Number(s?.["timeout-minutes"]) || 0), 0);
+  need(Number.isFinite(jobMinutes) && jobMinutes >= bounded,
+    `${where}: the job's timeout-minutes ${JSON.stringify(job["timeout-minutes"])} is below the ${bounded} minutes its steps up to `
+    + `\`ui_smoke\` may take in order.`);
+  need(world.texts?.get?.(IOS) === undefined || String(world.texts.get(IOS)).includes(`- '${IOS_UI_HELPER}'`),
+    `${IOS}: \`push.paths\` does not watch ${IOS_UI_HELPER}, so a change to the stage's supervisor would not start this lane.`);
+  const hygiene = world.docs.get("repo-hygiene.yml");
+  need(hygiene === undefined || JSON.stringify(hygiene).includes(`python3 ${IOS_UI_HELPER_TEST}`),
+    `repo-hygiene.yml does not run ${IOS_UI_HELPER_TEST}, so the supervisor's process and budget controls never run in CI.`);
+  return out;
+}
+
+/** Run the iPhone `ui_smoke` step as written (and the real helper) against stub xcrun/xcodebuild. */
+function iosCompactOverlapExecutionFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const step = world.docs.get(IOS)?.jobs?.[IOS_COMPACT_JOB]?.steps?.find((s) => s?.id === "ui_smoke");
+  const where = `${IOS}/${IOS_COMPACT_JOB}`;
+  if (typeof step?.run !== "string") return [`${where}: no \`ui_smoke\` run script to execute.`];
+  const dir = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/ios-overlap.XXXXXX`], { encoding: "utf8" }).stdout.trim();
+  if (!dir) return ["6v-iPhone: could not create a scratch directory."];
+  try {
+    const stub = (tool) => [
+      "#!/bin/bash",
+      'action="${@: -1}"; [ "$1 $2" = "simctl list" ] && action=list; [ "$1 $2" = "simctl bootstatus" ] && action=boot',
+      `echo "start ${tool} $action $*" >> "$TOOL_CALLS"`,
+      'if [ "$action" = list ]; then cat "$BOOT_LISTING_FILE"; echo "end list" >> "$TOOL_CALLS"; exit 0; fi',
+      'if [ "$action" = boot ] && [ "$BOOT_MODE" = fail ]; then echo "end boot failed" >> "$TOOL_CALLS"; exit 149; fi',
+      'if [ "$action" = build-for-testing ] && [ "$BUILD_MODE" = fail ]; then echo "end build-for-testing failed" >> "$TOOL_CALLS"; exit 65; fi',
+      'case "$action" in boot) sleep 0.4 ;; build-for-testing) sleep 0.2 ;; esac',
+      'case "$action" in boot|build-for-testing|test-without-building) echo "end $action" >> "$TOOL_CALLS"; exit 0 ;; esac',
+      'echo "unexpected call: $*" >&2; exit 2', "",
+    ].join("\n");
+    spawnSync("bash", ["-c", 'mkdir -p "$1/bin" && printf "%s" "$2" > "$1/bin/xcrun" && printf "%s" "$3" > "$1/bin/xcodebuild" '
+      + '&& chmod +x "$1/bin/xcrun" "$1/bin/xcodebuild"', "_", dir, stub("xcrun"), stub("xcodebuild")]);
+    let n = 0;
+    const run = ({ listing = BOOT_LISTING, shard = "complement", env = {} } = {}) => {
+      n += 1;
+      const rt = `${dir}/rt-${n}`;
+      const calls = `${dir}/calls-${n}`;
+      const output = `${dir}/output-${n}`;
+      spawnSync("bash", ["-c", `mkdir -p "${rt}" && printf '%s' "$1" > "${dir}/listing-${n}.json" && printf '%s' "$2" > "${dir}/step-${n}.sh" && : > "${calls}" && : > "${output}"`,
+        "_", JSON.stringify(listing), step.run]);
+      const r = spawnSync("bash", ["-e", `${dir}/step-${n}.sh`], {
+        encoding: "utf8", timeout: 30000, killSignal: "SIGKILL",
+        env: { PATH: `${dir}/bin:/usr/bin:/bin`, TOOL_CALLS: calls, BOOT_LISTING_FILE: `${dir}/listing-${n}.json`,
+          GITHUB_OUTPUT: output, RUNNER_TEMP: rt, UI_SHARD: shard, HOME: process.env.HOME ?? "", ...env },
+      });
+      const read = (f) => spawnSync("cat", [f], { encoding: "utf8" }).stdout ?? "";
+      return { status: r.status, log: `${r.stdout ?? ""}${r.stderr ?? ""}`, calls: read(calls).split("\n").filter(Boolean), output: read(output), rt };
+    };
+    const idx = (calls, prefix) => calls.findIndex((c) => c.startsWith(prefix));
+    for (const [label, listing, picks] of BOOT_CASES) {
+      const want = picks.iPhone;
+      const r = run({ listing });
+      const starts = r.calls.filter((c) => c.startsWith("start ") && !c.startsWith("start xcrun list"));
+      if (want === null) {
+        need(r.status !== 0 && starts.length === 0 && r.output === "",
+          `${where} (${label}): with no available iPhone the \`ui_smoke\` step must fail before any boot or build; got exit `
+          + `${r.status}, calls [${starts.join(" | ")}].`);
+        continue;
+      }
+      const udid = bootUdid(want[0]);
+      const boots = r.calls.filter((c) => c.startsWith("start xcrun boot"));
+      const builds = r.calls.filter((c) => c.startsWith("start xcodebuild build-for-testing"));
+      const tests = r.calls.filter((c) => c.startsWith("start xcodebuild test-without-building"));
+      need(r.status === 0, `${where} (${label}): the \`ui_smoke\` step failed on a listing with an available iPhone; exit ${r.status}.\n${r.log.slice(-1500)}`);
+      need(boots.length === 1 && boots[0] === `start xcrun boot simctl bootstatus ${udid} -b`,
+        `${where} (${label}): the stage ran boot barriers [${boots.join(" | ")}]; want exactly \`simctl bootstatus ${udid} -b\` (${want[1]}).`);
+      need(builds.length === 1 && builds[0].includes(`-destination platform=iOS Simulator,id=${udid} `)
+        && builds[0].includes(`-resultBundlePath ${r.rt}/ios-ui-build-complement.xcresult build-for-testing`),
+      `${where} (${label}): the stage ran builds [${builds.join(" | ")}]; want one build-for-testing of ${udid} into its own bundle.`);
+      need(tests.length === 1 && tests[0].includes(`-destination platform=iOS Simulator,id=${udid} `)
+        && tests[0].includes(`-resultBundlePath ${r.rt}/ios-ui-smoke-complement.xcresult `)
+        && tests[0].endsWith("-skip-testing:RelayiumUITests/AppShellUITests -only-testing:RelayiumUITests test-without-building"),
+      `${where} (${label}): the stage ran tests [${tests.join(" | ")}]; want one test-without-building of ${udid} with the complement selection.`);
+      const testAt = idx(r.calls, "start xcodebuild test-without-building");
+      need(idx(r.calls, "start xcodebuild build-for-testing") < idx(r.calls, "end boot") && testAt > idx(r.calls, "end boot")
+        && testAt > idx(r.calls, "end build-for-testing"),
+      `${where} (${label}): the build did not overlap the boot, or the test started before both ended: [${r.calls.join(" | ")}].`);
+      need(r.output === "", `${where} (${label}): the stage wrote ${JSON.stringify(r.output)} to GITHUB_OUTPUT.`);
+    }
+    const shell = run({ shard: "app-shell" });
+    need(shell.status === 0 && shell.calls.some((c) => c.startsWith("start xcodebuild test-without-building")
+      && c.endsWith("-collect-test-diagnostics never -only-testing:RelayiumUITests/AppShellUITests test-without-building")),
+    `${where}: the app-shell shard did not test exactly AppShellUITests with diagnostics never.`);
+    for (const [label, env] of [["a failed boot", { BOOT_MODE: "fail" }], ["a failed build", { BUILD_MODE: "fail" }]]) {
+      const r = run({ env });
+      need(r.status !== 0 && !r.calls.some((c) => c.startsWith("start xcodebuild test-without-building")),
+        `${where}: after ${label} the stage must fail without testing; got exit ${r.status}, calls [${r.calls.join(" | ")}].`);
+    }
+    const unknown = run({ shard: "retired" });
+    need(unknown.status !== 0 && unknown.calls.length === 0, `${where}: an unknown shard ran something or passed (exit ${unknown.status}).`);
+  } finally {
+    spawnSync("rm", ["-rf", dir]);
+  }
+  return out;
+}
+
+for (const message of iosCompactOverlapFailures(realWorld())) failures.push(message);
+for (const message of iosCompactOverlapExecutionFailures(realWorld())) failures.push(message);
+
+const IPHONE_OVERLAP_MUTATIONS = [
+  {
+    name: "the iPhone stage runs a helper that does not exist",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace(IOS_UI_HELPER, "scripts/ci/missing.py")),
+    expect: /ios-ui-smoke \(listing\): the `ui_smoke` step failed on a listing with an available iPhone/,
+  },
+  {
+    name: "the iPhone selection falls back to an iPad",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace('.startswith("iPhone")))', '.startswith(("iPhone", "iPad"))))')),
+    expect: /ios-ui-smoke \(no iPhone available\): with no available iPhone the `ui_smoke` step must fail before any boot or build/,
+  },
+  {
+    name: "the iPhone stage hands the device on through GITHUB_OUTPUT",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace('\necho "$device_id"\n', '\necho "device_id=$device_id" >> "$GITHUB_OUTPUT"\necho "$device_id"\n')),
+    expect: /ios-ui-smoke: the `ui_smoke` step writes GITHUB_OUTPUT/,
+  },
+  {
+    name: "the iPhone stage drops its own selection array",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace('-- "${selection[@]}"', "-- -only-testing:RelayiumUITests")),
+    expect: /ios-ui-smoke: the `ui_smoke` step does not run `\/usr\/bin\/python3 scripts\/ci\/ios-ui-smoke\.py` exactly once with its own arrays/,
+  },
+  {
+    name: "the iPhone stage runs whatever happened before",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s.if = "always()"; }),
+    expect: /ios-ui-smoke: the `ui_smoke` step's condition is "always\(\)", want none on the full path/,
+  },
+  {
+    name: "the iPhone stage continues on error",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s["continue-on-error"] = "true"; }),
+    expect: /ios-ui-smoke: the `ui_smoke` step sets `continue-on-error`/,
+  },
+  {
+    name: "the iPhone stage bound is raised",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s["timeout-minutes"] = "54"; }),
+    expect: /ios-ui-smoke: the `ui_smoke` step's timeout-minutes is "54", want 53/,
+  },
+  {
+    name: "the iPhone job bound no longer covers its step bounds",
+    mutate: (w) => withNamedJob(w, IOS, IOS_COMPACT_JOB, (job) => { job["timeout-minutes"] = "60"; }),
+    expect: /ios-ui-smoke: the job's timeout-minutes "60" is below the 63 minutes/,
+  },
+  {
+    name: "the iPhone stage gets a device handed in again",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s.env = { ...s.env, DEVICE_ID: "${{ steps.iphone_sim.outputs.device_id }}" }; }),
+    expect: /ios-ui-smoke: the `ui_smoke` step's env is .*want only UI_SHARD/,
+  },
+  {
+    name: "the iPhone stage boots by itself",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace("\nesac\n", '\nesac\nxcrun simctl bootstatus booted -b\n')),
+    expect: /ios-ui-smoke: the `ui_smoke` step runs xcodebuild, boots or sleeps itself/,
+  },
+];
+
+for (const { name, mutate, expect } of IPHONE_OVERLAP_MUTATIONS) {
+  let got;
+  try {
+    const world = mutate(realWorld());
+    got = [...iosCompactOverlapFailures(world), ...iosCompactOverlapExecutionFailures(world)];
+  } catch (err) {
+    check(false, `the iPhone stage mutation "${name}" threw instead of reporting: ${err.message}`);
+    continue;
+  }
+  check(got.some((message) => expect.test(message)),
+    `the iPhone stage check did NOT complain about "${name}". Expected a message matching ${expect}; got `
     + `${got.length === 0 ? "no failures at all" : `[\n    ${got.join("\n    ")}\n  ]`}.`);
 }
 
