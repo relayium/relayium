@@ -1,0 +1,45 @@
+# TEMPORARY hosted same-host B/N/M causal QA (ios20). Lives ONLY on internal-qa/ios20-bnm-20261005; NEVER merged
+# to main, never a normal CI proof or reuse source. One macOS job, no secrets, read-only token, no retries.
+name: ios20-hosted-bnm-qa
+on:
+  push:
+    branches:
+      - internal-qa/ios20-bnm-20261005-r2
+permissions:
+  contents: read
+concurrency:
+  group: ios20-hosted-bnm-qa
+  cancel-in-progress: false
+jobs:
+  bnm:
+    runs-on: macos-15
+    # 75 = the operator's own immutable 3600 s (120 s cleanup reserve) + checkout/setup/upload margin.
+    timeout-minutes: 75
+    steps:
+      - name: Check out (full history for the base archive; no persisted credentials)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run the bounded B/N/M operator (one immutable 3600 s deadline)
+        run: /usr/bin/python3 -I -B scripts/qa/ios20-hosted-bnm.py --repo "$GITHUB_WORKSPACE" --out "$RUNNER_TEMP/ios20-bnm"
+      # Selective evidence upload (allowlist): RESULT, all raw command logs/closures, toolchain/dependency receipts,
+      # the Xcode selection output, the three xcresults, calibration copies, and every generated xctestrun and
+      # product Info.plist. Never source trees, DerivedData binaries/intermediates, the dependency seed,
+      # SourcePackages copies or tars. RESULT.json at the root keeps the artifact layout operator-root-relative.
+      - name: Upload the selected raw evidence (logs, xcresults, receipts, calibration, xctestrun/Info.plist)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ios20-hosted-bnm-raw
+          path: |
+            ${{ runner.temp }}/ios20-bnm/RESULT.json
+            ${{ runner.temp }}/ios20-bnm/run/logs/**
+            ${{ runner.temp }}/ios20-bnm/run/*.json
+            ${{ runner.temp }}/ios20-bnm/run/select.env
+            ${{ runner.temp }}/ios20-bnm/run/*/result.xcresult/**
+            ${{ runner.temp }}/ios20-bnm/calibration/**
+            ${{ runner.temp }}/ios20-bnm/run/*/dd/Build/Products/**/*.xctestrun
+            ${{ runner.temp }}/ios20-bnm/run/*/dd/Build/Products/**/Info.plist
+          if-no-files-found: error
+          retention-days: 30
