@@ -363,6 +363,17 @@ jobs:
         timeout-minutes: 2
         run: python3 scripts/test/macos-ui-crash-diagnostics-test.py
 
+      # The same, for `swift-package.yml`'s failure-only crash evidence: its
+      # capture runs on a hosted macOS runner only after the package suite has
+      # failed, so what it refuses — an old, foreign-process, wrong-UUID,
+      # truncated, replaced or symlinked report, a mark from another run or
+      # attempt, a hung read — is proven here on every change, with synthetic
+      # `.ips` reports, a fixture `dwarfdump` and the real helper and entry
+      # point. Python 3.9 standard library only — no install, no Apple tooling.
+      - name: Swift package crash evidence keeps only what binds to its run
+        timeout-minutes: 2
+        run: python3 scripts/test/swift-test-diagnostics-test.py
+
       # `ios.yml`'s iPhone UI stage is supervised by scripts/ci/ios-ui-smoke.py: selection, then boot and
       # build-for-testing together, then test-without-building only after both succeeded, under the original
       # budgets, with every child in an owned process group. A hosted macOS run exercises only the happy path, so

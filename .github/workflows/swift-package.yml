@@ -70,8 +70,11 @@ name: swift-package
 #                                   runs under them rather than landing
 #                                   unverified.
 #
-# Nothing else. This job builds no app, signs nothing, reads no secret, uploads
-# no artifact and publishes nothing. Its guards also open a few files under
+# Nothing else. This job builds no app, signs nothing, reads no secret and
+# publishes nothing. Its only upload besides the evidence certificate is the
+# failure-only crash evidence below (`scripts/ci/swift-test-diagnostics.py`),
+# which `scripts/test/swift-ci-boundary-test.mjs` holds to exactly three named
+# steps and one exact EXIT trap on the `swift test` step. Its guards also open a few files under
 # `server/`, `scripts/` and `web/`; those trees are NOT here on purpose — they
 # would start the whole suite on every server and web commit — and the claims
 # that matter on them belong in the Linux checks `repo-hygiene.yml` runs on
@@ -107,6 +110,12 @@ on:
       # an edit to this lane's verdict and must re-run the lane that executes
       # it on a real log — not only its forged-log cases in repo-hygiene.
       - 'scripts/ci/assert-swift-named-execution.mjs'
+      # The crash-diagnostics helper this lane's mark, EXIT trap and failure-only
+      # capture execute, and its owning fixture tests: exactly these two files,
+      # so a helper-only or test-only change re-runs the lane whose steps run it
+      # (the fixtures also run in repo-hygiene). Not `scripts/**`.
+      - 'scripts/ci/swift-test-diagnostics.py'
+      - 'scripts/test/swift-test-diagnostics-test.py'
       - '.github/workflows/swift-package.yml'
       # The PR→main evidence verifier, its registry, the filter reader it imports,
       # the adoption transform, the toolchain certificate probe and registry, and
@@ -370,18 +379,48 @@ jobs:
           xcodebuild -version
           swift --version
           go version
+      # Crash diagnostics, 1 of 4: the time this job's test window opened,
+      # bound to this commit, run id and attempt, with the checked-out HEAD and
+      # the toolchain. Run 37175317336 kept no stack for a native SIG11 in the
+      # XCTest runner — the stdout line cannot say which test was running, and
+      # nothing but the log was retained. Writes one small file
+      # under `$RUNNER_TEMP` and always exits 0; `continue-on-error` and its own
+      # one-minute bound mean a diagnostics failure changes nothing about the
+      # suite below or its verdict.
+      - name: Mark the swift test window for crash diagnostics
+        if: needs.evidence.outputs.reuse != 'true'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          SWIFT_DIAG_SHA: ${{ github.sha }}
+          SWIFT_DIAG_RUN_ID: ${{ github.run_id }}
+          SWIFT_DIAG_ATTEMPT: ${{ github.run_attempt }}
+        run: /usr/bin/python3 scripts/ci/swift-test-diagnostics.py mark --runner-temp "$RUNNER_TEMP" --head "$SWIFT_DIAG_SHA" --run-id "$SWIFT_DIAG_RUN_ID" --attempt "$SWIFT_DIAG_ATTEMPT"
       # The whole package suite, with no `--filter`. This is the repository's
       # only unfiltered `swift test`; see the header. RELAYIUM_SWIFT_INTEROP=1
       # makes every Go-interop case a FAILURE rather than a skip when its
       # prerequisites are missing.
+      #
+      # The EXIT trap is crash diagnostics, 2 of 4: it records the IMMUTABLE
+      # moment this pipeline ended, so a crash report captured later can be
+      # bound to the test window and a crash during the diagnostics cannot.
+      # An EXIT trap's last command WOULD replace the script's status (a failed
+      # or timed-out finish turned an exit 7 into 9 or 142 in the fixture
+      # tests), so the trap saves `$?` first, turns off errexit for its own
+      # command and re-exits with exactly that status. The helper bounds itself
+      # to 5 s and `perl`'s alarm bounds the trap's command to 10 s.
       - name: swift test
         if: needs.evidence.outputs.reuse != 'true'
         working-directory: apps/RelayiumKit
         shell: bash
         env:
           RELAYIUM_SWIFT_INTEROP: '1'
+          SWIFT_DIAG_SHA: ${{ github.sha }}
+          SWIFT_DIAG_RUN_ID: ${{ github.run_id }}
+          SWIFT_DIAG_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -o pipefail
+          trap 'rc=$?; set +e; /usr/bin/perl -e "alarm shift; exec @ARGV" 10 /usr/bin/python3 "$GITHUB_WORKSPACE/scripts/ci/swift-test-diagnostics.py" finish --runner-temp "$RUNNER_TEMP" --head "$SWIFT_DIAG_SHA" --run-id "$SWIFT_DIAG_RUN_ID" --attempt "$SWIFT_DIAG_ATTEMPT"; exit "$rc"' EXIT
           swift test 2>&1 | tee "$RUNNER_TEMP/swift-test.log"
       - name: Named-execution proof
         if: needs.evidence.outputs.reuse != 'true'
@@ -414,6 +453,33 @@ jobs:
             InboxFinalizeRecoveryLiveTests/testLiveMixedAndAllEmptyManifestsAreUploadedAndCountedOnce \
             InboxFinalizeRecoveryLiveTests/testLiveTwoConcurrentDeliveriesEachUploadOnceWhenOneAnswerIsLost \
             InboxFinalizeRecoveryLiveTests/testLiveTheShareUploadStillSendsAPlainFinalize
+      # Crash diagnostics, 3 and 4 of 4, ONLY after this job has already failed
+      # — a green run skips both and pays nothing, and neither can turn a red
+      # run green: the failure above is the verdict. The helper (one 60-second
+      # budget, a watchdog, and this step's 2-minute bound) copies the original
+      # `swift-test.log`, reads the Mach-O UUID of the test bundle this job
+      # built with the fixed `/usr/bin/dwarfdump`, and keeps a SANITIZED stack
+      # only from an `xctest`/`swiftpm-testing-helper` crash report captured
+      # inside the window between the mark and the recorded test end that
+      # lists that UUID. No report is
+      # `UNAVAILABLE`, never a cause. No build, no test, no debugger.
+      - name: Capture crash evidence after a failed swift test
+        if: failure() && needs.evidence.outputs.reuse != 'true'
+        timeout-minutes: 2
+        env:
+          SWIFT_DIAG_SHA: ${{ github.sha }}
+          SWIFT_DIAG_RUN_ID: ${{ github.run_id }}
+          SWIFT_DIAG_ATTEMPT: ${{ github.run_attempt }}
+        run: /usr/bin/python3 scripts/ci/swift-test-diagnostics.py capture --runner-temp "$RUNNER_TEMP" --home "$HOME" --head "$SWIFT_DIAG_SHA" --run-id "$SWIFT_DIAG_RUN_ID" --attempt "$SWIFT_DIAG_ATTEMPT"
+      - name: Upload crash evidence after a failed swift test
+        if: failure() && needs.evidence.outputs.reuse != 'true'
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-swift-test-diagnostics-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/swift-test-diagnostics/capture
+          if-no-files-found: warn
+          retention-days: 7
       # PR→main evidence: the toolchain this job actually ran on, captured after
       # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
       # toolchain uploads nothing, and a job without a certificate is never
