@@ -263,6 +263,238 @@ func ldStripProto(b []byte) []byte {
 	return out
 }
 
+// ldOrder is the delivery order an ordered proxy (startLinkDevOrderedProxy)
+// forces on the ONE end that dials it.
+type ldOrder int
+
+const (
+	// ldOrderFree forwards every frame as it arrives.
+	ldOrderFree ldOrder = iota
+	// ldOrderHelloFirst holds the roster toward the end until the peer's first
+	// signal has been delivered, so the end's JoinRoom captures that signal
+	// before its room view is complete (room.Captured, linkdev.go run).
+	ldOrderHelloFirst
+	// ldOrderCommitFirst holds every peer signal toward the end until the end
+	// has sent its own first signal, so a legacy end's commit is on the wire
+	// before the peer's hello reaches it.
+	ldOrderCommitFirst
+)
+
+// ldFrame is one frame an ordered proxy saw on one end's connection: which
+// end, the direction ("down" hub→end written to the end, "held" hub→end
+// kept back, "up" end→hub written to the hub; a frame is recorded "down" or
+// "up" only after its write succeeded), the envelope type, for a signal its
+// discovery class (never its payload), and for a roster its size.
+type ldFrame struct {
+	end, dir, typ, class string
+	roster               int
+}
+
+func (f ldFrame) String() string {
+	s := f.end + " " + f.dir + " " + f.typ
+	if f.class != "" {
+		s += " " + f.class
+	}
+	if f.typ == signal.TypePeers {
+		s += fmt.Sprintf(" roster=%d", f.roster)
+	}
+	return s
+}
+
+// ldFrames is the ordered record of every frame the ordered proxies of one
+// test saw, in the order each proxy delivered or forwarded it.
+type ldFrames struct {
+	mu sync.Mutex
+	fs []ldFrame
+}
+
+func (l *ldFrames) add(f ldFrame) {
+	l.mu.Lock()
+	l.fs = append(l.fs, f)
+	l.mu.Unlock()
+}
+
+// of is the record of one end's connection.
+func (l *ldFrames) of(end string) []ldFrame {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []ldFrame
+	for _, f := range l.fs {
+		if f.end == end {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func (l *ldFrames) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var b strings.Builder
+	for i, f := range l.fs {
+		fmt.Fprintf(&b, "%3d %s\n", i, f)
+	}
+	return b.String()
+}
+
+// ldSignalClass names a signal payload by the discovery event it would be:
+// the class only, so a record never holds a commitment, SDP or address.
+func ldSignalClass(data json.RawMessage) string {
+	switch linksession.ClassifySignal(data) {
+	case linksession.DSigHelloLink:
+		return "hello(link/1)"
+	case linksession.DSigLegacyCommit:
+		return "legacy-commit"
+	case linksession.DSigLegacyOther:
+		return "legacy-other"
+	}
+	return "other"
+}
+
+// ldFrameAt is the index of the first frame in fs with this direction and
+// type (and class, when not empty), or -1.
+func ldFrameAt(fs []ldFrame, dir, typ, class string) int {
+	for i, f := range fs {
+		if f.dir == dir && f.typ == typ && (class == "" || f.class == class) {
+			return i
+		}
+	}
+	return -1
+}
+
+// ldRosterAt is the index of the first roster delivered to the end that
+// names both members, or -1.
+func ldRosterAt(fs []ldFrame) int {
+	for i, f := range fs {
+		if f.dir == "down" && f.typ == signal.TypePeers && f.roster == 2 {
+			return i
+		}
+	}
+	return -1
+}
+
+// startLinkDevOrderedProxy is a TEST-ONLY WebSocket relay in front of the
+// real hub for ONE end, as a hub that predates hints (every `proto` is
+// stripped, as startLinkDevProxy's strip). It forces order on that end's
+// connection and records every frame class into frames under the name end.
+// It holds frames back and releases them; it never rewrites or invents one,
+// and every frame it reads is forwarded unless a read or write error ends the
+// connection (which then ends both directions).
+func startLinkDevOrderedProxy(t *testing.T, upstream, end string, order ldOrder, frames *ldFrames) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		down, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer down.Close(websocket.StatusNormalClosure, "")
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		u := upstream + "/ws"
+		if r.URL.RawQuery != "" {
+			u += "?" + r.URL.RawQuery
+		}
+		up, _, err := websocket.Dial(ctx, u, nil)
+		if err != nil {
+			return
+		}
+		defer up.Close(websocket.StatusNormalClosure, "")
+
+		type heldFrame struct {
+			typ websocket.MessageType
+			b   []byte
+			f   ldFrame
+		}
+		// mu orders every write toward the end with the hold state, so the
+		// record is the delivery order.
+		var (
+			mu             sync.Mutex
+			held           []heldFrame
+			endSpoke       bool // the end has sent a signal (ldOrderCommitFirst)
+			peerSignalSent bool // a peer signal was delivered (ldOrderHelloFirst)
+		)
+		classify := func(dir string, env signal.Envelope) ldFrame {
+			f := ldFrame{end: end, dir: dir, typ: env.Type, roster: len(env.Peers)}
+			if env.Type == signal.TypeSignal {
+				f.class = ldSignalClass(env.Data)
+			}
+			return f
+		}
+		release := func() error { // mu held
+			for _, h := range held {
+				if err := down.Write(ctx, h.typ, h.b); err != nil {
+					return err
+				}
+				h.f.dir = "down"
+				frames.add(h.f)
+			}
+			held = nil
+			return nil
+		}
+		go func() {
+			defer cancel()
+			for {
+				typ, b, err := down.Read(ctx)
+				if err != nil {
+					return
+				}
+				env, _ := signal.DecodeEnvelope(b)
+				mu.Lock()
+				err = up.Write(ctx, typ, b)
+				if err == nil {
+					frames.add(classify("up", env))
+					if order == ldOrderCommitFirst && !endSpoke && env.Type == signal.TypeSignal {
+						endSpoke = true
+						err = release()
+					}
+				}
+				mu.Unlock()
+				if err != nil {
+					return
+				}
+			}
+		}()
+		for {
+			typ, b, err := up.Read(ctx)
+			if err != nil {
+				return
+			}
+			env, _ := signal.DecodeEnvelope(b)
+			if env.Type == signal.TypeWelcome || env.Type == signal.TypePeers {
+				b = ldStripProto(b)
+			}
+			f := classify("down", env)
+			mu.Lock()
+			hold := (order == ldOrderHelloFirst && !peerSignalSent && env.Type == signal.TypePeers) ||
+				(order == ldOrderCommitFirst && !endSpoke && env.Type == signal.TypeSignal)
+			if hold {
+				f.dir = "held"
+				frames.add(f)
+				f.dir = "down"
+				held = append(held, heldFrame{typ, b, f})
+				mu.Unlock()
+				continue
+			}
+			err = down.Write(ctx, typ, b)
+			if err == nil {
+				frames.add(f)
+			}
+			if err == nil && order == ldOrderHelloFirst && !peerSignalSent && env.Type == signal.TypeSignal {
+				peerSignalSent = true
+				err = release()
+			}
+			mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return "ws" + strings.TrimPrefix(srv.URL, "http")
+}
+
 // ldPeer is one end: the new CLI in process (`__link <cmd>`), or the old
 // binary as a real process (`<cmd>`).
 type ldPeer struct {
@@ -869,18 +1101,86 @@ func TestLinkDevNewToNewWithoutHints(t *testing.T) {
 			ldPeer{cmd: "text", args: []string{ldCode}, via: via})
 		ldWantLegacy(t, ra, rb)
 	})
+	// `pair` meeting a legacy-mode `receive` has two orders, and the hub's
+	// scheduling chooses between them. Each is forced here and asserted with
+	// its own outcome; neither accepts the other's.
+	//
+	// Commit first: receive's room view is complete before pair's hello
+	// reaches it, so receive sends its commit, pair reads that commit after
+	// its hello (legacy-after-hello) and receive refuses the hello it then
+	// reads in place of the peer's commit.
 	t.Run("pair-receive", func(t *testing.T) {
 		t.Parallel()
 		hub := startLinkDevHub(t)
-		via := startLinkDevProxy(t, hub.url, true, false)
+		frames := &ldFrames{}
+		viaPair := startLinkDevOrderedProxy(t, hub.url, "pair", ldOrderFree, frames)
+		viaRecv := startLinkDevOrderedProxy(t, hub.url, "receive", ldOrderCommitFirst, frames)
 		ra, rb := ldPairUp(t, hub, "",
-			ldPeer{cmd: "pair", args: []string{ldCode}, via: via},
-			ldPeer{cmd: "receive", args: []string{ldCode, t.TempDir()}, via: via})
+			ldPeer{cmd: "pair", args: []string{ldCode}, via: viaPair},
+			ldPeer{cmd: "receive", args: []string{ldCode, t.TempDir()}, via: viaRecv})
+		t.Logf("frames:\n%s", frames)
 		if ra.code != 1 || !strings.Contains(ra.stderr, "legacy CLI handshake after our link hello") {
 			t.Errorf("pair: want the legacy-after-hello refusal\n%s", ra)
 		}
 		if rb.code != 1 || !strings.Contains(rb.stderr, "app or the web page") {
 			t.Errorf("receive: want today's not-a-CLI refusal for a link hello\n%s", rb)
+		}
+		// The order this case is about actually happened: receive saw the
+		// whole room, committed, and only then got pair's hello.
+		if !strings.Contains(rb.stderr, "captured=0") || !strings.Contains(rb.stderr, "sending our commit first") {
+			t.Errorf("receive: want a complete room with nothing captured, then our commit first\n%s", rb)
+		}
+		fr := frames.of("receive")
+		roster := ldRosterAt(fr)
+		commit := ldFrameAt(fr, "up", signal.TypeSignal, "")
+		hello := ldFrameAt(fr, "down", signal.TypeSignal, "")
+		if roster < 0 || commit < 0 || hello < 0 || !(roster < commit && commit < hello) ||
+			fr[commit].class != "legacy-commit" || fr[hello].class != "hello(link/1)" {
+			t.Errorf("receive: want roster, then our legacy-commit, then pair's hello(link/1)\n%s", frames)
+		}
+		if i := ldFrameAt(frames.of("pair"), "down", signal.TypeSignal, ""); i < 0 ||
+			frames.of("pair")[i].class != "legacy-commit" {
+			t.Errorf("pair: want receive's legacy-commit as the first signal it got\n%s", frames)
+		}
+	})
+	// Hello first: pair's hello reaches receive before receive's roster, so
+	// JoinRoom captures it and the legacy handshake starts from it as the
+	// peer's "commit". DoHandshakeFromPeerCommit refuses a non-commit before
+	// sending anything (rzvous TestDoHandshakeFromPeerCommitRefusesBeforeSpeaking),
+	// so pair hears nothing at all and ends on its own bounded first-frame
+	// wait (linksession.DiscoveryWait) as "never spoke". This is the order of
+	// the hosted failure in run 37175317336 (Go job 111356704691). Its real
+	// cost is that wait; it is the outcome under test, so it is waited for.
+	t.Run("pair-receive-hello-captured", func(t *testing.T) {
+		t.Parallel()
+		hub := startLinkDevHub(t)
+		frames := &ldFrames{}
+		viaPair := startLinkDevOrderedProxy(t, hub.url, "pair", ldOrderFree, frames)
+		viaRecv := startLinkDevOrderedProxy(t, hub.url, "receive", ldOrderHelloFirst, frames)
+		ra, rb := ldPairUp(t, hub, "",
+			ldPeer{cmd: "pair", args: []string{ldCode}, via: viaPair},
+			ldPeer{cmd: "receive", args: []string{ldCode, t.TempDir()}, via: viaRecv})
+		t.Logf("frames:\n%s", frames)
+		if rb.code != 1 || !strings.Contains(rb.stderr, "captured=1") ||
+			!strings.Contains(rb.stderr, "continuing from the peer's commit") ||
+			!strings.Contains(rb.stderr, "app or the web page") {
+			t.Errorf("receive: want the captured hello refused as not-a-CLI\n%s", rb)
+		}
+		if ra.code != 1 || !strings.Contains(ra.stderr, linkDevEndMessage("peer-never-spoke")) ||
+			strings.Contains(ra.stderr, "legacy CLI handshake after our link hello") {
+			t.Errorf("pair: want the bounded never-spoke end, with no answer to its hello\n%s", ra)
+		}
+		fr := frames.of("receive")
+		hello := ldFrameAt(fr, "down", signal.TypeSignal, "hello(link/1)")
+		if roster := ldRosterAt(fr); hello < 0 || roster < 0 || hello > roster {
+			t.Errorf("receive: want pair's hello(link/1) delivered before its complete roster\n%s", frames)
+		}
+		// Refused without a commit: receive sent no signal of any kind.
+		if i := ldFrameAt(fr, "up", signal.TypeSignal, ""); i >= 0 {
+			t.Errorf("receive: sent a %s after refusing the captured hello\n%s", fr[i].class, frames)
+		}
+		if i := ldFrameAt(frames.of("pair"), "down", signal.TypeSignal, ""); i >= 0 {
+			t.Errorf("pair: got a %s, want no answer at all\n%s", frames.of("pair")[i].class, frames)
 		}
 	})
 }
