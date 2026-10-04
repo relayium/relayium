@@ -4,9 +4,11 @@ import com.relayium.android.transport.SignalingClient
 import com.relayium.protocol.Envelope
 import com.relayium.protocol.Json
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,12 +35,22 @@ class LocalPeerSignalingChannelTest {
 
     // ── harness ─────────────────────────────────────────────────────────────
 
-    private class ScriptedConnection(val peerLabel: String) : LocalPeerConnection {
+    /**
+     * [cancelGate], when given, holds the caller of [cancel] AFTER the
+     * cancellation is recorded and before it returns, for at most the same four
+     * seconds every wait here uses. [cancelReleased] says whether the gate was
+     * opened (true) or its bound ran out (false).
+     */
+    private class ScriptedConnection(
+        val peerLabel: String,
+        private val cancelGate: CountDownLatch? = null,
+    ) : LocalPeerConnection {
         override var onBytes: ((ByteArray, Int) -> Unit)? = null
         override var onClosed: (() -> Unit)? = null
         val sent = ConcurrentLinkedQueue<String>()
         @Volatile var started = false
         @Volatile var cancelled = false
+        @Volatile var cancelReleased: Boolean? = null
 
         override fun start() { started = true }
         override fun send(bytes: ByteArray) {
@@ -46,7 +58,10 @@ class LocalPeerSignalingChannelTest {
             // peer would actually parse rather than against the bytes we meant.
             sent.addAll(LocalPeerFraming.Reader().append(bytes))
         }
-        override fun cancel() { cancelled = true }
+        override fun cancel() {
+            cancelled = true
+            cancelGate?.let { cancelReleased = it.await(4_000, TimeUnit.MILLISECONDS) }
+        }
 
         /** Deliver [text] as a properly framed inbound read. */
         fun deliver(text: String) {
@@ -154,6 +169,20 @@ class LocalPeerSignalingChannelTest {
     }
 
     private fun settle() = Thread.sleep(120)
+
+    /**
+     * Wait for the departure itself. Dropping a stream cancels it and reports the
+     * departure as separate steps, so a stream's `cancelled` flag is no evidence
+     * that the departure has been delivered yet: reading `left` the moment it
+     * turns true samples whatever happens to have landed by then.
+     */
+    private fun awaitDeparture(rig: Rig) =
+        awaitTrue("a departure was reported") { rig.events.left.isNotEmpty() }
+
+    /** PEER_A's own establishment frame, not the capability credit browsing
+     *  already produced under the same id. */
+    private fun deliveredOfferFromA(rig: Rig): Boolean =
+        rig.events.signals.any { it.first == PEER_A && it.second == offer() }
 
     private fun peer(identity: String, name: String = "Peer", caps: List<String> = listOf("link/1")) =
         LocalPeerAdvertisement(identity, name, caps)
@@ -299,8 +328,7 @@ class LocalPeerSignalingChannelTest {
 
     // ── inbound routing ─────────────────────────────────────────────────────
 
-    private fun accept(rig: Rig): ScriptedConnection {
-        val connection = ScriptedConnection("inbound")
+    private fun accept(rig: Rig, connection: ScriptedConnection = ScriptedConnection("inbound")): ScriptedConnection {
         rig.transport.delegate!!.localPeerTransportDidAccept(connection)
         awaitTrue("started") { connection.started }
         return connection
@@ -345,9 +373,10 @@ class LocalPeerSignalingChannelTest {
         start(rig, peer(PEER_A), peer(PEER_B))
         val stream = accept(rig)
         stream.deliver(envelope(PEER_A, SELF, offer()))
-        awaitTrue("bound to A") { rig.events.signals.any { it.first == PEER_A } }
+        awaitTrue("bound to A") { deliveredOfferFromA(rig) }
         stream.deliver(envelope(PEER_B, SELF, offer()))
         awaitTrue("dropped") { stream.cancelled }
+        awaitDeparture(rig)
         assertEquals(listOf(PEER_A), rig.events.left.toList())
         assertTrue(
             "B's establishment frame was never delivered — only the capability " +
@@ -362,10 +391,38 @@ class LocalPeerSignalingChannelTest {
         start(rig, peer(PEER_A))
         val stream = accept(rig)
         stream.deliver(envelope(PEER_A, SELF, offer()))
-        awaitTrue("bound") { rig.events.signals.any { it.first == PEER_A } }
+        awaitTrue("bound") { deliveredOfferFromA(rig) }
         stream.deliverRaw(byteArrayOf(0, 0, 0, 0, 9, 9)) // a zero-length declaration
         awaitTrue("dropped") { stream.cancelled }
+        awaitDeparture(rig)
         assertEquals(listOf(PEER_A), rig.events.left.toList())
+    }
+
+    /**
+     * The window the departure waits above exist for, held open on purpose: this
+     * stream's cancel records the cancellation and then blocks until the test
+     * releases it, so a departure read straight after `cancelled` turns true is
+     * read while the channel's drop is still in progress. Whatever order the drop
+     * reports in, the departure must still arrive, once, for the bound peer.
+     */
+    @Test
+    fun `a dropped stream's departure is awaited, not inferred from its cancellation`() {
+        val rig = rig()
+        start(rig, peer(PEER_A))
+        val gate = CountDownLatch(1)
+        val stream = accept(rig, ScriptedConnection("inbound", cancelGate = gate))
+        try {
+            stream.deliver(envelope(PEER_A, SELF, offer()))
+            awaitTrue("bound") { deliveredOfferFromA(rig) }
+            stream.deliverRaw(byteArrayOf(0, 0, 0, 0, 9, 9))
+            awaitTrue("dropped") { stream.cancelled }
+        } finally {
+            gate.countDown()
+        }
+        awaitDeparture(rig)
+        assertEquals(listOf(PEER_A), rig.events.left.toList())
+        awaitTrue("the held cancel returned") { stream.cancelReleased != null }
+        assertEquals("released by this test, not by the gate's own bound", true, stream.cancelReleased)
     }
 
     // ── discovery ordering ──────────────────────────────────────────────────
@@ -399,6 +456,7 @@ class LocalPeerSignalingChannelTest {
             stream.deliver(envelope(PEER_A, SELF, Json.obj("n" to Json.of(it))))
         }
         awaitTrue("dropped") { stream.cancelled }
+        awaitDeparture(rig)
         assertEquals(listOf(PEER_A), rig.events.left.toList())
     }
 
