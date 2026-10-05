@@ -175,7 +175,92 @@ beside another's, is non-canonical; the CI policy and the generic PR→main
 proof accept only the current workflow and registry.
 Any other job is unavailable — no unknown job is waived; a witnessed job is
 never accepted as executed, any other adoption is unavailable, and transitive
-native reuse stays uncertified. All eight job records are bound into the
+native reuse stays uncertified.
+**Certified coverage (source; not yet hosted-verified end to end).** A run of
+the current or event-contract adoption whose step records show witness INTENT —
+any witness step of `test` or either UI shard not skipped (succeeded, failed or
+cancelled), or an `evidence` job that kept or handed over a witness — is judged
+on a second, distinct route (`coverage: certified-full-proof`), and every
+contradiction found there (a missing, failed or duplicated confirmation, a
+witness on the wrong runner, a mixed or foreign executed suite, an unkept
+decision) is refused in `auto` as well as `reuse`: a run that meant to be
+certified never falls back to the executed route's "unavailable" and a quiet
+rebuild. A run whose witness steps were all skipped or absent keeps the
+executed route above unchanged. On it `contract` and `signed-build` must still EXECUTE every
+listed step exactly as above (they are never certified), while `test` and both
+UI shards must each have run only the three canonical witness steps (exactly
+once, `success`, on `ubuntu-latest`) with every own gate step and the other
+shard's suite skipped or absent and no other step executed, and `evidence` must
+have run its decision, keep and handover steps exactly once `success` on
+Ubuntu. A mix of the two modes is neither. The reader then authenticates the
+ONE retained `relayium-ci-evidence-witness-macos-attempt-<n>` artifact of that
+run by API listing, record and digest (strict single-entry ZIP, typed witness
+for this lane, commit, tree, run, attempt `<n>` and `macos.yml@refs/heads/main`,
+vouching for exactly `test` + `ui-smoke`), binds attempt `<n>` as the original
+execution of every certified job, of `evidence` and of `certify-macos`
+(`judgeExecutionOrigin`, so a failed-jobs rerun relabel binds the carried
+execution through the original inventory), requires the certify job to have
+executed `Check out the probe`, `Certify this runner's toolchain now` and `Hand
+the certificates to the evidence job` exactly once on `macos-15`, finishing
+before the decision began and starting at most 30 minutes (F's
+`CURRENT_CERT_MAX_AGE_MS`) before the witness's `verified_at`, that `verified_at`
+to fall inside the decision step and the artifact's `created_at` inside the keep
+step (two seconds' whole-second tolerance), and re-runs F's own
+read-only source-proof judge (`ci-evidence.mjs` `judgeSourceProof`, shared with
+`witness`) NOW against the signed commit's own tree read from local git — source
+kind, latest attempt, every job, aggregate/select, required checks and runners,
+referenced workflows, tree, parents, scope, fingerprint and all five
+certification hashes — requiring it to select exactly the proof the witness
+names; it then re-authenticates every source toolchain certificate
+(`reauthenticateSourceCertificates`) and requires their value digests to equal
+the witness's source and current digests (the digest covers profile and
+toolchain only, so equal digests are equal VALUES; no current certificate body
+is synthesized). The witness, the proof and every source certificate artifact
+are frozen by their COMPLETE API identity (`artifactIdentityOf`: id, name,
+digest, size, creation, expiry and `workflow_run` id, head SHA, repository and
+head repository), and the coverage also freezes the source run's `updated_at`,
+PR head SHA and PR number. At the end it re-reads the source run and its
+listing, the proof and every source certificate artifact by name listing AND by
+record (each must still carry that complete identity, unexpired at a fresh
+read of the clock), the producer run's latest attempt, and the witness
+artifact's listing and record; any replacement or re-attribution (for example
+a foreign `head_repository_id` with the same id, digest and expiry) refuses
+even when the toolchain value is unchanged. A certified mandatory contract or
+signed-build step contradiction is refused, not unavailable. The
+signed-build's original execution must be the witness attempt: a signed build
+re-executed in a later attempt cannot inherit coverage of tooling nothing
+certified. F's 48-hour source window and E's 168-hour run / 6-hour artifact
+windows both apply at the real current time, and a NEW selection also needs
+the witness, the proof and every source certificate artifact to have at least
+the same 6 hours left (otherwise unavailable: `auto` builds). The 48-hour source
+rule is unchanged; a source close to 48 hours can still fail the
+notarize-stage readback, which runs before the paid notarization. An absent, expired, stale or
+pending proof, a witness re-decided in a later attempt, or a signed commit or
+first parent absent from the local clone is unavailable (`auto` builds,
+`reuse` refuses); any disagreement is refused in every mode. The `preflight`
+and `notarize-stage` checkouts of `macos-release.yml` fetch depth 2 — the
+release commit and its first parent, which the source derivation diffs against
+— and the CI policy refuses any other checkout options there. The coverage mode
+and its whole chain (witness identity and clock, original executions, source
+run/attempt/proof/digest/fingerprint/certification, certificate digests and
+artifact identities) are part of the frozen `relayium-macos-reuse-evidence/v2`
+identity the readback must reproduce; `validateCoverage` is its strict shared
+schema (exact keys, types, five execution roles, `test` + `ui-smoke`
+certificates in check order with exact names, no extra keys). For a LATER
+verification of an already-frozen chain the library exposes
+`verifyHistoricalCertifiedCoverage` (the same reader; the frozen coverage and an
+explicit source-Git adapter are required; the re-derived coverage must equal it
+exactly; F's `judgeHistoricalSourceProof` judges only the two original source
+age gates at the witness's own `verified_at`, after confirming the witness's
+source, with everything else, including expiry, at the real current time; any
+absence is refused, nothing is rebuilt). It has no CLI, environment or clock
+override. The operator handoff (record v2, `scripts/release/macos-handoff.mjs`)
+calls it at emit and at both verify stages with the coverage the publisher
+preflight's authenticated decision artifact froze, never a new selection;
+v1 records stay executed-only. The whole-chain positive and its controls run
+hermetically on the root fixture world (`scripts/test/fixtures/macos-handoff-world.mjs`
+over `macos-certified/world.mjs`), which is local evidence, not a hosted or
+published run. All eight job records are bound into the
 frozen evidence the notarization readback re-proves — and exactly one unexpired artifact
 `relayium-macos-signed-<sha>-ci` created while `signed-build` ran. Every list
 read is fully paginated against `total_count`. The zip must hash to the API
@@ -212,6 +297,22 @@ any secret or the restored `generate_appcast` is touched. Notarization,
 stapling, Gatekeeper, Sparkle signing of final bytes, staging, the publish job's
 metadata/web gates and `--latest=false` are unchanged. Reuse is exact-SHA only;
 tree-equivalent reuse is a separate, unstarted design.
+
+**Operator handoff is the default delivery.** `macos-release.yml` has a
+`metadata_delivery` input (`operator` default, `workflow`). In `operator` mode
+the publish job stops after pushing the unique candidate branch, dispatching
+and identifying its frozen gate and emitting a strict handoff record; it does
+not push `main` or create a release, and its summary says HANDED OFF / NOT
+PUBLISHED. The automatic path below is `workflow` mode, unchanged, and its
+preflight additionally refuses a source/`main` `.github/workflows` tree
+mismatch before the paid build. Details and operator steps:
+`docs/MACOS-RELEASE-POLICY.md`; read-only verifier:
+`scripts/release/macos-handoff.mjs verify`, which authenticates the artifact
+ZIP against the API digest, re-derives the frozen signed-build chain (a reuse
+through the preflight's own decision artifact, a certified one through the
+shared historical reader) and refuses after its verifiable-until instant, judges scope with the BASE commit's own checker and
+the gate's complete job graph against the roster BASE's own workflows, selector
+and evidence registry define (unknown predicates refused), and writes nothing.
 
 **PR-free metadata delivery.** The publish job no longer runs `gh pr create`,
 which this repository's Actions token is not permitted to do

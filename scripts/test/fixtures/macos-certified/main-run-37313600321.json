@@ -1,0 +1,20 @@
+{
+ "id": 37313600321,
+ "run_attempt": 1,
+ "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27",
+ "head_branch": "main",
+ "event": "push",
+ "status": "completed",
+ "conclusion": "success",
+ "workflow_id": 321216057,
+ "path": ".github/workflows/macos.yml",
+ "created_at": "2026-10-05T13:01:01Z",
+ "run_started_at": "2026-10-05T13:01:01Z",
+ "updated_at": "2026-10-05T13:10:51Z",
+ "repository": {
+  "id": 1282331342
+ },
+ "head_repository": {
+  "id": 1282331342
+ }
+}

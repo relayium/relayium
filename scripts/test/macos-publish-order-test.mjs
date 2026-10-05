@@ -183,9 +183,19 @@ check(
 const exec = publish.flatMap((step, stepIndex) =>
   step.code.map((text) => ({ text, step: step.name, stepIndex })));
 
+/**
+ * The operator-handoff step (`metadata_delivery=operator`) pushes the same
+ * candidate branch and dispatches the same gate, but never reaches main or the
+ * release; `scripts/test/macos-handoff-test.mjs` holds that step to exactly
+ * that. The ORDER below is the workflow-mode delivery's, so those markers are
+ * counted outside the handoff step.
+ */
+const OPERATOR_STEP = "Hand off the frozen candidate (no publication)";
+check(publish.some((step) => step.name === OPERATOR_STEP), `the publish job has no "${OPERATOR_STEP}" step`);
+
 /** The index of the single executable line containing `marker`. */
 function lineRunning(marker, label) {
-  const matches = exec.filter((line) => line.text.includes(marker));
+  const matches = exec.filter((line) => line.step !== OPERATOR_STEP && line.text.includes(marker));
   if (matches.length !== 1) {
     failures.push(
       `expected exactly one publish command to run ${label} (${marker}); found ${matches.length}`,
@@ -803,6 +813,18 @@ for (const [command, why] of [
   for (const failure of evidence.failures) failures.push(`macos-evidence: ${failure}`);
   process.stdout.write(`macos-evidence: ${evidence.cases} executable controls, ${evidence.failures.length} failed; `
     + `adoption-generator agreement ${evidence.generatorChecked ? "checked" : "not applicable (scripts/ci/ci-evidence-view.mjs absent)"}\n`);
+}
+
+// The operator handoff (the default `metadata_delivery`): its record schema,
+// its read-only verifier and the guarantee that operator mode cannot reach the
+// main push, the gate wait or the release creation. Run from here for the same
+// reason as the evidence controls above.
+{
+  const { run } = await import("./macos-handoff-test.mjs");
+  const handoff = await run();
+  check(handoff.passed > 50, `the macOS handoff controls ran only ${handoff.passed} passing cases`);
+  for (const failure of handoff.failures) failures.push(`macos-handoff: ${failure}`);
+  process.stdout.write(`macos-handoff: ${handoff.passed} controls passed, ${handoff.failures.length} failed\n`);
 }
 
 if (failures.length > 0) {

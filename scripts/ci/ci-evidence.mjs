@@ -196,9 +196,18 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 
 /** Every reason not to reuse. Caught at the top and turned into a full run. */
 export class NoReuse extends Error {}
+/**
+ * A `NoReuse` whose cause is ABSENCE — a proof, artifact or run that is missing,
+ * expired, still pending or outside its freshness window — rather than a fact
+ * that exists and disagrees. Every caller here treats both alike (the lane runs
+ * in full); the macOS release reader uses the distinction so an expired proof
+ * means "build" while a contradicted one stops the release.
+ */
+export class ProofUnavailable extends NoReuse {}
 
 const fail = (message) => { throw new NoReuse(message); };
 const need = (ok, message) => { if (!ok) fail(message); };
+const needAvailable = (ok, message) => { if (!ok) throw new ProofUnavailable(message); };
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const isInt = (v) => Number.isSafeInteger(v) && v > 0;
 /** A positive decimal integer as the runner writes it (`"2"`, never `"02"`, `"2.0"` or `"1e3"`), or NaN. */
@@ -634,11 +643,11 @@ export function headFacts(git) {
  * `mode type object\tpath` lines in path order. An unfiltered lane covers the
  * whole tree. Read from git's own tree listing — no file is opened.
  */
-export function laneFingerprint(git, laneId, lane, workflowsDir) {
+export function laneFingerprint(git, laneId, lane, workflowsDir, readWorkflow = (path) => readFileSync(path, "utf8")) {
   const entries = git(["ls-tree", "-r", "-z", "--full-tree", "HEAD"]).toString("utf8").split("\0").filter(Boolean);
   let patterns = null;
   if (!lane.unfiltered) {
-    patterns = readPushPaths(readFileSync(resolve(workflowsDir, lane.workflow), "utf8"), lane.workflow);
+    patterns = readPushPaths(readWorkflow(resolve(workflowsDir, lane.workflow)), lane.workflow);
   }
   const chosen = entries.filter((line) => {
     const path = line.slice(line.indexOf("\t") + 1);
@@ -672,10 +681,11 @@ async function runArtifact(api, repository, run, prHead, repositoryId, name, now
   const artifacts = await listCounted(api, `repos/${repository}/actions/runs/${run.id}/artifacts?name=${encodeURIComponent(name)}`,
     "artifacts", 20);
   const hits = artifacts.filter((a) => isObject(a) && a.name === name);
+  needAvailable(hits.length > 0, `the source run carries ${hits.length} artifact(s) named ${name}, want 1`);
   need(hits.length === 1, `the source run carries ${hits.length} artifact(s) named ${name}, want 1`);
   const art = hits[0];
-  need(isInt(art.id) && art.expired === false && iso(art.expires_at) && Date.parse(art.expires_at) > now().getTime(),
-    `artifact ${art.id} has expired`);
+  need(isInt(art.id) && iso(art.expires_at), `artifact ${art.id} has expired`);
+  needAvailable(art.expired === false && Date.parse(art.expires_at) > now().getTime(), `artifact ${art.id} has expired`);
   need(art.workflow_run?.id === run.id && art.workflow_run?.head_sha === prHead
     && art.workflow_run?.repository_id === repositoryId && art.workflow_run?.head_repository_id === repositoryId,
   `artifact ${art.id} is not from merge-gate run ${run.id} on ${prHead}`);
@@ -1309,6 +1319,218 @@ const runListing = (runs) => JSON.stringify([...runs].map((r) => [r.id, r.run_at
   r.event, r.run_started_at, r.created_at]).sort((a, b) => a[0] - b[0]));
 
 /**
+ * Steps 2-8 of `witness`, shared READ-ONLY with the macOS release reader: the
+ * one source this main commit may reuse (pull request, frozen or internal
+ * candidate), its latest attempt and every job of it, this lane's obligation,
+ * and the one immutable proof artifact agreeing with all of that. `head` and
+ * the injected `git`/`readFile`/`readWorkflow` must describe the SAME commit
+ * `sha`; `event.before` is its sole parent where a dispatch source needs one.
+ * Throws `NoReuse` on any doubt and writes nothing.
+ */
+export async function judgeSourceProof(args) {
+  return judgeProof(args, null);
+}
+
+/**
+ * The HISTORICAL form of `judgeSourceProof`, for the macOS release reader's
+ * later verification of a chain a main witness `W` already certified. Library
+ * only (never reachable from `main`). Same judgement, same arguments, plus the
+ * authenticated `witness`:
+ *  - `validateWitness`, and its target is this lane (macOS only), repository,
+ *    commit and tree; lanes with `externalInputs` are refused here (a later tag
+ *    would change what the original test saw — not specified historically);
+ *  - the selected source (kind, PR, head, merge, run, attempt, proof id, digest,
+ *    produced_at) must be EXACTLY the witness's source BEFORE any age gate;
+ *  - the two ORIGINAL age gates (source run updated, proof produced) are judged
+ *    at `eligibleAt` = W.verified_at, derived here — no caller timestamp — which
+ *    must itself not be in the future of the machine clock; a failure there
+ *    contradicts the witness and is plain `NoReuse`, never `ProofUnavailable`;
+ *  - everything else (artifact expiry, records, listings, jobs, tree, parents,
+ *    scope, fingerprint, the five hashes) is judged at the machine `now()`.
+ */
+export async function judgeHistoricalSourceProof({ witness: w, ...args }) {
+  let checked;
+  try { checked = validateWitness(w); } catch (err) { fail(`the historical witness is not valid: ${err.message}`); }
+  need(args.laneId === "macos" && checked.lane === "macos", `historical source proofs are specified for the macos lane only`);
+  need(checked.target.repository_id === args.repositoryId && checked.target.sha === args.sha
+    && checked.target.sha === args.head?.sha && checked.target.tree === args.head?.tree,
+  `the witness targets ${checked.target.sha}/${checked.target.tree}, not ${args.sha}/${args.head?.tree}`);
+  const eligibleAt = Date.parse(checked.verified_at);
+  need(Number.isFinite(eligibleAt) && eligibleAt <= args.now().getTime() + LIMITS.clockSkewMs,
+    `the witness says it was verified at ${checked.verified_at}, in the future of this machine's clock`);
+  return judgeProof(args, { witness: checked, eligibleAt });
+}
+
+async function judgeProof({
+  api, git, registry, laneId, repository, repositoryId, sha, head, event, now, workflowsDir, readFile = readRepoFile,
+  loadScope = importScope, scopeValue, readWorkflow,
+}, history) {
+  const lane = registry.lanes[laneId];
+  need(lane !== undefined, `lane ${laneId} is not in the evidence registry`);
+  need(head.sha === sha, `checked out ${head.sha}, the push is ${sha}`);
+  need(history === null || (lane.externalInputs ?? []).length === 0,
+    `lane ${laneId} reads external inputs; a historical source proof is not specified for it`);
+  // 2-4. Where the proof can come from: the merged same-repository pull request
+  //      whose merge produced this commit, OR — when no pull request did — the
+  //      frozen release-metadata candidate main just fast-forwarded to. Never
+  //      both: a commit with both kinds of source is ambiguous and runs in full.
+  const pulls = await listArray(api, `repos/${repository}/commits/${sha}/pulls`, LIMITS.pulls);
+  const candidates = pulls.filter((p) => isObject(p) && p.merged_at && p.merge_commit_sha === sha
+    && p.base?.ref === "main" && p.base?.repo?.id === repositoryId);
+  const onMain = await listCounted(api, `repos/${repository}/actions/workflows/${registry.producer.workflow}/runs?head_sha=${sha}`,
+    "workflow_runs", LIMITS.runs);
+  const src = candidates.length > 0
+    ? await pullRequestSource({ api, repository, repositoryId, registry, sha, head, candidates, onMain, lane })
+    : await dispatchSource({ api, repository, repositoryId, registry, sha, head, event, pulls, onMain, lane, readFile, loadScope, git });
+  const { run, runs, runsPath, latest, attempt } = src;
+  const prHead = src.runHead;
+
+  // 5. Freshness: at the machine clock, or — historically — at the instant the
+  //    witness was verified, AFTER the witness's source is confirmed (step 7).
+  const runAge = (at, absent) => {
+    const ageMs = at - Date.parse(run.updated_at);
+    const what = `merge-gate run ${run.id} finished ${Math.round(ageMs / 60000)} minutes ${history ? "before the witness" : "ago"}, `
+      + `outside ${registry.maxAgeHours}h`;
+    need(ageMs >= -LIMITS.clockSkewMs, what);
+    absent(ageMs <= registry.maxAgeHours * 3600 * 1000, what);
+  };
+  if (history === null) runAge(now().getTime(), needAvailable);
+
+  // 6. Every job of the latest attempt, and this lane's obligation in it.
+  const jobs = await attemptJobs(api, repository, run.id, attempt, `merge-gate run ${run.id}`);
+  const byName = new Map(jobs.map((j) => [j.name, j]));
+  for (const job of jobs) {
+    need(job.status === "completed", `job ${JSON.stringify(job.name)} of the source run is ${job.status}`);
+  }
+  for (const name of [registry.producer.aggregateJob, registry.producer.selectJob]) {
+    need(byName.get(name)?.conclusion === "success", `the source run's ${name} job did not succeed`);
+  }
+  const prefix = `${laneId} / `;
+  const allChecks = new Set(Object.values(lane.jobs).flatMap((j) => j.checks));
+  for (const job of jobs) {
+    if (!job.name.startsWith(prefix)) continue;
+    const rest = job.name.slice(prefix.length);
+    // The generated auxiliaries: the evidence job (decides nothing on a pull
+    // request) and the screen and certify jobs, which are skipped everywhere but
+    // a main push — one that RAN in the source run is not the source run this
+    // file understands.
+    if (rest === "evidence") continue;
+    if (rest === "screen" || rest === "certify-macos" || rest === "certify-windows") {
+      need(job.conclusion === "skipped", `the source run's ${JSON.stringify(job.name)} ${job.conclusion} instead of being skipped`);
+      continue;
+    }
+    need(allChecks.has(rest), `the source run has ${JSON.stringify(job.name)}, which the evidence registry does not know`);
+  }
+  const required = requiredJobs(lane, scopeValue);
+  // The source run's event, as `sourceRun` re-read it by id and as its kind
+  // demands: a pull-request proof is a `pull_request` run, both dispatch kinds
+  // a `workflow_dispatch` run. Both must agree, or no runner is expected at all.
+  const sourceEvent = src.kind === MANIFEST_KIND ? "pull_request" : "workflow_dispatch";
+  need(run.event === sourceEvent, `the source run is a ${run.event} run, its ${src.kind} source must be a ${sourceEvent} run`);
+  for (const [jobId, checks] of Object.entries(required)) {
+    for (const check of checks) {
+      const job = byName.get(`${prefix}${check}`);
+      need(job !== undefined, `the source run has no ${JSON.stringify(prefix + check)}`);
+      need(job.conclusion === "success", `${JSON.stringify(prefix + check)} concluded ${job.conclusion} in the source run`);
+      const runner = expectedRunner(lane.jobs[jobId], run.event);
+      need(job.labels.length === 1 && job.labels[0] === runner,
+        `${JSON.stringify(prefix + check)} ran on [${job.labels.join(", ")}], want [${runner}]`);
+    }
+  }
+
+  // 7. The proof: one immutable artifact, by id and API digest.
+  const { art, zip } = await runArtifact(api, repository, run, prHead, repositoryId,
+    `${registry.producer.artifactPrefix}${attempt}`, now);
+  let manifest;
+  try {
+    manifest = JSON.parse(readSingleEntryZip(zip, registry.producer.entry).toString("utf8"));
+  } catch (err) {
+    if (err instanceof NoReuse) throw err;
+    fail(`the proof is not JSON: ${err.message}`);
+  }
+  validateManifest(manifest);
+  if (history !== null) {
+    const ws = history.witness.source;
+    need(ws.kind === src.kind && ws.pull_request === (src.prNumber ?? null) && ws.head_sha === prHead
+      && ws.merge_sha === src.testedSha && ws.run_id === run.id && ws.run_attempt === attempt
+      && ws.artifact_id === art.id && ws.artifact_digest === art.digest && ws.produced_at === manifest.produced_at,
+    `the witness names source run ${ws.run_id}/${ws.run_attempt} proof ${ws.artifact_id}; this judgement selects `
+      + `${run.id}/${attempt} proof ${art.id}`);
+    runAge(history.eligibleAt, need);
+  }
+
+  // 8. The proof agrees with everything derived independently above.
+  const m = manifest;
+  need(m.repository.id === repositoryId && m.repository.full_name === repository, "the proof is for another repository");
+  need(m.kind === src.kind, `the proof is a ${m.kind}, this commit's source is a ${src.kind}`);
+  if (src.kind === MANIFEST_KIND) {
+    need(m.pull_request.number === src.prNumber && m.pull_request.head_sha === prHead
+      && m.pull_request.head_repository_id === repositoryId && m.pull_request.base_ref === "main",
+    "the proof names another pull request or head");
+  } else if (src.kind === INTERNAL_KIND) {
+    need(m.dispatch.head_sha === sha && m.dispatch.base_sha === src.base && m.dispatch.ref === src.testedRef,
+      "the proof names another candidate, base or branch");
+    need(JSON.stringify(m.dispatch.paths) === JSON.stringify(src.scope.paths) && m.dispatch.closure_sha256 === src.scope.closure_sha256,
+      "the proof's change set or trust closure disagrees with this commit's own judgement");
+  } else {
+    need(m.dispatch.head_sha === sha && m.dispatch.base_sha === src.base && m.dispatch.ref === src.testedRef,
+      "the proof names another candidate, base or branch");
+    need(m.dispatch.version === src.scope.version && JSON.stringify(m.dispatch.paths) === JSON.stringify(src.scope.paths)
+      && m.dispatch.scope_sha256 === src.scope.scope_sha256,
+    "the proof's candidate scope (version, change set or whitelist) disagrees with this commit's own judgement");
+  }
+  need(m.run.id === run.id && m.run.attempt === attempt, `the proof is from run ${m.run.id} attempt ${m.run.attempt}, not ${run.id}/${attempt}`);
+  need(m.run.workflow_sha === src.testedSha, "the proof's gate workflow is not from the tested commit");
+  need(m.checkout.sha === src.testedSha && m.checkout.ref === src.testedRef, "the proof's checkout is not the referenced merge ref");
+  need(m.checkout.tree === head.tree && m.checkout.tree === src.testedTree, "the proof's tree is not this commit's tree");
+  need(m.checkout.parents.join() === src.testedParents.join(), "the proof's merge parents disagree with git");
+  need(JSON.stringify(m.referenced_workflows) === JSON.stringify(src.refs), "the proof's referenced workflows disagree with the run");
+  need(m.lanes[laneId]?.selected === true && m.lanes[laneId]?.result === "success", `the proof says lane ${laneId} did not run and pass`);
+  const apiJobs = jobs.filter((j) => j.name !== registry.producer.aggregateJob)
+    .map((j) => ({ id: j.id, name: j.name, status: j.status, conclusion: j.conclusion, labels: j.labels })).sort((a, b) => a.id - b.id);
+  need(JSON.stringify(m.jobs) === JSON.stringify(apiJobs), "the proof's job inventory disagrees with the API's");
+  need(m.fingerprints[laneId] === laneFingerprint(git, laneId, lane, workflowsDir, readWorkflow), `the proof's ${laneId} input fingerprint disagrees with this tree`);
+  need(m.certification.registry_sha256 === sha256(readFile(REGISTRY_FILE))
+    && m.certification.verifier_sha256 === sha256(readFile(VERIFIER_FILE))
+    && m.certification.selector_sha256 === sha256(readFile(SELECTOR_FILE))
+    && m.certification.toolchain_sha256 === sha256(readFile(TOOLCHAIN_FILE))
+    && m.certification.toolchain_registry_sha256 === sha256(readFile(TOOLCHAIN_REGISTRY_FILE)),
+  "the proof was certified by a different verifier, registry or selector");
+  const produced = Date.parse(m.produced_at);
+  const ageAt = history === null ? now().getTime() : history.eligibleAt;
+  need(produced <= Date.parse(run.updated_at) + LIMITS.clockSkewMs && ageAt - produced >= -LIMITS.clockSkewMs,
+    "the proof's timestamp is outside the run or the freshness window");
+  (history === null ? needAvailable : need)(ageAt - produced <= registry.maxAgeHours * 3600 * 1000,
+    "the proof's timestamp is outside the run or the freshness window");
+  // The tag set the tag-reading job ACTUALLY checked out and tested, recorded
+  // by that job itself, must still be the repository's tag set now. A tag
+  // created after that job's checkout (even before the proof was produced) is
+  // a tag no test of this proof ever saw.
+  for (const input of lane.externalInputs ?? []) {
+    if (required[input.job] === undefined) continue;
+    const tested = await testedTagFingerprint(api, repository, run, prHead, repositoryId, attempt, input, now);
+    need(tested === await tagFingerprint(api, repository),
+      `the repository's tags differ from the tag set ${laneId} / ${input.job} checked out and tested`);
+  }
+
+  return { src, run, runs, runsPath, latest, attempt, prHead, jobs, required, art, manifest };
+}
+
+/**
+ * Step 10's source half, shared: the source run judged by `judgeSourceProof` is
+ * still that attempt and result, and nothing newer appeared on its head.
+ */
+export async function rereadSourceProof({ api, repository, proof }) {
+  const { run, runs, runsPath, latest, attempt, prHead } = proof;
+  const again = await api.json(`repos/${repository}/actions/runs/${run.id}`);
+  need(again.run_attempt === attempt && again.status === "completed" && again.conclusion === "success"
+    && again.updated_at === run.updated_at, `merge-gate run ${run.id} changed while it was being verified`);
+  const runsAgain = await listCounted(api, runsPath, "workflow_runs", LIMITS.runs);
+  need(runListing(runsAgain) === runListing(runs) && newest(runsAgain)?.id === latest.id,
+    `the merge-gate runs on ${prHead} changed while being verified`);
+}
+
+/**
  * The witness (see `validateWitness`) when this main push may reuse its pull
  * request's proof for `laneId`; throws `NoReuse` with the reason otherwise.
  */
@@ -1342,131 +1564,10 @@ export async function witness({
   const head = headFacts(git);
   need(head.sha === sha, `checked out ${head.sha}, the push is ${sha}`);
 
-  // 2-4. Where the proof can come from: the merged same-repository pull request
-  //      whose merge produced this commit, OR — when no pull request did — the
-  //      frozen release-metadata candidate main just fast-forwarded to. Never
-  //      both: a commit with both kinds of source is ambiguous and runs in full.
-  const pulls = await listArray(api, `repos/${repository}/commits/${sha}/pulls`, LIMITS.pulls);
-  const candidates = pulls.filter((p) => isObject(p) && p.merged_at && p.merge_commit_sha === sha
-    && p.base?.ref === "main" && p.base?.repo?.id === repositoryId);
-  const onMain = await listCounted(api, `repos/${repository}/actions/workflows/${registry.producer.workflow}/runs?head_sha=${sha}`,
-    "workflow_runs", LIMITS.runs);
-  const src = candidates.length > 0
-    ? await pullRequestSource({ api, repository, repositoryId, registry, sha, head, candidates, onMain, lane })
-    : await dispatchSource({ api, repository, repositoryId, registry, sha, head, event, pulls, onMain, lane, readFile, loadScope, git });
-  const { run, runs, runsPath, latest, attempt } = src;
-  const prHead = src.runHead;
-
-  // 5. Freshness.
-  const ageMs = now().getTime() - Date.parse(run.updated_at);
-  need(ageMs >= -LIMITS.clockSkewMs && ageMs <= registry.maxAgeHours * 3600 * 1000,
-    `merge-gate run ${run.id} finished ${Math.round(ageMs / 60000)} minutes ago, outside ${registry.maxAgeHours}h`);
-
-  // 6. Every job of the latest attempt, and this lane's obligation in it.
-  const jobs = await attemptJobs(api, repository, run.id, attempt, `merge-gate run ${run.id}`);
-  const byName = new Map(jobs.map((j) => [j.name, j]));
-  for (const job of jobs) {
-    need(job.status === "completed", `job ${JSON.stringify(job.name)} of the source run is ${job.status}`);
-  }
-  for (const name of [registry.producer.aggregateJob, registry.producer.selectJob]) {
-    need(byName.get(name)?.conclusion === "success", `the source run's ${name} job did not succeed`);
-  }
-  const prefix = `${laneId} / `;
-  const allChecks = new Set(Object.values(lane.jobs).flatMap((j) => j.checks));
-  for (const job of jobs) {
-    if (!job.name.startsWith(prefix)) continue;
-    const rest = job.name.slice(prefix.length);
-    // The generated auxiliaries: the evidence job (decides nothing on a pull
-    // request) and the screen and certify jobs, which are skipped everywhere but
-    // a main push — one that RAN in the source run is not the source run this
-    // file understands.
-    if (rest === "evidence") continue;
-    if (rest === "screen" || rest === "certify-macos" || rest === "certify-windows") {
-      need(job.conclusion === "skipped", `the source run's ${JSON.stringify(job.name)} ${job.conclusion} instead of being skipped`);
-      continue;
-    }
-    need(allChecks.has(rest), `the source run has ${JSON.stringify(job.name)}, which the evidence registry does not know`);
-  }
   const scopeValue = lane.scope ? env[`CI_EVIDENCE_SCOPE_${lane.scope.output.toUpperCase()}`] : undefined;
-  const required = requiredJobs(lane, scopeValue);
-  // The source run's event, as `sourceRun` re-read it by id and as its kind
-  // demands: a pull-request proof is a `pull_request` run, both dispatch kinds
-  // a `workflow_dispatch` run. Both must agree, or no runner is expected at all.
-  const sourceEvent = src.kind === MANIFEST_KIND ? "pull_request" : "workflow_dispatch";
-  need(run.event === sourceEvent, `the source run is a ${run.event} run, its ${src.kind} source must be a ${sourceEvent} run`);
-  for (const [jobId, checks] of Object.entries(required)) {
-    for (const check of checks) {
-      const job = byName.get(`${prefix}${check}`);
-      need(job !== undefined, `the source run has no ${JSON.stringify(prefix + check)}`);
-      need(job.conclusion === "success", `${JSON.stringify(prefix + check)} concluded ${job.conclusion} in the source run`);
-      const runner = expectedRunner(lane.jobs[jobId], run.event);
-      need(job.labels.length === 1 && job.labels[0] === runner,
-        `${JSON.stringify(prefix + check)} ran on [${job.labels.join(", ")}], want [${runner}]`);
-    }
-  }
-
-  // 7. The proof: one immutable artifact, by id and API digest.
-  const { art, zip } = await runArtifact(api, repository, run, prHead, repositoryId,
-    `${registry.producer.artifactPrefix}${attempt}`, now);
-  let manifest;
-  try {
-    manifest = JSON.parse(readSingleEntryZip(zip, registry.producer.entry).toString("utf8"));
-  } catch (err) {
-    if (err instanceof NoReuse) throw err;
-    fail(`the proof is not JSON: ${err.message}`);
-  }
-  validateManifest(manifest);
-
-  // 8. The proof agrees with everything derived independently above.
-  const m = manifest;
-  need(m.repository.id === repositoryId && m.repository.full_name === repository, "the proof is for another repository");
-  need(m.kind === src.kind, `the proof is a ${m.kind}, this commit's source is a ${src.kind}`);
-  if (src.kind === MANIFEST_KIND) {
-    need(m.pull_request.number === src.prNumber && m.pull_request.head_sha === prHead
-      && m.pull_request.head_repository_id === repositoryId && m.pull_request.base_ref === "main",
-    "the proof names another pull request or head");
-  } else if (src.kind === INTERNAL_KIND) {
-    need(m.dispatch.head_sha === sha && m.dispatch.base_sha === src.base && m.dispatch.ref === src.testedRef,
-      "the proof names another candidate, base or branch");
-    need(JSON.stringify(m.dispatch.paths) === JSON.stringify(src.scope.paths) && m.dispatch.closure_sha256 === src.scope.closure_sha256,
-      "the proof's change set or trust closure disagrees with this commit's own judgement");
-  } else {
-    need(m.dispatch.head_sha === sha && m.dispatch.base_sha === src.base && m.dispatch.ref === src.testedRef,
-      "the proof names another candidate, base or branch");
-    need(m.dispatch.version === src.scope.version && JSON.stringify(m.dispatch.paths) === JSON.stringify(src.scope.paths)
-      && m.dispatch.scope_sha256 === src.scope.scope_sha256,
-    "the proof's candidate scope (version, change set or whitelist) disagrees with this commit's own judgement");
-  }
-  need(m.run.id === run.id && m.run.attempt === attempt, `the proof is from run ${m.run.id} attempt ${m.run.attempt}, not ${run.id}/${attempt}`);
-  need(m.run.workflow_sha === src.testedSha, "the proof's gate workflow is not from the tested commit");
-  need(m.checkout.sha === src.testedSha && m.checkout.ref === src.testedRef, "the proof's checkout is not the referenced merge ref");
-  need(m.checkout.tree === head.tree && m.checkout.tree === src.testedTree, "the proof's tree is not this commit's tree");
-  need(m.checkout.parents.join() === src.testedParents.join(), "the proof's merge parents disagree with git");
-  need(JSON.stringify(m.referenced_workflows) === JSON.stringify(src.refs), "the proof's referenced workflows disagree with the run");
-  need(m.lanes[laneId]?.selected === true && m.lanes[laneId]?.result === "success", `the proof says lane ${laneId} did not run and pass`);
-  const apiJobs = jobs.filter((j) => j.name !== registry.producer.aggregateJob)
-    .map((j) => ({ id: j.id, name: j.name, status: j.status, conclusion: j.conclusion, labels: j.labels })).sort((a, b) => a.id - b.id);
-  need(JSON.stringify(m.jobs) === JSON.stringify(apiJobs), "the proof's job inventory disagrees with the API's");
-  need(m.fingerprints[laneId] === laneFingerprint(git, laneId, lane, workflowsDir), `the proof's ${laneId} input fingerprint disagrees with this tree`);
-  need(m.certification.registry_sha256 === sha256(readFile(REGISTRY_FILE))
-    && m.certification.verifier_sha256 === sha256(readFile(VERIFIER_FILE))
-    && m.certification.selector_sha256 === sha256(readFile(SELECTOR_FILE))
-    && m.certification.toolchain_sha256 === sha256(readFile(TOOLCHAIN_FILE))
-    && m.certification.toolchain_registry_sha256 === sha256(readFile(TOOLCHAIN_REGISTRY_FILE)),
-  "the proof was certified by a different verifier, registry or selector");
-  const produced = Date.parse(m.produced_at);
-  need(produced <= Date.parse(run.updated_at) + LIMITS.clockSkewMs && now().getTime() - produced <= registry.maxAgeHours * 3600 * 1000
-    && now().getTime() - produced >= -LIMITS.clockSkewMs, "the proof's timestamp is outside the run or the freshness window");
-  // The tag set the tag-reading job ACTUALLY checked out and tested, recorded
-  // by that job itself, must still be the repository's tag set now. A tag
-  // created after that job's checkout (even before the proof was produced) is
-  // a tag no test of this proof ever saw.
-  for (const input of lane.externalInputs ?? []) {
-    if (required[input.job] === undefined) continue;
-    const tested = await testedTagFingerprint(api, repository, run, prHead, repositoryId, attempt, input, now);
-    need(tested === await tagFingerprint(api, repository),
-      `the repository's tags differ from the tag set ${laneId} / ${input.job} checked out and tested`);
-  }
+  const { src, run, runs, runsPath, latest, attempt, prHead, required, art, manifest: m } = await judgeSourceProof({
+    api, git, registry, laneId, repository, repositoryId, sha, head, event, now, workflowsDir, readFile, loadScope, scopeValue,
+  });
 
   // 9. The toolchain. Every witnessed check's own job execution recorded the
   //    toolchain it actually ran on; a fresh run now would get the toolchain the
@@ -1484,12 +1585,7 @@ export async function witness({
 
   // 10. Re-read: the source run is still that attempt and that result, nothing
   //    newer appeared on the head, and THIS run is still the push it was.
-  const again = await api.json(`repos/${repository}/actions/runs/${run.id}`);
-  need(again.run_attempt === attempt && again.status === "completed" && again.conclusion === "success"
-    && again.updated_at === run.updated_at, `merge-gate run ${run.id} changed while it was being verified`);
-  const runsAgain = await listCounted(api, runsPath, "workflow_runs", LIMITS.runs);
-  need(runListing(runsAgain) === runListing(runs) && newest(runsAgain)?.id === latest.id,
-    `the merge-gate runs on ${prHead} changed while being verified`);
+  await rereadSourceProof({ api, repository, proof: { run, runs, runsPath, latest, attempt, prHead } });
   const current = await api.json(`repos/${repository}/actions/runs/${runId}`);
   need(current.id === runId && current.run_attempt === runAttempt && current.head_sha === sha && current.event === "push"
     && current.path === `.github/workflows/${lane.workflow}` && current.head_branch === "main"
@@ -1515,14 +1611,14 @@ export async function witness({
 
 /** The latest-executed run of a listing, after the checks every source shares. */
 function latestOf(runs, headSha, what) {
-  need(runs.length > 0, `no merge-gate run exists on ${what} ${headSha}`);
+  needAvailable(runs.length > 0, `no merge-gate run exists on ${what} ${headSha}`);
   for (const r of runs) {
     need(isObject(r) && isInt(r.id) && r.head_sha === headSha && iso(r.created_at) && iso(r.run_started_at)
       && isInt(r.run_attempt), "a merge-gate run in the listing is malformed or for another head");
   }
   need(new Set(runs.map((r) => r.id)).size === runs.length, "the merge-gate run listing repeats a run");
   const pending = runs.filter((r) => r.status !== "completed");
-  need(pending.length === 0, `${pending.length} merge-gate run(s) on ${headSha} are still ${pending[0]?.status}`);
+  needAvailable(pending.length === 0, `${pending.length} merge-gate run(s) on ${headSha} are still ${pending[0]?.status}`);
   return newest(runs);
 }
 
@@ -1679,14 +1775,100 @@ async function certifyToolchains({
   return out;
 }
 
+/**
+ * The source half of `certifyToolchains`, READ-ONLY and for a proof already
+ * judged by `judgeSourceProof`: every witnessed job's source certificates
+ * re-downloaded by exact name, re-authenticated by API digest, strictly
+ * validated and bound to that source run, attempt, commit, workflow and check
+ * index. Returns `{ [jobId]: { profile, source: [value digest...], artifacts:
+ * [artifactIdentityOf...] } }` — the value digests AND the complete
+ * artifact identities they were read from, so a caller can freeze the chain
+ * and re-read it (`rereadArtifactIdentities`). It compares nothing with a
+ * current certificate and synthesizes none.
+ */
+export async function reauthenticateSourceCertificates({
+  api, repository, repositoryId, proof, laneId, registry, toolchainRegistry, now,
+}) {
+  need(isObject(toolchainRegistry) && isObject(toolchainRegistry.lanes), "no toolchain registry: nothing is certified");
+  const lane = registry.lanes[laneId];
+  const { run, prHead, attempt, src, required } = proof;
+  const out = {};
+  for (const [jobId, checks] of Object.entries(required)) {
+    if (lane.jobs[jobId].mode === "fresh") continue;
+    const entry = toolchainRegistry.lanes[laneId]?.jobs?.[jobId];
+    need(isObject(entry), `${laneId}/${jobId} has no toolchain profile, so its toolchain is uncertified`);
+    need(entry.uncertifiable === undefined, `${laneId}/${jobId} is uncertifiable: ${entry.uncertifiable}`);
+    const artifacts = [];
+    const sources = await sourceCertificates({ api, repository, repositoryId, run, prHead, attempt,
+      sourceRef: `${repository}/.github/workflows/merge-gate.yml@${src.testedRef}`, mergeSha: src.testedSha, laneId, jobId, entry,
+      checks, toolchainRegistry, now, identities: artifacts });
+    out[jobId] = { profile: entry.profile, source: sources.map((c) => c.digest), artifacts };
+  }
+  return out;
+}
+
+/**
+ * The complete API identity of an artifact record — everything `runArtifact`
+ * authenticated and a replacement would have to forge: id, name, digest,
+ * size, creation, expiry and the run, head SHA, repository and head
+ * repository it belongs to. Strictly typed; `null` when the record is not one.
+ */
+export const ARTIFACT_IDENTITY_KEYS = Object.freeze(["id", "name", "digest", "size_in_bytes", "created_at", "expires_at",
+  "run_id", "head_sha", "repository_id", "head_repository_id"]);
+export function artifactIdentityOf(a) {
+  if (!isObject(a) || !isObject(a.workflow_run)) return null;
+  const id = {
+    id: a.id, name: a.name, digest: a.digest, size_in_bytes: a.size_in_bytes, created_at: a.created_at,
+    expires_at: a.expires_at, run_id: a.workflow_run.id, head_sha: a.workflow_run.head_sha,
+    repository_id: a.workflow_run.repository_id, head_repository_id: a.workflow_run.head_repository_id,
+  };
+  return isArtifactIdentity(id) ? id : null;
+}
+/** One strict artifact identity: exactly `ARTIFACT_IDENTITY_KEYS`, in order, typed. */
+export function isArtifactIdentity(v) {
+  return isObject(v) && JSON.stringify(Object.keys(v)) === JSON.stringify(ARTIFACT_IDENTITY_KEYS)
+    && isInt(v.id) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 200
+    && typeof v.digest === "string" && /^sha256:[0-9a-f]{64}$/.test(v.digest)
+    && Number.isSafeInteger(v.size_in_bytes) && v.size_in_bytes > 0 && iso(v.created_at) && iso(v.expires_at)
+    && isInt(v.run_id) && hex40(v.head_sha) && isInt(v.repository_id) && isInt(v.head_repository_id);
+}
+
+/**
+ * READ-ONLY end re-check of artifact identities a caller froze: each name still
+ * lists exactly one artifact of `runId`, AND its record by id still reads, with
+ * the same COMPLETE identity (`artifactIdentityOf`: id, name, digest, size,
+ * creation, expiry, run, head SHA, repository and head repository), unexpired
+ * at a FRESH `now()` per artifact. A replaced, re-uploaded, re-attributed or
+ * expired artifact refuses, even if its content would carry the same value.
+ * (Expiry here is a change, not an absence: the chain was read a moment ago.)
+ */
+export async function rereadArtifactIdentities({ api, repository, runId, identities, now }) {
+  for (const want of identities) {
+    need(isArtifactIdentity(want) && want.run_id === runId, `a frozen artifact identity is not one strict record of run ${runId}`);
+    const listed = await listCounted(api, `repos/${repository}/actions/runs/${runId}/artifacts?name=${encodeURIComponent(want.name)}`,
+      "artifacts", 20);
+    const hits = listed.filter((a) => isObject(a) && a.name === want.name);
+    const record = hits.length === 1 ? await api.json(`repos/${repository}/actions/artifacts/${want.id}`) : null;
+    const same = (a) => isObject(a) && a.expired === false && JSON.stringify(artifactIdentityOf(a)) === JSON.stringify(want);
+    need(hits.length === 1 && same(hits[0]) && same(record) && Date.parse(want.expires_at) > now().getTime(),
+      `artifact ${want.name} (${want.id}) changed, was replaced, re-attributed or expired while the chain was being verified`);
+  }
+}
+
 /** Every source certificate of one witnessed job, downloaded and bound to this source run, in check order. */
 async function sourceCertificates({
   api, repository, repositoryId, run, prHead, attempt, sourceRef, mergeSha, laneId, jobId, entry, checks, toolchainRegistry, now,
+  identities = null,
 }) {
   const out = [];
   for (let index = 0; index < checks.length; index += 1) {
     const name = `${TOOLCHAIN_ARTIFACT_PREFIX}${laneId}-${jobId}-${index}-attempt-${attempt}`;
-    const { zip } = await runArtifact(api, repository, run, prHead, repositoryId, name, now);
+    const { art, zip } = await runArtifact(api, repository, run, prHead, repositoryId, name, now);
+    if (identities !== null) {
+      const identity = artifactIdentityOf(art);
+      need(identity !== null, `${name} has no complete artifact identity`);
+      identities.push(identity);
+    }
     let src;
     try {
       src = validateCertificate(JSON.parse(readSingleEntryZip(zip, TOOLCHAIN_ENTRY).toString("utf8")), toolchainRegistry);

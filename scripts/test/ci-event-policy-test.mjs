@@ -6415,7 +6415,20 @@ const DISPATCH_INPUTS = [
     description:
       "Publish the versioned GitHub Release and deliver its appcast/download metadata to main",
   },
-  // The sixth, and the only one that did not move from `macos.yml`: where the
+  // Who performs the two publication writes. `operator` (the default) hands
+  // off a verified candidate and publishes nothing; `workflow` keeps the
+  // automatic delivery. Added after the 1.4.5 metadata push was refused with
+  // GH006 and the release creation with 403 (causes not asserted here).
+  {
+    name: "metadata_delivery",
+    type: "choice",
+    required: "true",
+    default: "operator",
+    description: "Metadata delivery: operator (hand off a verified candidate, publish nothing) "
+      + "or workflow (push main and create the release here)",
+    options: ["operator", "workflow"],
+  },
+  // The seventh, and one of two that did not move from `macos.yml`: where the
   // signed DMG comes from. `auto` reuses only proven exact-main evidence.
   {
     name: "signed_build_source",
@@ -6789,6 +6802,16 @@ function releaseBoundaryFailures(world) {
       `${MACOS_RELEASE}/preflight declares permissions ${JSON.stringify(preflight.permissions)}, want `
       + `{"actions":"read","contents":"read"}: it reads runs, jobs and artifacts and writes nothing.`,
     );
+    for (const [jobName, job] of [["preflight", preflight], ["notarize-stage", release.jobs?.["notarize-stage"]]]) {
+      const checkouts = (job?.steps ?? []).filter((step) => String(step?.uses ?? "").startsWith("actions/checkout@"));
+      need(
+        checkouts.length === 1 && deepEqual(checkouts[0].with, { "fetch-depth": "2" }),
+        `${MACOS_RELEASE}/${jobName} checks out with ${JSON.stringify(checkouts.map((c) => c.with ?? null))}; `
+        + "want exactly one checkout with `fetch-depth: 2` and nothing else. The certified source proof "
+        + "needs the release commit's first parent (depth 1 lacks it and silently rebuilds); a deeper "
+        + "fetch, another ref or other options widen what the reader trusts.",
+      );
+    }
     const text = JSON.stringify(preflight);
     need(
       text.includes("node scripts/release/macos-evidence.mjs select")
@@ -9836,6 +9859,20 @@ const MUTATIONS = [
     expect: /macos-release\.yml\/notarize-stage: timeout-minutes is "40", at or below the/,
   },
   // ── exact-main signed-build reuse and PR-free delivery ────────────────────
+  {
+    name: "the preflight checkout returns to depth one",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "preflight", (job) => {
+      delete job.steps.find((step) => String(step.uses ?? "").startsWith("actions/checkout@")).with;
+    }),
+    expect: /macos-release\.yml\/preflight checks out with \[null\]; want exactly one checkout with `fetch-depth: 2`/,
+  },
+  {
+    name: "the notarize-stage checkout fetches the whole history",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.steps.find((step) => String(step.uses ?? "").startsWith("actions/checkout@")).with = { "fetch-depth": "0" };
+    }),
+    expect: /macos-release\.yml\/notarize-stage checks out with \[\{"fetch-depth":"0"\}\]; want exactly one checkout/,
+  },
   {
     name: "the reusable build runs even when the preflight chose reuse",
     mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {

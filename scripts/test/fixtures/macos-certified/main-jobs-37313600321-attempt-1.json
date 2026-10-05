@@ -1,0 +1,893 @@
+{
+ "source": "GitHub API runs/37313600321/attempts/1/jobs (root-r5 current-main-macos-jobs.json), fields subset only",
+ "jobs": [
+  {
+   "id": 111774726191,
+   "run_id": 37313600321,
+   "run_attempt": 1,
+   "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27",
+   "name": "screen",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-05T13:01:03Z",
+   "completed_at": "2026-10-05T13:01:23Z",
+   "labels": [
+    "ubuntu-latest"
+   ],
+   "runner_name": "GitHub Actions 1000024329",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-05T13:01:04Z",
+     "completed_at": "2026-10-05T13:01:05Z"
+    },
+    {
+     "name": "Check out the verifier",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-05T13:01:05Z",
+     "completed_at": "2026-10-05T13:01:09Z"
+    },
+    {
+     "name": "Node for the verifier",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-05T13:01:09Z",
+     "completed_at": "2026-10-05T13:01:13Z"
+    },
+    {
+     "name": "Could a current toolchain certificate complete a proof?",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-05T13:01:13Z",
+     "completed_at": "2026-10-05T13:01:21Z"
+    },
+    {
+     "name": "Post Node for the verifier",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-05T13:01:21Z",
+     "completed_at": "2026-10-05T13:01:21Z"
+    },
+    {
+     "name": "Post Check out the verifier",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 8,
+     "started_at": "2026-10-05T13:01:21Z",
+     "completed_at": "2026-10-05T13:01:21Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 9,
+     "started_at": "2026-10-05T13:01:21Z",
+     "completed_at": "2026-10-05T13:01:22Z"
+    }
+   ]
+  },
+  {
+   "id": 111774873430,
+   "run_id": 37313600321,
+   "run_attempt": 1,
+   "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27",
+   "name": "certify-macos",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-05T13:01:32Z",
+   "completed_at": "2026-10-05T13:02:09Z",
+   "labels": [
+    "macos-15"
+   ],
+   "runner_name": "GitHub Actions 1000024351",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-05T13:01:32Z",
+     "completed_at": "2026-10-05T13:01:33Z"
+    },
+    {
+     "name": "Check out the probe",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-05T13:01:33Z",
+     "completed_at": "2026-10-05T13:01:38Z"
+    },
+    {
+     "name": "Certify this runner's toolchain now",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-05T13:01:38Z",
+     "completed_at": "2026-10-05T13:02:04Z"
+    },
+    {
+     "name": "Hand the certificates to the evidence job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-05T13:02:04Z",
+     "completed_at": "2026-10-05T13:02:04Z"
+    },
+    {
+     "name": "Post Check out the probe",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 8,
+     "started_at": "2026-10-05T13:02:04Z",
+     "completed_at": "2026-10-05T13:02:05Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 9,
+     "started_at": "2026-10-05T13:02:05Z",
+     "completed_at": "2026-10-05T13:02:05Z"
+    }
+   ]
+  },
+  {
+   "id": 111775180092,
+   "run_id": 37313600321,
+   "run_attempt": 1,
+   "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27",
+   "name": "evidence",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-05T13:02:11Z",
+   "completed_at": "2026-10-05T13:02:34Z",
+   "labels": [
+    "ubuntu-latest"
+   ],
+   "runner_name": "GitHub Actions 1000024357",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-05T13:02:12Z",
+     "completed_at": "2026-10-05T13:02:13Z"
+    },
+    {
+     "name": "Check out the verifier (ordinary main push only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-05T13:02:13Z",
+     "completed_at": "2026-10-05T13:02:16Z"
+    },
+    {
+     "name": "Node for the verifier (ordinary main push only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-05T13:02:16Z",
+     "completed_at": "2026-10-05T13:02:21Z"
+    },
+    {
+     "name": "Take the certify jobs' certificates (ordinary main push only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-05T13:02:21Z",
+     "completed_at": "2026-10-05T13:02:21Z"
+    },
+    {
+     "name": "Does the merged pull request's full proof cover this main tree?",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 5,
+     "started_at": "2026-10-05T13:02:21Z",
+     "completed_at": "2026-10-05T13:02:30Z"
+    },
+    {
+     "name": "Keep the witness (reuse only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 6,
+     "started_at": "2026-10-05T13:02:30Z",
+     "completed_at": "2026-10-05T13:02:31Z"
+    },
+    {
+     "name": "Hand the decision to the lane only once its witness is kept",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-05T13:02:31Z",
+     "completed_at": "2026-10-05T13:02:31Z"
+    },
+    {
+     "name": "Post Node for the verifier (ordinary main push only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 13,
+     "started_at": "2026-10-05T13:02:31Z",
+     "completed_at": "2026-10-05T13:02:31Z"
+    },
+    {
+     "name": "Post Check out the verifier (ordinary main push only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 14,
+     "started_at": "2026-10-05T13:02:31Z",
+     "completed_at": "2026-10-05T13:02:31Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 15,
+     "started_at": "2026-10-05T13:02:31Z",
+     "completed_at": "2026-10-05T13:02:31Z"
+    }
+   ]
+  },
+  {
+   "id": 111775350668,
+   "run_id": 37313600321,
+   "run_attempt": 1,
+   "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27",
+   "name": "test",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-05T13:02:36Z",
+   "completed_at": "2026-10-05T13:02:44Z",
+   "labels": [
+    "ubuntu-latest"
+   ],
+   "runner_name": "GitHub Actions 1000024361",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-05T13:02:37Z",
+     "completed_at": "2026-10-05T13:02:38Z"
+    },
+    {
+     "name": "Check out the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-05T13:02:38Z",
+     "completed_at": "2026-10-05T13:02:41Z"
+    },
+    {
+     "name": "Node for the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-05T13:02:41Z",
+     "completed_at": "2026-10-05T13:02:41Z"
+    },
+    {
+     "name": "Witness \u2014 the pull request's full proof covers this job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-05T13:02:41Z",
+     "completed_at": "2026-10-05T13:02:41Z"
+    },
+    {
+     "name": "Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 5,
+     "started_at": "2026-10-05T13:02:41Z",
+     "completed_at": "2026-10-05T13:02:41Z"
+    },
+    {
+     "name": "Toolchain versions",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 6,
+     "started_at": "2026-10-05T13:02:41Z",
+     "completed_at": "2026-10-05T13:02:41Z"
+    },
+    {
+     "name": "Release script tests",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 7,
+     "started_at": "2026-10-05T13:02:41Z",
+     "completed_at": "2026-10-05T13:02:41Z"
+    },
+    {
+     "name": "Certify this job's toolchain",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 8,
+     "started_at": "2026-10-05T13:02:41Z",
+     "completed_at": "2026-10-05T13:02:41Z"
+    },
+    {
+     "name": "Keep this job's toolchain certificate",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 9,
+     "started_at": "2026-10-05T13:02:41Z",
+     "completed_at": "2026-10-05T13:02:41Z"
+    },
+    {
+     "name": "Post Node for the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 17,
+     "started_at": "2026-10-05T13:02:41Z",
+     "completed_at": "2026-10-05T13:02:41Z"
+    },
+    {
+     "name": "Post Check out the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 18,
+     "started_at": "2026-10-05T13:02:41Z",
+     "completed_at": "2026-10-05T13:02:42Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 19,
+     "started_at": "2026-10-05T13:02:42Z",
+     "completed_at": "2026-10-05T13:02:42Z"
+    }
+   ]
+  },
+  {
+   "id": 111775350840,
+   "run_id": 37313600321,
+   "run_attempt": 1,
+   "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27",
+   "name": "contract",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-05T13:02:37Z",
+   "completed_at": "2026-10-05T13:02:45Z",
+   "labels": [
+    "ubuntu-latest"
+   ],
+   "runner_name": "GitHub Actions 1000024362",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-05T13:02:38Z",
+     "completed_at": "2026-10-05T13:02:38Z"
+    },
+    {
+     "name": "Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-05T13:02:38Z",
+     "completed_at": "2026-10-05T13:02:43Z"
+    },
+    {
+     "name": "Validate release contract",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-05T13:02:43Z",
+     "completed_at": "2026-10-05T13:02:43Z"
+    },
+    {
+     "name": "Post Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 6,
+     "started_at": "2026-10-05T13:02:43Z",
+     "completed_at": "2026-10-05T13:02:43Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-05T13:02:43Z",
+     "completed_at": "2026-10-05T13:02:43Z"
+    }
+   ]
+  },
+  {
+   "id": 111775424481,
+   "run_id": 37313600321,
+   "run_attempt": 1,
+   "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27",
+   "name": "ui-smoke (app-shell, RelayiumUITests/AppShellUITests, 30)",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-05T13:02:47Z",
+   "completed_at": "2026-10-05T13:03:09Z",
+   "labels": [
+    "ubuntu-latest"
+   ],
+   "runner_name": "GitHub Actions 1000024363",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-05T13:02:48Z",
+     "completed_at": "2026-10-05T13:02:51Z"
+    },
+    {
+     "name": "Check out the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-05T13:02:51Z",
+     "completed_at": "2026-10-05T13:02:55Z"
+    },
+    {
+     "name": "Node for the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-05T13:02:55Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Witness \u2014 the pull request's full proof covers this job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 5,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Import UI signing certificate",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 6,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Install UI provisioning profiles",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 7,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Mark the UI smoke start for crash diagnostics",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 8,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Run macOS product-flow UI smoke (app-shell)",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 9,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Upload macOS UI smoke result evidence",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 10,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Remove UI signing keychain",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 11,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Capture crash reports after a failed UI smoke",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 12,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Upload crash diagnostics after a failed UI smoke",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 13,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Certify this job's toolchain",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 14,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Keep this job's toolchain certificate",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 15,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:07Z"
+    },
+    {
+     "name": "Post Node for the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 29,
+     "started_at": "2026-10-05T13:03:07Z",
+     "completed_at": "2026-10-05T13:03:08Z"
+    },
+    {
+     "name": "Post Check out the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 30,
+     "started_at": "2026-10-05T13:03:08Z",
+     "completed_at": "2026-10-05T13:03:08Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 31,
+     "started_at": "2026-10-05T13:03:08Z",
+     "completed_at": "2026-10-05T13:03:08Z"
+    }
+   ]
+  },
+  {
+   "id": 111775424504,
+   "run_id": 37313600321,
+   "run_attempt": 1,
+   "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27",
+   "name": "ui-smoke (device-inbox, RelayiumUITests/DeviceInboxUITests,RelayiumUITests/SubscriptionUITests,Re...",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-05T13:02:47Z",
+   "completed_at": "2026-10-05T13:03:01Z",
+   "labels": [
+    "ubuntu-latest"
+   ],
+   "runner_name": "GitHub Actions 1000024364",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-05T13:02:49Z",
+     "completed_at": "2026-10-05T13:02:51Z"
+    },
+    {
+     "name": "Check out the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-05T13:02:51Z",
+     "completed_at": "2026-10-05T13:02:55Z"
+    },
+    {
+     "name": "Node for the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-05T13:02:55Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Witness \u2014 the pull request's full proof covers this job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 5,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Import UI signing certificate",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 6,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Install UI provisioning profiles",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 7,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Mark the UI smoke start for crash diagnostics",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 8,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Run macOS product-flow UI smoke (device-inbox)",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 9,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Upload macOS UI smoke result evidence",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 10,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Remove UI signing keychain",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 11,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Capture crash reports after a failed UI smoke",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 12,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Upload crash diagnostics after a failed UI smoke",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 13,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Certify this job's toolchain",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 14,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Keep this job's toolchain certificate",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 15,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Post Node for the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 29,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:58Z"
+    },
+    {
+     "name": "Post Check out the verifier (witness path only)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 30,
+     "started_at": "2026-10-05T13:02:58Z",
+     "completed_at": "2026-10-05T13:02:59Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 31,
+     "started_at": "2026-10-05T13:02:59Z",
+     "completed_at": "2026-10-05T13:02:59Z"
+    }
+   ]
+  },
+  {
+   "id": 111775424604,
+   "run_id": 37313600321,
+   "run_attempt": 1,
+   "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27",
+   "name": "signed-build",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-05T13:02:52Z",
+   "completed_at": "2026-10-05T13:10:50Z",
+   "labels": [
+    "macos-15"
+   ],
+   "runner_name": "GitHub Actions 1000024365",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-05T13:02:53Z",
+     "completed_at": "2026-10-05T13:02:54Z"
+    },
+    {
+     "name": "Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-05T13:02:54Z",
+     "completed_at": "2026-10-05T13:02:59Z"
+    },
+    {
+     "name": "Import signing certificate",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-05T13:02:59Z",
+     "completed_at": "2026-10-05T13:03:00Z"
+    },
+    {
+     "name": "Install provisioning profile",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-05T13:03:00Z",
+     "completed_at": "2026-10-05T13:03:00Z"
+    },
+    {
+     "name": "Install Share extension provisioning profile",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 5,
+     "started_at": "2026-10-05T13:03:00Z",
+     "completed_at": "2026-10-05T13:03:00Z"
+    },
+    {
+     "name": "Build (Mac App Store target, unsigned)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 6,
+     "started_at": "2026-10-05T13:03:00Z",
+     "completed_at": "2026-10-05T13:07:10Z"
+    },
+    {
+     "name": "Verify the App Store product embeds no updater",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-05T13:07:10Z",
+     "completed_at": "2026-10-05T13:07:12Z"
+    },
+    {
+     "name": "Verify the App Store product ships both privacy manifests",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 8,
+     "started_at": "2026-10-05T13:07:12Z",
+     "completed_at": "2026-10-05T13:07:12Z"
+    },
+    {
+     "name": "Build (signed, Release)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 9,
+     "started_at": "2026-10-05T13:07:12Z",
+     "completed_at": "2026-10-05T13:10:22Z"
+    },
+    {
+     "name": "Re-sign Sparkle distribution components",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 10,
+     "started_at": "2026-10-05T13:10:22Z",
+     "completed_at": "2026-10-05T13:10:25Z"
+    },
+    {
+     "name": "Verify signature and entitlements",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 11,
+     "started_at": "2026-10-05T13:10:25Z",
+     "completed_at": "2026-10-05T13:10:26Z"
+    },
+    {
+     "name": "Verify the direct product ships both privacy manifests",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 12,
+     "started_at": "2026-10-05T13:10:26Z",
+     "completed_at": "2026-10-05T13:10:27Z"
+    },
+    {
+     "name": "Package and verify DMG",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 13,
+     "started_at": "2026-10-05T13:10:27Z",
+     "completed_at": "2026-10-05T13:10:37Z"
+    },
+    {
+     "name": "Record signed package provenance",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 14,
+     "started_at": "2026-10-05T13:10:37Z",
+     "completed_at": "2026-10-05T13:10:40Z"
+    },
+    {
+     "name": "Upload signed package artifact",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 15,
+     "started_at": "2026-10-05T13:10:40Z",
+     "completed_at": "2026-10-05T13:10:43Z"
+    },
+    {
+     "name": "Remove signing keychain",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 16,
+     "started_at": "2026-10-05T13:10:43Z",
+     "completed_at": "2026-10-05T13:10:43Z"
+    },
+    {
+     "name": "Post Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 32,
+     "started_at": "2026-10-05T13:10:43Z",
+     "completed_at": "2026-10-05T13:10:44Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 33,
+     "started_at": "2026-10-05T13:10:44Z",
+     "completed_at": "2026-10-05T13:10:45Z"
+    }
+   ]
+  }
+ ]
+}

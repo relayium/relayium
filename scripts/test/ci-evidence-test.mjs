@@ -40,9 +40,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { deflateRawSync } from "node:zlib";
 
 import {
-  FROZEN_REF, INTERNAL_KIND, expectedRunner, LIMITS, MANIFEST_SCHEMA, NATIVE_RELEASES_FILE, NoReuse, REGISTRY_FILE, SCOPE_FILE, confirm, crc32, gitHubApi,
+  FROZEN_REF, INTERNAL_KIND, expectedRunner, LIMITS, MANIFEST_SCHEMA, NATIVE_RELEASES_FILE, NoReuse, ProofUnavailable, REGISTRY_FILE, SCOPE_FILE, confirm, crc32, gitHubApi,
   headFacts, judgeInternalCandidate, listCounted, loadRegistry, main, moduleImports, produce, realGit, readSingleEntryZip, requiredJobs,
-  validateManifest, validateWitness, witness,
+  validateManifest, validateWitness, witness, ARTIFACT_IDENTITY_KEYS, artifactIdentityOf, isArtifactIdentity, judgeHistoricalSourceProof,
+  judgeSourceProof, rereadArtifactIdentities,
 } from "../ci/ci-evidence.mjs";
 import { CONTROL_FILES } from "../ci/select-lanes.mjs";
 import { CANDIDATE_REF } from "../release/macos-evidence.mjs";
@@ -781,6 +782,30 @@ for (const [name, laneId, breakIt, expect, envOverrides] of NEGATIVES) {
   const r = await runWitness(w, laneId, { ...(laneId === "web" ? { CI_EVIDENCE_SCOPE_LIGHT: "true" } : {}), ...(envOverrides ?? {}) });
   check(!r.ok && r.error instanceof NoReuse && expect.test(r.error.message),
     `"${name}" (lane ${laneId}): want NoReuse matching ${expect}; got ${r.ok ? "REUSE" : `${r.error?.constructor?.name}: ${r.error?.message}`}`);
+}
+
+// ── 2a'. absence versus disagreement, by TYPE ───────────────────────────────
+//
+// The macOS release reader classifies F's refusals by class, never by message:
+// `ProofUnavailable` (a NoReuse subclass) is ONLY absence — nothing to reuse,
+// so a release may build — while every disagreement stays a plain NoReuse and
+// must stop it. F's own callers treat both alike (reuse=false).
+for (const [name, laneId, breakIt, expect, absent] of [
+  ["absent: the artifact expired", "go", (w) => { w.artifactPatch = { expired: true }; }, /has expired/, true],
+  ["absent: no merge-gate run exists", "go", (w) => { w.runs = []; }, /no merge-gate run exists/, true],
+  ["absent: a run on the head is still pending", "go", (w) => { w.runs.push({ ...w.runs[0], id: RUN + 1, created_at: "2026-10-01T14:40:00Z", run_started_at: "2026-10-01T14:40:00Z", status: "in_progress", conclusion: null }); }, /still in_progress/, true],
+  ["disagrees: the artifact digest is wrong", "go", (w) => { w.artifactPatch = { digest: `sha256:${"0".repeat(64)}` }; }, /do not match its API digest/, false],
+  ["disagrees: the tested tree is not main's tree", "go", (w) => { w.gitTree = hex("another-tree"); }, /tested tree .* is not this commit's tree/, false],
+  ["disagrees: a newer run on the head failed", "go", (w) => { w.runs.push({ ...w.runs[0], id: RUN + 1, created_at: "2026-10-01T14:40:00Z", run_started_at: "2026-10-01T14:40:00Z", conclusion: "failure" }); }, /concluded failure/, false],
+  ["disagrees: the proof names another PR head", "go", (w) => rezip(w, (m) => { m.pull_request.head_sha = hex("forged"); }), /names another pull request or head/, false],
+]) {
+  const w = freshWorld();
+  breakIt(w);
+  const r = await runWitness(w, laneId);
+  check(!r.ok && r.error instanceof NoReuse && expect.test(r.error.message)
+    && (r.error instanceof ProofUnavailable) === absent,
+  `classification "${name}": want ${absent ? "ProofUnavailable" : "plain NoReuse"} matching ${expect}; got `
+    + `${r.ok ? "REUSE" : `${r.error?.constructor?.name}: ${r.error?.message}`}`);
 }
 
 // ── 2b. the frozen release-metadata dispatch: the second, separately named source ──
@@ -2040,6 +2065,111 @@ async function internalSelectStep(cand, world = internalWorld(cand)) {
       && !text.includes("Witness") && !/^ {8}if:/m.test(text),
     "macos.yml contract still witnesses, reads the decision, captures or guards a step: it must run its original steps on every event");
   }
+}
+
+// ── 2h. the shared historical source judge and complete artifact identities ──
+//
+// `judgeHistoricalSourceProof` judges the SAME proof a real-Git internal
+// witness certified, at the witness's own verified_at for the two original age
+// gates only; `rereadArtifactIdentities` re-reads the COMPLETE identity by
+// listing AND record. The mirror: a source ≤48h old at verified_at but >48h now
+// is ProofUnavailable to the normal judge and accepted historically.
+{
+  const world = internalProofWorld();
+  const made = await runInternalWitness(world, "macos", { dir: IGOOD_SHALLOW });
+  check(made.ok, `2h: the real-Git internal macOS witness was refused: ${made.error?.message}`);
+  if (made.ok) {
+    const W = made.witness;
+    const git = realAt(IGOOD_SHALLOW);
+    const head = headFacts(git);
+    const args = (w, at) => ({
+      api: internalApi({ ...w, current: { ...w.current, path: ".github/workflows/macos.yml" } }), git, registry: REGISTRY, laneId: "macos",
+      repository: REPO, repositoryId: REPO_ID, sha: IGOOD.sha, head, event: { before: IBASE }, now: () => at, workflowsDir,
+      readFile: dirReader(IGOOD_SHALLOW), loadScope: dirScope(IGOOD_SHALLOW), scopeValue: undefined,
+    });
+    const outcome = async (fn) => { try { return { ok: true, value: await fn() }; } catch (error) { return { ok: false, error }; } };
+    const verified = Date.parse(W.verified_at);
+    const late = new Date(Date.parse(world.run.updated_at) + 49 * 3600 * 1000);
+    const now0 = await outcome(() => judgeHistoricalSourceProof({ ...args(world, new Date(verified)), witness: W }));
+    check(now0.ok && now0.value.art.id === W.source.artifact_id, `2h: historical positive at verified_at: ${now0.error?.message}`);
+    const normalLate = await outcome(() => judgeSourceProof(args(world, late)));
+    check(!normalLate.ok && normalLate.error instanceof ProofUnavailable && /outside 48h/.test(normalLate.error.message),
+      `2h mirror: the normal judge >48h now must be ProofUnavailable, got ${normalLate.error?.message ?? "accepted"}`);
+    const histLate = await outcome(() => judgeHistoricalSourceProof({ ...args(world, late), witness: W }));
+    check(histLate.ok, `2h mirror: the historical judge must accept the original eligibility, got ${histLate.error?.message}`);
+    // An original age contradiction is plain NoReuse, never ProofUnavailable.
+    const oldW = { ...W, verified_at: late.toISOString().replace(/\.\d{3}Z$/, "Z") };
+    const histOld = await outcome(() => judgeHistoricalSourceProof({ ...args(world, new Date(late.getTime() + 60_000)), witness: oldW }));
+    check(!histOld.ok && histOld.error instanceof NoReuse && !(histOld.error instanceof ProofUnavailable)
+      && /before the witness, outside 48h/.test(histOld.error.message),
+    `2h: an original age contradiction must be plain NoReuse, got ${histOld.error?.constructor?.name}: ${histOld.error?.message}`);
+    // The witness's source is compared BEFORE any age gate: a wrong proof id
+    // at a >48h instant is refused for the identity, not the age.
+    for (const [what, patch, reason] of [
+      ["another proof id", { source: { ...W.source, artifact_id: W.source.artifact_id + 1 } }, /the witness names source run/],
+      ["another digest", { source: { ...W.source, artifact_digest: `sha256:${"0".repeat(64)}` } }, /the witness names source run/],
+      ["another produced_at", { source: { ...W.source, produced_at: "2026-10-01T14:00:00Z" } }, /the witness names source run/],
+      ["another run attempt", { source: { ...W.source, run_attempt: 2 } }, /the witness names source run/],
+      ["another target sha", { target: { ...W.target, sha: hex("other") } }, /the witness targets/],
+      ["another target tree", { target: { ...W.target, tree: hex("tree") } }, /the witness targets/],
+      ["another repository", { target: { ...W.target, repository_id: 777777 } }, /the witness targets/],
+      ["another lane", { lane: "go" }, /macos lane only/],
+      ["a malformed witness", { verified_at: "yesterday" }, /historical witness is not valid/],
+    ]) {
+      const r = await outcome(() => judgeHistoricalSourceProof({ ...args(world, late), witness: { ...W, ...patch } }));
+      check(!r.ok && r.error instanceof NoReuse && !(r.error instanceof ProofUnavailable) && reason.test(r.error.message),
+        `2h: ${what} must be refused for its own reason, got ${r.error?.message ?? "accepted"}`);
+    }
+    const future = await outcome(() => judgeHistoricalSourceProof({ ...args(world, new Date(verified - 10 * 60_000)), witness: W }));
+    check(!future.ok && /in the future of this machine's clock/.test(future.error?.message ?? ""),
+      `2h: a witness verified in the machine clock's future must be refused, got ${future.error?.message ?? "accepted"}`);
+    const lateExpired = await outcome(() => judgeHistoricalSourceProof({ ...args(world, new Date("2026-10-08T14:30:00Z")), witness: W }));
+    check(!lateExpired.ok && /has expired/.test(lateExpired.error?.message ?? ""),
+      `2h: a proof expired NOW must be refused historically too, got ${lateExpired.error?.message ?? "accepted"}`);
+    const goArgs = { ...args(world, new Date(verified)), laneId: "web" };
+    const ext = await outcome(() => judgeHistoricalSourceProof({ ...goArgs, witness: { ...W, lane: "web" } }));
+    check(!ext.ok && ext.error instanceof NoReuse, `2h: a non-macos / external-input lane must be refused historically`);
+  }
+  // Complete identities: list AND record, every field.
+  const SRC = 7001;
+  const SRC_HEAD = hex("identity-head");
+  const rec = (patch = {}) => ({
+    id: 9001, name: "relayium-ci-evidence-proof-attempt-1", digest: `sha256:${"a".repeat(64)}`, size_in_bytes: 100,
+    created_at: "2026-10-01T14:20:00Z", expires_at: "2026-10-08T14:29:00Z", expired: false,
+    workflow_run: { id: SRC, head_sha: SRC_HEAD, repository_id: REPO_ID, head_repository_id: REPO_ID }, ...patch,
+  });
+  const want = artifactIdentityOf(rec());
+  check(isArtifactIdentity(want) && JSON.stringify(Object.keys(want)) === JSON.stringify(ARTIFACT_IDENTITY_KEYS)
+    && artifactIdentityOf(rec({ created_at: undefined })) === null && artifactIdentityOf(rec({ size_in_bytes: 0 })) === null,
+  "2h: artifactIdentityOf must be the strict ten-field identity");
+  const idApi = (listPatch, recordPatch) => ({
+    json: async (path) => (path.includes("/runs/") ? { total_count: 1, artifacts: [rec(listPatch)] } : rec(recordPatch)),
+  });
+  const reread = async (listPatch = {}, recordPatch = {}, at = new Date("2026-10-02T00:00:00Z")) => {
+    try { await rereadArtifactIdentities({ api: idApi(listPatch, recordPatch), repository: REPO, runId: SRC, identities: [want], now: () => at }); return null; }
+    catch (error) { return error; }
+  };
+  check(await reread() === null, "2h: an unchanged complete identity must re-read");
+  const foreign = { workflow_run: { id: SRC, head_sha: SRC_HEAD, repository_id: REPO_ID, head_repository_id: 777777 } };
+  for (const [what, list, record] of [
+    ["a foreign head repository in the end listing", foreign, {}],
+    ["a foreign head repository in the end record", {}, foreign],
+    ["another size", { size_in_bytes: 101 }, {}],
+    ["another creation", {}, { created_at: "2026-10-01T14:20:01Z" }],
+    ["another expiry", { expires_at: "2026-10-09T00:00:00Z" }, { expires_at: "2026-10-09T00:00:00Z" }],
+    ["another digest", {}, { digest: `sha256:${"b".repeat(64)}` }],
+    ["another head", { workflow_run: { id: SRC, head_sha: hex("x"), repository_id: REPO_ID, head_repository_id: REPO_ID } }, {}],
+    ["an expired record", {}, { expired: true }],
+  ]) {
+    const error = await reread(list, record);
+    check(error instanceof NoReuse && /changed, was replaced, re-attributed or expired/.test(error?.message ?? ""),
+      `2h: ${what} at the end re-read must be refused, got ${error?.message ?? "accepted"}`);
+  }
+  const expiredNow = await reread({}, {}, new Date("2026-10-08T14:29:01Z"));
+  check(expiredNow instanceof NoReuse, "2h: an identity expired at the fresh end clock must be refused");
+  const old4 = await (async () => { try { await rereadArtifactIdentities({ api: idApi({}, {}), repository: REPO, runId: SRC,
+    identities: [{ id: 9001, name: want.name, digest: want.digest, expires_at: want.expires_at }], now: () => new Date("2026-10-02T00:00:00Z") }); return null; } catch (e) { return e; } })();
+  check(old4 instanceof NoReuse && /not one strict record/.test(old4.message), "2h: a four-field frozen identity must be refused");
 }
 
 // ── 3. produce, confirm, the archive and the schema ─────────────────────────

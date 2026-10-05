@@ -45,6 +45,8 @@ unchanged in name, type, default and description:
 | `validate_sparkle_key` | boolean | `false` | prove the update key matches the app |
 | `release_version` | string | `''` | stage immutable public-release metadata for this version |
 | `publish_release` | boolean | `false` | publish the GitHub Release and deliver metadata to `main` |
+| `metadata_delivery` | choice | `operator` | who performs the main fast-forward and release creation: `operator` hands off, `workflow` writes |
+| `signed_build_source` | choice | `auto` | reuse proven exact-main signed build, or rebuild |
 
 **With every input left at its default the workflow builds and stops.** Both
 release stages require a dispatch *and* a non-default input, so a run started to
@@ -204,6 +206,277 @@ arrangement of jobs here can start it.
 `docs/CI-PLATFORM-BOUNDARY.md` holds the repository-wide version of this rule,
 including why the macOS CI and release halves are two files and what
 `scripts/test/ci-event-policy-test.mjs` asserts about the seam.
+
+## Metadata delivery: operator handoff (default) or workflow
+
+The publish job always assembles, validates, claim-checks and freezes the
+complete metadata candidate. What happens next depends on `metadata_delivery`.
+
+**`operator` (default).** The job pushes only the unique candidate branch
+`release-candidate/macos-v<version>-<run>-<attempt>`, dispatches
+`merge-gate.yml` in `frozen-release-metadata` mode, identifies that exact run
+(bounded; it does not wait for the gate's result), writes an immutable,
+strictly versioned handoff record (`relayium-macos-publication-handoff/v2`,
+uploaded as `relayium-macos-handoff-<sha>-<version>-attempt-<n>`) and a step
+summary headed **HANDED OFF / NOT PUBLISHED**. It never pushes `main` and never
+creates a release. **A green run in this mode is a staged handoff, not a
+release.** When `main` already carries the metadata the candidate is empty; the
+same validators still run and the record says `already-delivered`.
+
+Why: for 1.4.5 (42) the job's own push to `main` was refused with GH006 after a
+full green gate, and a later `gh release create` returned 403 and was recovered
+by an existing administrator. The GH006 cause is **unknown** and is not asserted
+here. The preflight can only prove the read-only contract; it cannot prove the
+token may push or create a release without doing so.
+
+The authorized operator then, from a checkout that has fetched current `main`,
+the candidate branch, the source commit and that commit's first parent (a
+full clone; a shallow clone without the parent is refused for a certified
+chain), with the handoff record and the
+artifact downloaded (`gh run download <run> -n relayium-macos-<sha>-<version>`),
+using their existing `gh` login (no new token, no forced push, no forged
+status). The verifier is a Node process and reads `GH_TOKEN` from its
+environment, so a bare `GH_TOKEN="$(gh auth token)"` line on its own does not
+reach it: prefix each invocation as shown below (or `export` the variable once
+in that shell). Do not echo the variable or run with shell tracing (`set -x`).
+
+Which steps apply depends on the record's `candidate.state`:
+
+- `frozen`: step 1 (`--stage main`), step 2 (ordinary fast-forward), step 3
+  (`--stage release`), step 4 (create, then rerun step 3).
+- `already-delivered`: skip steps 1 and 2 entirely — there is nothing to
+  fast-forward, and `--stage main` refuses this state. Start at step 3, then
+  step 4. Only the supported delivered gate described under step 3 is accepted;
+  the unsupported legacy-gate state keeps its manual same-artifact fallback.
+
+Every `verify` accepts an optional `--archive <zip>`: the complete artifact
+ZIP the operator already holds (for example the complete ZIP saved from a
+download of that artifact; `verify` itself reads the bytes in memory and writes
+nothing), used instead of downloading it again. It is a transfer
+saving only: each run still requires those bytes to hash to the digest the API
+reports for the record's artifact id at that moment, and every other check
+(current run, artifact metadata and expiry, provenance, gate, `main`) runs
+unchanged. Reuse one saved ZIP across steps 1, 3 and the step-4 readback.
+
+1. `GH_TOKEN="$(gh auth token)" node scripts/release/macos-handoff.mjs verify --stage main --record handoff.json --artifact-dir <artifact> [--archive <zip>]` —
+   read-only. The verifier downloads the artifact ZIP itself by the record's
+   artifact id and requires its bytes to hash to the digest the API reports
+   for that id (`--archive <zip>` instead verifies a ZIP the operator already
+   holds against that same API digest; the record never authenticates archive
+   contents). It reads the ZIP's entries in memory with the strict reader the
+   reuse path uses (safe names, no duplicates, regular files, CRC, exact
+   eight-file set), judges the notarized provenance's exact schema against the
+   publisher run (`notarizedBy` run/attempt, source commit, version/build,
+   arm64, Developer ID team, build or reuse origin), requires the artifact to
+   have been created during that run's successful `notarize-stage` job and the
+   run to have completed successfully at its recorded attempt, and requires
+   every local file in `<artifact>` to equal the authenticated ZIP entry byte
+   for byte. A reused signed build is judged at its producer run's latest
+   attempt: that attempt's record and complete job inventory (each expected
+   `macos.yml` job exactly once and green, the evidence-adoption jobs all or
+   none). The attempt a build or notarization ran in is read from the
+   authenticated provenance (`runAttempt`, `notarizedBy.runAttempt`), never
+   from the latest inventory's label: GitHub lists a job carried into a
+   "re-run failed jobs" attempt with that NEW attempt's number, a new job id,
+   node id and `created_at` (observed on publisher run 36943045523: its
+   attempt-1 `notarize-stage` is listed by attempt 5 as attempt 5 under a new
+   id, with identical times and steps). The claimed attempt is proved by
+   reading that attempt itself — its run record (same run, commit and
+   workflow, completed with any conclusion, since a later job of it may have
+   failed) and its complete job inventory, holding exactly one successful job
+   of that name — and by the latest attempt's job being the SAME execution:
+   run, commit, name, outcome, its own start and end, runner labels and every
+   step's number, name, outcome and times (and the runner name when both
+   report one). Wrapper id, node id, `created_at`, URL and runner group are
+   not execution keys; a relabelled or label-retaining wrapper is accepted, a
+   job that ran again is not the build or notarization the provenance
+   describes. The artifact must have been created inside the ORIGINAL
+   `notarize-stage` window. This applies to the reused producer's
+   `signed-build`, this run's `build / signed-build`, the publisher's
+   `notarize-stage`, and to a new reuse decision (`macos-evidence`). The
+   signed producer itself is proved at the IMMUTABLE source commit for both a
+   reuse and a fresh build, through the same helpers reuse selection uses:
+   `macos.yml` is read from the contents API at the source SHA and must be a
+   supported shape (`workflowShape`: legacy, or one of the canonical adoptions
+   whole); the attempt's complete roster must be exactly that shape's jobs —
+   the five gate jobs each once and successful, the adoption auxiliaries all
+   present (screen and certify completed, evidence successful) or all absent,
+   nothing unknown, nothing twice — and every gate job must have EXECUTED its
+   required steps on its required runner, with no witness or foreign step run
+   (`judgeExecution`). A fresh build is the run's own `workflow_call`: every
+   job carries `build / `, and its `evidence` job, outside a push to main, must
+   not have run its decision or handover steps. An unreadable or unsupported
+   source workflow, or any roster or step gap, is a refusal. Verify applies NO
+   freshness bound and no current-workflow-state rule: those decide whether a
+   NEW release may reuse a build, not whether an old handoff was proved.
+   Supported boundary: only the shapes `workflowShape` knows; a legacy shape is
+   accepted on the same five-job roster and step rules, not on its text alone.
+   **The signed-build chain (record v2).** A v2 record freezes `signedBuild`:
+   its kind (`publisher-build`, this run's own `build / ` call, always executed
+   coverage; or `main-push`, a reused `macos.yml` push run), the producer run,
+   the signed build's ORIGINAL attempt and execution hash, the producer
+   workflow shape and the coverage. For a reuse, emit does not select anything:
+   it reads the publisher preflight's own decision artifact
+   (`relayium-macos-build-source-<sha>-attempt-<n>`, the only one in the run)
+   by its listing and record (the complete ten-field artifact identity, which
+   must agree and be unexpired now), checks its bytes against the API digest,
+   parses the single strict `reuse-decision.json` and requires its evidence to
+   name exactly the producer run, signed-build attempt, payload hashes,
+   version, build and toolchain the notarized provenance names. The latest
+   preflight must be the ORIGINAL execution of that attempt's preflight; the
+   decision was made inside its "Select the signed-build source" step and the
+   artifact created inside the later "Upload the signed-build source decision"
+   step (whole-second API stamps, 2 s tolerance). The decision's identity,
+   attempt, preflight execution, time and mode are frozen in the record. A
+   decision written before the evidence carried `signedBuildOrigin` and
+   `coverage` (the 1.4.5 preflight's) is refused; its coverage is never
+   inferred. A second decision artifact (a re-executed preflight) is refused,
+   not resolved. The producer is then re-judged at its latest attempt with the
+   DECISION's coverage (`coverageOf` must agree), its signed build must be the
+   frozen original execution, and a `certified-full-proof` coverage is
+   re-authenticated by the shared library reader
+   `verifyHistoricalCertifiedCoverage` with the frozen coverage required, an
+   explicit Git adapter bound to the operator's checkout (inherited `GIT_*`
+   paths ignored) and the machine clock read fresh for each check; the
+   certified witness attempt must be the signed build's original attempt. The
+   two original source-age gates are judged at the witness's own
+   `verified_at`, so a chain whose source is now older than 48 hours still
+   verifies, while every artifact must be unexpired NOW. Verify re-derives the
+   whole chain at its start and again at its end and requires both to equal
+   the frozen `signedBuild` byte for byte (a replaced decision or certificate
+   with equal bytes under a new id is a different chain). A v1 record is still
+   parsed and verified exactly as before — executed-only — and is never read
+   as certified. The step summary and `verify` print **verifiable until**: the
+   earliest expiry among the notarized artifact, the decision and every
+   certified-chain artifact. After it, `verify` refuses and the record proves
+   nothing more; publication then needs the documented manual same-artifact
+   fallback, never a claim that the handoff still verifies.
+   The reused ORIGINAL pre-notarization signed ZIP is not part of that set.
+   `signedBuild.signedArtifact` (its id, name and digest) is attested by the
+   authenticated original decision, which named it when the build was
+   selected; a historical `verify` does not download or re-read that ZIP, so
+   its later expiry or deletion alone does not invalidate the handoff. What
+   must stay authentic and unexpired is the CURRENT required chain — the
+   notarized artifact, the decision and, for certified coverage, the witness,
+   proof and source certificates — compared exactly against the machine clock
+   at the start and again at the final re-read. This is not a waiver for new
+   work: a new build selection, a new reuse and the reuse readback still
+   refuse an expired or unavailable original signed input.
+   Then: candidate and base commits must be the server's (tree and
+   parents), the candidate one commit on the recorded base with exactly the
+   recorded paths; scope is judged by the **base commit's** own
+   `web/scripts/macos-release-candidate.mjs`, and the gate by the base's
+   `scripts/ci/select-lanes.mjs` and workflow filters, both unpacked from Git
+   objects into a private directory — never the candidate's or the invoking
+   checkout's copy. The gate run must still be at its recorded attempt and
+   every job green, and its job list must be exactly the roster BASE defines
+   for a `workflow_dispatch` gate: `select` and `merge-gate`; for every lane
+   the base selector requires (and the unconditional `compat` and
+   `repo-hygiene`), every job of the called workflow under its real name —
+   matrix and templated jobs (`macos / ui-smoke (…)` shards, `go / race
+   account shard 0…7`) expanded to the exact names in the base's
+   `scripts/ci/ci-evidence-registry.json` — present exactly once and
+   successful; main-only auxiliaries (`screen`, `certify-*`) skipped or absent;
+   the `evidence` job successful or skipped; every unselected lane present
+   once as a skipped caller; nothing else and nothing twice. Job predicates
+   are matched against a closed table (`DISPATCH_PREDICATES`); the web lane's
+   scope-gated jobs are required because the base's own
+   `web-lane-scope.mjs` runs everything for a dispatched gate. An unknown
+   predicate, a lane job the registry does not name, or a caller this table
+   does not understand is refused, never assumed. No native input (anything under `apps/` except
+   `apps/README.md`) may differ between the notarized source and the
+   candidate; `main == base` and the branch `== head`, read at the start and
+   again at the end.
+2. `git push origin <head>:main` — an ordinary fast-forward. If it succeeds only
+   because of an existing administrator rule bypass, record that explicitly; it
+   is **not** protected-check recognition.
+3. `GH_TOKEN="$(gh auth token)" node scripts/release/macos-handoff.mjs verify --stage release --record handoff.json --artifact-dir <artifact> [--archive <zip>]` —
+   everything above again, and `main` must now be **exactly** the candidate
+   head. For an already-delivered record `main` must be exactly the `main` the
+   record found; the delivering commit is the last first-parent commit on it
+   that changed any of the five derived files (later docs-only commits are
+   allowed), a one-parent commit whose change set its parent's (the original
+   base's) scope checker accepts and whose derived files are the artifact's.
+   Its green GitHub Actions `merge-gate` check run is only a pointer: the run
+   its `details_url` names is read and cross-bound (same check suite, the
+   run's latest attempt lists the aggregate job whose id is that check run,
+   `merge-gate.yml`, `workflow_dispatch`, this repository, the delivering
+   commit, a frozen `release-candidate/macos-v<this version>-…` branch or an
+   internal full-candidate branch), then judged exactly like a frozen
+   candidate's gate. A delivery proven only by another kind of run (a pull
+   request merge, a full bootstrap) is an unsupported legacy-gate state and is
+   REFUSED. A fresh frozen candidate is NOT a fallback there: the derived bytes
+   already on `main` make the candidate empty again. Do not cut a new version
+   or rebuild to manufacture one. The supported recovery is manual and
+   same-artifact: an existing authorized operator reviews the authenticated
+   artifact (digest, provenance, notarization execution), compares the three
+   release assets byte for byte with it, and creates the release with
+   `--target <source sha>` and `--latest=false`, recording that `verify` did
+   not accept the delivery. The release list is read
+   completely twice (drafts included) and must agree with itself and with the
+   tag lookup; the tag must be absent or resolve to the notarized source; an
+   existing release must be public, non-draft, non-prerelease, carry the exact
+   title, notes and three assets — each downloaded by its asset id and
+   byte-compared with the authenticated artifact — and must not hold the
+   `latest` alias.
+4. `gh release create` with exactly the record's `releasePlan` (title, notes,
+   `--target <source sha>`, `--latest=false`) and exactly these three uploads
+   from `<artifact>`, matching the workflow's own publish step:
+   `<artifact>/Relayium.dmg`, `<artifact>/Relayium.dmg.sha256` and
+   `<artifact>/release-web/public/apps/macos/appcast.xml#appcast.xml` (the feed
+   is nested in the artifact, not at its root; `#appcast.xml` names the asset).
+   Then rerun step 3 (with the same `--archive <zip>` if used), which now reads
+   the release back.
+
+The record's release notes must be exactly the publisher run's canonical notes;
+any other text is refused, so a record cannot carry instructions.
+
+After the slow downloads and the release readback the verifier re-reads the
+mutable state it judged — the publisher run and its jobs, the artifact record
+(expiry against the machine's clock at that moment), the gate run and the
+reused producer run — and `main` and the candidate branch, and refuses on any
+change. The verifier takes no clock override: expiry is judged against the
+machine's time. It cannot close the race between its last read and the
+operator's write; a non-forced push is what loses that race.
+
+**Recovery without a rebuild.** The verifier requires the publisher run to
+have completed successfully, including its `publish` job: a failed publication
+is never reported as a successful one, and a handoff from a failed run is not
+verifiable. That does not remove the original no-rebuild recovery. If the
+`publish` job fails (before or after the record is written), re-run only that
+failed job: the new attempt reuses the already-notarized artifact (the
+`notarize-stage` job and its upload are carried; nothing is rebuilt or
+re-notarized), pushes a new candidate branch named for the new attempt and
+writes a new record, and the old record is refused because the run is no longer
+at its attempt. The new attempt's emit and `verify` accept the carried
+notarization whether GitHub relabels its job with the new attempt or keeps the
+original label, after proving it against the original attempt as above; the
+original attempt's failed publication stays a failure, and a green handoff is
+still HANDED OFF / NOT PUBLISHED. A historical publisher run that never
+succeeded, or a release already public before any successful handoff, remains a
+documented manual fallback (above), never a successful handoff. Failures after a successful handoff happen in the operator's
+own steps and need no re-run: fix the cause and run `verify` again; the record
+stays usable only through its **verifiable until**, the earliest expiry of the
+whole chain `verify` must re-read (above), while the original signed input keeps
+its attested, not-re-read historical meaning. The notarization proof
+(the authenticated artifact, its `notarize-stage` job and provenance) is
+judged separately from the publication status and is never the same claim. In
+`workflow` mode the existing recovery is unchanged.
+
+The verifier writes nothing. Its verdict is evidence for review, not a write.
+
+**`workflow`.** The prior automatic delivery, unchanged: watch the gate, verify
+it as a record, fast-forward `main`, read it back, create the release with
+`--latest=false` and read the alias back. The preflight refuses this mode before
+the paid build when the source commit's `.github/workflows` tree differs from
+`main`'s — a documented condition under which a `GITHUB_TOKEN` write may be
+refused (the 1.4.5 403 occurred in that state). The comparison uses authentic
+Git tree reads and fails closed on truncated or unreadable data. In `operator`
+mode a mismatch is reported, not refused. A matching tree does **not** prove
+the token may push.
+
+An unknown or missing `metadata_delivery` fails the preflight and the publish
+job before any write.
 
 ## Recovery
 

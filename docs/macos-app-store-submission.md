@@ -1,5 +1,46 @@
 # macOS App Store submission
 
+## macOS 1.4.6 (43) — candidate PREPARED in source only
+
+**Status, 2026-10-05.** `1.4.6 (43)` is a source candidate and nothing more:
+all ten `MARKETING_VERSION` and ten `CURRENT_PROJECT_VERSION` settings — the
+direct app and its Share extension, the App Store app and its Share extension,
+and the UI test bundle, each in Debug and Release — read `1.4.6` and `43`. It
+is not built, signed, notarized, uploaded, accepted by TestFlight or
+published: no Release build, notarization, App Store package, upload,
+TestFlight build, GitHub release, tag, website or Sparkle change exists for it.
+The exact source commit is not known until the preparation is integrated, and
+the eventual release states it in its own section. The README files, the web
+release manifest (`web/native-releases.json`), appcast, generated pages and the
+internal TestFlight record below still describe the issued versions and change
+only after an actual artifact and provider acceptance.
+
+- Current issued versions, unchanged by this preparation and immutable: the
+  public GitHub direct release is `macos-v1.4.5` (published 2026-10-02 at
+  03:52:44 UTC; its source and artifact evidence belong to that channel's own
+  record); internal TestFlight holds `1.4.5 (42)` (App Store Connect build
+  `a0754ab1-adf6-46d9-9bbe-97968ef9d2ca`, read back `VALID` and not expired,
+  package built from `855ebc5ae`, as recorded in the section below); the public
+  Mac App Store still sells `1.4.0`. The 1.4.5 (42) section below remains the
+  authentic record of that upload, its package, notes, groups, App Store
+  versions and C03 state.
+- Why this number: `1.4.5 (42)` is issued in both channels and is never
+  reused. Read-back on 2026-10-05 — all 31 App Store Connect builds of the app
+  and the public GitHub releases — found the latest macOS build `1.4.5 (42)`
+  and no `1.4.6` train, no build `43`, no `macos-v1.4.6` tag and no release of
+  that name. The next candidate is the patch increment `1.4.6 (43)`: major and
+  minor unchanged, build strictly above `42`.
+- Purpose: this candidate exists to exercise the optimized macOS release
+  pipeline end to end on a fresh version. The preparation changes only version
+  identifiers; it claims no new feature, performance or behaviour change. Any
+  runtime difference against `1.4.5 (42)` is whatever the integrated source
+  contains, to be stated from that source when it is released.
+- Still pending, exactly as for `40`, `41` and `42`: the owner's actual StoreKit
+  sandbox acceptance (C03). It blocks external TestFlight, App Store submission
+  and any public store release. The owner's earlier exception allowing an
+  internal TestFlight upload before that acceptance applies to an internal
+  candidate only; nothing here claims an external or public store build.
+
 ## macOS 1.4.5 (42) — store build in internal TestFlight
 
 **Status, 2026-10-02.** The App Store package of `1.4.5 (42)` is in **internal

@@ -60,15 +60,15 @@ final class BundleVersionTests: XCTestCase {
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
         //
-        // Provider readback on 2026-10-01 confirms 1.4.4 (41) was consumed by
-        // both the direct release (GitHub macos-v1.4.4) and internal
-        // TestFlight (build 41, VALID), and that no 1.4.5 release or tag
-        // exists. The owner selected 1.4.5 (42) for the next candidate — a
+        // Provider readback on 2026-10-05 confirms 1.4.5 (42) was consumed by
+        // both the direct release (GitHub macos-v1.4.5) and internal
+        // TestFlight (build 42, VALID), and that no 1.4.6 release, tag, train
+        // or build 43 exists. The next candidate is therefore 1.4.6 (43) — a
         // patch increment, major and minor unchanged; an issued version is
         // never reused for changed content. This assertion does not advance
         // either channel's published version.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.5", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "42", occurrences: 10)
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.6", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "43", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon
