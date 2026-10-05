@@ -366,13 +366,27 @@ final class DevicePairUITests: XCTestCase {
     /// rather than failed — every claim this role owns has already been made,
     /// and turning "the roster took longer than expected to notice a departure"
     /// into a red run would attribute the other side's timing to this one.
+    ///
+    /// Only a look that SAW the roster empty releases the hold. A look that
+    /// could not be taken keeps holding, and a ceiling reached while looks are
+    /// failing IS a failure: this role cannot say the peer stayed, and must not
+    /// say it left.
     private func holdRoomUntilPeerLeaves(_ run: DevicePairRun) {
         emitDevicePair(.holding, value: run.tag, for: run)
         let deadline = Date().addingTimeInterval(run.peerBudget)
+        var hold = DevicePairRoomHold()
         while Date() < deadline {
-            let (contained, named) = rosterCandidates(run, in: app)
-            if contained.isEmpty && named.isEmpty { return }
+            if hold.record(observeRoster(run, in: app)) { return }
             Thread.sleep(forTimeInterval: 2)
+        }
+        if case let .unobservable(reason) = hold.ceiling {
+            XCTFail("""
+                \(run.role) held the room for its full \(Int(run.peerBudget))s ceiling \
+                without a usable look at the roster at the end (\(reason)), so whether the \
+                peer left is unobserved rather than reported.
+                \(app.debugDescription)
+                """)
+            return
         }
         // Deliberately not a failure. Said out loud so a reader of the retained
         // log knows this run ended on a ceiling rather than on an observation.
