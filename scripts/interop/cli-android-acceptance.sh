@@ -16,8 +16,9 @@
 # the peer side of its in-band protocol with a real `relayium pair`.
 #
 # Cells, each required before the run may pass:
-#   * the CLI as link INITIATOR and as RESPONDER (the hub's coin flip, read off
-#     the CLI's own `linked with …` line);
+#   * the CLI as link INITIATOR and as RESPONDER, by a deterministic schedule
+#     (below), each read off the CLI's own `linked with …` line and required to
+#     be the planned one;
 #   * the code minted by the CLI (`relayium pair`, logged in) and by the
 #     account API on behalf of a third party (the CLI then JOINS with
 #     `relayium pair CODE`; the Android instrumentation always joins);
@@ -26,6 +27,35 @@
 #     second batch on the same link must then complete).
 # Not played: the browser cell's `send`-cancel (the peer must hold a write and
 # announce it while holding, which a CLI process cannot) — see the peer file.
+#
+# ## The schedule, and what it does and does not observe
+#
+# The run's loopback acceptance server assigns websocket peer ids from a fixed
+# list (`RELAYIUM_ACCEPTANCE_PEER_IDS`, guarded to a loopback listener, no
+# release check and dev-log mail; production keeps random ids), and the link
+# role follows from the two ids (`linkwire.LinkRole`: the smaller initiates).
+# Every round gives the CLI entry 2r-1 and Android entry 2r, so the order of
+# ACCEPTS decides the roles, and the run makes that order causal:
+#   * before the CLI peer starts, the app is cleared, force-stopped and its
+#     process query must answer "no such process" (`stop_android_app`). That
+#     is no app PROCESS at that moment, not proof that no socket is in flight:
+#     a late or extra Android socket is not prevented by it, it is caught by
+#     the strict accounting below;
+#   * the Android half starts only once the server's own log shows socket
+#     2r-1 accepted as the CLI's planned id while the CLI was the only live
+#     client (`await_cli_accepted`), and the CLI peer is still running when
+#     that is observed. That is an ACCEPTED SOCKET and the id the server
+#     assigned it, not a welcome the CLI reported: neither client records the
+#     id it was welcomed with. The liveness check is an observation at the
+#     handover; it cannot prevent the CLI exiting later, which the round's own
+#     verdicts then fail;
+#   * after the round, with the CLI reaped and the app stopped again, the
+#     server must have accepted exactly sockets 1..2r — a reconnect or an extra
+#     socket is RED in the round that caused it, never a retry;
+#   * the run ends by stopping its server and counting every accepted socket
+#     (exactly six) with the browser lane's unchanged `peer-id-log`.
+# The CLI's printed role is judged against the plan; Android's own role is not
+# reported by the app and is not claimed.
 #
 # Evidence level: EMULATOR LOOPBACK (10.0.2.2 → the host's loopback server;
 # host candidates, no relay). Not a physical device, not NAT, not WAN.
@@ -37,7 +67,19 @@ repo="$(cd "$here/../.." && pwd)"
 # shellcheck source=../lib/local-acceptance.sh
 source "$here/../lib/local-acceptance.sh"
 
-max_rounds="${RELAYIUM_CLI_ANDROID_ROUNDS:-8}"
+# Exactly three rounds, unconditionally: no round override, no early exit, no
+# random fallback. Round shape: (1) code by the CLI, cancel=none; (2) code by
+# the account API, an active receive cancel; (3) code by the API, cancel=none.
+# Six ids, distinct across the whole list (and from the browser lane's), CLI
+# first in each pair; `scripts/test/role-coverage-cap-test.mjs` holds these
+# declarations to that shape.
+max_rounds=3
+acceptance_peer_ids="f444444444444444,0444444444444444,0555555555555555,f555555555555555,f666666666666666,0666666666666666"
+planned_roles=(responder initiator responder)
+IFS=, read -r -a peer_id_schedule <<<"$acceptance_peer_ids"
+# The CLI-first barrier's bound, in 0.25 s polls (60 s), far inside the CLI's
+# own ten-minute join wait and the peer's four-minute link wait.
+cli_accept_polls=240
 gradle_bin="${RELAYIUM_GRADLE:-$repo/apps/android/gradlew}"
 adb="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}/platform-tools/adb"
 serial="${ANDROID_SERIAL:-}"
@@ -110,6 +152,108 @@ reap_cli_peer() {
   return "$status"
 }
 # <<< diagnostics: owned CLI-peer lifecycle
+
+# >>> schedule: the CLI-first barrier and the accepted-socket accounting
+#
+# Stop the app and confirm, by its process query, that it has no process left.
+# Only one answer is "no process": `pidof` exiting 1 with empty stdout AND
+# empty stderr. A PID, any stderr (`error: device offline`, a transport or
+# query failure — even with empty stdout), exit 0 without a PID or any other
+# exit status is not a confirmed absence and fails the run: an app that may
+# still be connected could take the CLI's scheduled id. The query's raw
+# output stays in the run root for diagnosis. This is no app PROCESS now, not
+# no socket ever: a late or extra socket is caught by the accepted-prefix
+# accounting and the final strict count.
+stop_android_app() {
+  local query="$run_root/app-pidof" status=0 pids
+  adbs shell am force-stop "$app_id" >/dev/null 2>&1 \
+    || fail "could not stop the app $1"
+  adbs shell pidof "$app_id" >"$query.out" 2>"$query.err" || status=$?
+  pids="$(tr -d '\r' <"$query.out")"
+  if [ -s "$query.err" ]; then
+    fail "could not confirm the app stopped $1: its process query failed (exit $status): $(tr -d '\r' <"$query.err" | head -c 400)"
+  fi
+  case "$status" in
+    0)
+      [ -n "$pids" ] \
+        && fail "the app is still running after force-stop $1 (pid $pids); it could take a scheduled id"
+      fail "could not confirm the app stopped $1: its process query exited 0 without a PID"
+      ;;
+    1)
+      [ -z "$pids" ] \
+        || fail "could not confirm the app stopped $1: its process query exited 1 yet printed '$pids'"
+      ;;
+    *) fail "could not confirm the app stopped $1: its process query exited $status" ;;
+  esac
+}
+
+# The CLI-first barrier. The Android half must not start until the server has
+# ACCEPTED socket $1 (= 2r-1) as the CLI's planned id, every earlier socket in
+# order before it — read off this run's own server log, complete lines only.
+# Exit 3 from the oracle is a valid, shorter prefix (the CLI has not dialled
+# yet) and is waited on, bounded by `cli_accept_polls` and cut short the moment
+# the CLI peer exits. Anything else the oracle refuses — a later socket, a gap,
+# a duplicate, a wrong id — cannot be fixed by waiting and ends the run at
+# once. Pending OR accepted, the owned CLI peer must still be running when the
+# log is read: a peer that already exited is reaped and fails the run, never
+# handed over. That is an observation at the handover, not a promise that the
+# CLI stays up — a later exit fails the round's own verdicts. This is an
+# accepted socket, not a welcome receipt: the CLI reports no id. Sets
+# nothing; returns only on success.
+await_cli_accepted() {
+  local want="$1" polls=0 status reaped when
+  while :; do
+    status=0
+    python3 "$here/cli-android-oracle.py" accepted-prefix "$run_root/server.log" \
+        "$acceptance_peer_ids" "$want" 2>"$run_root/accepted-$round.log" || status=$?
+    case "$status" in
+      0) ;;
+      3) ;;
+      *)
+        stop_cli_peer
+        fail "round $round: the server's accepted sockets cannot become the schedule's first $want (oracle exit $status): $(cat "$run_root/accepted-$round.log")"
+        ;;
+    esac
+    if ! owned_child_running "$peer_pid"; then
+      when="before the server accepted its socket $want"
+      [ "$status" -ne 0 ] || when="by the time the server had accepted its socket $want; it is not handed over"
+      reaped=0
+      reap_cli_peer || reaped=$?
+      fail "round $round: the CLI peer exited (status $reaped) $when: $(tail -40 "$run_root/cli-peer-$round.log")"
+    fi
+    [ "$status" -ne 0 ] || break
+    if [ "$polls" -ge "$cli_accept_polls" ]; then
+      stop_cli_peer
+      fail "round $round: the server did not accept the CLI's socket $want within $cli_accept_polls polls: $(cat "$run_root/accepted-$round.log")"
+    fi
+    sleep 0.25
+    polls=$((polls + 1))
+  done
+  say "-- the server accepted socket $want as $cli_planned_id while the CLI was the only live client (an accepted socket, not a welcome receipt)"
+}
+
+# Stop THIS run's server before the final count, so nothing can append to its
+# log after it has been read (copied from `android-interop-acceptance.sh`):
+# TERM, a bounded wait for the process to actually exit, a reap, and then its
+# ONE registry slot retired — the cleanup trap must never signal a PID the
+# kernel may already have handed to an unrelated process.
+stop_owned_server() {
+  local pid="${server_pid:-}" waited=0
+  [ -n "$pid" ] || fail "no owned server PID to stop before the final count"
+  owned_child_running "$pid" \
+    || fail "the owned server (pid $pid) was not running before the final count: $(tail -5 "$run_root/server.log")"
+  kill -TERM "$pid" 2>/dev/null || fail "could not signal the owned server (pid $pid)"
+  while owned_child_running "$pid"; do
+    [ "$waited" -lt 100 ] || fail "the owned server (pid $pid) did not exit within 10s of SIGTERM"
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  # Its exit status under TERM is not judged; its log is.
+  wait "$pid" 2>/dev/null || true
+  retire_owned_child server "$pid"
+  say "-- stopped this run's server (pid $pid) before the final count"
+}
+# <<< schedule: the CLI-first barrier and the accepted-socket accounting
 
 # >>> diagnostics: bounded report capture
 #
@@ -257,10 +401,17 @@ while [ "$round" -lt "$max_rounds" ]; do
     1) code_role=cli; cancel=none ;;
     2) code_role=api; cancel=receive ;;
     3) code_role=api; cancel=none ;;
-    *) if [ $((round % 2)) -eq 0 ]; then code_role=cli; else code_role=api; fi; cancel=none ;;
+    *) fail "the schedule has no round $round" ;;
   esac
+  # This round's plan: two consecutive schedule entries, CLI first.
+  cli_planned_id="${peer_id_schedule[$((2 * round - 2))]:-}"
+  android_planned_id="${peer_id_schedule[$((2 * round - 1))]:-}"
+  planned_role="${planned_roles[$((round - 1))]:-}"
+  [ -n "$cli_planned_id" ] && [ -n "$android_planned_id" ] && [ -n "$planned_role" ] \
+    || fail "the schedule has no plan for round $round"
   say ""
   say "== round $round: code minted by the $code_role, cancel=$cancel =="
+  say "-- planned: CLI $planned_role (CLI $cli_planned_id, Android $android_planned_id)"
 
   code=""
   if [ "$code_role" = api ]; then
@@ -268,7 +419,8 @@ while [ "$round" -lt "$max_rounds" ]; do
     [ -n "$code" ] || fail "the account API minted no code"
   fi
   plan="$run_root/plan-$round.json"
-  python3 "$here/cli-matrix-plan.py" android "$run_root" "$round" "$code_role" "$cancel" "$code" >"$plan" \
+  python3 "$here/cli-matrix-plan.py" android "$run_root" "$round" "$code_role" "$cancel" \
+      "$code" "$cli_planned_id" "$android_planned_id" "$planned_role" >"$plan" \
     || fail "could not build round $round's plan"
   read_plan() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$plan" "$1"; }
   android_hex="$(hex_of "$(read_plan 'd["androidMessage"]')")"
@@ -287,6 +439,15 @@ while [ "$round" -lt "$max_rounds" ]; do
     *) fail "the plan names an unknown receive gate '$receive_gate'" ;;
   esac
 
+  # **Every round starts from an empty, stopped app**, and BEFORE the CLI peer
+  # exists: app data survives a reinstall (a stale tree would satisfy "the
+  # file arrived"), and an app process left from the previous round could
+  # open a socket and take the CLI's scheduled id. The code file alone proves
+  # nothing about that — it is written before the CLI dials.
+  adbs shell pm clear "$app_id" >/dev/null 2>&1 \
+    || fail "could not reset the app's data before round $round"
+  stop_android_app "before round $round's CLI peer starts"
+
   cli_out="$run_root/cli-$round.json"
   code_file="$run_root/code-$round.txt"
   node "$here/cli-android-peer.mjs" --plan "$plan" --out "$cli_out" --cli "$cli_bin" \
@@ -294,18 +455,14 @@ while [ "$round" -lt "$max_rounds" ]; do
   peer_pid=$!
   register_child "cli-peer-$round" "$peer_pid"
   for _ in $(seq 1 120); do [ -s "$code_file" ] && break; kill -0 "$peer_pid" 2>/dev/null || break; sleep 0.25; done
-  # >>> diagnostics: code-file and reset failures
+  # >>> diagnostics: code-file failures
   if [ ! -s "$code_file" ]; then
     stop_cli_peer
     fail "the CLI half never produced a code: $(tail -30 "$run_root/cli-peer-$round.log")"
   fi
   code="$(cat "$code_file")"
-
-  if ! adbs shell pm clear "$app_id" >/dev/null 2>&1; then
-    stop_cli_peer
-    fail "could not reset the app's data"
-  fi
-  # <<< diagnostics: code-file and reset failures
+  # <<< diagnostics: code-file failures
+  await_cli_accepted "$((2 * round - 1))"
   device_out="cli-interop-$round.json"
   set +e
   adbs shell am instrument -w -r \
@@ -369,24 +526,44 @@ CLI half: $(tail -40 "$run_root/cli-peer-$round.log")"
     responder) seen_responder=1 ;;
     *) fail "the oracle named no role: '$role'" ;;
   esac
+  [ "$role" = "$planned_role" ] \
+    || fail "round $round: the CLI was $role, but the schedule planned $planned_role"
   [ "$code_role" = cli ] && seen_code_cli=1
   [ "$code_role" = api ] && seen_code_api=1
   [ "$cancel" = none ] && seen_none=1
   [ "$cancel" = receive ] && seen_receive=1
-  adbs shell am force-stop "$app_id" >/dev/null 2>&1 || true
-  say "-- round $round passed (CLI was $role)"
-  if [ "$seen_initiator$seen_responder$seen_code_cli$seen_code_api$seen_none$seen_receive" = 111111 ]; then
-    break
-  fi
+  # The round's accounting, with every client it started gone: the CLI peer
+  # was reaped above and the app is stopped here. Exactly sockets 1..2r, so a
+  # reconnect or an extra socket fails THIS round rather than the final count.
+  stop_android_app "after round $round"
+  python3 "$here/cli-android-oracle.py" accepted-prefix "$run_root/server.log" \
+      "$acceptance_peer_ids" "$((2 * round))" \
+    || fail "after round $round the server had not accepted exactly the scheduled sockets 1..$((2 * round))"
+  say "-- round $round passed (CLI was $role, as planned)"
 done
 
+# All three rounds, never fewer: each carries a scenario as well as a role.
+[ "$round" -eq 3 ] || fail "ran $round rounds, not the scheduled three"
 [ "$seen_initiator" = 1 ] || fail "never observed the CLI as INITIATOR against Android in $round rounds"
 [ "$seen_responder" = 1 ] || fail "never observed the CLI as RESPONDER against Android in $round rounds"
 [ "$seen_code_cli$seen_code_api" = 11 ] || fail "both code roles were not exercised"
 [ "$seen_none$seen_receive" = 11 ] || fail "both cancel modes were not exercised"
+
+# ── every accepted websocket, counted ────────────────────────────────────
+#
+# Only once every owned client is gone: the CLI peers were reaped and the app
+# is stopped (and confirmed stopped). Then the server itself is stopped and
+# reaped, so the log read is COMPLETE — the browser lane's unchanged strict
+# count, exactly six. Read before `completed=1`: on success the run root, log
+# included, is deleted by the cleanup trap.
+stop_android_app "before the final count"
+stop_owned_server
+python3 "$repo/scripts/test/android-interop-oracle.py" peer-id-log \
+    "$run_root/server.log" "$acceptance_peer_ids" \
+  || fail "the server did not accept exactly the scheduled websockets"
 assert_run_was_local
 
 say ""
-say "== CLI ↔ Android emulator: both link roles, CLI- and API-minted codes, text both ways,"
+say "== CLI ↔ Android emulator: both link roles by schedule (the CLI's own linked line), CLI- and API-minted codes, text both ways,"
 say "   multi-entry batches both ways, a receive-cancel with a retry — EMULATOR LOOPBACK evidence =="
 completed=1

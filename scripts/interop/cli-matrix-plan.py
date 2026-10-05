@@ -3,6 +3,8 @@
 
     cli-matrix-plan.py web     RUN_ROOT ROUND CODE_ROLE VERIFY ENDING  > plan.json
     cli-matrix-plan.py android RUN_ROOT ROUND CODE_ROLE CANCEL [CODE]  > plan.json
+    cli-matrix-plan.py android RUN_ROOT ROUND CODE_ROLE CANCEL CODE \
+                               CLI_ID ANDROID_ID PLANNED_ROLE   > plan.json
     cli-matrix-plan.py mac     RUN_ROOT ROUND CODE_ROLE                > plan.json
 
 Writes the plan to stdout and stages every file the CLI will `/send` under
@@ -25,10 +27,43 @@ The body sizes are chosen, not arbitrary:
     holds that batch's first real write (nothing durable, nothing
     acknowledged), and the CLI therefore cannot have sent its last byte when
     Android cancels — the cancel is of an ACTIVE transfer by construction.
+
+The Android form with CLI_ID ANDROID_ID PLANNED_ROLE is the deterministic
+schedule `cli-android-acceptance.sh` runs: the ids the loopback acceptance
+server will assign (CLI first, then Android) and the link role they imply for
+the CLI. The plan carries them as `identity`; the shorter forms write an
+explicit `"identity": null` (no schedule, any role), so a plan never leaves
+the question unanswered.
 """
 import json
 import os
+import re
 import sys
+
+ID16 = re.compile(r"[0-9a-f]{16}")
+ROLES = ("initiator", "responder")
+
+
+def link_role(self_id, peer_id):
+    """`linkwire.LinkRole` (server/internal/linkwire/signal.go): the smaller id
+    initiates. The CLI prints the role its session derived from exactly this."""
+    return "initiator" if self_id < peer_id else "responder"
+
+
+def android_identity(cli_id, android_id, planned_role):
+    """The round's planned identities, refused here if they cannot be a
+    schedule at all — the oracle judges them again against what happened."""
+    for what, value in (("CLI", cli_id), ("Android", android_id)):
+        if not ID16.fullmatch(value):
+            raise ValueError("the planned %s id %r is not 16 lowercase hex characters" % (what, value))
+    if cli_id == android_id:
+        raise ValueError("the CLI and Android were planned the same id %s" % cli_id)
+    if planned_role not in ROLES:
+        raise ValueError("the planned role %r is neither initiator nor responder" % planned_role)
+    if link_role(cli_id, android_id) != planned_role:
+        raise ValueError("ids %s/%s make the CLI %s, not the planned %s"
+                         % (cli_id, android_id, link_role(cli_id, android_id), planned_role))
+    return {"expectedCliId": cli_id, "expectedAndroidId": android_id, "plannedRole": planned_role}
 
 FLOW_BEYOND = 12 * 1024 * 1024 + 4096
 
@@ -123,7 +158,7 @@ def web_plan(run_root, rnd, code_role, verify, ending):
     }
 
 
-def android_plan(run_root, rnd, code_role, cancel, code=""):
+def android_plan(run_root, rnd, code_role, cancel, code="", identity=None):
     """The CLI's side of `InteropAcceptanceTest`'s in-band protocol.
 
     The Android half's own payloads are fixed by its instrumentation arguments
@@ -160,6 +195,9 @@ def android_plan(run_root, rnd, code_role, cancel, code=""):
         # instrumentation and the oracle judges by THIS field, never by the
         # cancel mode alone. `None` is an explicit "ungated" round.
         "receiveGate": "first-write" if cancel == "receive" else None,
+        # Who the round plans the CLI to be, or an explicit `None` (no
+        # schedule): always present, never defaulted by the oracle.
+        "identity": identity,
         "first": [
             cli_entry("cli-big-%d.bin" % r, FLOW_BEYOND if cancel == "receive" else 199_000, r),
             cli_entry("cli-zero-%d.bin" % r, 0, 0),
@@ -233,6 +271,13 @@ def main(argv):
         plan = web_plan(run_root, rnd, code_role, verify, ending)
     elif len(argv) in (6, 7) and argv[1] == "android":
         plan = android_plan(*argv[2:])
+    elif len(argv) == 10 and argv[1] == "android":
+        try:
+            identity = android_identity(*argv[7:10])
+        except ValueError as err:
+            print("cli-matrix-plan.py: %s" % err, file=sys.stderr)
+            return 2
+        plan = android_plan(*argv[2:7], identity=identity)
     elif len(argv) == 5 and argv[1] == "mac":
         plan = mac_plan(*argv[2:])
     else:

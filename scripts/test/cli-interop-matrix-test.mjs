@@ -14,7 +14,11 @@
 //   * a missing, extra (declined/cancelled) or wrong-bytes file on either side;
 //   * a SKIPPED or renamed named test, a FAIL, a log without both link roles;
 //   * both ends claiming one link role, different SAS digits;
-//   * an outcome the CLI reported the wrong number of times, a wrong exit code.
+//   * an outcome the CLI reported the wrong number of times, a wrong exit code;
+//   * for the CLI ↔ Android schedule, a CLI role other than the planned one,
+//     a plan whose ids and role disagree, and every way the live accepted-
+//     socket prefix the shell waits on can be short (pending), wrong (fatal)
+//     or complete — rendered from the server's real log format.
 //
 // Then the WIRING: the workflows run exactly these entry points, on the paths
 // that feed them, with no `if:`/`continue-on-error` escape hatch — each also
@@ -23,7 +27,7 @@
 // Runs in `compat.yml` (unfiltered), so it judges every change.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,6 +72,11 @@ function judgeCases(label, { good, mutations, run, expectOut }) {
 }
 
 const scratch = mkdtempSync(join(tmpdir(), "cli-interop-matrix-test-"));
+const pycacheOf = () => {
+  const dir = join(repo, "scripts", "test", "__pycache__");
+  return existsSync(dir) ? readdirSync(dir).filter((f) => f.startsWith("android_interop_oracle")).sort().join(",") : "";
+};
+const pycacheBefore = pycacheOf();
 try {
   // ── cli-web-oracle.py ─────────────────────────────────────────────────
   {
@@ -168,10 +177,13 @@ try {
   // ── cli-android-oracle.py ─────────────────────────────────────────────
   {
     let n = 0;
-    const good = (cancel = "none") => {
+    // `ident` is [cliId, androidId, plannedRole] for the deterministic form
+    // (the shell's 10-argument call), or null for the legacy 6-argument form.
+    const good = (cancel = "none", ident = null) => {
       const root = join(scratch, `android-${n++}`);
       mkdirSync(root);
-      const plan = JSON.parse(execFileSync("python3", [join(interop, "cli-matrix-plan.py"), "android", root, "2", "cli", cancel], { encoding: "utf8" }));
+      const args = ident ? [cancel, "", ...ident] : [cancel];
+      const plan = JSON.parse(execFileSync("python3", [join(interop, "cli-matrix-plan.py"), "android", root, "2", "cli", ...args], { encoding: "utf8" }));
       for (const e of plan.android.expectSaved) writeFileSync(join(plan.dest, e.name), body(e.size, e.seed));
       const saved = [...(cancel === "receive" ? [] : plan.first), ...plan.second]
         .map((e) => ({ name: e.name, size: e.size, sha256: sha(body(e.size, e.seed)) }));
@@ -179,7 +191,7 @@ try {
         complete: true,
         cli: {
           stderr: [
-            "linked with a Relayium app or the web page (end-to-end encrypted link/1, responder)",
+            `linked with a Relayium app or the web page (end-to-end encrypted link/1, ${ident ? ident[2] : "responder"})`,
             "verification code (SAS): 111222 — not the pairing code",
             "delivered: the other side verified and saved the files", "delivered: the other side verified and saved the files",
             "saved: every file verified and written to disk in /x", "saved: every file verified and written to disk in /x",
@@ -346,6 +358,195 @@ try {
     const strayRun = run(stray);
     need(strayRun.code !== 0 && /did not plan one/.test(strayRun.err),
       `cli-android-oracle: an active record in an ungated round was not refused for that reason: ${strayRun.err.slice(0, 300)}`);
+
+    // ── the deterministic schedule (plan `identity`) ────────────────────────
+    //
+    // The ids are the REAL lane's, CLI first per round; the role each pair
+    // implies is `linkwire.LinkRole` (the smaller id initiates).
+    const shell = readFileSync(join(interop, "cli-android-acceptance.sh"), "utf8");
+    const SCHED = ["f444444444444444", "0444444444444444", "0555555555555555",
+                   "f555555555555555", "f666666666666666", "0666666666666666"];
+    need(/^acceptance_peer_ids="([^"\n]*)"$/m.exec(shell)?.[1] === SCHED.join(","),
+      "cli-android-acceptance.sh's schedule is not the one these controls exercise");
+    need(/^planned_roles=\(([^)\n]*)\)$/m.exec(shell)?.[1] === "responder initiator responder",
+      "cli-android-acceptance.sh's planned roles are not the ones these controls exercise");
+    const RESP = [SCHED[0], SCHED[1], "responder"];   // round 1
+    const INIT = [SCHED[2], SCHED[3], "initiator"];   // round 2
+    const linkedAs = (w, role) => {
+      w.obs.cli.stderr = w.obs.cli.stderr.map((l) => l.startsWith("linked with ") ? `linked with a Relayium app or the web page (end-to-end encrypted link/1, ${role})` : l);
+    };
+    const id = (w) => w.plan.identity;
+    for (const [label, ident, other] of [["responder", RESP, "initiator"], ["initiator", INIT, "responder"]]) {
+      judgeCases(`cli-android-oracle (scheduled CLI ${label})`, {
+        good: () => good("none", ident), run, expectOut: label,
+        mutations: [
+          { name: "the CLI linked in the other role", expect: new RegExp(`linked as ${other}, but the schedule .* planned ${label}`),
+            mutate: (w) => linkedAs(w, other) },
+          { name: "the plan's role contradicts its ids", expect: /schedule is inconsistent/,
+            mutate: (w) => { id(w).plannedRole = other; linkedAs(w, other); } },
+          { name: "the plan's ids are swapped", expect: /schedule is inconsistent/,
+            mutate: (w) => { [id(w).expectedCliId, id(w).expectedAndroidId] = [id(w).expectedAndroidId, id(w).expectedCliId]; } },
+          { name: "both clients planned the same id", expect: /planned the SAME id/,
+            mutate: (w) => { id(w).expectedAndroidId = id(w).expectedCliId; } },
+          { name: "an uppercase planned id", expect: /planned CLI id .* not 16 lowercase hex/,
+            mutate: (w) => { id(w).expectedCliId = id(w).expectedCliId.toUpperCase().replace(/^0/, "A"); } },
+          { name: "a short planned id", expect: /planned Android id .* not 16 lowercase hex/,
+            mutate: (w) => { id(w).expectedAndroidId = id(w).expectedAndroidId.slice(0, 15); } },
+          { name: "a numeric planned id", expect: /planned CLI id .* not 16 lowercase hex/,
+            mutate: (w) => { id(w).expectedCliId = 1; } },
+          { name: "an unknown planned role", expect: /planned role .* neither initiator nor responder/,
+            mutate: (w) => { id(w).plannedRole = "either"; } },
+          { name: "the plan does not carry identity at all", expect: /does not say which identities/,
+            mutate: (w) => { delete w.plan.identity; } },
+          { name: "the identity lacks its planned role", expect: /identity has no \['plannedRole'\]/,
+            mutate: (w) => { delete id(w).plannedRole; } },
+          { name: "the identity lacks the Android id", expect: /identity has no \['expectedAndroidId'\]/,
+            mutate: (w) => { delete id(w).expectedAndroidId; } },
+          { name: "the identity carries an unjudged field", expect: /fields nobody judges/,
+            mutate: (w) => { id(w).welcomedId = id(w).expectedCliId; } },
+          { name: "the identity is a bare role", expect: /neither a schedule nor null/,
+            mutate: (w) => { w.plan.identity = label; } },
+          { name: "the CLI printed no linked line", expect: /printed 0 linked lines[\s\S]*planned \w+ is unobserved/,
+            mutate: (w) => { w.obs.cli.stderr = w.obs.cli.stderr.filter((l) => !l.startsWith("linked with ")); } },
+          { name: "the CLI printed two linked lines (a relink)", expect: /printed 2 linked lines[\s\S]*planned \w+ is unobserved/,
+            mutate: (w) => { w.obs.cli.stderr.splice(1, 0, w.obs.cli.stderr[0]); } },
+          { name: "a relink in the OTHER role", expect: /printed 2 linked lines/,
+            mutate: (w) => { w.obs.cli.stderr.splice(1, 0, `linked with a Relayium app or the web page (end-to-end encrypted link/1, ${other})`); } },
+        ],
+      });
+    }
+    // The active receive cancel under its scheduled identity (round 2 plans
+    // the CLI initiator), so the gated judgement and the identity compose.
+    const activeSched = active();
+    activeSched.plan.identity = { expectedCliId: INIT[0], expectedAndroidId: INIT[1], plannedRole: "initiator" };
+    linkedAs(activeSched, "initiator");
+    const as = run(activeSched);
+    need(as.code === 0 && as.out === "initiator", `cli-android-oracle: the scheduled active receive-cancel round must PASS as initiator: ${as.err.slice(0, 400)}`);
+    // A legacy (null) plan still accepts EITHER role — and the plan says so.
+    const legacyInit = good();
+    need(Object.hasOwn(legacyInit.plan, "identity") && legacyInit.plan.identity === null,
+      "cli-matrix-plan.py's legacy android form must write an explicit identity: null");
+    linkedAs(legacyInit, "initiator");
+    const li = run(legacyInit);
+    need(li.code === 0 && li.out === "initiator", `cli-android-oracle: an unscheduled (identity null) initiator round must PASS: ${li.err.slice(0, 400)}`);
+
+    // The plan generator: the 7-argument form stays legacy, the 10-argument
+    // form refuses a schedule that cannot be one (and creates nothing), and
+    // nothing in between is accepted.
+    const planRun = (args) => {
+      const root = join(scratch, `android-plan-${n++}`);
+      mkdirSync(root);
+      const r = spawnSync("python3", [join(interop, "cli-matrix-plan.py"), "android", root, "3", "api", "none", ...args], { encoding: "utf8" });
+      return { ...r, root };
+    };
+    const seven = planRun(["123456"]);
+    need(seven.status === 0 && JSON.parse(seven.stdout).identity === null && JSON.parse(seven.stdout).code === "123456",
+      `cli-matrix-plan.py: the 7-argument android form must stay legacy with identity null: ${seven.stderr}`);
+    const ten = planRun(["123456", SCHED[4], SCHED[5], "responder"]);
+    need(ten.status === 0 && JSON.stringify(JSON.parse(ten.stdout).identity)
+      === JSON.stringify({ expectedCliId: SCHED[4], expectedAndroidId: SCHED[5], plannedRole: "responder" }),
+      `cli-matrix-plan.py: the 10-argument android form must carry the schedule: ${ten.stderr}`);
+    for (const [name, args, reason] of [
+      ["identical ids", ["", SCHED[0], SCHED[0], "responder"], /same id/],
+      ["a malformed id", ["", "F444444444444444", SCHED[1], "responder"], /not 16 lowercase hex/],
+      ["an unknown role", ["", SCHED[0], SCHED[1], "both"], /neither initiator nor responder/],
+      ["ids that imply the other role", ["", SCHED[0], SCHED[1], "initiator"], /make the CLI responder, not the planned initiator/],
+      ["only the ids (9 arguments)", ["", SCHED[0], SCHED[1]], /usage|cli-matrix-plan\.py web/],
+      ["one id (8 arguments)", ["", SCHED[0]], /usage|cli-matrix-plan\.py web/],
+    ]) {
+      const r = planRun(args);
+      need(r.status === 2 && reason.test(r.stderr), `cli-matrix-plan.py: "${name}" was not refused for its reason (exit ${r.status}): ${r.stderr.slice(0, 300)}`);
+      need(!existsSync(join(r.root, "stage-3")), `cli-matrix-plan.py: "${name}" staged files before refusing`);
+    }
+
+    // ── accepted-prefix: the live CLI-first barrier and the round-end check ─
+    //
+    // Lines rendered from `acceptancePeerIDLogFormat` as it stands in
+    // server/main.go, behind Go's standard log prefix, so a drift between the
+    // producer and this consumer fails here rather than on an emulator.
+    const mainGo = readFileSync(join(repo, "server", "main.go"), "utf8");
+    const GO_FORMAT = /^const acceptancePeerIDLogFormat = "([^"\\]*)"$/m.exec(mainGo)?.[1] ?? "";
+    need(GO_FORMAT.includes("%d") && GO_FORMAT.includes("%s") && mainGo.includes("\t\tlogf(acceptancePeerIDLogFormat, seq, id)\n"),
+      "server/main.go no longer logs every accepted socket through one acceptancePeerIDLogFormat");
+    const render = (seq, idv = SCHED[(seq - 1) % 6], format = GO_FORMAT) =>
+      `2026/10/06 01:00:0${seq % 10} ` + format.replace("%d", String(seq)).replace("%s", idv);
+    // A marker line for an arbitrary decimal sequence TEXT (render's clock
+    // digit assumes a small number).
+    const atSeq = (digits, idv) => "2026/10/06 01:00:09 " + GO_FORMAT.replace("%d", digits).replace("%s", idv);
+    const logOf = (seqs, { extra = [], tail = "" } = {}) =>
+      ["2026/10/06 01:00:00 relayium signaling server listening on 127.0.0.1:41234",
+       ...seqs.map((q) => render(q)), ...extra].join("\n") + "\n" + tail;
+    let logs = 0;
+    const prefix = (text, expected, schedule = SCHED.join(",")) => {
+      const f = join(scratch, `server-${logs++}.log`);
+      writeFileSync(f, text);
+      return runJudge("python3", [join(interop, "cli-android-oracle.py"), "accepted-prefix", f, schedule, String(expected)]);
+    };
+    for (const [seqs, expected] of [[[1], 1], [[1, 2], 2], [[1, 2, 3], 3], [[1, 2, 3, 4], 4], [[1, 2, 3, 4, 5], 5], [[1, 2, 3, 4, 5, 6], 6]]) {
+      const r = prefix(logOf(seqs), expected);
+      need(r.code === 0 && new RegExp(`seq ${expected} was assigned ${SCHED[expected - 1]} \\(an accepted socket, not a welcome receipt\\)`).test(r.err),
+        `accepted-prefix: ${seqs.length} accepts must be exactly the prefix ${expected} (exit ${r.code}): ${r.err.slice(0, 300)}`);
+    }
+    const halfLine = render(3).slice(0, -6);   // the server is mid-write
+    for (const [name, text, expected] of [
+      ["an empty log (the server has not written yet)", "", 1],
+      ["a log with no accepts yet", logOf([]), 1],
+      ["the CLI has not dialled yet (round 2)", logOf([1, 2]), 3],
+      ["the CLI has not dialled yet (round 3)", logOf([1, 2, 3, 4]), 5],
+      ["the CLI's accept is still being written (unfinished tail)", logOf([1, 2], { tail: halfLine }), 3],
+      ["an unfinished, not-yet-parsable tail", logOf([1, 2], { tail: "2026/10/06 01:00:03 relayium-acceptance-peer-id seq=" }), 3],
+      ["only an unfinished line, no newline at all", render(1), 1],
+    ]) {
+      const r = prefix(text, expected);
+      need(r.code === 3 && /pending/.test(r.err) && !/^ {2}- /m.test(r.err),
+        `accepted-prefix: "${name}" must be PENDING (exit 3), got exit ${r.code}: ${r.err.slice(0, 300)}`);
+    }
+    const tailDone = prefix(logOf([1, 2], { tail: halfLine }), 2);
+    need(tailDone.code === 0, `accepted-prefix: an unfinished later line must not count as an extra accept: ${tailDone.err.slice(0, 300)}`);
+    for (const [name, build, reason] of [
+      ["Android accepted before the CLI's barrier (a socket beyond it)", () => prefix(logOf([1, 2, 3, 4]), 3), /sequence 4 .* while waiting for 3/],
+      ["an extra socket after the round (a reconnect)", () => prefix(logOf([1, 2, 3, 4, 5]), 4), /sequence 5 .* while waiting for 4/],
+      ["a seventh accept beyond the whole schedule", () => prefix(logOf([1, 2, 3, 4, 5, 6, 7]), 6), /sequence 7 .* while waiting for 6/],
+      ["a gap below a later accept", () => prefix(logOf([1, 3]), 3), /\[2\] are missing below the accepted 3/],
+      ["a gap while still short", () => prefix(logOf([1, 3]), 5), /\[2\] are missing below the accepted 3/],
+      ["a sequence logged twice", () => prefix(logOf([1, 2, 2]), 3), /sequence 2 was logged twice/],
+      ["the CLI's socket carried another id", () => prefix(logOf([1, 2], { extra: [render(3, SCHED[0])] }), 3),
+        /sequence 3 carried f444444444444444, not the schedule's 0555555555555555/],
+      ["an earlier socket carried another id", () => prefix(logOf([1], { extra: [render(2, SCHED[2])] }), 3), /sequence 2 carried/],
+      ["a malformed marker line", () => prefix(logOf([1], { extra: ["2026/10/06 01:00:02 relayium-acceptance-peer-id seq=x id=?"] }), 3), /malformed/],
+      ["a zero sequence", () => prefix(logOf([1], { extra: [render(0, SCHED[0])] }), 3), /malformed/],
+      ["an uppercase id", () => prefix(logOf([1], { extra: [render(2, SCHED[1].toUpperCase().replace("0", "A"))] }), 3), /malformed/],
+      ["the producer's format drifted", () => prefix(logOf([], { extra: [render(1, SCHED[0], GO_FORMAT.replace("seq=%d", "n=%d"))] }), 1), /malformed/],
+      ["a schedule that reuses an id", () => prefix(logOf([1]), 1, [...SCHED.slice(0, 5), SCHED[0]].join(",")), /repeats an id/],
+      ["a five-id schedule", () => prefix(logOf([1]), 1, SCHED.slice(0, 5).join(",")), /5 ids, not six/],
+      ["a malformed schedule id", () => prefix(logOf([1]), 1, [...SCHED.slice(0, 5), "xyz"].join(",")), /not a list of 16-lowercase-hex ids/],
+      ["an expected prefix of 0", () => prefix(logOf([1]), 0), /not a sequence within the six-id schedule/],
+      ["an expected prefix beyond the schedule", () => prefix(logOf([1]), 7), /not a sequence within the six-id schedule/],
+      ["a zero-padded expected prefix", () => prefix(logOf([1]), "01"), /not a sequence within the six-id schedule/],
+      ["a non-numeric expected prefix", () => prefix(logOf([1]), "x"), /not a sequence within the six-id schedule/],
+      ["a missing log", () => runJudge("python3", [join(interop, "cli-android-oracle.py"), "accepted-prefix", join(scratch, "absent.log"), SCHED.join(","), "1"]), /unreadable/],
+      // Input-derived sequences are refused from their digits, never used as
+      // a range bound or converted when longer than the schedule's one digit.
+      ["a billion-th sequence (no range up to it)", () => prefix(logOf([1, 2], { extra: [atSeq("1000000000", SCHED[2])] }), 3),
+        /sequence 1000000000 \(0555555555555555\) .* while waiting for 3; it is beyond the six-id schedule/],
+      ["a 5000-digit sequence (no conversion, no traceback)", () => prefix(logOf([1], { extra: [atSeq("9".repeat(5000), SCHED[1])] }), 1),
+        /sequence 9{40}\.\.\.\(5000 characters\) .* beyond the six-id schedule/],
+      ["a two-digit sequence beside a valid prefix", () => prefix(logOf([1, 2, 3, 4, 5, 6], { extra: [atSeq("10", SCHED[0])] }), 6),
+        /sequence 10 .* beyond the six-id schedule/],
+      ["a 5000-digit expected prefix", () => prefix(logOf([1]), "1" + "0".repeat(4999)), /'1{1}0{39}\.\.\.\(5000 characters\)' is not a sequence within/],
+    ]) {
+      const t0 = Date.now();
+      const r = build();
+      const ms = Date.now() - t0;
+      need(r.code === 1 && reason.test(r.err) && !/Traceback/.test(r.err),
+        `accepted-prefix: "${name}" was not refused (exit 1) for its reason (exit ${r.code}): ${r.err.slice(0, 300)}`);
+      need(ms < 10_000, `accepted-prefix: "${name}" took ${ms} ms to refuse; a refusal must not scale with an input-derived sequence`);
+    }
+    const usage = runJudge("python3", [join(interop, "cli-android-oracle.py"), "accepted-prefix", join(scratch, "absent.log"), SCHED.join(",")]);
+    need(usage.code === 2 && /usage/.test(usage.err), `accepted-prefix: a missing bound must be a usage error (exit ${usage.code})`);
+    // The grammar is imported from the browser lane's oracle; no bytecode may
+    // be left beside it in the checkout.
+    need(pycacheBefore === pycacheOf(), "accepted-prefix wrote Python bytecode into scripts/test/__pycache__");
   }
 
   // ── cli-mac-oracle.py ─────────────────────────────────────────────────
@@ -502,7 +703,9 @@ try {
         "scripts/interop/cli-mac-acceptance.sh", "scripts/interop/cli-mac-peer.mjs", "scripts/interop/cli-mac-oracle.py",
         "scripts/interop/cli-matrix-plan.py", "scripts/interop/cli-process.mjs", "web/e2e/cli-web-pairing.mjs", "server/cmd/relayium/pair.go"]);
       watches(ai, "android-interop.yml", ["scripts/interop/cli-android-acceptance.sh", "scripts/interop/cli-android-peer.mjs",
-        "scripts/interop/cli-android-oracle.py", "scripts/interop/cli-matrix-plan.py", "scripts/interop/cli-process.mjs", "server/cmd/relayium/pair.go"]);
+        "scripts/interop/cli-android-oracle.py", "scripts/interop/cli-matrix-plan.py", "scripts/interop/cli-process.mjs", "server/cmd/relayium/pair.go",
+        // The CLI lane's accepted-socket grammar and final count are this file's.
+        "scripts/test/android-interop-oracle.py", "server/main.go"]);
       return problems;
     };
     const docs = Object.fromEntries(["go.yml", "native-web-pairing.yml", "android-interop.yml"].map((n) => [n, wf(n)]));
@@ -533,4 +736,4 @@ if (failures) {
   console.error(`cli-interop-matrix-test: ${failures} of ${checks} checks failed`);
   process.exit(1);
 }
-console.log(`cli-interop-matrix-test: ${checks} checks passed (four judges shown a good round and each single fault; A12 wiring and its mutations)`);
+console.log(`cli-interop-matrix-test: ${checks} checks passed (four judges shown a good round and each single fault; the CLI ↔ Android schedule and its accepted-socket prefix; A12 wiring and its mutations)`);
