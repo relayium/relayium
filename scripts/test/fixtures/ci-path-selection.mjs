@@ -302,6 +302,14 @@ export const PATH_MATRIX = [
     ["swift-package.yml"],
     "the Swift half of that acceptance: a package TEST file, so exactly the package lane, which "
     + "runs it forced, as InboxCLISenderLiveInteropTests.swift above"],
+  ["scripts/test/ios-physical-fixture-isolation-test.mjs", ["swift-package.yml"],
+    "the physical fixture isolation control: exactly the package lane, whose macOS job runs it "
+    + "with swiftc before its suite"],
+  ["scripts/ios-device-pair-acceptance.sh", ["swift-package.yml"],
+    "the physical pair launcher: no lane drives devices, but the package lane's control executes "
+    + "its naming functions and runtime fixture binding, so an edit to it re-runs that control"],
+  ["scripts/ios-device-inbox-acceptance.sh", ["swift-package.yml"],
+    "the physical Device Inbox launcher, likewise executed only by the package lane's control"],
   ["scripts/ci/device-inbox-downgrade-probe.sh", [],
     "the frozen-build downgrade probe: a mandatory LOCAL gate that builds the package twice, so "
     + "no path-filtered lane starts on it; repo-hygiene (unfiltered) parses it on every push"],

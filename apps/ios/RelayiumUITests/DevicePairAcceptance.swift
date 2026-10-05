@@ -89,6 +89,10 @@ struct DevicePairRun {
     /// so — and the run then fails honestly on the second execution of a phase
     /// rather than quietly deleting something to keep itself green.
     let keepsReceivedFolder: Bool
+    /// This phase's fixture tag: the run tag plus the phase, so two phases of
+    /// one run that receive on the same device stage, send and read back two
+    /// different names. Validated against `PhysicalFixture` and bound to `tag`.
+    let fixtureTag: String
 
     /// How long a role may wait for the other device to reach the same point.
     ///
@@ -153,11 +157,31 @@ extension XCTestCase {
                 cannot distinguish the peer from a stranger.
                 """)
         }
+        // A physical run names its own fixture and keeps the device's received
+        // files. Both are refused rather than defaulted: a missing tag would
+        // stage the fixed name an earlier run already left in Received, and a
+        // reset would delete what the owner received to make room for it.
+        guard let fixtureTag = value("FIXTURE_TAG"),
+              PhysicalFixture.isValidTag(fixtureTag),
+              fixtureTag.hasPrefix(tag + "-") else {
+            throw DevicePairRunError(description: """
+                RELAYIUM_DEVICE_PAIR_FIXTURE_TAG is missing, outside the fixture-tag \
+                grammar, or not this run's tag plus a phase. The sender would stage a \
+                name this run did not choose, and the receiving device may already hold it.
+                """)
+        }
+        guard value("KEEP_RECEIVED") == "1" else {
+            throw DevicePairRunError(description: """
+                RELAYIUM_DEVICE_PAIR_KEEP_RECEIVED is not "1". A physical run keeps the \
+                device's Received folder; each phase names its own fixture instead.
+                """)
+        }
         return DevicePairRun(tag: tag, role: role, peerName: peer, peerNaming: naming,
                              message: message,
                              peerMessage: value("PEER_MESSAGE"),
                              pairingCode: value("PAIRING_CODE"),
                              keepsReceivedFolder: value("KEEP_RECEIVED") == "1",
+                             fixtureTag: fixtureTag,
                              peerBudget: min(max(budget, 30), 1_800))
     }
 
@@ -180,6 +204,17 @@ extension XCTestCase {
                              verifying: Bool,
                              stagingFixture: Bool = false,
                              freshReceivedFolder: Bool = false) {
+        // The tag travels with the staging argument, read from the same
+        // variable `requireDevicePairRun` validated. Absent, it is passed as a
+        // bare flag, which the product refuses to stage under — so a launch
+        // that lost its tag fails instead of staging the fixed name.
+        var stagingArguments: [String] = []
+        if stagingFixture {
+            stagingArguments = [DevicePair.linkFixtureArgument, PhysicalFixture.argument]
+            if let tag = ProcessInfo.processInfo.environment["RELAYIUM_DEVICE_PAIR_FIXTURE_TAG"] {
+                stagingArguments.append(tag)
+            }
+        }
         app.launchArguments =
             // Pinned for the same reason every other suite pins it: every
             // assertion below names a rendered English string, and a device left
@@ -190,7 +225,7 @@ extension XCTestCase {
             // role so a run cannot inherit the previous one's answer and meet a
             // SAS gate it is not driving — or, worse, miss one it is.
             + ["-\(DevicePair.verifyPeersDefaultsKey)", verifying ? "YES" : "NO"]
-            + (stagingFixture ? [DevicePair.linkFixtureArgument] : [])
+            + stagingArguments
             + (freshReceivedFolder ? [DevicePair.freshReceivedFolderArgument] : [])
         app.launch()
     }
@@ -698,7 +733,8 @@ enum DevicePair {
         "\(releaseFilePrefix)-\(tag)-\(role)"
     }
 
-    /// `UITestMode.pendingFixtureName` and the exact length it writes.
+    /// `UITestMode.pendingFixtureName` — the UNTAGGED name, which a physical
+    /// run never stages (see `PhysicalFixture`) — and the exact length written.
     ///
     /// The digest is of 1,536 bytes of `0x52` and is a CONSTANT here rather than
     /// something read back off the sending device — which is what makes the
@@ -849,3 +885,39 @@ enum DevicePairChannel {
         "\(marker) \(tag) \(role) \(event.rawValue) \(value)"
     }
 }
+
+// BEGIN physical-fixture-suite — compiled and executed verbatim beside the
+// product's `UITestMode.FixtureName` by
+// scripts/test/ios-physical-fixture-isolation-test.mjs, which requires the two
+// to agree on every input. Keep it free of Foundation.
+/// **The fixture name a physical run stages, asserts and reads back.**
+///
+/// The product's rule, repeated because a UI-test target cannot import the
+/// app. Shared by the pair and Device Inbox suites, whose launchers compose the
+/// same tag: the 8-lowercase-hex run tag, then up to two `-segment`s of 1–12
+/// lowercase letters or digits naming the phase.
+enum PhysicalFixture {
+    /// `UITestMode.FixtureName.argument`; `#if DEBUG`, absent from Release.
+    static let argument = "--relayium-ui-testing-fixture-tag"
+    static let stem = "Relayium product brief"
+
+    static func isValidTag(_ tag: String) -> Bool {
+        let parts = tag.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count >= 1, parts.count <= 3 else { return false }
+        let head = Array(parts[0].unicodeScalars)
+        guard head.count == 8,
+              head.allSatisfy({ ("0"..."9").contains($0) || ("a"..."f").contains($0) })
+        else { return false }
+        for part in parts.dropFirst() {
+            let scalars = Array(part.unicodeScalars)
+            guard scalars.count >= 1, scalars.count <= 12,
+                  scalars.allSatisfy({ ("0"..."9").contains($0) || ("a"..."z").contains($0) })
+            else { return false }
+        }
+        return true
+    }
+
+    static func stem(tag: String) -> String { "\(stem) \(tag)" }
+    static func name(tag: String) -> String { "\(stem(tag: tag)).txt" }
+}
+// END physical-fixture-suite

@@ -264,6 +264,16 @@ const INTEROP_LOGS = new Map([[SWIFT_PACKAGE, "swift-test.log"], [INTEROP, "swif
 const DIAG_HELPER = "scripts/ci/swift-test-diagnostics.py";
 /** Its owning fixture tests; with the helper, the only scripts this lane's filter adds for it. */
 const DIAG_TEST = "scripts/test/swift-test-diagnostics-test.py";
+/**
+ * The physical-device fixture isolation control, run by the package job as one
+ * exact step BEFORE the crash-diagnostics window opens, and the two physical
+ * launchers whose real fixture binding it executes. With the control itself,
+ * these are the only `scripts/` files this lane's filter adds for it.
+ */
+const PHYS_TEST = "scripts/test/ios-physical-fixture-isolation-test.mjs";
+const PHYS_PAIR = "scripts/ios-device-pair-acceptance.sh";
+const PHYS_INBOX = "scripts/ios-device-inbox-acceptance.sh";
+const PHYS_STEP = { name: "Physical fixture isolation controls", run: `node ${PHYS_TEST}` };
 const DIAG_ENV = {
   SWIFT_DIAG_SHA: "${{ github.sha }}",
   SWIFT_DIAG_RUN_ID: "${{ github.run_id }}",
@@ -526,6 +536,14 @@ const OWNERSHIP = [
   [DIAG_HELPER, [SWIFT_PACKAGE],
     "the crash-diagnostics helper the package lane's mark, EXIT trap and failure-only capture run; "
     + "a helper-only change must re-run that lane and no heavy Apple workflow"],
+  [PHYS_TEST, [SWIFT_PACKAGE],
+    "the physical fixture isolation control the package job runs; a test-only change re-runs "
+    + "the lane that executes it, and no heavy Apple workflow"],
+  [PHYS_PAIR, [SWIFT_PACKAGE],
+    "the physical pair launcher whose naming functions and runtime binding that control executes; "
+    + "no workflow runs the launcher itself, which drives real devices"],
+  [PHYS_INBOX, [SWIFT_PACKAGE],
+    "the physical Device Inbox launcher, likewise executed only by that control"],
   [DIAG_TEST, [SWIFT_PACKAGE],
     "the helper's owning fixture tests (also run in repo-hygiene); a test-only change re-runs the "
     + "lane whose steps execute the helper they pin"],
@@ -1185,7 +1203,7 @@ function laneFailures(w) {
       // And exactly the crash-diagnostics helper its steps execute plus that helper's fixture tests,
       // two literal files, so a helper-only or test-only change re-runs this lane.
       const wantPaths = [PACKAGE_SOURCE_GLOB, ...APP_TREE_GLOBS, NAMED_CHECKER, DIAG_HELPER, DIAG_TEST,
-        `.github/workflows/${SWIFT_PACKAGE}`];
+        PHYS_TEST, PHYS_PAIR, PHYS_INBOX, `.github/workflows/${SWIFT_PACKAGE}`];
       need(
         deepEqual(paths, wantPaths),
         `${SWIFT_PACKAGE}'s path filter is ${JSON.stringify(paths)}; want exactly `
@@ -2187,9 +2205,35 @@ function diagnosticsFailures(w) {
   return out;
 }
 
+// ── 1k. the physical fixture isolation control: present, exact, and before the window ──
+
+/**
+ * PHYS_STEP must appear exactly once in the package job's full path (where the
+ * reuse guard is already removed, so any other condition is refused by 1c), and
+ * before the crash-diagnostics mark, so it can neither sit inside the suite's
+ * window nor move the capture off the named-execution proof.
+ */
+function physicalFixtureFailures(w) {
+  const out = [];
+  const steps = w.docs.get(SWIFT_PACKAGE)?.jobs?.[SWIFT_PACKAGE_JOB]?.steps ?? [];
+  const where = `${SWIFT_PACKAGE}/${SWIFT_PACKAGE_JOB}`;
+  const found = steps.map((step, i) => (deepEqual(step, PHYS_STEP) ? i : -1)).filter((i) => i >= 0);
+  const named = steps.filter((step) => step?.name === PHYS_STEP.name || String(step?.run ?? "").includes(PHYS_TEST));
+  if (found.length !== 1 || named.length !== 1) {
+    out.push(`${where} has ${found.length} exact "${PHYS_STEP.name}" step(s) (${named.length} naming it); want `
+      + `exactly one ${JSON.stringify(PHYS_STEP)}. Without it the physical fixture control runs in no CI lane.`);
+  }
+  const mark = steps.findIndex((step) => deepEqual(step, DIAG_MARK));
+  if (found.length === 1 && (mark < 0 || found[0] >= mark)) {
+    out.push(`${where}: the physical fixture control is step ${found[0]}, not before the crash-diagnostics mark `
+      + `(step ${mark}); it must stay outside the suite's window.`);
+  }
+  return out;
+}
+
 const CHECKS = [
   laneFailures, interopFailures, negationFailures, ownershipFailures, fixtureFailures, selfHostFailures,
-  diagnosticsFailures,
+  diagnosticsFailures, physicalFixtureFailures,
 ];
 
 for (const rule of CHECKS) {
@@ -2673,6 +2717,49 @@ const MUTATIONS = [
     mutate: (w) => withoutPath(w, SWIFT_PACKAGE, DIAG_HELPER),
     expect: /swift-test-diagnostics\.py" starts \[\]|swift-package\.yml's path filter is .*swift-test-diagnostics-test/,
   },
+  {
+    name: "the physical fixture control step is removed",
+    mutate: (w) => {
+      const job = w.docs.get(SWIFT_PACKAGE).jobs[SWIFT_PACKAGE_JOB];
+      job.steps = job.steps.filter((step) => step?.name !== PHYS_STEP.name);
+      return w;
+    },
+    expect: /has 0 exact "Physical fixture isolation controls" step/,
+  },
+  {
+    name: "the physical fixture control runs a different command",
+    mutate: (w) => {
+      const job = w.docs.get(SWIFT_PACKAGE).jobs[SWIFT_PACKAGE_JOB];
+      job.steps.find((step) => step?.name === PHYS_STEP.name).run = `node ${PHYS_TEST} || true`;
+      return w;
+    },
+    expect: /has 0 exact "Physical fixture isolation controls" step/,
+  },
+  {
+    name: "the physical fixture control keeps a condition other than the reuse guard",
+    mutate: (w) => {
+      const job = w.docs.get(SWIFT_PACKAGE).jobs[SWIFT_PACKAGE_JOB];
+      job.steps.find((step) => step?.name === PHYS_STEP.name).if = "always()";
+      return w;
+    },
+    expect: /a step sets "if:", and a suite that can skip itself is not a suite/,
+  },
+  {
+    name: "the physical fixture control moves inside the crash-diagnostics window",
+    mutate: (w) => {
+      const job = w.docs.get(SWIFT_PACKAGE).jobs[SWIFT_PACKAGE_JOB];
+      const i = job.steps.findIndex((step) => step?.name === PHYS_STEP.name);
+      const [step] = job.steps.splice(i, 1);
+      job.steps.splice(job.steps.findIndex((s) => deepEqual(s, DIAG_MARK)) + 1, 0, step);
+      return w;
+    },
+    expect: /not before the crash-diagnostics mark|crash-diagnostics mark is step \d+, not immediately before/,
+  },
+  ...[PHYS_TEST, PHYS_PAIR, PHYS_INBOX].map((path) => ({
+    name: `a change to ${path} no longer re-runs the package lane`,
+    mutate: (w) => withoutPath(w, SWIFT_PACKAGE, path),
+    expect: new RegExp(`${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" starts \\[\\]`),
+  })),
   {
     name: "a test-only crash-diagnostics change no longer re-runs the package lane",
     mutate: (w) => withoutPath(w, SWIFT_PACKAGE, DIAG_TEST),

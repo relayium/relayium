@@ -308,8 +308,76 @@ enum UITestMode {
 
     /// 1,536 bytes, so the size the row must render is an exact, unambiguous
     /// `1.5 KB` rather than a value that depends on rounding.
+    ///
+    /// This is the UNTAGGED name, the one every offline suite asserts. A
+    /// physical acceptance run names its own fixture instead — see
+    /// `FixtureName` — because a real device keeps what it received, the
+    /// product refuses a taken name, and the run must not delete the owner's
+    /// files to make room.
     static let pendingFixtureName = "Relayium product brief.txt" // nonlocalized: a test fixture
     private static let pendingFixtureByteCount = 1_536
+
+    // BEGIN physical-fixture-name — compiled and executed verbatim by
+    // scripts/test/ios-physical-fixture-isolation-test.mjs; keep it free of
+    // Foundation and of every other declaration in this file.
+    /// **The name this launch stages its fixture under, or nil for none.**
+    ///
+    /// A physical run passes `--relayium-ui-testing-fixture-tag <tag>`, where
+    /// the tag is the launcher's 8-lowercase-hex run tag, optionally followed by
+    /// up to two `-segment`s of 1–12 lowercase letters or digits that name the
+    /// phase. The staged name is then `<stem> <tag>.txt`: plain ASCII, no
+    /// separator, no dot but the extension's, so it can only ever be a sibling
+    /// in the app's own Documents.
+    ///
+    /// No tag argument at all is the offline case and keeps `untagged`, so the
+    /// simulator suites are unchanged. A tag argument that is repeated, has no
+    /// value, uses the `=` form or carries a value outside the grammar is
+    /// refused with nil — never repaired, and never folded back to `untagged`,
+    /// because a physical run that silently staged the fixed name would collide
+    /// with the file an earlier run legitimately left on the device.
+    enum FixtureName {
+        static let argument = "--relayium-ui-testing-fixture-tag"
+        static let stem = "Relayium product brief"
+
+        static func isValidTag(_ tag: String) -> Bool {
+            let parts = tag.split(separator: "-", omittingEmptySubsequences: false)
+            guard parts.count >= 1, parts.count <= 3 else { return false }
+            let head = Array(parts[0].unicodeScalars)
+            guard head.count == 8,
+                  head.allSatisfy({ ("0"..."9").contains($0) || ("a"..."f").contains($0) })
+            else { return false }
+            for part in parts.dropFirst() {
+                let scalars = Array(part.unicodeScalars)
+                guard scalars.count >= 1, scalars.count <= 12,
+                      scalars.allSatisfy({ ("0"..."9").contains($0) || ("a"..."z").contains($0) })
+                else { return false }
+            }
+            return true
+        }
+
+        static func resolve(_ arguments: [String], untagged: String) -> String? {
+            var positions: [Int] = []
+            for (index, argument) in arguments.enumerated() {
+                if argument == Self.argument {
+                    positions.append(index)
+                } else if argument.hasPrefix(Self.argument) {
+                    return nil
+                }
+            }
+            guard !positions.isEmpty else { return untagged }
+            guard positions.count == 1, positions[0] + 1 < arguments.count else { return nil }
+            let tag = arguments[positions[0] + 1]
+            guard isValidTag(tag) else { return nil }
+            return "\(stem) \(tag).txt"
+        }
+    }
+    // END physical-fixture-name
+
+    /// `pendingFixtureName`, or this launch's own tagged name, or nil when the
+    /// launch described a tag this process refuses — in which case nothing is
+    /// staged and nothing can be selected.
+    static let stagedPendingFixtureName = FixtureName.resolve(
+        ProcessInfo.processInfo.arguments, untagged: pendingFixtureName)
 
 
 
@@ -625,11 +693,11 @@ enum UITestMode {
     /// the container. Nil for every launch that did not ask for a fixture,
     /// which is every launch that passes neither argument.
     static func pendingFixtureURL() -> URL? {
-        guard stagesPendingFixture,
+        guard stagesPendingFixture, let name = stagedPendingFixtureName,
               let documents = try? FileManager.default.url(
                 for: .documentDirectory, in: .userDomainMask,
                 appropriateFor: nil, create: true) else { return nil }
-        return documents.appendingPathComponent(pendingFixtureName)
+        return documents.appendingPathComponent(name, isDirectory: false)
     }
 
     /// Rewritten on every launch that asks for it, so a container surviving

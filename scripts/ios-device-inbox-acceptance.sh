@@ -85,7 +85,7 @@
 # foreground on the committed state for a fixed, strictly bounded window
 # (90 seconds; the suite clamps to 30–300). Inside that window this launcher
 # takes its one read: `devicectl device copy from` on the receiving app's own
-# container, `Documents/Received/Relayium product brief.txt`, into this run's
+# container, `Documents/Received/Relayium product brief <run tag>.txt`, into this run's
 # evidence directory, hashed and required equal to the staged digest. Nothing
 # shortens the window and nothing signals into it — this launcher writes
 # NOTHING to either device, ever. The window elapses on its own, the receiver
@@ -100,12 +100,13 @@
 #     across runs — which is why this harness holds no credential, reads no
 #     credential environment variable, and has nothing to redact from a log. A
 #     device without a session SKIPS with the manual step quoted.
-#   * The receiving device's `Received` folder must not already hold a file
-#     named `Relayium product brief.txt`. The product REFUSES a taken flat
-#     name on commit rather than overwrite or rename, so a copy left by an
-#     earlier run makes THIS run fail honestly. Deleting it (Files app →
-#     Relayium → Received) between runs is an operator step, exactly like
-#     Automation Mode — never something this harness does to keep itself green.
+#   * Nothing to clear. The product REFUSES a taken flat name on commit rather
+#     than overwrite or rename, so each run stages its OWN name,
+#     `Relayium product brief <run tag>.txt`, and files earlier runs left —
+#     including the untagged `Relayium product brief.txt` — are left untouched
+#     and are not this run's name. If the receiver already holds this run's own
+#     name, the product refuses it and the run fails: a real failure, never
+#     retried under another tag and never cleared by this harness.
 #   * Both devices unlocked, awake, online and trusted by this Mac, with
 #     Automation Mode available. This script never changes a network setting,
 #     never reboots, erases, restores or removes anything on a device, and
@@ -194,9 +195,21 @@ receiver_events="READY PEER RECEIVING MESSAGE NAME FILE HOLDING DONE"
 bundle_id="com.relayium.mac"
 fixture_name="Relayium product brief.txt"
 fixture_container_path="Documents/Received/$fixture_name"
+fixture_tag=""
 fixture_bytes=1536
 fixture_byte=0x52
 fixture_sha256="1d71499ab7454d9955704333e6fddbded53e45217087bfdbaf529436765cfcfc"
+
+# `UITestMode.FixtureName.isValidTag` / `.resolve`, which the offline control
+# executes beside these: 8 lowercase hex, then at most two `-` segments of 1–12
+# lowercase letters or digits, staged as `Relayium product brief <tag>.txt`.
+fixture_tag_is_valid() {
+  [[ "$1" =~ ^[0-9a-f]{8}(-[a-z0-9]{1,12}){0,2}$ ]]
+}
+fixture_name_for_tag() {
+  fixture_tag_is_valid "$1" || return 1
+  printf 'Relayium product brief %s.txt' "$1"
+}
 
 expected_digest() {
   python3 -c 'import hashlib, sys
@@ -438,6 +451,23 @@ run_self_test() {
   self_test_expect "the pinned digest is the digest of the fixture's rule" \
     "$fixture_sha256" "$(expected_digest)"
 
+  say "== self-test: each run names its own brief, and nothing else =="
+  self_test_expect "the brief is named by the run tag" \
+    "Relayium product brief abcd1234.txt" "$(fixture_name_for_tag abcd1234)"
+  self_test_expect "two runs never share a brief name" "different" \
+    "$( [ "$(fixture_name_for_tag abcd1234)" = "$(fixture_name_for_tag 0123beef)" ] \
+        && echo same || echo different)"
+  local bad_tag bad_results=""
+  for bad_tag in "" "ABCD1234" "abcd123" "abcd12345" "../../x" "abcd1234/x" \
+      "abcd1234-" "abcd1234 x" "abcd1234.txt"; do
+    if fixture_name_for_tag "$bad_tag" >/dev/null 2>&1; then
+      bad_results="$bad_results accepted:$bad_tag"
+    fi
+  done
+  self_test_expect "a malformed tag composes no brief name at all" "" "$bad_results"
+  self_test_expect "the runner is told the brief's tag" "1" \
+    "$(grep -cF "TEST_RUNNER_RELAYIUM_DEVICE_INBOX_FIXTURE_TAG=\"\$fixture_tag\"" "${BASH_SOURCE[0]}")"
+
   say "== self-test: the run-unique message fits the channel both ends enforce =="
   self_test_expect "the composed message is inside the bounded token set" \
     "emittable 23" "$(self_test_token_shape "relayium-inbox-abcd1234")"
@@ -449,7 +479,7 @@ run_self_test() {
   # token would be a NEW name here, and "the expected ones are present" cannot
   # see an addition.
   self_test_expect "exactly these facts reach a device, and none is a credential" \
-    "TEST_RUNNER_RELAYIUM_DEVICE_INBOX_DELIVERY_BUDGET_SECONDS TEST_RUNNER_RELAYIUM_DEVICE_INBOX_MESSAGE TEST_RUNNER_RELAYIUM_DEVICE_INBOX_PEER_BUDGET_SECONDS TEST_RUNNER_RELAYIUM_DEVICE_INBOX_PEER_ID TEST_RUNNER_RELAYIUM_DEVICE_INBOX_ROLE TEST_RUNNER_RELAYIUM_DEVICE_INBOX_TAG " \
+    "TEST_RUNNER_RELAYIUM_DEVICE_INBOX_DELIVERY_BUDGET_SECONDS TEST_RUNNER_RELAYIUM_DEVICE_INBOX_FIXTURE_TAG TEST_RUNNER_RELAYIUM_DEVICE_INBOX_MESSAGE TEST_RUNNER_RELAYIUM_DEVICE_INBOX_PEER_BUDGET_SECONDS TEST_RUNNER_RELAYIUM_DEVICE_INBOX_PEER_ID TEST_RUNNER_RELAYIUM_DEVICE_INBOX_ROLE TEST_RUNNER_RELAYIUM_DEVICE_INBOX_TAG " \
     "$(exported_runner_variables)"
 
   say "== self-test: only the physical acceptance suite can be started =="
@@ -535,6 +565,13 @@ command -v xcrun >/dev/null 2>&1 || { say "xcrun is required and is not on PATH"
 
 acceptance_begin
 
+# This run's own fixture: the run tag itself, staged by the sender, asserted by
+# both roles and read back here. Never the untagged name, never repaired.
+fixture_tag="$run_tag"
+fixture_name="$(fixture_name_for_tag "$fixture_tag")" \
+  || fail "harness defect: run tag $run_tag composes no fixture name"
+fixture_container_path="Documents/Received/$fixture_name"
+
 # Kept whatever happens — success is evidence too. `run_root` is the lib's
 # throwaway scratch and dies with a passing run; nothing this run must keep
 # lives there.
@@ -551,10 +588,8 @@ say "-- precondition: BOTH devices must already be signed in, BY HAND, to the SA
 say "   Relayium account. This harness holds no credential, takes no account"
 say "   argument and reads no credential environment variable; a device without a"
 say "   session SKIPS with the manual step quoted rather than failing obscurely."
-say "-- precondition: the receiving device's Received folder must not already hold"
-say "   \"$fixture_name\". The product refuses a taken name on commit"
-say "   rather than overwrite; delete the previous brief in the Files app"
-say "   (Relayium → Received) between runs. Nothing here deletes it for you."
+say "-- this run's brief is \"$fixture_name\"; a file already there under it fails the run;"
+say "   the receiving device's existing Received files are kept untouched."
 
 # The grammar is proved before a device is touched, on every run: it is the one
 # piece of this harness that acts on input from outside itself.
@@ -679,6 +714,7 @@ start_role() {
   local udid="$1" role="$2" test_name="$3" peer_id="$4" role_log="$5"
   noninteractive env \
     TEST_RUNNER_RELAYIUM_DEVICE_INBOX_TAG="$run_tag" \
+    TEST_RUNNER_RELAYIUM_DEVICE_INBOX_FIXTURE_TAG="$fixture_tag" \
     TEST_RUNNER_RELAYIUM_DEVICE_INBOX_ROLE="$role" \
     TEST_RUNNER_RELAYIUM_DEVICE_INBOX_MESSAGE="$message" \
     TEST_RUNNER_RELAYIUM_DEVICE_INBOX_PEER_ID="$peer_id" \
@@ -865,10 +901,10 @@ run_delivery() {
     "$((peer_budget + delivery_budget + delivery_budget))" >/dev/null || status=$?
   case "$status" in
     0) ;;
-    1) fail "the receiver exited before both arrivals committed. If an earlier run left
-     \"$fixture_name\" in Received, the commit was refused as a name
-     conflict — delete the old file in the Files app (Relayium → Received) and
-     rerun. Its own failure is reported with its log below; see $receiver_log" ;;
+    1) fail "the receiver exited before both arrivals committed. The brief's name,
+     \"$fixture_name\", is this run's own, so a name conflict on it is a real
+     finding: keep the device's files and report it rather than rerunning under
+     another tag. Its own failure is reported with its log below; see $receiver_log" ;;
     2) fail "this run's message and brief did not both commit on the receiving device
      within $((peer_budget + delivery_budget + delivery_budget))s. See $receiver_log" ;;
   esac

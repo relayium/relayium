@@ -33,21 +33,17 @@
 #     an ambiguous roster — including when both devices announce the same family
 #     name, which is a supported pair rather than a refusal; the unified `link/1`
 #     is established; BOTH ends independently derive a short-authentication
-#     string and this script requires them EQUAL before either confirms; a batch
-#     staged before Connect is armed and released by that confirmation; the
+#     string and this script requires them EQUAL before either confirms; one
+#     batch is staged on the established connection after that confirmation; the
 #     receiving device presses the shipped Accept and its app reports the batch
 #     committed; each side sends a run-unique message the other asserts by exact
 #     text; and both return to a clean roster, the receiving device staying in
 #     the room until the connecting one has verified its own roster and left.
-#   * PROVES the PAIRING-CODE path between two real devices, as current `main`
-#     actually composes it. `LINK_PAIRING_ROOM_SUPPORT` is false off macOS, so a
-#     code on iOS establishes the LEGACY lane and not the workspace: one device
-#     stages the fixture and mints a real code on the real server through Create,
-#     this script reads those six digits out of that runner's bounded structured
-#     output while it is still on the handoff screen, the other device types them
-#     and Joins, both reach the legacy verification gate, both publish the code
-#     they derived and this script requires them EQUAL, the transfer runs, and
-#     the receiving device's own screen NAMES the file it wrote.
+#   * Does NOT yet prove a pairing-code FILE transfer. `LINK_PAIRING_ROOM_SUPPORT`
+#     is now true, so a code on iOS establishes the unified link rather than the
+#     legacy lane these roles drive; the pairing-files roles SKIP with that reason
+#     until they are rewritten. A skipped phase is not an acceptance — read the
+#     result bundle, not the exit status, for this flow.
 #   * PROVES a pairing-code TEXT session the same way, including the responder's
 #     own Accept gate, with a run-unique message asserted in each direction.
 #   * PROVES THE RECEIVED BYTES, TWICE, and the second time is not a repetition.
@@ -137,18 +133,18 @@
 #   * `--directions both` on a pairing flow therefore needs BOTH devices signed
 #     in, because each takes the generating role once.
 #
-# ── the one thing this run DELETES, and where ────────────────────────────────
+# ── what this run leaves on a device, and what it never deletes ─────────────
 #
-# Every receiving role launches with `--relayium-ui-testing-fresh-received-folder`
-# unless `--keep-received` is passed. That empties the RELAYIUM APP'S OWN
-# `Received` folder inside its own container on that device, and nothing else on
-# the device is reachable from it. It is on by default because iOS has no folder
-# picker for a download: the destination is fixed and the product REFUSES a name
-# already taken, so without it the second run of a phase fails on the file the
-# first run legitimately kept, and the digest check could not name the file it
-# pulls back. The device and the effect are printed before every phase that uses
-# it. Pass `--keep-received` to run against a device whose received files must
-# survive; the run will then fail on the second execution of a phase, honestly.
+# Nothing is deleted. iOS has no folder picker for a download: the destination
+# is fixed and the product REFUSES a name already taken. So instead of emptying
+# the receiving device's `Received` folder, every phase stages its OWN fixture
+# name, `Relayium product brief <run tag>-<phase>.txt`, and reads back exactly
+# that name. Files earlier runs left — including the untagged
+# `Relayium product brief.txt` older harnesses staged — are left where they are
+# and are not this phase's name. If the device already holds this phase's own
+# name, the product refuses it and the phase fails: that is reported, never
+# retried under another tag and never cleared. `--keep-received`
+# is accepted for older command lines and is now always in effect.
 #
 # ── what a FAILED run collects, and what it will never do to collect it ──────
 #
@@ -238,7 +234,41 @@ source "$repo_root/scripts/lib/ios-physical-device.sh"
 bundle_id="com.relayium.mac"
 fixture_name="Relayium product brief.txt"
 fixture_container_path="Documents/Received/$fixture_name"
+fixture_tag=""
 fixture_sha256="1d71499ab7454d9955704333e6fddbded53e45217087bfdbaf529436765cfcfc"
+
+# The fixture tag of one phase: this run's 8-lowercase-hex tag, the flow and
+# the direction. Distinct per phase because two phases of one run can receive
+# on the same device. Empty — and the phase refused — for anything else.
+phase_fixture_tag() {
+  local tag="$1" flow_name="$2" direction="$3" flow_part="" direction_part=""
+  case "$flow_name" in
+    nearby) flow_part=nearby ;;
+    pairing-files) flow_part=files ;;
+    pairing-text) flow_part=text ;;
+    *) return 1 ;;
+  esac
+  case "$direction" in
+    a-to-b) direction_part=ab ;;
+    b-to-a) direction_part=ba ;;
+    *) return 1 ;;
+  esac
+  fixture_tag_is_valid "$tag" || return 1
+  printf '%s-%s-%s' "$tag" "$flow_part" "$direction_part"
+}
+
+# `UITestMode.FixtureName.isValidTag`, which the offline control executes beside
+# this function: 8 lowercase hex, then at most two `-` segments of 1–12
+# lowercase letters or digits.
+fixture_tag_is_valid() {
+  [[ "$1" =~ ^[0-9a-f]{8}(-[a-z0-9]{1,12}){0,2}$ ]]
+}
+
+# The name `UITestMode.FixtureName.resolve` stages for a valid tag.
+fixture_name_for_tag() {
+  fixture_tag_is_valid "$1" || return 1
+  printf 'Relayium product brief %s.txt' "$1"
+}
 
 # ── arguments ────────────────────────────────────────────────────────────────
 
@@ -250,7 +280,8 @@ output_root=""
 peer_budget=300
 phase_budget=1800
 skip_build=0
-keep_received=0
+# Always 1: a physical run never empties a device's Received folder.
+keep_received=1
 self_test=0
 declare -a xcodebuild_extra=()
 
@@ -622,6 +653,39 @@ run_self_test() {
   self_test_expect "a runner app declaring no identifier is refused" \
     "5|" "$(self_test_runner_id "$scratch/dd-anonymous")"
 
+  say "== self-test: each phase names its own fixture, and nothing else =="
+  self_test_expect "a phase's tag is the run tag, the flow and the direction" \
+    "abcd1234-nearby-ab abcd1234-files-ba" \
+    "$(phase_fixture_tag abcd1234 nearby a-to-b) $(phase_fixture_tag abcd1234 pairing-files b-to-a)"
+  local plan_entry_tag
+  local -a plan_tags=()
+  for plan_entry_tag in $(phase_plan all both); do
+    plan_tags+=("$(phase_fixture_tag abcd1234 "${plan_entry_tag%%:*}" "${plan_entry_tag##*:}")")
+  done
+  self_test_expect "every phase of one run has a different fixture tag" \
+    "6 6" "$(printf '%s\n' "${plan_tags[@]}" | grep -c .) $(printf '%s\n' "${plan_tags[@]}" | sort -u | grep -c .)"
+  self_test_expect "two runs never share a phase's fixture name" \
+    "different" "$( [ "$(fixture_name_for_tag "$(phase_fixture_tag abcd1234 nearby a-to-b)")" \
+        = "$(fixture_name_for_tag "$(phase_fixture_tag 0123beef nearby a-to-b)")" ] \
+        && echo same || echo different)"
+  self_test_expect "the staged name is the brief with the phase tag" \
+    "Relayium product brief abcd1234-nearby-ab.txt" \
+    "$(fixture_name_for_tag abcd1234-nearby-ab)"
+  local bad_tag bad_results=""
+  for bad_tag in "" "ABCD1234" "abcd123" "abcd12345" "../../x" "abcd1234/x" \
+      "abcd1234-" "abcd1234--x" "abcd1234-a-b-c" "abcd1234-NEAR" "abcd1234 x" \
+      "abcd1234-0123456789abc" "abcd1234.txt"; do
+    if fixture_name_for_tag "$bad_tag" >/dev/null 2>&1; then
+      bad_results="$bad_results accepted:$bad_tag"
+    fi
+  done
+  self_test_expect "a malformed tag composes no fixture name at all" "" "$bad_results"
+  self_test_expect "an unknown flow or direction composes no phase tag" "1 1 1" \
+    "$(phase_fixture_tag abcd1234 other a-to-b >/dev/null; echo $?) $(phase_fixture_tag abcd1234 nearby up >/dev/null; echo $?) $(phase_fixture_tag ABCD1234 nearby a-to-b >/dev/null; echo $?)"
+  self_test_expect "the runner is told the phase's fixture tag" "1" \
+    "$(grep -cF "TEST_RUNNER_RELAYIUM_DEVICE_PAIR_FIXTURE_TAG=\"\$fixture_tag\"" "${BASH_SOURCE[0]}")"
+  self_test_expect "a physical run keeps the device's Received folder by default" "1" "$keep_received"
+
   say "== self-test: the phase plan =="
   # The plan is a pure function of --flow and --directions, so a run cannot
   # quietly drive fewer phases than it was asked for — which is the failure a
@@ -634,7 +698,7 @@ run_self_test() {
   self_test_expect "pairing means both pairing flows" \
     "pairing-files:b-to-a pairing-text:b-to-a" "$(phase_plan pairing b-to-a)"
 
-  say "== self-test: which device receives, and is therefore reset and hashed =="
+  say "== self-test: which device receives, and is therefore hashed =="
   self_test_expect "a-to-b receives on B" "b" "$(receiving_side nearby a-to-b)"
   self_test_expect "b-to-a receives on A" "a" "$(receiving_side nearby b-to-a)"
   self_test_expect "a pairing files phase receives on the joining side" \
@@ -928,6 +992,7 @@ start_role() {
     TEST_RUNNER_RELAYIUM_DEVICE_PAIR_PAIRING_CODE="$pairing_code" \
     TEST_RUNNER_RELAYIUM_DEVICE_PAIR_PEER_BUDGET_SECONDS="$peer_budget" \
     TEST_RUNNER_RELAYIUM_DEVICE_PAIR_KEEP_RECEIVED="$keep_received" \
+    TEST_RUNNER_RELAYIUM_DEVICE_PAIR_FIXTURE_TAG="$fixture_tag" \
     xcodebuild -project "$project" -scheme Relayium \
       -destination "platform=iOS,id=$udid" \
       -derivedDataPath "$derived_data" \
@@ -1158,6 +1223,13 @@ run_phase() {
   reset_roles
   phase_out="$output/$flow_name-$direction"
   mkdir -p "$phase_out"
+  # This phase's own fixture name: staged by the sender, asserted by the
+  # runners and read back here. Never the untagged name, never repaired.
+  fixture_tag="$(phase_fixture_tag "$run_tag" "$flow_name" "$direction")" \
+    || fail "harness defect: no fixture tag for run $run_tag, $flow_name $direction"
+  fixture_name="$(fixture_name_for_tag "$fixture_tag")" \
+    || fail "harness defect: no fixture name for tag $fixture_tag"
+  fixture_container_path="Documents/Received/$fixture_name"
   local phase_started=$SECONDS
 
   # In every flow the role that PUBLISHES is started first, because the second
@@ -1230,13 +1302,8 @@ run_phase() {
     [ "$expected_side" = "$receiver" ] || fail \
       "harness defect: $flow_name $direction expects $receiving_name to receive on device
      $(side_label "$expected_side"), but the file is written on device $(side_label "$receiver")."
-    if [ "$keep_received" -eq 0 ]; then
-      say "-- device $(side_label "$receiver") will empty Relayium's OWN Received folder inside its own"
-      say "   container before it receives. Nothing else on that device is touched."
-    else
-      say "-- --keep-received: device $(side_label "$receiver") keeps its Received folder, so this phase"
-      say "   will fail on a name it already holds if it has run before."
-    fi
+    say "-- device $(side_label "$receiver") keeps its Received folder; this phase receives"
+    say "   this phase's own name, \"$fixture_name\"; a file already there under it fails the phase."
   fi
 
   # Two run-unique strings, one per direction, each asserted character for

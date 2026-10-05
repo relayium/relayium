@@ -116,6 +116,14 @@ on:
       # (the fixtures also run in repo-hygiene). Not `scripts/**`.
       - 'scripts/ci/swift-test-diagnostics.py'
       - 'scripts/test/swift-test-diagnostics-test.py'
+      # The physical-device fixture isolation control this job runs, and the
+      # two physical launchers whose real fixture binding it executes: exactly
+      # these three files, so an edit to any of them re-runs the lane that runs
+      # the control. The Swift files it compiles are already under apps/ios/**.
+      # Not `scripts/**`.
+      - 'scripts/test/ios-physical-fixture-isolation-test.mjs'
+      - 'scripts/ios-device-pair-acceptance.sh'
+      - 'scripts/ios-device-inbox-acceptance.sh'
       - '.github/workflows/swift-package.yml'
       # The PR→main evidence verifier, its registry, the filter reader it imports,
       # the adoption transform, the toolchain certificate probe and registry, and
@@ -379,6 +387,17 @@ jobs:
           xcodebuild -version
           swift --version
           go version
+      # The physical acceptance fixture is named per run and per phase, never
+      # the fixed name an earlier run left in a real device's Received folder.
+      # This control compiles the product's and the UI-test suites' exact
+      # fixture-name source with swiftc and executes the two physical
+      # launchers' own naming functions and runtime binding under bash. It
+      # touches no device and no network; it runs here, before the suite's
+      # crash-diagnostics window, because this is the macOS job that has
+      # swiftc and already watches every file it reads.
+      - name: Physical fixture isolation controls
+        if: needs.evidence.outputs.reuse != 'true'
+        run: node scripts/test/ios-physical-fixture-isolation-test.mjs
       # Crash diagnostics, 1 of 4: the time this job's test window opened,
       # bound to this commit, run id and attempt, with the checked-out HEAD and
       # the toolchain. Run 37175317336 kept no stack for a native SIG11 in the
