@@ -425,22 +425,69 @@ final class DevicePairSeamTests: XCTestCase {
     /// exactly what the un-held version proved.
     func testAReceivingRoleHoldsItsCompletedStateBeforeItPressesDone() throws {
         let suite = try Self.codeOnly(Self.uiTestSource("DevicePairUITests.swift"))
-        XCTAssertEqual(suite.components(separatedBy: "holdForContainerRead(").count - 1, 1, """
-            exactly one role receives a file — the Nearby resident — and it must hold its \
-            completed state while the launcher reads the bytes off that device.
+        XCTAssertEqual(suite.components(separatedBy: "holdForContainerRead(").count - 1, 2, """
+            exactly two roles receive a file — the Nearby resident and the pairing joiner — \
+            and each must hold its completed state while the launcher reads the bytes.
             """)
-        for skipped in ["testPairingCodeFilesAreSentToThePhysicalPeer",
-                        "testPairingCodeFilesFromThePhysicalPeerAreReceived"] {
-            XCTAssertTrue(try Self.body(of: skipped, in: suite)
-                .contains("throw XCTSkip(Self.filePhaseNeedsAWorkspaceStagingSeam)"), """
-                \(skipped) must say why it cannot run rather than pass, fail or vanish: a \
-                pairing file phase reported green would be a claim nothing drove.
-                """)
+        // The pairing file roles are driven, not skipped: the generator stages
+        // through the in-workspace fixture and mints a real code behind the
+        // account gate; the joiner stages nothing and joins the published code.
+        // Each named step must be present, in this order.
+        let roles: [(test: String, steps: [String], absent: [String])] = [
+            ("testPairingCodeFilesAreSentToThePhysicalPeer",
+             ["requireDevicePairRun(role: \"pair-file-generator\")",
+              "launchForDevicePair(app, verifying: true, stagingFixture: true)",
+              "openPairingTab()", "requireVerificationIsOn()", "try mintCode(run)",
+              "compareAndConfirm(run, title: DevicePair.verifyTitle,",
+              "sendMessage(run.message", "awaitPeerMessage(run)",
+              "awaitBatchState(DevicePair.batchFinishedLabel)",
+              "awaitPeerEndsLink(run)", "endLinkAndDismiss()"],
+             ["XCTSkip", "joinCode(", "holdForContainerRead(", "Thread.sleep"]),
+            ("testPairingCodeFilesFromThePhysicalPeerAreReceived",
+             ["requireDevicePairRun(role: \"pair-file-joiner\")",
+              "freshReceivedFolder: !run.keepsReceivedFolder",
+              "openPairingTab()", "requireVerificationIsOn()",
+              "emitDevicePair(.ready", "try joinCode(run)",
+              "compareAndConfirm(run, title: DevicePair.verifyTitle,",
+              "awaitPeerMessage(run)", "sendMessage(run.message",
+              "app.buttons[DevicePair.acceptFilesLabel]", "accept.tap()",
+              "awaitBatchState(DevicePair.batchSavedLabel)",
+              "emitDevicePair(.received", "holdForContainerRead(", "endLinkAndDismiss()"],
+             ["XCTSkip", "stagingFixture", "mintCode(", "Thread.sleep"]),
+        ]
+        for role in roles {
+            // Up to the next helper too, so a private helper declared after
+            // the role cannot lend it a step it does not take.
+            let whole = try Self.body(of: role.test, in: suite)
+            let body = whole.components(separatedBy: "\n    private func ").first ?? whole
+            var cursor = body.startIndex
+            for step in role.steps {
+                guard let found = body.range(of: step, range: cursor..<body.endIndex) else {
+                    XCTFail("""
+                        \(role.test) no longer takes "\(step)" in order — a pairing \
+                        file phase reported green would then be a claim nothing drove.
+                        """)
+                    break
+                }
+                cursor = found.upperBound
+            }
+            for forbidden in role.absent {
+                XCTAssertFalse(body.contains(forbidden),
+                               "\(role.test) must not contain \"\(forbidden)\"")
+            }
         }
-        // The receiving role, with the control that ENDS its session named
-        // explicitly: the Nearby resident leaves the link.
+        // The sender's wait for the peer-ended link is a bounded poll of the
+        // exit control, never a clock, and it fails rather than passes on expiry.
+        let peerEnd = try Self.body(of: "awaitPeerEndsLink", in: suite)
+        for required in ["run.peerBudget", "!leave.exists && done.exists", "XCTFail("] {
+            XCTAssertTrue(peerEnd.contains(required),
+                          "awaitPeerEndsLink no longer contains \"\(required)\"")
+        }
+        // Each receiving role, with the control that ENDS its session named
+        // explicitly.
         for (test, exit) in [
             ("testNearbyAcceptsThePhysicalPeerAndTransfersBothWays", "endLinkAndDismiss()"),
+            ("testPairingCodeFilesFromThePhysicalPeerAreReceived", "endLinkAndDismiss()"),
         ] {
             let body = try Self.body(of: test, in: suite)
             guard let published = body.range(of: "emitDevicePair(.received"),
@@ -901,9 +948,9 @@ final class DevicePairSeamTests: XCTestCase {
             """)
         XCTAssertEqual(
             suite.components(separatedBy: "freshReceivedFolder: !run.keepsReceivedFolder").count - 1,
-            1, """
-            exactly one role receives a file — the Nearby resident — and it must honour \
-            the operator's choice.
+            2, """
+            exactly two roles receive a file — the Nearby resident and the pairing joiner — \
+            and each must honour the operator's choice.
             """)
     }
 

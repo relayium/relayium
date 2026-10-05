@@ -337,7 +337,7 @@ enum UITestMode {
     /// with the file an earlier run legitimately left on the device.
     enum FixtureName {
         static let argument = "--relayium-ui-testing-fixture-tag"
-        static let stem = "Relayium product brief"
+        static let stem = "Relayium product brief" // nonlocalized: Debug fixture filename stem shared by every locale
 
         static func isValidTag(_ tag: String) -> Bool {
             let parts = tag.split(separator: "-", omittingEmptySubsequences: false)
