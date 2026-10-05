@@ -136,6 +136,12 @@ jobs:
       # push. No dependencies, so there is nothing to install.
       - name: macos publish job orders validation before the immutable release
         run: node scripts/test/macos-publish-order-test.mjs
+      # macos-publish-order-test.mjs already imports and runs these controls;
+      # this explicit standalone run exists because ci-guard-coverage requires
+      # every scripts/test entry point to have its own workflow command. The
+      # duplicate Linux run is a deliberate, bounded cost, not a second signal.
+      - name: macos operator handoff controls
+        run: node scripts/test/macos-handoff-test.mjs
 
   native-web-pairing-gate:
     runs-on: ubuntu-latest
