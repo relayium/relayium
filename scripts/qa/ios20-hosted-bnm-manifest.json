@@ -1,0 +1,64 @@
+{
+ "branch": "internal-qa/ios20-bnm-20261005-r3",
+ "commit_b": "7d71a384d6ee64b367e5ad7d7d390624eb1b7492",
+ "commit_n": "155368c4d5e2973bb99c8b94f2b49b321b45656b",
+ "dependency_pins": {
+  "swift-sodium": "cfd195c76882aa9b997560ca7cb95d72fbf5db00",
+  "webrtc": "6ed87f05368632f71dc95c89c14c051561710925"
+ },
+ "expected": {
+  "account_message": "a signed-in launch did not render the account it holds",
+  "launches": {
+   "B": 2,
+   "M": 1,
+   "N": 1
+  },
+  "m_line": 386
+ },
+ "limits": {
+  "build_s": 600,
+  "cleanup_reserve_s": 120,
+  "close_cap_s": 15,
+  "initial_state_s": 120,
+  "job_timeout_minutes": 75,
+  "per_test_s": 300,
+  "test_s": 510,
+  "total_s": 3600
+ },
+ "mode": "build_only_diagnostic (workspace-state capture); full B/N/M proof NOT possible in this lane",
+ "profile": {
+  "device_type": "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+  "min_ios_sdk_major": "26",
+  "runtime_id": "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+  "runtime_os": "18.5",
+  "source": "old hosted run 37226104246 summary: iPhone 16 Pro, iOS 18.5 (22F77), Xcode 26 selection",
+  "xcode_major": "26"
+ },
+ "purpose": "temporary hosted same-host B/N/M causal QA; NEVER merge to main; not a CI proof/reuse source",
+ "select_block_sha256": "151322098cbd5fcd9769d02ab71465fffc69666f19563b5c60f25d277a65e1a1",
+ "source_pins": {
+  "B": {
+   "apps/RelayiumKit/Tests/RelayiumKitTests/IOSSurfaceGuardTests.swift": "08a5774fb007e6c630a396382724a6b2c04cc9246ce564c1df7be07b94bea066",
+   "apps/ios/RelayiumUITests/AppShellUITests.swift": "8c24150dfb49d2465a55c3e3fe47c56f3105b5449f85a5d23e1faca82f89e729"
+  },
+  "N": {
+   "apps/RelayiumKit/Tests/RelayiumKitTests/IOSSurfaceGuardTests.swift": "43851deb72761fd340f5cf382b341b8d954436d67d1aac5754afd7ab85eeb213",
+   "apps/ios/RelayiumUITests/AppShellUITests.swift": "73d7d3a744a5991b4bb5e0bfcd03ee2391cc0a9ae745f1472f590d0367f379ad"
+  }
+ },
+ "source_sha256": {
+  ".github/workflows/ios20-hosted-bnm.yml": "ddfe52ed5232b1cf67e4628766dcb1b9fd815e604bab79a49807925b107a8968",
+  "scripts/qa/ios20-hosted-bnm-support.py": "963941cd2a45ed9b5130f6c86f478c3ba02e5fc8da95817a33cef8ce7935e025",
+  "scripts/qa/ios20-hosted-bnm.py": "b7cac5cdbf2ff024b175500de341c586e1bae9a2ed2c411ed53ea8a0d9c2f127"
+ },
+ "upload_allowlist": [
+  "RESULT.json",
+  "run/logs/**",
+  "run/*.json",
+  "run/select.env",
+  "run/*/result.xcresult/**",
+  "calibration/**",
+  "run/*/dd/Build/Products/**/*.xctestrun",
+  "run/*/dd/Build/Products/**/Info.plist"
+ ]
+}
