@@ -6,14 +6,14 @@
     <language>en</language>
 <title>Relayium for macOS updates</title>
         <item>
-            <title>1.4.5</title>
-            <pubDate>Thu, 01 Oct 2026 23:53:52 +0000</pubDate>
-            <sparkle:version>42</sparkle:version>
-            <sparkle:shortVersionString>1.4.5</sparkle:shortVersionString>
+            <title>1.4.6</title>
+            <pubDate>Mon, 05 Oct 2026 23:33:51 +0000</pubDate>
+            <sparkle:version>43</sparkle:version>
+            <sparkle:shortVersionString>1.4.6</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <sparkle:criticalUpdate sparkle:version="25"></sparkle:criticalUpdate>
-            <enclosure url="https://github.com/relayium/relayium/releases/download/macos-v1.4.5/Relayium.dmg" length="21024636" type="application/octet-stream" sparkle:edSignature="H4I21RNt9LePeFxfALSYDnc4J2CFEMQOSVJ7z56t7bVoketQx+6xSE8qCNnbWNZydTTXtKUWZeZlgNmlBN4PCQ=="/>
+            <enclosure url="https://github.com/relayium/relayium/releases/download/macos-v1.4.6/Relayium.dmg" length="21342304" type="application/octet-stream" sparkle:edSignature="K6zcfuceypUlUvgERLTNBBf8gCqEil9ULxd1gHoFnMg4t4MEKInDmLQm4CJK+uBQB6+qCjo3iADy8bJVR5JbBA=="/>
         </item>
     </channel>
 </rss>
