@@ -47,7 +47,7 @@
 //   * the response is not the shape this file understands, or its entry count
 //     disagrees with `changed_files` (a truncated or half-paginated read);
 //   * a lane workflow is missing, or its `push.paths` block is unreadable;
-//   * a filter entry is not one of the four pattern shapes below;
+//   * a filter entry is not one of the five pattern shapes below;
 //   * a control file changed — this script, the gate, or the fixture — because
 //     those decide what runs, and a pull request that edits them is judged by
 //     its own edit;
@@ -174,10 +174,35 @@ export class SelectAll extends Error {}
 
 const warn = (message) => process.stderr.write(`select-lanes: ${message}\n`);
 
-// ── the four pattern shapes, and nothing else ───────────────────────────────
+// ── the five pattern shapes, and nothing else ───────────────────────────────
 
 /**
- * Which of the four permitted `paths:` shapes `pattern` is, or `null`.
+ * Characters GitHub's filter syntax gives a meaning to, beyond the `*` and
+ * `**` the shapes below place deliberately. `?` is one character, `+` one or
+ * more of the preceding one, `[...]` a class, `{a,b}` an alternation, `(...)`
+ * with `@`/`+`/`!` in front an extglob, `\` an escape, and an inner `!` a
+ * negation the reader would have to place. `compileGlob` escapes every one of
+ * them, so an entry containing one would be matched HERE as a literal while
+ * GitHub matched it as a pattern — the two would disagree, and a disagreement
+ * in which GitHub matches more is under-selection. Refused instead.
+ */
+const GLOB_METACHARACTERS = /[?+[\]{}()!@\\]/;
+
+/**
+ * Is `text` a plain repository path fragment: no glob metacharacter, no `*`,
+ * no surrounding whitespace, no empty, `.` or `..` segment, and no leading or
+ * trailing `/`? Every non-star part of every shape must be one, so that "this
+ * entry names exactly this path" is a statement GitHub and `compileGlob` agree
+ * about rather than one each reads its own way.
+ */
+function isPlainPath(text) {
+  if (text === "" || text !== text.trim() || text.includes("*")) return false;
+  if (GLOB_METACHARACTERS.test(text)) return false;
+  return text.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+
+/**
+ * Which of the five permitted `paths:` shapes `pattern` is, or `null`.
  *
  * A hand-written glob compiler is a bug farm, so the vocabulary is capped
  * rather than the compiler made clever. Every entry in every lane's filter
@@ -187,12 +212,20 @@ const warn = (message) => process.stderr.write(`select-lanes: ${message}\n`);
  *   2. `!prefix/**`           a subtree excluded from one above it
  *   3. `dir/file.ext`         one exact file, no metacharacter
  *   4. `dir/basename*`        one basename prefix (`server/account/deviceinbox*`)
+ *   5. `!dir/file.ext`        one exact file excluded from a tree above it
  *
- * A fifth shape returns `null` and the caller selects every lane, which forces
+ * A sixth shape returns `null` and the caller selects every lane, which forces
  * whoever introduces it to teach this file and the fixture about it in the same
- * commit. Negation is permitted only on shape 1: the ordered last-match-wins
- * semantics below are subtle enough with one exclusion form, and no filter here
- * has ever needed another.
+ * commit. Negation is permitted on shapes 1 and 3 only — a whole tree or one
+ * exact file — and never on a basename prefix or any other glob: `!dir/a*`
+ * or `!dir/*.json` would exclude a set of names nobody enumerated, and an
+ * exclusion is the one entry whose mistakes make the gate select LESS.
+ *
+ * Shape 5 exists for exactly one record today, `!apps/mac/release-readiness.json`
+ * after `apps/mac/**` in macos.yml and swift-package.yml: a release-control
+ * manifest no build, package test or signed artifact reads, which the
+ * unfiltered repo-hygiene lane checks on every change. Its ORDER is the
+ * matcher's ordered last-match-wins rule below, the same one shape 2 relies on.
  */
 export function classifyPattern(pattern) {
   if (typeof pattern !== "string" || pattern === "") return null;
@@ -202,17 +235,21 @@ export function classifyPattern(pattern) {
 
   if (body.endsWith("/**")) {
     const prefix = body.slice(0, -3);
-    if (prefix === "" || prefix.includes("*")) return null;
+    if (!isPlainPath(prefix)) return null;
     return negated ? "tree-exclusion" : "tree";
   }
-  // Only a whole-tree entry may be negated.
+  if (!body.includes("*")) {
+    if (!isPlainPath(body)) return null;
+    return negated ? "literal-exclusion" : "literal";
+  }
+  // A basename prefix may not be negated: see above.
   if (negated) return null;
-  if (!body.includes("*")) return "literal";
   // `dir/basename*`: exactly one `*`, at the very end, with a real basename in
   // front of it. `dir/*` is excluded deliberately — it reads like "this
   // directory" and means "every name in it, but not below it", which is a
   // distinction nobody gets right at a glance.
-  if (/^[^*]+\*$/.test(body) && !body.endsWith("/*") && body.includes("/")) return "basename";
+  if (/^[^*]+\*$/.test(body) && !body.endsWith("/*") && body.includes("/")
+    && isPlainPath(body.slice(0, -1))) return "basename";
   return null;
 }
 
@@ -350,7 +387,7 @@ export function readPushPaths(text, where) {
   for (const pattern of paths) {
     if (classifyPattern(pattern) === null) {
       throw new SelectAll(`${where}: the filter entry ${JSON.stringify(pattern)} is not one of `
-        + `the four permitted pattern shapes`);
+        + `the five permitted pattern shapes`);
     }
   }
   return paths;
@@ -542,18 +579,32 @@ function selfTest() {
     `the push.paths reader produced ${JSON.stringify(read)}`,
   );
 
-  // 2. The vocabulary: the four shapes, and a fifth that must be refused.
+  // 2. The vocabulary: the five shapes, and every other form refused.
   for (const [pattern, want] of [
     ["web/**", "tree"],
     ["!apps/RelayiumKit/Tests/**", "tree-exclusion"],
     [".github/workflows/go.yml", "literal"],
     ["server/account/deviceinbox*", "basename"],
+    ["!apps/mac/release-readiness.json", "literal-exclusion"],
+    ["!README.md", "literal-exclusion"],
   ]) {
     need(classifyPattern(pattern) === want,
       `classifyPattern(${JSON.stringify(pattern)}) is ${JSON.stringify(classifyPattern(pattern))}, `
       + `want ${JSON.stringify(want)}`);
   }
-  for (const pattern of ["**/*.ts", "web/*", "!web/foo.ts", "a*b*", "*", "", "!"]) {
+  for (const pattern of [
+    "**/*.ts", "web/*", "a*b*", "*", "", "!",
+    // Negation on anything but a whole tree or one exact file.
+    "!web/*", "!apps/mac/release-readiness*", "!apps/mac/*.json", "!apps/mac/**/release-readiness.json",
+    // Metacharacters GitHub reads as a pattern and compileGlob would read as text.
+    "!apps/mac/release-readiness.jso?", "!apps/mac/release-readiness.[jJ]son",
+    "!apps/mac/{release-readiness,other}.json", "!apps/mac/release+readiness.json",
+    "!apps/mac/@(release-readiness).json", "!apps/mac/release\\-readiness.json", "!!apps/mac/a.json",
+    "apps/mac/a?.json", "apps/{mac,ios}/**", "server/account/device[i]nbox*",
+    // Ill-formed paths: a segment GitHub never sees, or one the reader would have to normalise.
+    "!/apps/mac/a.json", "!apps/mac/", "!apps//mac/a.json", "!apps/./mac/a.json", "!apps/../a.json",
+    "! apps/mac/a.json", "!apps/mac/a.json ",
+  ]) {
     need(classifyPattern(pattern) === null,
       `classifyPattern(${JSON.stringify(pattern)}) accepted a shape outside the vocabulary`);
   }
@@ -568,6 +619,13 @@ function selfTest() {
     [["server/account/deviceinbox*"], "server/account/deviceinbox/sub.go", false],
     [[".github/workflows/go.yml"], "xgithub/workflows/go_yml", false],
     [["web/**"], "web", false],
+    // The exact-file exclusion: ordered, exact, and nothing near its name.
+    [["apps/mac/**", "!apps/mac/release-readiness.json"], "apps/mac/release-readiness.json", false],
+    [["apps/mac/**", "!apps/mac/release-readiness.json"], "apps/mac/release-readiness-extra.json", true],
+    [["apps/mac/**", "!apps/mac/release-readiness.json"], "apps/mac/release-readiness.json.bak", true],
+    [["apps/mac/**", "!apps/mac/release-readiness.json"], "apps/mac/sub/release-readiness.json", true],
+    [["apps/mac/**", "!apps/mac/release-readiness.json"], "apps/mac/release-readinessXjson", true],
+    [["!apps/mac/release-readiness.json", "apps/mac/**"], "apps/mac/release-readiness.json", true],
   ]) {
     need(matchesFilter(patterns, path) === want,
       `matchesFilter(${JSON.stringify(patterns)}, ${JSON.stringify(path)}) is `

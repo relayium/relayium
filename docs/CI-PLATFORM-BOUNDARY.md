@@ -424,7 +424,10 @@ they are optional.
 
 `swift-package.yml` watches `apps/RelayiumKit/**` with **no exclusion** and runs
 one job: the repository's **sole unfiltered `swift test`**. Since 2026-09-21 it
-also watches `apps/mac/**` and `apps/ios/**`. It compiles neither tree; it
+also watches `apps/mac/**` and `apps/ios/**`; its one exclusion, the exact file
+`!apps/mac/release-readiness.json` directly after `apps/mac/**`, lies outside
+the package and is read by no XCTest case (see
+[the macOS readiness record](#the-macos-readiness-record-starts-no-apple-lane)). It compiles neither tree; it
 **reads** both — dozens of the package's XCTest cases are guards over a project
 file, a plist, an entitlement, a privacy manifest, a `.strings` catalog or a
 Swift source under one of those roots, and a file a test opens is an input to it
@@ -634,7 +637,7 @@ cost is the whole reason:
 | ------------ | --------------------------------- |
 | `go.yml` | the **eight-shard** `-race` account lane, plus build, vet, suite and govulncheck |
 | `web.yml` | the full Vite suite, `npm run build`, an accessibility scan and three headless-Chrome journeys |
-| `swift-package.yml` | the whole package suite on a **paid** macOS runner — and a fifth filter entry, where the file's own rules require exactly four (the package, the two app trees its guards read, itself) and no exclusion |
+| `swift-package.yml` | the whole package suite on a **paid** macOS runner — and a fifth filter entry, where the file's own rules require exactly four (the package, the two app trees its guards read, itself) and no exclusion inside the package |
 
 The fixture rule is right for the frozen vectors: those bytes are what the Go and
 TypeScript manifest implementations are *reproduced against*, so a regenerated
@@ -985,10 +988,20 @@ untested code**, so every uncertainty resolves the other way — the selector
 selects **every** conditional lane when the API fails, when `changed_files` is at
 or above GitHub's 3000-file cap, when the response is malformed or short, when a
 lane workflow is missing or its filter unreadable, when a filter entry is not one
-of the four permitted pattern shapes, or when the change touches a **control
+of the five permitted pattern shapes, or when the change touches a **control
 file** (`merge-gate.yml`, `select-lanes.mjs`, or the shared path-selection
 fixture). A pull request that edits the gate therefore buys a full macOS run.
 That is the honest price and it is deliberate.
+
+The five shapes are `prefix/**`, `!prefix/**`, one exact path, `dir/basename*`
+and `!` before one exact path. Every non-star part must be a plain path: an entry
+carrying `?`, `+`, `[…]`, `{…}`, `(…)`, `@`, `\`, an inner `!`, surrounding
+whitespace, or an empty, `.` or `..` segment is refused — GitHub reads those as
+pattern syntax while both compilers here would read them as text, and that
+disagreement can only under-select. Negation is accepted on a whole tree or on
+one exact file, never on a basename prefix or any other glob (`!dir/a*`,
+`!dir/*.json`). The exact-file exclusion is used once; see
+[the macOS readiness record](#the-macos-readiness-record-starts-no-apple-lane).
 
 `ios-transfer-interop.yml` is intentionally separate from `ios.yml`. The former
 builds one unsigned simulator app, compiles and launches the real Go server, and
@@ -2112,6 +2125,63 @@ Closed 2026-09-21: `macos.yml` runs no `swift test`, so the Mac guards that read
 recorded rather than solved: a few Swift guards read `server/`, `scripts/` and
 `web/` files that select no Swift lane, and several web suites read root
 documents that `web.yml` does not watch.
+
+#### The macOS readiness record starts no Apple lane
+
+`macos.yml` and `swift-package.yml` follow `apps/mac/**` with exactly one
+exact-file exclusion, `!apps/mac/release-readiness.json`. The manifest is a
+release-**control** record: no `xcodebuild`, no `swift test` case and no signed
+artifact reads it (the Swift guards that did moved to `document-claims-test.mjs`
+on 2026-09-21; the one remaining mention in `MacSurfaceGuardTests.swift` is a
+comment). What does judge it is unchanged and unfiltered or release-time:
+
+* `repo-hygiene.yml` runs `test-release-readiness.sh --files-only` — which runs
+  `check-release-readiness.mjs` on the manifest and checks every named evidence
+  file — and `document-claims-test.mjs` on **every** change, on Linux;
+* `macos.yml`'s release intent still runs `check-release-readiness.mjs
+  --require-approved` before any publication, with its version, `main` and
+  notarization checks unchanged;
+* `macos-release.yml` still re-runs the full `test-release-readiness.sh`
+  (PlistBuddy and manifest mutations) before notarization, credential validation
+  or release-metadata staging, and `signed-build` there always builds and signs
+  the exact dispatched SHA fresh.
+
+So a record-only commit — `2d2c67e7c` against `373f6e733` changed exactly
+`apps/README.md`, `apps/mac/release-readiness.json` and
+`docs/macos-app-store-submission.md` — starts no path-filtered lane, while any
+shipping input beside the record (source, `Info.plist`, `project.pbxproj`,
+entitlements, asset-catalog JSON, `apps/mac/scripts/**` including the checker
+itself) still starts both Apple lanes, as does any name near the record
+(`release-readiness-extra.json`, `release-readiness.json.orig`, the same
+basename in a subdirectory). Boundaries this does **not** move:
+
+* Omitting the compile does not approve the record. A change to `approved`,
+  `implemented` or `required` in the manifest still needs authorization review,
+  and publication still needs the approved readiness check above.
+* No proof or artifact is inferred for the new commit. A `main` push whose lane
+  is not selected produces no fresh lane result for that SHA; the PR→main
+  evidence fingerprint simply no longer covers this file for these two lanes,
+  and no signed artifact or full-native proof of a parent is relabeled as the
+  new HEAD's.
+* `full-bootstrap` and `internal-full-candidate` select every lane regardless of
+  any filter, and a change to `select-lanes.mjs` (a control file) runs every
+  lane on its own pull request.
+* Order is load-bearing, as for the package-test negation: the exclusion must
+  follow `apps/mac/**`. `ci-lane-selector-test.mjs` and
+  `ci-event-policy-test.mjs` each pin, with their own reader, where it may
+  appear, and fail on it moved above the tree, removed, widened to any glob,
+  re-included later, or joined by a second exact-file exclusion.
+  `swift-ci-boundary-test.mjs` keeps the package lane's exact filter list and
+  permits this one literal, once, immediately after `apps/mac/**`; every other
+  exclusion in that filter — anywhere under `apps/RelayiumKit/`, or any other
+  `apps/mac` or `apps/ios` file — still fails, and compiled last-match-wins
+  probes require the record skipped while its checker, near names, the same
+  basename elsewhere, other Mac JSON and the package's manifest, lockfile,
+  source, tests and fixtures all still start the lane.
+
+This is a selection change only. No hosted runner-minute or delivery-time
+saving is claimed for it until a real record-only push is observed selecting no
+Apple lane.
 
 ### What has been observed, and what has not
 

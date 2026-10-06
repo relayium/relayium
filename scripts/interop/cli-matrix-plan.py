@@ -7,6 +7,7 @@
     cli-matrix-plan.py android RUN_ROOT ROUND CODE_ROLE CANCEL CODE \
                                CLI_ID ANDROID_ID PLANNED_ROLE   > plan.json
     cli-matrix-plan.py mac     RUN_ROOT ROUND CODE_ROLE                > plan.json
+    cli-matrix-plan.py web-budget CODE_ROLE...                         > waits
 
 Writes the plan to stdout and stages every file the CLI will `/send` under
 RUN_ROOT/stage-ROUND (created fresh; it must not exist). The receive
@@ -47,6 +48,13 @@ joins last. The plan's `identity` names every one of them, with the role the
 CLI and code-room ids imply. A schedule that cannot be one — a malformed or
 repeated id, a range that is not this code role's socket count, ids that
 imply another role — is refused before anything is staged.
+
+The web-budget form is the web lane's pacing, from the same socket table:
+given every round's code role, in run order, it prints one word per round —
+`go` or `wait` — saying whether `cli-web-acceptance.sh` must wait out the
+server's per-IP budget before that round. Nothing is staged. See
+`web_budget` for the accounting; a round that could not fit even an empty
+window is refused (exit 2), never scheduled.
 """
 import json
 import os
@@ -88,6 +96,48 @@ WEB_SOCKETS = {
     "web": (("web", "landing"), ("web", "cross-network"), ("web", "code-room"), ("cli", "code-room")),
 }
 SEQ = re.compile(r"[1-9][0-9]?")
+
+# The most sockets one 60-second window may carry from the run's one loopback
+# address. Every socket a round opens costs one, LAN sockets included: each is
+# its own `/api/ice` request (the page fetches one per room it joins, the CLI
+# one per link), and `/api/ice`'s production request cap — 5/min/IP
+# (`server/main.go` iceLimiter) — counts code-less LAN requests too. The /ws
+# join cap (`wsJoinPerIPPerMinute`, also 5) counts only the code-bearing
+# joins, two per round, so a window within this budget is within both. The
+# owning tests hold this figure to the server's own constants.
+WEB_JOIN_BUDGET = 5
+
+
+def web_budget(code_roles):
+    """One `go`/`wait` per round, in order, for the shell's pacing.
+
+    Windows are cumulative: every socket opened since the last wait is
+    assumed still inside the server's 60-second window (the shell waits 65 s,
+    after the previous round's clients are all gone, so a wait empties it and
+    nothing short of one does). A round joins the current window when the
+    window plus the round's declared socket count stays within the budget;
+    otherwise the shell waits first and the round opens a fresh window. A
+    round whose sockets alone exceed the budget fits no window and is refused.
+    Returns (decisions, windows), each window the list of 1-based rounds it
+    carries and its socket total."""
+    if not code_roles:
+        raise ValueError("no rounds to pace")
+    decisions, windows = [], []
+    for i, role in enumerate(code_roles, start=1):
+        if role not in WEB_SOCKETS:
+            raise ValueError("round %d's code role %r is neither cli nor web" % (i, role[:40]))
+        cost = len(WEB_SOCKETS[role])
+        if cost > WEB_JOIN_BUDGET:
+            raise ValueError("round %d opens %d sockets, more than the %d one window may carry"
+                             % (i, cost, WEB_JOIN_BUDGET))
+        if windows and windows[-1][1] + cost <= WEB_JOIN_BUDGET:
+            decisions.append("go")
+            windows[-1] = (windows[-1][0] + [i], windows[-1][1] + cost)
+        else:
+            # The first round opens the first window on an untouched budget.
+            decisions.append("wait" if windows else "go")
+            windows.append(([i], cost))
+    return decisions, windows
 
 
 def web_identity(code_role, ids_csv, first_seq, end_seq, planned_role):
@@ -324,6 +374,17 @@ def mac_plan(run_root, rnd, code_role):
 
 
 def main(argv):
+    if len(argv) >= 2 and argv[1] == "web-budget":
+        try:
+            decisions, windows = web_budget(argv[2:])
+        except ValueError as err:
+            print("cli-matrix-plan.py: %s" % err, file=sys.stderr)
+            return 2
+        print(" ".join(decisions))
+        print("-- join-budget windows (at most %d sockets each): %s; %d wait(s)"
+              % (WEB_JOIN_BUDGET, ", ".join("rounds %s = %d" % (",".join(map(str, r)), n) for r, n in windows),
+                 decisions.count("wait")), file=sys.stderr)
+        return 0
     if len(argv) == 11 and argv[1] == "web":
         _, _, run_root, rnd, code_role, verify, ending, ids_csv, first_seq, end_seq, planned_role = argv
         if verify not in ("on", "default") or ending not in ("quit", "interrupt"):

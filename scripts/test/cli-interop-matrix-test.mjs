@@ -99,8 +99,8 @@ try {
   const shellList = (name) => new RegExp(`^${name}=\\(([^)\\n]*)\\)$`, "m").exec(webShell)?.[1].trim().split(/\s+/) ?? [];
   const WEB_CELLS = [
     { round: 1, code: "cli", verify: "on", ending: "quit", first: 1, end: 2, role: "responder" },
-    { round: 2, code: "web", verify: "on", ending: "interrupt", first: 3, end: 6, role: "responder" },
-    { round: 3, code: "cli", verify: "default", ending: "quit", first: 7, end: 8, role: "initiator" },
+    { round: 2, code: "cli", verify: "default", ending: "quit", first: 3, end: 4, role: "initiator" },
+    { round: 3, code: "web", verify: "on", ending: "interrupt", first: 5, end: 8, role: "responder" },
     { round: 4, code: "web", verify: "default", ending: "quit", first: 9, end: 12, role: "initiator" },
   ];
   need(W.length === 12, `cli-web-acceptance.sh's schedule is not twelve ids: ${WEB_IDS}`);
@@ -323,19 +323,20 @@ try {
       const r = spawnSync("python3", ["-B", join(interop, "cli-matrix-plan.py"), "web", root, "2", ...args], { encoding: "utf8" });
       return { ...r, root };
     };
-    const ok2 = planRun(["web", "on", "interrupt", WEB_IDS, "3", "6", "responder"]);
+    const ok2 = planRun(["web", "on", "interrupt", WEB_IDS, "5", "8", "responder"]);
     need(ok2.status === 0 && JSON.stringify(JSON.parse(ok2.stdout).identity.sockets.map((s) => [s.seq, s.id, s.actor, s.stage]))
-      === JSON.stringify([[3, W[2], "web", "landing"], [4, W[3], "web", "cross-network"], [5, W[4], "web", "code-room"], [6, W[5], "cli", "code-room"]]),
-    `cli-matrix-plan.py: round 2's plan must schedule the page's three sockets then the CLI's: ${ok2.stderr}`);
+      === JSON.stringify([[5, W[4], "web", "landing"], [6, W[5], "web", "cross-network"], [7, W[6], "web", "code-room"], [8, W[7], "cli", "code-room"]]),
+    `cli-matrix-plan.py: the page-minted SAS round's plan must schedule the page's three sockets then the CLI's: ${ok2.stderr}`);
+    const sockOfCell = (cell) => webPlan(cell, mkdtempSync(join(scratch, "splan-"))).identity;
     const dup = [...W]; dup[5] = dup[4];
     for (const [name, args, reason] of [
       ["the legacy unscheduled web form", ["web", "on", "interrupt"], /usage|cli-matrix-plan\.py web/],
-      ["an eleven-id schedule", ["web", "on", "interrupt", W.slice(0, 11).join(","), "3", "6", "responder"], /11 ids, not 12/],
-      ["an uppercase id", ["web", "on", "interrupt", [W[0].toUpperCase().replace(/^E/, "E"), ...W.slice(1)].join(","), "3", "6", "responder"], /not 16 lowercase hex/],
-      ["the CLI and page planned the same id", ["web", "on", "interrupt", dup.join(","), "3", "6", "responder"], /repeats an id/],
-      ["a range that is not a page-minted round's four", ["web", "on", "interrupt", WEB_IDS, "3", "5", "responder"], /sockets 3\.\.5 are not the 4 a web-minted round opens/],
-      ["a CLI-minted round given four sockets", ["cli", "on", "quit", WEB_IDS, "3", "6", "responder"], /not the 2 a cli-minted round opens/],
-      ["ids that imply the other role", ["web", "on", "interrupt", WEB_IDS, "3", "6", "initiator"], /make the CLI responder, not the planned initiator/],
+      ["an eleven-id schedule", ["web", "on", "interrupt", W.slice(0, 11).join(","), "5", "8", "responder"], /11 ids, not 12/],
+      ["an uppercase id", ["web", "on", "interrupt", [W[0].toUpperCase().replace(/^E/, "E"), ...W.slice(1)].join(","), "5", "8", "responder"], /not 16 lowercase hex/],
+      ["the CLI and page planned the same id", ["web", "on", "interrupt", dup.join(","), "5", "8", "responder"], /repeats an id/],
+      ["a range that is not a page-minted round's four", ["web", "on", "interrupt", WEB_IDS, "5", "7", "responder"], /sockets 5\.\.7 are not the 4 a web-minted round opens/],
+      ["a CLI-minted round given four sockets", ["cli", "on", "quit", WEB_IDS, "5", "8", "responder"], /not the 2 a cli-minted round opens/],
+      ["ids that imply the other role", ["web", "on", "interrupt", WEB_IDS, "5", "8", "initiator"], /make the CLI responder, not the planned initiator/],
       ["a range beyond the schedule", ["web", "default", "quit", WEB_IDS, "10", "13", "initiator"], /end sequence '13' is not within/],
       ["a zero-padded sequence", ["web", "default", "quit", WEB_IDS, "09", "12", "initiator"], /first sequence '09' is not within/],
       ["an unknown code role", ["api", "on", "quit", WEB_IDS, "1", "2", "responder"], /neither cli nor web/],
@@ -362,6 +363,66 @@ try {
       const out = execFileSync("python3", ["-B", join(interop, "cli-matrix-plan.py"), args[0], root, ...args.slice(1)], { encoding: "utf8" });
       need(sha(Buffer.from(out.split(root).join("<ROOT>"))) === digest, `cli-matrix-plan.py ${args.join(" ")}: the shared planner's output changed`);
     }
+
+    // The web-budget form: the lane's pacing from the declared socket counts.
+    // Every window is summed here from the sockets each round's REAL plan
+    // schedules, never from the planner's own arithmetic.
+    const budget = (roles) => spawnSync("python3", ["-B", join(interop, "cli-matrix-plan.py"), "web-budget", ...roles], { encoding: "utf8" });
+    const SERVER_BUDGET = 5; // server/wsroute.go wsJoinPerIPPerMinute and main.go iceLimiter; role-coverage-cap-test binds them
+    const sockets = Object.fromEntries(["cli", "web"].map((c) => [c, WEB_CELLS.find((x) => x.code === c).end - WEB_CELLS.find((x) => x.code === c).first + 1]));
+    need(sockets.cli === sockOfCell(WEB_CELLS.find((x) => x.code === "cli")).sockets.length
+      && sockets.web === sockOfCell(WEB_CELLS.find((x) => x.code === "web")).sockets.length && sockets.cli === 2 && sockets.web === 4,
+    `cli-matrix-plan.py: a round's planned sockets are not the lane's declared ranges (${JSON.stringify(sockets)})`);
+    const windowsOf = (roles, decisions) => {
+      const out = [];
+      roles.forEach((c, i) => {
+        if (i === 0 || decisions[i] === "wait") out.push(0);
+        out[out.length - 1] += sockets[c];
+      });
+      return out;
+    };
+    const lane = budget(shellList("round_code_roles"));
+    need(lane.status === 0 && lane.stdout === "go go wait wait\n" && /rounds 1,2 = 4, rounds 3 = 4, rounds 4 = 4; 2 wait\(s\)/.test(lane.stderr),
+      `cli-matrix-plan.py web-budget: the lane's rounds must take exactly two waits (exit ${lane.status}): ${lane.stdout}${lane.stderr}`);
+    const old = budget(["cli", "web", "cli", "web"]);
+    need(old.status === 0 && old.stdout === "go wait wait wait\n" && /3 wait\(s\)/.test(old.stderr),
+      `cli-matrix-plan.py web-budget: the former alternating order needed three waits, not ${old.stdout.trim()}`);
+    // Every order of up to six rounds: no window over the budget, and no wait
+    // the budget did not force (the window it ends could not take the round).
+    for (let len = 1; len <= 6; len++) {
+      for (let bits = 0; bits < (1 << len); bits++) {
+        const roles = Array.from({ length: len }, (_, i) => ((bits >> i) & 1 ? "web" : "cli"));
+        const r = budget(roles);
+        const d = r.stdout.trim().split(" ");
+        const where = `cli-matrix-plan.py web-budget ${roles.join(" ")}`;
+        need(r.status === 0 && d.length === len && d.every((x) => x === "go" || x === "wait") && d[0] === "go", `${where}: not one go/wait per round (exit ${r.status}): ${r.stdout}${r.stderr}`);
+        const wins = windowsOf(roles, d);
+        need(wins.every((n) => n <= SERVER_BUDGET), `${where}: a window carries ${Math.max(...wins)} sockets, over ${SERVER_BUDGET}`);
+        let open = 0;
+        roles.forEach((c, i) => {
+          if (i > 0 && d[i] === "wait") need(open + sockets[c] > SERVER_BUDGET, `${where}: round ${i + 1} waits although its window had room`);
+          open = i > 0 && d[i] === "wait" ? sockets[c] : open + sockets[c];
+        });
+      }
+    }
+    for (const [name, roles, reason] of [
+      ["no rounds", [], /no rounds to pace/],
+      ["an unknown code role", ["cli", "api"], /round 2's code role 'api' is neither cli nor web/],
+    ]) {
+      const r = budget(roles);
+      need(r.status === 2 && reason.test(r.stderr) && r.stdout === "", `cli-matrix-plan.py web-budget: "${name}" was not refused for its reason (exit ${r.status}): ${r.stderr}`);
+    }
+    // A round wider than any window is refused, never scheduled: the real
+    // function, with a six-socket shape added to its table for this check.
+    const wide = spawnSync("python3", ["-B", "-c", [
+      "import importlib.util, sys",
+      "spec = importlib.util.spec_from_file_location('plan', sys.argv[1])",
+      "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)",
+      "m.WEB_SOCKETS['wide'] = tuple(('web', 'lan-%d' % i) for i in range(6))",
+      "sys.exit(m.main(['cli-matrix-plan.py', 'web-budget', 'cli', 'wide']))",
+    ].join("\n"), join(interop, "cli-matrix-plan.py")], { encoding: "utf8" });
+    need(wide.status === 2 && wide.stdout === "" && /round 2 opens 6 sockets, more than the 5 one window may carry/.test(wide.stderr),
+      `cli-matrix-plan.py web-budget: a six-socket round was not refused (exit ${wide.status}): ${wide.stdout}${wide.stderr}`);
   }
 
   // ── the web lane's accepted-socket accounting (its own oracle) ─────────
@@ -393,7 +454,7 @@ try {
     need(unordered.code === 0, `web accepted-prefix: concurrent accepts logged out of order are still the prefix: ${unordered.err.slice(0, 300)}`);
     for (const [name, text, expected] of [
       ["an empty log", "", 1],
-      ["the page's code room not yet accepted (round 2)", logOf(range(1, 4)), 5],
+      ["the page's code room not yet accepted (round 3)", logOf(range(1, 6)), 7],
       ["the CLI not yet dialled (round 4, two-digit)", logOf(range(1, 11)), 12],
       ["a two-digit accept still being written", logOf(range(1, 9), { tail: render(10).slice(0, -5) }), 10],
     ]) {
@@ -401,15 +462,15 @@ try {
       need(r.code === 3 && /pending/.test(r.err) && !/^ {2}- /m.test(r.err), `web accepted-prefix: "${name}" must be PENDING (exit 3), got ${r.code}: ${r.err.slice(0, 300)}`);
     }
     for (const [name, build, reason] of [
-      ["the CLI accepted before the page's code room (wrong order)", () => prefix(logOf([1, 2, 3, 4, 6]), 5), /\[5\] are missing below the accepted 6/],
-      ["an extra LAN socket before the code room (a reconnect)", () => prefix(logOf(range(1, 5)), 4), /sequence 5 .* while waiting for 4/],
+      ["the CLI accepted before the page's code room (wrong order)", () => prefix(logOf([1, 2, 3, 4, 5, 6, 8]), 7), /\[7\] are missing below the accepted 8/],
+      ["an extra LAN socket before the code room (a reconnect)", () => prefix(logOf(range(1, 7)), 6), /sequence 7 .* while waiting for 6/],
       ["a socket beyond round 4 (seq 13, two digits)", () => prefix(logOf(range(1, 13)), 12), /sequence 13 .* beyond the 12-id schedule/],
       ["the schedule's second pass (seq 24)", () => prefix(logOf(range(1, 12), { extra: [at(24, W[11])] }), 12), /sequence 24 .* beyond the 12-id schedule/],
       ["a three-digit sequence", () => prefix(logOf([1], { extra: [at(100, W[3])] }), 2), /sequence 100 .* beyond/],
       ["a 5000-digit sequence (no conversion, no traceback)", () => prefix(logOf([1], { extra: [at("9".repeat(5000), W[1])] }), 2), /sequence 9{40}\.\.\.\(5000 characters\)/],
       ["a duplicate", () => prefix(logOf([1, 2, 2]), 3), /sequence 2 was logged twice/],
       ["a gap below a later accept", () => prefix(logOf([1, 2, 4]), 4), /\[3\] are missing below the accepted 4/],
-      ["the page's code room carried the CLI's id", () => prefix(logOf(range(1, 4), { extra: [render(5, W[5])] }), 5), /sequence 5 carried e888888888888888, not the schedule's 0888888888888888/],
+      ["the page's code room carried the CLI's id", () => prefix(logOf(range(1, 6), { extra: [render(7, W[7])] }), 7), /sequence 7 carried e888888888888888, not the schedule's 0888888888888888/],
       ["a malformed marker line", () => prefix(logOf([1], { extra: ["2026/10/06 01:00:02 relayium-acceptance-peer-id seq=x id=?"] }), 2), /malformed/],
       ["a zero-padded sequence", () => prefix(logOf([1], { extra: [at("02", W[1])] }), 2), /malformed/],
       ["an expected prefix of 13", () => prefix(logOf([1]), 13), /not a sequence within the 12-id schedule/],
@@ -473,7 +534,7 @@ try {
     };
     const line = (seq, idv) => render(seq, idv) + "\n";
     const [c1, c2, c3, c4] = WEB_CELLS;
-    const id1 = IDENT[1], id2 = IDENT[2];
+    const id3 = IDENT[3];
     const cliFirst = (cell) => {
       const id = IDENT[cell.round];
       return { "cli:code-room": { append: line(cell.first) },
@@ -510,36 +571,36 @@ try {
     cases.push(["R1 the CLI exits before its socket is accepted", c1, { onOpen: { ...late, "cli:code-room": { die: "the CLI exited ({\"code\":1})" } } }, { error: /the CLI exited .* before the server accepted it/ }]);
     cases.push(["R1 the CLI exits by the time its socket is accepted", c1, { onOpen: { ...cliFirst(c1), "cli:code-room": { append: line(1), die: "the CLI exited ({\"code\":1})" } } }, { error: /by the time the server had accepted it; it is not handed over/ }]);
     cases.push(["R1 the CLI exits during the handover wait", c1, { onOpen: late, dieAt: { 2: "the CLI exited ({\"code\":1})" } }, { error: /the CLI exited .* before the server accepted it/, polls: 2 }]);
-    cases.push(["R3 a late socket from the previous round took the CLI's sequence: the page's welcome is refused", c3,
-      { onOpen: { "cli:code-room": { append: line(7, W[6]) }, "web:code-room": { append: line(8) + line(9), doc: doc("/cross-network", [ws("code", [W[8]], [])]) } } },
-      { error: /code-room socket \(seq 8\) was welcomed as abababababababab, but the schedule planned e999999999999999/, secondOpened: 1 }]);
+    cases.push(["R2 a late socket from the previous round took the CLI's sequence: the page's welcome is refused", c2,
+      { onOpen: { "cli:code-room": { append: line(3, W[2]) }, "web:code-room": { append: line(4) + line(5), doc: doc("/cross-network", [ws("code", [W[4]], [])]) } } },
+      { error: /code-room socket \(seq 4\) was welcomed as a888888888888888, but the schedule planned e999999999999999/, secondOpened: 1 }]);
     cases.push(["R1 the page's socket accepted with an extra reconnect before its barrier", c1,
       { onOpen: { ...cliFirst(c1), "web:code-room": { append: line(2) + line(3), doc: cliFirst(c1)["web:code-room"].doc } } },
       { error: /sequence 3 .* while waiting for 2/, secondOpened: 1 }]);
-    // R2: the page first, three sockets of its own.
-    const w2 = webFirst(c2);
-    const [l1, l2, cr] = id2.sockets;
-    cases.push(["R2 the landing page welcomed as the cross-network id", c2, { onOpen: { ...w2, "web:landing": { append: line(3), doc: doc("/", [ws("lan", [l2.id], [[]])]) } } },
-      { error: /landing socket \(seq 3\) was welcomed as b888888888888888, but the schedule planned a888888888888888/, never: ["web:cross-network", "cli:code-room"] }]);
-    cases.push(["R2 the landing page opened two sockets", c2, { onOpen: { ...w2, "web:landing": { append: line(3) + line(4), doc: doc("/", [ws("lan", [l1.id], [[]]), ws("lan", [], [])]) } } },
+    // R3: the page first, three sockets of its own.
+    const w3 = webFirst(c3);
+    const [l1, l2, cr] = id3.sockets;
+    cases.push(["R3 the landing page welcomed as the cross-network id", c3, { onOpen: { ...w3, "web:landing": { append: line(5), doc: doc("/", [ws("lan", [l2.id], [[]])]) } } },
+      { error: /landing socket \(seq 5\) was welcomed as b888888888888888, but the schedule planned a888888888888888/, never: ["web:cross-network", "cli:code-room"] }]);
+    cases.push(["R3 the landing page opened two sockets", c3, { onOpen: { ...w3, "web:landing": { append: line(5) + line(6), doc: doc("/", [ws("lan", [l1.id], [[]]), ws("lan", [], [])]) } } },
       { error: /landing document had opened 2 websockets/, never: ["web:cross-network", "cli:code-room"] }]);
-    cases.push(["R2 the landing socket welcomed twice (a reconnect)", c2, { onOpen: { ...w2, "web:landing": { append: line(3), doc: doc("/", [ws("lan", [l1.id, l1.id], [[]])]) } } },
+    cases.push(["R3 the landing socket welcomed twice (a reconnect)", c3, { onOpen: { ...w3, "web:landing": { append: line(5), doc: doc("/", [ws("lan", [l1.id, l1.id], [[]])]) } } },
       { error: /saw 2 welcomes, not one/, never: ["web:cross-network", "cli:code-room"] }]);
-    cases.push(["R2 the old landing document still answering after the navigation", c2, { onOpen: { ...w2, "web:cross-network": { append: line(4) } } },
-      { error: /cross-network socket \(seq 4\) was never welcomed/, never: ["web:code-room", "cli:code-room"] }]);
-    cases.push(["R2 a LAN reconnect during the round (an extra accept before the code room)", c2, { onOpen: { ...w2, "web:cross-network": { ...w2["web:cross-network"], append: line(4) + line(5) } } },
-      { error: /sequence 5 .* while waiting for 4/, never: ["web:code-room", "cli:code-room"] }]);
-    cases.push(["R2 the page's code room welcomed with the CLI's id", c2, { onOpen: { ...w2, "web:code-room": { append: line(5), doc: doc("/cross-network", [ws("lan", [l2.id], [[]]), ws("code", [W[5]], [[W[5]]])]) } } },
-      { error: /code-room socket \(seq 5\) was welcomed as e888888888888888, but the schedule planned 0888888888888888/, never: ["cli:code-room"] }]);
-    cases.push(["R2 the page's code room not the page alone", c2, { onOpen: { ...w2, "web:code-room": { append: line(5), doc: doc("/cross-network", [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [[cr.id, W[0]]])]) } } },
+    cases.push(["R3 the old landing document still answering after the navigation", c3, { onOpen: { ...w3, "web:cross-network": { append: line(6) } } },
+      { error: /cross-network socket \(seq 6\) was never welcomed/, never: ["web:code-room", "cli:code-room"] }]);
+    cases.push(["R3 a LAN reconnect during the round (an extra accept before the code room)", c3, { onOpen: { ...w3, "web:cross-network": { ...w3["web:cross-network"], append: line(6) + line(7) } } },
+      { error: /sequence 7 .* while waiting for 6/, never: ["web:code-room", "cli:code-room"] }]);
+    cases.push(["R3 the page's code room welcomed with the CLI's id", c3, { onOpen: { ...w3, "web:code-room": { append: line(7), doc: doc("/cross-network", [ws("lan", [l2.id], [[]]), ws("code", [W[7]], [[W[7]]])]) } } },
+      { error: /code-room socket \(seq 7\) was welcomed as e888888888888888, but the schedule planned 0888888888888888/, never: ["cli:code-room"] }]);
+    cases.push(["R3 the page's code room not the page alone", c3, { onOpen: { ...w3, "web:code-room": { append: line(7), doc: doc("/cross-network", [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [[cr.id, W[0]]])]) } } },
       { error: /was not the page alone before the CLI started/, never: ["cli:code-room"] }]);
-    cases.push(["R2 the page's code room roster never seen", c2, { onOpen: { ...w2, "web:code-room": { append: line(5), doc: doc("/cross-network", [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [])]) } } },
-      { error: /code-room socket \(seq 5\) was never welcomed/, never: ["cli:code-room"] }]);
-    cases.push(["R2 the page's code room shown but not yet accepted, then accepted", c2, { onOpen: { ...w2, "web:code-room": { doc: w2["web:code-room"].doc } }, appendAt: { 3: line(5) } },
-      { ok: true, polls: 3, barriers: [3, 4, 5, 6] }]);
-    cases.push(["R2 the page is gone during the handover", c2, { onOpen: { ...w2, "web:code-room": { doc: w2["web:code-room"].doc } }, dieAt: { 1: "the page is gone (crashed)" } },
-      { error: /code-room socket \(seq 5, planned 0888888888888888\): the page is gone \(crashed\) before the server accepted it/, never: ["cli:code-room"] }]);
-    cases.push(["R2 another client in the LAN room", c2, { onOpen: { ...w2, "web:landing": { append: line(3), doc: doc("/", [ws("lan", [l1.id], [[W[0]]])]) } } },
+    cases.push(["R3 the page's code room roster never seen", c3, { onOpen: { ...w3, "web:code-room": { append: line(7), doc: doc("/cross-network", [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [])]) } } },
+      { error: /code-room socket \(seq 7\) was never welcomed/, never: ["cli:code-room"] }]);
+    cases.push(["R3 the page's code room shown but not yet accepted, then accepted", c3, { onOpen: { ...w3, "web:code-room": { doc: w3["web:code-room"].doc } }, appendAt: { 3: line(7) } },
+      { ok: true, polls: 3, barriers: [5, 6, 7, 8] }]);
+    cases.push(["R3 the page is gone during the handover", c3, { onOpen: { ...w3, "web:code-room": { doc: w3["web:code-room"].doc } }, dieAt: { 1: "the page is gone (crashed)" } },
+      { error: /code-room socket \(seq 7, planned 0888888888888888\): the page is gone \(crashed\) before the server accepted it/, never: ["cli:code-room"] }]);
+    cases.push(["R3 another client in the LAN room", c3, { onOpen: { ...w3, "web:landing": { append: line(5), doc: doc("/", [ws("lan", [l1.id], [[W[0]]])]) } } },
       { error: /listed other clients in the LAN room/, never: ["web:cross-network"] }]);
     cases.push(["R4 the CLI's accept never arrives (just before shutdown)", c4, { onOpen: { ...webFirst(c4), "cli:code-room": {} } },
       { error: /the CLI's code-room socket \(seq 12.* did not accept it within 4 polls/, secondOpened: 1 }]);

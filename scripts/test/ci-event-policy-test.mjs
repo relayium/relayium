@@ -3464,7 +3464,104 @@ function pathMatrixFailures(world) {
       `changing "${path}" starts [${got.join(", ")}]; want [${want.join(", ")}] — ${why}.`,
     );
   }
+
+  // The vocabulary, judged by THIS file's own reading of each entry. The
+  // compiler above is general — it would compile `!apps/mac/*.json` or
+  // `a?.json` into something — so without this the policy would happily judge
+  // a filter the merge gate's selector refuses (or, worse, one GitHub reads as
+  // a pattern while both compilers here escape it to a literal). Written as
+  // whole-entry expressions, where the selector strips and branches, so the two
+  // can be wrong independently.
+  for (const file of filtered) {
+    for (const entry of wPaths(world, file)) {
+      const shape = filterEntryShape(entry);
+      if (shape === null) {
+        out.push(`${file}'s path filter entry ${JSON.stringify(entry)} is outside the five permitted `
+          + `shapes (prefix/**, !prefix/**, an exact path, dir/basename*, !exact-path). GitHub may read `
+          + `it as a pattern this repository's two compilers read as text, and the merge gate's `
+          + `selector refuses it outright, selecting every lane.`);
+      }
+    }
+  }
+
+  // The exact-file exclusion selects LESS when it is wrong, so where it lives
+  // is pinned: the readiness record, in the two Apple lanes, after the tree.
+  const exclusions = [];
+  for (const file of filtered) {
+    const paths = wPaths(world, file);
+    paths.forEach((entry, index) => {
+      if (filterEntryShape(entry) !== "literal-exclusion") return;
+      exclusions.push(`${file} ${entry}`);
+      const target = entry.slice(1);
+      // Effective: some EARLIER positive entry matches the excluded file, and
+      // no LATER positive entry re-includes it.
+      const before = paths.slice(0, index).some((p) => !isNegation(p) && pathFilterToRegExp(p).test(target));
+      const after = paths.slice(index + 1).some((p) => !isNegation(p) && pathFilterToRegExp(p).test(target));
+      if (!before || after) {
+        out.push(`${file} excludes ${target} ${!before ? "with no earlier entry that watches it" : "and then re-includes it"}: `
+          + `last match wins, so the exclusion is dead and ${file} starts on the record again.`);
+      }
+      if (paths.indexOf(MAC_TREE) === -1 || paths.indexOf(MAC_TREE) > index) {
+        out.push(`${file} lists ${entry} ${paths.includes(MAC_TREE) ? "before" : "without"} \`${MAC_TREE}\`, `
+          + `the tree it qualifies; the exclusion must follow it.`);
+      }
+    });
+  }
+  const wantExclusions = [`${MACOS} !${READINESS_RECORD}`, `${SWIFT_PACKAGE_LANE} !${READINESS_RECORD}`];
+  if (!deepEqual(exclusions.sort(), wantExclusions)) {
+    out.push(`the exact-file exclusions are [${exclusions.join("; ")}]; want [${wantExclusions.join("; ")}]. `
+      + `The readiness manifest is the one release-control record no build, package test or signed `
+      + `artifact reads; any other exclusion needs its own fixture rows and review.`);
+  }
+
+  // Per-file selection, then the union a commit is judged by. Not fixture
+  // rows, because two of these names do not exist in the tree on purpose.
+  const starts = (paths) => filtered.filter((file) => paths.some((path) => matchesFilter(wPaths(world, file), path))).sort();
+  const appleLanes = [MACOS, SWIFT_PACKAGE_LANE];
+  const recordOnly = starts(READINESS_RECORD_ONLY_COMMIT);
+  if (appleLanes.some((file) => recordOnly.includes(file))) {
+    out.push(`the record-only commit [${READINESS_RECORD_ONLY_COMMIT.join(", ")}] starts [${recordOnly.join(", ")}]; `
+      + `neither ${MACOS} nor ${SWIFT_PACKAGE_LANE} may start for it.`);
+  }
+  for (const extra of ["apps/mac/release-readiness-extra.json", "apps/mac/release-readiness.json.orig",
+    "apps/mac/Relayium/release-readiness.json", "apps/mac/Relayium/AccountView.swift",
+    "apps/mac/Relayium.xcodeproj/project.pbxproj", "apps/mac/Relayium/Info.plist"]) {
+    const got = starts([...READINESS_RECORD_ONLY_COMMIT, extra]);
+    if (!appleLanes.every((file) => got.includes(file))) {
+      out.push(`the record-only commit plus ${extra} starts [${got.join(", ")}]; both ${MACOS} and `
+        + `${SWIFT_PACKAGE_LANE} must start — the exclusion names one exact file and nothing near it.`);
+    }
+  }
   return out;
+}
+
+/** The readiness manifest the Apple lanes exclude by exact name. */
+const READINESS_RECORD = "apps/mac/release-readiness.json";
+const MAC_TREE = "apps/mac/**";
+/** The three paths 2d2c67e7c changed against 373f6e733: a record-only commit. */
+const READINESS_RECORD_ONLY_COMMIT = ["apps/README.md", READINESS_RECORD, "docs/macos-app-store-submission.md"];
+
+/**
+ * Which of the five `paths:` shapes the merge gate's selector accepts this
+ * entry is, decided here independently of `scripts/ci/select-lanes.mjs`.
+ * A plain segment is any run of characters GitHub's filter syntax gives no
+ * meaning to; `.`/`..` and empty segments are refused as ill-defined.
+ */
+function filterEntryShape(entry) {
+  if (typeof entry !== "string") return null;
+  // One segment: no separator, no metacharacter, not `.`/`..` (alone or as a
+  // basename prefix). Whitespace is judged once, at the ends of the body.
+  const seg = String.raw`(?!\.{1,2}(?:/|\*|$))[^/*?+\[\]{}()!@\\]+`;
+  const body = String.raw`(?!\s)${seg}(?:/${seg})*`;
+  const end = String.raw`(?<!\s)`;
+  const shapes = [
+    ["tree", new RegExp(String.raw`^${body}${end}/\*\*$`)],
+    ["tree-exclusion", new RegExp(String.raw`^!${body}${end}/\*\*$`)],
+    ["literal", new RegExp(String.raw`^${body}${end}$`)],
+    ["literal-exclusion", new RegExp(String.raw`^!${body}${end}$`)],
+    ["basename", new RegExp(String.raw`^${body}/${seg}${end}\*$`)],
+  ];
+  return shapes.find(([, re]) => re.test(entry))?.[0] ?? null;
 }
 
 // The matrix above only means what it says if the excluded workflows really are
@@ -8597,7 +8694,82 @@ function withIosUiSmokeRun(world, edit) {
   return world;
 }
 
+/** Rewrite one workflow's push (and aliased pull_request) filter with `edit`. */
+function editPaths(world, file, edit) {
+  const before = wPaths(world, file);
+  if (before === null) throw new Error(`${file} has no push.paths to edit`);
+  const after = edit([...before]);
+  if (deepEqual(after, before)) throw new Error(`${file}: the path-filter edit did not apply`);
+  return withPaths(world, file, after);
+}
+
+/** `paths` with the one entry `from` replaced by `to` (a list; empty deletes it). */
+function swapEntry(paths, from, ...to) {
+  const at = paths.indexOf(from);
+  if (at === -1 || paths.indexOf(from, at + 1) !== -1) throw new Error(`not exactly one ${from}`);
+  paths.splice(at, 1, ...to);
+  return paths;
+}
+
 const MUTATIONS = [
+  // The exact-file exclusion: every way of getting it wrong that selects less,
+  // or that silently re-includes the record.
+  {
+    name: "macos.yml's readiness exclusion moves above the tree it qualifies",
+    mutate: (world) => editPaths(world, MACOS, (paths) => {
+      swapEntry(paths, `!${READINESS_RECORD}`);
+      return swapEntry(paths, MAC_TREE, `!${READINESS_RECORD}`, MAC_TREE);
+    }),
+    expect: /macos\.yml excludes apps\/mac\/release-readiness\.json with no earlier entry that watches it/,
+  },
+  {
+    name: "the same move is caught by the record's own fixture row",
+    mutate: (world) => editPaths(world, MACOS, (paths) => {
+      swapEntry(paths, `!${READINESS_RECORD}`);
+      return swapEntry(paths, MAC_TREE, `!${READINESS_RECORD}`, MAC_TREE);
+    }),
+    expect: /changing "apps\/mac\/release-readiness\.json" starts \[macos\.yml\]; want \[\]/,
+  },
+  {
+    name: "swift-package.yml drops apps/mac/** and keeps the exclusion",
+    mutate: (world) => editPaths(world, SWIFT_PACKAGE_LANE, (paths) => swapEntry(paths, MAC_TREE)),
+    expect: /swift-package\.yml lists !apps\/mac\/release-readiness\.json without `apps\/mac\/\*\*`/,
+  },
+  {
+    name: "macos.yml loses the readiness exclusion",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`)),
+    expect: /the exact-file exclusions are \[swift-package\.yml !apps\/mac\/release-readiness\.json\]/,
+  },
+  {
+    name: "a later positive entry re-includes the readiness record",
+    mutate: (world) => editPaths(world, SWIFT_PACKAGE_LANE, (paths) => [...paths, READINESS_RECORD]),
+    expect: /swift-package\.yml excludes apps\/mac\/release-readiness\.json and then re-includes it/,
+  },
+  {
+    name: "the readiness exclusion is widened to a basename glob",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/release-readiness*")),
+    expect: /entry "!apps\/mac\/release-readiness\*" is outside the five permitted shapes/,
+  },
+  {
+    name: "the readiness exclusion is widened to every JSON file in apps/mac",
+    mutate: (world) => editPaths(world, SWIFT_PACKAGE_LANE, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/*.json")),
+    expect: /entry "!apps\/mac\/\*\.json" is outside the five permitted shapes/,
+  },
+  {
+    name: "the readiness exclusion is spelled with a class",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/release-readiness.[j]son")),
+    expect: /entry "!apps\/mac\/release-readiness\.\[j\]son" is outside the five permitted shapes/,
+  },
+  {
+    name: "a second exact-file exclusion appears beside the readiness record",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, `!${READINESS_RECORD}`, "!apps/mac/Relayium/Info.plist")),
+    expect: /the exact-file exclusions are \[.*macos\.yml !apps\/mac\/Relayium\/Info\.plist/,
+  },
+  {
+    name: "the readiness exclusion is widened to everything near its name",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/release-readiness**")),
+    expect: /the record-only commit plus apps\/mac\/release-readiness-extra\.json starts/,
+  },
   {
     name: "native-web-pairing.yml regains a bare `apps/**` filter",
     mutate: (world) => withPaths(world, NWP, [

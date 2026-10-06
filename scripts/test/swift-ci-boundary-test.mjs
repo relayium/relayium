@@ -122,6 +122,43 @@ const SWIFT_PACKAGE_JOB = "swift-test";
  * every commit to it.
  */
 const APP_TREE_GLOBS = ["apps/mac/**", "apps/ios/**"];
+/**
+ * The one exclusion the package lane's filter may carry: the macOS
+ * release-readiness manifest. It is a release-CONTROL record that no XCTest case
+ * opens (the guards that did moved to document-claims-test.mjs on 2026-09-21),
+ * and the unfiltered repo-hygiene lane checks it on every change. It lies outside
+ * the package, so excluding it leaves no package file without an owner.
+ *
+ * Exactly this literal, exactly once, immediately after `apps/mac/**` — the
+ * positive it qualifies under last-match-wins. Nothing under
+ * `apps/RelayiumKit` may be excluded at all, and no other file under
+ * `apps/mac` or `apps/ios` may be either.
+ */
+const MAC_READINESS_RECORD = "apps/mac/release-readiness.json";
+const MAC_READINESS_EXCLUSION = `!${MAC_READINESS_RECORD}`;
+/**
+ * Paths that must still start the package lane beside that exclusion. Each one
+ * is what a wider or retargeted exclusion would silently drop: the record's
+ * checker next to it, a near name, the same basename one level down or in the
+ * other app tree, another JSON resource under `apps/mac`, and package files —
+ * manifest, lockfile, source, test and fixture — that no exclusion may reach.
+ */
+const MAC_READINESS_NEIGHBOURS = [
+  "apps/mac/scripts/check-release-readiness.mjs",
+  "apps/mac/release-readiness.json.orig",
+  "apps/mac/release-readiness.jsonc",
+  "apps/mac/Relayium/release-readiness.json",
+  "apps/ios/release-readiness.json",
+  "apps/mac/Relayium/Assets.xcassets/Contents.json",
+  "apps/mac/Relayium/Info.plist",
+  `${SWIFT_PACKAGE_DIR}/release-readiness.json`,
+  `${SWIFT_PACKAGE_DIR}/Package.swift`,
+  `${SWIFT_PACKAGE_DIR}/Package.resolved`,
+  `${SWIFT_PACKAGE_DIR}/Sources/RelayiumKit/DeviceInbox/InboxSealedBox.swift`,
+  `${SWIFT_PACKAGE_DIR}/Sources/RelayiumShareKit/Resources/en.lproj/Localizable.strings`,
+  `${PACKAGE_TEST_DIR}/AeadTests.swift`,
+  `${PACKAGE_FIXTURES_ROOT}/store-wire-vectors.json`,
+];
 const MACOS = "macos.yml";
 const IOS = "ios.yml";
 const IOS_TRANSFER_INTEROP = "ios-transfer-interop.yml";
@@ -1202,7 +1239,10 @@ function laneFailures(w) {
       // literal file, not the `scripts/**` widening warned against below.
       // And exactly the crash-diagnostics helper its steps execute plus that helper's fixture tests,
       // two literal files, so a helper-only or test-only change re-runs this lane.
-      const wantPaths = [PACKAGE_SOURCE_GLOB, ...APP_TREE_GLOBS, NAMED_CHECKER, DIAG_HELPER, DIAG_TEST,
+      // And exactly one exclusion, the release-readiness record, directly after
+      // the app tree it qualifies (MAC_READINESS_EXCLUSION above).
+      const wantPaths = [PACKAGE_SOURCE_GLOB, APP_TREE_GLOBS[0], MAC_READINESS_EXCLUSION,
+        ...APP_TREE_GLOBS.slice(1), NAMED_CHECKER, DIAG_HELPER, DIAG_TEST,
         PHYS_TEST, PHYS_PAIR, PHYS_INBOX, `.github/workflows/${SWIFT_PACKAGE}`];
       need(
         deepEqual(paths, wantPaths),
@@ -1218,13 +1258,49 @@ function laneFailures(w) {
         + `was created to prevent — three heavy filters exclude the test target on the strength of `
         + `this one covering it.`,
       );
+      const otherExclusions = paths.filter((pattern) => isNegation(pattern)
+        && pattern !== MAC_READINESS_EXCLUSION);
       need(
-        !paths.some(isNegation),
+        otherExclusions.length === 0,
         `${SWIFT_PACKAGE}'s path filter carries an exclusion `
-        + `(${JSON.stringify(paths.filter(isNegation))}). This is the workflow that must see EVERY `
+        + `(${JSON.stringify(otherExclusions)}) beyond the one exact release-readiness record it may `
+        + `skip. This is the workflow that must see EVERY `
         + `file in the package — Sources, Tests, Fixtures, \`Package.swift\` and `
         + `\`Package.resolved\` — because it is the only one that still does. An exclusion here `
         + `creates a file with no owner at all.`,
+      );
+      // The one permitted exclusion, judged literally (count, position) and as
+      // compiled behaviour (the record skipped, every neighbour still started).
+      // The exact-list rule above already fails on any of these edits; these
+      // name WHICH edit, so a repair does not have to diff two eleven-item lists.
+      const recordExclusions = paths.filter((pattern) => pattern === MAC_READINESS_EXCLUSION).length;
+      need(
+        recordExclusions === 1,
+        `${SWIFT_PACKAGE}'s path filter lists \`${MAC_READINESS_EXCLUSION}\` ${recordExclusions} `
+        + `time(s); want exactly once. Without it a release-readiness record edit charges a macOS `
+        + `runner and the whole package suite for a file no XCTest case opens; twice is an edit `
+        + `nobody reviewed as written.`,
+      );
+      const macTreeAt = paths.indexOf(APP_TREE_GLOBS[0]);
+      const recordAt = paths.indexOf(MAC_READINESS_EXCLUSION);
+      need(
+        recordAt === -1 || (macTreeAt !== -1 && recordAt === macTreeAt + 1),
+        `${SWIFT_PACKAGE} lists \`${MAC_READINESS_EXCLUSION}\` at position ${recordAt + 1}; want it `
+        + `immediately after \`${APP_TREE_GLOBS[0]}\` (position ${macTreeAt + 2}). Above that `
+        + `positive the last-match-wins rule overrides it and it excludes nothing; further down it `
+        + `reads as qualifying a different entry and is one reorder from doing so.`,
+      );
+      need(
+        !matchesFilter(paths, MAC_READINESS_RECORD),
+        `a change to "${MAC_READINESS_RECORD}" alone still starts ${SWIFT_PACKAGE}: its exclusion `
+        + `is missing, overridden by a positive above it, or re-included by one below it.`,
+      );
+      const dropped = MAC_READINESS_NEIGHBOURS.filter((path) => !matchesFilter(paths, path));
+      need(
+        dropped.length === 0,
+        `${SWIFT_PACKAGE} no longer starts for ${JSON.stringify(dropped)}. The release-readiness `
+        + `exclusion is one exact file; a wider or retargeted one drops an app-tree file the guard `
+        + `tests READ or a package file that has no other owner.`,
       );
       // The filter above is now the lane's ONLY filtered event. There used to
       // be a second, aliased copy under `pull_request:` and a rule comparing
@@ -2284,6 +2360,20 @@ function withoutPath(w, file, path) {
   return withPaths(w, file, paths.filter((entry) => entry !== path));
 }
 
+/**
+ * A copy of `paths` with `entry` removed (when present) and inserted at the
+ * index `at` computes from the remaining list. Throws when that index is out of
+ * range, for the reason `withoutPath` does.
+ */
+function withEntryAt(paths, entry, at) {
+  const rest = (paths ?? []).filter((pattern) => pattern !== entry);
+  const i = at(rest);
+  if (!Number.isInteger(i) || i < 0 || i > rest.length) {
+    throw new Error(`cannot place ${entry} at ${i} in ${JSON.stringify(rest)}`);
+  }
+  return [...rest.slice(0, i), entry, ...rest.slice(i)];
+}
+
 /** Mutate the exact crash-diagnostics step `want`, and throw when it is not there. */
 function withDiagStep(w, want, mutate) {
   const steps = w.docs.get(SWIFT_PACKAGE)?.jobs?.[SWIFT_PACKAGE_JOB]?.steps ?? [];
@@ -2488,6 +2578,80 @@ const MUTATIONS = [
       `.github/workflows/${SWIFT_PACKAGE}`,
     ]),
     expect: /swift-package\.yml's path filter carries an exclusion/,
+  },
+
+  // ── the one permitted exclusion: removed, moved, widened, doubled ─────────
+  //
+  // Each starts from the real filter and changes ONE thing about the
+  // release-readiness exclusion, and each expects the rule naming that edit
+  // rather than the exact-list rule every one of them also trips.
+  {
+    // Removed: the record is back to charging a macOS runner and the whole
+    // package suite for a file no XCTest case opens.
+    name: "swift-package.yml drops the release-readiness exclusion",
+    mutate: (w) => withoutPath(w, SWIFT_PACKAGE, MAC_READINESS_EXCLUSION),
+    expect: /a change to "apps\/mac\/release-readiness\.json" alone still starts swift-package\.yml/,
+  },
+  {
+    // Moved ABOVE the tree it qualifies: present, and overridden by the next
+    // line. Only last-match-wins semantics see the difference.
+    name: "swift-package.yml puts the release-readiness exclusion above apps/mac/**",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, withEntryAt(wPaths(w, SWIFT_PACKAGE),
+      MAC_READINESS_EXCLUSION, (paths) => paths.indexOf(APP_TREE_GLOBS[0]))),
+    expect: /a change to "apps\/mac\/release-readiness\.json" alone still starts swift-package\.yml/,
+  },
+  {
+    // Moved LATER: still effective today, and no longer adjacent to what it
+    // qualifies — the position rule, not behaviour, is what names it.
+    name: "swift-package.yml moves the release-readiness exclusion to the end of its filter",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, withEntryAt(wPaths(w, SWIFT_PACKAGE),
+      MAC_READINESS_EXCLUSION, (paths) => paths.length)),
+    expect: /swift-package\.yml lists `!apps\/mac\/release-readiness\.json` at position 11; want it immediately after/,
+  },
+  {
+    // Re-included by a later positive: the exclusion stays in place and does
+    // nothing.
+    name: "swift-package.yml re-includes the release-readiness record after excluding it",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, [...wPaths(w, SWIFT_PACKAGE), MAC_READINESS_RECORD]),
+    expect: /a change to "apps\/mac\/release-readiness\.json" alone still starts swift-package\.yml/,
+  },
+  {
+    // Widened to a basename prefix: the near names and the record's checker
+    // stop starting the lane whose guard tests read the tree.
+    name: "swift-package.yml widens the release-readiness exclusion to a prefix glob",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, wPaths(w, SWIFT_PACKAGE)
+      .map((entry) => (entry === MAC_READINESS_EXCLUSION ? "!apps/mac/release-readiness*" : entry))),
+    expect: /swift-package\.yml no longer starts for \["apps\/mac\/release-readiness\.json\.orig","apps\/mac\/release-readiness\.jsonc"\]/,
+  },
+  {
+    // Widened to every JSON under the Mac tree: asset catalogs, which guard
+    // tests open, go unowned.
+    name: "swift-package.yml widens the release-readiness exclusion to apps/mac/**/*.json",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, wPaths(w, SWIFT_PACKAGE)
+      .map((entry) => (entry === MAC_READINESS_EXCLUSION ? "!apps/mac/**/*.json" : entry))),
+    expect: /swift-package\.yml no longer starts for \[.*"apps\/mac\/Relayium\/Assets\.xcassets\/Contents\.json"/,
+  },
+  {
+    // Retargeted to a neighbour literal: still one exact `!` file, the wrong one.
+    name: "swift-package.yml retargets the exclusion to the Mac Info.plist",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, wPaths(w, SWIFT_PACKAGE)
+      .map((entry) => (entry === MAC_READINESS_EXCLUSION ? "!apps/mac/Relayium/Info.plist" : entry))),
+    expect: /swift-package\.yml no longer starts for \["apps\/mac\/Relayium\/Info\.plist"\]/,
+  },
+  {
+    // A second exclusion beside the permitted one, inside the package — the
+    // failure this lane exists to prevent, written next to an accepted entry.
+    name: "swift-package.yml adds a package exclusion beside the release-readiness one",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, withEntryAt(wPaths(w, SWIFT_PACKAGE),
+      `!${SWIFT_PACKAGE_DIR}/Package.resolved`, (paths) => paths.indexOf(MAC_READINESS_EXCLUSION) + 1)),
+    expect: /swift-package\.yml's path filter carries an exclusion \(\["!apps\/RelayiumKit\/Package\.resolved"\]\) beyond/,
+  },
+  {
+    // The permitted literal written twice: the same exclusion, an edit nobody
+    // reviewed as written.
+    name: "swift-package.yml lists the release-readiness exclusion twice",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, [...wPaths(w, SWIFT_PACKAGE), MAC_READINESS_EXCLUSION]),
+    expect: /swift-package\.yml's path filter lists `!apps\/mac\/release-readiness\.json` 2 time\(s\)/,
   },
   {
     // The whole lane deleted with the three negations left in place: the

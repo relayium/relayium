@@ -41,9 +41,9 @@
 #
 #   round  minted by  CLI role   SAS      ending     sockets (seq)
 #   1      CLI        responder  on       /quit      CLI 1, page 2
-#   2      page       responder  on       interrupt  page LAN 3, page LAN 4,
-#                                                     page code room 5, CLI 6
-#   3      CLI        initiator  default  /quit      CLI 7, page 8
+#   2      CLI        initiator  default  /quit      CLI 3, page 4
+#   3      page       responder  on       interrupt  page LAN 5, page LAN 6,
+#                                                     page code room 7, CLI 8
 #   4      page       initiator  default  /quit      page LAN 9, page LAN 10,
 #                                                     page code room 11, CLI 12
 #
@@ -58,6 +58,18 @@
 # accepted exactly the prefix 2/6/8/12; at the end it is stopped and all
 # twelve are counted once more. An extra, refused or reconnected socket is a
 # FAILURE in the round that caused it, never a retry or a new round.
+#
+# ## Pacing
+#
+# Every socket is also one request against a production 5/min per-IP cap
+# from this one loopback address (`/api/ice`, which counts LAN requests too;
+# the code-bearing `/ws` joins are a subset). The budget is paced, never
+# relaxed: `cli-matrix-plan.py web-budget` reads each round's declared socket
+# count and says which rounds must first wait out the window (65 s, after
+# the previous round's clients are gone). The two CLI-minted rounds run
+# first because together they open four sockets, which fit one window; each
+# page-minted round's four then needs a window of its own. Two waits, where
+# the former alternating order (2, 4, 2, 4 sockets) needed three.
 #
 # ## Evidence level
 #
@@ -78,12 +90,27 @@ source "$here/../lib/local-acceptance.sh"
 # driver opens them; `cli-matrix-plan.py web` refuses a range that is not the
 # code role's socket count or ids that do not imply the planned role.
 max_rounds=4
-acceptance_peer_ids="e777777777777777,0777777777777777,a888888888888888,b888888888888888,0888888888888888,e888888888888888,0999999999999999,e999999999999999,abababababababab,bcbcbcbcbcbcbcbc,eaeaeaeaeaeaeaea,0aaaaaaaaaaaaaaa"
-round_code_roles=(cli web cli web)
-planned_roles=(responder responder initiator initiator)
-round_verify=(on on default default)
-round_endings=(quit interrupt quit quit)
-round_prefix_ends=(2 6 8 12)
+acceptance_peer_ids="e777777777777777,0777777777777777,0999999999999999,e999999999999999,a888888888888888,b888888888888888,0888888888888888,e888888888888888,abababababababab,bcbcbcbcbcbcbcbc,eaeaeaeaeaeaeaea,0aaaaaaaaaaaaaaa"
+round_code_roles=(cli cli web web)
+planned_roles=(responder initiator responder initiator)
+round_verify=(on default on default)
+round_endings=(quit quit interrupt quit)
+round_prefix_ends=(2 4 8 12)
+
+# Wait out the server's per-IP budget before ROUND exactly when the pacing
+# plan (`round_budget_waits`, from `cli-matrix-plan.py web-budget`) says so.
+# Anything but `go` or `wait` fails: a round is never run unpaced by default.
+pace_join_budget() {
+  local decision="${round_budget_waits[$(($1 - 1))]:-}"
+  case "$decision" in
+    wait)
+      say "-- waiting out the server's per-IP join budget before round $1"
+      sleep 65
+      ;;
+    go) say "-- round $1's sockets fit the current join-budget window" ;;
+    *) fail "the pacing plan has no decision for round $1" ;;
+  esac
+}
 
 # Is this owned child still running? `kill -0` also answers yes for an exited,
 # unreaped process, so the process state is read.
@@ -194,14 +221,16 @@ seen_quit=0
 seen_interrupt=0
 round=0
 
+# One `go`/`wait` per round, from the rounds' declared socket counts.
+budget_plan="$(python3 "$here/cli-matrix-plan.py" web-budget "${round_code_roles[@]}")" \
+  || fail "the rounds cannot be paced within the server's per-IP join budget"
+read -r -a round_budget_waits <<<"$budget_plan"
+[ "${#round_budget_waits[@]}" -eq "$max_rounds" ] \
+  || fail "the pacing plan has ${#round_budget_waits[@]} decisions, not one per round"
+
 while [ "$round" -lt "$max_rounds" ]; do
   round=$((round + 1))
-  if [ "$round" -gt 1 ]; then
-    # Two `/ws?code=` joins per round from this one loopback address, against
-    # the server's production per-IP budget (5/min). Paced, never relaxed.
-    say "-- waiting out the server's per-IP join budget before round $round"
-    sleep 65
-  fi
+  pace_join_budget "$round"
 
   code_role="${round_code_roles[$((round - 1))]:-}"
   planned_role="${planned_roles[$((round - 1))]:-}"

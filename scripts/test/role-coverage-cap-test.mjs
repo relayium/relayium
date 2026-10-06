@@ -124,6 +124,9 @@ const LANES = {
   cliWeb: "scripts/interop/cli-web-acceptance.sh",
   cliWebDriver: "web/e2e/cli-web-pairing.mjs",
   cliWebOracle: "scripts/interop/cli-web-oracle.py",
+  // Read only: the per-IP request caps the CLI ↔ Web lane paces against.
+  serverWsRoute: "server/wsroute.go",
+  serverMain: "server/main.go",
 };
 
 const FIXTURE = new URL("../../web/e2e/android-interop.mjs", import.meta.url).pathname;
@@ -526,6 +529,20 @@ const WEB_LIST = (name) => new RegExp(`^${name}=\\(([^)\\n]*)\\)$`, "gm");
 /** The sockets each code role's round opens, in order (the plan's shape). */
 const WEB_SHAPE = { cli: ["cli", "web:code-room"], web: ["web:landing", "web:cross-network", "web:code-room", "cli"] };
 const E2E_DIR = new URL("../../web/e2e/", import.meta.url).pathname;
+/** The four rounds the lane must play, in any order: (code role / SAS /
+ *  CLI link role / ending). The interrupt is the page-minted SAS round's. */
+const WEB_SEMANTIC_CELLS = ["cli/default/initiator/quit", "cli/on/responder/quit", "web/default/initiator/quit", "web/on/responder/interrupt"];
+const PACE_FN = /^pace_join_budget\(\) \{\n[\s\S]*?\n\}\n/gm;
+const PACE_BLOCK = /^budget_plan="\$\(python3 "\$here\/cli-matrix-plan\.py" web-budget "\$\{round_code_roles\[@\]\}"\)" \\\n[\s\S]*?(?=\nwhile )/gm;
+const WS_JOIN_CAP = /^const wsJoinPerIPPerMinute = (\d+)$/gm;
+const WS_JOIN_LIMITER = /^\twsCodeLimiter := signal\.NewRateLimiter\(account\.PerInstanceThreshold\(wsJoinPerIPPerMinute, div\), time\.Minute, /gm;
+const ICE_LIMITER = /^\ticeLimiter := signal\.NewRateLimiter\(account\.PerInstanceThreshold\((\d+), div\), time\.Minute, /gm;
+const PLAN_BUDGET = /^WEB_JOIN_BUDGET = (\d+)$/gm;
+/** The server's limiter window (`time.Minute`, sliding, whole seconds): a
+ *  wait empties it only if it is longer. */
+const LIMIT_WINDOW_S = 60;
+/** The lane's claim: its four rounds need exactly this many budget waits. */
+const LANE_WAITS = 2;
 const SCRIPTS_DIR = new URL("../", import.meta.url).pathname;
 
 /**
@@ -586,6 +603,8 @@ function evaluateCliWeb(w, problems, exactlyOne) {
       bad("cliWeb:cells", `endings ${JSON.stringify(endings)} do not cover /quit and the interrupt`);
     } else if (!codes.every((c, i) => verify[i] === (codes.indexOf(c) === i ? "on" : "default"))) {
       bad("cliWeb:cells", `verify ${JSON.stringify(verify)} is not SAS on for each code role's first round and the shipped default after`);
+    } else if (JSON.stringify(codes.map((c, i) => `${c}/${verify[i]}/${roles[i]}/${endings[i]}`).sort()) !== JSON.stringify(WEB_SEMANTIC_CELLS)) {
+      bad("cliWeb:cells", `the rounds play ${codes.map((c, i) => `${c}/${verify[i]}/${roles[i]}/${endings[i]}`).join(", ")}, not exactly the four semantic cells ${WEB_SEMANTIC_CELLS.join(", ")}`);
     } else {
       let at = 0;
       const want = codes.map((c) => (at += WEB_SHAPE[c]?.length ?? 0));
@@ -615,6 +634,34 @@ function evaluateCliWeb(w, problems, exactlyOne) {
   }
   if (!body.includes('--plan "$plan" --out "$obs" --server-log "$run_root/server.log"\n')) {
     bad("cliWeb:driver-log", "the driver no longer reads this run's server log for its barriers");
+  }
+
+  // The pacing: one planner decision per round from the declared socket
+  // counts, waited by ONE function the round calls before anything else —
+  // after the previous round's clients are gone, before this round's plan.
+  if (!body.includes('  round=$((round + 1))\n  pace_join_budget "$round"\n')) {
+    bad("cliWeb:pacing", "a round no longer starts by pacing the server's per-IP join budget");
+  }
+  const bodyCode = body.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
+  if (/(?:^|[\s;&|(])sleep\b/m.test(bodyCode)) bad("cliWeb:pacing", "the round loop sleeps outside the pacing plan (an ad hoc wait)");
+  const paceBlock = exactlyOne("cliWeb:pacing", text, PACE_BLOCK, `${LANES.cliWeb} pacing plan from the planner's web-budget`);
+  const paceFn = exactlyOne("cliWeb:pacing", text, PACE_FN, `${LANES.cliWeb} pace_join_budget`);
+
+  // The budget is the server's own: the tighter of the /ws join cap and the
+  // /api/ice request cap, both per IP per minute. The planner may not assume
+  // a looser one.
+  const wsCap = exactlyOne("cliWeb:budget-source", w.serverWsRoute, WS_JOIN_CAP, `${LANES.serverWsRoute} wsJoinPerIPPerMinute`);
+  const wsWired = exactlyOne("cliWeb:budget-source", w.serverMain, WS_JOIN_LIMITER, `${LANES.serverMain} wsCodeLimiter per minute`);
+  const iceCap = exactlyOne("cliWeb:budget-source", w.serverMain, ICE_LIMITER, `${LANES.serverMain} iceLimiter per minute`);
+  const planCap = exactlyOne("cliWeb:budget-source", w.cliAndroidPlan, PLAN_BUDGET, `${LANES.cliAndroidPlan} WEB_JOIN_BUDGET`);
+  const serverBudget = wsCap && wsWired && iceCap ? Math.min(Number(wsCap[1]), Number(iceCap[1])) : null;
+  if (serverBudget !== null && planCap && Number(planCap[1]) !== serverBudget) {
+    bad("cliWeb:budget-source", `the planner paces against ${planCap[1]} sockets a window, not the server's ${serverBudget}`);
+  }
+  // Paced over the declared rounds; max_rounds itself is `cliWeb:rounds`'s.
+  if (paceBlock && paceFn && codes && serverBudget !== null) {
+    const wrong = pacingBehavior(paceFn[0], paceBlock[0], w.cliAndroidPlan ?? "", codes, codes.length, serverBudget);
+    if (wrong.length) bad("cliWeb:pacing-behavior", `the pacing misbehaves when run:\n      ${wrong.join("\n      ")}`);
   }
   if (!inOrder(body, ['\n  wait "$driver_pid" || driver_status=$?\n  retire_owned_child "driver-$round" "$driver_pid"\n',
                       '\n  cli_role="$(python3 "$here/cli-web-oracle.py" "$plan" "$obs")"',
@@ -669,6 +716,94 @@ function evaluateCliWeb(w, problems, exactlyOne) {
 }
 
 /**
+ * The lane's pacing, RUN: the shell's own `pace_join_budget` and pacing-plan
+ * block, in a bash fixture whose `sleep` only records its argument (no clock
+ * is touched), with the planner text under evaluation as the only file in a
+ * scratch interop directory. Each round's sockets are counted from this
+ * test's own WEB_SHAPE, not from the planner, and every 60-second window is
+ * summed from the trace: a wait empties the window only if it outlasts it.
+ * Memoised per input.
+ */
+const pacingCache = new Map();
+function pacingBehavior(fnText, blockText, planText, codes, maxRounds, budget) {
+  const key = JSON.stringify([fnText, blockText, planText, codes, maxRounds, budget]);
+  if (pacingCache.has(key)) return pacingCache.get(key);
+  const problems = [];
+  const WIDE = '\nWEB_SOCKETS["wide"] = tuple(("web", "lan-%d" % i) for i in range(6))\n';
+  const SCENARIOS = [
+    ["the lane's rounds", { roles: codes, rounds: maxRounds }, { exit: 0, rounds: maxRounds, waits: LANE_WAITS }],
+    ["the former alternating order (2, 4, 2, 4 sockets)", { roles: ["cli", "web", "cli", "web"], rounds: 4 }, { exit: 0, rounds: 4, waits: 3 }],
+    ["a round wider than any window", { roles: ["cli", "wide"], rounds: 2, wide: true },
+      { exit: 1, rounds: 0, waits: 0, says: /round 2 opens 6 sockets, more than the \d+ one window may carry[\s\S]*cannot be paced/ }],
+    ["an unknown code role", { roles: ["cli", "api"], rounds: 2 }, { exit: 1, rounds: 0, waits: 0, says: /neither cli nor web/ }],
+    ["a pacing plan shorter than the rounds", { roles: codes, rounds: maxRounds + 1 },
+      { exit: 1, rounds: 0, waits: 0, says: /has \d+ decisions, not one per round/ }],
+    ["a round beyond the plan", { roles: codes, rounds: maxRounds, extra: true },
+      { exit: 1, rounds: maxRounds, waits: LANE_WAITS, says: new RegExp(`no decision for round ${maxRounds + 1}`) }],
+  ];
+  SCENARIOS.forEach(([name, given, want], i) => {
+    const dir = join(scratch, `pacing-${pacingCache.size}-${i}`);
+    mkdirSync(dir);
+    const trace = join(dir, "trace");
+    writeFileSync(trace, "");
+    const plan = given.wide ? planText.replace('\n\nif __name__ == "__main__":', `${WIDE}\n\nif __name__ == "__main__":`) : planText;
+    writeFileSync(join(dir, "cli-matrix-plan.py"), plan);
+    const script = [
+      "set -Eeuo pipefail",
+      `here=${shq(dir)}`,
+      `trace=${shq(trace)}`,
+      `max_rounds=${shq(given.rounds)}`,
+      `round_code_roles=(${given.roles.map(shq).join(" ")})`,
+      `say() { printf '%s\\n' "$*" >&2; }`,
+      `fail() { printf 'FAIL: %s\\n' "$*" >&2; exit 1; }`,
+      `sleep() { printf 'sleep %s\\n' "$*" >>"$trace"; }`,
+      fnText,
+      blockText,
+      "round=0",
+      'while [ "$round" -lt "$max_rounds" ]; do',
+      "  round=$((round + 1))",
+      '  pace_join_budget "$round"',
+      `  printf 'round %s\\n' "$round" >>"$trace"`,
+      "done",
+      given.extra ? 'pace_join_budget "$((max_rounds + 1))"' : "",
+      `printf 'RETURNED\\n' >&2`,
+    ].join("\n") + "\n";
+    writeFileSync(join(dir, "run.sh"), script);
+    const r = spawnSync("bash", [join(dir, "run.sh")], { cwd: dir, encoding: "utf8", timeout: 20_000 });
+    const errText = r.stderr ?? "";
+    const lines = readFileSync(trace, "utf8").split("\n").filter(Boolean);
+    const got = [];
+    if (r.status !== want.exit) got.push(`exit ${r.status}, want ${want.exit}`);
+    if ((want.exit === 0) !== /RETURNED/.test(errText)) got.push(want.exit === 0 ? "did not return" : "returned");
+    if (want.says && !want.says.test(errText)) got.push(`no ${want.says} in its failure`);
+    let window = 0;
+    let waits = 0;
+    let played = 0;
+    for (const l of lines) {
+      const sl = /^sleep (\S+)$/.exec(l);
+      const rd = /^round (\d+)$/.exec(l);
+      if (sl) {
+        waits++;
+        if (!(Number(sl[1]) > LIMIT_WINDOW_S)) got.push(`a ${sl[1]}s wait does not outlast the server's ${LIMIT_WINDOW_S}s window`);
+        else window = 0;
+      } else if (rd) {
+        played++;
+        if (Number(rd[1]) !== played) got.push(`round ${rd[1]} played out of order`);
+        const shape = WEB_SHAPE[given.roles[played - 1]];
+        if (!shape) got.push(`round ${played} (${given.roles[played - 1]}) was played unpaceable`);
+        window += shape?.length ?? 0;
+        if (window > budget) got.push(`round ${played} brings its window to ${window} sockets, over the server's ${budget}`);
+      } else got.push(`unexpected trace line ${JSON.stringify(l)}`);
+    }
+    if (played !== want.rounds) got.push(`${played} round(s) played, want ${want.rounds}`);
+    if (waits !== want.waits) got.push(`${waits} budget wait(s), want ${want.waits}`);
+    if (got.length) problems.push(`pacing "${name}": ${got.join("; ")}: ${errText.trim().split("\n").slice(-2).join(" | ").slice(0, 300)}`);
+  });
+  pacingCache.set(key, problems);
+  return problems;
+}
+
+/**
  * The driver's barriers, RUN: the driver text under evaluation, written as
  * the only real file in a scratch mirror of web/e2e (every other entry a
  * symlink, `scripts` too), through its print-only `--check-barrier` seam with
@@ -695,9 +830,9 @@ function driverBehavior(drvText) {
     return r.status === 0 ? JSON.parse(r.stdout).identity : null;
   };
   const R1 = identity(1, "cli", "on", "quit", 1, 2, "responder");
-  const R2 = identity(2, "web", "on", "interrupt", 3, 6, "responder");
-  if (!R1 || !R2) {
-    problems.push("the real planner refused the lane's rounds 1/2");
+  const R3 = identity(3, "web", "on", "interrupt", 5, 8, "responder");
+  if (!R1 || !R3) {
+    problems.push("the real planner refused the lane's rounds 1/3");
     driverCache.set(drvText, problems);
     return problems;
   }
@@ -705,30 +840,30 @@ function driverBehavior(drvText) {
   const ws = (room, welcomes, rosters) => ({ path: "/ws", room, welcomes, rosters });
   const r1 = { "cli:code-room": { append: line(1) },
     "web:code-room": { append: line(2), doc: { path: "/cross-network", sockets: [ws("code", [R1.expectedWebId], [[R1.expectedCliId, R1.expectedWebId].sort()])] } } };
-  const [l1, l2, cr] = R2.sockets;
-  const r2 = {
-    "web:landing": { append: line(3), doc: { path: "/", sockets: [ws("lan", [l1.id], [[]])] } },
-    "web:cross-network": { append: line(4), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]])] } },
-    "web:code-room": { append: line(5), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [[cr.id]])] } },
-    "cli:code-room": { append: line(6) },
+  const [l1, l2, cr] = R3.sockets;
+  const r3 = {
+    "web:landing": { append: line(5), doc: { path: "/", sockets: [ws("lan", [l1.id], [[]])] } },
+    "web:cross-network": { append: line(6), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]])] } },
+    "web:code-room": { append: line(7), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [[cr.id]])] } },
+    "cli:code-room": { append: line(8) },
   };
   const SCENARIOS = [
     ["R1 the CLI's prefix short twice, then exact", R1, "cli", 0, { onOpen: { ...r1, "cli:code-room": {} }, appendAt: { 2: line(1) } },
       { events: ["open cli:code-room", "open web:code-room", "welcomed 2"], barriers: [1, 2], polls: 2 }],
-    ["R2 the page's three sockets, then the CLI", R2, "web", 2, { onOpen: r2 },
-      { events: ["open web:landing", "welcomed 3", "open web:cross-network", "welcomed 4", "open web:code-room", "welcomed 5", "open cli:code-room"], barriers: [3, 4, 5, 6], polls: 0 }],
+    ["R3 the page's three sockets, then the CLI", R3, "web", 4, { onOpen: r3 },
+      { events: ["open web:landing", "welcomed 5", "open web:cross-network", "welcomed 6", "open web:code-room", "welcomed 7", "open cli:code-room"], barriers: [5, 6, 7, 8], polls: 0 }],
     ["R1 an extra socket before the handover", R1, "cli", 0, { onOpen: { ...r1, "cli:code-room": { append: line(1) + line(2) } } },
       { events: ["open cli:code-room"], error: /sequence 2 .* while waiting for 1/ }],
     ["R1 the CLI exits before its accept", R1, "cli", 0, { onOpen: { ...r1, "cli:code-room": { die: "the CLI exited" } } },
       { events: ["open cli:code-room"], error: /the CLI exited before the server accepted it/ }],
-    ["R2 the page's code room welcomed as another id", R2, "web", 2,
-      { onOpen: { ...r2, "web:code-room": { append: line(5), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]]), ws("code", [ids[5]], [[ids[5]]])] } } } },
-      { events: ["open web:landing", "welcomed 3", "open web:cross-network", "welcomed 4", "open web:code-room"], error: /was welcomed as e888888888888888, but the schedule planned 0888888888888888/ }],
-    ["R2 the page's code room not the page alone", R2, "web", 2,
-      { onOpen: { ...r2, "web:code-room": { append: line(5), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [[cr.id, ids[0]]])] } } } },
-      { events: ["open web:landing", "welcomed 3", "open web:cross-network", "welcomed 4", "open web:code-room"], error: /not the page alone before the CLI started/ }],
-    ["R2 the landing page opened two sockets", R2, "web", 2,
-      { onOpen: { ...r2, "web:landing": { append: line(3) + line(4), doc: { path: "/", sockets: [ws("lan", [l1.id], [[]]), ws("lan", [], [])] } } } },
+    ["R3 the page's code room welcomed as another id", R3, "web", 4,
+      { onOpen: { ...r3, "web:code-room": { append: line(7), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]]), ws("code", [ids[7]], [[ids[7]]])] } } } },
+      { events: ["open web:landing", "welcomed 5", "open web:cross-network", "welcomed 6", "open web:code-room"], error: /was welcomed as e888888888888888, but the schedule planned 0888888888888888/ }],
+    ["R3 the page's code room not the page alone", R3, "web", 4,
+      { onOpen: { ...r3, "web:code-room": { append: line(7), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [[cr.id, ids[0]]])] } } } },
+      { events: ["open web:landing", "welcomed 5", "open web:cross-network", "welcomed 6", "open web:code-room"], error: /not the page alone before the CLI started/ }],
+    ["R3 the landing page opened two sockets", R3, "web", 4,
+      { onOpen: { ...r3, "web:landing": { append: line(5) + line(6), doc: { path: "/", sockets: [ws("lan", [l1.id], [[]]), ws("lan", [], [])] } } } },
       { events: ["open web:landing"], error: /landing document had opened 2 websockets/ }],
   ];
   SCENARIOS.forEach(([name, ident, codeRole, before, sc, want], i) => {
@@ -1216,20 +1351,79 @@ const MUTATIONS = [
     () => mutate("cliWeb", WEB_ID_LINE, swapIds(WEB_ID_LINE, 10, 11)),
     ["cliWeb:schedule"]],
   ["cli-web plans the CLI responder in every round",
-    () => mutate("cliWeb", "planned_roles=(responder responder initiator initiator)", "planned_roles=(responder responder responder responder)"),
+    () => mutate("cliWeb", "planned_roles=(responder initiator responder initiator)", "planned_roles=(responder responder responder responder)"),
     ["cliWeb:cells"]],
   ["cli-web never interrupts",
-    () => mutate("cliWeb", "round_endings=(quit interrupt quit quit)", "round_endings=(quit quit quit quit)"),
+    () => mutate("cliWeb", "round_endings=(quit quit interrupt quit)", "round_endings=(quit quit quit quit)"),
     ["cliWeb:cells"]],
   ["cli-web never compares the SAS",
-    () => mutate("cliWeb", "round_verify=(on on default default)", "round_verify=(default default default default)"),
+    () => mutate("cliWeb", "round_verify=(on default on default)", "round_verify=(default default default default)"),
     ["cliWeb:cells"]],
   ["cli-web counts two sockets per round (the R74 model)",
-    () => mutate("cliWeb", "round_prefix_ends=(2 6 8 12)", "round_prefix_ends=(2 4 6 8)"),
+    () => mutate("cliWeb", "round_prefix_ends=(2 4 8 12)", "round_prefix_ends=(2 4 6 8)"),
     ["cliWeb:cells"]],
   ["cli-web plays one code role twice",
-    () => mutate("cliWeb", "round_code_roles=(cli web cli web)", "round_code_roles=(cli web cli cli)"),
+    () => mutate("cliWeb", "round_code_roles=(cli cli web web)", "round_code_roles=(cli cli web cli)"),
     ["cliWeb:cells"]],
+  ["cli-web SAS on only for the CLI-minted rounds",
+    () => mutate("cliWeb", "round_verify=(on default on default)", "round_verify=(on default default default)"),
+    ["cliWeb:cells"]],
+  ["cli-web interrupts a CLI-minted round instead of the page-minted SAS round",
+    () => mutate("cliWeb", "round_endings=(quit quit interrupt quit)", "round_endings=(quit interrupt quit quit)"),
+    ["cliWeb:cells"]],
+  ["cli-web pacing never waits (the needed sleep removed)",
+    () => mutate("cliWeb", "      sleep 65\n", "      :\n"),
+    ["cliWeb:pacing-behavior"]],
+  ["cli-web waits inside the server's window (30 s)",
+    () => mutate("cliWeb", "      sleep 65\n", "      sleep 30\n"),
+    ["cliWeb:pacing-behavior"]],
+  ["cli-web planner under-reports a page-minted round's sockets",
+    () => mutate("cliAndroidPlan", "        cost = len(WEB_SOCKETS[role])\n", "        cost = 2\n"),
+    ["cliWeb:pacing-behavior"]],
+  ["cli-web planner budget above the server's (8)",
+    () => mutate("cliAndroidPlan", "\nWEB_JOIN_BUDGET = 5\n", "\nWEB_JOIN_BUDGET = 8\n"),
+    ["cliWeb:budget-source", "cliWeb:pacing-behavior"]],
+  ["cli-web planner budget below the server's (4)",
+    () => mutate("cliAndroidPlan", "\nWEB_JOIN_BUDGET = 5\n", "\nWEB_JOIN_BUDGET = 4\n"),
+    ["cliWeb:budget-source"]],
+  ["server /api/ice cap tightened to 3 (the planner's 5 now too loose)",
+    () => mutate("serverMain", "\ticeLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(5, div)", "\ticeLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(3, div)"),
+    ["cliWeb:budget-source", "cliWeb:pacing-behavior"]],
+  ["cli-web planner schedules a round wider than any window",
+    () => mutate("cliAndroidPlan", "        if cost > WEB_JOIN_BUDGET:\n", "        if False:\n"),
+    ["cliWeb:pacing-behavior"]],
+  ["cli-web planner never packs two rounds into one window",
+    () => mutate("cliAndroidPlan", "        if windows and windows[-1][1] + cost <= WEB_JOIN_BUDGET:\n", "        if False:\n"),
+    ["cliWeb:pacing-behavior"]],
+  ["cli-web back to the alternating order (three waits)",
+    () => {
+      let w2 = mutate("cliWeb", WEB_ID_LINE, [0, 1, 4, 5, 6, 7, 2, 3, 8, 9, 10, 11].map((i) => WEB_ID_LINE.split(",")[i]).join(","));
+      for (const [from, to] of [["round_code_roles=(cli cli web web)", "round_code_roles=(cli web cli web)"],
+        ["planned_roles=(responder initiator responder initiator)", "planned_roles=(responder responder initiator initiator)"],
+        ["round_verify=(on default on default)", "round_verify=(on on default default)"],
+        ["round_endings=(quit quit interrupt quit)", "round_endings=(quit interrupt quit quit)"],
+        ["round_prefix_ends=(2 4 8 12)", "round_prefix_ends=(2 6 8 12)"]]) {
+        if (w2.cliWeb.split(from).length !== 2) throw new Error(`mutation anchor ${from} is not unique`);
+        w2 = { ...w2, cliWeb: w2.cliWeb.replace(from, to) };
+      }
+      return w2;
+    },
+    ["cliWeb:pacing-behavior"]],
+  ["cli-web pacing defaults to go on a missing decision",
+    () => mutate("cliWeb", '    *) fail "the pacing plan has no decision for round $1" ;;\n', '    *) say "no decision for round $1" ;;\n'),
+    ["cliWeb:pacing-behavior"]],
+  ["cli-web pacing plan no longer one decision per round",
+    () => mutate("cliWeb", '[ "${#round_budget_waits[@]}" -eq "$max_rounds" ] \\\n  || fail "the pacing plan has ${#round_budget_waits[@]} decisions, not one per round"\n', ""),
+    ["cliWeb:pacing-behavior"]],
+  ["cli-web round not paced",
+    () => mutate("cliWeb", '  round=$((round + 1))\n  pace_join_budget "$round"\n', "  round=$((round + 1))\n"),
+    ["cliWeb:pacing"]],
+  ["cli-web paced only after the driver started",
+    () => { const w2 = mutate("cliWeb", '  round=$((round + 1))\n  pace_join_budget "$round"\n', "  round=$((round + 1))\n"); return { ...w2, cliWeb: w2.cliWeb.replace("  driver_pid=$!\n", '  driver_pid=$!\n  pace_join_budget "$round"\n') }; },
+    ["cliWeb:pacing"]],
+  ["cli-web loop sleeps ad hoc again (the former unconditional wait)",
+    () => mutate("cliWeb", '  pace_join_budget "$round"\n', '  pace_join_budget "$round"\n  [ "$round" -eq 1 ] || sleep 65\n'),
+    ["cliWeb:pacing"]],
   ["cli-web driver no longer reads the server log",
     () => mutate("cliWeb", ' --server-log "$run_root/server.log"\n', "\n"),
     ["cliWeb:driver-log"]],
@@ -1304,8 +1498,8 @@ const MUTATIONS = [
     () => ({ ...world, cliWeb: "" }),
     ["cliWeb:rounds", "cliWeb:loop", "cliWeb:ids", "cliWeb:ids-before-server", "cliWeb:cells", "cliWeb:cells", "cliWeb:cells",
      "cliWeb:cells", "cliWeb:cells", "cliWeb:assignment", "cliWeb:assignment", "cliWeb:assignment", "cliWeb:assignment",
-     "cliWeb:plan-binding", "cliWeb:driver-log", "cliWeb:round-end", "cliWeb:all-rounds", "cliWeb:count", "cliWeb:server-stop",
-     "cliWeb:signals"]],
+     "cliWeb:plan-binding", "cliWeb:driver-log", "cliWeb:pacing", "cliWeb:pacing", "cliWeb:pacing", "cliWeb:round-end",
+     "cliWeb:all-rounds", "cliWeb:count", "cliWeb:server-stop", "cliWeb:signals"]],
   ["cli-android file unreadable (empty)",
     () => ({ ...world, cliAndroid: "" }),
     ["cliAndroid:rounds", "cliAndroid:loop", "cliAndroid:ids", "cliAndroid:roles", "cliAndroid:assignment",

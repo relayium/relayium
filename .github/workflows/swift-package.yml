@@ -104,6 +104,14 @@ on:
     paths:
       - 'apps/RelayiumKit/**'
       - 'apps/mac/**'
+      # The macOS release-readiness manifest is a release-CONTROL record, not
+      # an input: no build, package test or signed artifact reads it. The
+      # unfiltered repo-hygiene lane runs `test-release-readiness.sh
+      # --files-only` on every change, and macos-release.yml re-checks it in
+      # full, so a record-only edit needs neither Apple lane. The exclusion is
+      # this one exact file and must FOLLOW `apps/mac/**` (last match wins);
+      # anything else under apps/mac still starts this lane.
+      - '!apps/mac/release-readiness.json'
       - 'apps/ios/**'
       # The named-execution proof this lane's `swift test` log is judged by.
       # It decides whether the forced interop classes RAN, so an edit to it is
