@@ -196,6 +196,15 @@ const DIRECT_HEADLINE_SOURCE = (version) =>
 const buildRecords = (text, version) =>
   text.match(new RegExp(`(?<![0-9.])${quoteRegExp(version)} \\([0-9]+\\)`, "g")) ?? [];
 
+/**
+ * apps/README.md's internal TestFlight records, which state historical facts —
+ * including the direct tag a build was compared against — that a bump must not
+ * move. "No superseded direct tag is left" is a claim about the prose OUTSIDE
+ * them; inside them the old tag is the record.
+ */
+const TESTFLIGHT_RECORDS = /\*\*Internal TestFlight, read back [^*]+\.\*\*[\s\S]*?(?=\n\n|$)/g;
+const outsideTestFlightRecords = (text) => text.replace(TESTFLIGHT_RECORDS, "");
+
 const macTags = (text) => new Set([...text.matchAll(/macos-v[0-9]+(?:\.[0-9]+){1,2}/g)].map((m) => m[0]));
 
 describe("bumping the documents that name the published macOS release", () => {
@@ -212,7 +221,7 @@ describe("bumping the documents that name the published macOS release", () => {
       // `scripts/test/document-claims-test.mjs` requires the current tag and
       // `repository-status.test.mjs` requires that no superseded one is left
       // beside it.
-      expect(text, `${doc} still links the superseded release`)
+      expect(outsideTestFlightRecords(text), `${doc} still links the superseded release`)
         .not.toContain(`macos-v${PUBLISHED}`);
     }
 
@@ -389,7 +398,7 @@ describe("bumping the documents that name the published macOS release", () => {
           .toContain(PUBLISHED);
       }
       expect(text, `${doc} did not move the Developer ID claim`).toContain(`macos-v${NEXT}`);
-      expect(text, `${doc} left a superseded direct download tag`)
+      expect(outsideTestFlightRecords(text), `${doc} left a superseded direct download tag`)
         .not.toContain(`macos-v${PUBLISHED}`);
     }
   });
@@ -636,6 +645,60 @@ describe("bumping the documents that name the published macOS release", () => {
       expect(after.match(RECORD)?.[0], `the record lost ${fact}`).toContain(fact);
     }
     expect(flat(after), "the direct-download headline did not move").toContain(directHeadline(LATER));
+  });
+
+  /**
+   * A synthetic record in the real document's position and shape, so the cases
+   * below control which versions and tags it names instead of depending on
+   * whichever build happens to be current. It names the PUBLISHED direct tag as
+   * history — the exact spelling the 1.4.6 (43) record carries and the bump
+   * used to rewrite — wrapped across a line so the protection cannot rely on
+   * one physical line.
+   */
+  const TESTFLIGHT_RECORD_BLOCK = /\*\*Internal TestFlight, read back [^*]+\.\*\*[\s\S]*?(?=\n\n)/;
+  const syntheticRecord = (version) =>
+    "**Internal TestFlight, read back 2026-10-06.** The current internal TestFlight\n"
+    + `build is \`${version} (77)\`: built from source \`0123abc\` — not from \`fedc321\`, the source of the\n`
+    + `\`macos-v${PUBLISHED}\` direct release, which shipped ${PUBLISHED} (76) to\n`
+    + "the internal group.";
+
+  async function stagedWithRecord(version) {
+    const root = await stagedDocs();
+    const path = resolve(root, "apps/README.md");
+    const real = await readFile(path, "utf8");
+    expect(real, "apps/README.md has no internal TestFlight record to replace").toMatch(TESTFLIGHT_RECORD_BLOCK);
+    const record = syntheticRecord(version);
+    await writeFile(path, real.replace(TESTFLIGHT_RECORD_BLOCK, () => record), "utf8");
+    return { root, path, record };
+  }
+
+  for (const [label, version] of [
+    ["matches", () => PUBLISHED],
+    ["has diverged from", () => NEXT],
+  ]) {
+    it(`keeps a record's historical direct tag when its build ${label} the direct version`, async () => {
+      const { root, path, record } = await stagedWithRecord(version());
+      await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT });
+      const after = await readFile(path, "utf8");
+      expect(after, "the bump rewrote the internal TestFlight record").toContain(record);
+      expect(after.match(TESTFLIGHT_RECORD_BLOCK)?.[0], "the historical tag was rewritten")
+        .toContain(`\`macos-v${PUBLISHED}\``);
+      expect(after.match(TESTFLIGHT_RECORD_BLOCK)?.[0]).not.toContain(`macos-v${NEXT}`);
+      // Outside the record the same spellings still advance.
+      expect(flat(after), "the direct-download headline did not move").toContain(directHeadline(NEXT));
+      expect(after.replace(record, ""), "a direct tag outside the record stayed behind")
+        .not.toMatch(new RegExp(`macos-v${quoteRegExp(PUBLISHED)}(?![0-9.])`));
+    });
+  }
+
+  it("still moves a direct tag in the paragraph right after the record", async () => {
+    const { root, path, record } = await stagedWithRecord(NEXT);
+    const real = await readFile(path, "utf8");
+    const trailing = `\n\nDownload \`macos-v${PUBLISHED}\` from GitHub.`;
+    await writeFile(path, real.replace(record, () => record + trailing), "utf8");
+    await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT });
+    const after = await readFile(path, "utf8");
+    expect(after).toContain(record + `\n\nDownload \`macos-v${NEXT}\` from GitHub.`);
   });
 });
 

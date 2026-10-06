@@ -442,13 +442,45 @@ function releaseVersionPattern(version, { global = true } = {}) {
   );
 }
 
-/** Rewrite `pattern` everywhere EXCEPT inside the document's App Store claims. */
-function rewriteOutsideAppStoreClaims(text, pattern, to, url) {
+/**
+ * An internal TestFlight record: a whole Markdown paragraph that opens with the
+ * bold `**Internal TestFlight, read back <date>.**` marker and runs to the next
+ * blank line (or the end of the document).
+ *
+ * The "version (build)" look-ahead in `releaseVersionPattern` protects the
+ * build the record names, but a record also states historical facts by other
+ * spellings — the 1.4.6 (43) record says its build came "not from `97fd70806`,
+ * the source of the `macos-v1.4.6` direct release". That tag is a fact about the
+ * past; the bump to the next direct release turned it into `macos-v<next>`,
+ * which names a release that did not exist when the record was read back and
+ * that the build was never compared against. No look-around can tell that tag
+ * from the current one: the two are spelled identically and differ only by
+ * which paragraph they sit in, and whether the TestFlight build happens to
+ * share the direct version is irrelevant. So the record is carved out by its
+ * structural bounds, like the App Store link, and a human moves it when the
+ * TestFlight side actually moves. Whitespace inside the marker may wrap.
+ */
+const TESTFLIGHT_RECORD =
+  /(?<=^|\n[ \t]*\n)\*\*Internal\s+TestFlight,\s+read\s+back\s[^*]+\*\*[\s\S]*?(?=\n[ \t]*\n|$)/g;
+
+const testFlightRecords = (text) => text.match(TESTFLIGHT_RECORD) ?? [];
+
+/**
+ * Rewrite `pattern` everywhere EXCEPT inside the document's App Store claims and
+ * its internal TestFlight records. Overlapping spans are merged, so neither
+ * carve-out can re-expose the other.
+ */
+function rewriteOutsideProtectedSpans(text, pattern, to, url) {
+  const spans = [...text.matchAll(appStoreClaimPattern(url)), ...text.matchAll(TESTFLIGHT_RECORD)]
+    .map((match) => [match.index, match.index + match[0].length])
+    .sort((a, b) => a[0] - b[0]);
   let out = "";
   let cursor = 0;
-  for (const claim of text.matchAll(appStoreClaimPattern(url))) {
-    out += text.slice(cursor, claim.index).replace(pattern, to) + claim[0];
-    cursor = claim.index + claim[0].length;
+  for (const [start, end] of spans) {
+    if (end <= cursor) continue;
+    const from = Math.max(start, cursor);
+    out += text.slice(cursor, from).replace(pattern, to) + text.slice(from, end);
+    cursor = end;
   }
   return out + text.slice(cursor).replace(pattern, to);
 }
@@ -590,9 +622,14 @@ export async function bumpReleaseDocs({ repoRoot, from, to, docs = RELEASE_DOCS 
   for (const doc of docs) {
     const path = resolve(repoRoot, doc);
     const before = await readFile(path, "utf8");
-    const after = rewriteOutsideAppStoreClaims(before, pattern, to, appStore.url);
+    const after = rewriteOutsideProtectedSpans(before, pattern, to, appStore.url);
     if (after === before) {
       throw new Error(`${doc} names no published macOS release ${from}`);
+    }
+    // The TestFlight carve-out, proven on the OUTPUT before anything is written:
+    // every record must survive byte for byte, whatever the versions involved.
+    if (testFlightRecords(after).join("\n\n") !== testFlightRecords(before).join("\n\n")) {
+      throw new Error(`${doc}'s internal TestFlight record was rewritten by the ${from} -> ${to} bump`);
     }
     if (APP_STORE_CLAIM_DOCS.includes(doc)) {
       assertAppStoreClaims(doc, before, appStore);
