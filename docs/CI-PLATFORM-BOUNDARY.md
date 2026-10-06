@@ -1924,6 +1924,14 @@ the merged pull request's proof covers exactly this tree:
    lanes their reuse; dispatch it only after that commit's ordinary `main`
    evidence jobs have finished.
 
+   One E-only exception, never a proof: after "Judge every lane", and only in
+   this mode, the aggregate records and uploads a full-bootstrap receipt
+   (`relayium-macos-full-bootstrap-receipt-attempt-<n>`, 14 days). The macOS
+   release may reuse that run's `macos / signed-build` for a commit with NO
+   `macos.yml` push run (`scripts/release/macos-bootstrap.mjs`, described in
+   `docs/MACOS-RELEASE-POLICY.md`). `scripts/ci/ci-evidence.mjs` never reads
+   the receipt and the proof producers' conditions are unchanged.
+
    What it is not. It is additional validation of one commit, never a waiver:
    the ordinary `push: main` runs and their bare `wire-vectors` keep deciding
    promotion exactly as before, and a red ordinary result is fixed through the

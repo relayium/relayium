@@ -947,6 +947,22 @@ const EV_MAIN_PUSH = "github.event_name == 'push' && github.ref == 'refs/heads/m
 const EV_CHECKOUT = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd";
 const EV_NODE = "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e";
 const EV_UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+/** The full-bootstrap receipt steps' condition and the record step's script (6w executes it). */
+const BOOT_RECEIPT_IF = "github.event_name == 'workflow_dispatch' && inputs.mode == 'full-bootstrap'";
+const BOOT_RECEIPT_RUN = [
+  "set -euo pipefail",
+  'mkdir -p "$RUNNER_TEMP/full-bootstrap"',
+  'jq -n --arg mode "$RECEIPT_MODE" --arg base "$RECEIPT_BASE" --arg head "$RECEIPT_HEAD" \\',
+  '  --arg sha "$GITHUB_SHA" --arg ref "$GITHUB_REF" --arg repositoryId "$GITHUB_REPOSITORY_ID" \\',
+  '  --arg runId "$GITHUB_RUN_ID" --arg runAttempt "$GITHUB_RUN_ATTEMPT" \\',
+  '  --arg workflowRef "$GITHUB_WORKFLOW_REF" --arg workflowSha "$GITHUB_WORKFLOW_SHA" \\',
+  '  --arg signedArtifact "$RECEIPT_SIGNED_ARTIFACT" \\',
+  "  '{schema:\"relayium-macos-full-bootstrap-receipt/v1\",mode:$mode,base:$base,head:$head,sha:$sha,ref:$ref,",
+  "    repositoryId:$repositoryId,runId:$runId,runAttempt:$runAttempt,workflowRef:$workflowRef,",
+  "    workflowSha:$workflowSha,signedArtifact:$signedArtifact}' \\",
+  '  > "$RUNNER_TEMP/full-bootstrap/full-bootstrap-receipt.json"',
+  "",
+].join("\n");
 const EV_GRANTS = { contents: "read", actions: "read", "pull-requests": "read" };
 /** The paid probes run only on an ordinary main push the screen found eligible. */
 const EV_SCREEN_ELIGIBLE = "needs.screen.result == 'success' && needs.screen.outputs.eligible == 'true'";
@@ -1516,12 +1532,23 @@ function evidenceAdoptionFailures(world) {
       name: "relayium-ci-evidence-proof-attempt-${{ github.run_attempt }}",
       path: "${{ runner.temp }}/ci-evidence/ci-evidence.json", "if-no-files-found": "ignore", "retention-days": "7",
     } },
+    // The full bootstrap's E-only receipt (scripts/release/macos-bootstrap.mjs):
+    // LAST, after the proof steps, on that one mode only, never a proof name.
+    { name: "Record the full-bootstrap signed-build receipt", if: BOOT_RECEIPT_IF, env: {
+      RECEIPT_MODE: "${{ inputs.mode }}", RECEIPT_BASE: "${{ inputs.base_sha }}", RECEIPT_HEAD: "${{ inputs.head_sha }}",
+      RECEIPT_SIGNED_ARTIFACT: "${{ needs.macos.outputs.signed_artifact }}",
+    }, run: BOOT_RECEIPT_RUN },
+    { name: "Keep the full-bootstrap signed-build receipt", if: BOOT_RECEIPT_IF, uses: EV_UPLOAD, with: {
+      name: "relayium-macos-full-bootstrap-receipt-attempt-${{ github.run_attempt }}",
+      path: "${{ runner.temp }}/full-bootstrap/full-bootstrap-receipt.json", "if-no-files-found": "error", "retention-days": "14",
+    } },
   ];
   need(steps.length === 1 + want.length && String(steps[0]?.run ?? "").includes("CONDITIONAL_LANES")
     && steps[0]?.if === undefined && deepEqual(steps.slice(1), want), `${AGGREGATE}/${GATE_JOB}: the steps after `
     + `the judgement are not the canonical proof producer.\n  got:  ${JSON.stringify(steps.slice(1))}\n`
     + `  want: ${JSON.stringify(want)}\nThe proof may be minted only after every lane is judged, only on a pull `
-    + "request, only by the verifier whose tests just passed, and only under its attempt-scoped name.");
+    + "request, only by the verifier whose tests just passed, and only under its attempt-scoped name; the "
+    + "full-bootstrap receipt only after them, only in that mode, and never under a proof's name.");
 
   // Every other workflow that calls an adopted lane must grant the same, or it
   // fails to start the moment the callee carries an evidence job.
@@ -12284,6 +12311,92 @@ function fullBootstrapFailures(world, fx, only = null) {
     && fullBootstrapFailures(world, fx).length === 0,
   `6v: ${AGGREGATE} changed on disk, or the unmutated cases stopped passing after the controls.`);
   spawnSync("rm", ["-rf", fx.root]);
+}
+
+// ── 6w. the full-bootstrap receipt writer, EXECUTED ─────────────────────────
+//
+// The aggregate's "Record the full-bootstrap signed-build receipt" step is the
+// one place a full bootstrap's dispatch inputs are written down, and the
+// release reuse judge (scripts/release/macos-bootstrap.mjs) believes the mode
+// only from it. So its script is taken out of the parsed workflow and RUN with
+// bash and jq, with every source DISTINCT, and each of the twelve fields must
+// carry exactly its own source — never a constant, never a neighbour. The judge
+// must also accept this very file as its canonical caller, and read exactly the
+// keys the step writes. Then one edit per kind of wrong wiring, in a copy, each
+// refused for its own field.
+{
+  const { RECEIPT_KEYS, callerProblem } = await import("../release/macos-bootstrap.mjs");
+  const RECORD = "Record the full-bootstrap signed-build receipt";
+  const sources = {
+    "inputs.mode": "mode-marker", "inputs.base_sha": "b".repeat(40), "inputs.head_sha": "c".repeat(40),
+    "needs.macos.outputs.signed_artifact": "artifact-marker",
+  };
+  const runEnv = { GITHUB_SHA: "d".repeat(40), GITHUB_REF: "refs/heads/ref-marker", GITHUB_REPOSITORY_ID: "4242",
+    GITHUB_RUN_ID: "9001", GITHUB_RUN_ATTEMPT: "3", GITHUB_WORKFLOW_REF: "o/r/.github/workflows/merge-gate.yml@refs/heads/main",
+    GITHUB_WORKFLOW_SHA: "e".repeat(40) };
+  const expected = { schema: "relayium-macos-full-bootstrap-receipt/v1", mode: "mode-marker", base: "b".repeat(40),
+    head: "c".repeat(40), sha: "d".repeat(40), ref: "refs/heads/ref-marker", repositoryId: "4242", runId: "9001", runAttempt: "3",
+    workflowRef: "o/r/.github/workflows/merge-gate.yml@refs/heads/main", workflowSha: "e".repeat(40), signedArtifact: "artifact-marker" };
+  /** Problems with one (possibly mutated) record step, executed. */
+  const receiptProblems = (step) => {
+    const out = [];
+    if (typeof step?.run !== "string") return [`${AGGREGATE}/${GATE_JOB}: no "${RECORD}" step with a run script`];
+    if ((step.run.match(/\$\{\{[^}]*\}\}/g) ?? []).length !== 0) out.push(`"${RECORD}" carries an inline expression`);
+    const dir = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/boot-receipt.XXXXXX`], { encoding: "utf8" }).stdout.trim();
+    try {
+      const env = { PATH: process.env.PATH, HOME: process.env.HOME ?? "/tmp", RUNNER_TEMP: dir, ...runEnv };
+      for (const [k, raw] of Object.entries(step.env ?? {})) {
+        const m = /^\$\{\{ (.+) \}\}$/.exec(String(raw));
+        if (!m || !(m[1] in sources)) { out.push(`"${RECORD}" env ${k} reads an unmodelled ${JSON.stringify(raw)}`); continue; }
+        env[k] = sources[m[1]];
+      }
+      spawnSync("bash", ["-c", 'printf "%s" "$2" > "$1/step.sh"', "_", dir, step.run]);
+      const r = spawnSync("bash", [`${dir}/step.sh`], { env, encoding: "utf8" });
+      if (r.status !== 0) return [...out, `"${RECORD}" exited ${r.status}: ${r.stderr.slice(-300)}`];
+      let got;
+      try { got = JSON.parse(readFileSync(`${dir}/full-bootstrap/full-bootstrap-receipt.json`, "utf8")); } catch (err) {
+        return [...out, `"${RECORD}" wrote no JSON receipt: ${err.message}`];
+      }
+      if (JSON.stringify(Object.keys(got).sort()) !== JSON.stringify([...RECEIPT_KEYS])) {
+        out.push(`the receipt carries keys ${JSON.stringify(Object.keys(got).sort())}; the reuse judge reads exactly ${JSON.stringify(RECEIPT_KEYS)}`);
+      }
+      for (const [key, want] of Object.entries(expected)) {
+        if (got[key] !== want) out.push(`receipt.${key} is ${JSON.stringify(got[key])}, want its own source ${JSON.stringify(want)}`);
+      }
+    } finally {
+      spawnSync("rm", ["-rf", dir]);
+    }
+    return out;
+  };
+  const original = docs.get(AGGREGATE);
+  const recordOf = (doc) => (doc?.jobs?.[GATE_JOB]?.steps ?? []).find((st) => st?.name === RECORD);
+  for (const message of receiptProblems(recordOf(original))) check(false, `6w: ${message}`);
+  const text = readFileSync(resolve(workflowsDir, AGGREGATE), "utf8");
+  const problem = callerProblem(text);
+  check(problem === null, `6w: scripts/release/macos-bootstrap.mjs does not accept ${AGGREGATE} as its canonical full-bootstrap caller: ${problem}`);
+  // The judge refuses a caller whose receipt is not exactly the canonical one.
+  for (const [name, from, to, reason] of [
+    ["the receipt steps lose their mode condition", "        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'full-bootstrap'\n        env:\n          RECEIPT_MODE",
+      "        if: github.event_name == 'workflow_dispatch'\n        env:\n          RECEIPT_MODE", /does not end with the canonical full-bootstrap receipt steps/],
+    ["the macos caller gains a with: block", "    uses: ./.github/workflows/macos.yml\n    permissions:\n      contents: read\n      actions: read\n      pull-requests: read\n    secrets:",
+      "    uses: ./.github/workflows/macos.yml\n    with:\n      release_version: '9.9.9'\n    permissions:\n      contents: read\n      actions: read\n      pull-requests: read\n    secrets:", /macos caller is not exactly the canonical call/],
+  ]) {
+    if (!text.includes(from)) { check(false, `6w control "${name}" could not be applied`); continue; }
+    const got = callerProblem(text.split(from).join(to));
+    check(got !== null && reason.test(got), `6w control "${name}" was not refused for ${reason}; got ${JSON.stringify(got)}`);
+  }
+  for (const [name, from, to, expect] of [
+    ["base and head swapped", '--arg base "$RECEIPT_BASE" --arg head "$RECEIPT_HEAD"', '--arg base "$RECEIPT_HEAD" --arg head "$RECEIPT_BASE"', /receipt\.base is/],
+    ["the attempt read from the run id", '--arg runAttempt "$GITHUB_RUN_ATTEMPT"', '--arg runAttempt "$GITHUB_RUN_ID"', /receipt\.runAttempt is/],
+    ["the mode written as a constant", '--arg mode "$RECEIPT_MODE"', "--arg mode full-bootstrap", /receipt\.mode is/],
+    ["the signed artifact dropped", ",signedArtifact:$signedArtifact}", "}", /the receipt carries keys/],
+  ]) {
+    const step = structuredClone(recordOf(original));
+    if (!step?.run?.includes(from)) { check(false, `6w control "${name}" could not be applied`); continue; }
+    step.run = step.run.split(from).join(to);
+    const got = receiptProblems(step);
+    check(got.some((m) => expect.test(m)), `6w control "${name}" was NOT refused for ${expect}; got ${JSON.stringify(got.slice(0, 3))}`);
+  }
 }
 
 // ── report ──────────────────────────────────────────────────────────────────

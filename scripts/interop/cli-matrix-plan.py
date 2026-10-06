@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """One round's plan for an A12 CLI interop cell, and the CLI's staged sources.
 
-    cli-matrix-plan.py web     RUN_ROOT ROUND CODE_ROLE VERIFY ENDING  > plan.json
+    cli-matrix-plan.py web     RUN_ROOT ROUND CODE_ROLE VERIFY ENDING \
+                               IDS_CSV FIRST_SEQ END_SEQ PLANNED_ROLE  > plan.json
     cli-matrix-plan.py android RUN_ROOT ROUND CODE_ROLE CANCEL [CODE]  > plan.json
     cli-matrix-plan.py android RUN_ROOT ROUND CODE_ROLE CANCEL CODE \
                                CLI_ID ANDROID_ID PLANNED_ROLE   > plan.json
@@ -34,6 +35,18 @@ server will assign (CLI first, then Android) and the link role they imply for
 the CLI. The plan carries them as `identity`; the shorter forms write an
 explicit `"identity": null` (no schedule, any role), so a plan never leaves
 the question unanswered.
+
+The web form is ONLY deterministic (`cli-web-acceptance.sh`): IDS_CSV is the
+run's whole twelve-id schedule and FIRST_SEQ..END_SEQ are the accepted
+websockets this round owns, in the order the driver opens them. A CLI-minted
+round owns two (the CLI, then the page on `/cross-network#c=CODE`); a
+page-minted round owns four, because the page opens a LAN-room socket on `/`,
+another on `/cross-network`, and only then rebinds to the code room it mints
+(App.svelte's unconditional mount socket, then `switchRoom`), and the CLI
+joins last. The plan's `identity` names every one of them, with the role the
+CLI and code-room ids imply. A schedule that cannot be one — a malformed or
+repeated id, a range that is not this code role's socket count, ids that
+imply another role — is refused before anything is staged.
 """
 import json
 import os
@@ -67,6 +80,48 @@ def android_identity(cli_id, android_id, planned_role):
 
 FLOW_BEYOND = 12 * 1024 * 1024 + 4096
 
+# The CLI ↔ Web lane's schedule length, and the sockets each code role's round
+# opens, in order: the first actor's, then the second's.
+WEB_SCHEDULE_LEN = 12
+WEB_SOCKETS = {
+    "cli": (("cli", "code-room"), ("web", "code-room")),
+    "web": (("web", "landing"), ("web", "cross-network"), ("web", "code-room"), ("cli", "code-room")),
+}
+SEQ = re.compile(r"[1-9][0-9]?")
+
+
+def web_identity(code_role, ids_csv, first_seq, end_seq, planned_role):
+    """One CLI ↔ Web round's planned sockets, refused here if they cannot be a
+    schedule at all — the oracle judges them again against what happened."""
+    if code_role not in WEB_SOCKETS:
+        raise ValueError("the code role %r is neither cli nor web" % (code_role,))
+    ids = ids_csv.split(",")
+    if len(ids) != WEB_SCHEDULE_LEN:
+        raise ValueError("the schedule has %d ids, not %d" % (len(ids), WEB_SCHEDULE_LEN))
+    for value in ids:
+        if not ID16.fullmatch(value):
+            raise ValueError("the schedule id %r is not 16 lowercase hex characters" % (value[:40],))
+    if len(set(ids)) != len(ids):
+        raise ValueError("the schedule repeats an id; two sockets would carry the same id")
+    for what, value in (("first", first_seq), ("end", end_seq)):
+        if not SEQ.fullmatch(value) or int(value) > WEB_SCHEDULE_LEN:
+            raise ValueError("the %s sequence %r is not within the %d-id schedule" % (what, value[:40], WEB_SCHEDULE_LEN))
+    shape = WEB_SOCKETS[code_role]
+    first, end = int(first_seq), int(end_seq)
+    if end - first + 1 != len(shape):
+        raise ValueError("sockets %d..%d are not the %d a %s-minted round opens" % (first, end, len(shape), code_role))
+    sockets = [{"seq": first + i, "id": ids[first + i - 1], "actor": actor, "stage": stage}
+               for i, (actor, stage) in enumerate(shape)]
+    cli_id = next(x["id"] for x in sockets if x["actor"] == "cli")
+    web_id = next(x["id"] for x in sockets if x["actor"] == "web" and x["stage"] == "code-room")
+    if planned_role not in ROLES:
+        raise ValueError("the planned role %r is neither initiator nor responder" % (planned_role,))
+    if link_role(cli_id, web_id) != planned_role:
+        raise ValueError("ids %s/%s make the CLI %s, not the planned %s"
+                         % (cli_id, web_id, link_role(cli_id, web_id), planned_role))
+    return {"schedule": ids, "firstSeq": first, "endSeq": end, "sockets": sockets,
+            "expectedCliId": cli_id, "expectedWebId": web_id, "plannedRole": planned_role}
+
 
 def body(size, seed):
     return bytes(((i * 31 + seed) & 0xFF) for i in range(size)) if size < 1_000_000 else _big(size, seed)
@@ -88,7 +143,7 @@ def stage(root, rel, size, seed):
     return path
 
 
-def web_plan(run_root, rnd, code_role, verify, ending):
+def web_plan(run_root, rnd, code_role, verify, ending, planned):
     r = int(rnd)
     stage_root = os.path.join(run_root, "stage-%d" % r)
     dest = os.path.join(run_root, "dest-%d" % r)
@@ -140,6 +195,9 @@ def web_plan(run_root, rnd, code_role, verify, ending):
         "codeRole": code_role,
         "verify": verify,
         "ending": ending,
+        # Every socket this round opens, the ids the server will assign them
+        # and the role they imply for the CLI: always present, never defaulted.
+        "identity": planned,
         "dest": dest,
         "stage": stage_root,
         # Whitespace-significant and non-ASCII on purpose: anything that trims,
@@ -266,9 +324,18 @@ def mac_plan(run_root, rnd, code_role):
 
 
 def main(argv):
-    if len(argv) == 7 and argv[1] == "web":
-        _, _, run_root, rnd, code_role, verify, ending = argv
-        plan = web_plan(run_root, rnd, code_role, verify, ending)
+    if len(argv) == 11 and argv[1] == "web":
+        _, _, run_root, rnd, code_role, verify, ending, ids_csv, first_seq, end_seq, planned_role = argv
+        if verify not in ("on", "default") or ending not in ("quit", "interrupt"):
+            print("cli-matrix-plan.py: verify %r / ending %r is not on|default / quit|interrupt" % (verify, ending),
+                  file=sys.stderr)
+            return 2
+        try:
+            identity = web_identity(code_role, ids_csv, first_seq, end_seq, planned_role)
+        except ValueError as err:
+            print("cli-matrix-plan.py: %s" % err, file=sys.stderr)
+            return 2
+        plan = web_plan(run_root, rnd, code_role, verify, ending, identity)
     elif len(argv) in (6, 7) and argv[1] == "android":
         plan = android_plan(*argv[2:])
     elif len(argv) == 10 and argv[1] == "android":

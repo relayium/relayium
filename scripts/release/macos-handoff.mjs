@@ -39,15 +39,18 @@ import {
   ACTIONS_APP_ID,
   ADOPTED_SHAPE,
   AUXILIARY_JOBS,
+  BOOTSTRAP_KIND,
   CERTIFY_JOB,
   COVERAGE_CERTIFIED,
   COVERAGE_EXECUTED,
   EVENT_CONTRACT_SHAPE,
   EVIDENCE_JOB,
   EVIDENCE_SCHEMA,
+  EVIDENCE_SCHEMA_V3,
   EXPECTED_JOBS,
   PAYLOAD_FILES,
   PROVENANCE_SCHEMA,
+  RECEIPT_ARTIFACT,
   Refused,
   TEAM_ID,
   WITNESSED_CONTRACT_SHAPE,
@@ -79,6 +82,14 @@ const PUBLISHER_PATH = ".github/workflows/macos-release.yml";
  */
 export const HANDOFF_SCHEMA = "relayium-macos-publication-handoff/v2";
 export const HANDOFF_SCHEMA_V1 = "relayium-macos-publication-handoff/v1";
+/**
+ * v3 — a record whose signed build was reused from a full-bootstrap
+ * `merge-gate.yml` dispatch of main (`main-full-bootstrap`), and only that:
+ * v2's fields with `signedBuild.producer` (the caller, the receipt, the
+ * aggregate's execution and the run's inventory). v1/v2 records, and every
+ * publisher-build or main-push record written now, are unchanged.
+ */
+export const HANDOFF_SCHEMA_V3 = "relayium-macos-publication-handoff/v3";
 /** `signedBuild.kind`: the publisher's own `build / ` call, or a reused `macos.yml` push run on main. */
 export const SIGNED_BUILD_KINDS = Object.freeze(["publisher-build", "main-push"]);
 const PRODUCER_SHAPES = Object.freeze(["legacy", ADOPTED_SHAPE, EVENT_CONTRACT_SHAPE, WITNESSED_CONTRACT_SHAPE]);
@@ -224,9 +235,9 @@ export function parseHandoff(text) {
     throw new Refused(`the handoff record is not JSON: ${error.message}`);
   }
   refuse(record !== null && typeof record === "object" && !Array.isArray(record), "the handoff record is not an object");
-  refuse(record.schema === HANDOFF_SCHEMA || record.schema === HANDOFF_SCHEMA_V1,
-    `handoff schema ${JSON.stringify(record.schema)} is not ${HANDOFF_SCHEMA} or ${HANDOFF_SCHEMA_V1}`);
-  const v2 = record.schema === HANDOFF_SCHEMA;
+  refuse(record.schema === HANDOFF_SCHEMA || record.schema === HANDOFF_SCHEMA_V1 || record.schema === HANDOFF_SCHEMA_V3,
+    `handoff schema ${JSON.stringify(record.schema)} is not ${HANDOFF_SCHEMA}, ${HANDOFF_SCHEMA_V3} or ${HANDOFF_SCHEMA_V1}`);
+  const v2 = record.schema === HANDOFF_SCHEMA || record.schema === HANDOFF_SCHEMA_V3;
   checkShape(record, v2 ? SHAPE_V2 : SHAPE, "");
   refuse(record.repository.id > 0, "handoff repository.id is not positive");
   refuse(VERSION.test(record.release.version), "handoff release.version is not a version");
@@ -281,6 +292,8 @@ export function parseHandoff(text) {
 }
 
 const SIGNED_BUILD_KEYS = ["coverage", "decision", "execution", "kind", "originalAttempt", "runId", "shape", "signedArtifact"];
+const SIGNED_BUILD_KEYS_V3 = [...SIGNED_BUILD_KEYS, "producer"].sort();
+const PRODUCER_KEYS = ["aggregate", "caller", "inventory", "kind", "receipt"];
 const DECISION_KEYS = ["attempt", "decidedAt", "identity", "mode", "preflight"];
 const DECISION_MODES = Object.freeze(["auto", "reuse"]);
 
@@ -300,9 +313,13 @@ export const decisionArtifactName = (sha, attempt) => `relayium-macos-build-sour
  */
 function parseSignedBuild(record) {
   const sb = record.signedBuild;
-  refuse(JSON.stringify(Object.keys(sb).sort()) === JSON.stringify(SIGNED_BUILD_KEYS),
-    `handoff signedBuild has keys [${Object.keys(sb).sort().join(", ")}]; the schema requires exactly [${SIGNED_BUILD_KEYS.join(", ")}]`);
-  refuse(SIGNED_BUILD_KINDS.includes(sb.kind), `handoff signedBuild.kind ${JSON.stringify(sb.kind)} is unknown`);
+  // v3 is the full-bootstrap kind and nothing else; v2 never is.
+  const v3 = record.schema === HANDOFF_SCHEMA_V3;
+  const keys = v3 ? SIGNED_BUILD_KEYS_V3 : SIGNED_BUILD_KEYS;
+  refuse(JSON.stringify(Object.keys(sb).sort()) === JSON.stringify(keys),
+    `handoff signedBuild has keys [${Object.keys(sb).sort().join(", ")}]; the schema requires exactly [${keys.join(", ")}]`);
+  refuse(v3 ? sb.kind === BOOTSTRAP_KIND : SIGNED_BUILD_KINDS.includes(sb.kind),
+    `handoff signedBuild.kind ${JSON.stringify(sb.kind)} is unknown${v3 ? ` to ${HANDOFF_SCHEMA_V3}` : ""}`);
   refuse(Number.isSafeInteger(sb.runId) && sb.runId > 0 && Number.isSafeInteger(sb.originalAttempt) && sb.originalAttempt > 0,
     "handoff signedBuild run/attempt is malformed");
   refuse(typeof sb.execution === "string" && SHA256.test(sb.execution), "handoff signedBuild.execution is not a sha256");
@@ -319,7 +336,7 @@ function parseSignedBuild(record) {
     refuse(sb.decision === null && sb.signedArtifact === null, "a publisher-build signed build carries no reuse decision or reused artifact");
     return;
   }
-  refuse(sb.runId !== record.publisher.runId, "a main-push signed build cannot be the publisher run");
+  refuse(sb.runId !== record.publisher.runId, `a ${sb.kind} signed build cannot be the publisher run`);
   refuse(sb.coverage.mode === COVERAGE_EXECUTED || sb.shape === ADOPTED_SHAPE || sb.shape === EVENT_CONTRACT_SHAPE,
     `a certified coverage cannot describe a ${sb.shape} producer`);
   const sa = sb.signedArtifact;
@@ -346,6 +363,40 @@ function parseSignedBuild(record) {
       && w.target.repository_id === record.repository.id,
     "handoff certified coverage is not of the signed build's own run, commit and original attempt");
   }
+  if (v3) parseBootstrapProducer(record);
+}
+
+/**
+ * `signedBuild.producer` of a v3 record: exactly the full-bootstrap caller
+ * (merge-gate.yml's workflow id and blob at the source), the receipt (its
+ * complete artifact identity, of the producer run at the source, named for its
+ * attempt), the aggregate's execution and the run's job inventory. Executed
+ * coverage only. Authenticity is `judgeSignedBuild`'s.
+ */
+function parseBootstrapProducer(record) {
+  const sb = record.signedBuild;
+  refuse(sb.coverage.mode === COVERAGE_EXECUTED, "a main-full-bootstrap signed build can only be executed coverage");
+  requireProducer(sb.producer, { runId: sb.runId, sha: record.source.sha, repositoryId: record.repository.id },
+    "handoff signedBuild.producer");
+}
+
+/** One full-bootstrap `producer` document (a decision's or a record's), strictly. */
+function requireProducer(p, { runId, sha, repositoryId }, where) {
+  refuse(p !== null && typeof p === "object" && !Array.isArray(p) && sorted(p) === JSON.stringify(PRODUCER_KEYS),
+    `${where} must have exactly [${PRODUCER_KEYS.join(", ")}]`);
+  refuse(p.kind === BOOTSTRAP_KIND && SHA256.test(p.aggregate ?? "") && SHA256.test(p.inventory ?? ""),
+    `${where} kind, aggregate or inventory is malformed`);
+  const c = p.caller;
+  refuse(c !== null && typeof c === "object" && !Array.isArray(c) && sorted(c) === '["blob","id","path"]'
+    && Number.isSafeInteger(c.id) && c.id > 0 && c.path === GATE_WORKFLOW_PATH && SHA40.test(c.blob ?? ""),
+  `${where}.caller is not merge-gate.yml at the source`);
+  const r = p.receipt;
+  refuse(r !== null && typeof r === "object" && !Array.isArray(r) && sorted(r) === '["attempt","identity"]'
+    && Number.isSafeInteger(r.attempt) && r.attempt > 0 && isArtifactIdentity(r.identity), `${where}.receipt is malformed`);
+  const m = RECEIPT_ARTIFACT.exec(r.identity.name);
+  refuse(m !== null && Number(m[1]) === r.attempt && r.identity.run_id === runId && r.identity.head_sha === sha
+    && r.identity.repository_id === repositoryId && r.identity.head_repository_id === repositoryId,
+  `${where}.receipt is not the producer run's receipt at the source`);
 }
 
 /**
@@ -359,6 +410,8 @@ export function verifiableUntil(record) {
   const times = [record.artifact.expiresAt];
   const sb = record.signedBuild;
   if (sb?.decision) times.push(sb.decision.identity.expires_at);
+  // A full bootstrap's receipt is re-read and re-authenticated at every verify.
+  if (sb?.producer) times.push(sb.producer.receipt.identity.expires_at);
   if (sb?.coverage?.mode === COVERAGE_CERTIFIED) {
     times.push(sb.coverage.witness.identity.expires_at, sb.coverage.source.proofIdentity.expires_at);
     for (const cert of Object.values(sb.coverage.certificates)) for (const a of cert.artifacts) times.push(a.expires_at);
@@ -846,6 +899,12 @@ export function judgeReleaseProvenance(files, expect) {
     exact("event", "workflow_dispatch");
     exact("workflowRef", `${expect.repository}/.github/workflows/macos-release.yml@refs/heads/main`);
     exact("releaseVersion", p.version);
+  } else if (p.event === "workflow_dispatch" && p.workflowRef === `${expect.repository}/${GATE_WORKFLOW_PATH}@refs/heads/main`) {
+    // Reused from a full-bootstrap merge-gate dispatch: the called build
+    // reports the caller's event and workflow ref. Exactly this second tuple;
+    // `judgeSignedBuild` binds it to a main-full-bootstrap decision.
+    exact("releaseVersion", "");
+    refuse(/^[1-9][0-9]*$/.test(p.runId ?? ""), "provenance.runId is not a run id");
   } else {
     exact("event", "push");
     exact("workflowRef", `${expect.repository}/.github/workflows/macos.yml@refs/heads/main`);
@@ -1050,6 +1109,7 @@ const UPLOAD_STEP = "Upload the signed-build source decision";
 const DECISION_RECORD_KEYS = ["decidedAt", "evidence", "mode", "reason", "source"];
 const EVIDENCE_KEYS = ["artifact", "build", "coverage", "files", "jobs", "repository", "repositoryId", "run", "schema", "sha",
   "signedBuildOrigin", "toolchain", "version", "workflow"];
+const EVIDENCE_KEYS_V3 = [...EVIDENCE_KEYS, "producer"].sort();
 const sorted = (o) => JSON.stringify(Object.keys(o ?? {}).sort());
 const canonical = (v) => (Array.isArray(v) ? v.map(canonical)
   : v !== null && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])])) : v);
@@ -1090,10 +1150,13 @@ export function parseDecision(bytes) {
     && ISO.test(record.decidedAt ?? ""), `the decision chose ${JSON.stringify(record.source)} (${JSON.stringify(record.mode)}), not a reuse`);
   const ev = record.evidence;
   refuse(ev !== null && typeof ev === "object" && !Array.isArray(ev), "the decision carries no reuse evidence");
-  refuse(ev.schema === EVIDENCE_SCHEMA && ev.signedBuildOrigin !== undefined && ev.coverage !== undefined,
+  // v3 is the full-bootstrap producer's evidence and nothing else; v2 never is.
+  const v3 = ev.schema === EVIDENCE_SCHEMA_V3;
+  refuse((ev.schema === EVIDENCE_SCHEMA || v3) && ev.signedBuildOrigin !== undefined && ev.coverage !== undefined,
     `the decision (evidence ${JSON.stringify(ev.schema)}) predates signedBuildOrigin/coverage evidence; `
     + "its signed-build execution and coverage are unknown and are not inferred");
-  refuse(sorted(ev) === JSON.stringify(EVIDENCE_KEYS), `the decision evidence has keys ${sorted(ev)}; want exactly ${JSON.stringify(EVIDENCE_KEYS)}`);
+  const keys = v3 ? EVIDENCE_KEYS_V3 : EVIDENCE_KEYS;
+  refuse(sorted(ev) === JSON.stringify(keys), `the decision evidence has keys ${sorted(ev)}; want exactly ${JSON.stringify(keys)}`);
   const o = ev.signedBuildOrigin;
   refuse(o !== null && typeof o === "object" && sorted(o) === '["attempt","execution","jobId"]'
     && Number.isSafeInteger(o.attempt) && o.attempt > 0 && Number.isSafeInteger(o.jobId) && o.jobId > 0
@@ -1103,7 +1166,8 @@ export function parseDecision(bytes) {
     && PRODUCER_SHAPES.includes(wf.shape) && SHA40.test(wf.blob ?? "") && Number.isSafeInteger(wf.id), "the decision's workflow is malformed");
   const run = ev.run;
   refuse(run !== null && typeof run === "object" && sorted(run) === '["attempt","conclusion","createdAt","event","headBranch","id","runStartedAt"]'
-    && Number.isSafeInteger(run.id) && Number.isSafeInteger(run.attempt) && run.attempt >= o.attempt && run.event === "push"
+    && Number.isSafeInteger(run.id) && Number.isSafeInteger(run.attempt) && run.attempt >= o.attempt
+    && run.event === (v3 ? "workflow_dispatch" : "push")
     && run.headBranch === "main" && run.conclusion === "success", "the decision's producer run is malformed");
   refuse(Array.isArray(ev.jobs) && ev.jobs.length > 0 && ev.jobs.every((j) => j !== null && typeof j === "object"
     && sorted(j) === '["completedAt","conclusion","id","name","runAttempt","startedAt"]'), "the decision's job list is malformed");
@@ -1118,11 +1182,16 @@ export function parseDecision(bytes) {
   } catch (error) {
     throw new Refused(`the decision's coverage: ${error.message}`);
   }
+  if (v3) {
+    refuse(ev.coverage.mode === COVERAGE_EXECUTED && run.attempt === ev.producer?.receipt?.attempt,
+      "a full-bootstrap decision carries executed coverage of its receipt's (latest) attempt only");
+    requireProducer(ev.producer, { runId: run.id, sha: ev.sha, repositoryId: ev.repositoryId }, "the decision's producer");
+  }
   return record;
 }
 
 /** A step of a job, exactly once and successful, as a whole-second window widened by the API skew. */
-function stepWindow(job, name, where) {
+export function stepWindow(job, name, where) {
   const ran = (job.steps ?? []).filter((s) => s?.name === name);
   refuse(ran.length === 1 && ran[0].status === "completed" && ran[0].conclusion === "success",
     `${where} did not run "${name}" exactly once successfully`);
@@ -1289,7 +1358,10 @@ async function judgeReusedProducer(api, ctx, { runId, originalAttempt, coverage 
  */
 async function judgeSignedBuild(api, ctx, frozen) {
   const { repo, sha, runId, attempt, provenance, jobs } = ctx;
-  const kind = provenance.notarizedBy.signedBuildSource === "build" ? "publisher-build" : "main-push";
+  // A reuse's kind is its provenance tuple (`judgeReleaseProvenance` admits
+  // exactly two): a push of macos.yml, or a full-bootstrap merge-gate dispatch.
+  const kind = provenance.notarizedBy.signedBuildSource === "build" ? "publisher-build"
+    : provenance.event === "workflow_dispatch" ? BOOTSTRAP_KIND : "main-push";
   refuse(frozen === null || frozen.kind === kind,
     `the notarized provenance names a ${kind} signed build; the record froze ${frozen?.kind}`);
   const claimed = /^[1-9][0-9]*$/.test(provenance.runAttempt) ? Number(provenance.runAttempt) : NaN;
@@ -1312,6 +1384,9 @@ async function judgeSignedBuild(api, ctx, frozen) {
     const decision = await proveDecision(api, ctx, frozen?.decision ?? null);
     const ev = decision.evidence;
     const o = ev.signedBuildOrigin;
+    const schema = kind === BOOTSTRAP_KIND ? EVIDENCE_SCHEMA_V3 : EVIDENCE_SCHEMA;
+    refuse(ev.schema === schema,
+      `the decision's evidence is ${JSON.stringify(ev.schema)}, but the notarized provenance names a ${kind} producer (${schema})`);
     refuse(ev.repository === repo && ev.repositoryId === ctx.repoId && ev.sha === sha,
       "the decision evidence names another repository or commit");
     refuse(String(ev.run.id) === provenance.runId && o.attempt === claimed,
@@ -1322,16 +1397,41 @@ async function judgeSignedBuild(api, ctx, frozen) {
     refuse(ev.version === provenance.version && ev.build === provenance.build
       && JSON.stringify(canonical(ev.toolchain)) === JSON.stringify(canonical(provenance.toolchain)),
     "the decision's version, build or toolchain is not the notarized provenance's");
-    const producer = await judgeReusedProducer(api, ctx, { runId: ev.run.id, originalAttempt: o.attempt, coverage: ev.coverage });
-    refuse(sha256(Buffer.from(producer.origin.identity)) === o.execution && producer.origin.job.id === o.jobId,
-      "the reused signed-build execution is not the one the decision froze");
-    refuse(producer.shape === ev.workflow.shape && producer.blob === ev.workflow.blob,
-      "the producer workflow at the source is not the one the decision froze");
-    refuse(producer.latest >= ev.run.attempt, `the reused producer run ${ev.run.id} is at attempt ${producer.latest}, before the decision's`);
-    signedBuild = { kind, runId: ev.run.id, originalAttempt: o.attempt, execution: o.execution, shape: ev.workflow.shape,
-      coverage: ev.coverage, decision: decision.frozen,
-      signedArtifact: { id: ev.artifact.id, name: ev.artifact.name, digest: ev.artifact.digest } };
-    latest = producer.latest;
+    if (kind === BOOTSTRAP_KIND) {
+      // The full bootstrap, re-proved historically by the shared judge: the
+      // same caller, receipt, aggregate execution and job inventory the
+      // decision froze, and the same original signed-build execution.
+      const { verifyBootstrapProducer } = await import("./macos-bootstrap.mjs");
+      const producer = await verifyBootstrapProducer(api, {
+        repository: repo, repositoryId: ctx.repoId, sha, runId: ev.run.id, workflowId: ev.producer.caller.id,
+        originalAttempt: o.attempt, cwd: ctx.cwd, clock: ctx.time,
+      });
+      refuse(sha256(Buffer.from(producer.origin.identity)) === o.execution && producer.origin.job.id === o.jobId,
+        "the reused signed-build execution is not the one the decision froze");
+      refuse(producer.shape === ev.workflow.shape && producer.calleeBlob === ev.workflow.blob,
+        "the producer workflow at the source is not the one the decision froze");
+      refuse(producer.latest === ev.run.attempt,
+        `the full-bootstrap producer run ${ev.run.id} is at attempt ${producer.latest}, not the decision's ${ev.run.attempt}`);
+      const derived = { kind: BOOTSTRAP_KIND, caller: { id: ev.producer.caller.id, path: GATE_WORKFLOW_PATH, blob: producer.callerBlob },
+        receipt: producer.receipt, aggregate: producer.aggregate, inventory: producer.inventory };
+      refuse(JSON.stringify(canonical(derived)) === JSON.stringify(canonical(ev.producer)),
+        "the full-bootstrap caller, receipt, aggregate or inventory read back now is not the one the decision froze");
+      signedBuild = { kind, runId: ev.run.id, originalAttempt: o.attempt, execution: o.execution, shape: ev.workflow.shape,
+        coverage: ev.coverage, decision: decision.frozen,
+        signedArtifact: { id: ev.artifact.id, name: ev.artifact.name, digest: ev.artifact.digest }, producer: ev.producer };
+      latest = producer.latest;
+    } else {
+      const producer = await judgeReusedProducer(api, ctx, { runId: ev.run.id, originalAttempt: o.attempt, coverage: ev.coverage });
+      refuse(sha256(Buffer.from(producer.origin.identity)) === o.execution && producer.origin.job.id === o.jobId,
+        "the reused signed-build execution is not the one the decision froze");
+      refuse(producer.shape === ev.workflow.shape && producer.blob === ev.workflow.blob,
+        "the producer workflow at the source is not the one the decision froze");
+      refuse(producer.latest >= ev.run.attempt, `the reused producer run ${ev.run.id} is at attempt ${producer.latest}, before the decision's`);
+      signedBuild = { kind, runId: ev.run.id, originalAttempt: o.attempt, execution: o.execution, shape: ev.workflow.shape,
+        coverage: ev.coverage, decision: decision.frozen,
+        signedArtifact: { id: ev.artifact.id, name: ev.artifact.name, digest: ev.artifact.digest } };
+      latest = producer.latest;
+    }
   }
   refuse(frozen === null || JSON.stringify(signedBuild) === JSON.stringify(frozen),
     "the signed-build chain read back now differs from the chain the handoff froze");
@@ -1381,8 +1481,8 @@ async function judgeOrigins(api, record, { art, notarize, jobs, files }, { cwd, 
   const ids = { repo, repoId: record.repository.id, sha: record.source.sha, runId: record.publisher.runId,
     attempt: record.publisher.attempt };
   const { provenance, origin } = await judgeNotaryOrigin(api, { ...ids, art, notarize, files });
-  if (record.schema === HANDOFF_SCHEMA) {
-    // v2: the whole frozen signed-build chain, re-derived and compared.
+  if (record.schema === HANDOFF_SCHEMA || record.schema === HANDOFF_SCHEMA_V3) {
+    // v2/v3: the whole frozen signed-build chain, re-derived and compared.
     const chain = await judgeSignedBuild(api, { ...ids, provenance, jobs, cwd, time }, record.signedBuild);
     return { provenance, producer: null, anchors: JSON.stringify([origin.attempt, origin.identity, chain.anchor]) };
   }
@@ -1794,7 +1894,7 @@ export async function emitHandoff(api, env, { cwd, artifactDir, candidate, branc
   // is only emitted while its whole retained chain is still unexpired then.
   const handedOffAt = time();
   const record = {
-    schema: HANDOFF_SCHEMA,
+    schema: signedBuild.kind === BOOTSTRAP_KIND ? HANDOFF_SCHEMA_V3 : HANDOFF_SCHEMA,
     repository: { id: repoId, name: repo },
     release: {
       version, build: Number(provenance.build), channel: "stable",
@@ -1842,8 +1942,12 @@ export function handoffSummary(record) {
   if (sb) {
     lines.push(sb.kind === "publisher-build"
       ? `- Signed build: this run's own build (attempt ${sb.originalAttempt}), executed coverage`
-      : `- Signed build: reused macos.yml run ${sb.runId} attempt ${sb.originalAttempt}, ${sb.coverage.mode} coverage, `
-        + `frozen from preflight decision artifact ${sb.decision.identity.id} (attempt ${sb.decision.attempt})`);
+      : sb.kind === BOOTSTRAP_KIND
+        ? `- Signed build: reused from full-bootstrap merge-gate run ${sb.runId} (signed-build attempt ${sb.originalAttempt}, `
+          + `receipt ${sb.producer.receipt.identity.id}), executed coverage, frozen from preflight decision artifact `
+          + `${sb.decision.identity.id} (attempt ${sb.decision.attempt})`
+        : `- Signed build: reused macos.yml run ${sb.runId} attempt ${sb.originalAttempt}, ${sb.coverage.mode} coverage, `
+          + `frozen from preflight decision artifact ${sb.decision.identity.id} (attempt ${sb.decision.attempt})`);
   }
   const until = verifiableUntil(record);
   lines.push(`- Verifiable until ${until}: the earliest expiry of the artifacts \`verify\` must re-read. After it, \`verify\` `

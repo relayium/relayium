@@ -106,6 +106,22 @@ export const PRODUCER_WORKFLOW = ".github/workflows/macos.yml";
 export const GATE_WORKFLOW = ".github/workflows/merge-gate.yml";
 export const PROVENANCE_SCHEMA = "relayium-macos-signed-provenance/v2";
 export const EVIDENCE_SCHEMA = "relayium-macos-reuse-evidence/v2";
+/**
+ * The evidence of the SECOND reusable producer only: the `macos / ` call of a
+ * `merge-gate.yml` full-bootstrap dispatch of `main` (`macos-bootstrap.mjs`).
+ * A push-run decision stays v2, byte for byte; v3 is v2 plus `producer`.
+ */
+export const EVIDENCE_SCHEMA_V3 = "relayium-macos-reuse-evidence/v3";
+/** Producer kinds, each with exactly one (event, workflow) provenance tuple. */
+export const PUSH_KIND = "main-push";
+export const BOOTSTRAP_KIND = "main-full-bootstrap";
+const PROVENANCE_TUPLES = Object.freeze({
+  [PUSH_KIND]: Object.freeze({ event: "push", workflow: ".github/workflows/macos.yml" }),
+  [BOOTSTRAP_KIND]: Object.freeze({ event: "workflow_dispatch", workflow: ".github/workflows/merge-gate.yml" }),
+});
+/** The aggregate-written receipt that alone says a merge-gate run was a full bootstrap. */
+export const receiptArtifactName = (attempt) => `relayium-macos-full-bootstrap-receipt-attempt-${attempt}`;
+export const RECEIPT_ARTIFACT = /^relayium-macos-full-bootstrap-receipt-attempt-([1-9][0-9]*)$/;
 export const TEAM_ID = "7PVYUG4YQS";
 export const FROZEN_MODE = "frozen-release-metadata";
 /** GitHub Actions' own app — the only app whose `merge-gate` may count. */
@@ -1340,6 +1356,20 @@ export const CANDIDATE_REF =
 export class Unavailable extends Error {}
 /** Evidence that exists and is wrong. Nobody may proceed. */
 export class Refused extends Error {}
+/**
+ * The one `Unavailable` with a structured cause: the push listing for the
+ * commit answered with NO run at all — not a failed, pending, foreign or
+ * ambiguous one. Only this cause may consult the full-bootstrap producer
+ * (`macos-bootstrap.mjs`); any existing push run keeps the decision on the
+ * push path, so a red push can never be hidden behind a green bootstrap.
+ * `workflow` is the `macos.yml` workflow record that was listed.
+ */
+export class NoPushRun extends Unavailable {
+  constructor(message, workflow) {
+    super(message);
+    this.workflow = workflow;
+  }
+}
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const hours = (ms) => ms / 3_600_000;
@@ -1441,14 +1471,14 @@ export async function paginate(api, path, key) {
 // ── the producer run ────────────────────────────────────────────────────────
 
 /** The same-repository, non-fork, push-to-main identity every candidate needs. */
-function sameRepository(run, repositoryId) {
+export function sameRepository(run, repositoryId) {
   return run?.repository?.id === repositoryId
     && run?.head_repository?.id === repositoryId
     && run?.repository?.fork === false
     && run?.head_repository?.fork !== true;
 }
 
-function workflowPathOf(run) {
+export function workflowPathOf(run) {
   return String(run?.path ?? "").replace(/@.*$/, "");
 }
 
@@ -1475,7 +1505,12 @@ export async function selectProducerRun(api, { repository, repositoryId, sha, no
     && run?.workflow_id === workflow.id
     && workflowPathOf(run) === PRODUCER_WORKFLOW
     && sameRepository(run, repositoryId));
-  unavailable(runs.length > 0, `no push run of ${PRODUCER_WORKFLOW} on main exists for ${sha}`);
+  if (runs.length === 0) {
+    // Structured only when the API listed nothing at all; a listed run this
+    // filter rejects is not "no push run", it is a push run this file refuses.
+    const message = `no push run of ${PRODUCER_WORKFLOW} on main exists for ${sha}`;
+    throw listed.length === 0 ? new NoPushRun(message, workflow) : new Unavailable(message);
+  }
   unavailable(runs.length === 1,
     `${runs.length} push runs of ${PRODUCER_WORKFLOW} exist for ${sha}; reuse needs exactly one`);
 
@@ -1526,10 +1561,11 @@ export async function readProducerShape(api, { repository, sha }) {
   const file = await api.get(`/repos/${repository}/contents/${PRODUCER_WORKFLOW}?ref=${sha}`);
   refuse(file?.path === PRODUCER_WORKFLOW && file?.encoding === "base64" && typeof file?.content === "string",
     `the contents API did not return ${PRODUCER_WORKFLOW} at ${sha}`);
-  const shape = workflowShape(Buffer.from(file.content, "base64").toString("utf8"));
+  const text = Buffer.from(file.content, "base64").toString("utf8");
+  const shape = workflowShape(text);
   unavailable(shape !== "non-canonical",
     `${PRODUCER_WORKFLOW} at ${sha} carries a PR→main evidence adoption that is not the canonical one`);
-  return { shape, blob: file.sha };
+  return { shape, blob: file.sha, text };
 }
 
 /**
@@ -2040,9 +2076,14 @@ function requireString(object, key, where) {
 
 /**
  * The provenance contract. `expect` holds what the API proved; every field
- * that can be compared to it is.
+ * that can be compared to it is. `expect.kind` names the producer and with it
+ * the ONE (event, workflow) tuple its provenance must carry — a push run of
+ * `macos.yml` (the default), or a full-bootstrap `merge-gate.yml` dispatch,
+ * whose called build reports the CALLER's identity. Never either/or.
  */
 export function judgeProvenance(provenance, payloadHashes, checksumText, expect) {
+  const tuple = PROVENANCE_TUPLES[expect.kind ?? PUSH_KIND];
+  refuse(tuple !== undefined, `producer kind ${JSON.stringify(expect.kind)} is unknown`);
   refuse(provenance !== null && typeof provenance === "object" && !Array.isArray(provenance),
     "provenance.json is not an object");
   unavailable(provenance.schema !== undefined,
@@ -2056,10 +2097,10 @@ export function judgeProvenance(provenance, payloadHashes, checksumText, expect)
   exact("repositoryId", String(expect.repositoryId));
   exact("sha", expect.sha);
   exact("ref", "refs/heads/main");
-  exact("event", "push");
+  exact("event", tuple.event);
   exact("runId", String(expect.runId));
   exact("runAttempt", String(expect.signedBuildAttempt));
-  exact("workflowRef", `${expect.repository}/${PRODUCER_WORKFLOW}@refs/heads/main`);
+  exact("workflowRef", `${expect.repository}/${tuple.workflow}@refs/heads/main`);
   exact("workflowSha", expect.sha);
   exact("channel", "direct");
   exact("arch", "arm64");
@@ -2090,25 +2131,14 @@ export function judgeProvenance(provenance, payloadHashes, checksumText, expect)
 }
 
 /**
- * Everything `select` proves, end to end. `dir` receives the extracted bytes.
- * Returns the frozen evidence document.
+ * The signed artifact's bytes, judged: downloaded by id, hashed against the API
+ * digest, parsed as exactly the four payload files in memory and written once,
+ * exclusively, then re-hashed from disk. Returns the files, their hashes, the
+ * provenance parsed from those same verified bytes and the attempt it CLAIMS
+ * (proved by the caller against the run, never trusted). Shared by every
+ * producer kind, so each judges the same bytes the same way.
  */
-export async function collectEvidence(api, { repository, repositoryId, sha, releaseVersion, now, dir, sourceGit }) {
-  const { workflow, run, jobs, shape, workflowBlob, auxiliaryJobs, coverage } =
-    await selectProducerRun(api, { repository, repositoryId, sha, now });
-  // A certified run is re-authenticated in full BEFORE its artifact is read; an
-  // executed run carries no certified chain at all.
-  const certified = coverage === COVERAGE_CERTIFIED
-    ? await judgeCertifiedCoverage(api, {
-      repository, repositoryId, sha, run, now,
-      rosterJobs: EXPECTED_JOBS.map((e, i) => ({ id: e.id, job: jobs[i] })),
-      evidenceJob: auxiliaryJobs[AUXILIARY_JOBS.indexOf(EVIDENCE_JOB)],
-      certifyJob: auxiliaryJobs[AUXILIARY_JOBS.indexOf(CERTIFY_JOB)],
-      ...(sourceGit ? { sourceGit } : {}),
-    })
-    : null;
-  const signedBuild = jobs[EXPECTED_JOBS.findIndex((e) => e.id === "signed-build")];
-  const artifact = await selectArtifact(api, { repository, repositoryId, sha, run, signedBuild, now });
+export async function downloadSignedPayload(api, { repository, artifact, dir }) {
   let zip;
   try {
     zip = await api.download(`/repos/${repository}/actions/artifacts/${artifact.id}/zip`);
@@ -2138,6 +2168,43 @@ export async function collectEvidence(api, { repository, repositoryId, sha, rele
   // attempt, so the latest inventory's label is never the provenance attempt.
   const claimed = provenance !== null && typeof provenance === "object" && /^[1-9][0-9]*$/.test(provenance.runAttempt ?? "")
     ? Number(provenance.runAttempt) : NaN;
+  return { files, hashes, provenance, claimed };
+}
+
+/**
+ * Everything `select` proves, end to end. `dir` receives the extracted bytes.
+ * Returns the frozen evidence document.
+ */
+export async function collectEvidence(api, { repository, repositoryId, sha, releaseVersion, now, dir, sourceGit, cwd }) {
+  let selected;
+  try {
+    selected = await selectProducerRun(api, { repository, repositoryId, sha, now });
+  } catch (error) {
+    if (!(error instanceof NoPushRun)) throw error;
+    // The push listing for this commit is EMPTY — the one case in which the
+    // full-bootstrap producer may be consulted. Loaded only here, so every
+    // push-route caller (and the frozen merge-gate step) never imports it.
+    const { collectBootstrapEvidence } = await import("./macos-bootstrap.mjs");
+    return collectBootstrapEvidence(api, {
+      repository, repositoryId, sha, releaseVersion, now, dir, cwd: cwd ?? process.cwd(),
+      macosWorkflow: error.workflow, noPush: error.message,
+    });
+  }
+  const { workflow, run, jobs, shape, workflowBlob, auxiliaryJobs, coverage } = selected;
+  // A certified run is re-authenticated in full BEFORE its artifact is read; an
+  // executed run carries no certified chain at all.
+  const certified = coverage === COVERAGE_CERTIFIED
+    ? await judgeCertifiedCoverage(api, {
+      repository, repositoryId, sha, run, now,
+      rosterJobs: EXPECTED_JOBS.map((e, i) => ({ id: e.id, job: jobs[i] })),
+      evidenceJob: auxiliaryJobs[AUXILIARY_JOBS.indexOf(EVIDENCE_JOB)],
+      certifyJob: auxiliaryJobs[AUXILIARY_JOBS.indexOf(CERTIFY_JOB)],
+      ...(sourceGit ? { sourceGit } : {}),
+    })
+    : null;
+  const signedBuild = jobs[EXPECTED_JOBS.findIndex((e) => e.id === "signed-build")];
+  const artifact = await selectArtifact(api, { repository, repositoryId, sha, run, signedBuild, now });
+  const { files, hashes, provenance, claimed } = await downloadSignedPayload(api, { repository, artifact, dir });
   const origin = await judgeExecutionOrigin(api, {
     repository, runId: run.id, sha, workflowPath: PRODUCER_WORKFLOW, jobName: "signed-build",
     originalAttempt: claimed, latestAttempt: run.run_attempt, latestJob: signedBuild,
@@ -2216,6 +2283,10 @@ export function evidenceIdentity(evidence) {
     version: evidence.version,
     build: evidence.build,
     coverage: evidence.coverage,
+    // A full-bootstrap producer (v3) freezes its caller blob, its receipt's
+    // complete artifact identity and attempt, the aggregate's execution and
+    // the run's job inventory too. Absent from v2, whose identity is unchanged.
+    ...(evidence.producer === undefined ? {} : { producer: evidence.producer }),
   });
 }
 
@@ -2233,7 +2304,8 @@ export async function decide(api, { mode, repository, repositoryId, sha, ref, re
   try {
     unavailable(ref === "refs/heads/main", `the release runs from ${ref}, not main; only main is ever reused`);
     const evidence = await collectEvidence(api, { repository, repositoryId, sha, releaseVersion, now, dir });
-    return { source: "reuse", reason: `run ${evidence.run.id} attempt ${evidence.run.attempt}`, evidence };
+    return { source: "reuse", reason: evidence.producer === undefined ? `run ${evidence.run.id} attempt ${evidence.run.attempt}`
+      : `full-bootstrap merge-gate run ${evidence.run.id} attempt ${evidence.run.attempt}`, evidence };
   } catch (error) {
     if (error instanceof Unavailable) {
       if (mode === "reuse") throw new Refused(`reuse was required, but ${error.message}`);
@@ -2251,7 +2323,8 @@ export async function decide(api, { mode, repository, repositoryId, sha, ref, re
  * something else halfway through.
  */
 export async function readback(api, frozen, { now, dir, releaseVersion }) {
-  refuse(frozen?.schema === EVIDENCE_SCHEMA, "the frozen evidence is not a reuse evidence document");
+  refuse(frozen?.schema === EVIDENCE_SCHEMA || frozen?.schema === EVIDENCE_SCHEMA_V3,
+    "the frozen evidence is not a reuse evidence document");
   let fresh;
   try {
     fresh = await collectEvidence(api, {

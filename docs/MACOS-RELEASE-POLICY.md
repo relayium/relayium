@@ -311,6 +311,54 @@ unchanged. Reuse one saved ZIP across steps 1, 3 and the step-4 readback.
    NEW release may reuse a build, not whether an old handoff was proved.
    Supported boundary: only the shapes `workflowShape` knows; a legacy shape is
    accepted on the same five-job roster and step rules, not on its text alone.
+   **The full-bootstrap producer (evidence v3, record v3).** A source commit
+   whose `push: main` triggers do not select `macos.yml` (a release script, the
+   merge gate itself) has no push run to reuse. Only when the push listing for
+   that commit is EMPTY may `select` consult `scripts/release/macos-bootstrap.mjs`;
+   any push run at all — failed, pending, cancelled or ambiguous — keeps the
+   decision on the push path, so a red push is never hidden behind a green
+   bootstrap. The producer is the `macos / ` call of the one `merge-gate.yml`
+   `workflow_dispatch` of `main` at that commit (two dispatches are
+   ambiguous), latest attempt a completed success inside the selection age.
+   GitHub does not report dispatch inputs, so the mode is proved only by the
+   aggregate's receipt (`relayium-macos-full-bootstrap-receipt-attempt-<n>`,
+   one strict `full-bootstrap-receipt.json` of exactly twelve fields: its
+   schema, mode `full-bootstrap`, base = head = sha = the commit, `refs/heads/main`, the
+   numeric repository id, run id and attempt, the caller workflow ref and SHA,
+   and the signed artifact name). It is written by the two pinned steps that
+   end the aggregate, after "Judge every lane", only in that mode; the receipt
+   must be the run's one receipt, of its latest attempt, unexpired, its bytes
+   the API digest, created inside the aggregate's ORIGINAL "Keep" step. The
+   caller and callee are read at the commit itself: `merge-gate.yml` must be
+   the canonical caller (the `macos:` call with no `with:`, the four secrets,
+   and the receipt steps) and `macos.yml`'s `workflow_call` inputs exactly the
+   CI defaults. The whole caller is judged against that commit's own roster
+   (every lane required, no unknown, duplicate or red job), and the `macos / `
+   roster must be the five gate jobs each EXECUTED (both UI shards; no witness
+   or certified coverage). The signed provenance tuple is `workflow_dispatch`,
+   `merge-gate.yml@refs/heads/main`, workflow SHA = the commit, empty
+   `releaseVersion`, a direct build. The decision (evidence v3, kind
+   `main-full-bootstrap`) freezes the caller blob, receipt identity, aggregate
+   execution and job inventory; after the slow download the end anchor runs
+   the WHOLE judge again (caller and callee re-read at the commit, receipt
+   re-authenticated, every lane, the aggregate, every job's execution and the
+   signed build's original execution re-proved, the run record and its whole
+   artifact list re-read) and refuses any part that moved. A handoff (record v3) re-proves
+   the same producer historically by run id — no listing, no age rule, the
+   receipt unexpired at the machine clock — and refuses any change to the
+   frozen caller, receipt, aggregate, inventory or original signed-build
+   execution. A commit whose `merge-gate.yml` lacks the receipt steps (for
+   example `97fd708`) has no eligible bootstrap: it is unavailable, forced
+   reuse refuses, and no receipt is ever minted for it. The receipt is E
+   evidence only; it is never an F proof and `scripts/ci/ci-evidence.mjs`
+   never reads it. Notarization, stapling, Sparkle, Gatekeeper, `verify-app`,
+   the release contract, the frozen-metadata gate and public verification stay
+   mandatory. Supported boundary: offline whole-world controls only
+   (`bootstrapCases`, and `bootstrapHandoffCases` — the publisher world's
+   actual decide/readback, `emit` of the v3 record, strict parse and `verify`
+   main/release — in `scripts/test/macos-handoff-test.mjs`); no hosted
+   bootstrap producer has yet been selected, read back or handed off, and any
+   saving is unmeasured.
    **The signed-build chain (record v2).** A v2 record freezes `signedBuild`:
    its kind (`publisher-build`, this run's own `build / ` call, always executed
    coverage; or `main-push`, a reused `macos.yml` push run), the producer run,

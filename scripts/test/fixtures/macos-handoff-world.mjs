@@ -61,26 +61,34 @@ function selectedLanes(paths,workflowsDir){
  * dispatched gate graph as `[name, conclusion]` pairs (built by the test from
  * the repository's own files, not by the module under test).
  * `decisionMs`: how long before `now` the publisher preflight decided.
+ * `producer(world)`: optional — another signed-build producer layered over the
+ * certified world's API BEFORE the preflight decides, as
+ * `{api, provenance, dmgSha256, check(evidence)}` (the full-bootstrap
+ * dispatch of S, with S's macos.yml push listing empty). The preflight then
+ * decides, the notarize stage reads back and the notarized provenance names
+ * THAT producer, all through the shipped selector; nothing is hand-made.
  */
-export async function handoffWorld({now,sourceAgeMs,witnessAgeMs,decisionMs=30*60000,mode='reuse',gateJobs}={}){
+export async function handoffWorld({now,sourceAgeMs,witnessAgeMs,decisionMs=30*60000,mode='reuse',gateJobs,producer=null}={}){
  assert(typeof gateJobs==='function','handoffWorld needs the honest gate graph builder');
  const world=await certifiedWorld({now,sourceAgeMs,witnessAgeMs});
  try{
   const at=world.now.getTime(),S=world.sha,REPO=world.repository,REPO_ID=world.repositoryId;
+  const layer=producer?producer(world):null,base=layer?layer.api:world.api;
   const decidedAt=at-decisionMs,notaryFrom=decidedAt+5*60000,notaryTo=decidedAt+20*60000;
   // 1. The publisher preflight's ACTUAL decision, through the shipped selector.
-  const decision=await world.inCheckout(()=>E.decide(world.api,{mode,repository:REPO,repositoryId:REPO_ID,sha:S,ref:'refs/heads/main',
+  const decision=await world.inCheckout(()=>E.decide(base,{mode,repository:REPO,repositoryId:REPO_ID,sha:S,ref:'refs/heads/main',
    releaseVersion:VERSION,now:decidedAt,dir:join(world.directory,'preflight-payload')}));
   assert.equal(decision.source,'reuse',`the fixture preflight did not choose reuse: ${decision.reason}`);
-  assert.equal(decision.evidence.coverage.mode,E.COVERAGE_CERTIFIED,'the fixture preflight did not freeze a certified chain');
+  if(layer)layer.check(decision.evidence);
+  else assert.equal(decision.evidence.coverage.mode,E.COVERAGE_CERTIFIED,'the fixture preflight did not freeze a certified chain');
   const decisionRecord={decidedAt:new Date(decidedAt+123).toISOString(),mode,source:decision.source,reason:decision.reason,evidence:decision.evidence};
   const decisionZip=storedZip([{name:'reuse-decision.json',data:`${JSON.stringify(decisionRecord,null,2)}\n`}]);
   // 2. The notarize-stage readback of exactly that frozen evidence, through the shipped reader.
-  const readback=await world.inCheckout(()=>E.readback(world.api,decision.evidence,{now:notaryFrom+60000,
+  const readback=await world.inCheckout(()=>E.readback(base,decision.evidence,{now:notaryFrom+60000,
    dir:join(world.directory,'notary-readback'),releaseVersion:VERSION}));
   assert.equal(E.evidenceIdentity(readback),E.evidenceIdentity(decision.evidence),'the fixture readback is not the frozen chain');
   const signedDmg=readFileSync(join(world.directory,'notary-readback/Relayium.dmg'));
-  assert.equal(hash(signedDmg),world.dmgSha256,'the fixture readback did not install the signed payload');
+  assert.equal(hash(signedDmg),layer?layer.dmgSha256:world.dmgSha256,'the fixture readback did not install the signed payload');
   // 3. The frozen release-metadata candidate: one commit on S, exactly the base-owned scope.
   const index=join(world.directory,'candidate.index');const pg=plumbing(world.checkout,index);
   pg(['read-tree',S]);
@@ -97,7 +105,7 @@ export async function handoffWorld({now,sourceAgeMs,witnessAgeMs,decisionMs=30*6
   const selected=selectedLanes(changed,join(world.checkout,'.github/workflows'));
   // 4. The notarized artifact: the signed payload stapled (synthetically) plus the candidate's derived files.
   const notarizedDmg=Buffer.concat([signedDmg,Buffer.from('\nfixture staple; native notarization is verified separately\n')]);
-  const provenance={...world.provenance,dmgSha256:hash(notarizedDmg),notarized:true,
+  const provenance={...(layer?layer.provenance:world.provenance),dmgSha256:hash(notarizedDmg),notarized:true,
    notarizedBy:{runId:String(PUBLISHER_RUN),runAttempt:'1',signedBuildSource:'reuse'}};
   const files=new Map([['Relayium.dmg',notarizedDmg],['Relayium.dmg.sha256',Buffer.from(`${hash(notarizedDmg)}  Relayium.dmg\n`)],
    ['provenance.json',Buffer.from(JSON.stringify(provenance))]]);
@@ -161,7 +169,8 @@ export async function handoffWorld({now,sourceAgeMs,witnessAgeMs,decisionMs=30*6
    if(p===`${prefix}/actions/runs/${PUBLISHER_RUN}/artifacts`)return paged('artifacts',artifacts,q);
    if((m=new RegExp(`^${prefix}/actions/artifacts/(\\d+)$`).exec(p))&&zips.has(Number(m[1])))return clone(artifacts.find(a=>a.id===Number(m[1]))??null);
    if(p===`${prefix}/actions/workflows/merge-gate.yml`)return {id:GATE_WORKFLOW_ID,path:'.github/workflows/merge-gate.yml',state:'active'};
-   if(p===`${prefix}/actions/workflows/${GATE_WORKFLOW_ID}/runs`)return paged('workflow_runs',[gateRun()],q);
+   // The candidate's gate; a producer layer answers its own dispatch of S on main.
+   if(p===`${prefix}/actions/workflows/${GATE_WORKFLOW_ID}/runs`&&!(layer&&q.get('head_sha')===S))return paged('workflow_runs',[gateRun()],q);
    if(p===`${prefix}/actions/runs/${GATE_RUN}`)return gateRun();
    if(p===`${prefix}/actions/runs/${GATE_RUN}/attempts/${state.gate.attempt}/jobs`)return paged('jobs',gateGraph,q);
    if(p===`${prefix}/git/ref/tags/macos-v${VERSION}`)return state.tag;
@@ -177,7 +186,7 @@ export async function handoffWorld({now,sourceAgeMs,witnessAgeMs,decisionMs=30*6
    const v=own(r);
    if(v===null)throw Object.assign(new Error(`fixture 404 ${r}`),{status:404});
    if(v!==undefined)return v;
-   return world.api.get(input);
+   return base.get(input);
   }
   const api={get,
    async getOptional(input){try{return await get(input);}catch(error){if(error?.status===404)return null;throw error;}},
@@ -189,11 +198,11 @@ export async function handoffWorld({now,sourceAgeMs,witnessAgeMs,decisionMs=30*6
     m=/releases\/assets\/(\d+)$/.exec(r);
     if(m&&accept==='application/octet-stream'&&state.assetBytes[m[1]])return Buffer.from(state.assetBytes[m[1]]);
     if(m)throw Object.assign(new Error('fixture: no asset'),{status:404});
-    return world.api.download(input);
+    return base.download(input);
    }};
   const env={GITHUB_REPOSITORY:REPO,GITHUB_REPOSITORY_ID:String(REPO_ID),GITHUB_RUN_ID:String(PUBLISHER_RUN),GITHUB_RUN_ATTEMPT:'1',
    RELEASE_VERSION:VERSION,GITHUB_SHA:S};
-  return {...world,world,C,candidateTree,changed,selected,branchName,dispatchedAt,decision,decisionRecord,decisionZip,notarizedZip,files,
+  return {...world,world,layer,C,candidateTree,changed,selected,branchName,dispatchedAt,decision,decisionRecord,decisionZip,notarizedZip,files,
    artifactDir,provenance,state,publisherAttempts,artifacts,zips,gateGraph,env,api,calls,counters,hooks,
    preflight,notarize,
    reset(){calls.length=0;counters.clear();hooks.clear();world.reset();},

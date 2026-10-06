@@ -60,6 +60,23 @@
 //     in bash against real logs with the real oracle (pending then accepted,
 //     an unfinished tail, a later socket, a wrong id, a gap, the CLI exiting,
 //     the bound), with only the process/adb seams stubbed.
+//   - `scripts/interop/cli-web-acceptance.sh` (the CLI ↔ Web cell):
+//     DETERMINISTIC since 2026-10-06 (R78), replacing up to fourteen coin-flip
+//     rounds. Exactly four rounds, no override, no early break, no
+//     fill-the-missing-cell scheduling; one (code role × CLI role) cell each,
+//     both endings, SAS on for each code role's first round; twelve globally
+//     distinct ids declared before the server starts, consumed 2/4/2/4 per
+//     round (a page-minted round's page opens a LAN socket on `/`, another on
+//     `/cross-network`, then the code room) so the prefix ends are 2/6/8/12
+//     and every pair of CLI and code-room ids implies the planned role; the
+//     plan and the driver bound to the schedule and this run's server log;
+//     each round ending, its driver reaped, with the planned role and exactly
+//     1..end accepted; the server stopped before the lane's own twelve-socket
+//     `peer-id-log`. The driver (`web/e2e/cli-web-pairing.mjs`) owns both
+//     actors and therefore every barrier: its real `openInOrder` is RUN
+//     through its print-only `--check-barrier` seam against real logs and the
+//     real oracle, so a removed, reordered or weakened barrier is red by
+//     behaviour, not only by text.
 //
 // Every statistical cap — only Windows samples now — must be equal to every
 // other and at least FLOOR. It does not check what an environment override can
@@ -84,7 +101,7 @@
 // statistical test here: a random check on CI is a flake by construction.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -104,6 +121,9 @@ const LANES = {
   cliAndroid: "scripts/interop/cli-android-acceptance.sh",
   cliAndroidOracle: "scripts/interop/cli-android-oracle.py",
   cliAndroidPlan: "scripts/interop/cli-matrix-plan.py",
+  cliWeb: "scripts/interop/cli-web-acceptance.sh",
+  cliWebDriver: "web/e2e/cli-web-pairing.mjs",
+  cliWebOracle: "scripts/interop/cli-web-oracle.py",
 };
 
 const FIXTURE = new URL("../../web/e2e/android-interop.mjs", import.meta.url).pathname;
@@ -234,6 +254,7 @@ function evaluate(w) {
 
   evaluateAndroid(w, problems, exactlyOne);
   evaluateCliAndroid(w, problems, exactlyOne);
+  evaluateCliWeb(w, problems, exactlyOne);
   evaluateCallers(w, problems);
   exactlyOne("native:deterministic-rounds", w.native, NATIVE_DETERMINISTIC, `${LANES.native} deterministic two-round declaration`);
   exactlyOne("native:deterministic-ids", w.native, NATIVE_IDS, `${LANES.native} opposite peer-id schedule`);
@@ -499,6 +520,240 @@ function evaluateCliAndroid(w, problems, exactlyOne) {
   }
 }
 
+// ── the CLI ↔ Web lane ───────────────────────────────────────────────────
+
+const WEB_LIST = (name) => new RegExp(`^${name}=\\(([^)\\n]*)\\)$`, "gm");
+/** The sockets each code role's round opens, in order (the plan's shape). */
+const WEB_SHAPE = { cli: ["cli", "web:code-room"], web: ["web:landing", "web:cross-network", "web:code-room", "cli"] };
+const E2E_DIR = new URL("../../web/e2e/", import.meta.url).pathname;
+const SCRIPTS_DIR = new URL("../", import.meta.url).pathname;
+
+/**
+ * The CLI ↔ Web lane's schedule and barriers, read from its real source. Each
+ * claim has its own key, so a mutation must fail for ITS reason.
+ */
+function evaluateCliWeb(w, problems, exactlyOne) {
+  const text = w.cliWeb ?? "";
+  const bad = (key, message) => problems.push({ key, message: `${LANES.cliWeb}: ${message}` });
+
+  const rounds = exactlyOne("cliWeb:rounds", text, ANDROID_ROUNDS, `${LANES.cliWeb} max_rounds declaration`);
+  if (rounds && rounds[1] !== "4") bad("cliWeb:rounds", `max_rounds is ${rounds[1]}, not exactly 4`);
+  if (/RELAYIUM_CLI_WEB_(?:ROUNDS|FIRST)/.test(text)) {
+    bad("cliWeb:override", "the round count or the first code role can be overridden again; a deterministic lane runs exactly its schedule");
+  }
+  if (/\bnext_code_role\b|\ball_seen\b/.test(text)) {
+    bad("cliWeb:sampling", "the lane schedules rounds by what it has seen again (sampling), not by its fixed cells");
+  }
+  exactlyOne("cliWeb:loop", text, SHELL_LOOP, `${LANES.cliWeb} round loop bounded by max_rounds`);
+  const loop = /^while [^\n]*; do$/m.exec(text);
+  let body = "";
+  let afterLoop = -1;
+  if (loop) {
+    const end = text.indexOf("\ndone\n", loop.index);
+    body = text.slice(loop.index, end < 0 ? text.length : end);
+    afterLoop = end < 0 ? -1 : end;
+    const code = body.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
+    if (/\bbreak\b/.test(code)) bad("cliWeb:no-break", "the round loop can break early; a round it skips is a cell never played");
+  }
+
+  let ids = null;
+  const idsMatch = exactlyOne("cliWeb:ids", text, ANDROID_IDS, `${LANES.cliWeb} peer-id schedule`);
+  if (idsMatch) {
+    const list = idsMatch[1].split(",");
+    if (list.length !== 12) bad("cliWeb:ids", `the schedule has ${list.length} ids, not twelve`);
+    else if (!list.every((id) => ID16.test(id))) bad("cliWeb:ids", "a schedule id is not 16 lowercase hex characters");
+    else if (new Set(list).size !== list.length) bad("cliWeb:ids", "the schedule repeats an id; two sockets could carry the same id");
+    else ids = list;
+    const others = new Set([w.android, w.cliAndroid].flatMap((t) => (/^acceptance_peer_ids="([^"\n]*)"$/m.exec(t ?? "")?.[1] ?? "").split(",")));
+    if (ids && ids.some((id) => others.has(id))) bad("cliWeb:ids-global", "the schedule shares an id with an Android lane's; their evidence could match each other");
+  }
+  if (!(text.indexOf("\nacceptance_peer_ids=") >= 0 && text.indexOf("\nacceptance_start_server\n") > text.indexOf("\nacceptance_peer_ids="))) {
+    bad("cliWeb:ids-before-server", "the schedule is no longer declared before the server starts, so the server would assign random ids");
+  }
+
+  const lists = {};
+  for (const name of ["round_code_roles", "planned_roles", "round_verify", "round_endings", "round_prefix_ends"]) {
+    const m = exactlyOne("cliWeb:cells", text, WEB_LIST(name), `${LANES.cliWeb} ${name}`);
+    lists[name] = m ? m[1].trim().split(/\s+/) : null;
+  }
+  const { round_code_roles: codes, planned_roles: roles, round_verify: verify, round_endings: endings, round_prefix_ends: ends } = lists;
+  if (codes && roles && verify && endings && ends) {
+    const cells = new Set(codes.map((c, i) => `${c}:${roles[i]}`));
+    if (![codes, roles, verify, endings, ends].every((l) => l.length === 4)) bad("cliWeb:cells", "the four rounds are not each fully declared");
+    else if (!["cli:initiator", "cli:responder", "web:initiator", "web:responder"].every((c) => cells.has(c))) {
+      bad("cliWeb:cells", `the rounds play ${[...cells].join(", ")}, not every (code role × CLI role) cell once`);
+    } else if (!endings.includes("quit") || !endings.includes("interrupt") || !endings.every((e) => e === "quit" || e === "interrupt")) {
+      bad("cliWeb:cells", `endings ${JSON.stringify(endings)} do not cover /quit and the interrupt`);
+    } else if (!codes.every((c, i) => verify[i] === (codes.indexOf(c) === i ? "on" : "default"))) {
+      bad("cliWeb:cells", `verify ${JSON.stringify(verify)} is not SAS on for each code role's first round and the shipped default after`);
+    } else {
+      let at = 0;
+      const want = codes.map((c) => (at += WEB_SHAPE[c]?.length ?? 0));
+      if (JSON.stringify(ends) !== JSON.stringify(want.map(String))) {
+        bad("cliWeb:cells", `prefix ends ${JSON.stringify(ends)} are not the cumulative socket counts ${JSON.stringify(want)}`);
+      } else if (ids && want[3] !== ids.length) {
+        bad("cliWeb:cells", `the rounds open ${want[3]} sockets, not the schedule's ${ids.length}`);
+      } else if (ids) {
+        let first = 1;
+        codes.forEach((c, r) => {
+          const slots = WEB_SHAPE[c];
+          const cli = ids[first - 1 + slots.indexOf("cli")];
+          const page = ids[first - 1 + slots.indexOf("web:code-room")];
+          if (roleOf(cli, page) !== roles[r]) bad("cliWeb:schedule", `round ${r + 1}'s ids CLI ${cli}/page ${page} make the CLI ${roleOf(cli, page)}, not the planned ${roles[r]}`);
+          first += slots.length;
+        });
+      }
+    }
+  }
+  for (const line of ['  code_role="${round_code_roles[$((round - 1))]:-}"\n', '  planned_role="${planned_roles[$((round - 1))]:-}"\n',
+                      '  end_seq="${round_prefix_ends[$((round - 1))]:-}"\n',
+                      '  [ "$round" -eq 1 ] || first_seq=$(( ${round_prefix_ends[$((round - 2))]} + 1 ))\n']) {
+    if (!body.includes(line)) bad("cliWeb:assignment", `the round no longer takes ${line.trim()}`);
+  }
+  if (!body.includes('"$code_role" "$verify" "$ending" \\\n      "$acceptance_peer_ids" "$first_seq" "$end_seq" "$planned_role" >"$plan" \\\n')) {
+    bad("cliWeb:plan-binding", "the round's plan no longer carries the schedule, its socket range and the planned role");
+  }
+  if (!body.includes('--plan "$plan" --out "$obs" --server-log "$run_root/server.log"\n')) {
+    bad("cliWeb:driver-log", "the driver no longer reads this run's server log for its barriers");
+  }
+  if (!inOrder(body, ['\n  wait "$driver_pid" || driver_status=$?\n  retire_owned_child "driver-$round" "$driver_pid"\n',
+                      '\n  cli_role="$(python3 "$here/cli-web-oracle.py" "$plan" "$obs")"',
+                      '\n  [ "$cli_role" = "$planned_role" ] \\\n    || fail ',
+                      '\n  python3 "$here/cli-web-oracle.py" accepted-prefix "$run_root/server.log" \\\n      "$acceptance_peer_ids" "$end_seq" \\\n    || fail '])) {
+    bad("cliWeb:round-end", "a round no longer ends, with its driver reaped and its role as planned, by requiring exactly sockets 1..end");
+  }
+  const tail = afterLoop < 0 ? "" : text.slice(afterLoop);
+  if (!tail.includes('\n[ "$round" -eq 4 ] || fail ')) bad("cliWeb:all-rounds", "the run no longer requires all four scheduled rounds");
+  if (!inOrder(tail, ["\nstop_owned_server\n",
+                      '\npython3 "$here/cli-web-oracle.py" peer-id-log "$run_root/server.log" "$acceptance_peer_ids" \\\n  || fail ',
+                      "\nassert_run_was_local\n", "\ncompleted=1"])) {
+    bad("cliWeb:count", "the twelve-socket count no longer runs after the server stops and before the PASS");
+  }
+  const stop = exactlyOne("cliWeb:server-stop", text, SERVER_STOP_FN, `${LANES.cliWeb} stop_owned_server`);
+  if (stop && !inOrder(stop[0], ['kill -TERM "$pid"', 'while owned_child_running "$pid"; do', '[ "$waited" -lt 100 ] || fail',
+                                 '\n  wait "$pid" 2>/dev/null || true\n  retire_owned_child server "$pid"\n'])) {
+    bad("cliWeb:server-stop", "the server is no longer stopped, awaited, reaped and its one registry slot retired before the count");
+  }
+  const code = text.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
+  const kills = [...code.matchAll(/(?:^|[\s;(&|])kill\s+([^\n]*)/gm)];
+  const owned = kills.filter((m) => /^(?:-(?:TERM|KILL|0)\s+)?"\$[a-z_]*pid"(?:\s|$)/.test(m[1]));
+  if (/\b(?:pkill|killall)\b/.test(code) || owned.length !== kills.length || kills.length === 0) {
+    bad("cliWeb:signals", "a signal is sent to something other than one owned PID variable");
+  }
+
+  // The driver owns both actors, so it owns every barrier.
+  const drv = w.cliWebDriver ?? "";
+  const badDrv = (key, message) => problems.push({ key, message: `${LANES.cliWebDriver}: ${message}` });
+  for (const line of ["    await openInOrder(identity, openers, deps, observed.barriers);\n",
+                      "      prefix: (n) => acceptedPrefix(SERVER_LOG, schedule, n),\n",
+                      "        if (cli?.exit) return `the CLI exited (${JSON.stringify(cli.exit)})`;\n",
+                      "    observed.cleanup.browserExited = KEEP ? false : (await close())?.exited === true;\n"]) {
+    if (!drv.includes(line)) badDrv("cliWebDriver:wiring", `the round no longer runs ${line.trim()}`);
+  }
+  if (!inOrder(drv, ["      await archiveDocument();\n", '      await tab.send("Page.navigate", { url: `${ORIGIN}/cross-network` });'])) {
+    badDrv("cliWebDriver:archive", "the landing document's wire record is no longer kept before the navigation replaces it");
+  }
+  const wrong = driverBehavior(drv);
+  if (wrong.length) badDrv("cliWebDriver:barrier-behavior", `the barriers misbehave when run:\n      ${wrong.join("\n      ")}`);
+
+  const oracle = w.cliWebOracle ?? "";
+  if (!oracle.includes("\n    judge_identity(plan, cli_role, obs, p)\n")
+      || !oracle.includes('    if len(argv) >= 2 and argv[1] == "accepted-prefix":\n        return accepted_prefix_main(argv)\n')
+      || !oracle.includes('    if len(argv) >= 2 and argv[1] == "peer-id-log":\n        return peer_id_log_main(argv)\n')) {
+    problems.push({ key: "cliWebOracle:identity", message: `${LANES.cliWebOracle} no longer judges the planned identities or answers accepted-prefix/peer-id-log` });
+  }
+  const plan = w.cliAndroidPlan ?? "";
+  if (!plan.includes('        "identity": planned,\n') || !plan.includes('    if len(argv) == 11 and argv[1] == "web":\n')) {
+    problems.push({ key: "cliWebPlan:identity", message: `${LANES.cliAndroidPlan} no longer writes the web round's planned identity` });
+  }
+}
+
+/**
+ * The driver's barriers, RUN: the driver text under evaluation, written as
+ * the only real file in a scratch mirror of web/e2e (every other entry a
+ * symlink, `scripts` too), through its print-only `--check-barrier` seam with
+ * the real oracle and planner. Memoised per text.
+ */
+const driverCache = new Map();
+let mirrorSerial = 0;
+function driverBehavior(drvText) {
+  if (driverCache.has(drvText)) return driverCache.get(drvText);
+  const problems = [];
+  const root = join(scratch, `web-mirror-${mirrorSerial++}`);
+  mkdirSync(join(root, "web", "e2e"), { recursive: true });
+  for (const entry of readdirSync(E2E_DIR)) {
+    if (entry !== "cli-web-pairing.mjs") symlinkSync(join(E2E_DIR, entry), join(root, "web", "e2e", entry));
+  }
+  symlinkSync(SCRIPTS_DIR.replace(/\/$/, ""), join(root, "scripts"));
+  const driver = join(root, "web", "e2e", "cli-web-pairing.mjs");
+  writeFileSync(driver, drvText);
+  const ids = (/^acceptance_peer_ids="([^"\n]*)"$/m.exec(read(LANES.cliWeb) ?? "")?.[1] ?? "").split(",");
+  const identity = (round, code, verify, ending, first, end, role) => {
+    const dir = mkdtempSync(join(scratch, "web-plan-"));
+    const r = spawnSync("python3", ["-B", join(INTEROP_DIR, "cli-matrix-plan.py"), "web", dir, String(round), code, verify, ending,
+      ids.join(","), String(first), String(end), role], { encoding: "utf8" });
+    return r.status === 0 ? JSON.parse(r.stdout).identity : null;
+  };
+  const R1 = identity(1, "cli", "on", "quit", 1, 2, "responder");
+  const R2 = identity(2, "web", "on", "interrupt", 3, 6, "responder");
+  if (!R1 || !R2) {
+    problems.push("the real planner refused the lane's rounds 1/2");
+    driverCache.set(drvText, problems);
+    return problems;
+  }
+  const line = (seq, id = ids[seq - 1]) => `2026/10/06 01:00:09 ${GO_FORMAT.replace("%d", String(seq)).replace("%s", id)}\n`;
+  const ws = (room, welcomes, rosters) => ({ path: "/ws", room, welcomes, rosters });
+  const r1 = { "cli:code-room": { append: line(1) },
+    "web:code-room": { append: line(2), doc: { path: "/cross-network", sockets: [ws("code", [R1.expectedWebId], [[R1.expectedCliId, R1.expectedWebId].sort()])] } } };
+  const [l1, l2, cr] = R2.sockets;
+  const r2 = {
+    "web:landing": { append: line(3), doc: { path: "/", sockets: [ws("lan", [l1.id], [[]])] } },
+    "web:cross-network": { append: line(4), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]])] } },
+    "web:code-room": { append: line(5), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [[cr.id]])] } },
+    "cli:code-room": { append: line(6) },
+  };
+  const SCENARIOS = [
+    ["R1 the CLI's prefix short twice, then exact", R1, "cli", 0, { onOpen: { ...r1, "cli:code-room": {} }, appendAt: { 2: line(1) } },
+      { events: ["open cli:code-room", "open web:code-room", "welcomed 2"], barriers: [1, 2], polls: 2 }],
+    ["R2 the page's three sockets, then the CLI", R2, "web", 2, { onOpen: r2 },
+      { events: ["open web:landing", "welcomed 3", "open web:cross-network", "welcomed 4", "open web:code-room", "welcomed 5", "open cli:code-room"], barriers: [3, 4, 5, 6], polls: 0 }],
+    ["R1 an extra socket before the handover", R1, "cli", 0, { onOpen: { ...r1, "cli:code-room": { append: line(1) + line(2) } } },
+      { events: ["open cli:code-room"], error: /sequence 2 .* while waiting for 1/ }],
+    ["R1 the CLI exits before its accept", R1, "cli", 0, { onOpen: { ...r1, "cli:code-room": { die: "the CLI exited" } } },
+      { events: ["open cli:code-room"], error: /the CLI exited before the server accepted it/ }],
+    ["R2 the page's code room welcomed as another id", R2, "web", 2,
+      { onOpen: { ...r2, "web:code-room": { append: line(5), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]]), ws("code", [ids[5]], [[ids[5]]])] } } } },
+      { events: ["open web:landing", "welcomed 3", "open web:cross-network", "welcomed 4", "open web:code-room"], error: /was welcomed as e888888888888888, but the schedule planned 0888888888888888/ }],
+    ["R2 the page's code room not the page alone", R2, "web", 2,
+      { onOpen: { ...r2, "web:code-room": { append: line(5), doc: { path: "/cross-network", sockets: [ws("lan", [l2.id], [[]]), ws("code", [cr.id], [[cr.id, ids[0]]])] } } } },
+      { events: ["open web:landing", "welcomed 3", "open web:cross-network", "welcomed 4", "open web:code-room"], error: /not the page alone before the CLI started/ }],
+    ["R2 the landing page opened two sockets", R2, "web", 2,
+      { onOpen: { ...r2, "web:landing": { append: line(3) + line(4), doc: { path: "/", sockets: [ws("lan", [l1.id], [[]]), ws("lan", [], [])] } } } },
+      { events: ["open web:landing"], error: /landing document had opened 2 websockets/ }],
+  ];
+  SCENARIOS.forEach(([name, ident, codeRole, before, sc, want], i) => {
+    const dir = join(root, `case-${i}`);
+    mkdirSync(dir);
+    const log = join(dir, "server.log");
+    writeFileSync(log, Array.from({ length: before }, (_, k) => line(k + 1)).join(""));
+    writeFileSync(join(dir, "scenario.json"), JSON.stringify({ codeRole, identity: ident, log, polls: 4, ...sc }));
+    const r = spawnSync(process.execPath, [driver, "--check-barrier", join(dir, "scenario.json")], { encoding: "utf8", timeout: 60_000 });
+    let o = null;
+    try { o = JSON.parse(r.stdout); } catch { o = null; }
+    const got = [];
+    if (r.status !== 0 || !o) got.push(`seam exit ${r.status}: ${(r.stderr ?? "").trim().split("\n").slice(-2).join(" | ").slice(0, 200)}`);
+    else {
+      if (JSON.stringify(o.events) !== JSON.stringify(want.events)) got.push(`events ${JSON.stringify(o.events)}`);
+      if (want.error ? !(o.error && want.error.test(o.error)) : o.error) got.push(`error ${JSON.stringify(o.error)}`);
+      if (want.barriers && JSON.stringify(o.barriers.map((b) => b.seq)) !== JSON.stringify(want.barriers)) got.push(`barriers ${JSON.stringify(o.barriers)}`);
+      if (want.polls !== undefined && o.polls !== want.polls) got.push(`${o.polls} polls, want ${want.polls}`);
+    }
+    if (got.length) problems.push(`"${name}": ${got.join("; ")}`);
+  });
+  driverCache.set(drvText, problems);
+  return problems;
+}
+
 /** One value as a single-quoted shell word: literal for bash, whatever it
  *  contains (`'` becomes `'\''`). Never JSON — `"…"` lets bash expand `$(…)`,
  *  backticks and `$var` inside it. */
@@ -692,6 +947,7 @@ const winLine = (clamp, dflt) => `Math.min(${clamp}, Number(process.env.RT_ROUND
 const WIN_LINE = winLine(CAP, CAP);
 const ANDROID_ID_LINE = /^acceptance_peer_ids="([^"\n]*)"$/m.exec(world.android ?? "")?.[1] ?? "";
 const CLI_ID_LINE = /^acceptance_peer_ids="([^"\n]*)"$/m.exec(world.cliAndroid ?? "")?.[1] ?? "";
+const WEB_ID_LINE = /^acceptance_peer_ids="([^"\n]*)"$/m.exec(world.cliWeb ?? "")?.[1] ?? "";
 const swapIds = (csv, i, j) => { const l = csv.split(","); [l[i], l[j]] = [l[j], l[i]]; return l.join(","); };
 const setId = (csv, i, v) => { const l = csv.split(","); l[i] = v; return l.join(","); };
 // Each mutation: the world, and the exact set of problem keys it must produce.
@@ -921,6 +1177,135 @@ const MUTATIONS = [
   ["cli-android plan generator drops the identity",
     () => mutate("cliAndroidPlan", '        "identity": identity,\n', '        "identity": None,\n'),
     ["cliAndroidPlan:identity"]],
+  // ── the CLI ↔ Web lane ──
+  ["cli-web runs a fifth round",
+    () => mutate("cliWeb", "\nmax_rounds=4\n", "\nmax_rounds=5\n"),
+    ["cliWeb:rounds"]],
+  ["cli-web round count overridable again (the fourteen-round sampler)",
+    () => mutate("cliWeb", "\nmax_rounds=4\n", '\nmax_rounds="${RELAYIUM_CLI_WEB_ROUNDS:-14}"\n'),
+    ["cliWeb:override", "cliWeb:rounds"]],
+  ["cli-web first code role overridable again",
+    () => mutate("cliWeb", '  code_role="${round_code_roles[$((round - 1))]:-}"\n', '  code_role="${RELAYIUM_CLI_WEB_FIRST:-cli}"\n'),
+    ["cliWeb:override", "cliWeb:assignment"]],
+  ["cli-web schedules by what it has seen again",
+    () => mutate("cliWeb", "\nround=0\n", "\nround=0\nnext_code_role() { echo cli; }\n"),
+    ["cliWeb:sampling"]],
+  ["cli-web loop bounded by a literal",
+    () => mutate("cliWeb", `-lt "$max_rounds" ]; do`, `-lt 14 ]; do`),
+    ["cliWeb:loop"]],
+  ["cli-web stops once every cell is seen (the old early break)",
+    () => mutate("cliWeb", '  say "-- round $round passed (code by $code_role, CLI was $cli_role, as planned; ending $ending)"\ndone\n',
+                 '  say "-- round $round passed (code by $code_role, CLI was $cli_role, as planned; ending $ending)"\n  all_seen && break\ndone\n'),
+    ["cliWeb:no-break", "cliWeb:sampling"]],
+  ["cli-web schedule repeats an id",
+    () => mutate("cliWeb", WEB_ID_LINE, setId(WEB_ID_LINE, 11, WEB_ID_LINE.split(",")[4])),
+    ["cliWeb:ids"]],
+  ["cli-web schedule of eight ids (2r, the LAN sockets unscheduled)",
+    () => mutate("cliWeb", WEB_ID_LINE, WEB_ID_LINE.split(",").slice(0, 8).join(",")),
+    ["cliWeb:ids"]],
+  ["cli-web schedule shares an id with the Android lane",
+    () => mutate("cliWeb", WEB_ID_LINE, setId(WEB_ID_LINE, 0, "f111111111111111")),
+    ["cliWeb:ids-global"]],
+  ["cli-web schedule declared after the server started",
+    () => { const w2 = mutate("cliWeb", `acceptance_peer_ids="${WEB_ID_LINE}"\n`, ""); return { ...w2, cliWeb: w2.cliWeb.replace("\nacceptance_start_server\n", `\nacceptance_start_server\nacceptance_peer_ids="${WEB_ID_LINE}"\n`) }; },
+    ["cliWeb:ids-before-server"]],
+  ["cli-web round 1's pair reordered (the CLI no longer responder)",
+    () => mutate("cliWeb", WEB_ID_LINE, swapIds(WEB_ID_LINE, 0, 1)),
+    ["cliWeb:schedule"]],
+  ["cli-web round 4's CLI and code-room ids swapped",
+    () => mutate("cliWeb", WEB_ID_LINE, swapIds(WEB_ID_LINE, 10, 11)),
+    ["cliWeb:schedule"]],
+  ["cli-web plans the CLI responder in every round",
+    () => mutate("cliWeb", "planned_roles=(responder responder initiator initiator)", "planned_roles=(responder responder responder responder)"),
+    ["cliWeb:cells"]],
+  ["cli-web never interrupts",
+    () => mutate("cliWeb", "round_endings=(quit interrupt quit quit)", "round_endings=(quit quit quit quit)"),
+    ["cliWeb:cells"]],
+  ["cli-web never compares the SAS",
+    () => mutate("cliWeb", "round_verify=(on on default default)", "round_verify=(default default default default)"),
+    ["cliWeb:cells"]],
+  ["cli-web counts two sockets per round (the R74 model)",
+    () => mutate("cliWeb", "round_prefix_ends=(2 6 8 12)", "round_prefix_ends=(2 4 6 8)"),
+    ["cliWeb:cells"]],
+  ["cli-web plays one code role twice",
+    () => mutate("cliWeb", "round_code_roles=(cli web cli web)", "round_code_roles=(cli web cli cli)"),
+    ["cliWeb:cells"]],
+  ["cli-web driver no longer reads the server log",
+    () => mutate("cliWeb", ' --server-log "$run_root/server.log"\n', "\n"),
+    ["cliWeb:driver-log"]],
+  ["cli-web plan built without the schedule",
+    () => mutate("cliWeb", '"$acceptance_peer_ids" "$first_seq" "$end_seq" "$planned_role" >"$plan"', '>"$plan"'),
+    ["cliWeb:plan-binding"]],
+  ["cli-web stops asserting the planned role",
+    () => mutate("cliWeb", '[ "$cli_role" = "$planned_role" ] \\\n    || fail ', '[ "$cli_role" = "$planned_role" ] \\\n    || say '),
+    ["cliWeb:round-end"]],
+  ["cli-web round end no longer counts the prefix",
+    () => mutate("cliWeb", 'cli-web-oracle.py" accepted-prefix "$run_root/server.log"', 'cli-web-oracle.py" --version "$run_root/server.log"'),
+    ["cliWeb:round-end"]],
+  ["cli-web passes with fewer than four rounds",
+    () => mutate("cliWeb", '[ "$round" -eq 4 ] || fail "ran', '[ "$round" -ge 1 ] || fail "ran'),
+    ["cliWeb:all-rounds"]],
+  ["cli-web freezes the count before the server stops",
+    () => mutate("cliWeb", '\nstop_owned_server\npython3 "$here/cli-web-oracle.py" peer-id-log "$run_root/server.log" "$acceptance_peer_ids" \\\n  || fail "the server did not accept exactly the scheduled websockets"\n',
+                 '\npython3 "$here/cli-web-oracle.py" peer-id-log "$run_root/server.log" "$acceptance_peer_ids" \\\n  || fail "the server did not accept exactly the scheduled websockets"\nstop_owned_server\n'),
+    ["cliWeb:count"]],
+  ["cli-web counts with the Android lane's six-id oracle",
+    () => mutate("cliWeb", 'python3 "$here/cli-web-oracle.py" peer-id-log', 'python3 "$repo/scripts/test/android-interop-oracle.py" peer-id-log'),
+    ["cliWeb:count"]],
+  ["cli-web leaves the stopped server's PID in the cleanup registry",
+    () => mutate("cliWeb", '  retire_owned_child server "$pid"\n', ""),
+    ["cliWeb:server-stop"]],
+  ["cli-web stops the server by pattern",
+    () => mutate("cliWeb", '  kill -TERM "$pid" 2>/dev/null || fail "could not signal the owned server', '  pkill -f relayium-server || fail "could not signal the owned server'),
+    ["cliWeb:server-stop", "cliWeb:signals"]],
+  ["cli-web driver: the barrier removed (each socket recorded, none confirmed)",
+    () => mutate("cliWebDriver", "    barriers.push(await confirmSocket(s, deps));\n", '    barriers.push({ seq: s.seq, actor: s.actor, stage: s.stage, status: "exact", alive: true });\n'),
+    ["cliWebDriver:barrier-behavior"]],
+  ["cli-web driver: the actors opened in the swapped order",
+    () => mutate("cliWebDriver", "  for (const s of identity.sockets) {\n", "  for (const s of [...identity.sockets].reverse()) {\n"),
+    ["cliWebDriver:barrier-behavior"]],
+  ["cli-web driver: the second actor opened before the first's barrier",
+    () => mutate("cliWebDriver", "    await open(s);\n    barriers.push(await confirmSocket(s, deps));\n", "    const b = confirmSocket(s, deps).catch((e) => e);\n    await open(s);\n    const v = await b; if (v instanceof Error) throw v;\n    barriers.push(v);\n"),
+    ["cliWebDriver:barrier-behavior"]],
+  ["cli-web driver: the welcome identity not compared",
+    () => mutate("cliWebDriver", "  if (got !== s.id) return `${where} was welcomed as ${got}, but the schedule planned ${s.id}`;\n", ""),
+    ["cliWebDriver:barrier-behavior"]],
+  ["cli-web driver: a short prefix taken as exact",
+    () => mutate("cliWebDriver", "    if (r.code === 0) break;\n", "    if (r.code === 0 || r.code === PENDING) break;\n"),
+    ["cliWebDriver:barrier-behavior"]],
+  ["cli-web driver: a dead first actor handed over",
+    () => mutate("cliWebDriver", "    const dead = await deps.deadActor();\n", "    const dead = null;\n"),
+    ["cliWebDriver:barrier-behavior"]],
+  ["cli-web driver: the page's minted room need not be the page alone",
+    () => mutate("cliWebDriver", "    if (bad !== undefined) return `${where}'s room", "    if (false) return `${where}'s room"),
+    ["cliWebDriver:barrier-behavior"]],
+  ["cli-web driver: an extra socket in the document ignored",
+    () => mutate("cliWebDriver", "  if (sockets.length !== at.slot + 1) {\n", "  if (false) {\n"),
+    ["cliWebDriver:barrier-behavior"]],
+  ["cli-web driver: the round bypasses the planned sequence",
+    () => mutate("cliWebDriver", "    await openInOrder(identity, openers, deps, observed.barriers);\n", "    for (const s of identity.sockets) await openers[`${s.actor}:${s.stage}`](s);\n"),
+    ["cliWebDriver:wiring"]],
+  ["cli-web driver: the barrier reads another file",
+    () => mutate("cliWebDriver", "      prefix: (n) => acceptedPrefix(SERVER_LOG, schedule, n),\n", "      prefix: (n) => acceptedPrefix(OUT, schedule, n),\n"),
+    ["cliWebDriver:wiring"]],
+  ["cli-web driver: Chrome's exit no longer observed",
+    () => mutate("cliWebDriver", "    observed.cleanup.browserExited = KEEP ? false : (await close())?.exited === true;\n", "    if (!KEEP) close();\n    observed.cleanup.browserExited = true;\n"),
+    ["cliWebDriver:wiring"]],
+  ["cli-web driver: the landing document not archived before the navigation",
+    () => mutate("cliWebDriver", "        await archiveDocument();\n        await tab.send(\"Page.navigate\"", "        await tab.send(\"Page.navigate\""),
+    ["cliWebDriver:archive"]],
+  ["cli-web oracle stops judging the planned identities",
+    () => mutate("cliWebOracle", "\n    judge_identity(plan, cli_role, obs, p)\n", "\n"),
+    ["cliWebOracle:identity"]],
+  ["cli-web plan generator drops the identity",
+    () => mutate("cliAndroidPlan", '        "identity": planned,\n', '        "identity": None,\n'),
+    ["cliWebPlan:identity"]],
+  ["cli-web file unreadable (empty)",
+    () => ({ ...world, cliWeb: "" }),
+    ["cliWeb:rounds", "cliWeb:loop", "cliWeb:ids", "cliWeb:ids-before-server", "cliWeb:cells", "cliWeb:cells", "cliWeb:cells",
+     "cliWeb:cells", "cliWeb:cells", "cliWeb:assignment", "cliWeb:assignment", "cliWeb:assignment", "cliWeb:assignment",
+     "cliWeb:plan-binding", "cliWeb:driver-log", "cliWeb:round-end", "cliWeb:all-rounds", "cliWeb:count", "cliWeb:server-stop",
+     "cliWeb:signals"]],
   ["cli-android file unreadable (empty)",
     () => ({ ...world, cliAndroid: "" }),
     ["cliAndroid:rounds", "cliAndroid:loop", "cliAndroid:ids", "cliAndroid:roles", "cliAndroid:assignment",

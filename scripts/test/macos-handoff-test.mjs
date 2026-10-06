@@ -1380,6 +1380,12 @@ export async function run() {
     // ── the certified chain, whole: actual decide/readback, emit, verify main and release ──
     await certifiedCases(expect);
 
+    // ── the full-bootstrap producer, whole: select/decide/readback and H re-proof ──
+    await bootstrapCases(expect);
+
+    // ── the full-bootstrap producer through the publisher: actual decide/readback, emit v3, verify main and release ──
+    await bootstrapHandoffCases(expect);
+
     // ── the workflow: operator mode cannot reach the writes ──
     workflowControls(failures, () => { passed += 1; });
   } finally {
@@ -1738,6 +1744,654 @@ function workflowControls(failures, pass) {
     "the delivery-mode guard does not run before assembly");
   ok(/macos-handoff\.mjs workflows-preflight --mode "\$DELIVERY"/.test(text.slice(0, text.indexOf("\n  build:\n"))),
     "preflight does not compare the workflows directory before the paid build");
+}
+
+/** The git blob id of `text`, as the contents API reports the bytes it serves. */
+const gitBlob = (text) => createHash("sha1").update(`blob ${Buffer.byteLength(text)}\0`).update(text).digest("hex");
+
+/**
+ * One merge-gate full-bootstrap dispatch of main at the certified world's
+ * commit S, as GitHub-shaped answers layered over `w.api`: the push listing
+ * of macos.yml EMPTY; the whole honest gate graph (every lane required); the
+ * `macos / ` producer roster executed exactly as a workflow_call leaves it;
+ * the aggregate's judged receipt steps; the signed artifact (dispatch
+ * provenance) and the aggregate-written receipt; caller and callee through
+ * the contents API with the blob of the bytes served. Built from the
+ * repository's own roster files and the shipped receipt writer's field list,
+ * never from the bootstrap judge's verdicts. `fresh()` restores the honest
+ * world; tests change ONE thing in `s`.
+ */
+export function bootstrapFixture(w, B) {
+  const zipOf = storedZip;
+  const at = w.now.getTime(), S = w.sha, R = w.repository, RID = w.repositoryId;
+  const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const BOOT = 36995000900, WF = 9, SIGNED = 11200000900, RECEIPT = 11200000901;
+  const ids = { repository: { id: RID, full_name: R, fork: false }, head_repository: { id: RID, full_name: R, fork: false } };
+  const runAt = at - 3 * 3600000;
+  // The macos lane exactly as the called producer roster reports it.
+  const macos = producerRoster({ runId: BOOT, sha: S, start: iso(runAt + 60000), called: true, firstId: 600 })
+    .map((j) => ({ ...j, name: j.name.replace(/^build \/ /, "macos / ") }));
+  macos.find((j) => j.name === "macos / contract").labels = ["ubuntu-latest"];
+  const signedJob = macos.find((j) => j.name === "macos / signed-build");
+  const sFrom = Date.parse(signedJob.started_at), sTo = Date.parse(signedJob.completed_at);
+  const aggFrom = sTo + 60000;
+  const st = (number, name, from, to) => ({ number, name, status: "completed", conclusion: "success", started_at: iso(from), completed_at: iso(to) });
+  const aggregate = {
+    id: 699, name: "merge-gate", status: "completed", conclusion: "success", run_id: BOOT, head_sha: S, run_attempt: 1,
+    labels: ["ubuntu-latest"], runner_name: "GitHub Actions 1699", started_at: iso(aggFrom), completed_at: iso(aggFrom + 60000),
+    steps: [st(1, "Set up job", aggFrom, aggFrom + 1000), st(2, B.JUDGE_STEP, aggFrom + 2000, aggFrom + 10000),
+      st(3, B.RECORD_STEP, aggFrom + 11000, aggFrom + 12000), st(4, B.KEEP_STEP, aggFrom + 13000, aggFrom + 20000),
+      st(5, "Complete job", aggFrom + 59000, aggFrom + 60000)],
+  };
+  const allLanes = new Set(LANES.map((l) => l.id));
+  const others = honestGateJobs(allLanes).filter(([n]) => !n.startsWith("macos / ") && n !== "merge-gate")
+    .map(([name, conclusion], i) => ({ id: 400 + i, name, status: "completed", conclusion, run_id: BOOT, head_sha: S, run_attempt: 1 }));
+  const honestJobs = () => [...structuredClone(others), ...structuredClone(macos), structuredClone(aggregate)];
+  // The signed payload, as the called signed-build uploads it (dispatch provenance).
+  const dmg = Buffer.from("synthetic bootstrap signed payload; native signature verified separately");
+  const tool = Buffer.from("synthetic generate_appcast");
+  const provenance = { ...structuredClone(w.provenance), event: "workflow_dispatch", runId: String(BOOT), runAttempt: "1",
+    workflowRef: `${R}/.github/workflows/merge-gate.yml@refs/heads/main`, signedDmgSha256: sha256(dmg), dmgSha256: sha256(dmg),
+    generateAppcastSha256: sha256(tool) };
+  const signedZip = (p = provenance) => zipOf([{ name: "Relayium.dmg", data: dmg }, { name: "Relayium.dmg.sha256", data: `${sha256(dmg)}  Relayium.dmg\n` },
+    { name: "provenance.json", data: JSON.stringify(p) }, { name: "release-tools/generate_appcast", data: tool }]);
+  // The receipt, as the canonical record step writes it (its twelve keys).
+  const receiptFields = { schema: B.RECEIPT_SCHEMA, mode: B.BOOTSTRAP_MODE, base: S, head: S, sha: S, ref: "refs/heads/main",
+    repositoryId: String(RID), runId: String(BOOT), runAttempt: "1", workflowRef: `${R}/.github/workflows/merge-gate.yml@refs/heads/main`,
+    workflowSha: S, signedArtifact: `relayium-macos-signed-${S}-ci` };
+  const receiptZip = (f = receiptFields) => zipOf([{ name: B.RECEIPT_ENTRY, data: JSON.stringify(f) }]);
+  const art = (id, name, bytes, created, expires) => ({ id, node_id: `A${id}`, name, size_in_bytes: bytes.length, expired: false,
+    digest: `sha256:${sha256(bytes)}`, created_at: iso(created), updated_at: iso(created), expires_at: iso(expires),
+    workflow_run: { id: BOOT, repository_id: RID, head_repository_id: RID, head_branch: "main", head_sha: S } });
+  // Mutable per-world state (one object, so holders keep it); `fresh()`
+  // resets it to the honest world.
+  const s = {};
+  const fresh = () => {
+    const sz = signedZip(), rz = receiptZip();
+    for (const key of Object.keys(s)) delete s[key];
+    Object.assign(s, {
+      run: { id: BOOT, run_attempt: 1, head_sha: S, head_branch: "main", event: "workflow_dispatch", path: ".github/workflows/merge-gate.yml",
+        workflow_id: WF, status: "completed", conclusion: "success", created_at: iso(runAt), run_started_at: iso(runAt), ...ids },
+      listed: null, pushRuns: [], jobs: honestJobs(), zips: new Map([[SIGNED, sz], [RECEIPT, rz]]),
+      artifacts: [art(SIGNED, `relayium-macos-signed-${S}-ci`, sz, sTo - 30000, at + 7 * 86400000),
+        art(RECEIPT, receiptArtifactName(1), rz, aggFrom + 15000, at + 14 * 86400000)],
+      callerText: null, workflow: { id: WF, path: ".github/workflows/merge-gate.yml", state: "active" }, late: null, calls: 0, seen: [], calleeText: null,
+      onSignedDownload: null,
+    });
+    w.reset();
+  };
+  const receiptArtifactName = (n) => `relayium-macos-full-bootstrap-receipt-attempt-${n}`;
+  const P = `/repos/${R}`;
+  const paged = (key, list) => ({ total_count: list.length, [key]: structuredClone(list) });
+  const own = (path) => {
+    const u = new URL(`https://fixture.invalid${path}`), p = u.pathname;
+    let m;
+    s.seen.push(p);
+    if (p === `${P}/contents/.github/workflows/macos.yml` && s.calleeText !== null) {
+      return { path: ".github/workflows/macos.yml", encoding: "base64", content: Buffer.from(s.calleeText).toString("base64"),
+        sha: gitBlob(s.calleeText) };
+    }
+    if (p === `${P}/actions/workflows/321216057/runs`) return paged("workflow_runs", s.pushRuns);
+    if (s.pushRuns.length > 0 && p === `${P}/actions/runs/${s.pushRuns[0].id}`) return structuredClone(s.pushRuns[0]);
+    if (p === `${P}/actions/workflows/merge-gate.yml`) return structuredClone(s.workflow);
+    if (p === `${P}/actions/workflows/${WF}/runs`) return paged("workflow_runs", s.listed ?? [s.run]);
+    if (p === `${P}/actions/runs/${BOOT}`) { s.calls += 1; return structuredClone(s.late && s.calls > s.late.after ? s.late.run(s.run) : s.run); }
+    if (p === `${P}/actions/runs/${BOOT}/attempts/${s.run.run_attempt}`) {
+      return { id: BOOT, run_attempt: s.run.run_attempt, head_sha: S, status: s.run.status, conclusion: s.run.conclusion,
+        path: ".github/workflows/merge-gate.yml" };
+    }
+    if (p === `${P}/actions/runs/${BOOT}/attempts/${s.run.run_attempt}/jobs`) return paged("jobs", s.jobs);
+    if ((m = new RegExp(`^${P}/actions/runs/${BOOT}/attempts/(\\d+)(/jobs)?$`).exec(p)) && s.history?.[m[1]]) {
+      const h = s.history[m[1]];
+      return m[2] ? paged("jobs", h.jobs) : { id: BOOT, run_attempt: Number(m[1]), head_sha: S, status: "completed", conclusion: h.conclusion,
+        path: ".github/workflows/merge-gate.yml" };
+    }
+    if (p === `${P}/actions/runs/${BOOT}/artifacts`) {
+      const list = s.lateArtifacts && s.calls > s.lateArtifacts.after ? s.lateArtifacts.list(s.artifacts) : s.artifacts;
+      return paged("artifacts", list.filter((a) => !u.searchParams.has("name") || a.name === u.searchParams.get("name")));
+    }
+    if ((m = /^\/repos\/[^/]+\/[^/]+\/actions\/artifacts\/(\d+)$/.exec(p)) && s.zips.has(Number(m[1]))) {
+      return structuredClone((s.records?.[m[1]]) ?? s.artifacts.find((a) => a.id === Number(m[1])));
+    }
+    if (p === `${P}/contents/.github/workflows/merge-gate.yml` && u.searchParams.get("ref") === S) {
+      const text = s.callerText ?? w.runGit(["show", `${S}:.github/workflows/merge-gate.yml`]).toString();
+      return { path: ".github/workflows/merge-gate.yml", encoding: "base64", content: Buffer.from(text).toString("base64"),
+        sha: gitBlob(text) };
+    }
+    return undefined;
+  };
+  const api = {
+    async get(path) { const v = own(path); return v === undefined ? w.api.get(path) : v; },
+    async getOptional(path) { try { return await api.get(path); } catch (e) { if (e?.status === 404) return null; throw e; } },
+    async download(path) {
+      const m = /actions\/artifacts\/(\d+)\/zip$/.exec(path);
+      if (m && s.zips.has(Number(m[1]))) {
+        const bytes = Buffer.from(s.zips.get(Number(m[1])));
+        // A world that moves DURING the slow signed-payload download.
+        if (Number(m[1]) === SIGNED && s.onSignedDownload) { const late = s.onSignedDownload; s.onSignedDownload = null; late(); }
+        return bytes;
+      }
+      return w.api.download(path);
+    },
+  };
+  fresh();
+  return { at, S, R, RID, iso, BOOT, WF, SIGNED, RECEIPT, ids, runAt, macos, signedJob, sFrom, sTo, aggFrom, aggregate, others,
+    dmg, provenance, signedZip, receiptFields, receiptZip, art, s, fresh, receiptArtifactName, P, own, api };
+}
+
+// ── the full-bootstrap producer, whole: actual select → decide → readback and
+// the historical (H) re-proof, on real Git objects ─────────────────────────
+//
+// The certified world's checkout supplies the commit S whose merge-gate.yml
+// and macos.yml are THIS worktree's files (so the canonical caller/callee the
+// judge pins are the ones under review). Its push listing for macos.yml is
+// made EMPTY, and one merge-gate dispatch of main at S is served: its whole
+// honest gate graph (every lane required), the `macos / ` producer roster
+// executed exactly as a workflow_call leaves it, the aggregate's judged
+// receipt steps, the signed artifact and the aggregate-written receipt. The
+// fixture is built from the repository's own roster files and the shipped
+// receipt writer's field list, never from the bootstrap judge's verdicts.
+// Every hostile world changes ONE thing and must be refused (or made
+// unavailable → build) for its own reason after the positive passed.
+export async function bootstrapCases(expect) {
+  const E = await import("../release/macos-evidence.mjs");
+  const B = await import("../release/macos-bootstrap.mjs");
+  const { certifiedWorld } = await import("./fixtures/macos-certified/world.mjs");
+  const w = await certifiedWorld();
+  try {
+    const F = bootstrapFixture(w, B);
+    const { at, S, R, RID, iso, BOOT, WF, SIGNED, RECEIPT, ids, macos, signedJob, aggFrom, aggregate, others, dmg, provenance,
+      signedZip, receiptFields, receiptZip, s, fresh, receiptArtifactName, P, api } = F;
+    let seq = 0;
+    const opts = (mode, extra = {}) => ({ mode, repository: R, repositoryId: RID, sha: S, ref: "refs/heads/main", releaseVersion: "",
+      now: at, dir: join(w.directory, `boot-${++seq}`), ...extra });
+    const decideIn = (mode, extra) => w.inCheckout(() => decide(api, opts(mode, extra)));
+    const historical = (ev, clock = () => at) => w.inCheckout(() => B.verifyBootstrapProducer(api, { repository: R, repositoryId: RID, sha: S,
+      runId: ev.run.id, workflowId: ev.producer.caller.id, originalAttempt: ev.signedBuildOrigin.attempt, cwd: w.checkout, clock }));
+
+    // ── positive: the whole new route ──
+    fresh();
+    let frozen;
+    await expect("bootstrap: positive AUTO select chooses reuse of the full-bootstrap producer", async () => {
+      const d = await decideIn("auto");
+      if (d.source !== "reuse") throw new Error(`chose ${d.source}: ${d.reason}`);
+      const ev = d.evidence;
+      if (ev.schema !== E.EVIDENCE_SCHEMA_V3 || ev.producer?.kind !== E.BOOTSTRAP_KIND || ev.run.id !== BOOT
+        || ev.run.event !== "workflow_dispatch" || ev.coverage.mode !== E.COVERAGE_EXECUTED) throw new Error(`froze ${JSON.stringify(ev).slice(0, 300)}`);
+      if (ev.producer.receipt.identity.id !== RECEIPT || ev.artifact.id !== SIGNED || ev.signedBuildOrigin.jobId !== signedJob.id) {
+        throw new Error("the decision does not bind the receipt, the signed artifact and the signed-build execution");
+      }
+      frozen = ev;
+    });
+    fresh();
+    await expect("bootstrap: positive forced reuse freezes the same identity", async () => {
+      const d = await decideIn("reuse");
+      if (!frozen || E.evidenceIdentity(d.evidence) !== E.evidenceIdentity(frozen)) throw new Error("different identity");
+    });
+    fresh();
+    await expect("bootstrap: positive readback re-proves the frozen identity and installs the payload", async () => {
+      const dir = join(w.directory, "boot-readback");
+      const back = await w.inCheckout(() => readback(api, frozen, { now: at + 600000, dir, releaseVersion: "" }));
+      if (E.evidenceIdentity(back) !== E.evidenceIdentity(frozen)) throw new Error("readback identity differs");
+      if (sha256(readFileSync(join(dir, "Relayium.dmg"))) !== sha256(dmg)) throw new Error("payload not installed");
+    });
+    fresh();
+    await expect("bootstrap: positive H historical re-proof binds the frozen producer", async () => {
+      const p = await historical(frozen);
+      if (p.callerBlob !== frozen.producer.caller.blob || p.aggregate !== frozen.producer.aggregate
+        || p.inventory !== frozen.producer.inventory || p.receipt.identity.id !== RECEIPT
+        || sha256(Buffer.from(p.origin.identity)) !== frozen.signedBuildOrigin.execution) throw new Error("re-proof differs from the decision");
+    });
+    fresh();
+    await expect("bootstrap: H stays verifiable after the selection window (no freshening)", async () => {
+      s.run.created_at = iso(at - 400 * 3600000); s.run.run_started_at = s.run.created_at;
+      await historical(frozen, () => at + 6 * 86400000);
+    });
+
+    // ── unavailable → build (never a silent reuse, never hiding a red push) ──
+    const toBuild = async (label, mutate, reason) => {
+      fresh(); mutate();
+      await expect(label, async () => {
+        const d = await decideIn("auto");
+        if (d.source !== "build" || !reason.test(d.reason)) throw new Refused(`auto chose ${d.source}: ${d.reason}`);
+        throw new Refused(`build: ${d.reason}`);
+      }, reason);
+    };
+    const pushRun = (status, conclusion) => ({ id: 36995000777, run_attempt: 1, head_sha: S, head_branch: "main", event: "push",
+      path: ".github/workflows/macos.yml", workflow_id: 321216057, status, conclusion, created_at: iso(at - 3600000), ...ids });
+    for (const [label, st2, c] of [["failed", "completed", "failure"], ["pending", "in_progress", null], ["cancelled", "completed", "cancelled"]]) {
+      fresh(); s.pushRuns = [pushRun(st2, c)];
+      await expect(`bootstrap: an existing ${label} push run keeps the push path (never bootstrap)`, async () => {
+        let d, err;
+        try { d = await decideIn("auto"); } catch (e) { err = e; }
+        if (d?.source === "reuse" && d.evidence?.producer?.kind === E.BOOTSTRAP_KIND) throw new Error("a bootstrap hid the push run");
+        if (d?.source === "reuse") throw new Error("reused a non-green push run");
+        if (s.seen.some((c2) => c2.includes("merge-gate.yml") || c2.includes(`${BOOT}`))) throw new Error("consulted the bootstrap producer");
+        // The push path judged the push run itself and stopped there.
+        if (!s.seen.includes(`${P}/actions/runs/36995000777`)) throw new Error(`push run not judged: ${d?.reason ?? err?.message}`);
+        if (d?.source !== "build" || !/36995000777/.test(d.reason)) throw new Error(`not a push-path build: ${d?.source}/${d?.reason ?? err?.message}`);
+        throw new Refused(`push path kept: ${d?.reason ?? err?.message}`);
+      }, /push path kept/);
+    }
+    await toBuild("bootstrap: no dispatch at all", () => { s.listed = []; }, /no merge-gate run was dispatched/);
+    await toBuild("bootstrap: two dispatches are ambiguous", () => { s.listed = [s.run, { ...s.run, id: BOOT + 1 }]; }, /2 merge-gate runs were dispatched/);
+    await toBuild("bootstrap: latest attempt failed", () => { s.run.conclusion = "failure"; }, /concluded failure/);
+    await toBuild("bootstrap: latest attempt pending", () => { s.run.status = "in_progress"; s.run.conclusion = null; }, /pending attempt/);
+    await toBuild("bootstrap: older than the selection age", () => { s.run.created_at = iso(at - 200 * 3600000); s.run.run_started_at = s.run.created_at; }, /older than 168/);
+    await toBuild("bootstrap: future run", () => { s.run.created_at = iso(at + 3600000); }, /not yet started/);
+    await toBuild("bootstrap: no receipt (mode unproven)", () => { s.artifacts = s.artifacts.filter((a) => a.id !== RECEIPT); }, /carries no full-bootstrap receipt/);
+    await toBuild("bootstrap: two receipts", () => { s.artifacts.push({ ...s.artifacts[1], id: RECEIPT + 5 }); }, /2 full-bootstrap receipts/);
+    await toBuild("bootstrap: receipt expires inside the margin", () => { s.artifacts[1].expires_at = iso(at + 3600000); }, /expires in under 6 hours/);
+    await toBuild("bootstrap: caller lacks the receipt steps (97fd-style retro)", () => {
+      s.callerText = w.runGit(["show", `${S}:.github/workflows/merge-gate.yml`]).toString().split(`      - name: ${B.RECORD_STEP}`)[0];
+    }, /not a full-bootstrap caller/);
+    await toBuild("bootstrap: macos caller gains inputs", () => {
+      s.callerText = w.runGit(["show", `${S}:.github/workflows/merge-gate.yml`]).toString()
+        .replace("    uses: ./.github/workflows/macos.yml\n", "    uses: ./.github/workflows/macos.yml\n    with:\n      release_version: '9.9.9'\n");
+    }, /macos caller is not exactly the canonical call/);
+    await toBuild("bootstrap: callee default inputs changed (notarize default true)", () => {
+      s.calleeText = w.runGit(["show", `${S}:.github/workflows/macos.yml`]).toString()
+        .replace(/( {6}notarize:\n(?: {8}description:.*\n)? {8}required: false\n {8}default: )false/, "$1true");
+      if (!s.calleeText.includes("default: true")) throw new Error("callee control could not be applied");
+    }, /is not the callee a full bootstrap runs: its workflow_call inputs/);
+    await toBuild("bootstrap: run of another workflow id", () => { s.run.workflow_id = WF + 1; }, /is not a same-repository main dispatch/);
+    await toBuild("bootstrap: run on another branch", () => { s.run.head_branch = "feature"; }, /is not a same-repository main dispatch/);
+    await toBuild("bootstrap: run in another repository id", () => { s.run.repository = { ...s.run.repository, id: 1 }; }, /is not a same-repository main dispatch/);
+    await toBuild("bootstrap: merge-gate workflow disabled", () => { s.workflow.state = "disabled_manually"; }, /not active/);
+    await toBuild("bootstrap: missing required lane job", () => { s.jobs = s.jobs.filter((j) => j.name !== "go / evidence" && j.name !== others[1].name); },
+      /lacks required job|outside|executes every job|reads as|roster/);
+    await toBuild("bootstrap: partial UI (one ui-smoke shard missing)", () => {
+      s.jobs = s.jobs.filter((j) => !(j.name.startsWith("macos / ui-smoke") && j.name.includes("device-inbox")));
+    }, /ui-smoke|roster|missing|lacks/);
+
+    // ── refused: the run claims to be a full bootstrap and disagrees ──
+    const refused = async (label, mutate, reason) => {
+      fresh(); mutate();
+      await expect(label, () => decideIn("reuse"), reason);
+    };
+    for (const [key, value] of [["mode", "pull-request"], ["base", "f".repeat(40)], ["head", "f".repeat(40)], ["sha", "f".repeat(40)],
+      ["ref", "refs/heads/other"], ["repositoryId", "1"], ["runId", "1"], ["runAttempt", "2"],
+      ["workflowRef", `${R}/.github/workflows/merge-gate.yml@refs/heads/other`], ["workflowSha", "f".repeat(40)],
+      ["signedArtifact", "relayium-macos-signed-other-ci"], ["schema", "relayium-macos-full-bootstrap-receipt/v0"]]) {
+      await refused(`bootstrap: receipt.${key} wrong`, () => {
+        const rz = receiptZip({ ...receiptFields, [key]: value });
+        s.zips.set(RECEIPT, rz); Object.assign(s.artifacts[1], { digest: `sha256:${sha256(rz)}`, size_in_bytes: rz.length });
+      }, new RegExp(`receipt\\.${key} is`));
+    }
+    await refused("bootstrap: receipt has an extra key", () => {
+      const rz = receiptZip({ ...receiptFields, extra: "x" });
+      s.zips.set(RECEIPT, rz); Object.assign(s.artifacts[1], { digest: `sha256:${sha256(rz)}`, size_in_bytes: rz.length });
+    }, /has keys/);
+    await refused("bootstrap: receipt bytes are not the API digest", () => { s.zips.set(RECEIPT, receiptZip({ ...receiptFields })); s.artifacts[1].digest = `sha256:${"0".repeat(64)}`; },
+      /API digest/);
+    await refused("bootstrap: receipt created outside the aggregate's keep step", () => { s.artifacts[1].created_at = iso(aggFrom + 40000); }, /outside .*Keep the full-bootstrap/);
+    await refused("bootstrap: receipt of another attempt", () => { s.artifacts[1].name = receiptArtifactName(2); }, /receipt is of attempt 2/);
+    await refused("bootstrap: receipt record differs from listing", () => { s.records = { [RECEIPT]: { ...s.artifacts[1], digest: `sha256:${"1".repeat(64)}` } }; },
+      /changed between the listing and its record/);
+    await refused("bootstrap: receipt of another run", () => { s.artifacts[1].workflow_run = { ...s.artifacts[1].workflow_run, id: BOOT + 1 }; },
+      /is not an artifact of merge-gate run/);
+    await refused("bootstrap: aggregate recorded before judging", () => {
+      const a = s.jobs.find((j) => j.name === "merge-gate");
+      [a.steps[1].name, a.steps[2].name] = [a.steps[2].name, a.steps[1].name];
+    }, /in that order/);
+    await refused("bootstrap: duplicate aggregate", () => { s.jobs.push({ ...structuredClone(aggregate), id: 698 }); }, /lists 2 merge-gate job/);
+    await refused("bootstrap: extra unknown job in the caller", () => { s.jobs.push({ id: 697, name: "rogue", status: "completed", conclusion: "success", run_id: BOOT, head_sha: S, run_attempt: 1 }); },
+      /outside the base-owned roster/);
+    await refused("bootstrap: duplicate lane job", () => { s.jobs.push({ ...structuredClone(others[1]), id: 696 }); }, /more than once/);
+    const requiredCheck = others.find((j) => j.conclusion === "success" && j.name.includes(" / ") && !j.name.endsWith(" / evidence"));
+    await refused(`bootstrap: skipped required lane job (${requiredCheck.name})`, () => { s.jobs.find((j) => j.name === requiredCheck.name).conclusion = "skipped"; },
+      /concluded skipped; the base roster requires/);
+    await toBuild("bootstrap: UI shards witnessed instead of executed", () => {
+      for (const j of s.jobs.filter((x) => x.name.startsWith("macos / ui-smoke") || x.name === "macos / test")) {
+        for (const step of j.steps) {
+          if (WITNESS_STEPS.includes(step.name)) Object.assign(step, { conclusion: "success", started_at: j.started_at, completed_at: j.started_at });
+          else if (REQUIRED_STEPS[j.name.includes("app-shell") ? "ui-smoke/app-shell" : j.name.includes("device-inbox") ? "ui-smoke/device-inbox" : "test"]
+            .includes(step.name)) Object.assign(step, { conclusion: "skipped", started_at: null, completed_at: null });
+        }
+      }
+    }, /witness|executes every job|coverage/);
+    await refused("bootstrap: rerun attempt 2 re-executed signed-build (provenance names attempt 1)", () => {
+      const original = structuredClone(s.jobs);
+      s.history = { 1: { jobs: original, conclusion: "failure" } };
+      s.run.run_attempt = 2;
+      s.jobs = s.jobs.map((j) => ({ ...j, run_attempt: 2 }));
+      const sj = s.jobs.find((j) => j.name === "macos / signed-build");
+      sj.started_at = iso(Date.parse(sj.started_at) + 1000);
+      const rz = receiptZip({ ...receiptFields, runAttempt: "2" });
+      s.zips.set(RECEIPT, rz);
+      Object.assign(s.artifacts[1], { name: receiptArtifactName(2), digest: `sha256:${sha256(rz)}`, size_in_bytes: rz.length });
+    }, /signed-build/);
+    await refused("bootstrap: provenance carries a release version", () => {
+      const sz = signedZip({ ...provenance, releaseVersion: "1.4.6" });
+      s.zips.set(SIGNED, sz); Object.assign(s.artifacts[0], { digest: `sha256:${sha256(sz)}`, size_in_bytes: sz.length });
+    }, /releaseVersion/);
+    await refused("bootstrap: provenance claims push (wrong tuple)", () => {
+      const sz = signedZip({ ...provenance, event: "push" });
+      s.zips.set(SIGNED, sz); Object.assign(s.artifacts[0], { digest: `sha256:${sha256(sz)}`, size_in_bytes: sz.length });
+    }, /event/);
+    await refused("bootstrap: provenance workflowRef names macos.yml", () => {
+      const sz = signedZip({ ...provenance, workflowRef: `${R}/.github/workflows/macos.yml@refs/heads/main` });
+      s.zips.set(SIGNED, sz); Object.assign(s.artifacts[0], { digest: `sha256:${sha256(sz)}`, size_in_bytes: sz.length });
+    }, /workflowRef/);
+    await refused("bootstrap: run record from a fork", () => { s.run.head_repository = { id: 1, full_name: "evil/relayium", fork: true }; }, /changed identity|not a same-repository/);
+    // ── the end anchor: the world moves DURING the slow signed download, with
+    // the run record and the signed artifact's identity unchanged; the whole
+    // producer is judged again and each change is refused for its own part ──
+    const late = async (label, change, reason) => {
+      fresh();
+      let fired = false;
+      s.onSignedDownload = () => { fired = true; change(); };
+      await expect(label, async () => {
+        try { await decideIn("reuse"); } finally { if (!fired) throw new Error("control not triggered: no signed download"); }
+      }, reason);
+    };
+    const moved = (part) => new RegExp(`merge-gate run ${BOOT} changed while the evidence was being collected: ${part}`);
+    await late("bootstrap end: receipt replaced (same values, other identity)", () => {
+      s.artifacts[1] = { ...s.artifacts[1], id: RECEIPT + 9 }; s.zips.set(RECEIPT + 9, s.zips.get(RECEIPT));
+    }, moved("its receipt is not the one judged"));
+    await late("bootstrap end: receipt bytes and digest re-written under the same id", () => {
+      const rz = storedZip([{ name: B.RECEIPT_ENTRY, data: `${JSON.stringify(receiptFields, null, 1)}\n` }]);
+      s.zips.set(RECEIPT, rz); Object.assign(s.artifacts[1], { digest: `sha256:${sha256(rz)}`, size_in_bytes: rz.length });
+    }, moved("its receipt is not the one judged"));
+    await late("bootstrap end: a lane job substituted (job inventory)", () => {
+      s.jobs.find((j) => j.name === requiredCheck.name).id = 12345;
+    }, moved("its job inventory is not the one judged"));
+    await late("bootstrap end: a lane job's steps re-written (job executions)", () => {
+      const j = s.jobs.find((x) => x.name === requiredCheck.name);
+      j.steps = [{ number: 1, name: "Set up job", status: "completed", conclusion: "success", started_at: iso(at - 7200000), completed_at: iso(at - 7190000) }];
+    }, moved("its job executions is not the one judged"));
+    await late("bootstrap end: an extra job appears", () => {
+      s.jobs.push({ id: 697, name: "rogue", status: "completed", conclusion: "success", run_id: BOOT, head_sha: S, run_attempt: 1 });
+    }, moved(".*outside the base-owned roster"));
+    await late("bootstrap end: aggregate's original execution re-written", () => {
+      const a = s.jobs.find((x) => x.name === "merge-gate"); a.steps[4].completed_at = iso(Date.parse(a.steps[4].completed_at) + 1000);
+    }, moved("its aggregate execution is not the one judged"));
+    await late("bootstrap end: aggregate's keep step moved off the receipt", () => {
+      const a = s.jobs.find((x) => x.name === "merge-gate");
+      Object.assign(a.steps[3], { started_at: iso(aggFrom + 30000), completed_at: iso(aggFrom + 40000) });
+    }, moved(".*outside .*Keep the full-bootstrap"));
+    await late("bootstrap end: signed-build times re-written", () => {
+      const j = s.jobs.find((x) => x.name === "macos / signed-build"); j.completed_at = iso(Date.parse(j.completed_at) + 1000);
+    }, moved("its (job executions|signed-build original execution) is not the one judged"));
+    await late("bootstrap end: signed-build steps re-written", () => {
+      const j = s.jobs.find((x) => x.name === "macos / signed-build"); j.steps[j.steps.length - 1].name = "Renamed";
+    }, moved(".*signed-build|its job executions is not the one judged"));
+    await late("bootstrap end: caller source blob substituted (still canonical)", () => {
+      s.callerText = `# substituted\n${w.runGit(["show", `${S}:.github/workflows/merge-gate.yml`]).toString()}`;
+    }, moved(`the checkout's .github/workflows/merge-gate.yml at ${S} is [0-9a-f]{40}, not the API's`));
+    await late("bootstrap end: callee source blob substituted (same shape)", () => {
+      s.calleeText = `# substituted\n${w.runGit(["show", `${S}:.github/workflows/macos.yml`]).toString()}`;
+    }, moved("its callee is not the one judged"));
+    await late("bootstrap end: latest attempt failed", () => { s.run.conclusion = "failure"; },
+      moved("merge-gate run \\d+ is no longer a successful dispatch on main"));
+    await late("bootstrap end: an unrelated artifact appears (whole artifact list)", () => {
+      s.artifacts.push({ ...s.artifacts[0], id: SIGNED + 50, name: "other-artifact" });
+    }, moved("its run record or artifact list is not the one judged"));
+
+    // ── historical H refusals: the producer moved after the decision ──
+    // What macos-handoff.mjs's verify binds after the shared judge returns.
+    const hBind = async () => {
+      const p = await historical(frozen);
+      if (sha256(Buffer.from(p.origin.identity)) !== frozen.signedBuildOrigin.execution || p.origin.job.id !== frozen.signedBuildOrigin.jobId) {
+        throw new Refused("the reused signed-build execution is not the one the decision froze");
+      }
+      if (p.callerBlob !== frozen.producer.caller.blob || p.aggregate !== frozen.producer.aggregate || p.inventory !== frozen.producer.inventory
+        || JSON.stringify(p.receipt) !== JSON.stringify(frozen.producer.receipt)) {
+        throw new Refused("the full-bootstrap caller, receipt, aggregate or inventory read back now is not the one the decision froze");
+      }
+      return p;
+    };
+    const hRefused = async (label, mutate, reason) => {
+      fresh(); mutate();
+      await expect(label, hBind, reason);
+    };
+    await hRefused("bootstrap H: latest attempt now failed", () => { s.run.conclusion = "failure"; }, /not a successful merge-gate\.yml dispatch/);
+    await hRefused("bootstrap H: receipt expired at the machine clock", () => { s.artifacts[1].expires_at = iso(at - 1000); s.artifacts[1].expired = false; }, /expired at/);
+    await hRefused("bootstrap H: receipt gone", () => { s.artifacts = s.artifacts.filter((a) => a.id !== RECEIPT); }, /is not a proved signed build: .*no full-bootstrap receipt/);
+    await hRefused("bootstrap H: signed-build execution changed", () => {
+      const j = s.jobs.find((x) => x.name === "macos / signed-build"); j.started_at = iso(Date.parse(j.started_at) - 1000);
+    }, /signed-build execution is not the one the decision froze/);
+    await hRefused("bootstrap H: aggregate execution changed", () => {
+      const a = s.jobs.find((x) => x.name === "merge-gate"); a.steps[3].completed_at = iso(Date.parse(a.steps[3].completed_at) + 1000);
+    }, /caller, receipt, aggregate or inventory/);
+    await hRefused("bootstrap H: job inventory changed (a lane job relabelled)", () => {
+      s.jobs.find((x) => x.name === requiredCheck.name).id = 12345;
+    }, /caller, receipt, aggregate or inventory/);
+    await hRefused("bootstrap H: new receipt same values other identity", () => {
+      s.artifacts[1] = { ...s.artifacts[1], id: RECEIPT + 7 }; s.zips.set(RECEIPT + 7, s.zips.get(RECEIPT));
+    }, /caller, receipt, aggregate or inventory/);
+    fresh();
+    await expect("bootstrap H: positive bound re-proof", hBind);
+  } finally {
+    w.dispose();
+  }
+}
+
+// ── the full-bootstrap producer through the WHOLE publisher world ───────────
+//
+// `handoffWorld` with the bootstrap dispatch layered under it: the publisher
+// preflight's ACTUAL `decide` (AUTO) selects the bootstrap producer, the
+// notarize stage's ACTUAL `readback` re-proves it, the notarized provenance
+// names it, and the decision ZIP, frozen metadata candidate, gate and release
+// surfaces are the certified world's. Then the shipped `emitHandoff` writes the
+// v3 record, the shipped strict `parseHandoff` reads it, and the shipped
+// `verifyHandoff` stages main and release re-prove it. Every refusal below
+// reaches that real entrypoint and is matched by its own reason.
+export async function bootstrapHandoffCases(expect) {
+  const E = await import("../release/macos-evidence.mjs");
+  const B = await import("../release/macos-bootstrap.mjs");
+  const H = await import("../release/macos-handoff.mjs");
+  const layer = (setup) => (world) => {
+    const F = bootstrapFixture(world, B);
+    if (setup) setup(F);
+    return { F, api: F.api, provenance: F.provenance, dmgSha256: sha256(F.dmg),
+      check(ev) {
+        if (ev.schema !== E.EVIDENCE_SCHEMA_V3 || ev.producer?.kind !== E.BOOTSTRAP_KIND || ev.run.id !== F.BOOT
+          || ev.coverage.mode !== E.COVERAGE_EXECUTED) throw new Error(`the preflight did not select the full bootstrap: ${JSON.stringify(ev).slice(0, 200)}`);
+      } };
+  };
+  // Through the strict parser, then the real verify.
+  const V = (w, rec, stage, extra) => w.verify(parseHandoff(JSON.stringify(rec)), stage, extra);
+  const w = await handoffWorld({ gateJobs: honestGateJobs, mode: "auto", producer: layer() });
+  const { F } = w.layer;
+  const { s, at, S, BOOT, SIGNED, RECEIPT, iso, others, receiptFields } = F;
+  const raw = (rec) => JSON.parse(JSON.stringify(rec));
+  try {
+    let rec;
+    await expect("bootstrap handoff: positive EMIT writes a v3 main-full-bootstrap record", async () => {
+      rec = await w.emit();
+      const sb = rec.signedBuild, ev = w.decisionRecord.evidence;
+      const decisionArt = w.artifacts.find((a) => a.name.includes("build-source"));
+      const bad = [];
+      if (rec.schema !== H.HANDOFF_SCHEMA_V3 || sb.kind !== E.BOOTSTRAP_KIND || sb.runId !== BOOT) bad.push("schema/kind/run");
+      if (sb.coverage.mode !== E.COVERAGE_EXECUTED || sb.originalAttempt !== 1 || sb.execution !== ev.signedBuildOrigin.execution) bad.push("origin");
+      if (JSON.stringify(sb.producer) !== JSON.stringify(ev.producer) || sb.producer.receipt.identity.id !== RECEIPT) bad.push("producer");
+      if (JSON.stringify(sb.decision.identity) !== JSON.stringify(artifactIdentityOf(decisionArt)) || sb.decision.mode !== "auto") bad.push("decision");
+      if (sb.signedArtifact.id !== SIGNED) bad.push("signed artifact");
+      if (bad.length) throw new Error(bad.join(", "));
+    });
+    // Without the positive record every later control would be vacuous.
+    if (!rec) return;
+    await expect("bootstrap handoff: the strict parser reads the v3 record back exactly", () => {
+      if (JSON.stringify(parseHandoff(JSON.stringify(rec))) !== JSON.stringify(rec)) throw new Error("parse changed the record");
+    });
+    await expect("bootstrap handoff: positive VERIFY main re-proves the producer historically (no new selection)", async () => {
+      w.reset();
+      await V(w, rec, "main");
+      const selection = w.calls.filter((c) => c.includes("actions/workflows/321216057/runs") || c.endsWith("actions/workflows/macos.yml")
+        || (c.includes("actions/workflows/9/runs") && c.includes(`head_sha=${S}`) && c.includes("branch=main&") && !c.includes("event=workflow_dispatch&branch=main&head_sha")));
+      if (selection.length) throw new Error(`verify ran a selection read: ${selection.join(", ")}`);
+      for (const need of [`repos/${w.repository}/actions/runs/${BOOT}`, `repos/${w.repository}/actions/artifacts/${RECEIPT}`,
+        `DOWNLOAD repos/${w.repository}/actions/artifacts/${RECEIPT}/zip`]) {
+        if (!w.calls.includes(need)) throw new Error(`verify did not re-read ${need}`);
+      }
+    });
+
+    // Schema substitution at the real parser.
+    await expect("bootstrap handoff: v3 record relabelled v2 is refused", () => V(w, { ...raw(rec), schema: HANDOFF_SCHEMA }, "main"),
+      /handoff signedBuild has keys \[.*producer.*\]; the schema requires exactly/);
+    await expect("bootstrap handoff: v2 form of a bootstrap chain (producer dropped) is refused", () => {
+      const r = raw(rec); r.schema = HANDOFF_SCHEMA; delete r.signedBuild.producer;
+      return V(w, r, "main");
+    }, /handoff signedBuild\.kind "main-full-bootstrap" is unknown$/);
+    await expect("bootstrap handoff: v3 record claiming a main-push kind is refused", () => {
+      const r = raw(rec); r.signedBuild.kind = "main-push";
+      return V(w, r, "main");
+    }, /handoff signedBuild\.kind "main-push" is unknown to relayium-macos-publication-handoff\/v3/);
+    await expect("bootstrap handoff: v3 record without its producer is refused", () => {
+      const r = raw(rec); delete r.signedBuild.producer;
+      return V(w, r, "main");
+    }, /handoff signedBuild has keys .*; the schema requires exactly \[.*producer/);
+    await expect("bootstrap handoff: v1 form is refused (never inferred)", () => w.verify(asV1(rec), "main"),
+      new RegExp(`the reused producer run ${BOOT} is not a successful macos\\.yml push run on main at ${S}`));
+    // The record's frozen producer, edited: the real chain no longer matches it.
+    await expect("bootstrap handoff: record producer aggregate edited", () => {
+      const r = raw(rec); r.signedBuild.producer.aggregate = "0".repeat(64);
+      return V(w, r, "main");
+    }, /the signed-build chain read back now differs from the chain the handoff froze/);
+    await expect("bootstrap handoff: record receipt identity edited", () => {
+      const r = raw(rec); r.signedBuild.producer.receipt.identity.digest = `sha256:${"1".repeat(64)}`;
+      return V(w, r, "main");
+    }, /the signed-build chain read back now differs from the chain the handoff froze/);
+
+    // The producer moved after the decision: each is refused by the real verify.
+    const moved = async (label, change, reason) => {
+      F.fresh(); change();
+      try { await expect(label, () => V(w, rec, "main"), reason); } finally { F.fresh(); }
+    };
+    const what = `the full-bootstrap producer run ${BOOT}`;
+    const requiredCheck = others.find((j) => j.conclusion === "success" && j.name.includes(" / ") && !j.name.endsWith(" / evidence"));
+    await moved("bootstrap handoff: receipt gone", () => { s.artifacts = s.artifacts.filter((a) => a.id !== RECEIPT); },
+      new RegExp(`${what} is not a proved signed build: .*carries no full-bootstrap receipt`));
+    await moved("bootstrap handoff: receipt replaced (same values, other identity)", () => {
+      s.artifacts[1] = { ...s.artifacts[1], id: RECEIPT + 7 }; s.zips.set(RECEIPT + 7, s.zips.get(RECEIPT));
+    }, /the full-bootstrap caller, receipt, aggregate or inventory read back now is not the one the decision froze/);
+    await moved("bootstrap handoff: receipt bytes and digest re-written under the same id", () => {
+      const rz = storedZip([{ name: B.RECEIPT_ENTRY, data: `${JSON.stringify(receiptFields, null, 1)}\n` }]);
+      s.zips.set(RECEIPT, rz); Object.assign(s.artifacts[1], { digest: `sha256:${sha256(rz)}`, size_in_bytes: rz.length });
+    }, /the full-bootstrap caller, receipt, aggregate or inventory read back now is not the one the decision froze/);
+    await moved("bootstrap handoff: receipt field wrong (mode)", () => {
+      const rz = storedZip([{ name: B.RECEIPT_ENTRY, data: JSON.stringify({ ...receiptFields, mode: "pull-request" }) }]);
+      s.zips.set(RECEIPT, rz); Object.assign(s.artifacts[1], { digest: `sha256:${sha256(rz)}`, size_in_bytes: rz.length });
+    }, new RegExp(`${what}: receipt\\.mode is "pull-request"`));
+    await moved("bootstrap handoff: caller source blob substituted (still canonical)", () => {
+      s.callerText = `# substituted\n${w.runGit(["show", `${S}:.github/workflows/merge-gate.yml`]).toString()}`;
+    }, new RegExp(`${what}: the checkout's \\.github/workflows/merge-gate\\.yml at ${S} is [0-9a-f]{40}, not the API's`));
+    await moved("bootstrap handoff: caller no longer canonical", () => {
+      s.callerText = w.runGit(["show", `${S}:.github/workflows/merge-gate.yml`]).toString().split(`      - name: ${B.RECORD_STEP}`)[0];
+    }, new RegExp(`${what} is not a proved signed build: .*is not a full-bootstrap caller`));
+    await moved("bootstrap handoff: callee source blob substituted (same shape)", () => {
+      s.calleeText = `# substituted\n${w.runGit(["show", `${S}:.github/workflows/macos.yml`]).toString()}`;
+    }, /the producer workflow at the source is not the one the decision froze/);
+    await moved("bootstrap handoff: aggregate execution changed", () => {
+      const a = s.jobs.find((x) => x.name === "merge-gate"); a.steps[4].completed_at = iso(Date.parse(a.steps[4].completed_at) + 1000);
+    }, /the full-bootstrap caller, receipt, aggregate or inventory read back now is not the one the decision froze/);
+    await moved("bootstrap handoff: whole job inventory changed", () => { s.jobs.find((x) => x.name === requiredCheck.name).id = 12345; },
+      /the full-bootstrap caller, receipt, aggregate or inventory read back now is not the one the decision froze/);
+    await moved("bootstrap handoff: a required lane job now skipped", () => { s.jobs.find((x) => x.name === requiredCheck.name).conclusion = "skipped"; },
+      new RegExp(`${what}: .*concluded skipped; the base roster requires`));
+    await moved("bootstrap handoff: original signed-build execution changed", () => {
+      const j = s.jobs.find((x) => x.name === "macos / signed-build"); j.started_at = iso(Date.parse(j.started_at) - 1000);
+    }, /the reused signed-build execution is not the one the decision froze/);
+    await moved("bootstrap handoff: latest attempt now failed", () => { s.run.conclusion = "failure"; },
+      new RegExp(`${what} is not a successful merge-gate\\.yml dispatch on main`));
+    {
+      const decision = w.artifacts.find((a) => a.name.includes("build-source"));
+      const saved = [structuredClone(decision), w.zips.get(decision.id)];
+      const record = structuredClone(w.decisionRecord);
+      record.evidence.producer.aggregate = "2".repeat(64);
+      const bytes = storedZip([{ name: "reuse-decision.json", data: `${JSON.stringify(record, null, 2)}\n` }]);
+      w.zips.set(decision.id, bytes); Object.assign(decision, { digest: `sha256:${sha256(bytes)}`, size_in_bytes: bytes.length });
+      try {
+        await expect("bootstrap handoff: decision ZIP replaced (producer edited, digest consistent)", () => V(w, rec, "main"),
+          new RegExp(`decision artifact ${decision.id} is not the frozen decision ${decision.id} \\(replaced or changed\\)`));
+      } finally { Object.assign(decision, saved[0]); w.zips.set(decision.id, saved[1]); }
+    }
+    await expect("bootstrap handoff: positive VERIFY main again after the controls (world restored)", () => V(w, rec, "main"));
+
+    // Release stage, expiry and freshness.
+    w.deliverMain();
+    await expect("bootstrap handoff: positive VERIFY release (tag absent)", () => V(w, rec, "release"));
+    const until = H.verifiableUntil(rec);
+    await expect("bootstrap handoff: verifiableUntil is the receipt's expiry (earliest retained)", () => {
+      if (until !== rec.signedBuild.producer.receipt.identity.expires_at) throw new Error(`${until}`);
+      if (!handoffSummary(rec).includes(`receipt ${RECEIPT}`)) throw new Error("summary does not name the receipt");
+    });
+    const later = at + 8 * 86400000;
+    await expect("bootstrap handoff: no freshening — release verifies with the producer run older than 168h", () => V(w, rec, "release", { clock: () => later }));
+    await expect("bootstrap handoff: ... while a NEW auto selection at that instant rebuilds", async () => {
+      const d = await w.inCheckout(() => decide(F.api, { mode: "auto", repository: w.repository, repositoryId: w.repositoryId, sha: S,
+        ref: "refs/heads/main", releaseVersion: "1.4.5", now: later, dir: join(w.directory, "boot-later-auto") }));
+      if (d.source !== "build" || !/older than 168 hours/.test(d.reason)) throw new Error(`${d.source}: ${d.reason}`);
+    });
+    await expect("bootstrap handoff: positive just before verifiableUntil", () => V(w, rec, "release", { clock: () => Date.parse(until) - 60000 }));
+    await expect("bootstrap handoff: refused once the receipt has expired", () => V(w, rec, "release", { clock: () => Date.parse(until) + 1000 }),
+      /expired/);
+    {
+      const branchRoute = `repos/${w.repository}/git/ref/heads/${w.branchName}`;
+      w.reset();
+      let now = at;
+      w.hooks.set(branchRoute, (n) => { if (n === 2) now = Date.parse(until) + 1000; return undefined; });
+      await expect("bootstrap handoff: the receipt expires at the END of verify", async () => {
+        try { await V(w, rec, "release", { clock: () => now }); } finally {
+          if (w.counters.get(branchRoute) !== 2 || !(now > Date.parse(until))) throw new Error(`control not triggered: ${w.counters.get(branchRoute)}`);
+        }
+      }, /the retained chain expired at .* before the handoff verification finished/);
+      w.reset();
+    }
+    w.publishRelease(rec);
+    await expect("bootstrap handoff: positive VERIFY release (published identical)", () => V(w, rec, "release"));
+  } finally {
+    w.dispose();
+  }
+
+  // The retained original signed build: attempt 1's aggregate failed and wrote
+  // NO receipt; "re-run failed jobs" made attempt 2, whose re-executed
+  // aggregate judged every lane and kept the ONE receipt (attempt 2), while
+  // signed-build kept its original attempt-1 execution.
+  const retained = (F) => {
+    const { s, iso, aggregate, receiptFields, RECEIPT, receiptArtifactName } = F;
+    const first = structuredClone(s.jobs);
+    const failed = first.find((j) => j.name === "merge-gate");
+    failed.conclusion = "failure";
+    failed.steps = failed.steps.map((st) => (st.name === B.JUDGE_STEP ? { ...st, conclusion: "failure" }
+      : st.name === B.RECORD_STEP || st.name === B.KEEP_STEP ? { ...st, conclusion: "skipped", started_at: null, completed_at: null } : st));
+    s.history = { 1: { jobs: first, conclusion: "failure" } };
+    const from = Date.parse(aggregate.completed_at) + 600000;
+    const st = (number, name, a, b) => ({ number, name, status: "completed", conclusion: "success", started_at: iso(a), completed_at: iso(b) });
+    const again = { ...structuredClone(aggregate), id: 799, run_attempt: 2, runner_name: "GitHub Actions 1799",
+      started_at: iso(from), completed_at: iso(from + 60000),
+      steps: [st(1, "Set up job", from, from + 1000), st(2, B.JUDGE_STEP, from + 2000, from + 10000),
+        st(3, B.RECORD_STEP, from + 11000, from + 12000), st(4, B.KEEP_STEP, from + 13000, from + 20000), st(5, "Complete job", from + 59000, from + 60000)] };
+    s.jobs = [...structuredClone(first).filter((j) => j.name !== "merge-gate"), again];
+    s.run.run_attempt = 2;
+    s.run.run_started_at = iso(from - 60000);
+    const rz = F.receiptZip({ ...receiptFields, runAttempt: "2" });
+    s.zips.set(RECEIPT, rz);
+    Object.assign(s.artifacts[1], { name: receiptArtifactName(2), digest: `sha256:${sha256(rz)}`, size_in_bytes: rz.length,
+      created_at: iso(from + 15000), updated_at: iso(from + 15000) });
+  };
+  let w2;
+  await expect("bootstrap handoff: positive retained signed attempt 1 / latest attempt 2 (one receipt, of attempt 2)", async () => {
+    w2 = await handoffWorld({ gateJobs: honestGateJobs, mode: "auto", producer: layer(retained) });
+    const r2 = await w2.emit();
+    const sb = r2.signedBuild;
+    if (r2.schema !== H.HANDOFF_SCHEMA_V3 || sb.originalAttempt !== 1 || sb.producer.receipt.attempt !== 2
+      || w2.decisionRecord.evidence.run.attempt !== 2) throw new Error(`froze ${JSON.stringify(sb).slice(0, 300)}`);
+    await V(w2, r2, "main");
+    w2.deliverMain();
+    await V(w2, r2, "release");
+    // The retained world, then a second receipt (attempt 1's) appears: ambiguous, never waived.
+    w2.layer.F.s.artifacts.push({ ...w2.layer.F.s.artifacts[1], id: w2.layer.F.RECEIPT + 3,
+      name: w2.layer.F.receiptArtifactName(1) });
+    w2.layer.F.s.zips.set(w2.layer.F.RECEIPT + 3, w2.layer.F.s.zips.get(w2.layer.F.RECEIPT));
+    let refusal = null;
+    try { await V(w2, r2, "release"); } catch (error) { refusal = error; }
+    if (!(refusal instanceof Refused) || !/carries 2 full-bootstrap receipts/.test(refusal.message)) {
+      throw new Error(`a second (attempt-1) receipt was not refused as ambiguous: ${refusal?.message ?? "accepted"}`);
+    }
+  });
+  w2?.dispose();
 }
 
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
