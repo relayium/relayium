@@ -218,6 +218,222 @@ final class LocalSessionUITests: XCTestCase {
         return result
     }
 
+    // MARK: - the Nearby counterpart's residency
+
+    /// Whether THIS test process has already asked the Nearby counterpart to
+    /// start. Static because XCTest builds a fresh case instance per test, and
+    /// the counterpart is one process serving every Nearby test in the run.
+    private static var nearbyStartRequested = false
+
+    /// The counterpart's role, as its own `/status` names it.
+    private static let nearbyCounterpartRole = "local-link-peer"
+
+    /// The readiness wait's whole budget, measured from the successful
+    /// `/start` — see `requireResidentNearbyCounterpart`.
+    private static let nearbyReadinessSeconds: TimeInterval = 60
+
+    /// Why the Nearby counterpart cannot serve this test. Thrown, so nothing
+    /// after a refused fixture runs against it.
+    private struct NearbyFixtureRefusal: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    /// Start the Nearby counterpart's residency, or reuse it, and wait until it
+    /// is really advertising — before this test reads any baseline or launches
+    /// the app.
+    ///
+    /// **Here, rather than in the launcher, because of the counterpart's idle
+    /// ceiling.** `LocalLinkPeerRun.idleCeiling` fails the fixture after 240s
+    /// with nothing moving. The launcher used to `POST /start` before
+    /// `xcodebuild`, so that clock ran through compilation, simulator boot and
+    /// the Cross-network case: hosted run 37407624590 saw the peer reach
+    /// `resident` at 03:17:22 and record `failed` at 03:21:22 — six minutes
+    /// before the UI test runner had even started. That ordering is what this
+    /// moves; it is NOT a claim about why that run's link later failed.
+    ///
+    /// Only an `idle` counterpart that this process has never started is
+    /// started. A `resident` or `done` one that this process started is reused
+    /// as it is: one counterpart serves every Nearby test, and `done` is the
+    /// state the transfer test legitimately leaves it in. Anything else is
+    /// refused rather than repaired — a `failed` fixture, a counterpart that
+    /// went back to `idle`, one already started by something other than this
+    /// process, or a control API that does not answer this harness's token with
+    /// a well-formed 200. There is no reset and no second `/start`.
+    ///
+    /// Not `requireHarness`: `control` calls that, so a start inside it would
+    /// recurse, and the Cross-network case — which shares `requireHarness` —
+    /// must not arm the Nearby counterpart at all.
+    ///
+    /// **Two clocks, deliberately different.** The counterpart's own 240s idle
+    /// ceiling (its startup clock) begins when it accepts `POST /start`, is
+    /// pushed back whenever its room/roster/link progress changes, and is the
+    /// counterpart's business. This helper's readiness wait is a separate,
+    /// stricter clock: one monotonic deadline of `nearbyReadinessSeconds`,
+    /// taken once, immediately AFTER the `/start` answered 200 `ok` (or at entry
+    /// when this process's earlier start is still `starting`/`advertising`).
+    /// Every `/status` request, its answer wait and every pause between polls
+    /// is cut to what is left of it, and an answer that lands after it is
+    /// refused even if it says `resident`. The entry `/status` and the `/start`
+    /// itself run before that clock and keep the control API's ordinary 15s
+    /// request / 20s answer caps; the deadline never raises those caps.
+    private func requireResidentNearbyCounterpart(_ harness: Harness) throws {
+        guard let entry = try nearbyStatus(harness, within: nil) else {
+            throw NearbyFixtureRefusal(description: "the Nearby counterpart's /status did not answer")
+        }
+        switch entry.phase {
+        case "idle":
+            guard !Self.nearbyStartRequested else {
+                throw NearbyFixtureRefusal(description: """
+                    the Nearby counterpart this run already started is idle again; \
+                    it is never reset, so this is a fixture failure.
+                    last status: \(entry.raw)
+                    """)
+            }
+            Self.nearbyStartRequested = true
+            let started = controlExchange(harness.nearbyPort, "POST", "/start")
+            guard started.status == 200, started.body?["ok"] as? Bool == true else {
+                throw NearbyFixtureRefusal(description: """
+                    the Nearby counterpart refused to start: HTTP \
+                    \(started.status.map(String.init) ?? "<no answer>"), \
+                    \(started.body.map { String(describing: $0) } ?? "<no well-formed body>")
+                    """)
+            }
+        case "resident", "done":
+            guard Self.nearbyStartRequested else {
+                throw NearbyFixtureRefusal(description: """
+                    the Nearby counterpart was started before this test process \
+                    asked for it, so its 240s idle ceiling was already running.
+                    last status: \(entry.raw)
+                    """)
+            }
+            try requireOwnAdvertisement(entry, harness)
+            return
+        case "starting", "advertising":
+            guard Self.nearbyStartRequested else {
+                throw NearbyFixtureRefusal(description: """
+                    the Nearby counterpart was started by something other than \
+                    this test process.
+                    last status: \(entry.raw)
+                    """)
+            }
+        case "failed":
+            throw NearbyFixtureRefusal(description: """
+                the Nearby counterpart has failed and is not restarted.
+                last status: \(entry.raw)
+                """)
+        default:
+            throw NearbyFixtureRefusal(description: """
+                the Nearby counterpart reported a phase this fixture does not know.
+                last status: \(entry.raw)
+                """)
+        }
+
+        // `resident` is published once `LanDiscoveryModel` reaches `joined`,
+        // which on this transport means the listener and the browser both
+        // reported ready. A host that cannot advertise `_relayium._tcp` between
+        // the counterpart and the Simulator and an app that stopped rendering
+        // its roster otherwise present identically — as an empty roster 90
+        // seconds into the test.
+        let deadline = NearbyReadinessDeadline(seconds: Self.nearbyReadinessSeconds)
+        var last = entry
+        let ready = try pollUntilReady(deadline: deadline, interval: 0.5) {
+            // nil: the deadline ran out during this request; the clock decides.
+            guard let status = try nearbyStatus(harness, within: deadline) else { return false }
+            last = status
+            switch last.phase {
+            case "resident":
+                try requireOwnAdvertisement(last, harness)
+                return true
+            case "starting", "advertising":
+                return false
+            case "failed":
+                throw NearbyFixtureRefusal(description: """
+                    the Nearby counterpart could not advertise on this link.
+                    last status: \(last.raw)
+                    """)
+            default:
+                throw NearbyFixtureRefusal(description: """
+                    the Nearby counterpart left its start for a phase that is not \
+                    readiness.
+                    last status: \(last.raw)
+                    """)
+            }
+        }
+        if ready { return }
+        throw NearbyFixtureRefusal(description: """
+            the Nearby counterpart never advertised _relayium._tcp within \
+            \(Int(Self.nearbyReadinessSeconds))s of its start.
+            last status: \(last.raw)
+            This host has to let the counterpart and the iOS Simulator discover \
+            each other over Bonjour. A run that cannot is a harness failure on \
+            this machine, not an app one.
+            """)
+    }
+
+    /// `resident` from THIS run's counterpart: its own role, and the very name
+    /// the roster assertions match on.
+    private func requireOwnAdvertisement(_ status: (phase: String, raw: [String: Any]),
+                                         _ harness: Harness) throws {
+        guard status.raw["role"] as? String == Self.nearbyCounterpartRole,
+              status.raw["peerName"] as? String == harness.peerName else {
+            throw NearbyFixtureRefusal(description: """
+                the counterpart answering on the Nearby port is not this run's \
+                advertisement "\(harness.peerName)".
+                last status: \(status.raw)
+                """)
+        }
+    }
+
+    /// The Nearby counterpart's `/status`, accepted only as a well-formed 200
+    /// carrying a phase. A 401 (this harness's token refused), a 409, no answer
+    /// or an unparseable body is refused, never read as "not ready yet".
+    ///
+    /// With a `deadline`, the request is cut to what is left of it and `nil`
+    /// means only that the deadline ran out — before, during or just after the
+    /// request — so the readiness wait reports its own timeout. Without one,
+    /// `nil` is never returned.
+    private func nearbyStatus(_ harness: Harness, within deadline: NearbyReadinessDeadline?) throws
+        -> (phase: String, raw: [String: Any])? {
+        let answer = controlExchange(harness.nearbyPort, "GET", "/status", within: deadline)
+        if let deadline, deadline.remaining == nil { return nil }
+        guard answer.status == 200, let body = answer.body,
+              let phase = body["phase"] as? String else {
+            throw NearbyFixtureRefusal(description: """
+                the Nearby counterpart's control API did not answer /status with \
+                a well-formed 200: HTTP \
+                \(answer.status.map(String.init) ?? "<no answer>"), \
+                \(answer.body.map { String(describing: $0) } ?? "<no well-formed body>")
+                """)
+        }
+        return (phase, body)
+    }
+
+    /// One request that keeps the HTTP status, for the residency fixture only.
+    /// `control` deliberately answers with the body alone for its polling
+    /// callers; a start has to tell a 401 or 409 from a success. Its caps come
+    /// from `nearbyControlLimits`: the ordinary 15s request / 20s answer wait,
+    /// or less when a readiness `deadline` has less left.
+    private func controlExchange(_ port: Int, _ method: String, _ path: String,
+                                 within deadline: NearbyReadinessDeadline? = nil)
+        -> (status: Int?, body: [String: Any]?) {
+        guard let harness = try? requireHarness(),
+              let url = URL(string: "http://127.0.0.1:\(port)\(path)") else { return (nil, nil) }
+        let answer: (status: Int?, body: [String: Any]?)? =
+            awaitNearbyAnswer(within: deadline) { requestTimeout, deliver in
+                var request = URLRequest(url: url, timeoutInterval: requestTimeout)
+                request.httpMethod = method
+                request.setValue("Bearer \(harness.controlToken)", forHTTPHeaderField: "Authorization")
+                URLSession.shared.dataTask(with: request) { data, response, _ in
+                    let status = (response as? HTTPURLResponse)?.statusCode
+                    let body = data.flatMap {
+                        (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any]
+                    }
+                    deliver((status, body))
+                }.resume()
+            }
+        return answer ?? (nil, nil)
+    }
+
     /// Which link the counterpart is on right now, read before this test's app
     /// has had a chance to start one.
     ///
@@ -445,10 +661,11 @@ final class LocalSessionUITests: XCTestCase {
     /// Wait for the link to produce the counterpart, and assert the roster is
     /// describing it rather than still describing an empty one.
     ///
-    /// The launcher has already established that the peer is advertising before
-    /// a simulator was booted, so a failure here is the APP's side of discovery
-    /// — the browser, the advertisement parse, the capability credit or the
-    /// roster render — and not a harness that never came up.
+    /// `requireResidentNearbyCounterpart` has already established that the peer
+    /// is advertising before this test launched the app, so a failure here is
+    /// the APP's side of discovery — the browser, the advertisement parse, the
+    /// capability credit or the roster render — and not a harness that never
+    /// came up.
     private func awaitRoster(_ harness: Harness) -> XCUIElement {
         let row = rosterRow(harness)
         XCTAssertTrue(row.waitForExistence(timeout: 90), """
@@ -473,6 +690,9 @@ final class LocalSessionUITests: XCTestCase {
     /// could assert only that an empty roster explained itself.
     func testNearbyRosterNamesThePeerAndConnects() throws {
         let harness = try requireHarness()
+        // Armed here, by this test, before any baseline is read or the app is
+        // launched — see `requireResidentNearbyCounterpart`.
+        try requireResidentNearbyCounterpart(harness)
         awaitIdleCounterpart(harness)
         let baseline = counterpartEpoch(harness)
         let knownPeers = counterpartRoster(harness)
@@ -554,6 +774,9 @@ final class LocalSessionUITests: XCTestCase {
     /// would evidence the weaker of the two shapes the product ships.
     func testNearbyLinkTransfersThenDoneReturnsToACleanRoster() throws {
         let harness = try requireHarness()
+        // Armed here, by this test, before any baseline is read or the app is
+        // launched — see `requireResidentNearbyCounterpart`.
+        try requireResidentNearbyCounterpart(harness)
         awaitIdleCounterpart(harness)
         let baseline = counterpartEpoch(harness)
         let knownPeers = counterpartRoster(harness)
@@ -989,3 +1212,109 @@ final class LocalSessionUITests: XCTestCase {
                        "Done left the finished session's own control on screen")
     }
 }
+
+// BEGIN nearby-readiness-clock
+//
+// The Nearby readiness wait's clock, kept free of XCTest and of the harness so
+// `scripts/test/native-lan-harness-test.mjs` compiles exactly these lines with a
+// slow fake counterpart and measures elapsed time. Foundation only.
+
+/// One monotonic deadline (`DispatchTime`, i.e. uptime, never wall clock), taken
+/// once and never extended.
+struct NearbyReadinessDeadline {
+    /// The original instant itself. Every wait under this deadline ends at or
+    /// before it.
+    let end: DispatchTime
+
+    init(seconds: TimeInterval) {
+        end = DispatchTime(uptimeNanoseconds:
+            DispatchTime.now().uptimeNanoseconds + UInt64(max(0, seconds) * 1_000_000_000))
+    }
+
+    /// Seconds left, or nil once the deadline has passed. A duration, so it is
+    /// stale as soon as it is read: never add it to a later `now` to make an
+    /// instant to wait until — use `capped(_:)`.
+    var remaining: TimeInterval? {
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard now < end.uptimeNanoseconds else { return nil }
+        return TimeInterval(end.uptimeNanoseconds - now) / 1_000_000_000
+    }
+
+    /// The instant a wait of at most `seconds` from now must end: the earlier of
+    /// that and `end`. However late `now` is read — after a preemption, say —
+    /// the result is never past `end`.
+    func capped(_ seconds: TimeInterval) -> DispatchTime {
+        min(end, DispatchTime.now() + seconds)
+    }
+}
+
+/// Block until `instant` (monotonic). Nothing signals the semaphore; it only
+/// times out.
+func nearbyPause(until instant: DispatchTime) {
+    _ = DispatchSemaphore(value: 0).wait(timeout: instant)
+}
+
+/// The control API's ordinary per-request caps.
+let nearbyControlRequestCap: TimeInterval = 15
+let nearbyControlAnswerCap: TimeInterval = 20
+
+/// The request timeout and answer wait one control request may use: the
+/// ordinary caps, each cut to what is left of `deadline`. nil once it has
+/// passed. A deadline only ever lowers the caps.
+func nearbyControlLimits(within deadline: NearbyReadinessDeadline?)
+    -> (request: TimeInterval, answer: TimeInterval)? {
+    guard let deadline else { return (nearbyControlRequestCap, nearbyControlAnswerCap) }
+    guard let left = deadline.remaining else { return nil }
+    return (min(nearbyControlRequestCap, left), min(nearbyControlAnswerCap, left))
+}
+
+/// Send one request through `send` and wait for what it delivers, within
+/// `nearbyControlLimits`. nil when the deadline had already passed (nothing is
+/// sent), when no answer arrived in time, or when an answer arrived but the
+/// deadline passed meanwhile — a late success is not a success.
+///
+/// The answer wait ends at one instant fixed BEFORE `send` runs, so time spent
+/// inside `send` comes out of the wait instead of being added to it. That
+/// instant is the ordinary 20s answer cap from now, never later than the
+/// deadline's own original `end` — not `now` plus a `remaining` read earlier,
+/// which a preemption between the two reads would push past `end`. Neither a
+/// preemption nor a `send` that itself blocks can be cut short here; once
+/// either is over, no further wait is granted past that instant (and so never
+/// past `deadline`).
+func awaitNearbyAnswer<Answer>(
+    within deadline: NearbyReadinessDeadline?,
+    _ send: (_ requestTimeout: TimeInterval, _ deliver: @escaping (Answer) -> Void) -> Void
+) -> Answer? {
+    guard let limits = nearbyControlLimits(within: deadline) else { return nil }
+    let answerBy = deadline?.capped(nearbyControlAnswerCap) ?? DispatchTime.now() + limits.answer
+    let lock = NSLock()
+    var answer: Answer?
+    let done = DispatchSemaphore(value: 0)
+    send(limits.request) { value in
+        lock.lock()
+        answer = value
+        lock.unlock()
+        done.signal()
+    }
+    guard done.wait(timeout: answerBy) == .success else { return nil }
+    if let deadline, deadline.remaining == nil { return nil }
+    lock.lock()
+    defer { lock.unlock() }
+    return answer
+}
+
+/// Call `poll` until it answers true, all inside `deadline`: true only for a
+/// ready answer that `poll` returned before the deadline passed. Each pause
+/// ends `interval` from when it starts or at the deadline's original `end`,
+/// whichever is earlier. Whatever `poll` throws propagates.
+func pollUntilReady(deadline: NearbyReadinessDeadline, interval: TimeInterval,
+                    _ poll: () throws -> Bool) rethrows -> Bool {
+    while deadline.remaining != nil {
+        let ready = try poll()
+        guard deadline.remaining != nil else { return false }
+        if ready { return true }
+        nearbyPause(until: deadline.capped(interval))
+    }
+    return false
+}
+// END nearby-readiness-clock

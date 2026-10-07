@@ -24,18 +24,17 @@ import XCTest
 ///  - **the receiver's folder is never cleared.** A single flat file whose
 ///    name is already taken is REFUSED as `destinationOccupied` —
 ///    `ReceiveDestination`/`InboxCommit` never overwrite, merge into, or
-///    rename a flat file — so a `Relayium product brief.txt` left by an
-///    earlier run makes THIS run's delivery fail its commit honestly rather
-///    than land under another name. Deleting the previous file (Files app →
-///    Relayium → Received) between runs is an operator precondition, exactly
-///    like Automation Mode — not something this harness may do to keep itself
-///    green. The selected mini → iPad 7 direction was verified (read-only) to
-///    hold no receiver `Received` directory yet, so its first run starts clean.
+///    rename a flat file. Each run therefore stages its OWN name,
+///    `Relayium product brief <run tag>.txt` (see `PhysicalFixture`), so an
+///    earlier run's file — including the untagged `Relayium product brief.txt`
+///    older harnesses left behind — stays where it is and cannot collide. A
+///    collision on this run's own name is still a real failure, never retried
+///    under another tag and never cleared by this harness.
 ///
 /// The one Debug-only argument the SENDER adds is
-/// `--relayium-ui-testing-pending-fixture`, which stages the 1,536-byte
-/// `Relayium product brief.txt` into the sending app's own Documents and does
-/// nothing else. The system Files picker, the security scope, the expansion,
+/// `--relayium-ui-testing-pending-fixture`, with the run's
+/// `--relayium-ui-testing-fixture-tag`, which stages the 1,536-byte brief under
+/// this run's name into the sending app's own Documents and does nothing else. The system Files picker, the security scope, the expansion,
 /// the composer, the upload and the tracking poll are all production code.
 ///
 /// ## What makes stale history unable to satisfy a run
@@ -96,16 +95,15 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
         else { return }
         emit(.message, value: run.message, for: run)
 
-        guard awaitTimelineEntry(containing: Fixture.name,
+        guard awaitTimelineEntry(containing: run.fixtureName,
                                  directionPrefix: Copy.receivedPrefix,
                                  state: nil, excluding: seen,
                                  within: run.deliveryBudget, in: app,
                                  describing: """
-                                     this run's committed "\(Fixture.name)" row. If an \
-                                     earlier run left a file of that name in Received, \
-                                     this delivery was refused as a name conflict on \
-                                     commit; delete the old file in the Files app \
-                                     (Relayium → Received) and rerun
+                                     this run's committed "\(run.fixtureName)" row. The \
+                                     name is this run's own, so a refusal here is a \
+                                     real conflict on it: keep the device's files and \
+                                     report it rather than rerunning under another tag
                                      """)
         else { return }
         // The comparison against the staged name happens above; the channel
@@ -131,7 +129,8 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
     func testPhysicalSenderDeliversOneRunUniqueMessageAndTheStagedBrief() throws {
         let run = try requireRun(role: Role.sender)
         let app = XCUIApplication()
-        launch(app, arguments: [UITestArgument.pendingFixture])
+        launch(app, arguments: [UITestArgument.pendingFixture,
+                                PhysicalFixture.argument, run.fixtureTag])
 
         try requireSignedInDeviceInbox(in: app)
         emit(.ready, value: "1", for: run)
@@ -172,24 +171,28 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
                       "the peer's page offers no file selection")
         scrollUntilHittable(choose, in: app)
         choose.tap()
-        selectStagedBrief(in: app)
+        selectStagedBrief(stem: run.fixtureStem, in: app)
 
         let staged = app.descendants(matching: .any)[A11y.firstPendingFile].firstMatch
         XCTAssertTrue(staged.waitForExistence(timeout: Budget.settle),
                       "the picked brief did not appear as a pending file")
-        XCTAssertTrue(staged.label.contains(Fixture.name),
-                      "the pending row renders \"\(staged.label)\", not the staged brief")
+        XCTAssertTrue(staged.label.contains(run.fixtureName),
+                      "the pending row renders \"\(staged.label)\", not this run's brief")
+        // The fixed name is what an older run left on these devices; seeing it
+        // here would mean the launch fell back to it.
+        XCTAssertFalse(staged.label.contains(Fixture.name),
+                       "the pending row is the untagged brief, not this run's")
         let sendFiles = app.buttons[A11y.sendFiles].firstMatch
         XCTAssertTrue(sendFiles.waitForExistence(timeout: Budget.settle),
                       "a staged batch produced no Send control")
         scrollUntilHittable(sendFiles, in: app)
         sendFiles.tap()
 
-        guard awaitTimelineEntry(containing: Fixture.name,
+        guard awaitTimelineEntry(containing: run.fixtureName,
                                  directionPrefix: Copy.sentPrefix,
                                  state: Copy.savedOnTarget, excluding: seen,
                                  within: run.deliveryBudget, in: app,
-                                 describing: "this run's outgoing \"\(Fixture.name)\" "
+                                 describing: "this run's outgoing \"\(run.fixtureName)\" "
                                      + "reaching \"\(Copy.savedOnTarget)\"")
         else { return }
         emit(.name, value: run.tag, for: run)
@@ -217,6 +220,12 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
         /// bounded: `RELAYIUM_DEVICE_INBOX_HOLD_SECONDS`, default 90, clamped
         /// to 30...300. Nothing shortens it and nothing signals into it.
         let holdWindow: TimeInterval
+        /// The run tag again, as the fixture tag the launcher passed beside
+        /// it — required to be identical, so the name staged, asserted and read
+        /// back is this run's and no other's.
+        let fixtureTag: String
+        var fixtureName: String { PhysicalFixture.name(tag: fixtureTag) }
+        var fixtureStem: String { PhysicalFixture.stem(tag: fixtureTag) }
     }
 
     /// A run description that is present and self-contradictory. Distinct from
@@ -276,12 +285,21 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
             let raw = value(name).flatMap(TimeInterval.init) ?? fallback
             return min(max(raw, 30), 1_800)
         }
+        guard let fixtureTag = value("FIXTURE_TAG"), fixtureTag == tag,
+              PhysicalFixture.isValidTag(fixtureTag) else {
+            throw RunError(description: """
+                RELAYIUM_DEVICE_INBOX_FIXTURE_TAG is missing, not the run tag, or \
+                outside the fixture-tag grammar, so the sender would stage a name this \
+                run did not choose and the receiver may already hold it.
+                """)
+        }
         return Run(tag: tag, role: role, message: message,
                    peerID: value("PEER_ID"),
                    peerBudget: budget("PEER_BUDGET_SECONDS", fallback: 300),
                    deliveryBudget: budget("DELIVERY_BUDGET_SECONDS", fallback: 300),
                    holdWindow: min(max(value("HOLD_SECONDS")
-                       .flatMap(TimeInterval.init) ?? 90, 30), 300))
+                       .flatMap(TimeInterval.init) ?? 90, 30), 300),
+                   fixtureTag: fixtureTag)
     }
 
     // MARK: - the launch
@@ -521,7 +539,7 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
     /// `DOCSidebarView` Browse column and never draws that tab bar. Nothing
     /// downstream weakens — the brief still has to be found, tapped and
     /// confirmed through the real Open.
-    private func selectStagedBrief(in app: XCUIApplication) {
+    private func selectStagedBrief(stem: String, in app: XCUIApplication) {
         let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
         let sidebar = app.navigationBars[
             "com_apple_DocumentManager_Service.DOCSidebarView"]
@@ -546,7 +564,7 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
         // app folder, at its parent, or at the Locations root — which names the
         // device it is on. All are valid states of the same real picker, so
         // walk in from whichever is offered rather than encode one.
-        if !tapBrowserItem(labelledLike: Fixture.stem, timeout: 2, in: app) {
+        if !tapBrowserItem(labelledLike: stem, timeout: 2, in: app) {
             let appFolder = app.descendants(matching: .any)["Relayium"].firstMatch
             if appFolder.waitForExistence(timeout: 2) {
                 appFolder.tap()
@@ -570,10 +588,10 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
                 }
                 folder.tap()
             }
-            guard tapBrowserItem(labelledLike: Fixture.stem, timeout: Budget.settle,
+            guard tapBrowserItem(labelledLike: stem, timeout: Budget.settle,
                                  in: app) else {
                 return XCTFail("""
-                    the staged "\(Fixture.stem)" is not in the browser — the \
+                    the staged "\(stem)" is not in the browser — the \
                     sender launch may not have staged it. \(app.debugDescription)
                     """)
             }
@@ -684,10 +702,9 @@ final class DeviceInboxAcceptanceUITests: XCTestCase {
         }
     }
 
-    /// The staged brief, repeated from `UITestMode.pendingFixtureName` because a
-    /// UI-test target links no product module — and deliberately a CONSTANT
-    /// rather than an environment value, so the name both ends assert is the
-    /// name the sender's launch actually stages.
+    /// The UNTAGGED brief, `UITestMode.pendingFixtureName`, which this suite
+    /// never stages and asserts ABSENT from the sender's pending row. The run's
+    /// own name is `Run.fixtureName`, derived by `PhysicalFixture`.
     private enum Fixture {
         /// The app's own bundle id, shared with macOS since the universal-
         /// purchase migration. This target's OWN bundle is

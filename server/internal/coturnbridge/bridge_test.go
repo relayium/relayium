@@ -389,11 +389,12 @@ func TestBridgeQuarantinesSegmentAcrossProviderRestart(t *testing.T) {
 	restart := func(int64) {
 		if armed.CompareAndSwap(true, false) {
 			h.ep.set(tE2) // restart lands between this barrier's pre and post reads
+			// Same raw session id, published around the restart: from the
+			// hook, so it is drained by this PING and not an earlier one.
+			h.redis.publish(chan4(u, tSID, "traffic"), counters(7000, 7000))
 		}
 	}
 	h.redis.onPing.Store(&restart)
-	// Same raw session id, published around the restart.
-	h.redis.publish(chan4(u, tSID, "traffic"), counters(7000, 7000))
 	h.eventually("quarantine", func() bool { return h.b.Status().QuarantinedMessages >= 1 })
 	h.eventually("old epoch ended and delivered", func() bool {
 		bs, _ := h.c.store.CoturnBindings(context.Background())
@@ -402,6 +403,10 @@ func TestBridgeQuarantinesSegmentAcrossProviderRestart(t *testing.T) {
 	if h.c.billed() != 200 {
 		t.Fatalf("quarantined bytes billed: %d", h.c.billed())
 	}
+	// The barrier after the restart is untrusted too (its prevPre is still the
+	// old epoch); publish the new allocation only once a segment is trusted.
+	h.newEpochTrusted()
+	h.quarantined(1, 1)
 	// The new process reuses the raw id for a new allocation: a new binding.
 	u2 := h.c.username("g2")
 	h.born(u2, tSID)
@@ -411,6 +416,148 @@ func TestBridgeQuarantinesSegmentAcrossProviderRestart(t *testing.T) {
 	if len(bs) != 2 || bs[0].PID == bs[1].PID {
 		t.Fatalf("bindings %+v", bs)
 	}
+	h.boundToBothEpochs(bs)
+	h.quarantined(1, 1)
+}
+
+// newEpochTrusted waits until a segment is trusted under tE2. Status.Epoch is
+// set only by a trusted close, so the transitional segment (prevPre tE1) has
+// been closed: anything published from here on lands in a trusted segment.
+func (h *harness) newEpochTrusted() {
+	h.t.Helper()
+	h.eventually("new provider epoch trusted", func() bool { return h.b.Status().Epoch == tE2.String() })
+}
+
+// quarantined asserts the exact quarantine counters and that the subscription
+// never reconnected, so no barrier was replaced by a connection failure.
+func (h *harness) quarantined(msgs, segs int64) {
+	h.t.Helper()
+	if st := h.b.Status(); st.QuarantinedMessages != msgs || st.QuarantinedSegments != segs || st.Gaps != 0 {
+		h.t.Fatalf("quarantined %d messages in %d segments, %d gaps; want %d in %d, no gap; logs:\n%s",
+			st.QuarantinedMessages, st.QuarantinedSegments, st.Gaps, msgs, segs, h.logs.dump())
+	}
+}
+
+// boundToBothEpochs: one binding per provider process, old and new.
+func (h *harness) boundToBothEpochs(bs []account.CoturnBinding) {
+	h.t.Helper()
+	pids := map[int]bool{}
+	for _, b := range bs {
+		pids[b.PID] = true
+	}
+	if len(bs) != 2 || !pids[tE1.PID] || !pids[tE2.PID] {
+		h.t.Fatalf("bindings %+v, want one under PID %d and one under PID %d", bs, tE1.PID, tE2.PID)
+	}
+}
+
+// restartRig is the provider-restart scenario with the transitional barrier —
+// the PING after the restart, whose segment is always untrusted — held before
+// its queue drains, until the old binding's final report has been delivered.
+// The gate opens once: from trustE2, the synchronization point, or after
+// publishG2 has enqueued the new allocation. A publication not preceded by
+// trustE2 therefore lands in the transitional segment, deterministically.
+type restartRig struct {
+	*harness
+	gate chan struct{}
+	once sync.Once
+}
+
+func newRestartRig(t *testing.T) *restartRig {
+	h := newHarness(t, account.CoturnMeteringBillable)
+	// Fixture only: the held barrier must outlast the old binding's report.
+	h.startWith(func(c *Config) { c.BarrierTimeout = 4 * time.Second })
+	r := &restartRig{harness: h, gate: make(chan struct{})}
+	t.Cleanup(r.open) // registered after startWith, so it runs before h.halt
+	h.eventually("subscription", h.subscribed)
+	u := h.c.username("g1")
+	h.born(u, tSID)
+	h.redis.publish(chan4(u, tSID, "traffic"), counters(100, 100))
+	h.eventually("first delta delivered", func() bool { return h.c.billed() == 200 })
+
+	var restartAt atomic.Int64
+	held := make(chan struct{})
+	hook := func(n int64) {
+		if restartAt.CompareAndSwap(0, n) {
+			h.ep.set(tE2)
+			h.redis.publish(chan4(u, tSID, "traffic"), counters(7000, 7000))
+			return
+		}
+		if n == restartAt.Load()+1 {
+			close(held)
+			<-r.gate
+		}
+	}
+	h.redis.onPing.Store(&hook)
+	h.eventually("transitional barrier held", func() bool {
+		select {
+		case <-held:
+			return true
+		default:
+			return false
+		}
+	})
+	h.eventually("old epoch ended and delivered", func() bool {
+		bs, _ := h.c.store.CoturnBindings(context.Background())
+		return len(bs) == 1 && bs[0].Terminal
+	})
+	if h.c.billed() != 200 {
+		t.Fatalf("quarantined bytes billed: %d", h.c.billed())
+	}
+	h.quarantined(1, 1)
+	return r
+}
+
+func (r *restartRig) open() { r.once.Do(func() { close(r.gate) }) }
+
+func (r *restartRig) trustE2() { r.open(); r.newEpochTrusted() }
+
+func (r *restartRig) publishG2() {
+	u2 := r.c.username("g2")
+	r.born(u2, tSID)
+	r.redis.publish(chan4(u2, tSID, "total_traffic"), counters(10, 20))
+	r.open()
+}
+
+// Forced old order — the hosted failure made deterministic: the new
+// allocation published while the transitional barrier is pending shares its
+// untrusted segment and is quarantined, never billed.
+func TestBridgeRestartForcedOldOrderQuarantinesNewEpoch(t *testing.T) {
+	r := newRestartRig(t)
+	r.publishG2()
+	r.trustE2()
+	r.quarantined(3, 2)
+	p := r.redis.pings.Load()
+	// PING p+3 is sent only after segment p+2 closed.
+	r.eventually("later barriers", func() bool { return r.redis.pings.Load() >= p+3 })
+	if got := r.c.billed(); got != 200 {
+		t.Fatalf("quarantined new-epoch bytes billed: %d", got)
+	}
+	if bs, _ := r.c.store.CoturnBindings(context.Background()); len(bs) != 1 {
+		t.Fatalf("quarantined allocation bound: %+v", bs)
+	}
+	// The bridge is live: a later allocation is billed, so the 200 above is
+	// not an idle bridge.
+	u3 := r.c.username("g3")
+	r.born(u3, "007000000000000002")
+	r.redis.publish(chan4(u3, "007000000000000002", "total_traffic"), counters(1, 2))
+	r.eventually("later allocation billed", func() bool { return r.c.billed() == 203 })
+	r.quarantined(3, 2)
+}
+
+// Forced correct order: released, the new epoch trusted, then published — the
+// new allocation is billed once under its own binding.
+func TestBridgeRestartForcedCorrectOrderBillsNewEpoch(t *testing.T) {
+	r := newRestartRig(t)
+	r.trustE2()
+	r.quarantined(1, 1)
+	r.publishG2()
+	r.eventually("new epoch allocation billed", func() bool { return r.c.billed() == 230 })
+	bs, _ := r.c.store.CoturnBindings(context.Background())
+	if len(bs) != 2 || bs[0].PID == bs[1].PID {
+		t.Fatalf("bindings %+v", bs)
+	}
+	r.boundToBothEpochs(bs)
+	r.quarantined(1, 1)
 }
 
 // Central down, then a lost ACK, then a corrupted ACK: everything is retained

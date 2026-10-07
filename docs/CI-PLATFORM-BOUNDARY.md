@@ -175,7 +175,92 @@ beside another's, is non-canonical; the CI policy and the generic PR→main
 proof accept only the current workflow and registry.
 Any other job is unavailable — no unknown job is waived; a witnessed job is
 never accepted as executed, any other adoption is unavailable, and transitive
-native reuse stays uncertified. All eight job records are bound into the
+native reuse stays uncertified.
+**Certified coverage (source; not yet hosted-verified end to end).** A run of
+the current or event-contract adoption whose step records show witness INTENT —
+any witness step of `test` or either UI shard not skipped (succeeded, failed or
+cancelled), or an `evidence` job that kept or handed over a witness — is judged
+on a second, distinct route (`coverage: certified-full-proof`), and every
+contradiction found there (a missing, failed or duplicated confirmation, a
+witness on the wrong runner, a mixed or foreign executed suite, an unkept
+decision) is refused in `auto` as well as `reuse`: a run that meant to be
+certified never falls back to the executed route's "unavailable" and a quiet
+rebuild. A run whose witness steps were all skipped or absent keeps the
+executed route above unchanged. On it `contract` and `signed-build` must still EXECUTE every
+listed step exactly as above (they are never certified), while `test` and both
+UI shards must each have run only the three canonical witness steps (exactly
+once, `success`, on `ubuntu-latest`) with every own gate step and the other
+shard's suite skipped or absent and no other step executed, and `evidence` must
+have run its decision, keep and handover steps exactly once `success` on
+Ubuntu. A mix of the two modes is neither. The reader then authenticates the
+ONE retained `relayium-ci-evidence-witness-macos-attempt-<n>` artifact of that
+run by API listing, record and digest (strict single-entry ZIP, typed witness
+for this lane, commit, tree, run, attempt `<n>` and `macos.yml@refs/heads/main`,
+vouching for exactly `test` + `ui-smoke`), binds attempt `<n>` as the original
+execution of every certified job, of `evidence` and of `certify-macos`
+(`judgeExecutionOrigin`, so a failed-jobs rerun relabel binds the carried
+execution through the original inventory), requires the certify job to have
+executed `Check out the probe`, `Certify this runner's toolchain now` and `Hand
+the certificates to the evidence job` exactly once on `macos-15`, finishing
+before the decision began and starting at most 30 minutes (F's
+`CURRENT_CERT_MAX_AGE_MS`) before the witness's `verified_at`, that `verified_at`
+to fall inside the decision step and the artifact's `created_at` inside the keep
+step (two seconds' whole-second tolerance), and re-runs F's own
+read-only source-proof judge (`ci-evidence.mjs` `judgeSourceProof`, shared with
+`witness`) NOW against the signed commit's own tree read from local git — source
+kind, latest attempt, every job, aggregate/select, required checks and runners,
+referenced workflows, tree, parents, scope, fingerprint and all five
+certification hashes — requiring it to select exactly the proof the witness
+names; it then re-authenticates every source toolchain certificate
+(`reauthenticateSourceCertificates`) and requires their value digests to equal
+the witness's source and current digests (the digest covers profile and
+toolchain only, so equal digests are equal VALUES; no current certificate body
+is synthesized). The witness, the proof and every source certificate artifact
+are frozen by their COMPLETE API identity (`artifactIdentityOf`: id, name,
+digest, size, creation, expiry and `workflow_run` id, head SHA, repository and
+head repository), and the coverage also freezes the source run's `updated_at`,
+PR head SHA and PR number. At the end it re-reads the source run and its
+listing, the proof and every source certificate artifact by name listing AND by
+record (each must still carry that complete identity, unexpired at a fresh
+read of the clock), the producer run's latest attempt, and the witness
+artifact's listing and record; any replacement or re-attribution (for example
+a foreign `head_repository_id` with the same id, digest and expiry) refuses
+even when the toolchain value is unchanged. A certified mandatory contract or
+signed-build step contradiction is refused, not unavailable. The
+signed-build's original execution must be the witness attempt: a signed build
+re-executed in a later attempt cannot inherit coverage of tooling nothing
+certified. F's 48-hour source window and E's 168-hour run / 6-hour artifact
+windows both apply at the real current time, and a NEW selection also needs
+the witness, the proof and every source certificate artifact to have at least
+the same 6 hours left (otherwise unavailable: `auto` builds). The 48-hour source
+rule is unchanged; a source close to 48 hours can still fail the
+notarize-stage readback, which runs before the paid notarization. An absent, expired, stale or
+pending proof, a witness re-decided in a later attempt, or a signed commit or
+first parent absent from the local clone is unavailable (`auto` builds,
+`reuse` refuses); any disagreement is refused in every mode. The `preflight`
+and `notarize-stage` checkouts of `macos-release.yml` fetch depth 2 — the
+release commit and its first parent, which the source derivation diffs against
+— and the CI policy refuses any other checkout options there. The coverage mode
+and its whole chain (witness identity and clock, original executions, source
+run/attempt/proof/digest/fingerprint/certification, certificate digests and
+artifact identities) are part of the frozen `relayium-macos-reuse-evidence/v2`
+identity the readback must reproduce; `validateCoverage` is its strict shared
+schema (exact keys, types, five execution roles, `test` + `ui-smoke`
+certificates in check order with exact names, no extra keys). For a LATER
+verification of an already-frozen chain the library exposes
+`verifyHistoricalCertifiedCoverage` (the same reader; the frozen coverage and an
+explicit source-Git adapter are required; the re-derived coverage must equal it
+exactly; F's `judgeHistoricalSourceProof` judges only the two original source
+age gates at the witness's own `verified_at`, after confirming the witness's
+source, with everything else, including expiry, at the real current time; any
+absence is refused, nothing is rebuilt). It has no CLI, environment or clock
+override. The operator handoff (record v2, `scripts/release/macos-handoff.mjs`)
+calls it at emit and at both verify stages with the coverage the publisher
+preflight's authenticated decision artifact froze, never a new selection;
+v1 records stay executed-only. The whole-chain positive and its controls run
+hermetically on the root fixture world (`scripts/test/fixtures/macos-handoff-world.mjs`
+over `macos-certified/world.mjs`), which is local evidence, not a hosted or
+published run. All eight job records are bound into the
 frozen evidence the notarization readback re-proves — and exactly one unexpired artifact
 `relayium-macos-signed-<sha>-ci` created while `signed-build` ran. Every list
 read is fully paginated against `total_count`. The zip must hash to the API
@@ -212,6 +297,22 @@ any secret or the restored `generate_appcast` is touched. Notarization,
 stapling, Gatekeeper, Sparkle signing of final bytes, staging, the publish job's
 metadata/web gates and `--latest=false` are unchanged. Reuse is exact-SHA only;
 tree-equivalent reuse is a separate, unstarted design.
+
+**Operator handoff is the default delivery.** `macos-release.yml` has a
+`metadata_delivery` input (`operator` default, `workflow`). In `operator` mode
+the publish job stops after pushing the unique candidate branch, dispatching
+and identifying its frozen gate and emitting a strict handoff record; it does
+not push `main` or create a release, and its summary says HANDED OFF / NOT
+PUBLISHED. The automatic path below is `workflow` mode, unchanged, and its
+preflight additionally refuses a source/`main` `.github/workflows` tree
+mismatch before the paid build. Details and operator steps:
+`docs/MACOS-RELEASE-POLICY.md`; read-only verifier:
+`scripts/release/macos-handoff.mjs verify`, which authenticates the artifact
+ZIP against the API digest, re-derives the frozen signed-build chain (a reuse
+through the preflight's own decision artifact, a certified one through the
+shared historical reader) and refuses after its verifiable-until instant, judges scope with the BASE commit's own checker and
+the gate's complete job graph against the roster BASE's own workflows, selector
+and evidence registry define (unknown predicates refused), and writes nothing.
 
 **PR-free metadata delivery.** The publish job no longer runs `gh pr create`,
 which this repository's Actions token is not permitted to do
@@ -323,7 +424,10 @@ they are optional.
 
 `swift-package.yml` watches `apps/RelayiumKit/**` with **no exclusion** and runs
 one job: the repository's **sole unfiltered `swift test`**. Since 2026-09-21 it
-also watches `apps/mac/**` and `apps/ios/**`. It compiles neither tree; it
+also watches `apps/mac/**` and `apps/ios/**`; its one exclusion, the exact file
+`!apps/mac/release-readiness.json` directly after `apps/mac/**`, lies outside
+the package and is read by no XCTest case (see
+[the macOS readiness record](#the-macos-readiness-record-starts-no-apple-lane)). It compiles neither tree; it
 **reads** both — dozens of the package's XCTest cases are guards over a project
 file, a plist, an entitlement, a privacy manifest, a `.strings` catalog or a
 Swift source under one of those roots, and a file a test opens is an input to it
@@ -533,7 +637,7 @@ cost is the whole reason:
 | ------------ | --------------------------------- |
 | `go.yml` | the **eight-shard** `-race` account lane, plus build, vet, suite and govulncheck |
 | `web.yml` | the full Vite suite, `npm run build`, an accessibility scan and three headless-Chrome journeys |
-| `swift-package.yml` | the whole package suite on a **paid** macOS runner — and a fifth filter entry, where the file's own rules require exactly four (the package, the two app trees its guards read, itself) and no exclusion |
+| `swift-package.yml` | the whole package suite on a **paid** macOS runner — and a fifth filter entry, where the file's own rules require exactly four (the package, the two app trees its guards read, itself) and no exclusion inside the package |
 
 The fixture rule is right for the frozen vectors: those bytes are what the Go and
 TypeScript manifest implementations are *reproduced against*, so a regenerated
@@ -884,10 +988,20 @@ untested code**, so every uncertainty resolves the other way — the selector
 selects **every** conditional lane when the API fails, when `changed_files` is at
 or above GitHub's 3000-file cap, when the response is malformed or short, when a
 lane workflow is missing or its filter unreadable, when a filter entry is not one
-of the four permitted pattern shapes, or when the change touches a **control
+of the five permitted pattern shapes, or when the change touches a **control
 file** (`merge-gate.yml`, `select-lanes.mjs`, or the shared path-selection
 fixture). A pull request that edits the gate therefore buys a full macOS run.
 That is the honest price and it is deliberate.
+
+The five shapes are `prefix/**`, `!prefix/**`, one exact path, `dir/basename*`
+and `!` before one exact path. Every non-star part must be a plain path: an entry
+carrying `?`, `+`, `[…]`, `{…}`, `(…)`, `@`, `\`, an inner `!`, surrounding
+whitespace, or an empty, `.` or `..` segment is refused — GitHub reads those as
+pattern syntax while both compilers here would read them as text, and that
+disagreement can only under-select. Negation is accepted on a whole tree or on
+one exact file, never on a basename prefix or any other glob (`!dir/a*`,
+`!dir/*.json`). The exact-file exclusion is used once; see
+[the macOS readiness record](#the-macos-readiness-record-starts-no-apple-lane).
 
 `ios-transfer-interop.yml` is intentionally separate from `ios.yml`. The former
 builds one unsigned simulator app, compiles and launches the real Go server, and
@@ -1374,17 +1488,28 @@ strict decoding and provenance formats to a weights file; the renewal file's
 provenance is the PR #156 run 36873812806, attempt 1.
 
 `race-account` plans its eight shards weighted over
-`scripts/go-race-timings-account.json`: the corpus of hosted run 36893745143
-attempt 1 at `7c47921b9` (all eight account shards SUCCESS, every archive
-checked against its API digest), 2633 tests, 7194.45 s summed, with one
-legitimate SKIP (`TestUploadQuotaCrashChild`, the child process the SIGKILL
-test re-executes, measured at 0 s and planned at the 1 ms floor). In that run
-FNV's shards took 635–1116 s of test time; the weighted plan for the same list
-is 899.2–900.4 s per shard. That is a **planned estimate**: the gain is
-claimed only once a hosted run under the weighted plan measures it. The
-package and `^Test` list stay the helper's defaults, so the compiled list
-remains authoritative: a test added since plans at the largest measured weight
-(124.26 s) and a measured test since deleted is ignored. The policy test pins
+`scripts/go-race-timings-account.json`: the corpus of the full-bootstrap
+hosted run 37421626823 attempt 1 at `e4b538f18` (all eight account shards
+SUCCESS, each of the eight archives' SHA-256 checked against its API digest),
+2652 tests — 2651 PASS and one legitimate SKIP (`TestUploadQuotaCrashChild`,
+the child process the SIGKILL test re-executes, measured at 0 s and planned at
+the 1 ms floor) — with raw measured weights summing to 6392.31 s and a
+largest single weight of 124.87 s. Every weight is that run's own recorded
+duration, written by the unchanged `go-race-timings.go corpus`; nothing is
+blended, normalized or imputed. In that same run, still planned by the
+previous profile (run 36893745143 at `7c47921b9`, 2633 tests), the eight
+shards took 486–998 s of test time, with per-run scaling that differs from
+the earlier corpus. The refreshed plan for the 2652-test list is
+798.839–799.730 s per shard. That is a **planned estimate**, a hypothesis:
+replaying recorded durations under the new assignment moves the slowest shard
+from 998.21 s to 799.73 s on this run and from 1004.27 s to 846.36 s on the
+held-out earlier corpus, but a replay cannot observe runner or test-order
+effects, so no benchmark gain is guaranteed and none is claimed until a hosted
+run under this plan measures it. (Historically, FNV's shards took 635–1116 s
+in run 36893745143, an older run under the older assignment.) The package and
+`^Test` list stay the helper's defaults, so the compiled list remains
+authoritative: a test added since plans at the largest measured weight
+(124.87 s) and a measured test since deleted is ignored. The policy test pins
 the profile by SHA-256 and its provenance field by field, so a refreshed
 profile is a reviewed edit, and refuses the renewal profile, a narrowed
 pattern or a dropped `-weights` on `race-account`.
@@ -1823,6 +1948,14 @@ the merged pull request's proof covers exactly this tree:
    lanes their reuse; dispatch it only after that commit's ordinary `main`
    evidence jobs have finished.
 
+   One E-only exception, never a proof: after "Judge every lane", and only in
+   this mode, the aggregate records and uploads a full-bootstrap receipt
+   (`relayium-macos-full-bootstrap-receipt-attempt-<n>`, 14 days). The macOS
+   release may reuse that run's `macos / signed-build` for a commit with NO
+   `macos.yml` push run (`scripts/release/macos-bootstrap.mjs`, described in
+   `docs/MACOS-RELEASE-POLICY.md`). `scripts/ci/ci-evidence.mjs` never reads
+   the receipt and the proof producers' conditions are unchanged.
+
    What it is not. It is additional validation of one commit, never a waiver:
    the ordinary `push: main` runs and their bare `wire-vectors` keep deciding
    promotion exactly as before, and a red ordinary result is fixed through the
@@ -2003,6 +2136,63 @@ Closed 2026-09-21: `macos.yml` runs no `swift test`, so the Mac guards that read
 recorded rather than solved: a few Swift guards read `server/`, `scripts/` and
 `web/` files that select no Swift lane, and several web suites read root
 documents that `web.yml` does not watch.
+
+#### The macOS readiness record starts no Apple lane
+
+`macos.yml` and `swift-package.yml` follow `apps/mac/**` with exactly one
+exact-file exclusion, `!apps/mac/release-readiness.json`. The manifest is a
+release-**control** record: no `xcodebuild`, no `swift test` case and no signed
+artifact reads it (the Swift guards that did moved to `document-claims-test.mjs`
+on 2026-09-21; the one remaining mention in `MacSurfaceGuardTests.swift` is a
+comment). What does judge it is unchanged and unfiltered or release-time:
+
+* `repo-hygiene.yml` runs `test-release-readiness.sh --files-only` — which runs
+  `check-release-readiness.mjs` on the manifest and checks every named evidence
+  file — and `document-claims-test.mjs` on **every** change, on Linux;
+* `macos.yml`'s release intent still runs `check-release-readiness.mjs
+  --require-approved` before any publication, with its version, `main` and
+  notarization checks unchanged;
+* `macos-release.yml` still re-runs the full `test-release-readiness.sh`
+  (PlistBuddy and manifest mutations) before notarization, credential validation
+  or release-metadata staging, and `signed-build` there always builds and signs
+  the exact dispatched SHA fresh.
+
+So a record-only commit — `2d2c67e7c` against `373f6e733` changed exactly
+`apps/README.md`, `apps/mac/release-readiness.json` and
+`docs/macos-app-store-submission.md` — starts no path-filtered lane, while any
+shipping input beside the record (source, `Info.plist`, `project.pbxproj`,
+entitlements, asset-catalog JSON, `apps/mac/scripts/**` including the checker
+itself) still starts both Apple lanes, as does any name near the record
+(`release-readiness-extra.json`, `release-readiness.json.orig`, the same
+basename in a subdirectory). Boundaries this does **not** move:
+
+* Omitting the compile does not approve the record. A change to `approved`,
+  `implemented` or `required` in the manifest still needs authorization review,
+  and publication still needs the approved readiness check above.
+* No proof or artifact is inferred for the new commit. A `main` push whose lane
+  is not selected produces no fresh lane result for that SHA; the PR→main
+  evidence fingerprint simply no longer covers this file for these two lanes,
+  and no signed artifact or full-native proof of a parent is relabeled as the
+  new HEAD's.
+* `full-bootstrap` and `internal-full-candidate` select every lane regardless of
+  any filter, and a change to `select-lanes.mjs` (a control file) runs every
+  lane on its own pull request.
+* Order is load-bearing, as for the package-test negation: the exclusion must
+  follow `apps/mac/**`. `ci-lane-selector-test.mjs` and
+  `ci-event-policy-test.mjs` each pin, with their own reader, where it may
+  appear, and fail on it moved above the tree, removed, widened to any glob,
+  re-included later, or joined by a second exact-file exclusion.
+  `swift-ci-boundary-test.mjs` keeps the package lane's exact filter list and
+  permits this one literal, once, immediately after `apps/mac/**`; every other
+  exclusion in that filter — anywhere under `apps/RelayiumKit/`, or any other
+  `apps/mac` or `apps/ios` file — still fails, and compiled last-match-wins
+  probes require the record skipped while its checker, near names, the same
+  basename elsewhere, other Mac JSON and the package's manifest, lockfile,
+  source, tests and fixtures all still start the lane.
+
+This is a selection change only. No hosted runner-minute or delivery-time
+saving is claimed for it until a real record-only push is observed selecting no
+Apple lane.
 
 ### What has been observed, and what has not
 

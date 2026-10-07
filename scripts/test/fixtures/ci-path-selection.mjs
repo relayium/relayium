@@ -36,7 +36,7 @@
 //   [ realPath, exactSetOfPathFilteredWorkflows, why ]
 //
 // The SET is asserted, not membership: a filter that is too broad and one that
-// is too narrow fail the same way. Six rows are deliberately empty — a path no
+// is too narrow fail the same way. Eight rows are deliberately empty — a path no
 // filtered workflow may start. Workflows with no path filter at all
 // (`compat.yml`, `repo-hygiene.yml`) are excluded by construction; they run on
 // everything, so listing them would make every row say the same thing.
@@ -100,6 +100,33 @@ export const PATH_MATRIX = [
     + "acceptance, which does not package a DMG. The package suite starts too, because its "
     + "filter is the whole apps/mac tree rather than a hand-kept list of the files its guards "
     + "open — that list is what drifted on the iOS side"],
+  // ── the one exact-file exclusion (shape 5 in scripts/ci/select-lanes.mjs) ──
+  // `!apps/mac/release-readiness.json` follows `apps/mac/**` in macos.yml and
+  // swift-package.yml. These rows hold BOTH halves: the record alone starts no
+  // filtered lane, and every neighbour that IS a shipping input — the checker
+  // that judges the record included — still starts both Apple lanes.
+  ["apps/mac/release-readiness.json", [],
+    "the macOS release-readiness manifest is a release-CONTROL record, not a build, package-test "
+    + "or signed-artifact input: nothing under xcodebuild or `swift test` reads it (the Mac guards "
+    + "that once did moved to document-claims-test.mjs on 2026-09-21). The unfiltered "
+    + "repo-hygiene lane runs `test-release-readiness.sh --files-only` on every change, and "
+    + "macos.yml's release intent and macos-release.yml re-check it in full, so a record-only "
+    + "edit starts no filtered lane. Omitting the compile does not approve the record"],
+  ["docs/macos-app-store-submission.md", [],
+    "the Mac App Store submission record: prose no lane reads, so no filtered lane starts — the "
+    + "third file of the record-only commit the exclusion above exists for"],
+  ["apps/mac/scripts/check-release-readiness.mjs", ["macos.yml", "swift-package.yml"],
+    "the checker that JUDGES the readiness record is not excluded with it: the exclusion names "
+    + "one file, and a change to how the record is judged still starts both Apple lanes"],
+  ["apps/mac/Relayium/Info.plist", ["macos.yml", "swift-package.yml"],
+    "the app's plist, a shipping input beside the excluded record: both Apple lanes"],
+  ["apps/mac/Relayium.xcodeproj/project.pbxproj", ["macos.yml", "swift-package.yml"],
+    "the Xcode project, a shipping input beside the excluded record: both Apple lanes"],
+  ["apps/mac/Relayium/Relayium.entitlements", ["macos.yml", "swift-package.yml"],
+    "the app's entitlements, a signing input beside the excluded record: both Apple lanes"],
+  ["apps/mac/Relayium/Assets.xcassets/AppIcon.appiconset/Contents.json", ["macos.yml", "swift-package.yml"],
+    "another JSON file under apps/mac, compiled into the app: the exclusion is the readiness "
+    + "record by exact name and never `*.json`"],
   ["apps/ios/Relayium/RelayiumApp.swift", ["ios-transfer-interop.yml", "ios.yml", "swift-package.yml"],
     "iOS-only source: the iOS build lane, plus the package suite, whose guards read this tree "
     + "the way they read apps/mac. No macOS signing lane, and — since the pairing filter was narrowed off "
@@ -302,6 +329,14 @@ export const PATH_MATRIX = [
     ["swift-package.yml"],
     "the Swift half of that acceptance: a package TEST file, so exactly the package lane, which "
     + "runs it forced, as InboxCLISenderLiveInteropTests.swift above"],
+  ["scripts/test/ios-physical-fixture-isolation-test.mjs", ["swift-package.yml"],
+    "the physical fixture isolation control: exactly the package lane, whose macOS job runs it "
+    + "with swiftc before its suite"],
+  ["scripts/ios-device-pair-acceptance.sh", ["swift-package.yml"],
+    "the physical pair launcher: no lane drives devices, but the package lane's control executes "
+    + "its naming functions and runtime fixture binding, so an edit to it re-runs that control"],
+  ["scripts/ios-device-inbox-acceptance.sh", ["swift-package.yml"],
+    "the physical Device Inbox launcher, likewise executed only by the package lane's control"],
   ["scripts/ci/device-inbox-downgrade-probe.sh", [],
     "the frozen-build downgrade probe: a mandatory LOCAL gate that builds the package twice, so "
     + "no path-filtered lane starts on it; repo-hygiene (unfiltered) parses it on every push"],

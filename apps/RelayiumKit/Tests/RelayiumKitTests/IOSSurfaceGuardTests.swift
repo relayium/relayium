@@ -287,12 +287,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // 7. The test it repairs keeps the precondition, and stops paying for
         //    the picker presentation it was losing.
         let ui = try RepoRoot.text("apps/ios/RelayiumUITests/AppShellUITests.swift")
-        let repaired = try XCTUnwrap(ui.components(
-            separatedBy: "func testAFailedUploadKeepsTheWorkAndOffersToCarryOn()")
-            .dropFirst().first?.components(separatedBy: "\n    /// ").first,
-            "the repaired upload-failure test is gone")
-        XCTAssertTrue(repaired.contains("--relayium-ui-testing-preselect-fixture"),
-                      "the upload-failure test no longer uses the deterministic seam")
+        let repaired = try AppShellLaunchRoute.body(of: AppShellLaunchRoute.uploadFailure, in: ui)
+        // Its seam arrives through setup's selector-keyed first launch
+        // (`firstLaunchFixtures`), not a relaunch in the body: the route, the
+        // exact ordered arguments and the single launch are judged whole.
+        for broken in AppShellLaunchRoute.violations(in: ui, for: .uploadFailure) {
+            XCTFail(broken)
+        }
         XCTAssertTrue(repaired.contains("\"pendingFile.0\""),
                       "the upload-failure test taps Send without first proving a "
                       + "file was staged, so a lost selection reports itself as a "
@@ -337,9 +338,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(ui.contains("func testNearbyStagesNothingBeforeADeviceIsChosen()"),
                       "nothing pins that Nearby stages nothing before a device is chosen")
         for picker in ["func testASignedInStoredSendNamesTheFileItWouldUpload()"] {
-            let body = try XCTUnwrap(ui.components(separatedBy: picker)
-                .dropFirst().first?.components(separatedBy: "\n    /// ").first,
-                "the dedicated real-picker test \(picker) is gone")
+            let body = try AppShellLaunchRoute.body(of: AppShellLaunchRoute.realPicker, in: ui)
             XCTAssertTrue(body.contains("openBrowseInSystemPicker()"),
                           "\(picker) stopped driving the real system document browser")
             XCTAssertTrue(body.contains("selectStagedFixture(named:"),
@@ -347,6 +346,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(body.contains("--relayium-ui-testing-preselect"),
                            "\(picker) was switched to the injection seam, so nothing "
                            + "exercises the picker any more")
+        }
+
+        // ...and its first launch carries no injection seam either.
+        for broken in AppShellLaunchRoute.violations(in: ui, for: .realPicker) {
+            XCTFail(broken)
         }
 
         // 9. The built-App transfer gate uses a deterministic seam too. Its
@@ -569,15 +573,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "the refused-link seam spread beyond the single test that needs it")
         XCTAssertFalse(local.contains("--relayium-ui-testing-invalid-download-link"),
                        "the built-App suite adopted the refused-link seam too")
-        let repaired = try XCTUnwrap(ui.components(
-            separatedBy: "func testEditingARefusedLinkClearsTheRefusalWithIt()")
-            .dropFirst().first?.components(separatedBy: "\n    /// ").first,
-            "the repaired refusal-correction test is gone")
-        XCTAssertTrue(repaired.contains("--relayium-ui-testing-invalid-download-link"),
-                      "the correction test no longer uses the deterministic seam")
-        XCTAssertFalse(repaired.contains("--relayium-ui-testing-valid-download-link"),
-                       "the correction launch selects two competing link fixtures, so "
-                       + "which one reaches the field depends on call order")
+        let repaired = try AppShellLaunchRoute.body(of: AppShellLaunchRoute.refusedLink, in: ui)
+        // The seam, its exclusivity and the single launch are judged through
+        // setup's selector-keyed first launch (`firstLaunchFixtures`): the
+        // entry's exact ordered arguments, no competing valid-link fixture in
+        // it or in the body, and nothing in the body that relaunches.
+        for broken in AppShellLaunchRoute.violations(in: ui, for: .refusedLink) {
+            XCTFail(broken)
+        }
 
         // 5. Setup is deterministic; the ONE keystroke is real; and what it
         //    proves is product state, reached through the product's own Open.
@@ -609,8 +612,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // The correction itself must stay a keystroke. A second launch is the
         // only way to hand this screen another injected value, so one launch
         // means the fixture owns setup and the keyboard owns the subject.
-        XCTAssertEqual(repaired.components(separatedBy: "app.launch()").count - 1, 1,
-                       "the correction test relaunches more than once, so the "
+        XCTAssertEqual(try AppShellLaunchRoute.effectiveLaunches(of: AppShellLaunchRoute.refusedLink, in: ui), 1,
+                       "the correction test launches more than once, so the "
                        + "correction can be driven by another injected fixture instead "
                        + "of the real keyboard edit it exists to prove")
         // The change is awaited on the REAL field, and as an INEQUALITY. The tap
@@ -639,18 +642,18 @@ final class IOSSurfaceGuardTests: XCTestCase {
         //    that contract. This is the coverage the seam must route AROUND.
         for typing in ["func testMalformedReceiveLinkExplainsHowToRecover()",
                        "func testTheKeyboardGoKeyResolvesTheLink()"] {
-            let body = try XCTUnwrap(ui.components(separatedBy: typing).dropFirst().first?
-                .components(separatedBy: "\n    /// ").first,
-                "the real-typing test \(typing) is gone")
+            let body = try AppShellLaunchRoute.body(
+                of: String(typing.dropFirst("func ".count).dropLast("()".count)), in: ui)
             XCTAssertTrue(body.contains("link.typeText(\"not a link\")"),
                           "\(typing) stopped entering its link with the real keyboard")
             XCTAssertFalse(body.contains("--relayium-ui-testing-invalid-download-link"),
                            "\(typing) was switched to the injection seam, so nothing "
                            + "types a link into the product any more")
         }
-        let go = try XCTUnwrap(ui.components(
-            separatedBy: "func testTheKeyboardGoKeyResolvesTheLink()").dropFirst().first?
-            .components(separatedBy: "\n    /// ").first)
+        for broken in AppShellLaunchRoute.violations(in: ui, for: .realTyping) {
+            XCTFail(broken)
+        }
+        let go = try AppShellLaunchRoute.body(of: "testTheKeyboardGoKeyResolvesTheLink", in: ui)
         XCTAssertTrue(go.contains("app.keyboards.buttons[\"go\"]"),
                       "the keyboard-Go test no longer presses the real Go key")
     }
@@ -6493,5 +6496,484 @@ extension IOSSurfaceGuardTests {
         // A refusal keeps the text: the clear stays conditional on acceptance.
         XCTAssertTrue(view.contains("if deliveries.refusal == nil { draft = \"\" }"),
                       "the composer clears text the model refused")
+    }
+}
+
+// MARK: - The first-launch route of AppShellUITests (IOS20)
+
+/// A FIXED-SHAPE reader of how `AppShellUITests.swift` launches its fixture
+/// cases: setup launches each one directly, through the selector-keyed
+/// `firstLaunchFixtures` table, instead of the body relaunching. It is NOT a
+/// general Swift parser. It accepts exactly the shapes that file uses and
+/// throws on anything else — a duplicate key, unparsed residue, a missing
+/// table, a method it cannot bound — so a shape it does not understand fails
+/// the guard rather than passing it. Comments inside an entry are not
+/// arguments: a commented-out argument counts as absent.
+enum AppShellLaunchRoute {
+    struct Refusal: Error, CustomStringConvertible { let description: String }
+
+    static let uploadFailure = "testAFailedUploadKeepsTheWorkAndOffersToCarryOn"
+    static let refusedLink = "testEditingARefusedLinkClearsTheRefusalWithIt"
+    static let realPicker = "testASignedInStoredSendNamesTheFileItWouldUpload"
+    static let realTyping = ["testMalformedReceiveLinkExplainsHowToRecover", "testTheKeyboardGoKeyResolvesTheLink"]
+
+    static let invalidLink = "--relayium-ui-testing-invalid-download-link"
+    static let validLink = "--relayium-ui-testing-valid-download-link"
+    static let uploadFailureArguments = ["--relayium-ui-testing-signed-in",
+                                         "--relayium-ui-testing-preselect-fixture",
+                                         "--relayium-ui-testing-fail-upload"]
+    static let refusedLinkArguments = [invalidLink, "--relayium-ui-testing-open-stored-link"]
+    /// What a fixture case's body must never do: its one launch is setup's.
+    static let lifecycle = ["app.launch()", "app.terminate()", "app.launchArguments", "relaunchOnStoredLink("]
+
+    static let setup = [
+        "    override func setUpWithError() throws {",
+        "        continueAfterFailure = false",
+        "        let selector = try Self.recognizedSelector(in: name)   // before any launch",
+        "        app = XCUIApplication()",
+        "        app.launchArguments = launchesFreshDownload",
+        "            ? offlineLaunchArguments + Self.freshDownloadLaunchArguments",
+        "            : offlineLaunchArguments + (Self.firstLaunchFixtures[selector] ?? [])",
+        "        app.launch()",
+        "    }",
+        "",
+    ].joined(separator: "\n")
+
+    enum Contract: CaseIterable { case uploadFailure, refusedLink, realPicker, realTyping }
+
+    /// The whole body of `func <name>() {`, to its own closing brace — never "up
+    /// to the next doc comment", which overruns into whatever follows.
+    static func body(of name: String, in ui: String) throws -> String {
+        let parts = ui.components(separatedBy: "\n    func \(name)() {\n")
+        guard parts.count == 2 else { throw Refusal(description: "\(name) is not declared exactly once") }
+        guard let end = parts[1].range(of: "\n    }\n") else { throw Refusal(description: "\(name) has no closing brace") }
+        return String(parts[1][..<end.lowerBound])
+    }
+
+    /// Every entry of `firstLaunchFixtures`: test name -> ordered arguments.
+    static func fixtures(in ui: String) throws -> [String: [String]] {
+        let head = "    private static let firstLaunchFixtures: [Selector: [String]] = [\n"
+        let parts = ui.components(separatedBy: head)
+        guard parts.count == 2 else { throw Refusal(description: "the firstLaunchFixtures table is missing or declared twice") }
+        guard let end = parts[1].range(of: "\n    ]\n") else { throw Refusal(description: "the firstLaunchFixtures table is unterminated") }
+        let table = String(parts[1][..<end.lowerBound])
+        let key = "        #selector(AppShellUITests."
+        let chunks = table.components(separatedBy: key)
+        guard chunks[0].isEmpty else { throw Refusal(description: "unparsed residue before the first fixture entry") }
+        var out: [String: [String]] = [:]
+        for chunk in chunks.dropFirst() {
+            guard let close = chunk.range(of: "):\n") else { throw Refusal(description: "unparsed fixture key") }
+            let name = String(chunk[..<close.lowerBound])
+            guard name.hasPrefix("test"), name.allSatisfy({ $0.isLetter || $0.isNumber }) else {
+                throw Refusal(description: "unparsed fixture key \(name)")
+            }
+            let literal = chunk[close.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard literal.hasPrefix("["), literal.hasSuffix("],") else {
+                throw Refusal(description: "unparsed residue in the \(name) fixture entry")
+            }
+            var arguments: [String] = []
+            for rawLine in literal.dropFirst().dropLast(2).components(separatedBy: "\n") {
+                let code = rawLine.components(separatedBy: "//")[0]
+                for item in code.components(separatedBy: ",") {
+                    let token = item.trimmingCharacters(in: .whitespaces)
+                    if token.isEmpty { continue }
+                    if token.count >= 2, token.hasPrefix("\""), token.hasSuffix("\""),
+                       !token.dropFirst().dropLast().contains("\"") {
+                        arguments.append(String(token.dropFirst().dropLast()))
+                    } else if token == "Shell.navigationTraceArgument" {
+                        arguments.append(token)
+                    } else {
+                        throw Refusal(description: "unparsed residue in the \(name) fixture entry")
+                    }
+                }
+            }
+            guard out[name] == nil else { throw Refusal(description: "duplicate fixture entry for \(name)") }
+            out[name] = arguments
+        }
+        return out
+    }
+
+    /// The setup region: the file from its start through `tearDownWithError`,
+    /// with comments removed OUTSIDE string literals. Everything the launch route
+    /// is made of lives here. Fixed shape, fail closed: a multi-line or raw string,
+    /// an interpolation holding a quote or a paren, a nested or unterminated block
+    /// comment, or a missing / repeated teardown anchor refuses.
+    static let regionEnd = "\n    override func tearDownWithError() throws {\n        app?.terminate()\n    }\n"
+    static func activeRegion(_ ui: String) throws -> String {
+        let parts = ui.components(separatedBy: regionEnd)
+        guard parts.count == 2 else { throw Refusal(description: "the setup region's teardown anchor is not unique") }
+        return try strippingComments(parts[0] + regionEnd)
+    }
+
+    static func strippingComments(_ source: String) throws -> String {
+        let c = Array(source)
+        func at(_ k: Int, _ token: String) -> Bool {
+            let t = Array(token)
+            return k + t.count <= c.count && Array(c[k..<(k + t.count)]) == t
+        }
+        var out: [Character] = []
+        var i = 0
+        while i < c.count {
+            if at(i, "\"\"\"") || at(i, "#\"") {
+                throw Refusal(description: "unsupported literal form in the launch-route region")
+            }
+            if c[i] == "\"" {
+                out.append(c[i]); i += 1
+                while true {
+                    guard i < c.count, c[i] != "\n" else {
+                        throw Refusal(description: "unterminated string literal in the launch-route region")
+                    }
+                    if c[i] == "\\" {
+                        guard i + 1 < c.count else { throw Refusal(description: "unterminated escape in the launch-route region") }
+                        if c[i + 1] == "(" {
+                            var j = i + 2
+                            while j < c.count, c[j] != ")" {
+                                if c[j] == "\"" || c[j] == "(" || c[j] == "\n" {
+                                    throw Refusal(description: "unsupported interpolation in the launch-route region")
+                                }
+                                j += 1
+                            }
+                            guard j < c.count else { throw Refusal(description: "unterminated interpolation in the launch-route region") }
+                            out.append(contentsOf: c[i...j]); i = j + 1
+                            continue
+                        }
+                        out.append(c[i]); out.append(c[i + 1]); i += 2
+                        continue
+                    }
+                    out.append(c[i]); i += 1
+                    if c[i - 1] == "\"" { break }
+                }
+                continue
+            }
+            if at(i, "//") {
+                while i < c.count, c[i] != "\n" { i += 1 }
+                continue
+            }
+            if at(i, "/*") {
+                i += 2
+                while true {
+                    guard i < c.count else { throw Refusal(description: "unterminated block comment in the launch-route region") }
+                    if at(i, "/*") { throw Refusal(description: "nested block comment in the launch-route region") }
+                    if at(i, "*/") { i += 2; break }
+                    if c[i] == "\n" { out.append("\n") }
+                    i += 1
+                }
+                continue
+            }
+            out.append(c[i]); i += 1
+        }
+        return String(out).components(separatedBy: "\n")
+            .map { $0.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }
+            .joined(separator: "\n")
+    }
+
+    /// The active (comment-free) forms the route must take, whole.
+    static let activeSetup = setup.replacingOccurrences(
+        of: "let selector = try Self.recognizedSelector(in: name)   // before any launch",
+        with: "let selector = try Self.recognizedSelector(in: name)")
+    static let activeNameGuard = [
+        "    private static func recognizedSelector(in name: String) throws -> Selector {",
+        "        for spelling in [String(describing: Self.self), NSStringFromClass(Self.self)] {",
+        "            let prefix = \"-[\\(spelling) \"",
+        "            guard name.hasPrefix(prefix), name.hasSuffix(\"]\") else { continue }",
+        "            let candidate = String(name.dropFirst(prefix.count).dropLast())",
+        "            guard candidate.hasPrefix(\"test\"), !candidate.contains(\" \"), !candidate.contains(\"]\"),",
+        "                  !candidate.contains(\":\") else { continue }",
+        "            let selector = Self.throwingTestSelectors[candidate] ?? NSSelectorFromString(candidate)",
+        "            guard Self.instancesRespond(to: selector) else { continue }",
+        "            return selector",
+        "        }",
+        "        throw UnrecognizedTestName(description: \"unrecognized XCTest name: \\(name)\")",
+        "    }",
+        "",
+    ].joined(separator: "\n")
+    static let activeFreshDownload = [
+        "    private var launchesFreshDownload: Bool {",
+        "        let selector = NSStringFromSelector(",
+        "            #selector(testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile))",
+        "        return [String(describing: Self.self), NSStringFromClass(Self.self)]",
+        "            .contains { name == \"-[\\($0) \\(selector)]\" }",
+        "    }",
+        "",
+    ].joined(separator: "\n")
+
+    /// Setup is the exact ACTIVE route: guard before the first launch, the table
+    /// applied, exactly one launch. A copy hidden in a comment is not code.
+    static func checkSetup(_ ui: String) throws {
+        let code = try activeRegion(ui)
+        guard code.components(separatedBy: activeSetup).count == 2,
+              code.components(separatedBy: "func setUpWithError(").count == 2 else {
+            throw Refusal(description: "setup no longer launches exactly once through the guarded first-launch route")
+        }
+    }
+
+    /// The completed-download branch stays bound to ITS selector and both whole
+    /// spellings; otherwise it can claim any case and bypass the table.
+    static func checkFreshDownload(_ ui: String) throws {
+        let code = try activeRegion(ui)
+        guard code.components(separatedBy: activeFreshDownload).count == 2,
+              code.components(separatedBy: "var launchesFreshDownload").count == 2 else {
+            throw Refusal(description: "the fresh-download route is not bound to its own completed-download selector and both whole spellings")
+        }
+    }
+
+    /// The throwing cases' names map to their COMPILER selectors: one active
+    /// table, each key bound to `#selector` of the same name, and the keys are
+    /// exactly the class's `func test…() throws` declarations — a new throwing
+    /// case without an entry, an alias, a swapped or missing entry all refuse.
+    static func checkThrowingSelectors(_ ui: String) throws {
+        guard ui.components(separatedBy: "static let throwingTestSelectors").count == 2 else {
+            throw Refusal(description: "the throwing-test selector table is not declared exactly once")
+        }
+        let head = "    private static let throwingTestSelectors: [String: Selector] = [\n"
+        let parts = try activeRegion(ui).components(separatedBy: head)
+        guard parts.count == 2, let end = parts[1].range(of: "\n    ]\n") else {
+            throw Refusal(description: "the throwing-test selector table is missing from the active route region")
+        }
+        let lines = parts[1][..<end.lowerBound].components(separatedBy: "\n").filter { !$0.isEmpty }
+        guard lines.count % 2 == 0 else { throw Refusal(description: "unparsed residue in the throwing-test selector table") }
+        var keys: [String] = []
+        for k in stride(from: 0, to: lines.count, by: 2) {
+            let key = lines[k], value = lines[k + 1]
+            guard key.hasPrefix("        \""), key.hasSuffix("\":"),
+                  value.hasPrefix("            #selector(AppShellUITests."), value.hasSuffix("),") else {
+                throw Refusal(description: "unparsed residue in the throwing-test selector table")
+            }
+            let name = String(key.dropFirst(9).dropLast(2))
+            let target = String(value.dropFirst("            #selector(AppShellUITests.".count).dropLast(2))
+            guard name == target else {
+                throw Refusal(description: "the throwing-test selector table binds \(name) to \(target)'s selector")
+            }
+            guard !keys.contains(name) else { throw Refusal(description: "duplicate throwing-test selector entry \(name)") }
+            keys.append(name)
+        }
+        var declared: [String] = []
+        for chunk in ui.components(separatedBy: "\n    func ").dropFirst() {
+            let line = chunk.components(separatedBy: "\n")[0]
+            if line.hasPrefix("test"), line.hasSuffix("() throws {") {
+                declared.append(String(line.dropLast("() throws {".count)))
+            }
+        }
+        guard Set(keys) == Set(declared), keys.count == declared.count else {
+            throw Refusal(description: "the throwing-test selector table does not match the throwing test declarations")
+        }
+    }
+
+    /// Declarations the route depends on exist exactly once in the whole file, so
+    /// a live second copy outside the region cannot exist either.
+    static func checkUniqueDeclarations(_ ui: String) throws {
+        for decl in ["func setUpWithError(", "func recognizedSelector(", "var launchesFreshDownload",
+                     "static let firstLaunchFixtures"] where ui.components(separatedBy: decl).count != 2 {
+            throw Refusal(description: "\(decl) is not declared exactly once in AppShellUITests")
+        }
+    }
+
+    /// The name guard ends in a throw: an unrecognised name never falls back to
+    /// the default launch, under which an absence assertion passes vacuously.
+    static func checkNameGuard(_ ui: String) throws {
+        // The WHOLE active function, pinned: prefix derivation, candidate bounds,
+        // every condition, one return, a closing throw. Comments are not code.
+        guard try activeRegion(ui).components(separatedBy: activeNameGuard).count == 2 else {
+            throw Refusal(description: "the name guard can fall back instead of refusing an unrecognized name")
+        }
+    }
+
+    /// Launches a fixture case actually performs: setup's one, plus any in its body.
+    static func effectiveLaunches(of name: String, in ui: String) throws -> Int {
+        try checkSetup(ui)
+        let launchesInBody = try body(of: name, in: ui).components(separatedBy: "app.launch()").count - 1
+        return 1 + launchesInBody
+    }
+
+    /// What `contract` requires of the real source; empty means it holds.
+    static func violations(in ui: String, for contract: Contract) -> [String] {
+        var out: [String] = []
+        let table: [String: [String]]
+        do {
+            try checkSetup(ui)
+            try checkNameGuard(ui)
+            try checkThrowingSelectors(ui)
+            try checkFreshDownload(ui)
+            try checkUniqueDeclarations(ui)
+            table = try fixtures(in: activeRegion(ui))
+        } catch {
+            return ["\(error)"]
+        }
+        func lifecycleFree(_ name: String) {
+            do {
+                let b = try body(of: name, in: ui)
+                for marker in lifecycle where b.contains(marker) {
+                    out.append("\(name) carries body lifecycle \(marker); its one launch must be setup's")
+                }
+                if b.contains(validLink) { out.append("\(name) names a competing valid-link fixture in its body") }
+            } catch { out.append("\(error)") }
+        }
+        switch contract {
+        case .uploadFailure:
+            guard let args = table[uploadFailure] else {
+                return ["the upload-failure test has no first-launch entry, so it no longer uses the deterministic seam"]
+            }
+            if args != uploadFailureArguments {
+                out.append("the upload-failure test's first-launch arguments are not exactly \(uploadFailureArguments) in order")
+            }
+            lifecycleFree(uploadFailure)
+        case .refusedLink:
+            guard let args = table[refusedLink] else {
+                return ["the correction test has no first-launch entry, so it no longer uses the deterministic seam"]
+            }
+            if args != refusedLinkArguments {
+                out.append("the correction test's first-launch arguments are not exactly \(refusedLinkArguments) in order")
+            }
+            if args.contains(validLink) {
+                out.append("the correction launch selects two competing link fixtures, so which one reaches the field depends on call order")
+            }
+            if ui.components(separatedBy: invalidLink).count - 1 != 1
+                || table.contains(where: { $0.key != refusedLink && $0.value.contains(invalidLink) }) {
+                out.append("the refused-link seam spread beyond the single test that needs it")
+            }
+            lifecycleFree(refusedLink)
+        case .realPicker:
+            if (table[realPicker] ?? []).contains(where: { $0.hasPrefix("--relayium-ui-testing-preselect") }) {
+                out.append("the real-picker test was switched to the injection seam at its first launch")
+            }
+        case .realTyping:
+            for name in realTyping where table[name] != nil {
+                out.append("the real-typing test \(name) gained a first-launch fixture, so its link may be injected")
+            }
+        }
+        return out
+    }
+}
+
+extension IOSSurfaceGuardTests {
+    /// Every way the relocated first-launch route could stop meaning what the
+    /// owning guards require must be refused by those same guards. Each case
+    /// mutates the REAL AppShellUITests source in memory only; nothing on disk
+    /// changes.
+    func testTheFirstLaunchRouteGuardRefusesEveryRelocationBreak() throws {
+        let ui = try RepoRoot.text("apps/ios/RelayiumUITests/AppShellUITests.swift")
+        for contract in AppShellLaunchRoute.Contract.allCases {
+            XCTAssertEqual(AppShellLaunchRoute.violations(in: ui, for: contract), [],
+                           "\(contract) refuses the real source")
+        }
+        XCTAssertEqual(try AppShellLaunchRoute.effectiveLaunches(of: AppShellLaunchRoute.refusedLink, in: ui), 1)
+        let upload = "        #selector(AppShellUITests.testAFailedUploadKeepsTheWorkAndOffersToCarryOn):\n"
+            + "            [\"--relayium-ui-testing-signed-in\",\n"
+            + "                \"--relayium-ui-testing-preselect-fixture\",\n"
+            + "                \"--relayium-ui-testing-fail-upload\"],\n"
+        let refusedKey = "        #selector(AppShellUITests.testEditingARefusedLinkClearsTheRefusalWithIt):\n"
+        let refusedArgs = "[\"--relayium-ui-testing-invalid-download-link\",\n"
+            + "                \"--relayium-ui-testing-open-stored-link\"]"
+        let pickerEntry = "#selector(AppShellUITests.testASignedInStoredSendNamesTheFileItWouldUpload):\n"
+            + "            [\"--relayium-ui-testing-signed-in\", \"--relayium-ui-testing-pending-fixture\"]"
+        let shareEntry = "#selector(AppShellUITests.testShareOpensTheSystemShareSheet):\n"
+            + "            [\"--relayium-ui-testing-signed-in\", \"--relayium-ui-testing-pairing-code\"]"
+        let route = ": offlineLaunchArguments + (Self.firstLaunchFixtures[selector] ?? [])"
+        let guardLine = "let selector = try Self.recognizedSelector(in: name)"
+        let throwLine = "throw UnrecognizedTestName(description: \"unrecognized XCTest name: \\(name)\")"
+        let setupEnd = "        app.launch()\n    }\n\n    override func tearDownWithError() throws {"
+        let nameConditions = "            guard candidate.hasPrefix(\"test\"), !candidate.contains(\" \"), !candidate.contains(\"]\"),\n"
+            + "                  !candidate.contains(\":\") else { continue }\n"
+            + "            let selector = Self.throwingTestSelectors[candidate] ?? NSSelectorFromString(candidate)\n"
+            + "            guard Self.instancesRespond(to: selector) else { continue }\n"
+        let lightKey = "        \"testEveryPrimaryTaskPassesTheSystemAccessibilityAudit\":\n"
+        let lightValue = "            #selector(AppShellUITests.testEveryPrimaryTaskPassesTheSystemAccessibilityAudit),\n"
+        let darkKey = "        \"testEveryPrimaryTaskPassesTheSystemAccessibilityAuditInDarkAppearance\":\n"
+        let darkValue = "            #selector(AppShellUITests.testEveryPrimaryTaskPassesTheSystemAccessibilityAuditInDarkAppearance),\n"
+        let liveSetup = AppShellLaunchRoute.setup
+        let freshSelector = "#selector(testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile))"
+        let freshSpellings = "return [String(describing: Self.self), NSStringFromClass(Self.self)]"
+        // The fresh-download branch forced on refuses EVERY contract.
+        let alwaysFresh = ui.replacingOccurrences(of: AppShellLaunchRoute.activeFreshDownload,
+                                                  with: "    private var launchesFreshDownload: Bool { true }\n")
+        XCTAssertNotEqual(alwaysFresh, ui, "the fresh-download property was not found to mutate")
+        for contract in AppShellLaunchRoute.Contract.allCases {
+            XCTAssertTrue(AppShellLaunchRoute.violations(in: alwaysFresh, for: contract)
+                .contains { $0.contains("fresh-download route") }, "\(contract) accepts launchesFreshDownload { true }")
+        }
+        typealias C = AppShellLaunchRoute.Contract
+        let cases: [(String, C, String, String, String)] = [
+            ("missing entry", .uploadFailure, upload, "", "has no first-launch entry"),
+            ("wrong selector", .refusedLink, refusedKey,
+             "        #selector(AppShellUITests.testMalformedReceiveLinkExplainsHowToRecover):\n", "has no first-launch entry"),
+            ("wrong selector, typing side", .realTyping, refusedKey,
+             "        #selector(AppShellUITests.testMalformedReceiveLinkExplainsHowToRecover):\n", "gained a first-launch fixture"),
+            ("reorder", .refusedLink, refusedArgs,
+             "[\"--relayium-ui-testing-open-stored-link\",\n                \"--relayium-ui-testing-invalid-download-link\"]",
+             "arguments are not exactly"),
+            ("competing valid link", .refusedLink, refusedArgs,
+             String(refusedArgs.dropLast()) + ", \"--relayium-ui-testing-valid-download-link\"]", "competing link fixtures"),
+            ("commented-out argument", .uploadFailure, "\"--relayium-ui-testing-fail-upload\"],",
+             "// \"--relayium-ui-testing-fail-upload\"\n            ],", "arguments are not exactly"),
+            ("default route", .refusedLink, route, ": offlineLaunchArguments", "setup no longer launches"),
+            ("name fallback in setup", .uploadFailure, guardLine,
+             "let selector = (try? Self.recognizedSelector(in: name)) ?? #selector(AppShellUITests.testEveryPrimaryTaskRendersItsOwnScreen)",
+             "setup no longer launches"),
+            ("name guard returns a default", .refusedLink, throwLine,
+             "return #selector(AppShellUITests.testEveryPrimaryTaskRendersItsOwnScreen)", "can fall back"),
+            ("body launch", .refusedLink, "\n    func testEditingARefusedLinkClearsTheRefusalWithIt() {\n",
+             "\n    func testEditingARefusedLinkClearsTheRefusalWithIt() {\n        app.launch()\n", "body lifecycle app.launch()"),
+            ("body relaunch helper", .uploadFailure, "\n    func testAFailedUploadKeepsTheWorkAndOffersToCarryOn() {\n",
+             "\n    func testAFailedUploadKeepsTheWorkAndOffersToCarryOn() {\n        relaunchOnStoredLink()\n",
+             "body lifecycle relaunchOnStoredLink("),
+            ("second setup launch", .uploadFailure, setupEnd,
+             "        app.launch()\n        app.launch()\n    }\n\n    override func tearDownWithError() throws {",
+             "setup no longer launches"),
+            ("invalid-link leak", .refusedLink, shareEntry,
+             String(shareEntry.dropLast()) + ", \"--relayium-ui-testing-invalid-download-link\"]", "spread beyond"),
+            ("real picker preselect", .realPicker, pickerEntry,
+             String(pickerEntry.dropLast()) + ", \"--relayium-ui-testing-preselect-fixture\"]", "injection seam"),
+            ("typing fixture", .realTyping, "                Shell.navigationTraceArgument],\n",
+             "                Shell.navigationTraceArgument],\n"
+             + "        #selector(AppShellUITests.testTheKeyboardGoKeyResolvesTheLink):\n            [\"--relayium-ui-testing-open-stored-link\"],\n",
+             "gained a first-launch fixture"),
+            ("duplicate key", .uploadFailure, upload, upload + upload, "duplicate fixture entry"),
+            ("unparsed residue", .uploadFailure, "\"--relayium-ui-testing-fail-upload\"],",
+             "\"--relayium-ui-testing-fail-upload\"] + extra,", "unparsed residue"),
+            // R2: the three root-reproduced false passes, and their camouflaged forms.
+            ("name guard conditions removed", .uploadFailure, nameConditions, "", "can fall back"),
+            ("name guard conditions commented out", .refusedLink, nameConditions,
+             nameConditions.components(separatedBy: "\n").map { $0.isEmpty ? $0 : "// " + $0 }.joined(separator: "\n"),
+             "can fall back"),
+            ("setup copied into a block comment, real route defaulted", .uploadFailure, liveSetup,
+             "    /*\n" + liveSetup + "    */\n" + liveSetup.replacingOccurrences(of: route, with: ": offlineLaunchArguments"),
+             "setup no longer launches"),
+            ("fresh-download selector swapped to a fixture case", .refusedLink, freshSelector,
+             "#selector(testAFailedUploadKeepsTheWorkAndOffersToCarryOn))", "fresh-download route"),
+            ("fresh-download one spelling", .realPicker, freshSpellings,
+             "return [NSStringFromClass(Self.self)]", "fresh-download route"),
+            ("unsupported literal in the route region", .realTyping, "    private struct UnrecognizedTestName",
+             "    private let quoted = \"\"\"\n    \"\"\"\n    private struct UnrecognizedTestName", "unsupported literal form"),
+            ("nested block comment in the route region", .uploadFailure, "    private struct UnrecognizedTestName",
+             "    /* a /* b */ */\n    private struct UnrecognizedTestName", "nested block comment"),
+            // R3: the throwing cases resolve through compiler selectors, exactly.
+            ("missing light-audit entry", .uploadFailure, lightKey + lightValue, "", "does not match the throwing test declarations"),
+            ("missing dark-audit entry", .refusedLink, darkKey + darkValue, "", "does not match the throwing test declarations"),
+            ("commented-out dark-audit entry", .realPicker, darkKey + darkValue,
+             "        // " + darkKey.dropFirst(8) + "        // " + darkValue.dropFirst(8), "does not match the throwing test declarations"),
+            ("swapped audit selectors", .realTyping, lightValue + darkKey + darkValue,
+             darkValue + darkKey + lightValue, "binds"),
+            ("alias entry", .uploadFailure, darkKey + darkValue,
+             darkKey + darkValue + "        \"testAlias\":\n" + lightValue, "binds testAlias"),
+            ("unknown self-named entry", .refusedLink, darkKey + darkValue, darkKey + darkValue
+             + "        \"testEveryPrimaryTaskRendersItsOwnScreen\":\n"
+             + "            #selector(AppShellUITests.testEveryPrimaryTaskRendersItsOwnScreen),\n",
+             "does not match the throwing test declarations"),
+            ("new throwing case without an entry", .realPicker, "    func testEveryPrimaryTaskRendersItsOwnScreen() {\n",
+             "    func testEveryPrimaryTaskRendersItsOwnScreen() throws {\n", "does not match the throwing test declarations"),
+            ("prefix-matched lookup", .uploadFailure, "Self.throwingTestSelectors[candidate] ?? ",
+             "Self.throwingTestSelectors.first(where: { candidate.hasPrefix($0.key) })?.value ?? ", "can fall back"),
+            ("default fallback for an unknown name", .refusedLink, "?? NSSelectorFromString(candidate)",
+             "?? #selector(AppShellUITests.testEveryPrimaryTaskRendersItsOwnScreen)", "can fall back"),
+            ("colon check removed", .realTyping, ",\n                  !candidate.contains(\":\") else { continue }",
+             " else { continue }", "can fall back"),
+        ]
+        for (label, contract, find, replace, expected) in cases {
+            XCTAssertEqual(ui.components(separatedBy: find).count - 1, 1, "\(label): the mutation anchor is not unique")
+            let broken = ui.replacingOccurrences(of: find, with: replace)
+            XCTAssertNotEqual(broken, ui, "\(label): the mutation changed nothing")
+            let found = AppShellLaunchRoute.violations(in: broken, for: contract)
+            XCTAssertTrue(found.contains { $0.contains(expected) }, "\(label) was not refused for its reason: \(found)")
+        }
     }
 }

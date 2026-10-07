@@ -95,10 +95,33 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+// F's shared read-only judge is imported only when a run is certified (see
+// `judgeCertifiedCoverage`): every executed-route caller, including the frozen
+// merge-gate step that runs this file alone from a BASE worktree, never loads it.
+const loadF = () => Promise.all([import("../ci/ci-evidence.mjs"), import("../ci/ci-evidence-toolchain.mjs")])
+  .then(([f, toolchain]) => ({ ...f, TOOLCHAIN_REGISTRY_FILE: toolchain.TOOLCHAIN_REGISTRY_FILE,
+    loadToolchainRegistry: toolchain.loadToolchainRegistry }));
+
 export const PRODUCER_WORKFLOW = ".github/workflows/macos.yml";
 export const GATE_WORKFLOW = ".github/workflows/merge-gate.yml";
 export const PROVENANCE_SCHEMA = "relayium-macos-signed-provenance/v2";
-export const EVIDENCE_SCHEMA = "relayium-macos-reuse-evidence/v1";
+export const EVIDENCE_SCHEMA = "relayium-macos-reuse-evidence/v2";
+/**
+ * The evidence of the SECOND reusable producer only: the `macos / ` call of a
+ * `merge-gate.yml` full-bootstrap dispatch of `main` (`macos-bootstrap.mjs`).
+ * A push-run decision stays v2, byte for byte; v3 is v2 plus `producer`.
+ */
+export const EVIDENCE_SCHEMA_V3 = "relayium-macos-reuse-evidence/v3";
+/** Producer kinds, each with exactly one (event, workflow) provenance tuple. */
+export const PUSH_KIND = "main-push";
+export const BOOTSTRAP_KIND = "main-full-bootstrap";
+const PROVENANCE_TUPLES = Object.freeze({
+  [PUSH_KIND]: Object.freeze({ event: "push", workflow: ".github/workflows/macos.yml" }),
+  [BOOTSTRAP_KIND]: Object.freeze({ event: "workflow_dispatch", workflow: ".github/workflows/merge-gate.yml" }),
+});
+/** The aggregate-written receipt that alone says a merge-gate run was a full bootstrap. */
+export const receiptArtifactName = (attempt) => `relayium-macos-full-bootstrap-receipt-attempt-${attempt}`;
+export const RECEIPT_ARTIFACT = /^relayium-macos-full-bootstrap-receipt-attempt-([1-9][0-9]*)$/;
 export const TEAM_ID = "7PVYUG4YQS";
 export const FROZEN_MODE = "frozen-release-metadata";
 /** GitHub Actions' own app — the only app whose `merge-gate` may count. */
@@ -652,24 +675,28 @@ export function workflowShape(text) {
 }
 
 /**
- * Did this job EXECUTE its gate? Every reason it did not is `Unavailable`:
- * a full rebuild is always the safe answer to "this run did not test the
- * bytes", and an explicit `reuse` turns it into a failure.
+ * Did this job EXECUTE its gate? On the executed route every reason it did
+ * not is `Unavailable`: a full rebuild is always the safe answer to "this run
+ * did not test the bytes", and an explicit `reuse` turns it into a failure.
+ * A certified run passes `contradiction: refuse`: its contract or signed-build
+ * is known and must have executed, so a wrong runner, a missing, failed,
+ * duplicated or malformed mandatory step or a foreign step is `Refused` and
+ * never rebuilt over. A job reporting no step records stays `Unavailable`.
  */
-export function judgeExecution(id, job, shape) {
+export function judgeExecution(id, job, shape, { contradiction = unavailable } = {}) {
   const where = `job ${job.id} (${job.name})`;
   unavailable(Array.isArray(job.steps) && job.steps.length > 0, `${where} reports no step records`);
   for (const step of job.steps) {
-    unavailable(step && typeof step.name === "string" && typeof step.status === "string",
+    contradiction(step && typeof step.name === "string" && typeof step.status === "string",
       `${where} has a malformed step record`);
   }
   const labels = JSON.stringify(job.labels ?? null);
-  unavailable(RUNNER_LABELS[id].some((want) => JSON.stringify(want) === labels),
+  contradiction(RUNNER_LABELS[id].some((want) => JSON.stringify(want) === labels),
     `${where} ran on ${labels}; \`${id}\` must run on ${RUNNER_LABELS[id].map((l) => JSON.stringify(l)).join(" or ")}`);
   for (const name of REQUIRED_STEPS[id]) {
     const ran = job.steps.filter((step) => step.name === name);
-    unavailable(ran.length === 1, `${where} has ${ran.length} "${name}" step(s); it must execute exactly once`);
-    unavailable(ran[0].status === "completed" && ran[0].conclusion === "success",
+    contradiction(ran.length === 1, `${where} has ${ran.length} "${name}" step(s); it must execute exactly once`);
+    contradiction(ran[0].status === "completed" && ran[0].conclusion === "success",
       `${where} did not execute "${name}" (${ran[0].status}/${ran[0].conclusion})`);
   }
   // Reported-but-skipped witness steps exist only where that adoption put a
@@ -680,9 +707,634 @@ export function judgeExecution(id, job, shape) {
     const allowed = witnessable || !WITNESS_STEPS.includes(name)
       ? ran.every((step) => step.conclusion === "skipped")
       : ran.length === 0;
-    unavailable(allowed, `${where} ran "${name}" (${ran.map((s) => s.conclusion).join(", ") || "present"}); `
+    contradiction(allowed, `${where} ran "${name}" (${ran.map((s) => s.conclusion).join(", ") || "present"}); `
       + "a witnessed or foreign step is not an execution of this job's gate");
   }
+}
+
+/**
+ * How the producer run covered `test` and both UI shards. `executed`: each ran
+ * its own gate (`judgeExecution`). `certified-full-proof`: each ran ONLY the
+ * canonical witness confirmation of the current adoption, on Ubuntu, and the
+ * run's evidence job decided, kept and handed over that witness — which this
+ * reader then re-authenticates end to end (`judgeCertifiedCoverage`). The
+ * contract and signed-build are never certified: under both modes they must
+ * have executed their exact steps. A run mixing the two modes is neither.
+ */
+export const COVERAGE_EXECUTED = "executed";
+export const COVERAGE_CERTIFIED = "certified-full-proof";
+/** The jobs a certified coverage may stand in for, and nothing else. */
+export const CERTIFIABLE_JOBS = Object.freeze(["test", "ui-smoke/app-shell", "ui-smoke/device-inbox"]);
+/** The evidence job steps a certified run's decision must have executed. */
+export const CERTIFIED_EVIDENCE_STEPS = Object.freeze([
+  "Does the merged pull request's full proof cover this main tree?",
+  "Keep the witness (reuse only)",
+  "Hand the decision to the lane only once its witness is kept",
+]);
+/** The only non-skipped steps a witnessed job may report besides `WITNESS_STEPS`. */
+const WITNESS_PATH_HOUSEKEEPING = Object.freeze([
+  "Set up job", "Complete job",
+  "Post Node for the verifier (witness path only)", "Post Check out the verifier (witness path only)",
+]);
+const WITNESS_ARTIFACT = /^relayium-ci-evidence-witness-macos-attempt-([1-9][0-9]*)$/;
+/** The steps the certify job must have executed for its current capture to count. */
+export const CERTIFY_STEPS = Object.freeze([
+  "Check out the probe",
+  "Certify this runner's toolchain now",
+  "Hand the certificates to the evidence job",
+]);
+/** API timestamps are whole seconds: the tolerance on either side of a step window. */
+const STEP_SKEW_MS = 2_000;
+/**
+ * How old the current certificate may have been when the witness was verified:
+ * F's `CURRENT_CERT_MAX_AGE_MS`, the limit F applied in that very decision. F
+ * is loaded only on the certified route, so this is the bounded local copy;
+ * `certifiedCoverage` refuses unless the loaded F carries exactly this value.
+ */
+export const CERTIFY_TO_VERIFIED_MAX_MS = 30 * 60 * 1000;
+const WITNESS_ENTRY = "macos.json";
+
+/**
+ * A structured reason, so callers classify by `cause` and never by message.
+ * `unavailable` (absent, expired, stale, pending or an unsupported state) is
+ * an `Unavailable`; anything else that exists and disagrees is `Refused`.
+ */
+export class CertifiedUnavailable extends Error {
+  constructor(message) { super(message); this.cause = "certified-proof-unavailable"; }
+}
+
+/**
+ * Which mode the run's own step records say it INTENDED. Certified as soon as
+ * ANY canonical witnessable job (test or either UI shard) reports a witness
+ * step that was not skipped — whether it succeeded, failed or was cancelled —
+ * or the evidence job kept or handed over a witness. A run that meant to be
+ * covered by a witness is then judged as such, in full, and every
+ * contradiction is `Refused`; it never falls back to the executed route,
+ * whose "did not execute" is `Unavailable` and would let `auto` rebuild over a
+ * known disagreement. A run whose witness steps were all skipped or absent is
+ * judged as executed, exactly as before.
+ */
+export function coverageOf(jobs, shape) {
+  if (!(shape === ADOPTED_SHAPE || shape === EVENT_CONTRACT_SHAPE)) return COVERAGE_EXECUTED;
+  const certifiable = EXPECTED_JOBS.filter((e) => CERTIFIABLE_JOBS.includes(e.id));
+  const attempted = (job, names) => Array.isArray(job?.steps)
+    && job.steps.some((s) => names.includes(s?.name) && s?.conclusion !== "skipped");
+  const intent = jobs.some((job) => (certifiable.some((e) => e.match(String(job?.name ?? "")))
+      && attempted(job, WITNESS_STEPS))
+    || (EVIDENCE_JOB.match(String(job?.name ?? "")) && attempted(job, CERTIFIED_EVIDENCE_STEPS.slice(1))));
+  return intent ? COVERAGE_CERTIFIED : COVERAGE_EXECUTED;
+}
+
+/**
+ * Did this witnessable job run ONLY the canonical witness confirmation? Every
+ * witness step exactly once and successful, on Ubuntu; its own gate steps and
+ * the other shard's suite skipped or absent; no other step executed. A job
+ * that ran both its suite and the witness is neither mode. The run meant to be
+ * certified (`coverageOf`), so every disagreement here is `Refused`.
+ */
+export function judgeWitnessed(id, job) {
+  const where = `job ${job.id} (${job.name})`;
+  refuse(CERTIFIABLE_JOBS.includes(id), `${where}: \`${id}\` can never be covered by a witness`);
+  refuse(Array.isArray(job.steps) && job.steps.length > 0, `${where} reports no step records`);
+  for (const step of job.steps) {
+    refuse(step && typeof step.name === "string" && typeof step.status === "string",
+      `${where} has a malformed step record`);
+  }
+  refuse(JSON.stringify(job.labels ?? null) === JSON.stringify(["ubuntu-latest"]),
+    `${where} ran its witness on ${JSON.stringify(job.labels ?? null)}; the witness path runs on ["ubuntu-latest"]`);
+  for (const name of WITNESS_STEPS) {
+    const ran = job.steps.filter((step) => step.name === name);
+    refuse(ran.length === 1 && ran[0].status === "completed" && ran[0].conclusion === "success",
+      `${where} did not confirm its witness exactly once ("${name}": ${ran.map((s) => s.conclusion).join(", ") || "absent"})`);
+  }
+  const allowed = new Set([...WITNESS_STEPS, ...WITNESS_PATH_HOUSEKEEPING]);
+  for (const step of job.steps) {
+    if (allowed.has(step.name)) continue;
+    refuse(step.conclusion === "skipped",
+      `${where} executed "${step.name}" (${step.conclusion}) beside its witness; a mixed or foreign execution is neither mode`);
+  }
+}
+
+/** The certified evidence job: decided, kept and handed over its witness, on Ubuntu. */
+export function judgeCertifiedEvidence(job) {
+  const where = `job ${job.id} (${job.name})`;
+  refuse(Array.isArray(job.steps) && job.steps.length > 0, `${where} reports no step records`);
+  refuse(JSON.stringify(job.labels ?? null) === JSON.stringify(["ubuntu-latest"]),
+    `${where} ran on ${JSON.stringify(job.labels ?? null)}; want ["ubuntu-latest"]`);
+  for (const name of CERTIFIED_EVIDENCE_STEPS) {
+    const ran = job.steps.filter((step) => step?.name === name);
+    refuse(ran.length === 1 && ran[0].status === "completed" && ran[0].conclusion === "success",
+      `${where} did not execute "${name}" exactly once (${ran.map((s) => s?.conclusion).join(", ") || "absent"})`);
+  }
+}
+
+/**
+ * The SIGNED commit's own tree as F's judge reads a checkout: `HEAD` means
+ * `sha`, files and workflows come from `sha`'s blobs, the candidate-scope
+ * module is `sha`'s copy. Nothing in the invoking checkout is read or
+ * changed; the one temporary file is the scope module, outside the checkout.
+ */
+export function pinnedSourceTree(runGit, sha) {
+  refuse(SHA40.test(sha), `the source tree ${JSON.stringify(sha)} is not a full SHA`);
+  const git = (args) => runGit(args.map((a) => (a === "HEAD" ? sha : a)));
+  const readFile = (path) => git(["show", `${sha}:${path}`]);
+  const readWorkflow = (absolute) => git(["show", `${sha}:${absolute.replace(/^\/+/, "")}`]).toString("utf8");
+  // The module is written at its own repository path under a fresh temporary
+  // root, and loaded through the rooted literal form F's trust closure can name
+  // (`moduleImports`): any other dynamic load is refused there, which would make
+  // every internal candidate touching this reader unprovable.
+  const loadScope = async () => {
+    const root = mkdtempSync(join(tmpdir(), "macos-evidence-scope-"));
+    mkdirSync(join(root, "web/scripts"), { recursive: true });
+    writeFileSync(join(root, "web/scripts/macos-release-candidate.mjs"),
+      readFile("web/scripts/macos-release-candidate.mjs"), { flag: "wx" });
+    return import(pathToFileURL(join(root, "web/scripts/macos-release-candidate.mjs")).href);
+  };
+  return { git, readFile, readWorkflow, loadScope, workflowsDir: "/.github/workflows" };
+}
+
+function realGitBytes(args) {
+  const result = spawnSync("git", args, { encoding: "buffer", maxBuffer: 256 * 1024 * 1024 });
+  if (result.status !== 0) {
+    throw new CertifiedUnavailable(`git ${args.slice(0, 2).join(" ")} could not read the signed commit locally`);
+  }
+  return result.stdout;
+}
+
+/**
+ * The authenticated certified coverage of a producer run whose roster judged
+ * `certified-full-proof`. Reads, never writes, and never trusts a supplied
+ * witness, env or record:
+ *  1. the ONE retained main witness artifact of the run, by its canonical
+ *     attempt-qualified name: unexpired, from this run/commit/repository,
+ *     bytes equal to the current API digest, a strict single-entry ZIP holding
+ *     a valid typed witness for this lane, commit, tree, run, attempt and
+ *     `macos.yml@refs/heads/main`, vouching for exactly `test` + `ui-smoke`;
+ *  2. the witness attempt is the ORIGINAL execution of the evidence job and of
+ *     every witnessed job (`judgeExecutionOrigin`, so "re-run failed jobs"
+ *     relabels bind the carried execution, never the wrapper);
+ *  3. F's own source-proof judge (`judgeSourceProof`) re-run NOW against the
+ *     signed commit's tree: source kind, latest attempt, every job, aggregate,
+ *     select, required checks and runners, referenced workflows, tree,
+ *     parents, scope, fingerprint and all five certification hashes; the proof
+ *     artifact must be the one the witness names;
+ *  4. every source certificate re-authenticated and its value digest equal to
+ *     the witness's source AND current digest (equal digests are equal
+ *     toolchain values; the historical current capture stays bound by step 1-2);
+ *  5. F's re-read: the source run and its listing did not move.
+ * Absence (no witness, expired or stale proof, a pending source, an unreadable
+ * local commit, an unsupported rerun) is `Unavailable`; disagreement `Refused`.
+ */
+export async function judgeCertifiedCoverage(api, {
+  repository, repositoryId, sha, run, rosterJobs, evidenceJob, certifyJob, now, sourceGit = realGitBytes,
+}) {
+  const F = await loadF();
+  const { NoReuse, ProofUnavailable } = F;
+  try {
+    return validateCoverage(await certifiedCoverage(api, {
+      repository, repositoryId, sha, run, rosterJobs, evidenceJob, certifyJob, clock: () => now, sourceGit, F, history: null,
+    }));
+  } catch (error) {
+    if (error instanceof CertifiedUnavailable || error instanceof ProofUnavailable) {
+      throw new Unavailable(`the certified full proof is unavailable: ${error.message}`);
+    }
+    if (error instanceof NoReuse) throw new Refused(`the certified full proof disagrees: ${error.message}`);
+    throw error;
+  }
+}
+
+/** E's API as F's judge calls it: F paths carry no leading slash; absence is `ProofUnavailable`. */
+function ciApi(api, ProofUnavailable) {
+  const absent = (error) => {
+    if (error?.status === 404 || error?.status === 410) throw new ProofUnavailable(`the API reports ${error.status} for a proof record`);
+    throw error;
+  };
+  return {
+    json: (path) => api.get(`/${path}`).catch(absent),
+    download: (path, cap) => api.download(`/${path}`, cap).catch(absent),
+  };
+}
+
+/**
+ * The HISTORICAL verification of a certified coverage a release already froze
+ * (for the later handoff verifier; never a new selection). Same shared reader
+ * as `judgeCertifiedCoverage`, with these differences only:
+ *  - `expectedCoverage` is REQUIRED (strictly `validateCoverage`d) and the
+ *    re-derived coverage must equal it exactly — no alternative proof, source,
+ *    witness or certificate is ever re-selected;
+ *  - `sourceGit` is REQUIRED: an explicit byte-mode Git adapter for a checkout
+ *    holding the signed commit and its parent (no ambient working directory);
+ *  - F's two ORIGINAL source age gates are judged at the witness's own
+ *    verified_at (`judgeHistoricalSourceProof`), everything else at the fresh
+ *    machine `clock()` — every artifact must be unexpired NOW, but no new
+ *    selection headroom applies;
+ *  - nothing is rebuilt: absence is `Refused`, like any disagreement.
+ * No CLI, environment or history flag reaches this; `clock` defaults to the
+ * machine clock.
+ */
+export async function verifyHistoricalCertifiedCoverage(api, {
+  repository, repositoryId, sha, run, rosterJobs, evidenceJob, certifyJob, expectedCoverage, clock = Date.now, sourceGit,
+}) {
+  refuse(typeof sourceGit === "function", "a historical certified verification needs an explicit source Git adapter");
+  refuse(typeof clock === "function", "a historical certified verification needs a machine clock function");
+  refuse(expectedCoverage?.mode === COVERAGE_CERTIFIED, "a historical certified verification needs the frozen certified coverage");
+  validateCoverage(expectedCoverage);
+  const F = await loadF();
+  let coverage;
+  try {
+    coverage = await certifiedCoverage(api, {
+      repository, repositoryId, sha, run, rosterJobs, evidenceJob, certifyJob, clock, sourceGit, F,
+      history: { expected: expectedCoverage },
+    });
+  } catch (error) {
+    if (error instanceof Refused) throw error;
+    if (error instanceof CertifiedUnavailable || error instanceof F.NoReuse || error instanceof Unavailable) {
+      throw new Refused(`the frozen certified coverage no longer holds: ${error.message}`);
+    }
+    throw error;
+  }
+  validateCoverage(coverage);
+  refuse(JSON.stringify(coverage) === JSON.stringify(expectedCoverage),
+    "the certified coverage read back now differs from the coverage the release froze");
+  return coverage;
+}
+
+async function certifiedCoverage(api, {
+  repository, repositoryId, sha, run, rosterJobs, evidenceJob, certifyJob, clock, sourceGit, F, history,
+}) {
+  const {
+    REGISTRY_FILE: CI_REGISTRY_FILE, TOOLCHAIN_REGISTRY_FILE, headFacts, judgeSourceProof, judgeHistoricalSourceProof,
+    loadRegistry: loadCiRegistry, loadToolchainRegistry, readSingleEntryZip, reauthenticateSourceCertificates,
+    rereadArtifactIdentities, rereadSourceProof, validateWitness, artifactIdentityOf,
+  } = F;
+  const machineNow = () => {
+    const at = clock();
+    refuse(Number.isFinite(at), "the machine clock is unreadable");
+    return at;
+  };
+  // A NEW selection needs every retained chain artifact to outlive the
+  // release's own readback by the same margin as the signed artifact; a
+  // historical verification needs it unexpired now only.
+  const headroom = (identity, what) => {
+    if (history !== null) return;
+    if (hours(Date.parse(identity.expires_at) - machineNow()) < MIN_ARTIFACT_REMAINING_HOURS) {
+      throw new CertifiedUnavailable(`${what} ${identity.id} expires in under ${MIN_ARTIFACT_REMAINING_HOURS} hours`);
+    }
+  };
+  const all = await paginate(api, `/repos/${repository}/actions/runs/${run.id}/artifacts`, "artifacts");
+  const witnesses = all.filter((a) => WITNESS_ARTIFACT.test(String(a?.name ?? "")));
+  if (witnesses.length === 0) throw new CertifiedUnavailable(`run ${run.id} retains no main witness artifact`);
+  if (witnesses.length !== 1) {
+    throw new CertifiedUnavailable(`run ${run.id} retains ${witnesses.length} witness artifacts; a re-decided witness is not supported`);
+  }
+  const art = witnesses[0];
+  const attempt = Number(WITNESS_ARTIFACT.exec(art.name)[1]);
+  refuse(Number.isSafeInteger(art.id) && art.workflow_run?.id === run.id && art.workflow_run?.head_sha === sha
+    && art.workflow_run?.repository_id === repositoryId && art.workflow_run?.head_repository_id === repositoryId,
+  `witness artifact ${art.id} is not from run ${run.id} at ${sha} in this repository`);
+  refuse(typeof art.digest === "string" && /^sha256:[0-9a-f]{64}$/.test(art.digest), `witness artifact ${art.id} has no digest`);
+  const expires = Date.parse(art.expires_at);
+  refuse(Number.isFinite(expires), `witness artifact ${art.id} has no expiry`);
+  if (art.expired !== false || expires <= machineNow()) throw new CertifiedUnavailable(`witness artifact ${art.id} has expired`);
+  const witnessIdentity = artifactIdentityOf(art);
+  refuse(witnessIdentity !== null, `witness artifact ${art.id} has no complete artifact identity`);
+  headroom(witnessIdentity, "witness artifact");
+  const record = await api.get(`/repos/${repository}/actions/artifacts/${art.id}`);
+  refuse(JSON.stringify(artifactIdentityOf(record)) === JSON.stringify(witnessIdentity) && record?.expired === false,
+    `witness artifact ${art.id} changed between the listing and its record`);
+  let zip;
+  try {
+    zip = await api.download(`/repos/${repository}/actions/artifacts/${art.id}/zip`);
+  } catch (error) {
+    if (error?.status === 404 || error?.status === 410) throw new CertifiedUnavailable(`witness artifact ${art.id} could not be downloaded`);
+    throw error;
+  }
+  refuse(`sha256:${sha256(zip)}` === art.digest, `witness artifact ${art.id}'s bytes do not match its API digest`);
+  let witness;
+  try {
+    witness = validateWitness(JSON.parse(readSingleEntryZip(zip, WITNESS_ENTRY).toString("utf8")));
+  } catch (error) {
+    throw new Refused(`witness artifact ${art.id} is not one strict witness: ${error.message}`);
+  }
+  const tree = headFacts((args) => sourceGit(args.map((a) => (a === "HEAD" ? sha : a)))).tree;
+  const t = witness.target;
+  refuse(witness.lane === "macos" && t.repository_id === repositoryId && t.sha === sha && t.tree === tree
+    && t.run_id === run.id && t.run_attempt === attempt
+    && t.workflow_ref === `${repository}/${PRODUCER_WORKFLOW}@refs/heads/main`,
+  `the witness targets ${t.sha}/${t.tree} run ${t.run_id} attempt ${t.run_attempt} (${t.workflow_ref}), `
+    + `not this signed commit ${sha}/${tree} run ${run.id} attempt ${attempt}`);
+  refuse(JSON.stringify(Object.keys(witness.jobs).sort()) === JSON.stringify(["test", "ui-smoke"]),
+    `the witness vouches for [${Object.keys(witness.jobs).join(", ")}], want exactly test and ui-smoke`);
+
+  // 2. The witness attempt is the original execution of every certified job,
+  //    of the evidence decision and of the certify capture; "re-run failed
+  //    jobs" relabels bind the carried execution through the ORIGINAL
+  //    inventory, never the latest wrapper's label or id.
+  const executions = {};
+  const originals = {};
+  for (const job of [...rosterJobs.filter((j) => CERTIFIABLE_JOBS.includes(j.id)).map((j) => j.job), evidenceJob, certifyJob]) {
+    refuse(job !== undefined && job !== null, `run ${run.id} lacks a job the certified chain needs`);
+    const origin = await judgeExecutionOrigin(api, {
+      repository, runId: run.id, sha, workflowPath: PRODUCER_WORKFLOW, jobName: job.name,
+      originalAttempt: attempt, latestAttempt: run.run_attempt, latestJob: job,
+    });
+    executions[job.name] = sha256(Buffer.from(origin.identity));
+    originals[job.name] = origin.job;
+  }
+  judgeCertifyCapture(originals[certifyJob.name]);
+  refuse(F.CURRENT_CERT_MAX_AGE_MS === CERTIFY_TO_VERIFIED_MAX_MS,
+    `F's current-certificate age limit ${F.CURRENT_CERT_MAX_AGE_MS} ms is not this reader's ${CERTIFY_TO_VERIFIED_MAX_MS} ms`);
+  judgeWitnessTiming({
+    certify: originals[certifyJob.name], evidence: originals[evidenceJob.name], witness, art,
+    maxAgeMs: F.CURRENT_CERT_MAX_AGE_MS,
+  });
+
+  // 3. F's judge, now, against the signed commit's own tree.
+  const pinned = pinnedSourceTree(sourceGit, sha);
+  const registry = loadCiRegistry(pinned.readFile(CI_REGISTRY_FILE).toString("utf8"));
+  const toolchainRegistry = loadToolchainRegistry(pinned.readFile(TOOLCHAIN_REGISTRY_FILE).toString("utf8"));
+  const head = headFacts(pinned.git);
+  refuse(head.sha === sha && head.tree === tree, "the signed commit's local tree changed while it was being read");
+  const proofArgs = {
+    api: ciApi(api, F.ProofUnavailable),
+    git: pinned.git, registry, laneId: "macos", repository, repositoryId, sha, head,
+    event: { before: head.parents[0] }, now: () => new Date(machineNow()), workflowsDir: pinned.workflowsDir,
+    readFile: pinned.readFile, loadScope: pinned.loadScope, readWorkflow: pinned.readWorkflow, scopeValue: undefined,
+  };
+  const proof = history === null ? await judgeSourceProof(proofArgs) : await judgeHistoricalSourceProof({ ...proofArgs, witness });
+  const s = witness.source;
+  refuse(s.kind === proof.src.kind && s.run_id === proof.run.id && s.run_attempt === proof.attempt
+    && s.artifact_id === proof.art.id && s.artifact_digest === proof.art.digest && s.merge_sha === proof.src.testedSha
+    && s.head_sha === proof.prHead && s.pull_request === (proof.src.prNumber ?? null)
+    && s.produced_at === proof.manifest.produced_at,
+  `the witness names source run ${s.run_id}/${s.run_attempt} proof ${s.artifact_id}; F's judge selects `
+    + `${proof.run.id}/${proof.attempt} proof ${proof.art.id}`);
+  refuse(JSON.stringify(witness.jobs) === JSON.stringify(Object.fromEntries(Object.entries(proof.required)
+    .filter(([id]) => registry.lanes.macos.jobs[id].mode !== "fresh"))),
+  "the witness's job obligation is not the one the source proof requires now");
+
+  // 4. Source certificates, re-authenticated; their values equal the witness's.
+  const proofIdentity = artifactIdentityOf(proof.art);
+  refuse(proofIdentity !== null, `proof artifact ${proof.art.id} has no complete artifact identity`);
+  headroom(proofIdentity, "proof artifact");
+  const sources = await reauthenticateSourceCertificates({
+    api: ciApi(api, F.ProofUnavailable),
+    repository, repositoryId, proof, laneId: "macos", registry, toolchainRegistry, now: () => new Date(machineNow()),
+  });
+  const certificates = frozenCertificates(witness.certificates, sources, { attempt: proof.attempt, isIdentity: F.isArtifactIdentity });
+  for (const cert of Object.values(certificates)) for (const a of cert.artifacts) headroom(a, "source certificate artifact");
+
+  // 5. Nothing moved: the source run and its listing, the proof and every
+  //    source certificate artifact by identity, the producer run's latest
+  //    attempt, and the witness artifact by listing and record.
+  const fApi = ciApi(api, F.ProofUnavailable);
+  await rereadSourceProof({ api: fApi, repository, proof });
+  const sourceArtifacts = [
+    proofIdentity,
+    ...Object.keys(certificates).sort().flatMap((jobId) => certificates[jobId].artifacts),
+  ];
+  try {
+    await rereadArtifactIdentities({
+      api: fApi, repository, runId: proof.run.id, identities: sourceArtifacts, now: () => new Date(machineNow()),
+    });
+  } catch (error) {
+    if (error instanceof F.NoReuse) throw new Refused(error.message);
+    throw error;
+  }
+  const again = await api.get(`/repos/${repository}/actions/runs/${run.id}`);
+  refuse(again?.id === run.id && again?.run_attempt === run.run_attempt && again?.status === "completed"
+    && again?.conclusion === run.conclusion,
+  `producer run ${run.id} moved (attempt ${again?.run_attempt}, ${again?.status}/${again?.conclusion}) while its chain was verified`);
+  const relisted = (await paginate(api, `/repos/${repository}/actions/runs/${run.id}/artifacts`, "artifacts"))
+    .filter((a) => WITNESS_ARTIFACT.test(String(a?.name ?? "")));
+  const rerecord = await api.get(`/repos/${repository}/actions/artifacts/${art.id}`);
+  refuse(relisted.length === 1 && JSON.stringify(artifactIdentityOf(relisted[0])) === JSON.stringify(witnessIdentity)
+    && JSON.stringify(artifactIdentityOf(rerecord)) === JSON.stringify(witnessIdentity)
+    && relisted[0].expired === false && rerecord?.expired === false && Date.parse(art.expires_at) > machineNow(),
+  `witness artifact ${art.id} was replaced, changed or expired while its chain was verified`);
+  return {
+    mode: COVERAGE_CERTIFIED,
+    witness: {
+      artifactId: art.id, name: art.name, digest: art.digest, attempt, expiresAt: art.expires_at,
+      createdAt: art.created_at, verifiedAt: witness.verified_at, identity: witnessIdentity, target: { ...witness.target },
+    },
+    executions,
+    source: {
+      kind: proof.src.kind, runId: proof.run.id, attempt: proof.attempt, testedSha: proof.src.testedSha,
+      tree: proof.manifest.checkout.tree, artifactId: proof.art.id, digest: proof.art.digest,
+      producedAt: proof.manifest.produced_at, fingerprint: proof.manifest.fingerprints.macos,
+      certification: proof.manifest.certification, proofName: proof.art.name,
+      runUpdatedAt: proof.run.updated_at, headSha: proof.prHead, pullRequest: proof.src.prNumber ?? null,
+      proofIdentity,
+    },
+    certificates,
+  };
+}
+
+/**
+ * The certificates a certified coverage freezes: per witnessed job its profile,
+ * the witnessed current value, the re-authenticated source value digests AND
+ * the exact source certificate artifacts they were read from (F's complete
+ * `artifactIdentityOf` record, one per value, in check order, named for this
+ * job, index and source attempt). The identities enter `evidenceIdentity`, so a
+ * readback that finds the same values in a replaced or re-attributed artifact
+ * is a different chain.
+ */
+export function frozenCertificates(witnessCertificates, sources, { attempt, isIdentity }) {
+  refuse(Number.isSafeInteger(attempt) && attempt > 0 && typeof isIdentity === "function",
+    "the source attempt and the identity check are required to freeze certificates");
+  refuse(JSON.stringify(Object.keys(sources).sort()) === JSON.stringify(Object.keys(witnessCertificates).sort()),
+    "the source certificates and the witness certify different jobs");
+  const out = {};
+  for (const jobId of Object.keys(witnessCertificates).sort()) {
+    const cert = witnessCertificates[jobId];
+    const fresh = sources[jobId];
+    refuse(fresh !== undefined && fresh.profile === cert.profile
+      && JSON.stringify(fresh.source) === JSON.stringify(cert.source)
+      && cert.source.every((digest) => digest === cert.current),
+    `${jobId}: the re-authenticated source certificates or the witnessed current toolchain value disagree`);
+    refuse(Array.isArray(fresh.artifacts) && fresh.artifacts.length === fresh.source.length
+      && fresh.artifacts.every((a, i) => isIdentity(a) && a.name === certificateArtifactName(jobId, i, attempt))
+      && new Set(fresh.artifacts.map((a) => a.id)).size === fresh.artifacts.length,
+    `${jobId}: the source certificate artifact identities are not one strict record per certificate`);
+    out[jobId] = {
+      profile: cert.profile, current: cert.current, source: [...fresh.source],
+      artifacts: fresh.artifacts.map((a) => ({ ...a })),
+    };
+  }
+  return out;
+}
+
+/** F's exact source certificate artifact name for a macOS job, check index and source attempt. */
+export function certificateArtifactName(jobId, index, attempt) {
+  return `relayium-ci-evidence-toolchain-macos-${jobId}-${index}-attempt-${attempt}`;
+}
+
+const COVERAGE_ID_KEYS = ["id", "name", "digest", "size_in_bytes", "created_at", "expires_at",
+  "run_id", "head_sha", "repository_id", "head_repository_id"];
+const CERTIFICATION_KEYS = ["registry_sha256", "selector_sha256", "toolchain_registry_sha256", "toolchain_sha256", "verifier_sha256"];
+const SOURCE_KINDS = ["merge-gate-pull-request-full-run", "merge-gate-frozen-dispatch-full-run", "merge-gate-internal-full-candidate-run"];
+
+/**
+ * Strict, synchronous validation of a frozen evidence coverage: exactly
+ * `{ mode: "executed" }`, or a complete `certified-full-proof` chain with
+ * exactly the keys, types, cardinalities and internal agreements the shared
+ * reader produces (no extra keys anywhere). Returns the coverage; `Refused`
+ * otherwise. Shape only — authenticity is `verifyHistoricalCertifiedCoverage`.
+ */
+export function validateCoverage(coverage) {
+  const fail = (what) => { throw new Refused(`the coverage is malformed: ${what}`); };
+  const obj = (v, keys, what) => {
+    if (v === null || typeof v !== "object" || Array.isArray(v)
+      || JSON.stringify(Object.keys(v).sort()) !== JSON.stringify([...keys].sort())) fail(`${what} has keys ${JSON.stringify(v && typeof v === "object" ? Object.keys(v) : v)}`);
+    return v;
+  };
+  const int = (v, what) => { if (!(Number.isSafeInteger(v) && v > 0)) fail(`${what} is not a positive integer`); };
+  const hex = (v, n, what) => { if (!(typeof v === "string" && new RegExp(`^[0-9a-f]{${n}}$`).test(v))) fail(`${what} is not hex${n}`); };
+  const digest = (v, what) => { if (!(typeof v === "string" && /^sha256:[0-9a-f]{64}$/.test(v))) fail(`${what} is not a sha256 digest`); };
+  const time = (v, what) => { if (!Number.isFinite(instant(v))) fail(`${what} is not an ISO time`); };
+  const identity = (v, what) => {
+    if (v === null || typeof v !== "object" || JSON.stringify(Object.keys(v)) !== JSON.stringify(COVERAGE_ID_KEYS)) fail(`${what} is not a complete identity`);
+    int(v.id, `${what}.id`);
+    if (!(typeof v.name === "string" && v.name.length > 0 && v.name.length <= 200)) fail(`${what}.name`);
+    digest(v.digest, `${what}.digest`);
+    int(v.size_in_bytes, `${what}.size_in_bytes`);
+    time(v.created_at, `${what}.created_at`);
+    time(v.expires_at, `${what}.expires_at`);
+    int(v.run_id, `${what}.run_id`);
+    hex(v.head_sha, 40, `${what}.head_sha`);
+    int(v.repository_id, `${what}.repository_id`);
+    int(v.head_repository_id, `${what}.head_repository_id`);
+    return v;
+  };
+  if (coverage?.mode === COVERAGE_EXECUTED) {
+    obj(coverage, ["mode"], "an executed coverage");
+    return coverage;
+  }
+  if (coverage?.mode !== COVERAGE_CERTIFIED) fail(`mode ${JSON.stringify(coverage?.mode)}`);
+  obj(coverage, ["mode", "witness", "executions", "source", "certificates"], "a certified coverage");
+  const w = obj(coverage.witness, ["artifactId", "name", "digest", "attempt", "expiresAt", "createdAt", "verifiedAt", "identity", "target"],
+    "witness");
+  int(w.attempt, "witness.attempt");
+  identity(w.identity, "witness.identity");
+  if (!(w.artifactId === w.identity.id && w.name === w.identity.name && w.digest === w.identity.digest
+    && w.expiresAt === w.identity.expires_at && w.createdAt === w.identity.created_at
+    && w.name === `relayium-ci-evidence-witness-macos-attempt-${w.attempt}`)) fail("witness fields disagree with its identity");
+  time(w.verifiedAt, "witness.verifiedAt");
+  const t = obj(w.target, ["repository_id", "sha", "tree", "run_id", "run_attempt", "workflow_ref"], "witness.target");
+  int(t.repository_id, "witness.target.repository_id");
+  hex(t.sha, 40, "witness.target.sha");
+  hex(t.tree, 40, "witness.target.tree");
+  int(t.run_id, "witness.target.run_id");
+  if (t.run_attempt !== w.attempt) fail("witness.target.run_attempt is not the witness attempt");
+  if (!(typeof t.workflow_ref === "string" && t.workflow_ref.endsWith(`/${PRODUCER_WORKFLOW}@refs/heads/main`))) fail("witness.target.workflow_ref");
+  if (!(t.run_id === w.identity.run_id && t.sha === w.identity.head_sha && t.repository_id === w.identity.repository_id
+    && t.repository_id === w.identity.head_repository_id)) fail("the witness artifact is not of its target run");
+  const ex = coverage.executions;
+  if (ex === null || typeof ex !== "object" || Array.isArray(ex)) fail("executions");
+  const roles = Object.keys(ex).map((name) => [...EXPECTED_JOBS, EVIDENCE_JOB, CERTIFY_JOB].filter((e) => e.match(name)).map((e) => e.id));
+  if (!(roles.length === 5 && roles.every((r) => r.length === 1)
+    && JSON.stringify(roles.map((r) => r[0]).sort()) === JSON.stringify([...CERTIFIABLE_JOBS, "evidence", "certify-macos"].sort()))) {
+    fail(`executions are ${JSON.stringify(Object.keys(ex))}`);
+  }
+  for (const [name, value] of Object.entries(ex)) hex(value, 64, `executions[${name}]`);
+  const src = obj(coverage.source, ["kind", "runId", "attempt", "testedSha", "tree", "artifactId", "digest", "producedAt", "fingerprint",
+    "certification", "proofName", "runUpdatedAt", "headSha", "pullRequest", "proofIdentity"], "source");
+  if (!SOURCE_KINDS.includes(src.kind)) fail("source.kind");
+  int(src.runId, "source.runId");
+  int(src.attempt, "source.attempt");
+  hex(src.testedSha, 40, "source.testedSha");
+  hex(src.tree, 40, "source.tree");
+  if (src.tree !== t.tree) fail("the source tree is not the witness target tree");
+  time(src.producedAt, "source.producedAt");
+  time(src.runUpdatedAt, "source.runUpdatedAt");
+  hex(src.fingerprint, 64, "source.fingerprint");
+  const cert = obj(src.certification, CERTIFICATION_KEYS, "source.certification");
+  for (const k of CERTIFICATION_KEYS) hex(cert[k], 64, `source.certification.${k}`);
+  hex(src.headSha, 40, "source.headSha");
+  if (!(src.pullRequest === null || (Number.isSafeInteger(src.pullRequest) && src.pullRequest > 0))) fail("source.pullRequest");
+  if ((src.kind === SOURCE_KINDS[0]) !== (src.pullRequest !== null)) fail("source.pullRequest does not match its kind");
+  const pid = identity(src.proofIdentity, "source.proofIdentity");
+  if (!(src.proofName === `relayium-ci-evidence-proof-attempt-${src.attempt}` && pid.name === src.proofName
+    && pid.id === src.artifactId && pid.digest === src.digest && pid.run_id === src.runId && pid.head_sha === src.headSha)) {
+    fail("the proof identity disagrees with the source");
+  }
+  const certs = coverage.certificates;
+  if (certs === null || typeof certs !== "object" || JSON.stringify(Object.keys(certs)) !== JSON.stringify(["test", "ui-smoke"])) {
+    fail(`certificates are ${JSON.stringify(certs && Object.keys(certs))}, want exactly test and ui-smoke`);
+  }
+  const ids = new Set([pid.id, w.identity.id]);
+  for (const [jobId, c] of Object.entries(certs)) {
+    obj(c, ["profile", "current", "source", "artifacts"], `certificates.${jobId}`);
+    if (!(typeof c.profile === "string" && c.profile.length > 0 && c.profile.length <= 80)) fail(`certificates.${jobId}.profile`);
+    hex(c.current, 64, `certificates.${jobId}.current`);
+    if (!(Array.isArray(c.source) && c.source.length > 0 && Array.isArray(c.artifacts) && c.artifacts.length === c.source.length)) {
+      fail(`certificates.${jobId} source/artifact counts`);
+    }
+    c.source.forEach((d, i) => { hex(d, 64, `certificates.${jobId}.source[${i}]`); if (d !== c.current) fail(`certificates.${jobId}.source[${i}] is not the current value`); });
+    c.artifacts.forEach((a, i) => {
+      identity(a, `certificates.${jobId}.artifacts[${i}]`);
+      if (a.name !== certificateArtifactName(jobId, i, src.attempt) || a.run_id !== src.runId || a.head_sha !== src.headSha) {
+        fail(`certificates.${jobId}.artifacts[${i}] is not entry ${i} of the source run and attempt`);
+      }
+      if (ids.has(a.id)) fail(`certificates.${jobId}.artifacts[${i}] repeats an artifact id`);
+      ids.add(a.id);
+    });
+  }
+  return coverage;
+}
+
+/** The certify job's ORIGINAL execution captured the current toolchain: exact steps, on macOS, successful. */
+export function judgeCertifyCapture(job) {
+  const where = `job ${job?.id} (${job?.name})`;
+  refuse(job?.status === "completed" && job?.conclusion === "success",
+    `${where} is ${job?.status}/${job?.conclusion}; a certified run's current toolchain capture must have succeeded`);
+  refuse(JSON.stringify(job.labels ?? null) === JSON.stringify(["macos-15"]),
+    `${where} captured on ${JSON.stringify(job.labels ?? null)}; the certify job runs on ["macos-15"]`);
+  refuse(Array.isArray(job.steps), `${where} reports no step records`);
+  for (const name of CERTIFY_STEPS) {
+    const ran = job.steps.filter((step) => step?.name === name);
+    refuse(ran.length === 1 && ran[0].status === "completed" && ran[0].conclusion === "success",
+      `${where} did not execute "${name}" exactly once (${ran.map((st) => st?.conclusion).join(", ") || "absent"})`);
+  }
+}
+
+/**
+ * The witness's own clock, bound to the authenticated ORIGINAL executions: the
+ * certify capture finished before the decision began (and not long before);
+ * the witness was verified inside the decision step; its artifact was created
+ * inside the keep step. Whole-second API stamps get `STEP_SKEW_MS` either side.
+ */
+export function judgeWitnessTiming({ certify, evidence, witness, art, maxAgeMs = CERTIFY_TO_VERIFIED_MAX_MS }) {
+  refuse(Number.isSafeInteger(maxAgeMs) && maxAgeMs > 0 && maxAgeMs <= CERTIFY_TO_VERIFIED_MAX_MS,
+    `a current-certificate age limit of ${maxAgeMs} ms is not F's canonical ${CERTIFY_TO_VERIFIED_MAX_MS} ms`);
+  const step = (job, name) => job.steps.find((st) => st?.name === name);
+  const window = (st, what) => {
+    const from = Date.parse(st?.started_at);
+    const to = Date.parse(st?.completed_at);
+    refuse(Number.isFinite(from) && Number.isFinite(to) && from <= to, `${what} has no readable step window`);
+    return [from - STEP_SKEW_MS, to + STEP_SKEW_MS];
+  };
+  const [decideFrom, decideTo] = window(step(evidence, CERTIFIED_EVIDENCE_STEPS[0]), "the evidence decision");
+  const [keepFrom, keepTo] = window(step(evidence, CERTIFIED_EVIDENCE_STEPS[1]), "the witness keep step");
+  const [captureFrom, captureTo] = window(step(certify, CERTIFY_STEPS[1]), "the certify capture");
+  const handed = window(step(certify, CERTIFY_STEPS[2]), "the certificate handover")[1];
+  refuse(handed <= decideFrom + 2 * STEP_SKEW_MS && captureTo <= decideFrom + 2 * STEP_SKEW_MS,
+    "the certify capture did not finish before the evidence decision began");
+  const verified = Date.parse(witness.verified_at);
+  refuse(Number.isFinite(verified) && verified >= decideFrom && verified <= decideTo,
+    `the witness says it was verified at ${witness.verified_at}, outside the decision step that produced it`);
+  // F judged the current certificate's age at the moment it verified the
+  // witness, not when the decision step began. The exact capture timestamp is
+  // not retained, but the capture happened inside the certify step, so that
+  // step's (skew-widened) START is the latest it can be assumed older than:
+  // verified - start bounds the true age from above. Never widened beyond F.
+  refuse(verified - captureFrom <= maxAgeMs,
+    `the certify capture began more than ${maxAgeMs / 60_000} minutes before the witness was verified at `
+    + `${witness.verified_at}; F accepts a current certificate at most that old`);
+  const created = Date.parse(art.created_at);
+  refuse(Number.isFinite(created) && created >= keepFrom && created <= keepTo,
+    `witness artifact ${art.id} was created at ${art.created_at}, outside the step that kept it`);
 }
 
 /** Exactly these files, and nothing else, are a signed-build payload. */
@@ -704,6 +1356,20 @@ export const CANDIDATE_REF =
 export class Unavailable extends Error {}
 /** Evidence that exists and is wrong. Nobody may proceed. */
 export class Refused extends Error {}
+/**
+ * The one `Unavailable` with a structured cause: the push listing for the
+ * commit answered with NO run at all — not a failed, pending, foreign or
+ * ambiguous one. Only this cause may consult the full-bootstrap producer
+ * (`macos-bootstrap.mjs`); any existing push run keeps the decision on the
+ * push path, so a red push can never be hidden behind a green bootstrap.
+ * `workflow` is the `macos.yml` workflow record that was listed.
+ */
+export class NoPushRun extends Unavailable {
+  constructor(message, workflow) {
+    super(message);
+    this.workflow = workflow;
+  }
+}
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const hours = (ms) => ms / 3_600_000;
@@ -754,8 +1420,13 @@ export function githubApi({ token, server = "https://api.github.com", fetchImpl 
       }
       return res.json();
     },
-    async download(path) {
-      const res = await request(path);
+    async download(path, { accept } = {}) {
+      // `accept` exists for one caller: a release asset is its bytes only
+      // under `application/octet-stream`; the default answers with metadata.
+      const res = accept
+        ? await fetchImpl(path.startsWith("https://") ? path : `${server}${path}`,
+          { headers: { ...headers, Accept: accept }, redirect: "follow" })
+        : await request(path);
       if (!res.ok) {
         const error = new Error(`GET ${path}: HTTP ${res.status}`);
         error.status = res.status;
@@ -800,14 +1471,14 @@ export async function paginate(api, path, key) {
 // ── the producer run ────────────────────────────────────────────────────────
 
 /** The same-repository, non-fork, push-to-main identity every candidate needs. */
-function sameRepository(run, repositoryId) {
+export function sameRepository(run, repositoryId) {
   return run?.repository?.id === repositoryId
     && run?.head_repository?.id === repositoryId
     && run?.repository?.fork === false
     && run?.head_repository?.fork !== true;
 }
 
-function workflowPathOf(run) {
+export function workflowPathOf(run) {
   return String(run?.path ?? "").replace(/@.*$/, "");
 }
 
@@ -834,7 +1505,12 @@ export async function selectProducerRun(api, { repository, repositoryId, sha, no
     && run?.workflow_id === workflow.id
     && workflowPathOf(run) === PRODUCER_WORKFLOW
     && sameRepository(run, repositoryId));
-  unavailable(runs.length > 0, `no push run of ${PRODUCER_WORKFLOW} on main exists for ${sha}`);
+  if (runs.length === 0) {
+    // Structured only when the API listed nothing at all; a listed run this
+    // filter rejects is not "no push run", it is a push run this file refuses.
+    const message = `no push run of ${PRODUCER_WORKFLOW} on main exists for ${sha}`;
+    throw listed.length === 0 ? new NoPushRun(message, workflow) : new Unavailable(message);
+  }
   unavailable(runs.length === 1,
     `${runs.length} push runs of ${PRODUCER_WORKFLOW} exist for ${sha}; reuse needs exactly one`);
 
@@ -867,51 +1543,108 @@ export async function selectProducerRun(api, { repository, repositoryId, sha, no
     "jobs",
   );
   // The definition that run executed, and therefore the job roster to expect.
+  const { shape, blob } = await readProducerShape(api, { repository, sha });
+  const coverage = coverageOf(jobs, shape);
+  const roster = judgeProducerRoster(jobs, { runId: run.id, sha, latestAttempt: run.run_attempt, shape, coverage });
+  return { workflow, run, jobs: roster.jobs, shape, workflowBlob: blob, auxiliaryJobs: roster.auxiliaryJobs, coverage };
+}
+
+/**
+ * `macos.yml` AT THE IMMUTABLE COMMIT `sha` — the definition a push run of it,
+ * or a `workflow_call` of it from that commit, executed — and its supported
+ * shape. Shared by reuse selection and by the handoff verifier, so a historical
+ * proof reads the same file through the same parser; it carries no age or
+ * current-workflow-state rule. A missing or non-base64 answer is `Refused`, an
+ * unsupported adoption `Unavailable`.
+ */
+export async function readProducerShape(api, { repository, sha }) {
   const file = await api.get(`/repos/${repository}/contents/${PRODUCER_WORKFLOW}?ref=${sha}`);
   refuse(file?.path === PRODUCER_WORKFLOW && file?.encoding === "base64" && typeof file?.content === "string",
     `the contents API did not return ${PRODUCER_WORKFLOW} at ${sha}`);
-  const shape = workflowShape(Buffer.from(file.content, "base64").toString("utf8"));
+  const text = Buffer.from(file.content, "base64").toString("utf8");
+  const shape = workflowShape(text);
   unavailable(shape !== "non-canonical",
     `${PRODUCER_WORKFLOW} at ${sha} carries a PR→main evidence adoption that is not the canonical one`);
+  return { shape, blob: file.sha, text };
+}
+
+/**
+ * The complete job roster of ONE attempt of `macos.yml` at `sha`, judged
+ * against the immutable `shape`: every expected job exactly once, no unknown
+ * job, the adoption auxiliaries all or none (as the shape says), every gate
+ * job a completed success that EXECUTED its gate (`judgeExecution`). `prefix`
+ * is the caller-job prefix a `workflow_call` renders (`"build / "` under
+ * `macos-release.yml`); every listed job must carry it. `called` is that
+ * workflow_call: it is not a push to main, so the adoption's `evidence` job
+ * cannot have looked for, kept or handed on a witness — it must succeed with
+ * its decision step and both handover steps NOT executed, and every gate job
+ * still proves it executed in full.
+ */
+export function judgeProducerRoster(jobs, {
+  runId, sha, latestAttempt, shape, prefix = "", called = false, coverage = COVERAGE_EXECUTED,
+}) {
+  refuse(coverage === COVERAGE_EXECUTED || (coverage === COVERAGE_CERTIFIED && !called && prefix === ""
+    && (shape === ADOPTED_SHAPE || shape === EVENT_CONTRACT_SHAPE)),
+  `coverage ${JSON.stringify(coverage)} is not supported for a ${called ? "called " : ""}${shape} run`);
   const expectedJobs = isAdopted(shape) ? [...AUXILIARY_JOBS, ...EXPECTED_JOBS] : EXPECTED_JOBS;
   const byExpected = new Map(expectedJobs.map((e) => [e.id, []]));
   const strays = [];
   for (const job of jobs) {
-    refuse(job?.run_id === run.id && job?.head_sha === sha,
-      `job ${job?.id} listed under run ${run.id} belongs to run ${job?.run_id} / ${job?.head_sha}`);
+    refuse(job?.run_id === runId && job?.head_sha === sha,
+      `job ${job?.id} listed under run ${runId} belongs to run ${job?.run_id} / ${job?.head_sha}`);
     // Every job's own attempt is a safe positive integer no later than the
-    // run's latest. NOT equal to it: a "re-run failed jobs" attempt lists the
-    // jobs that already succeeded with the attempt they succeeded in. Without
-    // this, a job with no attempt makes `String(undefined)` the value a forged
-    // provenance has to match.
-    refuse(Number.isSafeInteger(job.run_attempt) && job.run_attempt >= 1 && job.run_attempt <= run.run_attempt,
+    // run's latest. NOT equal to it: a "re-run failed jobs" attempt may list a
+    // carried job with its original attempt or relabel it with the new one
+    // (observed); the signed-build's origin is proved by `judgeExecutionOrigin`.
+    // Without this, a job with no attempt makes `String(undefined)` the value a
+    // forged provenance has to match.
+    refuse(Number.isSafeInteger(job.run_attempt) && job.run_attempt >= 1 && job.run_attempt <= latestAttempt,
       `job ${job.id} (${job.name}) has run_attempt ${JSON.stringify(job.run_attempt)}; want an integer `
-      + `from 1 to the run's latest attempt ${run.run_attempt}`);
-    const expected = expectedJobs.find((e) => e.match(String(job.name ?? "")));
+      + `from 1 to the run's latest attempt ${latestAttempt}`);
+    const name = String(job.name ?? "");
+    const expected = name.startsWith(prefix) ? expectedJobs.find((e) => e.match(name.slice(prefix.length))) : undefined;
     if (expected) byExpected.get(expected.id).push(job);
     else strays.push(job.name);
   }
-  unavailable(strays.length === 0, `run ${run.id} has unexpected jobs: ${strays.join(", ")}`);
+  unavailable(strays.length === 0, `run ${runId} has unexpected jobs: ${strays.join(", ")}`);
   for (const [id, matched] of byExpected) {
-    unavailable(matched.length === 1, `run ${run.id} has ${matched.length} \`${id}\` job(s); want exactly one`);
+    unavailable(matched.length === 1, `run ${runId} has ${matched.length} \`${id}\` job(s); want exactly one`);
     const job = matched[0];
     if (id === "screen" || id === "certify-macos") {
       // Auxiliary and never red; judged for presence and a final state only.
       unavailable(job.status === "completed" && AUXILIARY_CONCLUSIONS[id].includes(job.conclusion),
-        `run ${run.id}'s \`${id}\` job is ${job.status}/${job.conclusion}; want completed `
+        `run ${runId}'s \`${id}\` job is ${job.status}/${job.conclusion}; want completed `
         + AUXILIARY_CONCLUSIONS[id].join("/"));
       continue;
     }
-    unavailable(job.status === "completed" && job.conclusion === "success",
-      `run ${run.id}'s \`${id}\` job is ${job.status}/${job.conclusion}; every gate job must succeed`);
-    judgeExecution(id, job, shape);
+    // Certified: the run meant to be covered by its witness, so a mandatory
+    // job that is known and contradicts its gate is `Refused` in auto and
+    // reuse alike. A contract or signed-build still running is merely not yet
+    // evidence (`Unavailable`); its absence is judged above.
+    const certified = coverage === COVERAGE_CERTIFIED;
+    const mandatory = id === "contract" || id === "signed-build";
+    (certified && (CERTIFIABLE_JOBS.includes(id) || id === "evidence" || (mandatory && job.status === "completed"))
+      ? refuse : unavailable)(
+      job.status === "completed" && job.conclusion === "success",
+      `run ${runId}'s \`${id}\` job is ${job.status}/${job.conclusion}; every gate job must succeed`);
+    if (called && id === "evidence") {
+      const where = `job ${job.id} (${job.name})`;
+      unavailable(Array.isArray(job.steps) && job.steps.length > 0, `${where} reports no step records`);
+      for (const step of [...REQUIRED_STEPS.evidence, ...MUST_NOT_RUN.evidence]) {
+        const ran = job.steps.filter((s) => s?.name === step);
+        unavailable(ran.every((s) => s.conclusion === "skipped"),
+          `${where} ran "${step}" in a workflow_call; no witness can be kept outside a push to main`);
+      }
+      continue;
+    }
+    if (coverage === COVERAGE_CERTIFIED && CERTIFIABLE_JOBS.includes(id)) judgeWitnessed(id, job);
+    else if (coverage === COVERAGE_CERTIFIED && id === "evidence") judgeCertifiedEvidence(job);
+    else if (coverage === COVERAGE_CERTIFIED) judgeExecution(id, job, shape, { contradiction: refuse });
+    else judgeExecution(id, job, shape);
   }
   return {
-    workflow,
-    run,
+    coverage,
     jobs: EXPECTED_JOBS.map((e) => byExpected.get(e.id)[0]),
-    shape,
-    workflowBlob: file.sha,
     auxiliaryJobs: isAdopted(shape) ? AUXILIARY_JOBS.map((e) => byExpected.get(e.id)[0]) : [],
   };
 }
@@ -944,6 +1677,112 @@ export async function selectArtifact(api, { repository, repositoryId, sha, run, 
     `artifact ${artifact.id} was created at ${artifact.created_at}, outside signed-build `
     + `${signedBuild.started_at}..${signedBuild.completed_at}`);
   return artifact;
+}
+
+// ── execution origin ────────────────────────────────────────────────────────
+
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
+const instant = (value) => (typeof value === "string" && ISO_TIME.test(value) ? Date.parse(value) : NaN);
+
+/**
+ * What a job EXECUTED, independent of how a later attempt's inventory labels
+ * it: run, commit, name, outcome, its own start and end, its runner labels,
+ * and every step's number, name, outcome and times. GitHub relabels a job a
+ * "re-run failed jobs" attempt carries — a new id, node id, created_at, URL,
+ * runner_group_id and the NEW attempt number (observed on run 36943045523:
+ * notarize-stage 110638815269 of attempt 1 is listed by attempt 5 as
+ * 110694426825, run_attempt 5, with the same times and steps) — so none of
+ * those is an execution key. The runner name, when both sides report one,
+ * must also agree; it supplements the times and steps, never replaces them.
+ */
+export function executionIdentity(job, where) {
+  refuse(job !== null && typeof job === "object", `${where} is not a job record`);
+  refuse(Number.isSafeInteger(job.run_id) && typeof job.head_sha === "string" && SHA40.test(job.head_sha)
+    && typeof job.name === "string" && job.name !== "", `${where} has no run, commit or name`);
+  refuse(job.status === "completed" && job.conclusion === "success", `${where} is ${job.status}/${job.conclusion}, not a completed success`);
+  const started = instant(job.started_at);
+  const completed = instant(job.completed_at);
+  refuse(Number.isFinite(started) && Number.isFinite(completed) && started <= completed,
+    `${where} has no chronological start and end (${JSON.stringify(job.started_at)}..${JSON.stringify(job.completed_at)})`);
+  refuse(Array.isArray(job.labels) && job.labels.every((l) => typeof l === "string" && l !== ""),
+    `${where} has malformed runner labels`);
+  refuse(Array.isArray(job.steps) && job.steps.length > 0, `${where} reports no step records`);
+  let last = 0;
+  const steps = job.steps.map((step) => {
+    refuse(step !== null && typeof step === "object" && Number.isSafeInteger(step.number) && step.number > last
+      && typeof step.name === "string" && step.name !== "" && typeof step.status === "string"
+      && (step.conclusion === null || typeof step.conclusion === "string"),
+    `${where} has a malformed, unordered or duplicate step record ${JSON.stringify(step?.number)}`);
+    const times = [step.started_at, step.completed_at].map((t) => (t === null ? null : instant(t)));
+    refuse(times.every((t) => t === null || Number.isFinite(t)) && (times.includes(null) || times[0] <= times[1]),
+      `${where} step ${step.number} has unreadable or reversed times`);
+    last = step.number;
+    return [step.number, step.name, step.status, step.conclusion, step.started_at, step.completed_at];
+  });
+  return {
+    key: JSON.stringify([job.run_id, job.head_sha, job.name, job.status, job.conclusion,
+      job.started_at, job.completed_at, [...job.labels].sort(), steps]),
+    runner: typeof job.runner_name === "string" && job.runner_name !== "" ? job.runner_name : null,
+    started,
+    completed,
+  };
+}
+
+/**
+ * The ORIGINAL execution of a job whose provenance names `originalAttempt`,
+ * seen in a later attempt's complete inventory as `latestJob`. The provenance
+ * attempt is the claim; it is proved only by reading that attempt itself —
+ * its run record (same run, commit and workflow; completed, with ANY
+ * conclusion, since a later job of that attempt may have failed) and its
+ * complete job inventory, which must hold exactly one completed, successful
+ * `jobName` labelled with that attempt — and by the latest attempt's job
+ * being that same execution (`executionIdentity`). The latest wrapper may
+ * keep the original attempt label or carry the latest one; any other label,
+ * a different execution, or an unreadable original attempt is refused. An
+ * original attempt equal to the latest needs no second read: the latest job
+ * is the execution, labelled with that attempt.
+ */
+export async function judgeExecutionOrigin(api, { repository, runId, sha, workflowPath, jobName,
+  originalAttempt, latestAttempt, latestJob }) {
+  const where = `run ${runId} \`${jobName}\``;
+  refuse(Number.isSafeInteger(latestAttempt) && latestAttempt >= 1, `${where}: the latest attempt is unknown`);
+  refuse(Number.isSafeInteger(originalAttempt) && originalAttempt >= 1 && originalAttempt <= latestAttempt,
+    `${where}: the provenance attempt ${JSON.stringify(originalAttempt)} is not an attempt from 1 to ${latestAttempt}`);
+  refuse(latestJob?.run_id === runId && latestJob?.head_sha === sha && latestJob?.name === jobName,
+    `${where}: the latest attempt's job is not this run's ${jobName} at ${sha}`);
+  refuse(latestJob.run_attempt === latestAttempt || latestJob.run_attempt === originalAttempt,
+    `${where} is labelled attempt ${JSON.stringify(latestJob.run_attempt)} in attempt ${latestAttempt}; `
+    + `want ${latestAttempt} (relabelled) or the provenance attempt ${originalAttempt}`);
+  const latest = executionIdentity(latestJob, `${where} (attempt ${latestAttempt} inventory)`);
+  if (originalAttempt === latestAttempt) {
+    return { attempt: originalAttempt, job: latestJob, identity: latest.key };
+  }
+  let record;
+  let jobs;
+  try {
+    record = await api.get(`/repos/${repository}/actions/runs/${runId}/attempts/${originalAttempt}`);
+    jobs = await paginate(api, `/repos/${repository}/actions/runs/${runId}/attempts/${originalAttempt}/jobs`, "jobs");
+  } catch (error) {
+    if (error instanceof Refused) throw error;
+    throw new Refused(`${where}: attempt ${originalAttempt} could not be read (${error?.status ?? error?.message ?? "?"})`);
+  }
+  refuse(record?.id === runId && record?.run_attempt === originalAttempt && record?.head_sha === sha
+    && workflowPathOf(record) === workflowPath && record?.status === "completed" && typeof record?.conclusion === "string",
+  `${where}: attempt ${originalAttempt} is not a completed attempt of this run of ${workflowPath} at ${sha}`);
+  for (const job of jobs) {
+    refuse(job?.run_id === runId && job?.head_sha === sha,
+      `${where}: attempt ${originalAttempt} lists job ${job?.id} of run ${job?.run_id} / ${job?.head_sha}`);
+  }
+  const hits = jobs.filter((job) => job.name === jobName);
+  refuse(hits.length === 1, `${where}: attempt ${originalAttempt} lists ${hits.length} \`${jobName}\` job(s); want exactly one`);
+  const original = hits[0];
+  refuse(original.run_attempt === originalAttempt,
+    `${where}: attempt ${originalAttempt} lists it as attempt ${JSON.stringify(original.run_attempt)}`);
+  const first = executionIdentity(original, `${where} (attempt ${originalAttempt} inventory)`);
+  refuse(first.key === latest.key && (first.runner === null || latest.runner === null || first.runner === latest.runner),
+    `${where}: attempt ${latestAttempt} lists a different execution than attempt ${originalAttempt} ran `
+    + "(its run, outcome, times, labels, runner or steps differ)");
+  return { attempt: originalAttempt, job: original, identity: first.key };
 }
 
 // ── the payload ─────────────────────────────────────────────────────────────
@@ -1095,7 +1934,7 @@ export function readZipEntries(zip) {
 }
 
 /** What kind of filesystem object an entry would create. */
-function entryKind(entry) {
+export function entryKind(entry) {
   if (entry.mode !== null) {
     const type = entry.mode & S_IFMT;
     if (type === S_IFREG) return "file";
@@ -1237,9 +2076,14 @@ function requireString(object, key, where) {
 
 /**
  * The provenance contract. `expect` holds what the API proved; every field
- * that can be compared to it is.
+ * that can be compared to it is. `expect.kind` names the producer and with it
+ * the ONE (event, workflow) tuple its provenance must carry — a push run of
+ * `macos.yml` (the default), or a full-bootstrap `merge-gate.yml` dispatch,
+ * whose called build reports the CALLER's identity. Never either/or.
  */
 export function judgeProvenance(provenance, payloadHashes, checksumText, expect) {
+  const tuple = PROVENANCE_TUPLES[expect.kind ?? PUSH_KIND];
+  refuse(tuple !== undefined, `producer kind ${JSON.stringify(expect.kind)} is unknown`);
   refuse(provenance !== null && typeof provenance === "object" && !Array.isArray(provenance),
     "provenance.json is not an object");
   unavailable(provenance.schema !== undefined,
@@ -1253,10 +2097,10 @@ export function judgeProvenance(provenance, payloadHashes, checksumText, expect)
   exact("repositoryId", String(expect.repositoryId));
   exact("sha", expect.sha);
   exact("ref", "refs/heads/main");
-  exact("event", "push");
+  exact("event", tuple.event);
   exact("runId", String(expect.runId));
   exact("runAttempt", String(expect.signedBuildAttempt));
-  exact("workflowRef", `${expect.repository}/${PRODUCER_WORKFLOW}@refs/heads/main`);
+  exact("workflowRef", `${expect.repository}/${tuple.workflow}@refs/heads/main`);
   exact("workflowSha", expect.sha);
   exact("channel", "direct");
   exact("arch", "arm64");
@@ -1287,14 +2131,14 @@ export function judgeProvenance(provenance, payloadHashes, checksumText, expect)
 }
 
 /**
- * Everything `select` proves, end to end. `dir` receives the extracted bytes.
- * Returns the frozen evidence document.
+ * The signed artifact's bytes, judged: downloaded by id, hashed against the API
+ * digest, parsed as exactly the four payload files in memory and written once,
+ * exclusively, then re-hashed from disk. Returns the files, their hashes, the
+ * provenance parsed from those same verified bytes and the attempt it CLAIMS
+ * (proved by the caller against the run, never trusted). Shared by every
+ * producer kind, so each judges the same bytes the same way.
  */
-export async function collectEvidence(api, { repository, repositoryId, sha, releaseVersion, now, dir }) {
-  const { workflow, run, jobs, shape, workflowBlob, auxiliaryJobs } =
-    await selectProducerRun(api, { repository, repositoryId, sha, now });
-  const signedBuild = jobs[EXPECTED_JOBS.findIndex((e) => e.id === "signed-build")];
-  const artifact = await selectArtifact(api, { repository, repositoryId, sha, run, signedBuild, now });
+export async function downloadSignedPayload(api, { repository, artifact, dir }) {
   let zip;
   try {
     zip = await api.download(`/repos/${repository}/actions/artifacts/${artifact.id}/zip`);
@@ -1318,6 +2162,58 @@ export async function collectEvidence(api, { repository, repositoryId, sha, rele
   } catch (error) {
     throw new Refused(`provenance.json is not JSON: ${error.message}`);
   }
+  // The provenance names the attempt signed-build ran in; that claim is read
+  // from the authenticated bytes first and then PROVED against the run: a
+  // "re-run failed jobs" attempt may relabel the carried job with its own
+  // attempt, so the latest inventory's label is never the provenance attempt.
+  const claimed = provenance !== null && typeof provenance === "object" && /^[1-9][0-9]*$/.test(provenance.runAttempt ?? "")
+    ? Number(provenance.runAttempt) : NaN;
+  return { files, hashes, provenance, claimed };
+}
+
+/**
+ * Everything `select` proves, end to end. `dir` receives the extracted bytes.
+ * Returns the frozen evidence document.
+ */
+export async function collectEvidence(api, { repository, repositoryId, sha, releaseVersion, now, dir, sourceGit, cwd }) {
+  let selected;
+  try {
+    selected = await selectProducerRun(api, { repository, repositoryId, sha, now });
+  } catch (error) {
+    if (!(error instanceof NoPushRun)) throw error;
+    // The push listing for this commit is EMPTY — the one case in which the
+    // full-bootstrap producer may be consulted. Loaded only here, so every
+    // push-route caller (and the frozen merge-gate step) never imports it.
+    const { collectBootstrapEvidence } = await import("./macos-bootstrap.mjs");
+    return collectBootstrapEvidence(api, {
+      repository, repositoryId, sha, releaseVersion, now, dir, cwd: cwd ?? process.cwd(),
+      macosWorkflow: error.workflow, noPush: error.message,
+    });
+  }
+  const { workflow, run, jobs, shape, workflowBlob, auxiliaryJobs, coverage } = selected;
+  // A certified run is re-authenticated in full BEFORE its artifact is read; an
+  // executed run carries no certified chain at all.
+  const certified = coverage === COVERAGE_CERTIFIED
+    ? await judgeCertifiedCoverage(api, {
+      repository, repositoryId, sha, run, now,
+      rosterJobs: EXPECTED_JOBS.map((e, i) => ({ id: e.id, job: jobs[i] })),
+      evidenceJob: auxiliaryJobs[AUXILIARY_JOBS.indexOf(EVIDENCE_JOB)],
+      certifyJob: auxiliaryJobs[AUXILIARY_JOBS.indexOf(CERTIFY_JOB)],
+      ...(sourceGit ? { sourceGit } : {}),
+    })
+    : null;
+  const signedBuild = jobs[EXPECTED_JOBS.findIndex((e) => e.id === "signed-build")];
+  const artifact = await selectArtifact(api, { repository, repositoryId, sha, run, signedBuild, now });
+  const { files, hashes, provenance, claimed } = await downloadSignedPayload(api, { repository, artifact, dir });
+  const origin = await judgeExecutionOrigin(api, {
+    repository, runId: run.id, sha, workflowPath: PRODUCER_WORKFLOW, jobName: "signed-build",
+    originalAttempt: claimed, latestAttempt: run.run_attempt, latestJob: signedBuild,
+  });
+  // The certificate describes the tooling of the witness attempt; a signed
+  // build executed in any other attempt ran on tooling nothing certified.
+  refuse(certified === null || origin.attempt === certified.witness.attempt,
+    `signed-build executed in attempt ${origin.attempt}, but the certified coverage is of attempt `
+    + `${certified?.witness.attempt}; a re-executed signed build cannot inherit that coverage`);
   const { version, build } = judgeProvenance(
     provenance,
     hashes,
@@ -1327,7 +2223,7 @@ export async function collectEvidence(api, { repository, repositoryId, sha, rele
       repositoryId,
       sha,
       runId: run.id,
-      signedBuildAttempt: signedBuild.run_attempt,
+      signedBuildAttempt: origin.attempt,
       releaseVersion,
     },
   );
@@ -1354,6 +2250,7 @@ export async function collectEvidence(api, { repository, repositoryId, sha, rele
       startedAt: job.started_at,
       completedAt: job.completed_at,
     })),
+    signedBuildOrigin: { attempt: origin.attempt, jobId: origin.job.id, execution: sha256(Buffer.from(origin.identity)) },
     artifact: {
       id: artifact.id,
       name: artifact.name,
@@ -1366,6 +2263,7 @@ export async function collectEvidence(api, { repository, repositoryId, sha, rele
     version,
     build,
     toolchain: provenance.toolchain,
+    coverage: certified ?? { mode: COVERAGE_EXECUTED },
   };
 }
 
@@ -1379,10 +2277,16 @@ export function evidenceIdentity(evidence) {
     workflow: evidence.workflow,
     run: { id: evidence.run.id, attempt: evidence.run.attempt, conclusion: evidence.run.conclusion },
     jobs: evidence.jobs.map((j) => [j.id, j.conclusion, j.runAttempt]),
+    signedBuildOrigin: evidence.signedBuildOrigin,
     artifact: { id: evidence.artifact.id, name: evidence.artifact.name, digest: evidence.artifact.digest },
     files: evidence.files,
     version: evidence.version,
     build: evidence.build,
+    coverage: evidence.coverage,
+    // A full-bootstrap producer (v3) freezes its caller blob, its receipt's
+    // complete artifact identity and attempt, the aggregate's execution and
+    // the run's job inventory too. Absent from v2, whose identity is unchanged.
+    ...(evidence.producer === undefined ? {} : { producer: evidence.producer }),
   });
 }
 
@@ -1400,7 +2304,8 @@ export async function decide(api, { mode, repository, repositoryId, sha, ref, re
   try {
     unavailable(ref === "refs/heads/main", `the release runs from ${ref}, not main; only main is ever reused`);
     const evidence = await collectEvidence(api, { repository, repositoryId, sha, releaseVersion, now, dir });
-    return { source: "reuse", reason: `run ${evidence.run.id} attempt ${evidence.run.attempt}`, evidence };
+    return { source: "reuse", reason: evidence.producer === undefined ? `run ${evidence.run.id} attempt ${evidence.run.attempt}`
+      : `full-bootstrap merge-gate run ${evidence.run.id} attempt ${evidence.run.attempt}`, evidence };
   } catch (error) {
     if (error instanceof Unavailable) {
       if (mode === "reuse") throw new Refused(`reuse was required, but ${error.message}`);
@@ -1418,7 +2323,8 @@ export async function decide(api, { mode, repository, repositoryId, sha, ref, re
  * something else halfway through.
  */
 export async function readback(api, frozen, { now, dir, releaseVersion }) {
-  refuse(frozen?.schema === EVIDENCE_SCHEMA, "the frozen evidence is not a reuse evidence document");
+  refuse(frozen?.schema === EVIDENCE_SCHEMA || frozen?.schema === EVIDENCE_SCHEMA_V3,
+    "the frozen evidence is not a reuse evidence document");
   let fresh;
   try {
     fresh = await collectEvidence(api, {

@@ -1,0 +1,6 @@
+tree a2e2d02e2b53c698a25f3967cf5081872adf6202
+parent 7fd1f0f3977708de726b08bc51227b974bf07d0f
+author relayium-release[bot] <github@relayium.com> 1791194761 +0400
+committer relayium-release[bot] <github@relayium.com> 1791194761 +0400
+
+Avoid redundant macOS UI launches and snapshot physical rosters

@@ -454,16 +454,20 @@ const RENEW_WEIGHTS = "scripts/go-race-timings-renewal.json";
 const TIMINGS_TOOL = "scripts/go-race-timings.go";
 /**
  * The account lane's measured profile, pinned to the exact corpus root and an
- * independent Codex review accepted: run 36893745143 attempt 1 at 7c47921b9,
- * all eight account shard archives verified against their API digests, 2633
- * tests. Replacing it needs a new accepted corpus and a deliberate edit here.
+ * independent review accepted: run 37421626823 attempt 1 at e4b538f18, all
+ * eight account shard archives verified against their API digests, 2652
+ * tests summing to 6392.31 s. The previous corpus (run 36893745143 at
+ * 7c47921b9) is refused by digest and provenance. Replacing it needs a new
+ * accepted corpus and a deliberate edit here.
  */
 const ACCOUNT_WEIGHTS = "scripts/go-race-timings-account.json";
-const ACCOUNT_WEIGHTS_SHA256 = "e9d0d8b464b095188f602d7340f144be86c8f651f8e01ab93cb2d2c54d0f8abf";
+const ACCOUNT_WEIGHTS_SHA256 = "0197b9a6106066538c8dec3d1f0507b5e78417ce951e97676ff1c22c6efc9c05";
 const ACCOUNT_WEIGHTS_PROVENANCE = {
-  kind: "go-test-json-corpus", sourceSHA: "7c47921b94b9120d528badc138d34fa0c8a6f1e9",
-  toolchain: "go version go1.26.6 linux/amd64", runID: 36893745143, runAttempt: 1, race: true, count: 1, complete: true,
+  kind: "go-test-json-corpus", sourceSHA: "e4b538f1888be95d9e9cf3bb131578fad29e6bb7",
+  toolchain: "go version go1.26.6 linux/amd64", runID: 37421626823, runAttempt: 1, race: true, count: 1, complete: true,
 };
+const ACCOUNT_WEIGHTS_TESTS = 2652;
+const ACCOUNT_WEIGHTS_SUM_SECONDS = 6392.31;
 
 const failures = [];
 function check(ok, message) {
@@ -947,6 +951,22 @@ const EV_MAIN_PUSH = "github.event_name == 'push' && github.ref == 'refs/heads/m
 const EV_CHECKOUT = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd";
 const EV_NODE = "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e";
 const EV_UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+/** The full-bootstrap receipt steps' condition and the record step's script (6w executes it). */
+const BOOT_RECEIPT_IF = "github.event_name == 'workflow_dispatch' && inputs.mode == 'full-bootstrap'";
+const BOOT_RECEIPT_RUN = [
+  "set -euo pipefail",
+  'mkdir -p "$RUNNER_TEMP/full-bootstrap"',
+  'jq -n --arg mode "$RECEIPT_MODE" --arg base "$RECEIPT_BASE" --arg head "$RECEIPT_HEAD" \\',
+  '  --arg sha "$GITHUB_SHA" --arg ref "$GITHUB_REF" --arg repositoryId "$GITHUB_REPOSITORY_ID" \\',
+  '  --arg runId "$GITHUB_RUN_ID" --arg runAttempt "$GITHUB_RUN_ATTEMPT" \\',
+  '  --arg workflowRef "$GITHUB_WORKFLOW_REF" --arg workflowSha "$GITHUB_WORKFLOW_SHA" \\',
+  '  --arg signedArtifact "$RECEIPT_SIGNED_ARTIFACT" \\',
+  "  '{schema:\"relayium-macos-full-bootstrap-receipt/v1\",mode:$mode,base:$base,head:$head,sha:$sha,ref:$ref,",
+  "    repositoryId:$repositoryId,runId:$runId,runAttempt:$runAttempt,workflowRef:$workflowRef,",
+  "    workflowSha:$workflowSha,signedArtifact:$signedArtifact}' \\",
+  '  > "$RUNNER_TEMP/full-bootstrap/full-bootstrap-receipt.json"',
+  "",
+].join("\n");
 const EV_GRANTS = { contents: "read", actions: "read", "pull-requests": "read" };
 /** The paid probes run only on an ordinary main push the screen found eligible. */
 const EV_SCREEN_ELIGIBLE = "needs.screen.result == 'success' && needs.screen.outputs.eligible == 'true'";
@@ -1516,12 +1536,23 @@ function evidenceAdoptionFailures(world) {
       name: "relayium-ci-evidence-proof-attempt-${{ github.run_attempt }}",
       path: "${{ runner.temp }}/ci-evidence/ci-evidence.json", "if-no-files-found": "ignore", "retention-days": "7",
     } },
+    // The full bootstrap's E-only receipt (scripts/release/macos-bootstrap.mjs):
+    // LAST, after the proof steps, on that one mode only, never a proof name.
+    { name: "Record the full-bootstrap signed-build receipt", if: BOOT_RECEIPT_IF, env: {
+      RECEIPT_MODE: "${{ inputs.mode }}", RECEIPT_BASE: "${{ inputs.base_sha }}", RECEIPT_HEAD: "${{ inputs.head_sha }}",
+      RECEIPT_SIGNED_ARTIFACT: "${{ needs.macos.outputs.signed_artifact }}",
+    }, run: BOOT_RECEIPT_RUN },
+    { name: "Keep the full-bootstrap signed-build receipt", if: BOOT_RECEIPT_IF, uses: EV_UPLOAD, with: {
+      name: "relayium-macos-full-bootstrap-receipt-attempt-${{ github.run_attempt }}",
+      path: "${{ runner.temp }}/full-bootstrap/full-bootstrap-receipt.json", "if-no-files-found": "error", "retention-days": "14",
+    } },
   ];
   need(steps.length === 1 + want.length && String(steps[0]?.run ?? "").includes("CONDITIONAL_LANES")
     && steps[0]?.if === undefined && deepEqual(steps.slice(1), want), `${AGGREGATE}/${GATE_JOB}: the steps after `
     + `the judgement are not the canonical proof producer.\n  got:  ${JSON.stringify(steps.slice(1))}\n`
     + `  want: ${JSON.stringify(want)}\nThe proof may be minted only after every lane is judged, only on a pull `
-    + "request, only by the verifier whose tests just passed, and only under its attempt-scoped name.");
+    + "request, only by the verifier whose tests just passed, and only under its attempt-scoped name; the "
+    + "full-bootstrap receipt only after them, only in that mode, and never under a proof's name.");
 
   // Every other workflow that calls an adopted lane must grant the same, or it
   // fails to start the moment the callee carries an evidence job.
@@ -2695,6 +2726,14 @@ if (go) {
       out.push(`${ACCOUNT_WEIGHTS}: want at least 1000 unique test names, each with a finite weight in [0, 21600] s; `
         + `got ${tests.length} entries, ${names.size} unique.`);
     }
+    if (tests.length !== ACCOUNT_WEIGHTS_TESTS || names.size !== ACCOUNT_WEIGHTS_TESTS) {
+      out.push(`${ACCOUNT_WEIGHTS}: want exactly the ${ACCOUNT_WEIGHTS_TESTS} measured tests; `
+        + `got ${tests.length} entries, ${names.size} unique.`);
+    }
+    const sum = Math.round(tests.reduce((s, t) => s + (Number.isFinite(t?.seconds) ? t.seconds : 0), 0) * 100) / 100;
+    if (sum !== ACCOUNT_WEIGHTS_SUM_SECONDS) {
+      out.push(`${ACCOUNT_WEIGHTS}: measured weights sum to ${sum} s, want ${ACCOUNT_WEIGHTS_SUM_SECONDS}.`);
+    }
     return out;
   };
   let accountRaw = "";
@@ -2708,16 +2747,26 @@ if (go) {
     // Controls: each change to the profile is reported, for its own reason.
     const ACCOUNT_PROFILE_CONTROLS = [
       { name: "one weight edited", expect: /sha256 .* want the accepted/,
-        raw: accountRaw.replace(/"seconds": 124\.26/, '"seconds": 1.26') },
-      { name: "a different run", expect: /provenance\.runID is 1, want 36893745143/,
-        raw: accountRaw.replace('"runID": 36893745143', '"runID": 1') },
+        raw: accountRaw.replace(/"seconds": 124\.87/, '"seconds": 1.87') },
+      { name: "one weight edited, sum", expect: /measured weights sum to 6269\.31 s, want 6392\.31/,
+        raw: accountRaw.replace(/"seconds": 124\.87/, '"seconds": 1.87') },
+      { name: "a different run", expect: /provenance\.runID is 1, want 37421626823/,
+        raw: accountRaw.replace('"runID": 37421626823', '"runID": 1') },
+      { name: "the previous accepted corpus's run", expect: /provenance\.runID is 36893745143, want 37421626823/,
+        raw: accountRaw.replace('"runID": 37421626823', '"runID": 36893745143') },
       { name: "another attempt", expect: /provenance\.runAttempt is 2/, raw: accountRaw.replace('"runAttempt": 1', '"runAttempt": 2') },
-      { name: "another commit", expect: /provenance\.sourceSHA/, raw: accountRaw.replace("7c47921b94b9120d528badc138d34fa0c8a6f1e9", "0".repeat(40)) },
+      { name: "another commit", expect: /provenance\.sourceSHA/,
+        raw: accountRaw.replace('"sourceSHA": "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"', `"sourceSHA": "${"0".repeat(40)}"`) },
+      { name: "the previous accepted corpus's commit", expect: /provenance\.sourceSHA is "7c47921b94b9120d528badc138d34fa0c8a6f1e9"/,
+        raw: accountRaw.replace('"sourceSHA": "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"',
+          '"sourceSHA": "7c47921b94b9120d528badc138d34fa0c8a6f1e9"') },
       { name: "measured without -race", expect: /provenance\.race is false/, raw: accountRaw.replace('"race": true', '"race": false') },
       { name: "the renewal profile in its place", expect: /package \.\/account, pattern \^Test/,
         raw: readFileSync(resolve(repoRoot, RENEW_WEIGHTS), "utf8") },
       { name: "a truncated test list", expect: /want at least 1000 unique test names/,
         raw: JSON.stringify({ ...JSON.parse(accountRaw), tests: JSON.parse(accountRaw).tests.slice(0, 10) }) },
+      { name: "one measured test dropped", expect: /want exactly the 2652 measured tests; got 2651 entries/,
+        raw: JSON.stringify({ ...JSON.parse(accountRaw), tests: JSON.parse(accountRaw).tests.slice(1) }) },
       { name: "a negative weight", expect: /finite weight in \[0, 21600\]/,
         raw: JSON.stringify({ ...JSON.parse(accountRaw),
           tests: JSON.parse(accountRaw).tests.map((t, i) => (i === 0 ? { ...t, seconds: -1 } : t)) }) },
@@ -3437,7 +3486,104 @@ function pathMatrixFailures(world) {
       `changing "${path}" starts [${got.join(", ")}]; want [${want.join(", ")}] — ${why}.`,
     );
   }
+
+  // The vocabulary, judged by THIS file's own reading of each entry. The
+  // compiler above is general — it would compile `!apps/mac/*.json` or
+  // `a?.json` into something — so without this the policy would happily judge
+  // a filter the merge gate's selector refuses (or, worse, one GitHub reads as
+  // a pattern while both compilers here escape it to a literal). Written as
+  // whole-entry expressions, where the selector strips and branches, so the two
+  // can be wrong independently.
+  for (const file of filtered) {
+    for (const entry of wPaths(world, file)) {
+      const shape = filterEntryShape(entry);
+      if (shape === null) {
+        out.push(`${file}'s path filter entry ${JSON.stringify(entry)} is outside the five permitted `
+          + `shapes (prefix/**, !prefix/**, an exact path, dir/basename*, !exact-path). GitHub may read `
+          + `it as a pattern this repository's two compilers read as text, and the merge gate's `
+          + `selector refuses it outright, selecting every lane.`);
+      }
+    }
+  }
+
+  // The exact-file exclusion selects LESS when it is wrong, so where it lives
+  // is pinned: the readiness record, in the two Apple lanes, after the tree.
+  const exclusions = [];
+  for (const file of filtered) {
+    const paths = wPaths(world, file);
+    paths.forEach((entry, index) => {
+      if (filterEntryShape(entry) !== "literal-exclusion") return;
+      exclusions.push(`${file} ${entry}`);
+      const target = entry.slice(1);
+      // Effective: some EARLIER positive entry matches the excluded file, and
+      // no LATER positive entry re-includes it.
+      const before = paths.slice(0, index).some((p) => !isNegation(p) && pathFilterToRegExp(p).test(target));
+      const after = paths.slice(index + 1).some((p) => !isNegation(p) && pathFilterToRegExp(p).test(target));
+      if (!before || after) {
+        out.push(`${file} excludes ${target} ${!before ? "with no earlier entry that watches it" : "and then re-includes it"}: `
+          + `last match wins, so the exclusion is dead and ${file} starts on the record again.`);
+      }
+      if (paths.indexOf(MAC_TREE) === -1 || paths.indexOf(MAC_TREE) > index) {
+        out.push(`${file} lists ${entry} ${paths.includes(MAC_TREE) ? "before" : "without"} \`${MAC_TREE}\`, `
+          + `the tree it qualifies; the exclusion must follow it.`);
+      }
+    });
+  }
+  const wantExclusions = [`${MACOS} !${READINESS_RECORD}`, `${SWIFT_PACKAGE_LANE} !${READINESS_RECORD}`];
+  if (!deepEqual(exclusions.sort(), wantExclusions)) {
+    out.push(`the exact-file exclusions are [${exclusions.join("; ")}]; want [${wantExclusions.join("; ")}]. `
+      + `The readiness manifest is the one release-control record no build, package test or signed `
+      + `artifact reads; any other exclusion needs its own fixture rows and review.`);
+  }
+
+  // Per-file selection, then the union a commit is judged by. Not fixture
+  // rows, because two of these names do not exist in the tree on purpose.
+  const starts = (paths) => filtered.filter((file) => paths.some((path) => matchesFilter(wPaths(world, file), path))).sort();
+  const appleLanes = [MACOS, SWIFT_PACKAGE_LANE];
+  const recordOnly = starts(READINESS_RECORD_ONLY_COMMIT);
+  if (appleLanes.some((file) => recordOnly.includes(file))) {
+    out.push(`the record-only commit [${READINESS_RECORD_ONLY_COMMIT.join(", ")}] starts [${recordOnly.join(", ")}]; `
+      + `neither ${MACOS} nor ${SWIFT_PACKAGE_LANE} may start for it.`);
+  }
+  for (const extra of ["apps/mac/release-readiness-extra.json", "apps/mac/release-readiness.json.orig",
+    "apps/mac/Relayium/release-readiness.json", "apps/mac/Relayium/AccountView.swift",
+    "apps/mac/Relayium.xcodeproj/project.pbxproj", "apps/mac/Relayium/Info.plist"]) {
+    const got = starts([...READINESS_RECORD_ONLY_COMMIT, extra]);
+    if (!appleLanes.every((file) => got.includes(file))) {
+      out.push(`the record-only commit plus ${extra} starts [${got.join(", ")}]; both ${MACOS} and `
+        + `${SWIFT_PACKAGE_LANE} must start — the exclusion names one exact file and nothing near it.`);
+    }
+  }
   return out;
+}
+
+/** The readiness manifest the Apple lanes exclude by exact name. */
+const READINESS_RECORD = "apps/mac/release-readiness.json";
+const MAC_TREE = "apps/mac/**";
+/** The three paths 2d2c67e7c changed against 373f6e733: a record-only commit. */
+const READINESS_RECORD_ONLY_COMMIT = ["apps/README.md", READINESS_RECORD, "docs/macos-app-store-submission.md"];
+
+/**
+ * Which of the five `paths:` shapes the merge gate's selector accepts this
+ * entry is, decided here independently of `scripts/ci/select-lanes.mjs`.
+ * A plain segment is any run of characters GitHub's filter syntax gives no
+ * meaning to; `.`/`..` and empty segments are refused as ill-defined.
+ */
+function filterEntryShape(entry) {
+  if (typeof entry !== "string") return null;
+  // One segment: no separator, no metacharacter, not `.`/`..` (alone or as a
+  // basename prefix). Whitespace is judged once, at the ends of the body.
+  const seg = String.raw`(?!\.{1,2}(?:/|\*|$))[^/*?+\[\]{}()!@\\]+`;
+  const body = String.raw`(?!\s)${seg}(?:/${seg})*`;
+  const end = String.raw`(?<!\s)`;
+  const shapes = [
+    ["tree", new RegExp(String.raw`^${body}${end}/\*\*$`)],
+    ["tree-exclusion", new RegExp(String.raw`^!${body}${end}/\*\*$`)],
+    ["literal", new RegExp(String.raw`^${body}${end}$`)],
+    ["literal-exclusion", new RegExp(String.raw`^!${body}${end}$`)],
+    ["basename", new RegExp(String.raw`^${body}/${seg}${end}\*$`)],
+  ];
+  return shapes.find(([, re]) => re.test(entry))?.[0] ?? null;
 }
 
 // The matrix above only means what it says if the excluded workflows really are
@@ -6415,7 +6561,20 @@ const DISPATCH_INPUTS = [
     description:
       "Publish the versioned GitHub Release and deliver its appcast/download metadata to main",
   },
-  // The sixth, and the only one that did not move from `macos.yml`: where the
+  // Who performs the two publication writes. `operator` (the default) hands
+  // off a verified candidate and publishes nothing; `workflow` keeps the
+  // automatic delivery. Added after the 1.4.5 metadata push was refused with
+  // GH006 and the release creation with 403 (causes not asserted here).
+  {
+    name: "metadata_delivery",
+    type: "choice",
+    required: "true",
+    default: "operator",
+    description: "Metadata delivery: operator (hand off a verified candidate, publish nothing) "
+      + "or workflow (push main and create the release here)",
+    options: ["operator", "workflow"],
+  },
+  // The seventh, and one of two that did not move from `macos.yml`: where the
   // signed DMG comes from. `auto` reuses only proven exact-main evidence.
   {
     name: "signed_build_source",
@@ -6789,6 +6948,16 @@ function releaseBoundaryFailures(world) {
       `${MACOS_RELEASE}/preflight declares permissions ${JSON.stringify(preflight.permissions)}, want `
       + `{"actions":"read","contents":"read"}: it reads runs, jobs and artifacts and writes nothing.`,
     );
+    for (const [jobName, job] of [["preflight", preflight], ["notarize-stage", release.jobs?.["notarize-stage"]]]) {
+      const checkouts = (job?.steps ?? []).filter((step) => String(step?.uses ?? "").startsWith("actions/checkout@"));
+      need(
+        checkouts.length === 1 && deepEqual(checkouts[0].with, { "fetch-depth": "2" }),
+        `${MACOS_RELEASE}/${jobName} checks out with ${JSON.stringify(checkouts.map((c) => c.with ?? null))}; `
+        + "want exactly one checkout with `fetch-depth: 2` and nothing else. The certified source proof "
+        + "needs the release commit's first parent (depth 1 lacks it and silently rebuilds); a deeper "
+        + "fetch, another ref or other options widen what the reader trusts.",
+      );
+    }
     const text = JSON.stringify(preflight);
     need(
       text.includes("node scripts/release/macos-evidence.mjs select")
@@ -8547,7 +8716,82 @@ function withIosUiSmokeRun(world, edit) {
   return world;
 }
 
+/** Rewrite one workflow's push (and aliased pull_request) filter with `edit`. */
+function editPaths(world, file, edit) {
+  const before = wPaths(world, file);
+  if (before === null) throw new Error(`${file} has no push.paths to edit`);
+  const after = edit([...before]);
+  if (deepEqual(after, before)) throw new Error(`${file}: the path-filter edit did not apply`);
+  return withPaths(world, file, after);
+}
+
+/** `paths` with the one entry `from` replaced by `to` (a list; empty deletes it). */
+function swapEntry(paths, from, ...to) {
+  const at = paths.indexOf(from);
+  if (at === -1 || paths.indexOf(from, at + 1) !== -1) throw new Error(`not exactly one ${from}`);
+  paths.splice(at, 1, ...to);
+  return paths;
+}
+
 const MUTATIONS = [
+  // The exact-file exclusion: every way of getting it wrong that selects less,
+  // or that silently re-includes the record.
+  {
+    name: "macos.yml's readiness exclusion moves above the tree it qualifies",
+    mutate: (world) => editPaths(world, MACOS, (paths) => {
+      swapEntry(paths, `!${READINESS_RECORD}`);
+      return swapEntry(paths, MAC_TREE, `!${READINESS_RECORD}`, MAC_TREE);
+    }),
+    expect: /macos\.yml excludes apps\/mac\/release-readiness\.json with no earlier entry that watches it/,
+  },
+  {
+    name: "the same move is caught by the record's own fixture row",
+    mutate: (world) => editPaths(world, MACOS, (paths) => {
+      swapEntry(paths, `!${READINESS_RECORD}`);
+      return swapEntry(paths, MAC_TREE, `!${READINESS_RECORD}`, MAC_TREE);
+    }),
+    expect: /changing "apps\/mac\/release-readiness\.json" starts \[macos\.yml\]; want \[\]/,
+  },
+  {
+    name: "swift-package.yml drops apps/mac/** and keeps the exclusion",
+    mutate: (world) => editPaths(world, SWIFT_PACKAGE_LANE, (paths) => swapEntry(paths, MAC_TREE)),
+    expect: /swift-package\.yml lists !apps\/mac\/release-readiness\.json without `apps\/mac\/\*\*`/,
+  },
+  {
+    name: "macos.yml loses the readiness exclusion",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`)),
+    expect: /the exact-file exclusions are \[swift-package\.yml !apps\/mac\/release-readiness\.json\]/,
+  },
+  {
+    name: "a later positive entry re-includes the readiness record",
+    mutate: (world) => editPaths(world, SWIFT_PACKAGE_LANE, (paths) => [...paths, READINESS_RECORD]),
+    expect: /swift-package\.yml excludes apps\/mac\/release-readiness\.json and then re-includes it/,
+  },
+  {
+    name: "the readiness exclusion is widened to a basename glob",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/release-readiness*")),
+    expect: /entry "!apps\/mac\/release-readiness\*" is outside the five permitted shapes/,
+  },
+  {
+    name: "the readiness exclusion is widened to every JSON file in apps/mac",
+    mutate: (world) => editPaths(world, SWIFT_PACKAGE_LANE, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/*.json")),
+    expect: /entry "!apps\/mac\/\*\.json" is outside the five permitted shapes/,
+  },
+  {
+    name: "the readiness exclusion is spelled with a class",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/release-readiness.[j]son")),
+    expect: /entry "!apps\/mac\/release-readiness\.\[j\]son" is outside the five permitted shapes/,
+  },
+  {
+    name: "a second exact-file exclusion appears beside the readiness record",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, `!${READINESS_RECORD}`, "!apps/mac/Relayium/Info.plist")),
+    expect: /the exact-file exclusions are \[.*macos\.yml !apps\/mac\/Relayium\/Info\.plist/,
+  },
+  {
+    name: "the readiness exclusion is widened to everything near its name",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/release-readiness**")),
+    expect: /the record-only commit plus apps\/mac\/release-readiness-extra\.json starts/,
+  },
   {
     name: "native-web-pairing.yml regains a bare `apps/**` filter",
     mutate: (world) => withPaths(world, NWP, [
@@ -9836,6 +10080,20 @@ const MUTATIONS = [
     expect: /macos-release\.yml\/notarize-stage: timeout-minutes is "40", at or below the/,
   },
   // ── exact-main signed-build reuse and PR-free delivery ────────────────────
+  {
+    name: "the preflight checkout returns to depth one",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "preflight", (job) => {
+      delete job.steps.find((step) => String(step.uses ?? "").startsWith("actions/checkout@")).with;
+    }),
+    expect: /macos-release\.yml\/preflight checks out with \[null\]; want exactly one checkout with `fetch-depth: 2`/,
+  },
+  {
+    name: "the notarize-stage checkout fetches the whole history",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.steps.find((step) => String(step.uses ?? "").startsWith("actions/checkout@")).with = { "fetch-depth": "0" };
+    }),
+    expect: /macos-release\.yml\/notarize-stage checks out with \[\{"fetch-depth":"0"\}\]; want exactly one checkout/,
+  },
   {
     name: "the reusable build runs even when the preflight chose reuse",
     mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
@@ -12247,6 +12505,92 @@ function fullBootstrapFailures(world, fx, only = null) {
     && fullBootstrapFailures(world, fx).length === 0,
   `6v: ${AGGREGATE} changed on disk, or the unmutated cases stopped passing after the controls.`);
   spawnSync("rm", ["-rf", fx.root]);
+}
+
+// ── 6w. the full-bootstrap receipt writer, EXECUTED ─────────────────────────
+//
+// The aggregate's "Record the full-bootstrap signed-build receipt" step is the
+// one place a full bootstrap's dispatch inputs are written down, and the
+// release reuse judge (scripts/release/macos-bootstrap.mjs) believes the mode
+// only from it. So its script is taken out of the parsed workflow and RUN with
+// bash and jq, with every source DISTINCT, and each of the twelve fields must
+// carry exactly its own source — never a constant, never a neighbour. The judge
+// must also accept this very file as its canonical caller, and read exactly the
+// keys the step writes. Then one edit per kind of wrong wiring, in a copy, each
+// refused for its own field.
+{
+  const { RECEIPT_KEYS, callerProblem } = await import("../release/macos-bootstrap.mjs");
+  const RECORD = "Record the full-bootstrap signed-build receipt";
+  const sources = {
+    "inputs.mode": "mode-marker", "inputs.base_sha": "b".repeat(40), "inputs.head_sha": "c".repeat(40),
+    "needs.macos.outputs.signed_artifact": "artifact-marker",
+  };
+  const runEnv = { GITHUB_SHA: "d".repeat(40), GITHUB_REF: "refs/heads/ref-marker", GITHUB_REPOSITORY_ID: "4242",
+    GITHUB_RUN_ID: "9001", GITHUB_RUN_ATTEMPT: "3", GITHUB_WORKFLOW_REF: "o/r/.github/workflows/merge-gate.yml@refs/heads/main",
+    GITHUB_WORKFLOW_SHA: "e".repeat(40) };
+  const expected = { schema: "relayium-macos-full-bootstrap-receipt/v1", mode: "mode-marker", base: "b".repeat(40),
+    head: "c".repeat(40), sha: "d".repeat(40), ref: "refs/heads/ref-marker", repositoryId: "4242", runId: "9001", runAttempt: "3",
+    workflowRef: "o/r/.github/workflows/merge-gate.yml@refs/heads/main", workflowSha: "e".repeat(40), signedArtifact: "artifact-marker" };
+  /** Problems with one (possibly mutated) record step, executed. */
+  const receiptProblems = (step) => {
+    const out = [];
+    if (typeof step?.run !== "string") return [`${AGGREGATE}/${GATE_JOB}: no "${RECORD}" step with a run script`];
+    if ((step.run.match(/\$\{\{[^}]*\}\}/g) ?? []).length !== 0) out.push(`"${RECORD}" carries an inline expression`);
+    const dir = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/boot-receipt.XXXXXX`], { encoding: "utf8" }).stdout.trim();
+    try {
+      const env = { PATH: process.env.PATH, HOME: process.env.HOME ?? "/tmp", RUNNER_TEMP: dir, ...runEnv };
+      for (const [k, raw] of Object.entries(step.env ?? {})) {
+        const m = /^\$\{\{ (.+) \}\}$/.exec(String(raw));
+        if (!m || !(m[1] in sources)) { out.push(`"${RECORD}" env ${k} reads an unmodelled ${JSON.stringify(raw)}`); continue; }
+        env[k] = sources[m[1]];
+      }
+      spawnSync("bash", ["-c", 'printf "%s" "$2" > "$1/step.sh"', "_", dir, step.run]);
+      const r = spawnSync("bash", [`${dir}/step.sh`], { env, encoding: "utf8" });
+      if (r.status !== 0) return [...out, `"${RECORD}" exited ${r.status}: ${r.stderr.slice(-300)}`];
+      let got;
+      try { got = JSON.parse(readFileSync(`${dir}/full-bootstrap/full-bootstrap-receipt.json`, "utf8")); } catch (err) {
+        return [...out, `"${RECORD}" wrote no JSON receipt: ${err.message}`];
+      }
+      if (JSON.stringify(Object.keys(got).sort()) !== JSON.stringify([...RECEIPT_KEYS])) {
+        out.push(`the receipt carries keys ${JSON.stringify(Object.keys(got).sort())}; the reuse judge reads exactly ${JSON.stringify(RECEIPT_KEYS)}`);
+      }
+      for (const [key, want] of Object.entries(expected)) {
+        if (got[key] !== want) out.push(`receipt.${key} is ${JSON.stringify(got[key])}, want its own source ${JSON.stringify(want)}`);
+      }
+    } finally {
+      spawnSync("rm", ["-rf", dir]);
+    }
+    return out;
+  };
+  const original = docs.get(AGGREGATE);
+  const recordOf = (doc) => (doc?.jobs?.[GATE_JOB]?.steps ?? []).find((st) => st?.name === RECORD);
+  for (const message of receiptProblems(recordOf(original))) check(false, `6w: ${message}`);
+  const text = readFileSync(resolve(workflowsDir, AGGREGATE), "utf8");
+  const problem = callerProblem(text);
+  check(problem === null, `6w: scripts/release/macos-bootstrap.mjs does not accept ${AGGREGATE} as its canonical full-bootstrap caller: ${problem}`);
+  // The judge refuses a caller whose receipt is not exactly the canonical one.
+  for (const [name, from, to, reason] of [
+    ["the receipt steps lose their mode condition", "        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'full-bootstrap'\n        env:\n          RECEIPT_MODE",
+      "        if: github.event_name == 'workflow_dispatch'\n        env:\n          RECEIPT_MODE", /does not end with the canonical full-bootstrap receipt steps/],
+    ["the macos caller gains a with: block", "    uses: ./.github/workflows/macos.yml\n    permissions:\n      contents: read\n      actions: read\n      pull-requests: read\n    secrets:",
+      "    uses: ./.github/workflows/macos.yml\n    with:\n      release_version: '9.9.9'\n    permissions:\n      contents: read\n      actions: read\n      pull-requests: read\n    secrets:", /macos caller is not exactly the canonical call/],
+  ]) {
+    if (!text.includes(from)) { check(false, `6w control "${name}" could not be applied`); continue; }
+    const got = callerProblem(text.split(from).join(to));
+    check(got !== null && reason.test(got), `6w control "${name}" was not refused for ${reason}; got ${JSON.stringify(got)}`);
+  }
+  for (const [name, from, to, expect] of [
+    ["base and head swapped", '--arg base "$RECEIPT_BASE" --arg head "$RECEIPT_HEAD"', '--arg base "$RECEIPT_HEAD" --arg head "$RECEIPT_BASE"', /receipt\.base is/],
+    ["the attempt read from the run id", '--arg runAttempt "$GITHUB_RUN_ATTEMPT"', '--arg runAttempt "$GITHUB_RUN_ID"', /receipt\.runAttempt is/],
+    ["the mode written as a constant", '--arg mode "$RECEIPT_MODE"', "--arg mode full-bootstrap", /receipt\.mode is/],
+    ["the signed artifact dropped", ",signedArtifact:$signedArtifact}", "}", /the receipt carries keys/],
+  ]) {
+    const step = structuredClone(recordOf(original));
+    if (!step?.run?.includes(from)) { check(false, `6w control "${name}" could not be applied`); continue; }
+    step.run = step.run.split(from).join(to);
+    const got = receiptProblems(step);
+    check(got.some((m) => expect.test(m)), `6w control "${name}" was NOT refused for ${expect}; got ${JSON.stringify(got.slice(0, 3))}`);
+  }
 }
 
 // ── report ──────────────────────────────────────────────────────────────────

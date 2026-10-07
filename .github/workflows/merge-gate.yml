@@ -86,7 +86,9 @@ on:
   #                            change whose ordinary `push: main` triggers do
   #                            not select every lane (a trust input the
   #                            internal mode refuses, say). No candidate, no
-  #                            pull request and NO proof: it only validates.
+  #                            pull request and NO proof: it validates, and
+  #                            its aggregate keeps only the E-only signed-build
+  #                            receipt at the end of this file (never a proof).
   #                            Strict: on `refs/heads/main`, with
   #                            base_sha == head_sha == the run's commit X ==
   #                            the select checkout, pr_number empty, and the
@@ -820,3 +822,45 @@ jobs:
           path: ${{ runner.temp }}/ci-evidence/ci-evidence.json
           if-no-files-found: ignore
           retention-days: 7
+
+      # ── full bootstrap: the E-only receipt a release may reuse from ──────────
+      #
+      # Only on the `full-bootstrap` dispatch, only after the judgement above has
+      # PASSED (no status function, so a red gate writes nothing), and NEVER a
+      # proof: the producer steps above do not run in this mode, and this file
+      # names no `relayium-ci-evidence-*` artifact. It records what nothing in
+      # GitHub's API can show afterwards — the dispatch inputs — beside the run's
+      # own identity and the name of the signed artifact the `macos` lane
+      # uploaded, so `scripts/release/macos-bootstrap.mjs` can tell this mode
+      # from a `pull-request` dispatch on `main` that ran the same lanes. The
+      # reader pins these two steps byte for byte, requires the upload inside
+      # THIS job's original execution, and judges every lane again itself;
+      # docs/MACOS-RELEASE-POLICY.md has the rules. Fourteen days, like the
+      # signed artifact it names.
+      - name: Record the full-bootstrap signed-build receipt
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'full-bootstrap'
+        env:
+          RECEIPT_MODE: ${{ inputs.mode }}
+          RECEIPT_BASE: ${{ inputs.base_sha }}
+          RECEIPT_HEAD: ${{ inputs.head_sha }}
+          RECEIPT_SIGNED_ARTIFACT: ${{ needs.macos.outputs.signed_artifact }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/full-bootstrap"
+          jq -n --arg mode "$RECEIPT_MODE" --arg base "$RECEIPT_BASE" --arg head "$RECEIPT_HEAD" \
+            --arg sha "$GITHUB_SHA" --arg ref "$GITHUB_REF" --arg repositoryId "$GITHUB_REPOSITORY_ID" \
+            --arg runId "$GITHUB_RUN_ID" --arg runAttempt "$GITHUB_RUN_ATTEMPT" \
+            --arg workflowRef "$GITHUB_WORKFLOW_REF" --arg workflowSha "$GITHUB_WORKFLOW_SHA" \
+            --arg signedArtifact "$RECEIPT_SIGNED_ARTIFACT" \
+            '{schema:"relayium-macos-full-bootstrap-receipt/v1",mode:$mode,base:$base,head:$head,sha:$sha,ref:$ref,
+              repositoryId:$repositoryId,runId:$runId,runAttempt:$runAttempt,workflowRef:$workflowRef,
+              workflowSha:$workflowSha,signedArtifact:$signedArtifact}' \
+            > "$RUNNER_TEMP/full-bootstrap/full-bootstrap-receipt.json"
+      - name: Keep the full-bootstrap signed-build receipt
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'full-bootstrap'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-full-bootstrap-receipt-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/full-bootstrap/full-bootstrap-receipt.json
+          if-no-files-found: error
+          retention-days: 14

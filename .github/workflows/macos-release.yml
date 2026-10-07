@@ -60,6 +60,19 @@ on:
         required: true
         default: false
         type: boolean
+      # Who performs the two writes after the frozen candidate exists: the
+      # fast-forward of main and the immutable release. `operator` (default)
+      # pushes only the unique candidate branch, dispatches its frozen gate,
+      # emits a handoff record and stops — HANDED OFF / NOT PUBLISHED.
+      # `workflow` keeps the automatic delivery below with all its gates.
+      metadata_delivery:
+        description: 'Metadata delivery: operator (hand off a verified candidate, publish nothing) or workflow (push main and create the release here)'
+        required: true
+        default: operator
+        type: choice
+        options:
+          - operator
+          - workflow
       # Where the signed DMG comes from. `auto` notarizes the package an
       # ordinary push run of `macos.yml` already built and fully gated for THIS
       # exact commit when `scripts/release/macos-evidence.mjs` can prove it, and
@@ -125,7 +138,13 @@ jobs:
       source: ${{ steps.select.outputs.source }}
       reuse_evidence: ${{ steps.select.outputs.evidence }}
     steps:
+      # Depth 2 and no more: the release commit AND its first parent, which is
+      # the base a certified main witness's source proof derives its scope from
+      # (`git diff-tree base sha`). A depth-1 checkout lacks that object, so a
+      # certified producer would read as unavailable and `auto` would rebuild.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 2
       - name: Fail fast on the publication contract
         if: inputs.publish_release
         env:
@@ -138,6 +157,23 @@ jobs:
             --release-version "$RELEASE_VERSION" --notarize "$NOTARIZE")
           [ "$verdict" = publish-preflight-ok ] || {
             echo "::error::the publication preflight returned no verdict"; exit 1; }
+      # Compares the source commit's and main's `.github/workflows` trees from
+      # authentic API reads. A mismatch is a documented condition under which a
+      # GITHUB_TOKEN write may be refused; workflow-mode delivery refuses it
+      # here, before the paid build, and operator mode reports it. A match does
+      # NOT prove this token may push or create a release.
+      - name: Compare the workflows directory and the delivery mode
+        if: inputs.publish_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DELIVERY: ${{ inputs.metadata_delivery }}
+        run: |
+          set -euo pipefail
+          verdict=$(node scripts/release/macos-handoff.mjs workflows-preflight --mode "$DELIVERY")
+          case "$verdict" in
+            "workflows-preflight-ok match"|"workflows-preflight-ok mismatch") ;;
+            *) echo "::error::the workflows preflight returned no verdict"; exit 1 ;;
+          esac
       - name: Select the signed-build source
         id: select
         env:
@@ -300,7 +336,11 @@ jobs:
               echo "::error::the preflight chose no signed-build source (${SOURCE:-empty})"
               exit 1 ;;
           esac
+      # Depth 2, as in the preflight: the readback re-proves the same certified
+      # source chain, which needs the release commit's first parent.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 2
       - name: Recheck complete macOS release readiness
         run: apps/mac/scripts/test-release-readiness.sh
       # The artifact NAME the build actually used, carried across the file
@@ -644,6 +684,12 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+      - name: Refuse an unknown metadata delivery mode
+        env:
+          DELIVERY: ${{ inputs.metadata_delivery }}
+        run: |
+          case "$DELIVERY" in operator|workflow) ;; *)
+            echo "::error::metadata_delivery '$DELIVERY' is neither operator nor workflow"; exit 1 ;; esac
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: relayium-macos-${{ github.sha }}-${{ inputs.release_version || 'ci' }}
@@ -890,7 +936,65 @@ jobs:
       # Not forced. If main moved between validation and here the push is
       # rejected, and the correct response is another run against the new main —
       # not overwriting whatever landed in between.
+      # Operator delivery (the default): push only the unique candidate branch,
+      # dispatch its frozen gate and identify that exact run, then write an
+      # immutable handoff record and STOP. It does not wait for the gate, does
+      # not touch main and does not create a release; the operator does both
+      # with existing authority after `macos-handoff.mjs verify`. The record
+      # (v2) freezes the signed-build chain this run already consumed — its own
+      # build, or the reuse decision the preflight uploaded — and never makes a
+      # new selection; `fetch-depth: 0` gives `emit` the source commit and its
+      # parent for a certified chain's explicit Git reads.
+      - name: Hand off the frozen candidate (no publication)
+        if: inputs.metadata_delivery == 'operator'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE: ${{ steps.freeze.outputs.candidate }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          tag="macos-v${RELEASE_VERSION}"
+          candidate_branch="release-candidate/$tag-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          record="$RUNNER_TEMP/handoff/handoff.json"
+          mkdir -p "$RUNNER_TEMP/handoff"
+          if [ -z "$CANDIDATE" ]; then
+            node scripts/release/macos-handoff.mjs emit --candidate - --branch - --since - \
+              --artifact-dir "$RUNNER_TEMP/release" --record "$record" --summary "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          base=$(git rev-parse "$CANDIDATE^")
+          [ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$base" ] || {
+            echo "::error::main moved past $base; rerun against the new main"; exit 1; }
+          git push origin "$CANDIDATE:refs/heads/$candidate_branch"
+          dispatched_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run merge-gate.yml \
+            --ref "$candidate_branch" \
+            -f mode=frozen-release-metadata \
+            -f "base_sha=$base" \
+            -f "head_sha=$CANDIDATE"
+          # Identify the run only (bounded); its result is the operator's to read.
+          for _ in $(seq 1 24); do
+            status=0
+            node scripts/release/macos-evidence.mjs gate-run --action find \
+              --branch "$candidate_branch" --head "$CANDIDATE" --since "$dispatched_at" >/dev/null || status=$?
+            [ "$status" = 0 ] && break
+            [ "$status" = 3 ] || { echo "::error::could not identify the dispatched merge-gate run"; exit 1; }
+            sleep 5
+          done
+          [ "$status" = 0 ] || { echo "::error::merge-gate was not created for $CANDIDATE"; exit 1; }
+          node scripts/release/macos-handoff.mjs emit --candidate "$CANDIDATE" \
+            --branch "$candidate_branch" --since "$dispatched_at" \
+            --artifact-dir "$RUNNER_TEMP/release" --record "$record" --summary "$GITHUB_STEP_SUMMARY"
+      - name: Upload the handoff record
+        if: inputs.metadata_delivery == 'operator'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-handoff-${{ github.sha }}-${{ inputs.release_version }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/handoff/handoff.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Deliver the frozen candidate to main
+        if: inputs.metadata_delivery == 'workflow'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CANDIDATE: ${{ steps.freeze.outputs.candidate }}
@@ -967,6 +1071,7 @@ jobs:
       # The public release is last. No immutable public object is created until
       # the checked metadata commit is reachable from protected main.
       - name: Publish immutable GitHub Release
+        if: inputs.metadata_delivery == 'workflow'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ inputs.release_version }}

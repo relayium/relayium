@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """One round's plan for an A12 CLI interop cell, and the CLI's staged sources.
 
-    cli-matrix-plan.py web     RUN_ROOT ROUND CODE_ROLE VERIFY ENDING  > plan.json
+    cli-matrix-plan.py web     RUN_ROOT ROUND CODE_ROLE VERIFY ENDING \
+                               IDS_CSV FIRST_SEQ END_SEQ PLANNED_ROLE  > plan.json
     cli-matrix-plan.py android RUN_ROOT ROUND CODE_ROLE CANCEL [CODE]  > plan.json
+    cli-matrix-plan.py android RUN_ROOT ROUND CODE_ROLE CANCEL CODE \
+                               CLI_ID ANDROID_ID PLANNED_ROLE   > plan.json
     cli-matrix-plan.py mac     RUN_ROOT ROUND CODE_ROLE                > plan.json
+    cli-matrix-plan.py web-budget CODE_ROLE...                         > waits
 
 Writes the plan to stdout and stages every file the CLI will `/send` under
 RUN_ROOT/stage-ROUND (created fresh; it must not exist). The receive
@@ -25,12 +29,148 @@ The body sizes are chosen, not arbitrary:
     holds that batch's first real write (nothing durable, nothing
     acknowledged), and the CLI therefore cannot have sent its last byte when
     Android cancels — the cancel is of an ACTIVE transfer by construction.
+
+The Android form with CLI_ID ANDROID_ID PLANNED_ROLE is the deterministic
+schedule `cli-android-acceptance.sh` runs: the ids the loopback acceptance
+server will assign (CLI first, then Android) and the link role they imply for
+the CLI. The plan carries them as `identity`; the shorter forms write an
+explicit `"identity": null` (no schedule, any role), so a plan never leaves
+the question unanswered.
+
+The web form is ONLY deterministic (`cli-web-acceptance.sh`): IDS_CSV is the
+run's whole twelve-id schedule and FIRST_SEQ..END_SEQ are the accepted
+websockets this round owns, in the order the driver opens them. A CLI-minted
+round owns two (the CLI, then the page on `/cross-network#c=CODE`); a
+page-minted round owns four, because the page opens a LAN-room socket on `/`,
+another on `/cross-network`, and only then rebinds to the code room it mints
+(App.svelte's unconditional mount socket, then `switchRoom`), and the CLI
+joins last. The plan's `identity` names every one of them, with the role the
+CLI and code-room ids imply. A schedule that cannot be one — a malformed or
+repeated id, a range that is not this code role's socket count, ids that
+imply another role — is refused before anything is staged.
+
+The web-budget form is the web lane's pacing, from the same socket table:
+given every round's code role, in run order, it prints one word per round —
+`go` or `wait` — saying whether `cli-web-acceptance.sh` must wait out the
+server's per-IP budget before that round. Nothing is staged. See
+`web_budget` for the accounting; a round that could not fit even an empty
+window is refused (exit 2), never scheduled.
 """
 import json
 import os
+import re
 import sys
 
+ID16 = re.compile(r"[0-9a-f]{16}")
+ROLES = ("initiator", "responder")
+
+
+def link_role(self_id, peer_id):
+    """`linkwire.LinkRole` (server/internal/linkwire/signal.go): the smaller id
+    initiates. The CLI prints the role its session derived from exactly this."""
+    return "initiator" if self_id < peer_id else "responder"
+
+
+def android_identity(cli_id, android_id, planned_role):
+    """The round's planned identities, refused here if they cannot be a
+    schedule at all — the oracle judges them again against what happened."""
+    for what, value in (("CLI", cli_id), ("Android", android_id)):
+        if not ID16.fullmatch(value):
+            raise ValueError("the planned %s id %r is not 16 lowercase hex characters" % (what, value))
+    if cli_id == android_id:
+        raise ValueError("the CLI and Android were planned the same id %s" % cli_id)
+    if planned_role not in ROLES:
+        raise ValueError("the planned role %r is neither initiator nor responder" % planned_role)
+    if link_role(cli_id, android_id) != planned_role:
+        raise ValueError("ids %s/%s make the CLI %s, not the planned %s"
+                         % (cli_id, android_id, link_role(cli_id, android_id), planned_role))
+    return {"expectedCliId": cli_id, "expectedAndroidId": android_id, "plannedRole": planned_role}
+
 FLOW_BEYOND = 12 * 1024 * 1024 + 4096
+
+# The CLI ↔ Web lane's schedule length, and the sockets each code role's round
+# opens, in order: the first actor's, then the second's.
+WEB_SCHEDULE_LEN = 12
+WEB_SOCKETS = {
+    "cli": (("cli", "code-room"), ("web", "code-room")),
+    "web": (("web", "landing"), ("web", "cross-network"), ("web", "code-room"), ("cli", "code-room")),
+}
+SEQ = re.compile(r"[1-9][0-9]?")
+
+# The most sockets one 60-second window may carry from the run's one loopback
+# address. Every socket a round opens costs one, LAN sockets included: each is
+# its own `/api/ice` request (the page fetches one per room it joins, the CLI
+# one per link), and `/api/ice`'s production request cap — 5/min/IP
+# (`server/main.go` iceLimiter) — counts code-less LAN requests too. The /ws
+# join cap (`wsJoinPerIPPerMinute`, also 5) counts only the code-bearing
+# joins, two per round, so a window within this budget is within both. The
+# owning tests hold this figure to the server's own constants.
+WEB_JOIN_BUDGET = 5
+
+
+def web_budget(code_roles):
+    """One `go`/`wait` per round, in order, for the shell's pacing.
+
+    Windows are cumulative: every socket opened since the last wait is
+    assumed still inside the server's 60-second window (the shell waits 65 s,
+    after the previous round's clients are all gone, so a wait empties it and
+    nothing short of one does). A round joins the current window when the
+    window plus the round's declared socket count stays within the budget;
+    otherwise the shell waits first and the round opens a fresh window. A
+    round whose sockets alone exceed the budget fits no window and is refused.
+    Returns (decisions, windows), each window the list of 1-based rounds it
+    carries and its socket total."""
+    if not code_roles:
+        raise ValueError("no rounds to pace")
+    decisions, windows = [], []
+    for i, role in enumerate(code_roles, start=1):
+        if role not in WEB_SOCKETS:
+            raise ValueError("round %d's code role %r is neither cli nor web" % (i, role[:40]))
+        cost = len(WEB_SOCKETS[role])
+        if cost > WEB_JOIN_BUDGET:
+            raise ValueError("round %d opens %d sockets, more than the %d one window may carry"
+                             % (i, cost, WEB_JOIN_BUDGET))
+        if windows and windows[-1][1] + cost <= WEB_JOIN_BUDGET:
+            decisions.append("go")
+            windows[-1] = (windows[-1][0] + [i], windows[-1][1] + cost)
+        else:
+            # The first round opens the first window on an untouched budget.
+            decisions.append("wait" if windows else "go")
+            windows.append(([i], cost))
+    return decisions, windows
+
+
+def web_identity(code_role, ids_csv, first_seq, end_seq, planned_role):
+    """One CLI ↔ Web round's planned sockets, refused here if they cannot be a
+    schedule at all — the oracle judges them again against what happened."""
+    if code_role not in WEB_SOCKETS:
+        raise ValueError("the code role %r is neither cli nor web" % (code_role,))
+    ids = ids_csv.split(",")
+    if len(ids) != WEB_SCHEDULE_LEN:
+        raise ValueError("the schedule has %d ids, not %d" % (len(ids), WEB_SCHEDULE_LEN))
+    for value in ids:
+        if not ID16.fullmatch(value):
+            raise ValueError("the schedule id %r is not 16 lowercase hex characters" % (value[:40],))
+    if len(set(ids)) != len(ids):
+        raise ValueError("the schedule repeats an id; two sockets would carry the same id")
+    for what, value in (("first", first_seq), ("end", end_seq)):
+        if not SEQ.fullmatch(value) or int(value) > WEB_SCHEDULE_LEN:
+            raise ValueError("the %s sequence %r is not within the %d-id schedule" % (what, value[:40], WEB_SCHEDULE_LEN))
+    shape = WEB_SOCKETS[code_role]
+    first, end = int(first_seq), int(end_seq)
+    if end - first + 1 != len(shape):
+        raise ValueError("sockets %d..%d are not the %d a %s-minted round opens" % (first, end, len(shape), code_role))
+    sockets = [{"seq": first + i, "id": ids[first + i - 1], "actor": actor, "stage": stage}
+               for i, (actor, stage) in enumerate(shape)]
+    cli_id = next(x["id"] for x in sockets if x["actor"] == "cli")
+    web_id = next(x["id"] for x in sockets if x["actor"] == "web" and x["stage"] == "code-room")
+    if planned_role not in ROLES:
+        raise ValueError("the planned role %r is neither initiator nor responder" % (planned_role,))
+    if link_role(cli_id, web_id) != planned_role:
+        raise ValueError("ids %s/%s make the CLI %s, not the planned %s"
+                         % (cli_id, web_id, link_role(cli_id, web_id), planned_role))
+    return {"schedule": ids, "firstSeq": first, "endSeq": end, "sockets": sockets,
+            "expectedCliId": cli_id, "expectedWebId": web_id, "plannedRole": planned_role}
 
 
 def body(size, seed):
@@ -53,7 +193,7 @@ def stage(root, rel, size, seed):
     return path
 
 
-def web_plan(run_root, rnd, code_role, verify, ending):
+def web_plan(run_root, rnd, code_role, verify, ending, planned):
     r = int(rnd)
     stage_root = os.path.join(run_root, "stage-%d" % r)
     dest = os.path.join(run_root, "dest-%d" % r)
@@ -105,6 +245,9 @@ def web_plan(run_root, rnd, code_role, verify, ending):
         "codeRole": code_role,
         "verify": verify,
         "ending": ending,
+        # Every socket this round opens, the ids the server will assign them
+        # and the role they imply for the CLI: always present, never defaulted.
+        "identity": planned,
         "dest": dest,
         "stage": stage_root,
         # Whitespace-significant and non-ASCII on purpose: anything that trims,
@@ -123,7 +266,7 @@ def web_plan(run_root, rnd, code_role, verify, ending):
     }
 
 
-def android_plan(run_root, rnd, code_role, cancel, code=""):
+def android_plan(run_root, rnd, code_role, cancel, code="", identity=None):
     """The CLI's side of `InteropAcceptanceTest`'s in-band protocol.
 
     The Android half's own payloads are fixed by its instrumentation arguments
@@ -160,6 +303,9 @@ def android_plan(run_root, rnd, code_role, cancel, code=""):
         # instrumentation and the oracle judges by THIS field, never by the
         # cancel mode alone. `None` is an explicit "ungated" round.
         "receiveGate": "first-write" if cancel == "receive" else None,
+        # Who the round plans the CLI to be, or an explicit `None` (no
+        # schedule): always present, never defaulted by the oracle.
+        "identity": identity,
         "first": [
             cli_entry("cli-big-%d.bin" % r, FLOW_BEYOND if cancel == "receive" else 199_000, r),
             cli_entry("cli-zero-%d.bin" % r, 0, 0),
@@ -228,11 +374,38 @@ def mac_plan(run_root, rnd, code_role):
 
 
 def main(argv):
-    if len(argv) == 7 and argv[1] == "web":
-        _, _, run_root, rnd, code_role, verify, ending = argv
-        plan = web_plan(run_root, rnd, code_role, verify, ending)
+    if len(argv) >= 2 and argv[1] == "web-budget":
+        try:
+            decisions, windows = web_budget(argv[2:])
+        except ValueError as err:
+            print("cli-matrix-plan.py: %s" % err, file=sys.stderr)
+            return 2
+        print(" ".join(decisions))
+        print("-- join-budget windows (at most %d sockets each): %s; %d wait(s)"
+              % (WEB_JOIN_BUDGET, ", ".join("rounds %s = %d" % (",".join(map(str, r)), n) for r, n in windows),
+                 decisions.count("wait")), file=sys.stderr)
+        return 0
+    if len(argv) == 11 and argv[1] == "web":
+        _, _, run_root, rnd, code_role, verify, ending, ids_csv, first_seq, end_seq, planned_role = argv
+        if verify not in ("on", "default") or ending not in ("quit", "interrupt"):
+            print("cli-matrix-plan.py: verify %r / ending %r is not on|default / quit|interrupt" % (verify, ending),
+                  file=sys.stderr)
+            return 2
+        try:
+            identity = web_identity(code_role, ids_csv, first_seq, end_seq, planned_role)
+        except ValueError as err:
+            print("cli-matrix-plan.py: %s" % err, file=sys.stderr)
+            return 2
+        plan = web_plan(run_root, rnd, code_role, verify, ending, identity)
     elif len(argv) in (6, 7) and argv[1] == "android":
         plan = android_plan(*argv[2:])
+    elif len(argv) == 10 and argv[1] == "android":
+        try:
+            identity = android_identity(*argv[7:10])
+        except ValueError as err:
+            print("cli-matrix-plan.py: %s" % err, file=sys.stderr)
+            return 2
+        plan = android_plan(*argv[2:7], identity=identity)
     elif len(argv) == 5 and argv[1] == "mac":
         plan = mac_plan(*argv[2:])
     else:
