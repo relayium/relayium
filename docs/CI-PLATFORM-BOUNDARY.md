@@ -1488,17 +1488,28 @@ strict decoding and provenance formats to a weights file; the renewal file's
 provenance is the PR #156 run 36873812806, attempt 1.
 
 `race-account` plans its eight shards weighted over
-`scripts/go-race-timings-account.json`: the corpus of hosted run 36893745143
-attempt 1 at `7c47921b9` (all eight account shards SUCCESS, every archive
-checked against its API digest), 2633 tests, 7194.45 s summed, with one
-legitimate SKIP (`TestUploadQuotaCrashChild`, the child process the SIGKILL
-test re-executes, measured at 0 s and planned at the 1 ms floor). In that run
-FNV's shards took 635–1116 s of test time; the weighted plan for the same list
-is 899.2–900.4 s per shard. That is a **planned estimate**: the gain is
-claimed only once a hosted run under the weighted plan measures it. The
-package and `^Test` list stay the helper's defaults, so the compiled list
-remains authoritative: a test added since plans at the largest measured weight
-(124.26 s) and a measured test since deleted is ignored. The policy test pins
+`scripts/go-race-timings-account.json`: the corpus of the full-bootstrap
+hosted run 37421626823 attempt 1 at `e4b538f18` (all eight account shards
+SUCCESS, each of the eight archives' SHA-256 checked against its API digest),
+2652 tests — 2651 PASS and one legitimate SKIP (`TestUploadQuotaCrashChild`,
+the child process the SIGKILL test re-executes, measured at 0 s and planned at
+the 1 ms floor) — with raw measured weights summing to 6392.31 s and a
+largest single weight of 124.87 s. Every weight is that run's own recorded
+duration, written by the unchanged `go-race-timings.go corpus`; nothing is
+blended, normalized or imputed. In that same run, still planned by the
+previous profile (run 36893745143 at `7c47921b9`, 2633 tests), the eight
+shards took 486–998 s of test time, with per-run scaling that differs from
+the earlier corpus. The refreshed plan for the 2652-test list is
+798.839–799.730 s per shard. That is a **planned estimate**, a hypothesis:
+replaying recorded durations under the new assignment moves the slowest shard
+from 998.21 s to 799.73 s on this run and from 1004.27 s to 846.36 s on the
+held-out earlier corpus, but a replay cannot observe runner or test-order
+effects, so no benchmark gain is guaranteed and none is claimed until a hosted
+run under this plan measures it. (Historically, FNV's shards took 635–1116 s
+in run 36893745143, an older run under the older assignment.) The package and
+`^Test` list stay the helper's defaults, so the compiled list remains
+authoritative: a test added since plans at the largest measured weight
+(124.87 s) and a measured test since deleted is ignored. The policy test pins
 the profile by SHA-256 and its provenance field by field, so a refreshed
 profile is a reviewed edit, and refuses the renewal profile, a narrowed
 pattern or a dropped `-weights` on `race-account`.
