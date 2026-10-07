@@ -367,7 +367,9 @@ export interface RelayRenewal {
 }
 
 export function createRelayRenewal(deps: RelayRenewalDeps): RelayRenewal {
-  const setTimer = deps.setTimer ?? setTimeout;
+  // Typed as the seam, not inferred: @types/node 26 no longer makes the global
+  // overload set reduce into this union, so a call would yield `number | Timeout`.
+  const setTimer: NonNullable<RelayRenewalDeps['setTimer']> = deps.setTimer ?? setTimeout;
   const clearTimer = deps.clearTimer ?? clearTimeout;
   const randomBytes = deps.randomBytes
     ?? ((length: number) => crypto.getRandomValues(new Uint8Array(length)));

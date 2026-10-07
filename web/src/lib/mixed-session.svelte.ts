@@ -192,7 +192,9 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
   const supports = deps.supportsLink ?? peerSupportsLink;
   const now = deps.now ?? Date.now;
   const idleMs = deps.idleMs ?? MIXED_LINK_IDLE_MS;
-  const setTimer = deps.setTimer ?? setTimeout;
+  // Typed as the seam, not inferred: @types/node 26 no longer makes the global
+  // overload set reduce into this union, so a call would yield `number | Timeout`.
+  const setTimer: NonNullable<MixedSessionDeps['setTimer']> = deps.setTimer ?? setTimeout;
   const clearTimer = deps.clearTimer ?? clearTimeout;
 
   let manager!: PeerLinkManager;
