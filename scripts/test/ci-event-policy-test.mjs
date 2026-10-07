@@ -454,16 +454,20 @@ const RENEW_WEIGHTS = "scripts/go-race-timings-renewal.json";
 const TIMINGS_TOOL = "scripts/go-race-timings.go";
 /**
  * The account lane's measured profile, pinned to the exact corpus root and an
- * independent Codex review accepted: run 36893745143 attempt 1 at 7c47921b9,
- * all eight account shard archives verified against their API digests, 2633
- * tests. Replacing it needs a new accepted corpus and a deliberate edit here.
+ * independent review accepted: run 37421626823 attempt 1 at e4b538f18, all
+ * eight account shard archives verified against their API digests, 2652
+ * tests summing to 6392.31 s. The previous corpus (run 36893745143 at
+ * 7c47921b9) is refused by digest and provenance. Replacing it needs a new
+ * accepted corpus and a deliberate edit here.
  */
 const ACCOUNT_WEIGHTS = "scripts/go-race-timings-account.json";
-const ACCOUNT_WEIGHTS_SHA256 = "e9d0d8b464b095188f602d7340f144be86c8f651f8e01ab93cb2d2c54d0f8abf";
+const ACCOUNT_WEIGHTS_SHA256 = "0197b9a6106066538c8dec3d1f0507b5e78417ce951e97676ff1c22c6efc9c05";
 const ACCOUNT_WEIGHTS_PROVENANCE = {
-  kind: "go-test-json-corpus", sourceSHA: "7c47921b94b9120d528badc138d34fa0c8a6f1e9",
-  toolchain: "go version go1.26.6 linux/amd64", runID: 36893745143, runAttempt: 1, race: true, count: 1, complete: true,
+  kind: "go-test-json-corpus", sourceSHA: "e4b538f1888be95d9e9cf3bb131578fad29e6bb7",
+  toolchain: "go version go1.26.6 linux/amd64", runID: 37421626823, runAttempt: 1, race: true, count: 1, complete: true,
 };
+const ACCOUNT_WEIGHTS_TESTS = 2652;
+const ACCOUNT_WEIGHTS_SUM_SECONDS = 6392.31;
 
 const failures = [];
 function check(ok, message) {
@@ -2722,6 +2726,14 @@ if (go) {
       out.push(`${ACCOUNT_WEIGHTS}: want at least 1000 unique test names, each with a finite weight in [0, 21600] s; `
         + `got ${tests.length} entries, ${names.size} unique.`);
     }
+    if (tests.length !== ACCOUNT_WEIGHTS_TESTS || names.size !== ACCOUNT_WEIGHTS_TESTS) {
+      out.push(`${ACCOUNT_WEIGHTS}: want exactly the ${ACCOUNT_WEIGHTS_TESTS} measured tests; `
+        + `got ${tests.length} entries, ${names.size} unique.`);
+    }
+    const sum = Math.round(tests.reduce((s, t) => s + (Number.isFinite(t?.seconds) ? t.seconds : 0), 0) * 100) / 100;
+    if (sum !== ACCOUNT_WEIGHTS_SUM_SECONDS) {
+      out.push(`${ACCOUNT_WEIGHTS}: measured weights sum to ${sum} s, want ${ACCOUNT_WEIGHTS_SUM_SECONDS}.`);
+    }
     return out;
   };
   let accountRaw = "";
@@ -2735,16 +2747,26 @@ if (go) {
     // Controls: each change to the profile is reported, for its own reason.
     const ACCOUNT_PROFILE_CONTROLS = [
       { name: "one weight edited", expect: /sha256 .* want the accepted/,
-        raw: accountRaw.replace(/"seconds": 124\.26/, '"seconds": 1.26') },
-      { name: "a different run", expect: /provenance\.runID is 1, want 36893745143/,
-        raw: accountRaw.replace('"runID": 36893745143', '"runID": 1') },
+        raw: accountRaw.replace(/"seconds": 124\.87/, '"seconds": 1.87') },
+      { name: "one weight edited, sum", expect: /measured weights sum to 6269\.31 s, want 6392\.31/,
+        raw: accountRaw.replace(/"seconds": 124\.87/, '"seconds": 1.87') },
+      { name: "a different run", expect: /provenance\.runID is 1, want 37421626823/,
+        raw: accountRaw.replace('"runID": 37421626823', '"runID": 1') },
+      { name: "the previous accepted corpus's run", expect: /provenance\.runID is 36893745143, want 37421626823/,
+        raw: accountRaw.replace('"runID": 37421626823', '"runID": 36893745143') },
       { name: "another attempt", expect: /provenance\.runAttempt is 2/, raw: accountRaw.replace('"runAttempt": 1', '"runAttempt": 2') },
-      { name: "another commit", expect: /provenance\.sourceSHA/, raw: accountRaw.replace("7c47921b94b9120d528badc138d34fa0c8a6f1e9", "0".repeat(40)) },
+      { name: "another commit", expect: /provenance\.sourceSHA/,
+        raw: accountRaw.replace('"sourceSHA": "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"', `"sourceSHA": "${"0".repeat(40)}"`) },
+      { name: "the previous accepted corpus's commit", expect: /provenance\.sourceSHA is "7c47921b94b9120d528badc138d34fa0c8a6f1e9"/,
+        raw: accountRaw.replace('"sourceSHA": "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"',
+          '"sourceSHA": "7c47921b94b9120d528badc138d34fa0c8a6f1e9"') },
       { name: "measured without -race", expect: /provenance\.race is false/, raw: accountRaw.replace('"race": true', '"race": false') },
       { name: "the renewal profile in its place", expect: /package \.\/account, pattern \^Test/,
         raw: readFileSync(resolve(repoRoot, RENEW_WEIGHTS), "utf8") },
       { name: "a truncated test list", expect: /want at least 1000 unique test names/,
         raw: JSON.stringify({ ...JSON.parse(accountRaw), tests: JSON.parse(accountRaw).tests.slice(0, 10) }) },
+      { name: "one measured test dropped", expect: /want exactly the 2652 measured tests; got 2651 entries/,
+        raw: JSON.stringify({ ...JSON.parse(accountRaw), tests: JSON.parse(accountRaw).tests.slice(1) }) },
       { name: "a negative weight", expect: /finite weight in \[0, 21600\]/,
         raw: JSON.stringify({ ...JSON.parse(accountRaw),
           tests: JSON.parse(accountRaw).tests.map((t, i) => (i === 0 ? { ...t, seconds: -1 } : t)) }) },
