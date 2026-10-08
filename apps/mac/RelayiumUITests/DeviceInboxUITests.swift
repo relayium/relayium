@@ -71,8 +71,11 @@ final class DeviceInboxUITests: XCTestCase {
     private func launch(_ extraArguments: [String]) {
         app.launchArguments = offlineLaunchArguments + extraArguments
         app.launch()
+        // No wait: `--relayium-ui-testing` keeps Sparkle's updater unstarted
+        // (`AppUpdates`, guarded by MacUITestIsolationTests), so no consent
+        // prompt can appear later. A restored one is already here; decline it.
         let sparkleDecline = app.buttons["Don’t Check"]
-        if sparkleDecline.waitForExistence(timeout: 2) { sparkleDecline.click() }
+        if sparkleDecline.exists { sparkleDecline.click() }
 
         // A hosted runner can restore the last deliberate closed-window state.
         // Relayium remains alive in that state by design, so process launch is

@@ -82,6 +82,14 @@ on:
     # the behaviour this entry exists to remove.
     paths:
       - 'apps/mac/**'
+      # The macOS release-readiness manifest is a release-CONTROL record, not
+      # an input: no build, package test or signed artifact reads it. The
+      # unfiltered repo-hygiene lane runs `test-release-readiness.sh
+      # --files-only` on every change, and macos-release.yml re-checks it in
+      # full, so a record-only edit needs neither Apple lane. The exclusion is
+      # this one exact file and must FOLLOW `apps/mac/**` (last match wins);
+      # anything else under apps/mac still starts this lane.
+      - '!apps/mac/release-readiness.json'
       - 'apps/RelayiumKit/**'
       - '!apps/RelayiumKit/Tests/**'
       - '.github/workflows/macos.yml'
@@ -350,33 +358,42 @@ jobs:
 
   contract:
     # macOS only when the step below can reach its release branch — the SAME
-    # three conditions as its `if`: a dispatch, a non-empty release_version,
-    # or publish_release. Everything else (every push, pull request and
-    # merge-gate call, which passes no inputs) only checks out, and spent ~7
-    # minutes queueing for a macOS runner to do it (run 36736501756: 13 s of
-    # work) while `ui-smoke` and `signed-build`, which need it, waited. Since
-    # `ui-smoke` stopped waiting for `test`, this job is the ONLY thing the UI
-    # shards wait for besides `evidence`, so its cheap runner is on their
-    # critical path.
-    # `inputs.release_version` is truthy exactly when `-n` is true; on push
-    # and pull_request `inputs` is empty, so both inputs are falsy. The
-    # step's first release-branch line refuses a non-macOS runner, so a
-    # widened `if` that this expression does not follow fails rather than
-    # running `xcodebuild` nowhere. ci-event-policy-test.mjs (6t) runs the step
-    # against both runners for each event/input case and holds the two equal.
+    # three conditions as its `if`: a release INTENT, i.e. a non-empty
+    # release_version, notarize, or publish_release. Those three inputs are
+    # declared only under `workflow_call`, and only `macos-release.yml` passes
+    # any of them. Everything else — every push, pull request and merge-gate
+    # call (which passes no inputs), INCLUDING a merge-gate call whose caller
+    # was dispatched — only checks out, and spent ~7 minutes queueing for a
+    # macOS runner to do it (run 36736501756: 13 s of work) while `ui-smoke`
+    # and `signed-build`, which need it, waited. The event used to be a fourth
+    # condition; it was the gap: under `workflow_call` `github.event_name` is
+    # the CALLER's event, so a dispatched merge gate (frozen release-metadata,
+    # internal full candidate, full bootstrap) put this checkout on macos-15
+    # with no release input at all (run 37175317336: 308 s queued, 9 s of
+    # work). The event is no longer read; a release is an input, not an event.
+    # `notarize` alone (no version, no publish) is release intent too, so it
+    # keeps the Apple runner conservatively, although the branch then checks
+    # nothing further: that combination never required a new version and still
+    # does not.
+    # `inputs.release_version` is truthy exactly when `-n` is true, and the two
+    # booleans exactly when they render `true`; on push and pull_request
+    # `inputs` is empty, so all three are falsy. The step's first
+    # release-branch line refuses a non-macOS runner, so a widened `if` that
+    # this expression does not follow fails rather than running `xcodebuild`
+    # nowhere. ci-event-policy-test.mjs (6t) runs the step against both
+    # runners for every event and every input combination and holds the two
+    # equal.
     # ALWAYS FRESH (the PR→main evidence registry marks it `fresh`): never
     # witnessed and never certified, so a main push always runs exactly these
-    # steps on exactly this runner choice. The runner is event-dependent — a
-    # dispatched gate (frozen release-metadata or internal full candidate) puts
-    # it on macos-15, a pull request on ubuntu-latest — which no single
-    # toolchain certificate can describe; the verifier instead requires the
-    # check to have SUCCEEDED in the source run, on the runner the source
-    # run's own verified event selects (`dispatchRunner`). It keeps
-    # `needs: evidence` and `!cancelled()` so its place in the graph and its
-    # behaviour when the evidence job fails are unchanged.
+    # steps on exactly this runner choice. Every source the evidence verifier
+    # reads — a pull request and both strict merge-gate dispatch modes — passes
+    # no release input, so the registry names one runner, ubuntu-latest, and
+    # the verifier requires the check to have SUCCEEDED there in the source
+    # run. It keeps `needs: evidence` and `!cancelled()` so its place in the
+    # graph and its behaviour when the evidence job fails are unchanged.
     needs: evidence
     if: ${{ !cancelled() }}
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' || inputs.release_version || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}
+    runs-on: ${{ (inputs.release_version || inputs.notarize || inputs.publish_release) && 'macos-15' || 'ubuntu-latest' }}
     # Finite, and chosen rather than inherited. Outside the release branch
     # the job is a checkout; the 32 successful macOS runs in this workflow's
     # recent history took 61s at worst and 24s on average. Only a release run
@@ -394,18 +411,19 @@ jobs:
           PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -euo pipefail
-          # Widened with the split. The condition used to be
-          # `workflow_dispatch` alone, because that was the only event that
-          # could carry these inputs; now they arrive through `workflow_call`
-          # from `macos-release.yml`, where `GITHUB_EVENT_NAME` is the CALLER's
-          # event and the dispatch test alone would skip the whole contract on
-          # exactly the runs it exists for. The dispatch test is kept rather
-          # than replaced — a direct dispatch of a caller is still a release
-          # intent — and either input naming a release now reaches the same
-          # checks. Nothing inside is relaxed: this branch only becomes
-          # reachable more often.
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] \
-            || [ -n "$RELEASE_VERSION" ] || [ "$PUBLISH_RELEASE" = true ]; then
+          # The release branch is reached by release INTENT alone: a
+          # non-empty release_version, notarize, or publish_release — the
+          # three inputs `macos-release.yml` passes through `workflow_call`.
+          # It used to be reached by `workflow_dispatch` too, but under
+          # `workflow_call` that is the CALLER's event, and the merge gate is
+          # dispatched with no release input at all; the event named no
+          # release, only a costlier runner. Every check inside is unchanged:
+          # the version format, notarize=true for a version, the
+          # MARKETING_VERSION match, and publication only with a version, from
+          # main, after the approved readiness check. `notarize` alone reaches
+          # the branch and checks nothing further, exactly as before.
+          if [ -n "$RELEASE_VERSION" ] || [ "$NOTARIZE" = true ] \
+            || [ "$PUBLISH_RELEASE" = true ]; then
             [ "$RUNNER_OS" = macOS ] || { echo "::error::release contract reached on $RUNNER_OS; runs-on must select macos-15 for it"; exit 1; }
             if [ -n "$RELEASE_VERSION" ]; then
               printf '%s' "$RELEASE_VERSION" | grep -Eq '^[0-9]+(\.[0-9]+){1,2}$' || exit 1

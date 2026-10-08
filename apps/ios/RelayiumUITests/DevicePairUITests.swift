@@ -366,13 +366,27 @@ final class DevicePairUITests: XCTestCase {
     /// rather than failed — every claim this role owns has already been made,
     /// and turning "the roster took longer than expected to notice a departure"
     /// into a red run would attribute the other side's timing to this one.
+    ///
+    /// Only a look that SAW the roster empty releases the hold. A look that
+    /// could not be taken keeps holding, and a ceiling reached while looks are
+    /// failing IS a failure: this role cannot say the peer stayed, and must not
+    /// say it left.
     private func holdRoomUntilPeerLeaves(_ run: DevicePairRun) {
         emitDevicePair(.holding, value: run.tag, for: run)
         let deadline = Date().addingTimeInterval(run.peerBudget)
+        var hold = DevicePairRoomHold()
         while Date() < deadline {
-            let (contained, named) = rosterCandidates(run, in: app)
-            if contained.isEmpty && named.isEmpty { return }
+            if hold.record(observeRoster(run, in: app)) { return }
             Thread.sleep(forTimeInterval: 2)
+        }
+        if case let .unobservable(reason) = hold.ceiling {
+            XCTFail("""
+                \(run.role) held the room for its full \(Int(run.peerBudget))s ceiling \
+                without a usable look at the roster at the end (\(reason)), so whether the \
+                peer left is unobserved rather than reported.
+                \(app.debugDescription)
+                """)
+            return
         }
         // Deliberately not a failure. Said out loud so a reader of the retained
         // log knows this run ended on a ceiling rather than on an observation.
@@ -567,25 +581,6 @@ final class DevicePairUITests: XCTestCase {
         credential and reads none.
         """
 
-    /// **Why the two FILE roles skip.** A connect-first surface chooses its
-    /// batch inside the workspace, through the system document browser, and
-    /// this harness has no way to drive that browser on a physical device. The
-    /// legacy lane staged its batch BEFORE the code existed, which is what the
-    /// old pre-connect direct-selection seam stood in for; there is no
-    /// pre-connect selection left for it to fill. The unified workspace's file
-    /// lane is still proved on hardware by the two Nearby roles, which drive the
-    /// same view over the same `link/1` through the in-workspace
-    /// `--relayium-ui-testing-link-fixture` seam (A25). These Cross-network roles
-    /// do not pass it yet, so a file crossing a RELAYED pairing room from an
-    /// iPhone is still not proved on hardware; that remains its own requirement.
-    private static let filePhaseNeedsAWorkspaceStagingSeam = """
-        The Cross-network file phase is not driveable yet: since iOS 0.4.0 the \
-        batch is chosen inside the connected workspace through the system \
-        document browser, which this harness cannot operate. Run the \
-        pair-text phase for the pairing room and the Nearby phase for the \
-        workspace's file lane. This is a recorded gap, not a pass.
-        """
-
     private func openPairingTab() -> Bool {
         openDevicePairDestination(DevicePair.directSurface, in: app)
     }
@@ -658,16 +653,108 @@ final class DevicePairUITests: XCTestCase {
         join.tap()
     }
 
-    // MARK: - Cross-network files: recorded as not driveable
+    // MARK: - Cross-network files, the minting and sending half
+    //
+    // The batch is chosen INSIDE the connected workspace, and Cross-network
+    // draws that workspace with the same `NearbyLinkWorkspaceView` the Nearby
+    // roles drive. So the same in-workspace link-fixture seam (A25) applies
+    // unchanged: the fixture is handed to the open link once, only after it
+    // `acceptsWork` — after the digits are answered — through the importer
+    // callback the system document browser would have called. The account
+    // gate, the minted code, the room, the verification, the wire and the
+    // peer's writer are all production; nothing is selected before connecting.
 
     func testPairingCodeFilesAreSentToThePhysicalPeer() throws {
-        _ = try requireDevicePairRun(role: "pair-file-generator")
-        throw XCTSkip(Self.filePhaseNeedsAWorkspaceStagingSeam)
+        let run = try requireDevicePairRun(role: "pair-file-generator")
+        app = XCUIApplication()
+        launchForDevicePair(app, verifying: true, stagingFixture: true)
+
+        guard openPairingTab() else { return }
+        requireVerificationIsOn()
+
+        guard try mintCode(run) != nil else { return }
+
+        compareAndConfirm(run, title: DevicePair.verifyTitle,
+                          confirm: DevicePair.verifyMatchesLabel)
+
+        // Ordered, minting side first, for the reason the text roles give.
+        sendMessage(run.message, composer: DevicePair.composerLabel)
+        awaitPeerMessage(run)
+
+        // Terminal only once the peer has accepted and written the batch.
+        awaitBatchState(DevicePair.batchFinishedLabel)
+
+        // NOT this device's link to end. The joiner's bytes are read off its
+        // container while its app still holds the completed batch, and only
+        // the launcher's release ends that hold; the joiner then ends the
+        // link. Waiting for that end is what keeps this device from changing
+        // the joiner's screen under the live read, without a clock.
+        awaitPeerEndsLink(run)
+        endLinkAndDismiss()
+        XCTAssertTrue(app.buttons[DevicePair.createCodeLabel]
+            .waitForExistence(timeout: DevicePair.settleBudget),
+                      "Done did not return Cross-network to its connect controls")
+        XCTAssertFalse(app.staticTexts[DevicePair.giveCodeHeading].exists,
+                       "the spent pairing code reappeared after the link ended")
     }
 
+    // MARK: - Cross-network files, the joining and receiving half
+
     func testPairingCodeFilesFromThePhysicalPeerAreReceived() throws {
-        _ = try requireDevicePairRun(role: "pair-file-joiner")
-        throw XCTSkip(Self.filePhaseNeedsAWorkspaceStagingSeam)
+        let run = try requireDevicePairRun(role: "pair-file-joiner")
+        app = XCUIApplication()
+        // The receiving half: no fixture, and the empty `Received` folder for
+        // the reason the Nearby resident gives.
+        launchForDevicePair(app, verifying: true,
+                            freshReceivedFolder: !run.keepsReceivedFolder)
+
+        guard openPairingTab() else { return }
+        requireVerificationIsOn()
+        emitDevicePair(.ready, value: run.tag, for: run)
+
+        try joinCode(run)
+
+        compareAndConfirm(run, title: DevicePair.verifyTitle,
+                          confirm: DevicePair.verifyMatchesLabel)
+
+        awaitPeerMessage(run)
+        sendMessage(run.message, composer: DevicePair.composerLabel)
+
+        let accept = app.buttons[DevicePair.acceptFilesLabel]
+        XCTAssertTrue(accept.waitForExistence(timeout: DevicePair.transferBudget), """
+            the peer's staged batch never reached this device as an offer.
+            \(app.debugDescription)
+            """)
+        scrollUntilHittable(accept, in: app)
+        accept.tap()
+
+        awaitBatchState(DevicePair.batchSavedLabel)
+        emitDevicePair(.received, value: run.tag, for: run)
+        // Held while this app still shows what it committed, exactly as the
+        // Nearby resident holds; the sender is waiting for the link end below.
+        holdForContainerRead(run, in: app, showing: DevicePair.batchSavedLabel)
+
+        endLinkAndDismiss()
+    }
+
+    /// Wait, bounded by the run's peer budget, for the OTHER device to end the
+    /// link: the workspace's exit stops offering "End connection" and offers
+    /// the peer-ended "Done". Polled against the screen; never a fixed delay.
+    private func awaitPeerEndsLink(_ run: DevicePairRun,
+                                   file: StaticString = #filePath,
+                                   line: UInt = #line) {
+        let leave = app.buttons[DevicePair.endConnectionLabel]
+        let done = app.buttons[DevicePair.doneLabel]
+        let deadline = Date().addingTimeInterval(run.peerBudget)
+        while Date() < deadline {
+            if !leave.exists && done.exists { return }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTFail("""
+            the receiving device never ended the link within \(Int(run.peerBudget))s, so \
+            this device cannot tell that its container read is over.
+            \(app.debugDescription)
+            """, file: file, line: line)
     }
 
     // MARK: - Cross-network conversation, the minting half

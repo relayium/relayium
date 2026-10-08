@@ -1,0 +1,45 @@
+{
+ "source": "GitHub API runs/37313600321/artifacts (root-r5 actual-main-witness/artifact-list.json)",
+ "artifacts": [
+  {
+   "id": 11347606491,
+   "node_id": "MDg6QXJ0aWZhY3QxMTM0NzYwNjQ5MQ==",
+   "name": "relayium-macos-signed-191d9c845aae736e731b5fd0c9db9c49f5e9ef27-ci",
+   "size_in_bytes": 21302240,
+   "url": "https://api.github.com/repos/relayium/relayium/actions/artifacts/11347606491",
+   "archive_download_url": "https://api.github.com/repos/relayium/relayium/actions/artifacts/11347606491/zip",
+   "expired": false,
+   "digest": "sha256:b42152342c051e56588fbaac9c265593e128eff7d71fe6d52ebc9551efe22437",
+   "created_at": "2026-10-05T13:10:43Z",
+   "updated_at": "2026-10-05T13:10:43Z",
+   "expires_at": "2026-10-19T13:10:40Z",
+   "workflow_run": {
+    "id": 37313600321,
+    "repository_id": 1282331342,
+    "head_repository_id": 1282331342,
+    "head_branch": "main",
+    "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27"
+   }
+  },
+  {
+   "id": 11347240348,
+   "node_id": "MDg6QXJ0aWZhY3QxMTM0NzI0MDM0OA==",
+   "name": "relayium-ci-evidence-witness-macos-attempt-1",
+   "size_in_bytes": 772,
+   "url": "https://api.github.com/repos/relayium/relayium/actions/artifacts/11347240348",
+   "archive_download_url": "https://api.github.com/repos/relayium/relayium/actions/artifacts/11347240348/zip",
+   "expired": false,
+   "digest": "sha256:e65b21b8147b963868e86e21421577051c770eb05fdf9521b6644a8a4975dc2a",
+   "created_at": "2026-10-05T13:02:31Z",
+   "updated_at": "2026-10-05T13:02:31Z",
+   "expires_at": "2026-11-04T13:02:30Z",
+   "workflow_run": {
+    "id": 37313600321,
+    "repository_id": 1282331342,
+    "head_repository_id": 1282331342,
+    "head_branch": "main",
+    "head_sha": "191d9c845aae736e731b5fd0c9db9c49f5e9ef27"
+   }
+  }
+ ]
+}

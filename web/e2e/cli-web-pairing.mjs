@@ -21,11 +21,33 @@
  * endpoint and mints with the page's own "create code" control; the CLI joins
  * with `relayium pair CODE` (the never-logged-in path).
  *
- * The LINK role (who offers) is not chosen by anyone: the hub assigns ids per
- * socket at random and the smaller id offers. This file RECORDS both sides'
- * own statement of it — the CLI's `linked with … (…, initiator|responder)` line
- * and the page's id comparison — and the shell loops until both assignments
- * have been seen under both code roles.
+ * The LINK role (who offers) follows from the two code-room ids: the smaller
+ * id offers. The run's loopback acceptance server assigns ids from a fixed
+ * schedule, one per ACCEPTED websocket in order, so the order in which the
+ * sockets are accepted decides the roles — and this file makes that order
+ * causal. The plan's `identity` lists every socket the round opens, with its
+ * sequence and id: a CLI-minted round the CLI's, then the page's; a page-
+ * minted round the page's LAN socket on `/`, its LAN socket on
+ * `/cross-network`, its code-room socket after "create code" rebinds it, then
+ * the CLI's. Each socket is opened only after the previous one passed its
+ * barrier (`confirmSocket`):
+ *
+ *   * a page socket must be welcomed, in the page's own wire record, as its
+ *     planned id, with no other socket in that document and — for the code
+ *     room the page minted — a roster of the page ALONE;
+ *   * the server's own log must show EXACTLY sequences 1..seq accepted with
+ *     their scheduled ids (`cli-web-oracle.py accepted-prefix`: 3 = a shorter
+ *     prefix, waited on; anything else ends the round at once);
+ *   * every actor started so far (the CLI process, the tab) must still be
+ *     alive when the prefix is exact — an actor that died is never handed
+ *     over.
+ *
+ * A CLI-minted round's CLI prints its code before it dials, so the minted
+ * line alone never starts the page. This file RECORDS both sides' own
+ * statement of the role — the CLI's `linked with … (…, initiator|responder)`
+ * line and the page's id comparison — and the page's wire record of every
+ * document, socket, welcome and roster; `cli-web-oracle.py` judges them all
+ * against the plan.
  *
  * ## One round, sequenced
  *
@@ -56,9 +78,11 @@
  * Nothing about the page is stubbed but the OS save dialogs (the ledger below),
  * which record what the product decrypted and wrote; they never produce bytes.
  */
-import { renameSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { appendFileSync, renameSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import {
   argFlag, argPresent, launchBrowser, newTab, ok, sleep,
   VERIFY_DEFAULT, VERIFY_ON, setWideViewport, withWatchdog,
@@ -71,17 +95,32 @@ const ORIGIN = argFlag("--origin", "");
 const CLI_BIN = argFlag("--cli", "");
 const XDG = argFlag("--xdg", "");
 const OUT = argFlag("--out", "");
-const PLAN = JSON.parse(readFileSync(argFlag("--plan", ""), "utf8"));
+const SERVER_LOG = argFlag("--server-log", "");
+/** Print-only seam: run the real socket sequence and barriers against a
+ *  scripted world (see `checkBarrier`); no browser, CLI or server. */
+const CHECK_BARRIER = argFlag("--check-barrier", "");
+const PLAN = CHECK_BARRIER ? null : JSON.parse(readFileSync(argFlag("--plan", ""), "utf8"));
 const KEEP = argPresent("--keep");
 const GLOBAL_TIMEOUT_MS = 12 * 60_000;
+const ORACLE = fileURLToPath(new URL("../../scripts/interop/cli-web-oracle.py", import.meta.url));
+const ID16 = /^[0-9a-f]{16}$/;
+const PENDING = 3;
+/** The barrier's bound on the server's accept, in polls of ACCEPT_POLL_MS
+ *  (60 s), far inside the CLI's own join wait. */
+const ACCEPT_POLLS = 240;
+const ACCEPT_POLL_MS = 250;
+const WELCOME_TIMEOUT_MS = 45_000;
 
-if (!ORIGIN || !CLI_BIN || !XDG || !OUT) {
-  console.error("usage: cli-web-pairing.mjs --origin URL --cli BIN --xdg DIR --plan FILE --out FILE");
+if (!CHECK_BARRIER && (!ORIGIN || !CLI_BIN || !XDG || !OUT || !SERVER_LOG)) {
+  console.error("usage: cli-web-pairing.mjs --origin URL --cli BIN --xdg DIR --plan FILE --out FILE --server-log FILE");
   process.exit(2);
 }
-const CODE_ROLE = PLAN.codeRole;
-if (!["cli", "web"].includes(CODE_ROLE)) throw new Error(`plan.codeRole must be cli or web, not ${CODE_ROLE}`);
-if (!["quit", "interrupt"].includes(PLAN.ending)) throw new Error(`plan.ending must be quit or interrupt`);
+const CODE_ROLE = PLAN?.codeRole;
+if (PLAN) {
+  if (!["cli", "web"].includes(CODE_ROLE)) throw new Error(`plan.codeRole must be cli or web, not ${CODE_ROLE}`);
+  if (!["quit", "interrupt"].includes(PLAN.ending)) throw new Error(`plan.ending must be quit or interrupt`);
+  if (!PLAN.identity || !Array.isArray(PLAN.identity.sockets)) throw new Error("plan.identity must schedule this round's sockets");
+}
 
 const HEAD = ".workspace-head";
 const HEAD_SAS = ".workspace-head .sas code";
@@ -93,14 +132,22 @@ const OPEN_WORKSPACE = ".open-workspace";
 
 /** Everything OBSERVED, for the oracle. Nothing in here is a verdict. */
 const observed = {
-  round: PLAN.round,
+  round: PLAN?.round,
   codeRole: CODE_ROLE,
-  verify: PLAN.verify,
-  ending: PLAN.ending,
+  verify: PLAN?.verify,
+  ending: PLAN?.ending,
   code: "",
   steps: [],
+  // One record per planned socket, in order, once its barrier passed.
+  barriers: [],
+  // Whether every client this round started was observed to exit.
+  cleanup: { cliExited: null, browserExited: null },
   web: {
     role: "", selfId: "", peerId: "", sas: "", peerName: "",
+    // The page's own websocket history: every document it loaded, every
+    // socket each opened, every welcome and roster each socket received.
+    // Read off each document BEFORE the next navigation replaces it. Judged.
+    wire: { documents: [] },
     receivedMessages: [], saves: [], sendStatuses: {}, recvStatuses: {},
     endState: "", sdp: null, errors: [],
     // The page's EARLIEST link-establishment signalling, as metadata only (see
@@ -161,7 +208,7 @@ async function ephemeralPort() {
  *  zero time. */
 const OBSERVE = `
   (() => {
-    window.__relayiumSelfId = '';
+    const wire = window.__wire = { path: location.pathname, sockets: [] };
     window.__sdp = { local: [], remote: [] };
     const EST_MAX = 64;
     const est = window.__establish = { max: EST_MAX, entries: [], omitted: 0 };
@@ -199,15 +246,24 @@ const OBSERVE = `
     };
     const Native = window.WebSocket;
     const seen = new WeakSet();
+    const token = (v) => (typeof v === 'string' ? v.slice(0, 64) : null);
     window.WebSocket = function (...args) {
       const ws = new Native(...args);
       if (!seen.has(ws)) {
         seen.add(ws);
+        // The judged record: path and room kind only (never the code), each
+        // welcome's id and each roster's ids, as the page received them.
+        let rec = null;
+        try {
+          const u = new URL(String(args[0]), location.href);
+          rec = { path: u.pathname, room: u.searchParams.has('code') ? 'code' : 'lan', welcomes: [], rosters: [] };
+        } catch { rec = { path: null, room: null, welcomes: [], rosters: [] }; }
+        wire.sockets.push(rec);
         ws.addEventListener('message', (ev) => {
           try {
             const m = JSON.parse(ev.data);
-            if (m && m.type === 'welcome' && typeof m.name === 'string') window.__relayiumSelfId = m.name;
-            if (m && m.type === 'peers' && Array.isArray(m.peers)) window.__relayiumPeers = m.peers.map((p) => p.id);
+            if (m && m.type === 'welcome') rec.welcomes.push(token(m.name));
+            if (m && m.type === 'peers') rec.rosters.push(Array.isArray(m.peers) ? m.peers.map((p) => token(p && p.id)) : null);
             try { inbound(m); } catch { /* diagnostics never throw into the page */ }
           } catch { /* not ours */ }
         });
@@ -460,6 +516,161 @@ async function awaitCardDone(tab, dir, what, timeoutMs = 120_000, { orGone = fal
   return c;
 }
 
+// ── the planned sockets and their barriers ───────────────────────────────────
+
+/** Where each planned page socket lives: the document (its stage name and
+ *  path) and its index among that document's sockets. A CLI-minted round's
+ *  page loads `/cross-network#c=CODE` once; a page-minted round's loads `/`,
+ *  then `/cross-network`, whose LAN socket "create code" rebinds. */
+const PAGE_SLOTS = {
+  cli: { "code-room": { doc: "code-link", path: "/cross-network", slot: 0 } },
+  web: {
+    landing: { doc: "landing", path: "/", slot: 0 },
+    "cross-network": { doc: "cross-network", path: "/cross-network", slot: 0 },
+    "code-room": { doc: "cross-network", path: "/cross-network", slot: 1 },
+  },
+};
+
+/**
+ * The barrier's verdict on one planned page socket, from the page's CURRENT
+ * document record (`window.__wire`): `{pending: true}` while it has not been
+ * welcomed yet (or the old document still answers), a problem string, or null.
+ * `sole`: the page minted this code room, so nobody else may be in it yet.
+ */
+function welcomeVerdict(doc, codeRole, s) {
+  const at = PAGE_SLOTS[codeRole]?.[s.stage];
+  if (!at) return `no page socket is planned at stage ${s.stage}`;
+  const where = `the page's ${s.stage} socket (seq ${s.seq})`;
+  if (!doc || doc.path !== at.path || !Array.isArray(doc.sockets)) return { pending: true };
+  const sockets = doc.sockets;
+  if (sockets.length <= at.slot || !sockets[at.slot].welcomes?.length) {
+    if (sockets.length > at.slot + 1) return `the page's ${at.doc} document opened ${sockets.length} websockets before ${where} was welcomed: an extra or reconnected socket`;
+    return { pending: true };
+  }
+  if (sockets.length !== at.slot + 1) {
+    return `the page's ${at.doc} document had opened ${sockets.length} websockets when ${where} was welcomed, not ${at.slot + 1}: an extra or reconnected socket`;
+  }
+  for (let i = 0; i <= at.slot; i++) {
+    const n = sockets[i].welcomes?.length ?? 0;
+    if (n !== 1) return `socket ${i + 1} of the page's ${at.doc} document saw ${n} welcomes, not one: a reconnect or a refused join`;
+  }
+  const sock = sockets[at.slot];
+  const room = s.stage === "code-room" ? "code" : "lan";
+  if (sock.path !== "/ws" || sock.room !== room) return `${where} is not a ${room}-room /ws socket (${sock.path}, ${sock.room})`;
+  const got = sock.welcomes[0];
+  if (typeof got !== "string" || !ID16.test(got)) return `${where} was welcomed with a malformed id ${JSON.stringify(got)}`;
+  if (got !== s.id) return `${where} was welcomed as ${got}, but the schedule planned ${s.id}`;
+  const rosters = Array.isArray(sock.rosters) ? sock.rosters : [];
+  if (room === "lan") {
+    const strangers = rosters.flatMap((r) => (Array.isArray(r) ? r : [null])).filter((id) => id !== got);
+    if (strangers.length) return `${where} listed other clients in the LAN room: ${JSON.stringify(strangers)}`;
+    return null;
+  }
+  if (codeRole === "web") {
+    // The page minted this room: before the CLI starts, it is the room's only
+    // member, and the page has SEEN that roster.
+    if (!rosters.length) return { pending: true };
+    const bad = rosters.find((r) => !(Array.isArray(r) && r.length === 1 && r[0] === got));
+    if (bad !== undefined) return `${where}'s room was not the page alone before the CLI started: roster ${JSON.stringify(bad)}`;
+  }
+  return null;
+}
+
+/** The server's accepted prefix, judged by the oracle on its own log. */
+function acceptedPrefix(log, schedule, n) {
+  const r = spawnSync("python3", ["-B", ORACLE, "accepted-prefix", log, schedule.join(","), String(n)],
+    { encoding: "utf8", timeout: 20_000 });
+  return { code: r.status, err: (r.stderr ?? "").trim() };
+}
+
+/**
+ * One planned socket's barrier; see the header. `deps` are the world's seams:
+ * `welcome(s)` resolves once the page welcomed `s` (throws its problem),
+ * `prefix(n)` is the oracle's `{code, err}`, `deadActor()` names an actor that
+ * died (or null), `sleep(ms)`. Returns the barrier record; throws otherwise.
+ */
+async function confirmSocket(s, deps) {
+  const who = `${s.actor === "cli" ? "the CLI's" : "the page's"} ${s.stage} socket (seq ${s.seq}, planned ${s.id})`;
+  if (s.actor === "web") await deps.welcome(s);
+  for (let polls = 0; ; polls++) {
+    const r = deps.prefix(s.seq);
+    if (r.code !== 0 && r.code !== PENDING) {
+      throw new Error(`${who}: the server's accepted sockets cannot become the schedule's first ${s.seq} (oracle exit ${r.code}): ${r.err}`);
+    }
+    const dead = await deps.deadActor();
+    if (dead) {
+      throw new Error(`${who}: ${dead} ${r.code === 0 ? "by the time the server had accepted it; it is not handed over" : "before the server accepted it"}`);
+    }
+    if (r.code === 0) break;
+    if (polls >= deps.polls) throw new Error(`${who}: the server did not accept it within ${polls} polls: ${r.err}`);
+    await deps.sleep(ACCEPT_POLL_MS);
+  }
+  return { seq: s.seq, actor: s.actor, stage: s.stage, status: "exact", alive: true };
+}
+
+/** Open the round's planned sockets in order, each only after the previous
+ *  one passed its barrier. `openers[actor:stage](s)` opens one socket. */
+async function openInOrder(identity, openers, deps, barriers) {
+  for (const s of identity.sockets) {
+    const open = openers[`${s.actor}:${s.stage}`];
+    if (!open) throw new Error(`no opener for the planned ${s.actor}:${s.stage} socket`);
+    await open(s);
+    barriers.push(await confirmSocket(s, deps));
+  }
+}
+
+/**
+ * The print-only seam (`--check-barrier SCENARIO.json`): the REAL
+ * `openInOrder`, `confirmSocket`, `welcomeVerdict` and oracle against a
+ * scripted world. The scenario names the plan's `identity` and `codeRole`, a
+ * server log file the seam owns, and what happens: `onOpen[actor:stage]`
+ * appends log text (`append`), sets the page's current document (`doc`)
+ * and/or kills an actor (`die`); `appendAt[poll]` appends log text on that
+ * barrier poll; `dieAt[poll]` kills an actor there. Prints `{events,
+ * barriers, polls, error}`; opens, spawns and connects to nothing.
+ */
+async function checkBarrier(file) {
+  const sc = JSON.parse(readFileSync(file, "utf8"));
+  const events = [];
+  const barriers = [];
+  let doc = null;
+  let dead = null;
+  let polls = 0;
+  const apply = (fx = {}) => {
+    if (fx.append) appendFileSync(sc.log, fx.append);
+    if (fx.doc !== undefined) doc = fx.doc;
+    if (fx.die) dead = fx.die;
+  };
+  const openers = {};
+  for (const s of sc.identity.sockets) {
+    const key = `${s.actor}:${s.stage}`;
+    openers[key] = async () => { events.push(`open ${key}`); apply(sc.onOpen?.[key]); };
+  }
+  const deps = {
+    welcome: async (s) => {
+      const v = welcomeVerdict(doc, sc.codeRole, s);
+      if (v && v.pending) throw new Error(`the page's ${s.stage} socket (seq ${s.seq}) was never welcomed`);
+      if (v) throw new Error(v);
+      events.push(`welcomed ${s.seq}`);
+    },
+    prefix: (n) => acceptedPrefix(sc.log, sc.identity.schedule, n),
+    deadActor: async () => dead,
+    sleep: async () => {
+      polls += 1;
+      if (sc.appendAt?.[polls]) appendFileSync(sc.log, sc.appendAt[polls]);
+      if (sc.dieAt?.[polls]) dead = sc.dieAt[polls];
+    },
+    polls: sc.polls ?? 4,
+  };
+  let error = null;
+  try {
+    await openInOrder(sc.identity, openers, deps, barriers);
+  } catch (err) {
+    error = String(err?.message ?? err);
+  }
+  process.stdout.write(JSON.stringify({ events, barriers, polls, error }) + "\n");
+}
+
 // ── the round ────────────────────────────────────────────────────────────────
 
 let cli = null;
@@ -481,48 +692,112 @@ async function run() {
   const { browser, close } = await launchBrowser({ debugPort: await ephemeralPort(), keep: KEEP });
   closeBrowser = close;
   let tab;
+  // The page's documents, archived before each navigation replaces one.
+  let currentDoc = "";
+  const readWire = async () => tab.evaluate("window.__wire ?? null");
+  const archiveDocument = async () => {
+    if (!tab || !currentDoc) return;
+    const w = await readWire();
+    observed.web.wire.documents.push({ stage: currentDoc, sockets: w?.sockets ?? null });
+    currentDoc = "";
+  };
   try {
     const preference = PLAN.verify === "on" ? VERIFY_ON : VERIFY_DEFAULT;
     const init = preference + OBSERVE + LEDGER;
 
-    if (CODE_ROLE === "cli") {
-      cli = startCli({ bin: CLI_BIN, args: cliArgs, env: cliEnv, label: "cli" });
-      const { match } = await cli.waitLine(MINTED_RE, "the CLI to mint a code", { timeoutMs: 30_000 });
-      observed.code = match[1];
-      step(`the CLI minted ${observed.code}`);
-      tab = await newTab(browser, `${ORIGIN}/cross-network#c=${observed.code}`, init);
-    } else {
-      // The page signs in through the product's own endpoint (the password
-      // travels from the environment into the page, never through argv), then
-      // mints with its own control.
-      const email = process.env.RELAYIUM_ACCEPTANCE_EMAIL ?? "";
-      const password = process.env.RELAYIUM_ACCEPTANCE_PASSWORD ?? "";
-      if (!email || !password) throw new Error("code-role web needs RELAYIUM_ACCEPTANCE_EMAIL/PASSWORD in the environment");
-      tab = await newTab(browser, `${ORIGIN}/`, init);
-      await tab.waitFor("document.readyState === 'complete'", "the landing page", 30_000);
-      const login = await tab.evaluate(`fetch('/api/auth/password/login', {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: ${JSON.stringify(email)}, password: ${JSON.stringify(password)} }),
-      }).then(async (r) => ({ status: r.status, body: (await r.text()).slice(0, 200) }))`);
-      if (login.status !== 200) throw new Error(`the page could not sign in (HTTP ${login.status}: ${login.body})`);
-      await tab.send("Page.navigate", { url: `${ORIGIN}/cross-network` });
-      await tab.waitFor(`(() => { const b = document.querySelector('.create-code'); return !!b && !b.disabled; })()`,
-        "the page's create-code control", 45_000);
-      await tab.evaluate("(() => { window.__establishMark?.('create-code:before'); document.querySelector('.create-code').click(); window.__establishMark?.('create-code:after'); return true; })()");
-      await tab.waitFor(`/^\\S{4,}$/.test((document.querySelector('.code')?.textContent ?? '').trim())`,
-        "the page to show the code it minted", 45_000);
-      observed.code = await tab.evaluate("document.querySelector('.code').textContent.trim()");
-      step(`the page minted ${observed.code}`);
-      cli = startCli({ bin: CLI_BIN, args: [...cliArgs, observed.code], env: cliEnv, label: "cli" });
-    }
+    const identity = PLAN.identity;
+    const schedule = identity.schedule;
+    const openers = {
+      // A CLI-minted round: the CLI first. Its minted line is printed BEFORE it
+      // dials, so the barrier on its accepted socket, not this line, is what
+      // lets the page start.
+      "cli:code-room": async () => {
+        if (CODE_ROLE === "cli") {
+          cli = startCli({ bin: CLI_BIN, args: cliArgs, env: cliEnv, label: "cli" });
+          const { match } = await cli.waitLine(MINTED_RE, "the CLI to mint a code", { timeoutMs: 30_000 });
+          observed.code = match[1];
+          step(`the CLI minted ${observed.code}`);
+        } else {
+          cli = startCli({ bin: CLI_BIN, args: [...cliArgs, observed.code], env: cliEnv, label: "cli" });
+          step(`the CLI joins ${observed.code}`);
+        }
+      },
+      // The page joining the code the CLI minted, or the page's own room.
+      "web:code-room": async () => {
+        if (CODE_ROLE === "cli") {
+          tab = await newTab(browser, `${ORIGIN}/cross-network#c=${observed.code}`, init);
+          currentDoc = "code-link";
+          return;
+        }
+        await tab.waitFor(`(() => { const b = document.querySelector('.create-code'); return !!b && !b.disabled; })()`,
+          "the page's create-code control", 45_000);
+        await tab.evaluate("(() => { window.__establishMark?.('create-code:before'); document.querySelector('.create-code').click(); window.__establishMark?.('create-code:after'); return true; })()");
+        await tab.waitFor(`/^\\S{4,}$/.test((document.querySelector('.code')?.textContent ?? '').trim())`,
+          "the page to show the code it minted", 45_000);
+        observed.code = await tab.evaluate("document.querySelector('.code').textContent.trim()");
+        step(`the page minted ${observed.code}`);
+      },
+      // A page-minted round: the landing page's LAN socket first…
+      "web:landing": async () => {
+        tab = await newTab(browser, `${ORIGIN}/`, init);
+        currentDoc = "landing";
+      },
+      // …then, with that socket accepted and welcomed as planned, the sign-in
+      // through the product's own endpoint (the password travels from the
+      // environment into the page, never through argv) and `/cross-network`.
+      "web:cross-network": async () => {
+        const email = process.env.RELAYIUM_ACCEPTANCE_EMAIL ?? "";
+        const password = process.env.RELAYIUM_ACCEPTANCE_PASSWORD ?? "";
+        if (!email || !password) throw new Error("code-role web needs RELAYIUM_ACCEPTANCE_EMAIL/PASSWORD in the environment");
+        await tab.waitFor("document.readyState === 'complete'", "the landing page", 30_000);
+        const login = await tab.evaluate(`fetch('/api/auth/password/login', {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: ${JSON.stringify(email)}, password: ${JSON.stringify(password)} }),
+        }).then(async (r) => ({ status: r.status, body: (await r.text()).slice(0, 200) }))`);
+        if (login.status !== 200) throw new Error(`the page could not sign in (HTTP ${login.status}: ${login.body})`);
+        await archiveDocument();
+        await tab.send("Page.navigate", { url: `${ORIGIN}/cross-network` });
+        currentDoc = "cross-network";
+      },
+    };
+    const deps = {
+      welcome: async (s) => {
+        const deadline = Date.now() + WELCOME_TIMEOUT_MS;
+        for (;;) {
+          let v;
+          try { v = welcomeVerdict(await readWire(), CODE_ROLE, s); } catch { v = { pending: true }; }
+          if (!v) return;
+          if (!v.pending) throw new Error(v);
+          if (Date.now() > deadline) throw new Error(`the page's ${s.stage} socket (seq ${s.seq}) was never welcomed within ${WELCOME_TIMEOUT_MS} ms`);
+          await sleep(100);
+        }
+      },
+      prefix: (n) => acceptedPrefix(SERVER_LOG, schedule, n),
+      deadActor: async () => {
+        if (cli?.exit) return `the CLI exited (${JSON.stringify(cli.exit)})`;
+        if (tab) {
+          try { await tab.evaluate("1"); } catch (err) { return `the page is gone (${String(err?.message ?? err).slice(0, 120)})`; }
+        }
+        return null;
+      },
+      sleep: (ms) => sleep(ms),
+      polls: ACCEPT_POLLS,
+    };
+    await openInOrder(identity, openers, deps, observed.barriers);
+    step(`every planned socket accepted in order: ${observed.barriers.map((b) => `${b.seq} ${b.actor}:${b.stage}`).join(", ")}`);
     await setWideViewport(tab, 1280, 900);
 
     // ── 1. link + admission on both ends ────────────────────────────────
-    await tab.waitFor("(window.__relayiumPeers ?? []).length >= 2", "the CLI to join the code room", 90_000);
+    // The page's own view of the code room: its welcome and the CLI in the
+    // roster beside it, from the judged wire record.
+    const slot = PAGE_SLOTS[CODE_ROLE]["code-room"].slot;
+    await tab.waitFor(`(() => { const r = window.__wire?.sockets?.[${slot}]?.rosters ?? []; const last = r[r.length - 1]; return Array.isArray(last) && last.length >= 2; })()`,
+      "the CLI to join the code room", 90_000);
     const ids = await tab.evaluate(`(() => {
-      const peers = window.__relayiumPeers ?? [];
-      const self = window.__relayiumSelfId ?? '';
-      return { self, peer: peers.find((p) => p !== self) ?? '' };
+      const s = window.__wire.sockets[${slot}];
+      const self = s.welcomes[0] ?? '';
+      const last = s.rosters[s.rosters.length - 1] ?? [];
+      return { self, peer: last.find((p) => p !== self) ?? '' };
     })()`);
     Object.assign(observed.web, {
       selfId: ids.self, peerId: ids.peer,
@@ -691,6 +966,7 @@ async function run() {
     observed.web.sdp = await tab.evaluate("window.__sdp");
     await readEstablishment(tab);
     observed.web.errors = tab.errors.slice(0, 50);
+    await archiveDocument();
     observed.complete = true;
   } finally {
     if (tab && !observed.complete) {
@@ -703,18 +979,29 @@ async function run() {
       // Separately, so a failed read above cannot cost the timeline the
       // failure path most needs.
       await readEstablishment(tab);
+      try { await archiveDocument(); } catch { /* best effort on the failure path */ }
     }
+    // Every client this round started, gone before the shell counts the
+    // server's accepted sockets: the CLI reaped, Chrome observed to exit.
     if (cli) {
       await cli.kill();
       observed.cli = cli.transcript();
     }
+    observed.cleanup.cliExited = cli ? cli.exit !== null : true;
+    observed.cleanup.browserExited = KEEP ? false : (await close())?.exited === true;
     writeObservation();
-    if (!KEEP) await close();
+  }
+  if (!observed.cleanup.cliExited || !observed.cleanup.browserExited) {
+    throw new Error(`the round's clients were not all observed to exit: ${JSON.stringify(observed.cleanup)}`);
   }
 }
 
-withWatchdog("cli ↔ web pairing", GLOBAL_TIMEOUT_MS, run).catch((err) => {
-  try { writeObservation(); } catch { /* nothing more to do */ }
-  console.error(`\n  \x1b[31m✗\x1b[0m ${err?.stack ?? err}`);
-  process.exit(1);
-});
+if (CHECK_BARRIER) {
+  checkBarrier(CHECK_BARRIER).then(() => process.exit(0), (err) => { console.error(String(err?.stack ?? err)); process.exit(2); });
+} else {
+  withWatchdog("cli ↔ web pairing", GLOBAL_TIMEOUT_MS, run).catch((err) => {
+    try { writeObservation(); } catch { /* nothing more to do */ }
+    console.error(`\n  \x1b[31m✗\x1b[0m ${err?.stack ?? err}`);
+    process.exit(1);
+  });
+}

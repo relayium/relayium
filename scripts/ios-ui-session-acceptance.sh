@@ -106,8 +106,9 @@ say "-- driving iPhone Simulator $device_id"
 # that room is invisible to it. macOS discovery did not move, and
 # `macos-ui-session-acceptance.sh` still drives `nearby-receiver`.
 #
-# Started before the app so it is already advertising when the roster is first
-# read. The name carries the run tag: Bonjour has no per-run room to hide behind,
+# Launched here, but NOT started: its residency is armed by the Nearby tests
+# themselves (see below), and the advertisement it will make is named for this
+# run. The name carries the run tag: Bonjour has no per-run room to hide behind,
 # and a shared build agent may have another run's peer on the same link.
 mkdir -p "$run_root/nearby-receive" "$run_root/pair-send"
 
@@ -129,47 +130,31 @@ peer_env=("RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN=$account_token")
 start_peer pair-link pair-link --receive-root "$run_root/pair-send"
 pair_port="$peer_port"
 
-# Residency is started here rather than by the test: it is the state the app
-# must find already true, and a room joined from inside the test would race the
-# first roster read it is there to assert. The pairing peer is NOT started —
-# a pairing code is short-lived and single-use, so the test mints it at the
-# moment it is about to type it.
-control "$nearby_port" POST /start >/dev/null
-
-# And it really is advertising, before a simulator boot is spent on it.
-# `resident` is published once `LanDiscoveryModel` reaches `joined`, which on
-# this transport means the listener and the browser both reported ready. A host
-# that cannot advertise `_relayium._tcp` between this process and the Simulator
-# and an app that stopped rendering its roster otherwise present identically —
-# as an empty roster 90 seconds into a UI test.
+# Residency is NOT started here. `local-link-peer` fails itself after 240s with
+# nothing moving (`LocalLinkPeerRun.idleCeiling`), and a `POST /start` from this
+# launcher armed that clock before `xcodebuild` had compiled anything: hosted run
+# 37407624590 saw the peer reach `resident` at 03:17:22 and record `failed` at
+# 03:21:22, six minutes before the UI test runner started. Each Nearby test now
+# calls `requireResidentNearbyCounterpart` before it reads a baseline or launches
+# the app; that helper sends the one `POST /start`, waits for `resident` with the
+# same 60s bound this launcher used to, reuses a healthy counterpart for the next
+# Nearby test, and refuses a failed one. The Cross-network case never arms it.
+# The pairing peer is not started here either: a pairing code is short-lived and
+# single-use, so the test mints it at the moment it is about to type it.
+#
+# What the launcher still owns is that nothing started it early: the peer must
+# still be `idle` when the simulator is handed to `xcodebuild`, or the helper
+# would be reusing a clock that is already running.
 #
 # `if` rather than `test … && fail`, for the reason `assert_run_was_local`
-# records: as the last command of a `&&` list, the ordinary "not ready yet"
-# answer returns non-zero and `set -e` would end the run on it.
-peer_status=""
-peer_phase=""
-peer_waited=0
-while [ "$peer_waited" -lt 120 ]; do
-  peer_status="$(control "$nearby_port" GET /status)" \
-    || fail "the local peer stopped answering its control API while coming up"
-  peer_phase="$(json_field "$peer_status" phase)"
-  if [ "$peer_phase" = "resident" ]; then
-    break
-  fi
-  if [ "$peer_phase" = "failed" ]; then
-    fail "the local peer could not advertise on this link: $peer_status"
-  fi
-  sleep 0.5
-  peer_waited=$((peer_waited + 1))
-done
-if [ "$peer_phase" != "resident" ]; then
-  fail "the local peer never advertised _relayium._tcp within 60s.
-   last status: $peer_status
-   This host has to let this process and the iOS Simulator discover each other
-   over Bonjour. A run that cannot is a harness failure on this machine, not an
-   app one."
+# records.
+peer_status="$(control "$nearby_port" GET /status)" \
+  || fail "the local peer stopped answering its control API before the UI run"
+peer_phase="$(json_field "$peer_status" phase)"
+if [ "$peer_phase" != "idle" ]; then
+  fail "the local peer was started before the UI tests could arm it: $peer_status"
 fi
-say "-- $peer_name is advertising _relayium._tcp on this link"
+say "-- $peer_name is launched and idle; the Nearby tests arm its residency"
 
 maybe_fault after-ios-peers
 

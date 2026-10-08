@@ -77,12 +77,159 @@ const DEVICES = () => ({ devices: {
   "com.apple.CoreSimulator.SimRuntime.iOS-18-5": [dev("iPad Air 11-inch (M2)", 4, "iPad-Air-11-inch-M2"), dev("iPhone 16", 5, "iPhone-16")],
 } });
 OUT["xcrun simctl list devices available -j"] = JSON.stringify(DEVICES());
+const IOS_YML = resolve(repoRoot, ".github/workflows/ios.yml");
+const IOS_TEXT = readFileSync(IOS_YML, "utf8");
 const DESTINATION_FILES = Object.fromEntries(Object.values(REGISTRY.destinations).map((d) => [resolve(repoRoot, d.file), readFileSync(resolve(repoRoot, d.file), "utf8")]));
 const CHROME = { Linux: "/usr/bin/google-chrome", macOS: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" };
 const XCODES = {
   "/Applications/Xcode_16.4.app": { version: "16.4", build: "16F6", macosx: "15.5", sim: "18.5" },
   "/Applications/Xcode_26.0.1.app": { version: "26.0.1", build: "17A400", macosx: "26.0", sim: "26.0" },
 };
+
+// What a real Xcode 27.0 (27A266a) printed for `usr/bin/xcodebuild -version -sdk`,
+// byte for byte (sha256 below): the only SDK inventory grammar this probe has
+// seen. Every mocked Xcode's inventory is this text with that Xcode's versions
+// and path put in, so the mocks speak exactly the observed grammar. The same
+// installation's three old queries answered `Xcode 27.0` / `Build version
+// 27A266a`, and `27.0` for both `xcrun --sdk macosx|iphonesimulator
+// --show-sdk-version` — the facts the inventory must yield.
+const RAW_XCODE27 = `DriverKit27.0.sdk - DriverKit 27.0 (driverkit27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/DriverKit.platform/Developer/SDKs/DriverKit27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/DriverKit.platform
+
+iPhoneOS27.0.sdk - iOS 27.0 (iphoneos27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform
+BuildID: 8B4091AC-A29C-11F1-874D-9FFBAA4B7BC9
+ProductBuildVersion: 24A430
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: iPhone OS
+ProductVersion: 27.0
+
+iPhoneSimulator27.0.sdk - Simulator - iOS 27.0 (iphonesimulator27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform
+BuildID: 8B4091AC-A29C-11F1-874D-9FFBAA4B7BC9
+ProductBuildVersion: 24A430
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: iPhone OS
+ProductVersion: 27.0
+
+MacOSX27.sdk - macOS 27.0 (macosx27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform
+BuildID: F8088D3E-A1DA-11F1-AAD4-A82B6E44CE4F
+ProductBuildVersion: 26A425
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: macOS
+ProductUserVisibleVersion: 27.0
+ProductVersion: 27.0
+iOSSupportVersion: 27.0
+
+MacOSX27.0.sdk - macOS 27.0 (macosx27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform
+BuildID: F8088D3E-A1DA-11F1-AAD4-A82B6E44CE4F
+ProductBuildVersion: 26A425
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: macOS
+ProductUserVisibleVersion: 27.0
+ProductVersion: 27.0
+iOSSupportVersion: 27.0
+
+AppleTVOS27.0.sdk - tvOS 27.0 (appletvos27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/AppleTVOS.platform
+BuildID: CA572AB2-A1E9-11F1-897C-5D64769D1288
+ProductBuildVersion: 24J360
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: Apple TVOS
+ProductVersion: 27.0
+
+AppleTVSimulator27.0.sdk - Simulator - tvOS 27.0 (appletvsimulator27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/AppleTVSimulator.platform/Developer/SDKs/AppleTVSimulator27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/AppleTVSimulator.platform
+BuildID: CA572AB2-A1E9-11F1-897C-5D64769D1288
+ProductBuildVersion: 24J360
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: Apple TVOS
+ProductVersion: 27.0
+
+XROS27.0.sdk - visionOS 27.0 (xros27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/XROS.platform/Developer/SDKs/XROS27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/XROS.platform
+BuildID: 03F050EE-A0FC-11F1-AD34-488FB93739A6
+ProductBuildVersion: 24M361
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: xrOS
+ProductVersion: 27.0
+iOSSupportVersion: 27.0
+
+XRSimulator27.0.sdk - Simulator - visionOS 27.0 (xrsimulator27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/XRSimulator.platform/Developer/SDKs/XRSimulator27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/XRSimulator.platform
+BuildID: 03F050EE-A0FC-11F1-AD34-488FB93739A6
+ProductBuildVersion: 24M361
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: xrOS
+ProductVersion: 27.0
+iOSSupportVersion: 27.0
+
+WatchOS27.0.sdk - watchOS 27.0 (watchos27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/WatchOS.platform/Developer/SDKs/WatchOS27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/WatchOS.platform
+BuildID: 8A5D5550-A2AF-11F1-89F4-E7B6EF0E3DA2
+ProductBuildVersion: 24R360
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: Watch OS
+ProductVersion: 27.0
+
+WatchSimulator27.0.sdk - Simulator - watchOS 27.0 (watchsimulator27.0)
+SDKVersion: 27.0
+Path: /Applications/Xcode.app/Contents/Developer/Platforms/WatchSimulator.platform/Developer/SDKs/WatchSimulator27.0.sdk
+PlatformVersion: 27.0
+PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/WatchSimulator.platform
+BuildID: 8A5D5550-A2AF-11F1-89F4-E7B6EF0E3DA2
+ProductBuildVersion: 24R360
+ProductCopyright: 1983-2026 Apple Inc.
+ProductName: Watch OS
+ProductVersion: 27.0
+
+Xcode 27.0
+Build version 27A266a
+`;
+const RAW_XCODE27_SHA256 = "ee1163bcd5132aa5851f1e834ffc2a16065f00c010458b007d35e67158253c87";
+const RAW_XCODE27_FACTS = { version: "27.0", build: "27A266a", macosx_sdk: "27.0", iphonesimulator_sdk: "27.0" };
+
+/** An Xcode's SDK inventory: the real one's blocks with this Xcode's SDK versions and path, and its own footer. */
+function sdkInventory(app, x) {
+  const blocks = RAW_XCODE27.split("\n\n");
+  const sdks = blocks.slice(0, -1).map((b) => {
+    const v = /\((macosx|driverkit)27\.0\)$/.test(b.split("\n")[0]) ? x.macosx : x.sim;
+    return b.replaceAll("MacOSX27.sdk", `MacOSX${v.split(".")[0]}.sdk`).replaceAll("27.0", v).replaceAll("/Applications/Xcode.app", app);
+  });
+  return `${sdks.join("\n\n")}\n\nXcode ${x.version}\nBuild version ${x.build}\n`;
+}
 
 const ENV = {
   Linux: { RUNNER_OS: "Linux", RUNNER_ARCH: "X64", ImageOS: "ubuntu24", ImageVersion: "20260928.1" },
@@ -133,14 +280,11 @@ function runner(os, overrides = {}) {
       }
       const key = argv.join(" ");
       const app = Object.keys(xcodes).find((a) => key.startsWith(`${a}/Contents/Developer/usr/bin/xcodebuild`));
+      // Each Xcode answers its own `xcodebuild -version -sdk` under its own
+      // DEVELOPER_DIR, and nothing else: no other argv, no `xcrun --sdk`.
       if (app) {
-        const x = xcodes[app];
-        return overrides.xcodebuild ? overrides.xcodebuild(app) : { status: 0, stdout: `Xcode ${x.version}\nBuild version ${x.build}\n`, stderr: "" };
-      }
-      const sdk = /^xcrun --sdk (macosx|iphonesimulator) --show-sdk-version$/.exec(key);
-      if (sdk) {
-        const x = Object.entries(xcodes).find(([a]) => env.DEVELOPER_DIR === `${a}/Contents/Developer`)?.[1];
-        return x ? { status: 0, stdout: `${sdk[1] === "macosx" ? x.macosx : x.sim}\n`, stderr: "" } : { status: 1, stdout: "", stderr: "" };
+        if (key !== `${app}/Contents/Developer/usr/bin/xcodebuild -version -sdk` || env.DEVELOPER_DIR !== `${app}/Contents/Developer`) return { status: 64, stdout: "", stderr: "" };
+        return overrides.xcodebuild ? overrides.xcodebuild(app) : { status: 0, stdout: sdkInventory(app, xcodes[app]), stderr: "" };
       }
       if (key === "java -version") {
         return overrides.java ?? { status: 0, stdout: "", stderr: 'openjdk version "17.0.16" 2025-07-15\nOpenJDK Runtime Environment Temurin-17.0.16+8 (build 17.0.16+8)\nOpenJDK 64-Bit Server VM\n' };
@@ -342,7 +486,7 @@ const UNKNOWNS = [
   ["linux-base", "an unreadable os-release", { files: { "/etc/os-release": undefined } }, /os-release is unreadable/],
   ["linux-base", "a profile run on the wrong OS", { env: { RUNNER_OS: "macOS" } }, /is for Linux, this runner is macOS/],
   ["macos-xcode", "no Xcode installed", { xcodes: {} }, /no Xcode is installed/],
-  ["macos-xcode", "an xcodebuild in an unknown shape", { xcodebuild: () => ({ status: 0, stdout: "Xcode beta\n", stderr: "" }) }, /xcodebuild -version is not in a recognised shape/],
+  ["macos-xcode", "an xcodebuild in an unknown shape", { xcodebuild: () => ({ status: 0, stdout: "Xcode beta\n", stderr: "" }) }, /^Xcode\.app xcodebuild -version -sdk is truncated$/],
   ["macos-xcode", "a broken Xcode", { xcodebuild: () => ({ status: 70, stdout: "", stderr: "" }) }, /exited 70/],
   ["macos-xcode", "too many Xcodes", { xcodes: Object.fromEntries(Array.from({ length: PROBE_LIMITS.xcodes + 1 }, (_, i) => [`/Applications/Xcode_${i}.0.app`, { version: `${i}.0`, build: "1A1", macosx: "1.0", sim: "1.0" }])) }, /more than 12 Xcodes/],
   ["macos-xcode", "an unknown default selection", { out: { "xcode-select -p": "\n" } }, /xcode-select -p/],
@@ -361,6 +505,13 @@ const UNKNOWNS = [
   ["macos-xcode-iphone", "a selection program that changed under its pin", { files: { [resolve(repoRoot, ".github/workflows/ios.yml")]: DESTINATION_FILES[resolve(repoRoot, ".github/workflows/ios.yml")].replace('startswith("iPhone")))\')"', 'startswith("iPhone 1")))\')"') } }, /not the one the registry pins/],
   ["macos-xcode-iphone", "a workflow without the step", { files: { [resolve(repoRoot, ".github/workflows/ios.yml")]: "jobs: {}\n" } }, /does not name the step/],
   ["macos-xcode-go-iphone", "a script that grew a second program", { files: { [resolve(repoRoot, "scripts/ios-ui-session-acceptance.sh")]: `${DESTINATION_FILES[resolve(repoRoot, "scripts/ios-ui-session-acceptance.sh")]}\nx="$(echo | python3 -c 'import json, sys\nprint(1)')"\n` } }, /runs 2 selection programs/],
+  // The iPhone program now lives in the ui_smoke step's quoted heredoc (the supervisor executes it); each way that
+  // copy stops being the pinned program is refused by name, and the real file passes the pin loop above.
+  ["macos-xcode-iphone", "the ui_smoke step grows a second selection program", { files: { [IOS_YML]: IOS_TEXT.replace("          set -euo pipefail\n          common=(", "          set -euo pipefail\n          x=\"$(echo {} \\\n            | /usr/bin/python3 -c 'import json, sys\n          print(1)')\"\n          common=(") } }, /runs 2 selection programs/],
+  ["macos-xcode-iphone", "the iPhone program sits in a step of another name", { files: { [IOS_YML]: IOS_TEXT.replace("- name: Run iOS primary-task UI smoke", "- name: Run iOS UI smoke") } }, /does not name the step/],
+  ["macos-xcode-iphone", "the iPhone program runs under another interpreter", { files: { [IOS_YML]: IOS_TEXT.replace("| /usr/bin/python3 -c 'import json, sys", "| python3 -c 'import json, sys") } }, /not the one the registry pins/],
+  ["macos-xcode-iphone", "the iPhone program loses its relative indentation", { files: { [IOS_YML]: IOS_TEXT.replace("          data = json.load(sys.stdin)\n          print(next(", "            data = json.load(sys.stdin)\n          print(next(") } }, /not uniformly indented/],
+  ["macos-xcode-iphone", "the iPhone program closes differently", { files: { [IOS_YML]: IOS_TEXT.replace('startswith("iPhone")))\')"', 'startswith("iPhone")))\') "') } }, /does not close where it is read/],
   ["windows-go", "a Windows ver in an unknown shape", { out: { "cmd /d /c ver": "Windows\r\n" } }, /ver is not in a recognised shape/],
   ["linux-go", "a source job with no matrix index", { env: { CI_EVIDENCE_JOB_INDEX: undefined } }, /CI_EVIDENCE_JOB_INDEX/],
   ["linux-go", "a matrix index past its total", { env: { CI_EVIDENCE_JOB_INDEX: "2", CI_EVIDENCE_JOB_TOTAL: "2" } }, /job index is outside the job total/],
@@ -704,17 +855,26 @@ const depsOf = (f) => ({ registry: REGISTRY, readFile: f.r.readFile, exists: f.r
   resolveChrome: f.r.resolveChrome, digestFile: f.r.digestFile, spawn: f.spawn, clock: f.clock });
 
 // The cost of each call point on the fake runner. The default macOS inventory
-// discovers Xcode.app (→ Xcode_26.0.1, ordinal 1) before Xcode_16.4 (ordinal 2).
-const MAC_COSTS = ({ sdk = 10, sdk16sim, devices = 10, runtimes = 10, xcodebuild = 10, xcodebuild1, python = 10 } = {}) => (argv, env) => {
+// discovers Xcode.app (→ Xcode_26.0.1, ordinal 1) before Xcode_16.4 (ordinal 2);
+// each Xcode is one `xcodebuild -version -sdk` call.
+const MAC_COSTS = ({ inventory = 10, inventory1, inventory16, devices = 10, runtimes = 10, python = 10 } = {}) => (argv) => {
   const k = argv.join(" ");
-  if (/\/usr\/bin\/xcodebuild -version$/.test(k)) return xcodebuild1 !== undefined && k.includes("Xcode_26.0.1") ? xcodebuild1 : xcodebuild;
-  if (k === "xcrun --sdk iphonesimulator --show-sdk-version" && sdk16sim !== undefined && String(env?.DEVELOPER_DIR).includes("Xcode_16.4")) return sdk16sim;
-  if (k.startsWith("xcrun --sdk ")) return sdk;
+  if (/\/usr\/bin\/xcodebuild -version -sdk$/.test(k)) {
+    if (inventory1 !== undefined && k.includes("Xcode_26.0.1")) return inventory1;
+    if (inventory16 !== undefined && k.includes("Xcode_16.4")) return inventory16;
+    return inventory;
+  }
   if (k === "xcrun simctl list devices available -j") return devices;
   if (k === "xcrun simctl list runtimes -j") return runtimes;
   if (argv[1] === "-c") return python;
   return 10;
 };
+
+// Four installs (the hosted image has more): one inventory call each, so
+// 4 x 25 s spends two thirds of the budget before the destination component.
+const XCODES4 = { ...XCODES,
+  "/Applications/Xcode_15.4.app": { version: "15.4", build: "15F31d", macosx: "14.5", sim: "17.5" },
+  "/Applications/Xcode_26.1.app": { version: "26.1", build: "17B55", macosx: "26.1", sim: "26.1" } };
 
 const CAPTURE = (profile, lane = "go", job = "test") => ["capture", "--role", "source", "--profile", profile, "--out", "OUT", "--lane", lane, "--job", job];
 
@@ -801,54 +961,56 @@ if (TIMING) {
   });
 
   part("success line", () => {
-    const s = scenario("success", "macos-xcode-iphone", MAC_COSTS({ xcodebuild1: 5000, sdk16sim: 7000, devices: 9000 }));
+    const s = scenario("success", "macos-xcode-iphone", MAC_COSTS({ inventory1: 5000, inventory16: 7000, devices: 9000 }));
     const plain = JSON.stringify(certFor("macos-xcode-iphone"), null, 2);
     check(s.code === 0 && s.written === `${plain}\n`, "the timed capture command did not write the plain certificate byte for byte");
     check(s.lines.length === 1 && s.text.includes(`ci-evidence-toolchain: source macos-xcode-iphone certificate ${JSON.parse(plain).digest}\n`),
       `want the unchanged certificate line and exactly one timing line: ${JSON.stringify(s.text)}`);
     const l = s.lines[0];
     check(field(l, "outcome") === "certificate" && field(l, "profile") === "macos-xcode-iphone" && field(l, "failure") === "-"
-      && field(l, "calls") === "13" && field(l, "wall_ms") === "21100" && field(l, "budget_ms") === "150000" && field(l, "budget_left_ms") === "128900"
-      && field(l, "components") === "image:2:20,xcode:7:12050,destination:4:9030"
-      && field(l, "slowest") === "destination.simctl-devices:9000:ok,xcode.sdk-iphonesimulator#2:7000:ok,xcode.xcodebuild-version#1:5000:ok",
+      && field(l, "calls") === "9" && field(l, "wall_ms") === "21060" && field(l, "budget_ms") === "150000" && field(l, "budget_left_ms") === "128940"
+      && field(l, "components") === "image:2:20,xcode:3:12010,destination:4:9030"
+      && field(l, "slowest") === "destination.simctl-devices:9000:ok,xcode.xcodebuild-sdk-inventory#2:7000:ok,xcode.xcodebuild-sdk-inventory#1:5000:ok",
     `the success line does not account for the capture's time: ${l}`);
   });
 
   part("simctl budget remainder", () => {
     // About the observed shape: the inventory takes most of the budget and a
     // listing meets the remainder. Old line: generic; new line: which and how.
-    const s = scenario("simctl", "macos-xcode-iphone", MAC_COSTS({ sdk: 25_000, devices: 29_000, runtimes: 25_000 }));
+    const s = scenario("simctl", "macos-xcode-iphone", MAC_COSTS({ inventory: 25_000, devices: 29_000, runtimes: 25_000 }), { xcodes: XCODES4 });
     check(s.code === 0 && s.written === null && s.warning === "::warning::ci-evidence-toolchain: no source certificate: xcrun could not run: ETIMEDOUT",
       `a timed-out listing must keep the old unknown: no certificate, exit 0, the same warning: ${s.warning}`);
     check(s.lines.length === 1 && field(s.lines[0], "outcome") === "no-certificate"
-      && field(s.lines[0], "failure") === "destination.simctl-runtimes:timeout:elapsed_ms=20950:applied_ms=20950:bound=budget-remainder:budget_before_ms=20950:budget_after_ms=0"
-      && field(s.lines[0], "components") === "image:2:20,xcode:7:100030,destination:2:49950" && field(s.lines[0], "wall_ms") === "150000",
+      && field(s.lines[0], "failure") === "destination.simctl-runtimes:timeout:elapsed_ms=20970:applied_ms=20970:bound=budget-remainder:budget_before_ms=20970:budget_after_ms=0"
+      && field(s.lines[0], "components") === "image:2:20,xcode:5:100010,destination:2:49970" && field(s.lines[0], "wall_ms") === "150000",
     `the timed-out simctl runtimes listing is not named with its bound: ${s.lines[0]}`);
     const runtimes = s.f.spawned.filter((x) => x.argv.join(" ") === "xcrun simctl list runtimes -j");
     check(runtimes.length === 1 && s.f.spawned.at(-1) === runtimes[0], "a timed-out command was retried, or the probe went on after it");
   });
 
   part("sdk per-command", () => {
-    const s = scenario("sdk", "macos-xcode-iphone", MAC_COSTS({ sdk16sim: 40_000 }));
-    const simctl = scenario("simctl", "macos-xcode-iphone", MAC_COSTS({ sdk: 25_000, devices: 29_000, runtimes: 25_000 }));
-    check(s.written === null && s.warning === simctl.warning, "an SDK and a simctl timeout no longer share the old message (it must stay unchanged)");
-    check(field(s.lines[0], "failure") === "xcode.sdk-iphonesimulator#2:timeout:elapsed_ms=30000:applied_ms=30000:bound=per-command:budget_before_ms=149930:budget_after_ms=119930",
+    const s = scenario("sdk", "macos-xcode-iphone", MAC_COSTS({ inventory16: 40_000 }));
+    const simctl = scenario("simctl", "macos-xcode-iphone", MAC_COSTS({ inventory: 25_000, devices: 29_000, runtimes: 25_000 }), { xcodes: XCODES4 });
+    // realExec names the program that could not run, as it always has: here that Xcode's own xcodebuild.
+    check(s.written === null && s.warning === "::warning::ci-evidence-toolchain: no source certificate: /Applications/Xcode_16.4.app/Contents/Developer/usr/bin/xcodebuild could not run: ETIMEDOUT",
+      `an SDK inventory timeout must be the usual could-not-run unknown: ${s.warning}`);
+    check(field(s.lines[0], "failure") === "xcode.xcodebuild-sdk-inventory#2:timeout:elapsed_ms=30000:applied_ms=30000:bound=per-command:budget_before_ms=149970:budget_after_ms=119970",
       `the Xcode SDK timeout is not named by call point, ordinal and bound: ${s.lines[0]}`);
     check(field(s.lines[0], "failure") !== field(simctl.lines[0], "failure"), "the timing line cannot tell an SDK timeout from a simctl one");
     // With most of the budget left, a timed-out command is still not retried, and nothing runs after it.
-    const sims = s.f.spawned.filter((x) => x.argv.join(" ") === "xcrun --sdk iphonesimulator --show-sdk-version");
-    check(sims.length === 2 && s.f.spawned.at(-1) === sims[1] && field(s.lines[0], "calls") === "8",
+    const inv = s.f.spawned.filter((x) => x.argv.join(" ") === "/Applications/Xcode_16.4.app/Contents/Developer/usr/bin/xcodebuild -version -sdk");
+    check(inv.length === 1 && s.f.spawned.at(-1) === inv[0] && field(s.lines[0], "calls") === "4",
       "a timed-out command with budget left was retried, or the probe went on after it");
   });
 
   part("tie", () => {
-    const s = scenario("tie", "macos-xcode-iphone", MAC_COSTS({ sdk: 25_000, devices: 19_950, runtimes: 40_000 }));
+    const s = scenario("tie", "macos-xcode-iphone", MAC_COSTS({ inventory: 25_000, devices: 19_970, runtimes: 40_000 }), { xcodes: XCODES4 });
     check(/^destination\.simctl-runtimes:timeout:elapsed_ms=30000:applied_ms=30000:bound=per-command:budget_before_ms=30000:/.test(field(s.lines[0], "failure") ?? ""),
       `a remaining budget exactly equal to the 30 s bound must be per-command: ${s.lines[0]}`);
   });
 
   part("exhausted", () => {
-    const s = scenario("exhausted", "macos-xcode-iphone", MAC_COSTS({ sdk: 25_000, devices: 29_000, runtimes: 20_950 }));
+    const s = scenario("exhausted", "macos-xcode-iphone", MAC_COSTS({ inventory: 25_000, devices: 29_000, runtimes: 20_970 }), { xcodes: XCODES4 });
     check(s.written === null && s.warning === "::warning::ci-evidence-toolchain: no source certificate: the probe ran out of its time budget"
       && field(s.lines[0], "failure") === "destination.selection-program:budget-exhausted:elapsed_ms=0:applied_ms=0:budget_before_ms=0:budget_after_ms=0"
       && field(s.lines[0], "budget_left_ms") === "0",
@@ -858,8 +1020,8 @@ if (TIMING) {
 
   part("refusal", () => {
     const s = scenario("refusal", "macos-xcode-iphone", MAC_COSTS(), { xcodebuild: () => ({ status: 0, stdout: "Xcode beta\n", stderr: "" }) });
-    check(s.written === null && /^::warning::ci-evidence-toolchain: no source certificate: Xcode\.app xcodebuild -version is not in a recognised shape/.test(s.warning ?? "")
-      && field(s.lines[0], "failure") === "xcode.refused:last=xcode.xcodebuild-version#1:ok",
+    check(s.written === null && s.warning === "::warning::ci-evidence-toolchain: no source certificate: Xcode.app xcodebuild -version -sdk is truncated"
+      && field(s.lines[0], "failure") === "xcode.refused:last=xcode.xcodebuild-sdk-inventory#1:ok",
     `a parse refusal must keep its message and name the component and its last call: ${s.lines[0]}`);
     const exit = scenario("exit", "macos-xcode-iphone", MAC_COSTS(), { status: { "xcrun simctl list devices available -j": 1 } });
     check(/simctl list devices available -j exited 1$/.test(exit.warning ?? "") && field(exit.lines[0], "failure") === "destination.refused:last=destination.simctl-devices:exit:1",
@@ -871,14 +1033,14 @@ if (TIMING) {
     // in the environment, in DEVELOPER_DIR and in the C compiler command.
     const canary = "CANARY7q";
     const xcodes = { [`/Applications/Xcode_${canary}.app`]: { version: "26.0.1", build: "17A400", macosx: "26.0", sim: "26.0" } };
-    const priv = scenario("private Xcode", "macos-xcode-go", MAC_COSTS({ xcodebuild: 40_000 }), {
+    const priv = scenario("private Xcode", "macos-xcode-go", MAC_COSTS({ inventory: 40_000 }), {
       xcodes, realpaths: { [`/Applications/Xcode_${canary}.app`]: `/Users/owner-${canary}/Private/Xcode_${canary}.app` },
       env: { SECRET_TOKEN: `tok-${canary}`, DEVELOPER_DIR: `/Users/owner-${canary}/Private/Xcode_${canary}.app/Contents/Developer` },
       out: { "go env CGO_ENABLED CC": `1\nclang-${canary} --sysroot=/Users/owner-${canary}\n` },
     });
-    check(priv.warning?.includes(canary) && field(priv.lines[0], "failure")?.startsWith("xcode.xcodebuild-version#1:timeout:"),
+    check(priv.warning?.includes(canary) && field(priv.lines[0], "failure")?.startsWith("xcode.xcodebuild-sdk-inventory#1:timeout:"),
       `the private-path scenario did not time out in the private Xcode (it must, to test the line): ${priv.warning} / ${priv.lines[0]}`);
-    const cc = scenario("private CC", "macos-xcode-go", MAC_COSTS({ xcodebuild: 10 }), {
+    const cc = scenario("private CC", "macos-xcode-go", MAC_COSTS({ inventory: 10 }), {
       env: { SECRET_TOKEN: `tok-${canary}` }, out: { "go env CGO_ENABLED CC": `1\nclang-${canary} --sysroot=/Users/owner-${canary}\n` },
     });
     for (const s of [priv, cc]) {
@@ -912,7 +1074,7 @@ if (TIMING) {
     // Two current profiles in one run: the first times out at its budget's end;
     // the second starts with a whole new budget and its own trace.
     const dir = mkdtempSync(join(tmpdir(), "ci-evidence-toolchain-timing-"));
-    const f = fakeSpawn("macos-xcode-iphone", { costs: MAC_COSTS({ sdk: 25_000, devices: 29_000, runtimes: 25_000 }) });
+    const f = fakeSpawn("macos-xcode-iphone", { costs: MAC_COSTS({ inventory: 25_000, devices: 29_000, runtimes: 25_000 }), overrides: { xcodes: XCODES4 } });
     const { code, text } = mainOut(["current", "--profiles", "macos-xcode-iphone,macos-xcode", "--dir", dir], f.r.env, depsOf(f));
     const lines = timingLines(text);
     let files = [];
@@ -921,7 +1083,7 @@ if (TIMING) {
       `want two timing lines and only the second profile's certificate: ${JSON.stringify(files)} ${JSON.stringify(lines)}`);
     check(field(lines[0], "profile") === "macos-xcode-iphone" && field(lines[0], "outcome") === "no-certificate" && field(lines[0], "budget_left_ms") === "0"
       && field(lines[1], "profile") === "macos-xcode" && field(lines[1], "outcome") === "certificate" && field(lines[1], "role") === "current"
-      && field(lines[1], "budget_left_ms") === "49950" && field(lines[1], "calls") === "9" && field(lines[1], "wall_ms") === "100050",
+      && field(lines[1], "budget_left_ms") === "49970" && field(lines[1], "calls") === "7" && field(lines[1], "wall_ms") === "100030",
     `the second profile did not get its own budget and trace: ${JSON.stringify(lines)}`);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -960,6 +1122,186 @@ if (TIMING) {
   });
 }
 
+// ── 5d. one SDK inventory per Xcode ─────────────────────────────────────────
+//
+// Each installed Xcode is asked ONCE — its own `usr/bin/xcodebuild -version
+// -sdk` — where it was `xcodebuild -version` plus two `xcrun --sdk …
+// --show-sdk-version`. The certificate's facts and bytes do not change
+// (section 1 and the instrumented identity compare whole certificates, the
+// mocks now answering only the inventory). These checks hold the parser to the
+// one grammar a real Xcode printed (RAW_XCODE27) and refuse everything else.
+
+const parseSdkInventory = toolchainModule.parseSdkInventory;
+const INVENTORY = typeof parseSdkInventory === "function";
+if (!INVENTORY) check(false, "the probe has no SDK inventory parser (parseSdkInventory not exported)");
+// The three old queries' raw answers on the same installation (receipts, sha256 checked).
+const OLD_RECEIPTS = { version: ["Xcode 27.0\nBuild version 27A266a\n", "694b44731d0b415c5b11d844151e466d7f5e200a95627efda377f232f1a6ab77"],
+  sdk: ["27.0\n", "7b01c549928398a045692f24bcac7803b348524cdd76f21265b02984b2ba556a"] };
+const cp = (n) => String.fromCodePoint(n);
+const RAW_BLOCKS = RAW_XCODE27.split("\n\n");
+const rawWith = (blocks) => `${blocks.join("\n\n")}\n\n${RAW_BLOCKS.at(-1)}`;
+const sdkBlocks = () => RAW_BLOCKS.slice(0, -1);
+const familyOf = (b) => /\(([a-z]+)[0-9.]+\)$/.exec(b.split("\n")[0])[1];
+const editBlock = (family, edit, nth = 0) => {
+  let seen = -1;
+  return rawWith(sdkBlocks().map((b) => (familyOf(b) === family && ++seen === nth ? edit(b) : b)));
+};
+const parsed = (text) => { try { return parseSdkInventory(text, "Xcode_T.app"); } catch (err) { return err; } };
+const refused = (text, re) => { const r = parsed(text); return r instanceof ToolchainUnknown && re.test(r.message); };
+
+if (INVENTORY) {
+  part("inventory raw", () => {
+    check(createHashHex(RAW_XCODE27) === RAW_XCODE27_SHA256 && Buffer.byteLength(RAW_XCODE27) === 4951,
+      "RAW_XCODE27 is not the real Xcode 27 inventory byte for byte");
+    const facts = parsed(RAW_XCODE27);
+    check(canonical(facts) === canonical(RAW_XCODE27_FACTS), `the real Xcode 27 inventory did not parse to its facts: ${facts?.message ?? canonical(facts)}`);
+    check(createHashHex(OLD_RECEIPTS.version[0]) === OLD_RECEIPTS.version[1] && createHashHex(OLD_RECEIPTS.sdk[0]) === OLD_RECEIPTS.sdk[1]
+      && `Xcode ${facts.version}\nBuild version ${facts.build}\n` === OLD_RECEIPTS.version[0]
+      && `${facts.macosx_sdk}\n` === OLD_RECEIPTS.sdk[0] && `${facts.iphonesimulator_sdk}\n` === OLD_RECEIPTS.sdk[0],
+    "the inventory's facts are not exactly what the three old queries answered on the same Xcode");
+    // The two macOS blocks (MacOSX27.sdk and MacOSX27.0.sdk) are both there and agree.
+    check(sdkBlocks().filter((b) => familyOf(b) === "macosx").length === 2, "the real inventory no longer has its two macOS SDK blocks");
+  });
+
+  part("inventory capture", () => {
+    // The real text through capture: one Xcode answering RAW_XCODE27 verbatim
+    // certifies byte for byte like the grammar-derived mock of the same facts.
+    const x27 = { "/Applications/Xcode_27.0.app": { version: "27.0", build: "27A266a", macosx: "27.0", sim: "27.0" } };
+    const o = { xcodes: x27, out: { "xcode-select -p": "/Applications/Xcode_27.0.app/Contents/Developer\n" } };
+    const viaRaw = certFor("macos-xcode", { ...o, xcodebuild: () => ({ status: 0, stdout: RAW_XCODE27, stderr: "" }) });
+    const viaMock = certFor("macos-xcode", o);
+    check(JSON.stringify(viaRaw, null, 2) === JSON.stringify(viaMock, null, 2)
+      && canonical(viaRaw.toolchain.xcode.installed) === canonical([{ app: "/Applications/Xcode_27.0.app", ...RAW_XCODE27_FACTS }]),
+    `the real inventory and the mocked one of the same facts certify differently: ${canonical(viaRaw.toolchain.xcode)}`);
+    // One call per real install (the Xcode.app alias asked once), through that
+    // install's own xcodebuild under its own DEVELOPER_DIR; no `xcrun --sdk`.
+    const r = runner("macOS");
+    capture({ registry: REGISTRY, profileName: "macos-xcode", role: "source", laneId: "go", jobId: "test", env: r.env, exec: r.exec,
+      readFile: r.readFile, exists: r.exists, listDir: r.listDir, realpath: r.realpath, now: NOW, resolveChrome: r.resolveChrome, digestFile: r.digestFile, root: repoRoot });
+    const xc = r.calls.filter((c) => /xcodebuild|^xcrun$|xcode-select/.test(c.argv[0]))
+      .map((c) => `${c.argv.join(" ")} @${c.env.DEVELOPER_DIR}`);
+    check(JSON.stringify(xc) === JSON.stringify([
+      "/Applications/Xcode_26.0.1.app/Contents/Developer/usr/bin/xcodebuild -version -sdk @/Applications/Xcode_26.0.1.app/Contents/Developer",
+      "/Applications/Xcode_16.4.app/Contents/Developer/usr/bin/xcodebuild -version -sdk @/Applications/Xcode_16.4.app/Contents/Developer",
+      "xcode-select -p @"]), `the Xcode inventory ran other commands than one own-xcodebuild inventory per install: ${JSON.stringify(xc)}`);
+    for (const profile of Object.keys(REGISTRY.profiles)) {
+      const { calls } = traced(profile);
+      check(!calls.some((a) => a[0] === "xcrun" && a[1] === "--sdk"), `${profile} still asks xcrun --sdk`);
+    }
+    // Each install's facts come from its own inventory, never another's.
+    const per = certFor("macos-xcode").toolchain.xcode.installed;
+    check(canonical(per) === canonical([
+      { app: "/Applications/Xcode_16.4.app", version: "16.4", build: "16F6", macosx_sdk: "15.5", iphonesimulator_sdk: "18.5" },
+      { app: "/Applications/Xcode_26.0.1.app", version: "26.0.1", build: "17A400", macosx_sdk: "26.0", iphonesimulator_sdk: "26.0" }]),
+    `two installs' inventories were mixed: ${canonical(per)}`);
+    // Through capture: an inventory carrying a second Xcode's footer line is unknown, named by the install asked.
+    const crossed = threw(() => certFor("macos-xcode", { xcodebuild: (app) => (app.includes("16.4")
+      ? { status: 0, stdout: sdkInventory(app, { version: "16.4", build: "16F6", macosx: "15.5", sim: "26.0" }).replace("\nXcode 16.4\n", "\nXcode 16.4\nXcode 26.0.1\n"), stderr: "" }
+      : { status: 0, stdout: sdkInventory(app, XCODES[app]), stderr: "" }) }));
+    check(crossed instanceof ToolchainUnknown && /^Xcode_16\.4\.app xcodebuild -version -sdk has an unrecognised line where an SDK block starts/.test(crossed.message),
+      `an inventory carrying a second Xcode's footer was not refused: ${crossed?.message ?? "a certificate"}`);
+  });
+
+  part("inventory refusals", () => {
+    const sim = (edit) => editBlock("iphonesimulator", edit);
+    const over = (n) => rawWith([...Array.from({ length: n }, () => sdkBlocks()[1]), ...sdkBlocks()]);
+    let under = 1;
+    while (Buffer.byteLength(over(under + 1)) <= PROBE_LIMITS.outputBytes) under += 1;
+    const cases = [
+      ["no footer", RAW_XCODE27.slice(0, RAW_XCODE27.indexOf("Xcode 27.0\n")), /does not end with the Xcode version footer$/],
+      ["no build line", RAW_XCODE27.replace("\nBuild version 27A266a\n", "\n"), /does not end with the Xcode version footer$/],
+      ["a footer twice", `${RAW_XCODE27}Xcode 27.0\nBuild version 27A266a\n`, /unrecognised line where an SDK block starts \(line 123\)$/],
+      ["text after the footer", `${RAW_XCODE27}note\n`, /does not end with the Xcode version footer$/],
+      ["text before the first SDK", `note\n${RAW_XCODE27}`, /unrecognised line where an SDK block starts \(line 1\)$/],
+      ["an Xcode beta footer", RAW_XCODE27.replace("Xcode 27.0\nBuild", "Xcode beta\nBuild"), /does not end with the Xcode version footer$/],
+      ["a footer with a trailing space", RAW_XCODE27.replace("27A266a\n", "27A266a \n"), /does not end with the Xcode version footer$/],
+      ["a footer without its line end", RAW_XCODE27.slice(0, -1), /does not end with a line end$/],
+      ["CRLF line ends", RAW_XCODE27.replaceAll("\n", "\r\n"), /has a byte outside printable ASCII and LF$/],
+      ...[0x00, 0x09, 0x0b, 0x1b, 0x7f, 0x85, 0x2028, 0xff0d].map((c) => [`U+${c.toString(16).padStart(4, "0")} in a value`,
+        RAW_XCODE27.replace("ProductName: iPhone OS", `ProductName: iPhone${cp(c)}OS`), /has a byte outside printable ASCII and LF$/]),
+      ["no iphonesimulator SDK", rawWith(sdkBlocks().filter((b) => familyOf(b) !== "iphonesimulator")), /lists no iphonesimulator SDK$/],
+      ["no macosx SDK", rawWith(sdkBlocks().filter((b) => familyOf(b) !== "macosx")), /lists no macosx SDK$/],
+      ["two macosx SDK versions", editBlock("macosx", (b) => b.replace("SDKVersion: 27.0", "SDKVersion: 27.1")), /lists the macosx SDK at two different versions$/],
+      ["two iphonesimulator SDK versions", rawWith([...sdkBlocks(), sdkBlocks()[2].replace("SDKVersion: 27.0", "SDKVersion: 26.5")]), /lists the iphonesimulator SDK at two different versions$/],
+      ["two appletvos SDK versions", rawWith([...sdkBlocks(), sdkBlocks()[5].replace("SDKVersion: 27.0", "SDKVersion: 26.0")]), /lists the appletvos SDK at two different versions$/],
+      ["a repeated SDKVersion", sim((b) => b.replace("SDKVersion: 27.0\n", "SDKVersion: 27.0\nSDKVersion: 27.0\n")), /repeats SDKVersion in one SDK block/],
+      ["a repeated Path", sim((b) => b.replace("\nPlatformVersion", `\n${b.split("\n")[2]}\nPlatformVersion`)), /repeats Path in one SDK block/],
+      ["a repeated optional key", sim((b) => b.replace("\nProductVersion: 27.0", "\nProductVersion: 27.0\nProductVersion: 27.0")), /repeats ProductVersion in one SDK block/],
+      ["no SDKVersion", sim((b) => b.replace("SDKVersion: 27.0\n", "")), /has an SDK block without SDKVersion$/],
+      ["no PlatformPath", editBlock("driverkit", (b) => b.split("\n").slice(0, -1).join("\n")), /has an SDK block without PlatformPath$/],
+      ["an unknown key", sim((b) => `${b}\nSDKFlavor: plain`), /unrecognised line in an SDK block/],
+      ["a key out of order", sim((b) => { const l = b.split("\n"); [l[1], l[2]] = [l[2], l[1]]; return l.join("\n"); }), /has SDKVersion out of its order/],
+      ["an optional key out of order", editBlock("macosx", (b) => b.replace("ProductUserVisibleVersion: 27.0\nProductVersion: 27.0", "ProductVersion: 27.0\nProductUserVisibleVersion: 27.0")), /has ProductUserVisibleVersion out of its order/],
+      ["an SDKVersion without a minor", sim((b) => b.replace("SDKVersion: 27.0", "SDKVersion: 27")), /has a SDKVersion in an unrecognised shape/],
+      ["an SDKVersion with a suffix", sim((b) => b.replace("SDKVersion: 27.0", "SDKVersion: 27.0b1")), /has a SDKVersion in an unrecognised shape/],
+      ["a relative Path", sim((b) => b.replace("Path: /", "Path: ")), /has a Path in an unrecognised shape/],
+      ["a ProductName past its 200 characters", sim((b) => b.replace("ProductName: iPhone OS", `ProductName: ${"x".repeat(201)}`)), /has a ProductName in an unrecognised shape/],
+      ["an empty value", sim((b) => b.replace("ProductName: iPhone OS", "ProductName: ")), /unrecognised line in an SDK block/],
+      ["no blank line before the footer", RAW_XCODE27.replace("\n\nXcode 27.0\n", "\nXcode 27.0\n"), /is truncated inside an SDK block$/],
+      ["a doubled blank line", RAW_XCODE27.replace("\n\n", "\n\n\n"), /unrecognised line where an SDK block starts \(line 7\)$/],
+      ["two blocks run together", RAW_XCODE27.replace("PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/DriverKit.platform\n\n", "PlatformPath: /Applications/Xcode.app/Contents/Developer/Platforms/DriverKit.platform\n"), /unrecognised line in an SDK block \(line 6\)$/],
+      ["a header with no canonical identity", RAW_XCODE27.replace(" (iphonesimulator27.0)", ""), /unrecognised line where an SDK block starts/],
+      ["a header with an upper-case family", RAW_XCODE27.replace("(iphonesimulator27.0)", "(iPhoneSimulator27.0)"), /unrecognised line where an SDK block starts/],
+      ["an empty output", "", /does not end with a line end$/],
+      ["only a footer", "Xcode 27.0\nBuild version 27A266a\n", /is truncated$/],
+      ["an output past the 64 KiB cap", over(under + 1), /is above its output cap$/],
+    ];
+    for (const [what, text, re] of cases) {
+      const r = parsed(text);
+      check(r instanceof ToolchainUnknown && re.test(r.message) && r.message.startsWith("Xcode_T.app xcodebuild -version -sdk ")
+        && !/\/Applications|\/Users|Platforms/.test(r.message),
+      `an SDK inventory with ${what} was not refused as ${re}: ${r instanceof Error ? r.message : canonical(r)}`);
+    }
+    check(parsed(undefined) instanceof ToolchainUnknown && parsed(undefined).message === "Xcode_T.app xcodebuild -version -sdk is not text", "a missing inventory output was not refused");
+    // The cap is the command's own 64 KiB, not something smaller: just under it parses.
+    check(canonical(parsed(over(under))) === canonical(RAW_XCODE27_FACTS) && Buffer.byteLength(over(under)) <= PROBE_LIMITS.outputBytes,
+      "an inventory just under the 64 KiB output cap was refused");
+    // Every truncation of the real output is refused: no prefix of it is a complete inventory.
+    let prefixes = 0;
+    for (let k = 0; k < RAW_XCODE27.length; k += 1) if (parsed(RAW_XCODE27.slice(0, k)) instanceof ToolchainUnknown) prefixes += 1;
+    check(prefixes === RAW_XCODE27.length, `${RAW_XCODE27.length - prefixes} truncations of the real inventory were accepted`);
+  });
+
+  part("inventory admits", () => {
+    // What the grammar admits on purpose: the facts these yield.
+    const sim = (edit) => editBlock("iphonesimulator", edit);
+    for (const [what, text, want] of [
+      // The version is ONLY the block's SDKVersion — never its header or file name.
+      ["an iphonesimulator SDKVersion that differs from its header", sim((b) => b.replace("SDKVersion: 27.0", "SDKVersion: 26.5")), { ...RAW_XCODE27_FACTS, iphonesimulator_sdk: "26.5" }],
+      ["a three-part SDKVersion", sim((b) => b.replace("SDKVersion: 27.0", "SDKVersion: 27.0.1")), { ...RAW_XCODE27_FACTS, iphonesimulator_sdk: "27.0.1" }],
+      // The family is ONLY the header's canonical identity — never the file name or display name.
+      ["a renamed SDK file and display", sim((b) => b.replace("iPhoneSimulator27.0.sdk - Simulator - iOS 27.0", "Other27.0.sdk - Something 27.0")), RAW_XCODE27_FACTS],
+      // Repeated blocks of one family with one SDKVersion: that version, no physical identity claimed.
+      ["a repeated identical iphonesimulator block", rawWith([...sdkBlocks(), sdkBlocks()[2]]), RAW_XCODE27_FACTS],
+      ["a ProductName of exactly 200 characters", sim((b) => b.replace("ProductName: iPhone OS", `ProductName: ${"x".repeat(200)}`)), RAW_XCODE27_FACTS],
+      ["the four required keys only", sim((b) => b.split("\n").slice(0, 5).join("\n")), RAW_XCODE27_FACTS],
+      ["a two-part Xcode version and another build", RAW_XCODE27.replace("Xcode 27.0\nBuild version 27A266a", "Xcode 27\nBuild version 27B5"), { ...RAW_XCODE27_FACTS, version: "27", build: "27B5" }],
+    ]) {
+      const r = parsed(text);
+      check(!(r instanceof Error) && canonical(r) === canonical(want), `an SDK inventory with ${what} did not yield ${canonical(want)}: ${r instanceof Error ? r.message : canonical(r)}`);
+    }
+    // A family taken from the file name instead would find this simulator block; the canonical identity says iphoneos.
+    check(refused(sim((b) => b.replace("(iphonesimulator27.0)", "(iphoneos27.0)")), /lists no iphonesimulator SDK$/),
+      "an SDK block's family was not taken from its canonical identity");
+  });
+
+  part("inventory budget", () => {
+    // The hosted shape: seven installs, each inventory slow. The sixth meets the
+    // budget's remainder; it is named, bounded by that remainder, and nothing
+    // runs after it. Every inventory call keeps the 64 KiB output cap.
+    const many = Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`/Applications/Xcode_2${i}.0.app`, { version: `2${i}.0`, build: `2${i}A1`, macosx: `2${i}.0`, sim: `2${i}.0` }]));
+    const s = scenario("inventory remainder", "macos-xcode-ipad", MAC_COSTS({ inventory: 25_000 }), { xcodes: many });
+    check(s.written === null && s.warning === "::warning::ci-evidence-toolchain: no source certificate: /Applications/Xcode_25.0.app/Contents/Developer/usr/bin/xcodebuild could not run: ETIMEDOUT"
+      && field(s.lines[0], "failure") === "xcode.xcodebuild-sdk-inventory#6:timeout:elapsed_ms=24980:applied_ms=24980:bound=budget-remainder:budget_before_ms=24980:budget_after_ms=0"
+      && field(s.lines[0], "calls") === "8" && field(s.lines[0], "components") === "image:2:20,xcode:6:149980" && field(s.lines[0], "budget_left_ms") === "0",
+    `an inventory meeting the budget's remainder is not named with its bound: ${s.warning} / ${s.lines[0]}`);
+    const inv = s.f.spawned.filter((x) => x.argv.at(-1) === "-sdk");
+    check(inv.length === 6 && s.f.spawned.at(-1) === inv[5] && inv.every((x) => x.maxBuffer === 64 * 1024)
+      && JSON.stringify(inv.map((x) => x.timeout)) === JSON.stringify([30_000, 30_000, 30_000, 30_000, 30_000, 24_980]),
+    `the inventory calls ran under other bounds, were retried, or the probe went on: ${JSON.stringify(inv.map((x) => [x.timeout, x.maxBuffer]))}`);
+  });
+}
+
 // ── 6. a real hosted Ubuntu runner, when this runs on one ────────────────────
 
 let live = "skipped (not a hosted Ubuntu runner)";
@@ -987,4 +1329,4 @@ if (failures.length > 0) {
 }
 console.log(`ci-evidence-toolchain-test: OK (${checks} checks: ${Object.keys(REGISTRY.profiles).length} profiles captured and stable; `
   + `${UNKNOWNS.length} unknown toolchains refused; ${VS2026} admitted and ${IMAGE_OS_REFUSED.length} near-miss ImageOS values refused at capture and schema; `
-  + `schema/digest/comparison/registry/CLI/budget controls; timing diagnostics; live: ${live})`);
+  + `schema/digest/comparison/registry/CLI/budget controls; timing diagnostics; SDK inventory grammar; live: ${live})`);

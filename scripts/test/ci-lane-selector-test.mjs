@@ -137,7 +137,7 @@ for (const lane of LANES) {
 // ── 2. the pattern vocabulary, capped on purpose ────────────────────────────
 //
 // A hand-written glob compiler is a bug farm, so the compiler stays general and
-// the VOCABULARY stays narrow: four shapes, asserted here. A fifth fails by
+// the VOCABULARY stays narrow: five shapes, asserted here. A sixth fails by
 // name, which forces whoever introduces it to teach the selector, the policy
 // test's compiler and the fixture about it in the same commit — rather than
 // discovering the disagreement as a lane that silently stopped being selected.
@@ -157,9 +157,9 @@ for (const lane of LANES) {
     const shape = classifyPattern(pattern);
     check(
       shape !== null,
-      `${lane.workflow}: the filter entry ${JSON.stringify(pattern)} is a FIFTH pattern shape. `
-      + `The permitted four are \`prefix/**\`, \`!prefix/**\`, an exact literal path and `
-      + `\`dir/basename*\`. Extend \`classifyPattern\`, the policy test's compiler and the shared `
+      `${lane.workflow}: the filter entry ${JSON.stringify(pattern)} is a SIXTH pattern shape. `
+      + `The permitted five are \`prefix/**\`, \`!prefix/**\`, an exact literal path, `
+      + `\`dir/basename*\` and \`!\` before one exact literal path. Extend \`classifyPattern\`, the policy test's compiler and the shared `
       + `fixture together, in this commit — a shape only one of the two implementations `
       + `understands is a lane the gate and the policy disagree about.`,
     );
@@ -168,12 +168,52 @@ for (const lane of LANES) {
 }
 // Every shape the vocabulary permits must actually occur, or the assertion
 // above is passing on shapes nothing exercises.
-for (const shape of ["tree", "tree-exclusion", "literal", "basename"]) {
+for (const shape of ["tree", "tree-exclusion", "literal", "basename", "literal-exclusion"]) {
   check(
     (shapesSeen.get(shape) ?? 0) > 0,
     `no lane filter uses the \`${shape}\` pattern shape any more, so the matcher's handling of it `
     + `is judged by nothing on disk. Either a filter changed and this vocabulary should shrink `
     + `with it, or an entry was lost.`,
+  );
+}
+
+// The exact-file exclusion is the shape whose mistakes select LESS, so where it
+// may appear is pinned rather than merely permitted: exactly the readiness
+// record, in exactly the two Apple lanes, each AFTER the `apps/mac/**` it
+// qualifies. Read with the selector's own reader so this is what the gate sees.
+{
+  const READINESS_EXCLUSION = "!apps/mac/release-readiness.json";
+  const want = ["macos.yml", "swift-package.yml"];
+  const seen = [];
+  for (const lane of LANES) {
+    let patterns;
+    try {
+      patterns = readPushPaths(readFileSync(resolve(workflowsDir, lane.workflow), "utf8"), lane.workflow);
+    } catch {
+      continue; // reported above
+    }
+    patterns.forEach((pattern, index) => {
+      if (classifyPattern(pattern) !== "literal-exclusion") return;
+      seen.push(lane.workflow);
+      check(
+        pattern === READINESS_EXCLUSION,
+        `${lane.workflow} excludes the exact file ${JSON.stringify(pattern)}. The only exact-file `
+        + `exclusion this vocabulary carries is ${READINESS_EXCLUSION}: a release-control record no `
+        + `build reads, checked by the unfiltered repo-hygiene lane. Any other file needs its own `
+        + `fixture rows, policy pin and review, in the same commit.`,
+      );
+      const tree = patterns.indexOf("apps/mac/**");
+      check(
+        tree !== -1 && tree < index,
+        `${lane.workflow} lists ${JSON.stringify(pattern)} ${tree === -1 ? "without" : "before"} `
+        + `\`apps/mac/**\`. Last match wins, so an exclusion with no earlier tree to qualify `
+        + `excludes nothing — the lane then starts on the record again, or never watched the tree.`,
+      );
+    });
+  }
+  check(
+    deepEqual(seen.sort(), want),
+    `the exact-file exclusion appears in [${seen.join(", ")}]; want [${want.join(", ")}].`,
   );
 }
 
@@ -246,6 +286,64 @@ check(
   + `exactly when its suite has something to say.`,
 );
 
+// The record-only commit the readiness exclusion exists for, as the gate sees
+// it: these three exact paths (2d2c67e7c against 373f6e733) start NEITHER
+// Apple lane — and adding any one shipping input beside the record starts
+// both again, because selection is per file and the union of the change set.
+const RECORD_ONLY = ["apps/README.md", "apps/mac/release-readiness.json", "docs/macos-app-store-submission.md"];
+{
+  const got = run(response(...RECORD_ONLY.map((filename) => ({ filename, status: "modified" }))));
+  check(
+    !got.has("macos") && !got.has("swift-package"),
+    `the record-only change set [${RECORD_ONLY.join(", ")}] selected [${[...got].join(", ")}]. `
+    + `None of the three is a build, package-test or signed-artifact input; repo-hygiene checks `
+    + `the readiness record on every change.`,
+  );
+}
+for (const shipping of [
+  "apps/mac/Relayium/AccountView.swift",
+  "apps/mac/Relayium/Info.plist",
+  "apps/mac/Relayium.xcodeproj/project.pbxproj",
+  "apps/mac/Relayium/Relayium.entitlements",
+  "apps/mac/Relayium/Assets.xcassets/AppIcon.appiconset/Contents.json",
+  "apps/mac/scripts/package-dmg.sh",
+  "apps/mac/scripts/check-release-readiness.mjs",
+  // Not in the tree. A name NEAR the record is not the record.
+  "apps/mac/release-readiness-extra.json",
+  "apps/mac/release-readiness.json.orig",
+]) {
+  const got = run(response(...[...RECORD_ONLY, shipping].map((filename) => ({ filename, status: "modified" }))));
+  check(
+    got.has("macos") && got.has("swift-package"),
+    `the record-only change set plus ${shipping} selected [${[...got].join(", ")}]; both Apple `
+    + `lanes must start. The exclusion names one exact file and qualifies nothing beside it.`,
+  );
+}
+{
+  // A rename INTO the record's path still runs what watched the path it left:
+  // the files API's previous_filename carries the old name.
+  const got = run(response({
+    filename: "apps/mac/release-readiness.json",
+    previous_filename: "apps/mac/Relayium/AccountView.swift",
+    status: "renamed",
+  }));
+  check(
+    got.has("macos") && got.has("swift-package"),
+    `renaming apps/mac/Relayium/AccountView.swift ONTO the readiness record selected `
+    + `[${[...got].join(", ")}]. The source left the build; the lanes that compiled it must run.`,
+  );
+}
+{
+  // Deleting the record is still an edit only repo-hygiene judges — and that
+  // lane fails on a missing manifest, which is why nothing heavy is needed.
+  const got = run(response({ filename: "apps/mac/release-readiness.json", status: "removed" }));
+  check(
+    !got.has("macos") && !got.has("swift-package"),
+    `deleting the readiness record selected [${[...got].join(", ")}]; the deletion is judged by `
+    + `repo-hygiene's files-only check, not by an Apple build that never read the file.`,
+  );
+}
+
 /** Every condition that must resolve to "run every conditional lane". */
 const FAIL_CLOSED = [
   {
@@ -276,6 +374,23 @@ const FAIL_CLOSED = [
     name: `${control} is part of the change set`,
     env: response({ filename: control }),
   })),
+  {
+    // Spelled out rather than iterated: the selector teaching itself a new
+    // shape is judged by running every lane, whatever else the PR touches.
+    name: "the selector changes alongside a record-only edit",
+    env: response({ filename: "scripts/ci/select-lanes.mjs" }, { filename: "apps/mac/release-readiness.json" }),
+    reason: /scripts\/ci\/select-lanes\.mjs is part of this pull request/,
+  },
+  {
+    name: "an internal full candidate whose change set is the readiness record alone",
+    env: { ...response({ filename: "apps/mac/release-readiness.json" }), LANE_SELECTOR_STATUS: INTERNAL_FULL_STATUS },
+    reason: /internal full candidate/,
+  },
+  {
+    name: "a full bootstrap of main whose change set is the readiness record alone",
+    env: { ...response({ filename: "apps/mac/release-readiness.json" }), LANE_SELECTOR_STATUS: FULL_BOOTSTRAP_STATUS },
+    reason: /full bootstrap of protected main/,
+  },
   {
     // Not a doubt but a decision: BASE's judge accepted an internal full
     // candidate, and that mode runs every lane by definition — even when its
@@ -588,6 +703,23 @@ function world(mutate) {
   return dir;
 }
 
+/**
+ * Replace the one `push.paths` item spelling `entry` with `replacement` (a
+ * string, a list, or `null` to delete it), leaving every other line — comments
+ * included — exactly as it is on disk.
+ */
+function replaceEntry(files, workflow, entry, replacement) {
+  const lines = files.get(workflow).split("\n");
+  const item = `      - '${entry}'`;
+  const at = lines.indexOf(item);
+  if (at === -1 || lines.indexOf(item, at + 1) !== -1) {
+    throw new Error(`${workflow} does not carry exactly one ${item.trim()}`);
+  }
+  const added = replacement === null ? [] : [replacement].flat().map((value) => `      - '${value}'`);
+  lines.splice(at, 1, ...added);
+  files.set(workflow, lines.join("\n"));
+}
+
 /** Replace one lane's whole `push.paths` sequence with `entries`. */
 function withPaths(files, workflow, entries) {
   const text = files.get(workflow);
@@ -615,8 +747,50 @@ const MUTATIONS = [
   {
     name: "a lane's filter grows a fifth pattern shape",
     mutate: (files) => withPaths(files, "contracts.yml", ["contracts/**/*.json"]),
-    expect: /is not one of the four permitted pattern shapes/,
+    expect: /is not one of the five permitted pattern shapes/,
     onSelect: true,
+  },
+  {
+    name: "the readiness exclusion is widened to a basename glob",
+    mutate: (files) => replaceEntry(files, "macos.yml", "!apps/mac/release-readiness.json", "!apps/mac/release-readiness*"),
+    expect: /"!apps\/mac\/release-readiness\*" is not one of the five permitted pattern shapes/,
+    onSelect: true,
+  },
+  {
+    name: "the readiness exclusion is widened to every JSON file in the directory",
+    mutate: (files) => replaceEntry(files, "swift-package.yml", "!apps/mac/release-readiness.json", "!apps/mac/*.json"),
+    expect: /"!apps\/mac\/\*\.json" is not one of the five permitted pattern shapes/,
+    onSelect: true,
+  },
+  {
+    name: "the readiness exclusion is spelled with a one-character wildcard",
+    mutate: (files) => replaceEntry(files, "macos.yml", "!apps/mac/release-readiness.json", "!apps/mac/release-readiness.jso?"),
+    expect: /"!apps\/mac\/release-readiness\.jso\?" is not one of the five permitted pattern shapes/,
+    onSelect: true,
+  },
+  {
+    name: "the readiness exclusion is removed from macos.yml",
+    mutate: (files) => replaceEntry(files, "macos.yml", "!apps/mac/release-readiness.json", null),
+    path: "apps/mac/release-readiness.json",
+    expectSelected: ["macos"],
+    rowFails: true,
+  },
+  {
+    name: "the readiness exclusion is moved above the tree it qualifies",
+    mutate: (files) => {
+      replaceEntry(files, "swift-package.yml", "!apps/mac/release-readiness.json", null);
+      replaceEntry(files, "swift-package.yml", "apps/RelayiumKit/**", ["!apps/mac/release-readiness.json", "apps/RelayiumKit/**"]);
+    },
+    path: "apps/mac/release-readiness.json",
+    expectSelected: ["swift-package"],
+    rowFails: true,
+  },
+  {
+    name: "swift-package.yml loses the tree the exclusion qualifies",
+    mutate: (files) => replaceEntry(files, "swift-package.yml", "apps/mac/**", null),
+    path: "apps/mac/Relayium/AccountView.swift",
+    expectSelected: ["macos"],
+    rowFails: true,
   },
   {
     name: "a lane workflow is deleted out from under the gate",
@@ -668,7 +842,7 @@ const MUTATIONS = [
   },
 ];
 
-for (const { name, mutate, expect, expectSelected, path, onSelect } of MUTATIONS) {
+for (const { name, mutate, expect, expectSelected, path, onSelect, rowFails } of MUTATIONS) {
   let dir;
   try {
     dir = world(mutate);
@@ -694,6 +868,17 @@ for (const { name, mutate, expect, expectSelected, path, onSelect } of MUTATIONS
     );
     continue;
   }
+  if (rowFails) {
+    // And the mutation is CAUGHT, not merely visible: the shared fixture row
+    // for that path must disagree with the mutated world, or nothing in the
+    // suite would ever have gone red for it.
+    const row = PATH_MATRIX.find(([rowPath]) => rowPath === path);
+    const wantIds = row ? row[1].map(laneIdOf).sort() : null;
+    check(
+      row !== undefined && thrown === null && !deepEqual(got, wantIds),
+      `the shared fixture does not catch "${name}": ${row === undefined ? `it has no row for ${path}` : `its row for ${path} still agrees with the mutated selection [${got?.join(", ")}]`}.`,
+    );
+  }
   check(
     thrown === null && deepEqual(got, expectSelected.slice().sort()),
     `the lane selector did not notice "${name}". Changing ${JSON.stringify(path)} selected `
@@ -710,6 +895,10 @@ for (const [patterns, path, want] of [
   [["apps/RelayiumKit/**", "!apps/RelayiumKit/Tests/**"], "apps/RelayiumKit/Sources/A.swift", true],
   [["server/account/deviceinbox*"], "server/account/deviceinbox_admission.go", true],
   [["server/account/deviceinbox*"], "server/account/deviceinbox/nested.go", false],
+  [["apps/mac/**", "!apps/mac/release-readiness.json"], "apps/mac/release-readiness.json", false],
+  [["apps/mac/**", "!apps/mac/release-readiness.json"], "apps/mac/release-readiness-extra.json", true],
+  [["apps/mac/**", "!apps/mac/release-readiness.json"], "apps/mac/Relayium/release-readiness.json", true],
+  [["!apps/mac/release-readiness.json", "apps/mac/**"], "apps/mac/release-readiness.json", true],
 ]) {
   check(
     matchesFilter(patterns, path) === want,

@@ -89,6 +89,10 @@ struct DevicePairRun {
     /// so — and the run then fails honestly on the second execution of a phase
     /// rather than quietly deleting something to keep itself green.
     let keepsReceivedFolder: Bool
+    /// This phase's fixture tag: the run tag plus the phase, so two phases of
+    /// one run that receive on the same device stage, send and read back two
+    /// different names. Validated against `PhysicalFixture` and bound to `tag`.
+    let fixtureTag: String
 
     /// How long a role may wait for the other device to reach the same point.
     ///
@@ -153,11 +157,31 @@ extension XCTestCase {
                 cannot distinguish the peer from a stranger.
                 """)
         }
+        // A physical run names its own fixture and keeps the device's received
+        // files. Both are refused rather than defaulted: a missing tag would
+        // stage the fixed name an earlier run already left in Received, and a
+        // reset would delete what the owner received to make room for it.
+        guard let fixtureTag = value("FIXTURE_TAG"),
+              PhysicalFixture.isValidTag(fixtureTag),
+              fixtureTag.hasPrefix(tag + "-") else {
+            throw DevicePairRunError(description: """
+                RELAYIUM_DEVICE_PAIR_FIXTURE_TAG is missing, outside the fixture-tag \
+                grammar, or not this run's tag plus a phase. The sender would stage a \
+                name this run did not choose, and the receiving device may already hold it.
+                """)
+        }
+        guard value("KEEP_RECEIVED") == "1" else {
+            throw DevicePairRunError(description: """
+                RELAYIUM_DEVICE_PAIR_KEEP_RECEIVED is not "1". A physical run keeps the \
+                device's Received folder; each phase names its own fixture instead.
+                """)
+        }
         return DevicePairRun(tag: tag, role: role, peerName: peer, peerNaming: naming,
                              message: message,
                              peerMessage: value("PEER_MESSAGE"),
                              pairingCode: value("PAIRING_CODE"),
                              keepsReceivedFolder: value("KEEP_RECEIVED") == "1",
+                             fixtureTag: fixtureTag,
                              peerBudget: min(max(budget, 30), 1_800))
     }
 
@@ -180,6 +204,17 @@ extension XCTestCase {
                              verifying: Bool,
                              stagingFixture: Bool = false,
                              freshReceivedFolder: Bool = false) {
+        // The tag travels with the staging argument, read from the same
+        // variable `requireDevicePairRun` validated. Absent, it is passed as a
+        // bare flag, which the product refuses to stage under — so a launch
+        // that lost its tag fails instead of staging the fixed name.
+        var stagingArguments: [String] = []
+        if stagingFixture {
+            stagingArguments = [DevicePair.linkFixtureArgument, PhysicalFixture.argument]
+            if let tag = ProcessInfo.processInfo.environment["RELAYIUM_DEVICE_PAIR_FIXTURE_TAG"] {
+                stagingArguments.append(tag)
+            }
+        }
         app.launchArguments =
             // Pinned for the same reason every other suite pins it: every
             // assertion below names a rendered English string, and a device left
@@ -190,7 +225,7 @@ extension XCTestCase {
             // role so a run cannot inherit the previous one's answer and meet a
             // SAS gate it is not driving — or, worse, miss one it is.
             + ["-\(DevicePair.verifyPeersDefaultsKey)", verifying ? "YES" : "NO"]
-            + (stagingFixture ? [DevicePair.linkFixtureArgument] : [])
+            + stagingArguments
             + (freshReceivedFolder ? [DevicePair.freshReceivedFolderArgument] : [])
         app.launch()
     }
@@ -297,32 +332,19 @@ extension XCTestCase {
 
     // MARK: - the roster, and refusing to guess which row is the peer
 
-    /// The two scopes `DevicePairRosterChoice` decides between, snapshotted once.
+    /// One look at the roster: ONE `app.snapshot()`, decided entirely from that
+    /// immutable tree by `DevicePairRosterObservation.observe`.
     ///
-    /// Snapshotted rather than re-read: every property read off an element is
-    /// another accessibility-hierarchy fetch, and a rule that re-read `label`
-    /// while it decided would be judging a roster that may have changed between
-    /// its own clauses.
-    func rosterCandidates(_ run: DevicePairRun, in app: XCUIApplication)
-        -> (contained: [DevicePairRosterCandidate], named: [DevicePairRosterCandidate])
-    {
-        func snapshot(_ query: XCUIElementQuery) -> [DevicePairRosterCandidate] {
-            query.allElementsBoundByIndex.map {
-                DevicePairRosterCandidate(label: $0.label, isEnabled: $0.isEnabled)
-            }
+    /// Snapshotted rather than re-read: every property read off a live element
+    /// re-resolves its query against the running app, and on 2026-10-05 a row
+    /// that left between the enumeration and its `label` read failed a run whose
+    /// every claim had already passed. A look that cannot be taken is
+    /// `.unavailable`, never an empty roster.
+    func observeRoster(_ run: DevicePairRun, in app: XCUIApplication) -> DevicePairRosterObservation {
+        DevicePairRosterObservation.observe(containerLabel: DevicePair.rosterContainerLabel,
+                                            peerName: run.peerName) {
+            DevicePairLiveRosterNode(snapshot: try app.snapshot())
         }
-        let container = app.otherElements[DevicePair.rosterContainerLabel]
-        let contained = container.exists ? snapshot(container.buttons) : []
-        // `containing` HERE, and `matching` everywhere else in this file. The
-        // difference is deliberate: a roster row is a SwiftUI `Button` whose
-        // announced name is carried by a `Text` descendant, so the row is found
-        // by what it contains — which is the form `LocalSessionUITests` has
-        // driven against a real second endpoint. Every other query in this file
-        // READS the matched element's own label, and `containing` would hand it
-        // an enclosing group's combined string instead.
-        let named = snapshot(app.buttons.containing(
-            NSPredicate(format: "label CONTAINS %@", run.peerName)))
-        return (contained, named)
     }
 
     /// The one roster row this runner may tap, or a failure that says why not.
@@ -336,14 +358,18 @@ extension XCTestCase {
                       file: StaticString = #filePath,
                       line: UInt = #line) -> XCUIElement? {
         let deadline = Date().addingTimeInterval(run.peerBudget)
-        var last = DevicePairRosterChoice.empty
+        var last = "no look was taken"
         while Date() < deadline {
-            let (contained, named) = rosterCandidates(run, in: app)
-            let choice = DevicePairRosterChoice.decide(naming: run.peerNaming,
-                                                       contained: contained,
-                                                       named: named,
-                                                       peerName: run.peerName)
-            last = choice
+            let observation = observeRoster(run, in: app)
+            // An unavailable look decides nothing and is waited past, inside the
+            // same budget: it is neither a room nor a reason to tap.
+            guard let choice = observation.choice(naming: run.peerNaming,
+                                                  peerName: run.peerName) else {
+                last = "\(observation)"
+                Thread.sleep(forTimeInterval: 1)
+                continue
+            }
+            last = "\(choice)"
             switch choice {
             case .takeContained:
                 return app.otherElements[DevicePair.rosterContainerLabel]
@@ -377,7 +403,7 @@ extension XCTestCase {
         XCTFail("""
             the Nearby roster never produced exactly one selectable device \
             announcing "\(run.peerName)" within \(Int(run.peerBudget))s. \
-            Last decision: \(last).
+            Last look: \(last).
             \(app.debugDescription)
             """, file: file, line: line)
         return nil
@@ -645,6 +671,26 @@ extension XCTestCase {
     }
 }
 
+/// `XCUIElementSnapshot` read as a `DevicePairRosterNode`. Every property is a
+/// value of the snapshot already taken; none of them touches the running app.
+struct DevicePairLiveRosterNode: DevicePairRosterNode {
+    let snapshot: XCUIElementSnapshot
+
+    var rosterKind: DevicePairRosterNodeKind {
+        switch snapshot.elementType {
+        case .other: return .other
+        case .button: return .button
+        default: return .unrelated
+        }
+    }
+    var identifier: String { snapshot.identifier }
+    var label: String { snapshot.label }
+    var isEnabled: Bool { snapshot.isEnabled }
+    var rosterChildren: [DevicePairRosterNode] {
+        snapshot.children.map { DevicePairLiveRosterNode(snapshot: $0) }
+    }
+}
+
 // MARK: - the shared vocabulary
 
 /// Every literal both roles depend on, in one place.
@@ -698,7 +744,8 @@ enum DevicePair {
         "\(releaseFilePrefix)-\(tag)-\(role)"
     }
 
-    /// `UITestMode.pendingFixtureName` and the exact length it writes.
+    /// `UITestMode.pendingFixtureName` — the UNTAGGED name, which a physical
+    /// run never stages (see `PhysicalFixture`) — and the exact length written.
     ///
     /// The digest is of 1,536 bytes of `0x52` and is a CONSTANT here rather than
     /// something read back off the sending device — which is what makes the
@@ -849,3 +896,193 @@ enum DevicePairChannel {
         "\(marker) \(tag) \(role) \(event.rawValue) \(value)"
     }
 }
+
+// BEGIN physical-fixture-suite — compiled and executed verbatim beside the
+// product's `UITestMode.FixtureName` by
+// scripts/test/ios-physical-fixture-isolation-test.mjs, which requires the two
+// to agree on every input. Keep it free of Foundation.
+/// **The fixture name a physical run stages, asserts and reads back.**
+///
+/// The product's rule, repeated because a UI-test target cannot import the
+/// app. Shared by the pair and Device Inbox suites, whose launchers compose the
+/// same tag: the 8-lowercase-hex run tag, then up to two `-segment`s of 1–12
+/// lowercase letters or digits naming the phase.
+enum PhysicalFixture {
+    /// `UITestMode.FixtureName.argument`; `#if DEBUG`, absent from Release.
+    static let argument = "--relayium-ui-testing-fixture-tag"
+    static let stem = "Relayium product brief"
+
+    static func isValidTag(_ tag: String) -> Bool {
+        let parts = tag.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count >= 1, parts.count <= 3 else { return false }
+        let head = Array(parts[0].unicodeScalars)
+        guard head.count == 8,
+              head.allSatisfy({ ("0"..."9").contains($0) || ("a"..."f").contains($0) })
+        else { return false }
+        for part in parts.dropFirst() {
+            let scalars = Array(part.unicodeScalars)
+            guard scalars.count >= 1, scalars.count <= 12,
+                  scalars.allSatisfy({ ("0"..."9").contains($0) || ("a"..."z").contains($0) })
+            else { return false }
+        }
+        return true
+    }
+
+    static func stem(tag: String) -> String { "\(stem) \(tag)" }
+    static func name(tag: String) -> String { "\(stem(tag: tag)).txt" }
+}
+// END physical-fixture-suite
+
+// BEGIN roster-observation — compiled and executed verbatim by
+// `DevicePairSeamTests` beside `DevicePairRosterChoice.swift`, so nothing in
+// this block may name XCTest, XCUITest or a product module.
+
+/// One node of an IMMUTABLE accessibility snapshot, as a roster observation
+/// reads it. The live adapter wraps `XCUIElementSnapshot`; the seam tests wrap
+/// a fake tree.
+protocol DevicePairRosterNode {
+    var rosterKind: DevicePairRosterNodeKind { get }
+    var identifier: String { get }
+    var label: String { get }
+    var isEnabled: Bool { get }
+    var rosterChildren: [DevicePairRosterNode] { get }
+}
+
+/// The only element types the two roster scopes distinguish: the container is
+/// an `Other`, a row is a `Button`, and everything else is merely traversed.
+enum DevicePairRosterNodeKind: Equatable {
+    case other
+    case button
+    case unrelated
+}
+
+/// **What one look at the roster saw — or that it could not look.**
+///
+/// The physical Mini run on 2026-10-05 failed AFTER every claim had been made:
+/// the old observation enumerated live queries and then read `label` off each
+/// bound element, and every such read re-resolved against the running app. The
+/// peer leaving the room between the enumeration and the read turned into an
+/// XCTest "No matches found" failure. So a look is now ONE snapshot, and every
+/// value the rule decides on is read out of that same immutable tree.
+///
+/// A look that could not be taken is `.unavailable`, never two empty scopes:
+/// an empty roster is the very observation that releases the resident's hold,
+/// and a failed read must not be able to impersonate it.
+enum DevicePairRosterObservation: Equatable {
+    case observed(contained: [DevicePairRosterCandidate], named: [DevicePairRosterCandidate])
+    case unavailable(reason: String)
+
+    /// The most nodes one look will walk. Far above any roster screen; a tree
+    /// larger than this is reported rather than partially read.
+    static let nodeCap = 4_096
+
+    /// **The two scopes `DevicePairRosterChoice` decides between, from one tree.**
+    ///
+    /// Same scopes as the live queries they replace:
+    ///  - contained: the `Button` descendants of THE `Other` element whose
+    ///    identifier or label is `containerLabel`. No container is an empty
+    ///    scope; more than one is not a roster this look can attribute rows to;
+    ///  - named: every `Button` with a DESCENDANT whose label contains
+    ///    `peerName` (the `containing` query: a row's announced name is carried
+    ///    by a `Text` inside it, and the button's own label is not a descendant).
+    static func observe(containerLabel: String,
+                        peerName: String,
+                        nodeCap: Int = nodeCap,
+                        snapshot: () throws -> DevicePairRosterNode) -> DevicePairRosterObservation {
+        let root: DevicePairRosterNode
+        do {
+            root = try snapshot()
+        } catch {
+            return .unavailable(reason: "the accessibility snapshot could not be taken: \(error)")
+        }
+
+        var visited = 0
+        var containers: [DevicePairRosterNode] = []
+        var named: [DevicePairRosterCandidate] = []
+        func names(_ label: String) -> Bool { !peerName.isEmpty && label.contains(peerName) }
+        // Returns whether this node or any descendant carries the peer's name,
+        // or nil once the cap is exceeded.
+        func walk(_ node: DevicePairRosterNode, isRoot: Bool) -> Bool? {
+            visited += 1
+            if visited > nodeCap { return nil }
+            if !isRoot, node.rosterKind == .other,
+               node.identifier == containerLabel || node.label == containerLabel {
+                containers.append(node)
+            }
+            let slot = named.count
+            var descendantNames = false
+            for child in node.rosterChildren {
+                guard let childNames = walk(child, isRoot: false) else { return nil }
+                descendantNames = descendantNames || childNames
+            }
+            if !isRoot, node.rosterKind == .button, descendantNames {
+                named.insert(DevicePairRosterCandidate(label: node.label, isEnabled: node.isEnabled),
+                             at: slot)
+            }
+            return descendantNames || names(node.label)
+        }
+        guard walk(root, isRoot: true) != nil else {
+            return .unavailable(reason: "the accessibility tree exceeded \(nodeCap) nodes")
+        }
+        guard containers.count <= 1 else {
+            return .unavailable(reason: "\(containers.count) elements are labelled \"\(containerLabel)\"")
+        }
+
+        var contained: [DevicePairRosterCandidate] = []
+        func collect(_ node: DevicePairRosterNode) {
+            for child in node.rosterChildren {
+                if child.rosterKind == .button {
+                    contained.append(DevicePairRosterCandidate(label: child.label,
+                                                               isEnabled: child.isEnabled))
+                }
+                collect(child)
+            }
+        }
+        // Already inside the bounded walk above, so this cannot exceed the cap.
+        if let container = containers.first { collect(container) }
+        return .observed(contained: contained, named: named)
+    }
+
+    /// The rule's decision, or nil when there was nothing to decide on.
+    func choice(naming: DevicePairPeerNaming, peerName: String) -> DevicePairRosterChoice? {
+        guard case let .observed(contained, named) = self else { return nil }
+        return DevicePairRosterChoice.decide(naming: naming, contained: contained,
+                                             named: named, peerName: peerName)
+    }
+}
+
+/// **When the resident may leave the room, as a value.**
+///
+/// Released only by an observation that SAW both scopes empty. An unavailable
+/// look neither releases nor counts as the peer still being present, so a run
+/// whose looks keep failing holds to the same ceiling and then reports that it
+/// could not observe — which its caller fails, rather than passing on a guess.
+struct DevicePairRoomHold: Equatable {
+    enum Ceiling: Equatable {
+        /// The latest look saw the peer's row still present. Not a failure.
+        case peerStillPresent
+        /// The latest look (or every look) could not be taken.
+        case unobservable(reason: String)
+    }
+
+    private(set) var latest: DevicePairRosterObservation?
+
+    /// Record one look; true means the hold may end now.
+    mutating func record(_ observation: DevicePairRosterObservation) -> Bool {
+        latest = observation
+        if case let .observed(contained, named) = observation {
+            return contained.isEmpty && named.isEmpty
+        }
+        return false
+    }
+
+    /// What the ceiling means, given the latest look.
+    var ceiling: Ceiling {
+        switch latest {
+        case .none: return .unobservable(reason: "no look was taken")
+        case let .unavailable(reason)?: return .unobservable(reason: reason)
+        case .observed?: return .peerStillPresent
+        }
+    }
+}
+// END roster-observation

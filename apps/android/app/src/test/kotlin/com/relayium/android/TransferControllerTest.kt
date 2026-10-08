@@ -25,9 +25,14 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,11 +61,21 @@ class TransferControllerTest {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val controllers = ArrayList<TransferController>()
+    /** Every transport any rig made, for the teardown's thread check. */
+    private val allTransports = ConcurrentLinkedQueue<FakeTransport>()
 
     @After
     fun tearDown() {
-        controllers.forEach { it.shutdown() }
-        scope.cancel()
+        try {
+            val offOwner = allTransports.flatMap { it.offOwner }
+            assertTrue(
+                "the controller sent from a thread other than its session executor: $offOwner",
+                offOwner.isEmpty(),
+            )
+        } finally {
+            controllers.forEach { it.shutdown() }
+            scope.cancel()
+        }
     }
 
     // ── harness ─────────────────────────────────────────────────────────────
@@ -73,21 +88,87 @@ class TransferControllerTest {
         override fun close() = Unit
     }
 
+    /**
+     * The controller's transport callbacks, delivered the way [LinkTransport]
+     * delivers them: on the session executor the controller injected ("All
+     * events fire on the executor thread"). A test calling straight in from its
+     * own thread runs the controller on two threads at once, racing its own
+     * storage completions — a stale `state.copy` from one can then republish
+     * what the other just cleared, which production cannot do.
+     *
+     * Each call is a finite barrier: it returns once the callback has run, so a
+     * test still sees its effects on the next line, and whatever the callback
+     * threw is rethrown here. A call from the executor itself would wait on its
+     * own thread forever, so it is refused before anything is submitted.
+     */
+    private class SerialEvents(
+        private val executor: ScheduledExecutorService,
+        private val owner: Thread,
+        private val delegate: LinkTransport.Events,
+    ) : LinkTransport.Events {
+        override fun onReady(keys: Crypto.SessionKeys, sas: String, maxFrameBytes: Int) =
+            deliver("onReady") { delegate.onReady(keys, sas, maxFrameBytes) }
+        override fun onFileFrame(frame: ByteArray) = deliver("onFileFrame") { delegate.onFileFrame(frame) }
+        override fun onTextFrame(frame: ByteArray) = deliver("onTextFrame") { delegate.onTextFrame(frame) }
+        override fun onClosed(reason: String) = deliver("onClosed") { delegate.onClosed(reason) }
+        override fun onInterrupted(interrupted: Boolean) =
+            deliver("onInterrupted") { delegate.onInterrupted(interrupted) }
+
+        private fun deliver(event: String, call: () -> Unit) {
+            check(Thread.currentThread() !== owner) {
+                "$event was called on the session executor itself; waiting for it there would never return"
+            }
+            val done = try {
+                executor.submit(Callable { call() })
+            } catch (e: RejectedExecutionException) {
+                throw AssertionError("$event was refused by the session executor", e)
+            }
+            try {
+                done.get(EVENT_BARRIER_SECONDS, TimeUnit.SECONDS)
+            } catch (e: TimeoutException) {
+                done.cancel(false)
+                throw AssertionError("$event did not finish on the session executor in ${EVENT_BARRIER_SECONDS}s", e)
+            } catch (e: ExecutionException) {
+                throw e.cause ?: e
+            }
+        }
+
+        companion object {
+            const val EVENT_BARRIER_SECONDS = 5L
+        }
+    }
+
     private class FakeTransport(
         val profile: WireProfile,
-        val events: LinkTransport.Events,
+        controllerEvents: LinkTransport.Events,
+        executor: ScheduledExecutorService,
+        /** The session executor's thread: the factory runs on it. */
+        private val owner: Thread,
     ) : TransportHandle {
+        val events: LinkTransport.Events = SerialEvents(executor, owner, controllerEvents)
         val fileFrames = ConcurrentLinkedQueue<ByteArray>()
         val textFrames = ConcurrentLinkedQueue<ByteArray>()
         val signals = ConcurrentLinkedQueue<Json>()
+        /** Sends the controller made from any thread but its session executor. */
+        val offOwner = ConcurrentLinkedQueue<String>()
         @Volatile var acceptFile = true
         @Volatile var acceptText = true
         @Volatile var textBuffered = 0L
         @Volatile var closedReason: String? = null
         override fun start() = Unit
         override fun onSignal(raw: Json) { signals.add(raw) }
-        override fun sendFile(frame: ByteArray) = if (acceptFile) { fileFrames.add(frame); true } else false
-        override fun sendText(frame: ByteArray) = if (acceptText) { textFrames.add(frame); true } else false
+        override fun sendFile(frame: ByteArray): Boolean {
+            onOwner("sendFile")
+            return if (acceptFile) { fileFrames.add(frame); true } else false
+        }
+        override fun sendText(frame: ByteArray): Boolean {
+            onOwner("sendText")
+            return if (acceptText) { textFrames.add(frame); true } else false
+        }
+        private fun onOwner(what: String) {
+            val thread = Thread.currentThread()
+            if (thread !== owner) offOwner.add("$what on ${thread.name}")
+        }
         override fun fileBufferedAmount() = 0L
         override fun textBufferedAmount() = textBuffered
         override fun leaveAndClose(leave: Signal?) { closedReason = "local-leave" }
@@ -135,8 +216,9 @@ class TransferControllerTest {
         val deps = TransferController.Deps(
             fetchIce = { IceConfig.Result(emptyList(), "") },
             signals = { _, events -> signaling.also { it.events = events } },
-            transports = { profile, _, _, _, events ->
-                FakeTransport(profile, events).also(transports::add)
+            transports = { profile, _, executor, _, events ->
+                FakeTransport(profile, events, executor, Thread.currentThread())
+                    .also(transports::add).also(allTransports::add)
             },
             store = store ?: ReceiveStore(temp.newFolder("staging-${System.nanoTime()}")),
             providerOps = ops,

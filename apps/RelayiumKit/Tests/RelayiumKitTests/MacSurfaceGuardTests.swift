@@ -6969,3 +6969,451 @@ extension MacSurfaceGuardTests {
                       "a handed-back message is invisible to the exit and to ⌘Q")
     }
 }
+
+// MARK: - The first-launch route of the macOS AppShellUITests
+
+/// A FIXED-SHAPE reader of how the macOS `AppShellUITests.swift` launches its
+/// fixture cases: setup launches each one directly, through the selector-keyed
+/// `firstLaunchFixtures` table, instead of the body ending the default launch
+/// and relaunching. Like the iOS reader (`AppShellLaunchRoute`, whose comment
+/// stripper it shares) it is NOT a general Swift parser: it accepts exactly the
+/// shapes that file uses and throws on anything else, so a shape it does not
+/// understand fails the guard rather than passing it.
+enum MacAppShellFirstLaunch {
+    struct Refusal: Error, CustomStringConvertible { let description: String }
+
+    static let path = "apps/mac/RelayiumUITests/AppShellUITests.swift"
+
+    /// The thirteen cases whose immediate relaunch moved into setup, with the
+    /// arguments they relaunched with after `offlineLaunchArguments`, in order.
+    static let fixtures: [String: [String]] = [
+        "testTheExpiringPairingCodeCountsDownDiesAndCanBeReplaced": ["--relayium-ui-testing-expiring-code"],
+        "testAFailedPairingMintSaysSoAndCanBeRecoveredFrom": ["--relayium-ui-testing-failing-mint"],
+        "testASignedInLaunchRendersItsAccountAndUngatesStoredSend": ["--relayium-ui-testing-signed-in"],
+        "testDestructiveConfirmationsNameTheirSubjectAndConsequence": ["--relayium-ui-testing-signed-in"],
+        "testSigningOutReturnsToTheSignedOutSurfaces": ["--relayium-ui-testing-signed-in"],
+        "testASignedInStoredSendNamesTheFileItWouldUpload": ["--relayium-ui-testing-signed-in"],
+        "testAStoredSendSelectionCanBeExtendedAndClearedAfterLeavingAndReturning": ["--relayium-ui-testing-signed-in"],
+        "testACompletedStoredSendHandsOverItsLinkAndOffersAnother": ["--relayium-ui-testing-signed-in"],
+        "testSigningInThroughTheFormOpensTheAccount": ["--relayium-ui-testing-sign-in"],
+        "testCancellingAnUploadInFlightReturnsTheTask":
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-stall-upload"],
+        "testAFailedUploadKeepsTheWorkAndOffersToCarryOn":
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-fail-upload"],
+        "testCreatingAPairingCodeShowsEveryHandoff": [],
+        "testShareOpensTheSystemSharingPicker": [],
+    ]
+
+    /// Cases that relaunch LATER, through a helper or per language. Their
+    /// lifecycle is the point of the case and stays in the body; none may gain
+    /// a first-launch entry.
+    static let excludedLifecycle: [String: String] = [
+        "testABuildBelowTheMinimumIsBlockedAndOffersOnlyTheUpdateAction": "launchEvaluating(",
+        "testASupportedBuildRendersTheOrdinaryShell": "app.launch()",
+        "testEveryShippedLanguageRendersItsOwnShell": "app.terminate()",
+        "testAnArchivedLanguagePreferenceRendersACompleteEnglishLeftToRightShell": "app.terminate()",
+        "testMalformedStoredLinkExplainsHowToRecover": "openStoredLink(",
+        "testCorrectingARefusedStoredLinkClearsTheRefusalWithIt": "openStoredLink(",
+        "testOpeningAValidStoredLinkDownloadsAndNamesTheResult": "openStoredLink(",
+        "testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile": "openStoredLink(",
+        "testTheKeyboardAloneCompletesATask": "openStoredLink(",
+    ]
+
+    /// What a fixture case's body must never do: its one launch is setup's.
+    static let lifecycle = ["app.launch()", "app.terminate()", "app.launchArguments", "XCUIApplication(",
+                            "ensureProductWindowIsOpen()", "openStoredLink(", "launchEvaluating("]
+
+    /// What every one of the thirteen did right after its relaunch, and so
+    /// what its body now begins with: nothing more and nothing less was moved.
+    static let firstStatement = "        let window = mainWindow\n"
+        + "        XCTAssertTrue(window.waitForExistence(timeout: 20))\n"
+
+    /// The active (comment-free) setup, whole: the name resolved before any
+    /// launch, the keyboard, a fresh app, the table applied, one launch, the
+    /// product window.
+    static let activeSetup = [
+        "    override func setUpWithError() throws {",
+        "        continueAfterFailure = false",
+        "        let selector = try Self.recognizedSelector(in: name)",
+        "        useASCIIKeyboard()",
+        "        app = XCUIApplication()",
+        "        app.launchArguments = offlineLaunchArguments + (Self.firstLaunchFixtures[selector] ?? [])",
+        "        app.launch()",
+        "        ensureProductWindowIsOpen()",
+        "    }",
+        "",
+    ].joined(separator: "\n")
+
+    static let activeOfflineArguments = [
+        "    private var offlineLaunchArguments: [String] {",
+        "        [\"--relayium-ui-testing\", \"--relayium-ui-testing-file-code\",",
+        "         \"-AppleLanguages\", \"(en)\",",
+        "         \"-AppleLocale\", \"en_US\", \"-SUEnableAutomaticChecks\", \"NO\"]",
+        "    }",
+        "",
+    ].joined(separator: "\n")
+
+    static let activeNameGuard = [
+        "    private static func recognizedSelector(in name: String) throws -> Selector {",
+        "        for spelling in [String(describing: Self.self), NSStringFromClass(Self.self)] {",
+        "            let prefix = \"-[\\(spelling) \"",
+        "            guard name.hasPrefix(prefix), name.hasSuffix(\"]\") else { continue }",
+        "            let candidate = String(name.dropFirst(prefix.count).dropLast())",
+        "            guard candidate.hasPrefix(\"test\"), !candidate.contains(\" \"), !candidate.contains(\"]\"),",
+        "                  !candidate.contains(\":\") else { continue }",
+        "            let selector = Self.throwingTestSelectors[candidate] ?? NSSelectorFromString(candidate)",
+        "            guard Self.instancesRespond(to: selector) else { continue }",
+        "            return selector",
+        "        }",
+        "        throw UnrecognizedTestName(description: \"unrecognized XCTest name: \\(name)\")",
+        "    }",
+        "",
+    ].joined(separator: "\n")
+
+    /// The end of the route region: teardown, unchanged — the app, the keyboard
+    /// and both file fixtures.
+    static let regionEnd = [
+        "    override func tearDownWithError() throws {",
+        "        app?.terminate()",
+        "        restoreInputSource()",
+        "        if let pendingFileFixture {",
+        "            try? FileManager.default.removeItem(at: pendingFileFixture)",
+        "        }",
+        "        if let receivedFolderFixture {",
+        "            try? FileManager.default.removeItem(at: receivedFolderFixture)",
+        "        }",
+        "    }",
+        "",
+    ].joined(separator: "\n")
+
+    static func activeRegion(_ ui: String) throws -> String {
+        let parts = ui.components(separatedBy: "\n" + regionEnd)
+        guard parts.count == 2 else {
+            throw Refusal(description: "the setup region's teardown anchor is not unique and unchanged")
+        }
+        return try AppShellLaunchRoute.strippingComments(parts[0] + "\n" + regionEnd)
+    }
+
+    /// The whole body of a test, `() {` or `() throws {`, to its own closing brace.
+    static func body(of name: String, in ui: String) throws -> String {
+        let plain = ui.components(separatedBy: "\n    func \(name)() {\n")
+        let throwing = ui.components(separatedBy: "\n    func \(name)() throws {\n")
+        guard plain.count + throwing.count == 3 else {
+            throw Refusal(description: "\(name) is not declared exactly once")
+        }
+        let tail = plain.count == 2 ? plain[1] : throwing[1]
+        guard let end = tail.range(of: "\n    }\n") else { throw Refusal(description: "\(name) has no closing brace") }
+        return String(tail[..<end.lowerBound])
+    }
+
+    /// Every `func test…()` declaration, and whether it throws.
+    static func declaredTests(in ui: String) -> [(name: String, isThrowing: Bool)] {
+        ui.components(separatedBy: "\n    func ").dropFirst().compactMap { chunk in
+            let line = chunk.components(separatedBy: "\n")[0]
+            guard line.hasPrefix("test") else { return nil }
+            if line.hasSuffix("() throws {") { return (String(line.dropLast("() throws {".count)), true) }
+            if line.hasSuffix("() {") { return (String(line.dropLast("() {".count)), false) }
+            return nil
+        }
+    }
+
+    /// Every entry of the ACTIVE `firstLaunchFixtures`: test name -> ordered
+    /// arguments. A commented-out entry or argument counts as absent.
+    static func parsedFixtures(in ui: String) throws -> [String: [String]] {
+        let head = "    private static let firstLaunchFixtures: [Selector: [String]] = [\n"
+        guard ui.components(separatedBy: "static let firstLaunchFixtures").count == 2 else {
+            throw Refusal(description: "the firstLaunchFixtures table is missing or declared twice")
+        }
+        let parts = try activeRegion(ui).components(separatedBy: head)
+        guard parts.count == 2, let end = parts[1].range(of: "\n    ]\n") else {
+            throw Refusal(description: "the firstLaunchFixtures table is missing from the active route region")
+        }
+        let key = "        #selector(AppShellUITests."
+        let chunks = parts[1][..<end.lowerBound].components(separatedBy: key)
+        guard chunks[0].isEmpty else { throw Refusal(description: "unparsed residue before the first fixture entry") }
+        var out: [String: [String]] = [:]
+        for chunk in chunks.dropFirst() {
+            guard let close = chunk.range(of: "):\n") else { throw Refusal(description: "unparsed fixture key") }
+            let name = String(chunk[..<close.lowerBound])
+            guard name.hasPrefix("test"), name.allSatisfy({ $0.isLetter || $0.isNumber }) else {
+                throw Refusal(description: "unparsed fixture key \(name)")
+            }
+            let literal = chunk[close.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard literal.hasPrefix("["), literal.hasSuffix("],") else {
+                throw Refusal(description: "unparsed residue in the \(name) fixture entry")
+            }
+            var arguments: [String] = []
+            for item in literal.dropFirst().dropLast(2).components(separatedBy: ",") {
+                let token = item.trimmingCharacters(in: .whitespacesAndNewlines)
+                if token.isEmpty { continue }
+                guard token.count >= 2, token.hasPrefix("\""), token.hasSuffix("\""),
+                      !token.dropFirst().dropLast().contains("\"") else {
+                    throw Refusal(description: "unparsed residue in the \(name) fixture entry")
+                }
+                arguments.append(String(token.dropFirst().dropLast()))
+            }
+            guard out[name] == nil else { throw Refusal(description: "duplicate fixture entry for \(name)") }
+            out[name] = arguments
+        }
+        return out
+    }
+
+    /// The throwing cases' names map to their COMPILER selectors: one active
+    /// table, each key bound to `#selector` of the same name, and the keys are
+    /// exactly the class's throwing declarations — mapped to a fixture or not.
+    static func checkThrowingSelectors(_ ui: String) throws {
+        guard ui.components(separatedBy: "static let throwingTestSelectors").count == 2 else {
+            throw Refusal(description: "the throwing-test selector table is not declared exactly once")
+        }
+        let head = "    private static let throwingTestSelectors: [String: Selector] = [\n"
+        let parts = try activeRegion(ui).components(separatedBy: head)
+        guard parts.count == 2, let end = parts[1].range(of: "\n    ]\n") else {
+            throw Refusal(description: "the throwing-test selector table is missing from the active route region")
+        }
+        let lines = parts[1][..<end.lowerBound].components(separatedBy: "\n").filter { !$0.isEmpty }
+        guard lines.count % 2 == 0 else { throw Refusal(description: "unparsed residue in the throwing-test selector table") }
+        var keys: [String] = []
+        for k in stride(from: 0, to: lines.count, by: 2) {
+            let key = lines[k], value = lines[k + 1]
+            let valueHead = "            #selector(AppShellUITests."
+            guard key.hasPrefix("        \""), key.hasSuffix("\":"), value.hasPrefix(valueHead), value.hasSuffix("),") else {
+                throw Refusal(description: "unparsed residue in the throwing-test selector table")
+            }
+            let name = String(key.dropFirst(9).dropLast(2))
+            let target = String(value.dropFirst(valueHead.count).dropLast(2))
+            guard name == target else {
+                throw Refusal(description: "the throwing-test selector table binds \(name) to \(target)'s selector")
+            }
+            guard !keys.contains(name) else { throw Refusal(description: "duplicate throwing-test selector entry \(name)") }
+            keys.append(name)
+        }
+        let declared = declaredTests(in: ui).filter { $0.isThrowing }.map { $0.name }
+        guard Set(keys) == Set(declared), keys.count == declared.count else {
+            throw Refusal(description: "the throwing-test selector table does not match the throwing test declarations")
+        }
+    }
+
+    /// Launches a fixture case actually performs: setup's one, plus any in its body.
+    static func effectiveLaunches(of name: String, in ui: String) throws -> Int {
+        let code = try activeRegion(ui)
+        guard code.components(separatedBy: activeSetup).count == 2 else {
+            throw Refusal(description: "setup no longer launches exactly once through the guarded first-launch route")
+        }
+        return 1 + (try body(of: name, in: ui).components(separatedBy: "app.launch()").count - 1)
+    }
+
+    /// Everything the route requires of `ui`; empty means it holds.
+    static func violations(in ui: String) -> [String] {
+        let table: [String: [String]]
+        do {
+            let code = try activeRegion(ui)
+            guard code.components(separatedBy: activeSetup).count == 2 else {
+                throw Refusal(description: "setup no longer launches exactly once through the guarded first-launch route")
+            }
+            for decl in ["func setUpWithError(", "func recognizedSelector(", "func tearDownWithError(",
+                         "var offlineLaunchArguments"] where ui.components(separatedBy: decl).count != 2 {
+                throw Refusal(description: "\(decl) is not declared exactly once in AppShellUITests")
+            }
+            guard code.components(separatedBy: activeNameGuard).count == 2 else {
+                throw Refusal(description: "the name guard can fall back instead of refusing an unrecognized name")
+            }
+            guard code.components(separatedBy: activeOfflineArguments).count == 2 else {
+                throw Refusal(description: "the offline launch arguments every launch starts from changed")
+            }
+            try checkThrowingSelectors(ui)
+            table = try parsedFixtures(in: ui)
+        } catch {
+            return ["\(error)"]
+        }
+        var out: [String] = []
+        let declared = Set(declaredTests(in: ui).map { $0.name })
+        for name in table.keys.sorted() where !declared.contains(name) {
+            out.append("the fixture table names \(name), which is not a declared test")
+        }
+        for name in fixtures.keys.sorted() {
+            guard let args = table[name] else {
+                out.append("\(name) has no first-launch entry, so it starts from the default launch")
+                continue
+            }
+            if args != fixtures[name] {
+                out.append("\(name)'s first-launch arguments are not exactly \(fixtures[name]!) in order")
+            }
+            do {
+                let b = try body(of: name, in: ui)
+                for marker in lifecycle where b.contains(marker) {
+                    out.append("\(name) carries body lifecycle \(marker); its one launch must be setup's")
+                }
+                if !b.hasPrefix(firstStatement) {
+                    out.append("\(name) no longer starts with the window wait that followed its relaunch")
+                }
+            } catch { out.append("\(error)") }
+        }
+        for name in table.keys.sorted() where fixtures[name] == nil {
+            out.append("\(name) gained a first-launch entry beyond the thirteen immediate relaunches")
+        }
+        for (name, marker) in excludedLifecycle.sorted(by: { $0.key < $1.key }) {
+            do {
+                if !(try body(of: name, in: ui)).contains(marker) {
+                    out.append("\(name) lost its own lifecycle \(marker)")
+                }
+            } catch { out.append("\(error)") }
+        }
+        let link = ui.components(separatedBy: "    private func openStoredLink(").dropFirst().first?
+            .components(separatedBy: "\n    }\n").first ?? ""
+        if !link.contains("        app.terminate()\n        app = XCUIApplication()\n")
+            || !link.contains("        app.launch()\n        ensureProductWindowIsOpen()\n") {
+            out.append("openStoredLink no longer relaunches the app the way the OS hands it a link")
+        }
+        return out
+    }
+
+    /// The pre-route source shape: default setup, and each of the thirteen
+    /// relaunching at the top of its body. Rebuilt from `ui` so the regression
+    /// fixture follows the real file rather than a frozen copy of it.
+    static func oldFirstLaunch(from ui: String) throws -> String {
+        let start = "    /// The cases whose first launch is a fixture"
+        guard let from = ui.range(of: start),
+              let setup = ui.range(of: "    override func setUpWithError() throws {\n"),
+              let setupEnd = ui.range(of: "\n    }\n", range: setup.upperBound..<ui.endIndex) else {
+            throw Refusal(description: "the route cannot be located to rebuild the old shape")
+        }
+        var old = String(ui[..<from.lowerBound])
+            + "    override func setUpWithError() throws {\n"
+            + "        continueAfterFailure = false\n"
+            + "        useASCIIKeyboard()\n"
+            + "        app = XCUIApplication()\n"
+            + "        app.launchArguments = offlineLaunchArguments\n"
+            + "        app.launch()\n"
+            + "        ensureProductWindowIsOpen()\n"
+            + "    }\n"
+            + String(ui[setupEnd.upperBound...])
+        for (name, args) in fixtures {
+            let list = args.isEmpty ? "" : " + [" + args.map { "\"\($0)\"" }.joined(separator: ", ") + "]"
+            let prefix = "        app.terminate()\n"
+                + "        app.launchArguments = offlineLaunchArguments\(list)\n"
+                + "        app.launch()\n"
+                + "        ensureProductWindowIsOpen()\n\n"
+            for sig in ["\n    func \(name)() {\n", "\n    func \(name)() throws {\n"] {
+                old = old.replacingOccurrences(of: sig, with: sig + prefix)
+            }
+        }
+        return old
+    }
+}
+
+extension MacSurfaceGuardTests {
+    /// **Each fixture case launches once, as itself.** Thirteen cases used to
+    /// launch the default shell in setup only to end it on their first line and
+    /// launch their fixture: a whole app lifecycle that asserted nothing. Setup
+    /// now launches the fixture directly. This holds the real file to exactly
+    /// that: the thirteen entries and their ordered arguments, one launch, no
+    /// surviving relaunch, every throwing case's name resolved to its compiler
+    /// selector, and the later relaunches that ARE the point of their cases left
+    /// where they were.
+    func testTheMacFirstLaunchRouteLaunchesEachFixtureOnce() throws {
+        let ui = try RepoRoot.text(MacAppShellFirstLaunch.path)
+        XCTAssertEqual(MacAppShellFirstLaunch.violations(in: ui), [])
+        XCTAssertEqual(try MacAppShellFirstLaunch.parsedFixtures(in: ui), MacAppShellFirstLaunch.fixtures)
+        let declared = MacAppShellFirstLaunch.declaredTests(in: ui)
+        XCTAssertEqual(declared.count, 41, "the macOS shell suite changed size; re-read this route")
+        let throwing = Set(declared.filter { $0.isThrowing }.map { $0.name })
+        XCTAssertEqual(throwing.count, 8)
+        XCTAssertEqual(throwing
+            .intersection(MacAppShellFirstLaunch.fixtures.keys).count, 6)
+        for name in MacAppShellFirstLaunch.fixtures.keys {
+            XCTAssertEqual(try MacAppShellFirstLaunch.effectiveLaunches(of: name, in: ui), 1, name)
+        }
+        // The old shape — default setup, relaunch in the body — is refused for
+        // its reason: the route is what this guard exists to hold.
+        let old = try MacAppShellFirstLaunch.oldFirstLaunch(from: ui)
+        let found = MacAppShellFirstLaunch.violations(in: old)
+        XCTAssertTrue(found.contains { $0.contains("setup no longer launches") }, "\(found)")
+    }
+
+    /// Every way the route could stop meaning what it claims is refused by the
+    /// same guard, for its own reason. Each case mutates the REAL source in
+    /// memory only; nothing on disk changes.
+    func testTheMacFirstLaunchRouteGuardRefusesEveryBreak() throws {
+        let ui = try RepoRoot.text(MacAppShellFirstLaunch.path)
+        let route = " + (Self.firstLaunchFixtures[selector] ?? [])"
+        let guardLine = "let selector = try Self.recognizedSelector(in: name)"
+        let setupStart = try XCTUnwrap(ui.range(of: "    override func setUpWithError() throws {\n"))
+        let setupEnd = try XCTUnwrap(ui.range(of: "\n    }\n", range: setupStart.upperBound..<ui.endIndex))
+        let setupText = String(ui[setupStart.lowerBound..<setupEnd.upperBound])
+        let shareEntry = "        #selector(AppShellUITests.testShareOpensTheSystemSharingPicker):\n            [],\n"
+        let destructive = "#selector(AppShellUITests.testDestructiveConfirmationsNameTheirSubjectAndConsequence):\n"
+            + "            [\"--relayium-ui-testing-signed-in\"],"
+        let stall = "[\"--relayium-ui-testing-signed-in\", \"--relayium-ui-testing-stall-upload\"],"
+        let failing = "[\"--relayium-ui-testing-failing-mint\"],"
+        let auditKey = "        \"testEveryDestinationPassesTheSystemAccessibilityAudit\":\n"
+        let auditValue = "            #selector(AppShellUITests.testEveryDestinationPassesTheSystemAccessibilityAudit),\n"
+        let pairingKey = "        \"testCreatingAPairingCodeShowsEveryHandoff\":\n"
+        let pairingValue = "            #selector(AppShellUITests.testCreatingAPairingCodeShowsEveryHandoff),\n"
+        let nameConditions = "            guard candidate.hasPrefix(\"test\"), !candidate.contains(\" \"), !candidate.contains(\"]\"),\n"
+            + "                  !candidate.contains(\":\") else { continue }\n"
+        let signOut = "\n    func testSigningOutReturnsToTheSignedOutSurfaces() {\n"
+        let upload = "\n    func testAFailedUploadKeepsTheWorkAndOffersToCarryOn() throws {\n"
+        let survivingPrefix = "        app.terminate()\n        app.launchArguments = offlineLaunchArguments\n"
+            + "            + [\"--relayium-ui-testing-signed-in\"]\n        app.launch()\n        ensureProductWindowIsOpen()\n\n"
+        let cases: [(String, String, String, String)] = [
+            ("missing entry", shareEntry, "", "has no first-launch entry"),
+            ("wrong arguments", destructive,
+             destructive.replacingOccurrences(of: "signed-in", with: "sign-in"), "are not exactly"),
+            ("reordered arguments", stall,
+             "[\"--relayium-ui-testing-stall-upload\", \"--relayium-ui-testing-signed-in\"],", "are not exactly"),
+            ("commented-out argument", failing, "[/* \"--relayium-ui-testing-failing-mint\" */],", "are not exactly"),
+            ("excluded case gains an entry", shareEntry, shareEntry
+             + "        #selector(AppShellUITests.testCorrectingARefusedStoredLinkClearsTheRefusalWithIt):\n            [],\n",
+             "gained a first-launch entry"),
+            ("duplicate key", shareEntry, shareEntry + shareEntry, "duplicate fixture entry"),
+            ("unparsed residue", failing, "[\"--relayium-ui-testing-failing-mint\"] + extra,", "unparsed residue"),
+            ("default route in setup", route, "", "setup no longer launches"),
+            ("second setup launch", "        app.launch()\n        ensureProductWindowIsOpen()\n    }\n\n    override func tearDownWithError",
+             "        app.launch()\n        app.launch()\n        ensureProductWindowIsOpen()\n    }\n\n    override func tearDownWithError",
+             "setup no longer launches"),
+            ("name fallback in setup", guardLine,
+             "let selector = (try? Self.recognizedSelector(in: name)) ?? #selector(AppShellUITests.testTheMainWindowOpens)",
+             "setup no longer launches"),
+            ("setup drops the ASCII keyboard", "        useASCIIKeyboard()\n        app = XCUIApplication()\n",
+             "        app = XCUIApplication()\n", "setup no longer launches"),
+            ("setup drops the product window", "        app.launch()\n        ensureProductWindowIsOpen()\n    }\n\n    override func tearDownWithError",
+             "        app.launch()\n    }\n\n    override func tearDownWithError", "setup no longer launches"),
+            ("setup copied into a block comment, real route defaulted", setupText,
+             "    /*\n" + setupText + "    */\n" + setupText.replacingOccurrences(of: route, with: ""),
+             "setup no longer launches"),
+            ("teardown loses the keyboard restore", "        app?.terminate()\n        restoreInputSource()\n",
+             "        app?.terminate()\n", "teardown anchor"),
+            ("offline arguments lose the file-code fixture", "\"--relayium-ui-testing\", \"--relayium-ui-testing-file-code\",",
+             "\"--relayium-ui-testing\",", "offline launch arguments"),
+            ("surviving relaunch in a body", signOut, signOut + survivingPrefix, "carries body lifecycle app.terminate()"),
+            ("duplicate launch in a body", upload, upload + "        app.launch()\n", "carries body lifecycle app.launch()"),
+            ("window wait trimmed with the prefix", signOut + MacAppShellFirstLaunch.firstStatement,
+             signOut + "        XCTAssertTrue(mainWindow.waitForExistence(timeout: 20))\n", "no longer starts with the window wait"),
+            ("leftover blank line", signOut, signOut + "\n", "no longer starts with the window wait"),
+            ("name guard returns a default", "throw UnrecognizedTestName(description: \"unrecognized XCTest name: \\(name)\")",
+             "return #selector(AppShellUITests.testTheMainWindowOpens)", "can fall back"),
+            ("name guard conditions removed", nameConditions, "", "can fall back"),
+            ("default fallback for an unknown name", "?? NSSelectorFromString(candidate)",
+             "?? #selector(AppShellUITests.testTheMainWindowOpens)", "can fall back"),
+            ("unmapped throwing case loses its selector", auditKey + auditValue, "",
+             "does not match the throwing test declarations"),
+            ("mapped throwing case loses its selector", pairingKey + pairingValue, "",
+             "does not match the throwing test declarations"),
+            ("swapped throwing selectors", pairingKey + pairingValue, pairingKey + auditValue, "binds"),
+            ("alias entry", auditKey + auditValue, auditKey + auditValue + "        \"testAlias\":\n" + auditValue,
+             "binds testAlias"),
+            ("new throwing case without an entry", "\n    func testTheMainWindowOpens() {\n",
+             "\n    func testTheMainWindowOpens() throws {\n", "does not match the throwing test declarations"),
+            ("version relaunch removed", "        launchEvaluating(version: \"1.2.3\")\n", "", "lost its own lifecycle"),
+            ("stored-link relaunch made a plain launch", "        app.terminate()\n        app = XCUIApplication()\n        app.launchArguments = offlineLaunchArguments + extraArguments\n",
+             "        app.launchArguments = offlineLaunchArguments + extraArguments\n", "openStoredLink no longer relaunches"),
+        ]
+        for (label, find, replace, expected) in cases {
+            XCTAssertEqual(ui.components(separatedBy: find).count - 1, 1, "\(label): the mutation anchor is not unique")
+            let broken = ui.replacingOccurrences(of: find, with: replace)
+            XCTAssertNotEqual(broken, ui, "\(label): the mutation changed nothing")
+            let found = MacAppShellFirstLaunch.violations(in: broken)
+            XCTAssertTrue(found.contains { $0.contains(expected) }, "\(label) was not refused for its reason: \(found)")
+        }
+    }
+}

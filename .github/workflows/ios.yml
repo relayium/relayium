@@ -80,6 +80,8 @@ on:
       - 'scripts/ios-app-store-metadata-validate.mjs'
       - 'docs/app-store-metadata-ios.json'
       - '.github/workflows/ios.yml'
+      # The iPhone UI smoke's own supervisor (select, boot+build overlap, test).
+      - 'scripts/ci/ios-ui-smoke.py'
       # The PR→main evidence verifier, its registry, the filter reader it imports,
       # the adoption transform, the toolchain certificate probe and registry, and
       # their tests decide whether a main push may witness this lane instead of
@@ -667,21 +669,50 @@ jobs:
         if: needs.evidence.outputs.reuse != 'true'
         timeout-minutes: 10
         run: ${{ env.RELAYIUM_SELECT_XCODE }}
-      # The simulator the test step drives is booted, and waited for, here:
-      # `simctl bootstatus -b` boots the device if it is not booted yet and
-      # returns once it has finished booting. That is a boot barrier and nothing
-      # more — it does not promise the accessibility services UI testing needs
-      # are ready. Its own 5-minute bound means a boot that never finishes fails
-      # this step, so the test step (no status function in its `if`) is skipped
-      # instead of spending its 48 minutes. The device is handed on only after
-      # the boot succeeded. Selection rule unchanged: the first available iPhone
-      # of the listing, the rule the toolchain registry pins.
-      - name: Boot the selected iPhone simulator
+      # One stage for this shard, supervised by scripts/ci/ios-ui-smoke.py under ONE monotonic clock started
+      # before anything runs. It executes the job's simulator selection below (a quoted heredoc: the shell never
+      # expands it; the pinned first-available-iPhone program is unchanged and is what the toolchain registry
+      # hashes, by this step's name), then starts `xcrun simctl bootstatus UDID -b` and `xcodebuild …
+      # build-for-testing` for that same device together. Selection plus boot share the original 300 s; build
+      # plus test share the original 2880 s of their own time; `test-without-building` starts only after BOTH
+      # succeeded, and every action ends within 3170 s so the 53-minute step keeps 10 s for cleanup. Each child
+      # runs in its own process group and is ended (TERM, then KILL, bounded) on any failure, timeout or cancel.
+      # Nothing is handed through step outputs. The selection arrays are the shard's real arguments: the helper
+      # refuses any other, and builds the destination from the selected UDID itself.
+      - name: Run iOS primary-task UI smoke
         if: needs.evidence.outputs.reuse != 'true'
-        id: iphone_sim
-        timeout-minutes: 5
+        id: ui_smoke
+        timeout-minutes: 53
+        env:
+          UI_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
+          common=(-project apps/ios/Relayium.xcodeproj -scheme Relayium
+            -derivedDataPath "$RUNNER_TEMP/dd-ios")
+          test_limits=(-test-timeouts-enabled YES
+            -default-test-execution-time-allowance 300
+            -maximum-test-execution-time-allowance 300)
+          case "$UI_SHARD" in
+            app-shell)
+              selection=(-collect-test-diagnostics never
+                -only-testing:RelayiumUITests/AppShellUITests)
+              ;;
+            complement)
+              selection=(-skip-testing:RelayiumUITests/AppShellUITests
+                -only-testing:RelayiumUITests)
+              ;;
+            *)
+              echo "::error::unknown UI shard '$UI_SHARD'; it would select nothing"
+              exit 1
+              ;;
+          esac
+          # The selection script is the heredoc below, executed by the helper (never by this shell). Its
+          # stdout must be exactly the selected UDID; everything diagnostic goes to stderr.
+          /usr/bin/python3 scripts/ci/ios-ui-smoke.py --shard "$UI_SHARD" \
+            --log-dir "$RUNNER_TEMP/ios-ui-smoke-$UI_SHARD-logs" \
+            --build-result "$RUNNER_TEMP/ios-ui-build-$UI_SHARD.xcresult" \
+            --test-result "$RUNNER_TEMP/ios-ui-smoke-$UI_SHARD.xcresult" \
+            -- "${common[@]}" -- "${test_limits[@]}" -- "${selection[@]}" <<'SELECT'
           device_id="$(xcrun simctl list devices available -j \
             | /usr/bin/python3 -c 'import json, sys
           data = json.load(sys.stdin)
@@ -691,7 +722,7 @@ jobs:
                      if device.get("isAvailable")
                      and device.get("name", "").startswith("iPhone")))')"
           [ -n "$device_id" ] || {
-            echo "::error::no available iPhone Simulator runtime"; exit 1; }
+            echo "::error::no available iPhone Simulator runtime" >&2; exit 1; }
           # The listing travels as an argument: with `python3 -` the heredoc is
           # the program on stdin, so stdin cannot also carry the JSON.
           listing="$(xcrun simctl list devices available -j)"
@@ -708,45 +739,9 @@ jobs:
           print(f"{hits[0][0]} {hits[0][1]}")
           PY
           )"
-          echo "Compact destination: $device_label ($device_id)"
-          echo "Boot started $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          xcrun simctl bootstatus "$device_id" -b
-          echo "Boot finished $(date -u +%Y-%m-%dT%H:%M:%SZ) after ${SECONDS}s"
-          echo "device_id=$device_id" >> "$GITHUB_OUTPUT"
-      - name: Run iOS primary-task UI smoke
-        if: needs.evidence.outputs.reuse != 'true'
-        id: ui_smoke
-        timeout-minutes: 48
-        env:
-          UI_SHARD: ${{ matrix.shard }}
-          DEVICE_ID: ${{ steps.iphone_sim.outputs.device_id }}
-        run: |
-          set -euo pipefail
-          [[ "${DEVICE_ID:-}" =~ ^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$ ]] || {
-            echo "::error::no booted iPhone Simulator was handed over (DEVICE_ID '${DEVICE_ID:-}')"; exit 1; }
-          device_id="$DEVICE_ID"
-          ui_test=(-project apps/ios/Relayium.xcodeproj -scheme Relayium
-            -destination "platform=iOS Simulator,id=$device_id"
-            -derivedDataPath "$RUNNER_TEMP/dd-ios"
-            -resultBundlePath "$RUNNER_TEMP/ios-ui-smoke-$UI_SHARD.xcresult"
-            -test-timeouts-enabled YES
-            -default-test-execution-time-allowance 300
-            -maximum-test-execution-time-allowance 300)
-          case "$UI_SHARD" in
-            app-shell)
-              xcodebuild "${ui_test[@]}" \
-                -only-testing:RelayiumUITests/AppShellUITests test
-              ;;
-            complement)
-              xcodebuild "${ui_test[@]}" \
-                -skip-testing:RelayiumUITests/AppShellUITests \
-                -only-testing:RelayiumUITests test
-              ;;
-            *)
-              echo "::error::unknown UI shard '$UI_SHARD'; it would select nothing"
-              exit 1
-              ;;
-          esac
+          echo "Compact destination: $device_label ($device_id)" >&2
+          echo "$device_id"
+          SELECT
       # `xcodebuild … test` exits 0 for a selection that matched nothing or
       # skipped everything, and the selection above is not self-evidently
       # disjoint. So the bundle's own record is the evidence: the counts say
@@ -928,7 +923,8 @@ jobs:
           # would make a rerun of the same SHA a different run. The tuple is
           # (name, runtime, udid) so the choice is stable by product name first
           # and only tie-broken by things that rotate.
-          selection="$(xcrun simctl list devices available -j \
+          echo "iPad selection: BEGIN" >&2
+          selection="$(xcrun --log simctl list devices available -j \
             | /usr/bin/python3 -c 'import json, sys
           data = json.load(sys.stdin)
           pads = sorted(
@@ -940,6 +936,7 @@ jobs:
           if pads:
               name, runtime, udid = pads[0]
               print(udid, name, runtime)')"
+          echo "iPad selection: END" >&2
           [ -n "$selection" ] || {
             echo "::error::no available iPad Simulator runtime; the regular-width shell has no destination on this image and this job must not fall back to a compact one"
             exit 1; }

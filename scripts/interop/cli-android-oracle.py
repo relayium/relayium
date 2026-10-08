@@ -2,6 +2,7 @@
 """The judge of one CLI ↔ Android emulator round (A12).
 
     cli-android-oracle.py PLAN.json CLI_OBSERVED.json ANDROID_OBSERVED.json
+    cli-android-oracle.py accepted-prefix SERVER.log IDS_CSV EXPECTED
 
 Exit 0 and print the CLI's link role on stdout when the round agrees; exit 1
 with every problem on stderr otherwise. The CLI's received tree is read off
@@ -9,12 +10,46 @@ disk HERE and compared with digests derived HERE from the plan's seeds; the
 Android half's saved files are its own digests of what it wrote to the tree
 the app was handed (`InteropDriver.readSaved`), compared with digests derived
 here from the CLI's staged seeds.
+
+## Who played which role
+
+The plan's `identity` is the deterministic schedule: the ids the loopback
+acceptance server assigns (`RELAYIUM_ACCEPTANCE_PEER_IDS`, CLI first) and the
+role they imply for the CLI under `linkwire.LinkRole` (the smaller id
+initiates). The round must name exactly that role on the CLI's ONE `linked
+with …` line. That line is the only identity evidence either side reports:
+neither client records the id it was welcomed with, and Android reports no
+role at all. Whether the server really assigned those ids, in that order, is
+the shell's accepted-socket accounting (`accepted-prefix` below, and the final
+`android-interop-oracle.py peer-id-log`), not this judgement. A null identity
+is an explicit unscheduled round and accepts either role.
+
+## accepted-prefix
+
+The CLI-first barrier's view of the live acceptance server's log: which of the
+six scheduled websockets the server has ACCEPTED so far (an accepted socket
+and its assigned id — not a welcome anyone received). Only lines that end in
+a newline count; a line still being written is ignored. Exit 0 when exactly
+sequences 1..EXPECTED are logged with their scheduled ids; exit 3 (pending)
+when a shorter contiguous prefix is, including none; exit 1 for anything that
+cannot become EXPECTED by waiting — a sequence beyond it, a gap below a later
+sequence, a duplicate, a wrong id or a malformed marker line — and for a
+schedule or bound that is not six distinct ids and 1..6. A sequence beyond
+the six-id schedule is refused from its digits alone, before it is converted
+or used as a bound: no input-derived range is ever enumerated, so a huge or
+absurdly long sequence costs one comparison, not memory or a traceback. The line grammar is
+`android-interop-oracle.py`'s own (`PEER_ID_LINE`), imported, not copied.
 """
 import hashlib
+import importlib.util
 import json
 import os
 import re
 import sys
+
+ID16 = re.compile(r"[0-9a-f]{16}")
+ROLES = ("initiator", "responder")
+PENDING = 3
 
 SEND_AGAIN = "relayium-e2e:send-again"
 # One flow window (linkwire.FlowWindowBytes / RealtimeFrame.FLOW_WINDOW_BYTES).
@@ -67,6 +102,7 @@ def judge(plan, cli_obs, android):
         role = linked[0].group(2)
         if linked[0].group(1) != "a Relayium app or the web page":
             p("the CLI named the Android peer %r" % linked[0].group(1))
+    judge_identity(plan, role, p)
     sas = [m.group(1) for m in (re.match(r"^verification code \(SAS\): (\S+) — ", l) for l in stderr) if m]
     a_sas = re.sub(r"\D", "", str(android.get("sas") or ""))
     if len(sas) != 1 or not a_sas or re.sub(r"\D", "", sas[0]) != a_sas:
@@ -162,6 +198,61 @@ def is_int(v):
     return isinstance(v, int) and not isinstance(v, bool)
 
 
+def link_role(self_id, peer_id):
+    """`linkwire.LinkRole` (server/internal/linkwire/signal.go): the smaller id
+    initiates. The CLI's `linked with …` role is its session's role from it."""
+    return "initiator" if self_id < peer_id else "responder"
+
+
+IDENTITY_KEYS = ("expectedCliId", "expectedAndroidId", "plannedRole")
+
+
+def judge_identity(plan, role, p):
+    """The planned identities, and the CLI's ONE observed role against them.
+
+    `role` is "" when the CLI did not print exactly one linked line; that is
+    already a problem, and a scheduled round then has no observed role."""
+    if "identity" not in plan:
+        p("the plan does not say which identities the round planned")
+        return
+    ident = plan["identity"]
+    if ident is None:
+        return
+    if not isinstance(ident, dict):
+        p("the plan's identity is %r, neither a schedule nor null" % (ident,))
+        return
+    extra = sorted(set(ident) - set(IDENTITY_KEYS))
+    if extra:
+        p("the plan's identity carries fields nobody judges: %r" % extra)
+    missing = [k for k in IDENTITY_KEYS if k not in ident]
+    if missing:
+        p("the plan's identity has no %r" % missing)
+        return
+    cli_id, android_id, planned = (ident[k] for k in IDENTITY_KEYS)
+    bad = False
+    for what, value in (("CLI", cli_id), ("Android", android_id)):
+        if not isinstance(value, str) or not ID16.fullmatch(value):
+            p("the planned %s id %r is not 16 lowercase hex characters" % (what, value))
+            bad = True
+    if planned not in ROLES:
+        p("the planned role %r is neither initiator nor responder" % (planned,))
+        bad = True
+    if bad:
+        return
+    if cli_id == android_id:
+        p("the round planned the SAME id %s for the CLI and Android" % cli_id)
+        return
+    if link_role(cli_id, android_id) != planned:
+        p("the schedule is inconsistent: planned ids %s/%s make the CLI %s, not the planned %s"
+          % (cli_id, android_id, link_role(cli_id, android_id), planned))
+        return
+    if not role:
+        p("the CLI reported no single link role, so the planned %s is unobserved" % planned)
+    elif role != planned:
+        p("the CLI linked as %s, but the schedule (CLI %s, Android %s) planned %s"
+          % (role, cli_id, android_id, planned))
+
+
 def judge_gate(plan, cli_obs, android, p):
     """The plan's receive gate, and — when it is on — the Android half's typed
     record of an ACTIVE receive cancel. Returns whether the gate is on.
@@ -254,7 +345,100 @@ def judge_gate(plan, cli_obs, android, p):
     return True
 
 
+def peer_id_rules():
+    """`android-interop-oracle.py`'s own line grammar and schedule parser —
+    the ones the final `peer-id-log` count applies — loaded from its file.
+    No bytecode is written beside it."""
+    sys.dont_write_bytecode = True
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "test", "android-interop-oracle.py")
+    spec = importlib.util.spec_from_file_location("android_interop_oracle", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.PEER_ID_MARKER, mod.PEER_ID_LINE, mod.parse_schedule
+
+
+def clip(text, limit=40):
+    """An input-derived token for a message, cut to a bounded length."""
+    return text if len(text) <= limit else "%s...(%d characters)" % (text[:limit], len(text))
+
+
+def judge_accepted_prefix(text, ids_csv, expected):
+    """Returns (status, problems, seen) for a LIVE server log; see the header."""
+    marker, line_rx, parse_schedule = peer_id_rules()
+    ids, problems = parse_schedule(ids_csv)
+    if not problems and len(ids) != 6:
+        problems.append("the schedule has %d ids, not six (two per round, three rounds)" % len(ids))
+    # Six ids: every sequence the schedule permits is one decimal digit, so
+    # longer digit strings are refused unconverted.
+    width = len(str(len(ids)))
+    if not (re.fullmatch(r"[1-9][0-9]*", expected) and len(expected) <= width and int(expected) <= len(ids)):
+        problems.append("the expected prefix %r is not a sequence within the six-id schedule" % (clip(expected),))
+    if problems:
+        return 1, problems, {}
+    want = int(expected)
+    # Complete lines only: the server may be mid-write, and a partial line is
+    # not yet an accept. Nothing after the last newline is read.
+    complete = text[:text.rfind("\n") + 1]
+    seen = {}
+    for line in complete.split("\n"):
+        if marker not in line:
+            continue
+        m = line_rx.fullmatch(line)
+        if not m:
+            problems.append("a peer-id log line is malformed: %r" % (clip(line, 200),))
+            continue
+        digits, got = m.group(1), m.group(2)
+        if len(digits) > width or int(digits) > len(ids):
+            problems.append("sequence %s (%s) was accepted while waiting for %d; it is beyond the six-id "
+                            "schedule, an extra client or the wrong order" % (clip(digits), got, want))
+            continue
+        seq = int(digits)
+        if seq in seen:
+            problems.append("sequence %d was logged twice" % seq)
+            continue
+        seen[seq] = got
+        if seq > want:
+            problems.append("sequence %d (%s) was accepted while waiting for %d; a socket beyond the "
+                            "schedule's point here is an extra client or the wrong order" % (seq, got, want))
+        elif got != ids[seq - 1]:
+            problems.append("sequence %d carried %s, not the schedule's %s" % (seq, got, ids[seq - 1]))
+    if seen:
+        # `seen` holds only sequences 1..6, so this range is the schedule's.
+        gaps = [s for s in range(1, max(seen) + 1) if s not in seen]
+        if gaps:
+            problems.append("sequence(s) %s are missing below the accepted %d; accepts are not a "
+                            "contiguous prefix" % (gaps, max(seen)))
+    if problems:
+        return 1, problems, seen
+    return (0 if len(seen) == want else PENDING), [], seen
+
+
+def accepted_prefix_main(argv):
+    if len(argv) != 5:
+        print("usage: cli-android-oracle.py accepted-prefix <server.log> <ids-csv> <expected>", file=sys.stderr)
+        return 2
+    try:
+        with open(argv[2], encoding="utf-8", errors="strict") as fh:
+            text = fh.read()
+    except (OSError, ValueError) as err:
+        print("  - the server log is unreadable: %s" % err, file=sys.stderr)
+        return 1
+    status, problems, seen = judge_accepted_prefix(text, argv[3], argv[4])
+    for x in problems:
+        print("  - %s" % x, file=sys.stderr)
+    if status == 0:
+        print("-- the server accepted sockets 1..%s with their scheduled ids; seq %s was assigned %s "
+              "(an accepted socket, not a welcome receipt)" % (argv[4], argv[4], seen[int(argv[4])]),
+              file=sys.stderr)
+    elif status == PENDING:
+        print("-- pending: the server has accepted %d of the first %s scheduled sockets" % (len(seen), argv[4]),
+              file=sys.stderr)
+    return status
+
+
 def main(argv):
+    if len(argv) >= 2 and argv[1] == "accepted-prefix":
+        return accepted_prefix_main(argv)
     if len(argv) != 4:
         print(__doc__, file=sys.stderr)
         return 2
@@ -264,8 +448,11 @@ def main(argv):
         for x in problems:
             print("  - %s" % x, file=sys.stderr)
         return 1
-    print("-- round %s agreed: code by %s, cancel=%s, CLI was %s, Android ended the session by %s"
+    ident = plan["identity"]
+    print("-- round %s agreed: code by %s, cancel=%s, CLI was %s (%s), Android ended the session by %s"
           % (plan["round"], plan["codeRole"], plan["cancel"], role,
+             "as scheduled: CLI %s, Android %s" % (ident["expectedCliId"], ident["expectedAndroidId"])
+             if ident else "unscheduled",
              "an authenticated leave" if ending == "leave" else "dropping the connection (no leave)"),
           file=sys.stderr)
     print(role)

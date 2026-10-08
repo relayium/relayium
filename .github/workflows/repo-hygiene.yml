@@ -136,6 +136,12 @@ jobs:
       # push. No dependencies, so there is nothing to install.
       - name: macos publish job orders validation before the immutable release
         run: node scripts/test/macos-publish-order-test.mjs
+      # macos-publish-order-test.mjs already imports and runs these controls;
+      # this explicit standalone run exists because ci-guard-coverage requires
+      # every scripts/test entry point to have its own workflow command. The
+      # duplicate Linux run is a deliberate, bounded cost, not a second signal.
+      - name: macos operator handoff controls
+        run: node scripts/test/macos-handoff-test.mjs
 
   native-web-pairing-gate:
     runs-on: ubuntu-latest
@@ -362,6 +368,27 @@ jobs:
       - name: macOS UI crash-report capture keeps only what it may
         timeout-minutes: 2
         run: python3 scripts/test/macos-ui-crash-diagnostics-test.py
+
+      # The same, for `swift-package.yml`'s failure-only crash evidence: its
+      # capture runs on a hosted macOS runner only after the package suite has
+      # failed, so what it refuses — an old, foreign-process, wrong-UUID,
+      # truncated, replaced or symlinked report, a mark from another run or
+      # attempt, a hung read — is proven here on every change, with synthetic
+      # `.ips` reports, a fixture `dwarfdump` and the real helper and entry
+      # point. Python 3.9 standard library only — no install, no Apple tooling.
+      - name: Swift package crash evidence keeps only what binds to its run
+        timeout-minutes: 2
+        run: python3 scripts/test/swift-test-diagnostics-test.py
+
+      # `ios.yml`'s iPhone UI stage is supervised by scripts/ci/ios-ui-smoke.py: selection, then boot and
+      # build-for-testing together, then test-without-building only after both succeeded, under the original
+      # budgets, with every child in an owned process group. A hosted macOS run exercises only the happy path, so
+      # the barrier, the shared and cumulative budgets, the stage clamp, cancellation and the bounded cleanup are
+      # proven here instead: real processes, fake `xcrun`/`xcodebuild` in a temporary directory, the real helper.
+      # Python standard library only — no install, no Apple tooling.
+      - name: iOS UI stage supervisor keeps its barrier, budgets and cleanup
+        timeout-minutes: 3
+        run: python3 scripts/test/ios-ui-smoke-test.py
 
       # And the one that makes the four steps above impossible to forget again.
       # Every `scripts/test/*-test.{mjs,sh}` must be named by some workflow; the

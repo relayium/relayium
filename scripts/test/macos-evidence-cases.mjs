@@ -39,7 +39,14 @@ import {
   CANONICAL_WITNESS_STEPS,
   LEGACY_ADOPTED_UI_SMOKE_CONDITIONS,
   WITNESSED_CONTRACT_EVIDENCE_JOB,
+  WITNESSED_CONTRACT_JOB,
+  CANONICAL_CONTRACT_JOB,
+  EVENT_CONTRACT_JOB,
+  EVENT_CONTRACT_CONDITIONS,
+  EVENT_CONTRACT_BRANCH,
+  RELEASE_INTENT_BRANCH,
   ADOPTED_SHAPE,
+  EVENT_CONTRACT_SHAPE,
   WITNESSED_CONTRACT_SHAPE,
   evidenceIdentity,
   Refused,
@@ -55,8 +62,22 @@ import {
   judgeGateRun,
   publishPreflight,
   readback,
+  COVERAGE_CERTIFIED,
+  CertifiedUnavailable,
+  COVERAGE_EXECUTED,
+  coverageOf,
+  judgeCertifiedCoverage,
+  judgeProducerRoster,
+  pinnedSourceTree,
+  judgeWitnessed,
+  judgeWitnessTiming,
+  CERTIFY_TO_VERIFIED_MAX_MS,
+  frozenCertificates,
+  validateCoverage,
+  verifyHistoricalCertifiedCoverage,
 } from "../release/macos-evidence.mjs";
 import { CANDIDATE_PATHS } from "../../web/scripts/macos-release-candidate.mjs";
+import { certifiedWorld as createCertifiedGitWorld, isolatedGitEnvironment } from './fixtures/macos-certified/world.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const REPO = "relayium/relayium";
@@ -167,7 +188,12 @@ const JOB_IDS = ["contract", "test", "ui-smoke/app-shell", "ui-smoke/device-inbo
 const LABELS = { contract: ["ubuntu-latest"], evidence: ["ubuntu-latest"], screen: ["ubuntu-latest"] };
 const steps = (list) => list.map((entry, index) => {
   const [name, conclusion] = Array.isArray(entry) ? entry : [entry, "success"];
-  return { name, status: "completed", conclusion, number: index + 1 };
+  // Authentic step records carry their own times (null when never started).
+  const ran = conclusion !== "skipped";
+  return {
+    name, status: "completed", conclusion, number: index + 1,
+    started_at: ran ? "2026-10-01T15:06:00Z" : null, completed_at: ran ? "2026-10-01T15:06:00Z" : null,
+  };
 });
 const WITNESS = [
   "Check out the verifier (witness path only)",
@@ -225,8 +251,28 @@ function adoptedText(legacy = LEGACY_WORKFLOW, { witnessedContract = false } = {
   }
   return out.join("\n");
 }
-/** The frozen previous adoption: contract witnessed and certified on Ubuntu. */
-const witnessedContractText = () => adoptedText(LEGACY_WORKFLOW, { witnessedContract: true });
+/** The contract's event-reading runner line and release branch, each WHOLE,
+ *  in place of the current release-intent ones. A stale anchor THROWS. */
+const CONTRACT_RUNS_ON = { intent: CANONICAL_JOB_CONDITIONS.contract[2], event: EVENT_CONTRACT_CONDITIONS[2] };
+const CONTRACT_BRANCH = { intent: RELEASE_INTENT_BRANCH.join("\n"), event: EVENT_CONTRACT_BRANCH.join("\n") };
+const withEventRunsOn = (text) => replaceOnce(text, `${CONTRACT_RUNS_ON.intent}\n`, `${CONTRACT_RUNS_ON.event}\n`);
+const withEventBranch = (text) => replaceOnce(text, `${CONTRACT_BRANCH.intent}\n`, `${CONTRACT_BRANCH.event}\n`);
+const withIntentRunsOn = (text) => replaceOnce(text, `${CONTRACT_RUNS_ON.event}\n`, `${CONTRACT_RUNS_ON.intent}\n`);
+const withIntentBranch = (text) => replaceOnce(text, `${CONTRACT_BRANCH.event}\n`, `${CONTRACT_BRANCH.intent}\n`);
+/** The frozen previous adoption: contract always fresh, runner AND branch read the caller's event. */
+const eventContractText = () => withEventBranch(withEventRunsOn(adoptedText()));
+/** `text` with job `id`'s whole block (its key up to the next job key) replaced by `lines`; a missing job THROWS. */
+function withJob(text, id, lines) {
+  const all = text.split("\n");
+  const at = all.indexOf(`  ${id}:`);
+  if (at < 0) throw new Error(`stale anchor: no job ${id}`);
+  let end = at + 1;
+  while (end < all.length && !/^ {2}[a-z0-9-]+:\s*$/.test(all[end])) end += 1;
+  all.splice(at, end - at, ...lines, "");
+  return all.join("\n");
+}
+/** The frozen adoption before that: contract witnessed and certified on Ubuntu — its WHOLE historical contract job. */
+const witnessedContractText = () => withJob(adoptedText(LEGACY_WORKFLOW, { witnessedContract: true }), "contract", WITNESSED_CONTRACT_JOB);
 
 /**
  * `text` with exactly one occurrence of `from` replaced. A missing or repeated
@@ -267,8 +313,8 @@ const legacyUiSmokeText = () => replaceOnce(witnessedContractText(), UI_SMOKE_TR
  * A complete, valid reuse world. Every case mutates one thing. `adopted` is the
  * current adoption (contract fresh); `witnessedContract` the frozen previous one.
  */
-function reuseWorld({ adopted = false, witnessedContract = false } = {}) {
-  if (witnessedContract) adopted = true;
+function reuseWorld({ adopted = false, witnessedContract = false, eventContract = false } = {}) {
+  if (witnessedContract || eventContract) adopted = true;
   const witnessedIds = witnessedContract ? JOB_IDS.filter((id) => id !== "signed-build")
     : JOB_IDS.filter((id) => id !== "signed-build" && id !== "contract");
   const run = {
@@ -338,7 +384,7 @@ function reuseWorld({ adopted = false, witnessedContract = false } = {}) {
     artifacts: [artifact],
     zip,
     runsTotal: null,
-    workflowText: witnessedContract ? witnessedContractText() : adopted ? adoptedText() : LEGACY_WORKFLOW,
+    workflowText: witnessedContract ? witnessedContractText() : eventContract ? eventContractText() : adopted ? adoptedText() : LEGACY_WORKFLOW,
   };
 }
 
@@ -350,6 +396,10 @@ function apiFor(w) {
     }
     if (path === `/repos/${REPO}/actions/runs/${w.run.id}/attempts/${w.run.run_attempt}/jobs`) {
       return { key: "jobs", items: w.jobs, total: w.jobs.length };
+    }
+    // Earlier attempts, when a world records them: { [n]: { attempt, jobs } }.
+    for (const [n, h] of Object.entries(w.history ?? {})) {
+      if (path === `/repos/${REPO}/actions/runs/${w.run.id}/attempts/${n}/jobs`) return { key: "jobs", items: h.jobs, total: h.jobs.length };
     }
     if (path === `/repos/${REPO}/actions/runs/${w.run.id}/artifacts`) {
       return { key: "artifacts", items: w.artifacts, total: w.artifacts.length };
@@ -366,6 +416,9 @@ function apiFor(w) {
     if (path === `/repos/${REPO}/actions/workflows/macos.yml`) return w.workflow;
     if (path === `/repos/${REPO}/actions/runs/${w.run.id}`) return w.run;
     if (path === `/repos/${REPO}/actions/runs/${w.run.id}/attempts/${w.run.run_attempt}`) return w.attempt;
+    for (const [n, h] of Object.entries(w.history ?? {})) {
+      if (path === `/repos/${REPO}/actions/runs/${w.run.id}/attempts/${n}`) return h.attempt;
+    }
     return undefined;
   };
   const api = {
@@ -462,9 +515,67 @@ async function reuseCases() {
     w.attempt.run_attempt = 2;
     w.runs[0] = { ...w.run };
     w.jobs[3].run_attempt = 2;
+    w.history = { 1: { attempt: { ...w.run, run_attempt: 1, conclusion: "failure" }, jobs: clone(reuseWorld().jobs) } };
     const got = await decideIn(w);
-    check(got.value?.source === "reuse" && got.value.evidence.jobs[4].runAttempt === 1,
+    check(got.value?.source === "reuse" && got.value.evidence.jobs[4].runAttempt === 1
+      && got.value.evidence.signedBuildOrigin?.attempt === 1,
       `select: a partial rerun keeping the attempt-1 signed-build was not reused: ${got.error?.message ?? got.value?.reason}`);
+  }
+
+  // The relabelled form GitHub actually returns (observed on publisher run
+  // 36943045523, attempts 1 and 5): the carried signed-build is listed by the
+  // latest attempt with that attempt's number, a new id, node id, created_at
+  // and a null runner_group_id, but the SAME execution — times, labels and
+  // steps. The provenance still names attempt 1, the attempt it ran in; the
+  // origin is proved by reading attempt 1 itself.
+  const relabelled = () => {
+    const w = reuseWorld();
+    const original = clone(w.jobs);
+    w.run.run_attempt = 4;
+    w.attempt.run_attempt = 4;
+    w.runs[0] = { ...w.run };
+    w.jobs = w.jobs.map((j, i) => ({ ...j, id: 9900 + i, run_attempt: 4, node_id: `CR_new${i}`,
+      created_at: "2026-10-02T03:37:39Z", runner_group_id: null }));
+    w.history = { 1: { attempt: { ...w.run, run_attempt: 1, conclusion: "failure" }, jobs: original } };
+    return w;
+  };
+  {
+    const got = await decideIn(relabelled(), { mode: "reuse" });
+    check(got.value?.source === "reuse" && got.value.evidence.signedBuildOrigin?.attempt === 1
+      && got.value.evidence.signedBuildOrigin?.jobId === 904,
+    `select: a relabelled carried signed-build (latest 4, origin 1) was not reused: ${got.error?.message ?? got.value?.reason}`);
+  }
+  const notCarried = [
+    ["the latest job re-executed (new times)", (w) => {
+      w.jobs[4].started_at = "2026-10-02T03:38:00Z"; w.jobs[4].completed_at = "2026-10-02T03:50:00Z";
+      w.artifacts[0].created_at = "2026-10-02T03:45:00Z"; // inside the new window: only continuity refuses
+    }, /different execution/],
+    ["one step changed", (w) => { w.jobs[4].steps[1].conclusion = "skipped"; }, /different execution/],
+    ["a step reordered/duplicated", (w) => { w.jobs[4].steps[1].number = 1; }, /malformed, unordered or duplicate step/],
+    ["another runner", (w) => { w.jobs[4].runner_name = "a"; w.history[1].jobs[4].runner_name = "b"; }, /different execution/],
+    ["the original attempt unreadable", (w) => { delete w.history; }, /attempt 1 could not be read/],
+    ["the original attempt lacks signed-build", (w) => { w.history[1].jobs.splice(4, 1); }, /lists 0 `signed-build`/],
+    ["the original attempt lists it twice", (w) => { w.history[1].jobs.push({ ...w.history[1].jobs[4], id: 905 }); }, /lists 2 `signed-build`/],
+    ["the original signed-build failed", (w) => { w.history[1].jobs[4].conclusion = "failure"; }, /not a completed success/],
+    ["the original attempt is another commit", (w) => { w.history[1].attempt.head_sha = "b".repeat(40); }, /not a completed attempt/],
+    ["the original attempt record is still running", (w) => { w.history[1].attempt.status = "in_progress"; }, /not a completed attempt/],
+    ["the original inventory labels another attempt", (w) => { w.history[1].jobs[4].run_attempt = 2; }, /lists it as attempt 2/],
+    ["the latest wrapper names a third attempt", (w) => { w.jobs[4].run_attempt = 2; }, /labelled attempt 2 in attempt 4/],
+    ["a provenance naming attempt 2 that never ran it", (w) => {
+      w.history[2] = { attempt: { ...w.run, run_attempt: 2, conclusion: "failure" }, jobs: w.history[1].jobs.filter((j) => j.name !== "signed-build") };
+      w.zip = payload({ provenance: { runAttempt: "2" } });
+      w.artifacts[0].digest = `sha256:${sha256(w.zip)}`;
+    }, /lists 0 `signed-build`/],
+  ];
+  for (const [name, mutate, reason] of notCarried) {
+    for (const mode of ["auto", "reuse"]) {
+      const w = relabelled();
+      mutate(w);
+      const got = await decideIn(w, { mode });
+      check(got.error instanceof Refused && reason.test(got.error.message),
+        `select ${mode}: relabelled origin with ${name} must be refused for ${reason}, not `
+        + `${got.value ? `treated as ${got.value.source}` : got.error?.message}`);
+    }
   }
 
   // Unavailable evidence: auto rebuilds, reuse refuses.
@@ -832,6 +943,7 @@ async function executionCases() {
   // state those auxiliaries legitimately end in on a main push the merged pull
   // request did not prove (the screen said no / was red / the probe ran or failed).
   const FROZEN = { witnessedContract: true };
+  const EVENT = { eventContract: true };
   for (const [name, adopted, shape, jobs, mutate] of [
     ["a legacy five-job full producer", false, "legacy", 5, () => {}],
     ["a canonical adopted producer (screen no, certify skipped) that executed natively", true, ADOPTED_SHAPE, 8, () => {}],
@@ -839,6 +951,10 @@ async function executionCases() {
       check(JSON.stringify(jobOf(w, "contract").steps.map((st) => st.name)) === JSON.stringify(REAL_STEPS.contract),
         "execution: the current adoption's contract fixture is not exactly its original steps");
     }],
+    // Every signed build produced while the fresh contract still read the caller's event: that adoption, whole.
+    ["a producer under the frozen event-contract adoption", EVENT, EVENT_CONTRACT_SHAPE, 8, () => {}],
+    ["a frozen event-contract producer whose contract ran on macOS", EVENT, EVENT_CONTRACT_SHAPE, 8, (w) => { jobOf(w, "contract").labels = ["macos-15"]; }],
+    ["a frozen event-contract producer whose certify failed (never red)", EVENT, EVENT_CONTRACT_SHAPE, 8, (w) => { jobOf(w, "certify-macos").conclusion = "failure"; }],
     // Every signed build produced before the contract became fresh: the frozen previous adoption, whole.
     ["a producer under the frozen witnessed-contract adoption", FROZEN, WITNESSED_CONTRACT_SHAPE, 8, () => {}],
     // Built before ui-smoke stopped waiting for test: the frozen previous adoption with that triple, whole.
@@ -849,7 +965,7 @@ async function executionCases() {
     ["a canonical adopted producer whose certify failed (never red)", true, ADOPTED_SHAPE, 8, (w) => { jobOf(w, "certify-macos").conclusion = "failure"; }],
     ["a frozen witnessed-contract producer whose certify failed (never red)", FROZEN, WITNESSED_CONTRACT_SHAPE, 8, (w) => { jobOf(w, "certify-macos").conclusion = "failure"; }],
   ]) {
-    const w = reuseWorld(adopted === FROZEN ? FROZEN : { adopted });
+    const w = reuseWorld(typeof adopted === "object" ? adopted : { adopted });
     // A stale anchor throws (never a silent no-op); it is reported, not fatal to the suite.
     try { mutate(w); } catch (err) { check(false, `execution: ${name}: ${err.message}`); continue; }
     const got = await decideIn(w);
@@ -875,6 +991,7 @@ async function executionCases() {
     // A partial rerun under the adoption: one UI shard re-ran and EXECUTED in
     // attempt 2; every other job is its full attempt-1 record.
     const w = reuseWorld({ adopted: true });
+    w.history = { 1: { attempt: { ...w.run, run_attempt: 1, conclusion: "failure" }, jobs: clone(w.jobs) } };
     w.run.run_attempt = 2;
     w.attempt.run_attempt = 2;
     w.runs[0] = { ...w.run };
@@ -886,15 +1003,11 @@ async function executionCases() {
   const app = "ui-smoke/app-shell";
   const smoke = "Run macOS product-flow UI smoke (app-shell)";
   const cases = [
-    ["an Ubuntu UI shard that took the witness path", true, (w) => witnessed(jobOf(w, app)), /ran on \["ubuntu-latest"\]; `ui-smoke\/app-shell` must run on \["macos-15"\]/],
-    ["a macOS UI shard whose witness succeeded and smoke was skipped", true, (w) => witnessed(jobOf(w, app), { mac: true }), /did not execute "Import UI signing certificate" \(completed\/skipped\)/],
-    ["a successful witness beside an executed smoke", true, (w) => setStep(jobOf(w, app), WITNESS[2], "success"), /ran "Witness — the pull request's full proof covers this job" \(success\)/],
     ["an omitted smoke step", true, (w) => { const j = jobOf(w, app); j.steps = j.steps.filter((st) => st.name !== smoke); }, /has 0 "Run macOS product-flow UI smoke \(app-shell\)" step\(s\)/],
     ["a skipped smoke step", true, (w) => setStep(jobOf(w, app), smoke, "skipped"), /did not execute "Run macOS product-flow UI smoke \(app-shell\)" \(completed\/skipped\)/],
     ["a duplicated smoke step", true, (w) => { const j = jobOf(w, app); j.steps.push({ ...j.steps.find((st) => st.name === smoke) }); }, /has 2 "Run macOS product-flow UI smoke \(app-shell\)" step\(s\)/],
     ["a failed smoke step under a green job", true, (w) => setStep(jobOf(w, app), smoke, "failure"), /did not execute "Run macOS product-flow UI smoke \(app-shell\)" \(completed\/failure\)/],
     ["the other shard's suite run in the app-shell job", true, (w) => jobOf(w, app).steps.push({ name: "Run macOS product-flow UI smoke (device-inbox)", status: "completed", conclusion: "success" }), /ran "Run macOS product-flow UI smoke \(device-inbox\)" \(success\)/],
-    ["a witnessed test job", true, (w) => witnessed(jobOf(w, "test")), /job 901 \(test\) ran on \["ubuntu-latest"\]/],
     ["a witnessed contract job", true, (w) => witnessed(jobOf(w, "contract")), /job 900 \(contract\) did not execute "Validate release contract" \(completed\/skipped\)/],
     ["a witnessed contract job under the frozen adoption", FROZEN, (w) => witnessed(jobOf(w, "contract")), /job 900 \(contract\) did not execute "Validate release contract" \(completed\/skipped\)/],
     // The current contract has no witness path: a witness step record, even skipped, is foreign to it.
@@ -904,6 +1017,20 @@ async function executionCases() {
     // Never a mix of the two adoptions, and never an unknown third.
     ["the current evidence job beside a witnessed contract", true, (w) => { w.workflowText = withAfterSteps(w.workflowText, "contract", CANONICAL_WITNESS_STEPS); }, /not the canonical one/],
     ["the frozen evidence job beside a fresh contract", FROZEN, (w) => { w.workflowText = withoutWitness(w.workflowText, "contract"); }, /not the canonical one/],
+    // Never a mix of contract generations: each runner only beside its own release branch.
+    ["the current release branch beside the event runner", true, (w) => { w.workflowText = withEventRunsOn(w.workflowText); }, /not the canonical one/],
+    ["the event release branch beside the current runner", true, (w) => { w.workflowText = withEventBranch(w.workflowText); }, /not the canonical one/],
+    ["the frozen event contract with the current runner", EVENT, (w) => { w.workflowText = withIntentRunsOn(w.workflowText); }, /not the canonical one/],
+    ["the frozen event contract with the current branch", EVENT, (w) => { w.workflowText = withIntentBranch(w.workflowText); }, /not the canonical one/],
+    ["the frozen witnessed contract with the current runner", FROZEN, (w) => { w.workflowText = withIntentRunsOn(w.workflowText); }, /not the canonical one/],
+    ["the frozen witnessed contract with the current branch", FROZEN, (w) => { w.workflowText = withIntentBranch(w.workflowText); }, /not the canonical one/],
+    ["the frozen witnessed contract with both current lines", FROZEN, (w) => { w.workflowText = withIntentBranch(withIntentRunsOn(w.workflowText)); }, /not the canonical one/],
+    ["the frozen event contract with a witnessed contract", EVENT, (w) => { w.workflowText = withAfterSteps(w.workflowText, "contract", CANONICAL_WITNESS_STEPS); }, /not the canonical one/],
+    ["the frozen event contract with the frozen evidence job", EVENT, (w) => { w.workflowText = replaceOnce(w.workflowText, CANONICAL_EVIDENCE_JOB.join("\n") + "\n", WITNESSED_CONTRACT_EVIDENCE_JOB.join("\n") + "\n"); }, /not the canonical one/],
+    ["the frozen event contract with the legacy ui-smoke triple", EVENT, (w) => { w.workflowText = replaceOnce(w.workflowText, UI_SMOKE_TRIPLE(CANONICAL_JOB_CONDITIONS["ui-smoke"]), UI_SMOKE_TRIPLE(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS)); }, /not the canonical one/],
+    ["a skipped witness step in the frozen event contract", EVENT, (w) => jobOf(w, "contract").steps.unshift({ name: WITNESS[0], status: "completed", conclusion: "skipped" }), /job 900 \(contract\) ran "Check out the verifier \(witness path only\)" \(skipped\)/],
+    ["a release branch that drops a check inside the current contract", true, (w) => { w.workflowText = replaceOnce(w.workflowText, "              [ \"$NOTARIZE\" = true ] || exit 1\n", ""); }, /not the canonical one/],
+    ["a release branch that drops the readiness check inside the frozen event contract", EVENT, (w) => { w.workflowText = replaceOnce(w.workflowText, "              node apps/mac/scripts/check-release-readiness.mjs --require-approved\n", ""); }, /not the canonical one/],
     ["the frozen evidence job inside the current adoption", true, (w) => { w.workflowText = replaceOnce(w.workflowText, CANONICAL_EVIDENCE_JOB.join("\n") + "\n", WITNESSED_CONTRACT_EVIDENCE_JOB.join("\n") + "\n"); }, /not the canonical one/],
     ["the legacy ui-smoke triple on the current adoption", true, (w) => { w.workflowText = replaceOnce(w.workflowText, UI_SMOKE_TRIPLE(CANONICAL_JOB_CONDITIONS["ui-smoke"]), UI_SMOKE_TRIPLE(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS)); }, /not the canonical one/],
     ["a fresh contract whose steps still read the decision", true, (w) => { w.workflowText = replaceOnce(w.workflowText, "      - name: Validate release contract\n", "      - name: Validate release contract\n        if: needs.evidence.outputs.reuse != 'true'\n"); }, /not the canonical one/],
@@ -920,8 +1047,6 @@ async function executionCases() {
     ["a skipped evidence job", true, (w) => { jobOf(w, "evidence").conclusion = "skipped"; }, /`evidence` job is completed\/skipped/],
     ["a failed evidence job", true, (w) => { jobOf(w, "evidence").conclusion = "failure"; }, /`evidence` job is completed\/failure/],
     ["a duplicated evidence job", true, (w) => { w.jobs.push({ ...jobOf(w, "evidence"), id: 898 }); }, /has 2 `evidence` job\(s\)/],
-    ["an evidence job that kept a witness", true, (w) => setStep(jobOf(w, "evidence"), "Keep the witness (reuse only)", "success"), /ran "Keep the witness \(reuse only\)" \(success\)/],
-    ["an evidence job that handed reuse to the lane", true, (w) => setStep(jobOf(w, "evidence"), "Hand the decision to the lane only once its witness is kept", "success"), /ran "Hand the decision to the lane only once its witness is kept" \(success\)/],
     ["a screen job missing under the adoption", true, (w) => { w.jobs = w.jobs.filter((j) => j.name !== "screen"); }, /has 0 `screen` job\(s\); want exactly one/],
     ["a certify-macos job missing under the adoption", true, (w) => { w.jobs = w.jobs.filter((j) => j.name !== "certify-macos"); }, /has 0 `certify-macos` job\(s\); want exactly one/],
     ["a duplicated screen job", true, (w) => { w.jobs.push({ ...jobOf(w, "screen"), id: 896 }); }, /has 2 `screen` job\(s\)/],
@@ -951,7 +1076,7 @@ async function executionCases() {
   ];
   for (const [name, adopted, mutate, reason] of cases) {
     for (const mode of ["auto", "reuse"]) {
-      const w = reuseWorld(adopted === FROZEN ? FROZEN : { adopted });
+      const w = reuseWorld(typeof adopted === "object" ? adopted : { adopted });
       try { mutate(w); } catch (err) { check(false, `execution ${mode}: ${name}: ${err.message}`); continue; }
       const got = await decideIn(w, { mode });
       if (mode === "auto") {
@@ -962,6 +1087,26 @@ async function executionCases() {
         check(got.error instanceof Refused && reason.test(got.error.message),
           `execution reuse: ${name} must fail an explicit reuse for ${reason}, got ${got.error?.message ?? got.value?.source}`);
       }
+    }
+  }
+  // A run whose own step records show it MEANT to be covered by a witness
+  // (any witness step not skipped in test or a UI shard, or a kept / handed-over
+  // witness) is judged as certified, and every contradiction there is a known
+  // disagreement: refused in auto AND reuse, never a quiet full rebuild.
+  for (const [name, adopted, mutate, reason] of [
+    ["an Ubuntu UI shard that took the witness path", true, (w) => witnessed(jobOf(w, app)), /\(evidence\) did not execute "Keep the witness \(reuse only\)" exactly once/],
+    ["a macOS UI shard whose witness succeeded and smoke was skipped", true, (w) => witnessed(jobOf(w, app), { mac: true }), /\(evidence\) did not execute "Keep the witness \(reuse only\)" exactly once/],
+    ["a successful witness beside an executed smoke", true, (w) => setStep(jobOf(w, app), WITNESS[2], "success"), /\(evidence\) did not execute "Keep the witness \(reuse only\)" exactly once/],
+    ["a witnessed test job", true, (w) => witnessed(jobOf(w, "test")), /\(evidence\) did not execute "Keep the witness \(reuse only\)" exactly once/],
+    ["an evidence job that kept a witness", true, (w) => setStep(jobOf(w, "evidence"), "Keep the witness (reuse only)", "success"), /\(evidence\) did not execute "Hand the decision to the lane only once its witness is kept" exactly once/],
+    ["an evidence job that handed reuse to the lane", true, (w) => setStep(jobOf(w, "evidence"), "Hand the decision to the lane only once its witness is kept", "success"), /\(evidence\) did not execute "Keep the witness \(reuse only\)" exactly once/],
+  ]) {
+    for (const mode of ["auto", "reuse"]) {
+      const w = reuseWorld({ adopted });
+      mutate(w);
+      const got = await decideIn(w, { mode });
+      check(got.error instanceof Refused && reason.test(got.error.message),
+        `execution ${mode}: ${name} is a certified contradiction and must be refused for ${reason}, got ${got.error?.message ?? got.value?.source}`);
     }
   }
   // Wrong evidence stays wrong under the adoption: never hidden by a rebuild.
@@ -984,6 +1129,97 @@ async function executionCases() {
   check(workflowShape(adoptedText()) === ADOPTED_SHAPE, "shape: the canonical adoption is not judged adopted");
   check(workflowShape(witnessedContractText()) === WITNESSED_CONTRACT_SHAPE,
     `shape: the frozen witnessed-contract adoption is judged ${workflowShape(witnessedContractText())}`);
+  check(workflowShape(eventContractText()) === EVENT_CONTRACT_SHAPE,
+    `shape: the frozen event-contract adoption is judged ${workflowShape(eventContractText())}`);
+  // The frozen witnessed contract, WHOLE: removing any one original check,
+  // guard or capture step from it — or carrying any other generation's
+  // part — is not that adoption. Each anchor must exist exactly once.
+  {
+    const W = WITNESSED_CONTRACT_JOB;
+    const want = (needle) => { const i = W.findIndex((l) => l.includes(needle)); if (i < 0 || W.findIndex((l, k) => k > i && l.includes(needle)) >= 0) throw new Error(`stale anchor ${needle}`); return i; };
+    const without = (...needles) => { const drop = new Set(needles.map(want)); return W.filter((_, i) => !drop.has(i)); };
+    const capture = W.findIndex((l) => l === "      - name: Certify this job's toolchain");
+    const keep = W.findIndex((l) => l === "      - name: Keep this job's toolchain certificate");
+    const guardIdx = W.findIndex((l, i) => l === "        if: needs.evidence.outputs.reuse != 'true'" && W[i - 1] === "      - name: Validate release contract");
+    for (const [what, lines] of [
+      ["no version-format check", without("grep -Eq '^[0-9]+")],
+      ["no notarize requirement", without('[ "$NOTARIZE" = true ] || exit 1')],
+      ["no MARKETING_VERSION read", without("-showBuildSettings")],
+      ["no MARKETING_VERSION match", without('[ "$actual" = "$RELEASE_VERSION" ]')],
+      ["no publish version/main requirement", without("refs/heads/main ] || exit 1")],
+      ["no readiness check", without("check-release-readiness.mjs --require-approved")],
+      ["no non-macOS runner guard", without('[ "$RUNNER_OS" = macOS ]')],
+      ["no notarize and no readiness", without('[ "$NOTARIZE" = true ] || exit 1', "check-release-readiness.mjs --require-approved")],
+      ["no step guard on the release contract", W.filter((_, i) => i !== guardIdx)],
+      ["no toolchain capture tail", W.slice(0, capture)],
+      ["no kept certificate", W.slice(0, keep)],
+      ["the current runner", W.map((l) => (l === EVENT_CONTRACT_CONDITIONS[2] ? CANONICAL_JOB_CONDITIONS.contract[2] : l))],
+      ["the current release branch", (() => { const i = W.indexOf(EVENT_CONTRACT_BRANCH[0]); return [...W.slice(0, i), ...RELEASE_INTENT_BRANCH, ...W.slice(i + 2)]; })()],
+      ["the current (fresh) contract job", [...CANONICAL_CONTRACT_JOB]],
+      ["the frozen event (fresh) contract job", [...EVENT_CONTRACT_JOB]],
+      ["an extra step", [...W, "      - run: true"]],
+    ]) {
+      check(guardIdx > 0 && capture > 0 && keep > capture && JSON.stringify(lines) !== JSON.stringify(W),
+        `shape: the witnessed control "${what}" changes nothing (stale anchor)`);
+      let got;
+      try { got = workflowShape(withJob(witnessedContractText(), "contract", lines)); } catch (err) { got = `unbuildable (${err.message})`; }
+      check(got === "non-canonical", `shape: the frozen witnessed contract with ${what} is judged ${got}, want non-canonical`);
+    }
+    // Comment-only edits (YAML and shell) keep every generation.
+    for (const [what, text, wantShape] of [
+      ["witnessed, YAML comment", () => replaceOnce(witnessedContractText(), "  contract:\n", "  contract:\n    # a new comment\n"), WITNESSED_CONTRACT_SHAPE],
+      ["witnessed, shell comment", () => replaceOnce(witnessedContractText(), "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n", "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n          # a new shell comment\n"), WITNESSED_CONTRACT_SHAPE],
+      ["event, shell comment", () => replaceOnce(eventContractText(), "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n", "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n          # a new shell comment\n"), EVENT_CONTRACT_SHAPE],
+      ["current, shell comment", () => replaceOnce(adoptedText(), "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n", "          PUBLISH_RELEASE: ${{ inputs.publish_release }}\n        run: |\n          set -euo pipefail\n          # a new shell comment\n"), ADOPTED_SHAPE],
+    ]) {
+      let got;
+      try { got = workflowShape(text()); } catch (err) { got = `unbuildable (${err.message})`; }
+      check(got === wantShape, `shape: a comment-only change (${what}) is judged ${got}, want ${wantShape}`);
+    }
+    check(Object.isFrozen(WITNESSED_CONTRACT_JOB), "shape: WITNESSED_CONTRACT_JOB is not frozen");
+  }
+  // Contract generations, each WHOLE. The current job is the live one; the
+  // frozen event one differs from it by exactly its runner line and its
+  // two-line release branch, and is frozen so the current pin cannot drag it.
+  {
+    const liveLines = LIVE_WORKFLOW.split("\n");
+    const at = liveLines.indexOf("  contract:");
+    let end = at + 1;
+    while (end < liveLines.length && !/^ {2}[a-z0-9-]+:\s*$/.test(liveLines[end])) end += 1;
+    const live = liveLines.slice(at, end).filter((l) => l.trim() !== "" && !l.trim().startsWith("#"));
+    check(at >= 0 && JSON.stringify(live) === JSON.stringify(CANONICAL_CONTRACT_JOB),
+      "shape: CANONICAL_CONTRACT_JOB drifted from the live macos.yml contract job");
+    const diff = CANONICAL_CONTRACT_JOB.map((l, i) => (l === EVENT_CONTRACT_JOB[i] ? null : i)).filter((i) => i !== null);
+    check(Object.isFrozen(EVENT_CONTRACT_JOB) && Object.isFrozen(EVENT_CONTRACT_CONDITIONS) && Object.isFrozen(EVENT_CONTRACT_BRANCH)
+      && EVENT_CONTRACT_JOB.length === CANONICAL_CONTRACT_JOB.length && JSON.stringify(diff) === JSON.stringify([3, 14, 15])
+      && EVENT_CONTRACT_JOB[3].includes("github.event_name == 'workflow_dispatch'") && !CANONICAL_CONTRACT_JOB.join("\n").includes("workflow_dispatch")
+      && JSON.stringify(CANONICAL_CONTRACT_JOB.slice(14, 16)) === JSON.stringify(RELEASE_INTENT_BRANCH)
+      && JSON.stringify(EVENT_CONTRACT_JOB.slice(14, 16)) === JSON.stringify(EVENT_CONTRACT_BRANCH),
+    `shape: the frozen event contract is not the current one with exactly its runner and release branch swapped (lines ${diff})`);
+    // Each generation alone, and every cross-generation mix, by the judge directly.
+    for (const [what, text, want] of [
+      ["the current adoption", () => adoptedText(), ADOPTED_SHAPE],
+      ["the frozen event-contract adoption", () => eventContractText(), EVENT_CONTRACT_SHAPE],
+      ["the frozen witnessed-contract adoption", () => witnessedContractText(), WITNESSED_CONTRACT_SHAPE],
+      ["the event runner with the current branch", () => withEventRunsOn(adoptedText()), "non-canonical"],
+      ["the current runner with the event branch", () => withEventBranch(adoptedText()), "non-canonical"],
+      ["the witnessed adoption with the current runner", () => withIntentRunsOn(witnessedContractText()), "non-canonical"],
+      ["the witnessed adoption with the current branch", () => withIntentBranch(witnessedContractText()), "non-canonical"],
+      ["the witnessed adoption with both current lines", () => withIntentBranch(withIntentRunsOn(witnessedContractText())), "non-canonical"],
+      ["the witnessed adoption with the branch twice", () => replaceOnce(witnessedContractText(), `${CONTRACT_BRANCH.event}\n`, `${CONTRACT_BRANCH.event}\n          fi\n${CONTRACT_BRANCH.event}\n`), "non-canonical"],
+      ["the event contract with a witness prefix", () => withAfterSteps(eventContractText(), "contract", CANONICAL_WITNESS_STEPS), "non-canonical"],
+      ["the event contract with the frozen evidence job", () => replaceOnce(eventContractText(), CANONICAL_EVIDENCE_JOB.join("\n") + "\n", WITNESSED_CONTRACT_EVIDENCE_JOB.join("\n") + "\n"), "non-canonical"],
+      ["the event contract with the legacy ui-smoke triple", () => replaceOnce(eventContractText(), UI_SMOKE_TRIPLE(CANONICAL_JOB_CONDITIONS["ui-smoke"]), UI_SMOKE_TRIPLE(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS)), "non-canonical"],
+      ["the event contract with a fresh test", () => withoutWitness(eventContractText(), "test"), "non-canonical"],
+      ["the current contract with an extra step", () => replaceOnce(adoptedText(), "\n  test:\n", "\n      - run: true\n  test:\n"), "non-canonical"],
+      ["the event contract with an extra step", () => replaceOnce(eventContractText(), "\n  test:\n", "\n      - run: true\n  test:\n"), "non-canonical"],
+      ["the event contract with a comment-only change", () => replaceOnce(eventContractText(), "  contract:\n", "  contract:\n    # a new comment\n"), EVENT_CONTRACT_SHAPE],
+    ]) {
+      let got;
+      try { got = workflowShape(text()); } catch (err) { got = `unbuildable (${err.message})`; }
+      check(got === want, `shape: ${what} is judged ${got}, want ${want}`);
+    }
+  }
   // The frozen previous adoption differs from the current one by exactly the
   // Ubuntu probe in the evidence job and the contract's witness prefix.
   {
@@ -1021,7 +1257,7 @@ async function executionCases() {
   }
   check(JSON.stringify(CANONICAL_JOB_CONDITIONS["ui-smoke"]) !== JSON.stringify(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS)
     && Object.isFrozen(LEGACY_ADOPTED_UI_SMOKE_CONDITIONS), "shape: the legacy ui-smoke triple is not a separate frozen constant");
-  for (const base of [adoptedText, witnessedContractText]) {
+  for (const base of [adoptedText, eventContractText, witnessedContractText]) {
     const [needs, cond] = CANONICAL_JOB_CONDITIONS["ui-smoke"];
     const fork = " && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)";
     for (const [what, from, to] of [
@@ -1097,6 +1333,8 @@ async function executionCases() {
       check(JSON.stringify(got) === JSON.stringify(want),
         `shape: CANONICAL_JOB_CONDITIONS.${id} drifted from the generator's ${id} job`);
     }
+    check(JSON.stringify(job("contract")) === JSON.stringify(CANONICAL_CONTRACT_JOB),
+      "shape: CANONICAL_CONTRACT_JOB drifted from the generator's contract job");
     check(workflowShape(generated) === ADOPTED_SHAPE, "shape: the generator's own adoption of this tree is not judged adopted");
     check(workflowShape(LIVE_WORKFLOW) === ADOPTED_SHAPE, "shape: the live macos.yml is not judged adopted");
     generatorChecked = true;
@@ -1941,6 +2179,751 @@ function contractCases() {
   }
 }
 
+
+// ── certified coverage (E with F's full proof) ──────────────────────────────
+
+/**
+ * The AUTHENTIC 191d main push run 37313600321 attempt 1 (its jobs, run record,
+ * artifact listing and the retained witness ZIP, byte-identical to the API's
+ * digest), under scripts/test/fixtures/macos-certified/. The source proof's
+ * own API records (pulls, merge-gate listing, commits, trees, certificates)
+ * are NOT captured there, so the full positive stops where F's judge asks for
+ * the first of them: absent is `Unavailable` (auto builds), never a pass.
+ */
+const CERTIFIED_DIR = join(repoRoot, "scripts/test/fixtures/macos-certified");
+const MAIN_SHA = "191d9c845aae736e731b5fd0c9db9c49f5e9ef27";
+function certifiedWorld() {
+  const read = (name) => readFileSync(join(CERTIFIED_DIR, name));
+  return {
+    run: JSON.parse(read("main-run-37313600321.json")),
+    jobs: JSON.parse(read("main-jobs-37313600321-attempt-1.json")).jobs,
+    artifacts: JSON.parse(read("main-artifacts-37313600321.json")).artifacts,
+    zip: read("main-witness-37313600321.zip"),
+  };
+}
+// HERMETIC: the signed commit is the authentic raw 191d commit object, checked
+// here against its own SHA-1 object id (so it cannot be a forged stand-in), and
+// served for exactly the two reads that precede F's first source-API call
+// (`headFacts`). It does not depend on the checkout's history, which a shallow
+// hosted clone after later commits would not hold. Any other read is the
+// typed absence a real checkout without the object reports.
+const RAW_COMMIT = readFileSync(join(CERTIFIED_DIR, `commit-${MAIN_SHA}.raw`));
+const rawCommitId = createHash("sha1").update(Buffer.concat([Buffer.from(`commit ${RAW_COMMIT.length}\0`), RAW_COMMIT])).digest("hex");
+const GIT_OBJECTS = JSON.parse(readFileSync(join(CERTIFIED_DIR, "git-objects-191d.json"), "utf8"));
+function gitObject(id, type) {
+  const entry = GIT_OBJECTS[id];
+  if (entry?.type !== type) throw new Error(`no authentic ${type} ${id} in the fixture`);
+  const body = Buffer.from(entry.base64, "base64");
+  const got = createHash("sha1").update(Buffer.concat([Buffer.from(`${type} ${body.length}\0`), body])).digest("hex");
+  if (got !== id) throw new Error(`fixture ${type} ${id} hashes to ${got}`);
+  return body;
+}
+const localGit = (args) => {
+  if (rawCommitId !== MAIN_SHA) throw new Error(`the raw commit fixture hashes to ${rawCommitId}, not ${MAIN_SHA}`);
+  const key = JSON.stringify(args);
+  if (key === JSON.stringify(["show", "-s", "--format=%H%n%T", MAIN_SHA])) {
+    return Buffer.from(`${MAIN_SHA}\n${/^tree ([0-9a-f]{40})$/m.exec(RAW_COMMIT.toString("utf8"))[1]}\n`);
+  }
+  if (key === JSON.stringify(["cat-file", "commit", MAIN_SHA])) return Buffer.from(RAW_COMMIT);
+  // `show <sha>:<path>`: walked from the commit's tree through authentic raw
+  // tree objects to the blob, every object re-hashed to its own id first.
+  if (args.length === 2 && args[0] === "show" && args[1].startsWith(`${MAIN_SHA}:`)) {
+    let id = /^tree ([0-9a-f]{40})$/m.exec(RAW_COMMIT.toString("utf8"))[1];
+    for (const part of args[1].slice(MAIN_SHA.length + 1).split("/")) {
+      const tree = gitObject(id, "tree");
+      id = null;
+      for (let at = 0; at < tree.length;) {
+        const nul = tree.indexOf(0, at);
+        const name = tree.subarray(tree.indexOf(0x20, at) + 1, nul).toString("utf8");
+        if (name === part) { id = tree.subarray(nul + 1, nul + 21).toString("hex"); break; }
+        at = nul + 21;
+      }
+      if (id === null || GIT_OBJECTS[id] === undefined) break;
+    }
+    if (id !== null && GIT_OBJECTS[id]?.type === "blob") return gitObject(id, "blob");
+  }
+  throw new CertifiedUnavailable(`git ${args.slice(0, 2).join(" ")} could not read the signed commit locally`);
+};
+function certifiedApi(w, { calls = [] } = {}) {
+  const missing = (path) => Object.assign(new Error(`404 ${path}`), { status: 404 });
+  return {
+    async get(path) {
+      calls.push(path);
+      const bare = path.replace(/[?&]per_page=100&page=\d+$/, "");
+      if (bare === `/repos/${REPO}/actions/runs/${w.run.id}/artifacts`) {
+        return { total_count: w.artifacts.length, artifacts: clone(w.artifacts) };
+      }
+      const art = /^\/repos\/[^/]+\/[^/]+\/actions\/artifacts\/(\d+)$/.exec(bare);
+      if (art) {
+        const hit = w.artifacts.find((a) => a.id === Number(art[1]));
+        if (hit) return clone(hit);
+      }
+      throw missing(path);
+    },
+    async download(path) {
+      calls.push(path);
+      const witness = w.artifacts.find((a) => /witness/.test(a.name));
+      if (witness && path === `/repos/${REPO}/actions/artifacts/${witness.id}/zip`) return Buffer.from(w.zip);
+      throw missing(path);
+    },
+  };
+}
+const rosterArgs = (w) => ({ runId: w.run.id, sha: MAIN_SHA, latestAttempt: w.run.run_attempt, shape: ADOPTED_SHAPE });
+const byName = (w, name) => w.jobs.find((j) => (name.includes("(") ? j.name.startsWith(name) : j.name === name));
+async function certifiedOutcome(w, opts = {}) {
+  const coverage = coverageOf(w.jobs, ADOPTED_SHAPE);
+  const roster = judgeProducerRoster(w.jobs, { ...rosterArgs(w), coverage });
+  const ids = ["contract", "test", "ui-smoke/app-shell", "ui-smoke/device-inbox", "signed-build"];
+  return outcome(judgeCertifiedCoverage(certifiedApi(w, opts), {
+    repository: REPO, repositoryId: REPO_ID, sha: MAIN_SHA, run: w.run, now: opts.now ?? Date.parse("2026-10-05T16:30:00Z"),
+    rosterJobs: ids.map((id, i) => ({ id, job: roster.jobs[i] })), evidenceJob: roster.auxiliaryJobs[2],
+    certifyJob: roster.auxiliaryJobs[1], sourceGit: localGit,
+  }));
+}
+
+/**
+ * The publisher checkout depth, on REAL git: a release commit and its first
+ * parent in a temporary repository, cloned at depth 1 and at depth 2 through
+ * `file://` (so `--depth` is honoured). The certified source derivation needs
+ * `git diff-tree <parent> <sha>`: depth 1 lacks the parent object and reads as
+ * the typed absence (auto would rebuild); depth 2 derives the change set.
+ */
+function depthCases() {
+  const scratch = mkdtempSync(join(tmpdir(), "macos-evidence-depth-"));
+  try {
+    const origin = join(scratch, "origin");
+    const g = (cwd, ...args) => {
+      const r = spawnSync("git", args, { cwd, encoding: "utf8", env: { ...isolatedGitEnvironment(), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: "1",
+        GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.invalid", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.invalid" } });
+      if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+      return r.stdout.trim();
+    };
+    mkdirSync(origin);
+    g(origin, "init", "-q", "-b", "main");
+    writeFileSync(join(origin, "a.txt"), "base\n");
+    g(origin, "add", "a.txt"); g(origin, "commit", "-q", "-m", "base");
+    const base = g(origin, "rev-parse", "HEAD");
+    writeFileSync(join(origin, "a.txt"), "candidate\n");
+    g(origin, "commit", "-q", "-am", "candidate");
+    const sha = g(origin, "rev-parse", "HEAD");
+    for (const depth of [1, 2]) {
+      const clone = join(scratch, `depth-${depth}`);
+      g(scratch, "clone", "-q", `--depth=${depth}`, `file://${origin}`, clone);
+      const runGit = (args) => {
+        const r = spawnSync("git", args, { cwd: clone, encoding: "buffer", env: { ...isolatedGitEnvironment(), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
+        if (r.status !== 0) throw new CertifiedUnavailable(`git ${args.slice(0, 2).join(" ")} could not read the signed commit locally`);
+        return r.stdout;
+      };
+      let got;
+      try { got = pinnedSourceTree(runGit, sha).git(["diff-tree", "-r", "--name-status", base, "HEAD"]).toString("utf8"); } catch (e) { got = e; }
+      if (depth === 1) {
+        check(got instanceof CertifiedUnavailable, `depth: a depth-1 publisher checkout must lack the parent (typed absence), got ${got?.message ?? JSON.stringify(got)}`);
+      } else {
+        check(typeof got === "string" && /^M\ta\.txt$/m.test(got), `depth: a depth-2 publisher checkout must derive the candidate's change set, got ${got?.message ?? JSON.stringify(got)}`);
+      }
+    }
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+async function certifiedCases() {
+  const real = certifiedWorld();
+  // The fixture is the real thing: the witness bytes hash to the API digest.
+  const witnessArt = real.artifacts.find((a) => /witness/.test(a.name));
+  check(`sha256:${sha256(real.zip)}` === witnessArt.digest, "certified: the authentic witness ZIP no longer matches its API digest");
+
+  // 1. The authentic run is certified; its executed-route refusal is the one root reproduced.
+  check(coverageOf(real.jobs, ADOPTED_SHAPE) === COVERAGE_CERTIFIED, "certified: the authentic 191d run is not read as certified");
+  let executed = null;
+  try { judgeProducerRoster(real.jobs, { ...rosterArgs(real), coverage: COVERAGE_EXECUTED }); } catch (error) { executed = error; }
+  check(executed instanceof Unavailable && /Keep the witness \(reuse only\)/.test(executed.message),
+    `certified: the executed route must still refuse the authentic run as root reproduced, got ${executed?.message}`);
+  let certifiedRoster = null;
+  try { certifiedRoster = judgeProducerRoster(real.jobs, { ...rosterArgs(real), coverage: COVERAGE_CERTIFIED }); } catch (error) {
+    certifiedRoster = error;
+  }
+  check(certifiedRoster?.coverage === COVERAGE_CERTIFIED, `certified: the authentic roster fails the certified judge: ${certifiedRoster?.message}`);
+
+  // 2. Genuine witness authenticated, then F's judge asks for the source records
+  //    this fixture does not hold: Unavailable (auto builds), and never before
+  //    the witness itself was read and bound.
+  const calls = [];
+  const absent = await certifiedOutcome(real, { calls });
+  check(absent.error instanceof Unavailable && /certified full proof is unavailable/.test(absent.error.message)
+    && calls.some((c) => c.endsWith(`/artifacts/${witnessArt.id}/zip`)) && calls.some((c) => c.includes(`/commits/${MAIN_SHA}/pulls`)),
+  `certified: a genuine witness without its source records must be Unavailable after binding, got ${absent.error?.message ?? "a pass"}`);
+
+  // 3. Witness negatives, each for its own reason.
+  const mutate = (fn) => { const w = clone({ ...real, zip: undefined }); w.zip = Buffer.from(real.zip); fn(w); return w; };
+  const cases = [
+    ["missing witness", (w) => { w.artifacts = w.artifacts.filter((a) => !/witness/.test(a.name)); }, Unavailable, /retains no main witness/],
+    ["two witnesses", (w) => { w.artifacts.push({ ...clone(witnessArt), id: 1, name: "relayium-ci-evidence-witness-macos-attempt-2" }); },
+      Unavailable, /re-decided witness is not supported/],
+    ["expired witness", (w) => { w.artifacts.find((a) => /witness/.test(a.name)).expired = true; }, Unavailable, /has expired/],
+    ["altered ZIP bytes", (w) => { w.zip[w.zip.length - 30] ^= 1; }, Refused, /do not match its API digest/],
+    ["witness from another run", (w) => { w.artifacts.find((a) => /witness/.test(a.name)).workflow_run.id += 1; }, Refused,
+      /is not from run/],
+    ["wrong attempt name", (w) => { w.artifacts.find((a) => /witness/.test(a.name)).name = "relayium-ci-evidence-witness-macos-attempt-2"; },
+      Refused, /targets .* attempt 1 .* attempt 2/],
+  ];
+  // Certify capture and witness clock, bound to the authenticated original
+  // executions (all read BEFORE F's judge, so the authentic fixture reaches them).
+  const stepOf = (w, job, name) => byName(w, job).steps.find((st) => st.name === name);
+  cases.push(
+    ["certify capture skipped", (w) => { stepOf(w, "certify-macos", "Certify this runner's toolchain now").conclusion = "skipped"; },
+      Refused, /\(certify-macos\) did not execute "Certify this runner's toolchain now" exactly once/],
+    ["certify handover missing", (w) => { const j = byName(w, "certify-macos"); j.steps = j.steps.filter((st) => st.name !== "Hand the certificates to the evidence job"); },
+      Refused, /did not execute "Hand the certificates to the evidence job" exactly once \(absent\)/],
+    ["certify on Ubuntu", (w) => { byName(w, "certify-macos").labels = ["ubuntu-latest"]; }, Refused, /captured on \["ubuntu-latest"\]/],
+    ["certify job failed", (w) => { byName(w, "certify-macos").conclusion = "failure"; }, Refused, /`certify-macos` \(attempt 1 inventory\) is completed\/failure, not a completed success/],
+    ["certify capture after the decision", (w) => {
+      const st = stepOf(w, "certify-macos", "Hand the certificates to the evidence job");
+      st.started_at = st.completed_at = "2026-10-05T13:02:40Z";
+    }, Refused, /did not finish before the evidence decision began/],
+    ["certify capture two hours before the witness", (w) => {
+      stepOf(w, "certify-macos", "Certify this runner's toolchain now").started_at = "2026-10-05T11:00:00Z";
+    }, Refused, /certify capture began more than 30 minutes before the witness was verified at 2026-10-05T13:02:30Z/],
+    // The whole certify job 45 minutes earlier, every step window shifted
+    // together: ordering, decision, keep and creation all still hold, so
+    // only F's 30-minute current-certificate age refuses it.
+    ["whole certify job 45 minutes before the witness", (w) => {
+      const j = byName(w, "certify-macos");
+      const shift = (t) => new Date(Date.parse(t) - 45 * 60_000).toISOString().replace(".000Z", "Z");
+      for (const key of ["started_at", "completed_at", "created_at"]) if (j[key]) j[key] = shift(j[key]);
+      for (const st of j.steps) { st.started_at = shift(st.started_at); st.completed_at = shift(st.completed_at); }
+    }, Refused, /certify capture began more than 30 minutes before the witness was verified at 2026-10-05T13:02:30Z/],
+    ["witness verified outside its decision step", (w) => {
+      const st = stepOf(w, "evidence", "Does the merged pull request's full proof cover this main tree?");
+      st.completed_at = "2026-10-05T13:02:25Z";
+    }, Refused, /verified at 2026-10-05T13:02:30Z, outside the decision step/],
+    ["witness artifact created outside its keep step", (w) => {
+      w.artifacts.find((a) => /witness/.test(a.name)).created_at = "2026-10-05T13:05:00Z";
+    }, Refused, /created at 2026-10-05T13:05:00Z, outside the step that kept it/],
+  );
+  for (const [name, fn, type, reason] of cases) {
+    const result = await certifiedOutcome(mutate(fn));
+    check(result.error instanceof type && reason.test(result.error.message),
+      `certified: ${name}: want ${type.name} ${reason}, got ${result.error?.constructor?.name} ${result.error?.message ?? "a pass"}`);
+  }
+
+  // 4. Roster negatives: contract/signed-build never certified; mixed or foreign
+  //    steps, wrong runner, missing confirmation are neither mode.
+  // A certified run's witness/evidence contradictions are Refused (never a
+  // rebuild); contract and signed-build keep the executed rule (Unavailable).
+  const rosterCase = (name, fn, reason, want = Refused) => {
+    const w = mutate(fn);
+    let error = null;
+    try { judgeProducerRoster(w.jobs, { ...rosterArgs(w), coverage: coverageOf(w.jobs, ADOPTED_SHAPE) }); } catch (e) { error = e; }
+    check(error instanceof want && reason.test(error.message),
+      `certified roster: ${name}: want ${want.name} ${reason}, got ${error?.message ?? "a pass"}`);
+  };
+  rosterCase("test ran its suite beside the witness", (w) => {
+    byName(w, "test").steps.find((s) => s.name === "Release script tests").conclusion = "success";
+  }, /executed "Release script tests" .* beside its witness/);
+  rosterCase("a UI shard ran the other shard's suite", (w) => {
+    byName(w, "ui-smoke (app-shell").steps.find((s) => /UI smoke \(app-shell\)/.test(s.name)).name = "Run macOS product-flow UI smoke (device-inbox)";
+    byName(w, "ui-smoke (app-shell").steps.find((s) => /device-inbox/.test(s.name)).conclusion = "success";
+  }, /beside its witness/);
+  rosterCase("a witness confirmation skipped", (w) => {
+    byName(w, "ui-smoke (device-inbox").steps.find((s) => s.name.startsWith("Witness")).conclusion = "skipped";
+  }, /did not confirm its witness exactly once/);
+  rosterCase("a duplicated confirmation", (w) => {
+    const j = byName(w, "ui-smoke (app-shell");
+    j.steps.push({ ...clone(j.steps.find((s) => s.name.startsWith("Witness"))), number: 99 });
+  }, /did not confirm its witness exactly once/);
+  rosterCase("a witness on macOS", (w) => { byName(w, "test").labels = ["macos-15"]; }, /witness path runs on/);
+  // Contract and signed-build are never certified, and in a certified run they
+  // are KNOWN mandatory executions: a contradiction is Refused (decide passes a
+  // Refused through in auto and reuse alike), not rebuilt over. Only a job
+  // still running is not yet evidence (Unavailable).
+  rosterCase("contract skipped its gate", (w) => {
+    byName(w, "contract").steps.find((s) => s.name === "Validate release contract").conclusion = "skipped";
+  }, /\(contract\) did not execute "Validate release contract" \(completed\/skipped\)/);
+  rosterCase("contract gate step failed", (w) => {
+    byName(w, "contract").steps.find((s) => s.name === "Validate release contract").conclusion = "failure";
+  }, /\(contract\) did not execute "Validate release contract" \(completed\/failure\)/);
+  rosterCase("contract job failed", (w) => { byName(w, "contract").conclusion = "failure"; },
+    /`contract` job is completed\/failure; every gate job must succeed/);
+  rosterCase("contract still running", (w) => { const j = byName(w, "contract"); j.status = "in_progress"; j.conclusion = null; },
+    /`contract` job is in_progress\/null/, Unavailable);
+  rosterCase("contract step record malformed", (w) => { byName(w, "contract").steps[0].status = 7; },
+    /\(contract\) has a malformed step record/);
+  rosterCase("signed-build skipped its build", (w) => {
+    byName(w, "signed-build").steps.find((s) => s.name === "Build (signed, Release)").conclusion = "skipped";
+  }, /\(signed-build\) did not execute "Build \(signed, Release\)" \(completed\/skipped\)/);
+  rosterCase("signed-build omitted signing", (w) => {
+    const j = byName(w, "signed-build");
+    j.steps = j.steps.filter((s) => s.name !== "Re-sign Sparkle distribution components");
+  }, /\(signed-build\) has 0 "Re-sign Sparkle distribution components" step\(s\)/);
+  rosterCase("signed-build on the wrong runner", (w) => { byName(w, "signed-build").labels = ["ubuntu-latest"]; },
+    /\(signed-build\) ran on \["ubuntu-latest"\]/);
+  rosterCase("signed-build job failed", (w) => { byName(w, "signed-build").conclusion = "failure"; },
+    /`signed-build` job is completed\/failure; every gate job must succeed/);
+  rosterCase("signed-build still running", (w) => { const j = byName(w, "signed-build"); j.status = "queued"; j.conclusion = null; },
+    /`signed-build` job is queued\/null/, Unavailable);
+  rosterCase("contract reports no step records", (w) => { byName(w, "contract").steps = []; },
+    /\(contract\) reports no step records/, Unavailable);
+  // The executed route is unchanged: the same contradiction there is Unavailable.
+  {
+    const w = mutate((x) => { byName(x, "contract").steps.find((s) => s.name === "Validate release contract").conclusion = "skipped"; });
+    for (const j of w.jobs) for (const st of j.steps ?? []) {
+      if ([...WITNESS, "Keep the witness (reuse only)", "Hand the decision to the lane only once its witness is kept"].includes(st.name)) st.conclusion = "skipped";
+    }
+    let error = null;
+    try { judgeProducerRoster(w.jobs, { ...rosterArgs(w), coverage: coverageOf(w.jobs, ADOPTED_SHAPE) }); } catch (e) { error = e; }
+    check(error instanceof Unavailable && /\(contract\) did not execute "Validate release contract"/.test(error.message),
+      `certified roster: an executed-route contract that skipped its gate stays Unavailable, got ${error?.constructor?.name} ${error?.message}`);
+  }
+  rosterCase("evidence handover skipped", (w) => {
+    byName(w, "evidence").steps.find((s) => s.name.startsWith("Hand the decision")).conclusion = "skipped";
+  }, /did not execute "Hand the decision/);
+  let never = null;
+  try { judgeWitnessed("contract", byName(real, "test")); } catch (e) { never = e; }
+  check(never instanceof Refused && /can never be covered by a witness/.test(never.message),
+    `certified: a witnessed contract must be refused outright, got ${never?.message}`);
+  // A confirmed test witness without a KEPT decision is still a run that meant
+  // to be certified: it is judged so and refused, not rebuilt over.
+  const unkept = mutate((w) => { byName(w, "evidence").steps.find((s) => s.name === "Keep the witness (reuse only)").conclusion = "skipped"; });
+  check(coverageOf(unkept.jobs, ADOPTED_SHAPE) === COVERAGE_CERTIFIED, "certified: an unkept witness still declares certified intent");
+  rosterCase("a confirmed witness whose decision was never kept", (w) => {
+    byName(w, "evidence").steps.find((s) => s.name === "Keep the witness (reuse only)").conclusion = "skipped";
+  }, /did not execute "Keep the witness \(reuse only\)" exactly once/);
+  rosterCase("a FAILED confirmation (job reported failure)", (w) => {
+    const j = byName(w, "test");
+    j.steps.find((s) => s.name.startsWith("Witness")).conclusion = "failure";
+    j.conclusion = "failure";
+  }, /`test` job is completed\/failure/);
+  rosterCase("a failed confirmation under a green job", (w) => {
+    byName(w, "test").steps.find((s) => s.name.startsWith("Witness")).conclusion = "failure";
+  }, /did not confirm its witness exactly once/);
+  rosterCase("witness intent ONLY in a UI shard (test executed)", (w) => {
+    for (const st of byName(w, "test").steps) if (st.name.startsWith("Witness")) st.conclusion = "skipped";
+  }, /\(test\) did not confirm its witness exactly once/);
+  // Every witness step skipped everywhere and nothing kept: the executed route.
+  const none = mutate((w) => {
+    for (const j of w.jobs) for (const st of j.steps ?? []) {
+      if ([...WITNESS, "Keep the witness (reuse only)", "Hand the decision to the lane only once its witness is kept"].includes(st.name)) st.conclusion = "skipped";
+    }
+  });
+  check(coverageOf(none.jobs, ADOPTED_SHAPE) === COVERAGE_EXECUTED, "certified: a run with no witness intent must stay on the executed route");
+}
+
+/**
+ * The witness clock against F's current-certificate age, judged directly on
+ * consistent step windows (each case moves every window it needs, so no
+ * unrelated ordering guard refuses it first). F verified the witness at
+ * `verified_at`; the capture happened no earlier than the certify step's
+ * skew-widened start, so `verified - (start - skew)` must be <= 30 minutes.
+ */
+async function timingCases() {
+  const F = await import("../ci/ci-evidence.mjs");
+  check(CERTIFY_TO_VERIFIED_MAX_MS === F.CURRENT_CERT_MAX_AGE_MS && CERTIFY_TO_VERIFIED_MAX_MS === 30 * 60_000,
+    `timing: the reader's limit ${CERTIFY_TO_VERIFIED_MAX_MS} is not F's canonical ${F.CURRENT_CERT_MAX_AGE_MS}`);
+  const iso = (ms) => new Date(ms).toISOString();
+  const T0 = Date.parse("2026-10-05T12:00:00Z");
+  const SKEW = 2_000;
+  const world = ({ capture = [0, 20_000], hand = [20_000, 20_000], decide = [30_000, 40_000], verified = 39_000,
+    keep = [40_000, 41_000], created = 41_000 } = {}) => ({
+    certify: { steps: [
+      { name: "Certify this runner's toolchain now", started_at: iso(T0 + capture[0]), completed_at: iso(T0 + capture[1]) },
+      { name: "Hand the certificates to the evidence job", started_at: iso(T0 + hand[0]), completed_at: iso(T0 + hand[1]) },
+    ] },
+    evidence: { steps: [
+      { name: "Does the merged pull request's full proof cover this main tree?", started_at: iso(T0 + decide[0]), completed_at: iso(T0 + decide[1]) },
+      { name: "Keep the witness (reuse only)", started_at: iso(T0 + keep[0]), completed_at: iso(T0 + keep[1]) },
+    ] },
+    witness: { verified_at: iso(T0 + verified) },
+    art: { id: 7, created_at: iso(T0 + created) },
+  });
+  const MIN = 60_000;
+  const LIMIT = CERTIFY_TO_VERIFIED_MAX_MS;
+  const AGE = /certify capture began more than 30 minutes before the witness was verified/;
+  // Decision and keep windows placed late enough around `v` for the age to be the only question.
+  const late = (v, decideFrom = v - 5_000) => ({ decide: [decideFrom, v + 1_000], verified: v, keep: [v + 1_000, v + 2_000], created: v + 2_000 });
+  const table = [
+    ["a prompt capture", {}, null],
+    ["exactly 30 minutes (skew-widened start)", late(LIMIT - SKEW), null],
+    ["one millisecond over 30 minutes", late(LIMIT - SKEW + 1), AGE],
+    ["just over 30 minutes by a whole second", late(LIMIT), AGE],
+    ["45 minutes", late(45 * MIN), AGE],
+    // Capture within 30 minutes of the decision START, but the decision ran
+    // long and verified the witness 35 minutes after the capture began.
+    ["a long decision", { decide: [MIN, 40 * MIN], verified: 35 * MIN, keep: [40 * MIN, 40 * MIN + 1_000], created: 40 * MIN + 1_000 }, AGE],
+    ["a capture finishing after the decision began", { hand: [20_000, 40_000] }, /did not finish before the evidence decision began/],
+    ["a witness verified after its decision step", { verified: 50_000, keep: [50_000, 51_000], created: 51_000 },
+      /outside the decision step that produced it/],
+    ["a witness verified before its decision step", { verified: 20_000 }, /outside the decision step that produced it/],
+    ["a witness artifact created outside its keep step", { created: 60_000 }, /outside the step that kept it/],
+  ];
+  for (const [name, at, reason] of table) {
+    let error = null;
+    try { judgeWitnessTiming(world(at)); } catch (e) { error = e; }
+    check(reason === null ? error === null : error instanceof Refused && reason.test(error.message),
+      `timing: ${name}: want ${reason ?? "accepted"}, got ${error?.message ?? "accepted"}`);
+  }
+  // No caller may widen the limit; F's own value is the only one it accepts.
+  for (const maxAgeMs of [60 * MIN, LIMIT + 1, 0, 1.5]) {
+    let error = null;
+    try { judgeWitnessTiming({ ...world(), maxAgeMs }); } catch (e) { error = e; }
+    check(error instanceof Refused && /is not F's canonical 1800000 ms/.test(error.message),
+      `timing: a ${maxAgeMs} ms limit must be refused, got ${error?.message ?? "accepted"}`);
+  }
+  let error = null;
+  try { judgeWitnessTiming({ ...world(late(LIMIT - SKEW)), maxAgeMs: F.CURRENT_CERT_MAX_AGE_MS }); } catch (e) { error = e; }
+  check(error === null, `timing: F's own limit at the boundary must be accepted, got ${error?.message}`);
+}
+
+/**
+ * The returned frozen certificates carry the exact source certificate
+ * artifacts. Same toolchain VALUE, different artifact id: a different frozen
+ * identity, so a readback comparing `evidenceIdentity` refuses. (Primitive
+ * level: the whole certified decide/readback with these identities is root's
+ * genuine replay; no hermetic whole-chain factory exists in this file.)
+ */
+async function identityCases() {
+  const F = await import("../ci/ci-evidence.mjs");
+  const opts = { attempt: 1, isIdentity: F.isArtifactIdentity };
+  const digest = (c) => `sha256:${c.repeat(64)}`;
+  const witnessCerts = { test: { profile: "ubuntu", current: "v1", source: ["v1"] } };
+  const record = (id, patch = {}) => ({
+    id, name: "relayium-ci-evidence-toolchain-macos-test-0-attempt-1", digest: digest("a"), size_in_bytes: 512,
+    created_at: "2026-10-05T10:00:00Z", expires_at: "2026-10-20T00:00:00Z", expired: false,
+    workflow_run: { id: 7001, head_sha: "c".repeat(40), repository_id: 42, head_repository_id: 42 }, ...patch,
+  });
+  const artifact = (id, patch) => F.artifactIdentityOf(record(id, patch));
+  const sources = (art) => ({ test: { profile: "ubuntu", source: ["v1"], artifacts: [art] } });
+  const a = frozenCertificates(witnessCerts, sources(artifact(101)), opts);
+  const b = frozenCertificates(witnessCerts, sources(artifact(102)), opts);
+  check(JSON.stringify(a.test.artifacts) === JSON.stringify([artifact(101)]) && a.test.source[0] === b.test.source[0]
+    && JSON.stringify(Object.keys(a.test.artifacts[0])) === JSON.stringify(F.ARTIFACT_IDENTITY_KEYS),
+  `identity: the frozen certificates must carry the complete artifact identity, got ${JSON.stringify(a.test)}`);
+  // Every field of the complete identity is frozen: the same id and value with a
+  // foreign head repository, another size, creation, expiry, digest or head is a
+  // different chain.
+  for (const [what, patch] of [
+    ["a foreign head repository", { workflow_run: { id: 7001, head_sha: "c".repeat(40), repository_id: 42, head_repository_id: 777777 } }],
+    ["a foreign repository", { workflow_run: { id: 7001, head_sha: "c".repeat(40), repository_id: 777777, head_repository_id: 42 } }],
+    ["another run", { workflow_run: { id: 7002, head_sha: "c".repeat(40), repository_id: 42, head_repository_id: 42 } }],
+    ["another head", { workflow_run: { id: 7001, head_sha: "d".repeat(40), repository_id: 42, head_repository_id: 42 } }],
+    ["another size", { size_in_bytes: 513 }],
+    ["another creation", { created_at: "2026-10-05T10:00:01Z" }],
+    ["another expiry", { expires_at: "2026-10-20T00:00:01Z" }],
+    ["another digest", { digest: digest("b") }],
+  ]) {
+    const c = frozenCertificates(witnessCerts, sources(artifact(101, patch)), opts);
+    check(JSON.stringify(c) !== JSON.stringify(a), `identity: ${what} with the same id and value must change the frozen identity`);
+  }
+  const w = reuseWorld({ adopted: true });
+  const frozen = (await decideIn(w)).value?.evidence;
+  check(Boolean(frozen), "identity: the executed reuse world produced no evidence to bind");
+  if (frozen) {
+    const certified = (certs) => ({ ...clone(frozen), coverage: { mode: COVERAGE_CERTIFIED, certificates: certs } });
+    check(evidenceIdentity(certified(a)) !== evidenceIdentity(certified(b))
+      && evidenceIdentity(certified(a)) === evidenceIdentity(certified(clone(a))),
+    "identity: a replaced source certificate artifact with the same value must change the frozen evidence identity");
+  }
+  for (const [name, art, n = 1] of [
+    ["a missing digest", { ...artifact(101), digest: undefined }],
+    ["an extra key", { ...artifact(101), expired: false }],
+    ["a dropped key (the old four-field identity)", { id: 101, name: record(101).name, digest: digest("a"), expires_at: "2026-10-20T00:00:00Z" }],
+    ["reordered keys", Object.fromEntries(Object.entries(artifact(101)).reverse())],
+    ["a string id", { ...artifact(101), id: "101" }],
+    ["an unreadable expiry", { ...artifact(101), expires_at: "soon" }],
+    ["a non-hex head", { ...artifact(101), head_sha: "x" }],
+    ["another index's name", { ...artifact(101), name: "relayium-ci-evidence-toolchain-macos-test-1-attempt-1" }],
+    ["another attempt's name", { ...artifact(101), name: "relayium-ci-evidence-toolchain-macos-test-0-attempt-2" }],
+    ["fewer identities than values", null, 0],
+  ]) {
+    let error = null;
+    try { frozenCertificates(witnessCerts, { test: { profile: "ubuntu", source: ["v1"], artifacts: n === 0 ? [] : [JSON.parse(JSON.stringify(art))] } }, opts); } catch (e) { error = e; }
+    check(error instanceof Refused && /artifact identities are not one strict record per certificate/.test(error.message),
+      `identity: ${name} must be refused, got ${error?.message ?? "accepted"}`);
+  }
+  let error = null;
+  try { frozenCertificates(witnessCerts, sources(artifact(101))); } catch (e) { error = e; }
+  check(error !== null, "identity: freezing certificates without the source attempt must fail");
+}
+
+/**
+ * The strict shared coverage schema (shape only; authenticity is the reader's).
+ * A synthetic, internally consistent certified coverage — TEST DATA — is
+ * accepted; each single-fact break is refused. The authentic 191d coverage
+ * round-trip is root's/author's replay harness, not this file.
+ */
+async function coverageSchemaCases() {
+  const sha = "1".repeat(40);
+  const tree = "2".repeat(40);
+  const id = (n, name, run, patch = {}) => ({
+    id: n, name, digest: `sha256:${String(n % 10).repeat(64)}`, size_in_bytes: 900, created_at: "2026-10-05T10:22:31Z",
+    expires_at: "2026-10-12T10:22:30Z", run_id: run, head_sha: sha, repository_id: 42, head_repository_id: 42, ...patch,
+  });
+  const v = "a".repeat(64);
+  const good = () => ({
+    mode: COVERAGE_CERTIFIED,
+    witness: {
+      artifactId: 11, name: "relayium-ci-evidence-witness-macos-attempt-1", digest: `sha256:${"1".repeat(64)}`, attempt: 1,
+      expiresAt: "2026-11-04T13:02:30Z", createdAt: "2026-10-05T13:02:31Z", verifiedAt: "2026-10-05T13:02:30Z",
+      identity: id(11, "relayium-ci-evidence-witness-macos-attempt-1", 500, { expires_at: "2026-11-04T13:02:30Z", created_at: "2026-10-05T13:02:31Z" }),
+      target: { repository_id: 42, sha, tree, run_id: 500, run_attempt: 1, workflow_ref: "o/r/.github/workflows/macos.yml@refs/heads/main" },
+    },
+    executions: { "test": v, "ui-smoke (app-shell, X, 30)": v, "ui-smoke (device-inbox, Y, 30)": v, "evidence": v, "certify-macos": v },
+    source: {
+      kind: "merge-gate-internal-full-candidate-run", runId: 400, attempt: 1, testedSha: sha, tree, artifactId: 21,
+      digest: `sha256:${"1".repeat(64)}`, producedAt: "2026-10-05T10:48:30Z", fingerprint: v,
+      certification: { registry_sha256: v, verifier_sha256: v, selector_sha256: v, toolchain_sha256: v, toolchain_registry_sha256: v },
+      proofName: "relayium-ci-evidence-proof-attempt-1", runUpdatedAt: "2026-10-05T10:48:34Z", headSha: sha, pullRequest: null,
+      proofIdentity: id(21, "relayium-ci-evidence-proof-attempt-1", 400),
+    },
+    certificates: {
+      test: { profile: "macos-xcode", current: v, source: [v], artifacts: [id(31, "relayium-ci-evidence-toolchain-macos-test-0-attempt-1", 400)] },
+      "ui-smoke": { profile: "macos-xcode", current: v, source: [v, v], artifacts: [
+        id(32, "relayium-ci-evidence-toolchain-macos-ui-smoke-0-attempt-1", 400),
+        id(33, "relayium-ci-evidence-toolchain-macos-ui-smoke-1-attempt-1", 400)] },
+    },
+  });
+  const accepted = (c) => { try { validateCoverage(c); return null; } catch (e) { return e; } };
+  check(accepted(good()) === null, `coverage: the consistent certified coverage must be accepted, got ${accepted(good())?.message}`);
+  check(accepted({ mode: "executed" }) === null, "coverage: the executed coverage must be accepted");
+  for (const [what, mutate] of [
+    ["an extra top-level key", (c) => { c.extra = 1; }],
+    ["an executed coverage with an extra key", (c) => { for (const k of Object.keys(c)) delete c[k]; Object.assign(c, { mode: "executed", x: 1 }); }],
+    ["an unknown mode", (c) => { c.mode = "certified"; }],
+    ["four executions", (c) => { delete c.executions.evidence; }],
+    ["an unknown execution role", (c) => { delete c.executions.evidence; c.executions.contract = c.executions.test; }],
+    ["two ui-smoke app-shell executions", (c) => { delete c.executions["ui-smoke (device-inbox, Y, 30)"]; c.executions["ui-smoke (app-shell, Z, 30)"] = c.executions.test; }],
+    ["a non-hex execution", (c) => { c.executions.test = "x"; }],
+    ["a witness id disagreeing with its identity", (c) => { c.witness.artifactId = 12; }],
+    ["a witness of another target run", (c) => { c.witness.target.run_id = 501; }],
+    ["a witness target attempt not the witness attempt", (c) => { c.witness.target.run_attempt = 2; }],
+    ["a witness target workflow off main", (c) => { c.witness.target.workflow_ref = "o/r/.github/workflows/macos.yml@refs/heads/x"; }],
+    ["an old array witness identity", (c) => { c.witness.identity = Object.values(c.witness.identity); }],
+    ["a source tree not the target tree", (c) => { c.source.tree = "3".repeat(40); }],
+    ["a pull request on an internal kind", (c) => { c.source.pullRequest = 7; }],
+    ["no pull request on a pull-request kind", (c) => { c.source.kind = "merge-gate-pull-request-full-run"; }],
+    ["a missing certification hash", (c) => { delete c.source.certification.selector_sha256; }],
+    ["a proof identity of another run", (c) => { c.source.proofIdentity.run_id = 401; }],
+    ["a proof identity of another id", (c) => { c.source.proofIdentity.id = 22; }],
+    ["a proof identity with a foreign head repository type", (c) => { c.source.proofIdentity.head_repository_id = "777777"; }],
+    ["a proof name of another attempt", (c) => { c.source.proofName = "relayium-ci-evidence-proof-attempt-2"; c.source.proofIdentity.name = c.source.proofName; }],
+    ["the dropped proofExpiresAt key back", (c) => { c.source.proofExpiresAt = c.source.proofIdentity.expires_at; }],
+    ["a missing runUpdatedAt", (c) => { delete c.source.runUpdatedAt; }],
+    ["certificates in another order", (c) => { c.certificates = { "ui-smoke": c.certificates["ui-smoke"], test: c.certificates.test }; }],
+    ["a third certified job", (c) => { c.certificates.contract = c.certificates.test; }],
+    ["fewer artifacts than values", (c) => { c.certificates["ui-smoke"].artifacts.pop(); }],
+    ["certificate artifacts swapped by index", (c) => { c.certificates["ui-smoke"].artifacts.reverse(); }],
+    ["a certificate of another attempt", (c) => { c.certificates.test.artifacts[0].name = "relayium-ci-evidence-toolchain-macos-test-0-attempt-2"; }],
+    ["a certificate of another run", (c) => { c.certificates.test.artifacts[0].run_id = 401; }],
+    ["a repeated artifact id", (c) => { c.certificates.test.artifacts[0].id = 21; }],
+    ["a source value not the current value", (c) => { c.certificates.test.source = ["b".repeat(64)]; }],
+    ["a four-field certificate identity", (c) => { const a = c.certificates.test.artifacts[0]; c.certificates.test.artifacts[0] = { id: a.id, name: a.name, digest: a.digest, expires_at: a.expires_at }; }],
+  ]) {
+    const c = good();
+    mutate(c);
+    const error = accepted(c);
+    check(error instanceof Refused && /the coverage is malformed/.test(error.message), `coverage: ${what} must be refused, got ${error?.message ?? "accepted"}`);
+  }
+  // The historical reader takes no ambient Git, no derived expectation and no executed record.
+  const api = { get: async () => { throw new Error("no API read may precede the argument checks"); }, download: async () => { throw new Error("no download"); } };
+  for (const [what, opts] of [
+    ["no source Git adapter", { expectedCoverage: good() }],
+    ["no frozen coverage", { sourceGit: () => Buffer.alloc(0) }],
+    ["an executed frozen coverage", { sourceGit: () => Buffer.alloc(0), expectedCoverage: { mode: "executed" } }],
+    ["a malformed frozen coverage", { sourceGit: () => Buffer.alloc(0), expectedCoverage: { ...good(), extra: 1 } }],
+    ["a clock that is not a function", { sourceGit: () => Buffer.alloc(0), expectedCoverage: good(), clock: 5 }],
+  ]) {
+    let error = null;
+    try { await verifyHistoricalCertifiedCoverage(api, { repository: "o/r", repositoryId: 42, sha, run: { id: 500 }, ...opts }); } catch (e) { error = e; }
+    check(error instanceof Refused, `historical: ${what} must be refused before any read, got ${error?.message ?? "accepted"}`);
+  }
+}
+
+export async function wholeCertifiedCases() {
+  const firstCase = cases, firstFailure = failures.length;
+  const world = await createCertifiedGitWorld();
+  try {
+  let sequence = 0;
+  const options = () => ({ repository: world.repository, repositoryId: world.repositoryId,
+    sha: world.sha, ref: 'refs/heads/main', releaseVersion: '1.4.5', now: world.now.getTime(),
+    dir: join(world.directory, `selection-${++sequence}`) });
+  const frozen = await world.inCheckout(async () => {
+    const automatic = await decide(world.api, { ...options(), mode: 'auto' });
+    check(automatic.source === 'reuse' && automatic.evidence?.coverage?.mode === COVERAGE_CERTIFIED,
+      'whole real-Git chain: actual produce/witness must allow automatic certified reuse');
+    world.reset();
+    const forced = await decide(world.api, { ...options(), mode: 'reuse' });
+    check(evidenceIdentity(automatic.evidence) === evidenceIdentity(forced.evidence),
+      'whole real-Git chain: auto and forced reuse freeze the same identity');
+    world.reset();
+    const back = await readback(world.api, automatic.evidence, { now: world.now.getTime(),
+      releaseVersion: '1.4.5', dir: join(world.directory, 'initial-readback') });
+    check(evidenceIdentity(back) === evidenceIdentity(automatic.evidence), 'whole real-Git chain: readback identity');
+    check(createHash('sha256').update(readFileSync(join(world.directory, 'initial-readback/Relayium.dmg'))).digest('hex') === world.dmgSha256,
+      'whole real-Git chain: independently hash the installed payload');
+    return automatic.evidence;
+  });
+  const historical = (coverage = frozen.coverage, clock = () => world.now.getTime()) =>
+    verifyHistoricalCertifiedCoverage(world.api, { repository: world.repository, repositoryId: world.repositoryId,
+      sha: world.sha, run: world.main, rosterJobs: ['test', 'ui-smoke/app-shell', 'ui-smoke/device-inbox']
+        .map((id, index) => ({ id, job: world.mainJobs[index + 1] })),
+      evidenceJob: world.mainJobs.find(j => j.name === 'evidence'),
+      certifyJob: world.mainJobs.find(j => j.name === 'certify-macos'), expectedCoverage: coverage,
+      clock, sourceGit: world.runGit });
+  const refuseReadback = async (label, pattern, now = world.now.getTime()) => {
+    let error;
+    try { await world.inCheckout(() => readback(world.api, frozen, { now,
+      dir: join(world.directory, `negative-${++sequence}`), releaseVersion: '1.4.5' })); } catch (e) { error = e; }
+    check(error instanceof Refused && pattern.test(error.message), `${label}: must refuse for ${pattern}, got ${error?.message ?? 'accepted'}`);
+  };
+    world.reset();
+    const retained = await historical();
+    check(JSON.stringify(retained) === JSON.stringify(frozen.coverage), 'whole historical reader: same frozen coverage');
+    // This changes only the clock: proof, witness and Git objects remain identical.
+    world.reset();
+    const later = world.now.getTime() + 49 * 3600000;
+    const oldSelection = await world.inCheckout(() => decide(world.api, { ...options(), now: later, mode: 'auto' }));
+    check(oldSelection.source === 'build' && /outside 48h/.test(oldSelection.reason),
+      `whole age mirror: new reuse expires after 48 hours, got ${oldSelection.source}/${oldSelection.reason}`);
+    world.reset();
+    const oldRetained = await historical(frozen.coverage, () => later);
+    check(JSON.stringify(oldRetained) === JSON.stringify(frozen.coverage), 'whole age mirror: original eligibility remains historically verifiable');
+    world.reset();
+    let forcedAgeError;
+    try { await world.inCheckout(() => decide(world.api, { ...options(), now: later, mode: 'reuse' })); } catch (e) { forcedAgeError = e; }
+    check(forcedAgeError instanceof Refused && /outside 48h/.test(forcedAgeError.message), 'whole age mirror: forced reuse refuses stale source');
+    world.reset();
+    await refuseReadback('whole age mirror: readback refuses stale source', /outside 48h/, later);
+    world.reset();
+    const changedExpected = structuredClone(frozen.coverage);
+    const executionName = Object.keys(changedExpected.executions)[0];
+    changedExpected.executions[executionName] = '0'.repeat(64);
+    let mismatchError; try { await historical(changedExpected); } catch (e) { mismatchError = e; }
+    check(mismatchError instanceof Refused && mismatchError.message === 'the certified coverage read back now differs from the coverage the release froze',
+      'whole historical reader refuses well-formed mismatched frozen execution');
+
+    const certificate = world.artifacts.find(a => a.name === 'relayium-ci-evidence-toolchain-macos-test-0-attempt-1');
+    const recordRoute = `repos/${world.repository}/actions/artifacts/${certificate.id}`;
+    const raceMessage = `artifact ${certificate.name} (${certificate.id}) changed, was replaced, re-attributed or expired while the chain was being verified`;
+    for (const [key, value] of [['id', certificate.id + 100000], ['name', certificate.name + '-other'],
+      ['digest', 'sha256:' + '0'.repeat(64)], ['size_in_bytes', certificate.size_in_bytes + 1],
+      ['created_at', new Date(Date.parse(certificate.created_at) + 1000).toISOString().replace('.000Z', 'Z')],
+      ['expires_at', new Date(Date.parse(certificate.expires_at) + 1000).toISOString().replace('.000Z', 'Z')],
+      ['run_id', certificate.workflow_run.id + 1], ['head_sha', 'f'.repeat(40)],
+      ['repository_id', 777777], ['head_repository_id', 777777]]) {
+      world.reset();
+      world.hooks.set(recordRoute, n => {
+        if (n !== 1) return;
+        const changed = structuredClone(certificate);
+        if (['run_id', 'head_sha', 'repository_id', 'head_repository_id'].includes(key)) changed.workflow_run[key === 'run_id' ? 'id' : key] = value;
+        else changed[key] = value;
+        return changed;
+      });
+      await refuseReadback(`whole certificate end-record race ${key}`, new RegExp('^' + raceMessage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'));
+      check(world.counters.get(recordRoute) === 1, `whole certificate ${key}: mutated the final record read`);
+    }
+    world.reset();
+    const listRoute = `repos/${world.repository}/actions/runs/${world.source.id}/artifacts?name=${certificate.name}&per_page=100&page=1`;
+    world.hooks.set(listRoute, n => n >= 2 ? { total_count: 1, artifacts: [{ ...structuredClone(certificate),
+      workflow_run: { ...certificate.workflow_run, head_repository_id: 777777 } }] } : undefined);
+    await refuseReadback('whole certificate end-list foreign repository', /changed|identity|disagree|replaced/i);
+    check(world.counters.get(listRoute) === 2, 'whole foreign repository: mutated the second certificate list');
+
+    world.reset();
+    const originalId = certificate.id;
+    const originalBytes = world.zipBytes.get(originalId);
+    certificate.id += 100000;
+    world.zipBytes.set(certificate.id, originalBytes);
+    try {
+      await refuseReadback('whole same-value certificate replacement', /^the evidence read back now differs from the evidence the preflight froze$/);
+      world.reset();
+      let replacedError; try { await historical(); } catch (e) { replacedError = e; }
+      check(replacedError instanceof Refused && replacedError.message === 'the certified coverage read back now differs from the coverage the release froze',
+        'whole historical reader refuses same-value certificate replacement against frozen identity');
+    }
+    finally { world.zipBytes.delete(certificate.id); certificate.id = originalId; }
+
+    world.reset();
+    const proofArtifact = world.artifacts.find(a => a.id === frozen.coverage.source.artifactId);
+    const originalExpiry = proofArtifact.expires_at;
+    proofArtifact.expires_at = new Date(world.now.getTime() + 3 * 3600000).toISOString().replace('.000Z', 'Z');
+    try {
+      const nearExpiry = await world.inCheckout(() => decide(world.api, { ...options(), mode: 'auto' }));
+      check(nearExpiry.source === 'build' && /expires in under 6 hours/.test(nearExpiry.reason), 'whole proof expiry headroom: rebuild before selection');
+      const expected = structuredClone(frozen.coverage);
+      expected.source.proofIdentity.expires_at = proofArtifact.expires_at;
+      world.reset();
+      const nearHistorical = await historical(expected);
+      check(JSON.stringify(nearHistorical) === JSON.stringify(expected), 'whole proof expiry headroom: historical reader uses actual expiry');
+      proofArtifact.expires_at = new Date(world.now.getTime() - 1000).toISOString().replace('.000Z', 'Z');
+      expected.source.proofIdentity.expires_at = proofArtifact.expires_at;
+      world.reset();
+      let error; try { await historical(expected); } catch (e) { error = e; }
+      check(error instanceof Refused && /expired|expiry/i.test(error.message), 'whole historical reader refuses actually expired proof');
+      world.reset();
+      let forcedExpiryError;
+      try { await world.inCheckout(() => decide(world.api, { ...options(), mode: 'reuse' })); } catch (e) { forcedExpiryError = e; }
+      check(forcedExpiryError instanceof Refused && /expired/.test(forcedExpiryError.message), 'whole expired proof: forced reuse refuses');
+      world.reset();
+      await refuseReadback('whole expired proof: readback refuses', /expired/);
+    } finally { proofArtifact.expires_at = originalExpiry; }
+
+    world.reset();
+    const originalRun = structuredClone(world.main);
+    const carriedJobs = structuredClone(world.mainJobs).map(j => ({ ...j, id: j.id + 10000, run_attempt: 2 }));
+    world.main.run_attempt = 2;
+    world.attemptJobs.get(world.main.id).set(2, carriedJobs);
+    world.originalRuns.get(world.main.id).set(2, structuredClone(world.main));
+    try {
+      const carried = await world.inCheckout(() => decide(world.api, { ...options(), mode: 'reuse' }));
+      check(carried.source === 'reuse' && JSON.stringify(carried.evidence.coverage) === JSON.stringify(frozen.coverage)
+        && JSON.stringify(carried.evidence.signedBuildOrigin) === JSON.stringify(frozen.signedBuildOrigin),
+        'whole carried attempt: original executions and coverage survive wrapper relabels');
+      world.reset();
+      await refuseReadback('whole carried attempt: frozen latest wrapper cannot silently change', /^the evidence read back now differs from the evidence the preflight froze$/);
+      world.reset();
+      const signed = carriedJobs.find(j => j.name === 'signed-build');
+      signed.steps[0].started_at = new Date(Date.parse(signed.steps[0].started_at) + 1000).toISOString().replace('.000Z', 'Z');
+      await refuseReadback('whole re-executed signed build refuses original provenance', /not the original execution|execution.*differ|different execution/);
+    } finally { Object.assign(world.main, originalRun); world.attemptJobs.get(world.main.id).delete(2); world.originalRuns.get(world.main.id).delete(2); }
+    world.reset();
+    const malformed = structuredClone(frozen.coverage); malformed.source.extra = 'untrusted';
+    let schemaError; try { await historical(malformed); } catch (e) { schemaError = e; }
+    check(schemaError instanceof Refused && world.calls.length === 0, 'whole strict schema refusal precedes API reads');
+    const cwd = process.cwd();
+    world.reset();
+    let advancingNow = world.now.getTime(), advanced = false;
+    world.hooks.set(recordRoute, () => { advanced = true; advancingNow = Date.parse(certificate.expires_at) + 1000; });
+    let clockError;
+    try { await historical(frozen.coverage, () => advancingNow); } catch (e) { clockError = e; }
+    check(advanced && clockError instanceof Refused && /expired while the chain was being verified/.test(clockError.message),
+      'whole historical reader rechecks fresh clock after final certificate API read');
+    world.reset();
+    const poisonKeys = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'];
+    const ambient = new Map(poisonKeys.map(key => [key, process.env[key]]));
+    process.env.GIT_DIR = join(world.directory, 'poison.git');
+    process.env.GIT_WORK_TREE = world.directory;
+    process.env.GIT_INDEX_FILE = join(world.directory, 'poison.index');
+    const poisoned = Object.fromEntries(poisonKeys.map(key => [key, process.env[key]]));
+    try {
+      check(Object.keys(isolatedGitEnvironment()).every(key => !key.startsWith('GIT_')),
+        'whole fixture environment sanitizer removes poison keys at call time');
+      const safe = await world.inCheckout(() => decide(world.api, { ...options(), mode: 'reuse' }));
+      check(safe.source === 'reuse' && poisonKeys.every(key => process.env[key] === poisoned[key]),
+        'whole fixture ignores inherited Git paths and restores caller environment');
+      check(world.runGit(['rev-parse', 'HEAD']).toString().trim() === world.sha,
+        'whole source Git adapter ignores inherited Git paths');
+    } finally { for (const [key, value] of ambient) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
+    let nestedError;
+    await world.inCheckout(async () => { try { await world.inCheckout(() => Promise.resolve()); } catch (e) { nestedError = e; } });
+    check(nestedError?.message.includes('already held') && process.cwd() === cwd, 'whole fixture rejects reentrancy and restores cwd');
+    try { await world.inCheckout(() => { throw new Error('fixture cancellation'); }); } catch {}
+    check(process.cwd() === cwd, 'whole fixture restores cwd after a failed operation');
+    await world.inCheckout(() => Promise.resolve());
+    check(process.cwd() === cwd, 'whole fixture releases lock after a failed operation');
+  } finally { world.dispose(); }
+  return { cases: cases - firstCase, failures: failures.slice(firstFailure) };
+}
+
 export async function run() {
   archiveCases();
   destinationCases();
@@ -1953,6 +2936,12 @@ export async function run() {
   await gateStepCases();
   verifierCases();
   contractCases();
+  await certifiedCases();
+  await timingCases();
+  await identityCases();
+  await coverageSchemaCases();
+  await wholeCertifiedCases();
+  depthCases();
   return { cases, failures: [...failures], generatorChecked };
 }
 

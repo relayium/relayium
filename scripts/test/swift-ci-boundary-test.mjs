@@ -122,6 +122,43 @@ const SWIFT_PACKAGE_JOB = "swift-test";
  * every commit to it.
  */
 const APP_TREE_GLOBS = ["apps/mac/**", "apps/ios/**"];
+/**
+ * The one exclusion the package lane's filter may carry: the macOS
+ * release-readiness manifest. It is a release-CONTROL record that no XCTest case
+ * opens (the guards that did moved to document-claims-test.mjs on 2026-09-21),
+ * and the unfiltered repo-hygiene lane checks it on every change. It lies outside
+ * the package, so excluding it leaves no package file without an owner.
+ *
+ * Exactly this literal, exactly once, immediately after `apps/mac/**` — the
+ * positive it qualifies under last-match-wins. Nothing under
+ * `apps/RelayiumKit` may be excluded at all, and no other file under
+ * `apps/mac` or `apps/ios` may be either.
+ */
+const MAC_READINESS_RECORD = "apps/mac/release-readiness.json";
+const MAC_READINESS_EXCLUSION = `!${MAC_READINESS_RECORD}`;
+/**
+ * Paths that must still start the package lane beside that exclusion. Each one
+ * is what a wider or retargeted exclusion would silently drop: the record's
+ * checker next to it, a near name, the same basename one level down or in the
+ * other app tree, another JSON resource under `apps/mac`, and package files —
+ * manifest, lockfile, source, test and fixture — that no exclusion may reach.
+ */
+const MAC_READINESS_NEIGHBOURS = [
+  "apps/mac/scripts/check-release-readiness.mjs",
+  "apps/mac/release-readiness.json.orig",
+  "apps/mac/release-readiness.jsonc",
+  "apps/mac/Relayium/release-readiness.json",
+  "apps/ios/release-readiness.json",
+  "apps/mac/Relayium/Assets.xcassets/Contents.json",
+  "apps/mac/Relayium/Info.plist",
+  `${SWIFT_PACKAGE_DIR}/release-readiness.json`,
+  `${SWIFT_PACKAGE_DIR}/Package.swift`,
+  `${SWIFT_PACKAGE_DIR}/Package.resolved`,
+  `${SWIFT_PACKAGE_DIR}/Sources/RelayiumKit/DeviceInbox/InboxSealedBox.swift`,
+  `${SWIFT_PACKAGE_DIR}/Sources/RelayiumShareKit/Resources/en.lproj/Localizable.strings`,
+  `${PACKAGE_TEST_DIR}/AeadTests.swift`,
+  `${PACKAGE_FIXTURES_ROOT}/store-wire-vectors.json`,
+];
 const MACOS = "macos.yml";
 const IOS = "ios.yml";
 const IOS_TRANSFER_INTEROP = "ios-transfer-interop.yml";
@@ -244,6 +281,86 @@ const INTEROP_NAMED_CASES = [
 ];
 /** Where each lane tees its `swift test` output for the proof to read. */
 const INTEROP_LOGS = new Map([[SWIFT_PACKAGE, "swift-test.log"], [INTEROP, "swift-interop.log"]]);
+/**
+ * The ONE exception to section 1c's "no step-level if:/continue-on-error, no
+ * upload" rules: three crash-diagnostic steps (scripts/ci/swift-test-diagnostics.py),
+ * matched EXACTLY as parsed from the full-path text and at exact positions.
+ *
+ *   mark     immediately before `swift test`; continue-on-error and a one-minute
+ *            bound, because a marker that failed must not skip or redden the suite.
+ *   capture  immediately after the named-execution proof, `if: failure()` only.
+ *   upload   the job's last step, `if: failure()` only, one fixed path and name.
+ *
+ * A failure-only step cannot turn a green suite red (it does not run) and
+ * cannot turn a red one green (the failure is already recorded), so it is not
+ * a suite that skips itself. Any other shape — a different condition, an
+ * advisory capture, a second upload, a moved step, an extra argument — is not
+ * this exception and falls back to the original bans. Run 37175317336 is why:
+ * a native SIG11 in the XCTest runner left no stack once the runner was gone.
+ */
+const DIAG_HELPER = "scripts/ci/swift-test-diagnostics.py";
+/** Its owning fixture tests; with the helper, the only scripts this lane's filter adds for it. */
+const DIAG_TEST = "scripts/test/swift-test-diagnostics-test.py";
+/**
+ * The physical-device fixture isolation control, run by the package job as one
+ * exact step BEFORE the crash-diagnostics window opens, and the two physical
+ * launchers whose real fixture binding it executes. With the control itself,
+ * these are the only `scripts/` files this lane's filter adds for it.
+ */
+const PHYS_TEST = "scripts/test/ios-physical-fixture-isolation-test.mjs";
+const PHYS_PAIR = "scripts/ios-device-pair-acceptance.sh";
+const PHYS_INBOX = "scripts/ios-device-inbox-acceptance.sh";
+const PHYS_STEP = { name: "Physical fixture isolation controls", run: `node ${PHYS_TEST}` };
+const DIAG_ENV = {
+  SWIFT_DIAG_SHA: "${{ github.sha }}",
+  SWIFT_DIAG_RUN_ID: "${{ github.run_id }}",
+  SWIFT_DIAG_ATTEMPT: "${{ github.run_attempt }}",
+};
+const DIAG_IDENTITY = `--head "$SWIFT_DIAG_SHA" --run-id "$SWIFT_DIAG_RUN_ID" --attempt "$SWIFT_DIAG_ATTEMPT"`;
+const DIAG_UPLOAD_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+const DIAG_MARK = {
+  name: "Mark the swift test window for crash diagnostics",
+  "continue-on-error": "true",
+  "timeout-minutes": "1",
+  env: DIAG_ENV,
+  run: `/usr/bin/python3 ${DIAG_HELPER} mark --runner-temp "$RUNNER_TEMP" ${DIAG_IDENTITY}`,
+};
+const DIAG_CAPTURE = {
+  name: "Capture crash evidence after a failed swift test",
+  if: "failure()",
+  "timeout-minutes": "2",
+  env: DIAG_ENV,
+  run: `/usr/bin/python3 ${DIAG_HELPER} capture --runner-temp "$RUNNER_TEMP" --home "$HOME" ${DIAG_IDENTITY}`,
+};
+const DIAG_UPLOAD = {
+  name: "Upload crash evidence after a failed swift test",
+  if: "failure()",
+  "timeout-minutes": "2",
+  uses: DIAG_UPLOAD_ACTION,
+  with: {
+    name: "relayium-swift-test-diagnostics-${{ github.sha }}-attempt-${{ github.run_attempt }}",
+    path: "${{ runner.temp }}/swift-test-diagnostics/capture",
+    "if-no-files-found": "warn",
+    "retention-days": "7",
+  },
+};
+const DIAG_STEPS = [DIAG_MARK, DIAG_CAPTURE, DIAG_UPLOAD];
+/**
+ * The `swift test` step itself, exactly: pipefail, the EXIT trap that records
+ * the immutable test end (bounded by `perl`'s alarm; it saves `$?`, disables
+ * errexit and re-exits with that saved status, because an EXIT trap's last
+ * command would otherwise replace it), and the original
+ * unfiltered pipeline. Nothing may be added around the suite.
+ */
+const DIAG_SWIFT_RUN = [
+  "set -o pipefail",
+  `trap 'rc=$?; set +e; /usr/bin/perl -e "alarm shift; exec @ARGV" 10 /usr/bin/python3 "$GITHUB_WORKSPACE/${DIAG_HELPER}" `
+    + `finish --runner-temp "$RUNNER_TEMP" ${DIAG_IDENTITY}; exit "$rc"' EXIT`,
+  'swift test 2>&1 | tee "$RUNNER_TEMP/swift-test.log"',
+  "",
+].join("\n");
+const DIAG_SWIFT_ENV = { RELAYIUM_SWIFT_INTEROP: "1", ...DIAG_ENV };
+const isDiagStep = (step) => DIAG_STEPS.some((want) => deepEqual(step, want));
 /**
  * Toolchain installers a Swift lane may not carry: brew, npm, and every
  * `actions/setup-*` action EXCEPT setup-go at exactly the pinned SHA. A setup-go
@@ -453,6 +570,20 @@ const FIXTURE_TREE_GLOBS = [
  * written out rather than derived.
  */
 const OWNERSHIP = [
+  [DIAG_HELPER, [SWIFT_PACKAGE],
+    "the crash-diagnostics helper the package lane's mark, EXIT trap and failure-only capture run; "
+    + "a helper-only change must re-run that lane and no heavy Apple workflow"],
+  [PHYS_TEST, [SWIFT_PACKAGE],
+    "the physical fixture isolation control the package job runs; a test-only change re-runs "
+    + "the lane that executes it, and no heavy Apple workflow"],
+  [PHYS_PAIR, [SWIFT_PACKAGE],
+    "the physical pair launcher whose naming functions and runtime binding that control executes; "
+    + "no workflow runs the launcher itself, which drives real devices"],
+  [PHYS_INBOX, [SWIFT_PACKAGE],
+    "the physical Device Inbox launcher, likewise executed only by that control"],
+  [DIAG_TEST, [SWIFT_PACKAGE],
+    "the helper's owning fixture tests (also run in repo-hygiene); a test-only change re-runs the "
+    + "lane whose steps execute the helper they pin"],
   [`${SWIFT_PACKAGE_DIR}/Sources/RelayiumKit/Crypto/SealedBox.swift`, [IOS, IOS_TRANSFER_INTEROP, MACOS, NWP, SWIFT_PACKAGE],
     "SHARED source. Every Apple consumer compiles it, the pairing acceptance links it, and the "
     + "package's own suite covers it. The Tests negation must not reach this file"],
@@ -1106,7 +1237,13 @@ function laneFailures(w) {
       // this lane's verdict, so it must re-run the lane that executes it
       // (scripts/test/ci-lane-closure-test.mjs, audit D-H2 2026-09-28) — one
       // literal file, not the `scripts/**` widening warned against below.
-      const wantPaths = [PACKAGE_SOURCE_GLOB, ...APP_TREE_GLOBS, NAMED_CHECKER, `.github/workflows/${SWIFT_PACKAGE}`];
+      // And exactly the crash-diagnostics helper its steps execute plus that helper's fixture tests,
+      // two literal files, so a helper-only or test-only change re-runs this lane.
+      // And exactly one exclusion, the release-readiness record, directly after
+      // the app tree it qualifies (MAC_READINESS_EXCLUSION above).
+      const wantPaths = [PACKAGE_SOURCE_GLOB, APP_TREE_GLOBS[0], MAC_READINESS_EXCLUSION,
+        ...APP_TREE_GLOBS.slice(1), NAMED_CHECKER, DIAG_HELPER, DIAG_TEST,
+        PHYS_TEST, PHYS_PAIR, PHYS_INBOX, `.github/workflows/${SWIFT_PACKAGE}`];
       need(
         deepEqual(paths, wantPaths),
         `${SWIFT_PACKAGE}'s path filter is ${JSON.stringify(paths)}; want exactly `
@@ -1121,13 +1258,49 @@ function laneFailures(w) {
         + `was created to prevent — three heavy filters exclude the test target on the strength of `
         + `this one covering it.`,
       );
+      const otherExclusions = paths.filter((pattern) => isNegation(pattern)
+        && pattern !== MAC_READINESS_EXCLUSION);
       need(
-        !paths.some(isNegation),
+        otherExclusions.length === 0,
         `${SWIFT_PACKAGE}'s path filter carries an exclusion `
-        + `(${JSON.stringify(paths.filter(isNegation))}). This is the workflow that must see EVERY `
+        + `(${JSON.stringify(otherExclusions)}) beyond the one exact release-readiness record it may `
+        + `skip. This is the workflow that must see EVERY `
         + `file in the package — Sources, Tests, Fixtures, \`Package.swift\` and `
         + `\`Package.resolved\` — because it is the only one that still does. An exclusion here `
         + `creates a file with no owner at all.`,
+      );
+      // The one permitted exclusion, judged literally (count, position) and as
+      // compiled behaviour (the record skipped, every neighbour still started).
+      // The exact-list rule above already fails on any of these edits; these
+      // name WHICH edit, so a repair does not have to diff two eleven-item lists.
+      const recordExclusions = paths.filter((pattern) => pattern === MAC_READINESS_EXCLUSION).length;
+      need(
+        recordExclusions === 1,
+        `${SWIFT_PACKAGE}'s path filter lists \`${MAC_READINESS_EXCLUSION}\` ${recordExclusions} `
+        + `time(s); want exactly once. Without it a release-readiness record edit charges a macOS `
+        + `runner and the whole package suite for a file no XCTest case opens; twice is an edit `
+        + `nobody reviewed as written.`,
+      );
+      const macTreeAt = paths.indexOf(APP_TREE_GLOBS[0]);
+      const recordAt = paths.indexOf(MAC_READINESS_EXCLUSION);
+      need(
+        recordAt === -1 || (macTreeAt !== -1 && recordAt === macTreeAt + 1),
+        `${SWIFT_PACKAGE} lists \`${MAC_READINESS_EXCLUSION}\` at position ${recordAt + 1}; want it `
+        + `immediately after \`${APP_TREE_GLOBS[0]}\` (position ${macTreeAt + 2}). Above that `
+        + `positive the last-match-wins rule overrides it and it excludes nothing; further down it `
+        + `reads as qualifying a different entry and is one reorder from doing so.`,
+      );
+      need(
+        !matchesFilter(paths, MAC_READINESS_RECORD),
+        `a change to "${MAC_READINESS_RECORD}" alone still starts ${SWIFT_PACKAGE}: its exclusion `
+        + `is missing, overridden by a positive above it, or re-included by one below it.`,
+      );
+      const dropped = MAC_READINESS_NEIGHBOURS.filter((path) => !matchesFilter(paths, path));
+      need(
+        dropped.length === 0,
+        `${SWIFT_PACKAGE} no longer starts for ${JSON.stringify(dropped)}. The release-readiness `
+        + `exclusion is one exact file; a wider or retargeted one drops an app-tree file the guard `
+        + `tests READ or a package file that has no other owner.`,
       );
       // The filter above is now the lane's ONLY filtered event. There used to
       // be a second, aliased copy under `pull_request:` and a rule comparing
@@ -1227,9 +1400,18 @@ function laneFailures(w) {
     //     installer step here is either dead weight on a PAID runner or a
     //     release path growing in the cheapest workflow to edit.
     const text = w.texts.get(SWIFT_PACKAGE) ?? "";
+    const pkgSteps = doc.jobs?.[SWIFT_PACKAGE_JOB]?.steps ?? [];
+    const exactUpload = pkgSteps.filter((step) => deepEqual(step, DIAG_UPLOAD)).length === 1;
+    const transfers = (text.match(/upload-artifact|download-artifact/g) ?? []).length;
+    need(
+      transfers <= (exactUpload ? 1 : 0),
+      `${SWIFT_PACKAGE} uploads or downloads a build artifact (${transfers} transfer line(s); the only `
+      + `one allowed is the exact failure-only "${DIAG_UPLOAD.name}" step). This workflow exists to `
+      + `run one \`swift test\` on a checkout: anything else uploaded here is a release path growing `
+      + `in the cheapest workflow to edit, or dead weight on a PAID macOS runner.`,
+    );
     for (const [pattern, what] of [
       [/secrets\./, "reads a repository secret"],
-      [/upload-artifact|download-artifact/, "uploads or downloads a build artifact"],
       // Every toolchain installer EXCEPT the one pinned setup-go section 1c′
       // requires for the forced Go interop classes. An unpinned setup-go, a
       // second language's setup action, brew or npm all still land here.
@@ -1285,6 +1467,7 @@ function laneFailures(w) {
         + `\`scripts/test/ci-event-policy-test.mjs\`; this rule is only that a number exists.`,
       );
       for (const step of job.steps ?? []) {
+        if (isDiagStep(step)) continue; // the exact exception above, positioned by diagnosticsFailures
         need(
           step.if === undefined,
           `${SWIFT_PACKAGE}/${name}: a step sets "if:", and a suite that can skip itself is not a `
@@ -2051,8 +2234,82 @@ function selfHostFailures(w) {
   return out;
 }
 
+// ── 1j. the crash-diagnostic steps: present, exact, and where they must be ──
+
+/**
+ * DIAG_STEPS must each appear exactly once in the package job: the mark right
+ * before `swift test`, the capture right after the named-execution proof, the
+ * upload right after the capture and last. Everything about their shape is
+ * matched exactly in section 1c; this rule is about presence and position.
+ * Missing is a failure too: without them the next native crash in the suite is
+ * again a signal number with no stack.
+ */
+function diagnosticsFailures(w) {
+  const out = [];
+  const steps = w.docs.get(SWIFT_PACKAGE)?.jobs?.[SWIFT_PACKAGE_JOB]?.steps ?? [];
+  const where = `${SWIFT_PACKAGE}/${SWIFT_PACKAGE_JOB}`;
+  const at = (want) => steps.map((step, i) => (deepEqual(step, want) ? i : -1)).filter((i) => i >= 0);
+  const swiftIndex = steps.findIndex((step) => /\bswift\s+test\b/.test(String(step?.run ?? "")));
+  const proofIndex = steps.findIndex((step) => namedProofOf(step) !== null);
+  const [mark, capture, upload] = DIAG_STEPS.map(at);
+  const swiftStep = steps[swiftIndex];
+  if (swiftStep && (swiftStep.run !== DIAG_SWIFT_RUN || !deepEqual(swiftStep.env, DIAG_SWIFT_ENV))) {
+    out.push(`${where}: the \`swift test\` step is not exactly the reviewed pipefail + EXIT-trap finish + `
+      + `unfiltered pipeline with env ${JSON.stringify(DIAG_SWIFT_ENV)}; got run ${JSON.stringify(swiftStep.run)} `
+      + `env ${JSON.stringify(swiftStep.env)}. Anything else around the suite can mask, skip or move its `
+      + `verdict, or lose the immutable test end the crash capture binds to.`);
+  }
+  for (const [found, want] of [[mark, DIAG_MARK], [capture, DIAG_CAPTURE], [upload, DIAG_UPLOAD]]) {
+    if (found.length !== 1) {
+      out.push(`${where} has ${found.length} exact "${want.name}" step(s); want exactly one, matching `
+        + `DIAG_STEPS in this file. Without it a native crash in the suite leaves only a signal number `
+        + `in the log (run 37175317336), and a near-miss shape is not the reviewed exception.`);
+    }
+  }
+  if (mark.length === 1 && mark[0] !== swiftIndex - 1) {
+    out.push(`${where}: the crash-diagnostics mark is step ${mark[0]}, not immediately before \`swift test\` `
+      + `(step ${swiftIndex}); its window must open right before the suite it describes.`);
+  }
+  if (capture.length === 1 && (proofIndex < 0 || capture[0] !== proofIndex + 1)) {
+    out.push(`${where}: the crash-diagnostics capture is step ${capture[0]}, not immediately after the `
+      + `named-execution proof (step ${proofIndex}); it must run after everything that decides the verdict.`);
+  }
+  if (upload.length === 1 && (upload[0] !== capture[0] + 1 || upload[0] !== steps.length - 1)) {
+    out.push(`${where}: the crash-diagnostics upload is step ${upload[0]}, not immediately after the capture `
+      + `and last; it must upload what the capture wrote and nothing may follow it.`);
+  }
+  return out;
+}
+
+// ── 1k. the physical fixture isolation control: present, exact, and before the window ──
+
+/**
+ * PHYS_STEP must appear exactly once in the package job's full path (where the
+ * reuse guard is already removed, so any other condition is refused by 1c), and
+ * before the crash-diagnostics mark, so it can neither sit inside the suite's
+ * window nor move the capture off the named-execution proof.
+ */
+function physicalFixtureFailures(w) {
+  const out = [];
+  const steps = w.docs.get(SWIFT_PACKAGE)?.jobs?.[SWIFT_PACKAGE_JOB]?.steps ?? [];
+  const where = `${SWIFT_PACKAGE}/${SWIFT_PACKAGE_JOB}`;
+  const found = steps.map((step, i) => (deepEqual(step, PHYS_STEP) ? i : -1)).filter((i) => i >= 0);
+  const named = steps.filter((step) => step?.name === PHYS_STEP.name || String(step?.run ?? "").includes(PHYS_TEST));
+  if (found.length !== 1 || named.length !== 1) {
+    out.push(`${where} has ${found.length} exact "${PHYS_STEP.name}" step(s) (${named.length} naming it); want `
+      + `exactly one ${JSON.stringify(PHYS_STEP)}. Without it the physical fixture control runs in no CI lane.`);
+  }
+  const mark = steps.findIndex((step) => deepEqual(step, DIAG_MARK));
+  if (found.length === 1 && (mark < 0 || found[0] >= mark)) {
+    out.push(`${where}: the physical fixture control is step ${found[0]}, not before the crash-diagnostics mark `
+      + `(step ${mark}); it must stay outside the suite's window.`);
+  }
+  return out;
+}
+
 const CHECKS = [
   laneFailures, interopFailures, negationFailures, ownershipFailures, fixtureFailures, selfHostFailures,
+  diagnosticsFailures, physicalFixtureFailures,
 ];
 
 for (const rule of CHECKS) {
@@ -2101,6 +2358,29 @@ function withoutPath(w, file, path) {
     throw new Error(`${file}'s path filter does not list ${path}, so there is nothing to remove`);
   }
   return withPaths(w, file, paths.filter((entry) => entry !== path));
+}
+
+/**
+ * A copy of `paths` with `entry` removed (when present) and inserted at the
+ * index `at` computes from the remaining list. Throws when that index is out of
+ * range, for the reason `withoutPath` does.
+ */
+function withEntryAt(paths, entry, at) {
+  const rest = (paths ?? []).filter((pattern) => pattern !== entry);
+  const i = at(rest);
+  if (!Number.isInteger(i) || i < 0 || i > rest.length) {
+    throw new Error(`cannot place ${entry} at ${i} in ${JSON.stringify(rest)}`);
+  }
+  return [...rest.slice(0, i), entry, ...rest.slice(i)];
+}
+
+/** Mutate the exact crash-diagnostics step `want`, and throw when it is not there. */
+function withDiagStep(w, want, mutate) {
+  const steps = w.docs.get(SWIFT_PACKAGE)?.jobs?.[SWIFT_PACKAGE_JOB]?.steps ?? [];
+  const i = steps.findIndex((step) => deepEqual(step, want));
+  if (i < 0) throw new Error(`${SWIFT_PACKAGE} has no exact "${want.name}" step to mutate`);
+  mutate(steps[i], steps, i);
+  return w;
 }
 
 /** Mutate the job called `name`, and throw when the file does not declare it. */
@@ -2299,6 +2579,80 @@ const MUTATIONS = [
     ]),
     expect: /swift-package\.yml's path filter carries an exclusion/,
   },
+
+  // ── the one permitted exclusion: removed, moved, widened, doubled ─────────
+  //
+  // Each starts from the real filter and changes ONE thing about the
+  // release-readiness exclusion, and each expects the rule naming that edit
+  // rather than the exact-list rule every one of them also trips.
+  {
+    // Removed: the record is back to charging a macOS runner and the whole
+    // package suite for a file no XCTest case opens.
+    name: "swift-package.yml drops the release-readiness exclusion",
+    mutate: (w) => withoutPath(w, SWIFT_PACKAGE, MAC_READINESS_EXCLUSION),
+    expect: /a change to "apps\/mac\/release-readiness\.json" alone still starts swift-package\.yml/,
+  },
+  {
+    // Moved ABOVE the tree it qualifies: present, and overridden by the next
+    // line. Only last-match-wins semantics see the difference.
+    name: "swift-package.yml puts the release-readiness exclusion above apps/mac/**",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, withEntryAt(wPaths(w, SWIFT_PACKAGE),
+      MAC_READINESS_EXCLUSION, (paths) => paths.indexOf(APP_TREE_GLOBS[0]))),
+    expect: /a change to "apps\/mac\/release-readiness\.json" alone still starts swift-package\.yml/,
+  },
+  {
+    // Moved LATER: still effective today, and no longer adjacent to what it
+    // qualifies — the position rule, not behaviour, is what names it.
+    name: "swift-package.yml moves the release-readiness exclusion to the end of its filter",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, withEntryAt(wPaths(w, SWIFT_PACKAGE),
+      MAC_READINESS_EXCLUSION, (paths) => paths.length)),
+    expect: /swift-package\.yml lists `!apps\/mac\/release-readiness\.json` at position 11; want it immediately after/,
+  },
+  {
+    // Re-included by a later positive: the exclusion stays in place and does
+    // nothing.
+    name: "swift-package.yml re-includes the release-readiness record after excluding it",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, [...wPaths(w, SWIFT_PACKAGE), MAC_READINESS_RECORD]),
+    expect: /a change to "apps\/mac\/release-readiness\.json" alone still starts swift-package\.yml/,
+  },
+  {
+    // Widened to a basename prefix: the near names and the record's checker
+    // stop starting the lane whose guard tests read the tree.
+    name: "swift-package.yml widens the release-readiness exclusion to a prefix glob",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, wPaths(w, SWIFT_PACKAGE)
+      .map((entry) => (entry === MAC_READINESS_EXCLUSION ? "!apps/mac/release-readiness*" : entry))),
+    expect: /swift-package\.yml no longer starts for \["apps\/mac\/release-readiness\.json\.orig","apps\/mac\/release-readiness\.jsonc"\]/,
+  },
+  {
+    // Widened to every JSON under the Mac tree: asset catalogs, which guard
+    // tests open, go unowned.
+    name: "swift-package.yml widens the release-readiness exclusion to apps/mac/**/*.json",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, wPaths(w, SWIFT_PACKAGE)
+      .map((entry) => (entry === MAC_READINESS_EXCLUSION ? "!apps/mac/**/*.json" : entry))),
+    expect: /swift-package\.yml no longer starts for \[.*"apps\/mac\/Relayium\/Assets\.xcassets\/Contents\.json"/,
+  },
+  {
+    // Retargeted to a neighbour literal: still one exact `!` file, the wrong one.
+    name: "swift-package.yml retargets the exclusion to the Mac Info.plist",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, wPaths(w, SWIFT_PACKAGE)
+      .map((entry) => (entry === MAC_READINESS_EXCLUSION ? "!apps/mac/Relayium/Info.plist" : entry))),
+    expect: /swift-package\.yml no longer starts for \["apps\/mac\/Relayium\/Info\.plist"\]/,
+  },
+  {
+    // A second exclusion beside the permitted one, inside the package — the
+    // failure this lane exists to prevent, written next to an accepted entry.
+    name: "swift-package.yml adds a package exclusion beside the release-readiness one",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, withEntryAt(wPaths(w, SWIFT_PACKAGE),
+      `!${SWIFT_PACKAGE_DIR}/Package.resolved`, (paths) => paths.indexOf(MAC_READINESS_EXCLUSION) + 1)),
+    expect: /swift-package\.yml's path filter carries an exclusion \(\["!apps\/RelayiumKit\/Package\.resolved"\]\) beyond/,
+  },
+  {
+    // The permitted literal written twice: the same exclusion, an edit nobody
+    // reviewed as written.
+    name: "swift-package.yml lists the release-readiness exclusion twice",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, [...wPaths(w, SWIFT_PACKAGE), MAC_READINESS_EXCLUSION]),
+    expect: /swift-package\.yml's path filter lists `!apps\/mac\/release-readiness\.json` 2 time\(s\)/,
+  },
   {
     // The whole lane deleted with the three negations left in place: the
     // expensive silent outcome, because every heavy board still reports green.
@@ -2449,6 +2803,152 @@ const MUTATIONS = [
       return w;
     },
     expect: /swift-package\.yml reads a repository secret/,
+  },
+
+  // ── the crash-diagnostics exception stays exactly as narrow as reviewed ──
+  {
+    name: "the diagnostics capture runs on success too",
+    mutate: (w) => withDiagStep(w, DIAG_CAPTURE, (step) => { delete step.if; }),
+    expect: /exact "Capture crash evidence after a failed swift test" step/,
+  },
+  {
+    name: "the diagnostics upload runs always()",
+    mutate: (w) => withDiagStep(w, DIAG_UPLOAD, (step) => { step.if = "always()"; }),
+    expect: /swift-test: a step sets "if:"/,
+  },
+  {
+    name: "the diagnostics capture becomes advisory",
+    mutate: (w) => withDiagStep(w, DIAG_CAPTURE, (step) => { step["continue-on-error"] = "true"; }),
+    expect: /swift-test: a step sets continue-on-error/,
+  },
+  {
+    name: "the diagnostics mark loses continue-on-error, so its failure skips the suite",
+    mutate: (w) => withDiagStep(w, DIAG_MARK, (step) => { delete step["continue-on-error"]; }),
+    expect: /exact "Mark the swift test window for crash diagnostics" step/,
+  },
+  {
+    name: "the diagnostics capture is pointed at an arbitrary directory",
+    mutate: (w) => withDiagStep(w, DIAG_CAPTURE, (step) => { step.run = step.run.replace('"$HOME"', "/"); }),
+    expect: /0 exact "Capture crash evidence after a failed swift test" step/,
+  },
+  {
+    name: "the diagnostics upload widens to the whole build tree",
+    mutate: (w) => withDiagStep(w, DIAG_UPLOAD, (step) => { step.with.path = "apps/RelayiumKit/.build"; }),
+    expect: /swift-package\.yml uploads or downloads a build artifact \(1 transfer line/,
+  },
+  {
+    name: "a second upload line appears beside the diagnostics upload",
+    mutate: (w) => {
+      w.texts.set(SWIFT_PACKAGE, `${w.texts.get(SWIFT_PACKAGE)}\n        uses: ${DIAG_UPLOAD_ACTION}\n`);
+      return w;
+    },
+    expect: /swift-package\.yml uploads or downloads a build artifact \(2 transfer line/,
+  },
+  {
+    name: "the diagnostics capture moves before the named-execution proof",
+    mutate: (w) => withDiagStep(w, DIAG_CAPTURE, (step, steps, i) => {
+      steps.splice(i, 1);
+      steps.splice(steps.findIndex((st) => namedProofOf(st) !== null), 0, step);
+    }),
+    expect: /the crash-diagnostics capture is step \d+, not immediately after the named-execution proof/,
+  },
+  {
+    name: "the diagnostics mark moves away from swift test",
+    mutate: (w) => withDiagStep(w, DIAG_MARK, (step, steps, i) => {
+      steps.splice(i, 1);
+      steps.splice(1, 0, step);
+    }),
+    expect: /the crash-diagnostics mark is step \d+, not immediately before `swift test`/,
+  },
+  {
+    name: "a step follows the diagnostics upload",
+    mutate: (w) => withDiagStep(w, DIAG_UPLOAD, (step, steps) => {
+      steps.push({ name: "after", run: "ls\n" });
+    }),
+    expect: /the crash-diagnostics upload is step \d+, not immediately after the capture and last/,
+  },
+  {
+    name: "the crash diagnostics are removed",
+    mutate: (w) => {
+      const job = w.docs.get(SWIFT_PACKAGE).jobs[SWIFT_PACKAGE_JOB];
+      job.steps = job.steps.filter((step) => !isDiagStep(step));
+      return w;
+    },
+    expect: /has 0 exact "Mark the swift test window for crash diagnostics" step/,
+  },
+  {
+    name: "a helper-only crash-diagnostics change no longer re-runs the package lane",
+    mutate: (w) => withoutPath(w, SWIFT_PACKAGE, DIAG_HELPER),
+    expect: /swift-test-diagnostics\.py" starts \[\]|swift-package\.yml's path filter is .*swift-test-diagnostics-test/,
+  },
+  {
+    name: "the physical fixture control step is removed",
+    mutate: (w) => {
+      const job = w.docs.get(SWIFT_PACKAGE).jobs[SWIFT_PACKAGE_JOB];
+      job.steps = job.steps.filter((step) => step?.name !== PHYS_STEP.name);
+      return w;
+    },
+    expect: /has 0 exact "Physical fixture isolation controls" step/,
+  },
+  {
+    name: "the physical fixture control runs a different command",
+    mutate: (w) => {
+      const job = w.docs.get(SWIFT_PACKAGE).jobs[SWIFT_PACKAGE_JOB];
+      job.steps.find((step) => step?.name === PHYS_STEP.name).run = `node ${PHYS_TEST} || true`;
+      return w;
+    },
+    expect: /has 0 exact "Physical fixture isolation controls" step/,
+  },
+  {
+    name: "the physical fixture control keeps a condition other than the reuse guard",
+    mutate: (w) => {
+      const job = w.docs.get(SWIFT_PACKAGE).jobs[SWIFT_PACKAGE_JOB];
+      job.steps.find((step) => step?.name === PHYS_STEP.name).if = "always()";
+      return w;
+    },
+    expect: /a step sets "if:", and a suite that can skip itself is not a suite/,
+  },
+  {
+    name: "the physical fixture control moves inside the crash-diagnostics window",
+    mutate: (w) => {
+      const job = w.docs.get(SWIFT_PACKAGE).jobs[SWIFT_PACKAGE_JOB];
+      const i = job.steps.findIndex((step) => step?.name === PHYS_STEP.name);
+      const [step] = job.steps.splice(i, 1);
+      job.steps.splice(job.steps.findIndex((s) => deepEqual(s, DIAG_MARK)) + 1, 0, step);
+      return w;
+    },
+    expect: /not before the crash-diagnostics mark|crash-diagnostics mark is step \d+, not immediately before/,
+  },
+  ...[PHYS_TEST, PHYS_PAIR, PHYS_INBOX].map((path) => ({
+    name: `a change to ${path} no longer re-runs the package lane`,
+    mutate: (w) => withoutPath(w, SWIFT_PACKAGE, path),
+    expect: new RegExp(`${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" starts \\[\\]`),
+  })),
+  {
+    name: "a test-only crash-diagnostics change no longer re-runs the package lane",
+    mutate: (w) => withoutPath(w, SWIFT_PACKAGE, DIAG_TEST),
+    expect: /swift-test-diagnostics-test\.py" starts \[\]/,
+  },
+  {
+    name: "the swift test EXIT trap is removed, so the test end is never recorded",
+    mutate: (w) => withCommandJob(w, SWIFT_PACKAGE, "swift test 2>&1", (job, step) => {
+      step.run = step.run.split("\n").filter((line) => !line.startsWith("trap ")).join("\n");
+    }),
+    expect: /the `swift test` step is not exactly the reviewed pipefail \+ EXIT-trap finish/,
+  },
+  {
+    name: "the swift test EXIT trap calls exit, replacing the suite's own status",
+    mutate: (w) => withCommandJob(w, SWIFT_PACKAGE, "swift test 2>&1", (job, step) => {
+      step.run = step.run.replace('exit "$rc"', "exit 0");
+    }),
+    expect: /the `swift test` step is not exactly the reviewed pipefail \+ EXIT-trap finish/,
+  },
+  {
+    // The legitimate shape, read again: the real steps must raise none of the
+    // diagnostics complaints, so the exception cannot quietly stop matching.
+    name: "the real crash-diagnostics steps are the accepted shape",
+    mutate: (w) => w,
+    refute: /crash-diagnostics|crash evidence|crash diagnostics|transfer line|a step sets/,
   },
 
   // ── the sole unfiltered `swift test` ──────────────────────────────────────

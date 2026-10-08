@@ -91,9 +91,8 @@ const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 /** The call points a probe runs a command from. Anything else is traced as `none`. */
 export const PROBE_OPS = Object.freeze([
   "sw-vers-product", "sw-vers-build", "windows-ver", "go-version", "go-env", "cc-version", "cc-target",
-  "node-version", "npm-version", "java-version", "chrome-version", "xcodebuild-version", "sdk-macosx",
-  "sdk-iphonesimulator", "xcode-select-print", "simctl-devices", "simctl-runtimes", "selection-program",
-  "interpreter-version",
+  "node-version", "npm-version", "java-version", "chrome-version", "xcodebuild-sdk-inventory",
+  "xcode-select-print", "simctl-devices", "simctl-runtimes", "selection-program", "interpreter-version",
 ]);
 const SIGNALS = new Set(["SIGTERM", "SIGKILL", "SIGINT", "SIGHUP", "SIGQUIT", "SIGABRT", "SIGSEGV", "SIGBUS", "SIGPIPE",
   "SIGILL", "SIGTRAP", "SIGFPE", "SIGALRM", "SIGXCPU", "SIGXFSZ", "SIGSYS"]);
@@ -362,9 +361,89 @@ function chrome(ctx) {
 }
 
 /**
+ * One Xcode's `usr/bin/xcodebuild -version -sdk` (no SDK named: every SDK it
+ * ships, then the Xcode's own version footer), read into the four facts the
+ * certificate keeps: the Xcode version and build from the footer, and the
+ * macosx and iphonesimulator SDK versions from their blocks' `SDKVersion`.
+ *
+ * Only the grammar observed on a real Xcode is admitted. Each SDK block is a
+ * header `<Name>.sdk - <display> (<family><version>)`, then `Key: value` lines
+ * in the observed order — the four every SDK printed first, then any of the
+ * optional keys some SDKs printed, each at most once — then one empty line.
+ * After the last block comes the two-line footer and nothing else. The family
+ * a block belongs to is the lower-case word of its canonical identity in the
+ * header's parentheses; its version is ONLY its `SDKVersion` line. Two blocks
+ * of one family (macOS ships `MacOSX27.sdk` and `MacOSX27.0.sdk`) are admitted
+ * only with the same `SDKVersion`, which is all the certificate records — no
+ * claim that they are one SDK. Anything else — a line out of place, a repeated
+ * key or footer, a missing or conflicting SDK, CR or control bytes, output past
+ * the command's cap — is unknown, so the lane runs in full. No output text is
+ * quoted back: SDK paths stay out of every message.
+ */
+const SDK_HEADER = /^[A-Za-z]+[0-9]+(?:\.[0-9]+){0,2}\.sdk - [A-Za-z][A-Za-z0-9 .-]{0,59} \(([a-z]+)[0-9]+(?:\.[0-9]+){0,2}\)$/;
+const SDK_VERSION = /^[0-9]+(\.[0-9]+){1,2}$/;
+const SDK_FIELDS = [
+  ["SDKVersion", SDK_VERSION, true],
+  ["Path", /^\/[ -~]{1,1023}$/, true],
+  ["PlatformVersion", /^[0-9]+(\.[0-9]+){0,2}$/, true],
+  ["PlatformPath", /^\/[ -~]{1,1023}$/, true],
+  ["BuildID", /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/, false],
+  ["ProductBuildVersion", /^[0-9A-Za-z]+$/, false],
+  ["ProductCopyright", /^[ -~]{1,200}$/, false],
+  ["ProductName", /^[ -~]{1,200}$/, false],
+  ["ProductUserVisibleVersion", /^[0-9]+(\.[0-9]+){0,2}$/, false],
+  ["ProductVersion", /^[0-9]+(\.[0-9]+){0,2}$/, false],
+  ["iOSSupportVersion", /^[0-9]+(\.[0-9]+){0,2}$/, false],
+];
+
+export function parseSdkInventory(text, what) {
+  const bad = (why) => unknown(`${what} xcodebuild -version -sdk ${why}`);
+  if (typeof text !== "string") bad("is not text");
+  if (Buffer.byteLength(text) > PROBE_LIMITS.outputBytes) bad("is above its output cap");
+  if (!/^[ -~\n]*$/.test(text)) bad("has a byte outside printable ASCII and LF");
+  if (!text.endsWith("\n")) bad("does not end with a line end");
+  const lines = text.slice(0, -1).split("\n");
+  if (lines.length < 3) bad("is truncated");
+  const footer = /^Xcode ([0-9]+(?:\.[0-9]+){0,2})$/.exec(lines[lines.length - 2]);
+  const build = /^Build version ([0-9A-Za-z]+)$/.exec(lines[lines.length - 1]);
+  if (!footer || !build) bad("does not end with the Xcode version footer");
+  const versions = new Map();
+  let i = 0;
+  const end = lines.length - 2;
+  while (i < end) {
+    const header = SDK_HEADER.exec(lines[i]);
+    if (!header) bad(`has an unrecognised line where an SDK block starts (line ${i + 1})`);
+    i += 1;
+    const seen = new Map();
+    let next = 0;
+    while (i < end && lines[i] !== "") {
+      const m = /^([A-Za-z]+): (.+)$/.exec(lines[i]);
+      const at = m ? SDK_FIELDS.findIndex(([key]) => key === m[1]) : -1;
+      if (at === -1) bad(`has an unrecognised line in an SDK block (line ${i + 1})`);
+      if (seen.has(m[1])) bad(`repeats ${m[1]} in one SDK block (line ${i + 1})`);
+      if (at < next) bad(`has ${m[1]} out of its order in an SDK block (line ${i + 1})`);
+      if (!SDK_FIELDS[at][1].test(m[2])) bad(`has a ${m[1]} in an unrecognised shape (line ${i + 1})`);
+      seen.set(m[1], m[2]);
+      next = at + 1;
+      i += 1;
+    }
+    if (i >= end) bad("is truncated inside an SDK block");
+    for (const [key, , required] of SDK_FIELDS) if (required && !seen.has(key)) bad(`has an SDK block without ${key}`);
+    const family = header[1];
+    const sdkVersion = seen.get("SDKVersion");
+    if (versions.has(family) && versions.get(family) !== sdkVersion) bad(`lists the ${family} SDK at two different versions`);
+    versions.set(family, sdkVersion);
+    i += 1; // the empty line that closes the block
+  }
+  for (const family of ["macosx", "iphonesimulator"]) if (!versions.has(family)) bad(`lists no ${family} SDK`);
+  return { version: footer[1], build: build[1], macosx_sdk: versions.get("macosx"), iphonesimulator_sdk: versions.get("iphonesimulator") };
+}
+
+/**
  * Every installed Xcode (version, build, both SDKs) and the image's default
  * selection. Every Xcode a job may select — the default, or the highest 26.x the
- * iOS selection picks — is a function of this inventory and the tree.
+ * iOS selection picks — is a function of this inventory and the tree. Each
+ * Xcode is asked once, through its own xcodebuild (parseSdkInventory).
  */
 function xcode(ctx) {
   const apps = ctx.listDir("/Applications").filter((n) => /^Xcode[A-Za-z0-9_.-]*\.app$/.test(n)).sort();
@@ -375,11 +454,8 @@ function xcode(ctx) {
     if (seen.size >= PROBE_LIMITS.xcodes) unknown(`more than ${PROBE_LIMITS.xcodes} Xcodes installed`);
     const dev = join(real, "Contents/Developer");
     ctx.ordinal = seen.size + 1;
-    const text = run(ctx, "xcodebuild-version", [join(dev, "usr/bin/xcodebuild"), "-version"], { DEVELOPER_DIR: dev });
-    const v = match(text, /^Xcode ([0-9]+(\.[0-9]+){0,2})\s*\nBuild version ([0-9A-Za-z]+)\s*$/m, `${app} xcodebuild -version`);
-    const sdk = (name, op) => match(run(ctx, op, ["xcrun", "--sdk", name, "--show-sdk-version"], { DEVELOPER_DIR: dev }).trim(),
-      /^[0-9]+(\.[0-9]+){1,2}$/, `${app} ${name} SDK`)[0];
-    seen.set(real, { app: real, version: v[1], build: v[3], macosx_sdk: sdk("macosx", "sdk-macosx"), iphonesimulator_sdk: sdk("iphonesimulator", "sdk-iphonesimulator") });
+    const facts = parseSdkInventory(run(ctx, "xcodebuild-sdk-inventory", [join(dev, "usr/bin/xcodebuild"), "-version", "-sdk"], { DEVELOPER_DIR: dev }), app);
+    seen.set(real, { app: real, ...facts });
   }
   ctx.ordinal = 0;
   if (seen.size === 0) unknown("no Xcode is installed");

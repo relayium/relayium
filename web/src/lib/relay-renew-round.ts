@@ -72,7 +72,9 @@ export interface RenewRoundClient {
 }
 
 export function createRenewRoundClient(deps: RenewRoundDeps): RenewRoundClient {
-  const setTimer = deps.setTimer ?? setTimeout;
+  // Typed as the seam, not inferred: @types/node 26 no longer makes the global
+  // overload set reduce into this union, so a call would yield `number | Timeout`.
+  const setTimer: NonNullable<RenewRoundDeps['setTimer']> = deps.setTimer ?? setTimeout;
   const clearTimer = deps.clearTimer ?? clearTimeout;
   const timeoutMs = deps.timeoutMs ?? RENEW_ROUND_TIMEOUT_MS;
 

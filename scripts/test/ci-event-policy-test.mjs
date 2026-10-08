@@ -454,16 +454,20 @@ const RENEW_WEIGHTS = "scripts/go-race-timings-renewal.json";
 const TIMINGS_TOOL = "scripts/go-race-timings.go";
 /**
  * The account lane's measured profile, pinned to the exact corpus root and an
- * independent Codex review accepted: run 36893745143 attempt 1 at 7c47921b9,
- * all eight account shard archives verified against their API digests, 2633
- * tests. Replacing it needs a new accepted corpus and a deliberate edit here.
+ * independent review accepted: run 37421626823 attempt 1 at e4b538f18, all
+ * eight account shard archives verified against their API digests, 2652
+ * tests summing to 6392.31 s. The previous corpus (run 36893745143 at
+ * 7c47921b9) is refused by digest and provenance. Replacing it needs a new
+ * accepted corpus and a deliberate edit here.
  */
 const ACCOUNT_WEIGHTS = "scripts/go-race-timings-account.json";
-const ACCOUNT_WEIGHTS_SHA256 = "e9d0d8b464b095188f602d7340f144be86c8f651f8e01ab93cb2d2c54d0f8abf";
+const ACCOUNT_WEIGHTS_SHA256 = "0197b9a6106066538c8dec3d1f0507b5e78417ce951e97676ff1c22c6efc9c05";
 const ACCOUNT_WEIGHTS_PROVENANCE = {
-  kind: "go-test-json-corpus", sourceSHA: "7c47921b94b9120d528badc138d34fa0c8a6f1e9",
-  toolchain: "go version go1.26.6 linux/amd64", runID: 36893745143, runAttempt: 1, race: true, count: 1, complete: true,
+  kind: "go-test-json-corpus", sourceSHA: "e4b538f1888be95d9e9cf3bb131578fad29e6bb7",
+  toolchain: "go version go1.26.6 linux/amd64", runID: 37421626823, runAttempt: 1, race: true, count: 1, complete: true,
 };
+const ACCOUNT_WEIGHTS_TESTS = 2652;
+const ACCOUNT_WEIGHTS_SUM_SECONDS = 6392.31;
 
 const failures = [];
 function check(ok, message) {
@@ -947,6 +951,22 @@ const EV_MAIN_PUSH = "github.event_name == 'push' && github.ref == 'refs/heads/m
 const EV_CHECKOUT = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd";
 const EV_NODE = "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e";
 const EV_UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+/** The full-bootstrap receipt steps' condition and the record step's script (6w executes it). */
+const BOOT_RECEIPT_IF = "github.event_name == 'workflow_dispatch' && inputs.mode == 'full-bootstrap'";
+const BOOT_RECEIPT_RUN = [
+  "set -euo pipefail",
+  'mkdir -p "$RUNNER_TEMP/full-bootstrap"',
+  'jq -n --arg mode "$RECEIPT_MODE" --arg base "$RECEIPT_BASE" --arg head "$RECEIPT_HEAD" \\',
+  '  --arg sha "$GITHUB_SHA" --arg ref "$GITHUB_REF" --arg repositoryId "$GITHUB_REPOSITORY_ID" \\',
+  '  --arg runId "$GITHUB_RUN_ID" --arg runAttempt "$GITHUB_RUN_ATTEMPT" \\',
+  '  --arg workflowRef "$GITHUB_WORKFLOW_REF" --arg workflowSha "$GITHUB_WORKFLOW_SHA" \\',
+  '  --arg signedArtifact "$RECEIPT_SIGNED_ARTIFACT" \\',
+  "  '{schema:\"relayium-macos-full-bootstrap-receipt/v1\",mode:$mode,base:$base,head:$head,sha:$sha,ref:$ref,",
+  "    repositoryId:$repositoryId,runId:$runId,runAttempt:$runAttempt,workflowRef:$workflowRef,",
+  "    workflowSha:$workflowSha,signedArtifact:$signedArtifact}' \\",
+  '  > "$RUNNER_TEMP/full-bootstrap/full-bootstrap-receipt.json"',
+  "",
+].join("\n");
 const EV_GRANTS = { contents: "read", actions: "read", "pull-requests": "read" };
 /** The paid probes run only on an ordinary main push the screen found eligible. */
 const EV_SCREEN_ELIGIBLE = "needs.screen.result == 'success' && needs.screen.outputs.eligible == 'true'";
@@ -1516,12 +1536,23 @@ function evidenceAdoptionFailures(world) {
       name: "relayium-ci-evidence-proof-attempt-${{ github.run_attempt }}",
       path: "${{ runner.temp }}/ci-evidence/ci-evidence.json", "if-no-files-found": "ignore", "retention-days": "7",
     } },
+    // The full bootstrap's E-only receipt (scripts/release/macos-bootstrap.mjs):
+    // LAST, after the proof steps, on that one mode only, never a proof name.
+    { name: "Record the full-bootstrap signed-build receipt", if: BOOT_RECEIPT_IF, env: {
+      RECEIPT_MODE: "${{ inputs.mode }}", RECEIPT_BASE: "${{ inputs.base_sha }}", RECEIPT_HEAD: "${{ inputs.head_sha }}",
+      RECEIPT_SIGNED_ARTIFACT: "${{ needs.macos.outputs.signed_artifact }}",
+    }, run: BOOT_RECEIPT_RUN },
+    { name: "Keep the full-bootstrap signed-build receipt", if: BOOT_RECEIPT_IF, uses: EV_UPLOAD, with: {
+      name: "relayium-macos-full-bootstrap-receipt-attempt-${{ github.run_attempt }}",
+      path: "${{ runner.temp }}/full-bootstrap/full-bootstrap-receipt.json", "if-no-files-found": "error", "retention-days": "14",
+    } },
   ];
   need(steps.length === 1 + want.length && String(steps[0]?.run ?? "").includes("CONDITIONAL_LANES")
     && steps[0]?.if === undefined && deepEqual(steps.slice(1), want), `${AGGREGATE}/${GATE_JOB}: the steps after `
     + `the judgement are not the canonical proof producer.\n  got:  ${JSON.stringify(steps.slice(1))}\n`
     + `  want: ${JSON.stringify(want)}\nThe proof may be minted only after every lane is judged, only on a pull `
-    + "request, only by the verifier whose tests just passed, and only under its attempt-scoped name.");
+    + "request, only by the verifier whose tests just passed, and only under its attempt-scoped name; the "
+    + "full-bootstrap receipt only after them, only in that mode, and never under a proof's name.");
 
   // Every other workflow that calls an adopted lane must grant the same, or it
   // fails to start the moment the callee carries an evidence job.
@@ -2695,6 +2726,14 @@ if (go) {
       out.push(`${ACCOUNT_WEIGHTS}: want at least 1000 unique test names, each with a finite weight in [0, 21600] s; `
         + `got ${tests.length} entries, ${names.size} unique.`);
     }
+    if (tests.length !== ACCOUNT_WEIGHTS_TESTS || names.size !== ACCOUNT_WEIGHTS_TESTS) {
+      out.push(`${ACCOUNT_WEIGHTS}: want exactly the ${ACCOUNT_WEIGHTS_TESTS} measured tests; `
+        + `got ${tests.length} entries, ${names.size} unique.`);
+    }
+    const sum = Math.round(tests.reduce((s, t) => s + (Number.isFinite(t?.seconds) ? t.seconds : 0), 0) * 100) / 100;
+    if (sum !== ACCOUNT_WEIGHTS_SUM_SECONDS) {
+      out.push(`${ACCOUNT_WEIGHTS}: measured weights sum to ${sum} s, want ${ACCOUNT_WEIGHTS_SUM_SECONDS}.`);
+    }
     return out;
   };
   let accountRaw = "";
@@ -2708,16 +2747,26 @@ if (go) {
     // Controls: each change to the profile is reported, for its own reason.
     const ACCOUNT_PROFILE_CONTROLS = [
       { name: "one weight edited", expect: /sha256 .* want the accepted/,
-        raw: accountRaw.replace(/"seconds": 124\.26/, '"seconds": 1.26') },
-      { name: "a different run", expect: /provenance\.runID is 1, want 36893745143/,
-        raw: accountRaw.replace('"runID": 36893745143', '"runID": 1') },
+        raw: accountRaw.replace(/"seconds": 124\.87/, '"seconds": 1.87') },
+      { name: "one weight edited, sum", expect: /measured weights sum to 6269\.31 s, want 6392\.31/,
+        raw: accountRaw.replace(/"seconds": 124\.87/, '"seconds": 1.87') },
+      { name: "a different run", expect: /provenance\.runID is 1, want 37421626823/,
+        raw: accountRaw.replace('"runID": 37421626823', '"runID": 1') },
+      { name: "the previous accepted corpus's run", expect: /provenance\.runID is 36893745143, want 37421626823/,
+        raw: accountRaw.replace('"runID": 37421626823', '"runID": 36893745143') },
       { name: "another attempt", expect: /provenance\.runAttempt is 2/, raw: accountRaw.replace('"runAttempt": 1', '"runAttempt": 2') },
-      { name: "another commit", expect: /provenance\.sourceSHA/, raw: accountRaw.replace("7c47921b94b9120d528badc138d34fa0c8a6f1e9", "0".repeat(40)) },
+      { name: "another commit", expect: /provenance\.sourceSHA/,
+        raw: accountRaw.replace('"sourceSHA": "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"', `"sourceSHA": "${"0".repeat(40)}"`) },
+      { name: "the previous accepted corpus's commit", expect: /provenance\.sourceSHA is "7c47921b94b9120d528badc138d34fa0c8a6f1e9"/,
+        raw: accountRaw.replace('"sourceSHA": "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"',
+          '"sourceSHA": "7c47921b94b9120d528badc138d34fa0c8a6f1e9"') },
       { name: "measured without -race", expect: /provenance\.race is false/, raw: accountRaw.replace('"race": true', '"race": false') },
       { name: "the renewal profile in its place", expect: /package \.\/account, pattern \^Test/,
         raw: readFileSync(resolve(repoRoot, RENEW_WEIGHTS), "utf8") },
       { name: "a truncated test list", expect: /want at least 1000 unique test names/,
         raw: JSON.stringify({ ...JSON.parse(accountRaw), tests: JSON.parse(accountRaw).tests.slice(0, 10) }) },
+      { name: "one measured test dropped", expect: /want exactly the 2652 measured tests; got 2651 entries/,
+        raw: JSON.stringify({ ...JSON.parse(accountRaw), tests: JSON.parse(accountRaw).tests.slice(1) }) },
       { name: "a negative weight", expect: /finite weight in \[0, 21600\]/,
         raw: JSON.stringify({ ...JSON.parse(accountRaw),
           tests: JSON.parse(accountRaw).tests.map((t, i) => (i === 0 ? { ...t, seconds: -1 } : t)) }) },
@@ -3437,7 +3486,104 @@ function pathMatrixFailures(world) {
       `changing "${path}" starts [${got.join(", ")}]; want [${want.join(", ")}] — ${why}.`,
     );
   }
+
+  // The vocabulary, judged by THIS file's own reading of each entry. The
+  // compiler above is general — it would compile `!apps/mac/*.json` or
+  // `a?.json` into something — so without this the policy would happily judge
+  // a filter the merge gate's selector refuses (or, worse, one GitHub reads as
+  // a pattern while both compilers here escape it to a literal). Written as
+  // whole-entry expressions, where the selector strips and branches, so the two
+  // can be wrong independently.
+  for (const file of filtered) {
+    for (const entry of wPaths(world, file)) {
+      const shape = filterEntryShape(entry);
+      if (shape === null) {
+        out.push(`${file}'s path filter entry ${JSON.stringify(entry)} is outside the five permitted `
+          + `shapes (prefix/**, !prefix/**, an exact path, dir/basename*, !exact-path). GitHub may read `
+          + `it as a pattern this repository's two compilers read as text, and the merge gate's `
+          + `selector refuses it outright, selecting every lane.`);
+      }
+    }
+  }
+
+  // The exact-file exclusion selects LESS when it is wrong, so where it lives
+  // is pinned: the readiness record, in the two Apple lanes, after the tree.
+  const exclusions = [];
+  for (const file of filtered) {
+    const paths = wPaths(world, file);
+    paths.forEach((entry, index) => {
+      if (filterEntryShape(entry) !== "literal-exclusion") return;
+      exclusions.push(`${file} ${entry}`);
+      const target = entry.slice(1);
+      // Effective: some EARLIER positive entry matches the excluded file, and
+      // no LATER positive entry re-includes it.
+      const before = paths.slice(0, index).some((p) => !isNegation(p) && pathFilterToRegExp(p).test(target));
+      const after = paths.slice(index + 1).some((p) => !isNegation(p) && pathFilterToRegExp(p).test(target));
+      if (!before || after) {
+        out.push(`${file} excludes ${target} ${!before ? "with no earlier entry that watches it" : "and then re-includes it"}: `
+          + `last match wins, so the exclusion is dead and ${file} starts on the record again.`);
+      }
+      if (paths.indexOf(MAC_TREE) === -1 || paths.indexOf(MAC_TREE) > index) {
+        out.push(`${file} lists ${entry} ${paths.includes(MAC_TREE) ? "before" : "without"} \`${MAC_TREE}\`, `
+          + `the tree it qualifies; the exclusion must follow it.`);
+      }
+    });
+  }
+  const wantExclusions = [`${MACOS} !${READINESS_RECORD}`, `${SWIFT_PACKAGE_LANE} !${READINESS_RECORD}`];
+  if (!deepEqual(exclusions.sort(), wantExclusions)) {
+    out.push(`the exact-file exclusions are [${exclusions.join("; ")}]; want [${wantExclusions.join("; ")}]. `
+      + `The readiness manifest is the one release-control record no build, package test or signed `
+      + `artifact reads; any other exclusion needs its own fixture rows and review.`);
+  }
+
+  // Per-file selection, then the union a commit is judged by. Not fixture
+  // rows, because two of these names do not exist in the tree on purpose.
+  const starts = (paths) => filtered.filter((file) => paths.some((path) => matchesFilter(wPaths(world, file), path))).sort();
+  const appleLanes = [MACOS, SWIFT_PACKAGE_LANE];
+  const recordOnly = starts(READINESS_RECORD_ONLY_COMMIT);
+  if (appleLanes.some((file) => recordOnly.includes(file))) {
+    out.push(`the record-only commit [${READINESS_RECORD_ONLY_COMMIT.join(", ")}] starts [${recordOnly.join(", ")}]; `
+      + `neither ${MACOS} nor ${SWIFT_PACKAGE_LANE} may start for it.`);
+  }
+  for (const extra of ["apps/mac/release-readiness-extra.json", "apps/mac/release-readiness.json.orig",
+    "apps/mac/Relayium/release-readiness.json", "apps/mac/Relayium/AccountView.swift",
+    "apps/mac/Relayium.xcodeproj/project.pbxproj", "apps/mac/Relayium/Info.plist"]) {
+    const got = starts([...READINESS_RECORD_ONLY_COMMIT, extra]);
+    if (!appleLanes.every((file) => got.includes(file))) {
+      out.push(`the record-only commit plus ${extra} starts [${got.join(", ")}]; both ${MACOS} and `
+        + `${SWIFT_PACKAGE_LANE} must start — the exclusion names one exact file and nothing near it.`);
+    }
+  }
   return out;
+}
+
+/** The readiness manifest the Apple lanes exclude by exact name. */
+const READINESS_RECORD = "apps/mac/release-readiness.json";
+const MAC_TREE = "apps/mac/**";
+/** The three paths 2d2c67e7c changed against 373f6e733: a record-only commit. */
+const READINESS_RECORD_ONLY_COMMIT = ["apps/README.md", READINESS_RECORD, "docs/macos-app-store-submission.md"];
+
+/**
+ * Which of the five `paths:` shapes the merge gate's selector accepts this
+ * entry is, decided here independently of `scripts/ci/select-lanes.mjs`.
+ * A plain segment is any run of characters GitHub's filter syntax gives no
+ * meaning to; `.`/`..` and empty segments are refused as ill-defined.
+ */
+function filterEntryShape(entry) {
+  if (typeof entry !== "string") return null;
+  // One segment: no separator, no metacharacter, not `.`/`..` (alone or as a
+  // basename prefix). Whitespace is judged once, at the ends of the body.
+  const seg = String.raw`(?!\.{1,2}(?:/|\*|$))[^/*?+\[\]{}()!@\\]+`;
+  const body = String.raw`(?!\s)${seg}(?:/${seg})*`;
+  const end = String.raw`(?<!\s)`;
+  const shapes = [
+    ["tree", new RegExp(String.raw`^${body}${end}/\*\*$`)],
+    ["tree-exclusion", new RegExp(String.raw`^!${body}${end}/\*\*$`)],
+    ["literal", new RegExp(String.raw`^${body}${end}$`)],
+    ["literal-exclusion", new RegExp(String.raw`^!${body}${end}$`)],
+    ["basename", new RegExp(String.raw`^${body}/${seg}${end}\*$`)],
+  ];
+  return shapes.find(([, re]) => re.test(entry))?.[0] ?? null;
 }
 
 // The matrix above only means what it says if the excluded workflows really are
@@ -3759,7 +3905,7 @@ const RUNNER_BUDGETS = [
     why: "a PAID macOS runner is held by work that will never finish",
     jobs: {
       // Declared 10. A checkout on Ubuntu for push, pull request and the merge
-      // gate; on macOS only when a dispatch or release input reaches
+      // gate (dispatched or not); on macOS only when a release input reaches
       // `xcodebuild -showBuildSettings` (6t). Still budgeted: on those runs it
       // is a PAID runner, and 6l counts any `runs-on` that can name macOS.
       contract: {
@@ -5454,7 +5600,7 @@ function iosParallelLaneFailures(world) {
 
   const ui = body("ios-ui-smoke");
   need(
-    ui.includes("-only-testing:RelayiumUITests test")
+    ui.includes("-only-testing:RelayiumUITests)") && ui.includes("scripts/ci/ios-ui-smoke.py")
       && !ui.includes("local-transfer-acceptance.sh")
       && !ui.includes("actions/setup-go"),
     `${IOS}/ios-ui-smoke must independently own the offline primary-task UI test and no transfer `
@@ -5777,9 +5923,11 @@ function iosCompactShardFailures(world) {
     + `entry and the selection it runs are not connected.`,
   );
   need(
-    /-resultBundlePath\s+"?[^"\s]*\$UI_SHARD/.test(code),
+    code.includes('--test-result "$RUNNER_TEMP/ios-ui-smoke-$UI_SHARD.xcresult"')
+      && code.includes('--build-result "$RUNNER_TEMP/ios-ui-build-$UI_SHARD.xcresult"'),
     `${where}: the result bundle path does not carry \`$UI_SHARD\`. Each shard's bundle is the `
-    + `evidence for its half, and the proof and upload steps read it by that name.`,
+    + `evidence for its half, and the proof and upload steps read it by that name (the build gets its own, `
+    + `\`ios-ui-build-$UI_SHARD.xcresult\`, never accepted as test evidence).`,
   );
 
   const branches = caseBranches(code);
@@ -5804,8 +5952,9 @@ function iosCompactShardFailures(world) {
     // exactly the classes that stopped running.
     if (branch === undefined) { selections.set(shard, null); continue; }
     need(
-      /xcodebuild[^\n]*(?:\\\n[^\n]*)*\btest\s*$/m.test(branch),
-      `${where}: the \`${shard}\` branch runs no \`xcodebuild … test\`.`,
+      /^[ \t]*selection=\(/m.test(branch),
+      `${where}: the \`${shard}\` branch assigns no \`selection=(…)\` array, so the helper's test runs no `
+      + `selection of this shard's own.`,
     );
     const selection = testSelection(branch);
     selections.set(shard, selection);
@@ -6037,40 +6186,63 @@ function macosBudgetFailures(world) {
   return out;
 }
 
-// ── 6t. macos.yml `contract`: Apple runner exactly when the release branch runs ─
+// ── 6t. macos.yml `contract`: Apple runner exactly when a release is intended ─
 //
-// `contract` is a checkout on every push, pull request and merge-gate call; its
-// one step reaches `xcodebuild -showBuildSettings` and the readiness check only
-// on a dispatch, a non-empty `release_version` or `publish_release`. It used to
-// wait ~7 minutes for a macOS runner to do 13 s of checkout (run 36736501756)
-// while `ui-smoke` and `signed-build` waited on it, so `runs-on` now picks
-// `ubuntu-latest` unless one of those three holds.
+// `contract` is a checkout on every push, pull request and merge-gate call —
+// including a merge-gate call whose caller was DISPATCHED, because the gate
+// passes no inputs; its one step reaches `xcodebuild -showBuildSettings` and the
+// readiness check only on release INTENT: a non-empty `release_version`,
+// `notarize`, or `publish_release`. It used to wait ~7 minutes for a macOS
+// runner to do 13 s of checkout (run 36736501756) while `ui-smoke` and
+// `signed-build` waited on it, and until the event stopped counting as intent a
+// dispatched gate still did (run 37175317336: 308 s queued, 9 s of work), so
+// `runs-on` now picks `ubuntu-latest` unless one of the three inputs holds.
 //
-// The two conditions are written twice — once as a GitHub expression, once as
-// shell — and nothing but this section keeps them equal. So nothing is taken
-// from the text: the expression is evaluated, and the step's script is RUN, for
-// each event/input shape a caller can produce, against stub `xcodebuild` and
-// `node`. A case reaches the release branch iff, run as Linux, the script calls
-// a tool, exits non-zero or trips its runner guard; every such case must have
-// evaluated to `macos-15`. Separately, no script run as Linux may call a tool at
-// all — the guard that makes a future widened `if` fail instead of running
-// `xcodebuild` on a runner without one.
+// The intent is written twice — once as a GitHub expression, once as shell —
+// and nothing but this section keeps them equal. So nothing is taken from the
+// text: the expression is evaluated, and the step's script is RUN, for EVERY
+// event and EVERY combination of the three inputs (and for each event with no
+// inputs at all), against stub `xcodebuild` and `node`. The runner must be
+// exactly `macos-15` iff an input names a release. Run as Linux, an intent-free
+// case must call no tool and pass, and an intent case must trip the runner guard
+// before any tool; run as macOS, each intent case must reach exactly the
+// original checks: version format, notarize=true for a version, the
+// MARKETING_VERSION match, and publication only with a version from main after
+// the approved readiness check. `notarize` alone is intent — the Apple runner,
+// conservatively — and on macOS checks nothing further, as it always did.
 const CONTRACT_STEP = "Validate release contract";
-const CONTRACT_CASES = [
-  // [label, event, inputs (undefined: the event supplies none), ordinary?]
-  ["push to main", "push", undefined, true],
-  ["pull request", "pull_request", undefined, true],
-  ["merge-gate call under a pull request (no `with:`)", "pull_request",
-    { release_version: "", notarize: false, publish_release: false }, true],
-  ["merge-gate call under a push", "push", { release_version: "", notarize: false, publish_release: false }, true],
-  ["dispatch with no release inputs", "workflow_dispatch",
-    { release_version: "", notarize: false, publish_release: false }, false],
-  ["release candidate", "workflow_dispatch", { release_version: "1.4.5", notarize: true, publish_release: false }, false],
-  ["release inputs under a push event", "push", { release_version: "1.4.5", notarize: true, publish_release: false }, false],
-  ["publish without a version", "push", { release_version: "", notarize: false, publish_release: true }, false],
-  ["notarize alone", "push", { release_version: "", notarize: true, publish_release: false }, false],
-  ["publish release", "workflow_dispatch", { release_version: "1.4.5", notarize: true, publish_release: true }, false],
-];
+const CONTRACT_EVENTS = ["push", "pull_request", "workflow_dispatch"];
+const CONTRACT_CASES = (() => {
+  // [label, event, inputs (undefined: the event supplies none), intent?]
+  const out = [];
+  for (const event of CONTRACT_EVENTS) {
+    out.push([`${event} with no inputs`, event, undefined, false]);
+    for (const release_version of ["", "1.4.5"]) {
+      for (const notarize of [false, true]) {
+        for (const publish_release of [false, true]) {
+          const inputs = { release_version, notarize, publish_release };
+          const intent = release_version !== "" || notarize || publish_release;
+          out.push([`${event} version=${JSON.stringify(release_version)} notarize=${notarize} publish=${publish_release}`, event, inputs, intent]);
+        }
+      }
+    }
+  }
+  return out;
+})();
+/** What the macOS run of an intent case must do: [exit 0?, xcodebuild?, readiness?]. */
+function contractMacExpect(inputs, ref = "refs/heads/main", marketing = "1.4.5") {
+  const version = inputs.release_version;
+  if (version !== "") {
+    if (!/^[0-9]+(\.[0-9]+){1,2}$/.test(version)) return [false, false, false];
+    if (!inputs.notarize) return [false, false, false];
+    if (version !== marketing) return [false, true, false];
+  }
+  if (inputs.publish_release) {
+    if (version === "" || ref !== "refs/heads/main") return [false, version !== "", false];
+    return [true, true, true];
+  }
+  return [true, version !== "", false];
+}
 
 /** Evaluate a `${{ }}` runs-on for one case; throws on anything it does not model. */
 function evalRunsOn(runsOn, event, inputs) {
@@ -6098,17 +6270,17 @@ function macosContractRunnerFailures(world) {
   const dir = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/macos-contract.XXXXXX`], { encoding: "utf8" })
     .stdout.trim();
   const stub = (tool) => `#!/bin/sh\necho "${tool} $*" >> "$TOOL_CALLS"\n`
-    + (tool === "xcodebuild" ? "echo '    MARKETING_VERSION = 1.4.5'\n" : "");
+    + (tool === "xcodebuild" ? "echo '    MARKETING_VERSION = 1.4.5'\n" : "exit \"${READINESS_EXIT:-0}\"\n");
   spawnSync("bash", ["-c", `mkdir -p "$1/bin" && printf '%s' "$2" > "$1/bin/xcodebuild" && printf '%s' "$3" > "$1/bin/node" `
     + `&& chmod +x "$1/bin/xcodebuild" "$1/bin/node" && printf '%s' "$4" > "$1/step.sh"`,
   "_", dir, stub("xcodebuild"), stub("node"), step.run]);
-  const run = (os, event, inputs, n) => {
-    const calls = `${dir}/calls-${n}-${os}`;
+  const run = (os, event, inputs, n, { ref = "refs/heads/main", readiness = 0, tag = "" } = {}) => {
+    const calls = `${dir}/calls-${n}-${os}${tag}`;
     const r = spawnSync("bash", [`${dir}/step.sh`], {
       encoding: "utf8",
       env: {
-        PATH: `${dir}/bin:${process.env.PATH}`, TOOL_CALLS: calls, RUNNER_OS: os,
-        GITHUB_EVENT_NAME: event, GITHUB_REF: "refs/heads/main",
+        PATH: `${dir}/bin:${process.env.PATH}`, TOOL_CALLS: calls, RUNNER_OS: os, READINESS_EXIT: String(readiness),
+        GITHUB_EVENT_NAME: event, GITHUB_REF: ref,
         // How GitHub renders `${{ inputs.x }}`: absent inputs are empty, booleans are words.
         RELEASE_VERSION: inputs ? String(inputs.release_version) : "",
         NOTARIZE: inputs ? String(inputs.notarize) : "",
@@ -6118,7 +6290,13 @@ function macosContractRunnerFailures(world) {
     const tools = spawnSync("cat", [calls], { encoding: "utf8" }).stdout ?? "";
     return { status: r.status, out: `${r.stdout}${r.stderr}`, tools };
   };
-  CONTRACT_CASES.forEach(([label, event, inputs, ordinary], n) => {
+  const macMatches = (label, mac, [ok, xcode, ready]) => {
+    need((mac.status === 0) === ok && /^xcodebuild /m.test(mac.tools) === xcode
+      && /check-release-readiness\.mjs --require-approved/.test(mac.tools) === ready,
+    `${MACOS}/contract (${label}): on macOS the step must ${ok ? "pass" : "refuse"}${xcode ? ", read MARKETING_VERSION" : ", read no MARKETING_VERSION"}`
+      + `${ready ? " and run the readiness check" : " and run no readiness check"}; got exit ${mac.status}, tools [${mac.tools.trim()}].\n${mac.out}`);
+  };
+  CONTRACT_CASES.forEach(([label, event, inputs, intent], n) => {
     let runner;
     try {
       runner = evalRunsOn(job["runs-on"], event, inputs);
@@ -6136,16 +6314,29 @@ function macosContractRunnerFailures(world) {
     need(!reached || runner === "macos-15",
       `${MACOS}/contract (${label}): the step reaches its release branch, but runs-on picks `
       + `${JSON.stringify(runner)}. Every release reachability must keep the Apple runner.`);
-    need(!ordinary || (!reached && runner === "ubuntu-latest"),
+    need(intent || (!reached && runner === "ubuntu-latest"),
       `${MACOS}/contract (${label}): an ordinary run picks ${JSON.stringify(runner)}${reached ? " and reaches the release branch" : ""}; `
       + `want ubuntu-latest and a checkout only, so it does not queue for a macOS runner.`);
-    if (runner === "macos-15" && label === "publish release") {
-      const mac = run("macOS", event, inputs, n);
-      need(mac.status === 0 && /^xcodebuild /m.test(mac.tools) && /check-release-readiness\.mjs --require-approved/.test(mac.tools),
-        `${MACOS}/contract (${label}): on macOS the step must still read MARKETING_VERSION and run the readiness `
-        + `check, and pass with matching stubs; got exit ${mac.status}, tools [${mac.tools.trim()}].\n${mac.out}`);
-    }
+    need(!intent || (runner === "macos-15" && reached && /release contract reached on Linux/.test(linux.out)),
+      `${MACOS}/contract (${label}): a release intent picks ${JSON.stringify(runner)}${reached ? "" : " and never reaches the release branch"}; `
+      + `want macos-15 and the release branch (its Linux run refused by the runner guard).`);
+    if (intent && runner === "macos-15") macMatches(label, run("macOS", event, inputs, n), contractMacExpect(inputs));
   });
+  // The original release checks, each refusing on macOS for its own reason.
+  for (const [label, inputs, opts, expect] of [
+    ["invalid version format", { release_version: "1.4.5-beta", notarize: true, publish_release: false }, {}, [false, false, false]],
+    ["a one-part version", { release_version: "2", notarize: true, publish_release: false }, {}, [false, false, false]],
+    ["a version without notarize", { release_version: "1.4.5", notarize: false, publish_release: false }, {}, [false, false, false]],
+    ["a version that is not MARKETING_VERSION", { release_version: "1.4.6", notarize: true, publish_release: false }, {}, [false, true, false]],
+    ["publish without a version", { release_version: "", notarize: true, publish_release: true }, {}, [false, false, false]],
+    ["publish from a branch other than main", { release_version: "1.4.5", notarize: true, publish_release: true }, { ref: "refs/heads/release" }, [false, true, false]],
+    ["publish whose readiness check refuses", { release_version: "1.4.5", notarize: true, publish_release: true }, { readiness: 1 }, [false, true, true]],
+    ["notarize alone (no new version required)", { release_version: "", notarize: true, publish_release: false }, {}, [true, false, false]],
+  ]) {
+    const want = opts.readiness ? expect : contractMacExpect(inputs, opts.ref);
+    need(JSON.stringify(want) === JSON.stringify(expect), `${MACOS}/contract (${label}): 6t's own expectation table disagrees with its control`);
+    macMatches(label, run("macOS", "workflow_dispatch", inputs, `x-${label.replace(/[^a-z0-9]+/gi, "-")}`, { ...opts, tag: "-x" }), expect);
+  }
   spawnSync("rm", ["-rf", dir]);
   return out;
 }
@@ -6370,7 +6561,20 @@ const DISPATCH_INPUTS = [
     description:
       "Publish the versioned GitHub Release and deliver its appcast/download metadata to main",
   },
-  // The sixth, and the only one that did not move from `macos.yml`: where the
+  // Who performs the two publication writes. `operator` (the default) hands
+  // off a verified candidate and publishes nothing; `workflow` keeps the
+  // automatic delivery. Added after the 1.4.5 metadata push was refused with
+  // GH006 and the release creation with 403 (causes not asserted here).
+  {
+    name: "metadata_delivery",
+    type: "choice",
+    required: "true",
+    default: "operator",
+    description: "Metadata delivery: operator (hand off a verified candidate, publish nothing) "
+      + "or workflow (push main and create the release here)",
+    options: ["operator", "workflow"],
+  },
+  // The seventh, and one of two that did not move from `macos.yml`: where the
   // signed DMG comes from. `auto` reuses only proven exact-main evidence.
   {
     name: "signed_build_source",
@@ -6744,6 +6948,16 @@ function releaseBoundaryFailures(world) {
       `${MACOS_RELEASE}/preflight declares permissions ${JSON.stringify(preflight.permissions)}, want `
       + `{"actions":"read","contents":"read"}: it reads runs, jobs and artifacts and writes nothing.`,
     );
+    for (const [jobName, job] of [["preflight", preflight], ["notarize-stage", release.jobs?.["notarize-stage"]]]) {
+      const checkouts = (job?.steps ?? []).filter((step) => String(step?.uses ?? "").startsWith("actions/checkout@"));
+      need(
+        checkouts.length === 1 && deepEqual(checkouts[0].with, { "fetch-depth": "2" }),
+        `${MACOS_RELEASE}/${jobName} checks out with ${JSON.stringify(checkouts.map((c) => c.with ?? null))}; `
+        + "want exactly one checkout with `fetch-depth: 2` and nothing else. The certified source proof "
+        + "needs the release commit's first parent (depth 1 lacks it and silently rebuilds); a deeper "
+        + "fetch, another ref or other options widen what the reader trusts.",
+      );
+    }
     const text = JSON.stringify(preflight);
     need(
       text.includes("node scripts/release/macos-evidence.mjs select")
@@ -8502,7 +8716,82 @@ function withIosUiSmokeRun(world, edit) {
   return world;
 }
 
+/** Rewrite one workflow's push (and aliased pull_request) filter with `edit`. */
+function editPaths(world, file, edit) {
+  const before = wPaths(world, file);
+  if (before === null) throw new Error(`${file} has no push.paths to edit`);
+  const after = edit([...before]);
+  if (deepEqual(after, before)) throw new Error(`${file}: the path-filter edit did not apply`);
+  return withPaths(world, file, after);
+}
+
+/** `paths` with the one entry `from` replaced by `to` (a list; empty deletes it). */
+function swapEntry(paths, from, ...to) {
+  const at = paths.indexOf(from);
+  if (at === -1 || paths.indexOf(from, at + 1) !== -1) throw new Error(`not exactly one ${from}`);
+  paths.splice(at, 1, ...to);
+  return paths;
+}
+
 const MUTATIONS = [
+  // The exact-file exclusion: every way of getting it wrong that selects less,
+  // or that silently re-includes the record.
+  {
+    name: "macos.yml's readiness exclusion moves above the tree it qualifies",
+    mutate: (world) => editPaths(world, MACOS, (paths) => {
+      swapEntry(paths, `!${READINESS_RECORD}`);
+      return swapEntry(paths, MAC_TREE, `!${READINESS_RECORD}`, MAC_TREE);
+    }),
+    expect: /macos\.yml excludes apps\/mac\/release-readiness\.json with no earlier entry that watches it/,
+  },
+  {
+    name: "the same move is caught by the record's own fixture row",
+    mutate: (world) => editPaths(world, MACOS, (paths) => {
+      swapEntry(paths, `!${READINESS_RECORD}`);
+      return swapEntry(paths, MAC_TREE, `!${READINESS_RECORD}`, MAC_TREE);
+    }),
+    expect: /changing "apps\/mac\/release-readiness\.json" starts \[macos\.yml\]; want \[\]/,
+  },
+  {
+    name: "swift-package.yml drops apps/mac/** and keeps the exclusion",
+    mutate: (world) => editPaths(world, SWIFT_PACKAGE_LANE, (paths) => swapEntry(paths, MAC_TREE)),
+    expect: /swift-package\.yml lists !apps\/mac\/release-readiness\.json without `apps\/mac\/\*\*`/,
+  },
+  {
+    name: "macos.yml loses the readiness exclusion",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`)),
+    expect: /the exact-file exclusions are \[swift-package\.yml !apps\/mac\/release-readiness\.json\]/,
+  },
+  {
+    name: "a later positive entry re-includes the readiness record",
+    mutate: (world) => editPaths(world, SWIFT_PACKAGE_LANE, (paths) => [...paths, READINESS_RECORD]),
+    expect: /swift-package\.yml excludes apps\/mac\/release-readiness\.json and then re-includes it/,
+  },
+  {
+    name: "the readiness exclusion is widened to a basename glob",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/release-readiness*")),
+    expect: /entry "!apps\/mac\/release-readiness\*" is outside the five permitted shapes/,
+  },
+  {
+    name: "the readiness exclusion is widened to every JSON file in apps/mac",
+    mutate: (world) => editPaths(world, SWIFT_PACKAGE_LANE, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/*.json")),
+    expect: /entry "!apps\/mac\/\*\.json" is outside the five permitted shapes/,
+  },
+  {
+    name: "the readiness exclusion is spelled with a class",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/release-readiness.[j]son")),
+    expect: /entry "!apps\/mac\/release-readiness\.\[j\]son" is outside the five permitted shapes/,
+  },
+  {
+    name: "a second exact-file exclusion appears beside the readiness record",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, `!${READINESS_RECORD}`, "!apps/mac/Relayium/Info.plist")),
+    expect: /the exact-file exclusions are \[.*macos\.yml !apps\/mac\/Relayium\/Info\.plist/,
+  },
+  {
+    name: "the readiness exclusion is widened to everything near its name",
+    mutate: (world) => editPaths(world, MACOS, (paths) => swapEntry(paths, `!${READINESS_RECORD}`, "!apps/mac/release-readiness**")),
+    expect: /the record-only commit plus apps\/mac\/release-readiness-extra\.json starts/,
+  },
   {
     name: "native-web-pairing.yml regains a bare `apps/**` filter",
     mutate: (world) => withPaths(world, NWP, [
@@ -9792,6 +10081,20 @@ const MUTATIONS = [
   },
   // ── exact-main signed-build reuse and PR-free delivery ────────────────────
   {
+    name: "the preflight checkout returns to depth one",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "preflight", (job) => {
+      delete job.steps.find((step) => String(step.uses ?? "").startsWith("actions/checkout@")).with;
+    }),
+    expect: /macos-release\.yml\/preflight checks out with \[null\]; want exactly one checkout with `fetch-depth: 2`/,
+  },
+  {
+    name: "the notarize-stage checkout fetches the whole history",
+    mutate: (world) => withNamedJob(world, MACOS_RELEASE, "notarize-stage", (job) => {
+      job.steps.find((step) => String(step.uses ?? "").startsWith("actions/checkout@")).with = { "fetch-depth": "0" };
+    }),
+    expect: /macos-release\.yml\/notarize-stage checks out with \[\{"fetch-depth":"0"\}\]; want exactly one checkout/,
+  },
+  {
     name: "the reusable build runs even when the preflight chose reuse",
     mutate: (world) => withNamedJob(world, MACOS_RELEASE, "build", (job) => {
       job.if = "always()";
@@ -10881,29 +11184,29 @@ const MUTATIONS = [
   {
     name: "the complement shard loses its -skip-testing exclusion",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run
-      .replace(/[ \t]*-skip-testing:RelayiumUITests\/AppShellUITests \\\n/, "")),
+      .replace("selection=(-skip-testing:RelayiumUITests/AppShellUITests\n", "selection=(\n")),
     expect: /RelayiumUITests\/AppShellUITests is selected by both shards \[app-shell, complement\]/,
   },
   {
     // Prose is not selection: the exclusion survives only as a comment.
     name: "the complement's exclusion survives only as a comment",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run
-      .replace(/([ \t]*)(-skip-testing:RelayiumUITests\/AppShellUITests \\\n)/, "$1# $2")),
+      .replace(/([ \t]*)selection=\((-skip-testing:RelayiumUITests\/AppShellUITests\n)/, "$1selection=(\n$1  # $2")),
     expect: /RelayiumUITests\/AppShellUITests is selected by both shards/,
   },
   {
     name: "the app-shell shard is widened to the whole target",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run
-      .replace("-only-testing:RelayiumUITests/AppShellUITests test", "-only-testing:RelayiumUITests test")),
+      .replace("-only-testing:RelayiumUITests/AppShellUITests)", "-only-testing:RelayiumUITests)")),
     expect: /is selected by both shards \[app-shell, complement\]/,
   },
   {
     // Green today, wrong tomorrow: the complement spelled as today's classes.
     name: "the complement is written as a hand-kept class list",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run.replace(
-      /-skip-testing:RelayiumUITests\/AppShellUITests \\\n([ \t]*)-only-testing:RelayiumUITests test/,
+      /-skip-testing:RelayiumUITests\/AppShellUITests\n([ \t]*)-only-testing:RelayiumUITests\)/,
       (_, indent) => world.uiTestClasses.filter((name) => name !== IOS_COMPACT_BOUNDARY_CLASS)
-        .map((name) => `-only-testing:RelayiumUITests/${name}`).join(` \\\n${indent}`) + " test",
+        .map((name) => `-only-testing:RelayiumUITests/${name}`).join(`\n${indent}`) + ")",
     )),
     expect: /the `complement` shard selects only .*Naming the remaining classes instead/,
   },
@@ -10912,9 +11215,9 @@ const MUTATIONS = [
     name: "a class is added while the complement is a hand-kept list",
     mutate: (world) => {
       withIosUiSmokeRun(world, (run) => run.replace(
-        /-skip-testing:RelayiumUITests\/AppShellUITests \\\n([ \t]*)-only-testing:RelayiumUITests test/,
+        /-skip-testing:RelayiumUITests\/AppShellUITests\n([ \t]*)-only-testing:RelayiumUITests\)/,
         (_, indent) => world.uiTestClasses.filter((name) => name !== IOS_COMPACT_BOUNDARY_CLASS)
-          .map((name) => `-only-testing:RelayiumUITests/${name}`).join(` \\\n${indent}`) + " test",
+          .map((name) => `-only-testing:RelayiumUITests/${name}`).join(`\n${indent}`) + ")",
       ));
       world.uiTestClasses = [...world.uiTestClasses, "NewlyAddedUITests"];
       return world;
@@ -10941,8 +11244,8 @@ const MUTATIONS = [
   {
     name: "a shard narrows to a single test method",
     mutate: (world) => withIosUiSmokeRun(world, (run) => run
-      .replace("-only-testing:RelayiumUITests/AppShellUITests test",
-        "-only-testing:RelayiumUITests/AppShellUITests/testLaunch test")),
+      .replace("-only-testing:RelayiumUITests/AppShellUITests)",
+        "-only-testing:RelayiumUITests/AppShellUITests/testLaunch)")),
     expect: /a method-level identifier is a partition this policy cannot evaluate/,
   },
   {
@@ -11032,16 +11335,81 @@ const MUTATIONS = [
     mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
       job["runs-on"] = job["runs-on"].replace(" || inputs.publish_release", "");
     }),
-    expect: /macos\.yml\/contract \(publish without a version\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+    expect: /macos\.yml\/contract \(push version="" notarize=false publish=true\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
   },
   {
-    // 6t. The shell `if` grows a reach the expression does not follow.
-    name: "macos.yml contract's release branch becomes reachable by notarize alone",
+    // 6t. Notarize alone is release intent: forgetting it in the expression
+    // leaves the branch reachable on Ubuntu, where the guard fails the release.
+    name: "macos.yml contract's runs-on forgets notarize",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      job["runs-on"] = job["runs-on"].replace(" || inputs.notarize", "");
+    }),
+    expect: /macos\.yml\/contract \(push version="" notarize=true publish=false\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+  },
+  {
+    // 6t. The shell forgets notarize: the expression still pays for macOS but
+    // the branch never runs — intent without its checks.
+    name: "macos.yml contract's release branch forgets notarize",
     mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
       const step = job.steps.find((s) => s.name === CONTRACT_STEP);
-      step.run = step.run.replace('|| [ "$PUBLISH_RELEASE" = true ]; then', '|| [ "$PUBLISH_RELEASE" = true ] || [ "$NOTARIZE" = true ]; then');
+      step.run = step.run.replace('if [ -n "$RELEASE_VERSION" ] || [ "$NOTARIZE" = true ] \\\n', 'if [ -n "$RELEASE_VERSION" ] \\\n');
     }),
-    expect: /macos\.yml\/contract \(notarize alone\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+    expect: /macos\.yml\/contract \(push version="" notarize=true publish=false\): a release intent picks "macos-15" and never reaches the release branch/,
+  },
+  {
+    // 6t. THE GAP: the caller's event comes back into the expression, and a
+    // dispatched merge gate (no inputs) queues for macOS again.
+    name: "macos.yml contract's runs-on reads the caller's event again",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      job["runs-on"] = job["runs-on"].replace("(inputs.release_version", "(github.event_name == 'workflow_dispatch' || inputs.release_version");
+    }),
+    expect: /macos\.yml\/contract \(workflow_dispatch with no inputs\): an ordinary run picks "macos-15"/,
+  },
+  {
+    // 6t. The shell `if` grows the event back: a dispatched gate reaches the
+    // release branch on Ubuntu, and the guard fails it.
+    name: "macos.yml contract's release branch reads the caller's event again",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace('if [ -n "$RELEASE_VERSION" ]', 'if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] || [ -n "$RELEASE_VERSION" ]');
+    }),
+    expect: /macos\.yml\/contract \(workflow_dispatch with no inputs\): the step reaches its release branch, but runs-on picks "ubuntu-latest"/,
+  },
+  {
+    // 6t. Each original release check keeps its refusal: notarize no longer required for a version.
+    name: "macos.yml contract no longer requires notarize for a version",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(/^ *\[ "\$NOTARIZE" = true \] \|\| exit 1\n/m, "");
+    }),
+    expect: /macos\.yml\/contract \(a version without notarize\): on macOS the step must refuse/,
+  },
+  {
+    // 6t. The version-format check is gone.
+    name: "macos.yml contract no longer checks the version format",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(/^ *printf '%s' "\$RELEASE_VERSION" \| grep -Eq .*\n/m, "");
+    }),
+    expect: /macos\.yml\/contract \(invalid version format\): on macOS the step must refuse/,
+  },
+  {
+    // 6t. The MARKETING_VERSION match is gone.
+    name: "macos.yml contract no longer matches MARKETING_VERSION",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(/^ *\[ "\$actual" = "\$RELEASE_VERSION" \] .*\n/m, "");
+    }),
+    expect: /macos\.yml\/contract \(a version that is not MARKETING_VERSION\): on macOS the step must refuse/,
+  },
+  {
+    // 6t. Publication from a non-main ref is no longer refused.
+    name: "macos.yml contract publishes from any ref",
+    mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
+      const step = job.steps.find((s) => s.name === CONTRACT_STEP);
+      step.run = step.run.replace(' && [ "$GITHUB_REF" = refs/heads/main ]', "");
+    }),
+    expect: /macos\.yml\/contract \(publish from a branch other than main\): on macOS the step must refuse/,
   },
   {
     // 6t. Without the guard, a Linux run that reaches the branch calls xcodebuild.
@@ -11050,19 +11418,19 @@ const MUTATIONS = [
       const step = job.steps.find((s) => s.name === CONTRACT_STEP);
       step.run = step.run.replace(/^ *\[ "\$RUNNER_OS" = macOS \].*\n/m, "");
     }),
-    expect: /macos\.yml\/contract \(release candidate\): run as Linux, the release-contract step called \[xcodebuild/,
+    expect: /macos\.yml\/contract \(push version="1\.4\.5" notarize=true publish=false\): run as Linux, the release-contract step called \[xcodebuild/,
   },
   {
     // 6t. The optimisation itself: ordinary runs stop queueing for macOS.
     name: "macos.yml contract goes back to macos-15 for every run",
     mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => { job["runs-on"] = "macos-15"; }),
-    expect: /macos\.yml\/contract \(push to main\): an ordinary run picks "macos-15"/,
+    expect: /macos\.yml\/contract \(push with no inputs\): an ordinary run picks "macos-15"/,
   },
   {
     // 6t. An expression the evaluator does not model is refused, not guessed.
     name: "macos.yml contract's runs-on reads a context 6t does not model",
     mutate: (world) => withNamedJob(world, MACOS, "contract", (job) => {
-      job["runs-on"] = job["runs-on"].replace("github.event_name", "github.event.action");
+      job["runs-on"] = job["runs-on"].replace("inputs.notarize", "github.event.action");
     }),
     expect: /macos\.yml\/contract: cannot evaluate runs-on/,
   },
@@ -11074,7 +11442,7 @@ const MUTATIONS = [
       const step = job.steps.find((s) => s.name === CONTRACT_STEP);
       step.run = step.run.replace(/^ *node apps\/mac\/scripts\/check-release-readiness\.mjs --require-approved\n/m, "");
     }),
-    expect: /macos\.yml\/contract \(publish release\): on macOS the step must still read MARKETING_VERSION and run the readiness/,
+    expect: /macos\.yml\/contract \(push version="1\.4\.5" notarize=true publish=true\): on macOS the step must pass, read MARKETING_VERSION and run the readiness check/,
   },
   {
     // 6l. A conditional runs-on that can pick macOS is still a paid job.
@@ -11169,9 +11537,9 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
 // executable half runs the workflow's own step scripts with stub `xcrun` and
 // `xcodebuild`, once for the real files and once per mutation in 8v.
 
-/** The two UI jobs: their preparation step, their test step, and the device kind. */
+/** The iPad UI job: its preparation step, its test step, and the device kind. The iPhone job no longer has a
+ *  separate preparation step: its selection, boot barrier and build run in ONE supervised stage (6v-iPhone). */
 const IOS_BOOT_JOBS = [
-  { job: IOS_COMPACT_JOB, prep: "iphone_sim", test: "ui_smoke", kind: "iPhone", other: "iPad", shard: "complement" },
   { job: IOS_REGULAR_WIDTH_JOB, prep: "ipad_sim", test: "ipad_shell", kind: "iPad", other: "iPhone", shard: "" },
 ];
 const IOS_BOOT_PREP_MAX_MINUTES = 5;
@@ -11290,6 +11658,13 @@ function iosSimulatorBootExecutionFailures(world, { hang = true } = {}) {
       "#!/bin/bash",
       'echo "xcrun $*" >> "$TOOL_CALLS"',
       'if [ "$1 $2 $3 $4" = "simctl list devices available" ]; then cat "$BOOT_LISTING_FILE"; exit 0; fi',
+      // The iPad listing runs as `xcrun --log …`, a timing diagnostic: xcrun names
+      // the command it invokes on stderr. Exactly that argv and nothing looser —
+      // any other option (`--find`, `--verbose`, …) still falls through and fails.
+      'if [ "$#" -eq 6 ] && [ "$1 $2 $3 $4 $5 $6" = "--log simctl list devices available -j" ]; then',
+      '  echo "/fake/Xcode.app/Contents/Developer/usr/bin/simctl list devices available -j" >&2',
+      '  cat "$BOOT_LISTING_FILE"; exit 0',
+      'fi',
       'if [ "$1 $2" = "simctl bootstatus" ]; then',
       '  case "$BOOT_MODE" in',
       '    ok) echo "Device already booted, nothing to do."; exit 0 ;;',
@@ -11357,6 +11732,20 @@ function iosSimulatorBootExecutionFailures(world, { hang = true } = {}) {
           `${where} (${label}): the \`${prep}\` step's log does not name the selected model, runtime and UDID and the `
           + `UTC start/finish of the boot with its elapsed time.\n${r.log}`);
       }
+      if (kind === "iPad") {
+        // The diagnostic option is accepted by exact argv only: the same listing
+        // under any other xcrun option is refused and fails the step closed.
+        const logged = "xcrun --log simctl list devices available -j";
+        need(prepStep.run.split(logged).length === 2,
+          `${where}: the \`${prep}\` step does not list through \`${logged}\` exactly once.`);
+        for (const option of ["--verbose", "--find"]) {
+          const other = run(prepStep.run.replace(logged, logged.replace("--log", option)));
+          need(other.status !== 0 && boots(other.calls).length === 0 && other.output === ""
+            && other.log.includes(`unexpected xcrun call: ${option} simctl list devices available -j`),
+            `${where}: the \`${prep}\` listing under \`xcrun ${option}\` was not refused by the stub; got exit `
+            + `${other.status}, boots [${boots(other.calls)}], output ${JSON.stringify(other.output)}.`);
+        }
+      }
       const udid = bootUdid(kind === "iPhone" ? 2 : 4);
       const failed = run(prepStep.run, { mode: "fail" });
       need(failed.status !== 0 && failed.output === "",
@@ -11413,24 +11802,9 @@ function withBootStep(world, jobId, stepId, edit) {
 
 const BOOT_MUTATIONS = [
   {
-    name: "the iPhone boot barrier is removed",
-    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "iphone_sim", (r) => r.replace(`${IOS_BOOT_BARRIER}\n`, "")),
-    expect: /ios-ui-smoke: the `iphone_sim` step does not run `xcrun simctl bootstatus "\$device_id" -b` exactly once/,
-  },
-  {
     name: "the iPad boot failure is swallowed",
     mutate: (w) => withBootStepRun(w, IOS_REGULAR_WIDTH_JOB, "ipad_sim", (r) => r.replace(IOS_BOOT_BARRIER, `${IOS_BOOT_BARRIER} || true`)),
     expect: /ios-ipad-shell: a failing `simctl bootstatus` must fail the `ipad_sim` step and hand nothing on/,
-  },
-  {
-    name: "the iPhone barrier loses -b and only watches",
-    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "iphone_sim", (r) => r.replace(IOS_BOOT_BARRIER, 'xcrun simctl bootstatus "$device_id"')),
-    expect: /ios-ui-smoke \(listing\): the `iphone_sim` step ran boot barriers \[xcrun simctl bootstatus 00000002-AAAA-BBBB-CCCC-DDDDEEEEFFF2\]/,
-  },
-  {
-    name: "the iPhone barrier boots a different device",
-    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "iphone_sim", (r) => r.replace(IOS_BOOT_BARRIER, `${IOS_BOOT_BARRIER.replace('"$device_id"', "booted")} ; : "$device_id"`)),
-    expect: /ios-ui-smoke \(listing\): the `iphone_sim` step ran boot barriers \[xcrun simctl bootstatus booted -b\]/,
   },
   {
     name: "the iPad device is handed on before its boot succeeded",
@@ -11449,39 +11823,14 @@ const BOOT_MUTATIONS = [
     expect: /ios-ipad-shell \(no iPad available\): with no available iPad the `ipad_sim` step must fail before any boot/,
   },
   {
-    name: "the iPhone preparation continues on error",
-    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "iphone_sim", (s) => { s["continue-on-error"] = "true"; }),
-    expect: /ios-ui-smoke: the `iphone_sim` or `ui_smoke` step sets `continue-on-error`/,
-  },
-  {
-    name: "the iPhone test step runs whatever the boot did",
-    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s.if = "always()"; }),
-    expect: /ios-ui-smoke: the `ui_smoke` step's condition is "always\(\)", want none on the full path/,
-  },
-  {
     name: "the iPad preparation loses its bound",
     mutate: (w) => withBootStep(w, IOS_REGULAR_WIDTH_JOB, "ipad_sim", (s) => { delete s["timeout-minutes"]; }),
     expect: /ios-ipad-shell: the `ipad_sim` step's timeout-minutes is undefined, want an integer in 1\.\.5/,
   },
   {
-    name: "the iPhone preparation bound is raised past five minutes",
-    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "iphone_sim", (s) => { s["timeout-minutes"] = "10"; }),
-    expect: /ios-ui-smoke: the `iphone_sim` step's timeout-minutes is "10", want an integer in 1\.\.5/,
-  },
-  {
-    name: "the iPhone test step stops validating DEVICE_ID",
-    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace(/\[\[ "\$\{DEVICE_ID:-\}" =~ [^\n]*\n[^\n]*\n/, "")),
-    expect: /ios-ui-smoke: given DEVICE_ID "", the `ui_smoke` step ran xcodebuild or passed/,
-  },
-  {
     name: "the iPad test step drives a device other than the booted one",
     mutate: (w) => withBootStepRun(w, IOS_REGULAR_WIDTH_JOB, "ipad_shell", (r) => r.replace('device_id="$DEVICE_ID"', `device_id="${bootUdid(9)}"`)),
     expect: /ios-ipad-shell: given DEVICE_ID 00000004-AAAA-BBBB-CCCC-DDDDEEEEFFF4, the `ipad_shell` step ran \[xcodebuild .*id=00000009/,
-  },
-  {
-    name: "the iPhone job bound no longer covers its step bounds",
-    mutate: (w) => withNamedJob(w, IOS, IOS_COMPACT_JOB, (job) => { job["timeout-minutes"] = "60"; }),
-    expect: /ios-ui-smoke: the job's timeout-minutes "60" is below the 63 minutes/,
   },
 ];
 
@@ -11496,6 +11845,236 @@ for (const { name, mutate, expect } of BOOT_MUTATIONS) {
   }
   check(got.some((message) => expect.test(message)),
     `the iOS boot barrier check did NOT complain about "${name}". Expected a message matching ${expect}; got `
+    + `${got.length === 0 ? "no failures at all" : `[\n    ${got.join("\n    ")}\n  ]`}.`);
+}
+
+// ── 6v-iPhone. the iPhone shard: one supervised stage, selection → boot ∥ build → test ──
+//
+// The iPhone job no longer boots in a separate step. Its `ui_smoke` step hands the job's own selection script
+// (a quoted heredoc; the pinned program, hashed by this step's name in the toolchain registry) to
+// scripts/ci/ios-ui-smoke.py, which supervises selection, then `xcrun simctl bootstatus UDID -b` and `xcodebuild …
+// build-for-testing` together, then `test-without-building` only after BOTH succeeded — under the original 300 s
+// (selection + boot), 2880 s (build + test) and a 3170 s stage inside the original 53 minutes. What is held here:
+//
+//   * there is no separate iPhone preparation step and nothing is handed through step outputs;
+//   * the step is the original one (name, id, evidence guard only, 53 minutes, no continue-on-error), and the job
+//     bound still covers the step bounds in order;
+//   * the step passes its OWN inline arrays and the selection heredoc to the helper, and runs no xcodebuild or
+//     bootstrap itself;
+//   * executed against stub tools: the selected device is booted exactly once, built for testing exactly once and
+//     tested exactly once, the test starts only after the boot and the build both ENDED, a missing iPhone or a
+//     failed boot/build runs no test, and nothing is written to GITHUB_OUTPUT;
+//   * the helper's own process, budget and cleanup behaviour is owned by scripts/test/ios-ui-smoke-test.py, which
+//     repo-hygiene runs; its trigger is watched by ios.yml.
+const IOS_UI_HELPER = "scripts/ci/ios-ui-smoke.py";
+const IOS_UI_HELPER_TEST = "scripts/test/ios-ui-smoke-test.py";
+const IOS_UI_HELPER_ARGS = '-- "${common[@]}" -- "${test_limits[@]}" -- "${selection[@]}" <<\'SELECT\'';
+
+function iosCompactOverlapFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const doc = world.docs.get(IOS);
+  const job = doc?.jobs?.[IOS_COMPACT_JOB];
+  if (!job) return out;
+  const where = `${IOS}/${IOS_COMPACT_JOB}`;
+  const steps = job.steps ?? [];
+  need(!steps.some((s) => s?.id === "iphone_sim" || s?.name === "Boot the selected iPhone simulator"),
+    `${where}: a separate iPhone preparation step is back. Selection, boot and build run in ONE supervised stage; `
+    + `a separate step would hand a device on through outputs and pay its own budget out of the test's.`);
+  const at = steps.findIndex((s) => s?.id === "ui_smoke");
+  const step = steps[at];
+  need(step !== undefined, `${where}: no step has \`id: ui_smoke\`.`);
+  if (!step) return out;
+  need(step.name === "Run iOS primary-task UI smoke",
+    `${where}: the \`ui_smoke\` step is named ${JSON.stringify(step.name)}; the toolchain registry locates the pinned `
+    + `iPhone selection program by the name "Run iOS primary-task UI smoke".`);
+  need(step.if === undefined,
+    `${where}: the \`ui_smoke\` step's condition is ${JSON.stringify(step.if)}, want none on the full path (only the evidence guard).`);
+  need(step["continue-on-error"] === undefined, `${where}: the \`ui_smoke\` step sets \`continue-on-error\`, so a failed boot, build or test no longer fails the job.`);
+  need(Number(step["timeout-minutes"]) === 53,
+    `${where}: the \`ui_smoke\` step's timeout-minutes is ${JSON.stringify(step["timeout-minutes"])}, want 53 — the original 5 + 48 `
+    + `minutes, which the helper's 3170 s stage plus its 10 s cleanup reserve fits inside.`);
+  need(JSON.stringify(Object.keys(step.env ?? {})) === JSON.stringify(["UI_SHARD"]),
+    `${where}: the \`ui_smoke\` step's env is ${JSON.stringify(step.env)}, want only UI_SHARD (no device is handed in).`);
+  const run = String(step.run ?? "");
+  const code = run.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+  need(code.split(`/usr/bin/python3 ${IOS_UI_HELPER} --shard "$UI_SHARD"`).length === 2 && code.includes(IOS_UI_HELPER_ARGS),
+    `${where}: the \`ui_smoke\` step does not run \`/usr/bin/python3 ${IOS_UI_HELPER}\` exactly once with its own arrays and `
+    + `the selection heredoc (\`${IOS_UI_HELPER_ARGS}\`).`);
+  need(!/GITHUB_OUTPUT/.test(code), `${where}: the \`ui_smoke\` step writes GITHUB_OUTPUT; nothing is handed on from this stage.`);
+  need(!/^\s*xcodebuild\b/m.test(code) && !/simctl\s+bootstatus/.test(code) && !/simctl\s+boot\b/.test(code) && !/\bsleep\b/.test(code),
+    `${where}: the \`ui_smoke\` step runs xcodebuild, boots or sleeps itself; only the supervisor may, under its budgets.`);
+  need(code.includes("xcrun simctl list devices available -j") && code.includes('startswith("iPhone")'),
+    `${where}: the \`ui_smoke\` step no longer carries the job's own iPhone selection script.`);
+  const xcodeAt = steps.findIndex((s) => SELECT_REF_RE.test(String(s?.run ?? "")));
+  need(xcodeAt !== -1 && xcodeAt < at, `${where}: the Xcode selection does not run before the \`ui_smoke\` stage.`);
+  const jobMinutes = Number(job["timeout-minutes"]);
+  const bounded = steps.slice(0, at + 1).reduce((sum, s) => sum + (Number(s?.["timeout-minutes"]) || 0), 0);
+  need(Number.isFinite(jobMinutes) && jobMinutes >= bounded,
+    `${where}: the job's timeout-minutes ${JSON.stringify(job["timeout-minutes"])} is below the ${bounded} minutes its steps up to `
+    + `\`ui_smoke\` may take in order.`);
+  need(world.texts?.get?.(IOS) === undefined || String(world.texts.get(IOS)).includes(`- '${IOS_UI_HELPER}'`),
+    `${IOS}: \`push.paths\` does not watch ${IOS_UI_HELPER}, so a change to the stage's supervisor would not start this lane.`);
+  const hygiene = world.docs.get("repo-hygiene.yml");
+  need(hygiene === undefined || JSON.stringify(hygiene).includes(`python3 ${IOS_UI_HELPER_TEST}`),
+    `repo-hygiene.yml does not run ${IOS_UI_HELPER_TEST}, so the supervisor's process and budget controls never run in CI.`);
+  return out;
+}
+
+/** Run the iPhone `ui_smoke` step as written (and the real helper) against stub xcrun/xcodebuild. */
+function iosCompactOverlapExecutionFailures(world) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const step = world.docs.get(IOS)?.jobs?.[IOS_COMPACT_JOB]?.steps?.find((s) => s?.id === "ui_smoke");
+  const where = `${IOS}/${IOS_COMPACT_JOB}`;
+  if (typeof step?.run !== "string") return [`${where}: no \`ui_smoke\` run script to execute.`];
+  const dir = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/ios-overlap.XXXXXX`], { encoding: "utf8" }).stdout.trim();
+  if (!dir) return ["6v-iPhone: could not create a scratch directory."];
+  try {
+    const stub = (tool) => [
+      "#!/bin/bash",
+      'action="${@: -1}"; [ "$1 $2" = "simctl list" ] && action=list; [ "$1 $2" = "simctl bootstatus" ] && action=boot',
+      `echo "start ${tool} $action $*" >> "$TOOL_CALLS"`,
+      'if [ "$action" = list ]; then cat "$BOOT_LISTING_FILE"; echo "end list" >> "$TOOL_CALLS"; exit 0; fi',
+      'if [ "$action" = boot ] && [ "$BOOT_MODE" = fail ]; then echo "end boot failed" >> "$TOOL_CALLS"; exit 149; fi',
+      'if [ "$action" = build-for-testing ] && [ "$BUILD_MODE" = fail ]; then echo "end build-for-testing failed" >> "$TOOL_CALLS"; exit 65; fi',
+      'case "$action" in boot) sleep 0.4 ;; build-for-testing) sleep 0.2 ;; esac',
+      'case "$action" in boot|build-for-testing|test-without-building) echo "end $action" >> "$TOOL_CALLS"; exit 0 ;; esac',
+      'echo "unexpected call: $*" >&2; exit 2', "",
+    ].join("\n");
+    spawnSync("bash", ["-c", 'mkdir -p "$1/bin" && printf "%s" "$2" > "$1/bin/xcrun" && printf "%s" "$3" > "$1/bin/xcodebuild" '
+      + '&& chmod +x "$1/bin/xcrun" "$1/bin/xcodebuild"', "_", dir, stub("xcrun"), stub("xcodebuild")]);
+    let n = 0;
+    const run = ({ listing = BOOT_LISTING, shard = "complement", env = {} } = {}) => {
+      n += 1;
+      const rt = `${dir}/rt-${n}`;
+      const calls = `${dir}/calls-${n}`;
+      const output = `${dir}/output-${n}`;
+      spawnSync("bash", ["-c", `mkdir -p "${rt}" && printf '%s' "$1" > "${dir}/listing-${n}.json" && printf '%s' "$2" > "${dir}/step-${n}.sh" && : > "${calls}" && : > "${output}"`,
+        "_", JSON.stringify(listing), step.run]);
+      const r = spawnSync("bash", ["-e", `${dir}/step-${n}.sh`], {
+        encoding: "utf8", timeout: 30000, killSignal: "SIGKILL",
+        env: { PATH: `${dir}/bin:/usr/bin:/bin`, TOOL_CALLS: calls, BOOT_LISTING_FILE: `${dir}/listing-${n}.json`,
+          GITHUB_OUTPUT: output, RUNNER_TEMP: rt, UI_SHARD: shard, HOME: process.env.HOME ?? "", ...env },
+      });
+      const read = (f) => spawnSync("cat", [f], { encoding: "utf8" }).stdout ?? "";
+      return { status: r.status, log: `${r.stdout ?? ""}${r.stderr ?? ""}`, calls: read(calls).split("\n").filter(Boolean), output: read(output), rt };
+    };
+    const idx = (calls, prefix) => calls.findIndex((c) => c.startsWith(prefix));
+    for (const [label, listing, picks] of BOOT_CASES) {
+      const want = picks.iPhone;
+      const r = run({ listing });
+      const starts = r.calls.filter((c) => c.startsWith("start ") && !c.startsWith("start xcrun list"));
+      if (want === null) {
+        need(r.status !== 0 && starts.length === 0 && r.output === "",
+          `${where} (${label}): with no available iPhone the \`ui_smoke\` step must fail before any boot or build; got exit `
+          + `${r.status}, calls [${starts.join(" | ")}].`);
+        continue;
+      }
+      const udid = bootUdid(want[0]);
+      const boots = r.calls.filter((c) => c.startsWith("start xcrun boot"));
+      const builds = r.calls.filter((c) => c.startsWith("start xcodebuild build-for-testing"));
+      const tests = r.calls.filter((c) => c.startsWith("start xcodebuild test-without-building"));
+      need(r.status === 0, `${where} (${label}): the \`ui_smoke\` step failed on a listing with an available iPhone; exit ${r.status}.\n${r.log.slice(-1500)}`);
+      need(boots.length === 1 && boots[0] === `start xcrun boot simctl bootstatus ${udid} -b`,
+        `${where} (${label}): the stage ran boot barriers [${boots.join(" | ")}]; want exactly \`simctl bootstatus ${udid} -b\` (${want[1]}).`);
+      need(builds.length === 1 && builds[0].includes(`-destination platform=iOS Simulator,id=${udid} `)
+        && builds[0].includes(`-resultBundlePath ${r.rt}/ios-ui-build-complement.xcresult build-for-testing`),
+      `${where} (${label}): the stage ran builds [${builds.join(" | ")}]; want one build-for-testing of ${udid} into its own bundle.`);
+      need(tests.length === 1 && tests[0].includes(`-destination platform=iOS Simulator,id=${udid} `)
+        && tests[0].includes(`-resultBundlePath ${r.rt}/ios-ui-smoke-complement.xcresult `)
+        && tests[0].endsWith("-skip-testing:RelayiumUITests/AppShellUITests -only-testing:RelayiumUITests test-without-building"),
+      `${where} (${label}): the stage ran tests [${tests.join(" | ")}]; want one test-without-building of ${udid} with the complement selection.`);
+      const testAt = idx(r.calls, "start xcodebuild test-without-building");
+      need(idx(r.calls, "start xcodebuild build-for-testing") < idx(r.calls, "end boot") && testAt > idx(r.calls, "end boot")
+        && testAt > idx(r.calls, "end build-for-testing"),
+      `${where} (${label}): the build did not overlap the boot, or the test started before both ended: [${r.calls.join(" | ")}].`);
+      need(r.output === "", `${where} (${label}): the stage wrote ${JSON.stringify(r.output)} to GITHUB_OUTPUT.`);
+    }
+    const shell = run({ shard: "app-shell" });
+    need(shell.status === 0 && shell.calls.some((c) => c.startsWith("start xcodebuild test-without-building")
+      && c.endsWith("-collect-test-diagnostics never -only-testing:RelayiumUITests/AppShellUITests test-without-building")),
+    `${where}: the app-shell shard did not test exactly AppShellUITests with diagnostics never.`);
+    for (const [label, env] of [["a failed boot", { BOOT_MODE: "fail" }], ["a failed build", { BUILD_MODE: "fail" }]]) {
+      const r = run({ env });
+      need(r.status !== 0 && !r.calls.some((c) => c.startsWith("start xcodebuild test-without-building")),
+        `${where}: after ${label} the stage must fail without testing; got exit ${r.status}, calls [${r.calls.join(" | ")}].`);
+    }
+    const unknown = run({ shard: "retired" });
+    need(unknown.status !== 0 && unknown.calls.length === 0, `${where}: an unknown shard ran something or passed (exit ${unknown.status}).`);
+  } finally {
+    spawnSync("rm", ["-rf", dir]);
+  }
+  return out;
+}
+
+for (const message of iosCompactOverlapFailures(realWorld())) failures.push(message);
+for (const message of iosCompactOverlapExecutionFailures(realWorld())) failures.push(message);
+
+const IPHONE_OVERLAP_MUTATIONS = [
+  {
+    name: "the iPhone stage runs a helper that does not exist",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace(IOS_UI_HELPER, "scripts/ci/missing.py")),
+    expect: /ios-ui-smoke \(listing\): the `ui_smoke` step failed on a listing with an available iPhone/,
+  },
+  {
+    name: "the iPhone selection falls back to an iPad",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace('.startswith("iPhone")))', '.startswith(("iPhone", "iPad"))))')),
+    expect: /ios-ui-smoke \(no iPhone available\): with no available iPhone the `ui_smoke` step must fail before any boot or build/,
+  },
+  {
+    name: "the iPhone stage hands the device on through GITHUB_OUTPUT",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace('\necho "$device_id"\n', '\necho "device_id=$device_id" >> "$GITHUB_OUTPUT"\necho "$device_id"\n')),
+    expect: /ios-ui-smoke: the `ui_smoke` step writes GITHUB_OUTPUT/,
+  },
+  {
+    name: "the iPhone stage drops its own selection array",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace('-- "${selection[@]}"', "-- -only-testing:RelayiumUITests")),
+    expect: /ios-ui-smoke: the `ui_smoke` step does not run `\/usr\/bin\/python3 scripts\/ci\/ios-ui-smoke\.py` exactly once with its own arrays/,
+  },
+  {
+    name: "the iPhone stage runs whatever happened before",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s.if = "always()"; }),
+    expect: /ios-ui-smoke: the `ui_smoke` step's condition is "always\(\)", want none on the full path/,
+  },
+  {
+    name: "the iPhone stage continues on error",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s["continue-on-error"] = "true"; }),
+    expect: /ios-ui-smoke: the `ui_smoke` step sets `continue-on-error`/,
+  },
+  {
+    name: "the iPhone stage bound is raised",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s["timeout-minutes"] = "54"; }),
+    expect: /ios-ui-smoke: the `ui_smoke` step's timeout-minutes is "54", want 53/,
+  },
+  {
+    name: "the iPhone job bound no longer covers its step bounds",
+    mutate: (w) => withNamedJob(w, IOS, IOS_COMPACT_JOB, (job) => { job["timeout-minutes"] = "60"; }),
+    expect: /ios-ui-smoke: the job's timeout-minutes "60" is below the 63 minutes/,
+  },
+  {
+    name: "the iPhone stage gets a device handed in again",
+    mutate: (w) => withBootStep(w, IOS_COMPACT_JOB, "ui_smoke", (s) => { s.env = { ...s.env, DEVICE_ID: "${{ steps.iphone_sim.outputs.device_id }}" }; }),
+    expect: /ios-ui-smoke: the `ui_smoke` step's env is .*want only UI_SHARD/,
+  },
+  {
+    name: "the iPhone stage boots by itself",
+    mutate: (w) => withBootStepRun(w, IOS_COMPACT_JOB, "ui_smoke", (r) => r.replace("\nesac\n", '\nesac\nxcrun simctl bootstatus booted -b\n')),
+    expect: /ios-ui-smoke: the `ui_smoke` step runs xcodebuild, boots or sleeps itself/,
+  },
+];
+
+for (const { name, mutate, expect } of IPHONE_OVERLAP_MUTATIONS) {
+  let got;
+  try {
+    const world = mutate(realWorld());
+    got = [...iosCompactOverlapFailures(world), ...iosCompactOverlapExecutionFailures(world)];
+  } catch (err) {
+    check(false, `the iPhone stage mutation "${name}" threw instead of reporting: ${err.message}`);
+    continue;
+  }
+  check(got.some((message) => expect.test(message)),
+    `the iPhone stage check did NOT complain about "${name}". Expected a message matching ${expect}; got `
     + `${got.length === 0 ? "no failures at all" : `[\n    ${got.join("\n    ")}\n  ]`}.`);
 }
 
@@ -11926,6 +12505,92 @@ function fullBootstrapFailures(world, fx, only = null) {
     && fullBootstrapFailures(world, fx).length === 0,
   `6v: ${AGGREGATE} changed on disk, or the unmutated cases stopped passing after the controls.`);
   spawnSync("rm", ["-rf", fx.root]);
+}
+
+// ── 6w. the full-bootstrap receipt writer, EXECUTED ─────────────────────────
+//
+// The aggregate's "Record the full-bootstrap signed-build receipt" step is the
+// one place a full bootstrap's dispatch inputs are written down, and the
+// release reuse judge (scripts/release/macos-bootstrap.mjs) believes the mode
+// only from it. So its script is taken out of the parsed workflow and RUN with
+// bash and jq, with every source DISTINCT, and each of the twelve fields must
+// carry exactly its own source — never a constant, never a neighbour. The judge
+// must also accept this very file as its canonical caller, and read exactly the
+// keys the step writes. Then one edit per kind of wrong wiring, in a copy, each
+// refused for its own field.
+{
+  const { RECEIPT_KEYS, callerProblem } = await import("../release/macos-bootstrap.mjs");
+  const RECORD = "Record the full-bootstrap signed-build receipt";
+  const sources = {
+    "inputs.mode": "mode-marker", "inputs.base_sha": "b".repeat(40), "inputs.head_sha": "c".repeat(40),
+    "needs.macos.outputs.signed_artifact": "artifact-marker",
+  };
+  const runEnv = { GITHUB_SHA: "d".repeat(40), GITHUB_REF: "refs/heads/ref-marker", GITHUB_REPOSITORY_ID: "4242",
+    GITHUB_RUN_ID: "9001", GITHUB_RUN_ATTEMPT: "3", GITHUB_WORKFLOW_REF: "o/r/.github/workflows/merge-gate.yml@refs/heads/main",
+    GITHUB_WORKFLOW_SHA: "e".repeat(40) };
+  const expected = { schema: "relayium-macos-full-bootstrap-receipt/v1", mode: "mode-marker", base: "b".repeat(40),
+    head: "c".repeat(40), sha: "d".repeat(40), ref: "refs/heads/ref-marker", repositoryId: "4242", runId: "9001", runAttempt: "3",
+    workflowRef: "o/r/.github/workflows/merge-gate.yml@refs/heads/main", workflowSha: "e".repeat(40), signedArtifact: "artifact-marker" };
+  /** Problems with one (possibly mutated) record step, executed. */
+  const receiptProblems = (step) => {
+    const out = [];
+    if (typeof step?.run !== "string") return [`${AGGREGATE}/${GATE_JOB}: no "${RECORD}" step with a run script`];
+    if ((step.run.match(/\$\{\{[^}]*\}\}/g) ?? []).length !== 0) out.push(`"${RECORD}" carries an inline expression`);
+    const dir = spawnSync("mktemp", ["-d", `${process.env.TMPDIR ?? "/tmp"}/boot-receipt.XXXXXX`], { encoding: "utf8" }).stdout.trim();
+    try {
+      const env = { PATH: process.env.PATH, HOME: process.env.HOME ?? "/tmp", RUNNER_TEMP: dir, ...runEnv };
+      for (const [k, raw] of Object.entries(step.env ?? {})) {
+        const m = /^\$\{\{ (.+) \}\}$/.exec(String(raw));
+        if (!m || !(m[1] in sources)) { out.push(`"${RECORD}" env ${k} reads an unmodelled ${JSON.stringify(raw)}`); continue; }
+        env[k] = sources[m[1]];
+      }
+      spawnSync("bash", ["-c", 'printf "%s" "$2" > "$1/step.sh"', "_", dir, step.run]);
+      const r = spawnSync("bash", [`${dir}/step.sh`], { env, encoding: "utf8" });
+      if (r.status !== 0) return [...out, `"${RECORD}" exited ${r.status}: ${r.stderr.slice(-300)}`];
+      let got;
+      try { got = JSON.parse(readFileSync(`${dir}/full-bootstrap/full-bootstrap-receipt.json`, "utf8")); } catch (err) {
+        return [...out, `"${RECORD}" wrote no JSON receipt: ${err.message}`];
+      }
+      if (JSON.stringify(Object.keys(got).sort()) !== JSON.stringify([...RECEIPT_KEYS])) {
+        out.push(`the receipt carries keys ${JSON.stringify(Object.keys(got).sort())}; the reuse judge reads exactly ${JSON.stringify(RECEIPT_KEYS)}`);
+      }
+      for (const [key, want] of Object.entries(expected)) {
+        if (got[key] !== want) out.push(`receipt.${key} is ${JSON.stringify(got[key])}, want its own source ${JSON.stringify(want)}`);
+      }
+    } finally {
+      spawnSync("rm", ["-rf", dir]);
+    }
+    return out;
+  };
+  const original = docs.get(AGGREGATE);
+  const recordOf = (doc) => (doc?.jobs?.[GATE_JOB]?.steps ?? []).find((st) => st?.name === RECORD);
+  for (const message of receiptProblems(recordOf(original))) check(false, `6w: ${message}`);
+  const text = readFileSync(resolve(workflowsDir, AGGREGATE), "utf8");
+  const problem = callerProblem(text);
+  check(problem === null, `6w: scripts/release/macos-bootstrap.mjs does not accept ${AGGREGATE} as its canonical full-bootstrap caller: ${problem}`);
+  // The judge refuses a caller whose receipt is not exactly the canonical one.
+  for (const [name, from, to, reason] of [
+    ["the receipt steps lose their mode condition", "        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'full-bootstrap'\n        env:\n          RECEIPT_MODE",
+      "        if: github.event_name == 'workflow_dispatch'\n        env:\n          RECEIPT_MODE", /does not end with the canonical full-bootstrap receipt steps/],
+    ["the macos caller gains a with: block", "    uses: ./.github/workflows/macos.yml\n    permissions:\n      contents: read\n      actions: read\n      pull-requests: read\n    secrets:",
+      "    uses: ./.github/workflows/macos.yml\n    with:\n      release_version: '9.9.9'\n    permissions:\n      contents: read\n      actions: read\n      pull-requests: read\n    secrets:", /macos caller is not exactly the canonical call/],
+  ]) {
+    if (!text.includes(from)) { check(false, `6w control "${name}" could not be applied`); continue; }
+    const got = callerProblem(text.split(from).join(to));
+    check(got !== null && reason.test(got), `6w control "${name}" was not refused for ${reason}; got ${JSON.stringify(got)}`);
+  }
+  for (const [name, from, to, expect] of [
+    ["base and head swapped", '--arg base "$RECEIPT_BASE" --arg head "$RECEIPT_HEAD"', '--arg base "$RECEIPT_HEAD" --arg head "$RECEIPT_BASE"', /receipt\.base is/],
+    ["the attempt read from the run id", '--arg runAttempt "$GITHUB_RUN_ATTEMPT"', '--arg runAttempt "$GITHUB_RUN_ID"', /receipt\.runAttempt is/],
+    ["the mode written as a constant", '--arg mode "$RECEIPT_MODE"', "--arg mode full-bootstrap", /receipt\.mode is/],
+    ["the signed artifact dropped", ",signedArtifact:$signedArtifact}", "}", /the receipt carries keys/],
+  ]) {
+    const step = structuredClone(recordOf(original));
+    if (!step?.run?.includes(from)) { check(false, `6w control "${name}" could not be applied`); continue; }
+    step.run = step.run.split(from).join(to);
+    const got = receiptProblems(step);
+    check(got.some((m) => expect.test(m)), `6w control "${name}" was NOT refused for ${expect}; got ${JSON.stringify(got.slice(0, 3))}`);
+  }
 }
 
 // ── report ──────────────────────────────────────────────────────────────────

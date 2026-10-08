@@ -15,15 +15,168 @@ final class AppShellUITests: XCTestCase {
         "--relayium-ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
     ]
 
+    /// The one case whose first launch is a fresh stored download. Setup launches
+    /// it that way directly, rather than launching the default shell only for
+    /// the case to end it at once and launch again: the same arguments reach the
+    /// same first launch, with one fewer app lifecycle in between.
+    private static let freshDownloadLaunchArguments = [
+        "--relayium-ui-testing-sign-in",
+        "--relayium-ui-testing-valid-download-link",
+        "--relayium-ui-testing-fresh-received-folder",
+        "--relayium-ui-testing-open-stored-link",
+    ]
+
+    /// The cases whose first launch is a fixture, each with the arguments it
+    /// launched with after `offlineLaunchArguments`, in their original order.
+    /// Setup launches them that way directly instead of launching the default
+    /// shell only for the case to end it at once. `#selector` stops a rename
+    /// compiling past an entry.
+    private static let firstLaunchFixtures: [Selector: [String]] = [
+        #selector(AppShellUITests.testASignedInLaunchRendersItsAccountAndUngatesSend):
+            ["--relayium-ui-testing-signed-in"],
+        #selector(AppShellUITests.testSubscriptionsRenderAndPurchaseWithoutAWebCheckout):
+            [
+                "--relayium-ui-testing-signed-in",
+                "--relayium-ui-testing-subscriptions",
+            ],
+        #selector(AppShellUITests.testStoppedNearbyReceivingAsksForActionWithoutPretendingToWork):
+            ["--relayium-ui-testing-off-receiving"],
+        #selector(AppShellUITests.testNearbyStagesNothingBeforeADeviceIsChosen):
+            ["--relayium-ui-testing-pending-fixture"],
+        #selector(AppShellUITests.testRevokeConfirmationNamesTheDeviceAndItsRealConsequence):
+            ["--relayium-ui-testing-signed-in"],
+        #selector(AppShellUITests.testDeleteConfirmationStatesWhatItErasesAndForWhom):
+            ["--relayium-ui-testing-signed-in"],
+        #selector(AppShellUITests.testSigningOutReturnsToTheSignedOutSurfaces):
+            ["--relayium-ui-testing-signed-in"],
+        #selector(AppShellUITests.testCreatingACodeStaysOnCrossNetworkAndShowsEveryHandoff):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"],
+        #selector(AppShellUITests.testCancellingAGeneratedCodeReturnsDirectlyToTheStartControls):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"],
+        #selector(AppShellUITests.testAFailedCodeMustBeDismissedBeforeStartingAgain):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-mint-failure"],
+        #selector(AppShellUITests.testATerminalNearbySessionNamesItsPeerAndReturnsToTheRoster):
+            ["--relayium-ui-testing-terminal-nearby"],
+        #selector(AppShellUITests.testASignedInStoredSendNamesTheFileItWouldUpload):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture"],
+        #selector(AppShellUITests.testEditingARefusedLinkClearsTheRefusalWithIt):
+            ["--relayium-ui-testing-invalid-download-link",
+                "--relayium-ui-testing-open-stored-link"],
+        #selector(AppShellUITests.testACompletedStoredSendHandsOverItsLinkAndOffersAnother):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture"],
+        #selector(AppShellUITests.testCancellingAnUploadInFlightReturnsTheTask):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture",
+                "--relayium-ui-testing-stall-upload"],
+        #selector(AppShellUITests.testSigningInThroughTheFormOpensTheAccount):
+            ["--relayium-ui-testing-sign-in"],
+        #selector(AppShellUITests.testAFailedUploadKeepsTheWorkAndOffersToCarryOn):
+            ["--relayium-ui-testing-signed-in",
+                "--relayium-ui-testing-preselect-fixture",
+                "--relayium-ui-testing-fail-upload"],
+        #selector(AppShellUITests.testOpeningAValidStoredLinkDecryptsAndNamesTheManifest):
+            [
+                "--relayium-ui-testing-sign-in",
+                "--relayium-ui-testing-valid-download-link",
+                "--relayium-ui-testing-open-stored-link",
+            ],
+        #selector(AppShellUITests.testEveryTaskReachesItsActionAtTheLargestTextSize):
+            ["-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityXXL",
+                // The stored-link screen is presented rather than browsed to, so
+                // it is reached at launch and dismissed below before the
+                // browseable destinations are visited.
+                "--relayium-ui-testing-open-stored-link",
+                // Diagnostics only: the hosted iOS 18.5 run tapped the Device
+                // Inbox tab here and stayed on Nearby. Beside the
+                // `--relayium-ui-testing` above, this makes `open` attach the
+                // tab state and the app's own record of selection writes. The
+                // tap, the waits and the assertions are the original ones, but
+                // the extra queries shift timing, so a pass here does not show
+                // the hosted failure is fixed.
+                Shell.navigationTraceArgument],
+        #selector(AppShellUITests.testShareOpensTheSystemShareSheet):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"],
+    ]
+
+    private struct UnrecognizedTestName: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    /// XCTest names a throwing case without the error parameter its Objective-C
+    /// selector carries. These two are this class's only throwing cases, so each
+    /// name maps to the selector the compiler derives for it; every other name
+    /// resolves to the selector of its own spelling.
+    private static let throwingTestSelectors: [String: Selector] = [
+        "testEveryPrimaryTaskPassesTheSystemAccessibilityAudit":
+            #selector(AppShellUITests.testEveryPrimaryTaskPassesTheSystemAccessibilityAudit),
+        "testEveryPrimaryTaskPassesTheSystemAccessibilityAuditInDarkAppearance":
+            #selector(AppShellUITests.testEveryPrimaryTaskPassesTheSystemAccessibilityAuditInDarkAppearance),
+    ]
+
+    /// The running case's selector, read from its whole XCTest name
+    /// `-[Class selector]` with the class spelled bare or module-qualified — the
+    /// two whole spellings `launchesFreshDownload` accepts, and nothing shorter.
+    /// Any other shape throws before the first launch rather than falling back
+    /// to the default one, under which an absence assertion could pass vacuously.
+    private static func recognizedSelector(in name: String) throws -> Selector {
+        for spelling in [String(describing: Self.self), NSStringFromClass(Self.self)] {
+            let prefix = "-[\(spelling) "
+            guard name.hasPrefix(prefix), name.hasSuffix("]") else { continue }
+            let candidate = String(name.dropFirst(prefix.count).dropLast())
+            guard candidate.hasPrefix("test"), !candidate.contains(" "), !candidate.contains("]"),
+                  !candidate.contains(":") else { continue }
+            let selector = Self.throwingTestSelectors[candidate] ?? NSSelectorFromString(candidate)
+            guard Self.instancesRespond(to: selector) else { continue }
+            return selector
+        }
+        throw UnrecognizedTestName(description: "unrecognized XCTest name: \(name)")
+    }
+
+    /// Exactly that case's XCTest name, `-[Class selector]`, compared whole.
+    /// XCTest has spelled the class bare (`AppShellUITests`, measured on Xcode
+    /// 27) and module-qualified, so both whole spellings are accepted and
+    /// nothing shorter. `#selector` stops a rename compiling past it; any other
+    /// spelling leaves the case on the default launch, which its own first
+    /// assertion then refuses rather than passing quietly.
+    private var launchesFreshDownload: Bool {
+        let selector = NSStringFromSelector(
+            #selector(testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile))
+        return [String(describing: Self.self), NSStringFromClass(Self.self)]
+            .contains { name == "-[\($0) \(selector)]" }
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
+        let selector = try Self.recognizedSelector(in: name)   // before any launch
         app = XCUIApplication()
-        app.launchArguments = offlineLaunchArguments
+        app.launchArguments = launchesFreshDownload
+            ? offlineLaunchArguments + Self.freshDownloadLaunchArguments
+            : offlineLaunchArguments + (Self.firstLaunchFixtures[selector] ?? [])
         app.launch()
     }
 
     override func tearDownWithError() throws {
         app?.terminate()
+    }
+
+    /// Wait for `predicate` on `element` for at most `timeout` seconds, and not
+    /// at all when nothing remains of a caller's deadline.
+    private static func wait(for element: XCUIElement, _ predicate: String,
+                             timeout: TimeInterval) -> Bool {
+        guard timeout > 0 else { return false }
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: predicate), object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    /// Wait for `condition` for at most `timeout` seconds, and not at all when
+    /// nothing remains of a caller's deadline.
+    private static func wait(until condition: @escaping () -> Bool,
+                             timeout: TimeInterval) -> Bool {
+        guard timeout > 0 else { return false }
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in condition() }, object: nil)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func scrollUntilHittable(_ element: XCUIElement, maxSwipes: Int = 6) {
@@ -230,10 +383,6 @@ final class AppShellUITests: XCTestCase {
     /// deterministic in-process transport, so this reaches no server and no real
     /// credential exists anywhere in it.
     func testASignedInLaunchRendersItsAccountAndUngatesSend() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in"]
-        app.launch()
 
         open(Shell.account, in: app)
         XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
@@ -296,12 +445,6 @@ final class AppShellUITests: XCTestCase {
     /// submission orchestration while replacing only StoreKit with a local
     /// deterministic adapter. No request or Apple account leaves the simulator.
     func testSubscriptionsRenderAndPurchaseWithoutAWebCheckout() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + [
-            "--relayium-ui-testing-signed-in",
-            "--relayium-ui-testing-subscriptions",
-        ]
-        app.launch()
 
         open(Shell.account, in: app)
         let monthly = app.buttons["subscription-buy-uitest.subscription.month"]
@@ -344,10 +487,6 @@ final class AppShellUITests: XCTestCase {
     /// listener that is already off. Look again, in the roster below, is the
     /// one recovery that matches it.
     func testStoppedNearbyReceivingAsksForActionWithoutPretendingToWork() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-off-receiving"]
-        app.launch()
 
         open(Shell.lanTransfer, in: app)
 
@@ -374,31 +513,6 @@ final class AppShellUITests: XCTestCase {
     /// The system document browser is presented as a remote view inside the
     /// app's own element tree, not as a separate `DocumentManagerUICore`
     /// process, so every step below addresses `app`.
-    private func tapInBrowser(_ label: String, timeout: TimeInterval = 15) {
-        let element = app.descendants(matching: .any)[label].firstMatch
-        guard element.waitForExistence(timeout: timeout) else {
-            return XCTFail("""
-                the system document browser has no "\(label)".
-                \(app.debugDescription)
-                """)
-        }
-        element.tap()
-    }
-
-    /// Files hides a known extension, so match the fixture by the stem it is
-    /// guaranteed to render rather than by a display name the OS may shorten.
-    private func tapStagedFixture(named stem: String, timeout: TimeInterval = 15) {
-        let element = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH %@", stem)).firstMatch
-        guard element.waitForExistence(timeout: timeout) else {
-            return XCTFail("""
-                the staged fixture "\(stem)" is not in the browser.
-                \(app.debugDescription)
-                """)
-        }
-        element.tap()
-    }
-
     /// Land the system picker on Browse, whichever shape iOS presented it in.
     ///
     /// Compact widths present a browsing-mode chooser —
@@ -428,37 +542,67 @@ final class AppShellUITests: XCTestCase {
             """)
     }
 
-    /// Select the staged document without assuming which directory the system
-    /// browser remembered from an earlier import. Files may reopen inside the
-    /// app folder, at the app folder's parent, or at the Locations root; all
-    /// three are valid system states and expose the same production importer.
-    /// The Locations root names the device it is on — "On My iPhone" or
-    /// "On My iPad" — so match either rather than encode one device idiom.
+    /// Select the staged document by looking at where the system browser
+    /// actually is, every time it looks, rather than assuming where a tap left it.
+    ///
+    /// Files may reopen inside the app folder, at the app folder's parent, or at
+    /// the Locations root, and a tap on the device can land in any of them: a
+    /// hosted run (37104393492) tapped "On My iPhone" and the browser was already
+    /// inside `Relayium` with the fixture on screen while this helper still waited
+    /// for a `Relayium` row to tap. A local run (r2) then met a folder view that
+    /// existed for a fraction of a second during the Browse transition, and
+    /// asking whether its row was hittable failed the test.
+    ///
+    /// So each look is ONE read-only snapshot of the app, classified by the plain
+    /// `PickerSelection` core: the fixture in the browser's `File View` cells
+    /// first, then the app folder among them, then an on-device Location among
+    /// the `Browse View` cells. Nothing is touched until the same candidate has
+    /// been seen on two consecutive looks; only then is the live element asked
+    /// whether it is hittable, and that same element is the one tapped. One
+    /// deadline covers the whole selection and is never restarted. It bounds
+    /// starting anything new, not a running query, which cannot be interrupted.
     private func selectStagedFixture(named stem: String) {
-        let fixture = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH %@", stem)).firstMatch
-        if fixture.waitForExistence(timeout: 2) {
-            return fixture.tap()
-        }
-
-        let appFolder = app.descendants(matching: .any)["Relayium"].firstMatch
-        if appFolder.waitForExistence(timeout: 2) {
-            appFolder.tap()
-            return tapStagedFixture(named: stem)
-        }
-
-        let device = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label == %@ OR label == %@",
-                        "On My iPhone", "On My iPad")).firstMatch
-        guard device.waitForExistence(timeout: 15) else {
-            return XCTFail("""
-                the system document browser offers no on-device location.
+        var guarded: XCUIElement?
+        let outcome = PickerSelection.run(
+            within: 15,
+            now: { ProcessInfo.processInfo.systemUptime },
+            look: { progress in
+                // The one place an error is handled: a look that could not be
+                // taken is a look that found nothing, and is waited past.
+                guard let snapshot = try? app.snapshot() else { return .unavailable }
+                return PickerSelection.classify(PickerNode(snapshot), stem: stem, progress: progress)
+            },
+            guardHittable: { candidate in
+                guarded = nil
+                let matches = app.collectionViews.matching(identifier: candidate.container).cells
+                    .matching(NSPredicate(format: "identifier == %@ AND label == %@",
+                                          candidate.identifier, candidate.label))
+                let count = matches.count
+                guard count == 1 else { return count == 0 ? .missing : .ambiguous(count) }
+                let element = matches.element(boundBy: 0)
+                guard element.isHittable else { return .notHittable }
+                guarded = element
+                return .hittable
+            },
+            perform: { _ in guarded?.tap() },
+            pause: { RunLoop.current.run(until: Date().addingTimeInterval(0.25)) })
+        switch outcome.result {
+        case .selected:
+            return
+        case .refused(let why):
+            XCTFail("""
+                the system document browser is ambiguous: \(why).
+                looks: \(outcome.trace.joined(separator: "; "))
+                \(app.debugDescription)
+                """)
+        case .timedOut(let done):
+            XCTFail("""
+                the staged fixture "\(stem)" was not selectable within 15 s \
+                (on-device location tapped: \(done.deviceTapped), app folder tapped: \(done.folderTapped)).
+                looks: \(outcome.trace.joined(separator: "; "))
                 \(app.debugDescription)
                 """)
         }
-        device.tap()
-        tapInBrowser("Relayium")
-        tapStagedFixture(named: stem)
     }
 
     /// **Connect first (A25): Nearby stages nothing before a device is chosen.**
@@ -472,10 +616,6 @@ final class AppShellUITests: XCTestCase {
     /// driven, on the one surface that stages before sending:
     /// `testASignedInStoredSendNamesTheFileItWouldUpload`.
     func testNearbyStagesNothingBeforeADeviceIsChosen() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-pending-fixture"]
-        app.launch()
 
         open(Shell.lanTransfer, in: app)
         // The screen rendered: its verification setting is always there.
@@ -559,10 +699,6 @@ final class AppShellUITests: XCTestCase {
     /// destructive button lying about itself, and nothing before this drove the
     /// two arms in the running app.
     func testRevokeConfirmationNamesTheDeviceAndItsRealConsequence() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in"]
-        app.launch()
         open(Shell.account, in: app)
 
         let other = app.buttons.matching(
@@ -605,10 +741,6 @@ final class AppShellUITests: XCTestCase {
     /// everyone holding the link. The dialog must say both, and cancelling it
     /// must leave the object alone.
     func testDeleteConfirmationStatesWhatItErasesAndForWhom() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in"]
-        app.launch()
         open(Shell.account, in: app)
 
         // By the delete action itself, not merely by the row's id: a rebuildable
@@ -640,10 +772,6 @@ final class AppShellUITests: XCTestCase {
     /// This is the one way out of a signed-in session, and until the acceptance
     /// account existed there was no way to reach it at all.
     func testSigningOutReturnsToTheSignedOutSurfaces() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in"]
-        app.launch()
         open(Shell.account, in: app)
 
         XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
@@ -682,10 +810,6 @@ final class AppShellUITests: XCTestCase {
     /// lane — a `?mode=` there would tell a connect-first peer to make a choice
     /// it no longer has.
     func testCreatingACodeStaysOnCrossNetworkAndShowsEveryHandoff() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"]
-        app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
         let create = app.buttons["Create a code"]
@@ -721,10 +845,6 @@ final class AppShellUITests: XCTestCase {
     /// an empty terminal task would make the user dismiss something that never
     /// happened.
     func testCancellingAGeneratedCodeReturnsDirectlyToTheStartControls() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"]
-        app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
         let create = app.buttons["Create a code"]
@@ -754,10 +874,6 @@ final class AppShellUITests: XCTestCase {
     /// back; a second start over an unread failure would replace the one
     /// sentence explaining why nothing happened.
     func testAFailedCodeMustBeDismissedBeforeStartingAgain() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-mint-failure"]
-        app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
         let create = app.buttons["Create a code"]
@@ -810,10 +926,6 @@ final class AppShellUITests: XCTestCase {
     /// from the retained terminal surface and must actually release it. macOS
     /// has covered this since batch 12; iOS had no runtime evidence.
     func testATerminalNearbySessionNamesItsPeerAndReturnsToTheRoster() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-terminal-nearby"]
-        app.launch()
 
         XCTAssertTrue(app.staticTexts["Session with Studio Mac · 19af02"]
             .waitForExistence(timeout: 20),
@@ -849,10 +961,6 @@ final class AppShellUITests: XCTestCase {
     /// document browser, so the picker, the security scope and the expansion are
     /// production code.
     func testASignedInStoredSendNamesTheFileItWouldUpload() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture"]
-        app.launch()
 
         open(Shell.storedSend, in: app)
         XCTAssertFalse(app.buttons["Go to Account"].exists,
@@ -901,11 +1009,6 @@ final class AppShellUITests: XCTestCase {
     /// `testTheKeyboardGoKeyResolvesTheLink` keep the real typing and the real
     /// submission, so nothing here removes that coverage.
     func testEditingARefusedLinkClearsTheRefusalWithIt() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-invalid-download-link",
-               "--relayium-ui-testing-open-stored-link"]
-        app.launch()
 
         waitForPresentedStoredReceive(app)
 
@@ -973,10 +1076,6 @@ final class AppShellUITests: XCTestCase {
     /// upload fixture could get here. The encryption, chunking, manifest and
     /// link construction are all production code; only the transport is local.
     func testACompletedStoredSendHandsOverItsLinkAndOffersAnother() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture"]
-        app.launch()
 
         open(Shell.storedSend, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
@@ -1019,11 +1118,6 @@ final class AppShellUITests: XCTestCase {
     /// The fixture holds the chunk request open, so the surface under test is
     /// the real in-flight one and Cancel ends the real request.
     func testCancellingAnUploadInFlightReturnsTheTask() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-preselect-fixture",
-               "--relayium-ui-testing-stall-upload"]
-        app.launch()
 
         open(Shell.storedSend, in: app)
         let chooser = app.buttons["Choose Files or Folders…"]
@@ -1065,9 +1159,6 @@ final class AppShellUITests: XCTestCase {
     /// signed in. The transition itself — the one a first-time user actually
     /// performs — had no runtime evidence on either platform.
     func testSigningInThroughTheFormOpensTheAccount() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
-        app.launch()
 
         open(Shell.account, in: app)
         XCTAssertTrue(app.staticTexts["Welcome back"].waitForExistence(timeout: 15),
@@ -1126,12 +1217,6 @@ final class AppShellUITests: XCTestCase {
     /// selection never arrived, instead of letting Send be tapped with nothing
     /// staged and reporting a missing Resume upload.
     func testAFailedUploadKeepsTheWorkAndOffersToCarryOn() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in",
-               "--relayium-ui-testing-preselect-fixture",
-               "--relayium-ui-testing-fail-upload"]
-        app.launch()
 
         open(Shell.storedSend, in: app)
 
@@ -1170,13 +1255,6 @@ final class AppShellUITests: XCTestCase {
     /// `CloudDownloadModelTests` and macOS's runtime save test; this test has
     /// never tapped Receive and must not claim that it does.
     func testOpeningAValidStoredLinkDecryptsAndNamesTheManifest() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + [
-            "--relayium-ui-testing-sign-in",
-            "--relayium-ui-testing-valid-download-link",
-            "--relayium-ui-testing-open-stored-link",
-        ]
-        app.launch()
 
         waitForPresentedStoredReceive(app)
         let link = app.textFields["receive.link"]
@@ -1218,15 +1296,7 @@ final class AppShellUITests: XCTestCase {
     /// product itself: a relaunch WITHOUT that argument opens the same link
     /// again and must be refused, by name, because the file is still there.
     func testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + [
-            "--relayium-ui-testing-sign-in",
-            "--relayium-ui-testing-valid-download-link",
-            "--relayium-ui-testing-fresh-received-folder",
-            "--relayium-ui-testing-open-stored-link",
-        ]
-        app.launch()
-
+        // Setup already launched with `freshDownloadLaunchArguments`.
         waitForPresentedStoredReceive(app)
         let open = app.buttons["Open"]
         XCTAssertTrue(open.waitForExistence(timeout: 15))
@@ -1253,10 +1323,65 @@ final class AppShellUITests: XCTestCase {
                       "a completed download offers no system share")
         scrollUntilHittable(share, maxSwipes: 10)
         share.tap()
-        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 20),
-                      "Share did not open the system share sheet")
+        // One deadline for the whole sheet, the 20 + 5 seconds the two waits
+        // here always had between them. The wrapper exists before its content
+        // is drawn, so an optional five-second look for Close could expire on a
+        // sheet that was still arriving and leave it covering Done; here the
+        // sheet's own way out must be on screen AND hittable, is tapped once,
+        // and the sheet must be gone before the case goes on.
+        //
+        // Two forms of that way out have been observed, and only these two:
+        // the full-screen sheet's header Close (hosted iOS 26.3), and — when
+        // the system presents the sheet as a popover instead (Xcode 27 SDK on
+        // iOS 26.5) — the popover's own `PopoverDismissRegion`, with no Close
+        // anywhere in the app or SpringBoard tree. The region is only chosen
+        // while a popover is actually holding the share sheet, so an unrelated
+        // popup can never be what this dismisses.
+        let sheet = app.otherElements["ActivityListView"]
+        let remote = app.otherElements["ShareSheet.RemoteContainerView"]
         let close = app.buttons["Close"]
-        if close.waitForExistence(timeout: 5) { close.tap() }
+        let region = app.otherElements["PopoverDismissRegion"]
+        let sharePopover = app.popovers.otherElements["ActivityListView"]
+        let clock = { ProcessInfo.processInfo.systemUptime }
+        let outcome = ShareSheetDismissal.run(
+            budget: 25, now: clock,
+            opened: { Self.wait(for: sheet, "exists == true", timeout: $0) },
+            readiness: {
+                ShareSheetDismissal.Readiness(
+                    close: close.exists && close.isHittable,
+                    region: region.exists && region.isHittable,
+                    sharePopover: sharePopover.exists)
+            },
+            overlays: {
+                ShareSheetDismissal.Overlays(
+                    sheet: sheet.exists, remote: remote.exists, region: region.exists)
+            },
+            waitUntil: { timeout, condition in Self.wait(until: condition, timeout: timeout) },
+            tap: { target in
+                switch target {
+                case .close: close.tap()
+                case .popoverRegion: region.tap()
+                }
+            })
+        if !outcome.isDismissed {
+            // Diagnostic only: what was actually on screen when the sheet did
+            // not leave, in this app and in SpringBoard. Changes no verdict.
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            XCTContext.runActivity(named: "share sheet not dismissed: \(outcome)") { activity in
+                let attachments = [
+                    XCTAttachment(string: "app.state = \(app.state.rawValue)"),
+                    XCTAttachment(string: app.debugDescription),
+                    XCTAttachment(string: springboard.debugDescription),
+                ]
+                for (attachment, name) in zip(attachments, ["app-state", "app-tree",
+                                                            "springboard-tree"]) {
+                    attachment.name = name
+                    attachment.lifetime = .keepAlways
+                    activity.add(attachment)
+                }
+            }
+        }
+        XCTAssertTrue(outcome.isDismissed, "the system share sheet: \(outcome)")
 
         let done = app.buttons["receive.done"]
         XCTAssertTrue(done.waitForExistence(timeout: 15),
@@ -1467,23 +1592,6 @@ final class AppShellUITests: XCTestCase {
     /// falls off is usually the one the task ends with. Several surfaces in this
     /// product were rearranged for exactly this reason; nothing asserted it.
     func testEveryTaskReachesItsActionAtTheLargestTextSize() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["-UIPreferredContentSizeCategoryName",
-               "UICTContentSizeCategoryAccessibilityXXL",
-               // The stored-link screen is presented rather than browsed to, so
-               // it is reached at launch and dismissed below before the
-               // browseable destinations are visited.
-               "--relayium-ui-testing-open-stored-link",
-               // Diagnostics only: the hosted iOS 18.5 run tapped the Device
-               // Inbox tab here and stayed on Nearby. Beside the
-               // `--relayium-ui-testing` above, this makes `open` attach the
-               // tab state and the app's own record of selection writes. The
-               // tap, the waits and the assertions are the original ones, but
-               // the extra queries shift timing, so a pass here does not show
-               // the hosted failure is fixed.
-               Shell.navigationTraceArgument]
-        app.launch()
 
         // The stored link's Open, the Device Inbox's account route, Nearby's
         // verification setting and Account's registration path are the four
@@ -1552,10 +1660,6 @@ final class AppShellUITests: XCTestCase {
     /// and this is the control the whole pairing handoff depends on, because it
     /// is how the code reaches the other person at all.
     func testShareOpensTheSystemShareSheet() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"]
-        app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
         let create = app.buttons["Create a code"]
@@ -1950,4 +2054,317 @@ final class AppShellUITests: XCTestCase {
     }
 
 
+}
+
+/// The public snapshot's standard attributes, as the plain values the core
+/// classifies. Only the element types the classification names are kept by
+/// name; every other type is "Other".
+extension PickerNode {
+    init(_ snapshot: XCUIElementSnapshot) {
+        let type: String
+        switch snapshot.elementType {
+        case .collectionView: type = "CollectionView"
+        case .cell: type = "Cell"
+        case .staticText: type = "StaticText"
+        case .button: type = "Button"
+        case .navigationBar: type = "NavigationBar"
+        case .application: type = "Application"
+        default: type = "Other"
+        }
+        let frame = snapshot.frame
+        self.init(type: type, identifier: snapshot.identifier, label: snapshot.label,
+                  frame: PickerFrame(x: Double(frame.origin.x), y: Double(frame.origin.y),
+                                     width: Double(frame.size.width), height: Double(frame.size.height)),
+                  enabled: snapshot.isEnabled, children: snapshot.children.map { PickerNode($0) })
+    }
+}
+
+// BEGIN PickerSelection core — plain Swift, no XCTest; the picker controls compile these exact bytes.
+
+/// A rectangle in points.
+struct PickerFrame: Equatable {
+    var x = 0.0, y = 0.0, width = 0.0, height = 0.0
+
+    /// Whole points: a row that has stopped moving keeps its rounded frame.
+    /// A heuristic for "the same row, at rest", not proof of identity.
+    var rounded: PickerFrame {
+        PickerFrame(x: x.rounded(), y: y.rounded(), width: width.rounded(), height: height.rounded())
+    }
+}
+
+/// One element of one snapshot, as plain values.
+struct PickerNode: Equatable {
+    var type: String
+    var identifier = ""
+    var label = ""
+    var frame = PickerFrame()
+    var enabled = true
+    var children: [PickerNode] = []
+}
+
+/// The navigation the selection has already made. Each happens at most once.
+struct PickerProgress: Equatable {
+    var deviceTapped = false
+    var folderTapped = false
+}
+
+enum PickerKind: String, Equatable {
+    case fixture, folder, device
+}
+
+/// What one look proposes to tap, identified by everything the snapshot says
+/// about it: two looks agree only if every field agrees.
+struct PickerCandidate: Equatable {
+    var kind: PickerKind
+    var container: String
+    var ancestors: [String]
+    var identifier: String
+    var label: String
+    var frame: PickerFrame
+    var enabled: Bool
+}
+
+enum PickerLook: Equatable {
+    /// No snapshot could be taken.
+    case unavailable
+    /// The browser is mid-change: more than one view of a kind.
+    case unsettled
+    /// Nothing to act on.
+    case nothing
+    case candidate(PickerCandidate)
+    case ambiguous(String)
+}
+
+/// What the live element said when asked, once a candidate was stable.
+enum PickerGuard: Equatable {
+    case hittable, notHittable, missing
+    case ambiguous(Int)
+}
+
+enum PickerSelection {
+    enum Result: Equatable {
+        case selected
+        case refused(String)
+        case timedOut(PickerProgress)
+    }
+
+    struct Outcome: Equatable {
+        var result: Result
+        var trace: [String]
+    }
+
+    static let fileView = "File View"
+    static let browseView = "Browse View"
+    static let traceLimit = 32
+
+    /// Classify one snapshot. The fixture is decided first, wherever the
+    /// browser is; the app folder only inside a folder's item area and only
+    /// while no fixture is visible; an on-device Location only where no item
+    /// area is. More than one match is ambiguous, never guessed between.
+    static func classify(_ root: PickerNode, stem: String, progress: PickerProgress) -> PickerLook {
+        let items = containers(named: fileView, in: root)
+        let places = containers(named: browseView, in: root)
+        if items.count > 1 || places.count > 1 { return .unsettled }
+        if let area = items.first {
+            let cells = area.node.children.flatMap { cellsBelow($0) }
+            let fixtures = cells.filter { $0.label.hasPrefix(stem) }
+            if fixtures.count > 1 { return .ambiguous("\(fixtures.count) items match the fixture") }
+            if let fixture = fixtures.first { return .candidate(candidate(.fixture, fixture, area)) }
+            if progress.folderTapped { return .nothing }
+            let folders = cells.filter { cell in cell.children.contains { contains($0, exactly: "Relayium") } }
+            if folders.count > 1 { return .ambiguous("\(folders.count) items match the app folder") }
+            if let folder = folders.first { return .candidate(candidate(.folder, folder, area)) }
+            return .nothing
+        }
+        if let place = places.first, !progress.deviceTapped {
+            let devices = place.node.children.flatMap { cellsBelow($0) }
+                .filter { $0.label == "On My iPhone" || $0.label == "On My iPad" }
+            if devices.count > 1 { return .ambiguous("\(devices.count) on-device locations") }
+            if let device = devices.first { return .candidate(candidate(.device, device, place)) }
+        }
+        return .nothing
+    }
+
+    /// Every CollectionView with this identifier, with the (type, identifier)
+    /// path of the elements above it.
+    private static func containers(named name: String, in root: PickerNode)
+        -> [(node: PickerNode, ancestors: [String])] {
+        var found: [(node: PickerNode, ancestors: [String])] = []
+        func walk(_ node: PickerNode, _ path: [String]) {
+            if node.type == "CollectionView" && node.identifier == name { found.append((node, path)) }
+            let here = node.identifier.isEmpty ? path : path + ["\(node.type):\(node.identifier)"]
+            for child in node.children { walk(child, here) }
+        }
+        walk(root, [])
+        return found
+    }
+
+    private static func cellsBelow(_ node: PickerNode) -> [PickerNode] {
+        node.type == "Cell" ? [node] : node.children.flatMap { cellsBelow($0) }
+    }
+
+    private static func contains(_ node: PickerNode, exactly text: String) -> Bool {
+        node.identifier == text || node.label == text || node.children.contains { contains($0, exactly: text) }
+    }
+
+    private static func candidate(_ kind: PickerKind, _ cell: PickerNode,
+                                  _ area: (node: PickerNode, ancestors: [String])) -> PickerCandidate {
+        PickerCandidate(kind: kind, container: area.node.identifier, ancestors: area.ancestors,
+                        identifier: cell.identifier, label: cell.label, frame: cell.frame.rounded,
+                        enabled: cell.enabled)
+    }
+
+    /// The whole selection under ONE deadline, fixed on entry and never reset.
+    /// Nothing starts after it: it is checked before each look, after each
+    /// look, and after the live guard, immediately before the tap. A candidate
+    /// is acted on only after two consecutive looks found it unchanged; any
+    /// other look in between, and every tap, starts the count again.
+    static func run(within limit: Double, now: () -> Double, look: (PickerProgress) -> PickerLook,
+                    guardHittable: (PickerCandidate) -> PickerGuard, perform: (PickerCandidate) -> Void,
+                    pause: () -> Void) -> Outcome {
+        let start = now()
+        let deadline = start + limit
+        var done = PickerProgress()
+        var previous: PickerLook?
+        var trace: [String] = []
+        func note(_ step: String) {
+            let centiseconds = Int(((now() - start) * 100).rounded())
+            trace.append("\(centiseconds / 100).\(centiseconds % 100 < 10 ? "0" : "")\(centiseconds % 100)s \(step)")
+            if trace.count > traceLimit { trace.removeFirst() }
+        }
+        looking: while now() < deadline {
+            let seen = look(done)
+            guard now() < deadline else { note("look ended at the deadline"); break looking }
+            let stable = previous == seen
+            previous = seen
+            switch seen {
+            case .unavailable:
+                note("no snapshot")
+                previous = nil
+            case .unsettled:
+                note("unsettled")
+                previous = nil
+            case .nothing:
+                note("nothing")
+                previous = nil
+            case .ambiguous(let why):
+                note("ambiguous")
+                if stable { return Outcome(result: .refused(why), trace: trace) }
+            case .candidate(let candidate):
+                guard stable else { note("\(candidate.kind.rawValue) in \(candidate.container), first sighting"); break }
+                guard candidate.enabled else { note("\(candidate.kind.rawValue) disabled"); previous = nil; break }
+                let live = guardHittable(candidate)
+                guard now() < deadline else { note("guard ended at the deadline"); break looking }
+                switch live {
+                case .hittable:
+                    note("\(candidate.kind.rawValue) in \(candidate.container), tap")
+                    perform(candidate)
+                    previous = nil
+                    switch candidate.kind {
+                    case .fixture: return Outcome(result: .selected, trace: trace)
+                    case .folder: done.folderTapped = true
+                    case .device: done.deviceTapped = true
+                    }
+                case .notHittable, .missing:
+                    note("\(candidate.kind.rawValue) in \(candidate.container), not hittable or gone")
+                    previous = nil
+                case .ambiguous(let count):
+                    note("live ambiguous")
+                    return Outcome(result: .refused("\(count) live elements match the candidate"), trace: trace)
+                }
+            }
+            pause()
+        }
+        return Outcome(result: .timedOut(done), trace: trace)
+    }
+}
+
+// END PickerSelection core
+
+/// The one control that dismisses the system share sheet in the form it took.
+enum ShareSheetDismissTarget: Equatable {
+    /// The full-screen sheet's header button.
+    case close
+    /// The popover's own outside-dismiss region.
+    case popoverRegion
+}
+
+/// How a system share sheet left the screen — or the stage it stopped at.
+///
+/// Pure over its observations and a monotonic clock, so the choice of target
+/// and the deadline arithmetic are exercised without a simulator. Every wait
+/// is given only what remains of ONE budget, and the clock is read again after
+/// every observation and the tap: a target that turns hittable after the
+/// budget is spent, or a sheet that leaves late, is a failure rather than a
+/// pass.
+enum ShareSheetDismissal: Equatable {
+    case dismissed(ShareSheetDismissTarget)
+    case neverOpened
+    case dismissNeverReady
+    case targetLost(ShareSheetDismissTarget)
+    case deadlinePassed(stage: String)
+    case neverDismissed(ShareSheetDismissTarget)
+
+    var isDismissed: Bool {
+        if case .dismissed = self { return true }
+        return false
+    }
+
+    /// What can be tapped now: each control both exists and is hittable.
+    struct Readiness: Equatable {
+        var close: Bool
+        var region: Bool
+        /// A popover is holding the share sheet itself.
+        var sharePopover: Bool
+    }
+
+    /// What is still on screen after the tap.
+    struct Overlays: Equatable {
+        var sheet: Bool
+        var remote: Bool
+        var region: Bool
+    }
+
+    /// Close when it is there; the popover region only while a popover is
+    /// actually holding the share sheet; otherwise nothing.
+    static func target(_ ready: Readiness) -> ShareSheetDismissTarget? {
+        if ready.close { return .close }
+        if ready.region && ready.sharePopover { return .popoverRegion }
+        return nil
+    }
+
+    /// The sheet, its remote content and — for a popover — its dismiss region
+    /// are all gone.
+    static func isGone(_ overlays: Overlays, after target: ShareSheetDismissTarget) -> Bool {
+        !overlays.sheet && !overlays.remote
+            && (target != .popoverRegion || !overlays.region)
+    }
+
+    static func run(budget: TimeInterval,
+                    now: () -> TimeInterval,
+                    opened: (TimeInterval) -> Bool,
+                    readiness: @escaping () -> Readiness,
+                    overlays: @escaping () -> Overlays,
+                    waitUntil: (TimeInterval, @escaping () -> Bool) -> Bool,
+                    tap: (ShareSheetDismissTarget) -> Void) -> ShareSheetDismissal {
+        let deadline = now() + budget
+        func remaining() -> TimeInterval { max(0, deadline - now()) }
+        func late() -> Bool { now() > deadline }
+
+        guard opened(remaining()) else { return .neverOpened }
+        if late() { return .deadlinePassed(stage: "open") }
+        guard waitUntil(remaining(), { target(readiness()) != nil }),
+              let chosen = target(readiness()) else { return .dismissNeverReady }
+        if late() { return .deadlinePassed(stage: "dismiss ready") }
+        // The chosen control again, immediately before the one tap.
+        guard target(readiness()) == chosen else { return .targetLost(chosen) }
+        if late() { return .deadlinePassed(stage: "before tap") }
+        tap(chosen)
+        if late() { return .deadlinePassed(stage: "tap") }
+        guard waitUntil(remaining(), { isGone(overlays(), after: chosen) }) else {
+            return .neverDismissed(chosen)
+        }
+        if late() { return .deadlinePassed(stage: "dismissed") }
+        return .dismissed(chosen)
+    }
 }

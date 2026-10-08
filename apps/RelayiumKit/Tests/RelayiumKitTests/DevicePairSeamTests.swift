@@ -162,6 +162,224 @@ final class DevicePairSeamTests: XCTestCase {
             """)
     }
 
+    /// **One look is one immutable tree, and a look that failed is never an
+    /// empty room.**
+    ///
+    /// The physical Mini run on 2026-10-05 passed every claim and then failed
+    /// inside the resident's hold: the old observation enumerated live queries
+    /// and read `label` off each bound element, so the iPhone leaving between
+    /// the two reads became XCTest's "No matches found". This compiles the
+    /// `roster-observation` block of `DevicePairAcceptance.swift` VERBATIM beside
+    /// the real `DevicePairRosterChoice` and drives it with fake snapshot trees,
+    /// so the scopes, the refusals and the hold's release rule are executed here
+    /// rather than read.
+    func testTheRosterObservationReadsOneTreeAndNeverMistakesAFailedLookForAnEmptyRoom() throws {
+        let cases: [(String, String)] = [
+            // The shape the failing log showed, with the peer's row present.
+            ("present", "observed [iPhone] [iPhone] -> takeContained"),
+            // The peer leaves the instant after the look. The look still reports
+            // what it saw, and nothing re-read the live room to find out.
+            ("vanished", "observed [iPhone] [iPhone] liveReads=0"),
+            // The same room after the peer left: a VALID empty look.
+            ("gone", "observed [] [] -> empty"),
+            // A look that could not be taken is not that empty room.
+            ("throws", "unavailable: the accessibility snapshot could not be taken: refused -> nil"),
+            // `containing` is about descendants: a button whose OWN label is the
+            // peer's name, with nothing inside it, is not a named row; a button
+            // labelled otherwise, with the name in a Text inside it, is.
+            ("self-label only", "observed [] [] -> empty"),
+            ("descendant name", "observed [] [Row] -> takeNamed"),
+            ("disabled", "observed [iPhone!] [iPhone!] -> notSelectable(label: \"iPhone\")"),
+            // The container is an Other matched by identifier OR label, and
+            // nothing else of that name is a container.
+            ("container by identifier", "observed [iPhone] [iPhone] -> takeContained"),
+            ("button named like the container", "observed [] [Nearby devices] -> takeNamed"),
+            ("duplicate container", "unavailable: 2 elements are labelled \"Nearby devices\" -> nil"),
+            ("over the cap", "unavailable: the accessibility tree exceeded 5 nodes -> nil"),
+            ("under the cap", "observed [iPhone] [iPhone] -> takeContained"),
+            // Partial exposure still refuses: one row in the container, a second
+            // named row outside it.
+            ("ambiguous 1 vs 2", "observed [iPhone] [iPhone, iPhone] -> ambiguous(contained: 1, named: 2)"),
+            ("ambiguous 2 vs 1", "observed [iPhone, iPad] [iPhone] -> ambiguous(contained: 2, named: 1)"),
+            ("shared stranger", "observed [Studio Mac] [] -> takeContained"),
+            ("distinct stranger", "observed [Studio Mac] [] -> notTheIntendedPeer(label: \"Studio Mac\")"),
+            ("distinct no name", "observed [iPhone] [] -> notTheIntendedPeer(label: \"iPhone\")"),
+            // The resident's hold. Only a look that SAW both scopes empty
+            // releases it; failed looks neither release nor count as presence.
+            ("hold unknown then empty", "released at 2"),
+            ("hold unknown throughout", "ceiling unobservable(reason: \"the accessibility snapshot could not be taken: refused\")"),
+            ("hold present", "ceiling peerStillPresent"),
+            ("hold present then unknown", "ceiling unobservable(reason: \"the accessibility snapshot could not be taken: refused\")"),
+            ("hold before any look", "ceiling unobservable(reason: \"no look was taken\")"),
+        ]
+
+        let driver = """
+        import Foundation
+
+        struct Fake: DevicePairRosterNode {
+            var rosterKind: DevicePairRosterNodeKind
+            var identifier = ""
+            var label = ""
+            var isEnabled = true
+            var kids: [Fake] = []
+            var rosterChildren: [DevicePairRosterNode] { kids }
+        }
+        struct Refused: Error, CustomStringConvertible { var description: String { "refused" } }
+
+        func text(_ label: String) -> Fake { Fake(rosterKind: .unrelated, label: label) }
+        func row(_ name: String, enabled: Bool = true) -> Fake {
+            Fake(rosterKind: .button, label: name, isEnabled: enabled, kids: [text(name)])
+        }
+        func roster(_ rows: [Fake], identifier: String = "", label: String = "Nearby devices") -> Fake {
+            Fake(rosterKind: .other, identifier: identifier, label: label, kids: rows)
+        }
+        // The window chrome the failing run's log listed, so every room has
+        // buttons that are neither rows nor named.
+        let chrome = [Fake(rosterKind: .button, label: "Hide Sidebar"),
+                      Fake(rosterKind: .button, identifier: "destination-help", label: "Help"),
+                      Fake(rosterKind: .button, label: "Pause receiving")]
+        func app(_ kids: [Fake]) -> Fake {
+            Fake(rosterKind: .unrelated, label: "Relayium",
+                 kids: [Fake(rosterKind: .other, label: "window", kids: chrome + kids)])
+        }
+
+        func look(_ root: Fake, peer: String = "iPhone",
+                  cap: Int = DevicePairRosterObservation.nodeCap) -> DevicePairRosterObservation {
+            DevicePairRosterObservation.observe(containerLabel: "Nearby devices",
+                                                peerName: peer, nodeCap: cap) { root }
+        }
+        let failed = DevicePairRosterObservation.observe(containerLabel: "Nearby devices",
+                                                         peerName: "iPhone") { throw Refused() }
+        func show(_ o: DevicePairRosterObservation) -> String {
+            func list(_ c: [DevicePairRosterCandidate]) -> String {
+                "[" + c.map { $0.label + ($0.isEnabled ? "" : "!") }.joined(separator: ", ") + "]"
+            }
+            switch o {
+            case let .observed(contained, named): return "observed \\(list(contained)) \\(list(named))"
+            case let .unavailable(reason): return "unavailable: \\(reason)"
+            }
+        }
+        func decided(_ name: String, _ o: DevicePairRosterObservation,
+                     _ naming: DevicePairPeerNaming = .distinct, peer: String = "iPhone") {
+            let choice = o.choice(naming: naming, peerName: peer).map { "\\($0)" } ?? "nil"
+            print("\\(name)\\t\\(show(o)) -> \\(choice)")
+        }
+        func hold(_ name: String, _ looks: [DevicePairRosterObservation]) {
+            var hold = DevicePairRoomHold()
+            for (index, observation) in looks.enumerated() {
+                if hold.record(observation) { return print("\\(name)\\treleased at \\(index)") }
+            }
+            print("\\(name)\\tceiling \\(hold.ceiling)")
+        }
+
+        decided("present", look(app([roster([row("iPhone")])])))
+
+        // A live room whose reads are counted once the snapshot has been taken.
+        final class LiveRoom {
+            var rows = ["iPhone"]
+            var snapped = false
+            var readsAfterSnapshot = 0
+            func label(_ index: Int) -> String {
+                if snapped { readsAfterSnapshot += 1 }
+                return rows[index]
+            }
+        }
+        let room = LiveRoom()
+        let vanished = DevicePairRosterObservation.observe(containerLabel: "Nearby devices",
+                                                           peerName: "iPhone") {
+            let tree = app([roster(room.rows.indices.map { row(room.label($0)) })])
+            room.snapped = true
+            room.rows.removeAll()
+            return tree
+        }
+        print("vanished\\t\\(show(vanished)) liveReads=\\(room.readsAfterSnapshot)")
+
+        let gone = look(app([roster([])]))
+        decided("gone", gone)
+        decided("throws", failed)
+        decided("self-label only", look(app([roster([]), Fake(rosterKind: .button, label: "iPhone")])))
+        decided("descendant name",
+                look(app([Fake(rosterKind: .button, label: "Row",
+                               kids: [Fake(rosterKind: .unrelated, kids: [text("my iPhone")])])])),
+                .shared)
+        decided("disabled", look(app([roster([row("iPhone", enabled: false)])])))
+        decided("container by identifier",
+                look(app([roster([row("iPhone")], identifier: "Nearby devices", label: "Devices")])))
+        decided("button named like the container",
+                look(app([Fake(rosterKind: .button, label: "Nearby devices", kids: [text("iPhone")])])),
+                .shared)
+        decided("duplicate container", look(app([roster([row("iPhone")]), roster([])])))
+        decided("over the cap", look(app([roster([row("iPhone")])]), cap: 5))
+        decided("under the cap", look(app([roster([row("iPhone")])]), cap: 9))
+        decided("ambiguous 1 vs 2", look(app([roster([row("iPhone")]), row("iPhone")])))
+        decided("ambiguous 2 vs 1", look(app([roster([row("iPhone"), row("iPad")])])))
+        decided("shared stranger", look(app([roster([row("Studio Mac")])])), .shared)
+        decided("distinct stranger", look(app([roster([row("Studio Mac")])])))
+        decided("distinct no name", look(app([roster([row("iPhone")])]), peer: ""), peer: "")
+
+        let present = look(app([roster([row("iPhone")])]))
+        hold("hold unknown then empty", [failed, failed, gone, present])
+        hold("hold unknown throughout", [failed, failed, failed, failed, failed])
+        hold("hold present", [present, present])
+        hold("hold present then unknown", [present, failed])
+        hold("hold before any look", [])
+
+        """
+
+        let acceptance = try Self.uiTestSource("DevicePairAcceptance.swift")
+        guard let begin = acceptance.range(of: "// BEGIN roster-observation"),
+              let end = acceptance.range(of: "// END roster-observation"),
+              begin.upperBound < end.lowerBound else {
+            throw DevicePairSeamError(description: """
+                DevicePairAcceptance.swift no longer marks its roster-observation block, so the \
+                observation the physical roles run cannot be executed here.
+                """)
+        }
+        let block = "import Foundation\n" + String(acceptance[begin.lowerBound..<end.upperBound])
+        let produced = try runSwift(driver: driver, sources: [
+            ("RosterObservation.swift", block),
+            ("DevicePairRosterChoice.swift", try Self.uiTestSource("DevicePairRosterChoice.swift")),
+        ])
+        XCTAssertEqual(produced, cases.map { "\($0.0)\t\($0.1)" }, """
+            the roster observation does not report what the physical roles rely on. Each line \
+            is one look: a failed look must stay distinguishable from an empty room, names \
+            count only from a row's descendants, a second container or an oversized tree is \
+            refused, and the resident's hold ends only on a look that SAW the roster empty.
+            """)
+    }
+
+    /// **The physical roles look through the snapshot, and only through it.**
+    ///
+    /// The executed block above is only half the fix: the XCTest side must feed
+    /// it ONE `app.snapshot()` and must not go back to enumerating live queries
+    /// and reading their attributes, and the hold must turn an unobservable
+    /// ceiling into a failure rather than a note.
+    func testThePhysicalRolesObserveTheRosterThroughOneSnapshot() throws {
+        let acceptance = try Self.codeOnly(Self.uiTestSource("DevicePairAcceptance.swift"))
+        guard let start = acceptance.range(of: "func observeRoster("),
+              let end = acceptance.range(of: "func awaitSpokenDigits(") else {
+            throw DevicePairSeamError(description: "the roster section of DevicePairAcceptance.swift moved")
+        }
+        let section = String(acceptance[start.lowerBound..<end.lowerBound])
+        XCTAssertEqual(section.components(separatedBy: "app.snapshot()").count - 1, 1,
+                       "one roster look must be exactly one app.snapshot()")
+        for banned in ["allElementsBoundByIndex", ".label", ".isEnabled", "rosterCandidates"] {
+            XCTAssertFalse(section.contains(banned), """
+                the roster section reads \(banned) off the live app again. That re-resolves a \
+                query against a room the peer may already have left, which is the failure the \
+                physical Mini run on 2026-10-05 hit after every claim had passed.
+                """)
+        }
+        let suite = try Self.codeOnly(Self.uiTestSource("DevicePairUITests.swift"))
+        let hold = try Self.body(of: "holdRoomUntilPeerLeaves", in: suite)
+        XCTAssertTrue(hold.contains("hold.record(observeRoster(run, in: app))"),
+                      "the resident's hold no longer releases through DevicePairRoomHold")
+        XCTAssertTrue(hold.contains("case let .unobservable(reason) = hold.ceiling"),
+                      "the resident's hold no longer distinguishes an unobservable ceiling")
+        XCTAssertTrue(hold.contains("XCTFail("),
+                      "an unobservable ceiling no longer fails the resident's run")
+    }
+
     // MARK: - the launch, which decides whether either device is in the room
 
     /// **The two arguments the physical harness must never pass.**
@@ -425,22 +643,69 @@ final class DevicePairSeamTests: XCTestCase {
     /// exactly what the un-held version proved.
     func testAReceivingRoleHoldsItsCompletedStateBeforeItPressesDone() throws {
         let suite = try Self.codeOnly(Self.uiTestSource("DevicePairUITests.swift"))
-        XCTAssertEqual(suite.components(separatedBy: "holdForContainerRead(").count - 1, 1, """
-            exactly one role receives a file — the Nearby resident — and it must hold its \
-            completed state while the launcher reads the bytes off that device.
+        XCTAssertEqual(suite.components(separatedBy: "holdForContainerRead(").count - 1, 2, """
+            exactly two roles receive a file — the Nearby resident and the pairing joiner — \
+            and each must hold its completed state while the launcher reads the bytes.
             """)
-        for skipped in ["testPairingCodeFilesAreSentToThePhysicalPeer",
-                        "testPairingCodeFilesFromThePhysicalPeerAreReceived"] {
-            XCTAssertTrue(try Self.body(of: skipped, in: suite)
-                .contains("throw XCTSkip(Self.filePhaseNeedsAWorkspaceStagingSeam)"), """
-                \(skipped) must say why it cannot run rather than pass, fail or vanish: a \
-                pairing file phase reported green would be a claim nothing drove.
-                """)
+        // The pairing file roles are driven, not skipped: the generator stages
+        // through the in-workspace fixture and mints a real code behind the
+        // account gate; the joiner stages nothing and joins the published code.
+        // Each named step must be present, in this order.
+        let roles: [(test: String, steps: [String], absent: [String])] = [
+            ("testPairingCodeFilesAreSentToThePhysicalPeer",
+             ["requireDevicePairRun(role: \"pair-file-generator\")",
+              "launchForDevicePair(app, verifying: true, stagingFixture: true)",
+              "openPairingTab()", "requireVerificationIsOn()", "try mintCode(run)",
+              "compareAndConfirm(run, title: DevicePair.verifyTitle,",
+              "sendMessage(run.message", "awaitPeerMessage(run)",
+              "awaitBatchState(DevicePair.batchFinishedLabel)",
+              "awaitPeerEndsLink(run)", "endLinkAndDismiss()"],
+             ["XCTSkip", "joinCode(", "holdForContainerRead(", "Thread.sleep"]),
+            ("testPairingCodeFilesFromThePhysicalPeerAreReceived",
+             ["requireDevicePairRun(role: \"pair-file-joiner\")",
+              "freshReceivedFolder: !run.keepsReceivedFolder",
+              "openPairingTab()", "requireVerificationIsOn()",
+              "emitDevicePair(.ready", "try joinCode(run)",
+              "compareAndConfirm(run, title: DevicePair.verifyTitle,",
+              "awaitPeerMessage(run)", "sendMessage(run.message",
+              "app.buttons[DevicePair.acceptFilesLabel]", "accept.tap()",
+              "awaitBatchState(DevicePair.batchSavedLabel)",
+              "emitDevicePair(.received", "holdForContainerRead(", "endLinkAndDismiss()"],
+             ["XCTSkip", "stagingFixture", "mintCode(", "Thread.sleep"]),
+        ]
+        for role in roles {
+            // Up to the next helper too, so a private helper declared after
+            // the role cannot lend it a step it does not take.
+            let whole = try Self.body(of: role.test, in: suite)
+            let body = whole.components(separatedBy: "\n    private func ").first ?? whole
+            var cursor = body.startIndex
+            for step in role.steps {
+                guard let found = body.range(of: step, range: cursor..<body.endIndex) else {
+                    XCTFail("""
+                        \(role.test) no longer takes "\(step)" in order — a pairing \
+                        file phase reported green would then be a claim nothing drove.
+                        """)
+                    break
+                }
+                cursor = found.upperBound
+            }
+            for forbidden in role.absent {
+                XCTAssertFalse(body.contains(forbidden),
+                               "\(role.test) must not contain \"\(forbidden)\"")
+            }
         }
-        // The receiving role, with the control that ENDS its session named
-        // explicitly: the Nearby resident leaves the link.
+        // The sender's wait for the peer-ended link is a bounded poll of the
+        // exit control, never a clock, and it fails rather than passes on expiry.
+        let peerEnd = try Self.body(of: "awaitPeerEndsLink", in: suite)
+        for required in ["run.peerBudget", "!leave.exists && done.exists", "XCTFail("] {
+            XCTAssertTrue(peerEnd.contains(required),
+                          "awaitPeerEndsLink no longer contains \"\(required)\"")
+        }
+        // Each receiving role, with the control that ENDS its session named
+        // explicitly.
         for (test, exit) in [
             ("testNearbyAcceptsThePhysicalPeerAndTransfersBothWays", "endLinkAndDismiss()"),
+            ("testPairingCodeFilesFromThePhysicalPeerAreReceived", "endLinkAndDismiss()"),
         ] {
             let body = try Self.body(of: test, in: suite)
             guard let published = body.range(of: "emitDevicePair(.received"),
@@ -901,9 +1166,9 @@ final class DevicePairSeamTests: XCTestCase {
             """)
         XCTAssertEqual(
             suite.components(separatedBy: "freshReceivedFolder: !run.keepsReceivedFolder").count - 1,
-            1, """
-            exactly one role receives a file — the Nearby resident — and it must honour \
-            the operator's choice.
+            2, """
+            exactly two roles receive a file — the Nearby resident and the pairing joiner — \
+            and each must honour the operator's choice.
             """)
     }
 
@@ -1000,20 +1265,31 @@ final class DevicePairSeamTests: XCTestCase {
     /// repository: both files are copied into a fresh temporary directory, which
     /// is removed afterwards whether the case passed or not.
     private func runSwift(driver: String, alongside name: String) throws -> [String] {
+        try runSwift(driver: driver, sources: [(name, Self.uiTestSource(name))])
+    }
+
+    /// The same, over several named sources — for a marked block compiled beside
+    /// the file it depends on.
+    private func runSwift(driver: String, sources: [(String, String)]) throws -> [String] {
+        let name = sources.map(\.0).joined(separator: " + ")
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("relayium-roster-choice-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let subject = root.appendingPathComponent(name)
-        try Self.uiTestSource(name).write(to: subject, atomically: true, encoding: .utf8)
+        var subjects: [String] = []
+        for (file, text) in sources {
+            let subject = root.appendingPathComponent(file)
+            try text.write(to: subject, atomically: true, encoding: .utf8)
+            subjects.append(subject.path)
+        }
         let main = root.appendingPathComponent("main.swift")
         try driver.write(to: main, atomically: true, encoding: .utf8)
 
         let binary = root.appendingPathComponent("subject")
         let compile = Process()
         compile.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        compile.arguments = ["swiftc", "-Onone", subject.path, main.path, "-o", binary.path]
+        compile.arguments = ["swiftc", "-Onone"] + subjects + [main.path, "-o", binary.path]
         let compileErrors = Pipe()
         compile.standardError = compileErrors
         compile.standardOutput = Pipe()
