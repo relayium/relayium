@@ -112,7 +112,7 @@ const en = article({
     {
       symptom: "The other device never appears, so there is no card to open a message session from.",
       code: ["https://relayium.com/   # compare the public IP in the status pill on both devices"],
-      fix: "Same-network discovery groups devices by the public IP they connect from, so two different addresses mean two rooms — drop a VPN or iCloud Private Relay, or join the same Wi-Fi. If they are genuinely on different networks, use a pairing code on https://relayium.com/cross-network instead.",
+      fix: "Same-network discovery groups devices by the public IP they connect from — the exact IPv4 address, or the /64 network prefix of an IPv6 address — so two different IPv4 addresses, one of each family, or IPv6 addresses from different prefixes mean two rooms — a VPN or iCloud Private Relay may be why, so try without it, or join the same Wi-Fi. If they are genuinely on different networks, use a pairing code on https://relayium.com/cross-network instead.",
     },
     {
       symptom: "The composer refuses the text and says the message is too long.",
@@ -222,7 +222,7 @@ const zh = article({
     {
       symptom: "对方设备一直不出现，也就没有卡片可以开消息会话。",
       code: ["https://relayium.com/   # 对比两台设备上状态条里的公网 IP"],
-      fix: "同网络发现是按连接过来的公网 IP 分组的，所以两个不同地址就是两个房间——断开 VPN 或 iCloud 专用代理，或者连到同一个 Wi-Fi。如果两端确实不在同一网络，就改用 https://relayium.com/cross-network 上的配对码。",
+      fix: "同网络发现是按连接过来的公网 IP 分组的——IPv4 看完整地址，IPv6 看地址的 /64 网络前缀——所以两个不同的 IPv4 地址、一个 IPv4 一个 IPv6，或者网络前缀不同的 IPv6 地址，就是两个房间——VPN 或 iCloud 专用代理可能是原因，可以先断开再试，或者连到同一个 Wi-Fi。如果两端确实不在同一网络，就改用 https://relayium.com/cross-network 上的配对码。",
     },
     {
       symptom: "输入框拒收这段文本，提示消息太长。",

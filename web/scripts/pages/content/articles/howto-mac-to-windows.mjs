@@ -24,7 +24,7 @@ const en = {
         label: "What you need",
         items: [
           "A Mac with Safari or Chrome, and a Windows PC with Edge or Chrome — any modern browser on either side.",
-          "For the simplest path, both machines on the same Wi-Fi or Ethernet network. Mixing the two is fine: a wired PC and a Mac on the same router still share one public IP, which is what puts them in the same room.",
+          "For the simplest path, both machines on the same Wi-Fi or Ethernet network. Mixing the two is fine: a wired PC and a Mac on the same router usually still share one public IPv4 address, or over IPv6 one /64 network prefix (the first 64 bits of their addresses), which is what puts them in the same room.",
           "The page open over https://relayium.com/ on both. Encrypted transfer needs HTTPS, and over plain http:// the page says so instead of listing devices.",
           "For a large batch, Chrome or Edge on whichever machine is receiving. Only those can stream straight to disk and let you pick a target folder — Safari has no such API and has to assemble the batch in memory instead.",
           "The files or folders to send — up to 1,000 files per batch.",
@@ -42,7 +42,7 @@ const en = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "Compare the public IP in the status pill on both machines. One shared address is what puts them in the same room — a corporate VPN on the work laptop is the usual reason two machines on one office network report different ones.",
+          text: "Compare the public IP in the status pill on both machines. Over IPv4, one shared address is what puts them in the same room — a corporate VPN on the work laptop is a common reason two machines on one office network report different ones. Over IPv6 the two addresses usually differ even on one network, so there only an IPv4 address on one machine and an IPv6 address on the other is a sure sign of two rooms.",
           code: ["Connected · this device MacBook · public IP 203.0.113.9"],
         },
         {
@@ -75,12 +75,12 @@ const en = {
           {
             symptom: "Neither machine appears under “Nearby devices”, even though both are on the office Wi-Fi.",
             code: ["https://relayium.com/   # compare the public IP in the status pill on both machines"],
-            fix: "Two different public IP addresses mean two rooms, and a corporate VPN is one common cause: it carries one machine out through the company's address while the other leaves through the office router. A guest SSID that exits elsewhere is another, and they are not the only ones. If you are willing to change them, disconnect the VPN on that machine or leave the guest SSID, then reload https://relayium.com/ there. If the VPN has to stay up, a pairing code on https://relayium.com/cross-network reaches the other machine without dropping it.",
+            fix: "Two different public IPv4 addresses, one IPv4 and one IPv6 address, or IPv6 addresses from different network prefixes mean two rooms, and a corporate VPN is one common cause: it carries one machine out through the company's address while the other leaves through the office router. A guest SSID that exits elsewhere is another, and they are not the only ones. If you are willing to change them, disconnect the VPN on that machine or leave the guest SSID, then reload https://relayium.com/ there. If the VPN has to stay up, a pairing code on https://relayium.com/cross-network reaches the other machine without dropping it.",
           },
           {
-            symptom: "Both machines show the same public IP and neither card appears.",
+            symptom: "Both machines are listed, but opening the workspace never connects.",
             code: ["https://relayium.com/   # the hint under the device list names the router setting"],
-            fix: "The network is separating its own clients. On a router that is yours, turn off “AP isolation / client isolation”; on a managed office network that you cannot change, pair the two machines with a code on https://relayium.com/cross-network instead.",
+            fix: "If the workspace header stays on “Connecting…” or shows “Connection failed”, the network may be separating its own clients: the server still lists both machines, but they cannot reach each other directly. On a router that is yours, turn off “AP isolation / client isolation”; on a managed office network that you cannot change, pair the two machines with a code on https://relayium.com/cross-network instead.",
           },
           {
             symptom: "The Mac warns, before you accept, that the whole batch has to be held in memory.",
@@ -95,7 +95,7 @@ const en = {
           {
             symptom: "The transfer works but the badge reads “P2P direct” instead of “LAN direct”.",
             code: ["https://relayium.com/   # read the path badge in the workspace header"],
-            fix: "The two machines share a public IP without sharing a local hop, which is what two VLANs behind one office uplink look like. The transfer is still direct and still end-to-end encrypted; put both on the same subnet if you want the path to be your LAN rather than whatever route the browsers found.",
+            fix: "The two machines share a room without sharing a local hop, which is what two VLANs behind one office uplink look like. The transfer is still direct and still end-to-end encrypted; put both on the same subnet if you want the path to be your LAN rather than whatever route the browsers found.",
           },
         ],
       },
@@ -181,7 +181,7 @@ const zh = {
         label: "你需要准备",
         items: [
           "一台用 Safari 或 Chrome 的 Mac，一台用 Edge 或 Chrome 的 Windows PC——任意一侧用现代浏览器即可。",
-          "最简单的方式是把两台电脑接入同一个 Wi-Fi 或有线网络。有线和无线混着用也没问题：同一台路由器下的有线 PC 和 Mac 仍然共享同一个公网 IP，而这正是把它们放进同一个房间的依据。",
+          "最简单的方式是把两台电脑接入同一个 Wi-Fi 或有线网络。有线和无线混着用也没问题：同一台路由器下的有线 PC 和 Mac 通常仍然共享同一个公网 IPv4 地址，走 IPv6 时则共享同一个 /64 网络前缀（地址的前 64 位），而这正是把它们放进同一个房间的依据。",
           "两台都通过 https://relayium.com/ 打开页面。加密传输需要 HTTPS，用普通 http:// 打开时页面会直接这么说，而不会列出设备。",
           "如果这一批很大，接收那一侧请用 Chrome 或 Edge。只有它们能流式直接落盘，并让你先挑好目标文件夹——Safari 没有这个接口，只能把整批内容在内存里拼装。",
           "要发送的文件或文件夹——每批最多 1,000 个文件。",
@@ -199,7 +199,7 @@ const zh = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "对比两台机器上状态条里的公网 IP。共享同一个地址才会把它们放进同一个房间——同一个办公网络里的两台机器却报出不同地址，通常是工作笔记本上开着公司 VPN。",
+          text: "对比两台机器上状态条里的公网 IP。走 IPv4 时，地址相同才会把它们放进同一个房间——同一个办公网络里的两台机器却报出不同的 IPv4 地址，常见原因是工作笔记本上开着公司 VPN。走 IPv6 时即使在同一个网络里两个地址通常也不同，所以只有一台是 IPv4、另一台是 IPv6 才能确定是两个房间。",
           code: ["已连接 · 本机 MacBook · 公网 IP 203.0.113.9"],
         },
         {
@@ -232,12 +232,12 @@ const zh = {
           {
             symptom: "两台机器都连着办公 Wi-Fi，但「附近的设备」里谁也不出现。",
             code: ["https://relayium.com/   # 对比两台机器上状态条里的公网 IP"],
-            fix: "两个不同的公网 IP 就是两个房间，而公司 VPN 是常见原因之一：它把一台机器从公司的出口地址带出去，另一台却还从办公室路由器出去。从别处出网的访客 SSID 是另一种，两者都不是唯一可能。如果你愿意改：在那台机器上断开 VPN，或者离开访客 SSID，然后在那里重新加载 https://relayium.com/。如果 VPN 必须一直开着，用 https://relayium.com/cross-network 上的配对码也能连到另一台机器，不用断开它。",
+            fix: "两个不同的公网 IPv4 地址、一个 IPv4 一个 IPv6，或者网络前缀不同的 IPv6 地址，就是两个房间，而公司 VPN 是常见原因之一：它把一台机器从公司的出口地址带出去，另一台却还从办公室路由器出去。从别处出网的访客 SSID 是另一种，两者都不是唯一可能。如果你愿意改：在那台机器上断开 VPN，或者离开访客 SSID，然后在那里重新加载 https://relayium.com/。如果 VPN 必须一直开着，用 https://relayium.com/cross-network 上的配对码也能连到另一台机器，不用断开它。",
           },
           {
-            symptom: "两台机器显示的公网 IP 相同，却都不出现卡片。",
+            symptom: "两台机器都列出来了，但打开工作区后始终连不上。",
             code: ["https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关"],
-            fix: "网络把自己的客户端隔开了。路由器如果是你自己的，就关闭「AP 隔离 / 客户端隔离」；如果是你无权改动的受管办公网络，就改用 https://relayium.com/cross-network 上的配对码让两台机器配对。",
+            fix: "如果工作区标题栏一直停在「连接中…」或显示「连接失败」，可能是网络把自己的客户端隔开了：服务器仍会列出两台机器，但它们无法直接连到对方。路由器如果是你自己的，就关闭「AP 隔离 / 客户端隔离」；如果是你无权改动的受管办公网络，就改用 https://relayium.com/cross-network 上的配对码让两台机器配对。",
           },
           {
             symptom: "还没点接收，Mac 就警告说整批文件必须放在内存里。",
@@ -252,7 +252,7 @@ const zh = {
           {
             symptom: "传输能跑，但标签显示的是「P2P 直连」而不是「局域网直连」。",
             code: ["https://relayium.com/   # 看工作区标题栏里的路径标签"],
-            fix: "两台机器共享同一个公网 IP，却没有共享本地的那一跳——同一条办公上行下的两个 VLAN 就是这个样子。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台放到同一个子网里。",
+            fix: "两台机器在同一个房间，却没有共享本地的那一跳——同一条办公上行下的两个 VLAN 就是这个样子。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台放到同一个子网里。",
           },
         ],
       },

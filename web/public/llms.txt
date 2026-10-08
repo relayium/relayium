@@ -5,7 +5,7 @@
 ## What it is
 
 - **Category:** Secure file transfer and online-only ephemeral text transfer between devices, on the same network or across the internet.
-- **Same-network (default):** Open https://relayium.com on two devices on the same network. They discover each other automatically (grouped into a "room" by shared public IP). Pick files (or drag-and-drop, up to 1,000 at once) or send an ephemeral text message; the receiver accepts the file batch and the content travels end-to-end encrypted. A text session opens straight into the composer. Comparing a short verification code is an optional extra step (advanced verification, off by default — see below). No account needed.
+- **Same-network (default):** Open https://relayium.com on two devices on the same network. They discover each other automatically (grouped into a "room" by the exact public IPv4 address, or by the IPv6 /64 prefix; this grouping is a discovery heuristic, not proof of trust, and devices on different address families or prefixes may need a pairing code). Pick files (or drag-and-drop, up to 1,000 at once) or send an ephemeral text message; the receiver accepts the file batch and the content travels end-to-end encrypted. A text session opens straight into the composer. Comparing a short verification code is an optional extra step (advanced verification, off by default — see below). No account needed.
 - **Cross-network:** two pages — realtime file and ephemeral text transfer at /cross-network (the code creator signs in; the person joining by 6-digit pairing code / join link / QR does not), and async stored file transfer at /offline-transfer (sender signs in, recipients never need an account).
 
 ## Transfer modes

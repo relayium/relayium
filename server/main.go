@@ -590,8 +590,9 @@ func main() {
 	}
 
 	// X-Forwarded-For is only trusted from configured reverse proxies; otherwise
-	// the direct peer IP is authoritative (see signal.IPExtractor). LAN grouping
-	// uses that exact value; abuse limits derive an IPv4-address or IPv6-/64 key.
+	// the direct peer IP is authoritative (see signal.IPExtractor). welcome.ip
+	// reports that exact value; LAN rooms (signal.RoomKey) and abuse limits
+	// derive an IPv4-address or IPv6-/64 key from it.
 	trustedNets, err := parseTrustedProxies(*trustedProxies)
 	if err != nil {
 		log.Fatalf("%v", err)

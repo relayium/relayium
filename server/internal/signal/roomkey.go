@@ -12,10 +12,11 @@ import (
 // below) or falls inside one of the configured trusted-proxy CIDRs; otherwise it
 // always uses the direct connection's remote host (port stripped).
 //
-// This IP is used as a rate-limit key (/api/pair, /ws?code=) and as the LAN
-// room key. Trusting a forgeable header from an untrusted peer would let an
-// attacker bypass the pairing-code rate limits or hijack another user's LAN
-// room, so a genuinely remote/public peer's XFF is never trusted by default.
+// This IP is the source of the rate-limit key (/api/pair, /ws?code=) and of
+// the LAN room key (see RateLimitKey and RoomKey). Trusting a forgeable header
+// from an untrusted peer would let an attacker bypass the pairing-code rate
+// limits or hijack another user's LAN room, so a genuinely remote/public peer's
+// XFF is never trusted by default.
 //
 // LOOPBACK IS ALWAYS TRUSTED. The standard deployment is a same-host reverse
 // proxy (nginx/Caddy → 127.0.0.1:8080), so the server's direct peer is loopback
@@ -120,20 +121,34 @@ func RateLimitKey(ip string) string {
 }
 
 // RateLimitKey resolves the trusted client address before normalizing it. It
-// intentionally remains separate from RoomKey: LAN grouping keeps its exact
-// existing public-IP behavior.
+// stays separate from RoomKey even though both group IPv6 by /64: they differ
+// on a value that is not an address (RoomKey returns it unchanged, RateLimitKey
+// collapses it to "invalid-ip"), and an abuse budget and a discovery room are
+// separate decisions that should be able to change independently.
 func (x *IPExtractor) RateLimitKey(r *http.Request) string {
 	return RateLimitKey(x.IP(r))
 }
 
-// RoomKey groups clients sharing a public IP into one room (pseudo-LAN discovery).
+// RoomKey is the code-less LAN discovery room for r: clients with the same key
+// see each other in the roster. It is a heuristic for "probably the same
+// network", never an authorization: membership grants no trust and changes
+// nothing about the end-to-end handshake or how a receiver admits a transfer.
 //
-// IPv6 has no NAT. Every device on one network holds its own global address in
-// the /64 that network shares, so keying on the exact address gives each device
-// a room of its own and LAN discovery never connects two of them. Group by /64
-// instead: that prefix is the IPv6 equivalent of the single NATed IPv4 address
-// an IPv4 room is already built on. IPv4 is unchanged, and so is any value that
-// is not an address at all.
+// IPv4 keys on the exact observed address, the shared public address of a
+// typical NATed network. IPv6 keys on the observed address's /64. Devices on an
+// IPv6 network usually reach the server from distinct global addresses (IPv6
+// NAT is uncommon but exists), and those addresses usually share the network's
+// /64, the prefix SLAAC assigns from. Keying on the exact address put devices
+// with distinct observed addresses in separate rooms, so they could not discover
+// each other.
+//
+// What the /64 does not prove: that two clients are physically near each other
+// or can reach each other directly. And what it misses: a device that reaches
+// the server over IPv4 while another uses IPv6, devices on different prefixes
+// (multiple prefixes; a VPN or privacy relay may cause this), and a device
+// whose address changes, since an open WebSocket stays in the room it joined.
+// Pairing codes cover those cases. A value that is not an address is returned
+// unchanged.
 func (x *IPExtractor) RoomKey(r *http.Request) string {
 	ip := x.IP(r)
 	if parsed := net.ParseIP(ip); parsed != nil && parsed.To4() == nil {

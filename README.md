@@ -241,7 +241,11 @@ handshake and an optional short code two humans can compare out of band.
                       LAN: direct · browser cross-network: TURN carries ciphertext only
 ```
 
-1. Both browsers connect to the signaling server over WebSocket and are grouped into a **room by public IP**.
+1. Both browsers connect to the signaling server over WebSocket and are grouped into a **room by public IP**:
+   the exact address over IPv4, the address's `/64` prefix over IPv6 (where each device usually has its own
+   global address). This is a "probably the same network" heuristic, not proof of proximity or trust; devices
+   that reach the server over different address families or IPv6 prefixes land in different rooms (a VPN may
+   cause this) and can use a pairing code instead.
 2. The sender creates a WebRTC offer (carrying its X25519 public key); the server relays it to the receiver.
 3. ICE candidates are exchanged, the DataChannel opens, and both sides derive shared session keys via ECDH.
 4. With *advanced verification* on (off by default), both screens show a **SAS code** derived from the
@@ -278,7 +282,7 @@ handshake and an optional short code two humans can compare out of band.
   band detects endpoint impersonation or key substitution. Displaying it and stopping for that comparison
   is opt-in (*advanced verification*, off by default; `--verify` in the CLI) — the commitment check that
   makes a ~20-bit code worth comparing is not, and rejects a mismatched reveal on every connection.
-- **Metadata minimization:** the server sees room membership (public IP), a device nickname, presence,
+- **Metadata minimization:** the server sees room membership (public IP; IPv6 grouped by `/64`), a device nickname, presence,
   and signaling envelopes. On a LAN, content travels directly over the DataChannel; cross-network browser
   TURN carries only end-to-end encrypted ciphertext; in the published CLI (v0.27.0) pairing-code
   sessions also use that ciphertext-only TURN relay whenever the server issues one, while `up`/`down`
@@ -378,7 +382,8 @@ of them opens onto a placeholder:
   local link alone — contacting no Relayium server — or through the code-less
   rendezvous room the Web and macOS clients join. That room is offered first,
   because it is the only one a browser or the Mac app is ever in, and it shows
-  the public IP the server keyed the room by. Nothing connects without an
+  this device's public IP as the server observed it (the room is keyed by that
+  address over IPv4 and by its `/64` over IPv6). Nothing connects without an
   explicit selection or an accepted prompt.
 * **Inbox** is a real Device Inbox receiver: it enrols a key, holds the
   receiving policy (off / ask / automatic), decrypts deliveries and keeps a
@@ -434,7 +439,7 @@ relayium/
 ├── server/                    # Go signaling server
 │   ├── main.go                 #   HTTP + WebSocket + static file serving
 │   ├── account/, ext/, httpx/, authx/, selfupdate/  #   importable outside internal/, see note below
-│   └── internal/signal/        #   hub (rooms by public IP), envelopes
+│   └── internal/signal/        #   hub (rooms by public IPv4 / IPv6 /64), envelopes
 └── docs/                      # design spec + manual test procedure
 ```
 
