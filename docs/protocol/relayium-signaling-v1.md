@@ -10,6 +10,30 @@ handshake ride inside `data` and are defined by the realtime layer, not here.
   holds exactly two peers; the LAN room holds up to a server cap (currently 50),
   so the `peers` roster there may list more than one other peer.
 
+## LAN room grouping (code-less joins)
+- The server chooses the LAN room from the client address it observes
+  (`X-Forwarded-For` is read only from a trusted proxy; see
+  `signal.IPExtractor`). Authoritative: `signal.IPExtractor.RoomKey`.
+- **IPv4:** the exact address. Clients behind one NATed public address share a
+  room; a different address, even in the same `/24`, is a different room.
+  An IPv4-mapped IPv6 spelling (`::ffff:a.b.c.d`) is keyed exactly as written,
+  like IPv4, and is never widened to a `/64`.
+- **IPv6:** the address masked to its `/64` (its first 64 bits). Devices on
+  one IPv6 network usually reach the server from distinct global addresses
+  (IPv6 NAT is uncommon but exists) inside the network's `/64`, the usual SLAAC
+  subnet.
+- A value that is not an address is used unchanged.
+- This is a discovery heuristic only. A shared key proves nothing about physical
+  proximity, household, authorization or direct reachability; it grants no trust
+  and changes nothing about consent or the end-to-end handshake.
+- Known misses, for which the pairing-code room is the fallback: one device on
+  IPv4 and another on IPv6; differing IPv6 prefixes (multiple prefixes; a VPN or
+  privacy relay may cause this); an address change, since an open WebSocket
+  stays in the room it joined until it reconnects.
+- `welcome.ip` is always the client's own exact observed address, never the room
+  key. Pairing-code rooms are never grouped by address, and abuse rate limits use
+  a separate key (`signal.RateLimitKey`).
+
 ## Pairing code (authoritative: `signal.CodeAlphabet` / `CodeLen` / `CodeTTLSeconds`)
 - Exactly **6 decimal digits**, `0`-`9`. Leading zeros are ordinary: `004291` and
   `000000` are valid codes and are NOT the integers 4291 and 0. A client that

@@ -20,8 +20,8 @@ const en = {
     {
       heading: "How same-network detection works",
       body: [
-        "Relayium does not ask you to type anything to find nearby devices. When your browser opens relayium.com without a pairing code, the server places you in a room based on the network you are connecting from — in practice, devices that share the same public IP address (the same home, office, or campus Wi-Fi, or the same mobile hotspot) land in the same room automatically.",
-        "That room is not capped at two participants: it holds however many devices open the site from that network, so a whole desk of laptops or a classroom of phones can all see each other at once, not just a single pair.",
+        "Relayium does not ask you to type anything to find nearby devices. When your browser opens relayium.com without a pairing code, the server places you in a room based on the network you are connecting from — in practice, devices on the same home, office, or campus Wi-Fi, or the same mobile hotspot, usually land in the same room automatically. Over IPv4 that means sharing one public IPv4 address. Over IPv6 each device usually shows its own public address, so the room is the network prefix instead: the first 64 bits of the address, the /64 a home or office network usually hands out. Being in one room only makes devices visible to each other; it does not make them trusted.",
+        "That room is not capped at two participants: several devices that open the site from that network can be listed at once, so a few laptops and phones on one desk can all see each other, not just a single pair. The server does limit how many devices one room holds and how many connections it accepts, so on a very busy network not everyone may be listed.",
       ],
     },
     {
@@ -44,11 +44,11 @@ const en = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "Read the status pill under the heading on both devices and compare the public IP in it. One shared address is what puts two devices in the same room; two different addresses mean two different networks, whatever the Wi-Fi name says.",
+          text: "Read the status pill under the heading on both devices and compare the public IP in it. Over IPv4, one shared address is what puts two devices in the same room, and two different IPv4 addresses mean two rooms, whatever the Wi-Fi name says. Over IPv6 the two addresses usually differ even on one network, so a mismatch there proves nothing by itself. One device showing an IPv4 address and the other an IPv6 address does mean two rooms.",
           code: ["Connected · this device MacBook · public IP 203.0.113.9"],
         },
         {
-          text: "Look under “Nearby devices”. Every device that opened the page from that network is listed there as a card carrying its own name — nothing to type, nothing to confirm.",
+          text: "Look under “Nearby devices”. Devices that opened the page from that network are listed there as cards, each carrying that device's own name — nothing to type, nothing to confirm.",
         },
         {
           text: "On the sending device, click the recipient's card and press “Open workspace”. On a current browser that is the single action a nearby-device card offers, because files, folders and messages all travel over the one encrypted connection it opens. The room may list several devices; opening a workspace is how you pick the one this transfer goes to, and you open another one when the next person's turn comes.",
@@ -66,7 +66,7 @@ const en = {
       success: {
         label: "What a working transfer looks like",
         body: [
-          "The peer card is gone by then — the workspace took its place. The state is in the workspace header instead: the device you are connected to, a link state of “Connected”, and one path badge reading “LAN direct”, a host-to-host hop across your own network. “P2P direct” is the honest second case: the two devices really did share a public IP, but the hop their browsers settled on was not a local one.",
+          "The peer card is gone by then — the workspace took its place. The state is in the workspace header instead: the device you are connected to, a link state of “Connected”, and one path badge reading “LAN direct”, a host-to-host hop across your own network. “P2P direct” is the honest second case: the two devices really were in the same room, but the hop their browsers settled on was not a local one.",
           "On the receiving side the counter ends on the last file, and the file itself is wherever the save line said it would be. The receiving browser's own downloads list is where you confirm that, not this page — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.",
         ],
         code: ["Connected to MacBook · Connected · LAN direct\nFile 3/3"],
@@ -79,7 +79,7 @@ const en = {
     {
       heading: "When the devices don't see each other",
       body: [
-        "Same-network discovery keys off the network your browser is connecting from, so that is where to look first: the two devices are not really on one network, the router is keeping its clients apart, the page was not opened over HTTPS, or the receiving browser is being asked to hold more than it can. Those are common first checks rather than the whole list, and each of them has something on screen that decides it.",
+        "Same-network discovery keys off the network your browser is connecting from, so that is where to look first: the two devices are not really on one network, the router is keeping its clients apart so listed devices cannot connect, the page was not opened over HTTPS, or the receiving browser is being asked to hold more than it can. Those are common first checks rather than the whole list, and each of them has something on screen that decides it.",
       ],
       troubleshooting: {
         label: "Symptom, check, fix",
@@ -87,12 +87,12 @@ const en = {
           {
             symptom: "“Nearby devices” stays empty, or lists only the device you are looking at.",
             code: ["https://relayium.com/   # open it on both, then compare the public IP in the status pill"],
-            fix: "Two different public IP addresses mean two separate rooms. A VPN, iCloud Private Relay, or a guest SSID that sends clients out through another address are common reasons for that, and not the only ones. If you are willing to change them: switch the VPN off, or turn Private Relay off for that one Wi-Fi network, or move both devices onto the main network, then reload https://relayium.com/ on each. If you would rather leave them on, a pairing code on https://relayium.com/cross-network reaches the other device without touching either setting, and is end-to-end encrypted the same way.",
+            fix: "Two different public IPv4 addresses, one IPv4 and one IPv6 address, or IPv6 addresses from different network prefixes mean two separate rooms. A VPN, iCloud Private Relay, or a guest SSID that sends clients out through another address are common reasons for that, and not the only ones. If you are willing to change them: switch the VPN off, or turn Private Relay off for that one Wi-Fi network, or move both devices onto the main network, then reload https://relayium.com/ on each. If you would rather leave them on, a pairing code on https://relayium.com/cross-network reaches the other device without touching either setting, and is end-to-end encrypted the same way.",
           },
           {
-            symptom: "Both devices show the same public IP and still neither card appears.",
+            symptom: "Both devices are listed, but opening the workspace never connects.",
             code: ["https://relayium.com/   # the hint under the device list names the router setting"],
-            fix: "The router is separating its own clients. Turn off “AP isolation / client isolation” in its Wi-Fi settings — mesh systems, hotel and guest networks often ship with it on — and reload the page on both devices. When you do not control the router, a pairing code on https://relayium.com/cross-network is the way through instead.",
+            fix: "If the workspace header stays on “Connecting…” or shows “Connection failed”, the router may be separating its own clients: the server still lists both devices, but they cannot reach each other directly. Turn off “AP isolation / client isolation” in its Wi-Fi settings — mesh systems, hotel and guest networks often ship with it on — and reload the page on both devices. When you do not control the router, a pairing code on https://relayium.com/cross-network is the way through instead.",
           },
           {
             symptom: "The page says encrypted transfer requires HTTPS, and no device list appears at all.",
@@ -107,7 +107,7 @@ const en = {
           {
             symptom: "The transfer runs, but the badge reads “P2P direct” instead of “LAN direct”.",
             code: ["https://relayium.com/   # read the path badge in the workspace header"],
-            fix: "The two devices share a public IP without sharing a local hop — carrier-grade NAT, two VLANs behind one uplink, or an extender in client mode all do this. The transfer is still direct and still end-to-end encrypted; put both devices on the same access point if you want the path to be your LAN rather than whatever route the browsers found.",
+            fix: "The two devices share a room without sharing a local hop — carrier-grade NAT, two VLANs behind one uplink, or an extender in client mode all do this. The transfer is still direct and still end-to-end encrypted; put both devices on the same access point if you want the path to be your LAN rather than whatever route the browsers found.",
           },
         ],
       },
@@ -115,8 +115,8 @@ const en = {
     {
       heading: "Why it is fast: no server in the middle",
       body: [
-        "Both devices connect from the same network, so Relayium links them peer-to-peer: the bytes go from one device to the other without a round trip to a Relayium server, and there is nothing to upload first and nothing to wait on downloading afterwards. How fast that is depends on the hop the two browsers actually settled on, and the path badge names it. “LAN direct” is the local one — the data stays inside your own network and runs at your network's speed rather than your internet connection's. “P2P direct” is still direct and still has no server in the middle, but the route the browsers found left the local segment, so it is bounded by whatever link it really crosses. A shared public IP is what puts two devices in the same room; on its own it is not a promise that the hop between them is local.",
-        "This is also why no account is involved on either side: with everyone already on the same trusted network, Relayium does not need sign-in to know who should be allowed to connect to whom.",
+        "Both devices connect from the same network, so Relayium links them peer-to-peer: the bytes go from one device to the other without a round trip to a Relayium server, and there is nothing to upload first and nothing to wait on downloading afterwards. How fast that is depends on the hop the two browsers actually settled on, and the path badge names it. “LAN direct” is the local one — the data stays inside your own network and runs at your network's speed rather than your internet connection's. “P2P direct” is still direct and still has no server in the middle, but the route the browsers found left the local segment, so it is bounded by whatever link it really crosses. Being in the same room is what lets two devices find each other; on its own it is not a promise that the hop between them is local.",
+        "No account is involved on either side: sending and receiving on the same network work without sign-in. That is an account policy, not a judgement about who is on the network. Sharing a room only means the server saw both devices arrive from what looks like the same network; it does not identify the people behind them or make a device trustworthy, and anyone else on that network can appear in the list under a name they chose themselves. Pick the device you mean before opening a workspace, read what an incoming request says before accepting files, and turn on advanced verification if you want to compare a code on both screens before anything moves.",
       ],
     },
     {
@@ -136,11 +136,11 @@ const en = {
       },
       {
         q: "How does Relayium know which devices are on my network?",
-        a: "Devices that connect from the same network typically share the same public IP address, and Relayium groups devices with a matching public IP into the same room automatically, with no code required.",
+        a: "Devices that connect from the same network typically share one public IPv4 address, or over IPv6 the same /64 network prefix (the first 64 bits of their addresses), and Relayium groups devices that match this way into the same room automatically, with no code required. A device on IPv4 and one on IPv6, or devices on different prefixes, land in different rooms and need a pairing code.",
       },
       {
         q: "Can more than two devices see each other at once?",
-        a: "Yes — the room lists every device that opens relayium.com from that network, so a phone, a laptop and a desktop all appear side by side. A transfer itself is one-to-one: you open a workspace with one of the listed devices, and that is who the files go to. Sharing with several people in the same room means opening a workspace with each of them in turn.",
+        a: "Yes — the room lists the devices that open relayium.com from that network, so a phone, a laptop and a desktop can appear side by side, up to the server's limit on how many devices one room holds. A transfer itself is one-to-one: you open a workspace with one of the listed devices, and that is who the files go to. Sharing with several people in the same room means opening a workspace with each of them in turn.",
       },
       {
         q: "Is the transfer still encrypted if it never leaves my network?",
@@ -172,8 +172,8 @@ const zh = {
     {
       heading: "同网络是怎么被识别的",
       body: [
-        "Relayium 不需要你输入任何东西来发现附近的设备。当你的浏览器不带配对码打开 relayium.com 时，服务器会根据你所连接的网络把你放进一个房间——实际上，共享同一个公网 IP 的设备（比如同一个家庭、办公室、校园 Wi-Fi，或同一个手机热点）会自动落入同一个房间。",
-        "这个房间不限于两个人：从该网络打开网站的设备有多少，房间里就能容纳多少台，所以一整桌笔记本电脑，或一个教室的手机，都能同时互相看见，不只是一对一。",
+        "Relayium 不需要你输入任何东西来发现附近的设备。当你的浏览器不带配对码打开 relayium.com 时，服务器会根据你所连接的网络把你放进一个房间——实际上，同一个家庭、办公室、校园 Wi-Fi 或同一个手机热点下的设备通常会自动落入同一个房间。走 IPv4 时，依据是共享同一个公网 IPv4 地址。走 IPv6 时每台设备通常显示各自的公网地址，房间依据的是网络前缀：地址的前 64 位，也就是家庭或办公网络通常分配的那个 /64。同在一个房间只是让设备互相可见，并不代表彼此可信。",
+        "这个房间不限于两个人：从该网络打开网站的多台设备可以同时列出来，所以同一张桌上的几台笔记本和手机都能互相看见，不只是一对一。不过服务器对一个房间能容纳的设备数和接受的连接数都有上限，网络里的人很多时不一定能列出所有人。",
       ],
     },
     {
@@ -196,11 +196,11 @@ const zh = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "在两台设备上读一下标题下方的状态条，对比里面的公网 IP。地址相同才会把两台设备放进同一个房间；地址不同就说明是两个网络，Wi-Fi 名字叫什么都不算。",
+          text: "在两台设备上读一下标题下方的状态条，对比里面的公网 IP。走 IPv4 时，地址相同才会把两台设备放进同一个房间，两个不同的 IPv4 地址就是两个房间，Wi-Fi 名字叫什么都不算。走 IPv6 时，即使在同一个网络里两个地址通常也不同，所以地址不同本身说明不了什么。一台显示 IPv4 地址、另一台显示 IPv6 地址，则确实是两个房间。",
           code: ["已连接 · 本机 MacBook · 公网 IP 203.0.113.9"],
         },
         {
-          text: "看「附近的设备」这一栏。凡是从该网络打开页面的设备，都会以卡片形式列在那里，卡片上是它自己的名字——不用输入，也不用确认。",
+          text: "看「附近的设备」这一栏。从该网络打开页面的设备会以卡片形式列在那里，卡片上是那台设备自己的名字——不用输入，也不用确认。",
         },
         {
           text: "在发送端点开对方的卡片，按「打开工作区」。在较新的浏览器上，这是附近设备卡片提供的唯一动作：文件、文件夹和消息都走它打开的那一条加密连接。房间里可能列着好几台设备，打开工作区就是在其中挑定这次要发给谁；轮到下一个人时，再打开一个工作区。",
@@ -218,7 +218,7 @@ const zh = {
       success: {
         label: "传输成功时是什么样",
         body: [
-          "这时对方的卡片已经不在了——工作区取代了它。状态改看工作区的标题栏：连的是哪台设备、链路状态显示「已连接」、以及唯一的那个路径标签显示「局域网直连」，也就是在你自己网络里的主机到主机一跳。「P2P 直连」是另一种诚实的情况：两台设备确实共享同一个公网 IP，但浏览器最终选中的那一跳并不在本地。",
+          "这时对方的卡片已经不在了——工作区取代了它。状态改看工作区的标题栏：连的是哪台设备、链路状态显示「已连接」、以及唯一的那个路径标签显示「局域网直连」，也就是在你自己网络里的主机到主机一跳。「P2P 直连」是另一种诚实的情况：两台设备确实在同一个房间，但浏览器最终选中的那一跳并不在本地。",
           "接收端的计数停在最后一个文件，而文件本身就在保存提示所说的位置。确认这一点要看接收端浏览器自己的下载列表，而不是看本页面——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。",
         ],
         code: ["已连接到 MacBook · 已连接 · 局域网直连\n文件 3/3"],
@@ -231,7 +231,7 @@ const zh = {
     {
       heading: "两台设备互相看不到时",
       body: [
-        "同网络发现依据的是你的浏览器从哪个网络连过来，所以先从这里查起：两台设备其实不在同一个网络、路由器把客户端隔开了、页面不是用 HTTPS 打开的，或者接收端浏览器被要求装下超出它能力的内容。这些是常见的第一批排查项，而不是全部原因；每一项在屏幕上都有能判定它的东西。",
+        "同网络发现依据的是你的浏览器从哪个网络连过来，所以先从这里查起：两台设备其实不在同一个网络、路由器把客户端隔开而让列出的设备连不上、页面不是用 HTTPS 打开的，或者接收端浏览器被要求装下超出它能力的内容。这些是常见的第一批排查项，而不是全部原因；每一项在屏幕上都有能判定它的东西。",
       ],
       troubleshooting: {
         label: "现象、检查、处理",
@@ -239,12 +239,12 @@ const zh = {
           {
             symptom: "「附近的设备」一直是空的，或者只列出你正在看的这一台。",
             code: ["https://relayium.com/   # 两台都打开，然后对比状态条里的公网 IP"],
-            fix: "两个不同的公网 IP 就是两个不同的房间。VPN、iCloud 专用代理，或者把客户端从另一个地址送出去的访客 SSID 都是常见原因，但不是全部原因。如果你愿意改动它们：关掉 VPN，或只对当前这个 Wi-Fi 关闭专用代理，或者把两台设备都挪到主网络，然后在每台设备上重新加载 https://relayium.com/。如果你不想改，用 https://relayium.com/cross-network 上的配对码也能接上对方，两个设置都不用动，而且同样是端到端加密。",
+            fix: "两个不同的公网 IPv4 地址、一个 IPv4 一个 IPv6，或者网络前缀不同的 IPv6 地址，就是两个不同的房间。VPN、iCloud 专用代理，或者把客户端从另一个地址送出去的访客 SSID 都是常见原因，但不是全部原因。如果你愿意改动它们：关掉 VPN，或只对当前这个 Wi-Fi 关闭专用代理，或者把两台设备都挪到主网络，然后在每台设备上重新加载 https://relayium.com/。如果你不想改，用 https://relayium.com/cross-network 上的配对码也能接上对方，两个设置都不用动，而且同样是端到端加密。",
           },
           {
-            symptom: "两台设备显示的公网 IP 相同，卡片却仍然一张都不出现。",
+            symptom: "两台设备都列出来了，但打开工作区后始终连不上。",
             code: ["https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关"],
-            fix: "路由器把自己的客户端隔开了。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」——Mesh 系统、酒店和访客网络经常默认开着——然后在两台设备上重新加载页面。如果路由器不由你管，那就改走 https://relayium.com/cross-network 上的配对码。",
+            fix: "如果工作区标题栏一直停在「连接中…」或显示「连接失败」，可能是路由器把自己的客户端隔开了：服务器仍会列出两台设备，但它们无法直接连到对方。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」——Mesh 系统、酒店和访客网络经常默认开着——然后在两台设备上重新加载页面。如果路由器不由你管，那就改走 https://relayium.com/cross-network 上的配对码。",
           },
           {
             symptom: "页面提示加密传输需要 HTTPS，设备列表根本没出现。",
@@ -259,7 +259,7 @@ const zh = {
           {
             symptom: "传输能跑，但标签显示的是「P2P 直连」而不是「局域网直连」。",
             code: ["https://relayium.com/   # 看工作区标题栏里的路径标签"],
-            fix: "两台设备共享同一个公网 IP，却没有共享本地的那一跳——运营商级 NAT、同一条上行下的两个 VLAN，或者工作在客户端模式的信号扩展器都会这样。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台设备接到同一个接入点上。",
+            fix: "两台设备在同一个房间，却没有共享本地的那一跳——运营商级 NAT、同一条上行下的两个 VLAN，或者工作在客户端模式的信号扩展器都会这样。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台设备接到同一个接入点上。",
           },
         ],
       },
@@ -267,8 +267,8 @@ const zh = {
     {
       heading: "为什么这么快：中间没有服务器",
       body: [
-        "两台设备是从同一个网络连上来的，所以 Relayium 让它们点对点直连：字节直接从一台设备流向另一台，不绕道 Relayium 的服务器往返，既没有什么要先上传，也没有什么要等着下载。至于到底有多快，取决于两个浏览器最终选中的是哪一跳，而路径标签会把它说出来。「局域网直连」是本地的那一跳——数据不出你自己的网络，跑的是局域网的速度，而不是宽带的速度。「P2P 直连」同样是直连，中间同样没有服务器，但浏览器找到的那条路已经离开了本地网段，因此受限于它实际经过的链路。共享同一个公网 IP 只是把两台设备放进同一个房间，它本身并不保证两者之间那一跳是本地的。",
-        "这也是为什么两端都不需要账号：既然大家已经在同一个可信网络里，Relayium 不需要靠登录来判断谁能连谁。",
+        "两台设备是从同一个网络连上来的，所以 Relayium 让它们点对点直连：字节直接从一台设备流向另一台，不绕道 Relayium 的服务器往返，既没有什么要先上传，也没有什么要等着下载。至于到底有多快，取决于两个浏览器最终选中的是哪一跳，而路径标签会把它说出来。「局域网直连」是本地的那一跳——数据不出你自己的网络，跑的是局域网的速度，而不是宽带的速度。「P2P 直连」同样是直连，中间同样没有服务器，但浏览器找到的那条路已经离开了本地网段，因此受限于它实际经过的链路。同在一个房间只是让两台设备互相发现，它本身并不保证两者之间那一跳是本地的。",
+        "两端都不需要账号：在同一网络里收发都无需登录。这是账号方面的规定，并不是对网络里有谁的判断。同在一个房间只说明服务器看到两台设备来自看起来相同的网络；它既不识别设备背后是谁，也不会让设备变得可信——同一网络里的其他人同样可能出现在列表里，名字也是他们自己起的。打开工作区前先认准你要连的那台设备，接收文件前看清请求里写的内容；如果想在任何内容传输之前先在两块屏幕上核对一段校验码，就打开「高级验证」。",
       ],
     },
     {
@@ -288,11 +288,11 @@ const zh = {
       },
       {
         q: "Relayium 怎么知道哪些设备在我的网络里？",
-        a: "同网络下的设备通常共享同一个公网 IP，Relayium 会自动把公网 IP 相同的设备归到同一个房间里，无需任何配对码。",
+        a: "同网络下的设备通常共享同一个公网 IPv4 地址，走 IPv6 时则共享同一个 /64 网络前缀（地址的前 64 位），Relayium 会自动把这样匹配的设备归到同一个房间里，无需任何配对码。一台走 IPv4、一台走 IPv6，或者前缀不同的设备，会落在不同的房间，需要用配对码。",
       },
       {
         q: "能不能同时有两台以上的设备互相看见？",
-        a: "可以——从该网络打开 relayium.com 的每台设备都会列在房间里，手机、笔记本、台式机可以并排出现。但一次传输是一对一的：你和列表里的某一台设备打开工作区，文件就发给它。要分享给同一个房间里的几个人，就依次和每个人各开一次工作区。",
+        a: "可以——从该网络打开 relayium.com 的设备会列在房间里，手机、笔记本、台式机可以并排出现，上限是服务器对一个房间能容纳设备数的限制。但一次传输是一对一的：你和列表里的某一台设备打开工作区，文件就发给它。要分享给同一个房间里的几个人，就依次和每个人各开一次工作区。",
       },
       {
         q: "如果传输从未离开我的网络，还是加密的吗？",

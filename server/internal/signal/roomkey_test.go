@@ -144,14 +144,105 @@ func TestRateLimitKeyNormalizesAddressFamilies(t *testing.T) {
 	}
 }
 
-func TestRateLimitKeyUsesTrustedProxyResultWithoutChangingRoomKey(t *testing.T) {
+// RateLimitKey and RoomKey now agree on what an IPv6 address is: both group by
+// the network's /64. They still differ in their fallback for a value that is not
+// an address at all (RoomKey returns it unchanged; RateLimitKey collapses it to
+// "invalid-ip"), which is the separation the previous form of this test
+// protected. The room half is covered by TestRoomKeyGroupsIPv6ByPrefix.
+func TestRateLimitKeyAndRoomKeyAgreeOnIPv6Prefix(t *testing.T) {
 	x := NewIPExtractor(nil)
 	r := &http.Request{RemoteAddr: "[::1]:443", Header: http.Header{}}
 	r.Header.Set("X-Forwarded-For", "2001:db8:1234:5678::beef")
 	if got := x.RateLimitKey(r); got != "2001:db8:1234:5678::/64" {
 		t.Fatalf("RateLimitKey = %q", got)
 	}
-	if got := x.RoomKey(r); got != "2001:db8:1234:5678::beef" {
-		t.Fatalf("RoomKey changed to %q", got)
+	if got := x.RoomKey(r); got != "2001:db8:1234:5678::/64" {
+		t.Fatalf("RoomKey = %q", got)
+	}
+}
+
+// A network shares one /64, so every device on it must land in one LAN room.
+// Keying on the exact address gave each device a room of its own, which silently
+// disabled LAN discovery on every IPv6 network: both clients reached a ready
+// state and simply never saw each other.
+func TestRoomKeyGroupsIPv6ByPrefix(t *testing.T) {
+	x := NewIPExtractor(nil)
+	room := func(ip string) string {
+		r := &http.Request{RemoteAddr: net.JoinHostPort(ip, "443"), Header: http.Header{}}
+		return x.RoomKey(r)
+	}
+
+	// Addresses in one /64 are one network and must share a room.
+	const want = "2001:db8:1234:5678::/64"
+	for _, ip := range []string{
+		"2001:db8:1234:5678::1",
+		"2001:db8:1234:5678::abcd",
+		"2001:db8:1234:5678::beef",
+	} {
+		if got := room(ip); got != want {
+			t.Errorf("RoomKey(%q) = %q, want %q", ip, got, want)
+		}
+	}
+
+	// A different /64 is a different network and must never be merged with it.
+	if got := room("2001:db8:1234:5679::1"); got != "2001:db8:1234:5679::/64" {
+		t.Errorf("different /64: RoomKey = %q", got)
+	}
+
+	// IPv4 is unchanged — one NATed address was already one room.
+	if got := room("203.0.113.7"); got != "203.0.113.7" {
+		t.Errorf("IPv4: RoomKey = %q, want 203.0.113.7", got)
+	}
+
+	// A value that is not an address is returned as-is, not guessed at.
+	if got := room("not-an-address"); got != "not-an-address" {
+		t.Errorf("non-address: RoomKey = %q, want it unchanged", got)
+	}
+}
+
+// The /64 boundary is exact, spelling does not matter, and the address-family
+// split is decided on the parsed address rather than on what the text looks
+// like. An IPv4-mapped IPv6 address is IPv4 to RoomKey and so keeps the exact
+// observed spelling; it is never widened to a /64 that would hold every IPv4
+// client. A zoned link-local spelling does not parse and is returned unchanged.
+func TestRoomKeyIPv6PrefixBoundaries(t *testing.T) {
+	x := NewIPExtractor(nil)
+	room := func(remote string) string {
+		return x.RoomKey(&http.Request{RemoteAddr: remote, Header: http.Header{}})
+	}
+	for _, tc := range []struct {
+		remote, want string
+	}{
+		{"[2001:db8:1234:5678::]:443", "2001:db8:1234:5678::/64"},
+		{"[2001:db8:1234:5678:ffff:ffff:ffff:ffff]:443", "2001:db8:1234:5678::/64"},
+		{"[2001:0DB8:1234:5678:0:0:0:BEEF]:443", "2001:db8:1234:5678::/64"},
+		{"[2001:db8:1234:5679::]:443", "2001:db8:1234:5679::/64"},
+		{"[2001:db8:1234:5677:ffff:ffff:ffff:ffff]:443", "2001:db8:1234:5677::/64"},
+		{"[::ffff:203.0.113.7]:443", "::ffff:203.0.113.7"},
+		{"203.0.113.7:443", "203.0.113.7"},
+		{"203.0.113.8:443", "203.0.113.8"},
+		{"[fe80::1%eth0]:443", "fe80::1%eth0"},
+	} {
+		if got := room(tc.remote); got != tc.want {
+			t.Errorf("RoomKey(%s) = %q, want %q", tc.remote, got, tc.want)
+		}
+	}
+}
+
+// The /64 is computed from the address the extractor resolved, so a spoofed
+// X-Forwarded-For is no more able to pick a room than it was before grouping:
+// an untrusted peer is keyed on its own address, and behind a trusted proxy a
+// left-padded entry is skipped in favour of the right-most untrusted hop.
+func TestRoomKeyUsesOnlyTheResolvedClientAddress(t *testing.T) {
+	x := NewIPExtractor(nil)
+	untrusted := &http.Request{RemoteAddr: "[2001:db8:aaaa:bbbb::9]:443", Header: http.Header{}}
+	untrusted.Header.Set("X-Forwarded-For", "2001:db8:1234:5678::1")
+	if got := x.RoomKey(untrusted); got != "2001:db8:aaaa:bbbb::/64" {
+		t.Fatalf("untrusted peer RoomKey = %q", got)
+	}
+	padded := &http.Request{RemoteAddr: "127.0.0.1:443", Header: http.Header{}}
+	padded.Header.Set("X-Forwarded-For", "2001:db8:1234:5678::1, 2001:db8:dead:beef::2")
+	if got := x.RoomKey(padded); got != "2001:db8:dead:beef::/64" {
+		t.Fatalf("left-padded RoomKey = %q", got)
 	}
 }

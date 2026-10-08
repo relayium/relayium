@@ -42,6 +42,12 @@
     : connState === "reconnecting" ? t.shell.statusReconnecting
     : t.shell.statusConnecting,
   );
+  // The server reports this device's own observed address, never the LAN room
+  // key. On IPv6 the room is the address's /64, so two devices that will meet
+  // usually show different addresses here; the note says so rather than leaving
+  // a reader to conclude they are on different networks. A colon only ever
+  // appears in an IPv6 literal (welcome.ip carries no port).
+  const ipv6 = $derived(selfIP.includes(":"));
   const detail = $derived(
     unsupported || connState === "ready" ? ""
     : connState === "reconnecting" ? t.reconnecting : t.connecting,
@@ -93,6 +99,11 @@
         <Row label={t.ipLabel}>
           <span class="ip">{selfIP}</span>
         </Row>
+        {#if ipv6}
+          <Row block>
+            <p class="detail ip-note">{t.ipv6Note}</p>
+          </Row>
+        {/if}
       {/if}
     {/if}
 

@@ -27,7 +27,7 @@ const en = {
         label: "What you need",
         items: [
           "A current browser on each device — Chrome or Edge on Windows, Firefox or Chrome on Linux, Chrome on Android. Nothing from a store, nothing to install.",
-          "Both devices on the same Wi-Fi. Unlike AirDrop, being next to each other is not the criterion: discovery groups devices by the public IP they connect from, so a phone still on mobile data will not appear even sitting on the same desk.",
+          "Both devices on the same Wi-Fi. Unlike AirDrop, being next to each other is not the criterion: discovery groups devices by the public IP they connect from (over IPv6, by its /64 network prefix), so a phone still on mobile data will not appear even sitting on the same desk.",
           "Working internet access on both, with the page open over https://relayium.com/. AirDrop needs no internet at all; these browsers do need to reach the rendezvous to find each other, so an isolated LAN calls for a self-hosted instance instead.",
           "No account and no pairing code for the same-network case — that is the part this flow shares with AirDrop.",
         ],
@@ -38,7 +38,7 @@ const en = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "Compare the public IP in the status pill on both. One shared address is what makes the two devices visible to each other, and it is the fastest way to catch the phone that never left mobile data.",
+          text: "Compare the public IP in the status pill on both. Over IPv4, one shared address is what makes the two devices visible to each other, and a different one is the fastest way to catch the phone that never left mobile data. Over IPv6 the addresses usually differ even on one Wi-Fi; an IPv4 address on one device and an IPv6 address on the other still means two rooms.",
           code: ["Connected · this device ThinkPad · public IP 203.0.113.9"],
         },
         {
@@ -68,12 +68,12 @@ const en = {
           {
             symptom: "The other device is right next to you and still does not show up under “Nearby devices”.",
             code: ["https://relayium.com/   # compare the public IP in the status pill on both devices"],
-            fix: "Two different public IP addresses mean two rooms, and proximity does nothing for it. Put both devices on the same Wi-Fi and switch mobile data off on the phone. A VPN or iCloud Private Relay on either side is another common reason for two addresses; if you are willing to change them, switch the VPN off or turn Private Relay off for that one network and reload https://relayium.com/ there. If you would rather leave them on, a pairing code on https://relayium.com/cross-network reaches the other device without touching either setting.",
+            fix: "Two different public IPv4 addresses, one IPv4 and one IPv6 address, or IPv6 addresses from different network prefixes mean two rooms, and proximity does nothing for it. Put both devices on the same Wi-Fi and switch mobile data off on the phone. A VPN or iCloud Private Relay on either side is another common reason for two addresses; if you are willing to change them, switch the VPN off or turn Private Relay off for that one network and reload https://relayium.com/ there. If you would rather leave them on, a pairing code on https://relayium.com/cross-network reaches the other device without touching either setting.",
           },
           {
-            symptom: "Both devices show the same public IP and neither card appears.",
+            symptom: "Both devices are listed, but opening the workspace never connects.",
             code: ["https://relayium.com/   # the hint under the device list names the router setting"],
-            fix: "The router is separating its own clients. Turn off “AP isolation / client isolation” in its Wi-Fi settings, or use a pairing code on https://relayium.com/cross-network when the router is not yours to change.",
+            fix: "If the workspace header stays on “Connecting…” or shows “Connection failed”, the router may be separating its own clients: the server still lists both devices, but they cannot reach each other directly. Turn off “AP isolation / client isolation” in its Wi-Fi settings, or use a pairing code on https://relayium.com/cross-network when the router is not yours to change.",
           },
           {
             symptom: "The page itself does not load on a network with no internet access.",
@@ -130,7 +130,7 @@ const en = {
       },
       {
         q: "Can it send to a group, like AirDrop can?",
-        a: "Not in one shot. The local room isn't limited to two devices, so every nearby device that opened the page is listed at once — but a transfer is one-to-one: you open a workspace with one recipient, and that is who those files go to. Sharing the same batch with several people in the room means opening a workspace with each of them in turn. The pairing-code mode for across-the-internet sending joins exactly two devices, over an encrypted relay.",
+        a: "Not in one shot. The local room isn't limited to two devices, so several nearby devices that opened the page can be listed at once, up to the server's limits on room size and connections — but a transfer is one-to-one: you open a workspace with one recipient, and that is who those files go to. Sharing the same batch with several people in the room means opening a workspace with each of them in turn. The pairing-code mode for across-the-internet sending joins exactly two devices, over an encrypted relay.",
       },
     ],
   },
@@ -160,7 +160,7 @@ const zh = {
         label: "你需要准备",
         items: [
           "每台设备上都有一个较新的浏览器——Windows 上用 Chrome 或 Edge，Linux 上用 Firefox 或 Chrome，Android 上用 Chrome。不用去应用商店，也没有要安装的东西。",
-          "两台设备在同一个 Wi-Fi 里。和 AirDrop 不同，判断依据不是「挨得近」：设备发现是按连接过来的公网 IP 分组的，所以一台还挂在移动数据上的手机，即使摆在同一张桌子上也不会出现。",
+          "两台设备在同一个 Wi-Fi 里。和 AirDrop 不同，判断依据不是「挨得近」：设备发现是按连接过来的公网 IP 分组的（IPv6 按 /64 网络前缀），所以一台还挂在移动数据上的手机，即使摆在同一张桌子上也不会出现。",
           "两台都能正常联网，并且是通过 https://relayium.com/ 打开页面。AirDrop 完全不需要互联网；而这两个浏览器确实需要连上会合服务器才能找到彼此，所以完全隔离的局域网应改用自托管实例。",
           "同网络场景下不需要账号，也不需要配对码——这正是这套流程和 AirDrop 相同的地方。",
         ],
@@ -171,7 +171,7 @@ const zh = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "对比两台设备上状态条里的公网 IP。共享同一个地址才能让两台设备互相可见，而这也是最快识别出「那台手机根本没离开移动数据」的办法。",
+          text: "对比两台设备上状态条里的公网 IP。走 IPv4 时，地址相同才能让两台设备互相可见，地址不同也是最快识别出「那台手机根本没离开移动数据」的办法。走 IPv6 时即使在同一个 Wi-Fi 下两个地址通常也不同；不过一台是 IPv4、另一台是 IPv6，仍然意味着两个房间。",
           code: ["已连接 · 本机 ThinkPad · 公网 IP 203.0.113.9"],
         },
         {
@@ -201,12 +201,12 @@ const zh = {
           {
             symptom: "另一台设备就在你旁边，「附近的设备」里却还是没有它。",
             code: ["https://relayium.com/   # 对比两台设备上状态条里的公网 IP"],
-            fix: "两个不同的公网 IP 就是两个房间，靠得再近也不管用。先把两台设备接到同一个 Wi-Fi，并关掉手机上的移动数据。任一侧的 VPN 或 iCloud 专用代理是造成两个地址的另一个常见原因；如果你愿意改这些设置，就断开 VPN，或只对这一个网络关闭专用代理，然后在那台设备上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到另一台设备，两个设置都不用动。",
+            fix: "两个不同的公网 IPv4 地址、一个 IPv4 一个 IPv6，或者网络前缀不同的 IPv6 地址，就是两个房间，靠得再近也不管用。先把两台设备接到同一个 Wi-Fi，并关掉手机上的移动数据。任一侧的 VPN 或 iCloud 专用代理是造成两个地址的另一个常见原因；如果你愿意改这些设置，就断开 VPN，或只对这一个网络关闭专用代理，然后在那台设备上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到另一台设备，两个设置都不用动。",
           },
           {
-            symptom: "两台设备显示的公网 IP 相同，却都不出现卡片。",
+            symptom: "两台设备都列出来了，但打开工作区后始终连不上。",
             code: ["https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关"],
-            fix: "路由器把自己的客户端隔开了。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。",
+            fix: "如果工作区标题栏一直停在「连接中…」或显示「连接失败」，可能是路由器把自己的客户端隔开了：服务器仍会列出两台设备，但它们无法直接连到对方。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。",
           },
           {
             symptom: "在一个没有互联网出口的网络里，页面本身就打不开。",
@@ -263,7 +263,7 @@ const zh = {
       },
       {
         q: "能像 AirDrop 一样发给一群人吗？",
-        a: "不能一次发完。本地房间不限于两台设备，所以从该网络打开页面的每台设备都会同时列出来——但一次传输是一对一的：你和某一个接收方打开工作区，这批文件就发给它。要把同一批文件分给房间里的好几个人，就依次和他们各开一次工作区。而跨网络的配对码模式只连接两台设备，且经由加密中继完成。",
+        a: "不能一次发完。本地房间不限于两台设备，所以从该网络打开页面的多台设备可以同时列出来（以服务器对房间人数和连接数的上限为限）——但一次传输是一对一的：你和某一个接收方打开工作区，这批文件就发给它。要把同一批文件分给房间里的好几个人，就依次和他们各开一次工作区。而跨网络的配对码模式只连接两台设备，且经由加密中继完成。",
       },
     ],
   },

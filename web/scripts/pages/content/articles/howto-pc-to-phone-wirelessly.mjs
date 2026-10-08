@@ -35,7 +35,7 @@ const en = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "Open the same page on the phone, then compare the public IP in the status pill on both screens. A matching address is what puts the two devices in one room — a phone that quietly stayed on mobile data shows a different one.",
+          text: "Open the same page on the phone, then compare the public IP in the status pill on both screens. Over IPv4, a matching address is what puts the two devices in one room — a phone that quietly stayed on mobile data shows a different one. Over IPv6 the addresses usually differ even on one Wi-Fi; an IPv4 address on one screen and an IPv6 address on the other still means two rooms.",
           code: ["Connected · this device Pixel · public IP 203.0.113.9"],
         },
         {
@@ -57,7 +57,7 @@ const en = {
         code: ["Connected to Pixel · Connected · LAN direct\nFile 1/1"],
       },
       bullets: [
-        "A same-network room holds every device that opened the page from that network, so a tablet or a second laptop appearing next to the phone is normal.",
+        "A same-network room can list several devices that opened the page from that network, up to the server's limits on room size and connections, so a tablet or a second laptop appearing next to the phone is normal.",
         "The 1,000-file cap is per batch rather than per session, so a very large tree can go over in several drops without reconnecting.",
       ],
     },
@@ -72,12 +72,12 @@ const en = {
           {
             symptom: "The phone never appears under “Nearby devices” on the computer.",
             code: ["https://relayium.com/   # compare the public IP in the status pill on both screens"],
-            fix: "Two different public IP addresses mean two rooms. A phone that quietly stayed on mobile data is one common reason; a VPN or iCloud Private Relay sending it out through another address is another, and they are not the only ones. If you are willing to change them: join the Wi-Fi, switch the VPN off, or turn Private Relay off for that one network, then reload https://relayium.com/ on the phone. If you would rather leave them on, a pairing code on https://relayium.com/cross-network reaches the phone without touching either setting, and is end-to-end encrypted the same way.",
+            fix: "Two different public IPv4 addresses, one IPv4 and one IPv6 address, or IPv6 addresses from different network prefixes mean two rooms. A phone that quietly stayed on mobile data is one common reason; a VPN or iCloud Private Relay sending it out through another address is another, and they are not the only ones. If you are willing to change them: join the Wi-Fi, switch the VPN off, or turn Private Relay off for that one network, then reload https://relayium.com/ on the phone. If you would rather leave them on, a pairing code on https://relayium.com/cross-network reaches the phone without touching either setting, and is end-to-end encrypted the same way.",
           },
           {
-            symptom: "Both devices show the same public IP and the cards still do not appear.",
+            symptom: "Both devices are listed, but opening the workspace never connects.",
             code: ["https://relayium.com/   # the hint under the device list names the router setting"],
-            fix: "The router is separating its own clients, which guest and hotel Wi-Fi often do by default. Turn off “AP isolation / client isolation”, or use a pairing code on https://relayium.com/cross-network when the router is not yours to change.",
+            fix: "If the workspace header stays on “Connecting…” or shows “Connection failed”, the router may be separating its own clients: the server still lists both devices, but they cannot reach each other directly. Guest and hotel Wi-Fi often separate clients by default. Turn off “AP isolation / client isolation”, or use a pairing code on https://relayium.com/cross-network when the router is not yours to change.",
           },
           {
             symptom: "The transfer starts and then stalls or fails after you switch apps on the phone.",
@@ -179,7 +179,7 @@ const zh = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "在手机上打开同一个页面，然后对比两块屏幕上状态条里的公网 IP。地址一致才会把两台设备放进同一个房间——如果手机悄悄留在移动数据上，它显示的会是另一个地址。",
+          text: "在手机上打开同一个页面，然后对比两块屏幕上状态条里的公网 IP。走 IPv4 时，地址一致才会把两台设备放进同一个房间——如果手机悄悄留在移动数据上，它显示的会是另一个地址。走 IPv6 时即使在同一个 Wi-Fi 下两个地址通常也不同；不过一块屏幕显示 IPv4、另一块显示 IPv6，仍然意味着两个房间。",
           code: ["已连接 · 本机 Pixel · 公网 IP 203.0.113.9"],
         },
         {
@@ -201,7 +201,7 @@ const zh = {
         code: ["已连接到 Pixel · 已连接 · 局域网直连\n文件 1/1"],
       },
       bullets: [
-        "同网络房间会容纳所有从该网络打开页面的设备，所以手机旁边多出一台平板或第二台笔记本是正常的。",
+        "同网络房间可以同时列出多台从该网络打开页面的设备（以服务器对房间人数和连接数的上限为限），所以手机旁边多出一台平板或第二台笔记本是正常的。",
         "1,000 个文件的上限是按批而不是按会话算的，所以很大的目录树可以分几次拖过去，不用重新连接。",
       ],
     },
@@ -216,12 +216,12 @@ const zh = {
           {
             symptom: "电脑上的「附近的设备」里始终没有手机。",
             code: ["https://relayium.com/   # 对比两块屏幕上状态条里的公网 IP"],
-            fix: "两个不同的公网 IP 就是两个房间。手机悄悄留在移动数据上是常见原因之一；VPN 或 iCloud 专用代理把它从另一个地址送出去是另一种，而且都不是唯一可能。如果你愿意改这些设置：让它连上 Wi-Fi、断开 VPN，或只对这一个网络关闭专用代理，然后在手机上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到这台手机，两个设置都不用动，端到端加密同样成立。",
+            fix: "两个不同的公网 IPv4 地址、一个 IPv4 一个 IPv6，或者网络前缀不同的 IPv6 地址，就是两个房间。手机悄悄留在移动数据上是常见原因之一；VPN 或 iCloud 专用代理把它从另一个地址送出去是另一种，而且都不是唯一可能。如果你愿意改这些设置：让它连上 Wi-Fi、断开 VPN，或只对这一个网络关闭专用代理，然后在手机上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到这台手机，两个设置都不用动，端到端加密同样成立。",
           },
           {
-            symptom: "两台设备显示的公网 IP 相同，卡片却还是不出现。",
+            symptom: "两台设备都列出来了，但打开工作区后始终连不上。",
             code: ["https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关"],
-            fix: "路由器把自己的客户端隔开了，访客网络和酒店 Wi-Fi 经常默认这样。关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。",
+            fix: "如果工作区标题栏一直停在「连接中…」或显示「连接失败」，可能是路由器把自己的客户端隔开了：服务器仍会列出两台设备，但它们无法直接连到对方。访客网络和酒店 Wi-Fi 经常默认这样隔开。关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。",
           },
           {
             symptom: "传输开始后，你在手机上切了别的 App，然后它就卡住或失败了。",

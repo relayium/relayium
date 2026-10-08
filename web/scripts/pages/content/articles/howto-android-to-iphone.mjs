@@ -24,7 +24,7 @@ const en = {
         label: "What you need",
         items: [
           "An Android phone with Chrome (or any modern browser) and an iPhone with Safari — both up to date.",
-          "For the fastest path, both devices on the same Wi-Fi network. On the iPhone that usually also means turning iCloud Private Relay off for that one network: it sends the phone out through a different public IP, and same-network discovery groups devices by exactly that address. Leaving it on is a perfectly good choice — a pairing code on https://relayium.com/cross-network then reaches the phone without changing the setting.",
+          "For the fastest path, both devices on the same Wi-Fi network. On the iPhone that usually also means turning iCloud Private Relay off for that one network: it sends the phone out through a different public IP, and same-network discovery groups devices by that address (over IPv6, by its /64 network prefix). Leaving it on is a perfectly good choice — a pairing code on https://relayium.com/cross-network then reaches the phone without changing the setting.",
           "The page open over https://relayium.com/ on both phones. Encrypted transfer needs HTTPS, and over plain http:// the page says so instead of listing devices.",
           "The files you want to send, up to 1,000 per batch, and somewhere for them to land on the receiving phone — which folder that is belongs to its browser, not to Relayium.",
         ],
@@ -41,7 +41,7 @@ const en = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "Compare the public IP in the status pill on both phones. Matching addresses put the two in one room; a different one on the iPhone commonly means iCloud Private Relay or mobile data rather than a broken Wi-Fi.",
+          text: "Compare the public IP in the status pill on both phones. Over IPv4, matching addresses put the two in one room; over IPv6 the two addresses usually differ even on one Wi-Fi, so a mismatch there proves nothing by itself. A different IPv4 address on the iPhone, or IPv4 on one phone and IPv6 on the other, commonly means iCloud Private Relay or mobile data rather than a broken Wi-Fi.",
           code: ["Connected · this device iPhone · public IP 203.0.113.9"],
         },
         {
@@ -66,7 +66,7 @@ const en = {
     {
       heading: "When the two phones can't see each other",
       body: [
-        "One cause worth knowing on the iPhone: iCloud Private Relay is on for many iCloud+ accounts and changes the public IP the phone appears to come from, which is exactly what same-network discovery groups by. It is one common reason among several, not the only one, and the checks below are the usual first ones rather than an exhaustive list — each decides its case from what is already on screen.",
+        "One cause worth knowing on the iPhone: iCloud Private Relay is on for many iCloud+ accounts and changes the public IP the phone appears to come from, which is what same-network discovery groups by (over IPv6, its /64 network prefix). It is one common reason among several, not the only one, and the checks below are the usual first ones rather than an exhaustive list — each decides its case from what is already on screen.",
       ],
       troubleshooting: {
         label: "Symptom, check, fix",
@@ -74,12 +74,12 @@ const en = {
           {
             symptom: "The iPhone never appears on the Android phone, or the other way round.",
             code: ["https://relayium.com/   # compare the public IP in the status pill on both phones"],
-            fix: "Two different public IP addresses mean two rooms. On an iPhone iCloud Private Relay is one common cause, and a phone that quietly stayed on mobile data is another; neither is the only possibility. If you are willing to change them, turn Private Relay off for that one Wi-Fi under Settings › Wi-Fi › the network › Limit IP Address Tracking, or join the Wi-Fi, then reload https://relayium.com/. If you would rather leave Private Relay or a VPN on, a pairing code on https://relayium.com/cross-network reaches the phone without touching either.",
+            fix: "Two different public IPv4 addresses, one IPv4 and one IPv6 address, or IPv6 addresses from different network prefixes mean two rooms. On an iPhone iCloud Private Relay is one common cause, and a phone that quietly stayed on mobile data is another; neither is the only possibility. If you are willing to change them, turn Private Relay off for that one Wi-Fi under Settings › Wi-Fi › the network › Limit IP Address Tracking, or join the Wi-Fi, then reload https://relayium.com/. If you would rather leave Private Relay or a VPN on, a pairing code on https://relayium.com/cross-network reaches the phone without touching either.",
           },
           {
-            symptom: "Both phones show the same public IP and neither card appears.",
+            symptom: "Both phones are listed, but opening the workspace never connects.",
             code: ["https://relayium.com/   # the hint under the device list names the router setting"],
-            fix: "The router is separating its own clients. Turn off “AP isolation / client isolation” in its Wi-Fi settings, or pair the two phones across networks with a code on https://relayium.com/cross-network when the router is not yours to change.",
+            fix: "If the workspace header stays on “Connecting…” or shows “Connection failed”, the router may be separating its own clients: the server still lists both phones, but they cannot reach each other directly. Turn off “AP isolation / client isolation” in its Wi-Fi settings, or pair the two phones across networks with a code on https://relayium.com/cross-network when the router is not yours to change.",
           },
           {
             symptom: "The iPhone warns, before you accept, that the whole batch has to be held in memory.",
@@ -163,7 +163,7 @@ const zh = {
         label: "你需要准备",
         items: [
           "一台装有 Chrome（或任意现代浏览器）的安卓手机，一台用 Safari 的 iPhone——都保持最新版本。",
-          "想要最快的路径，就让两台设备连到同一个 Wi-Fi。在 iPhone 上，这通常还意味着只对这一个网络关闭 iCloud 专用代理：它会让手机从另一个公网 IP 出去，而同网络发现正是按这个地址来分组的。继续开着它也完全可以——那就用 https://relayium.com/cross-network 上的配对码，不改设置也能连到这台手机。",
+          "想要最快的路径，就让两台设备连到同一个 Wi-Fi。在 iPhone 上，这通常还意味着只对这一个网络关闭 iCloud 专用代理：它会让手机从另一个公网 IP 出去，而同网络发现正是按这个地址来分组的（IPv6 按 /64 网络前缀）。继续开着它也完全可以——那就用 https://relayium.com/cross-network 上的配对码，不改设置也能连到这台手机。",
           "两台手机都通过 https://relayium.com/ 打开页面。加密传输需要 HTTPS，用普通 http:// 打开时页面会直接这么说，而不会列出设备。",
           "你要发送的文件，每批最多 1,000 个；接收方手机上也要有地方放它们——放进哪个目录由它的浏览器决定，不由 Relayium 决定。",
         ],
@@ -180,7 +180,7 @@ const zh = {
           code: ["https://relayium.com/"],
         },
         {
-          text: "对比两台手机上状态条里的公网 IP。地址一致才会把两台放进同一个房间；iPhone 显示的地址不同，常见的缘故是 iCloud 专用代理或移动数据，而不是 Wi-Fi 出了问题。",
+          text: "对比两台手机上状态条里的公网 IP。走 IPv4 时，地址一致才会把两台放进同一个房间；走 IPv6 时即使在同一个 Wi-Fi 下两个地址通常也不同，所以地址不同本身说明不了什么。iPhone 显示的 IPv4 地址不同，或者一台是 IPv4、另一台是 IPv6，常见的缘故是 iCloud 专用代理或移动数据，而不是 Wi-Fi 出了问题。",
           code: ["已连接 · 本机 iPhone · 公网 IP 203.0.113.9"],
         },
         {
@@ -205,7 +205,7 @@ const zh = {
     {
       heading: "两台手机互相看不到时",
       body: [
-        "iPhone 上有一个值得先知道的原因：很多 iCloud+ 账号默认开着 iCloud 专用代理，它会改变手机对外呈现的公网 IP，而同网络发现正是按这个地址来分组的。它是几种常见原因之一，并非唯一原因；下面这些检查是通常的首轮排查，而不是穷尽清单，每一条都能用屏幕上已有的东西判定各自的情况。",
+        "iPhone 上有一个值得先知道的原因：很多 iCloud+ 账号默认开着 iCloud 专用代理，它会改变手机对外呈现的公网 IP，而同网络发现正是按这个地址来分组的（IPv6 按 /64 网络前缀）。它是几种常见原因之一，并非唯一原因；下面这些检查是通常的首轮排查，而不是穷尽清单，每一条都能用屏幕上已有的东西判定各自的情况。",
       ],
       troubleshooting: {
         label: "现象、检查、处理",
@@ -213,12 +213,12 @@ const zh = {
           {
             symptom: "iPhone 始终不出现在安卓手机上，或者反过来。",
             code: ["https://relayium.com/   # 对比两台手机上状态条里的公网 IP"],
-            fix: "两个不同的公网 IP 就是两个房间。在 iPhone 上，iCloud 专用代理是常见原因之一，手机悄悄留在移动数据上是另一种，两者都不是唯一可能。如果你愿意改这些设置：在「设置 › 无线局域网 › 该网络 › 限制 IP 地址跟踪」里只对那一个 Wi-Fi 关掉专用代理，或让手机连上 Wi-Fi，然后重新加载 https://relayium.com/。如果你更想保留专用代理或 VPN，用 https://relayium.com/cross-network 上的配对码也能连到这台手机，两者都不用动。",
+            fix: "两个不同的公网 IPv4 地址、一个 IPv4 一个 IPv6，或者网络前缀不同的 IPv6 地址，就是两个房间。在 iPhone 上，iCloud 专用代理是常见原因之一，手机悄悄留在移动数据上是另一种，两者都不是唯一可能。如果你愿意改这些设置：在「设置 › 无线局域网 › 该网络 › 限制 IP 地址跟踪」里只对那一个 Wi-Fi 关掉专用代理，或让手机连上 Wi-Fi，然后重新加载 https://relayium.com/。如果你更想保留专用代理或 VPN，用 https://relayium.com/cross-network 上的配对码也能连到这台手机，两者都不用动。",
           },
           {
-            symptom: "两台手机显示的公网 IP 相同，却都不出现卡片。",
+            symptom: "两台手机都列出来了，但打开工作区后始终连不上。",
             code: ["https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关"],
-            fix: "路由器把自己的客户端隔开了。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就用 https://relayium.com/cross-network 上的配对码让两台手机跨网络配对。",
+            fix: "如果工作区标题栏一直停在「连接中…」或显示「连接失败」，可能是路由器把自己的客户端隔开了：服务器仍会列出两台手机，但它们无法直接连到对方。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就用 https://relayium.com/cross-network 上的配对码让两台手机跨网络配对。",
           },
           {
             symptom: "还没点接收，iPhone 就警告说整批文件必须放在内存里。",

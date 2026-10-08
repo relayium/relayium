@@ -430,8 +430,19 @@ last-checked line.
 
 ## Cross-network transfers
 
-Same-LAN transfers (both devices on the same public IP) work out of the box —
-no TURN, no account required. Transfers across different networks need STUN
+Same-LAN transfers usually work out of the box — no TURN, no account
+required — as long as the two devices can reach each other directly; router
+client ("AP") isolation can block that even when both devices are listed. The
+server puts code-less visitors into one discovery room by the address it
+observes: the exact public address over IPv4, or the `/64` prefix over IPv6,
+where devices on one network usually show different addresses. Behind a
+reverse proxy that address comes from `X-Forwarded-For`, which the server reads
+only from a loopback peer or a CIDR you list in `-trusted-proxies`
+(`RELAYIUM_TRUSTED_PROXIES`); a proxy on another address that is not listed
+collapses every visitor into the proxy's own room. The grouping is a
+heuristic, not a trust boundary: devices split across IPv4 and IPv6 or across
+IPv6 prefixes land in different rooms (a VPN may cause either) and can use a
+pairing code instead. Transfers across different networks need STUN
 for NAT traversal, and a TURN relay for the (fairly common) case where a
 direct peer-to-peer connection still can't be established.
 

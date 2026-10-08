@@ -108,6 +108,10 @@ export interface Messages {
   theme: { label: string; system: string; light: string; dark: string };
   tagline: string;
   ipLabel: string; // row label for the device's server-observed public IP
+  // Shown under an IPv6 public IP: devices on one IPv6 network usually show
+  // different addresses yet share a LAN room (/64). Says that listing is not
+  // trust and points a missing device at a pairing code.
+  ipv6Note: string;
   connecting: string;
   unavailable: string;
   unsupported: string;
