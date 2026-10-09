@@ -86,6 +86,11 @@ public final class CloudUploader {
     /// allocates a fresh 8.5 MB block.
     public private(set) var packingBufferReallocations = 0
 
+    /// Retry waits, the non-advancing bound and the clock the diagnostics read.
+    /// Production never changes it; tests substitute the sleep and the clock so
+    /// a bounded retry is proved without waiting for it.
+    public var pacing = UploadRetryPacing()
+
     public init(transport: ResumableTransport) { self.transport = transport }
 
     /// The framed-stream header every session leads with: the length-prefixed
@@ -121,7 +126,19 @@ public final class CloudUploader {
     public func upload(sources: [PlaintextSource], purpose: UploadPurpose = .share,
                        burnAfterRead: Bool, ttl: Int,
                        token: String,
+                       onActivity: UploadActivityHandler? = nil,
                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
+        let trace = UploadTrace(now: pacing.now, emit: onActivity)
+        return try await trace.run {
+            try await self.uploadTraced(sources: sources, purpose: purpose,
+                                        burnAfterRead: burnAfterRead, ttl: ttl,
+                                        token: token, trace: trace, onProgress: onProgress)
+        }
+    }
+
+    private func uploadTraced(sources: [PlaintextSource], purpose: UploadPurpose,
+                        burnAfterRead: Bool, ttl: Int, token: String, trace: UploadTrace,
+                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
         // This path mints its own content key and hands back a `#k=` capability,
         // which is a public share by definition — so the shared manifest is the
         // only coherent frame 0 here, and the check states it rather than
@@ -151,9 +168,10 @@ public final class CloudUploader {
         guard validUploadChunkSize(chunkSize) else { throw CloudError.decoding }
         let enc = ChunkEncryptor(key: raw, sources: sources)
         try await pump(enc: enc, uploadId: uploadId, chunkSize: chunkSize,
-                       from: 0, total: total, token: token, onProgress: onProgress)
+                       from: 0, total: total, token: token, trace: trace, onProgress: onProgress)
 
         try Task.checkCancellation()
+        trace.enter(.finalizing)
         let r = try await transport.finalizeUpload(uploadId: uploadId, token: token)
         // A second server-chosen id, and not necessarily the one init issued:
         // this is the one that becomes the keychain account name the key is
@@ -201,7 +219,24 @@ public final class CloudUploader {
                        manifest: UploadManifest,
                        burnAfterRead: Bool, ttl: Int, token: String,
                        onUploadSession: (String, Int) throws -> Void,
+                       onActivity: UploadActivityHandler? = nil,
                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
+        let trace = UploadTrace(now: pacing.now, emit: onActivity)
+        return try await trace.run {
+            try await self.resumeTraced(sources: sources, key: key, uploadId: uploadId,
+                                  uploadChunkSize: uploadChunkSize, purpose: purpose,
+                                  manifest: manifest, burnAfterRead: burnAfterRead, ttl: ttl,
+                                  token: token, trace: trace, onUploadSession: onUploadSession,
+                                  onProgress: onProgress)
+        }
+    }
+
+    private func resumeTraced(sources: [PlaintextSource], key: [UInt8], uploadId: String?,
+                        uploadChunkSize: Int?, purpose: UploadPurpose,
+                        manifest: UploadManifest,
+                        burnAfterRead: Bool, ttl: Int, token: String, trace: UploadTrace,
+                        onUploadSession: (String, Int) throws -> Void,
+                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
         guard uploadManifestMatches(purpose: purpose, manifest: manifest) else {
             throw StoredWireError.invalidManifest
         }
@@ -216,6 +251,8 @@ public final class CloudUploader {
                 throw CloudError.decoding
             }
             do {
+                trace.enter(.checkingOffset)
+                trace.count(\.offsetQueries)
                 let offset = try await transport.uploadOffset(uploadId: checked, token: token)
                 guard offset >= 0, offset <= total else { throw CloudError.server(status: 0) }
                 committed = offset
@@ -232,6 +269,7 @@ public final class CloudUploader {
             // that opened the original session: the replacement object has to
             // be the same kind of object, or a delivery that was interrupted
             // for long enough becomes a public share on retry.
+            trace.enter(.openingSession)
             let (issuedId, chunkSize) = try await transport.initUpload(
                 header: header, purpose: purpose, burnAfterRead: burnAfterRead,
                 ttl: ttl, size: total, token: token)
@@ -247,7 +285,8 @@ public final class CloudUploader {
         if committed < total {
             let enc = try ChunkEncryptor(key: key, sources: sources, resumingAt: committed)
             try await pump(enc: enc, uploadId: live.id, chunkSize: live.chunkSize,
-                           from: committed, total: total, token: token, onProgress: onProgress)
+                           from: committed, total: total, token: token, trace: trace,
+                           onProgress: onProgress)
         } else {
             // Everything already landed. A zero-length PATCH at the end of the
             // stream is not a thing to send; finalizing is the only work left.
@@ -255,6 +294,7 @@ public final class CloudUploader {
         }
 
         try Task.checkCancellation()
+        trace.enter(.finalizing)
         let r = try await transport.finalizeUpload(uploadId: live.id, token: token)
         return UploadOutcome(id: try StoredObjectID.checked(r.id),
                              expiresAt: r.expiresAt, keyB64url: encodeStoreKey(key))
@@ -268,7 +308,7 @@ public final class CloudUploader {
     /// no-copy slice handed to the transport, the replay on a partial commit —
     /// is unchanged, and the memory guards still measure it.
     private func pump(enc: ChunkEncryptor, uploadId: String, chunkSize: Int,
-                      from: Int, total: Int, token: String,
+                      from: Int, total: Int, token: String, trace: UploadTrace,
                       onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws {
         // Held bytes double as the replay buffer: the server can commit part of a
         // chunk, so the unacknowledged tail must survive until it is acked.
@@ -299,6 +339,9 @@ public final class CloudUploader {
         let gate = ProgressGate(onProgress)
         gate.floor(from)
         onProgress(from, total)
+        /// Consecutive answers that acknowledged nothing new. See
+        /// `UploadRetryPacing.maxNonAdvancingAcknowledgements`.
+        var stalls = 0
         while offset < total {
             try Task.checkCancellation()
             while pending.count < chunkSize {
@@ -322,12 +365,61 @@ public final class CloudUploader {
             gate.floor(offset)
             let received = try await patchWithRetry(
                 uploadId: uploadId, bytes: pending,
-                chunkStart: chunkStart, total: total, token: token,
+                chunkStart: chunkStart, total: total, token: token, trace: trace,
                 onBytesSent: { gate.report(min($0, total), total) })
-            let consumed = received - chunkStart
+            var consumed = received - chunkStart
             // Offset moving backwards, or past bytes we never produced: either way
             // we can no longer align, and sending more writes a misplaced stream.
             if consumed < 0 || consumed > pending.count { throw CloudError.server(status: 0) }
+            if consumed == 0 {
+                // A 200 or 409 that names the offset this request started at:
+                // the server answered, and holds nothing more than before. Once
+                // is ordinary (a duplicated request that lost the race on the
+                // server answers exactly this); an unbroken run of them is a
+                // server or proxy that keeps swallowing the body, and resending
+                // it forever is a loop that never ends and never says so.
+                //
+                // Bounded by a COUNT, never a wall-clock reading, and nothing
+                // here moves the committed offset, drops a held byte or
+                // finalizes: running out leaves every byte the server did
+                // commit where it is, for a later resume to continue from.
+                stalls += 1
+                trace.count(\.nonAdvancingAcknowledgements)
+                guard stalls < pacing.maxNonAdvancingAcknowledgements else {
+                    trace.noteStallExhausted()
+                    throw CloudError.network
+                }
+                trace.enter(.waitingToRetry)
+                try await pacing.sleep(pacing.stallBackoff(stalls))
+                try Task.checkCancellation()
+                // Ask rather than assume: the answer may have been the lost
+                // one, and the bytes already stored. Sending them again would
+                // be harmless to the blob but is exactly the waste this read
+                // exists to avoid.
+                trace.enter(.checkingOffset)
+                trace.count(\.offsetQueries)
+                let stored: Int
+                do {
+                    stored = try await transport.uploadOffset(uploadId: uploadId, token: token)
+                } catch let e as CloudError {
+                    if e == .unauthorized || e == .quota || e == .rateLimited { throw e }
+                    try Task.checkCancellation()
+                    continue                      // resend the same bytes, still bounded
+                } catch {
+                    try Task.checkCancellation()
+                    throw error
+                }
+                if stored == chunkStart { continue }
+                // The same alignment rule as an acknowledgement: inside the
+                // bytes held, or the stream can no longer be placed.
+                guard stored > chunkStart, stored - chunkStart <= pending.count else {
+                    throw CloudError.server(status: 0)
+                }
+                trace.count(\.offsetRecoveries)
+                consumed = stored - chunkStart
+            }
+            stalls = 0
+            if consumed < pending.count { trace.count(\.partialCommits) }
             // Never `removeFirst`: it drops the buffer's allocation, so the next
             // refill takes a fresh ~8.5 MB block — once per chunk, whatever the
             // network is doing. Measured on this codebase: removeFirst reallocated
@@ -343,9 +435,13 @@ public final class CloudUploader {
                 pending.append(tail)
             }
             noteStorage(pending)
-            chunkStart = received
-            offset = received
-            onProgress(offset, total)
+            chunkStart += consumed
+            offset = chunkStart
+            // Through the gate, like every in-flight report: an acknowledgement
+            // below what has already left (a partial commit, a replay) must not
+            // drag the bar backwards. The bar counts bytes SENT; what the
+            // server has confirmed is `UploadActivity`'s to say.
+            gate.commit(offset, total)
         }
         // The other half of the asymmetric guard: the loop ends on offset >= total,
         // so an under-reporting formula would leave frames unsent. Confirm dry.
@@ -375,12 +471,13 @@ public final class CloudUploader {
     /// PATCH with resync-and-replay. A reset commits whatever landed, so the
     /// server's offset can fall inside the chunk we sent; replay from there.
     private func patchWithRetry(uploadId: String, bytes: Data, chunkStart: Int,
-                                total: Int, token: String,
+                                total: Int, token: String, trace: UploadTrace,
                                 onBytesSent: @escaping (Int) -> Void) async throws -> Int {
         let end = chunkStart + bytes.count
         var from = chunkStart
         for attempt in 1...5 {
             do {
+                let request = trace.beginRequest()
                 // A Data slice shares the packing buffer's storage — no copy,
                 // on the first attempt or on a replay. The replay path runs
                 // exactly when the network is already unhappy, which is the
@@ -394,20 +491,39 @@ public final class CloudUploader {
                 let outcome = try await transport.patchChunk(
                     uploadId: uploadId, bytes: body,
                     from: from, to: end, total: total, token: token,
-                    onBytesSent: { onBytesSent(base + $0) })
+                    onBytesSent: { n in
+                        onBytesSent(base + n)
+                        // Every byte of this request has left the device. What
+                        // remains is the server's answer, and that wait — not
+                        // the sending — is what a slow store or a lost reply
+                        // looks like.
+                        if base + n >= end { trace.bodySent(request) }
+                    })
                 switch outcome {
-                case .committed(let r), .serverAhead(let r): return r
+                case .committed(let r): return r
+                case .serverAhead(let r):
+                    trace.count(\.serverAheadAnswers)
+                    return r
                 }
             } catch let e as CloudError {
+                trace.noteTransportFailure(e)
                 // User-actionable failures are never retried and never masked.
                 if e == .unauthorized || e == .quota || e == .rateLimited { throw e }
                 if attempt >= 5 { throw e }
                 try Task.checkCancellation()
+                trace.count(\.transportRetries)
+                trace.enter(.checkingOffset)
+                trace.count(\.offsetQueries)
                 from = (try? await transport.uploadOffset(uploadId: uploadId, token: token)) ?? from
-                if from >= end { return from }
+                if from >= end {
+                    // The reply was lost, not the bytes.
+                    trace.count(\.offsetRecoveries)
+                    return from
+                }
                 // The server fell behind bytes we no longer hold — unreplayable.
                 if from < chunkStart { throw CloudError.server(status: 0) }
-                try await Task.sleep(nanoseconds: UInt64(100_000_000 * attempt))
+                trace.enter(.waitingToRetry)
+                try await pacing.sleep(pacing.transportBackoff(attempt))
             }
         }
         throw CloudError.network
@@ -550,7 +666,27 @@ extension CloudUploader {
                                   policy: FinalizeRecoveryPolicy = FinalizeRecoveryPolicy(),
                                   onUploadSession: (String, Int) throws -> Void,
                                   onFinalizing: (String) throws -> Void,
+                                  onActivity: UploadActivityHandler? = nil,
                                   onProgress: @escaping (_ sent: Int, _ total: Int) -> Void)
+        async throws -> RecoveredUpload {
+        let trace = UploadTrace(now: pacing.now, emit: onActivity)
+        return try await trace.run {
+            try await self.resumeRecoverableTraced(sources: sources, key: key, session: session,
+                                                   purpose: purpose, manifest: manifest, ttl: ttl,
+                                                   token: token, policy: policy, trace: trace,
+                                                   onUploadSession: onUploadSession,
+                                                   onFinalizing: onFinalizing,
+                                                   onProgress: onProgress)
+        }
+    }
+
+    private func resumeRecoverableTraced(sources: [PlaintextSource], key: [UInt8],
+                                   session: DeliverySession?, purpose: UploadPurpose,
+                                   manifest: UploadManifest, ttl: Int, token: String,
+                                   policy: FinalizeRecoveryPolicy, trace: UploadTrace,
+                                   onUploadSession: (String, Int) throws -> Void,
+                                   onFinalizing: (String) throws -> Void,
+                                   onProgress: @escaping (_ sent: Int, _ total: Int) -> Void)
         async throws -> RecoveredUpload {
         guard purpose == .deviceTask, case .sealed = manifest,
               uploadManifestMatches(purpose: purpose, manifest: manifest) else {
@@ -560,7 +696,8 @@ extension CloudUploader {
         let total = try Self.checkedCipherSize(sources.map(\.size))
 
         func finalize(_ id: String, sent: Bool) async throws -> RecoveredUpload {
-            try await finalizeRecovering(id, sent: sent, policy: policy, token: token,
+            trace.enter(.finalizing)
+            return try await finalizeRecovering(id, sent: sent, policy: policy, token: token,
                                          beforeEachRequest: {
                 do { try onFinalizing(id) } catch {
                     throw DeliveryUploadError.finalizeStateNotRecorded
@@ -574,6 +711,8 @@ extension CloudUploader {
             var offset: Int?
             do {
                 try Task.checkCancellation()
+                trace.enter(.checkingOffset)
+                trace.count(\.offsetQueries)
                 offset = try await transport.uploadOffset(uploadId: id, token: token)
             } catch CloudError.notFound {
                 offset = nil
@@ -586,7 +725,8 @@ extension CloudUploader {
                 if r < total {
                     let enc = try ChunkEncryptor(key: key, sources: sources, resumingAt: r)
                     try await pump(enc: enc, uploadId: id, chunkSize: recorded.chunkSize,
-                                   from: r, total: total, token: token, onProgress: onProgress)
+                                   from: r, total: total, token: token, trace: trace,
+                                   onProgress: onProgress)
                 } else {
                     onProgress(total, total)
                 }
@@ -608,7 +748,8 @@ extension CloudUploader {
                 if r < total {
                     let enc = try ChunkEncryptor(key: key, sources: sources, resumingAt: r)
                     try await pump(enc: enc, uploadId: id, chunkSize: recorded.chunkSize,
-                                   from: r, total: total, token: token, onProgress: onProgress)
+                                   from: r, total: total, token: token, trace: trace,
+                                   onProgress: onProgress)
                 } else {
                     onProgress(total, total)
                 }
@@ -625,6 +766,7 @@ extension CloudUploader {
         // sending them again meters them again. No second object or daily
         // debit can result, because the reaped session never finalized.)
         try Task.checkCancellation()
+        trace.enter(.openingSession)
         let (issuedId, chunkSize) = try await transport.initUpload(
             header: header, purpose: purpose, burnAfterRead: false,
             ttl: ttl, size: total, token: token)
@@ -634,7 +776,8 @@ extension CloudUploader {
         if total > 0 {
             let enc = try ChunkEncryptor(key: key, sources: sources, resumingAt: 0)
             try await pump(enc: enc, uploadId: id, chunkSize: chunkSize,
-                           from: 0, total: total, token: token, onProgress: onProgress)
+                           from: 0, total: total, token: token, trace: trace,
+                           onProgress: onProgress)
         } else {
             onProgress(0, 0)
         }
@@ -757,12 +900,14 @@ extension CloudUploader {
         sources: [PlaintextSource],
         singleShot: (_ burnAfterRead: Bool, _ ttl: Int, _ token: String) async throws -> SingleShotResult,
         burnAfterRead: Bool, ttl: Int, token: String,
+        onActivity: UploadActivityHandler? = nil,
         onProgress: @escaping (_ sent: Int, _ total: Int) -> Void
     ) async throws -> UploadOutcome {
         do {
             return try await upload(sources: sources, purpose: .share,
                                     burnAfterRead: burnAfterRead,
-                                    ttl: ttl, token: token, onProgress: onProgress)
+                                    ttl: ttl, token: token, onActivity: onActivity,
+                                    onProgress: onProgress)
         } catch is CancellationError {
             throw CancellationError()
         } catch let e as StoredLinkKeyError {
@@ -815,5 +960,329 @@ final class ProgressGate: @unchecked Sendable {
         high = n
         lock.unlock()
         emit(n, total)
+    }
+
+    /// An acknowledged offset. Reported when it is at least what is already
+    /// shown — so a chunk the server confirmed is always said, even after every
+    /// byte of it was already reported leaving — and swallowed when it is
+    /// below, which is a partial commit or a non-advancing answer and must not
+    /// move the bar backwards.
+    func commit(_ n: Int, _ total: Int) {
+        lock.lock()
+        guard n >= high else { lock.unlock(); return }
+        high = n
+        lock.unlock()
+        emit(n, total)
+    }
+}
+
+// MARK: - What an upload is doing, and where its time went
+
+/// What a running upload is doing right now — the half of its state that
+/// `sent / total` cannot say.
+///
+/// The bar counts bytes that have LEFT this device. Bytes leaving is not the
+/// server holding them: a chunk can be entirely sent and still be waiting for
+/// the server to confirm it, and that wait — a slow store, a reply lost on the
+/// way back, a reconnect — is exactly what used to look like a frozen bar.
+public enum UploadActivity: String, CaseIterable, Equatable, Hashable, Sendable {
+    /// Opening a server session (or a fresh one after the old one expired).
+    case openingSession
+    /// Encrypted bytes are leaving this device.
+    case sending
+    /// Every byte of the current request has been handed to the network
+    /// stack; the server has not yet said what it stored. On a slow uplink
+    /// part of this time is the OS still draining its send buffer — the
+    /// transport cannot see past that hand-off, so neither can this stage.
+    case awaitingConfirmation
+    /// Asking the server how much of the upload it holds.
+    case checkingOffset
+    /// Waiting a moment before trying again after a failed or empty answer.
+    case waitingToRetry
+    /// Every byte is stored; the server is turning them into the finished
+    /// object.
+    case finalizing
+}
+
+/// A failure, sorted into what a bug report needs and nothing else. No case
+/// carries a value, so nothing about the file, the account or the session can
+/// ride along.
+public enum UploadErrorClass: String, Equatable, Sendable {
+    case cancelled
+    case network
+    case unauthorized
+    case quota
+    case rateLimited
+    case notFound
+    case server4xx
+    case server5xx
+    /// The server's offsets and the stream disagree (`server(status: 0)`).
+    case misaligned
+    /// The bounded run of answers that acknowledged nothing ran out.
+    case nonAdvancingAcknowledgements
+    case decoding
+    case finalizeUnconfirmed
+    case finalizeNotCompleted
+    case finalizeStateNotRecorded
+    case inconsistentSession
+    case refusedIdentifier
+    case other
+
+    static func of(_ error: Error) -> UploadErrorClass {
+        if error is CancellationError { return .cancelled }
+        if let cloud = error as? CloudError {
+            switch cloud {
+            case .unauthorized: return .unauthorized
+            case .quota, .dailyQuota, .monthlyTraffic: return .quota
+            case .rateLimited: return .rateLimited
+            case .notFound: return .notFound
+            case .network: return .network
+            case .decoding: return .decoding
+            case .server(let status):
+                if status == 0 { return .misaligned }
+                return status >= 500 ? .server5xx : .server4xx
+            case .downloadLimited, .downloadUnavailable: return .other
+            }
+        }
+        if let delivery = error as? DeliveryUploadError {
+            switch delivery {
+            case .unconfirmed: return .finalizeUnconfirmed
+            case .notCompleted: return .finalizeNotCompleted
+            case .finalizeStateNotRecorded: return .finalizeStateNotRecorded
+            case .inconsistentSession: return .inconsistentSession
+            }
+        }
+        if error is StoredLinkKeyError { return .refusedIdentifier }
+        return .other
+    }
+}
+
+/// Metadata about one upload attempt: which stage it was in, how long each
+/// stage took, and how often each recovery path ran.
+///
+/// Deliberately ONLY that. No file name, path, size, URL, upload id, object
+/// id, key, token or account appears in it — not even an offset — so it can be
+/// logged and attached to a bug report as it is. It exists so the next "it sat
+/// at 56% for five minutes" can be answered from evidence (awaiting
+/// confirmation? retrying? finalizing?) instead of a guess.
+public struct UploadDiagnostics: Equatable, Sendable {
+    public enum Outcome: Equatable, Sendable {
+        case inProgress
+        case completed
+        case failed(UploadErrorClass)
+    }
+
+    /// Increases with every snapshot this attempt emits, so a consumer that
+    /// receives them on another queue can drop one that arrives late.
+    public internal(set) var sequence = 0
+    public internal(set) var activity: UploadActivity = .openingSession
+    public internal(set) var outcome: Outcome = .inProgress
+    /// Seconds spent in each stage so far, from a monotonic clock.
+    public internal(set) var stageSeconds: [UploadActivity: Double] = [:]
+    /// The single longest unbroken stretch in one stage.
+    public internal(set) var longestStage: UploadActivity?
+    public internal(set) var longestStageSeconds: Double = 0
+    public internal(set) var patchRequests = 0
+    /// PATCH failures that were retried (not the final one, if any).
+    public internal(set) var transportRetries = 0
+    public internal(set) var lastTransportError: UploadErrorClass?
+    public internal(set) var nonAdvancingAcknowledgements = 0
+    public internal(set) var serverAheadAnswers = 0
+    public internal(set) var partialCommits = 0
+    public internal(set) var offsetQueries = 0
+    /// Offset reads that found the bytes already stored, so they were not
+    /// sent again.
+    public internal(set) var offsetRecoveries = 0
+
+    public init() {}
+
+    /// One line, fixed vocabulary, numbers only. Safe for a log.
+    public var summary: String {
+        let outcomeText: String
+        switch outcome {
+        case .inProgress: outcomeText = "inProgress"
+        case .completed: outcomeText = "completed"
+        case .failed(let c): outcomeText = "failed:" + c.rawValue
+        }
+        let stages = UploadActivity.allCases.compactMap { stage -> String? in
+            guard let s = stageSeconds[stage] else { return nil }
+            return stage.rawValue + "=" + String(format: "%.3f", s)
+        }.joined(separator: ",")
+        var parts = ["outcome=" + outcomeText, "stage=" + activity.rawValue]
+        if let longestStage {
+            parts.append("longest=" + longestStage.rawValue + ":" + String(format: "%.3f", longestStageSeconds))
+        }
+        parts += ["patches=\(patchRequests)", "transportRetries=\(transportRetries)",
+                  "lastTransportError=" + (lastTransportError?.rawValue ?? "none"),
+                  "nonAdvancing=\(nonAdvancingAcknowledgements)",
+                  "serverAhead=\(serverAheadAnswers)", "partialCommits=\(partialCommits)",
+                  "offsetQueries=\(offsetQueries)", "offsetRecoveries=\(offsetRecoveries)",
+                  "seconds=[" + stages + "]"]
+        return parts.joined(separator: " ")
+    }
+}
+
+/// Receives every change of stage, with the diagnostics as they stand, and
+/// once more when the attempt ends (`outcome` no longer `.inProgress`). May be
+/// called from any thread; `UploadDiagnostics.sequence` orders the calls.
+public typealias UploadActivityHandler = (UploadActivity, UploadDiagnostics) -> Void
+
+/// Waits and bounds of the PATCH loop. Every bound is a COUNT; the waits are
+/// sums this code chose, never elapsed-time readings.
+public struct UploadRetryPacing: Sendable {
+    /// Consecutive answers acknowledging nothing new before the attempt gives
+    /// up. Five: one such answer is an ordinary race (a duplicated request the
+    /// server already applied answers 409 at the same offset), and a second
+    /// after an offset read is still plausible. Five in a row — with an offset
+    /// read before each resend and about five seconds of waiting between
+    /// them — is a server or proxy that keeps swallowing the body. Giving up
+    /// keeps every committed byte; a staged job resumes from there.
+    public var maxNonAdvancingAcknowledgements = 5
+    /// Wait before resending after the n-th empty answer: 0.5s × n, at most 2s.
+    public var stallBackoffStep: Double = 0.5
+    public var stallBackoffMax: Double = 2
+    /// Injectable for tests; must honour cancellation.
+    public var sleep: @Sendable (_ seconds: Double) async throws -> Void = { seconds in
+        try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+    }
+    /// Monotonic nanoseconds for the diagnostics only. `CLOCK_MONOTONIC`
+    /// keeps counting while the device sleeps, which is time the user waited.
+    public var now: @Sendable () -> UInt64 = { clock_gettime_nsec_np(CLOCK_MONOTONIC) }
+
+    public init() {}
+
+    func stallBackoff(_ n: Int) -> Double { min(max(0, stallBackoffStep * Double(n)), stallBackoffMax) }
+    /// The PATCH error backoff this loop has always used: 0.1s × attempt.
+    func transportBackoff(_ attempt: Int) -> Double { 0.1 * Double(attempt) }
+}
+
+/// The per-attempt recorder behind `UploadDiagnostics`. Locked because the
+/// URLSession delegate queue reports "every byte has left" while the upload
+/// loop moves through the other stages.
+final class UploadTrace: @unchecked Sendable {
+    private let lock = NSLock()
+    private let now: @Sendable () -> UInt64
+    private let emit: UploadActivityHandler?
+    private var d = UploadDiagnostics()
+    private var stageStart: UInt64
+    private var finished = false
+    private var stallExhausted = false
+    private var requestId = 0
+
+    init(now: @escaping @Sendable () -> UInt64, emit: UploadActivityHandler?) {
+        self.now = now
+        self.emit = emit
+        self.stageStart = now()
+    }
+
+    /// Runs one attempt, emitting the first snapshot before it starts and the
+    /// final one — with its outcome — however it ends.
+    func run<T>(_ body: () async throws -> T) async throws -> T {
+        publish()
+        do {
+            let value = try await body()
+            finish(.completed)
+            return value
+        } catch {
+            finish(.failed(classify(error)))
+            throw error
+        }
+    }
+
+    func enter(_ activity: UploadActivity) {
+        lock.lock()
+        guard !finished, activity != d.activity else { lock.unlock(); return }
+        accrue()
+        d.activity = activity
+        d.sequence += 1
+        let snapshot = d
+        lock.unlock()
+        emit?(activity, snapshot)
+    }
+
+    /// A PATCH is about to leave: enter `.sending` and name the request, so a
+    /// delegate callback that arrives late — after its request was answered,
+    /// or from an earlier one — cannot relabel whatever the loop is doing now.
+    func beginRequest() -> Int {
+        lock.lock()
+        guard !finished else { lock.unlock(); return -1 }
+        d.patchRequests += 1
+        requestId += 1
+        let id = requestId
+        lock.unlock()
+        enter(.sending)
+        return id
+    }
+
+    /// Every byte of request `id` has left. Only moves `.sending` →
+    /// `.awaitingConfirmation`, and only for the request still in flight.
+    func bodySent(_ id: Int) {
+        lock.lock()
+        guard !finished, id == requestId, d.activity == .sending else { lock.unlock(); return }
+        accrue()
+        d.activity = .awaitingConfirmation
+        d.sequence += 1
+        let snapshot = d
+        lock.unlock()
+        emit?(.awaitingConfirmation, snapshot)
+    }
+
+    func count(_ field: WritableKeyPath<UploadDiagnostics, Int>) {
+        lock.lock(); defer { lock.unlock() }
+        guard !finished else { return }
+        d[keyPath: field] += 1
+    }
+
+    func noteTransportFailure(_ error: Error) {
+        lock.lock(); defer { lock.unlock() }
+        guard !finished else { return }
+        d.lastTransportError = UploadErrorClass.of(error)
+    }
+
+    func noteStallExhausted() {
+        lock.lock(); defer { lock.unlock() }
+        stallExhausted = true
+    }
+
+    private func classify(_ error: Error) -> UploadErrorClass {
+        lock.lock(); defer { lock.unlock() }
+        if stallExhausted, !(error is CancellationError) { return .nonAdvancingAcknowledgements }
+        return UploadErrorClass.of(error)
+    }
+
+    private func publish() {
+        lock.lock()
+        let snapshot = d
+        lock.unlock()
+        emit?(snapshot.activity, snapshot)
+    }
+
+    private func finish(_ outcome: UploadDiagnostics.Outcome) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        accrue()
+        finished = true
+        d.outcome = outcome
+        d.sequence += 1
+        let snapshot = d
+        lock.unlock()
+        emit?(snapshot.activity, snapshot)
+    }
+
+    /// Caller holds the lock.
+    private func accrue() {
+        let t = now()
+        let elapsed = Double(t >= stageStart ? t - stageStart : 0) / 1_000_000_000
+        d.stageSeconds[d.activity, default: 0] += elapsed
+        if elapsed > d.longestStageSeconds {
+            d.longestStageSeconds = elapsed
+            d.longestStage = d.activity
+        }
+        stageStart = t
+    }
+
+    var snapshot: UploadDiagnostics {
+        lock.lock(); defer { lock.unlock() }
+        return d
     }
 }

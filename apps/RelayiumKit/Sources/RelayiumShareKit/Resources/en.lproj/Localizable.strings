@@ -239,6 +239,12 @@
 "upload.resume" = "Resume upload";
 "upload.discard" = "Discard saved copy";
 "upload.restarting" = "The server dropped the paused upload, so it is starting again from the beginning.";
+"upload.activity.openingSession" = "Setting up the upload…";
+"upload.activity.sending" = "Sending encrypted data…";
+"upload.activity.awaitingConfirmation" = "Sent. Waiting for the server to confirm it has stored this part…";
+"upload.activity.checkingOffset" = "Checking how much the server has stored…";
+"upload.activity.waitingToRetry" = "The server didn't confirm the last part. Trying again shortly — anything it already stored is kept.";
+"upload.activity.finalizing" = "Everything is stored. Finishing the upload…";
 "upload.cleanupFailed" = "Relayium couldn't remove its copy of the files from this device. It will try again the next time it opens.";
 "upload.keyKept" = "The key is stored securely on this device and is never sent to Relayium's servers. You can copy this link again from the Account tab.";
 "upload.keyWarning" = "%@ The link below is the only available copy of the key — copy it now. Relayium's servers never had the key, so this link can't be shown again.";

@@ -518,14 +518,24 @@ struct SendView: View {
             } currentValueLabel: {
                 Text(L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
             }
-            // Above Cancel, in reading order. Still the foreground-only truth —
-            // nothing uploads while the app is suspended — but R3-G gave it a
-            // second half: the bytes are staged on this device, so reopening
-            // Relayium offers to carry on. Both halves are in the sentence.
-            Text(L10n.t(.uploadKeepOpen))
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
+            // Two supporting sentences, styled once as a group.
+            VStack(alignment: .leading, spacing: Metrics.inner) {
+                // Bytes that left this device are not bytes the server has
+                // confirmed. Said separately, so waiting for its answer — or a
+                // retry — is not mistaken for a hang.
+                if let activity = UploadPresentation.activityText(upload.currentUploadActivity) {
+                    Text(activity)
+                }
+                // Above Cancel, in reading order. Still the foreground-only
+                // truth — nothing uploads while the app is suspended — but R3-G
+                // gave it a second half: the bytes are staged on this device, so
+                // reopening Relayium offers to carry on. Both halves are in the
+                // sentence.
+                Text(L10n.t(.uploadKeepOpen))
+            }
+            .font(.footnote)
+            .foregroundStyle(Palette.supportingLabel)
+            .fixedSize(horizontal: false, vertical: true)
             PendingFileList(sessionFiles: upload.sessionFiles)
             Button(L10n.t(.commonCancel)) { upload.cancel() }
                 .borderedAction()

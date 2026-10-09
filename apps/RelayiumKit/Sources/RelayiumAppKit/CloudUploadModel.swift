@@ -76,6 +76,25 @@ public final class CloudUploadModel: ObservableObject {
     /// what it contains without keeping access to the source files alive.
     @Published public private(set) var sessionFiles: [FileMeta] = []
 
+    /// What the running upload is doing, beside how many bytes have left.
+    /// Kept out of `UploadState` on purpose: `.uploading(sent:total:)` is
+    /// matched all over both apps, and "sent" and "the server has it" are two
+    /// facts, not one. Read it through `currentUploadActivity`, which only
+    /// answers while an upload is actually on screen.
+    @Published public private(set) var uploadActivity: UploadActivity?
+
+    /// The metadata-only record of the latest attempt this screen ran — stages,
+    /// durations, counters, an error class; never a name, id or key. For a bug
+    /// report; the same line is written to the local log when an attempt ends.
+    @Published public private(set) var lastUploadDiagnostics: UploadDiagnostics?
+
+    /// The activity to show, or nil when no upload is on screen. A late
+    /// snapshot can never label a finished, failed or paused upload.
+    public var currentUploadActivity: UploadActivity? {
+        guard case .uploading = state else { return nil }
+        return uploadActivity
+    }
+
     private let uploader: CloudUploader
     /// Where the key of every successful upload is kept, so the Account tab can
     /// rebuild this link later. The same store the account management model
@@ -125,6 +144,10 @@ public final class CloudUploadModel: ObservableObject {
     /// Operation identity, as in AccountSession: a late callback from a
     /// superseded upload must not repaint a screen the user has moved past.
     private var generation = 0
+    /// The newest diagnostics snapshot applied, and for which generation.
+    /// Snapshots hop to the main actor one task each, and tasks are not
+    /// promised to run in the order they were made.
+    private var appliedDiagnostics: (generation: Int, sequence: Int) = (-1, -1)
 
     public init(uploader: CloudUploader, keyStore: StoredLinkKeyStore, origin: String,
                 pending: PendingUploadSupport? = nil) {
@@ -262,6 +285,7 @@ public final class CloudUploadModel: ObservableObject {
         // unchanged: one live uploader, one in-memory key, no staged copy.
         guard let pending, let accountId, !accountId.isEmpty else {
             state = .uploading(sent: 0, total: 0)
+            uploadActivity = nil
             task = Task { [weak self] in
                 guard let self else { return }
                 do {
@@ -275,6 +299,7 @@ public final class CloudUploadModel: ObservableObject {
                         burnAfterRead: self.burnAfterRead,
                         ttl: self.ttl,
                         token: token,
+                        onActivity: Self.activityForwarder(to: self, g: g),
                         onProgress: { sent, total in
                             Task { @MainActor in self.report(sent: sent, total: total, g: g) }
                         })
@@ -293,6 +318,7 @@ public final class CloudUploadModel: ObservableObject {
         // server session exist. Reversed, a crash in between would leave a
         // session nothing on this device could feed.
         state = .preparing
+        uploadActivity = nil
         let burn = burnAfterRead
         let ttl = self.ttl
         let source = sourceDraftId
@@ -378,6 +404,7 @@ public final class CloudUploadModel: ObservableObject {
         let g = generation
         cleanupWarning = nil
         state = .uploading(sent: 0, total: job.totalBytes)
+        uploadActivity = nil
         task = Task { [weak self] in
             guard let self else { return }
             do {
@@ -429,6 +456,7 @@ public final class CloudUploadModel: ObservableObject {
                         self?.sessionEstablished(updated, replaced: known != nil && known != id, g: g)
                     }
                 },
+                onActivity: Self.activityForwarder(to: self, g: g),
                 onProgress: { [weak self] sent, total in
                     Task { @MainActor in self?.report(sent: sent, total: total, g: g) }
                 })
@@ -876,8 +904,51 @@ public final class CloudUploadModel: ObservableObject {
 
     func report(sent: Int, total: Int, g: Int) {
         guard g == generation else { return }
+        switch state {
+        case let .uploading(shown, shownTotal):
+            // Progress callbacks hop here one task each, and nothing promises
+            // they run in order: a late, lower report of the same upload must
+            // not drag the bar back. A different total is a different stream
+            // (the first report of a resumed job), so it is taken as is.
+            if shownTotal == total, sent < shown { return }
+        case .restarting:
+            // A replaced session really does start again from zero, and the
+            // state already said so.
+            break
+        default:
+            // Finished, failed, paused, or back to the selection: a report
+            // that lost the race with the outcome is not allowed to resurrect
+            // a progress bar over it.
+            return
+        }
         state = .uploading(sent: sent, total: total)
     }
+
+    /// The `onActivity` handler both upload paths hand the uploader. The final
+    /// snapshot is logged from the callback itself — before any generation
+    /// check, so a cancelled attempt still leaves its line — and everything
+    /// else hops to the main actor under the generation guard.
+    private static func activityForwarder(to model: CloudUploadModel, g: Int) -> UploadActivityHandler {
+        { [weak model] activity, diagnostics in
+            if diagnostics.outcome != .inProgress {
+                // Fixed vocabulary and numbers only (`UploadDiagnostics.summary`),
+                // so public is safe and keeps the line readable in a sysdiagnose.
+                // nonlocalized: an os_log diagnostic, never shown to a user.
+                uploadLog.info("upload attempt ended: \(diagnostics.summary, privacy: .public)")
+            }
+            Task { @MainActor in model?.reportActivity(activity, diagnostics, g: g) }
+        }
+    }
+
+    func reportActivity(_ activity: UploadActivity, _ diagnostics: UploadDiagnostics, g: Int) {
+        guard g == generation else { return }
+        if appliedDiagnostics.generation == g, diagnostics.sequence <= appliedDiagnostics.sequence { return }
+        appliedDiagnostics = (g, diagnostics.sequence)
+        lastUploadDiagnostics = diagnostics
+        uploadActivity = diagnostics.outcome == .inProgress ? activity : nil
+    }
+
+    private nonisolated static let uploadLog = Logger(subsystem: "com.relayium", category: "upload")
 
     /// Check the id, persist the key, then present the link.
     ///
