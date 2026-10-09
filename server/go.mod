@@ -1,6 +1,6 @@
 module github.com/relayium/relayium
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -54,7 +54,7 @@ require (
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

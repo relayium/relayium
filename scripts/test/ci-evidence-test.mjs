@@ -31,7 +31,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -257,6 +257,9 @@ function baseWorld() {
     hooks: {},
     // Source certificate overrides: key `<lane>/<job>/<index>` → (cert) => cert | null (absent).
     certPatch: {},
+    // Source certificate API-metadata overrides (expiry and the like): "*" for every certificate, then
+    // `<lane>/<job>/<index>` for one. Unit worlds leave it empty: their fixed NOW precedes the default expiry.
+    certArtifactPatch: {},
     certAttempt: 1,
     // Current certificate overrides: profile → (cert) => cert | null (absent).
     currentPatch2: {},
@@ -355,7 +358,8 @@ function artifactTable(world) {
         if (patch) cert = patch(cert);
         if (cert === null) return;
         const bytes = cert instanceof Buffer ? cert : zipOf([{ name: "toolchain.json", data: JSON.stringify(cert) }]);
-        out.push({ id, name: `relayium-ci-evidence-toolchain-${laneId}-${jobId}-${index}-attempt-${world.certAttempt}`, bytes, patch: {} });
+        const meta = { ...world.certArtifactPatch?.["*"], ...world.certArtifactPatch?.[`${laneId}/${jobId}/${index}`] };
+        out.push({ id, name: `relayium-ci-evidence-toolchain-${laneId}-${jobId}-${index}-attempt-${world.certAttempt}`, bytes, patch: meta });
       });
     }
   }
@@ -2394,13 +2398,19 @@ async function e2e() {
   world.pr.merge_commit_sha = sha;
   world.current.head_sha = sha;
   world.current.path = ".github/workflows/go.yml";
+  // The CLI judges against the real clock, so this world lives on ONE captured wall clock: the proof and
+  // every certificate it links expire a week after it (the unit worlds keep their fixed NOW).
+  const wall = Date.now();
+  const at = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const alive = { expired: false, expires_at: at(wall + 7 * 86400_000) };
+  world.artifactPatch = { ...alive };
+  world.certArtifactPatch = { "*": { ...alive } };
   const pw = producerWorld(world);
   const m = await produce({ env: produceEnv(), api: mockApi(pw), git: gitFor(pw, MERGE), registry: REGISTRY,
-    now: () => new Date(Date.now() - 60_000), workflowsDir });
+    now: () => new Date(wall - 60_000), workflowsDir });
   world.zip = zipManifest(m);
-  world.artifactPatch = { expires_at: new Date(Date.now() + 7 * 86400_000).toISOString().replace(/\.\d{3}Z$/, "Z") };
-  world.now = new Date();
-  world.run.updated_at = new Date(Date.now() - 30_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  world.now = new Date(wall);
+  world.run.updated_at = at(wall - 30_000);
   // Rebind the routes from the fixed MAIN to the real fixture commit.
   const api = mockApi(world);
   const seen = [];
@@ -2484,6 +2494,28 @@ async function e2e() {
     check(rerun.status === 1 && /decided for attempt 1, this is attempt "2"/.test(rerun.stderr),
       `confirm accepted attempt 1's witness in attempt 2 (exit ${rerun.status}): ${rerun.stderr}`);
   }
+
+  // A valid proof does not carry an expired certificate: one reached its expiry by the captured clock
+  // (flag still false), another is flagged expired with a future date. Each is refused by id, keeps no witness.
+  const goCertIds = artifactTable(world).filter((a) => a.name.startsWith("relayium-ci-evidence-toolchain-go-")).map((a) => a.id);
+  const goKeys = Object.entries(REGISTRY.lanes.go.jobs).filter(([jobId, e]) => e.mode !== "fresh" && TOOLREG.lanes.go?.jobs?.[jobId]?.profile)
+    .flatMap(([jobId, e]) => e.checks.map((_, i) => `go/${jobId}/${i}`));
+  check(goCertIds.length === goChecks && goKeys.length === goChecks, `the go certificate table drifted: ${goCertIds.length}/${goKeys.length}, want ${goChecks}`);
+  for (const [what, key, id, patch] of [
+    ["expires_at equal to the captured clock (to the second)", goKeys.at(-1), goCertIds.at(-1), { expired: false, expires_at: at(wall) }],
+    ["flagged expired with a future expires_at", goKeys[0], goCertIds[0], { expired: true }],
+  ]) {
+    world.certArtifactPatch = { "*": { ...alive }, [key]: patch };
+    rmSync(env.CI_EVIDENCE_WITNESS_FILE, { force: true });
+    const r = await run(["witness", "go"]);
+    check(r.status === 0 && r.stdout === `reuse=false\nreason=artifact ${id} has expired\n`
+      && !existsSync(env.CI_EVIDENCE_WITNESS_FILE),
+      `a certificate ${what} over HTTP was not refused as artifact ${id} has expired without a witness (exit ${r.status}): ${r.stdout}${r.stderr}`);
+    world.certArtifactPatch = { "*": { ...alive } };
+  }
+  const restored = await run(["witness", "go"]);
+  check(restored.status === 0 && restored.stdout.startsWith("reuse=true\nreason=verified\nwitness={"),
+    `the restored world over HTTP did not reuse again (exit ${restored.status}): ${restored.stdout}${restored.stderr}`);
 
   corrupt = true;
   const bad = await run(["witness", "go"]);

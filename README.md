@@ -310,7 +310,7 @@ documented in [`docs/activation-funnel.md`](docs/activation-funnel.md).
 
 ## Quick start (run it locally)
 
-**Prerequisites:** Go 1.26.6+ and Node 24 (the version CI builds and tests with).
+**Prerequisites:** Go 1.26.9+ and Node 24 (the version CI builds and tests with).
 
 ```bash
 # 1. Build the web client
