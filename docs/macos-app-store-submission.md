@@ -1,65 +1,110 @@
 # macOS App Store submission
 
-## macOS 1.4.7 (44) — candidate archived and exported locally, not uploaded
+## macOS 1.4.7 (44) — uploaded; external TestFlight and App Store review submitted, not yet approved
 
-**Status, 2026-10-09.** `1.4.7 (44)` is a **local candidate**. An App Store
-package was archived and exported locally from source
-`5c308432d834495ebb928a63980ca95ebb64ed89` and passed a strict local artifact
-verification; it awaits final source CI and Apple validation. It has not been
-validated by Apple, uploaded, submitted, approved or published in any
-channel: no App Store Connect build `44`, no TestFlight group, no App Store
-review submission, no GitHub release, no appcast, Sparkle feed or website
-change. The published direct release stays `1.4.6`, internal TestFlight stays
-`1.4.6 (43)` and the public Mac App Store stays `1.4.0`.
-All ten `MARKETING_VERSION` and ten `CURRENT_PROJECT_VERSION` settings — the
-direct app and its Share extension, the App Store app and its Share
-extension, and the UI test bundle, each in Debug and Release — read `1.4.7`
-and `44`. No iOS version setting changes.
+**Status, 2026-10-09.** Build `1.4.7 (44)` was uploaded to App Store Connect
+once and is in two review queues. Apple has approved neither, and nothing about
+`1.4.7` is public:
 
-- Why this number: `1.4.6 (43)` is issued in both channels and is never
-  reused. A read-back of App Store Connect on 2026-10-09 found the latest
-  macOS build `1.4.6 (43)` (`VALID`) and no build `44`; the latest GitHub
-  macOS release is `macos-v1.4.6` (published 2026-10-06). The candidate is the
-  patch increment, major and minor unchanged, build strictly above `43`.
-  Both inventories must be read again immediately before any upload or
-  publication, and a version or build found consumed by then is not reused.
-- Purpose: deliver the upload waiting/retry feedback change. The upload screen
-  distinguishes sending, waiting for server confirmation, checking the server
-  offset, waiting to retry and finalizing; repeated acknowledgements that do
-  not advance the committed offset are retried a bounded number of times and
-  then fail instead of looping, without finalizing incomplete data; and each
-  upload records metadata-only local diagnostics (stage, per-stage duration,
-  fixed counters, error class — no names, paths, sizes, offsets, URLs,
-  identifiers, keys or tokens) to the local system log.
-- Evidence so far is source-level. A local loopback HTTP acceptance of the
-  frozen upload source passed six scenarios (healthy, mid-upload reset,
-  repeated zero-advance acknowledgements, same-offset conflict, lost
-  acknowledgement, cancel); the lost-acknowledgement case used a custom 3 s
-  timeout to bound the run. This does not identify the cause of the owner's
-  original roughly five-minute upload stall, and it is not provider, App Store
-  Connect or TestFlight acceptance. Visual, accessibility and hands-on QA of
-  the new upload text remain open.
-- Local package, 2026-10-09: archive, export and the strict artifact
-  verifier each exited 0 with local Xcode. `Relayium.pkg` SHA-256
-  `414976e37793cdd57154c01428d08222d0aa467e4a1c74e3af4db63ddc676b4b`, source
-  `5c308432d834495ebb928a63980ca95ebb64ed89`: the app and its Share extension
-  both read `1.4.7 (44)`, are arm64 only and sandboxed, carry a valid
-  distribution signature with the expected entitlements and a privacy
-  manifest, and the package contains no Sparkle. This is local evidence, not
-  Apple validation or an upload.
-- Hosted CI: the first full gate on `5c308432d` failed in the Swift lane
-  because two existing version guard tests (`BundleVersionTests`,
-  `MacAppleSignInGuardTests`) still expected `1.4.6 (43)`. That failure is
-  kept on record. The correction changes only those two tests and two
-  release records, no compiled input, so it does not require rebuilding the
-  package; the package's source stays `5c308432d` and is not relabelled to the
-  corrected commit. Final source CI has not passed yet.
-- Native StoreKit and subscription sources are not changed by this candidate.
-  The owner confirmed on 2026-10-08 that StoreKit sandbox acceptance (C03) is
-  complete; that is the owner's report, recorded as such. Every release gate —
-  signing, packaging, Apple validation, independent review and the provider
-  read-backs — still applies before any external TestFlight or App Store
-  submission, and App Store approval is Apple's decision, never assumed.
+- **App Store Connect build.** One upload of the App Store package succeeded at
+  2026-10-09 15:12 UTC. App Store Connect then read build `44` back as `VALID`
+  on the `1.4.7` macOS train (build ID
+  `1b6d2103-702d-4585-b11d-a9face6901d9`). Before the upload, Apple's
+  validate-only check also passed for the same package. Build `44` is now
+  consumed and is never reused; the next native macOS candidate needs a
+  marketing version above `1.4.7` and a build number above `44`.
+- **TestFlight.** The build is in **internal testing** (`IN_BETA_TESTING`) in
+  the existing internal group, and was added to the existing external group.
+  Export compliance is set to no non-exempt encryption, automatic tester
+  notification is off, and What to Test notes are in English and Simplified
+  Chinese. One external beta review was submitted and reads
+  `WAITING_FOR_REVIEW`; it is **not approved**, so external testers cannot
+  install it yet. Existing groups, testers and earlier builds were preserved.
+- **Mac App Store.** A new macOS App Store version `1.4.7` (version ID
+  `7c861dca-21f6-4735-aeed-e30f653587a2`, release type "after approval") was
+  created with build `44` selected and submitted for review (review submission
+  `675b7dd5-7b4a-4266-9252-b1c8920ecd3f`). Both the submission and the
+  version read `WAITING_FOR_REVIEW`: submitted, **not approved, not public**.
+  The public Mac App Store version is still `1.4.0` (build `38`). Approval is
+  Apple's decision and is not assumed; because the release type is "after
+  approval", an approval would publish `1.4.7` without a further step.
+- **Store listing.** The `1.4.7` version carries only the existing English
+  (`en-US`) listing. Its description, keywords, support and marketing URLs, the
+  three desktop screenshots and the existing review contact and demo-account
+  details were inherited from the approved base version; only the English
+  "What's New" text was written. The new listing has no promotional text,
+  while the base version has one, so the listing is not claimed to be
+  identical. There is no
+  Simplified Chinese App Store listing; that gap is a separate, deferred item
+  and is not created by or fixed by this release.
+- **Unchanged channels.** The GitHub direct release stays `macos-v1.4.6`. No
+  direct DMG, appcast, Sparkle feed or website change was made for `1.4.7`.
+- **Why this number.** `1.4.6 (43)` is issued in both channels. A read-back on
+  2026-10-09 found the latest App Store Connect macOS build `1.4.6 (43)` and no
+  build `44`, and the latest GitHub macOS release `macos-v1.4.6` (published
+  2026-10-06). `1.4.7 (44)` is the patch increment; major and minor are
+  unchanged. All ten `MARKETING_VERSION` and ten `CURRENT_PROJECT_VERSION`
+  settings — the direct app and its Share extension, the App Store app and its
+  Share extension, and the UI test bundle, each in Debug and Release — read
+  `1.4.7` and `44`. No iOS version setting changes.
+
+### Source and package
+
+- The uploaded package is `Relayium.pkg`, SHA-256
+  `414976e37793cdd57154c01428d08222d0aa467e4a1c74e3af4db63ddc676b4b`, archived
+  and exported locally from source
+  `5c308432d834495ebb928a63980ca95ebb64ed89`. A strict local verification
+  found the app and its Share extension both at `1.4.7 (44)`, arm64 only,
+  sandboxed, with a valid distribution signature, the expected entitlements and
+  a privacy manifest, and no Sparkle in the package.
+- The first full hosted CI run on `5c308432d` failed in the Swift lane: two
+  existing version guard tests (`BundleVersionTests`,
+  `MacAppleSignInGuardTests`) still expected `1.4.6 (43)`. That failure stays
+  on record. The corrected source delivered to `main` is
+  `92eba2a52d83f602b4acb0ac3f48e1e5dfbb6426`; it differs from `5c308432d` only
+  in those two tests and two release records, with no change to any compiled
+  native input. Its full CI run `37944726301` succeeded: of 96 jobs, 78
+  succeeded and 18 were skipped by workflow rules.
+- Because no compiled input changed, the package was not rebuilt. Its source is
+  still recorded as `5c308432d`; it is not relabelled as built from `92eba2a52`.
+
+### What the release changes
+
+- Upload waiting and retry feedback. The upload screen distinguishes sending,
+  waiting for server confirmation, checking the server offset, waiting to retry
+  and finalizing. Repeated acknowledgements that do not advance the committed
+  offset are retried a bounded number of times and then fail instead of
+  looping, without finalizing incomplete data. Each upload records
+  metadata-only local diagnostics (stage, per-stage duration, fixed counters,
+  error class — no names, paths, sizes, offsets, URLs, identifiers, keys or
+  tokens) to the local system log.
+- Native StoreKit and subscription sources are not changed. The six existing
+  subscription products are approved, and no paid product is exposed for the
+  first time. The owner confirmed on 2026-10-08 that real-network and StoreKit
+  sandbox acceptance (C03) is complete; that is the owner's report, recorded as
+  such. This release is not evidence of Stripe or Coturn acceptance.
+
+### Upload evidence and its limits
+
+- A local loopback HTTP acceptance of the upload source passed six scenarios
+  (healthy, mid-upload reset, repeated zero-advance acknowledgements,
+  same-offset conflict, lost acknowledgement, cancel); the lost-acknowledgement
+  case used a custom 3 s timeout to bound the run.
+- A later local diagnostic used a real HTTP server with the candidate uploader.
+  A 61.6 MB upload succeeded on a healthy server, and also succeeded after
+  three injected HTTP 408 responses. When every chunk got a 408, it stopped
+  with a bounded error and did not finalize. A single ~8.45 MB chunk sent at
+  100 KB/s succeeded in 84.7 s. These are synthetic local tests: the 408s were
+  injected, and none of this measures the real network path.
+- The owner's report was a 61.6 MB upload that stopped at 13% with a network
+  error, which is at the first ~8 MB chunk boundary. Server logs from around
+  then showed HTTP 408 responses on upload requests. The exact cause and which
+  hop produced the timeout are **not established**. This release does not
+  claim to fix the original stall, to make uploads faster, or to prevent every
+  network failure.
+- Still open: visual, accessibility and hands-on QA of the new upload text,
+  and a real-network upload check on the shipped build. No hands-on check of
+  this build has been made.
 
 ## macOS 1.4.6 (43) — direct release on GitHub; store build in internal TestFlight
 
