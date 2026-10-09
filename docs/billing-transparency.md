@@ -185,7 +185,7 @@ dedicated, metering-only route (`POST /api/coturn-metering/v1/snapshots`).
 That route exists only when `-coturn-metering-relays` /
 `RELAYIUM_COTURN_METERING_RELAYS` (`main.go:357`) lists the bridges allowed to
 report, each with its own token (central keeps only the token's SHA-256;
-`coturnMeteringRoute`, `main.go:1516`); unset — the default — there is no
+`coturnMeteringRoute`, `main.go:1525`); unset — the default — there is no
 route and nothing is ingested. An allocation is keyed by the relay machine's
 boot id, the coturn process id and start time, and coturn's session number, so
 a coturn restart can't reuse an earlier allocation's key, and its bytes are
@@ -201,13 +201,34 @@ When configured, the ingest runs in one of two modes (`-coturn-metering-mode`,
   started earlier is billed retroactively, and a report received while the
   ingest is in shadow mode keeps that allocation shadow for good.
 
+**A startup that is not billable demotes every existing billable allocation
+for good.** When central starts with the ingest in shadow mode, or with the
+ingest disabled (no relays listed), it first turns every allocation central
+had recorded as billable into shadow — whichever relay reported it, even one
+no longer listed, and also an allocation whose end was inferred but whose
+final total has not arrived yet — before the route exists
+(`DemoteCoturnBillableBindings`, `account/coturn_metering_store.go`, called
+from `NewCoturnMeteringIngest` and `coturnMeteringRoute`). So bytes such an
+allocation relays while billing is off are never billed after billable mode
+returns, even if central received no report for it in between. The demotion
+changes only that allocation's ledger mark: bytes already billed before it
+stay billed, exactly once and in the month they were recorded; nothing is
+refunded, reset or billed again. It is all or nothing — if it fails, the
+server refuses to start and every allocation stays as it was — and a
+configuration error is refused before it runs; a billable startup demotes
+nothing. It covers only allocations central has already recorded: one that
+started while billing was off and whose first report arrives after billable
+mode returns is decided by the activation time, so turning billing back on
+needs a fresh `-coturn-metering-billable-since`, later than the period it was
+off, for that allocation to stay unbilled.
+
 **An allocation whose start the bridge never saw is never billed.** When the
 bridge meets an allocation without coturn's "new" status and without a start
 time in coturn's session listing — for example a session coturn refused to
 allocate for, whose few hundred bytes of request/refusal traffic coturn still
 counts — it reports a reserved "start unknown" value, and central keeps that
 allocation shadow whatever the activation time is (`ApplyCoturnSnapshot`,
-`account/coturn_metering_store.go:100`, the condition at `:183`). Its bytes
+`account/coturn_metering_store.go:102`, the condition at `:185`). Its bytes
 stay visible as a measurement; they never reach your bill.
 
 **Self-hosted relay nodes are recorded but never billed.** If you point

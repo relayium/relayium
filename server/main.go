@@ -1514,8 +1514,19 @@ func guardCoturnRedisMetering(redisAddr string, logf func(format string, args ..
 // coturnMeteringRoute builds the coturn metering ingest handler, or returns
 // nil when no relay identity is configured (the route then does not exist
 // and a bridge's reports stay spooled on its host).
+//
+// Money: any startup that is not billable — shadow mode, or the ingest
+// disabled here — demotes every existing billable binding to shadow before
+// returning, so those allocations' bytes from this period are never billed
+// after a later billable startup. Allocations central has not yet seen are
+// not covered here: they stay unbilled only if that later startup uses a
+// fresh billable-since, after this period. An error means no handler and
+// refuses startup.
 func coturnMeteringRoute(acct *account.Service, relays, mode string, billableSince int64) (http.Handler, error) {
 	if strings.TrimSpace(relays) == "" {
+		if err := acct.CoturnMeteringDisabled(context.Background()); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 	ids, err := account.ParseCoturnMeteringRelays(relays)

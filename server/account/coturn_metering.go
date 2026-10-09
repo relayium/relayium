@@ -97,6 +97,7 @@ func distinctRelayTokens(relays map[string][32]byte) error {
 // SQLiteStore has it, so the handler refuses to build over any other store.
 type coturnMeteringStore interface {
 	ApplyCoturnSnapshot(ctx context.Context, in CoturnSnapshotApply) (CoturnSnapshotOutcome, error)
+	DemoteCoturnBillableBindings(ctx context.Context) (int64, error)
 }
 
 // CoturnMeteringIngest is the HTTP handler for wire.Path.
@@ -108,6 +109,11 @@ type CoturnMeteringIngest struct {
 
 // NewCoturnMeteringIngest builds the ingest over store. refused is the
 // attribution guard (Service.attributionRefused); nil accepts every tag.
+//
+// In shadow mode it first demotes every existing billable binding to shadow
+// (DemoteCoturnBillableBindings), after the whole configuration is validated
+// and before the handler exists: on any error it returns no handler, and
+// nothing has been demoted (an invalid configuration writes nothing at all).
 func NewCoturnMeteringIngest(store Store, refused func(token, userID string) string, cfg CoturnMeteringConfig) (*CoturnMeteringIngest, error) {
 	st, ok := store.(coturnMeteringStore)
 	if !ok {
@@ -142,7 +148,32 @@ func NewCoturnMeteringIngest(store Store, refused func(token, userID string) str
 	if refused == nil {
 		refused = func(string, string) string { return "" }
 	}
+	if cfg.Mode == CoturnMeteringShadow {
+		n, err := st.DemoteCoturnBillableBindings(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("coturn metering: demote billable bindings for shadow mode: %w", err)
+		}
+		cfg.Logf("coturn metering: shadow mode: demoted %d billable binding(s) to shadow for good", n)
+	}
 	return &CoturnMeteringIngest{cfg: cfg, store: st, refused: refused}, nil
+}
+
+// CoturnMeteringDisabled is the startup step for an ingest that is not
+// configured: no route exists, so this period is not billable either, and
+// every existing billable binding is demoted to shadow exactly as a
+// shadow-mode startup does. A store without the coturn capability has no
+// bindings.
+func (s *Service) CoturnMeteringDisabled(ctx context.Context) error {
+	st, ok := s.store.(coturnMeteringStore)
+	if !ok {
+		return nil
+	}
+	n, err := st.DemoteCoturnBillableBindings(ctx)
+	if err != nil {
+		return fmt.Errorf("coturn metering: demote billable bindings while the ingest is disabled: %w", err)
+	}
+	log.Printf("coturn metering: ingest disabled: demoted %d billable binding(s) to shadow for good", n)
+	return nil
 }
 
 // CoturnMeteringHandler is NewCoturnMeteringIngest over this service's store

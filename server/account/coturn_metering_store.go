@@ -96,7 +96,9 @@ type CoturnSnapshotOutcome struct {
 // allocation is shadow whatever BillableSince is, even 1: an unknown start is
 // never billable. Any snapshot received while the ingest is in shadow mode
 // demotes its binding to shadow permanently, so bytes of a shadow period are
-// never billed later.
+// never billed later; a binding that already existed when central started
+// non-billable was demoted then, even if it receives nothing in that period
+// (DemoteCoturnBillableBindings). An existing binding is never promoted.
 func (s *SQLiteStore) ApplyCoturnSnapshot(ctx context.Context, in CoturnSnapshotApply) (CoturnSnapshotOutcome, error) {
 	snap := in.Snapshot
 	if snap.Cumulative > wire.MaxCumulative || snap.StartTicks > wire.MaxCumulative || snap.Seq > wire.MaxCumulative {
@@ -242,6 +244,49 @@ func (s *SQLiteStore) ApplyCoturnSnapshot(ctx context.Context, in CoturnSnapshot
 		return CoturnSnapshotOutcome{}, err
 	}
 	return out, nil
+}
+
+// DemoteCoturnBillableBindings demotes every billable coturn binding to shadow
+// for good and returns how many it demoted. Central calls it at a startup in
+// which the ingest is not billable (shadow mode, or the ingest disabled),
+// before the handler exists: a billable binding that receives no snapshot
+// during that period would otherwise bill the bytes relayed in it once
+// billable mode returns, since its next cumulative includes them. It covers
+// every billable binding, whatever relay owns it (also one no longer
+// configured) and whatever its state (an ended_unfinalized binding can still
+// grow to its final; a final one cannot, so demoting it forgoes at most a
+// rate-clamp catch-up).
+//
+// It changes only the ledger column: no receipt, counter, owner, alloc id or
+// timestamp, and no usage_events/usage_periods row, so nothing already billed
+// is refunded, reset or billed again. It runs in an explicit transaction that
+// is committed only after the update and its row count succeed: any error
+// rolls every row back (a lone autocommit UPDATE is not enough — a row error
+// raised with FAIL semantics keeps the rows already changed by the statement).
+// Running it again demotes nothing; no path re-promotes a shadow binding.
+//
+// It protects bindings that exist when it runs. An allocation central has
+// never seen is decided when its first snapshot arrives, by the creation rule
+// above: a later billable startup needs a fresh BillableSince, after the
+// non-billable period, for that allocation to stay unbilled.
+func (s *SQLiteStore) DemoteCoturnBillableBindings(ctx context.Context) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE coturn_metering_bindings SET ledger = 'shadow' WHERE ledger = 'billable'`)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // CoturnBinding is one coturn_metering_bindings row, for tests and evidence.
