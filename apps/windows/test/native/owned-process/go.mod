@@ -8,6 +8,6 @@
 // dependency into the workspace at all.
 module github.com/relayium/relayium/apps/windows/test/native/owned-process
 
-go 1.26.6
+go 1.26.9
 
 require golang.org/x/sys v0.47.0
