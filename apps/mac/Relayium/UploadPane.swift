@@ -257,6 +257,15 @@ struct UploadPane: View {
             Text(L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
                 .font(.callout.weight(.medium)).foregroundStyle(Palette.text)
                 .monospacedDigit()
+            // The bar counts bytes that have left this Mac; this line says
+            // whether the server has confirmed them, so waiting for its answer
+            // (or retrying) does not read as a frozen transfer.
+            if let activity = UploadPresentation.activityText(model.currentUploadActivity) {
+                Text(activity)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(L10n.t(.uploadMacKeepOpen))
                 .font(.subheadline)
                 .foregroundStyle(Palette.textTertiary)

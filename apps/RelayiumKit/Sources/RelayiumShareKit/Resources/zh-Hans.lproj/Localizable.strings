@@ -238,6 +238,12 @@
 "upload.resume" = "继续上传";
 "upload.discard" = "删除本机副本";
 "upload.restarting" = "服务器已丢弃暂停的上传，因此将从头重新开始。";
+"upload.activity.openingSession" = "正在建立上传……";
+"upload.activity.sending" = "正在发送加密数据……";
+"upload.activity.awaitingConfirmation" = "已发送，正在等待服务器确认已保存这一部分……";
+"upload.activity.checkingOffset" = "正在核对服务器已保存的进度……";
+"upload.activity.waitingToRetry" = "服务器没有确认上一部分，稍后重试，已保存的部分会保留。";
+"upload.activity.finalizing" = "已全部保存，正在完成上传……";
 "upload.cleanupFailed" = "Relayium 没能删除保存在本机的文件副本，下次打开时会再次尝试清理。";
 "upload.keyKept" = "密钥已安全保存在这台设备上，绝不会发送给 Relayium 的服务器。你随时可以在「账户」标签页再次复制这条链接。";
 "upload.keyWarning" = "%@ 下面这条链接是密钥仅存的一份副本 — 请立即复制。Relayium 的服务器从未持有该密钥，因此这条链接无法再次显示。";

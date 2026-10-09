@@ -1,4 +1,5 @@
 import Foundation
+import RelayiumKit
 import RelayiumShareKit
 
 /// What the "Link ready" screen says about the key that opens an upload.
@@ -48,6 +49,22 @@ public enum UploadPresentation {
             return UploadKeyNotice(text: keyKeptText(language: language), isWarning: false)
         }
         return UploadKeyNotice(text: warning, isWarning: true)
+    }
+
+    /// The sentence under the progress bar, or nil when there is nothing to
+    /// add. Both panes render this, so "sent" and "confirmed" are told apart
+    /// the same way on every platform — and in one place a test can reach.
+    public static func activityText(_ activity: UploadActivity?,
+                                    language: AppLanguage? = nil) -> String? {
+        guard let activity else { return nil }
+        switch activity {
+        case .openingSession: return L10n.t(.uploadActivityOpeningSession, language: language)
+        case .sending: return L10n.t(.uploadActivitySending, language: language)
+        case .awaitingConfirmation: return L10n.t(.uploadActivityAwaitingConfirmation, language: language)
+        case .checkingOffset: return L10n.t(.uploadActivityCheckingOffset, language: language)
+        case .waitingToRetry: return L10n.t(.uploadActivityWaitingToRetry, language: language)
+        case .finalizing: return L10n.t(.uploadActivityFinalizing, language: language)
+        }
     }
 }
 

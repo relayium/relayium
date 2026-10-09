@@ -875,6 +875,17 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// The server dropped an idle session, so the upload starts over. Named
     /// because the progress bar is about to return to zero.
     case uploadRestarting = "upload.restarting"
+    /// What a running upload is doing beside the bytes-sent bar
+    /// (`UploadActivity`). The bar counts bytes that LEFT this device; these say
+    /// whether the server has confirmed them, so a wait is not read as a hang.
+    case uploadActivityOpeningSession = "upload.activity.openingSession"
+    case uploadActivitySending = "upload.activity.sending"
+    /// Every byte of the current part has left; the server has not confirmed.
+    case uploadActivityAwaitingConfirmation = "upload.activity.awaitingConfirmation"
+    case uploadActivityCheckingOffset = "upload.activity.checkingOffset"
+    /// A failed or empty answer; retrying from what the server already holds.
+    case uploadActivityWaitingToRetry = "upload.activity.waitingToRetry"
+    case uploadActivityFinalizing = "upload.activity.finalizing"
     /// The upload finished but its staged copy could not be removed. Never a
     /// failed upload — the link works — and never silent either.
     case uploadCleanupFailed = "upload.cleanupFailed"
