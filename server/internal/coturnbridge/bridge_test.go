@@ -319,6 +319,9 @@ func (h *harness) halt() {
 		h.stop()
 		<-h.done
 		h.stop = nil
+		if err := h.b.Close(); err != nil {
+			h.t.Errorf("close: %v", err)
+		}
 	}
 }
 
@@ -654,8 +657,11 @@ func TestBridgeFairPagination(t *testing.T) {
 	}
 }
 
-// A full spool never drops a report: the record stays in memory, is alerted,
-// is still delivered, and the ledger counts it exactly once.
+// A full primary spool never drops a report: the record past it goes to
+// the overflow tier (R2; before it, the record stayed in memory only and was
+// lost with the process — see receipts/obsolete-old-tests-on-candidate.txt),
+// pressure is alerted with an admission request, and both are delivered,
+// the ledger counting each exactly once.
 func TestBridgeFullSpoolStillDeliversAndAlerts(t *testing.T) {
 	h := newHarness(t, account.CoturnMeteringBillable)
 	h.c.mode.Store("down")
@@ -666,15 +672,23 @@ func TestBridgeFullSpoolStillDeliversAndAlerts(t *testing.T) {
 	h.born(u, "007000000000000002")
 	h.redis.publish(chan4(u, "007000000000000001", "total_traffic"), counters(100, 0))
 	h.redis.publish(chan4(u, "007000000000000002", "total_traffic"), counters(0, 50))
-	h.eventually("spool full alerted", func() bool { return h.logs.has("spool full") && h.b.Status().Unpersisted == 1 })
-	if n, _ := h.b.spool.Count(); n != 1 || len(h.b.Snapshot()) != 2 {
-		t.Fatalf("spool %d, tracked %d", n, len(h.b.Snapshot()))
+	h.eventually("pressure alerted, both durable", func() bool {
+		st := h.b.Status()
+		return h.logs.has("closing coturn relay admission is requested") && st.AdmissionRequested &&
+			st.Unpersisted == 0 && st.Primary.Files == 1 && st.Overflow.Files == 1
+	})
+	if n := recordFilesOnDisk(t, h.dir); n != 2 || len(h.b.Snapshot()) != 2 {
+		t.Fatalf("on disk %d, tracked %d", n, len(h.b.Snapshot()))
 	}
 	h.c.mode.Store("")
 	h.eventually("both delivered", func() bool { return h.c.billed() == 150 && len(h.b.Snapshot()) == 0 })
-	if n, _ := h.b.spool.Count(); n != 0 {
-		t.Fatalf("spool %d after delivery", n)
+	if n := recordFilesOnDisk(t, h.dir); n != 0 {
+		t.Fatalf("%d records after delivery", n)
 	}
+	h.eventually("exact accounting after delivery", func() bool {
+		st := h.b.Status()
+		return st.Primary == (TierUse{}) && st.Overflow == (TierUse{}) && st.SpoolState == "ok" && !st.AdmissionRequested
+	})
 }
 
 // Money control: an allocation whose birth the bridge never saw (no "new", no

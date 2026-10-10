@@ -88,6 +88,16 @@ type Alloc struct {
 	// Only a persisted snapshot may be delivered: a delivered seq that is not
 	// on disk could, after a crash, be resealed with other content.
 	persistedSeq uint64
+	// ks caches Key.String() (delivery ordering compares it often).
+	ks string
+}
+
+// keyString returns a's key as a string, cached.
+func (a *Alloc) keyString() string {
+	if a.ks == "" {
+		a.ks = a.Key.String()
+	}
+	return a.ks
 }
 
 // Sendable reports whether a's latest snapshot is durably spooled.
@@ -129,10 +139,19 @@ type Tracker struct {
 	// start is not yet known, for at most this long after first sight, so a
 	// psd listing can supply its start (0: never hold).
 	HoldUnknownSecs int64
-	gen             uint64
+	// Admit, when set, is asked before a NEW key is tracked, with the bytes
+	// of the observation that would create it. It returns whether the key may
+	// be tracked and whether an earlier observation of it was refused (its
+	// stream sum then starts with a gap). A refused key is not tracked.
+	Admit func(key AllocKey, bytes uint64, kind string) (ok, priorRefusal bool)
+	gen   uint64
 	// forgotten holds recently delivered keys (bridge time) so a listing or
-	// late message cannot resurrect a finished allocation.
-	forgotten map[AllocKey]int64
+	// late message cannot resurrect a finished allocation. Bounded (FIFO,
+	// evictions counted) when the bridge sets its max.
+	forgotten *fifoSet[AllocKey]
+	// blocked keys are never tracked (a key found in both spool tiers: its
+	// records await an operator).
+	blocked map[AllocKey]bool
 }
 
 // forgetSecs is how long a delivered allocation's key stays tombstoned.
@@ -144,14 +163,14 @@ const upgradeWindowSecs = 600
 
 // NewTracker returns an empty tracker.
 func NewTracker(relayID string, alert func(string, ...any)) *Tracker {
-	return &Tracker{RelayID: relayID, Allocs: map[AllocKey]*Alloc{}, Alert: alert, forgotten: map[AllocKey]int64{}}
+	return &Tracker{RelayID: relayID, Allocs: map[AllocKey]*Alloc{}, Alert: alert, forgotten: newFifoSet[AllocKey](0), blocked: map[AllocKey]bool{}}
 }
 
 // Forget drops a delivered (or dead-lettered) allocation and tombstones its
 // key for forgetSecs.
 func (t *Tracker) Forget(k AllocKey, now int64) {
 	delete(t.Allocs, k)
-	t.forgotten[k] = now
+	t.forgotten.Add(k, now)
 }
 
 // Gen advances and returns the observation generation (one per trusted
@@ -163,7 +182,7 @@ func (t *Tracker) Gen() uint64 { t.gen++; return t.gen }
 // different username for an existing key is refused (nil): coturn never
 // changes a session's username (441/437), so it is an anomaly. A recently
 // delivered key is not recreated (nil).
-func (t *Tracker) alloc(key AllocKey, username string, now int64, gen uint64, startKnown bool, start int64) *Alloc {
+func (t *Tracker) alloc(key AllocKey, username string, now int64, gen uint64, startKnown bool, start int64, bytes uint64, kind string) *Alloc {
 	if a, ok := t.Allocs[key]; ok {
 		if a.Username != username {
 			t.Alert("ALERT username %q for %s differs from bound %q: quarantined", username, key, a.Username)
@@ -171,10 +190,21 @@ func (t *Tracker) alloc(key AllocKey, username string, now int64, gen uint64, st
 		}
 		return a
 	}
-	if _, gone := t.forgotten[key]; gone {
+	if t.forgotten.Has(key) || t.blocked[key] {
 		return nil
 	}
+	var gap bool
+	if t.Admit != nil {
+		ok, prior := t.Admit(key, bytes, kind)
+		if !ok {
+			return nil
+		}
+		gap = prior
+	}
 	a := &Alloc{Key: key, Username: username, State: wire.StateLive, FirstObservedUnix: 1, SeenUnix: now, FirstGen: gen, dirty: true}
+	if gap {
+		a.StreamGaps = 1
+	}
 	if startKnown {
 		a.FirstObservedUnix, a.StartKnown = max(start, 1), true
 	}
@@ -191,14 +221,14 @@ func (t *Tracker) ApplyEvents(e Epoch, events []Event, now int64) (finals bool) 
 			continue
 		}
 		key := AllocKey{Epoch: e, SessionID: ev.SessionID}
-		if _, gone := t.forgotten[key]; gone {
+		if t.forgotten.Has(key) {
 			if ev.Kind == KindTotal {
 				t.Alert("ALERT final %d for %s arrived after its record was retired: anything above the reported lower bound is not billed", ev.Bytes, key)
 			}
 			continue
 		}
 		// Only coturn's "new" status shows the allocation's birth.
-		a := t.alloc(key, ev.Username, now, gen, ev.Kind == KindNew, now)
+		a := t.alloc(key, ev.Username, now, gen, ev.Kind == KindNew, now, ev.Bytes, string(ev.Kind))
 		if a == nil {
 			continue
 		}
@@ -276,7 +306,7 @@ func (t *Tracker) ApplyListing(e Epoch, sessions []PSDSession, startGen uint64, 
 		if s.StartedAgo >= 0 {
 			start = now - s.StartedAgo
 		}
-		a := t.alloc(AllocKey{Epoch: e, SessionID: s.SessionID}, s.Username, now, gen, known, start)
+		a := t.alloc(AllocKey{Epoch: e, SessionID: s.SessionID}, s.Username, now, gen, known, start, s.Bytes, "psd")
 		if a == nil || a.State != wire.StateLive {
 			continue
 		}
@@ -319,11 +349,7 @@ func (t *Tracker) EndEpoch(current Epoch) {
 // terminal snapshot is the last one, except that an inferred end can be
 // followed by one final.
 func (t *Tracker) Flush(now int64) (sealed, held []*Alloc) {
-	for k, at := range t.forgotten {
-		if now-at > forgetSecs {
-			delete(t.forgotten, k)
-		}
-	}
+	t.forgotten.Expire(now, forgetSecs)
 	for _, a := range t.Allocs {
 		if !a.dirty {
 			continue

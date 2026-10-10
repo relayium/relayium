@@ -201,6 +201,7 @@ func TestSpoolDurabilityAndBounds(t *testing.T) {
 	if err := sp.Open(); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { sp.Close() })
 	tr := NewTracker("r", (&alerts{}).f)
 	for i, sid := range []string{"007000000000000001", "007000000000000002", "007000000000000003"} {
 		tr.ApplyEvents(tE1, []Event{{Kind: KindTraffic, Username: tUser, SessionID: sid, Bytes: uint64(10 * (i + 1))}}, 1)
@@ -323,7 +324,7 @@ func TestTrackerForgottenKeyIsNotResurrected(t *testing.T) {
 		t.Fatalf("resurrected: %+v", tr.Allocs)
 	}
 	sealedAt(tr, 3+forgetSecs+1)
-	if len(tr.forgotten) != 0 {
+	if tr.forgotten.Len() != 0 {
 		t.Fatal("tombstone not pruned")
 	}
 }
