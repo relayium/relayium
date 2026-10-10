@@ -397,7 +397,13 @@ type Bridge struct {
 	refusalsPending                   int64
 	refusalFirst, refusalLast, refWhy string
 	statusErr                         error // last status write error (nil: written)
-	closed                            bool
+	// Recent-finals eviction alerting: the first eviction is logged at once,
+	// later ones are counted and logged together at most once a minute
+	// (also from idle flushes). Fixed-size state.
+	finalEvictPending   int64
+	finalEvictAlerted   bool
+	lastFinalEvictAlert int64
+	closed              bool
 }
 
 // refusedEvent is quarantine evidence of a stream event the spool could not
@@ -667,6 +673,30 @@ func (b *Bridge) admit(k AllocKey, bytes uint64, kind string) (bool, bool) {
 	b.refusalLast, b.refWhy = k.String(), why
 	b.refusalAlertLocked()
 	return false, false
+}
+
+// finalEvictAlertLocked logs the recent finals evicted since the last such
+// line, at most once a minute: at once the first time (whatever the clock
+// reads, 0 included), then when 60 s have passed since the last line. A clock
+// that moved back restarts the 60 s window from the new time instead of
+// emitting per eviction.
+func (b *Bridge) finalEvictAlertLocked() {
+	if b.finalEvictPending == 0 {
+		return
+	}
+	now := b.now()
+	if b.finalEvictAlerted {
+		if now < b.lastFinalEvictAlert {
+			b.lastFinalEvictAlert = now
+		}
+		if now-b.lastFinalEvictAlert < 60 {
+			return
+		}
+	}
+	b.finalEvictAlerted, b.lastFinalEvictAlert = true, now
+	b.alert("ALERT %d recent finals dropped from the drain list (cap %d) since the last such alert: drain refuses until %d",
+		b.finalEvictPending, b.cfg.RecentFinalsMax, b.truncatedUntil)
+	b.finalEvictPending = 0
 }
 
 // refusalAlertLocked logs pending refusals as one aggregated line, at most
@@ -1102,6 +1132,7 @@ func (b *Bridge) writeStatusLocked() {
 	b.st.TombstonesEvicted += b.refused.evicted + b.tr.forgotten.evicted
 	b.refused.evicted, b.tr.forgotten.evicted = 0, 0
 	b.refusalAlertLocked()
+	b.finalEvictAlertLocked()
 	b.assessLocked()
 	if len(b.st.LastError) > 1024 {
 		b.st.LastError = b.st.LastError[:1024]
@@ -1352,9 +1383,10 @@ func (b *Bridge) ReportOnce(ctx context.Context) (int, error) {
 			}
 			b.st.Delivered++
 			if a.Snap.State == wire.StateFinal {
-				if b.finals.Add(key.String(), b.now()) > 0 {
+				if n := b.finals.Add(key.String(), b.now()); n > 0 {
 					b.truncatedUntil = b.now() + forgetSecs
-					b.alert("ALERT recent finals exceed %d: the oldest were dropped from status; drain refuses until %d", b.cfg.RecentFinalsMax, b.truncatedUntil)
+					b.finalEvictPending += int64(n)
+					b.finalEvictAlertLocked()
 				}
 			}
 			b.forgetLocked(key, b.now())
