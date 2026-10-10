@@ -13,8 +13,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/relayium/relayium/internal/storecrypto"
@@ -150,6 +152,7 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 
 	// The wait for the server's answer is bounded here rather than by the
 	// transport's ResponseHeaderTimeout; confirmTimeout says why.
+	caller := ctx
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
@@ -179,9 +182,19 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 		}
 	}
 
+	// bodySent marks the boundary past which the outcome can be unknown: every
+	// body byte has been taken by the transport. It is set BEFORE the pipe is
+	// closed, so no request the transport finished can be seen without it; the
+	// cost is that a connection lost between this and the body's last framing
+	// bytes is reported as unknown when it was in fact a failure — the honest
+	// direction to err in.
+	var bodySent atomic.Bool
 	pr, pw := io.Pipe()
 	go func() {
 		werr := writeUploadBody(pw, encManifest, files, key, onProgress)
+		if werr == nil {
+			bodySent.Store(true)
+		}
 		pw.CloseWithError(werr)
 		if werr != nil {
 			return
@@ -223,8 +236,25 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	} else if httpc == c.stdHTTP && c.uploadHTTP != nil {
 		httpc = c.uploadHTTP
 	}
+	// unknown is the answer for a request whose body was wholly sent but whose
+	// outcome the client cannot read: the caller's own cancellation stays the
+	// caller's, and the confirm timeout keeps its own report.
+	unknown := func(status int, cause error) error {
+		var unconfirmed *UploadUnconfirmedError
+		if errors.As(context.Cause(ctx), &unconfirmed) {
+			return unconfirmed
+		}
+		if caller.Err() != nil {
+			return cause
+		}
+		return &UploadUnconfirmedError{Status: status, Err: cause}
+	}
+
 	resp, err := httpc.Do(req)
 	if err != nil {
+		if bodySent.Load() {
+			return "", "", 0, unknown(0, err)
+		}
 		var unconfirmed *UploadUnconfirmedError
 		if errors.As(context.Cause(ctx), &unconfirmed) {
 			return "", "", 0, unconfirmed
@@ -234,6 +264,12 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Any 5xx answering a wholly sent body may come from an intermediary that
+		// failed, or chose that status, after central stored the upload: a status
+		// does not establish who sent it, so none of them is definite.
+		if resp.StatusCode >= 500 && bodySent.Load() {
+			return "", "", 0, unknown(resp.StatusCode, fmt.Errorf("upload: unexpected status %d", resp.StatusCode))
+		}
 		return "", "", 0, uploadStatusError(resp.StatusCode)
 	}
 
@@ -244,25 +280,63 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 		// notice a silent truncation; 0 means the server did not report one.
 		ExpiresAt int64 `json:"expiresAt"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", "", 0, err
+	// A 2xx is central accepting the upload, so a confirmation that cannot be
+	// read, or names no id a link can carry, leaves an upload that exists with
+	// no usable link: unknown, never a broken link and never a failure.
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxConfirmBody)).Decode(&out); err != nil {
+		return "", "", 0, unknown(0, fmt.Errorf("upload: unreadable confirmation: %w", err))
+	}
+	if !usableID.MatchString(out.ID) {
+		return "", "", 0, unknown(0, errors.New("upload: the confirmation carries no usable id"))
 	}
 	return out.ID, storecrypto.EncodeKey(key), out.ExpiresAt, nil
 }
 
-// UploadUnconfirmedError means the whole body was written and the server did
-// not answer within confirmTimeout. Whether the upload arrived is unknown, and
-// the message has to say so: the POST is not idempotent, so Upload never retries
-// it -- a second attempt that also lands is a second stored, metered file.
-type UploadUnconfirmedError struct{ Waited time.Duration }
+// maxConfirmBody bounds the upload confirmation read; central's is a few dozen
+// bytes.
+const maxConfirmBody = 64 << 10
+
+// usableID is an id a claim link can carry as one inert path segment.
+var usableID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// UploadUnconfirmedError means the whole body was written and no usable answer
+// came back: the server did not answer within confirmTimeout (Waited), the
+// connection ended first, a gateway answered in central's place (Status), or the
+// confirmation could not be read. Whether the upload arrived is unknown, and the
+// message has to say so: the POST is not idempotent, so Upload never retries it
+// -- a second attempt that also lands is a second stored, metered file.
+type UploadUnconfirmedError struct {
+	// Waited is the confirm timeout that expired, or 0.
+	Waited time.Duration
+	// Status is the non-2xx status that answered instead of central's
+	// confirmation, or 0.
+	Status int
+	// Err is the underlying failure, when there is one.
+	Err error
+}
 
 func (e *UploadUnconfirmedError) Error() string {
-	return fmt.Sprintf("the server did not confirm the upload within %s of the last byte being sent — "+
-		"the link is very slow, or the server is not answering\n"+
-		"  nothing was retried. Run the command again for a link; if this upload did arrive after all, "+
-		"it is listed on your account page in the browser, where it can be deleted",
-		e.Waited.Round(time.Second))
+	var what string
+	switch {
+	case e.Waited > 0:
+		what = fmt.Sprintf("the server did not confirm the upload within %s of the last byte being sent — "+
+			"the link is very slow, or the server is not answering", e.Waited.Round(time.Second))
+	case e.Status != 0:
+		what = fmt.Sprintf("the whole upload was sent, but the answer was HTTP %d instead of the server's "+
+			"confirmation — a proxy or gateway may have failed after the server stored it", e.Status)
+	default:
+		what = "the whole upload was sent, but no usable confirmation came back"
+		if e.Err != nil {
+			what += " (" + e.Err.Error() + ")"
+		}
+	}
+	return what + ", so whether it arrived is unknown\n" +
+		"  nothing was retried. Before running the command again, check your account page in the browser: " +
+		"if this upload did arrive after all, it is listed there, where it can be deleted. " +
+		"Running the command again uploads, and counts, a new copy"
 }
+
+func (e *UploadUnconfirmedError) Unwrap() error { return e.Err }
 
 // writeUploadBody writes the framed request body (manifest header + each
 // file's encrypted chunks) into w, using one global seq counter starting at
