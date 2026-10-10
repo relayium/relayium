@@ -147,6 +147,12 @@ public struct AccountClient {
             // account. If it does not, expose the one actionable remedy rather
             // than a raw server status.
             throw AccountError.appleEmailUnavailable
+        case 409 where errorCode(in: data) == "login_conflict":
+            // The account, its Apple link or its lifecycle moved between the
+            // server's checks and its write; nothing was issued. A fresh Apple
+            // sign-in resolves it. Not retried here: the authorization code is
+            // single-use. Any other 409 stays a plain server status.
+            throw AccountError.appleLoginConflict
         case 429: throw AccountError.rateLimited
         case 502, 503:
             // The server could not COMPLETE the exchange (Apple unreachable, or

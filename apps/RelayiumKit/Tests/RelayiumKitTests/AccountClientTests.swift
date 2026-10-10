@@ -142,6 +142,42 @@ final class AccountClientTests: XCTestCase {
         }
     }
 
+    // MARK: - Sign in with Apple: the lifecycle conflict
+
+    /// The server's 409 `login_conflict` — the account, its Apple link or its
+    /// lifecycle moved between the checks and the write, and nothing was issued
+    /// — is the one Apple refusal whose remedy is "sign in with Apple again".
+    /// Only that exact status AND code earns the dedicated case; anything else
+    /// stays the generic status, because guessing would show a wrong remedy.
+    func testLoginWithAppleMapsOnlyTheExact409LoginConflict() async {
+        let cases: [(status: Int, body: String, want: AccountError)] = [
+            (409, #"{"error":"login_conflict"}"#, .appleLoginConflict),
+            // An unknown or malformed 409 is not known to be this conflict.
+            (409, #"{"error":"something new"}"#, .server(status: 409)),
+            (409, #"{"error":"LOGIN_CONFLICT"}"#, .server(status: 409)),
+            (409, #"{"error":"login_conflict "}"#, .server(status: 409)),
+            (409, #"{"code":"login_conflict"}"#, .server(status: 409)),
+            (409, "login_conflict", .server(status: 409)),
+            (409, "", .server(status: 409)),
+            // The same code under any other status is not this conflict either.
+            (400, #"{"error":"login_conflict"}"#, .server(status: 400)),
+            (500, #"{"error":"login_conflict"}"#, .server(status: 500)),
+        ]
+        for c in cases {
+            StubURLProtocol.reset()
+            StubURLProtocol.stub = .init(status: c.status, body: Data(c.body.utf8), check: nil)
+            await XCTAssertThrowsErrorAsync(
+                try await self.client().loginWithApple(idToken: "eyJ.identity.sig",
+                                                       authorizationCode: "c-one-time",
+                                                       nonce: "NONCE-1", name: "")) {
+                XCTAssertEqual($0 as? AccountError, c.want, "\(c.status) \(c.body)")
+            }
+            // Apple's authorization code is single-use: a conflict is never
+            // answered by replaying it.
+            XCTAssertEqual(StubURLProtocol.requestCount, 1, "\(c.status) \(c.body)")
+        }
+    }
+
     // MARK: - resending the verification email
 
     func testResendSendsOnlyTheAddress() async throws {

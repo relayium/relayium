@@ -114,6 +114,22 @@ enum UITestMode {
     static let stallUploadArgument = "--relayium-ui-testing-stall-upload"
     static let stallsUpload = ProcessInfo.processInfo.arguments.contains(stallUploadArgument)
 
+    /// Answers every chunk with `200 {"received": <the offset it started at>}`:
+    /// a server that replies promptly and keeps nothing.
+    ///
+    /// The one upload failure neither fixture above can produce. A stall never
+    /// answers and a 500 is an error; this is a SUCCESS that acknowledges no new
+    /// byte, which is what drives the uploader's non-advancing bound — wait,
+    /// check the offset, resend, and give up after
+    /// `UploadRetryPacing.maxNonAdvancingAcknowledgements` answers. Nothing
+    /// about that policy is substituted here: the production pacing runs, so the
+    /// retry line is on screen for the waits the product really takes and the
+    /// attempt ends because the product's own count ran out.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let nonAdvancingUploadArgument = "--relayium-ui-testing-nonadvancing-upload"
+    static let answersUploadWithoutAdvancing = ProcessInfo.processInfo.arguments
+        .contains(nonAdvancingUploadArgument)
+
     /// A signed-in launch whose account id the Device Inbox refuses to use.
     ///
     /// **The one state where "there is an account" and "the receiver adopted it"
@@ -547,6 +563,7 @@ enum UITestMode {
     static let answersAccountAPI = false
     static let stallsUpload = false
     static let failsUpload = false
+    static let answersUploadWithoutAdvancing = false
     static func makeAccountTransport() -> URLSession? { nil }
     #endif
 
@@ -939,6 +956,15 @@ final class UITestAccountTransport: URLProtocol {
             // product should offer to carry on rather than start over.
             if UITestMode.failsUpload { return (500, Data(#"{"error":"server"}"#.utf8)) }
             let range = request.value(forHTTPHeaderField: "Content-Range") ?? ""
+            // Answered, and nothing kept: the offset this request started at,
+            // read from the request's own header so the answer always names
+            // the uploader's current position rather than a constant that
+            // happens to match the first chunk. The offset read below answers
+            // 0, which agrees for the single-chunk fixture the suite sends.
+            if UITestMode.answersUploadWithoutAdvancing {
+                let start = Self.startOf(contentRange: range)
+                return (200, Data("{\"received\":\(start)}".utf8))
+            }
             let received = Self.receivedAfter(contentRange: range)
             return (200, Data("{\"received\":\(received)}".utf8))
         }
@@ -953,6 +979,14 @@ final class UITestAccountTransport: URLProtocol {
               let dash = contentRange.firstIndex(of: "-") else { return 0 }
         let to = contentRange[contentRange.index(after: dash)..<slash]
         return (Int(to) ?? -1) + 1
+    }
+
+    /// `bytes from-to/total` → `from`, the byte count the server already held
+    /// before this request. Malformed answers 0, like `receivedAfter`.
+    static func startOf(contentRange: String) -> Int {
+        guard let space = contentRange.firstIndex(of: " "),
+              let dash = contentRange.firstIndex(of: "-"), space < dash else { return 0 }
+        return Int(contentRange[contentRange.index(after: space)..<dash]) ?? 0
     }
 
 

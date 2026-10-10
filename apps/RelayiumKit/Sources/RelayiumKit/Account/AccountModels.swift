@@ -276,7 +276,7 @@ public enum AccountError: Error, Equatable {
 
     // MARK: - Sign in with Apple
     //
-    // Two cases, not one, and neither is `invalidCredentials`: no email and no
+    // Distinct cases, and none of them is `invalidCredentials`: no email and no
     // password was involved in an Apple authorization, so that error's copy
     // ("check your email and password") would name two fields the user never
     // touched and send them looking for a mistake they did not make.
@@ -296,4 +296,11 @@ public enum AccountError: Error, Equatable {
     /// account. The remedy lives in the device's Sign in with Apple settings,
     /// not in an HTTP status shown to the user.
     case appleEmailUnavailable
+    /// 409 `login_conflict` — the account, its Apple link or its lifecycle
+    /// changed between the server's checks and its write, so nothing was
+    /// issued. Not a refusal of the Apple ID: a fresh Apple sign-in resolves
+    /// against the new state. Only that exact status and code map here; any
+    /// other 409 stays `.server(status:)`. The client never retries on its own,
+    /// because Apple's authorization code is single-use.
+    case appleLoginConflict
 }

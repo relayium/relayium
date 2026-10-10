@@ -103,6 +103,8 @@ final class AppShellUITests: XCTestCase {
             ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-stall-upload"],
         #selector(AppShellUITests.testAFailedUploadKeepsTheWorkAndOffersToCarryOn):
             ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-fail-upload"],
+        #selector(AppShellUITests.testAnUploadTheServerNeverAcknowledgesSaysSoThenStopsWithoutALink):
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-nonadvancing-upload"],
         #selector(AppShellUITests.testCreatingAPairingCodeShowsEveryHandoff):
             [],
         #selector(AppShellUITests.testShareOpensTheSystemSharingPicker):
@@ -128,6 +130,10 @@ final class AppShellUITests: XCTestCase {
             #selector(AppShellUITests.testCancellingAnUploadInFlightReturnsTheTask),
         "testAFailedUploadKeepsTheWorkAndOffersToCarryOn":
             #selector(AppShellUITests.testAFailedUploadKeepsTheWorkAndOffersToCarryOn),
+        "testAnUploadTheServerNeverAcknowledgesSaysSoThenStopsWithoutALink":
+            #selector(AppShellUITests.testAnUploadTheServerNeverAcknowledgesSaysSoThenStopsWithoutALink),
+        "testAStalledUploadNamesWhatItIsDoingInChinese":
+            #selector(AppShellUITests.testAStalledUploadNamesWhatItIsDoingInChinese),
         "testCreatingAPairingCodeShowsEveryHandoff":
             #selector(AppShellUITests.testCreatingAPairingCodeShowsEveryHandoff),
         "testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile":
@@ -282,7 +288,11 @@ final class AppShellUITests: XCTestCase {
     /// title carries the same words. Scope navigation to the labelled sidebar
     /// outline so nothing else with that label can turn one intended click into
     /// an ambiguous two-element query.
-    private func sidebarDestination(_ title: String, in window: XCUIElement) -> XCUIElement {
+    ///
+    /// `shownAs` is the row's words in a launch that is not in English; the
+    /// destination is still named by its English key, so the id stays one list.
+    private func sidebarDestination(_ title: String, in window: XCUIElement,
+                                    shownAs shown: String? = nil) -> XCUIElement {
         let id = Self.destinationIDs[title]!
         let stable = window.descendants(matching: .any)["sidebar-\(id)"].firstMatch
         if stable.exists { return stable }
@@ -292,7 +302,8 @@ final class AppShellUITests: XCTestCase {
         // never by an OS-private table/outline container and never by the page
         // heading with the same label in the detail half.
         let dividingX = window.frame.midX
-        let visibleTitle = NSPredicate(format: "label == %@ OR value == %@", title, title)
+        let words = shown ?? title
+        let visibleTitle = NSPredicate(format: "label == %@ OR value == %@", words, words)
         if let row = window.descendants(matching: .any).matching(visibleTitle)
             .allElementsBoundByIndex
             .first(where: { $0.frame.midX < dividingX }) {
@@ -430,12 +441,13 @@ final class AppShellUITests: XCTestCase {
     /// explicit chooser button that invokes the same product action.
     private func chooseFixture(_ fixture: URL,
                                in window: XCUIElement,
+                               chooserLabel: String = "Choose Files or Folders…",
                                file: StaticString = #filePath,
                                line: UInt = #line) {
         let identified = window.descendants(matching: .any)["transfer-choose-files"].firstMatch
         let chooser = identified.exists
             ? identified
-            : window.buttons["Choose Files or Folders…"]
+            : window.buttons[chooserLabel]
         guard chooser.waitForExistence(timeout: 10) else {
             return XCTFail("the transfer surface has no explicit file chooser",
                            file: file, line: line)
@@ -1919,10 +1931,20 @@ final class AppShellUITests: XCTestCase {
         let cancel = window.buttons["Cancel"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 20),
                       "an upload in flight cannot be cancelled")
+        // The held PATCH is the state the activity line exists for: bytes on
+        // their way and no answer yet. Which of the two sentences depends on
+        // whether URLSession reports body progress through the in-process
+        // fixture, so either is the truth here — a blank line or any other
+        // sentence is not.
+        XCTAssertTrue(waitForUploadActivity(in: window, toSay: Self.inFlightActivity["en"]!,
+                                            timeout: 20),
+                      "an upload in flight does not say what it is doing")
         cancel.click()
 
         XCTAssertTrue(chooser.waitForExistence(timeout: 20),
                       "a cancelled upload did not return the selection")
+        XCTAssertFalse(uploadActivityLine(in: window).exists,
+                       "a cancelled upload left its activity line on screen")
         let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
         XCTAssertTrue(identity.waitForExistence(timeout: 10),
                       "a cancelled upload lost the files the user had chosen")
@@ -2012,6 +2034,176 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(window.descendants(matching: .any)["storedSend.resultLink"]
             .firstMatch.exists,
             "a failed upload produced a capability link anyway")
+    }
+
+    // MARK: - what a running upload says it is doing
+
+    /// The two sentences an upload with a request in flight may truthfully show,
+    /// per shipped language: bytes on their way, or every byte sent and the
+    /// server's answer awaited. Copied from the catalogs rather than read
+    /// through the app's copy layer, which this target does not link — a
+    /// rewording therefore fails here, and is meant to be looked at.
+    private static let inFlightActivity: [String: [String]] = [
+        "en": ["Sending encrypted data…",
+               "Sent. Waiting for the server to confirm it has stored this part…"],
+        "zh-Hans": ["正在发送加密数据……",
+                    "已发送，正在等待服务器确认已保存这一部分……"],
+    ]
+
+    // nonlocalized: the English catalog's `upload.activity.waitingToRetry`
+    private static let waitingToRetryActivity =
+        "The server didn't confirm the last part. Trying again shortly — anything it already stored is kept."
+
+    /// The running upload's activity line, by its own identity and nothing
+    /// else. No fall-back to the visible words: the identity is part of what
+    /// these cases check, so a line that loses it must fail them.
+    private func uploadActivityLine(in window: XCUIElement) -> XCUIElement {
+        window.descendants(matching: .any)["storedSend.activity"].firstMatch
+    }
+
+    /// Whether the activity line says one of `sentences` before `timeout`.
+    ///
+    /// One predicate over identity AND words, asked through `exists`, rather
+    /// than reading the line's label after finding it: the line is removed the
+    /// moment an upload ends, and reading an attribute of an element that has
+    /// just gone fails the case for a reason unrelated to the claim. Polled
+    /// without sleeping, like `sectionHeadingExists`; every `exists` resolves a
+    /// fresh snapshot.
+    private func waitForUploadActivity(in window: XCUIElement, toSay sentences: [String],
+                                       timeout: TimeInterval) -> Bool {
+        let saying = NSPredicate(
+            format: "identifier == %@ AND (label IN %@ OR value IN %@)",
+            "storedSend.activity", sentences, sentences)
+        let line = window.descendants(matching: .any).matching(saying).firstMatch
+        let deadline = Date(timeIntervalSinceNow: timeout)
+        repeat {
+            if line.exists { return true }
+        } while Date() < deadline
+        return false
+    }
+
+    /// **A server that answers every chunk and keeps none of it: the upload
+    /// says it is retrying, then stops — with the files kept and no link.**
+    ///
+    /// The fixture answers each PATCH `200 {"received": <where it started>}`,
+    /// so nothing ever advances and nothing ever fails outright. Everything
+    /// after the transport is production: the uploader's non-advancing count,
+    /// its waits between resends (no injected pacing — the shipped waits sum to
+    /// about five seconds before the count runs out), the activity line, and the
+    /// failure card. Three things are asserted, in order:
+    ///
+    /// - while it is still running, the line says it is waiting to try again —
+    ///   the sentence that stops this state reading as a frozen transfer;
+    /// - it then ENDS on its own, inside a bound far shorter than any real
+    ///   timeout, so a loop that resent forever fails here;
+    /// - it ends as a recoverable failure: Try again, the chosen file still
+    ///   listed, no activity line and no capability link. A finalize would
+    ///   have produced one — the fixture answers finalize normally — so no link
+    ///   is also the evidence that nothing claimed the bytes were stored.
+    func testAnUploadTheServerNeverAcknowledgesSaysSoThenStopsWithoutALink() throws {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let send = sidebarDestination("Share a link", in: window)
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.click()
+
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
+        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
+        pendingFileFixture = fixture
+
+        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10))
+        chooseFixture(fixture, in: window)
+
+        let sendAction = window.buttons["Send"]
+        XCTAssertTrue(sendAction.waitForExistence(timeout: 15))
+        sendAction.click()
+
+        let link = window.descendants(matching: .any)["storedSend.resultLink"].firstMatch
+        XCTAssertTrue(waitForUploadActivity(in: window, toSay: [Self.waitingToRetryActivity],
+                                            timeout: 20),
+                      "an upload whose bytes the server keeps not acknowledging never "
+                      + "said it was waiting to try again")
+        XCTAssertFalse(link.exists,
+                       "an upload the server never acknowledged produced a link while retrying")
+
+        let tryAgain = window.buttons["Try again"]
+        guard tryAgain.waitForExistence(timeout: 30) else {
+            attachDiagnostics(named: "nonadvancing-upload-never-ended")
+            return XCTFail("an upload the server never acknowledged did not stop retrying")
+        }
+        XCTAssertTrue(window.descendants(matching: .any).matching(NSPredicate(
+            format: "label CONTAINS %@ OR value CONTAINS %@",
+            "Check your internet connection", "Check your internet connection")).firstMatch.exists,
+                      "the stopped upload does not say why it stopped")
+        XCTAssertFalse(uploadActivityLine(in: window).exists,
+                       "a stopped upload still claims to be doing something")
+        XCTAssertFalse(window.buttons["Cancel"].exists,
+                       "a stopped upload still offers to cancel itself")
+        XCTAssertFalse(link.exists,
+                       "an upload the server never acknowledged ended on a link")
+        XCTAssertFalse(sectionHeadingExists("Link ready", in: window),
+                       "an upload the server never acknowledged was presented as finished")
+        XCTAssertTrue(window.descendants(matching: .any)["pendingFile.0"].firstMatch.exists,
+                      "a stopped upload lost the files the user had chosen")
+    }
+
+    /// The stalled upload's activity line in Chinese.
+    ///
+    /// The generic language matrix proves the shell is translated; it never
+    /// reaches a running upload, so the activity sentences — the longest copy
+    /// in the upload card — had no runtime evidence in Simplified Chinese. A
+    /// relaunch in its own body, like every per-language case here.
+    func testAStalledUploadNamesWhatItIsDoingInChinese() throws {
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments = offlineLaunchArguments.map {
+            $0 == "(en)" ? "(zh-Hans)" : $0 == "en_US" ? "zh_CN" : $0
+        } + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-stall-upload"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let send = sidebarDestination("Share a link", in: window, shownAs: "分享链接")
+        XCTAssertTrue(send.waitForExistence(timeout: 10),
+                      "the Chinese shell has no Share a link destination")
+        send.click()
+
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
+        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
+        pendingFileFixture = fixture
+        chooseFixture(fixture, in: window, chooserLabel: "选择文件或文件夹…")
+
+        let sendAction = window.buttons["发送"]
+        XCTAssertTrue(sendAction.waitForExistence(timeout: 15))
+        sendAction.click()
+
+        let cancel = window.buttons["取消"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 20),
+                      "a Chinese upload in flight cannot be cancelled")
+        XCTAssertTrue(waitForUploadActivity(in: window, toSay: Self.inFlightActivity["zh-Hans"]!,
+                                            timeout: 20),
+                      "a Chinese upload in flight does not say what it is doing in Chinese")
+        // Inside the window, not clipped past its edge: the one layout fact a
+        // long sentence in a fixed-width card can get wrong that this suite can
+        // measure without asserting pixels.
+        let line = uploadActivityLine(in: window)
+        XCTAssertTrue(line.exists)
+        XCTAssertLessThanOrEqual(line.frame.maxX, window.frame.maxX,
+                                 "the Chinese activity line runs past the window")
+        cancel.click()
+
+        XCTAssertTrue(window.descendants(matching: .any)["pendingFile.0"].firstMatch
+            .waitForExistence(timeout: 20),
+                      "a cancelled Chinese upload lost the files the user had chosen")
+        XCTAssertFalse(uploadActivityLine(in: window).exists,
+                       "a cancelled Chinese upload left its activity line on screen")
+        XCTAssertFalse(window.descendants(matching: .any)["storedSend.resultLink"]
+            .firstMatch.exists,
+            "a cancelled Chinese upload left a capability link on screen")
     }
 
     /// Creating a pairing code with a batch already staged stays on

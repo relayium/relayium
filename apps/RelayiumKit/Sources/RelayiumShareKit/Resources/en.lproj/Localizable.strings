@@ -525,6 +525,7 @@
 "error.apple.rejected" = "Apple sign-in wasn't accepted. Try again, or sign in with your email and password.";
 "error.apple.unavailable" = "Couldn't finish signing in with Apple just now. Try again in a moment.";
 "error.apple.emailUnavailable" = "Apple didn't provide an email address. Remove Relayium from Sign in with Apple in Settings, then try again.";
+"error.apple.loginConflict" = "Your account changed while you were signing in, so you weren't signed in. Sign in with Apple again.";
 "error.apple.incompleteCredential" = "Apple didn't return everything needed to sign in, so nothing was sent. Try again, or sign in with your email and password.";
 "error.apple.authorizationFailed" = "Signing in with Apple didn't complete. Try again, or sign in with your email and password.";
 "error.keychain.signIn" = "This device couldn't store your sign-in (keychain error %@). You'll stay signed in until you quit.";

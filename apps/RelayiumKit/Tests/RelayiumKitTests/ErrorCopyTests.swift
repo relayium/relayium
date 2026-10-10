@@ -8,6 +8,7 @@ final class ErrorCopyTests: XCTestCase {
     func testAccountErrorsAllMapToNonEmptyText() {
         let cases: [AccountError] = [
             .invalidCredentials, .rateLimited, .server(status: 503), .decoding, .network,
+            .appleLoginConflict,
         ]
         for e in cases {
             XCTAssertFalse(ErrorCopy.message(for: e, language: .en).isEmpty, "no copy for \(e)")
@@ -19,6 +20,31 @@ final class ErrorCopyTests: XCTestCase {
     func testInvalidCredentialsTalksAboutEmailAndPassword() {
         let m = ErrorCopy.message(for: AccountError.invalidCredentials, language: .en).lowercased()
         XCTAssertTrue(m.contains("email") && m.contains("password"))
+    }
+    /// The Apple sign-in conflict has its own sentence in both shipped
+    /// languages: it asks for a fresh Apple sign-in, never shows the raw status,
+    /// and never suggests a password problem or a refused Apple ID.
+    func testAppleLoginConflictHasItsOwnCopyInEveryLanguage() {
+        for language in AppLanguage.allCases {
+            let m = ErrorCopy.message(for: AccountError.appleLoginConflict, language: language)
+            XCTAssertFalse(m.isEmpty, language.rawValue)
+            XCTAssertNotEqual(m, L10nKey.errorAppleLoginConflict.rawValue,
+                              "\(language.rawValue) fell through to the raw key")
+            XCTAssertEqual(m, L10n.t(.errorAppleLoginConflict, language: language))
+            XCTAssertFalse(m.contains("409"), m)
+            XCTAssertTrue(m.contains("Apple"), m)
+            for other: AccountError in [.server(status: 409), .invalidCredentials,
+                                        .appleRejected, .appleUnavailable] {
+                XCTAssertNotEqual(m, ErrorCopy.message(for: other, language: language),
+                                  "\(language.rawValue) collapsed into \(other)")
+            }
+        }
+        let en = ErrorCopy.message(for: AccountError.appleLoginConflict, language: .en).lowercased()
+        XCTAssertFalse(en.contains("password"), en)
+        XCTAssertFalse(en.contains("wasn't accepted") || en.contains("rejected"), en)
+        let zh = ErrorCopy.message(for: AccountError.appleLoginConflict, language: .zh)
+        XCTAssertFalse(zh.contains("密码"), zh)
+        XCTAssertFalse(zh.contains("未被接受"), zh)
     }
     func testKeychainErrorNamesTheStatusCode() {
         XCTAssertTrue(ErrorCopy.message(for: KeychainError.status(-25300), language: .en).contains("-25300"))

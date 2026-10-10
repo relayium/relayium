@@ -265,6 +265,10 @@ struct UploadPane: View {
                     .font(.subheadline)
                     .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    // A stable address for the line, so acceptance can assert it
+                    // is on screen and which sentence it says while an upload
+                    // waits or retries — the state this line exists to explain.
+                    .accessibilityIdentifier("storedSend.activity")
             }
             Text(L10n.t(.uploadMacKeepOpen))
                 .font(.subheadline)

@@ -6984,8 +6984,9 @@ enum MacAppShellFirstLaunch {
 
     static let path = "apps/mac/RelayiumUITests/AppShellUITests.swift"
 
-    /// The thirteen cases whose immediate relaunch moved into setup, with the
-    /// arguments they relaunched with after `offlineLaunchArguments`, in order.
+    /// The thirteen cases whose immediate relaunch moved into setup, plus each
+    /// later fixture case written for that route from the start, with the
+    /// arguments they launch with after `offlineLaunchArguments`, in order.
     static let fixtures: [String: [String]] = [
         "testTheExpiringPairingCodeCountsDownDiesAndCanBeReplaced": ["--relayium-ui-testing-expiring-code"],
         "testAFailedPairingMintSaysSoAndCanBeRecoveredFrom": ["--relayium-ui-testing-failing-mint"],
@@ -7000,6 +7001,8 @@ enum MacAppShellFirstLaunch {
             ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-stall-upload"],
         "testAFailedUploadKeepsTheWorkAndOffersToCarryOn":
             ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-fail-upload"],
+        "testAnUploadTheServerNeverAcknowledgesSaysSoThenStopsWithoutALink":
+            ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-nonadvancing-upload"],
         "testCreatingAPairingCodeShowsEveryHandoff": [],
         "testShareOpensTheSystemSharingPicker": [],
     ]
@@ -7017,6 +7020,7 @@ enum MacAppShellFirstLaunch {
         "testOpeningAValidStoredLinkDownloadsAndNamesTheResult": "openStoredLink(",
         "testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile": "openStoredLink(",
         "testTheKeyboardAloneCompletesATask": "openStoredLink(",
+        "testAStalledUploadNamesWhatItIsDoingInChinese": "app.terminate()",
     ]
 
     /// What a fixture case's body must never do: its one launch is setup's.
@@ -7249,7 +7253,7 @@ enum MacAppShellFirstLaunch {
             } catch { out.append("\(error)") }
         }
         for name in table.keys.sorted() where fixtures[name] == nil {
-            out.append("\(name) gained a first-launch entry beyond the thirteen immediate relaunches")
+            out.append("\(name) gained a first-launch entry beyond the recorded fixture cases")
         }
         for (name, marker) in excludedLifecycle.sorted(by: { $0.key < $1.key }) {
             do {
@@ -7315,11 +7319,11 @@ extension MacSurfaceGuardTests {
         XCTAssertEqual(MacAppShellFirstLaunch.violations(in: ui), [])
         XCTAssertEqual(try MacAppShellFirstLaunch.parsedFixtures(in: ui), MacAppShellFirstLaunch.fixtures)
         let declared = MacAppShellFirstLaunch.declaredTests(in: ui)
-        XCTAssertEqual(declared.count, 41, "the macOS shell suite changed size; re-read this route")
+        XCTAssertEqual(declared.count, 43, "the macOS shell suite changed size; re-read this route")
         let throwing = Set(declared.filter { $0.isThrowing }.map { $0.name })
-        XCTAssertEqual(throwing.count, 8)
+        XCTAssertEqual(throwing.count, 10)
         XCTAssertEqual(throwing
-            .intersection(MacAppShellFirstLaunch.fixtures.keys).count, 6)
+            .intersection(MacAppShellFirstLaunch.fixtures.keys).count, 7)
         for name in MacAppShellFirstLaunch.fixtures.keys {
             XCTAssertEqual(try MacAppShellFirstLaunch.effectiveLaunches(of: name, in: ui), 1, name)
         }

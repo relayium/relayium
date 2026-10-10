@@ -193,6 +193,12 @@ public enum ErrorCopy {
                 return L10n.t(.errorAppleUnavailable, language: language)
             case .appleEmailUnavailable:
                 return L10n.t(.errorAppleEmailUnavailable, language: language)
+            case .appleLoginConflict:
+                // The account changed while the server was signing the user
+                // in. The remedy is one more Apple sign-in, which this copy
+                // names; it says nothing about a password or a refused Apple ID
+                // because neither is true.
+                return L10n.t(.errorAppleLoginConflict, language: language)
             }
         }
         if let e = error as? AppleSignInError {

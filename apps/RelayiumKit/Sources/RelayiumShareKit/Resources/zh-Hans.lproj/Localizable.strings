@@ -513,6 +513,7 @@
 "error.apple.rejected" = "Apple 登录未被接受。请重试，或改用邮箱和密码登录。";
 "error.apple.unavailable" = "暂时无法完成 Apple 登录。请稍后重试。";
 "error.apple.emailUnavailable" = "Apple 未提供邮箱地址。请在系统设置的“通过 Apple 登录”中移除 Relayium，然后重试。";
+"error.apple.loginConflict" = "登录过程中你的账号发生了变化，因此未能登录。请重新通过 Apple 登录。";
 "error.apple.incompleteCredential" = "Apple 未返回登录所需的全部信息，因此没有发送任何内容。请重试，或改用邮箱和密码登录。";
 "error.apple.authorizationFailed" = "Apple 登录未能完成。请重试，或改用邮箱和密码登录。";
 "error.keychain.signIn" = "这台设备未能保存你的登录凭据（钥匙串错误 %@）。在退出应用之前你会保持登录状态。";

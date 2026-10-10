@@ -314,6 +314,42 @@ final class AppleSignInTests: XCTestCase {
                           .failed(message: ErrorCopy.message(for: AccountError.server(status: 400))))
     }
 
+    /// The account or its Apple link changed while the server was signing the
+    /// user in, and nothing was issued. The remedy is a fresh Apple sign-in,
+    /// not a raw 409 and not a credential complaint — and the app must neither
+    /// keep a credential nor replay Apple's single-use code on its own.
+    func testALoginConflictAsksForAFreshAppleSignInAndStoresNothing() async throws {
+        let store = InMemoryTokenStore()
+        StubURLProtocol.reset()
+        StubURLProtocol.stub = .init(status: 409, body: Data(#"{"error":"login_conflict"}"#.utf8))
+        let s = session(store: store)
+
+        await signIn(s)
+
+        XCTAssertEqual(s.state,
+                       .failed(message: ErrorCopy.message(for: AccountError.appleLoginConflict)))
+        for other: AccountError in [.server(status: 409), .invalidCredentials, .appleRejected] {
+            XCTAssertNotEqual(s.state, .failed(message: ErrorCopy.message(for: other)), "\(other)")
+        }
+        XCTAssertNil(try store.load())
+        XCTAssertNil(s.bearerToken)
+        XCTAssertEqual(StubURLProtocol.requestCount, 1)
+    }
+
+    /// A 409 the client does not recognise stays the generic status: it is not
+    /// known to be the conflict, so it does not get that remedy.
+    func testAnUnknown409StaysAServerStatus() async throws {
+        let store = InMemoryTokenStore()
+        StubURLProtocol.stub = .init(status: 409, body: Data(#"{"error":"something new"}"#.utf8))
+        let s = session(store: store)
+
+        await signIn(s)
+
+        XCTAssertEqual(s.state, .failed(message: ErrorCopy.message(for: AccountError.server(status: 409))))
+        XCTAssertNil(try store.load())
+        XCTAssertNil(s.bearerToken)
+    }
+
     /// A freshly issued bearer plus a server that cannot answer /api/me is a
     /// token in hand, not a rejected sign-in: offer a retry, keep the token.
     func testAFailedAccountLoadAfterAppleIsUnavailableNotFailed() async throws {

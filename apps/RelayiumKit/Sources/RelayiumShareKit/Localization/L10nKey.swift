@@ -1547,7 +1547,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorAccountPasswordTooShort = "error.account.passwordTooShort"
     case errorAccountEmailTaken = "error.account.emailTaken"
     case errorAccountPendingDeletion = "error.account.pendingDeletion"
-    /// Native Sign in with Apple. Four sentences for two very different kinds
+    /// Native Sign in with Apple. Separate sentences for very different kinds
     /// of failure, and none of them may reuse `error.account.invalidCredentials`
     /// — that one tells the user to check an email and a password, and an Apple
     /// authorization involves neither.
@@ -1563,6 +1563,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// The copy points to the system authorization record that can be reset;
     /// displaying server status 400 would give the user nothing to act on.
     case errorAppleEmailUnavailable = "error.apple.emailUnavailable"
+    /// The account or its Apple link changed while the server was signing the
+    /// user in, and nothing was issued. A fresh Apple sign-in resolves it; the
+    /// raw 409 would give the user nothing to act on.
+    case errorAppleLoginConflict = "error.apple.loginConflict"
     /// The authorization came back without the identity token or the one-time
     /// code, so nothing was sent. It may not describe a refusal: no server ever
     /// saw this attempt.
