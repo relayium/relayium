@@ -48,6 +48,12 @@ func Drain(ctx context.Context, cfg DrainConfig) error {
 	if err != nil {
 		return fmt.Errorf("drain: %w", err)
 	}
+	// Refusal counters at the start: any refusal during the drain means some
+	// evidence of this stop was not kept, so the stop cannot be exact.
+	base, _, _, err := drainState(cfg.SpoolDir)
+	if err != nil {
+		return fmt.Errorf("drain: bridge status unreadable: %w", err)
+	}
 	cli, err := DialCLI(cfg.CLIAddr, cfg.CLIPassword, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("drain: %w", err)
@@ -86,6 +92,13 @@ func Drain(ctx context.Context, cfg DrainConfig) error {
 			why := "status unreadable"
 			if err == nil {
 				why = drainReady(e, emptyAtMilli, cancelled, st, recs, gone)
+				spool, final := drainSpoolReady(st, base)
+				if final {
+					return fmt.Errorf("drain: %s", spool)
+				}
+				if why == "" {
+					why = spool
+				}
 			} else {
 				why += ": " + err.Error()
 			}
@@ -149,11 +162,47 @@ func drainReady(e Epoch, emptyAtMilli int64, cancelled map[string]bool, st Statu
 	return ""
 }
 
-// drainState reads the bridge's status, spool records and gone marks
-// without modifying any of them.
+// drainSpoolReady returns "" when finite holding cannot have cost this drain
+// any evidence, or the reason it may have, and whether that reason is final
+// (waiting cannot cure it: the stop is not exact).
+//
+// Capacity alone is NOT loss: a busy spool (primary near its limit, records
+// in overflow, even both tiers full) whose cancelled sessions all have a
+// durable final or gone mark is exact — drainReady checks those records in
+// both tiers. What refuses is uncertainty or loss: allocations not durable,
+// evidence refused since the drain began, records in both tiers or unreadable
+// records left in place, an incomplete recent-finals list, or failing status
+// writes (this status may then be stale).
+func drainSpoolReady(st, base Status) (why string, final bool) {
+	switch {
+	case st.RefusedNewKeys != base.RefusedNewKeys || st.RefusedEvents != base.RefusedEvents ||
+		st.RefusedListingSessions != base.RefusedListingSessions || st.QuarantineRefusedMessages != base.QuarantineRefusedMessages:
+		return fmt.Sprintf("NOT EXACT: evidence was refused during the drain (refused keys %d->%d, events %d->%d, listing sessions %d->%d, quarantine refusals %d->%d)",
+			base.RefusedNewKeys, st.RefusedNewKeys, base.RefusedEvents, st.RefusedEvents, base.RefusedListingSessions, st.RefusedListingSessions,
+			base.QuarantineRefusedMessages, st.QuarantineRefusedMessages), true
+	case st.DuplicateKeys != 0:
+		return fmt.Sprintf("NOT EXACT: %d keys have records in both spool tiers (operator)", st.DuplicateKeys), true
+	case st.UnloadedRecords != 0:
+		return fmt.Sprintf("NOT EXACT: %d unreadable spool records were left in place unarchived (operator)", st.UnloadedRecords), true
+	case st.TempsHeld != 0:
+		return fmt.Sprintf("NOT EXACT: %d temporary files of earlier runs are held in place (possibly unique evidence; operator)", st.TempsHeld), true
+	case st.TempsStuck != 0:
+		return fmt.Sprintf("%d temporary files could not be removed: writes fail closed", st.TempsStuck), false
+	case st.AtRisk != 0:
+		return fmt.Sprintf("%d allocations at risk (state not durable after a write error)", st.AtRisk), false
+	case st.RecentFinalsTruncated:
+		return "recent finals truncated: a cancelled session's final may be missing from the list", false
+	case st.StatusWriteFailures != base.StatusWriteFailures:
+		return fmt.Sprintf("status writes failed during the drain (%d->%d): the status may be stale", base.StatusWriteFailures, st.StatusWriteFailures), false
+	}
+	return "", false
+}
+
+// drainState reads the bridge's status, spool records (both tiers) and gone
+// marks without modifying any of them. A key in both tiers is an error.
 func drainState(dir string) (Status, map[AllocKey]*Alloc, map[AllocKey]bool, error) {
 	var st Status
-	raw, err := os.ReadFile(filepath.Join(dir, "status.json"))
+	raw, err := readCapped(filepath.Join(dir, "status.json"), statusReadMaxBytes)
 	if err != nil {
 		return st, nil, nil, err
 	}
@@ -166,7 +215,10 @@ func drainState(dir string) (Status, map[AllocKey]*Alloc, map[AllocKey]bool, err
 		return st, nil, nil, err
 	}
 	for _, ent := range gents {
-		b, err := os.ReadFile(filepath.Join(dir, "gone", ent.Name()))
+		if ent.IsDir() || !strings.HasSuffix(ent.Name(), spoolExt) {
+			continue // temps; marks are named like records (as LoadGone reads them)
+		}
+		b, err := readCapped(filepath.Join(dir, "gone", ent.Name()), goneMarkMaxBytes)
 		if err != nil {
 			return st, nil, nil, err
 		}
@@ -176,24 +228,56 @@ func drainState(dir string) (Status, map[AllocKey]*Alloc, map[AllocKey]bool, err
 		}
 		gone[m.Key] = true
 	}
-	ents, err := os.ReadDir(dir)
-	if err != nil {
-		return st, nil, nil, err
+	// Records are read only up to the bridge's configured record limit (from
+	// its status; 64 KiB for a status without limits): a larger file is
+	// named, never read whole.
+	recordMax := st.Limits.RecordMaxBytes
+	if recordMax <= 0 {
+		recordMax = 64 << 10
 	}
 	recs := map[AllocKey]*Alloc{}
-	for _, ent := range ents {
-		if ent.IsDir() || !strings.HasSuffix(ent.Name(), spoolExt) {
-			continue
-		}
-		b, err := os.ReadFile(filepath.Join(dir, ent.Name()))
+	for _, d := range []string{dir, filepath.Join(dir, overflowSD)} {
+		ents, err := os.ReadDir(d)
 		if err != nil {
+			if d != dir && os.IsNotExist(err) {
+				continue // a spool written before the overflow tier existed
+			}
 			return st, nil, nil, err
 		}
-		var a Alloc
-		if err := json.Unmarshal(b, &a); err != nil {
-			return st, nil, nil, err
+		for _, ent := range ents {
+			if ent.IsDir() || !strings.HasSuffix(ent.Name(), spoolExt) {
+				continue
+			}
+			b, err := readCapped(filepath.Join(d, ent.Name()), recordMax)
+			if err != nil {
+				return st, nil, nil, err
+			}
+			var a Alloc
+			if err := json.Unmarshal(b, &a); err != nil {
+				return st, nil, nil, err
+			}
+			if _, dup := recs[a.Key]; dup {
+				return st, nil, nil, fmt.Errorf("allocation %s has a record in both spool tiers", a.Key)
+			}
+			recs[a.Key] = &a
 		}
-		recs[a.Key] = &a
 	}
 	return st, recs, gone, nil
+}
+
+// readCapped reads p only if its size is at most max, checking the size
+// before any read and bounding the read itself; a larger file is a named
+// error and nothing of it is read.
+func readCapped(p string, max int64) ([]byte, error) {
+	fi, err := os.Lstat(p)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file (%v): not read", p, fi.Mode().Type())
+	}
+	if fi.Size() > max {
+		return nil, fmt.Errorf("%s is oversized (%d bytes, limit %d): not read", p, fi.Size(), max)
+	}
+	return readBounded(p, max)
 }

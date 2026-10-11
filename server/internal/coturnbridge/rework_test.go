@@ -98,35 +98,47 @@ func TestConfigOrderingGuard(t *testing.T) {
 	}
 }
 
-// F2 money control: a snapshot that is not on disk is never delivered. Spool
-// full → the record stays in memory unsent; the bridge crashes; after the
-// restart the same allocation's final is delivered as a fresh sequence that
-// central never saw, so no seq is ever reused with other content. Its birth
-// died with the crash; after the restart coturn's psd listing supplies its
-// start again, as in production, so it stays billable.
+// F2 money control: a snapshot that is not on disk is never delivered. Its
+// spool write fails (R2: an I/O fault; before the overflow tier this test
+// used a full spool, which now gives the record a durable overflow place —
+// see receipts/obsolete-old-tests-on-candidate.txt); the record stays in
+// memory unsent and at risk; the bridge stops; after the restart the same
+// allocation's final is delivered as a fresh sequence that central never
+// saw, so no seq is ever reused with other content. Its birth died with the
+// process; coturn's psd listing supplies its start again, as in production,
+// so it stays billable.
 func TestBridgeNeverSendsUnpersistedSnapshot(t *testing.T) {
+	ff := newFaultFS()
 	h := newHarness(t, account.CoturnMeteringBillable)
-	h.startWith(func(c *Config) { c.SpoolMaxEntries = 1 })
+	h.startWith(func(c *Config) { c.fs = ff })
 	h.eventually("subscription", h.subscribed)
 	u := h.c.username("g1")
 	h.born(u, "007000000000000001")
 	h.redis.publish(chan4(u, "007000000000000001", "traffic"), counters(100, 0))
 	h.eventually("first delivered", func() bool { return h.c.sawSession("007000000000000001") && h.c.billed() == 100 })
+	second := (&Spool{}).name(AllocKey{Epoch: tE1, SessionID: "007000000000000002"})
+	ff.fail("rename", func(p string) bool { return filepath.Base(p) == second })
 	h.born(u, "007000000000000002")
 	h.redis.publish(chan4(u, "007000000000000002", "traffic"), counters(0, 40))
-	h.eventually("spool full", func() bool { return h.logs.has("spool full") })
+	h.eventually("write failure alerted", func() bool { return h.logs.has("spool write for") && h.b.Status().AtRisk == 1 })
 	time.Sleep(300 * time.Millisecond) // ~10 report cycles
 	if h.c.sawSession("007000000000000002") {
 		t.Fatal("an unpersisted snapshot was delivered")
 	}
-	h.halt() // crash: the second allocation existed only in memory
+	if st := h.b.Status(); st.AdmissionRequested == false || st.Unpersisted != 1 {
+		t.Fatalf("at-risk state not signalled: %+v", st)
+	}
+	h.halt() // the second allocation existed only in memory
 
 	f := &fakeCLI{password: "pw"}
 	f.set(psdListing(
 		PSDSession{SessionID: "007000000000000001", Username: u, StartedAgo: 5},
 		PSDSession{SessionID: "007000000000000002", Username: u, StartedAgo: 4}), "")
 	cli := withCLI(t, f, 700*time.Millisecond)
-	h.startWith(func(c *Config) { cli(c); c.SpoolMaxEntries = 1 })
+	h.startWith(func(c *Config) { cli(c); c.fs = ff })
+	if st := h.b.Status(); st.PossiblyLostAtRisk != 1 {
+		t.Fatalf("at-risk allocation of the stopped run not counted as possibly lost: %d", st.PossiblyLostAtRisk)
+	}
 	h.eventually("resubscribed", h.subscribed)
 	h.eventually("second allocation's start listed", func() bool {
 		for _, a := range h.b.Snapshot() {
@@ -139,10 +151,15 @@ func TestBridgeNeverSendsUnpersistedSnapshot(t *testing.T) {
 	h.redis.publish(chan4(u, "007000000000000002", "total_traffic"), counters(0, 70))
 	time.Sleep(200 * time.Millisecond)
 	if h.c.sawSession("007000000000000002") {
-		t.Fatal("unpersisted final delivered while the spool is full")
+		t.Fatal("unpersisted final delivered while its write fails")
 	}
 	h.redis.publish(chan4(u, "007000000000000001", "total_traffic"), counters(300, 0))
-	h.eventually("both settled", func() bool { n, _ := h.b.spool.Count(); return n == 0 && h.c.billed() == 370 })
+	h.eventually("first settled", func() bool { return h.c.billed() == 300 })
+	ff.clear()
+	h.eventually("both settled", func() bool { return recordFilesOnDisk(t, h.dir) == 0 && h.c.billed() == 370 })
+	if got := h.c.billed(); got != 370 {
+		t.Fatalf("billed %d, want 370", got)
+	}
 	if h.b.Status().DeadLettered != 0 || h.logs.has("conflict") {
 		t.Fatal("seq reuse conflict")
 	}
@@ -354,12 +371,14 @@ func TestBridgeGoneMarkWinsAfterCrash(t *testing.T) {
 	if err := sp.Put(a); err != nil { // the record is back: the crash window
 		t.Fatal(err)
 	}
+	sp.Close() // the crashed process's lock dies with it
 	b, err := New(Config{RelayID: "coturn-central", Realm: "relayium.com", RedisAddr: "127.0.0.1:1", CentralURL: "http://127.0.0.1:1",
 		Token: "t", SpoolDir: dir, Epoch: &fakeEpoch{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := sp.Count(); n != 0 || len(b.Snapshot()) != 0 {
+	t.Cleanup(func() { b.Close() })
+	if n := recordFilesOnDisk(t, dir); n != 0 || len(b.Snapshot()) != 0 {
 		t.Fatalf("record survived its gone mark: %d files", n)
 	}
 	b.tr.ApplyEvents(tE1, []Event{traffic(5)}, 4)
