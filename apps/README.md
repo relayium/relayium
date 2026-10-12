@@ -1,12 +1,18 @@
 # Relayium native apps
 
-macOS **1.4.8** is published through the direct-download channel. Android
-**0.3.0 (9)** was published on 2026-09-26 as a public preview APK (GitHub Release
-`android-v0.3.0`). iOS **0.5.0 (11)** is a TestFlight build only (internal and
-external testing groups, per the 2026-10-12 provider readback); iOS has no
-public release. The macOS TestFlight build `1.4.7 (44)`, also selected
-by a Mac App Store version that is waiting for review and not approved, is
-recorded separately from the direct release, from its own source.
+macOS **1.4.8** is published through the direct-download channel. It is build
+`45`, GitHub Release `macos-v1.4.8`, published on 2026-10-12. The separately
+versioned Mac App Store channel is public at [1.4.7](https://apps.apple.com/app/id6801142976), released
+by Apple on 2026-10-12 with build `1.4.7 (44)`, which is recorded separately
+from the direct release, from its own source. Android **0.3.1 (10)** was
+published on 2026-10-12 as a public preview APK (GitHub Release
+`android-v0.3.1`). iOS has no public release: **0.5.1 (12)** has been in
+internal TestFlight testing since 2026-10-12, and **0.5.0 (11)** remains in the
+internal and external testing groups (per the 2026-10-12 provider read-back). The relayium.com download links, Android update feed and
+Sparkle feed move to the new direct releases with a separate website delivery,
+which was still pending when this was written on 2026-10-12; until its own
+recorded public verification, what relayium.com actually serves is
+authoritative and may still be the previous releases.
 
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
   It vends two products. `RelayiumKit` is the transport stack plus the
@@ -36,8 +42,8 @@ recorded separately from the direct release, from its own source.
   six already-Approved `com.relayium.mac.*` subscription products instead of a
   catalogue of its own.
 - `android/` — native Android client (`com.relayium.android`), Kotlin + Jetpack
-  Compose over a pure-JVM `:protocol` module. **Public preview at 0.3.0
-  (versionCode 9)**, which is what the download serves today; direct APK only,
+  Compose over a pure-JVM `:protocol` module. **Public preview at 0.3.1
+  (versionCode 10)**, published as GitHub Release `android-v0.3.1`; direct APK only,
   no Google Play, no Play Services, no Play Billing. Five destinations — Transfer, Nearby, Inbox, Cloud, Account: it mints
   a six-digit code or `/cross-network#c=` link as well as joining one, finds
   devices with no code at all, receives Device Inbox deliveries into app-private
@@ -150,7 +156,7 @@ Store and private candidates — is Apple silicon (`arm64`) only, and its Sparkl
 feed item carries `<sparkle:hardwareRequirements>arm64` so an Intel Mac is never
 offered it. Distribution is that direct download and Sparkle
 updates from it. The separately versioned Mac App Store channel is also public,
-currently at [1.4.0](https://apps.apple.com/app/id6801142976) under App Apple ID
+currently at [1.4.7](https://apps.apple.com/app/id6801142976) under App Apple ID
 `6801142976`. [`web/mac-app-store-release.json`](../web/mac-app-store-release.json)
 is the record of that version and the day Apple published it. The generated
 release pages interpolate it; the two READMEs state it in prose, and the macOS
@@ -170,8 +176,18 @@ number — the one [`web/mac-app-store-release.json`](../web/mac-app-store-relea
 records. Those two manifests are what each channel actually serves; no
 sentence here is.
 
-**Internal TestFlight, read back 2026-10-06.** The current internal TestFlight
-build is `1.4.6 (43)`: App Store Connect build
+**Internal TestFlight, read back 2026-10-12.** The current internal TestFlight
+build is `1.4.7 (44)`: App Store Connect build
+`1b6d2103-702d-4585-b11d-a9face6901d9`, built from source `5c308432d`,
+`VALID` and `IN_BETA_TESTING` in the existing internal group, tester
+notification off, and approved for the existing external group as recorded in
+[`docs/macos-app-store-submission.md`](../docs/macos-app-store-submission.md).
+The Mac App Store version Apple released on 2026-10-12 selects this build.
+The direct `1.4.8 (45)` release was not uploaded to App Store Connect and is
+not in TestFlight.
+
+**Internal TestFlight, read back 2026-10-06.** At that read-back the newest
+internal TestFlight build was `1.4.6 (43)`: App Store Connect build
 `ab78e9f5-055d-4b2c-b1d7-8e5683ee722d`, built from source `43b7028ac` — not
 from `97fd70806`, the source of the `macos-v1.4.6` direct release — processed
 `VALID` and `IN_BETA_TESTING` in the existing internal group only, tester
@@ -179,7 +195,8 @@ notification off. The earlier `1.4.5 (42)` build (App Store Connect build
 `a0754ab1-adf6-46d9-9bbe-97968ef9d2ca`, source `855ebc5ae`), `1.4.4 (41)` build
 (source `f37a96d9b`) and `1.4.3 (40)` build remain in that internal group. For
 all four, actual StoreKit sandbox purchase acceptance is still pending, and
-none is in any external group or on the Mac App Store.
+none is in any external group or on the Mac App Store; StoreKit sandbox
+acceptance of `1.4.7 (44)` is pending too.
 [`docs/macos-app-store-submission.md`](../docs/macos-app-store-submission.md)
 is the operator record: what the release changes, what it deliberately does not
 change, its channel state with the read-back evidence, and the What to Test
@@ -208,14 +225,24 @@ The macOS status above covers macOS only. iOS development resumed on
 2026-09-01 at version 0.3.0: internal TestFlight builds were used for
 development acceptance before the earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
-offers iOS. The current internal TestFlight build is **`0.5.0 (11)`**, built
+offers iOS. The current internal TestFlight build is **`0.5.1 (12)`**: App
+Store Connect build `751dfe57-b6a4-46d7-b6bb-c0ad3b677012`, built from source
+`d23ca151c`, uploaded once on 2026-10-12 and read back at 15:53 UTC `VALID` and
+`IN_BETA_TESTING` in the existing internal group only — tester notification
+off, `usesNonExemptEncryption` `false`, not in the external group and not
+selected by any App Store version. Before it, **`0.5.0 (11)`** was built
 from source `49587fe16`, uploaded on 2026-10-02 and read back that day
 `VALID` and `IN_BETA_TESTING` in the existing internal group only — tester
 notification off, `usesNonExemptEncryption` `false` — and installed on the
-owner's own devices. Later App Store Connect state for that build changed, by
-an actor this record does not establish, and this
-README does not infer any external TestFlight or App Store availability from
-it. Before it, `0.4.1 (10)` (frozen source `15466b04`) was the internal build
+owner's own devices. The 2026-10-12 provider read-back also found it in
+external testing, and the editable `0.5.0` App Store version
+(`PREPARE_FOR_SUBMISSION`, manual release) with build `11` selected; those
+changes were made by an actor this record does not establish, that App Store
+version has not been submitted for review, and external TestFlight testing is
+not App Store availability.
+Configuring `0.5.1 (12)` left both of those unchanged; its StoreKit sandbox and
+physical-device acceptance are pending. Before `0.5.0 (11)`,
+`0.4.1 (10)` (frozen source `15466b04`) was the internal build
 that first carried the relay-credential renewal; `0.4.0 (9)`, uploaded on
 2026-09-18 from `4d694a9e`, does not. `docs/ios-app-store-submission.md` holds
 the earlier checkpoints. An internal

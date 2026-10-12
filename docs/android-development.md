@@ -3,23 +3,37 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The release manifest selects 0.3.1 (versionCode 10). Publication of those bytes
-is prepared; the last verified public release is still 0.3.0 until the
-publication readback below is added.
+any kind. The release manifest selects 0.3.1 (versionCode 10), published on
+2026-10-12 as GitHub Release `android-v0.3.1`. The relayium.com download link
+and update feed move to it with a separate website delivery, pending as of
+2026-10-12; until its own recorded public verification, what relayium.com
+actually serves is authoritative and may still be 0.3.0.
 
-### Android 0.3.1 (10) signed artifact and publication preparation
+### Android 0.3.1 (10) publication
 
-Signed and verified on 2026-10-12; publication is not yet verified. The APK
+**Published 2026-10-12T14:12:06Z** as the GitHub pre-release
+[`android-v0.3.1`](https://github.com/relayium/relayium/releases/tag/android-v0.3.1)
+(not marked latest; the repository-wide latest alias stayed on the CLI release
+`v0.27.0`). The tag names metadata commit
+`4bad8c0874eb12571a6439ab456b430bbeddabbf`. An anonymous download of
+`Relayium-0.3.1-10.apk` hashed to the SHA-256 below at 46,037,578 bytes.
+The website delivery that moves the relayium.com download link and the
+`/apps/android/update.json` feed is separate and is recorded when verified;
+the advisory `/api/client-policy/android` keeps serving revision 1 (0.3.0)
+until the next server promotion, which a 0.3.1 install ignores because it is
+not newer.
+
+Signed and verified on 2026-10-12. The APK
 `Relayium-0.3.1-10.apk` was built from clean, pushed source
 `d23ca151c08ebc2e8c8f04224361e58aff5991a8`. Its SHA-256 is
 `adbeb94fca1492a92eadf91f3d8f215ecd5fff917ee61d64a06d40d9c0059520`,
 size 46,037,578 bytes, and signing certificate SHA-256 remains
 `ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`.
-The release tag will name the subsequent metadata commit; the APK's runtime
-inputs remain those of `d23ca151c`, with no binary rebuild or relabelling.
-The canonical manifest, generated `/apps/android/update.json` and advisory
-policy recommendation are prepared for 0.3.1 (10). This is a direct APK
-preview, not a Google Play release.
+The release tag names the subsequent metadata commit `4bad8c087`; the APK's
+runtime inputs remain those of `d23ca151c`, with no binary rebuild or
+relabelling. The canonical manifest, generated `/apps/android/update.json` and
+advisory policy recommendation in that commit name 0.3.1 (10). This is a
+direct APK preview, not a Google Play release.
 
 Against the 0.3.0 source `e96dc9e6c`, Device Inbox recovers a send whose finalize
 answer was lost instead of uploading again. Upload and delivery states are
@@ -38,10 +52,9 @@ the release UI, and a downgrade to 0.3.0 was refused. A single-byte mutation of
 `resources.arsc` failed the real v3 integrity check. These are emulator and
 artifact results; physical-device and real-network acceptance remain pending.
 
-Publish these exact bytes as a GitHub pre-release with `--latest=false`, verify
-the anonymous download hash and the unchanged CLI latest alias, then deliver
-website/update metadata and record the actual state. No publication or live-feed
-claim follows from this preparation.
+The publication followed that order: these exact bytes as a GitHub
+pre-release with `--latest=false`, then the anonymous download hash and the
+unchanged CLI latest alias. No live-feed or website claim follows from it.
 
 ### Provenance of the 0.3.0 release
 

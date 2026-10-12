@@ -67,7 +67,7 @@ Public macOS releases before the 1.4 series are universal (Apple silicon and Int
 from the 1.4 series on, every macOS release on every channel is built for Macs
 with Apple silicon only, on macOS 13 or later.
 A separately versioned Mac App Store release is also public, currently
-[1.4.0](https://apps.apple.com/app/id6801142976). The two channels share the
+[1.4.7](https://apps.apple.com/app/id6801142976). The two channels share the
 app's core transfer capabilities but are released independently, so a version on
 one channel may include changes the other does not have yet. An Android public preview is published as a
 direct APK. There is no Relayium app for iOS or Windows — on those platforms the
@@ -354,7 +354,7 @@ pairing code requires sign-in; joining with that code does not.
 | --- | --- | --- |
 | **Web** | [Live at relayium.com](https://relayium.com/) | LAN and cross-network file/text transfer, encrypted stored links, accounts, and usage controls. |
 | **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
-| **macOS** | [1.4.8 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.4.8) and [1.4.0 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share the core transfer capabilities, are released on their own schedules, and use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
+| **macOS** | [1.4.8 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.4.8) and [1.4.7 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share the core transfer capabilities, are released on their own schedules, and use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
 | **Android** | Direct-APK public preview, from its own `android-v*` GitHub Release | Five screens — Transfer, Nearby, Inbox, Cloud, Account: pairing transfers either direction, nearby devices with no code, Device Inbox receiving with durable history, encrypted stored links, and an account. Foreground only — no background delivery and no resident session. Received files live in app-private storage; exporting elsewhere is explicit. No Google Play listing and no Play Services. |
 | **iPhone, iPad, Windows, Linux** | The web app, plus the CLI on Windows and Linux | Relayium publishes no app for these platforms. The browser is the client and is not a fallback there — it carries the same end-to-end encrypted transfer, with nothing to install. |
 
@@ -371,7 +371,7 @@ the iOS sections of [`apps/README.md`](apps/README.md) describe a build in
 development, not something a reader can install.
 
 **On Android:** `apps/android/` is a native Kotlin/Compose client, at version
-`0.3.0` (versionCode 9), offered as a **public preview** distributed as a direct
+`0.3.1` (versionCode 10), offered as a **public preview** distributed as a direct
 APK — no Google Play listing and no Google Play Services dependency of any kind.
 It has five destinations — Transfer, Nearby, Inbox, Cloud and Account — and none
 of them opens onto a placeholder:

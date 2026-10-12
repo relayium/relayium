@@ -1,9 +1,40 @@
 # iOS App Store and TestFlight submission
 
-## iOS 0.5.1 (12) candidate preparation
+## iOS 0.5.1 (12) — internal TestFlight, 2026-10-12
 
-**Current state, 2026-10-12: source preparation for an internal TestFlight
-candidate. Nothing has been archived, exported, uploaded or configured.** The
+**Current state, read back 2026-10-12T15:53:18Z: `0.5.1 (12)` is `VALID` and
+`IN_BETA_TESTING` in the existing internal TestFlight group only.** Tester
+notification is off and `usesNonExemptEncryption` is `false`. It is not in the
+external group, not selected by any App Store version, and not submitted for
+review; iOS still has no public App Store release.
+
+- **Build and provenance.** App Store Connect build
+  `751dfe57-b6a4-46d7-b6bb-c0ad3b677012`, archived and exported from source
+  `d23ca151c08ebc2e8c8f04224361e58aff5991a8` (`Relayium.ipa`, SHA-256
+  `44dfde1062e51fbde0c5138bb737bb8ed1d0c9429450694e983770d2198efd37`; candidate
+  manifest SHA-256
+  `73010d907af9d325252ae710bc087319eace1bef77d2c0620db6e6be7e266dff`). Apple's
+  validate-only check passed once; a fresh read immediately before the upload
+  found build `11` as the highest; one upload succeeded at 2026-10-12 15:22 UTC.
+  Processing reached `VALID` at about 15:32 UTC.
+- **Configuration.** Exactly five writes, all returned and verified on
+  2026-10-12 from 15:45:23 UTC: export compliance (`usesNonExemptEncryption`
+  `false`), automatic tester notification off, the English (`en-US`) and
+  Simplified Chinese (`zh-Hans`) What to Test text from the
+  `docs/app-store-metadata-ios.json` packet at that source (packet SHA-256
+  `1db9d4a3…`), and adding the build to the existing internal group. Testers
+  are told not to purchase or restore.
+- **Preserved.** An independent 85-request read-back at 15:53:18 UTC found every
+  earlier build row and its beta details, both groups and their testers, and all
+  eight App Store version build selections unchanged. `0.5.0 (11)` stays in the
+  internal and external groups, and the editable `0.5.0` App Store version
+  (`PREPARE_FOR_SUBMISSION`) still selects build `11`. The only other change was
+  Apple's own review progression of the macOS `1.4.7` App Store version.
+- **Still open.** StoreKit sandbox purchase, cancellation and account-switch
+  verification (C03) and physical-device acceptance of `0.5.0 (11)` and
+  `0.5.1 (12)` are pending; no WAN or hands-on result is claimed.
+
+**Source preparation, 2026-10-12.** The
 app and its Share extension declare `0.5.1 (12)` in Debug and Release.
 
 - **Why this number.** The root provider readback of 2026-10-12 found build

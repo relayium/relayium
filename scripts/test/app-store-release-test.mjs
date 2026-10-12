@@ -190,7 +190,7 @@ describe("the release operator's document agrees with the canonical record", () 
   it("states the published version and its publication date as current truth", async () => {
     const text = await flat();
     assert.ok(text.includes(`| Current published version | \`${record.version}\``), "the app-record table must name the published version");
-    assert.ok(text.includes(`**\`${record.version}\` (build \`38\`) is PUBLISHED on the Mac App Store, public since ${record.publishedAt}.**`), "the current-state section must say the version is published, not pending");
+    assert.ok(text.includes(`**\`${record.version}\` (build \`44\`) is PUBLISHED on the Mac App Store, public since ${record.publishedAt}.**`), "the current-state section must say the version is published, not pending");
     assert.ok(text.includes("web/mac-app-store-release.json"), "the document must point at the canonical record rather than restate it");
   });
 

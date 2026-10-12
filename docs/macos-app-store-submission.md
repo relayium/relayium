@@ -1,8 +1,24 @@
 # macOS App Store submission
 
-## macOS 1.4.8 (45) — direct-download candidate, source preparation only
+## macOS 1.4.8 (45) — direct download published 2026-10-12
 
-**Status, 2026-10-12.** All ten `MARKETING_VERSION` and ten
+**Published, 2026-10-12T15:17:00Z.** GitHub Release
+[`macos-v1.4.8`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.8)
+carries the Developer ID-signed, notarized and stapled `Relayium.dmg`,
+SHA-256 `360bb0375924e0571a0f6ca27fd38a0ec1e59680e8d4efbe07b11ef565ec0d79`,
+21,374,278 bytes, built from source
+`4bad8c0874eb12571a6439ab456b430bbeddabbf`; the appcast and client policy
+naming it come from metadata commit
+`8325eca8062537df2ca53b966cc9e96afe982d44`, whose frozen-metadata gate run
+passed before the release. An anonymous download matched the checksum and
+appcast, and the repository-wide latest alias stayed on the CLI release
+`v0.27.0`. The relayium.com Sparkle feed, client policy and download links
+move to `1.4.8` with a separate website delivery, pending as of 2026-10-12;
+until its own recorded public verification, what relayium.com actually serves
+is authoritative, and installed apps may still be offered `1.4.6`. The paragraph below is the
+source-preparation record.
+
+**Status, 2026-10-12 (source preparation).** All ten `MARKETING_VERSION` and ten
 `CURRENT_PROJECT_VERSION` settings read `1.4.8` and `45`; every product target
 stays arm64 only. Nothing has been built, signed, notarized or published for
 `1.4.8`, and no manifest, appcast, client policy, README headline or release
@@ -35,7 +51,17 @@ page names it. Those move only in the post-notarization metadata commit
   expired-code replacement path (start a code, let it expire, press New code,
   join the replacement from a browser).
 
-## macOS 1.4.7 (44) — uploaded; external TestFlight and App Store review submitted, not yet approved
+## macOS 1.4.7 (44) — released on the Mac App Store 2026-10-12
+
+**Released, 2026-10-12.** Apple approved the `1.4.7` App Store version and,
+because its release type is "after approval", released it without a further
+step: a root provider read at 2026-10-12T15:15:26Z found the version `READY_FOR_SALE`
+(`READY_FOR_DISTRIBUTION`) with build `44`
+(`1b6d2103-702d-4585-b11d-a9face6901d9`) still selected, and Apple's public
+lookup for App Apple ID `6801142976` lists version `1.4.7`, released
+2026-10-12T14:47:38Z. No new App Store upload or submission was made for it.
+StoreKit sandbox purchase acceptance (C03) remains pending and is not claimed.
+The paragraphs below are the earlier records.
 
 **Update, 2026-10-12 (root provider readback).** External TestFlight review of
 build `44` reads `BETA_APPROVED`; the `1.4.7` App Store version still reads
@@ -459,7 +485,11 @@ Store Connect from declarations that still require the owner, legal review, or
 an authenticated Apple session.
 
 Nothing in this document authorizes enabling sales, adding an item for review,
-or releasing a version. Relayium uses manual App Store release.
+or releasing a version. The release type is set per App Store version: the
+current `1.4.7` version was "after approval" (App Store Connect
+`AFTER_APPROVAL`, read back unchanged on 2026-10-12), so Apple's approval
+released it; earlier versions recorded below used manual release. This record
+states what each version used and sets no standing policy for the next one.
 
 ## App record
 
@@ -470,8 +500,8 @@ or releasing a version. Relayium uses manual App Store release.
 | Platforms | macOS only |
 | Bundle ID | `com.relayium.mac` |
 | SKU | `relayium-macos` |
-| Current published version | `1.4.0` (build `38`), public since 2026-09-17 — from `web/mac-app-store-release.json` |
-| Release method | Manual |
+| Current published version | `1.4.7` (build `44`), public since 2026-10-12 — from `web/mac-app-store-release.json` |
+| Release method | After approval (`AFTER_APPROVAL`) for the current `1.4.7` version; set per version |
 | Primary category | Utilities |
 | Secondary category | Productivity |
 | Subtitle | End-to-end encrypted transfer |
@@ -480,9 +510,22 @@ or releasing a version. Relayium uses manual App Store release.
 
 ### Current release state
 
-**`1.4.0` (build `38`) is PUBLISHED on the Mac App Store, public since 2026-09-17.**
+**`1.4.7` (build `44`) is PUBLISHED on the Mac App Store, public since 2026-10-12.**
 It is not a pending submission and must not be described as the
-next release. The canonical record is `web/mac-app-store-release.json`
+next release. Evidence, 2026-10-12: a root App Store Connect read at
+15:15:26Z returned App Store version `7c861dca-21f6-4735-aeed-e30f653587a2`,
+`1.4.7`, `READY_FOR_SALE` (`READY_FOR_DISTRIBUTION`), with build
+`1b6d2103-702d-4585-b11d-a9face6901d9` (`44`) selected, the same build
+submitted on 2026-10-09; Apple's public lookup returned version `1.4.7`,
+bundle `com.relayium.mac`, `currentVersionReleaseDate`
+`2026-10-12T14:47:38Z`. That version's release type was "after approval",
+so Apple's approval released it. StoreKit sandbox purchase acceptance (C03)
+is still pending. Build `44` is consumed by it, and build `45` by the
+Developer ID `1.4.8` release, so the next archive of any version needs a
+build number strictly above `45`, read back again before use.
+
+The previous published version, `1.4.0` (build `38`), public since
+2026-09-17, is recorded below for continuity. The canonical record is `web/mac-app-store-release.json`
 (`version`, `publishedAt`, `appleId`, `url`); every other surface that prints
 the App Store version — the root `README.md`, `apps/README.md`, the nine
 `/releases` pages — interpolates or is checked against that file, and
