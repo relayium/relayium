@@ -3,34 +3,45 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The release manifest selects 0.3.0 (versionCode 9).
+any kind. The release manifest selects 0.3.1 (versionCode 10). Publication of those bytes
+is prepared; the last verified public release is still 0.3.0 until the
+publication readback below is added.
 
-### Android 0.3.1 (10) candidate preparation
+### Android 0.3.1 (10) signed artifact and publication preparation
 
-Source preparation only, 2026-10-12: `versionCode = 10`, `versionName =
-"0.3.1"`. No APK has been built or signed for it, and `web/android-release.json`,
-the generated `/apps/android/update.json` and the advisory
-`server/account/android_client_policy.json` still name 0.3.0 (9); they move
-only after the signed bytes exist, together, as the policy test requires.
+Signed and verified on 2026-10-12; publication is not yet verified. The APK
+`Relayium-0.3.1-10.apk` was built from clean, pushed source
+`d23ca151c08ebc2e8c8f04224361e58aff5991a8`. Its SHA-256 is
+`adbeb94fca1492a92eadf91f3d8f215ecd5fff917ee61d64a06d40d9c0059520`,
+size 46,037,578 bytes, and signing certificate SHA-256 remains
+`ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`.
+The release tag will name the subsequent metadata commit; the APK's runtime
+inputs remain those of `d23ca151c`, with no binary rebuild or relabelling.
+The canonical manifest, generated `/apps/android/update.json` and advisory
+policy recommendation are prepared for 0.3.1 (10). This is a direct APK
+preview, not a Google Play release.
 
-Shipping changes against the 0.3.0 source `e96dc9e6c`: a Device Inbox send
-whose finalize answer was lost is recovered from its durable record instead of
-being uploaded again; an unsettled upload is told apart from an unresolved
-delivery in the Inbox, delivery states match the other clients, and Try again
-checks with the server; Outgoing controls carry per-row spoken names; stale
-staging files are swept; and the app reads the advisory client policy to offer
-a recommended update. Debug-only test hooks changed alongside. The Android
-app has no checkout or billing controls (it only displays the plan the server
-computed), and no account, plan or quota display code changed.
-No speed or network-path improvement is claimed; transfers remain
-foreground-only.
+Against the 0.3.0 source `e96dc9e6c`, Device Inbox recovers a send whose finalize
+answer was lost instead of uploading again. Upload and delivery states are
+clearer, Try again checks with the server, Outgoing controls have per-row spoken
+names, stale staging files are swept, and the app reads the advisory policy
+for recommended updates. No checkout, billing, plan or quota display code
+changed. Transfers remain foreground-only; no speed or network-path improvement
+is claimed.
 
-The upgrade must keep the signing certificate
-`ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`, so an
-installed 0.3.0 updates in place. Emulator upgrade from the published 0.3.0
-bytes, signature-tamper rejection and downgrade refusal are the expected
-acceptance; physical-device and real-network acceptance stay pending unless
-performed.
+Actual acceptance: 1,678 protocol/app unit tests, zero skips or failures, lint
+and release build passed. The signed APK was re-observed with the Android SDK;
+all 529 original unsigned ZIP entries remain byte-identical, with only three
+signature entries added. On an isolated API 36 emulator, upgrade from the
+actual published 0.3.0 APK kept an agent-owned data marker, cold launch rendered
+the release UI, and a downgrade to 0.3.0 was refused. A single-byte mutation of
+`resources.arsc` failed the real v3 integrity check. These are emulator and
+artifact results; physical-device and real-network acceptance remain pending.
+
+Publish these exact bytes as a GitHub pre-release with `--latest=false`, verify
+the anonymous download hash and the unchanged CLI latest alias, then deliver
+website/update metadata and record the actual state. No publication or live-feed
+claim follows from this preparation.
 
 ### Provenance of the 0.3.0 release
 
