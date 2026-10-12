@@ -1,6 +1,50 @@
 # iOS App Store and TestFlight submission
 
-## iOS 0.5.0 (11) candidate preparation
+## iOS 0.5.1 (12) candidate preparation
+
+**Current state, 2026-10-12: source preparation for an internal TestFlight
+candidate. Nothing has been archived, exported, uploaded or configured.** The
+app and its Share extension declare `0.5.1 (12)` in Debug and Release.
+
+- **Why this number.** The root provider readback of 2026-10-12 found build
+  `11` (`0.5.0`) `VALID` and `IN_BETA_TESTING` in the internal and the external
+  TestFlight groups, and an App Store version `0.5.0` in
+  `PREPARE_FOR_SUBMISSION` with build `11` selected. `0.5.0 (11)` is therefore
+  consumed; the next candidate takes a new visible version and build `12`. The
+  highest build must be read back again, fresh, immediately before any upload.
+- **Distinct from the `0.5.0` draft.** This candidate is for the existing
+  internal TestFlight group only, tester notification off. It does not change
+  the `0.5.0` App Store version, its build selection, the external group, its
+  testers or any storefront field, and it is not a submission.
+- **What changed since `0.5.0 (11)`** (source `49587fe16` to this candidate):
+  a stored-link upload (`SendView`) reports what it is waiting for and never
+  shows a sent part as stored before the server confirms it; on both stored-link
+  and Device Inbox uploads, a server that keeps answering without advancing is
+  retried a bounded number of times (five non-advancing acknowledgements,
+  0.5–2 s backoff). A stored-link upload then reports a network failure; a
+  Device Inbox send, whose screen gains no status line, ends as a resumable
+  failed upload with everything kept and must not upload twice;
+  Sign in with Apple maps the server's 409 `login_conflict` to its own message
+  and asks for a fresh sign-in instead of retrying a single-use code. Remaining
+  changes in the period are UI tests. No throughput or network-cause repair is
+  claimed, and no purchase, subscription, entitlement or StoreKit path changed.
+- **What to Test.** `docs/app-store-metadata-ios.json` names `0.5.1 (12)`
+  against `(11)`, describes those changes with the new status-line check
+  scoped to stored links only, and carries the `(11)` checks A
+  to F forward because no hands-on result for them has been recorded.
+  `scripts/test/ios-app-store-metadata-validate-test.mjs` holds the text to
+  this round's terms. The storefront fields in the packet are not entered for
+  this candidate.
+- **Still open.** Sandbox purchase, cancellation and account-switch
+  verification is pending, so testers are told not to purchase or restore.
+  Physical-device acceptance of `0.5.0 (11)` and of this candidate has no
+  recorded result. The out-of-space photo staging message is still proven
+  only at model level and rides these notes as a device check.
+
+## iOS 0.5.0 (11) candidate preparation (historical)
+
+**Superseded 2026-10-12** by the `0.5.1 (12)` section above; `0.5.0 (11)` was
+uploaded and is consumed. The text below is the 2026-10-02 record.
 
 **Current state, 2026-10-02: an internal TestFlight candidate, not yet built
 from its final source.** The source already declares `0.5.0 (11)` for the app

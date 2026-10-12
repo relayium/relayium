@@ -135,11 +135,11 @@ function accepts(label, text, extraArgs = []) {
 // ── the baseline ─────────────────────────────────────────────────────────────
 
 accepts("the shipped packet passes", shippedRaw);
-accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.5.0"]);
+accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.5.1"]);
 
 // ── the candidate version and the observed version are different facts ─────
 //
-// The packet is drafted for 0.5.0 while App Store Connect was last read back
+// The packet is drafted for 0.5.1 while App Store Connect was last read back
 // holding 0.3.1, which is in review. The validator lets those two differ, and
 // that permission is exactly what these cases exist to keep narrow: it must not
 // turn into "any mismatch is fine", and it must not let the observation be
@@ -149,22 +149,22 @@ accepts("the shipped packet passes against its own declared version", shippedRaw
   const shipped = clone();
   const observed = shipped.appStoreConnectObservation.records.find((entry) => entry.targetForIosRelease);
   cases += 1;
-  if (shipped.record.marketingVersion !== "0.5.0" || observed?.observedVersion !== "0.3.1") {
+  if (shipped.record.marketingVersion !== "0.5.1" || observed?.observedVersion !== "0.3.1") {
     bad(
-      "the shipped packet drafts 0.5.0 against an observed 0.3.1",
+      "the shipped packet drafts 0.5.1 against an observed 0.3.1",
       `record.marketingVersion is ${shipped.record.marketingVersion}, observedVersion is ${observed?.observedVersion}`,
     );
   } else {
-    ok("the shipped packet drafts 0.5.0 against an observed 0.3.1");
+    ok("the shipped packet drafts 0.5.1 against an observed 0.3.1");
   }
 }
 
 const iosTarget = (p) => p.appStoreConnectObservation.records.find((entry) => entry.targetForIosRelease);
 
 rejects(
-  "an observation rewritten to the candidate version, as though 0.5.0 had been read back",
+  "an observation rewritten to the candidate version, as though 0.5.1 had been read back",
   (p) => {
-    iosTarget(p).observedVersion = "0.5.0";
+    iosTarget(p).observedVersion = "0.5.1";
   },
   "never to match the candidate",
 );
@@ -202,29 +202,29 @@ rejects(
   (p) => {
     p.record.marketingVersion = "0.3.1";
   },
-  "not the '0.5.0' this packet was written for",
+  "not the '0.5.1' this packet was written for",
 );
 
 rejects(
   "an observation note claiming the candidate version was observed",
   (p) => {
     const field = p.appStoreConnectObservation.observedFields.find((entry) => entry.id === "version");
-    field.observed = `${field.observed} On a later reading the record showed 0.5.0 selected for review.`;
+    field.observed = `${field.observed} On a later reading the record showed 0.5.1 selected for review.`;
   },
-  "no read-back of '0.5.0' exists",
+  "no read-back of '0.5.1' exists",
 );
 
 rejects(
   "an observed record note naming the candidate version",
   (p) => {
-    iosTarget(p).note = `${iosTarget(p).note} It now reads 0.5.0.`;
+    iosTarget(p).note = `${iosTarget(p).note} It now reads 0.5.1.`;
   },
-  "no read-back of '0.5.0' exists",
+  "no read-back of '0.5.1' exists",
 );
 
 // The guard names WHOLE versions. A different version that merely contains the
 // candidate's digits is not a claim about the candidate, and refusing it would
-// make the guard noise that somebody eventually deletes. (`0.5.00` would be the
+// make the guard noise that somebody eventually deletes. (`0.5.10` would be the
 // sharper probe, but the packet's decimal-price rule refuses it on its own.)
 cases += 1;
 {
@@ -242,9 +242,9 @@ cases += 1;
 rejects(
   "TestFlight text left describing the previous version",
   (p) => {
-    p.testFlight.betaAppDescription["en-US"] = p.testFlight.betaAppDescription["en-US"].replace("the 0.5.0 line", "the 0.3.1 line");
+    p.testFlight.betaAppDescription["en-US"] = p.testFlight.betaAppDescription["en-US"].replace("the 0.5.1 line", "the 0.3.1 line");
   },
-  "names version '0.3.1', but this packet is drafted for '0.5.0'",
+  "names version '0.3.1', but this packet is drafted for '0.5.1'",
 );
 
 rejects(
@@ -252,7 +252,7 @@ rejects(
   (p) => {
     p.testFlight.whatToTest["zh-Hans"] = `${p.testFlight.whatToTest["zh-Hans"]}\n9. 与 0.3.1 对照。`;
   },
-  "names version '0.3.1', but this packet is drafted for '0.5.0'",
+  "names version '0.3.1', but this packet is drafted for '0.5.1'",
 );
 
 rejects(
@@ -642,16 +642,16 @@ rejects(
 rejects(
   "a marketing version the packet was not drafted for",
   (p) => {
-    p.record.marketingVersion = "0.5.1";
+    p.record.marketingVersion = "0.5.2";
   },
-  "not the '0.5.0' this packet was written for",
+  "not the '0.5.1' this packet was written for",
 );
 
 cases += 1;
 assertRejected(
   "a candidate whose version disagrees with the packet",
-  runOn(shippedRaw, ["--expect-version", "0.5.1"]),
-  "this run was told the candidate is '0.5.1'",
+  runOn(shippedRaw, ["--expect-version", "0.5.2"]),
+  "this run was told the candidate is '0.5.2'",
 );
 
 // ── URLs ─────────────────────────────────────────────────────────────────────
@@ -1098,7 +1098,7 @@ rejects(
   "the English What to Test losing the signed-out join check",
   (p) => {
     p.testFlight.whatToTest["en-US"] = p.testFlight.whatToTest["en-US"].replace(
-      "Signed out, joining a code somebody else is showing works, and showing a code does not; signed in, showing a code works. ",
+      "Signed out, joining a code somebody else is showing works, and showing a code does not; signed in, showing a code works.",
       "",
     );
   },
@@ -1329,9 +1329,9 @@ accepts(
 rejects(
   "the observed version drifting from the version this packet is drafted for",
   (p) => {
-    p.appStoreConnectObservation.records[0].observedVersion = "0.5.0";
+    p.appStoreConnectObservation.records[0].observedVersion = "0.5.1";
   },
-  "reports the target's version as '0.5.0', but it was read back as '0.3.1'",
+  "reports the target's version as '0.5.1', but it was read back as '0.3.1'",
 );
 
 rejects(
@@ -2680,7 +2680,7 @@ manifestRejects(
   "declares no NSPrivacyCollectedDataTypes",
 );
 
-// ── the What to Test contract for the 0.5.0 (11) internal round ──────────────
+// ── the What to Test contract for the 0.5.1 (12) internal round ──────────────
 //
 // The validator holds the What to Test text to Apple's limits, to the pinned
 // account and two-device disclosures, to one version and to no background or
@@ -2697,8 +2697,14 @@ manifestRejects(
 // validator is deliberately not changed by this; when the round's terms change,
 // this section changes with them.
 //
+// 0.5.1 (12) changed them: it names (11) as the previous build, describes the
+// upload activity/acknowledgement bound and the Sign in with Apple conflict,
+// and carries the (11) checks A to F forward because no hands-on result for
+// them has been recorded. The (11) list of changes, including the discard
+// clean-up line, is no longer the round's "new" paragraph.
+//
 //   internal-only     the text says this round is internal testing only;
-//   identity          it names 0.5.0 (11) and calls the previous build (10);
+//   identity          it names 0.5.1 (12) and calls the previous build (11);
 //   c03-pending       it says sandbox purchase/cancellation verification is
 //                     still pending;
 //   no-purchase       it tells testers not to purchase and not to restore;
@@ -2708,14 +2714,29 @@ manifestRejects(
 //   network-optional  every instruction to change networks says it is optional;
 //   wan-truth         a same-Wi-Fi Cross-network pairing is said NOT to prove a
 //                     cross-network path, and a different network is named;
-//   lost-finalize, tracking, local-copy, link-salvage, conflict, discard-cleanup
-//                     one tester-observable statement for each native change
-//                     since the draft: an interrupted Device Inbox send is never
-//                     uploaded again and an unconfirmed one says so; a delivery
-//                     is still followed after the sender relaunches; a copied
-//                     stored link stays on the device and expires; a link listed
-//                     after an interrupted finish opens; a send found in two
-//                     places deletes nothing; discarding a send cleans up.
+//   lost-finalize, tracking, local-copy, link-salvage, conflict
+//                     one tester-observable statement for each (11) change that
+//                     still awaits a hands-on result: an interrupted Device
+//                     Inbox send is never uploaded again and an unconfirmed one
+//                     says so; a delivery is still followed after the sender
+//                     relaunches; a copied stored link stays on the device and
+//                     expires; a link listed after an interrupted finish opens;
+//                     a send found in two places deletes nothing;
+//   carried-forward   the A to F checks are said to still await results;
+//   ack-bound, login-conflict
+//                     one statement each for the two changes since (11): a sent
+//                     part is not shown as stored until the server confirms it
+//                     and a server that keeps not confirming ends in a reported
+//                     failure; a Sign in with Apple conflict leaves the tester
+//                     signed out and asks for a fresh sign-in.
+//   status-line-scope the NEW status line is checked on stored links, and no
+//                     line that asks for it names Device Inbox: only
+//                     `SendView` composes `UploadPresentation.activityText`;
+//                     the Inbox send path shares the bounded retry but passes
+//                     no activity handler and its screen is unchanged;
+//   inbox-bound       Device Inbox sends are still said to get the same
+//                     bounded retry and to end in a failed upload that can be
+//                     tried again.
 //
 // The test-harness-only changes of the same period are compiled out of Release
 // builds and are deliberately NOT described to testers.
@@ -2730,8 +2751,10 @@ const NOTES_CONTRACT = {
     storekit: /StoreKit/i,
     whole: [
       ["internal-only", /\binternal (?:testing|testers?) only\b/i],
-      ["identity", /\b0\.5\.0 \(11\)/],
-      ["identity", /\(10\)/],
+      ["identity", /\b0\.5\.1 \(12\)/],
+      // Anchored to "previous build": (11) is also named by the carried-forward
+      // checks, so a bare "(11)" would survive deleting the comparison.
+      ["identity", /\bprevious build \(11\)/],
       ["no-purchase", /\b(?:do not|don't|never)\b[^.]*\b(?:purchase|buy)\b/i],
       ["no-purchase", /\b(?:do not|don't|never|nor)\b[^.]*\brestor(?:e|ing) purchases?\b/i],
       ["wan-truth", /\bdifferent network\b/i],
@@ -2748,8 +2771,17 @@ const NOTES_CONTRACT = {
       ["local-copy", [/\bUniversal Clipboard\b/, /\b(?:not|never)\b/i]],
       ["link-salvage", [/\bstored[- ]link\b/i, /\b(?:closed|force-quit|quit)\b/i, /\bmust open\b/i]],
       ["conflict", [/\btwo places\b/i, /\bnothing (?:was|has been|is) deleted\b/i]],
-      ["discard-cleanup", [/\bclean-?up\b/i, /\bdiscard/i]],
+      ["carried-forward", [/\bA to F\b/, /\bawait|\bstill need/i, /\(11\)/]],
+      ["ack-bound", [/\bnot shown as stored\b/i, /\bserver confirms\b/i]],
+      ["ack-bound", [/\bkeeps not confirming\b/i, /\bnetwork failure\b/i]],
+      ["login-conflict", [/\bSign in with Apple\b/, /\baccount changed\b/i, /\bnot signed in\b/i]],
+      ["inbox-bound", [/\bDevice Inbox\b/, /\bsame bounded retry\b/i, /\btry again\b/i]],
     ],
+    // Line-level: a step is one line, and the old wrong step put the surfaces
+    // in one sentence and the status line in the next.
+    statusLine: /\bstatus line\b/i,
+    statusLineSurface: /\bstored[- ]link\b/i,
+    inbox: /\bDevice Inbox\b/,
     cellular: /cellular/i,
     optional: /\b(?:optional|not required|not needed|no need)\b/i,
     networkChange: /\b(?:switch|switching|change|changing)\b[^.]*\bnetworks?\b/i,
@@ -2763,8 +2795,8 @@ const NOTES_CONTRACT = {
     storekit: /StoreKit/i,
     whole: [
       ["internal-only", /仅(?:供|限)内部测试/],
-      ["identity", /0\.5\.0 \(11\)/],
-      ["identity", /\(10\)/],
+      ["identity", /0\.5\.1 \(12\)/],
+      ["identity", /上一构建 \(11\)/],
       ["no-purchase", /(?:请勿|不要|勿)[^。]*购买/],
       ["no-purchase", /(?:请勿|不要|勿)[^。]*恢复购买/],
       ["wan-truth", /不同的网络/],
@@ -2781,8 +2813,15 @@ const NOTES_CONTRACT = {
       ["local-copy", [/通用剪贴板/, /不得|不会|不能/]],
       ["link-salvage", [/存储链接/, /关闭|强制退出/, /必须能打开/]],
       ["conflict", [/两个位置/, /没有删除/]],
-      ["discard-cleanup", [/丢弃/, /清理/]],
+      ["carried-forward", [/A 至 F/, /仍需要|尚待/, /\(11\)/]],
+      ["ack-bound", [/确认之前/, /已存储/]],
+      ["ack-bound", [/一直不确认/, /网络失败/]],
+      ["login-conflict", [/Apple 登录/, /账户已?发生变化/, /并未登录/]],
+      ["inbox-bound", [/设备收件箱/, /同样的有限重试/, /可重试/]],
     ],
+    statusLine: /进度条下方的说明/,
+    statusLineSurface: /存储链接/,
+    inbox: /设备收件箱/,
     cellular: /蜂窝/,
     optional: /可选|不需要|无需|不必/,
     networkChange: /切换网络|更换网络|网络切换/,
@@ -2804,6 +2843,9 @@ function notesContractFindings(packet) {
       const body = clause.replace(rules.lead, "");
       if (rules.instructs.test(body) && rules.money.test(body)) add("purchase-step");
     }
+    const statusLines = text.split("\n").filter((line) => rules.statusLine.test(line));
+    if (!statusLines.some((line) => rules.statusLineSurface.test(line))) add("status-line-scope");
+    if (statusLines.some((line) => rules.inbox.test(line))) add("status-line-scope");
     for (const s of sentences) {
       if (rules.cellular.test(s) && !rules.optional.test(s)) add("cellular-optional");
       if (rules.networkChange.test(s) && !rules.optional.test(s)) add("network-optional");
@@ -2869,7 +2911,7 @@ contractRejects(
 contractRejects(
   "the English text claiming purchase verification is done",
   "en-US",
-  (t) => replaceOnce(t, "but sandbox purchase and cancellation verification is still pending", "and sandbox purchase and cancellation have been verified"),
+  (t) => replaceOnce(t, "Sandbox purchase and cancellation verification is still pending", "Sandbox purchase and cancellation have been verified"),
   "c03-pending",
 );
 contractRejects(
@@ -2893,7 +2935,7 @@ contractRejects(
 contractRejects(
   "the Chinese text claiming purchase acceptance is complete",
   "zh-Hans",
-  (t) => replaceOnce(t, "但沙盒购买与取消的验收尚未完成", "沙盒购买与取消的验收已经通过"),
+  (t) => replaceOnce(t, "沙盒购买与取消的验收尚未完成", "沙盒购买与取消的验收已经通过"),
   "c03-pending",
 );
 contractRejects(
@@ -2956,9 +2998,15 @@ contractRejects(
   "internal-only",
 );
 contractRejects(
-  "the previous build no longer named as (10)",
+  "the previous build no longer named as (11)",
   "en-US",
-  (t) => replaceOnce(t, "compared with the previous build (10)", "compared with the previous build"),
+  (t) => replaceOnce(t, "compared with the previous build (11)", "compared with the previous build"),
+  "identity",
+);
+contractRejects(
+  "the Chinese previous build no longer named as (11)",
+  "zh-Hans",
+  (t) => replaceOnce(t, "对比上一构建 (11)，", ""),
   "identity",
 );
 
@@ -3012,16 +3060,67 @@ contractRejects(
   "conflict",
 );
 contractRejects(
-  "the discard clean-up no longer mentioned",
+  "the A to F checks no longer said to await results",
   "en-US",
-  (t) => replaceOnce(t, " stricter clean-up when a send is discarded,", ""),
-  "discard-cleanup",
+  (t) => replaceOnce(t, "A to F still await hands-on results from (11):\n", ""),
+  "carried-forward",
 );
 contractRejects(
-  "the Chinese discard clean-up no longer mentioned",
+  "the Chinese A to F checks no longer said to await results",
   "zh-Hans",
-  (t) => replaceOnce(t, "丢弃发送时的清理更严格；", ""),
-  "discard-cleanup",
+  (t) => replaceOnce(t, "以下 A 至 F 项沿用 (11)，仍需要实际测试结果：\n", ""),
+  "carried-forward",
+);
+// The R1 defect itself: the first 0.5.1 draft asked for the new status line on
+// both upload paths. Restoring that exact step must fail for the scope rule.
+contractRejects(
+  "the new status line asked of Device Inbox uploads too (first 0.5.1 draft)",
+  "en-US",
+  (t) => replaceOnce(t, "G. Upload a large file as a stored link. The status line",
+    "G. Upload a large file as a stored link and through Device Inbox. The status line"),
+  "status-line-scope",
+);
+contractRejects(
+  "the Chinese status-line step widened to Device Inbox again",
+  "zh-Hans",
+  (t) => replaceOnce(t, "G. 以存储链接上传大文件。", "G. 以存储链接和设备收件箱两种方式上传大文件。"),
+  "status-line-scope",
+);
+contractRejects(
+  "the Device Inbox bounded retry no longer described",
+  "en-US",
+  (t) => replaceOnce(t, "Device Inbox sends get the same bounded retry, screen unchanged, then a failed upload you can try again; nothing is lost. ", ""),
+  "inbox-bound",
+);
+contractRejects(
+  "a sent part claimed stored before the server confirms it",
+  "en-US",
+  (t) => replaceOnce(t, "a sent part is not shown as stored until the server confirms it", "a sent part is shown as stored at once"),
+  "ack-bound",
+);
+contractRejects(
+  "the bounded retry no longer said to end in a reported failure",
+  "en-US",
+  (t) => replaceOnce(t, "a stored-link upload retries a few times, then reports a network failure", "a stored-link upload keeps waiting"),
+  "ack-bound",
+);
+contractRejects(
+  "the Chinese bounded retry made unbounded",
+  "zh-Hans",
+  (t) => replaceOnce(t, "存储链接上传会重试几次，然后报告网络失败，而不是无限等待", "存储链接上传会一直等待"),
+  "ack-bound",
+);
+contractRejects(
+  "a sign-in conflict described as signing the tester in",
+  "en-US",
+  (t) => replaceOnce(t, "you were not signed in; sign in again", "you are signed in anyway; continue"),
+  "login-conflict",
+);
+contractRejects(
+  "the Chinese sign-in conflict check dropped",
+  "zh-Hans",
+  (t) => replaceOnce(t, "H. 若通过 Apple 登录时提示账户已发生变化，说明并未登录；请重新登录并反馈。\n", ""),
+  "login-conflict",
 );
 
 contractRejects(
@@ -3048,9 +3147,9 @@ for (const locale of ["en-US", "zh-Hans"]) {
 rejects(
   "the English What to Test naming the previous build by its version",
   (p) => {
-    p.testFlight.whatToTest["en-US"] = p.testFlight.whatToTest["en-US"].replace("the previous build (10)", "the previous build 0.4.1 (10)");
+    p.testFlight.whatToTest["en-US"] = p.testFlight.whatToTest["en-US"].replace("the previous build (11)", "the previous build 0.5.0 (11)");
   },
-  "testFlight.whatToTest.en-US: names version '0.4.1'",
+  "testFlight.whatToTest.en-US: names version '0.5.0'",
 );
 
 rejects(

@@ -41,8 +41,12 @@ android {
         // `scripts/test/android-policy-test.mjs` asserts the two move together.
         // 0.3.0 (9) candidate: verification hold, help, account management,
         // share fixes and transfer/renewal hardening. Public feed stays 0.2.5.
-        versionCode = 9
-        versionName = "0.3.0"
+        // 0.3.1 (10) candidate: Device Inbox send recovery after a lost
+        // finalize answer, clearer delivery states and retry, per-row spoken
+        // names, stale staging cleanup and the advisory client policy. The
+        // public feed stays 0.3.0 (9) until this APK is published.
+        versionCode = 10
+        versionName = "0.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

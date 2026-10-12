@@ -5,6 +5,33 @@ applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
 any kind. The release manifest selects 0.3.0 (versionCode 9).
 
+### Android 0.3.1 (10) candidate preparation
+
+Source preparation only, 2026-10-12: `versionCode = 10`, `versionName =
+"0.3.1"`. No APK has been built or signed for it, and `web/android-release.json`,
+the generated `/apps/android/update.json` and the advisory
+`server/account/android_client_policy.json` still name 0.3.0 (9); they move
+only after the signed bytes exist, together, as the policy test requires.
+
+Shipping changes against the 0.3.0 source `e96dc9e6c`: a Device Inbox send
+whose finalize answer was lost is recovered from its durable record instead of
+being uploaded again; an unsettled upload is told apart from an unresolved
+delivery in the Inbox, delivery states match the other clients, and Try again
+checks with the server; Outgoing controls carry per-row spoken names; stale
+staging files are swept; and the app reads the advisory client policy to offer
+a recommended update. Debug-only test hooks changed alongside. The Android
+app has no checkout or billing controls (it only displays the plan the server
+computed), and no account, plan or quota display code changed.
+No speed or network-path improvement is claimed; transfers remain
+foreground-only.
+
+The upgrade must keep the signing certificate
+`ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`, so an
+installed 0.3.0 updates in place. Emulator upgrade from the published 0.3.0
+bytes, signature-tamper rejection and downgrade refusal are the expected
+acceptance; physical-device and real-network acceptance stay pending unless
+performed.
+
 ### Provenance of the 0.3.0 release
 
 The signed candidate `Relayium-0.3.0-9.apk` was built from

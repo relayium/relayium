@@ -69,8 +69,15 @@ final class BundleVersionTests: XCTestCase {
         // 2026-10-05 readback that found 1.4.5 (42) consumed in both
         // channels.) This assertion does not advance either channel's
         // published version.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.7", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "44", occurrences: 10)
+        //
+        // 1.4.7 (44) is consumed too: App Store Connect reads build 44 VALID,
+        // in TestFlight and selected by the 1.4.7 App Store version awaiting
+        // review (root provider readback 2026-10-12), while the direct channel
+        // still publishes 1.4.6. The next candidate is 1.4.8 (45), prepared
+        // for the direct channel; it leaves the 1.4.7 review selection as it
+        // is and is not an App Store upload.
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.8", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "45", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon
@@ -140,7 +147,12 @@ final class BundleVersionTests: XCTestCase {
         // Fresh provider readback on 2026-09-26 confirms 0.4.1 (10) VALID.
         // New user workflows take 0.5.0 (11), independent of the Mac sequence.
         // This is source preparation, not an upload or a public release.
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.0", occurrences: 4)
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "11", occurrences: 4)
+        //
+        // 0.5.0 (11) is consumed: VALID in TestFlight and selected by the
+        // 0.5.0 App Store version still in PREPARE_FOR_SUBMISSION (root
+        // provider readback 2026-10-12). The next internal candidate takes a
+        // new visible version, 0.5.1 (12); it does not touch that draft.
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.1", occurrences: 4)
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "12", occurrences: 4)
     }
 }

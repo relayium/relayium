@@ -1,6 +1,45 @@
 # macOS App Store submission
 
+## macOS 1.4.8 (45) — direct-download candidate, source preparation only
+
+**Status, 2026-10-12.** All ten `MARKETING_VERSION` and ten
+`CURRENT_PROJECT_VERSION` settings read `1.4.8` and `45`; every product target
+stays arm64 only. Nothing has been built, signed, notarized or published for
+`1.4.8`, and no manifest, appcast, client policy, README headline or release
+page names it. Those move only in the post-notarization metadata commit
+(`web/scripts/macos-release-candidate.mjs`), from the stapled bytes.
+
+- **Channel.** Developer ID direct download (GitHub Release and Sparkle) only.
+  This candidate is not uploaded to App Store Connect, and it does not change
+  the `1.4.7` App Store version, its build selection or either TestFlight
+  group.
+- **Why this number.** The root provider readback of 2026-10-12 found build
+  `1.4.7 (44)` `VALID`, in internal testing (`IN_BETA_TESTING`) and approved
+  for external testing (`BETA_APPROVED`), and the `1.4.7` App Store version
+  `WAITING_FOR_REVIEW` with build `44` selected. The latest GitHub macOS
+  release is still `macos-v1.4.6` (`1.4.6 (43)`). `1.4.7` and `44` are
+  consumed, so the next candidate is the patch increment `1.4.8 (45)`. The
+  direct channel moves from `1.4.6 (43)` to `1.4.8 (45)`; it never published
+  `1.4.7`.
+- **What ships against the direct `1.4.6` source `97fd70806`.** The upload
+  acknowledgement bound and waiting/retry status lines described under
+  `1.4.7 (44)` below (built there from `5c308432d`), plus two changes after
+  `1.4.7 (44)`: Sign in with Apple maps the server's 409 `login_conflict` to
+  its own message and asks for a fresh sign-in, and the upload status line has
+  a stable accessibility identifier. The other changes in the period are UI
+  tests and Debug-only test seams. No StoreKit, subscription, entitlement or
+  payment source changed. No throughput or network-cause repair is claimed.
+- **Still open.** Hands-on and accessibility QA of the upload status text, a
+  real-network upload on the shipped build, and the carried-forward signed
+  two-machine cross-network pairing followed by a Device Inbox send, plus the
+  expired-code replacement path (start a code, let it expire, press New code,
+  join the replacement from a browser).
+
 ## macOS 1.4.7 (44) — uploaded; external TestFlight and App Store review submitted, not yet approved
+
+**Update, 2026-10-12 (root provider readback).** External TestFlight review of
+build `44` reads `BETA_APPROVED`; the `1.4.7` App Store version still reads
+`WAITING_FOR_REVIEW`. The status paragraph below is the 2026-10-09 record.
 
 **Status, 2026-10-09.** Build `1.4.7 (44)` was uploaded to App Store Connect
 once and is in two review queues. Apple has approved neither, and nothing about
