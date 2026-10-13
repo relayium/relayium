@@ -71,11 +71,16 @@ func TestRunUpHappyPath(t *testing.T) {
 	if strings.Count(out.String(), "\n") != 1 {
 		t.Fatalf("stdout must contain only the composable link, got %q", out.String())
 	}
-	wantHint := "relayium down '" + link + "'"
-	if !strings.Contains(errOut.String(), wantHint) {
-		t.Fatalf("want exact download command %q, got stderr %q", wantHint, errOut.String())
+	// The key is printed exactly once, on stdout. The stderr hint names the
+	// stdin form of `down` and never repeats the link or its fragment: stderr is
+	// what lands in logs and pasted reports.
+	if !strings.Contains(errOut.String(), "relayium down -") {
+		t.Fatalf("hint should name the stdin form `relayium down -`, got stderr %q", errOut.String())
+	}
+	if frag := link[strings.Index(link, "#k=")+3:]; frag == "" || strings.Contains(errOut.String(), frag) || strings.Contains(errOut.String(), "#k=") {
+		t.Fatalf("stderr must not carry the link's key, got %q", errOut.String())
 	}
 	if strings.Contains(errOut.String(), "<link>") {
-		t.Fatalf("hint left a placeholder for a value already known: %q", errOut.String())
+		t.Fatalf("hint left a placeholder: %q", errOut.String())
 	}
 }

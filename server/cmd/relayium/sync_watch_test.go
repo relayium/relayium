@@ -133,9 +133,9 @@ func TestSyncHelpDescribesWatchRetryTruthfully(t *testing.T) {
 	}
 }
 
-// The sync callback is not context-aware: Ctrl-C cannot interrupt a transfer
-// that is already running. The help has to say where the boundary is instead of
-// implying the command stops the moment it is pressed.
+// A stop does not end a running transfer the moment it is pressed: it gets a
+// bounded drain first. The help has to say where that boundary is instead of
+// implying an immediate stop (or, as before this repair, no stop at all).
 func TestSyncHelpDescribesCtrlCBoundary(t *testing.T) {
 	var o, e bytes.Buffer
 	if rc := Run([]string{"sync", "-h"}, &o, &e); rc != 0 {
@@ -149,10 +149,14 @@ func TestSyncHelpDescribesCtrlCBoundary(t *testing.T) {
 	}
 	// The claim has to sit with the Ctrl-C sentence, not somewhere else.
 	claim := got[idx:min(idx+400, len(got))]
+	// The contract (cli-repair 20261013): a stop starts no new attempt, gives
+	// the transfer in flight a BOUNDED drain, then aborts it -- and says what
+	// an abort leaves on the receiver.
 	for _, want := range []string{
-		"no further attempt",                       // what it does stop
-		"once the attempt already running returns", // and what it waits for
-		"not cut off mid-transfer",                 // stated plainly
+		"no further attempt",        // what it does stop
+		"30 seconds to finish",      // the bounded wait
+		"aborted",                   // what happens after it
+		"keeps only verified files", // what an abort leaves behind
 	} {
 		if !strings.Contains(claim, want) {
 			t.Errorf("the Ctrl-C paragraph omits %q:\n%s", want, claim)

@@ -12,6 +12,18 @@ type SendOpts struct {
 	Progress func(path string, sent, total int64)
 	Sync     bool // sync mode: set Hello.Sync and honor the receiver's Skip
 	Delete   bool // mirror: set Hello.Delete
+	// ContentCheck (sync only) puts each source file's SHA-256 in the manifest
+	// and asks the receiver to skip and install by content (see content_check.go).
+	// It costs one extra read of every source file before anything is sent.
+	ContentCheck bool
+	// RequireContentCheck makes a receiver that does not confirm content
+	// checking a failure (ErrContentCheckUnsupported) before any file body is
+	// sent, instead of a Report.ContentCheckUnconfirmed warning.
+	RequireContentCheck bool
+	// RequireDeleteReport (with Delete) makes a receiver that cannot report a
+	// refused or partial delete a failure (ErrDeleteReportUnsupported) before
+	// any file body is sent. Only a content-checking receiver reports it.
+	RequireDeleteReport bool
 }
 
 type Report struct {
@@ -26,12 +38,47 @@ type Report struct {
 	// and then failed. Both are receiver-local and not carried on the wire.
 	DeleteRefusedReason string
 	DeletePartial       string
+	// ContentChecked is set on the sending side when the receiver confirmed a
+	// content-checked sync: its skips compared digests, and every installed file
+	// matched the manifest digest. ContentCheckUnconfirmed is set when content
+	// checking was requested and the receiver (an older relayium) did not
+	// confirm it: its skips used size and modification time only.
+	ContentChecked          bool
+	ContentCheckUnconfirmed bool
+	// DeleteRefused / DeletePartialRemote are what a content-checking receiver
+	// reported about a permitted delete (sending side). DeleteOutcomeUnknown is
+	// set when --delete was requested and the receiver cannot report refused or
+	// partial deletes (it predates that report).
+	DeleteRefused        bool
+	DeletePartialRemote  bool
+	DeleteOutcomeUnknown bool
 }
 
 // Send transmits the manifest's files over rw (a duplex stream, typically the
 // SSH stdio pipe). srcs[i] is the local path for m.Files[i].
 func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, error) {
-	if err := WriteJSON(rw, MsgHello, Hello{Version: WireVersion, Mode: "push", Sync: opts.Sync, Delete: opts.Delete, ResumeProof: true}); err != nil {
+	contentCheck := opts.Sync && (opts.ContentCheck || opts.RequireContentCheck || (opts.Delete && opts.RequireDeleteReport))
+	if contentCheck && !hasAllDigests(m) {
+		// Digests are computed before the first frame, so a source that cannot
+		// be read fails here with nothing sent.
+		dm, err := withContentDigests(m, srcs)
+		if err != nil {
+			return Report{}, err
+		}
+		m = dm
+	}
+	// A strict request must not reach a receiver that cannot honour it: an
+	// older receiver that needs no file at all runs its delete step before the
+	// sender could refuse. So the capability is asked first, with a question
+	// that deletes and writes nothing (see Hello.Preflight), and the real
+	// request -- with its Delete -- is sent only after the answer.
+	strict := opts.Sync && (opts.RequireContentCheck || (opts.Delete && opts.RequireDeleteReport))
+	if strict {
+		if err := preflight(rw, opts); err != nil {
+			return Report{}, err
+		}
+	}
+	if err := WriteJSON(rw, MsgHello, Hello{Version: WireVersion, Mode: "push", Sync: opts.Sync, Delete: opts.Delete, ResumeProof: true, ContentCheck: contentCheck}); err != nil {
 		return Report{}, err
 	}
 	if err := WriteJSON(rw, MsgManifest, m); err != nil {
@@ -57,6 +104,21 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 	}
 
 	var rep Report
+	if contentCheck {
+		if rs.ContentCheck {
+			rep.ContentChecked = true
+		} else {
+			// The receiver ignored the request: it is older, and its Skip list was
+			// decided by size and mtime. Never treat the missing echo as support.
+			if opts.RequireContentCheck {
+				return Report{}, ErrContentCheckUnsupported
+			}
+			if opts.Delete && opts.RequireDeleteReport {
+				return Report{}, ErrDeleteReportUnsupported
+			}
+			rep.ContentCheckUnconfirmed = true
+		}
+	}
 	for i, f := range m.Files {
 		if skip[i] {
 			rep.Skipped++
@@ -76,6 +138,14 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 	}
 	rep.Failed = res.Failed
 	rep.DeleteDenied = res.DeleteDenied
+	if opts.Delete {
+		if contentCheck && rs.ContentCheck {
+			rep.DeleteRefused = res.DeleteRefused
+			rep.DeletePartialRemote = res.DeletePartial
+		} else if !res.DeleteDenied {
+			rep.DeleteOutcomeUnknown = true
+		}
+	}
 	return rep, nil
 }
 
@@ -155,4 +225,26 @@ func sendFile(rw io.ReadWriter, i int, f FileEntry, src string, offset int64, pr
 		return fmt.Errorf("%s: size changed during send (%d != %d)", f.Path, sent, f.Size)
 	}
 	return WriteJSON(rw, MsgFileHash, FileHash{Index: i, SHA256: hex.EncodeToString(h.Sum(nil))})
+}
+
+// preflight asks the receiver whether it supports content checking and delete
+// reporting, without asking it to do anything. Only an explicit echo counts.
+func preflight(rw io.ReadWriter, opts SendOpts) error {
+	if err := WriteJSON(rw, MsgHello, Hello{Version: WireVersion, Mode: "push", Sync: true, ResumeProof: true, ContentCheck: true, Preflight: true}); err != nil {
+		return err
+	}
+	if err := WriteJSON(rw, MsgManifest, Manifest{}); err != nil {
+		return err
+	}
+	var rs ResumeState
+	if err := readExpect(rw, &rs); err != nil {
+		return err
+	}
+	if rs.Preflight && rs.ContentCheck && (rs.DeleteReport || !(opts.Delete && opts.RequireDeleteReport)) {
+		return nil
+	}
+	if opts.RequireContentCheck && !rs.ContentCheck {
+		return ErrContentCheckUnsupported
+	}
+	return ErrDeleteReportUnsupported
 }

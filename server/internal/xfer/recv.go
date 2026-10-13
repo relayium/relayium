@@ -122,6 +122,19 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 			errors.New("this receiver does not accept sync: it never replaces files that are already here"))
 	}
 	sync := hello.Sync && opts.AllowSync
+	// Content checking is a sync feature. The sender's announcement is honoured
+	// only together with an authorized sync, and only with a digest on every
+	// entry: a content-checked manifest without one is malformed, and guessing
+	// would turn the check back into the size+mtime rule it replaces.
+	contentCheck := sync && hello.ContentCheck
+	if contentCheck {
+		if err := checkManifestDigests(m); err != nil {
+			return Report{}, refuse(rw, ErrCodeProtocol, err)
+		}
+	}
+	if hello.Preflight {
+		return receivePreflight(rw, hello, m, sync, destDir, opts)
+	}
 
 	// A one-shot receive must never silently replace files already owned by the
 	// user. `sync` is the explicit overwrite/mirror operation; ordinary push
@@ -156,9 +169,18 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 	}
 
 	rs := ResumeState{}
-	if sync && !opts.NoResume {
+	switch {
+	case contentCheck:
+		// Skip is decided by content even with --no-resume: skipping a file
+		// that is already identical is not resuming one. Resume offers are
+		// withheld as before.
+		rs = contentSyncStateFor(destDir, m)
+		if opts.NoResume {
+			rs.Entries = nil
+		}
+	case sync && !opts.NoResume:
 		rs = syncStateFor(destDir, m)
-	} else if !opts.NoResume {
+	case !opts.NoResume:
 		rs = resumeStateFor(destDir, m)
 	}
 	// An offset merges bytes already on this disk into the result, so it is only
@@ -232,7 +254,11 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 				offset = 0
 			}
 		}
-		ok, err := receiveOneFile(rw, destDir, dest, f, offset, sync, opts.Progress)
+		want := ""
+		if contentCheck {
+			want = f.SHA256
+		}
+		ok, err := receiveOneFileChecked(rw, destDir, dest, f, offset, sync, want, opts.Progress)
 		if err != nil {
 			return rep, err
 		}
@@ -276,9 +302,40 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 	// Surface a denied delete to the sender too (spec §8 "both ends"), not
 	// just the receiver's local Report.
 	res.DeleteDenied = hello.Delete && !opts.AllowDelete
+	// A content-checking sender also learns whether a permitted delete was
+	// refused or stopped part-way (no receiver text, just the outcome). An older
+	// sender's Result keeps its exact original shape.
+	if hello.ContentCheck {
+		res.DeleteRefused = hello.Delete && opts.AllowDelete && rep.DeleteRefusedReason != ""
+		res.DeletePartial = rep.DeletePartial != ""
+	}
 
 	rep.Failed = res.Failed
 	return rep, WriteJSON(rw, MsgResult, res)
+}
+
+// receivePreflight answers a strict sender's capability question (see
+// Hello.Preflight) and then runs the real transfer that follows on the same
+// connection. The question itself must change nothing, so anything but an
+// authorized content-checked sync with no Delete and an empty manifest is a
+// protocol error; and the real Hello may not be another preflight or a stream.
+// Every trust decision (AllowSync, AllowDelete, the wire version) is made again
+// on the real Hello by receiveV1 itself.
+func receivePreflight(rw io.ReadWriter, hello Hello, m Manifest, sync bool, destDir string, opts RecvOpts) (Report, error) {
+	if !sync || !hello.ContentCheck || hello.Delete || len(m.Files) != 0 {
+		return Report{}, refuse(rw, ErrCodeProtocol, errors.New("protocol error: a preflight must be an empty content-checked sync without delete"))
+	}
+	if err := WriteJSON(rw, MsgResume, ResumeState{ContentCheck: true, Preflight: true, DeleteReport: true}); err != nil {
+		return Report{}, err
+	}
+	next, t, err := readHello(rw)
+	if err != nil {
+		return Report{}, err
+	}
+	if t != MsgHello || next.Preflight || next.Stream {
+		return Report{}, refuse(rw, ErrCodeProtocol, errors.New("protocol error: a preflight must be followed by one ordinary hello"))
+	}
+	return receiveV1(rw, next, destDir, opts)
 }
 
 // receiveOneFile streams one manifest entry into a temporary staging file,
@@ -293,6 +350,17 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 //
 // ok=false with a nil error is ONE failed file, not a failed transfer.
 func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, progress func(path string, received, total int64)) (ok bool, err error) {
+	return receiveOneFileChecked(rw, base, dest, f, offset, replace, "", progress)
+}
+
+// receiveOneFileChecked is receiveOneFile with wantDigest: when set (a
+// content-checked sync) it is the manifest's SHA-256 for this file, and the
+// installed body must match it, not only the hash the sender computed while
+// streaming. A source edited after the manifest was built is streamed and
+// hashed consistently by the sender, so only this comparison stops a body that
+// differs from what the manifest -- and the skip decisions made on it --
+// described.
+func receiveOneFileChecked(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, wantDigest string, progress func(path string, received, total int64)) (ok bool, err error) {
 	// The sender streams f.Size-offset bytes whether or not they can be written
 	// here -- it learns about a failed file only from the final result. So the body
 	// is fenced off, and whatever writeFileBody left unread is drained before the
@@ -324,6 +392,9 @@ func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int
 		return false, err
 	}
 	if werr != nil || fh.SHA256 != sum {
+		return false, nil
+	}
+	if wantDigest != "" && sum != wantDigest {
 		return false, nil
 	}
 	if err := installStaged(staged, dest, replace); err != nil {

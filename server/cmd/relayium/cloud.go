@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -73,6 +75,29 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 	cfgDir, err := resolveConfigDir(configDir)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
+		return 1
+	}
+
+	// A machine that already holds a credential is not logged in again by
+	// accident. A new login registers a NEW device: the old credential would
+	// stay live on the server with nothing here left to revoke it, Device Inbox
+	// receiving enabled here would stop (it belongs to the old device), and
+	// unfinished `inbox send` work started by the old device could no longer be
+	// retried. So the refusal comes first -- before any request, and before
+	// anything in --config-dir is touched. Switching is two explicit steps:
+	// `logout` (which revokes on the server) and then `login`. A credential file
+	// that cannot be read is refused too: it is not this command's to replace.
+	if existing, ok, lerr := cloud.Load(cfgDir); lerr != nil {
+		fmt.Fprintf(stderr, "login: the existing credential in %s cannot be read (%v); it was left untouched.\n", cfgDir, lerr)
+		fmt.Fprintln(stderr, "  run `relayium logout --local-only` to clear it, or fix the file, then log in again")
+		return 1
+	} else if ok {
+		fmt.Fprintf(stderr, "login: this machine is already logged in as %s (%s).\n", existing.AccountEmail, existing.Server)
+		fmt.Fprintln(stderr, "  Logging in again would register a NEW device: the current credential would stay valid on the server,")
+		fmt.Fprintln(stderr, "  Device Inbox receiving enabled here would stop until you re-enable it, and unfinished")
+		fmt.Fprintln(stderr, "  `relayium inbox send` work started from this device could no longer be retried.")
+		fmt.Fprintln(stderr, "  To use another account or server: run `relayium logout` first (it revokes the current")
+		fmt.Fprintln(stderr, "  credential on the server), then `relayium login`. Nothing was changed.")
 		return 1
 	}
 
@@ -167,7 +192,9 @@ func runWhoami(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("whoami", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var configDir string
+	var asJSON bool
 	fs.StringVar(&configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
+	fs.BoolVar(&asJSON, "json", false, "print one JSON document")
 	if wantsHelpFS(fs, args) {
 		fmt.Fprint(stdout, whoamiUsage)
 		return 0
@@ -175,19 +202,47 @@ func runWhoami(args []string, stdout, stderr io.Writer) int {
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
+	// With --json the answer is exactly one document on stdout, failure
+	// included. It is the local credential's account and server -- never the
+	// token -- and, like the text form, says nothing about whether the server
+	// still accepts it.
+	type whoamiDoc struct {
+		LoggedIn bool   `json:"loggedIn"`
+		Account  string `json:"account,omitempty"`
+		Server   string `json:"server,omitempty"`
+		Error    string `json:"error,omitempty"`
+	}
+	emit := func(d whoamiDoc) {
+		enc := json.NewEncoder(stdout)
+		enc.SetEscapeHTML(false)
+		_ = enc.Encode(d)
+	}
 	cfgDir, err := resolveConfigDir(configDir)
 	if err != nil {
+		if asJSON {
+			emit(whoamiDoc{Error: "config_dir_unresolved"})
+		}
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	creds, ok, err := cloud.Load(cfgDir)
 	if err != nil {
+		if asJSON {
+			emit(whoamiDoc{Error: "credential_unreadable"})
+		}
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	if !ok {
+		if asJSON {
+			emit(whoamiDoc{Error: "not_logged_in"})
+		}
 		fmt.Fprintln(stderr, "not logged in (run `relayium login`)")
 		return 1
+	}
+	if asJSON {
+		emit(whoamiDoc{LoggedIn: true, Account: creds.AccountEmail, Server: creds.Server})
+		return 0
 	}
 	fmt.Fprintf(stdout, "%s (%s)\n", creds.AccountEmail, creds.Server)
 	return 0
@@ -292,8 +347,8 @@ func truncatedTTLNotice(requestedSecs, expiresAt, now int64) string {
 func runUp(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("up", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var burn bool
-	var ttlArg string
+	var burn, asJSON, pending bool
+	var ttlArg, recoverID string
 	var maxDownloads int64
 	var server, configDir string
 	fs.BoolVar(&burn, "burn", false, "delete after first download")
@@ -301,6 +356,9 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	fs.Int64Var(&maxDownloads, "max-downloads", 0, "max number of downloads allowed")
 	fs.StringVar(&server, "server", "", "override the cloud server (defaults to the logged-in server)")
 	fs.StringVar(&configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
+	fs.BoolVar(&asJSON, "json", false, "print one JSON document with the outcome")
+	fs.StringVar(&recoverID, "recover", "", "ask the server for the outcome of an earlier upload whose outcome was unknown")
+	fs.BoolVar(&pending, "pending", false, "list uploads whose outcome is still unknown")
 	if wantsHelpFS(fs, args) {
 		fmt.Fprint(stdout, upUsage)
 		return 0
@@ -308,25 +366,42 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
+	out := upOutput{stdout: stdout, stderr: stderr, json: asJSON}
 	paths := fs.Args()
+	if recoverID != "" || pending {
+		if len(paths) != 0 || burn || ttlArg != "" || maxDownloads != 0 || server != "" || (recoverID != "" && pending) {
+			fmt.Fprintln(stderr, "up: --recover <id> and --pending take no paths and no upload options")
+			return 2
+		}
+		if pending {
+			return upPending(configDir, out)
+		}
+		return upRecover(recoverID, configDir, out)
+	}
 	if len(paths) == 0 {
 		fmt.Fprintln(stderr, "up needs <path...>")
+		return 2
+	}
+	// A negative limit is a mistake (a script's empty or mistyped variable),
+	// not a request: refuse it before credentials, files or the network are
+	// touched. 0 is the flag's documented "not set" value, which leaves the
+	// download limit to the server's own default policy -- it is NOT a promise
+	// of unlimited downloads, and the help says so.
+	if maxDownloads < 0 {
+		fmt.Fprintf(stderr, "up: --max-downloads must be a positive count (got %d); leave it out, or pass 0, to use the server's default\n", maxDownloads)
 		return 2
 	}
 
 	cfgDir, err := resolveConfigDir(configDir)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return out.fail("config_dir_unresolved", err)
 	}
 	creds, ok, err := cloud.Load(cfgDir)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return out.fail("credential_unreadable", err)
 	}
 	if !ok {
-		fmt.Fprintln(stderr, "run `relayium login` first")
-		return 1
+		return out.fail("not_logged_in", errors.New("run `relayium login` first"))
 	}
 
 	var ttlSeconds int64
@@ -344,40 +419,51 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	// that host — and it wouldn't authenticate there anyway. Require a matching
 	// login instead.
 	if server != "" && !sameServer(server, creds.Server) {
-		fmt.Fprintf(stderr, "you're logged in to %s — run `relayium login --server %s` before uploading there\n", creds.Server, server)
-		return 1
+		return out.fail("wrong_server", fmt.Errorf("you're logged in to %s — run `relayium login --server %s` before uploading there", creds.Server, server))
 	}
 	client := cloud.NewClient(creds.Server)
 	client.Token = creds.AccessToken
 	if server != "" {
 		client.Server = server
 	}
+
+	// The operation is recorded BEFORE the request: if its answer is lost,
+	// `up --recover` can still ask the server about it and rebuild the link.
+	prep, err := cloud.PrepareUpload(paths, cloud.UploadOpts{Burn: burn, TTLSeconds: ttlSeconds, MaxDownloads: maxDownloads})
+	if err != nil {
+		return out.fail("prepare_failed", err)
+	}
+	op, err := cloud.NewUpOperation(prep, client.Server, creds.AccountEmail, time.Now().Unix())
+	if err != nil {
+		return out.fail("prepare_failed", err)
+	}
+	lock, err := cloud.LockUpOperation(cfgDir, op.ID)
+	if err != nil {
+		return out.fail("record_failed", fmt.Errorf("could not record the upload before sending it, so nothing was sent: %w", err))
+	}
+	defer lock.Release()
+	if err := cloud.SaveUpOperation(cfgDir, op); err != nil {
+		_ = cloud.RemoveUpOperation(cfgDir, op.ID)
+		return out.fail("record_failed", fmt.Errorf("could not record the upload before sending it, so nothing was sent: %w", err))
+	}
+
 	bar := newProgressBar(stderr, "⇡", "Uploading")
 	client.Progress = bar.update
 	client.Confirming = bar.confirming
-
-	id, key, expiresAt, err := client.Upload(context.Background(), paths, cloud.UploadOpts{
-		Burn:         burn,
-		TTLSeconds:   ttlSeconds,
-		MaxDownloads: maxDownloads,
-	})
+	id, expiresAt, err := client.UploadPrepared(context.Background(), prep, op.OpKey)
 	bar.finish()
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		var unknown *cloud.UploadUnconfirmedError
+		if errors.As(err, &unknown) {
+			// The server may have stored it. Keep the record (and its key).
+			return out.unknown(op.ID, err)
+		}
+		// The request definitely did not store anything (it never completed,
+		// or the server refused it): the record has nothing left to recover.
+		_ = cloud.RemoveUpOperation(cfgDir, op.ID)
+		return out.fail("upload_failed", err)
 	}
-
-	link := client.DownloadLink(client.Server, id, key)
-	fmt.Fprintln(stdout, link)
-	// Keep stdout machine-composable: `relayium up ... | pbcopy` must copy only
-	// the link. The human hint belongs on stderr and includes the exact,
-	// shell-safe command — asking someone to replace <link> wastes information
-	// the CLI already has, and the fragment must be quoted defensively.
-	fmt.Fprintf(stderr, "opens in a browser, or fetch it with `relayium down '%s'`\n", link)
-	if notice := truncatedTTLNotice(ttlSeconds, expiresAt, time.Now().Unix()); notice != "" {
-		fmt.Fprintln(stderr, notice)
-	}
-	return 0
+	return out.uploaded(cfgDir, op, client.DownloadLink(client.Server, id, prep.Key()), id, expiresAt, ttlSeconds)
 }
 
 // runDown fetches and decrypts a claim (a full `relayium up` link, or a bare
@@ -406,6 +492,17 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	if len(rest) == 2 {
 		destDir = rest[1]
 	}
+	// "-" reads the link from standard input, so its "#k=" key never appears in
+	// this process's argument list (visible to other local users through ps) or
+	// in shell history. A directory literally named "-" is still "./-".
+	if claim == "-" {
+		var err error
+		claim, err = readClaimFromStdin(downStdin(), downStdinIsTerminal())
+		if err != nil {
+			fmt.Fprintln(stderr, "down:", err)
+			return 2
+		}
+	}
 
 	claimServer, id, key, err := cloud.ParseClaim(claim)
 	if err != nil {
@@ -427,6 +524,43 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stderr, "✓ downloaded %d file(s) to %s\n", len(paths), destDir)
 	return 0
+}
+
+// maxStdinClaim bounds what `down -` reads. A real link is a few hundred bytes;
+// anything near this is not a link, and reading it unbounded would let a
+// mistaken pipe (`cat big.iso | relayium down -`) fill memory.
+const maxStdinClaim = 8 << 10
+
+// downStdin and downStdinIsTerminal are the standard input `down -` reads,
+// indirected so tests can supply one.
+var (
+	downStdin           = func() io.Reader { return os.Stdin }
+	downStdinIsTerminal = func() bool { return isTerminalFile(os.Stdin) }
+)
+
+// readClaimFromStdin reads one link or code from r: surrounding whitespace is
+// trimmed, and the input must be non-empty, a single line, and under
+// maxStdinClaim. Its errors never repeat what was read -- the input is a
+// secret.
+func readClaimFromStdin(r io.Reader, isTerminal bool) (string, error) {
+	if isTerminal {
+		return "", errors.New(`"-" reads the link from standard input, which is a terminal here; pipe it in instead, for example: pbpaste | relayium down -`)
+	}
+	b, err := io.ReadAll(io.LimitReader(r, maxStdinClaim+1))
+	if err != nil {
+		return "", errors.New("could not read the link from standard input")
+	}
+	if len(b) > maxStdinClaim {
+		return "", fmt.Errorf("standard input is longer than %d bytes, so it is not a link; pipe in only the link", maxStdinClaim)
+	}
+	claim := strings.TrimSpace(string(b))
+	if claim == "" {
+		return "", errors.New("standard input was empty; pipe in the link, for example: pbpaste | relayium down -")
+	}
+	if strings.ContainsAny(claim, "\r\n") {
+		return "", errors.New("standard input holds more than one line; pipe in exactly one link")
+	}
+	return claim, nil
 }
 
 // resolveDownServer picks the cloud server `down` talks to. Precedence: an

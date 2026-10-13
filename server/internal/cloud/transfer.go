@@ -51,6 +51,7 @@ func uploadStatusError(status int) error {
 type uploadFile struct {
 	name string // relative, forward-slash path as recorded in the manifest
 	path string // absolute source path on disk
+	size int64  // as stat'd when the upload was prepared
 }
 
 // walkUploadPaths expands paths (files and/or directory trees) into the flat
@@ -124,14 +125,49 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	if err := checkSecureServer(c.Server); err != nil {
 		return "", "", 0, err
 	}
-	files, err := walkUploadPaths(paths)
+	p, err := PrepareUpload(paths, opt)
 	if err != nil {
 		return "", "", 0, err
+	}
+	id, expiresAt, err = c.sendUpload(ctx, p, "")
+	if err != nil {
+		return "", "", 0, err
+	}
+	return id, p.Key(), expiresAt, nil
+}
+
+// PreparedUpload is everything an upload sends, decided before any request:
+// the file list, the fresh content key, the encrypted manifest, the retention
+// options and the exact request body length. It is what a durable operation
+// record has to pin so a later recovery asks about exactly the same request.
+type PreparedUpload struct {
+	files       []uploadFile
+	key         []byte
+	encManifest []byte
+	total       int64 // plaintext bytes
+	opts        UploadOpts
+	// BodyLength is the exact length of the framed request body.
+	BodyLength int64
+}
+
+// Key is the content key, encoded as it appears in a link fragment.
+func (p *PreparedUpload) Key() string { return storecrypto.EncodeKey(p.key) }
+
+// Opts are the retention options the upload carries.
+func (p *PreparedUpload) Opts() UploadOpts { return p.opts }
+
+// PrepareUpload walks paths, generates a content key and encrypts the manifest.
+// It makes no request. Every key it generates encrypts exactly one body: a key
+// is never reused for another plaintext.
+func PrepareUpload(paths []string, opt UploadOpts) (*PreparedUpload, error) {
+	files, err := walkUploadPaths(paths)
+	if err != nil {
+		return nil, err
 	}
 
 	key, err := storecrypto.GenerateKey()
 	if err != nil {
-		return "", "", 0, err
+		return nil, err
 	}
 
 	manifest := storecrypto.Manifest{Files: make([]storecrypto.FileEntry, len(files))}
@@ -139,16 +175,46 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	for i, f := range files {
 		info, err := os.Stat(f.path)
 		if err != nil {
-			return "", "", 0, err
+			return nil, err
 		}
+		files[i].size = info.Size()
 		manifest.Files[i] = storecrypto.FileEntry{Name: f.name, Size: info.Size()}
 		total += info.Size()
 	}
 
 	encManifest, err := storecrypto.EncryptManifest(key, manifest)
 	if err != nil {
-		return "", "", 0, err
+		return nil, err
 	}
+	body := int64(4 + len(encManifest))
+	for _, f := range files {
+		chunks := (f.size + storecrypto.ChunkSize - 1) / storecrypto.ChunkSize
+		body += f.size + chunks*(4+gcmTagSize)
+	}
+	return &PreparedUpload{files: files, key: key, encManifest: encManifest, total: total, opts: opt, BodyLength: body}, nil
+}
+
+// gcmTagSize is the AES-GCM tag each storecrypto frame carries after its
+// plaintext (FrameChunk: uint32 length || ciphertext+tag).
+const gcmTagSize = 16
+
+// UploadPrepared sends a prepared upload under the Idempotency-Key opKey, with
+// an exact Content-Length, so the server can answer a later recovery probe
+// (Recover) for the same request without a second body. It never retries.
+func (c *Client) UploadPrepared(ctx context.Context, p *PreparedUpload, opKey string) (id string, expiresAt int64, err error) {
+	if err := checkSecureServer(c.Server); err != nil {
+		return "", 0, err
+	}
+	if opKey == "" {
+		return "", 0, errors.New("upload: an operation key is required")
+	}
+	return c.sendUpload(ctx, p, opKey)
+}
+
+// sendUpload posts p. With opKey empty it behaves exactly as Upload always
+// did (chunked body, no key); with opKey it adds the key and the exact length.
+func (c *Client) sendUpload(ctx context.Context, p *PreparedUpload, opKey string) (id string, expiresAt int64, err error) {
+	files, key, encManifest, total, opt := p.files, p.key, p.encManifest, p.total, p.opts
 
 	// The wait for the server's answer is bounded here rather than by the
 	// transport's ResponseHeaderTimeout; confirmTimeout says why.
@@ -225,10 +291,14 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, pr)
 	if err != nil {
 		pr.Close()
-		return "", "", 0, err
+		return "", 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Content-Type", "application/octet-stream")
+	if opKey != "" {
+		req.Header.Set("Idempotency-Key", opKey)
+		req.ContentLength = p.BodyLength
+	}
 
 	httpc := c.HTTP
 	if httpc == nil {
@@ -244,22 +314,28 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 		if errors.As(context.Cause(ctx), &unconfirmed) {
 			return unconfirmed
 		}
-		if caller.Err() != nil {
+		if caller.Err() != nil && opKey == "" {
+			// Plain Upload keeps its contract: the caller's own cancellation
+			// stays the caller's.
 			return cause
 		}
+		// A recorded upload (opKey) whose body was wholly sent is unknown
+		// even when the caller cancelled: the server may have stored it, and
+		// reporting a plain cancellation would let the caller forget the only
+		// copy of its key.
 		return &UploadUnconfirmedError{Status: status, Err: cause}
 	}
 
 	resp, err := httpc.Do(req)
 	if err != nil {
 		if bodySent.Load() {
-			return "", "", 0, unknown(0, err)
+			return "", 0, unknown(0, err)
 		}
 		var unconfirmed *UploadUnconfirmedError
 		if errors.As(context.Cause(ctx), &unconfirmed) {
-			return "", "", 0, unconfirmed
+			return "", 0, unconfirmed
 		}
-		return "", "", 0, err
+		return "", 0, err
 	}
 	defer resp.Body.Close()
 
@@ -268,9 +344,9 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 		// failed, or chose that status, after central stored the upload: a status
 		// does not establish who sent it, so none of them is definite.
 		if resp.StatusCode >= 500 && bodySent.Load() {
-			return "", "", 0, unknown(resp.StatusCode, fmt.Errorf("upload: unexpected status %d", resp.StatusCode))
+			return "", 0, unknown(resp.StatusCode, fmt.Errorf("upload: unexpected status %d", resp.StatusCode))
 		}
-		return "", "", 0, uploadStatusError(resp.StatusCode)
+		return "", 0, uploadStatusError(resp.StatusCode)
 	}
 
 	var out struct {
@@ -284,12 +360,12 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	// read, or names no id a link can carry, leaves an upload that exists with
 	// no usable link: unknown, never a broken link and never a failure.
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxConfirmBody)).Decode(&out); err != nil {
-		return "", "", 0, unknown(0, fmt.Errorf("upload: unreadable confirmation: %w", err))
+		return "", 0, unknown(0, fmt.Errorf("upload: unreadable confirmation: %w", err))
 	}
 	if !usableID.MatchString(out.ID) {
-		return "", "", 0, unknown(0, errors.New("upload: the confirmation carries no usable id"))
+		return "", 0, unknown(0, errors.New("upload: the confirmation carries no usable id"))
 	}
-	return out.ID, storecrypto.EncodeKey(key), out.ExpiresAt, nil
+	return out.ID, out.ExpiresAt, nil
 }
 
 // maxConfirmBody bounds the upload confirmation read; central's is a few dozen
@@ -403,42 +479,34 @@ func (c *Client) DownloadLink(origin, id, keyB64Url string) string {
 // accepts: a full shareable link, as built by DownloadLink
 // (scheme://host/d/<id>#k=<key>), or a bare compact code with no host
 // (<id>#k=<key>) — for the latter, server is returned empty and the caller
-// supplies a default (--server, or defaultCloudServer). Both forms carry the
+// supplies a default (--server, or defaultCloudServer). A refusal never
+// repeats the input: whatever was pasted may be, or contain, the key alone.
+// Both forms carry the
 // key as a "k=" URL-fragment, matching web's buildDownloadLink/
 // parseDownloadKey so links interop between the CLI and the browser.
 func ParseClaim(s string) (server, id, keyB64Url string, err error) {
 	hashIdx := strings.LastIndex(s, "#")
 	if hashIdx < 0 {
-		return "", "", "", fmt.Errorf("cloud: claim %q: missing #k=<key> fragment", s)
+		return "", "", "", errors.New("cloud: not a download link: it has no #k=<key> part (the link printed by `relayium up` ends with one)")
 	}
 	head, frag := s[:hashIdx], s[hashIdx+1:]
 	key, ok := strings.CutPrefix(frag, "k=")
 	if !ok || key == "" {
-		return "", "", "", fmt.Errorf("cloud: claim %q: fragment must be k=<key>", redactClaim(s))
+		return "", "", "", errors.New("cloud: not a download link: the part after \"#\" must be k=<key>")
 	}
 
 	if u, uerr := url.Parse(head); uerr == nil && u.Scheme != "" && u.Host != "" {
 		id, ok := strings.CutPrefix(u.Path, "/d/")
 		if !ok || id == "" {
-			return "", "", "", fmt.Errorf("cloud: claim %q: not a /d/<id> link", redactClaim(s))
+			return "", "", "", errors.New("cloud: not a download link: expected https://<host>/d/<id>#k=<key>")
 		}
 		return u.Scheme + "://" + u.Host, id, key, nil
 	}
 
 	if head == "" {
-		return "", "", "", fmt.Errorf("cloud: claim %q: missing id", redactClaim(s))
+		return "", "", "", errors.New("cloud: not a download link: it has no id before \"#k=\"")
 	}
 	return "", head, key, nil
-}
-
-// redactClaim hides a claim's URL fragment — the "#k=" decryption key — so an
-// error message (terminal scrollback, a pasted bug report, CI logs) never
-// repeats the secret that opens the files.
-func redactClaim(s string) string {
-	if i := strings.LastIndex(s, "#"); i >= 0 {
-		return s[:i] + "#<redacted>"
-	}
-	return s
 }
 
 // downloadStatusError maps a meta/blob fetch's HTTP status to an actionable

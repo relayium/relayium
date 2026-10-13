@@ -3,6 +3,7 @@ package cloud
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,6 +63,10 @@ type Client struct {
 	// put in HTTP, so a caller that replaced HTTP keeps being obeyed.
 	uploadHTTP *http.Client
 	stdHTTP    *http.Client
+	// recoverHTTP carries a recovery probe (RecoverUpload): the upload
+	// transport with a long Expect-Continue wait, so a slow answer is waited
+	// for instead of triggering the (refused) body.
+	recoverHTTP *http.Client
 
 	confirmBase    time.Duration
 	confirmMinRate int
@@ -112,12 +117,28 @@ func newClientWith(server string, base *http.Transport, to clientTimeouts) *Clie
 	// locally, which is the wrong moment for an upload (confirmTimeout).
 	up := base.Clone()
 	up.ResponseHeaderTimeout = 0
+	rec := base.Clone()
+	rec.ResponseHeaderTimeout = 0
+	rec.ExpectContinueTimeout = recoverExpectContinueWait
+	// A recovery probe speaks HTTP/1.1 only (ALPN offers http/1.1; certificate
+	// verification is untouched). Over HTTP/2 a proxy may hold the request
+	// headers until the first DATA frame -- which a probe never sends -- so
+	// the origin would never see the question. Uploads and downloads keep H2.
+	rec.ForceAttemptHTTP2 = false
+	rec.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	if rec.TLSClientConfig != nil {
+		rec.TLSClientConfig = rec.TLSClientConfig.Clone()
+	} else {
+		rec.TLSClientConfig = &tls.Config{}
+	}
+	rec.TLSClientConfig.NextProtos = []string{"http/1.1"}
 	std := &http.Client{Transport: &uaTransport{base: tr}}
 	return &Client{
 		Server:         server,
 		HTTP:           std,
 		stdHTTP:        std,
 		uploadHTTP:     &http.Client{Transport: &uaTransport{base: up}},
+		recoverHTTP:    &http.Client{Transport: &uaTransport{base: rec}},
 		sleep:          time.Sleep,
 		confirmBase:    to.confirmBase,
 		confirmMinRate: to.confirmMinRate,

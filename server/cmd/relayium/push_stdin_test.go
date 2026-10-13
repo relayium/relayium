@@ -44,6 +44,21 @@ func TestMain(m *testing.M) {
 		}
 		streamRecvIdle = d
 	}
+	// Test-only shortening of the transfer shutdown/phase bounds for
+	// subprocess tests (shutdown_signal_test.go).
+	for env, dst := range map[string]*time.Duration{
+		"RELAYIUM_TEST_SERVE_DRAIN":      &serveDrain,
+		"RELAYIUM_TEST_SYNC_DRAIN":       &syncWatchDrain,
+		"RELAYIUM_TEST_DAEMON_READ_IDLE": &daemonReadIdle,
+	} {
+		if v := os.Getenv(env); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				panic(err)
+			}
+			*dst = d
+		}
+	}
 	switch os.Getenv("RELAYIUM_TEST_ROLE") {
 	case "recv-engine":
 		os.Exit(runRecv(os.Args[2:], os.Stdout, os.Stderr))

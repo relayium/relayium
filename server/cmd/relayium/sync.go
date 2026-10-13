@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"os"
-	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/relayium/relayium/internal/sshx"
 	"github.com/relayium/relayium/internal/xfer"
@@ -16,15 +16,23 @@ import (
 const syncUsage = `relayium sync — one-way incremental folder mirror
 
 usage:
-  relayium sync <src...> relayium://host[:port] [--delete] [--watch]   direct, no SSH/account
+  relayium sync <src...> relayium://host[:port] [--delete [--strict-delete]] [--checksum] [--watch]
+                                                  direct, no SSH/account
 
 A relayium:// destination is the direct server-to-server path: the receiver runs
 "relayium serve --dir D" and this mirrors into that directory over a pinned TLS
 1.3 connection. No relay, no SSH, no Relayium account — the listener accepts this
 host only once its fingerprint ("relayium id") is authorized there.
 
-Only files that changed are sent; unchanged ones (same size and mtime) are
-skipped, and a partial file resumes.
+Only files that changed are sent, and a partial file resumes. "Unchanged" is
+decided by content: this side puts each source file's SHA-256 in the manifest
+(one extra read of every source file per run), and the receiver skips a file
+only when its own copy has the same size and digest, and installs a received
+file only when its bytes match that digest. An edit that keeps the size within
+the same second, or a copy that preserves timestamps, is therefore still sent.
+A receiver running an older relayium cannot compare content: it skips by size
+and modification time as before, and this side warns that it did (see
+--checksum to refuse instead).
 
 positional arguments:
   <src...>   directories or files to mirror
@@ -44,6 +52,17 @@ flags:
                    receiver's --dir is never touched — and an empty source
                    refuses outright rather than mirroring nothing onto
                    everything.
+  --checksum       require content checking: ask the receiver first, with a
+                   question that writes and deletes nothing, and refuse a
+                   receiver that cannot compare content (an older relayium).
+                   Without it the check is still the default; an older
+                   receiver then falls back to size+mtime and a warning says so.
+  --strict-delete  with --delete only: exit 1 unless the receiver confirms
+                   the delete ran in full (not ignored, refused or stopped
+                   part-way). A receiver running an older relayium cannot
+                   report that; the same first question finds out, and it is
+                   refused before the delete request is ever sent. Without
+                   --strict-delete these outcomes stay warnings, as before.
   --watch          keep running and re-sync when the sources change. Changes are
                    debounced and runs never overlap, so a burst of edits becomes
                    one sync.
@@ -71,10 +90,11 @@ flags:
                    retrying, so it never sits there "synced" while blind to part
                    of the source.
 
-                   Ctrl-C stops it: no further attempt is started, and it exits
-                   once the attempt already running returns. A sync in flight is
-                   not cut off mid-transfer, so stopping can take as long as the
-                   current transfer does.
+                   Ctrl-C or SIGTERM stops it: no further attempt is started,
+                   and a transfer in flight gets 30 seconds to finish before it
+                   is aborted (the receiver discards the file it was writing
+                   and keeps only verified files). A second Ctrl-C ends it at
+                   once.
   --config-dir D   identity/trust directory for relayium:// destinations
                    (default ~/.config/relayium)
 
@@ -106,20 +126,23 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	if !strings.HasPrefix(dest, daemonScheme) || f.identity != "" || f.port != 0 {
 		return sshRetired(stderr)
 	}
-
-	once := func() int {
-		return syncOnce(dest, srcs, f, stdout, stderr)
+	if f.strictDelete && !f.del {
+		fmt.Fprintln(stderr, "sync: --strict-delete only applies together with --delete")
+		return 2
 	}
+
+	ctx, cancel := transferSignalContext()
+	defer cancel()
 	if !f.watch {
-		return once()
+		// One sync: a signal stops it at once (no drain).
+		return syncOnce(ctx, 0, dest, srcs, f, stdout, stderr)
 	}
 	// Watch mode: WatchAndSync owns the whole loop, including the first sync, so
 	// an initial failure retries on its own timer instead of waiting for a
-	// change that may never come.
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
+	// change that may never come. A signal starts no further attempt; the one
+	// running gets syncWatchDrain to finish and is then aborted.
 	err := xfer.WatchAndSync(ctx, srcs, func() error {
-		if code := once(); code != 0 {
+		if code := syncOnce(ctx, syncWatchDrain, dest, srcs, f, stdout, stderr); code != 0 {
 			// syncOnce already printed why; the code is what the retry needs.
 			return fmt.Errorf("exit status %d", code)
 		}
@@ -135,11 +158,13 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 }
 
 type syncFlags struct {
-	identity  string
-	port      int
-	del       bool
-	watch     bool
-	configDir string
+	identity     string
+	port         int
+	del          bool
+	watch        bool
+	checksum     bool
+	strictDelete bool
+	configDir    string
 }
 
 // syncFlagSet declares `sync`'s flags, binding them into f. The help pre-scan
@@ -151,16 +176,29 @@ func syncFlagSet(f *syncFlags) *flag.FlagSet {
 	fs.IntVar(&f.port, "p", 0, "ssh port")
 	fs.BoolVar(&f.del, "delete", false, "delete files on the receiver that are gone from the source")
 	fs.BoolVar(&f.watch, "watch", false, "keep running and re-sync on change, retrying failures")
+	fs.BoolVar(&f.checksum, "checksum", false, "require the receiver to compare content, refusing an older receiver before sending anything")
+	fs.BoolVar(&f.strictDelete, "strict-delete", false, "with --delete: exit non-zero unless the receiver confirms the delete ran in full")
 	fs.StringVar(&f.configDir, "config-dir", "", "identity/trust directory (daemon)")
 	return fs
 }
 
-// syncOnce runs a single incremental sync of srcs → dest.
-func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer) int {
+// syncWatchDrain is how long `sync --watch` lets a transfer in flight finish
+// after a stop signal before aborting it. A var so tests can shorten it.
+var syncWatchDrain = 30 * time.Second
+
+// syncOnce runs a single incremental sync of srcs → dest. ctx stops it: a
+// transfer in flight gets drain to finish and is then aborted.
+func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []string, f syncFlags, stdout, stderr io.Writer) int {
+	if ctx.Err() != nil {
+		return 130
+	}
 	m, paths, err := xfer.BuildManifest(srcs)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
+	}
+	if ctx.Err() != nil {
+		return 130
 	}
 	xfer.WarnIfEmpty(m, stderr)
 	if f.del && len(paths) == 0 {
@@ -168,26 +206,42 @@ func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer)
 		return 1
 	}
 	prog := newSendProgress(stderr)
-	opts := xfer.SendOpts{Sync: true, Delete: f.del, Progress: prog.report}
+	// Content checking is the default: what counts as "unchanged" is decided
+	// by the bytes, not by size and whole-second mtime. --checksum makes it a
+	// requirement rather than a best effort.
+	opts := xfer.SendOpts{Sync: true, Delete: f.del, Progress: prog.report,
+		ContentCheck: true, RequireContentCheck: f.checksum, RequireDeleteReport: f.strictDelete}
 
 	if strings.HasPrefix(dest, daemonScheme) {
+		// Digests are computed BEFORE dialing: hashing a large tree takes
+		// time, and a listener bounds how long a connected peer may stay
+		// silent.
+		cm, err := xfer.WithContentDigestsContext(ctx, m, paths)
+		if ctx.Err() != nil {
+			// Stopped while hashing: nothing was dialed or sent.
+			fmt.Fprintln(stderr, "interrupted before anything was sent")
+			return 130
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
 		tconn, err := dialDaemon(dest, f.configDir, stderr)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
 		defer tconn.Close()
-		rep, err := xfer.Send(tconn, m, paths, opts)
+		rep, err := sendWithShutdown(ctx, tconn, cm, paths, opts, drain)
 		prog.finish()
+		if errors.Is(err, errTransferInterrupted) {
+			return reportInterrupted(rep, stderr)
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		fmt.Fprintf(stderr, "synced: %d sent, %d unchanged\n", rep.Files, rep.Skipped)
-		if rep.DeleteDenied {
-			fmt.Fprintln(stderr, "warning: the receiver ignored --delete (its listener isn't started with --allow-delete); nothing was deleted")
-		}
-		return reportExit(rep, stderr)
+		return reportSync(rep, f, stderr)
 	}
 
 	// SSH transport: sync requires relayium on the remote (native protocol).
@@ -226,9 +280,43 @@ func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer)
 		fmt.Fprintln(stderr, cerr)
 		return 1
 	}
+	return reportSync(rep, f, stderr)
+}
+
+// reportSync prints a sync's outcome to stderr and returns its exit code.
+//
+// The default exit contract is unchanged: 0 unless a file failed. A receiver
+// that could not confirm content checking (an older relayium) is a warning, as
+// is a refused delete. --strict-delete turns every delete outcome other than
+// "ran in full" into a non-zero exit.
+func reportSync(rep xfer.Report, f syncFlags, stderr io.Writer) int {
 	fmt.Fprintf(stderr, "synced: %d sent, %d unchanged\n", rep.Files, rep.Skipped)
-	if rep.DeleteDenied {
-		fmt.Fprintln(stderr, "warning: the receiver ignored --delete (its listener isn't started with --allow-delete); nothing was deleted")
+	if rep.ContentCheckUnconfirmed {
+		fmt.Fprintln(stderr, "warning: the receiver runs an older relayium that decides what is unchanged by size and modification time only;")
+		fmt.Fprintln(stderr, "  a file whose content changed without changing either may have been skipped. Update relayium on the receiver,")
+		fmt.Fprintln(stderr, "  or pass --checksum to refuse such a receiver instead of syncing.")
 	}
-	return reportExit(rep, stderr)
+	deleteFailed := false
+	switch {
+	case rep.DeleteDenied:
+		deleteFailed = true
+		fmt.Fprintln(stderr, "warning: the receiver ignored --delete (its listener isn't started with --allow-delete); nothing was deleted")
+	case rep.DeleteRefused:
+		deleteFailed = true
+		fmt.Fprintln(stderr, "warning: the receiver refused the mirror delete (it could not derive a safe scope); nothing was deleted")
+	case rep.DeletePartialRemote:
+		deleteFailed = true
+		fmt.Fprintln(stderr, "warning: the receiver's mirror delete stopped part-way; some stale files were removed and some remain (see the receiver's log)")
+	case rep.DeleteOutcomeUnknown && f.strictDelete:
+		// Send refuses this case before any file (RequireDeleteReport); kept
+		// so the exit can never be 0 if that ever changed.
+		deleteFailed = true
+		fmt.Fprintln(stderr, "warning: the receiver runs an older relayium that cannot report whether its delete ran in full")
+	}
+	code := reportExit(rep, stderr)
+	if code == 0 && f.strictDelete && deleteFailed {
+		fmt.Fprintln(stderr, "sync: --strict-delete: the delete did not run in full")
+		return 1
+	}
+	return code
 }

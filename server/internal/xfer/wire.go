@@ -75,6 +75,24 @@ type Hello struct {
 	// receiver's MsgStreamAccept. omitempty keeps every v1 Hello byte-for-byte
 	// what it was (stream_golden_test.go), so no released peer sees a new field.
 	Stream bool `json:",omitempty"`
+	// ContentCheck announces that every manifest entry carries the SHA-256 of
+	// the source file (FileEntry.SHA256) and asks a sync receiver to skip only
+	// files whose bytes match it, and to install only files whose received body
+	// matches it. A receiver that understands it echoes ResumeState.ContentCheck;
+	// one that does not ignores both fields and falls back to its size+mtime
+	// rule, which the sender can then see and report. omitempty: absent, every
+	// frame is byte-for-byte what it was (stream_golden_test.go).
+	ContentCheck bool `json:",omitempty"`
+	// Preflight marks a capability question that changes nothing: a sync
+	// Hello with ContentCheck, WITHOUT Delete, followed by an EMPTY manifest.
+	// A receiver that understands it answers ResumeState{ContentCheck,
+	// Preflight, DeleteReport} and then waits, on the same connection, for the
+	// real Hello and manifest. An older receiver ignores the flag and sees an
+	// empty sync with nothing to delete -- it writes, removes and replaces
+	// nothing -- and its missing echo tells the sender to stop before the real
+	// request (with its Delete) is ever sent. Sent only for --checksum or
+	// --strict-delete.
+	Preflight bool `json:",omitempty"`
 }
 
 type FileEntry struct {
@@ -82,6 +100,10 @@ type FileEntry struct {
 	Size    int64
 	Mode    uint32
 	ModTime int64 // unix seconds
+	// SHA256 is the lowercase hex SHA-256 of the file's Size bytes, set only in
+	// a sync whose Hello.ContentCheck is set. omitempty keeps every other
+	// manifest unchanged on the wire.
+	SHA256 string `json:",omitempty"`
 }
 
 type Manifest struct{ Files []FileEntry }
@@ -99,6 +121,16 @@ type ResumeState struct {
 	// MsgResumeVerdict. A sender waits for that verdict only when this is set,
 	// so an older receiver (which never sends one) cannot deadlock a new sender.
 	ResumeProof bool
+	// ContentCheck echoes Hello.ContentCheck: this receiver decided Skip by
+	// comparing content digests (not size+mtime), and will install a file only
+	// if its body matches the manifest's SHA256. Absent, the sender knows the
+	// receiver predates content checking and that Skip used size+mtime.
+	ContentCheck bool `json:",omitempty"`
+	// Preflight and DeleteReport answer a Preflight Hello: this receiver
+	// supports content checking and reports refused/partial deletes, and is
+	// now waiting for the real Hello on this connection.
+	Preflight    bool `json:",omitempty"`
+	DeleteReport bool `json:",omitempty"`
 }
 
 type FileStart struct {
@@ -153,6 +185,12 @@ type Result struct {
 	OK           bool
 	Failed       []string
 	DeleteDenied bool // sync mode: Hello.Delete was set but the receiver isn't --allow-delete
+	// DeleteRefused and DeletePartial report a permitted mirror-delete that the
+	// receiver refused (nothing deleted) or that stopped part-way. They carry no
+	// receiver text (no local paths), and are sent only to a sender that set
+	// Hello.ContentCheck, so an older sender's Result is unchanged.
+	DeleteRefused bool `json:",omitempty"`
+	DeletePartial bool `json:",omitempty"`
 }
 
 // Stable MsgError codes. New codes may be added; existing ones never change

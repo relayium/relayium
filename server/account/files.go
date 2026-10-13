@@ -637,17 +637,29 @@ func uploadOperationDigest(r *http.Request) []byte {
 //   - the object is gone (deleted, expired, download limit spent): 410 — it
 //     is never created a second time;
 //   - otherwise: the original 200 body with `Idempotent-Replay: true`.
+//
+// Every answer it writes carries "Connection: close". A key is answered
+// without reading the body, and net/http otherwise drains up to 256 KiB of an
+// unread request body BEFORE writing the response header so the connection
+// can be reused. A client that asks with no body to send (a recovery probe)
+// behind a proxy that does not forward "Expect: 100-continue" would wait for
+// that drain forever; closing the connection after the answer skips it. The
+// status, body and every other header are unchanged, and a request that is
+// NOT answered here (false) keeps its connection behaviour.
 func (s *Service) answerUploadOperation(w http.ResponseWriter, r *http.Request, userID, key string, digest []byte, failClosed bool) bool {
 	op, err := s.store.GetUploadOperation(r.Context(), userID, key)
 	if errors.Is(err, ErrNotFound) || (err != nil && !failClosed) {
 		return false
 	}
+	answer := func() { w.Header().Set("Connection", "close") }
 	if err != nil {
+		answer()
 		// Fail closed: an unknown answer must not become a second upload.
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return true
 	}
 	if !bytes.Equal(op.RequestDigest, digest) {
+		answer()
 		http.Error(w, "Idempotency-Key was already used for a different request", http.StatusUnprocessableEntity)
 		return true
 	}
@@ -656,14 +668,17 @@ func (s *Service) answerUploadOperation(w http.ResponseWriter, r *http.Request, 
 		if !failClosed {
 			return false
 		}
+		answer()
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return true
 	}
 	if err != nil || sf.UserID != userID || s.now().Unix() >= sf.ExpiresAt ||
 		(sf.MaxDownloads > 0 && sf.DownloadCount >= sf.MaxDownloads) {
+		answer()
 		http.Error(w, "the upload made with this Idempotency-Key no longer exists", http.StatusGone)
 		return true
 	}
+	answer()
 	w.Header().Set("Idempotent-Replay", "true")
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": sf.ID, "expiresAt": sf.ExpiresAt})
 	return true

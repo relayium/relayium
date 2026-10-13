@@ -62,7 +62,8 @@ usage:
   relayium whoami                           show the logged-in cloud account
   relayium up <path...> [--burn] [--ttl D] [--max-downloads N]
                                              encrypt client-side and upload to the cloud
-  relayium down <link-or-code> [destDir]    fetch and decrypt a cloud claim (no login needed)
+  relayium down <link-or-code|-> [destDir] fetch and decrypt a cloud claim (no login needed;
+                                             "-" reads the link from stdin)
   relayium inbox <subcommand>               Device Inbox: send files to one of your devices
                                              (devices, send, sent, cancel, retry) or receive
                                              them here (enable --dir, run, status, pause,

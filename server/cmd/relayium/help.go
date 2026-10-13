@@ -273,6 +273,11 @@ Runs the device-code flow: it prints a short code and a URL, you approve it in a
 browser, and the credential is stored in --config-dir. Needs network access to
 the server.
 
+A machine that already holds a credential (in --config-dir) is refused before
+anything is sent: logging in again would register a new device, leave the old
+credential live, stop Device Inbox receiving enabled here and strand unfinished
+"inbox send" retries. Run "relayium logout" first to switch account or server.
+
 An account is required only for the hosted and account-bound features: minting a
 pairing code for "send"/"text", "relayium up", and the Device Inbox. It grants
 NO filesystem access to anyone — "serve"/"push relayium://" trust is the
@@ -304,7 +309,7 @@ flags:
 const whoamiUsage = `relayium whoami — show the logged-in cloud account
 
 usage:
-  relayium whoami [--config-dir D]
+  relayium whoami [--json] [--config-dir D]
 
 Reads the credential stored in --config-dir (default ~/.config/relayium) and
 prints the account and server it is for. Local only: it makes no request, so it
@@ -312,13 +317,17 @@ reports what this machine has, not whether the server still accepts it. Exits
 non-zero when this machine is not logged in.
 
 flags:
+  --json           print one JSON document ({"loggedIn", "account", "server"},
+                   or {"loggedIn": false, "error"} with exit 1); never the token
   --config-dir D   credential directory (default ~/.config/relayium)
 `
 
 const upUsage = `relayium up — encrypt locally and upload to a shareable link
 
 usage:
-  relayium up <path...> [--burn] [--ttl D] [--max-downloads N] [--config-dir D]
+  relayium up <path...> [--burn] [--ttl D] [--max-downloads N] [--json] [--config-dir D]
+  relayium up --recover <operation> [--json] [--config-dir D]
+  relayium up --pending [--json] [--config-dir D]
 
 Files are encrypted on this machine and only the ciphertext is uploaded; the
 printed link carries the key in its "#k=" fragment, which a browser never sends
@@ -345,28 +354,66 @@ flags:
   --ttl D                retention: 7d, 2w, 2h, 90m, or a number of seconds. The
                          plan's cap still applies and a longer request is
                          shortened (you are told when that happens).
-  --max-downloads N      stop serving the link after N downloads
+  --max-downloads N      stop serving the link after N downloads. N must be
+                         positive; leaving it out (or 0) applies the server's
+                         default download policy, which is not necessarily
+                         unlimited. A negative N is refused before anything
+                         is uploaded.
   --server URL           override the cloud server. It must be the server you
                          are logged in to; the token is never sent elsewhere.
   --config-dir D         credential directory (default ~/.config/relayium)
 
 The link goes to stdout, so "relayium up f | pbcopy" copies only the link.
+
+When the answer is lost: before sending, each upload is recorded privately in
+--config-dir (the record holds the link's key, like the credential beside it).
+If the whole upload was sent but no usable answer came back — a gateway error,
+a dropped connection, an unreadable confirmation — the server may have stored
+it, and "up" exits 3 and names the operation. "relayium up --recover <id>"
+then asks the server about that exact upload WITHOUT sending it again: if the
+server has it, the link is printed (counted once, as before); if the server
+proves it was stored and has since gone, it says so. Any other answer —
+a server that asks for the data again, a timeout, an unexpected status —
+only means the upload was not confirmed (it may still exist): the outcome
+stays unknown, the record is kept, and nothing is uploaded. Recovery waits
+at most 30 seconds for an answer; a server that predates upload recovery
+never confirms one.
+Recovery is refused for another account or server. "up --pending" lists the
+recorded operations (never their keys). An upload stopped part-way is not
+resumed: run "up" again, which uploads and counts a new copy.
+
+exit status: 0 uploaded (or recovered); 1 failed, or recovery found it gone;
+2 usage; 3 outcome unknown — the operation is kept for "--recover".
+
+  --json         print one JSON document: {"status", "link", "id",
+                 "expiresAt", "operation"} when uploaded, or {"status",
+                 "operation", "error"} otherwise. Only an "uploaded" document
+                 carries the link (and its key).
+  --recover ID   ask the server for the outcome of operation ID
+  --pending      list operations whose outcome is still unknown
 `
 
 const downUsage = `relayium down — fetch and decrypt a stored link
 
 usage:
   relayium down <link-or-code> [destDir]
+  relayium down - [destDir]           read the link from standard input
 
 No account is needed: the id and the key in the link are the only credential,
 and the key never reaches the server. Needs network access to the server the
 link points at.
 
 positional arguments:
-  <link-or-code>   a full "relayium up" link, or a bare <id>#k=<key> code
+  <link-or-code>   a full "relayium up" link, or a bare <id>#k=<key> code,
+                   or "-" to read it from standard input
   [destDir]        directory to write into (default ".")
 
-Quote the argument — the "#" would otherwise start a shell comment.
+Prefer "-": a link typed as an argument is visible to other local users (ps)
+and kept in shell history, and the key in it opens the files. For example:
+  pbpaste | relayium down - ./dest
+Standard input must hold exactly one link (at most 8 KiB) and must not be a
+terminal. When passing the link as an argument, quote it — the "#" would
+otherwise start a shell comment. Error messages never repeat the key.
 
 flags:
   --server URL   override the cloud server (default: the one in the link, else
@@ -376,7 +423,7 @@ flags:
 const updateUsage = `relayium update — upgrade this binary in place
 
 usage:
-  relayium update [--check] [--force]
+  relayium update [--check [--json]] [--force]
 
 Downloads the latest release from https://github.com/` + updateRepo + `/releases
 and replaces the running binary. Needs network access and write permission on
@@ -385,6 +432,10 @@ cannot be replaced, so it prints where to download the zip instead.
 
 flags:
   --check    only report whether an update is available; install nothing
+  --json     with --check only: print one JSON document
+             ({"current", "latest", "updateAvailable"}, or "error" with exit 1).
+             Exit 0 means the question was answered, whatever the answer.
+             Refused without --check, so it can never trigger an install.
   --force    reinstall even when already on the latest version. --force also
              disables the downgrade guard and the minimum-version floor built
              into this binary, so it will install an older release, even one
@@ -467,7 +518,7 @@ flags:
 const inboxStatusUsage = `relayium inbox status — show local, credential and server state
 
 usage:
-  relayium inbox status [--config-dir D]
+  relayium inbox status [--check] [--json] [--config-dir D]
 
 Reports what is actually true: whether receive is on or paused, the receive
 directory and whether it is usable, whether a worker holds the lock, which
@@ -476,10 +527,27 @@ what the server says about this device's enrolment, presence and active key.
 
 No secret is ever printed. The local section works offline; the server section
 needs "relayium login" and network access, and its absence is reported rather
-than guessed. Exits non-zero when there is no credential or the server cannot
-be reached.
+than guessed. Exits 1 when there is no credential or the server cannot be
+reached, 0 otherwise — whatever the state it reports.
+
+--check turns the report into a readiness probe for monitors and scripts:
+  0  this device can receive now: enabled, not paused, receive directory
+     usable, a worker holds the lock, keys readable, and — as the server sees
+     it — enrolled, not revoked, online, policy "auto", receive directory
+     ready, a protocol and receive capability this build speaks, and the
+     private half of the active key held here
+  3  the state was read and the device cannot receive; a final "NOT READY:"
+     line (or the JSON "notReady" list) names every reason
+  1  the state could not be read (no credential, server unreachable) —
+     a failed query, never reported as "not ready"
+Where the platform cannot tell whether a worker runs, --check reports
+"worker_unknown" rather than guessing.
 
 flags:
+  --check          exit with the readiness codes above
+  --json           print exactly one JSON document on stdout (on success and
+                   on failure) instead of the report; it carries no token and
+                   no key material
   --config-dir D   credential/state directory (default ~/.config/relayium)
 `
 

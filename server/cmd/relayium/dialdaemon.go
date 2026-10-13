@@ -36,15 +36,26 @@ func dialDaemon(target, configDir string, stderr io.Writer) (*tls.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.DialTimeout("tcp", hostport, daemonDialTimeout)
+	raw, err := net.DialTimeout("tcp", hostport, daemonDialTimeout)
 	if err != nil {
 		return nil, err
 	}
+	// The handshake has its own deadline: a listener that accepts the TCP
+	// connection and then never answers must not hold this command forever.
+	// It is cleared on success, and the transfer phase is bounded per
+	// operation instead (see phasedConn).
+	conn := &phasedConn{Conn: raw, readIdle: daemonReadIdle, writeIdle: daemonWriteIdle}
+	_ = raw.SetDeadline(time.Now().Add(daemonHandshakeTimeout))
 	tconn, presented, err := secure.ClientAny(conn, id)
 	if err != nil {
-		conn.Close()
+		raw.Close()
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return nil, fmt.Errorf("TLS handshake with %s failed: no answer within %s (is a relayium listener running there?)", hostport, daemonHandshakeTimeout)
+		}
 		return nil, fmt.Errorf("TLS handshake with %s failed: %w", hostport, err)
 	}
+	conn.startTransfer()
 	if found {
 		if presented != pinned {
 			tconn.Close()
@@ -78,9 +89,16 @@ func pushDaemon(target string, srcs []string, configDir string, noResume bool, s
 		return 1
 	}
 	defer tconn.Close()
+	ctx, stop := transferSignalContext()
+	defer stop()
 	prog := newSendProgress(stderr)
-	rep, err := xfer.Send(tconn, m, paths, xfer.SendOpts{Progress: prog.report})
+	// A one-shot push stops at once on a signal (no drain): the person asked it
+	// to stop, and the receiver discards the file in flight.
+	rep, err := sendWithShutdown(ctx, tconn, m, paths, xfer.SendOpts{Progress: prog.report}, 0)
 	prog.finish()
+	if errors.Is(err, errTransferInterrupted) {
+		return reportInterrupted(rep, stderr)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		// The authorization hint is a guess for the silent case — an unauthorized

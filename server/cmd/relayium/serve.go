@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/term"
@@ -42,6 +44,14 @@ type idleConn struct {
 func (c *idleConn) Read(p []byte) (int, error) {
 	_ = c.Conn.SetReadDeadline(time.Now().Add(c.idle))
 	return c.Conn.Read(p)
+}
+
+// Write is bounded the same way: a sender that stops reading must not pin this
+// handler on a reply (resume state, verdicts, the result) forever. The
+// listener's replies are small frames, so one deadline per Write is per-frame.
+func (c *idleConn) Write(p []byte) (int, error) {
+	_ = c.Conn.SetWriteDeadline(time.Now().Add(c.idle))
+	return c.Conn.Write(p)
 }
 
 type serveFlags struct {
@@ -94,6 +104,12 @@ already exists under --dir, and only after its size and SHA-256 verified; the
 bytes are staged privately beside it until then. A dropped or cancelled
 stream leaves nothing under the name. If serve itself is killed mid-stream,
 one hidden ".relayium-recv-*" staging directory can remain; remove it.
+
+SIGINT (Ctrl-C) or SIGTERM stops serve: it stops accepting at once, lets
+transfers in flight finish for up to 30 seconds, then aborts the rest (their
+unverified files are discarded, never installed) and exits — 0 when nothing had
+to be aborted, 1 when a transfer was cut off. With --once, it exits 0 only if
+its one transfer completed.
 
 In a terminal, serve asks you to approve each new pusher on its first push and
 remembers it. With no terminal (systemd, a pipe), an unknown pusher is rejected:
@@ -174,6 +190,11 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	// Signals are taken over BEFORE the listener exists and before "listening
+	// on" is printed: a stop that arrives right after start-up must be a clean
+	// stop, not the default kill.
+	ctx, stop := transferSignalContext()
+	defer stop()
 	ln, err := net.Listen("tcp", serveListenAddr(f.bind, f.port))
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -186,7 +207,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "note: listening on all interfaces. Restrict it with --bind or a firewall rule.\n")
 	}
 
-	return serveLoop(ln, h, f.once)
+	return serveLoopCtx(ctx, ln, h, f.once, serveDrain)
 }
 
 // serveListenAddr builds the listen address. An empty bind keeps the historical
@@ -292,27 +313,111 @@ type serveHandler struct {
 // maxConcurrentServe) so one slow or stalled peer can't starve the rest, running
 // until Accept fails.
 func serveLoop(ln net.Listener, h *serveHandler, once bool) int {
+	return serveLoopCtx(context.Background(), ln, h, once, serveDrain)
+}
+
+// serveDrain is how long serve lets transfers in flight finish after a stop
+// signal before aborting them. A var so tests can shorten it.
+var serveDrain = 30 * time.Second
+
+// serveLoopCtx is serveLoop that stops when ctx is done (SIGINT/SIGTERM in
+// runServe): the listener closes, so nothing new is accepted; transfers in
+// flight get drain to finish; whatever is still running after that is aborted
+// by closing its raw connection. The receiver installs a file only after it
+// verifies, and removes its own staging file when a transfer ends early, so an
+// abort leaves no half file -- the handlers are given time to do that cleanup
+// before this returns.
+//
+// Exit status after a stop: 0 when nothing had to be aborted (an idle listener
+// stopped by its service manager is a clean stop), 1 when a transfer was cut
+// off. With once, 0 only if its single transfer completed.
+func serveLoopCtx(ctx context.Context, ln net.Listener, h *serveHandler, once bool, drain time.Duration) int {
+	tracker := newConnTracker()
+	var stopping atomic.Bool
+	stopped := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			stopping.Store(true)
+			_ = ln.Close()
+		case <-stopped:
+		}
+	}()
+	defer close(stopped)
+
+	// shutdown runs the bounded drain and reports whether anything was aborted.
+	shutdown := func() (aborted bool) {
+		if tracker.wait(drain) {
+			return false
+		}
+		n := tracker.abortAll()
+		fmt.Fprintf(h.stderr, "relayium serve: stopping; aborted %d transfer(s) still in flight after %s (unverified files are discarded, none installed)\n", n, drain)
+		// Give the aborted handlers time to remove their staging files.
+		tracker.wait(5 * time.Second)
+		return n > 0
+	}
+
 	if once {
 		conn, err := ln.Accept()
 		if err != nil {
+			if stopping.Load() {
+				fmt.Fprintln(h.stderr, "relayium serve: stopped before a transfer arrived")
+				return 1
+			}
 			fmt.Fprintln(h.stderr, err)
 			return 1
 		}
-		if h.serve(conn) {
-			return 0
+		tracker.add(conn)
+		result := make(chan bool, 1)
+		go func() {
+			defer tracker.done(conn)
+			result <- h.serve(conn)
+		}()
+		select {
+		case ok := <-result:
+			if ok {
+				return 0
+			}
+			return 1
+		case <-ctx.Done():
+		}
+		shutdown()
+		select {
+		case ok := <-result:
+			if ok {
+				return 0
+			}
+		default:
 		}
 		return 1
 	}
+
 	sem := make(chan struct{}, maxConcurrentServe)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
+			if stopping.Load() {
+				if shutdown() {
+					return 1
+				}
+				fmt.Fprintln(h.stderr, "relayium serve: stopped")
+				return 0
+			}
 			fmt.Fprintln(h.stderr, err)
 			return 1
 		}
-		sem <- struct{}{}
+		// A saturated listener must still notice a stop: never block on the
+		// semaphore without also watching ctx.
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			_ = conn.Close()
+			continue // the next Accept fails on the closed listener
+		}
+		tracker.add(conn)
 		go func() {
 			defer func() { <-sem }()
+			defer tracker.done(conn)
 			h.serve(conn)
 		}()
 	}

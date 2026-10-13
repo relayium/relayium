@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -624,7 +627,10 @@ func runInboxStatus(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("inbox status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var configDir string
+	var check, asJSON bool
 	inboxConfigDirFlag(fs, &configDir)
+	fs.BoolVar(&check, "check", false, "exit 3 unless this device can receive right now")
+	fs.BoolVar(&asJSON, "json", false, "print one JSON document instead of the report")
 	if wantsHelpFS(fs, args) {
 		fmt.Fprint(stdout, inboxStatusUsage)
 		return 0
@@ -632,26 +638,226 @@ func runInboxStatus(args []string, stdout, stderr io.Writer) int {
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "inbox status takes no arguments (got %q)\n", fs.Arg(0))
+		return 2
+	}
 	cfgDir, err := resolveConfigDir(configDir)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		if asJSON {
+			writeStatusJSON(stdout, inboxStatusReport{Error: "config_dir_unresolved"})
+		} else {
+			fmt.Fprintln(stderr, err)
+		}
 		return 1
 	}
+
+	// The human report is written as it is gathered, exactly as before; with
+	// --json it goes nowhere and the gathered facts are printed as one document.
+	text := stdout
+	if asJSON {
+		text = io.Discard
+	}
+	rep, code := gatherInboxStatus(cfgDir, text)
+
+	if check {
+		rep.computeReadiness()
+		switch {
+		case code != 0:
+			// The question could not be answered: no credential, or the server
+			// unreachable. That is a failure to query (1), never "not ready".
+		case rep.Ready:
+			code = 0
+		default:
+			code = exitInboxNotReady
+		}
+		if !asJSON {
+			if code == exitInboxNotReady {
+				fmt.Fprintf(stdout, "\nNOT READY: %s\n", strings.Join(rep.NotReady, ", "))
+			} else if code == 0 {
+				fmt.Fprintln(stdout, "\nREADY: this device can receive deliveries now")
+			}
+		}
+	} else if asJSON {
+		rep.computeReadiness()
+	}
+	if asJSON {
+		writeStatusJSON(stdout, rep)
+	}
+	return code
+}
+
+// exitInboxNotReady is `inbox status --check`'s answer "the state was read, and
+// this device cannot receive right now". It is distinct from 1, "the state
+// could not be read" (no credential, server unreachable), so a monitor can tell
+// a broken receiver from a broken probe.
+const exitInboxNotReady = 3
+
+// inboxStatusReport is what `inbox status` found, layer by layer. It carries no
+// secret: no token, no key material — a key generation and counts only.
+type inboxStatusReport struct {
+	Local struct {
+		Configured        bool   `json:"configured"`
+		ConfigError       string `json:"configError,omitempty"`
+		Enabled           bool   `json:"enabled"`
+		Paused            bool   `json:"paused"`
+		ReceiveDir        string `json:"receiveDir,omitempty"`
+		ReceiveDirUsable  bool   `json:"receiveDirUsable"`
+		ReceiveDirProblem string `json:"receiveDirProblem,omitempty"`
+		// Worker is "running", "not_running" or "unknown".
+		Worker      string `json:"worker"`
+		WorkerError string `json:"workerError,omitempty"`
+		DeviceID    string `json:"deviceId,omitempty"`
+		Server      string `json:"server,omitempty"`
+	} `json:"local"`
+	Credential struct {
+		Present bool   `json:"present"`
+		Error   string `json:"error,omitempty"`
+		Account string `json:"account,omitempty"`
+		Server  string `json:"server,omitempty"`
+	} `json:"credential"`
+	Keys struct {
+		Held  int    `json:"held"`
+		Error string `json:"error,omitempty"`
+	} `json:"keys"`
+	ServerState *inboxServerStatus `json:"serverState,omitempty"`
+	// Error names why the status could not be fully read: "not_logged_in",
+	// "credential_unreadable", "server_unreachable". Empty when it was.
+	Error       string `json:"error,omitempty"`
+	ServerError string `json:"serverError,omitempty"`
+	// Ready and NotReady answer "can this device receive now?". Ready is false
+	// whenever Error is set: an unanswered question is not a yes.
+	Ready    bool     `json:"ready"`
+	NotReady []string `json:"notReady"`
+}
+
+type inboxServerStatus struct {
+	DeviceID          string `json:"deviceId"`
+	DeviceName        string `json:"deviceName"`
+	Enrolled          bool   `json:"enrolled"`
+	Presence          string `json:"presence,omitempty"`
+	AutoAccept        string `json:"autoAccept,omitempty"`
+	ReceiveDirReady   bool   `json:"receiveDirReady"`
+	ProtocolVersion   int    `json:"protocolVersion,omitempty"`
+	ReceiveCapability string `json:"receiveCapability,omitempty"`
+	CanReceive        bool   `json:"canReceive"`
+	Revoked           bool   `json:"revoked"`
+	KeyGeneration     int64  `json:"keyGeneration,omitempty"`
+	KeyPublished      bool   `json:"keyPublished"`
+	KeyHeldLocally    bool   `json:"keyHeldLocally"`
+}
+
+// computeReadiness lists every reason this device cannot receive now. Each is
+// a stable code a script can match.
+func (r *inboxStatusReport) computeReadiness() {
+	var why []string
+	add := func(code string) { why = append(why, code) }
+	switch {
+	case r.Local.ConfigError != "":
+		add("config_unreadable")
+	case !r.Local.Configured || !r.Local.Enabled:
+		add("not_enabled")
+	case r.Local.Paused:
+		add("paused")
+	}
+	if r.Local.Configured && r.Local.Enabled && !r.Local.ReceiveDirUsable {
+		add("receive_dir_unusable")
+	}
+	switch r.Local.Worker {
+	case "running":
+	case "not_running":
+		add("worker_not_running")
+	default:
+		add("worker_unknown")
+	}
+	if r.Keys.Error != "" {
+		add("keys_unreadable")
+	}
+	if r.Error != "" {
+		add(r.Error)
+	}
+	if s := r.ServerState; s != nil {
+		if r.Local.DeviceID != "" && r.Local.DeviceID != s.DeviceID {
+			add("device_changed")
+		}
+		if r.Local.Server != "" && !sameServer(r.Local.Server, r.Credential.Server) {
+			add("server_changed")
+		}
+		switch {
+		case !s.Enrolled:
+			add("not_enrolled")
+		case s.Revoked:
+			add("revoked")
+		case !s.CanReceive:
+			add("server_cannot_receive")
+		}
+		if s.Enrolled && !s.Revoked {
+			// The server's CanReceive means only that a sender may SEAL a task
+			// to this device -- it is true for an offline device or one that
+			// asks first. Receiving automatically, now, also needs every one of
+			// these, as the server sees them.
+			if s.Presence != inbox.PresenceOnline {
+				add("server_presence_not_online")
+			}
+			if s.AutoAccept != inbox.AutoAcceptAuto {
+				add("server_policy_not_auto")
+			}
+			if !s.ReceiveDirReady {
+				add("server_receive_dir_not_ready")
+			}
+			if !slices.Contains(inboxclient.ProtocolVersions(), s.ProtocolVersion) ||
+				!slices.Contains(inboxclient.Capabilities(), s.ReceiveCapability) {
+				add("protocol_unsupported")
+			}
+		}
+		if s.Enrolled && !s.KeyPublished {
+			add("no_active_key")
+		} else if s.Enrolled && !s.KeyHeldLocally {
+			add("active_key_not_held")
+		}
+	}
+	if why == nil {
+		why = []string{}
+	}
+	r.NotReady = why
+	r.Ready = len(why) == 0
+}
+
+func writeStatusJSON(w io.Writer, rep inboxStatusReport) {
+	if rep.NotReady == nil {
+		rep.NotReady = []string{}
+	}
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(rep)
+}
+
+// gatherInboxStatus reads every layer and writes the human report to out as it
+// goes. The exit code is the default `status` contract: 1 when there is no
+// usable credential or the server cannot be asked, 0 otherwise.
+func gatherInboxStatus(cfgDir string, stdout io.Writer) (inboxStatusReport, int) {
+	var rep inboxStatusReport
 	store := inboxclient.NewStore(inboxclient.StoreDir(cfgDir))
 	cfg, found, cerr := store.LoadConfig()
 
 	fmt.Fprintln(stdout, "Local")
 	if cerr != nil {
+		rep.Local.ConfigError = cerr.Error()
 		fmt.Fprintf(stdout, "  configuration:  unreadable (%v)\n", cerr)
 	} else if !found {
 		fmt.Fprintln(stdout, "  automatic receive: off (never enabled)")
 		fmt.Fprintln(stdout, "  enable it with: relayium inbox enable --dir <folder>")
 	} else {
+		rep.Local.Configured = true
+		rep.Local.Enabled, rep.Local.Paused = cfg.Enabled, cfg.Paused
+		rep.Local.ReceiveDir, rep.Local.DeviceID, rep.Local.Server = cfg.Dir, cfg.DeviceID, cfg.Server
 		fmt.Fprintf(stdout, "  automatic receive: %s\n", enabledWord(cfg))
 		fmt.Fprintf(stdout, "  receive directory: %s\n", cfg.Dir)
 		if derr := inboxclient.CheckReceiveDir(cfg.Dir); derr != nil {
+			rep.Local.ReceiveDirProblem = derr.Error()
 			fmt.Fprintf(stdout, "  directory status:  NOT USABLE — %v\n", derr)
 		} else {
+			rep.Local.ReceiveDirUsable = true
 			fmt.Fprintln(stdout, "  directory status:  usable (verified by writing and removing a probe file)")
 		}
 	}
@@ -662,12 +868,18 @@ func runInboxStatus(args []string, stdout, stderr io.Writer) int {
 	running, lerr := inboxclient.WorkerRunning(store.LockPath())
 	switch {
 	case errors.Is(lerr, inboxclient.ErrLockUnsupported):
+		rep.Local.Worker = "unknown"
+		rep.Local.WorkerError = "unsupported on this platform"
 		fmt.Fprintln(stdout, "  worker:            unknown on this platform")
 	case lerr != nil:
+		rep.Local.Worker = "unknown"
+		rep.Local.WorkerError = lerr.Error()
 		fmt.Fprintf(stdout, "  worker:            unknown (%v)\n", lerr)
 	case running:
+		rep.Local.Worker = "running"
 		fmt.Fprintln(stdout, "  worker:            running (`relayium inbox run` holds the lock)")
 	default:
+		rep.Local.Worker = "not_running"
 		fmt.Fprintln(stdout, "  worker:            not running — start it with `relayium inbox run`")
 	}
 
@@ -675,13 +887,16 @@ func runInboxStatus(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, "Credential")
 	creds, hasCreds, err := cloud.Load(cfgDir)
 	if err != nil {
+		rep.Error, rep.Credential.Error = "credential_unreadable", err.Error()
 		fmt.Fprintf(stdout, "  unreadable (%v)\n", err)
-		return 1
+		return rep, 1
 	}
 	if !hasCreds {
+		rep.Error = "not_logged_in"
 		fmt.Fprintln(stdout, "  not logged in — run `relayium login`")
-		return 1
+		return rep, 1
 	}
+	rep.Credential.Present, rep.Credential.Account, rep.Credential.Server = true, creds.AccountEmail, creds.Server
 	fmt.Fprintf(stdout, "  account: %s\n", creds.AccountEmail)
 	fmt.Fprintf(stdout, "  server:  %s\n", creds.Server)
 
@@ -690,8 +905,10 @@ func runInboxStatus(args []string, stdout, stderr io.Writer) int {
 	// can act on.
 	keys, kerr := store.Keys().Load()
 	if kerr != nil {
+		rep.Keys.Error = kerr.Error()
 		fmt.Fprintf(stdout, "  device keys: unreadable (%v)\n", kerr)
 	} else {
+		rep.Keys.Held = len(keys)
 		fmt.Fprintf(stdout, "  device keys: %d private key(s) held locally\n", len(keys))
 	}
 
@@ -701,17 +918,24 @@ func runInboxStatus(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 	sess, err := openInboxSession(ctx, cfgDir)
 	if err != nil {
+		rep.Error, rep.ServerError = "server_unreachable", err.Error()
 		fmt.Fprintf(stdout, "  unreachable or not authorised: %v\n", err)
 		fmt.Fprintln(stdout, "  (the local state above is still accurate)")
-		return 1
+		return rep, 1
 	}
+	ss := &inboxServerStatus{DeviceID: sess.device.ID, DeviceName: sess.device.Name}
+	rep.ServerState = ss
 	fmt.Fprintf(stdout, "  device:    %s (%s)\n", sess.device.Name, sess.device.ID)
 	in := sess.device.Inbox
 	if in == nil {
 		fmt.Fprintln(stdout, "  enrolment: none — this device is not a send target")
 		fmt.Fprintln(stdout, "  enable it with: relayium inbox enable --dir <folder>")
-		return 0
+		return rep, 0
 	}
+	ss.Enrolled = true
+	ss.Presence, ss.AutoAccept, ss.ReceiveDirReady = string(in.Presence), in.AutoAccept, in.ReceiveDirReady
+	ss.ProtocolVersion, ss.ReceiveCapability = in.ProtocolVersion, in.ReceiveCapability
+	ss.CanReceive, ss.Revoked = in.CanReceive, in.Revoked
 	fmt.Fprintf(stdout, "  presence:  %s\n", in.Presence)
 	fmt.Fprintf(stdout, "  policy:    auto-accept %q, receive directory reported %s\n",
 		in.AutoAccept, readyWord(in.ReceiveDirReady))
@@ -721,6 +945,7 @@ func runInboxStatus(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "  active key: none published")
 	} else {
 		_, held, err := store.Keys().ByKeyID(in.Key.ID)
+		ss.KeyPublished, ss.KeyGeneration, ss.KeyHeldLocally = true, in.Key.Generation, held && err == nil
 		fmt.Fprintf(stdout, "  active key: generation %d, private half held locally: %t\n",
 			in.Key.Generation, held && err == nil)
 		if !held {
@@ -731,7 +956,7 @@ func runInboxStatus(args []string, stdout, stderr io.Writer) int {
 	if in.Revoked {
 		fmt.Fprintln(stdout, "  the inbox was revoked; clear it from another device or the web, then re-enable here")
 	}
-	return 0
+	return rep, 0
 }
 
 func enabledWord(cfg inboxclient.Config) string {
