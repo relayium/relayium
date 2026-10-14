@@ -597,6 +597,31 @@ describe("uploadFileResumable", () => {
     expect(captured.url).toContain("/api/files");
   });
 
+  it("never finalizes or sends a single POST when a file read fails mid-upload", async () => {
+    // encryptFiles reads one slice ahead, so the failing read below is started
+    // while an earlier frame is still being packed and PATCHed. It must still
+    // end the upload as that read's own error, at the slice that needed it:
+    // no finalize, and the legacy single-shot fallback re-reads, hits the same
+    // failure and never sends its POST.
+    const state = installFakeUploadFetch({ chunkSize: 100 * 1024 });
+    const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+    const { file: real } = multiChunkFixture(4);
+    const err = new DOMException("read failed", "NotReadableError");
+    const failing = {
+      name: real.name,
+      size: real.size,
+      slice: (a: number, b: number) =>
+        a >= 2 * STORE_CHUNK_SIZE ? { arrayBuffer: () => Promise.reject(err) } : real.slice(a, b),
+    } as unknown as File;
+
+    await expect(uploadFileResumable([failing], { burnAfterRead: false, ttl: 0 })).rejects.toBe(err);
+    expect(state.patches).toBeGreaterThan(0); // the failure really was mid-upload
+    expect(state.received).toBeLessThan(cipherSizeFor([real]));
+    expect(state.finalized).toBe(false);
+    expect(captured.url).toBe("");
+    expect(captured.body).toBeNull();
+  });
+
   it("does not retain the ciphertext — resident bytes stay far below the file size", async () => {
     // 上一条测的是我们自己记的计数器；这条测的是**真实驻留**。旧实现（把每一帧都
     // push 进数组再 new Blob）在这里的 delta 会随文件线性增长，计数器却看不见。

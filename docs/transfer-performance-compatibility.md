@@ -12,6 +12,21 @@ Performance work is classified before implementation:
    status semantics and API shape needs no capability. Old and new clients use
    the same wire. The current Web read-ahead and segmented decrypt queue, native
    incremental chain hash and bounded download buffering are in this class.
+   So is the Web stored upload's one-slice file read-ahead (`encryptFiles`,
+   2026-10-14): the next 192 KiB slice of the same file is read while the
+   current one is sealed. Frames, nonces, frame order, the server-issued
+   upload chunk size (8 MiB by default for shares and Device Inbox deliveries,
+   1 MiB for pair-room pre-uploads), the single in-flight PATCH, replay of an
+   unacknowledged tail and the fallback/finalize sequence are unchanged; the
+   packing buffer is unchanged and at most one extra 192 KiB slice read is
+   outstanding. File reads cannot be aborted: once the upload has returned the
+   encryption generator, the one outstanding read-ahead may still settle late,
+   but its result is discarded and cannot trigger further sealing or network
+   requests. As before, a pull that is already in progress when the caller's
+   abort signal fires may finish its current read and seal before the caller
+   returns the generator. The gain is in the preparation stage; how much of
+   it reaches a whole upload depends on the network, and no transfer-speed
+   figure is promised.
 2. A server hardening change may reject a request that no released client emits,
    but must retain every released request shape. Account-file resume therefore
    continues to accept exactly `Range: bytes=N-`; unsupported explicit-end,
@@ -78,7 +93,9 @@ the same expand/observe/contract rule.
 The `kimi_reviews` reports were treated as hypotheses, not requirements.
 
 - Implemented: bounded native response streaming, allocation-reduced native
-  hashing, segmented Web decryption, one-chunk Web read-ahead, explicit invalid
+  hashing, segmented Web decryption, one-chunk Web read-ahead (realtime
+  transfer; the stored upload's one-slice read-ahead followed on 2026-10-14),
+  explicit invalid
   Range rejection, nginx response streaming/upstream reuse, and consistent
   `fq` queueing for future BBR TURN installs.
 - Already present: pooled remote-storage clients, production file-descriptor

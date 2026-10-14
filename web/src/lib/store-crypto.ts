@@ -171,13 +171,41 @@ export function cipherSizeFor(files: File[]): number {
   return n;
 }
 
+// Start reading the STORE_CHUNK_SIZE slice of `file` at `off`, or return
+// undefined past its end. The promise is observed immediately, so a read that
+// fails while nobody is awaiting it yet — or that is never awaited because the
+// generator was returned early — is not an unhandled rejection; the `await`
+// that later needs it still receives the original error. A synchronous throw
+// from slice() is turned into that same rejection, so it surfaces at the same
+// point it did before the read-ahead existed.
+function readSlice(file: File, off: number): Promise<ArrayBuffer> | undefined {
+  if (off >= file.size) return undefined;
+  let read: Promise<ArrayBuffer>;
+  try {
+    read = file.slice(off, off + STORE_CHUNK_SIZE).arrayBuffer();
+  } catch (e) {
+    read = Promise.reject(e);
+  }
+  read.catch(() => {});
+  return read;
+}
+
 // Stream every file's chunks as encrypted frames; seq is global across files,
 // starting at 1 (0 is the manifest).
+//
+// One slice of read-ahead: the read of the NEXT slice of the same file starts
+// before the current slice is sealed, so file I/O overlaps AES-GCM. At most one
+// future read is outstanding (≤ STORE_CHUNK_SIZE bytes); sealing, nonces, frame
+// order and frame bytes are exactly the serial ones. File reads cannot be
+// aborted: after an early return the one outstanding read may still settle,
+// but its result is dropped and nothing is sealed or sent from it.
 export async function* encryptFiles(files: File[], key: CryptoKey): AsyncGenerator<Bytes> {
   let seq = 1;
   for (const file of files) {
+    let next = readSlice(file, 0);
     for (let off = 0; off < file.size; off += STORE_CHUNK_SIZE) {
-      const piece = new Uint8Array(await file.slice(off, off + STORE_CHUNK_SIZE).arrayBuffer()) as Bytes;
+      const piece = new Uint8Array(await next!) as Bytes;
+      next = readSlice(file, off + STORE_CHUNK_SIZE);
       const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce(seq) }, key, piece));
       yield frame(ct);
       seq++;
