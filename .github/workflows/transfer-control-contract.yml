@@ -1,8 +1,8 @@
-# transfer-control-contract.yml — the lane that owns ONE document:
-# `contracts/transfer-control-v1.json` (docs/protocol/relayium-transfer-control-v1.md).
+# Shared Web transfer contract lane: transfer-control-v1 and relay-performance-v1.
+# Both documents have Web-only consumers; native ports register when implemented.
 #
 # Why its own lane, on one free Ubuntu runner: the document's only consumers are
-# two Web Vitest files that load every vector and compare it with what
+# three Web Vitest files that load every vector and compare it with what
 # web/src/lib/transfer-control.ts and stored-file.ts actually do. Joining
 # `contracts.yml` would make every edit to it buy that lane's PAID macOS Swift
 # job, which cannot open this file; joining `web.yml` would start the whole Web
@@ -12,7 +12,7 @@
 # evidence/witness steps (scripts/ci/ci-evidence-registry.json).
 #
 # A change to the consumers themselves (web/src/**) is judged by `web.yml`,
-# whose `npm test` runs the same two files.
+# whose `npm test` runs the same three files.
 
 name: transfer-control-contract
 
@@ -22,6 +22,7 @@ on:
       - main
     paths:
       - 'contracts/transfer-control-v1.json'
+      - 'contracts/relay-performance-v1.json'
       - '.github/workflows/transfer-control-contract.yml'
       # The PR→main evidence verifier, its registry, the filter reader it imports,
       # the adoption transform, the toolchain certificate probe and registry, and
@@ -164,7 +165,7 @@ jobs:
       - name: The Web consumers of the transfer-control contract
         if: needs.evidence.outputs.reuse != 'true'
         working-directory: web
-        run: npx vitest run src/lib/transfer-control.test.ts src/lib/stored-file.adaptive.test.ts
+        run: npx vitest run src/lib/transfer-control.test.ts src/lib/stored-file.adaptive.test.ts src/lib/relay-performance.test.ts
       # PR→main evidence: the toolchain this job actually ran on, captured after
       # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
       # toolchain uploads nothing, and a job without a certificate is never

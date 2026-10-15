@@ -3,7 +3,7 @@ import {
   MAX_RTT_ENTRIES, MAX_RTT_MS, RELAY_GATE_MS,
   createRelaySelection, parseRelayRtt,
 } from "./relay-selection";
-import type { RelayEntry } from "./ice";
+import { pickRelay, type RelayEntry } from "./ice";
 
 const relay = (id: string): RelayEntry => ({
   id,
@@ -1080,5 +1080,432 @@ describe("the relay gate, when the peer it had already opened for leaves", () =>
     h.selection.noteRoster([]);
     expect(h.selection.gate.ready()).toBe(true);
     expect(h.armCount).toBe(0);
+  });
+});
+
+// ── throughput-informed selection (relay-performance-v1) ─────────────────────
+
+describe("relay selection with goodput evidence", () => {
+  const REF = 33554432;
+  /** A peer declaration. `u` defaults to `k`: an honest peer's published values
+   *  never exceed its declared bounds. */
+  const decl = (k: Record<string, number>, u: Record<string, number> = k) => ({ v: 1, policy: "bulk", ref: REF, k, u });
+
+  /** A room whose local history answers from `local` (upper bound = same). */
+  function perfRoom(local: Record<string, number>, ids = ["a", "b"]) {
+    const sent: Array<{ map: Record<string, number>; perf: unknown }> = [];
+    const doms: Array<{ cb: () => void; ms: number; cleared: boolean }> = [];
+    const graces: Array<{ cb: () => void; ms: number; cleared: boolean }> = [];
+    let clock = 0;
+    const selection = createRelaySelection({
+      publish: (map, perf) => sent.push({ map: { ...map }, perf: perf === undefined ? undefined : JSON.parse(JSON.stringify(perf)) }),
+      performance: { estimate: (id) => (Object.prototype.hasOwnProperty.call(local, id) ? local[id] : null) },
+      now: () => clock,
+      setTimer: (cb, ms, kind) => {
+        const list = kind === "dominance" ? doms : graces;
+        list.push({ cb, ms, cleared: false });
+        return (kind === "dominance" ? -list.length : list.length - 1) as unknown as ReturnType<typeof setTimeout>;
+      },
+      clearTimer: (h) => {
+        const n = h as unknown as number;
+        const t = n < 0 ? doms[-n - 1] : graces[n];
+        if (t) t.cleared = true;
+      },
+    });
+    selection.reset(ids.map(relay));
+    return {
+      selection, sent,
+      advance(ms: number) { clock += ms; },
+      fireDominance() { const t = doms.find((d) => !d.cleared); if (t) { t.cleared = true; t.cb(); } },
+      get dominanceDelay() { const t = doms.find((d) => !d.cleared); return t ? t.ms : null; },
+      expireGrace() { const t = graces.find((g) => !g.cleared); if (t) { t.cleared = true; t.cb(); } },
+    };
+  }
+
+  it("declares v1 in the same envelope as every RTT map, and only evidence for answered relays", () => {
+    const room = perfRoom({ a: 2000, b: 100000 });
+    room.selection.record("a", 20);
+    // `u` is the complete room-start bound set from the FIRST envelope on.
+    expect(room.sent).toEqual([{ map: { a: 20 }, perf: decl({ a: 2000 }, { a: 2000, b: 100000 }) }]);
+    room.selection.record("b", 200);
+    expect(room.sent[1]).toEqual({ map: { a: 20, b: 200 }, perf: decl({ a: 2000, b: 100000 }) });
+  });
+
+  it("an empty history still declares (support with no data)", () => {
+    const room = perfRoom({});
+    room.selection.record("a", 20);
+    expect(room.sent[0].perf).toEqual(decl({}));
+  });
+
+  it("without the performance option nothing new is published (Windows legacy)", () => {
+    const sent: unknown[][] = [];
+    const s = createRelaySelection({ publish: (...args) => sent.push(args) });
+    s.reset([relay("a")]);
+    s.record("a", 20);
+    expect(sent).toEqual([[{ a: 20 }]]);
+    s.receive("p", { relayRtt: { a: 25 }, relayPerf: decl({ a: 999999 }) });
+    expect(s.perfActive).toBe(false);
+  });
+
+  it("far-fast: both peers declaring evidence pick the far, fast relay — and agree when swapped", () => {
+    const left = perfRoom({ a: 2000, b: 100000 });
+    const right = perfRoom({ a: 2000, b: 100000 });
+    left.selection.record("a", 20); left.selection.record("b", 200); left.selection.finishMeasurement();
+    right.selection.record("a", 25); right.selection.record("b", 190); right.selection.finishMeasurement();
+    const lastL = left.sent[left.sent.length - 1];
+    const lastR = right.sent[right.sent.length - 1];
+    left.selection.receive("R", { relayRtt: lastR.map, relayPerf: lastR.perf });
+    right.selection.receive("L", { relayRtt: lastL.map, relayPerf: lastL.perf });
+    expect(left.selection.perfActive).toBe(true);
+    expect(left.selection.selectedRelayId).toBe("b");
+    expect(right.selection.selectedRelayId).toBe("b");
+  });
+
+  it("an old peer (no declaration) keeps the legacy choice on both sides", () => {
+    const room = perfRoom({ a: 2000, b: 100000 });
+    room.selection.record("a", 20); room.selection.record("b", 200); room.selection.finishMeasurement();
+    room.selection.receive("old", { relayRtt: { a: 25, b: 190 } });
+    expect(room.selection.perfActive).toBe(false);
+    expect(room.selection.selectedRelayId).toBe("a");
+  });
+
+  it("a newer envelope without (or with a malformed) declaration demotes the peer to legacy", () => {
+    const room = perfRoom({ a: 2000, b: 100000 });
+    room.selection.record("a", 20); room.selection.record("b", 200); room.selection.finishMeasurement();
+    room.selection.receive("p", { relayRtt: { a: 25, b: 190 }, relayPerf: decl({ a: 2000, b: 100000 }) });
+    expect(room.selection.selectedRelayId).toBe("b");
+    room.selection.receive("p", { relayRtt: { a: 25, b: 190 } });
+    expect(room.selection.selectedRelayId).toBe("a");
+    room.selection.receive("p", { relayRtt: { a: 25, b: 190 }, relayPerf: { v: 1, policy: "bulk", ref: 1, k: {} } });
+    expect(room.selection.perfActive).toBe(false);
+    room.selection.receive("p", { relayRtt: { a: 25, b: 190 }, relayPerf: decl({ a: 2000, b: 100000 }) });
+    expect(room.selection.selectedRelayId).toBe("b");
+  });
+
+  it("a declaration without a valid RTT map in the same envelope is not consumed", () => {
+    const room = perfRoom({ a: 2000 });
+    expect(room.selection.receive("p", { relayPerf: decl({ a: 1 }) })).toBe(false);
+    expect(room.selection.perfActive).toBe(false);
+  });
+
+  it("peer evidence for ids outside the local pool is ignored", () => {
+    const room = perfRoom({ a: 2000 });
+    room.selection.record("a", 20);
+    room.selection.receive("p", { relayRtt: { a: 25, zz: 1 }, relayPerf: decl({ zz: 100000, a: 2000 }) });
+    expect(Object.keys(room.selection.theirsPerf)).toEqual(["a"]);
+  });
+
+  it("a second peer that does not declare turns ranking off; its departure restores it", () => {
+    const room = perfRoom({ a: 2000, b: 100000 });
+    room.selection.record("a", 20); room.selection.record("b", 200); room.selection.finishMeasurement();
+    room.selection.receive("p", { relayRtt: { a: 25, b: 190 }, relayPerf: decl({ a: 2000, b: 100000 }) });
+    room.selection.receive("q", { relayRtt: { a: 25, b: 190 } });
+    expect(room.selection.selectedRelayId).toBe("a");
+    room.selection.peerGone("q");
+    expect(room.selection.selectedRelayId).toBe("b");
+  });
+
+  it("reset forgets evidence and declarations: nothing crosses rooms", () => {
+    const room = perfRoom({ a: 2000, b: 100000 });
+    room.selection.record("a", 20); room.selection.record("b", 200);
+    room.selection.receive("p", { relayRtt: { a: 25, b: 190 }, relayPerf: decl({ a: 2000, b: 100000 }) });
+    room.selection.reset([relay("a"), relay("b")]);
+    expect(room.selection.perfActive).toBe(false);
+    expect({ ...room.selection.minePerf }).toEqual({});
+    expect({ ...room.selection.theirsPerf }).toEqual({});
+  });
+
+  it("pending far-fast relay: the gate does NOT open on the old worst-leg bound", () => {
+    // Our b probe has not answered; the peer has measured both and declares b fast.
+    const room = perfRoom({ a: 2000, b: 100000 });
+    room.selection.notePeer("p");
+    room.selection.record("a", 20);
+    room.selection.receive("p", { relayRtt: { a: 25, b: 190 }, relayPerf: decl({ a: 2000, b: 100000 }) });
+    expect(room.selection.selectedRelayId).toBe("a");
+    room.advance(30); // the legacy rule would have released at 26 ms
+    room.fireDominance();
+    expect(room.selection.gate.ready()).toBe(false);
+    // b answers: the far-fast relay wins and the room releases on measurement.
+    room.selection.record("b", 200);
+    room.selection.finishMeasurement();
+    expect(room.selection.selectedRelayId).toBe("b");
+    expect(room.selection.gate.ready()).toBe(true);
+  });
+
+  it("a known-fast relay that never answers still costs at most the existing grace", () => {
+    const room = perfRoom({ a: 2000, b: 100000 });
+    room.selection.notePeer("p");
+    room.selection.record("a", 20);
+    room.selection.receive("p", { relayRtt: { a: 25, b: 190 }, relayPerf: decl({ a: 2000, b: 100000 }) });
+    expect(room.selection.gate.ready()).toBe(false);
+    room.expireGrace();
+    expect(room.selection.gate.ready()).toBe(true);
+    expect(room.selection.selectedRelayId).toBe("a");
+  });
+
+  it("cold history: early exit is exactly the legacy schedule", () => {
+    const room = perfRoom({});
+    room.selection.notePeer("p");
+    room.selection.record("a", 20);
+    room.selection.receive("p", { relayRtt: { a: 25 }, relayPerf: decl({}) });
+    expect(room.selection.perfActive).toBe(true);
+    expect(room.dominanceDelay).toBe(26);
+    room.advance(26);
+    room.fireDominance();
+    expect(room.selection.gate.ready()).toBe(true);
+  });
+});
+
+// ── first-build agreement (R2) ───────────────────────────────────────────────
+//
+// What the gate exists for is that BOTH peers' first `link/1` builds name the
+// same relay — not that their final maps agree later. These run two real
+// selections against one deterministic clock, deliver every envelope through a
+// scheduler with per-message delays (so envelopes may reorder), and build from
+// `takeChoice()` inside the first `whenReady` callback, exactly as peer-link
+// does.
+
+interface SideSpec {
+  /** Probe answer time per relay, or null for a probe that never answers. */
+  probe: Record<string, number | null>;
+  /** History: per relay, [upper bound, value at the fresh round trip or null]. */
+  history: Record<string, [number, number | null]>;
+  perf: boolean;
+}
+
+function twoPeers(pool: string[], a: SideSpec, b: SideSpec, delay: (from: "A" | "B", n: number) => number) {
+  let clock = 0;
+  let seq = 0;
+  const queue: Array<{ at: number; seq: number; run: () => void; dead?: boolean }> = [];
+  const schedule = (at: number, run: () => void) => { const e = { at, seq: seq++, run }; queue.push(e); return e; };
+  const sel: Record<"A" | "B", ReturnType<typeof createRelaySelection>> = {} as never;
+  const built: Record<string, { at: number; id: string | null }> = {};
+  let sent = { A: 0, B: 0 };
+  const mk = (me: "A" | "B", spec: SideSpec) => createRelaySelection({
+    now: () => clock,
+    setTimer: (cb, ms) => schedule(clock + ms, cb) as unknown as ReturnType<typeof setTimeout>,
+    clearTimer: (h) => { (h as unknown as { dead?: boolean }).dead = true; },
+    publish: (map, perf) => {
+      const other = me === "A" ? "B" : "A";
+      const env = JSON.parse(JSON.stringify(perf ? { relayRtt: map, relayPerf: perf } : { relayRtt: map }));
+      schedule(clock + delay(me, sent[me]++), () => sel[other].receive(me, env));
+    },
+    performance: spec.perf ? {
+      estimate: (id, rtt) => {
+        const h = spec.history[id];
+        if (!h) return null;
+        return rtt === null ? h[0] : h[1];
+      },
+    } : undefined,
+  });
+  sel.A = mk("A", a);
+  sel.B = mk("B", b);
+  const entries = pool.map((id) => relay(id));
+  for (const me of ["A", "B"] as const) {
+    const spec = me === "A" ? a : b;
+    sel[me].reset(entries);
+    sel[me].notePeer(me === "A" ? "B" : "A");
+    sel[me].gate.whenReady(() => { built[me] = { at: clock, id: sel[me].takeChoice() }; });
+    let last = 0;
+    let anyDead = false;
+    for (const id of pool) {
+      const t = spec.probe[id];
+      if (t === null) { anyDead = true; continue; }
+      last = Math.max(last, t);
+      schedule(t, () => sel[me].record(id, t));
+    }
+    schedule(anyDead ? 9000 : last, () => sel[me].finishMeasurement());
+  }
+  for (let steps = 0; steps < 10_000; steps++) {
+    queue.sort((x, y) => x.at - y.at || x.seq - y.seq);
+    const next = queue.shift();
+    if (!next || next.at > 12_000) break;
+    clock = next.at;
+    if (!(next as { dead?: boolean }).dead) next.run();
+  }
+  return { built, final: { A: sel.A.selectedRelayId, B: sel.B.selectedRelayId } };
+}
+
+describe("first-build agreement", () => {
+  const side = (probe: SideSpec["probe"], history: SideSpec["history"], perf = true): SideSpec => ({ probe, history, perf });
+  const instant = () => 0;
+
+  it("Root counterexamples: cold both near at the legacy time; warm and asymmetric both far", () => {
+    const pool = ["near", "far"];
+    const probe = { near: 20, far: 200 };
+    const cold = twoPeers(pool, side(probe, { near: [2000, 2000] }), side(probe, { near: [2000, 2000] }), instant);
+    expect(cold.built.A).toEqual({ at: 41, id: "near" });
+    expect(cold.built.B).toEqual({ at: 41, id: "near" });
+    const fast: SideSpec["history"] = { near: [2000, 2000], far: [100000, 100000] };
+    const warm = twoPeers(pool, side(probe, fast), side(probe, fast), instant);
+    expect(warm.built.A.id).toBe("far");
+    expect(warm.built.B.id).toBe("far");
+    const asym = twoPeers(pool, side(probe, { near: [2000, 2000] }), side(probe, fast), instant);
+    expect(asym.built.A.id).toBe("far");
+    expect(asym.built.B.id).toBe("far");
+  });
+
+  it("a room with no evidence anywhere keeps the legacy schedule exactly", () => {
+    const pool = ["near", "far"];
+    const probe = { near: 20, far: 200 };
+    const perfRoom = twoPeers(pool, side(probe, {}), side(probe, {}), instant);
+    const legacyRoom = twoPeers(pool, side(probe, {}, false), side(probe, {}, false), instant);
+    expect(perfRoom.built).toEqual(legacyRoom.built);
+    expect(perfRoom.built.A).toEqual({ at: 41, id: "near" });
+  });
+
+  it("no evidence anywhere: a peer-pending relay nearer than the pick does NOT delay the release (legacy schedule)", () => {
+    // A measures a at 10 and b at 30; B measures b at 30 and a at 300. At 30 A has
+    // finished and its pick is b, while a (A's leg 10 <= 30) is still unreported
+    // by B. The legacy rule releases at 30 and accepts that risk; with no
+    // evidence anywhere the goodput room must do exactly the same.
+    const pool = ["a", "b"];
+    const A = { a: 10, b: 30 }; const B = { a: 300, b: 30 };
+    const perfRoom = twoPeers(pool, side(A, {}), side(B, {}), instant);
+    const legacyRoom = twoPeers(pool, side(A, {}, false), side(B, {}, false), instant);
+    expect(perfRoom.built).toEqual(legacyRoom.built);
+    expect(perfRoom.built.A).toEqual({ at: 30, id: "b" });
+  });
+
+  it("with evidence, the same peer-pending relay IS waited for (it could still become the legacy winner)", () => {
+    const pool = ["a", "b"];
+    const A = { a: 10, b: 30 }; const B = { a: 300, b: 30 };
+    const ev: SideSpec["history"] = { b: [2000, 2000] };
+    const r = twoPeers(pool, side(A, ev), side(B, ev), instant);
+    expect(r.built.A.id).toBe(r.built.B.id);
+    expect(r.built.A.at).toBe(300);
+  });
+
+  it("evidence that appears mid-room is never published above the room-start bound", () => {
+    // B's history gains far evidence after reset. Unclamped, B would publish it,
+    // pick far at 200 while A — trusting B's declared bound (none for far) —
+    // already built on near at 171.
+    const pool = ["near", "far"];
+    const base: SideSpec["history"] = { near: [2000, 2000] };
+    let farReads = 0;
+    const growing = new Proxy({ ...base }, {
+      get: (t, k: string) => (k === "far" ? (++farReads > 1 ? [100000, 100000] : undefined) : (t as SideSpec["history"])[k]),
+    }) as SideSpec["history"];
+    const r = twoPeers(pool, side({ near: 20, far: 200 }, base), side({ near: 150, far: 100 }, growing), instant);
+    expect(farReads).toBeGreaterThan(1);
+    expect(r.built.A.id).toBe(r.built.B.id);
+    expect(r.built.B.id).toBe("near");
+  });
+
+  it("a known-fast relay whose probe never answers costs at most the existing grace", () => {
+    const pool = ["near", "far"];
+    const fast: SideSpec["history"] = { near: [2000, 2000], far: [100000, 100000] };
+    const r = twoPeers(pool, side({ near: 20, far: null }, fast), side({ near: 20, far: null }, fast), instant);
+    expect(r.built.A.id).toBe("near");
+    expect(r.built.B.id).toBe("near");
+    expect(r.built.A.at).toBeLessThanOrEqual(5000);
+  });
+
+  it("a history that turns faster mid-room cannot exceed the declared bound", () => {
+    // B's history gains far evidence after the room started: the bound taken
+    // at reset (none) wins, so B publishes nothing for far and A agrees.
+    const pool = ["near", "far"];
+    const probe = { near: 20, far: 200 };
+    const growing: SideSpec["history"] = { near: [2000, 2000] };
+    const spec = side(probe, growing);
+    let calls = 0;
+    const real = spec.history;
+    spec.history = new Proxy(real, { get: (t, k: string) => (k === "far" && ++calls > 0 && calls > 1 ? [100000, 100000] : t[k]) });
+    const r = twoPeers(pool, side(probe, { near: [2000, 2000] }), spec, instant);
+    expect(r.built.A.id).toBe(r.built.B.id);
+  });
+
+  it("randomised, probes almost always answer: agreement and release time against the legacy rule", () => {
+    let seed = 23;
+    const rnd = (n: number) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+    const pickOf = <T>(xs: readonly T[]) => xs[rnd(xs.length)];
+    const KBPS = [1500, 8000, 60000, 300000];
+    let rooms = 0; let grace = 0; let slower = 0; let extraMs = 0; let overrides = 0;
+    for (let i = 0; i < 1500; i++) {
+      const pool = rnd(2) ? ["r1", "r2"] : ["r1", "r2", "r3"];
+      const mkSide = (perf: boolean): SideSpec => {
+        const probe: SideSpec["probe"] = {}; const history: SideSpec["history"] = {};
+        for (const id of pool) {
+          probe[id] = rnd(50) === 0 ? null : 10 + rnd(400);
+          if (rnd(3)) { const up = pickOf(KBPS); history[id] = [up, pickOf([up, Math.max(1, Math.floor(up / 3)), null])]; }
+        }
+        return { probe, history, perf };
+      };
+      const A = mkSide(true); const B = mkSide(true);
+      if (Object.keys(A.history).length + Object.keys(B.history).length === 0) continue;
+      const delays = [rnd(4) * 30, rnd(4) * 30];
+      const jit: number[] = [];
+      for (let j = 0; j < 40; j++) jit.push(rnd(40));
+      const d = (from: "A" | "B", n: number) => (from === "A" ? delays[0] : delays[1]) + jit[(n * 2 + (from === "A" ? 0 : 1)) % 40];
+      const r = twoPeers(pool, A, B, d);
+      const legacy = twoPeers(pool, { ...A, perf: false }, { ...B, perf: false }, d);
+      if (!r.built.A || !r.built.B) continue;
+      rooms++;
+      if (r.built.A.at >= 5000 || r.built.B.at >= 5000) {
+        grace++;
+        // The grace is only ever reached because some probe never answered.
+        expect(pool.some((id) => A.probe[id] === null || B.probe[id] === null),
+          JSON.stringify({ pool, A, B, delays, built: r.built })).toBe(true);
+        continue;
+      }
+      expect(r.built.A.id).toBe(r.built.B.id);
+      if (r.built.A.id !== legacy.built.A?.id) overrides++;
+      const late = Math.max(r.built.A.at, r.built.B.at) - Math.max(legacy.built.A?.at ?? 0, legacy.built.B?.at ?? 0);
+      if (late > 0) { slower++; extraMs += late; }
+    }
+    expect(rooms).toBeGreaterThan(500);
+    console.log(`first-build sim (rare dead): goodputRooms=${rooms} graceReleases=${grace} overrides=${overrides} releasedLaterThanLegacy=${slower} meanExtraMsWhenLater=${slower ? Math.round(extraMs / slower) : 0}`);
+  });
+
+  it("randomised: first builds agree whenever both released before the grace", () => {
+    let seed = 11;
+    const rnd = (n: number) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+    const pickOf = <T>(xs: readonly T[]) => xs[rnd(xs.length)];
+    const PROBES = [15, 40, 120, 300, null] as const;
+    const KBPS = [1500, 8000, 60000, 300000];
+    let agreedEarly = 0; let graceReleases = 0; let farWins = 0; let legacySplits = 0; let legacyRooms = 0;
+    let graceSplitsGoodput = 0; let graceSplitsLegacy = 0; let graceGoodput = 0;
+    for (let i = 0; i < 3000; i++) {
+      const pool = rnd(2) ? ["r1", "r2"] : ["r1", "r2", "r3"];
+      const mkSide = (): SideSpec => {
+        const probe: SideSpec["probe"] = {}; const history: SideSpec["history"] = {};
+        for (const id of pool) {
+          probe[id] = pickOf(PROBES);
+          if (rnd(3)) {
+            const up = pickOf(KBPS);
+            // Fresh value: the bound, a lower filtered quartile, or dropped.
+            history[id] = [up, pickOf([up, Math.max(1, Math.floor(up / 3)), null])];
+          }
+        }
+        return { probe, history, perf: rnd(10) !== 0 };
+      };
+      const A = mkSide(); const B = mkSide();
+      const dA = rnd(4) * 40; const dB = rnd(4) * 40;
+      const r = twoPeers(pool, A, B, (from) => (from === "A" ? dA : dB) + rnd(60));
+      if (!r.built.A || !r.built.B) continue;
+      // Goodput decides only when both take part and some side has evidence.
+      // Otherwise this is the legacy rule, whose accepted "peer map may still
+      // grow" split is pre-existing behaviour this batch must NOT change — it is
+      // counted, not asserted.
+      const decides = A.perf && B.perf && (Object.keys(A.history).length + Object.keys(B.history).length) > 0;
+      if (r.built.A.at >= 5000 || r.built.B.at >= 5000) {
+        graceReleases++;
+        if (decides) graceGoodput++;
+        if (r.built.A.id !== r.built.B.id) (decides ? graceSplitsGoodput++ : graceSplitsLegacy++);
+        continue;
+      }
+      if (!decides) {
+        legacyRooms++;
+        if (r.built.A.id !== r.built.B.id) legacySplits++;
+        continue;
+      }
+      expect(r.built.A.id, JSON.stringify({ pool, A, B, dA, dB, built: r.built })).toBe(r.built.B.id);
+      agreedEarly++;
+      if (r.built.A.id !== pickRelay(Object.fromEntries(pool.filter((id) => A.probe[id] !== null && B.probe[id] !== null).map((id) => [id, A.probe[id] as number])), Object.fromEntries(pool.filter((id) => A.probe[id] !== null && B.probe[id] !== null).map((id) => [id, B.probe[id] as number])))) farWins++;
+    }
+    expect(agreedEarly).toBeGreaterThan(500);
+    expect(farWins).toBeGreaterThan(20);
+    // Reported, not asserted: grace releases are the existing bounded fallback.
+    console.log(`first-build sim: goodputRoomsAgreed=${agreedEarly} graceReleases=${graceReleases} goodputOverrides=${farWins} legacyRooms=${legacyRooms} legacySplits(pre-existing rule)=${legacySplits} graceInGoodputRooms=${graceGoodput} graceSplits goodput=${graceSplitsGoodput} legacy=${graceSplitsLegacy}`);
   });
 });

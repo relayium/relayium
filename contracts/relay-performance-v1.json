@@ -1,0 +1,866 @@
+{
+  "contract": "relay-performance",
+  "contractVersion": 1,
+  "documentation": "docs/protocol/relayium-relay-performance-v1.md",
+  "consumers": [
+    "web/src/lib/relay-performance.test.ts"
+  ],
+  "pendingPorts": [
+    "apps/windows (shares web lib, opt-in not wired)",
+    "RelayiumKit (Swift)",
+    "server/cmd/relayium (Go CLI)",
+    "apps/android"
+  ],
+  "declaration": {
+    "envelopeKey": "relayPerf",
+    "siblingOf": "relayRtt",
+    "v": 1,
+    "policy": "bulk",
+    "ref": 33554432,
+    "maxEntries": 32,
+    "maxIdLength": 64,
+    "kbpsMin": 1,
+    "kbpsMax": 10000000,
+    "upperKey": "u",
+    "note": "The first internal frozen batch (no u) never shipped. A declaration without a valid u is not a declaration. k entries are clamped to u and dropped when u has none."
+  },
+  "override": {
+    "ratioNum": 4,
+    "ratioDen": 5,
+    "minSavingMs": 250
+  },
+  "pick": [
+    {
+      "name": "cold: no evidence on either side is exactly the legacy RTT order",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {},
+      "theirsPerf": {},
+      "expect": "a",
+      "legacy": "a"
+    },
+    {
+      "name": "far-fast: 200 ms / 100 Mbit/s beats 20 ms / 2 Mbit/s for the 32 MiB reference",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "expect": "b",
+      "legacy": "a",
+      "predictedMs": 2885,
+      "legacyPredictedMs": 134243
+    },
+    {
+      "name": "legacy winner without evidence is never overridden (no assumed bandwidth)",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "b": 100000
+      },
+      "theirsPerf": {
+        "b": 100000
+      },
+      "expect": "a",
+      "legacy": "a"
+    },
+    {
+      "name": "challenger without evidence never wins",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {},
+      "expect": "a",
+      "legacy": "a"
+    },
+    {
+      "name": "within the override margin the legacy winner stays (no flapping)",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000,
+        "b": 2400
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 2400
+      },
+      "expect": "a",
+      "legacy": "a"
+    },
+    {
+      "name": "joint goodput is the slower side: one peer's slow evidence vetoes",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 1500
+      },
+      "expect": "a",
+      "legacy": "a"
+    },
+    {
+      "name": "one side's evidence alone is used when the other has none",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {
+        "b": 100000
+      },
+      "expect": "b",
+      "legacy": "a"
+    },
+    {
+      "name": "lowest predicted time among qualifying challengers",
+      "mine": {
+        "a": 20,
+        "b": 200,
+        "c": 100
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190,
+        "c": 90
+      },
+      "minePerf": {
+        "a": 2000,
+        "b": 100000,
+        "c": 50000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000,
+        "c": 50000
+      },
+      "expect": "b",
+      "legacy": "a"
+    },
+    {
+      "name": "equal predicted time falls through to (worst, sum, id)",
+      "mine": {
+        "a": 20,
+        "x": 300,
+        "y": 300
+      },
+      "theirs": {
+        "a": 25,
+        "x": 300,
+        "y": 300
+      },
+      "minePerf": {
+        "a": 2000,
+        "x": 50000,
+        "y": 50000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "x": 50000,
+        "y": 50000
+      },
+      "expect": "x",
+      "legacy": "a"
+    },
+    {
+      "name": "near-tier positive: a slightly farther relay that is much faster",
+      "mine": {
+        "a": 30,
+        "b": 45
+      },
+      "theirs": {
+        "a": 35,
+        "b": 40
+      },
+      "minePerf": {
+        "a": 8000,
+        "b": 40000
+      },
+      "theirsPerf": {
+        "a": 8000,
+        "b": 40000
+      },
+      "expect": "b",
+      "legacy": "a"
+    },
+    {
+      "name": "no common relay",
+      "mine": {
+        "a": 20
+      },
+      "theirs": {
+        "b": 25
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {
+        "b": 100000
+      },
+      "expect": null,
+      "legacy": null
+    }
+  ],
+  "parse": [
+    {
+      "name": "valid",
+      "data": {
+        "relayRtt": {},
+        "relayPerf": {
+          "v": 1,
+          "policy": "bulk",
+          "ref": 33554432,
+          "k": {
+            "a": 2000
+          },
+          "u": {
+            "a": 10000000
+          }
+        }
+      },
+      "valid": true,
+      "k": {
+        "a": 2000
+      }
+    },
+    {
+      "name": "valid empty k declares support with no data",
+      "data": {
+        "relayPerf": {
+          "v": 1,
+          "policy": "bulk",
+          "ref": 33554432,
+          "k": {},
+          "u": {}
+        }
+      },
+      "valid": true,
+      "k": {}
+    },
+    {
+      "name": "unknown fields ignored",
+      "data": {
+        "relayPerf": {
+          "v": 1,
+          "policy": "bulk",
+          "ref": 33554432,
+          "k": {},
+          "extra": [
+            1
+          ],
+          "u": {}
+        }
+      },
+      "valid": true,
+      "k": {}
+    },
+    {
+      "name": "absent",
+      "data": {
+        "relayRtt": {
+          "a": 1
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "mere object presence is not a declaration",
+      "data": {
+        "relayPerf": {}
+      },
+      "valid": false
+    },
+    {
+      "name": "other version",
+      "data": {
+        "relayPerf": {
+          "v": 2,
+          "policy": "bulk",
+          "ref": 33554432,
+          "k": {},
+          "u": {}
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "other policy",
+      "data": {
+        "relayPerf": {
+          "v": 1,
+          "policy": "interactive",
+          "ref": 33554432,
+          "k": {},
+          "u": {}
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "other reference",
+      "data": {
+        "relayPerf": {
+          "v": 1,
+          "policy": "bulk",
+          "ref": 1048576,
+          "k": {},
+          "u": {}
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "array k",
+      "data": {
+        "relayPerf": {
+          "v": 1,
+          "policy": "bulk",
+          "ref": 33554432,
+          "k": [
+            1
+          ],
+          "u": {}
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "bad entries dropped individually",
+      "data": {
+        "relayPerf": {
+          "v": 1,
+          "policy": "bulk",
+          "ref": 33554432,
+          "k": {
+            "a": 0,
+            "b": -5,
+            "c": 10000001,
+            "d": "9",
+            "e": 2500.9,
+            "": 5
+          },
+          "u": {
+            "a": 10000000,
+            "b": 10000000,
+            "c": 10000000,
+            "d": 10000000,
+            "e": 10000000,
+            "": 10000000
+          }
+        }
+      },
+      "valid": true,
+      "k": {
+        "e": 2500
+      }
+    },
+    {
+      "name": "missing u is not a declaration",
+      "data": {
+        "relayPerf": {
+          "v": 1,
+          "policy": "bulk",
+          "ref": 33554432,
+          "k": {
+            "a": 2000
+          }
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "k is clamped to u and dropped without u",
+      "data": {
+        "relayPerf": {
+          "v": 1,
+          "policy": "bulk",
+          "ref": 33554432,
+          "k": {
+            "a": 5000,
+            "b": 7000
+          },
+          "u": {
+            "a": 3000
+          }
+        }
+      },
+      "valid": true,
+      "k": {
+        "a": 3000
+      }
+    }
+  ],
+  "dominance": [
+    {
+      "name": "cold: identical to the legacy rule (peer leg retires b)",
+      "selected": "a",
+      "mine": {
+        "a": 20
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {},
+      "theirsPerf": {},
+      "pool": [
+        "a",
+        "b"
+      ],
+      "elapsed": 0,
+      "expect": true,
+      "legacyExpect": true,
+      "mineUpper": {},
+      "theirsUpper": {}
+    },
+    {
+      "name": "pending far-fast relay is NOT retired by the old worst-leg bound",
+      "selected": "a",
+      "mine": {
+        "a": 20
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b"
+      ],
+      "elapsed": 30,
+      "expect": false,
+      "legacyExpect": true,
+      "mineUpper": {
+        "b": 100000,
+        "a": 2000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      }
+    },
+    {
+      "name": "known-fast relay that never answers is retired once even its best case cannot qualify",
+      "selected": "a",
+      "mine": {
+        "a": 20
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b"
+      ],
+      "elapsed": 104710,
+      "expect": true,
+      "retiresAt": 104710,
+      "mineUpper": {
+        "b": 100000,
+        "a": 2000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      }
+    },
+    {
+      "name": "one millisecond earlier it is still live",
+      "selected": "a",
+      "mine": {
+        "a": 20
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b"
+      ],
+      "elapsed": 104709,
+      "expect": false,
+      "mineUpper": {
+        "b": 100000,
+        "a": 2000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      }
+    },
+    {
+      "name": "no monotonic anchor: only evidence can retire",
+      "selected": "a",
+      "mine": {
+        "a": 20
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b"
+      ],
+      "elapsed": null,
+      "expect": false,
+      "mineUpper": {
+        "b": 100000,
+        "a": 2000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      }
+    },
+    {
+      "name": "pending relay with no evidence anywhere: legacy half only",
+      "selected": "b",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b",
+        "c"
+      ],
+      "elapsed": 26,
+      "expect": true,
+      "mineUpper": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      }
+    },
+    {
+      "name": "pending relay that could still become the LEGACY winner keeps the room open",
+      "selected": "b",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190
+      },
+      "minePerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b",
+        "c"
+      ],
+      "elapsed": 25,
+      "expect": false,
+      "mineUpper": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      }
+    },
+    {
+      "name": "pending relay whose best case only ties the challenger pick stays live",
+      "selected": "b",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190,
+        "c": 200
+      },
+      "minePerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b",
+        "c"
+      ],
+      "elapsed": 200,
+      "expect": false,
+      "mineUpper": {
+        "c": 100000,
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      }
+    },
+    {
+      "name": "and is retired once it can only be slower than the pick",
+      "selected": "b",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 25,
+        "b": 190,
+        "c": 200
+      },
+      "minePerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsPerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b",
+        "c"
+      ],
+      "elapsed": 201,
+      "expect": true,
+      "mineUpper": {
+        "c": 100000,
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      }
+    },
+    {
+      "name": "own probes all answered but the peer has not reported far: NOT released (old rule would)",
+      "selected": "a",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 20
+      },
+      "minePerf": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsPerf": {
+        "a": 2000
+      },
+      "mineUpper": {
+        "a": 2000,
+        "b": 100000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b"
+      ],
+      "elapsed": 180,
+      "expect": false,
+      "legacyExpect": true
+    },
+    {
+      "name": "asymmetric: only the PEER declared far evidence; our clock cannot retire it",
+      "selected": "a",
+      "mine": {
+        "a": 20
+      },
+      "theirs": {
+        "a": 20
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {
+        "a": 2000
+      },
+      "mineUpper": {
+        "a": 2000
+      },
+      "theirsUpper": {
+        "a": 2000,
+        "b": 100000
+      },
+      "pool": [
+        "a",
+        "b"
+      ],
+      "elapsed": 21,
+      "expect": false,
+      "legacyExpect": true
+    },
+    {
+      "name": "peer-pending relay with no declared evidence on either side and a worse own leg: retired",
+      "selected": "a",
+      "mine": {
+        "a": 20,
+        "b": 200
+      },
+      "theirs": {
+        "a": 20
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {
+        "a": 2000
+      },
+      "mineUpper": {
+        "a": 2000
+      },
+      "theirsUpper": {
+        "a": 2000
+      },
+      "pool": [
+        "a",
+        "b"
+      ],
+      "elapsed": 0,
+      "expect": true
+    },
+    {
+      "name": "peer-pending relay that could still become the legacy winner: NOT released",
+      "selected": "a",
+      "mine": {
+        "a": 20,
+        "b": 10
+      },
+      "theirs": {
+        "a": 20
+      },
+      "minePerf": {
+        "a": 2000
+      },
+      "theirsPerf": {
+        "a": 2000
+      },
+      "mineUpper": {
+        "a": 2000
+      },
+      "theirsUpper": {
+        "a": 2000
+      },
+      "pool": [
+        "a",
+        "b"
+      ],
+      "elapsed": 500,
+      "expect": false,
+      "legacyExpect": true
+    }
+  ]
+}

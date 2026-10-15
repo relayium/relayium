@@ -6,6 +6,7 @@ import {
   MIXED_FILE_COMPLETE_STALL_MS,
   MIXED_FILE_GAP_TIMEOUT_MS,
   MIXED_FILE_SEND_PROGRESS_STALL_MS,
+  type TransferSample,
 } from "./mixed-file-session.svelte";
 import { SaveCancelledError, type SaveTarget } from "./filesink";
 import type { MixedPeerLink } from "./peer-link.svelte";
@@ -133,6 +134,9 @@ async function harness(opts: {
   onActivityA?: () => void;
   onUserActivityA?: () => void;
   onUserActivityB?: () => void;
+  /** Routing-evidence hooks (relay-history). Omitted by every older case. */
+  onTransferSampleA?: (s: TransferSample) => void;
+  onTransferSampleB?: (s: TransferSample) => void;
 } = {}) {
   const aKey = generateKeyPair();
   const bKey = generateKeyPair();
@@ -189,6 +193,7 @@ async function harness(opts: {
     gapTimeoutMs: opts.gapTimeoutMs,
     onActivity: opts.onActivityA,
     onUserActivity: opts.onUserActivityA,
+    onTransferSample: opts.onTransferSampleA,
   });
   const b = createMixedFileSession({
     ensureLink: vi.fn(async () => links.b),
@@ -200,6 +205,7 @@ async function harness(opts: {
     drainTimeoutMs: opts.drainTimeoutMs,
     gapTimeoutMs: opts.gapTimeoutMs,
     onUserActivity: opts.onUserActivityB,
+    onTransferSample: opts.onTransferSampleB,
   });
   a.attach(aLink);
   b.attach(bLink);
@@ -2793,4 +2799,127 @@ describe("user activity is real transfer progress, not frame arrival", () => {
     expect(receiver).toBeGreaterThan(0);
     expect([...h.bTarget.output.get("hello.txt")!]).toEqual(bytes("hello"));
   });
+});
+
+// Routing evidence (relay-history.ts). Observation only: a clean batch is
+// reported once per side; nothing declined, cancelled, failed or resumed is.
+describe("mixed file session transfer samples", () => {
+  it("reports one clean batch once on each side, with sizes and phase times only", async () => {
+    const sa: TransferSample[] = [];
+    const sb: TransferSample[] = [];
+    const { a, b, aLink, bLink } = await harness({ onTransferSampleA: (x) => sa.push(x), onTransferSampleB: (x) => sb.push(x) });
+    a.enqueue("b", [{ file: new File([new Uint8Array(300_000)], "one.bin") }, { file: new File(["xy"], "two.txt") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => a.send?.status === "sendDone" && b.recv?.status === "recvDone");
+    await until(() => sa.length === 1 && sb.length === 1);
+    expect(sa[0]).toMatchObject({ link: aLink, dir: "send", bytes: 300_002 });
+    expect(sb[0]).toMatchObject({ link: bLink, dir: "recv", bytes: 300_002, creditWaitMs: 0, bufferWaitMs: 0 });
+    for (const x of [sa[0], sb[0]]) {
+      expect(x.activeMs).toBeGreaterThanOrEqual(0);
+      expect(x.finalizeMs).toBeGreaterThanOrEqual(0);
+      expect(x.activeMs).toBeGreaterThanOrEqual(x.finalizeMs);
+      // Nothing that names the content.
+      expect(Object.keys(x).sort()).toEqual(["activeMs", "bufferWaitMs", "bytes", "creditWaitMs", "dir", "finalizeMs", "link"]);
+    }
+    expect(sa[0].creditWaitMs + sa[0].bufferWaitMs).toBeLessThanOrEqual(sa[0].activeMs);
+  });
+
+  it("observeTransfers installs, replaces and removes the observer", async () => {
+    const first: TransferSample[] = [];
+    const second: TransferSample[] = [];
+    const { a, b } = await harness({ onTransferSampleA: (x) => first.push(x) });
+    a.observeTransfers((x) => second.push(x));
+    a.enqueue("b", picked("one.txt", "1"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => a.send?.status === "sendDone" && second.length === 1);
+    expect(first).toEqual([]);
+    a.observeTransfers(null);
+    a.enqueue("b", picked("two.txt", "2"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => b.recv?.status === "recvDone" && b.recv.files[0].name === "two.txt");
+    await until(() => a.send?.status === "sendDone" && !a.active());
+    expect(second).toHaveLength(1);
+  });
+
+  it("reports nothing for a declined batch", async () => {
+    const sa: TransferSample[] = [];
+    const sb: TransferSample[] = [];
+    const { a, b } = await harness({ onTransferSampleA: (x) => sa.push(x), onTransferSampleB: (x) => sb.push(x) });
+    a.enqueue("b", picked("no.txt", "nope"));
+    await until(() => !!b.incoming);
+    b.reject();
+    await until(() => a.send?.status === "rejected");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sa).toEqual([]);
+    expect(sb).toEqual([]);
+  });
+
+  it("reports nothing for a batch the sender cancelled", async () => {
+    const sa: TransferSample[] = [];
+    const sb: TransferSample[] = [];
+    const { a, b } = await harness({ onTransferSampleA: (x) => sa.push(x), onTransferSampleB: (x) => sb.push(x) });
+    a.enqueue("b", [{ file: new File([new Uint8Array(4 * 1024 * 1024)], "big.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => (a.send?.sent ?? 0) > 0);
+    a.cancel("send");
+    await until(() => !a.active() && !b.active(), 8_000);
+    expect(sa).toEqual([]);
+    expect(sb).toEqual([]);
+  }, 15_000);
+
+  it("a throwing hook cannot fail or reorder the transfer", async () => {
+    const { a, b, bTarget } = await harness({
+      onTransferSampleA: () => { throw new Error("observer bug"); },
+      onTransferSampleB: () => { throw new Error("observer bug"); },
+    });
+    a.enqueue("b", picked("ok.txt", "fine"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => a.send?.status === "sendDone" && b.recv?.status === "recvDone");
+    expect([...bTarget.output.get("ok.txt")!]).toEqual(bytes("fine"));
+    expect(a.errorKey).toBe("");
+    expect(b.errorKey).toBe("");
+    a.enqueue("b", picked("again.txt", "two"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => b.recv?.status === "recvDone" && b.recv.files[0].name === "again.txt");
+  });
+
+  it("reports nothing for a batch a transport gap interrupted, even though it completes", async () => {
+    const sa: TransferSample[] = [];
+    const sb: TransferSample[] = [];
+    const { a, b, aLink, bLink, links, file } = await harness({ onTransferSampleA: (x) => sa.push(x), onTransferSampleB: (x) => sb.push(x) });
+    let releaseSource!: () => void;
+    const sourceGate = new Promise<void>((resolve) => { releaseSource = resolve; });
+    const originalFrames = aLink.fileSender.dataFrames.bind(aLink.fileSender);
+    vi.spyOn(aLink.fileSender, "dataFrames").mockImplementation(async function* (...args) {
+      let held = false;
+      for await (const frame of originalFrames(...args)) {
+        yield frame;
+        if (!held && frame[0] === FRAME.CHUNK) { held = true; await sourceGate; }
+      }
+    });
+    a.enqueue("b", [{ file: new File([new Uint8Array(3 * 1024 * 1024)], "gap.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => (b.recv?.sent ?? 0) > 0);
+    file.a.close();
+    file.b.close();
+    releaseSource();
+    await until(() => a.send?.status === "resuming" && b.recv?.status === "resuming");
+    const swap = channelPair();
+    const aNext = { ...aLink, fileChannel: swap.a as unknown as RTCDataChannel };
+    const bNext = { ...bLink, fileChannel: swap.b as unknown as RTCDataChannel };
+    links.a = aNext; links.b = bNext;
+    a.attach(aNext);
+    b.attach(bNext);
+    await until(() => b.recv?.status === "recvDone" && a.send?.status === "sendDone");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sa).toEqual([]);
+    expect(sb).toEqual([]);
+  }, 30_000);
 });

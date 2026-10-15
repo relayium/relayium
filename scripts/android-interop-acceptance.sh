@@ -618,6 +618,25 @@ PLAN
   grep -q '^INSTRUMENTATION_CODE: -1$' "$run_root/instrument-$round.log" \
     || fail "the Android half did not run to completion: $(tail -40 "$run_root/instrument-$round.log")"
   if grep -qE '^INSTRUMENTATION_STATUS_CODE: (-1|-2)$' "$run_root/instrument-$round.log"; then
+    # The browser can still be waiting when Android fails. Its current progress
+    # and Android's finally-written state distinguish a link failure from a
+    # lane/UI failure; do not discard them by exiting on instrumentation first.
+    say "-- browser half at Android failure (round $round)"
+    tail -40 "$run_root/browser-$round.log" >&2 || true
+    failure_state="$run_root/android-failure-$round.json"
+    if adbs exec-out run-as "$app_id" cat "files/$device_out" >"$failure_state" 2>/dev/null; then
+      python3 - "$failure_state" <<'STATE'
+import json, sys
+try:
+    state = json.load(open(sys.argv[1], encoding="utf-8"))
+    if not isinstance(state, dict):
+        raise ValueError("diagnostic state is not an object")
+    keys = ("finalPhase", "finalTextState", "finalErrorKey", "finalFileLaneDown", "complete")
+    print("-- Android final state: " + json.dumps({k: state.get(k) for k in keys}))
+except (OSError, ValueError):
+    print("-- Android final state unavailable")
+STATE
+    fi
     fail "the Android half FAILED: $(sed -n '/INSTRUMENTATION_STATUS: stack=/,/^INSTRUMENTATION_STATUS_CODE/p' "$run_root/instrument-$round.log" | head -40)"
   fi
 

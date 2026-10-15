@@ -17,6 +17,10 @@
 import {
   pickRelay, relayChoiceDominates, relayDominanceElapsedMs, type RelayEntry,
 } from "./ice";
+import {
+  emptyMap, parseRelayPerf, perfDeclaration, pickRelayPerf, relayPerfChoiceDominates,
+  relayPerfDominanceElapsedMs, type PerfDeclaration, type PerfKnowledge, type PerfMap,
+} from "./relay-performance";
 
 /**
  * How long a room waits for a PEER's map before building on the fallback
@@ -129,9 +133,36 @@ export interface RelayGate {
  */
 export type RelayTimerKind = "grace" | "dominance";
 
+/**
+ * This side's goodput evidence (relay-history.ts), when the client takes part in
+ * throughput-informed selection (docs/protocol/relayium-relay-performance-v1.md).
+ *
+ * Omitted, the selection is exactly the legacy RTT agreement and never declares
+ * the capability — which is how a caller that has not opted in (the Windows
+ * renderer today) stays byte-for-byte what it was.
+ */
+export interface RelayPerformanceSource {
+  /**
+   * Conservative goodput (kbit/s) through `id`, or null without confident
+   * evidence. `ownRttMs` is this side's fresh probe of that relay; null asks
+   * for an UPPER bound on what any round trip could return.
+   *
+   * The selection asks for the upper bounds ONCE per room (at `reset`) and
+   * clamps every value it later publishes to them, so a history that changes
+   * mid-room (a transfer finishing elsewhere, a network change) can never make
+   * a declared bound false.
+   */
+  estimate(id: string, ownRttMs: number | null): number | null;
+}
+
 export interface RelaySelectionOptions {
-  /** Broadcast this side's cumulative map. Called once per relay that answers. */
-  publish: (map: Record<string, number>) => void;
+  /**
+   * Broadcast this side's cumulative map. Called once per relay that answers.
+   * `perf` is this side's goodput declaration, present only when `performance`
+   * is configured; it MUST travel in the same envelope as `map`.
+   */
+  publish: (map: Record<string, number>, perf?: PerfDeclaration) => void;
+  performance?: RelayPerformanceSource;
   deadlineMs?: number;
   setTimer?: (cb: () => void, ms: number, kind: RelayTimerKind) => ReturnType<typeof setTimeout>;
   clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
@@ -197,6 +228,22 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
    *  offering a departed peer's map to the next one. */
   let contributors = new Set<string>();
   let selected: string | null = null;
+  /** This side's published goodput evidence — only for relays our own probe has
+   *  answered, so it grows in the same envelopes as `mine`. */
+  let minePerf: PerfMap = emptyMap();
+  /** The peers' goodput evidence, merged like `theirs`, pool ids only. */
+  let theirsPerf: PerfMap = emptyMap();
+  /** Our room-start upper bounds (declared to the peer as `u`). */
+  let mineUpper: PerfMap = emptyMap();
+  /** The peers' declared upper bounds, pool ids only, merged by max. */
+  let theirsUpper: PerfMap = emptyMap();
+  /**
+   * Contributors whose LATEST envelope declared v1 with our policy and
+   * reference size. Latest, not ever: a peer whose newer envelope omits or
+   * mangles the declaration is legacy from that moment. Goodput ranking is in
+   * force only while EVERY contributor is in here and we are configured for it.
+   */
+  let perfDeclared = new Set<string>();
   /** True once every probe has answered or timed out: `mine` can no longer grow. */
   let measured = false;
   let open = true;
@@ -302,10 +349,49 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
    * not as zero. See `probeAnchorMs`.
    */
   function dominant(): boolean {
-    return relayChoiceDominates(
-      selected, mine, theirs, poolIds,
-      probeAnchorMs === null ? null : now() - probeAnchorMs,
-    );
+    const elapsed = probeAnchorMs === null ? null : now() - probeAnchorMs;
+    if (perfDecides()) return relayPerfChoiceDominates(selected, knowledge(), poolIds, elapsed);
+    return relayChoiceDominates(selected, mine, theirs, poolIds, elapsed);
+  }
+
+  /** Goodput ranking is in force: we take part, and every peer whose map we
+   *  hold declared the same version, policy and reference in its latest
+   *  envelope. Anything else is the legacy agreement on both sides. */
+  function perfActive(): boolean {
+    if (!opts.performance || contributors.size === 0) return false;
+    for (const c of contributors) if (!perfDeclared.has(c)) return false;
+    return true;
+  }
+
+  /**
+   * Goodput is in force AND some side declared evidence it could use. With no
+   * declared bound anywhere no override is possible, the pick is the legacy one
+   * by construction, and the room keeps the legacy release schedule exactly —
+   * cold rooms are never slower than before.
+   */
+  function perfDecides(): boolean {
+    return perfActive() && (Object.keys(mineUpper).length > 0 || Object.keys(theirsUpper).length > 0);
+  }
+
+  function knowledge(): PerfKnowledge {
+    return { mine, theirs, minePerf, theirsPerf, mineUpper, theirsUpper };
+  }
+
+  /** Room-start snapshot of our upper bounds, one per pool relay we have any
+   *  confident history for. */
+  function snapshotUpper(ids: readonly string[]): PerfMap {
+    const out = emptyMap();
+    if (!opts.performance) return out;
+    for (const id of ids) {
+      const v = opts.performance.estimate(id, null);
+      if (typeof v === "number" && Number.isFinite(v) && v >= 1) out[id] = Math.floor(v);
+    }
+    return out;
+  }
+
+  function publishMine() {
+    if (opts.performance) opts.publish(mine, perfDeclaration(minePerf, mineUpper));
+    else opts.publish(mine);
   }
 
   /**
@@ -322,8 +408,17 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
   function armDominance() {
     abandonDominance();
     if (open || measured || selected === null || probeAnchorMs === null) return;
-    const worstLeg = Math.max(mine[selected], theirs[selected]);
-    const delay = relayDominanceElapsedMs(worstLeg) - (now() - probeAnchorMs);
+    let at: number | null;
+    if (perfDecides()) {
+      // Under the goodput score the instant depends on the LEGACY winner and on
+      // every pending relay's best possible evidence — never on the pick's
+      // worse leg alone, which would retire a farther, faster relay unseen.
+      at = relayPerfDominanceElapsedMs(knowledge(), poolIds);
+      if (at === null) return;
+    } else {
+      at = relayDominanceElapsedMs(Math.max(mine[selected], theirs[selected]));
+    }
+    const delay = at - (now() - probeAnchorMs);
     // Not reachable while `dominant()` is false — the rule and this deadline are
     // the same inequality — but a caller-supplied clock is a caller-supplied
     // clock. Written as "not positive" rather than "at most zero" so a NaN
@@ -373,11 +468,20 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     // that, one silently dropped relay spends the whole nine-second probe
     // budget holding a choice the room already has, and the peer grace expires
     // first: five seconds of spinner for an answer that was ready in 200 ms.
+    //
+    // Under goodput ranking "our own measurement finished" is NOT sufficient:
+    // the peer's round trip and evidence for a relay can still arrive and move
+    // the choice, and releasing on our side alone is how the two first builds
+    // split while the final maps agree. `dominant()` covers our finished
+    // measurement too (no own relay left pending), so it is the whole rule.
+    if (perfDecides()) return dominant();
     return measured || dominant();
   }
 
   function reselect() {
-    selected = pickRelay(mine, theirs);
+    selected = perfActive()
+      ? pickRelayPerf(mine, theirs, minePerf, theirsPerf).id
+      : pickRelay(mine, theirs);
     if (settled()) release();
     // The choice moved, so the instant its worse leg retires every pending
     // probe moved with it. Recomputed rather than adjusted.
@@ -449,6 +553,10 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     /** The relay both peers agreed on, or null. A plain read: the debug panel's
      *  mirrors and the tests use it, and neither is building anything. */
     get selectedRelayId() { return selected; },
+    /** Goodput evidence and whether it is deciding. Read-only mirrors. */
+    get minePerf() { return minePerf; },
+    get theirsPerf() { return theirsPerf; },
+    get perfActive() { return perfActive(); },
 
     /**
      * The relay both peers agreed on, read in order to BUILD with it.
@@ -482,9 +590,14 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       waiters = [];
       pool = next;
       poolIds = next.map((r) => r.id);
+      mineUpper = snapshotUpper(poolIds);
       probeAnchorMs = null;
       mine = {};
       theirs = {};
+      minePerf = emptyMap();
+      theirsPerf = emptyMap();
+      theirsUpper = emptyMap();
+      perfDeclared = new Set();
       contributors = new Set();
       roster = new Set();
       selected = null;
@@ -599,9 +712,18 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
      */
     peerGone(peerId: string) {
       roster.delete(peerId);
-      if (contributors.delete(peerId) && contributors.size === 0) {
-        theirs = {};
-        reselect();
+      perfDeclared.delete(peerId);
+      if (contributors.delete(peerId)) {
+        if (contributors.size === 0) {
+          theirs = {};
+          theirsPerf = emptyMap();
+          theirsUpper = emptyMap();
+          reselect();
+        } else if (opts.performance) {
+          // The remaining contributors may all declare now that a legacy one
+          // has gone, which changes the rule the choice is made by.
+          reselect();
+        }
       }
       if (gracePeer === peerId) {
         gracePeer = null;
@@ -624,10 +746,15 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       waiters = [];
       pool = [];
       poolIds = [];
+      mineUpper = emptyMap();
       probeAnchorMs = null;
       abandonDominance();
       mine = {};
       theirs = {};
+      minePerf = emptyMap();
+      theirsPerf = emptyMap();
+      theirsUpper = emptyMap();
+      perfDeclared = new Set();
       contributors = new Set();
       roster = new Set();
       selected = null;
@@ -655,7 +782,21 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       // at or after every probe's own start. See `probeAnchorMs`.
       if (probeAnchorMs === null) probeAnchorMs = now();
       mine = { ...mine, [id]: rttMs };
-      opts.publish(mine);
+      if (opts.performance) {
+        // Evidence is published only for a relay whose round trip is now known,
+        // and only if the history is consistent with it — so it travels in the
+        // same envelope as the RTT it was judged against.
+        // Clamped to the room-start bound we declared: no bound, no value.
+        const est = opts.performance.estimate(id, rttMs);
+        const bound = Object.prototype.hasOwnProperty.call(mineUpper, id) ? mineUpper[id] : undefined;
+        if (bound !== undefined && typeof est === "number" && Number.isFinite(est) && est >= 1) {
+          const next = emptyMap();
+          for (const k of Object.keys(minePerf)) next[k] = minePerf[k];
+          next[id] = Math.min(Math.floor(est), bound);
+          minePerf = next;
+        }
+      }
+      publishMine();
       reselect();
     },
 
@@ -684,6 +825,28 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
       if (!map) return false;
       contributors.add(from);
       theirs = { ...theirs, ...map };
+      if (opts.performance) {
+        // Only in the same envelope as a valid RTT map, and only the latest one
+        // counts: a newer envelope without a valid declaration demotes this
+        // peer to legacy rather than leaving a stale capability in force.
+        const decl = parseRelayPerf(data);
+        if (decl) {
+          perfDeclared.add(from);
+          const next = emptyMap();
+          for (const k of Object.keys(theirsPerf)) next[k] = theirsPerf[k];
+          for (const k of Object.keys(decl.k)) if (poolIds.includes(k)) next[k] = decl.k[k];
+          theirsPerf = next;
+          const up = emptyMap();
+          for (const k of Object.keys(theirsUpper)) up[k] = theirsUpper[k];
+          for (const k of Object.keys(decl.u)) {
+            if (!poolIds.includes(k)) continue;
+            up[k] = Object.prototype.hasOwnProperty.call(up, k) ? Math.max(up[k], decl.u[k]) : decl.u[k];
+          }
+          theirsUpper = up;
+        } else {
+          perfDeclared.delete(from);
+        }
+      }
       reselect();
       return true;
     },
@@ -691,7 +854,7 @@ export function createRelaySelection(opts: RelaySelectionOptions) {
     /** Re-broadcast to a peer that has just appeared, if there is anything to say. */
     greet() {
       if (Object.keys(mine).length === 0) return;
-      opts.publish(mine);
+      publishMine();
     },
 
     /** The peer whose bounded grace is running, or null. Exposed for tests and

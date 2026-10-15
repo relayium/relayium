@@ -4,7 +4,7 @@ const en = {
   description:
     "How Relayium handles files and ephemeral text: content is end-to-end encrypted, live message bodies are never stored by Relayium, and stored download links keep files zero-knowledge encrypted.",
   updatedLabel: "Last updated",
-  updated: "2026-09-29",
+  updated: "2026-10-15",
   otherDocLabel: "Terms of Service",
   lead: [
     "Relayium is built so that your files and ephemeral text stay yours. Local browser sessions are direct; cross-network browser sessions may carry end-to-end encrypted ciphertext through TURN; CLI pairing-code sessions do so whenever the server issues a relay for the code; and stored download links hold only zero-knowledge encrypted file ciphertext.",
@@ -72,6 +72,7 @@ const en = {
       heading: "Cookies and local storage",
       body: [
         "We use one session cookie to keep you signed in. In your browser's local storage we keep a random device id so a device you registered can be recognized; up to 20 recent realtime transfer entries (file name, size, direction, peer name and time) when local history is enabled; and the decryption keys needed to copy links you created back from My Files in that same browser. None of this browser-local history or key material is synced to the server. The history panel can clear its entries or turn recording off, and signing out clears both transfer history and stored-link keys. Clearing this site's browser data also removes them, after which a lost download-link key cannot be recovered by us. We do not use advertising or tracking cookies.",
+        "The browser also keeps a separate, local relay-performance history to help choose a faster route for large files: at most 30 records. Only the past 24 hours are used; expired records are removed when this history is next opened or used. Each record contains a salted hash of the relay identifier, transport type, coarse network class, minute, quantized speed and volume, and round-trip time. It contains no file name, file content, peer identifier or IP address. These records are separate from the optional transfer-history panel; its switch and sign-out do not clear them. Clearing this site’s browser data removes them. Derived speed estimates and their upper bounds are shared through signaling with the other participant to agree on a relay; the stored records themselves are not uploaded.",
       ],
     },
     {
@@ -143,7 +144,7 @@ const zh = {
   description:
     "Relayium 如何处理文件与临时文本：内容采用端到端加密，Relayium 不存储实时消息正文，暂存下载链接中的文件保持零知识加密。",
   updatedLabel: "最后更新",
-  updated: "2026-09-29",
+  updated: "2026-10-15",
   otherDocLabel: "服务条款",
   lead: [
     "Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 配对码会话在服务器为该码签发中继时也是如此；暂存下载链接只保存零知识加密的文件密文。",
@@ -204,6 +205,7 @@ const zh = {
       heading: "Cookie 与本地存储",
       body: [
         "我们使用一个会话 cookie 来保持你的登录状态。浏览器本地存储会保存：一个用于识别已注册设备的随机设备 id；启用本机历史时最近最多 20 条实时传输记录（文件名、大小、方向、对端名称和时间）；以及让你能在同一浏览器的「我的文件」中重新复制自己所建链接的解密密钥。这些本机历史和密钥材料都不会同步到服务器。历史面板可以清空记录或关闭记录功能；退出登录会同时清除传输历史和暂存链接密钥。清除本站的浏览器数据也会移除它们，此后遗失的下载链接密钥无法由我们恢复。我们不使用广告或追踪 cookie。",
+        "浏览器还会单独保存用于选择大文件更快路径的本机中继性能记录：最多 30 条，仅使用过去 24 小时内的记录；下次打开或使用这份历史时会删除过期记录。每条只包含加盐后的中继标识哈希、传输类型、粗略网络类别、分钟、量化后的速度和数据量区间，以及往返时间，不包含文件名、文件内容、对端标识或 IP 地址。这些记录独立于可选的传输历史面板，关闭该面板的记录功能或退出登录不会清除它们；清除本站浏览器数据会移除它们。派生的速度估计及其上界会通过信令与另一位参与者交换，以协商中继；本机保存的记录本身不会上传。",
       ],
     },
     {

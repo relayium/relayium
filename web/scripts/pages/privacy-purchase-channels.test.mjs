@@ -60,7 +60,7 @@ import { describe, it, expect } from "vitest";
 import privacy from "./content/legal/privacy.mjs";
 import { MAINTAINED_LANGS, FROZEN_LANGS, LANGS } from "./shared.mjs";
 
-const MAINTAINED_DATE = "2026-09-29";
+const MAINTAINED_DATE = "2026-10-15";
 const FROZEN_DATE = "2026-08-13";
 
 /** Every string in a locale's document, flattened, so a sentence cannot hide

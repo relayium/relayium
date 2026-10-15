@@ -1394,8 +1394,14 @@ describe("the relay choice is committed by the link path and only by it", () => 
       "const relayRtcConfig = (relayId: string | null): RtcConfig =>\n"
       + "    chooseRtcConfig({ iceServers, relays: relayPool }, relayId);",
     );
+    // The link reader commits, and records which relay this room BUILT on —
+    // the only builds a finished transfer may be attributed to (relay-history).
     expect(all).toContain(
-      "const linkRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.takeChoice());",
+      "const linkRtcConfig = (): RtcConfig => {\n"
+      + "    const id = relaySelection.takeChoice();\n"
+      + "    if (id !== null) builtRelayIds.add(id);\n"
+      + "    return relayRtcConfig(id);\n"
+      + "  };",
     );
     // …and there is no second, non-committing reader left. `linkRtcConfig` is
     // the only consumer of the choice now, which is why it may commit the room
@@ -1418,6 +1424,30 @@ describe("the relay choice is committed by the link path and only by it", () => 
     // reappear on it and silently pick up the commit.
     expect(all).not.toContain("rtcConfig: () => rtcConfig(),");
     expect(all).not.toContain("const rtcConfig = (): RtcConfig");
+  });
+
+  it("routing evidence is room-scoped and never reaches activity or renewal", () => {
+    const all = code(app);
+    // Built-relay record is emptied with the room epoch, so evidence never
+    // crosses rooms.
+    const reset = block("function resetRelaySelection() {", "renewRounds.reset();");
+    expect(reset).toContain("relayMeasureEpoch++;");
+    expect(reset).toContain("builtRelayIds = new Set();");
+    // The workspace gets the sample hook as observation only…
+    const workspaceDeps = block(
+      "const workspace: PeerWorkspace = createPeerWorkspace({", "const storedReceiver =",
+    );
+    expect(workspaceDeps).toContain("onTransferSample: (sample) => onTransferSample(sample),");
+    // …and the handler only records evidence: it touches no activity, renewal,
+    // signalling or relay-selection mutator.
+    const handler = block("function onTransferSample(sample: TransferSample) {", "// ── nearest-relay selection");
+    for (const forbidden of ["onActivity", "onUserActivity", "touch", "renew", "sendSignal", ".record(", ".receive(", "takeChoice"]) {
+      expect(handler).not.toContain(forbidden);
+    }
+    expect(handler).toContain("recordTransferSample(relayHistory,");
+    expect(handler).toContain("() => relayMeasureEpoch");
+    // The declaration rides in the SAME signal object as the RTT map.
+    expect(all).toContain("const envelope = perf ? { relayRtt: map, relayPerf: perf } : { relayRtt: map };");
   });
 });
 

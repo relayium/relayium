@@ -13,7 +13,7 @@
 
 import { createMixedSession, type MixedSession, type MixedSessionDeps } from "./mixed-session.svelte";
 import { peerSupportsLink } from "./peer-caps.svelte";
-import type { QueuedFileBatch } from "./mixed-file-session.svelte";
+import type { QueuedFileBatch, TransferSample } from "./mixed-file-session.svelte";
 import type { PeerLinkStatus } from "./peer-link.svelte";
 import type { PickedFile } from "./drag";
 import type { Incoming, Xfer } from "./transfer-model";
@@ -54,6 +54,12 @@ export interface PeerWorkspaceDeps extends Omit<MixedSessionDeps,
    * silence instead.
    */
   onSendRefused?(reason: SendRefusal): void;
+  /**
+   * One file batch finished cleanly on this side (see
+   * `MixedFileSessionDeps.onTransferSample`). Routing evidence only: it is not
+   * activity, renews nothing and cannot change the transfer.
+   */
+  onTransferSample?(sample: TransferSample): void;
 }
 
 /** Why a batch was not admitted. See `onSendRefused`. */
@@ -279,6 +285,9 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     setTimer: deps.setTimer,
     clearTimer: deps.clearTimer,
   });
+  // Routing evidence (relay-history). The file session lives inside the mixed
+  // session, so the observer is installed on it rather than threaded through.
+  if (deps.onTransferSample) mixed.file.observeTransfers(deps.onTransferSample);
 
   // Installed once, on the manager the session just built. It reads through the
   // `deps` getter on every use, so a room switch that replaces the gate needs no

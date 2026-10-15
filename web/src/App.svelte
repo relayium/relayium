@@ -30,6 +30,8 @@
   import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
   import { chooseRtcConfig, fetchIceConfig, measureRelays, type IceConfig, type RelayAvailability, type RelayEntry } from "./lib/ice";
   import { createRelaySelection, parseRelayRtt, type RelayGate } from "./lib/relay-selection";
+  import { createRelayHistory, HISTORY_STORAGE_KEY, recordTransferSample } from "./lib/relay-history";
+  import type { TransferSample } from "./lib/mixed-file-session.svelte";
   import { relayFailNote } from "./lib/relay-status";
   import { relayDeadline, type RelayDeadline } from "./lib/relay-deadline";
   import { renewGrantConfig } from "./lib/ice";
@@ -154,6 +156,8 @@
     // (peer-workspace → mixed-session → peer-link), and so the one read that
     // records the room's commitment. See `linkRtcConfig`.
     rtcConfig: () => linkRtcConfig(),
+    // Routing evidence only (relay-history.ts): never activity, never renewal.
+    onTransferSample: (sample) => onTransferSample(sample),
     // The gate the link manager holds its first legal `link/1` frame behind —
     // this room's whole readiness, not only its relay agreement. See `roomGate`.
     relayGate: () => roomGate,
@@ -359,7 +363,57 @@
    * back underneath a transport that already exists — see `relock` in
    * relay-selection.ts.
    */
-  const linkRtcConfig = (): RtcConfig => relayRtcConfig(relaySelection.takeChoice());
+  const linkRtcConfig = (): RtcConfig => {
+    const id = relaySelection.takeChoice();
+    if (id !== null) builtRelayIds.add(id);
+    return relayRtcConfig(id);
+  };
+  /**
+   * The relays this room has BUILT a connection on by agreement. A finished
+   * transfer is evidence about a relay only if its observed path is one of
+   * these — never a pool-fallback build. Room-scoped: emptied with the epoch.
+   */
+  let builtRelayIds = new Set<string>();
+
+  // ── observed relay goodput (relay-history.ts / relay-performance.ts) ─────────────
+  // Local, salted, bounded history of how completed transfers through each relay
+  // actually went. It is what lets two peers that both have evidence prefer a
+  // farther relay that moved their files much faster; with no evidence, or with
+  // a peer that does not declare the same policy, the choice is the legacy RTT
+  // one. Nothing here sends a byte or probes anything.
+  const relayHistory = createRelayHistory({
+    storage: {
+      get: () => localStorage.getItem(HISTORY_STORAGE_KEY),
+      set: (value) => localStorage.setItem(HISTORY_STORAGE_KEY, value),
+    },
+  });
+  /** A coarse network class, where the browser offers one. No identifier. */
+  function networkClass(): string {
+    const type = (navigator as Navigator & { connection?: { type?: unknown } }).connection?.type;
+    return typeof type === "string" ? type : "unknown";
+  }
+  /**
+   * One clean batch finished on this side. Attributed to a relay only when the
+   * connection's selected pair really ran through a relay this room agreed on
+   * and built with; recorded only if it is still the same room afterwards.
+   */
+  function onTransferSample(sample: TransferSample) {
+    void recordTransferSample(relayHistory, {
+      dir: sample.dir,
+      bytes: sample.bytes,
+      activeMs: sample.activeMs,
+      creditWaitMs: sample.creditWaitMs,
+      bufferWaitMs: sample.bufferWaitMs,
+      finalizeMs: sample.finalizeMs,
+      stats: () => sample.link.conn.stats(),
+    }, {
+      epoch: relayMeasureEpoch,
+      pool: relayPool,
+      builtIds: new Set(builtRelayIds),
+      ownRtt: relaySelection.mine,
+      net: networkClass(),
+    }, () => relayMeasureEpoch);
+  }
 
   // ── nearest-relay selection ──────────────────────────────────────────────────────
   // Each peer measures its RTT to every pool relay; the maps are swapped over signaling
@@ -383,9 +437,17 @@
     // the call that triggered this one, because `record` publishes BEFORE it
     // re-derives the choice — reading `selectedRelayId` from in here would
     // mirror the previous one.
-    publish: (map) => {
+    //
+    // The goodput declaration rides in the SAME envelope as the RTT map, so a
+    // peer can never weigh one against a stale copy of the other. Older clients
+    // read `relayRtt` and ignore the sibling key.
+    publish: (map, perf) => {
       if (!signaling) return;
-      for (const p of peers) if (p.id !== selfId) signaling.sendSignal(p.id, { relayRtt: map });
+      const envelope = perf ? { relayRtt: map, relayPerf: perf } : { relayRtt: map };
+      for (const p of peers) if (p.id !== selfId) signaling.sendSignal(p.id, envelope);
+    },
+    performance: {
+      estimate: (id, rttMs) => relayHistory.estimate(id, networkClass(), rttMs),
     },
   });
   function syncRelayMirrors() {
@@ -613,6 +675,7 @@
 
   function resetRelaySelection() {
     relayMeasureEpoch++; // supersede any in-flight measurement from the previous room
+    builtRelayIds = new Set(); // and its builds: evidence never crosses rooms
     // Round requests belong to the room being left, along with its socket and
     // its credentials. Settled here — with the same discipline the gate's own
     // waiters get — so nothing can still be awaiting a grant when the next
@@ -977,6 +1040,20 @@
   // OS scheme and the width make `body` paint (lib/browser-theme-color.ts).
   // Synchronous so Svelte keeps the returned teardown.
   onMount(() => startBrowserThemeColor());
+  // A network change moves this device's vantage point: goodput recorded before
+  // it is no longer evidence about the path from here.
+  onMount(() => {
+    const changed = () => relayHistory.noteNetworkChange();
+    const connection = (navigator as Navigator & { connection?: EventTarget }).connection;
+    connection?.addEventListener?.("change", changed);
+    window.addEventListener("online", changed);
+    window.addEventListener("offline", changed);
+    return () => {
+      connection?.removeEventListener?.("change", changed);
+      window.removeEventListener("online", changed);
+      window.removeEventListener("offline", changed);
+    };
+  });
 
   // <head> upkeep, split in two on purpose. The meta/canonical/hreflang block
   // depends only on route + language, but it used to sit in the same effect as

@@ -13,6 +13,23 @@ import { ACCEPT } from "./transfer";
 
 beforeAll(async () => { await ready(); });
 
+// Behaviour-preserving wrap: every real file session is built as before; only
+// its `observeTransfers` calls are recorded, so a test can see what the
+// workspace installed on the session it cannot otherwise reach.
+const observed = vi.hoisted(() => ({ calls: [] as unknown[] }));
+vi.mock("./mixed-file-session.svelte", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./mixed-file-session.svelte")>();
+  return {
+    ...real,
+    createMixedFileSession: (deps: Parameters<typeof real.createMixedFileSession>[0]) => {
+      const session = real.createMixedFileSession(deps);
+      const install = session.observeTransfers.bind(session);
+      session.observeTransfers = (fn) => { observed.calls.push(fn); install(fn); };
+      return session;
+    },
+  };
+});
+
 function dataChannel(label: string) {
   return {
     label, readyState: "open", bufferedAmount: 0,
@@ -23,7 +40,7 @@ function dataChannel(label: string) {
 /** `realLinkCaps` drops the injected capability stub so the workspace uses the
  *  shipped `peerSupportsLink` — the only way to test what a DEFAULT build does
  *  with a peer's roster claim, room policy included. */
-function setup(opts: { realLinkCaps?: boolean } = {}) {
+function setup(opts: { realLinkCaps?: boolean; onTransferSample?: (s: unknown) => void } = {}) {
   const listeners: ((from: string, data: unknown) => void)[] = [];
   const sent: { to: string; data: InboundSignal }[] = [];
   const signaling = {
@@ -62,6 +79,7 @@ function setup(opts: { realLinkCaps?: boolean } = {}) {
     connect,
     resume,
     onSendRefused: (reason) => refusals.push(reason),
+    onTransferSample: opts.onTransferSample,
   });
   return {
     workspace, sent, connect, resume, refusals,
@@ -1379,5 +1397,16 @@ describe("link establishment against the roster", () => {
     expect(h.connect).not.toHaveBeenCalled();
     expect(busyTo(h, "a")).toHaveLength(1);
     h.workspace.stop();
+  });
+});
+
+describe("peer workspace routing evidence", () => {
+  it("installs the transfer observer on its file session, and nothing without one", () => {
+    observed.calls = [];
+    setup();
+    expect(observed.calls).toEqual([]);
+    const fn = vi.fn();
+    setup({ onTransferSample: fn });
+    expect(observed.calls).toEqual([fn]);
   });
 });

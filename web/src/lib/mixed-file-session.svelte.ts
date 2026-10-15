@@ -181,6 +181,11 @@ interface Inbound {
   consentExpired: boolean;
   drainLimit: number;
   drained: number;
+  /** A gap paused this batch at some point. Its timing then spans a recovery,
+   *  so it is no evidence about the path (see `onTransferSample`). */
+  interrupted: boolean;
+  /** Wall time spent finalizing the save target, for the sample's phases. */
+  finalizeMs: number;
   drainTimer?: ReturnType<typeof setTimeout>;
   receiveTimer?: ReturnType<typeof setTimeout>;
 }
@@ -236,6 +241,35 @@ export interface MixedFileSessionDeps {
   /** Whether this peer announced `preupload/1`. Test seam; production reads the
    *  roster announcement. */
   supportsPreupload?(peerId: string): boolean;
+  /**
+   * One file batch finished CLEANLY on this side: sent and answered with the
+   * receiver's COMPLETE, or received, verified, finalized and acknowledged with
+   * COMPLETE. Never for a declined, cancelled, failed, integrity-failed, or
+   * gap-interrupted (resumed) batch, and never for a stale generation.
+   *
+   * Observation only. It runs after the protocol step it describes, its result
+   * is ignored and anything it throws is swallowed, so it cannot reorder or
+   * fail a transfer, and it is not `onActivity`/`onUserActivity`: routing
+   * evidence is not traffic and renews nothing. See relay-history.ts for what a
+   * sample may and may not be used for.
+   */
+  onTransferSample?(sample: TransferSample): void;
+}
+
+/** What one clean batch looked like from this side. Sizes and times only. */
+export interface TransferSample {
+  readonly link: MixedPeerLink;
+  readonly dir: "send" | "recv";
+  /** Whole-batch plaintext bytes. */
+  readonly bytes: number;
+  /** Consent to COMPLETE, wall ms: the end-to-end transfer time this side saw. */
+  readonly activeMs: number;
+  /** Sender: time parked on the receiver's durable-ACK credit window. */
+  readonly creditWaitMs: number;
+  /** Sender: time parked on the local DataChannel buffer draining. */
+  readonly bufferWaitMs: number;
+  /** Sender: last byte queued to COMPLETE. Receiver: save-target finalize. */
+  readonly finalizeMs: number;
 }
 
 export interface MixedFileSession {
@@ -272,6 +306,13 @@ export interface MixedFileSession {
   dismissRecv(x: Xfer): void;
   active(): boolean;
   reset(): void;
+  /**
+   * Install (or with null, remove) the observer `onTransferSample` describes.
+   * The setter form exists because this session is built inside the mixed
+   * session, whose owner reaches it only as `mixed.file`; the semantics are
+   * identical — observation only, after the protocol step, errors swallowed.
+   */
+  observeTransfers(observer: ((sample: TransferSample) => void) | null): void;
 }
 
 export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSession {
@@ -545,6 +586,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     if (oldInbound) {
       if (oldInbound.phase === "receiving" || oldInbound.phase === "resuming") {
         oldInbound.phase = "resuming";
+        oldInbound.interrupted = true;
         incoming = null;
         if (recv && !recv.done) recv = { ...recv, status: "resuming", speed: 0 };
       } else {
@@ -1182,7 +1224,9 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         return;
       }
       if (!current.targetFinalized) {
+        const finalizeStart = now();
         await current.target?.done?.();
+        current.finalizeMs += now() - finalizeStart;
         current.targetFinalized = true;
       }
       if (!stillReceiving(current)) return;
@@ -1204,6 +1248,17 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         return;
       }
       if (!sendBarrier(COMPLETE, candidate, current.generation)) return;
+      if (!current.interrupted) {
+        emitSample({
+          link: candidate,
+          dir: "recv",
+          bytes: current.total,
+          activeMs: now() - current.startedAt,
+          creditWaitMs: 0,
+          bufferWaitMs: 0,
+          finalizeMs: current.finalizeMs,
+        });
+      }
       finishInbound(true);
     }
   }
@@ -1269,6 +1324,8 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       consentExpired: false,
       drainLimit: total,
       drained: 0,
+      interrupted: false,
+      finalizeMs: 0,
     };
     inbound = current;
     incoming = { from: candidate.peerId, files, total };
@@ -1437,6 +1494,15 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     if (sink) {
       try { await sink.close(); } catch { /* failing path already owns status */ }
     }
+  }
+
+  let transferObserver: ((sample: TransferSample) => void) | null = deps.onTransferSample ?? null;
+
+  /** Observation only: never lets a hook fault reach the lane. */
+  function emitSample(sample: TransferSample) {
+    const observer = transferObserver;
+    if (!observer) return;
+    try { observer(sample); } catch { /* evidence is optional */ }
   }
 
   function finishInbound(success: boolean) {
@@ -1671,13 +1737,19 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       const startedAt = now();
       let index = 0;
       let lastUiAt = 0;
+      let creditWaitMs = 0;
+      let bufferWaitMs = 0;
       for await (const data of candidate.fileSender.dataFrames(
         batch.picked.map((picked) => picked.file), candidate.keys, undefined, limit,
       )) {
         // dataFrames consumed a nonce before yielding. If a stop crossed that
         // await, this one frame must still enter the channel before BATCH_ABORT.
+        const waitStart = now();
         if (!current.cancelRequested && !current.remoteStop) await waitForCredit(current);
+        const creditDone = now();
         await waitForBuffer(candidate.fileChannel, current);
+        creditWaitMs += creditDone - waitStart;
+        bufferWaitMs += now() - creditDone;
         sendProtected(data, candidate, expectedGeneration);
         if (isChunkFrame(data)) {
           current.sentBytes += data.byteLength - CHUNK_OVERHEAD;
@@ -1714,6 +1786,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       }
 
       current.phase = "finishing";
+      const finishingAt = now();
       if (send) send = {
         ...send,
         sent: batch.total,
@@ -1733,6 +1806,18 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       }
       if (!current.gotComplete) throw new Error("relayium: file batch ended without COMPLETE");
       if (send) send = { ...send, status: "sendDone", done: true, ok: true, speed: 0 };
+      if (outbound === current) {
+        const t = now();
+        emitSample({
+          link: candidate,
+          dir: "send",
+          bytes: batch.total,
+          activeMs: t - startedAt,
+          creditWaitMs,
+          bufferWaitMs,
+          finalizeMs: t - finishingAt,
+        });
+      }
     } catch (err) {
       if (err instanceof TransportGapError) {
         // The throw site already entered the gap (or was inert because a
@@ -2138,6 +2223,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     attach,
     detach,
     suspend,
+    observeTransfers(observer) { transferObserver = observer; },
     needsRecovery() { return recoveryIntent; },
     sendStoredKeys() {
       const candidate = link;

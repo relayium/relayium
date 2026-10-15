@@ -253,11 +253,27 @@ const OWNERSHIP = [
         workflow: WEB,
         runs: "npm test",
         contractJob: "web-contract",
-        contractCommand: "npx vitest run src/lib/transfer-control.test.ts src/lib/stored-file.adaptive.test.ts",
+        contractCommand: "npx vitest run src/lib/transfer-control.test.ts src/lib/stored-file.adaptive.test.ts src/lib/relay-performance.test.ts",
         workingDirectory: "web",
         paidRunner: false,
       },
     ],
+  },
+  {
+    contract: `${CONTRACT_TREE}/relay-performance-v1.json`,
+    doc: "docs/protocol/relayium-relay-performance-v1.md",
+    lane: TRANSFER_CONTROL,
+    gateJob: "transfer-contract",
+    consumers: [{
+      language: "Web",
+      test: "web/src/lib/relay-performance.test.ts",
+      workflow: WEB,
+      runs: "npm test",
+      contractJob: "web-contract",
+      contractCommand: "npx vitest run src/lib/transfer-control.test.ts src/lib/stored-file.adaptive.test.ts src/lib/relay-performance.test.ts",
+      workingDirectory: "web",
+      paidRunner: false,
+    }],
   },
 ];
 
@@ -267,8 +283,15 @@ const CONSUMERS = OWNERSHIP.flatMap((owner) =>
   owner.consumers.map((consumer) => ({ ...consumer, contract: owner.contract, lane: owner.lane })));
 
 /** The lanes this tree owns, and the exact filter each must carry. */
-const LANE_FILTERS = new Map(
-  OWNERSHIP.map((owner) => [owner.lane, [owner.contract, `.github/workflows/${owner.lane}`]]));
+const LANE_FILTERS = new Map();
+for (const owner of OWNERSHIP) {
+  const contracts = LANE_FILTERS.get(owner.lane) ?? [];
+  contracts.push(owner.contract);
+  LANE_FILTERS.set(owner.lane, contracts);
+}
+for (const [lane, contracts] of LANE_FILTERS) {
+  LANE_FILTERS.set(lane, [...contracts, `.github/workflows/${lane}`]);
+}
 
 // ── a parser for the YAML subset these workflows use ────────────────────────
 
@@ -802,8 +825,8 @@ function triggerFailures(world) {
     need(
       deepEqual(paths, LANE_FILTERS.get(owner.lane)),
       `${owner.lane}'s path filter is ${JSON.stringify(paths)}; want exactly `
-      + `${JSON.stringify(LANE_FILTERS.get(owner.lane))}. Two entries and no exclusion: the `
-      + `document it owns, and itself. \`${CONTRACT_TREE}/**\` here is what put a Swift runner on `
+      + `${JSON.stringify(LANE_FILTERS.get(owner.lane))}. Owned documents and no exclusion: the `
+      + `documents it owns, and itself. \`${CONTRACT_TREE}/**\` here is what put a Swift runner on `
       + `a document Swift never opens.`,
     );
     // The filter this lane carries is now its `push` filter and nothing else.
@@ -1186,6 +1209,21 @@ const DEVICE_INBOX = OWNERSHIP[0];
 const OPS_CONTRACT = OWNERSHIP[1];
 
 const MUTATIONS = [
+  {
+    name: "the shared lane drops the relay performance contract filter",
+    mutate: w => withPaths(w, TRANSFER_CONTROL, LANE_FILTERS.get(TRANSFER_CONTROL).filter(p => p !== "contracts/relay-performance-v1.json")),
+    expect: /a change to contracts\/relay-performance-v1\.json does NOT start transfer-control-contract\.yml/,
+  },
+  {
+    name: "the shared lane stops executing relay performance vectors",
+    mutate: w => withCommandJob(w, TRANSFER_CONTROL, "npx vitest run", (_job, step) => { step.run = step.run.replace(" src/lib/relay-performance.test.ts", ""); }),
+    expect: /does not run `npx vitest run .*relay-performance\.test\.ts`/,
+  },
+  {
+    name: "the relay performance consumer no longer reads its contract",
+    mutate: w => { w.sources.set("web/src/lib/relay-performance.test.ts", "// no contract reader"); return w; },
+    expect: /does not name contracts\/relay-performance-v1\.json verbatim/,
+  },
   // ── ownership ─────────────────────────────────────────────────────────────
   {
     name: "a consumer test stops reading the contract it is named for",
@@ -1565,10 +1603,11 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
+const consumerJobs = new Set(CONSUMERS.map(c => `${c.lane}/${c.contractJob}`));
 console.log(
   `contract-ci-policy-test: OK (${OWNERSHIP.length} contracts in ${CONTRACT_TREE}/, each owned by `
-  + `exactly one of [${[...LANE_FILTERS.keys()].join(", ")}] over ${CONSUMERS.length} finite, `
-  + `secret-free jobs — one PAID macOS runner, ${CONSUMERS.length - 1} ubuntu — while `
+  + `exactly one of [${[...LANE_FILTERS.keys()].join(", ")}] over ${consumerJobs.size} finite, `
+  + `secret-free jobs — one PAID macOS runner, ${consumerJobs.size - 1} ubuntu — while `
   + `${HEAVY_LANES.join(", ")} stay out of a document edit and still own their own consumer tests; `
   + `${world.treeFiles.length} tree files checked for an owner; ordered last-match-wins path `
   + `semantics compiled and proved; both lanes reachable from a pull request only through `
