@@ -659,6 +659,8 @@ function withEntries(text, transform) {
 function selfTest() {
   const problems = [];
   const cases = [
+    ["transfer-control-contract.yml", "'contracts/relay-performance-v1.json'",
+      /knownGaps entry web ← contracts\/relay-performance-v1\.json claims coverage by transfer-contract/],
     ["web.yml", "'server/**'", /web reads server\/account\/store\.go/],
     ["ios-transfer-interop.yml", "'server/**'",
       /ios-transfer-interop reads server\//],
@@ -709,5 +711,5 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   }
   console.log(`ci-lane-closure-test: OK (${result.checked} lane reads across ${result.lanes} lanes each `
     + `select their lane; ${result.fixtures} Android shared fixtures are Gradle inputs; `
-    + `${result.gaps} named known gap(s), each still hit; 4 filter-removal mutations each reported)`);
+    + `${result.gaps} named known gap(s), each still hit; 5 filter-removal mutations each reported)`);
 }

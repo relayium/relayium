@@ -112,13 +112,19 @@
       "lane": "transfer-contract",
       "glob": "web/src/**",
       "coveredBy": "web",
-      "why": "transfer-control-contract.yml's web-contract job runs two Vitest files from web/src; the same files run in web.yml's `npm test`, which every web/src change selects. The lane watches only its contract document on purpose (scripts/test/fixtures/ci-path-selection.mjs, transfer-control-v1 row)."
+      "why": "transfer-control-contract.yml's web-contract job runs three Vitest files from web/src; the same files run in web.yml's `npm test`, which every web/src change selects. The lane watches its two contract documents on purpose (scripts/test/fixtures/ci-path-selection.mjs, transfer-control-v1 row)."
     },
     {
       "lane": "web",
       "glob": "contracts/transfer-control-v1.json",
       "coveredBy": "transfer-contract",
-      "why": "web/src/lib/transfer-control.test.ts and stored-file.adaptive.test.ts open the transfer-control vectors; a change confined to the document starts transfer-control-contract.yml, which runs exactly those two files, instead of web.yml's full browser suite (scripts/test/contract-ci-policy-test.mjs keeps web.yml out of every contract edit)."
+      "why": "web/src/lib/transfer-control.test.ts and stored-file.adaptive.test.ts open the transfer-control vectors; a change confined to the document starts transfer-control-contract.yml, which runs those two files and the relay-performance consumer, instead of web.yml's full browser suite (scripts/test/contract-ci-policy-test.mjs keeps web.yml out of every contract edit)."
+    },
+    {
+      "lane": "web",
+      "glob": "contracts/relay-performance-v1.json",
+      "coveredBy": "transfer-contract",
+      "why": "web/src/lib/relay-performance.test.ts opens these vectors; the shared transfer-control-contract.yml web-contract job executes that exact reader on a document-only change. contract-ci-policy-test.mjs verifies the consumer command and keeps the full Web browser suite out of contract-only edits."
     },
     {
       "lane": "swift-package",
