@@ -1194,11 +1194,11 @@ func (d *linkDevDriver) linkOpen() bool {
 	return link == "Open" || link == "Restarting"
 }
 
-// nextWake is the earliest instant the loop must act without an input: the
-// session's own deadline (which may be due now), or a local pacing mark that
-// is still in the FUTURE — a mark already passed is acted on by progress() on
-// the next input and must not re-arm the timer at zero (a busy loop while the
-// lane it waits for is not open yet).
+// nextWake is the earliest instant the loop must act without an input. A
+// runnable text mark may become overdue between progress() and timer arming;
+// it must wake now, since no further input is owed. A lane still waiting for
+// acceptance needs its peer event instead, so an overdue pacing mark must not
+// spin that blocked lane at zero.
 func (d *linkDevDriver) nextWake() time.Time {
 	now := time.Now()
 	if d.pumpMore {
@@ -1218,6 +1218,10 @@ func (d *linkDevDriver) nextWake() time.Time {
 		}
 	}
 	if len(d.texts) > 0 || (d.textDone && d.quitting && !d.saidDone) {
+		_, textState := d.laneStates()
+		if d.admitted && !d.closed && textState == "Open" && !d.nextTextAt.After(now) {
+			return now
+		}
 		future(d.nextTextAt) // the end-of-input marker is paced like a message
 	}
 	if b, ok := d.latch.Bound(); ok && d.armed && !d.warned {

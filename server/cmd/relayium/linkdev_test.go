@@ -2644,3 +2644,78 @@ func TestLinkDevOverrunDiagnosticsOnRealFixture(t *testing.T) {
 		}
 	}
 }
+
+// The pacing deadline can pass after progress() and before nextWake() arms the
+// timer. Observe that boundary on real admitted CLI peers without sleeping or
+// weakening the protocol rate bound. An explicit wake after a bad observation
+// lets the old implementation finish and report the assertion, rather than
+// leaving its in-process peers alive for the 90 s pairing guard.
+func TestLinkDevOverdueTextPacingWakesWithoutSpinningClosedLane(t *testing.T) {
+	hub := startLinkDevHub(t)
+	var openChecked, waitingChecked atomic.Bool
+	var missed, spun atomic.Bool
+	ldHookBeforeWake = func(d *linkDevDriver) {
+		if !d.admitted || d.closed || len(d.texts) == 0 {
+			return
+		}
+		_, lane := d.laneStates()
+		if lane != "Open" && lane != "WaitAccept" {
+			return
+		}
+		checked := &openChecked
+		if lane == "WaitAccept" {
+			checked = &waitingChecked
+		}
+		if !checked.CompareAndSwap(false, true) {
+			return
+		}
+		saved := d.nextTextAt
+		d.nextTextAt = time.Now().Add(-time.Millisecond)
+		start := time.Now()
+		wake := d.nextWake()
+		if lane == "WaitAccept" {
+			if !wake.After(start.Add(100 * time.Millisecond)) {
+				spun.Store(true)
+			}
+			d.nextTextAt = saved
+			return
+		}
+		if wake.After(start.Add(100 * time.Millisecond)) {
+			missed.Store(true)
+			// Cleanup assistance is itself a test failure, never acceptance.
+			select {
+			case d.q.wake <- struct{}{}:
+			default:
+			}
+		}
+	}
+	t.Cleanup(func() { ldHookBeforeWake = nil })
+	messages := []string{"paced first", "paced second — unicode", "paced third"}
+	commands := []string{}
+	for _, m := range messages {
+		commands = append(commands, "text "+m)
+	}
+	a := ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--dest", t.TempDir(), "--script", ldScript(t, commands...), ldCode}}
+	b := ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--dest", t.TempDir(), "--script", ldScript(t, "wait-texts 3"), ldCode}}
+	ra, rb := ldPairUp(t, hub, "", a, b)
+	if !openChecked.Load() || !waitingChecked.Load() {
+		t.Fatalf("pacing states not exercised: open=%v waiting=%v", openChecked.Load(), waitingChecked.Load())
+	}
+	if missed.Load() {
+		t.Error("overdue runnable text was left without a timer wake")
+	}
+	if spun.Load() {
+		t.Error("a text lane still waiting for acceptance would spin at an overdue mark")
+	}
+	if ra.code != 0 || rb.code != 0 {
+		t.Fatalf("peers did not finish: A=%s B=%s", ra, rb)
+	}
+	for _, m := range messages {
+		if !strings.Contains(rb.stdout, m) {
+			t.Errorf("receiver missed %q: %s", m, rb)
+		}
+	}
+	if !strings.Contains(rb.stderr, "texts received=3") {
+		t.Errorf("receiver did not account for all3messages: %s", rb)
+	}
+}
