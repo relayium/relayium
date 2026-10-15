@@ -1603,11 +1603,11 @@ class Workflow(unittest.TestCase):
         on = self.text.split("\njobs:\n", 1)[0]
         self.assertIn("\n      - 'scripts/ci/macos-ui-crash-diagnostics.py'\n", on)
 
-    def test_this_suite_runs_unconditionally_in_repository_policy(self):
+    def test_this_suite_runs_unconditionally_in_native_crash_policy(self):
         with open(HYGIENE_YML) as f:
             lines = f.read().split("\n")
         self.assertFalse(any(re.match(r"^ {4}paths(-ignore)?:", l) for l in lines[:lines.index("jobs:")]))
-        job = job_block(lines, "repository-policy")
+        job = job_block(lines, "native-crash-policy")
         self.assertFalse(any(re.match(r"^    if:", l) for l in job))
         runs = [s for s in steps_of(job) if step_keys(s).get("run") == TEST_RUN]
         self.assertEqual(len(runs), 1)
