@@ -685,6 +685,13 @@ Sender:
 3. Per file: the logical chunks, each as `CHUNK_PART` … `CHUNK`, then
    `DONE_ENC`.
 4. Honour the flow-control window and SCTP backpressure throughout (§6.5).
+   A local browser cap may additionally pace file-content frames and use smaller
+   valid fragments; it does not pace ACK/control/text, alter the 192 KiB logical
+   checkpoint grid, or enlarge the 8 MiB durable-credit window. A consumed nonce
+   frame crossing cancellation still precedes ABORT and is charged into the
+   local cap's debt. The optional authenticated DONE `paced:true` hint is defined
+   in the realtime-wire document and prevents intentional user pacing from
+   teaching new peers an artificial relay throughput limit.
 5. Wait for `COMPLETE`.
 
 Receiver:

@@ -27,6 +27,7 @@ import {
   roomRemainingMs,
   SliceController,
   currentSpeedPref,
+  pacedBurst,
   sameSpeedPref,
   type UploadStats,
 } from "./transfer-control";
@@ -1084,6 +1085,29 @@ function mono(): number {
 /** One token bucket for every upload in this page, so concurrent uploads share
  *  one limit. */
 const sharedBucket = new TokenBucket(mono);
+/** A departing FIFO head makes work runnable without waiting for the next
+ *  setting poll. Listeners own no tokens and are retired with their wait. */
+const pacingWaiters = new Set<() => void>();
+
+function wakePacingWaiters(): void {
+  for (const wake of [...pacingWaiters]) wake();
+}
+
+function waitForPacingTurn(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException("aborted", "AbortError")); return; }
+    const cleanup = () => {
+      clearTimeout(timer);
+      pacingWaiters.delete(wake);
+      signal?.removeEventListener("abort", abort);
+    };
+    const wake = () => { cleanup(); resolve(); };
+    const abort = () => { cleanup(); reject(new DOMException("aborted", "AbortError")); };
+    const timer = setTimeout(wake, ms);
+    pacingWaiters.add(wake);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
 
 /** Accounting of the most recent chunked upload (tests and local diagnostics). */
 let lastUploadStats: UploadStats | undefined;
@@ -1108,16 +1132,42 @@ async function paceAttempt(bytes: number, ctl: SliceController, pref: ReturnType
       if (!sameSpeedPref(currentSpeedPref(), pref)) return true;
       const wait = sharedBucket.tryTake(ticket, bytes, rate, capacity);
       if (wait <= 0) return false;
-      await abortableSleep(Math.min(250, Math.max(1, wait)), signal);
+      await waitForPacingTurn(Math.min(250, Math.max(1, wait)), signal);
     }
   } finally {
     sharedBucket.leave(ticket);
+    wakePacingWaiters();
   }
 }
 
 /** Reset shared pacing state between tests. */
 export function resetUploadPacingForTests(): void {
   sharedBucket.reset();
+  wakePacingWaiters();
+}
+
+/** Local WebRTC file-frame scheduling uses the same page-wide cap as stored
+ *  uploads. Background estimation remains specific to stored requests. */
+export function realtimeFileFrameBudget(negotiatedMax: number): number {
+  const pref = currentSpeedPref();
+  return pref.mode === "cap" ? Math.min(negotiatedMax, pacedBurst(pref.capBytesPerSec)) : negotiatedMax;
+}
+
+export async function paceRealtimeFileFrame(bytes: number, signal?: AbortSignal): Promise<void> {
+  for (;;) {
+    const pref = currentSpeedPref();
+    if (pref.mode !== "cap") return;
+    // A single frame sealed just before a lower cap may exceed the new burst.
+    // The existing bucket charges it into debt; no nonce is discarded or frame
+    // re-encrypted. Subsequent fragments already use the new smaller budget.
+    const ctl = new SliceController(pacedBurst(pref.capBytesPerSec));
+    if (!await paceAttempt(bytes, ctl, pref, signal)) return;
+  }
+}
+
+export function chargeCancelledRealtimeFrame(bytes: number): void {
+  const pref = currentSpeedPref();
+  if (pref.mode === "cap") sharedBucket.debitSealedFrame(bytes, pref.capBytesPerSec, pacedBurst(pref.capBytesPerSec));
 }
 
 /** GET the server's committed offset for a resuming upload — and, for a

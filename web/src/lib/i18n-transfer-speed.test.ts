@@ -22,11 +22,13 @@ describe("upload speed copy", () => {
     }
   });
 
-  it("states the burst limitation and that live transfers are not covered", () => {
+  it("states the burst limitation, shared live/cloud cap and cloud-only background", () => {
     expect(en.speed.capNote).toMatch(/full network speed/);
     expect(zh.speed.capNote).toMatch(/全速/);
-    expect(en.speed.scope).toMatch(/not limited by this setting yet/);
-    expect(zh.speed.scope).toMatch(/暂不受此设置限制/);
+    expect(en.speed.scope).toMatch(/shared by encrypted cloud uploads and live file transfers/);
+    expect(en.speed.scope).toMatch(/cloud uploads only/);
+    expect(zh.speed.scope).toMatch(/加密云端上传和实时文件传输共享/);
+    expect(zh.speed.scope).toMatch(/仅用于云端上传/);
   });
 
   it("formats remaining time at minute resolution above a minute", () => {

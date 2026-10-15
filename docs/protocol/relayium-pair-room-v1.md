@@ -40,6 +40,24 @@ pairing ROOM.
 - Not a share: absent from `GET /api/files`, and `DELETE /api/files/{id}` does
   not reach it. Its lifecycle is the room's.
 
+### Browser scheduling (local policy, unchanged v1 wire)
+
+The browser may overlap at most two small per-file objects, each at most
+256 KiB of plaintext, to overlap independent request latency. A larger file
+runs alone. It waits for each init's accepted response before starting another
+object; each object's PATCHes and finalize remain strictly ordered. All uploads
+in the page continue to share the existing speed-cap bucket. A join stops starting additional upload jobs. Already owned attempts may
+finish; the server refuses a new init after join. Room reset aborts all owned
+attempts, and their old generation must retire before the new room can reclaim
+those entries, even if the six digits happen to be the same.
+
+Progress identifies the oldest active entry. A failed on-wire attempt can leave
+the room deadline unconfirmed; an older sibling response cannot settle that
+uncertainty. An authoritative expiry overrides all delayed results and returns
+finished entries to the live-link lane. Object layout, key handoff, admission,
+quotas, deadlines, retention and receiver compatibility are unchanged. Other
+clients may retain serial scheduling.
+
 ## 2. Lifecycle and timing
 
 Let `open` be when the room was created (the first pre-upload for that code) and

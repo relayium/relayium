@@ -1667,7 +1667,7 @@ export interface Messages {
   // what spacing requests can and cannot do — no "no impact" promises.
   speed: {
     title: string;
-    scope: string; // which uploads it governs, and that live transfers are not limited yet
+    scope: string; // shared cloud/live custom cap; background remains cloud-only
     fast: string;
     fastNote: string;
     background: string;

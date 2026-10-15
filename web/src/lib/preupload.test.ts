@@ -43,7 +43,7 @@ interface FakeOpts {
   /** Status to answer the Nth init (1-based) with, instead of opening a session. */
   initStatus?: Record<number, number>;
   /** Status to answer a PATCH with, once `patchAfter` of them have been served. */
-  patchStatus?: number;
+  patchStatus?: number | ((n: number) => number | undefined);
   patchAfter?: number;
   finalizeStatus?: number;
   /** What the Nth successful finalize (1-based) answers as `expiresAt` — the
@@ -115,9 +115,10 @@ function installFakeServer(opts: FakeOpts = {}) {
     }
     state.patches++;
     opts.onPatch?.(state.patches);
-    if (opts.patchStatus && state.patches > (opts.patchAfter ?? 0)) {
+    const patchStatus = typeof opts.patchStatus === "function" ? opts.patchStatus(state.patches) : opts.patchStatus;
+    if (patchStatus && state.patches > (opts.patchAfter ?? 0)) {
       state.inFlight--;
-      return json({}, opts.patchStatus);
+      return json({}, patchStatus);
     }
     const body = new Uint8Array(await (init!.body as Blob | Uint8Array as Blob).arrayBuffer?.() ??
       (init!.body as Uint8Array));
@@ -149,14 +150,14 @@ afterEach(() => {
 });
 
 describe("driving staged files up against the pairing code", () => {
-  it("uploads one object per file, one at a time, and records each key", async () => {
+  it("uploads one object per file within two small-file slots, and records each key", async () => {
     const server = installFakeServer();
     addToOutbox([pf("a.bin"), pf("b.bin")]);
     await run();
 
     expect(server.inits).toHaveLength(2);
     for (const url of server.inits) expect(url).toContain(`code=${CODE}`);
-    expect(server.maxInFlight).toBe(1); // never two open sessions for one room
+    expect(server.maxInFlight).toBe(2); // two distinct small objects; never duplicate the same token
     expect(server.finalized).toBe(2);
     expect([outboxState(0), outboxState(1)]).toEqual(["uploaded", "uploaded"]);
     expect(uploadedRefs().map((r) => r.id)).toEqual(["obj-u1", "obj-u2"]);
@@ -195,7 +196,7 @@ describe("driving staged files up against the pairing code", () => {
     addToOutbox([pf("a.bin"), pf("b.bin")]);
     await Promise.all([run(), run()]);
     expect(server.inits).toHaveLength(2); // two files, not four
-    expect(server.maxInFlight).toBe(1);
+    expect(server.maxInFlight).toBe(2);
   });
 
   it("starts working for a new room even while the old room's pass is winding down", async () => {
@@ -546,7 +547,7 @@ describe("410 — the room's deadline passed while uploading", () => {
 
   it("returns the file to the live-link lane when finalize is refused", async () => {
     const server = installFakeServer({ finalizeStatus: 410 });
-    addToOutbox([pf("a.bin"), pf("b.bin")]);
+    addToOutbox([bigPf("a.bin"), pf("b.bin")]);
     await run();
     expectReturnedToLiveLink(server);
   });
@@ -884,12 +885,13 @@ describe("what a failed pre-upload knows about the room's window", () => {
     // fails after the code has already changed, and the digits on screen now
     // have nothing to do with it.
     installFakeServer({
-      patchStatus: 500,
-      onPatch: () => startPreupload("100200", true),
+      patchStatus: (n) => n === 1 ? 500 : undefined,
+      onPatch: (n) => { if (n === 1) startPreupload("100200", true); },
     });
     addToOutbox([pf("a.bin")]);
     await run();
 
     expect(preuploadUnconfirmed()).not.toBe("100200");
+    expect(outboxState(0), "the new room must actually get its own driver").toBe("uploaded");
   });
 });

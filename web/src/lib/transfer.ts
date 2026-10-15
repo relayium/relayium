@@ -317,13 +317,14 @@ export class Sender {
   private async *pieces(
     plain: Bytes,
     keys: SessionKeys,
-    pieceBytes: number,
+    pieceBytes: number | (() => number),
     partKind: number,
     finalKind: number,
   ): AsyncGenerator<Bytes> {
     let off = 0;
     for (;;) {
-      const end = Math.min(off + pieceBytes, plain.length);
+      const budget = typeof pieceBytes === "function" ? pieceBytes() : pieceBytes;
+      const end = Math.min(off + budget, plain.length);
       const last = end >= plain.length;
       const s = this.seq++;
       yield frame(last ? finalKind : partKind, s, await seal(keys.send, s, plain.slice(off, end) as Bytes));
@@ -349,9 +350,14 @@ export class Sender {
     files: File[],
     keys: SessionKeys,
     resume?: ResumePoint,
-    maxFrameBytes: number = CHUNK_SIZE + CHUNK_OVERHEAD,
+    maxFrameBytes: number | (() => number) = CHUNK_SIZE + CHUNK_OVERHEAD,
+    senderLimited?: () => boolean,
   ): AsyncGenerator<Bytes> {
-    const pieceBytes = piecePlainBytes(maxFrameBytes);
+    // A local speed choice may change between fragments. Only the transport
+    // pieces change; logical hash/checkpoint chunks stay on the same grid.
+    const pieceBytes = typeof maxFrameBytes === "function"
+      ? () => piecePlainBytes(maxFrameBytes())
+      : piecePlainBytes(maxFrameBytes);
     if (resume && !resumePointAligned(resume, files.map((f) => f.size))) {
       throw new Error("relayium: resume point is not on a chunk boundary");
     }
@@ -396,7 +402,10 @@ export class Sender {
       yield frame(
         KIND_DONE_ENC,
         ds,
-        await seal(keys.send, ds, enc.encode(JSON.stringify({ sha256: toHex(hash) })) as Bytes),
+        await seal(keys.send, ds, enc.encode(JSON.stringify({
+          sha256: toHex(hash),
+          ...(senderLimited?.() ? { paced: true } : {}),
+        })) as Bytes),
       );
     }
   }
@@ -515,7 +524,7 @@ export class Receiver {
   async feed(
     encoded: Bytes,
     keys: SessionKeys,
-  ): Promise<{ batch?: Manifest; chunk?: Uint8Array; done?: { ok: boolean }; resume?: ResumePoint & { seq: number } }> {
+  ): Promise<{ batch?: Manifest; chunk?: Uint8Array; done?: { ok: boolean; paced?: true }; resume?: ResumePoint & { seq: number } }> {
     const kind = encoded[0];
     const seq = new DataView(encoded.buffer, encoded.byteOffset).getUint32(1);
     const payload = encoded.slice(5);
@@ -567,10 +576,10 @@ export class Receiver {
       // A file cannot end in the middle of a chunk. Leftover pieces mean the
       // sender's framing and ours disagree — fail rather than hash a short chunk.
       if (this.parts.length > 0) throw new Error("relayium: file ended mid-chunk");
-      const { sha256 } = JSON.parse(dec.decode(plain)) as { sha256: string };
+      const { sha256, paced } = JSON.parse(dec.decode(plain)) as { sha256: string; paced?: unknown };
       const ok = sha256 === toHex(this.hash);
       this.hash = new Uint8Array(32); // reset chain for the next file in the batch
-      return { done: { ok } };
+      return { done: { ok, ...(paced === true ? { paced: true as const } : {}) } };
     }
     if (kind === KIND_BATCH_LEGACY || kind === KIND_DONE_LEGACY) {
       // 对端跑的是加密 manifest 之前的版本。**不回落到明文解析**：那条回落一旦存在

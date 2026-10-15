@@ -241,10 +241,12 @@ export function roomRemainingMs(
  *   cannot move anyone else's schedule.
  * - Only the head ticket may take tokens, so concurrent uploads are served in
  *   order and two bodies cannot both be released by one refill.
- * Guarantee (with every body <= capacity): for any two dispatch instants
+ * Ordinary ticket-dispatch guarantee (with every body <= capacity): for any two dispatch instants
  * t1 <= t2, the bytes dispatched in [t1, t2] are at most
  * rate x (t2 - t1) + capacity. Each body still leaves at network speed.
- * Every attempt is charged — retries and requests later cut included.
+ * Every attempt is charged — retries and requests later cut included. An
+ * already-sealed live cancellation crossing may add one immediate frame via
+ * debitSealedFrame; its complete byte debt is repaid by subsequent dispatches.
  */
 export interface PaceTicket {
   readonly id: number;
@@ -302,6 +304,14 @@ export class TokenBucket {
       return 0;
     }
     return Math.max(1, ((need - have) * 1000) / rate);
+  }
+
+  /** An already sealed live frame must precede its cancellation barrier. Charge
+   *  that bounded crossing into debt immediately; no ticket is advanced and no
+   *  token is granted. Later dispatches repay it before using the same cap. */
+  debitSealedFrame(bytes: number, rate: number, capacity: number): void {
+    this.refill(rate, capacity);
+    this.tokens = (this.tokens ?? 0) - bytes;
   }
 
   /** Forget all state (tests). */

@@ -24,6 +24,7 @@ import {
   Sender,
   FRAME,
   ackFrame,
+  isChunkFrame,
   isBatchAbort,
   resumeReqFrame,
 } from "./transfer";
@@ -35,6 +36,9 @@ import {
   type HandoffItem,
 } from "./preupload-handoff";
 import { encodeKey } from "./store-crypto";
+import { saveSpeedPref, pacedBurst, worstWindowExcess } from "./transfer-control";
+import { paceRealtimeFileFrame, resetUploadPacingForTests } from "./stored-file";
+import { settleWithFakeTimers } from "./settle-fake-timers";
 // The shipped sender-side gate, driven here through a real link rather than
 // stubbed: what this lane emits on attachment is exactly what that gate allows.
 import {
@@ -232,6 +236,101 @@ const picked = (name: string, body: string) => [{ file: new File([body], name) }
 const bytes = (text: string) => [...new TextEncoder().encode(text)];
 
 beforeEach(async () => { await ready(); });
+
+describe("live file sending shares the chosen upload cap", () => {
+  afterEach(() => {
+    saveSpeedPref({ mode: "fast", capBytesPerSec: 1048576 });
+    resetUploadPacingForTests();
+  });
+
+  it("paces real encrypted frames without weakening durable credit or whole-file verification", async () => {
+    const rate = 128 * 1024;
+    saveSpeedPref({ mode: "cap", capBytesPerSec: rate });
+    resetUploadPacingForTests();
+    const aSamples: TransferSample[] = [], bSamples: TransferSample[] = [];
+    const h = await harness({ onTransferSampleA: (s) => aSamples.push(s), onTransferSampleB: (s) => bSamples.push(s) });
+    const sent: { t: number; bytes: number }[] = [];
+    const send = h.file.a.send.bind(h.file.a);
+    h.file.a.send = (data) => {
+      const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array((data as Uint8Array).buffer);
+      if (isChunkFrame(bytes)) sent.push({ t: performance.now(), bytes: bytes.length });
+      send(data);
+    };
+    const source = Uint8Array.from({ length: 256 * 1024 }, (_, i) => i % 251);
+    try {
+      h.a.enqueue("b", [{ file: new File([source], "paced.bin") }]);
+      await until(() => !!h.b.incoming);
+      h.b.accept();
+      await until(() => h.a.send?.status === "sendDone" && h.b.recv?.status === "recvDone");
+      expect(Math.max(...sent.map((s) => s.bytes)), "steady capped frames fit one shared burst").toBeLessThanOrEqual(pacedBurst(rate));
+      expect(worstWindowExcess(sent, rate, pacedBurst(rate)), "live files must consume actual shared tokens").toBeLessThanOrEqual(128);
+      const hash = async (bytes: Uint8Array) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)))).join(",");
+      expect(await hash(h.bTarget.output.get("paced.bin")!)).toBe(await hash(source));
+      expect(h.file.a.readyState).toBe("open");
+      expect(aSamples.length, "a local cap cannot teach relay throughput").toBe(0);
+      expect(bSamples.length, "the authenticated paced hint excludes receiver samples too").toBe(0);
+    } finally { h.a.detach(); h.b.detach(); }
+  });
+
+  it("cancels a pacing wait promptly, keeps the nonce barrier ordered and reuses the same codecs", async () => {
+    saveSpeedPref({ mode: "cap", capBytesPerSec: 32 * 1024 });
+    resetUploadPacingForTests();
+    const h = await harness();
+    try {
+      h.a.enqueue("b", [{ file: new File([new Uint8Array(1024 * 1024)], "cancel.bin") }]);
+      await until(() => !!h.b.incoming); h.b.accept();
+      const chunks = () => h.file.a.sent.filter((f) => isChunkFrame(new Uint8Array(f)));
+      await until(() => chunks().length === 1);
+      await new Promise((r) => setTimeout(r, 30)); // second sealed frame is waiting for its turn
+      h.a.cancel("send");
+      await until(() => !h.a.active() && !h.b.active(), 500);
+      expect(chunks().length, "only the one consumed-nonce crossing may follow cancellation").toBeLessThanOrEqual(2);
+      expect(h.file.a.sent.some((f) => isBatchAbort(f))).toBe(true);
+      expect(h.file.a.readyState).toBe("open");
+      saveSpeedPref({ mode: "fast", capBytesPerSec: 1048576 });
+      h.a.enqueue("b", picked("after.txt", "same codecs after paced cancel"));
+      await until(() => h.b.incoming?.files[0].name === "after.txt"); h.b.accept();
+      await until(() => h.a.send?.status === "sendDone" && h.b.recv?.status === "recvDone");
+      expect(new TextDecoder().decode(h.bTarget.output.get("after.txt"))).toBe("same codecs after paced cancel");
+    } finally { h.a.detach(); h.b.detach(); }
+  });
+
+  it("charges a sealed frame even when cancellation crosses encryption before pacing begins", async () => {
+    saveSpeedPref({ mode: "cap", capBytesPerSec: 32 * 1024 });
+    resetUploadPacingForTests();
+    // Keep the bucket's monotonic clock frozen during real crypto, then drive
+    // it with fake Date time. No wall-time scheduling or clock rewind can hide
+    // whether the cancellation crossing actually spent the initial burst.
+    let clockFrozen = true, origin = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => clockFrozen ? 0 : Date.now() - origin);
+    const h = await harness();
+    let crossed = false;
+    const frames = h.aLink.fileSender.dataFrames.bind(h.aLink.fileSender);
+    vi.spyOn(h.aLink.fileSender, "dataFrames").mockImplementation(async function* (...args) {
+      for await (const frame of frames(...args)) {
+        if (!crossed && isChunkFrame(frame)) { crossed = true; h.a.cancel("send"); }
+        yield frame;
+      }
+    });
+    try {
+      h.a.enqueue("b", [{ file: new File([new Uint8Array(CHUNK_SIZE)], "crossing.bin") }]);
+      await until(() => !!h.b.incoming); h.b.accept();
+      await until(() => crossed && !h.a.active() && !h.b.active());
+      const chunks = h.file.a.sent.filter((f) => isChunkFrame(new Uint8Array(f)));
+      expect(chunks).toHaveLength(1);
+      expect(chunks[0].byteLength).toBe(32 * 1024);
+      expect(h.file.a.sent.some(isBatchAbort)).toBe(true);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      origin = Date.now(); clockFrozen = false;
+      const start = performance.now();
+      expect(await settleWithFakeTimers(paceRealtimeFileFrame(32 * 1024))).not.toBeInstanceOf(Error);
+      expect(performance.now() - start, "the consumed-nonce frame must not bypass the shared cap").toBeGreaterThanOrEqual(1000);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      clock.mockRestore(); vi.useRealTimers(); h.a.detach(); h.b.detach();
+    }
+  });
+});
 
 describe("mixed file session", () => {
   it("waits for explicit consent, then transfers a batch without closing either lane", async () => {
@@ -973,6 +1072,36 @@ describe("mixed file session transport recovery", () => {
   const announced = (frame: ArrayBuffer) =>
     JSON.parse(new TextDecoder().decode(new Uint8Array(frame).slice(5))) as
       { index: number; offset: number; seq: number };
+
+  it("retires a pacing wait before realigning the same codecs on a replacement transport", async () => {
+    saveSpeedPref({ mode: "cap", capBytesPerSec: 32 * 1024 });
+    resetUploadPacingForTests();
+    const h = await harness();
+    try {
+      h.a.enqueue("b", [{ file: new File([new Uint8Array(256 * 1024)], "paced-gap.bin") }]);
+      await until(() => !!h.b.incoming); h.b.accept();
+      await until(() => h.file.a.sent.filter((f) => isChunkFrame(new Uint8Array(f))).length === 1);
+      await new Promise((r) => setTimeout(r, 30));
+      h.file.a.close(); h.file.b.close();
+      await until(() => h.a.send?.status === "resuming" && h.b.recv?.status === "resuming");
+      const { swap, aNext, bNext } = rebuild(h.aLink, h.bLink, h.links);
+      h.a.attach(aNext); h.b.attach(bNext);
+      // Realignment must not wait for the retired generation's one-second cap.
+      await until(() => swap.a.sent.some((f) => kindOf(f) === FRAME.RESUME), 500);
+      saveSpeedPref({ mode: "fast", capBytesPerSec: 1048576 });
+      await until(() => h.a.send?.status === "sendDone" && h.b.recv?.status === "recvDone");
+      expect(h.bTarget.output.get("paced-gap.bin")?.length).toBe(256 * 1024);
+      const hash = async (a: Uint8Array) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(a)))).join(",");
+      expect(await hash(h.bTarget.output.get("paced-gap.bin")!)).toBe(await hash(new Uint8Array(256 * 1024)));
+      const seq = (f: ArrayBuffer) => new DataView(f).getUint32(1);
+      const oldSeq = Math.max(...h.file.a.sent.filter((f) => isChunkFrame(new Uint8Array(f))).map(seq));
+      const resumedSeq = Math.min(...swap.a.sent.filter((f) => isChunkFrame(new Uint8Array(f))).map(seq));
+      expect(resumedSeq, "the never-emitted sealed nonce stays burned").toBeGreaterThan(oldSeq + 1);
+    } finally {
+      h.a.detach(); h.b.detach();
+      saveSpeedPref({ mode: "fast", capBytesPerSec: 1048576 }); resetUploadPacingForTests();
+    }
+  });
 
   it("resumes the interrupted batch byte-exactly on a new transport", async () => {
     const { a, b, aLink, bLink, links, file, text, bTarget } = await harness();

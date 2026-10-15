@@ -89,7 +89,9 @@ artificial delay), `background`, `cap` (32 KiB/s – 1 GiB/s).
   or the 256 KiB probe in background); the bucket starts full and never holds more,
   so idle time or a cancel buys no catch-up burst. Waiting uploads hold FIFO
   tickets; only the head may take, and tokens are taken only at the moment the
-  body is dispatched — every attempt, retries and cut requests included. A
+  body is dispatched — every attempt, retries and cut requests included.
+  Queue departure wakes the remaining waiters immediately; the 250 ms settings
+  poll is an upper bound for preference changes, not a FIFO handoff delay. A
   cancel or re-plan leaves the queue without any refund, so it cannot move another
   upload's turn. Guarantee: for any two request starts t1 ≤ t2, bytes started in
   [t1, t2] ≤ `rate × (t2 − t1) + capacity`. (R3 used a virtual clock with refunds;
@@ -166,3 +168,25 @@ artificial delay), `background`, `cap` (32 KiB/s – 1 GiB/s).
 - The speed preference is read through pure TypeScript (`currentSpeedPref`), so
   `stored-file.ts` stays importable from Node runtimes (Windows stored runtime);
   without storage the preference is "fast" or this page's in-memory choice.
+
+## Browser realtime custom-cap extension (local policy)
+
+The same page-wide custom-cap bucket also governs encrypted file-content frames
+sent over the mixed WebRTC lane. Background estimation remains stored-only;
+Fast keeps the transport congestion controller and existing durable-credit window.
+This extension changes local scheduling, not stored HTTP v1. Other clients may
+retain their existing scheduling. The setting is a tab's budget, not a system-wide
+limit across apps or browsers.
+
+Frames use at most the smaller of the negotiated maximum and the current paced
+burst, while logical chunks/hash/checkpoints remain 192 KiB. A preference change
+may cross one already sealed frame. Cancel/reject/terminal/gap wakes the pacing
+wait immediately; an already sealed frame still entering the ordered channel
+before ABORT is charged into debt, repaid by subsequent capped sends. No tokens
+are refunded. Metadata, DONE, ACKs and text bypass this file-data cap. Bursts and
+protocol overhead remain; no zero-effect-on-other-traffic promise is made.
+
+A batch touched by the custom cap reports the optional encrypted DONE hint
+`paced:true` and neither new endpoint records it as relay-throughput evidence.
+Old receivers ignore this additive JSON field and continue full hash verification;
+unknown external sender limits cannot be inferred. See realtime-wire v1.

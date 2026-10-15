@@ -21,6 +21,13 @@ no command yet. The Go CLI's shipped transfers still use its own separate wire
 - 1 CHUNK      — one file slice, sealed(sessionKey, seq).
 - 7 BATCH_ENC  — the manifest JSON, sealed(sessionKey, seq). seq 0.
 - 8 DONE_ENC   — `{"sha256":<hex>}` (the file's chained hash), sealed(sessionKey, seq).
+  New browser senders may add `"paced":true` inside the encrypted JSON when a
+  user-selected cap participated in this batch. It is only a performance hint:
+  new receivers exclude that completion from relay-throughput learning, while
+  verification, credit and COMPLETE still depend on the whole-file hash and
+  durable writes. Absent/unknown hints grant nothing. Existing Web, Go, Android
+  and Apple readers ignore unknown JSON members and still verify `sha256`.
+  Default-Fast DONE bytes remain unchanged; no new frame kind is introduced.
 - 4 RESUME_START (plaintext, sender→recv) — `{"index","offset","seq"}`.
 - 5 RESUME_REQ   (plaintext, recv→sender) — `{"index","offset"}` (non-negative ints only).
 - 6 ACK          (plaintext, recv→sender) — Float64 BE cumulative bytes durably written. 13 bytes.

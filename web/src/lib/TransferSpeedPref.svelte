@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Upload speed preference (stored uploads only). The choice is device-local
-  // and takes effect on the next upload request, including uploads already
+  // Upload speed preference (shared cloud/live cap; cloud-only background).
+  // The device-local choice affects the next file frame or upload request,
+  // including uploads already
   // running in this tab. Copy states exactly what spacing requests can do.
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { CAP_CHOICES, setSpeedPref, speedPref } from "./transfer-speed-pref.svelte";

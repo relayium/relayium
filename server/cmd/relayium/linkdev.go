@@ -1217,6 +1217,13 @@ func (d *linkDevDriver) nextWake() time.Time {
 			at = t
 		}
 	}
+	// Runnable local work owes no further peer event. Its deadline may have
+	// passed since progress/releaseLeave checked it, so retain overdue marks.
+	due := func(t time.Time) {
+		if !t.IsZero() && t.Before(at) {
+			at = t
+		}
+	}
 	if len(d.texts) > 0 || (d.textDone && d.quitting && !d.saidDone) {
 		_, textState := d.laneStates()
 		if d.admitted && !d.closed && textState == "Open" && !d.nextTextAt.After(now) {
@@ -1228,11 +1235,20 @@ func (d *linkDevDriver) nextWake() time.Time {
 		future(b.WarnAt)
 	}
 	if d.cur == nil && len(d.outQ) > 0 {
-		future(d.outQ[0].notBefore)
+		fs, _ := d.laneStates()
+		if d.admitted && !d.closed && fs == "Idle" {
+			due(d.outQ[0].notBefore)
+		} else {
+			future(d.outQ[0].notBefore)
+		}
 	}
-	future(d.sleepUntil)
+	if d.admitted && !d.closed && !d.quitting && len(d.script) > 0 && d.script[0].op == "sleep" {
+		due(d.sleepUntil)
+	} else {
+		future(d.sleepUntil)
+	}
 	if d.heldLeave != nil || d.heldLost != nil {
-		future(d.heldUntil) // releaseLeave applies them once due
+		due(d.heldUntil) // releaseLeave applies them once due
 	}
 	// Renewal deadlines are the engine's timers: like the session's, one that
 	// is already OVERDUE (the loop was busy past it) wakes the loop at once

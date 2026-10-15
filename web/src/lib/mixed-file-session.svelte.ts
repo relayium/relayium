@@ -5,6 +5,8 @@
 // all consume one monotonically increasing nonce sequence in each direction.
 
 import type { PickedFile } from "./drag";
+import { currentSpeedPref } from "./transfer-control";
+import { chargeCancelledRealtimeFrame, paceRealtimeFileFrame, realtimeFileFrameBudget } from "./stored-file";
 import type { StatusKey } from "./i18n.svelte";
 import { pickSaveTarget as defaultPickSaveTarget, saveFailureStatus, SaveCancelledError, type FileSink, type SaveTarget } from "./filesink";
 import type { Incoming, Xfer } from "./transfer-model";
@@ -130,6 +132,9 @@ interface Outbound {
   sentBytes: number;
   acked: number;
   creditWake: (() => void) | null;
+  /** Separate from ACK credit: durable progress must never bypass pacing. */
+  pacingAbort?: AbortController;
+  userLimited?: boolean;
   decide: (decision: Decision) => void;
   complete: () => void;
   completed: Promise<void>;
@@ -153,6 +158,7 @@ interface ReceiveCheckpoint extends ResumePoint {
 }
 
 interface Inbound {
+  senderLimited?: boolean;
   link: MixedPeerLink;
   generation: number;
   readonly files: FileMeta[];
@@ -418,6 +424,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       oldOutbound.decide("reject");
       oldOutbound.complete();
       oldOutbound.creditWake?.();
+      oldOutbound.pacingAbort?.abort();
       oldOutbound.terminal = true;
       outbound = null;
       if (send && !send.done) send = { ...send, status: "sendFail", done: true, ok: false, speed: 0 };
@@ -484,6 +491,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     current.decide("reject");
     current.complete();
     current.creditWake?.();
+    current.pacingAbort?.abort();
     current.terminal = true;
     if (!final) send = null;
     else if (send && !send.done) send = { ...send, ...final, done: true, speed: 0 };
@@ -566,6 +574,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         // Unblock credit, buffer and completion waits. The old run observes the
         // generation mismatch and retires without finishing this batch.
         oldOutbound.creditWake?.();
+        oldOutbound.pacingAbort?.abort();
         oldOutbound.complete();
         if (send && !send.done) send = { ...send, status: "resuming", speed: 0 };
       } else if (consented) {
@@ -639,6 +648,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       failedOutbound.decide("reject");
       failedOutbound.complete();
       failedOutbound.creditWake?.();
+      failedOutbound.pacingAbort?.abort();
       failedOutbound.terminal = true;
     }
     outbound = null;
@@ -916,6 +926,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       else if (current.phase === "resuming") {
         current.remoteStop = true;
         current.creditWake?.();
+        current.pacingAbort?.abort();
         current.complete();
         if (send) send = { ...send, status: "rejected", done: true, ok: false, speed: 0 };
         finishOutbound(current);
@@ -923,6 +934,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       else if (current.phase === "sending" || current.phase === "finishing") {
         current.remoteStop = true;
         current.creditWake?.();
+        current.pacingAbort?.abort();
         current.complete();
       }
     } else if (kind === "busy" && current.phase === "waitingAccept") current.decide("busy");
@@ -1191,6 +1203,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       await closeSink(current);
       if (!stillReceiving(current)) return;
       current.allOk = current.allOk && out.done.ok;
+      current.senderLimited ||= out.done.paced === true;
       current.fileIndex++;
       current.fileOffset = 0;
       if (current.fileIndex < current.files.length) {
@@ -1248,7 +1261,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         return;
       }
       if (!sendBarrier(COMPLETE, candidate, current.generation)) return;
-      if (!current.interrupted) {
+      if (!current.interrupted && !current.senderLimited) {
         emitSample({
           link: candidate,
           dir: "recv",
@@ -1536,6 +1549,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     if (outbound !== current) return;
     current.terminal = true;
     current.creditWake?.();
+    current.pacingAbort?.abort();
     outbound = null;
     if (pendingInbound?.link === current.link) {
       const next = pendingInbound;
@@ -1625,6 +1639,33 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       current.creditWake = wake;
       channel.onbufferedamountlow = wake;
     });
+  }
+
+  async function waitForPacing(frame: Uint8Array, current: Outbound) {
+    const inGap = () => current.phase === "resuming";
+    if (!isChunkFrame(frame) || inGap()) return;
+    if (current.cancelRequested || current.remoteStop || current.terminal) {
+      // A stop can cross async sealing before a pacing wait even exists. That
+      // consumed-nonce frame still precedes ABORT, so it owes the same debt as
+      // a frame whose pacing wait was interrupted below.
+      chargeCancelledRealtimeFrame(frame.byteLength);
+      return;
+    }
+    if (currentSpeedPref().mode !== "cap") return;
+    current.userLimited = true;
+    const ctl = new AbortController();
+    current.pacingAbort = ctl;
+    try {
+      await paceRealtimeFileFrame(frame.byteLength, ctl.signal);
+    } catch (err) {
+      if (!ctl.signal.aborted || !(inGap() || current.cancelRequested || current.remoteStop || current.terminal)) throw err;
+      // The sealed frame still precedes ABORT, or burns its nonce in the gap.
+      // Cancellation must wake immediately without granting those bytes free
+      // passage through the shared cap; subsequent sends repay the debt.
+      if (!inGap()) chargeCancelledRealtimeFrame(frame.byteLength);
+    } finally {
+      if (current.pacingAbort === ctl) current.pacingAbort = undefined;
+    }
   }
 
   async function resolveWithin<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
@@ -1740,7 +1781,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       let creditWaitMs = 0;
       let bufferWaitMs = 0;
       for await (const data of candidate.fileSender.dataFrames(
-        batch.picked.map((picked) => picked.file), candidate.keys, undefined, limit,
+        batch.picked.map((picked) => picked.file), candidate.keys, undefined, () => realtimeFileFrameBudget(limit), () => current.userLimited === true,
       )) {
         // dataFrames consumed a nonce before yielding. If a stop crossed that
         // await, this one frame must still enter the channel before BATCH_ABORT.
@@ -1748,6 +1789,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         if (!current.cancelRequested && !current.remoteStop) await waitForCredit(current);
         const creditDone = now();
         await waitForBuffer(candidate.fileChannel, current);
+        await waitForPacing(data, current);
         creditWaitMs += creditDone - waitStart;
         bufferWaitMs += now() - creditDone;
         sendProtected(data, candidate, expectedGeneration);
@@ -1806,7 +1848,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       }
       if (!current.gotComplete) throw new Error("relayium: file batch ended without COMPLETE");
       if (send) send = { ...send, status: "sendDone", done: true, ok: true, speed: 0 };
-      if (outbound === current) {
+      if (outbound === current && !current.userLimited) {
         const t = now();
         emitSample({
           link: candidate,
@@ -1867,10 +1909,12 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         batch.picked.map((picked) => picked.file),
         candidate.keys,
         point,
-        candidate.conn.maxFrameBytes(),
+        () => realtimeFileFrameBudget(candidate.conn.maxFrameBytes()),
+        () => current.userLimited === true,
       )) {
         if (!current.cancelRequested && !current.remoteStop) await waitForCredit(current);
         await waitForBuffer(candidate.fileChannel, current);
+        await waitForPacing(data, current);
         sendProtected(data, candidate, expectedGeneration);
         if (isChunkFrame(data)) {
           const bytes = data.byteLength - CHUNK_OVERHEAD;
@@ -2294,6 +2338,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       if (dir === "send" && outbound) {
         outbound.cancelRequested = true;
         outbound.creditWake?.();
+        outbound.pacingAbort?.abort();
         if (outbound.phase === "waitingAccept") outbound.decide("reject");
         if (outbound.phase === "finishing") outbound.complete();
         if (outbound.phase === "resuming") send = null;
@@ -2337,6 +2382,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       clearTimeout(replayTimer);
       replayTimer = undefined;
       outbound?.creditWake?.();
+      outbound?.pacingAbort?.abort();
       // Retire the live generation before clearing its object references so an
       // open sink is closed and any consumed nonce makes the old codecs terminal.
       detach();

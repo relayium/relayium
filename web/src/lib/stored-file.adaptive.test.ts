@@ -433,20 +433,33 @@ describe("speed limits pace the actual sending", () => {
     expect(worstPacingExcess(sim.st.sent, t0, cap)).toBeGreaterThan(1);
   }, 60_000);
 
-  it("two concurrent capped uploads share one limit", async () => {
-    const cap = 256 * 1024;
-    setSpeedPref({ mode: "cap", capBytesPerSec: cap });
-    const a = fixture(MiB / 2), b = fixture(MiB / 2);
-    const sim = installSim({ chunkSize: MiB, schedule: [{ at: 0, bps: 100_000_000 }], prefixOnAbort: true });
-    const t0 = Date.now();
-    const both = Promise.all([uploadFileResumable([a.file], SHARE), uploadFileResumable([b.file], SHARE)]);
-    const res = await settleWithFakeTimers(both);
-    expect(res).not.toBeInstanceOf(Error);
-    const [ra, rb] = res as Array<{ key: string }>;
-    expect(await decrypt(sim.blob("u1"), ra.key)).toEqual(a.plain);
-    expect(await decrypt(sim.blob("u2"), rb.key)).toEqual(b.plain);
-    expect(worstPacingExcess(sim.st.sent, t0, cap)).toBeLessThanOrEqual(1);
-  }, 60_000);
+  for (const scrambled of [false, true]) {
+    it("two concurrent capped uploads share one limit" + (scrambled ? " with fixed scrambled session ids" : ""), async () => {
+      const cap = 256 * 1024;
+      setSpeedPref({ mode: "cap", capBytesPerSec: cap });
+      const files = [fixture(MiB / 2), fixture(MiB / 2 + 37)];
+      const sim = installSim({
+        chunkSize: MiB, schedule: [{ at: 0, bps: 100_000_000 }], prefixOnAbort: true,
+        sessionId: scrambled ? (size) => size === cipherSizeFor([files[0].file]) ? "u2" : "u1" : undefined,
+      });
+      const t0 = Date.now();
+      const both = Promise.all(files.map((f) => uploadFileResumable([f.file], SHARE)));
+      const res = await settleWithFakeTimers(both);
+      expect(res).not.toBeInstanceOf(Error);
+      const out = res as Array<{ key: string }>;
+      // Real WebCrypto decides init arrival order. The response key belongs to
+      // its task, not whichever opaque id happened to reach the server first.
+      for (let i = 0; i < files.length; i++) {
+        const size = cipherSizeFor([files[i].file]);
+        const ids = [...sim.st.declaredById].filter(([, n]) => n === size).map(([id]) => id);
+        expect(ids, "exactly one session per upload's declared ciphertext size").toHaveLength(1);
+        const got = await decrypt(sim.blob(ids[0]), out[i].key);
+        expect(got.length).toBe(files[i].plain.length);
+        expect(Buffer.compare(Buffer.from(got), Buffer.from(files[i].plain))).toBe(0);
+      }
+      expect(worstPacingExcess(sim.st.sent, t0, cap)).toBeLessThanOrEqual(1);
+    }, 60_000);
+  }
 
   it("switching to Fastest ends a pacing wait at once", async () => {
     setSpeedPref({ mode: "cap", capBytesPerSec: 32 * 1024 });

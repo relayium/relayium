@@ -83,7 +83,7 @@ describe("TransferSpeedPref", () => {
     await render();
     const checked = target.querySelector<HTMLInputElement>('input[type="radio"]:checked');
     expect(checked?.value).toBe("fast");
-    expect(target.textContent).toContain("Live device-to-device transfers are not limited by this setting yet");
+    expect(target.textContent).toContain("The custom limit is shared by encrypted cloud uploads and live file transfers");
   });
 
   it("choosing a limit drives the preference the uploader reads, and explains bursts", async () => {

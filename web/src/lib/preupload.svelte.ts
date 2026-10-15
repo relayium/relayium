@@ -55,7 +55,7 @@ import { CAP_PREUPLOAD } from "./preupload-handoff";
  */
 export type PreuploadNotice = "" | "expired";
 
-/** Which entry is uploading right now and how far it has got. `token` is the
+/** The oldest active entry and how far it has got. `token` is the
  *  outbox handle (outboxToken), not an index: the queue moves while this runs.
  *  `code` is the room those bytes are bound to — a reader that acts on "an
  *  upload is in flight" has to know whether it is in flight for ITS room, and a
@@ -171,10 +171,11 @@ export function preuploadUnconfirmed(): string {
  * came before it, so the window it names is at or past anything the lost answer
  * could have bought. Certainty replaces doubt rather than sitting beside it.
  */
-function noteDeadline(code: string, expiresAt: number): void {
+function noteDeadline(code: string, expiresAt: number, mayConfirm = true): void {
+  if (closed && notice === "expired") return;
   if (!Number.isFinite(expiresAt) || expiresAt <= 0) return;
   if (expiresAt > MAX_PLAUSIBLE_DEADLINE) return; // a joined room's "never"
-  if (unconfirmed === code) unconfirmed = "";
+  if (mayConfirm && unconfirmed === code) unconfirmed = "";
   if (deadline?.code === code && deadline.expiresAt >= expiresAt) return;
   deadline = { code, expiresAt };
 }
@@ -220,16 +221,37 @@ let closed = false;
  */
 let running = false;
 let driver: Promise<void> = Promise.resolve();
-/** Aborts only the upload in flight, and only when its file is gone. */
-let inFlight: AbortController | null = null;
+/** Two small objects may overlap request latency; a large object runs alone.
+ *  These are local scheduling bounds, not a change to pair_room/1. */
+const SMALL_FILE_BYTES = 256 * 1024;
+const SMALL_FILE_SLOTS = 2;
+interface UploadJob {
+  token: string;
+  code: string;
+  epoch: number;
+  doubtVersion: number;
+  small: boolean;
+  admitted: boolean;
+  ctl: AbortController;
+  progress?: PreuploadProgress;
+  done?: Promise<void>;
+}
+const inFlight = new Map<string, UploadJob>();
+let roomEpoch = 0;
+let doubtVersion = 0;
+let wakeDriver: (() => void) | null = null;
+
+function showProgress(): void {
+  progress = [...inFlight.values()].find((job) => job.epoch === roomEpoch)?.progress ?? null;
+}
 
 /**
  * Pre-upload the staged batch against `code`, and keep doing so as more files
  * are staged, until the room stops accepting them.
  *
  * Idempotent: calling it again while it runs joins the running pass rather than
- * starting a second one. Two drivers would open two sessions for one room, and
- * (worse) could both claim the same entry between its state read and its
+ * starting a second one. Two drivers could exceed the bounded slots and
+ * could both claim the same entry between its state read and its
  * markUploading. A running pass follows the room — it re-reads which room it is
  * working for between files — so a code change does not need a second driver.
  *
@@ -251,7 +273,7 @@ export function startPreupload(code: string, ready = preuploadSenderReady()): Pr
 }
 
 /**
- * Start no further uploads for `code`; let the one in flight finish.
+ * Start no further uploads for `code`; let admitted uploads finish.
  *
  * This is the join, seen from this side. The protocol allows the running upload
  * to complete on purpose — its bytes are already sent and already billed, and
@@ -317,8 +339,10 @@ function leaveRoom(): void {
   // reason to be vague about the one now on screen.
   deadline = null;
   unconfirmed = "";
-  inFlight?.abort();
-  inFlight = null;
+  roomEpoch++;
+  doubtVersion = 0;
+  for (const job of inFlight.values()) job.ctl.abort();
+  wakeDriver?.();
   releaseUploaded();
 }
 
@@ -339,7 +363,7 @@ function nextStaged(): number {
 }
 
 /**
- * One pass over the queue: upload each staged file the room will still take.
+ * One pass over the queue with bounded overlap of small per-file objects.
  *
  * The whole loop sits inside this function's own try/finally deliberately. Every
  * exit is a `return` from inside it, so `running` is cleared in the same turn the
@@ -352,90 +376,80 @@ async function drive(): Promise<void> {
   running = true;
   try {
     for (;;) {
-      // Re-read the room every time round: minting a fresh code replaces it, and
-      // this pass follows rather than needing a second one behind it.
-      const code = activeCode;
-      if (!code || held || closed) return;
-      const index = nextStaged();
-      if (index < 0) return;
-      const token = outboxToken(index);
-      const picked = outbox()[index];
-      // A folder's file keeps its relative path only on the live link: the
-      // stored manifest carries names and sizes and nothing else, so
-      // pre-uploading one would silently flatten the folder the receiver is
-      // meant to get back. Passed over rather than uploaded — slower, and
-      // correct — and the flat files in the same batch still go up.
-      if (picked.path) {
-        skipped.add(token);
-        continue;
-      }
-      markUploading(index);
-      const ctl = new AbortController();
-      inFlight = ctl;
-      // Whether THIS attempt got as far as handing bytes to the network. It is
-      // what decides how its failure may be read: before it, nothing moved on
-      // the server and the code's own window is untouched; after it, an append
-      // may have committed and extended the room without ever saying so.
-      let onWire = false;
-      try {
-        const res = await uploadFileResumable(
-          [picked.file],
-          { purpose: "pair_room", code },
-          (p) => {
-            progress = { code, token, sent: p.sent, total: p.total };
-            if (p.onWire) onWire = true;
-            // Every response that names the room's deadline, taken as it
-            // arrives: the append's ack and the probe that recovers a lost one.
-            // Waiting for finalize is what left a failed batch with nothing.
-            //
-            // Guarded on the room still being the active one for the same reason
-            // the landing below is: a tick from an upload whose room the user has
-            // already left must not file that room's window over the new one's.
-            if (p.expiresAt !== undefined && code === activeCode) noteDeadline(code, p.expiresAt);
-            // The user removed this file (or cleared the batch) while its bytes
-            // were going up. Nothing will ever be handed the key, so stop paying
-            // for the rest of them.
-            if (outboxIndexOf(token) < 0) ctl.abort();
-          },
-          ctl.signal,
-        );
-        const at = outboxIndexOf(token);
-        // Two ways this upload can be worth nothing by the time it lands, and
-        // both end with the entry back on the live link rather than marked
-        // uploaded:
-        //
-        //   - the entry is gone (removed, or the batch was cleared). Never mark
-        //     by the starting index — that index may now hold a different file,
-        //     and this key is not its key. The object dies with the room.
-        //   - the room changed underneath it. The object is bound to the room it
-        //     was uploaded into, so its ciphertext dies on THAT room's deadline;
-        //     handing its key to the new room's peer would promise a fetch that
-        //     404s. The bytes are spent either way — the file is not.
-        if (at < 0) continue;
-        if (activeCode !== code) {
-          failUpload(at);
-          continue;
+      // Retire old owners before the new room can reclaim the same tokens,
+      // including reset followed by the SAME code string.
+      const retired = [...inFlight.values()].some((job) => job.epoch !== roomEpoch);
+      if (!retired && activeCode && !held && !closed) {
+        while (inFlight.size < SMALL_FILE_SLOTS) {
+          const index = nextStaged();
+          if (index < 0) break;
+          const picked = outbox()[index];
+          const token = outboxToken(index);
+          // Stored-Wire has no relative path; folders keep the live-link path.
+          if (picked.path) { skipped.add(token); continue; }
+          const small = picked.file.size <= SMALL_FILE_BYTES;
+          const peers = [...inFlight.values()];
+          // Never speculate past an unanswered init, overlap a large file,
+          // or increase the established large-file memory/bandwidth footprint.
+          if (peers.some((job) => !job.admitted || !job.small) || (peers.length && !small)) break;
+          const job: UploadJob = {
+            token, code: activeCode, epoch: roomEpoch, doubtVersion,
+            small, admitted: false, ctl: new AbortController(),
+          };
+          markUploading(index); // synchronous claim, before the first await
+          inFlight.set(token, job);
+          job.done = uploadOne(job, picked.file);
         }
-        markUploaded(at, { id: res.id, key: res.key });
-        // Recorded only on the path that keeps the object, and only under the
-        // room that is still current — the two refusals above have already
-        // returned. This response is the one moment the server tells a client
-        // where the room's window now ends, and therefore how long the code it
-        // is showing has left.
-        noteDeadline(code, res.expiresAt);
-      } catch (e) {
-        const at = outboxIndexOf(token);
-        // Back to `staged`, so the live link picks it up on join. An entry
-        // parked in `uploading` is a file that would go over neither transport.
-        if (at >= 0) failUpload(at);
-        if (!continueAfter(e, code, onWire)) return;
-      } finally {
-        inFlight = null;
-        progress = null;
       }
+      if (!inFlight.size) return;
+      // Admission also wakes the driver: waiting only for a whole upload to
+      // finish would preserve exactly the serial request tax being removed.
+      let wake!: () => void;
+      const changed = new Promise<void>((resolve) => { wake = resolve; wakeDriver = wake; });
+      try { await Promise.race([changed, ...[...inFlight.values()].map((job) => job.done!)]); }
+      finally { if (wakeDriver === wake) wakeDriver = null; }
     }
   } finally {
     running = false;
+  }
+}
+
+async function uploadOne(job: UploadJob, file: File): Promise<void> {
+  const { token, code, ctl, epoch } = job;
+  const currentRoom = () => epoch === roomEpoch && code === activeCode;
+  let onWire = false;
+  try {
+    const res = await uploadFileResumable(
+      [file], { purpose: "pair_room", code },
+      (p) => {
+        if (p.onWire) onWire = true;
+        if (currentRoom()) {
+          if (!job.admitted) { job.admitted = true; wakeDriver?.(); }
+          job.progress = { code, token, sent: p.sent, total: p.total };
+          showProgress();
+          // A sibling response may have been generated BEFORE this attempt's
+          // ambiguous failure. Only a freshly started attempt can settle doubt.
+          if (p.expiresAt !== undefined) noteDeadline(code, p.expiresAt, job.doubtVersion === doubtVersion);
+        }
+        if (outboxIndexOf(token) < 0) ctl.abort();
+      }, ctl.signal,
+    );
+    const at = outboxIndexOf(token);
+    if (at < 0) return;
+    if (!currentRoom() || ctl.signal.aborted || (closed && notice === "expired")) {
+      failUpload(at);
+      return;
+    }
+    markUploaded(at, { id: res.id, key: res.key });
+    noteDeadline(code, res.expiresAt, job.doubtVersion === doubtVersion);
+  } catch (e) {
+    const at = outboxIndexOf(token);
+    if (at >= 0) failUpload(at);
+    // Late refusal/abort from an old epoch must never close the new room.
+    if (currentRoom()) continueAfter(e, code, onWire);
+  } finally {
+    inFlight.delete(token);
+    showProgress();
   }
 }
 
@@ -452,6 +466,9 @@ async function drive(): Promise<void> {
  * was for, and whether it happened after bytes had been handed to the network.
  */
 function continueAfter(e: unknown, code: string, onWire: boolean): boolean {
+  // Once expiry is authoritative, a sibling's later failure cannot restore
+  // uncertainty about a room whose ciphertext is already gone.
+  if (closed && notice === "expired") return false;
   // Doubt about a room the user has already left is not doubt about the one on
   // screen — and `leaveRoom` has already cleared this room's state, which a late
   // landing must not undo.
@@ -465,7 +482,7 @@ function continueAfter(e: unknown, code: string, onWire: boolean): boolean {
     // Its bytes were still bytes. An abort stops the request, not whatever the
     // server had already committed of it, so a room it may have extended is
     // exactly as unconfirmable as any other lost answer.
-    if (mayBeExtended) unconfirmed = code;
+    if (mayBeExtended) { unconfirmed = code; doubtVersion++; }
     return true;
   }
   const status = e instanceof UploadError ? e.status : 0;
@@ -483,6 +500,7 @@ function continueAfter(e: unknown, code: string, onWire: boolean): boolean {
       // consequence the user can see.
       closed = true;
       notice = "expired";
+      releaseUploaded();
       // And it outranks every deadline this module was ever handed. A window an
       // earlier file bought can still be in the future when the room is already
       // over on the server — the account was deleted, or this client's copy of
@@ -507,7 +525,7 @@ function continueAfter(e: unknown, code: string, onWire: boolean): boolean {
       // to, and none of these statuses is an answer to that question: a 500 in
       // particular is returned by an append that has already committed its bytes
       // and moved the room in the same transaction.
-      if (mayBeExtended) unconfirmed = code;
+      if (mayBeExtended) { unconfirmed = code; doubtVersion++; }
       closed = true;
       return false;
   }
