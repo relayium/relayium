@@ -1,0 +1,645 @@
+{
+  "version": 1,
+  "spec": "docs/protocol/relayium-transfer-control-v1.md",
+  "note": "Client-side behaviour vectors. No wire format change: the server sees ordinary PATCHes. Default unlimited packing is unchanged from before (greedy frames until the buffer holds at least chunkSize; one request may exceed chunkSize by up to one ciphertext frame). Every client port must reproduce these outputs exactly.",
+  "constants": {
+    "MAX_SLICE_BYTES": 67108864,
+    "DEFAULT_SLICE_BYTES": 8388608,
+    "MIN_FAST_SLICE": 65536,
+    "MIN_PACED_SLICE": 32768,
+    "PACED_BURST_MS": 250,
+    "MIN_CAP_BPS": 32768,
+    "MAX_CAP_BPS": 1073741824,
+    "BACKGROUND_SHARE": 0.5,
+    "BACKGROUND_FLOOR_BPS": 32768,
+    "BACKGROUND_PROBE_SLICE": 262144,
+    "FAST_TARGET_MS": 2000,
+    "WATCHDOG_FACTOR": 4,
+    "WATCHDOG_FLOOR_MS": 20000,
+    "PAIR_WATCHDOG_FLOOR_MS": 8000,
+    "PAIR_DEADLINE_MARGIN_MS": 30000,
+    "MIN_DEADLINE_CUT_MS": 1000,
+    "PAIR_WINDOW_CEILING_MS": 300000,
+    "MAX_FAULTS_WITHOUT_PROGRESS": 5,
+    "BACKGROUND_PROBE_EVERY": 8,
+    "PACKING": "greedy-frames-to-chunkSize"
+  },
+  "legacySliceMax": [
+    {
+      "chunkSize": 1048576,
+      "expect": 1048576
+    },
+    {
+      "chunkSize": 8388608,
+      "expect": 8388608
+    },
+    {
+      "chunkSize": 67108864,
+      "expect": 67108864
+    },
+    {
+      "chunkSize": 1073741824,
+      "expect": 67108864
+    },
+    {
+      "chunkSize": 0,
+      "expect": 8388608
+    },
+    {
+      "chunkSize": -5,
+      "expect": 8388608
+    },
+    {
+      "chunkSize": 1.5,
+      "expect": 8388608
+    },
+    {
+      "chunkSize": "8388608",
+      "expect": 8388608
+    },
+    {
+      "chunkSize": null,
+      "expect": 8388608
+    },
+    {
+      "chunkSize": 9007199254740992,
+      "expect": 8388608,
+      "why": "not a safe integer: treated as absent"
+    }
+  ],
+  "controller": [
+    {
+      "name": "fast: packing target is the server chunkSize, unchanged by answers",
+      "max": 1048576,
+      "steps": [
+        {
+          "op": "next",
+          "pref": {
+            "mode": "fast",
+            "capBytesPerSec": 1048576
+          },
+          "expect": 1048576
+        },
+        {
+          "op": "answered",
+          "bytes": 1048576,
+          "ms": 500
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "fast",
+            "capBytesPerSec": 1048576
+          },
+          "expect": 1048576
+        },
+        {
+          "op": "watchdog",
+          "slice": 1048576,
+          "pairRoom": false,
+          "stalls": 0,
+          "expect": 20000
+        },
+        {
+          "op": "watchdog",
+          "slice": 1048576,
+          "pairRoom": true,
+          "stalls": 0,
+          "expect": 8000
+        },
+        {
+          "op": "watchdog",
+          "slice": 1048576,
+          "pairRoom": true,
+          "roomRemainingMs": 35000,
+          "stalls": 0,
+          "expect": 5000
+        },
+        {
+          "op": "watchdog",
+          "slice": 1048576,
+          "pairRoom": true,
+          "roomRemainingMs": 30500,
+          "stalls": 0,
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "no measurement yet: ordinary unbounded, pair bounded by its deadline only",
+      "max": 8388608,
+      "steps": [
+        {
+          "op": "watchdog",
+          "slice": 8388608,
+          "pairRoom": false,
+          "stalls": 0,
+          "expect": null
+        },
+        {
+          "op": "watchdog",
+          "slice": 8388608,
+          "pairRoom": true,
+          "roomRemainingMs": 290000,
+          "stalls": 0,
+          "expect": 260000
+        },
+        {
+          "op": "watchdog",
+          "slice": 8388608,
+          "pairRoom": true,
+          "stalls": 0,
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "collapse demotes the retry, slow budget grows, growth back by doubling",
+      "max": 8388608,
+      "steps": [
+        {
+          "op": "answered",
+          "bytes": 8388608,
+          "ms": 1000
+        },
+        {
+          "op": "collapse",
+          "committed": 20000,
+          "tried": 8388608,
+          "ms": 8000
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "fast",
+            "capBytesPerSec": 1048576
+          },
+          "expect": 65536
+        },
+        {
+          "op": "watchdog",
+          "slice": 65536,
+          "pairRoom": false,
+          "stalls": 0,
+          "expect": 104857.6
+        },
+        {
+          "op": "watchdog",
+          "slice": 65536,
+          "pairRoom": false,
+          "stalls": 2,
+          "expect": 419430.4
+        },
+        {
+          "op": "answered",
+          "bytes": 65536,
+          "ms": 300
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "fast",
+            "capBytesPerSec": 1048576
+          },
+          "expect": 131072
+        },
+        {
+          "op": "answered",
+          "bytes": 131072,
+          "ms": 2500
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "fast",
+            "capBytesPerSec": 1048576
+          },
+          "expect": 131072
+        }
+      ]
+    },
+    {
+      "name": "cap: paced slice is a quarter second of the limit, floor 32 KiB, never above the packing target",
+      "max": 1048576,
+      "steps": [
+        {
+          "op": "pace",
+          "pref": {
+            "mode": "cap",
+            "capBytesPerSec": 1048576
+          },
+          "expect": 1048576
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "cap",
+            "capBytesPerSec": 1048576
+          },
+          "expect": 262144
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "cap",
+            "capBytesPerSec": 32768
+          },
+          "expect": 32768
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "cap",
+            "capBytesPerSec": 1000
+          },
+          "expect": 32768
+        },
+        {
+          "op": "pace",
+          "pref": {
+            "mode": "cap",
+            "capBytesPerSec": 1000
+          },
+          "expect": 32768
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "cap",
+            "capBytesPerSec": 1073741824
+          },
+          "expect": 1048576
+        }
+      ]
+    },
+    {
+      "name": "background: probe first; reference = EWMA of probe-sized requests only; small paced answers do not lower it; a periodic probe follows a slower network; a cut halves it",
+      "max": 8388608,
+      "steps": [
+        {
+          "op": "pace",
+          "pref": {
+            "mode": "background",
+            "capBytesPerSec": 0
+          },
+          "expect": null
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "background",
+            "capBytesPerSec": 0
+          },
+          "expect": 262144
+        },
+        {
+          "op": "answered",
+          "bytes": 262144,
+          "ms": 100
+        },
+        {
+          "op": "pace",
+          "pref": {
+            "mode": "background",
+            "capBytesPerSec": 0
+          },
+          "expect": 1310720
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "background",
+            "capBytesPerSec": 0
+          },
+          "expect": 327680
+        },
+        {
+          "op": "answered",
+          "bytes": 65536,
+          "ms": 1000
+        },
+        {
+          "op": "answered",
+          "bytes": 65536,
+          "ms": 1000
+        },
+        {
+          "op": "answered",
+          "bytes": 65536,
+          "ms": 1000
+        },
+        {
+          "op": "answered",
+          "bytes": 65536,
+          "ms": 1000
+        },
+        {
+          "op": "answered",
+          "bytes": 65536,
+          "ms": 1000
+        },
+        {
+          "op": "answered",
+          "bytes": 65536,
+          "ms": 1000
+        },
+        {
+          "op": "answered",
+          "bytes": 65536,
+          "ms": 1000
+        },
+        {
+          "op": "answered",
+          "bytes": 65536,
+          "ms": 1000
+        },
+        {
+          "op": "pace",
+          "pref": {
+            "mode": "background",
+            "capBytesPerSec": 0
+          },
+          "expect": 1310720
+        },
+        {
+          "op": "next",
+          "pref": {
+            "mode": "background",
+            "capBytesPerSec": 0
+          },
+          "expect": 262144
+        },
+        {
+          "op": "answered",
+          "bytes": 262144,
+          "ms": 1000
+        },
+        {
+          "op": "pace",
+          "pref": {
+            "mode": "background",
+            "capBytesPerSec": 0
+          },
+          "expect": 720896
+        },
+        {
+          "op": "collapse",
+          "committed": 0,
+          "tried": 262144,
+          "ms": 8000
+        },
+        {
+          "op": "pace",
+          "pref": {
+            "mode": "background",
+            "capBytesPerSec": 0
+          },
+          "expect": 360448
+        }
+      ]
+    }
+  ],
+  "roomRemaining": [
+    {
+      "expiresAtSec": 1000,
+      "serverNowMs": 900000,
+      "receivedAtMono": 0,
+      "nowMono": 0,
+      "expect": 100000
+    },
+    {
+      "expiresAtSec": 1000,
+      "serverNowMs": 900000,
+      "receivedAtMono": 0,
+      "nowMono": 40000,
+      "expect": 60000
+    },
+    {
+      "expiresAtSec": 1000,
+      "serverNowMs": 1100000,
+      "receivedAtMono": 0,
+      "nowMono": 0,
+      "expect": 0
+    },
+    {
+      "expiresAtSec": 10000,
+      "serverNowMs": 0,
+      "receivedAtMono": 0,
+      "nowMono": 0,
+      "expect": 300000
+    }
+  ],
+  "progressRate": [
+    {
+      "records": [
+        [
+          0,
+          0
+        ],
+        [
+          1000,
+          100000
+        ]
+      ],
+      "query": 1000,
+      "total": 1000000,
+      "expectRate": null,
+      "expectEta": null
+    },
+    {
+      "records": [
+        [
+          0,
+          0
+        ],
+        [
+          2000,
+          100000
+        ],
+        [
+          4000,
+          400000
+        ]
+      ],
+      "query": 4000,
+      "total": 1000000,
+      "expectRate": 100000,
+      "expectEta": 6000
+    },
+    {
+      "records": [
+        [
+          0,
+          0
+        ],
+        [
+          2000,
+          100000
+        ],
+        [
+          4000,
+          400000
+        ]
+      ],
+      "query": 19001,
+      "total": 1000000,
+      "expectRate": null,
+      "expectEta": null
+    },
+    {
+      "records": [
+        [
+          0,
+          0
+        ],
+        [
+          4000,
+          400000
+        ],
+        [
+          5000,
+          300000
+        ]
+      ],
+      "query": 5000,
+      "total": 1000000,
+      "expectRate": 100000,
+      "expectEta": 6000
+    }
+  ],
+  "requestCount": {
+    "note": "Default fast request count for one file must equal the pre-L1 greedy packing: frames of STORE_CHUNK_SIZE plaintext + 20 B (last frame shorter) appended until >= chunkSize.",
+    "cases": [
+      {
+        "plainBytes": 1048576,
+        "chunkSize": 1048576,
+        "expectRequests": 1
+      },
+      {
+        "plainBytes": 33554432,
+        "chunkSize": 1048576,
+        "expectRequests": 29
+      },
+      {
+        "plainBytes": 33554432,
+        "chunkSize": 8388608,
+        "expectRequests": 4
+      },
+      {
+        "plainBytes": 1048576,
+        "chunkSize": 8388608,
+        "expectRequests": 1
+      }
+    ]
+  },
+  "tokenBucket": {
+    "note": "Shared pacing bucket: tokens = request-body bytes, refill at rate from elapsed time (rate in force during the elapsed span), capacity = one paced burst, initial full. Only the head ticket may take; taking happens at dispatch; leaving (cancel/replan) refunds nothing. take returns 0 when taken else ms to wait (250 when not head).",
+    "rate": 100,
+    "capacity": 100,
+    "steps": [
+      {
+        "now": 0,
+        "op": "enqueue",
+        "t": "A"
+      },
+      {
+        "now": 0,
+        "op": "take",
+        "t": "A",
+        "bytes": 100,
+        "expect": 0
+      },
+      {
+        "now": 0,
+        "op": "enqueue",
+        "t": "B"
+      },
+      {
+        "now": 0,
+        "op": "enqueue",
+        "t": "C"
+      },
+      {
+        "now": 0,
+        "op": "take",
+        "t": "B",
+        "bytes": 100,
+        "expect": 1000
+      },
+      {
+        "now": 0,
+        "op": "take",
+        "t": "C",
+        "bytes": 100,
+        "expect": 250
+      },
+      {
+        "now": 100,
+        "op": "leave",
+        "t": "B"
+      },
+      {
+        "now": 100,
+        "op": "enqueue",
+        "t": "D"
+      },
+      {
+        "now": 100,
+        "op": "take",
+        "t": "C",
+        "bytes": 100,
+        "expect": 900
+      },
+      {
+        "now": 100,
+        "op": "take",
+        "t": "D",
+        "bytes": 100,
+        "expect": 250
+      },
+      {
+        "now": 1000,
+        "op": "take",
+        "t": "C",
+        "bytes": 100,
+        "expect": 0
+      },
+      {
+        "now": 1000,
+        "op": "take",
+        "t": "D",
+        "bytes": 100,
+        "expect": 1000
+      },
+      {
+        "now": 1500,
+        "op": "take",
+        "t": "D",
+        "bytes": 100,
+        "expect": 500
+      },
+      {
+        "now": 2000,
+        "op": "take",
+        "t": "D",
+        "bytes": 100,
+        "expect": 0
+      }
+    ],
+    "dispatches": [
+      {
+        "t": 0,
+        "bytes": 100
+      },
+      {
+        "t": 1000,
+        "bytes": 100
+      },
+      {
+        "t": 2000,
+        "bytes": 100
+      }
+    ],
+    "windowOracle": "for every pair of dispatch instants t1<=t2: sum(bytes in [t1,t2]) <= rate*(t2-t1)/1000 + capacity"
+  }
+}

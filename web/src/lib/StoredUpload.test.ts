@@ -231,3 +231,34 @@ describe("StoredUpload progress before server confirmation", () => {
     expect(target.querySelector("input[readonly]"), "link appears only after confirmation").not.toBeNull();
   });
 });
+
+// L1: the rate/ETA line appears only when the upload reports CONFIRMED rate,
+// and the speed preference is reachable from the share page.
+describe("StoredUpload confirmed rate and remaining time", () => {
+  it("shows nothing until a confirmed rate exists, then rate and ETA; hides it while confirming", async () => {
+    let report!: (p: { phase: string; sent: number; total: number; rate?: number; etaMs?: number }) => void;
+    uploadFileResumable.mockImplementation((_f: unknown, _o: unknown, onProgress: typeof report) => {
+      report = onProgress;
+      return new Promise(() => {});
+    });
+    await mountUpload();
+    await pick([4 << 20]);
+    report({ phase: "uploading", sent: 1 << 20, total: 4 << 20 });
+    flushSync();
+    expect(target.querySelector(".rate")).toBeNull();
+    report({ phase: "uploading", sent: 2 << 20, total: 4 << 20, rate: 512 * 1024, etaMs: 4_000 });
+    flushSync();
+    expect(target.querySelector(".rate")?.textContent).toBe("512 KB/s confirmed · less than a minute left");
+    report({ phase: "uploading", sent: 3 << 20, total: 4 << 20, rate: 1 << 20, etaMs: 125_000 });
+    flushSync();
+    expect(target.querySelector(".rate")?.textContent).toBe("1.0 MB/s confirmed · about 2 min left");
+    report({ phase: "uploading", sent: 4 << 20, total: 4 << 20, rate: 1 << 20, etaMs: 0 });
+    flushSync();
+    expect(target.querySelector(".rate"), "no rate line while the server confirms").toBeNull();
+  });
+
+  it("offers the upload speed setting on the share page", async () => {
+    await mountUpload();
+    expect(target.querySelector("details.speed-pref summary")?.textContent).toBe("Upload speed");
+  });
+});

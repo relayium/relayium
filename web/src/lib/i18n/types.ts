@@ -1662,6 +1662,23 @@ export interface Messages {
     note: string; // what the comparison is and what it detects
     unaffected: string; // what is never gated on it (keys, ciphertext relay, save consent)
   };
+  // Per-device upload speed preference (transfer-speed-pref.svelte.ts). Applies
+  // to stored (encrypted cloud) uploads only; every sentence must stay true about
+  // what spacing requests can and cannot do — no "no impact" promises.
+  speed: {
+    title: string;
+    scope: string; // which uploads it governs, and that live transfers are not limited yet
+    fast: string;
+    fastNote: string;
+    background: string;
+    backgroundNote: string;
+    cap: string;
+    capNote: string; // how the limit is enforced, incl. short bursts at network speed
+    capLabel: string; // accessible label of the limit selector
+    mbit: (v: string) => string; // "2 Mbit/s"
+    rateLine: (rate: string) => string; // confirmed rate, e.g. "1.2 MB/s"
+    etaLine: (secs: number) => string; // remaining time until the last byte is confirmed
+  };
   // Unified peer workspace (`link/1`). One encrypted link carries both the
   // file and the text lane, so exactly one header owns the peer name, link state,
   // path badge, verification code and disconnect action. Legacy peers never reach

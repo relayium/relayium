@@ -8,6 +8,8 @@
   import { hasFiles, filesFromDataTransfer } from "./drag";
   import { rememberUploadKey } from "./upload-keys";
   import { progressPercent } from "./progress-percent";
+  import { formatSize } from "./format";
+  import TransferSpeedPref from "./TransferSpeedPref.svelte";
   import { LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
   import { holdRefresh } from "./app-update.svelte";
   import { session } from "./auth.svelte";
@@ -64,6 +66,9 @@
   });
   let busy = $state(false);
   let progress = $state(0); // 0..100 — progress of whichever phase the API reports
+  // Server-confirmed rate and remaining time (chunked uploads only); empty until
+  // the upload has enough confirmed progress to say anything honest.
+  let rateText = $state("");
   // The chunked path encrypts and uploads at the same time, so it reports a single
   // "uploading" phase that runs 0→100 once. Only the single-shot fallback still has
   // two phases (encrypt, then POST); the label says which one is live.
@@ -144,6 +149,7 @@
     expiresAt = 0;
     busy = true;
     progress = 0;
+    rateText = "";
     phase = "encrypting";
     finishing = false;
     controller = new AbortController();
@@ -159,6 +165,9 @@
         // server has confirmed the upload.
         progress = progressPercent(p.sent, p.total, false);
         finishing = p.phase === "uploading" && p.total > 0 && p.sent >= p.total;
+        rateText = p.rate !== undefined && !finishing
+          ? [t.speed.rateLine(formatSize(Math.round(p.rate))), p.etaMs !== undefined ? t.speed.etaLine(Math.round(p.etaMs / 1000)) : ""].filter(Boolean).join(" · ")
+          : "";
       }, controller.signal);
       link = buildDownloadLink(location.origin, out.id, out.key);
       expiresAt = out.expiresAt;
@@ -228,10 +237,13 @@
     <div class="progress-bar" role="progressbar" aria-label={finishing ? t.stored.finishing : phase === "uploading" ? t.stored.uploadingNow : t.stored.encrypting} aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
     <!-- 同 DownloadPage：百分比不进 live region，理由见那里的注释。 -->
     <p class="phase">{finishing ? t.stored.finishing : phase === "uploading" ? `${t.stored.uploadingNow} ${progress}%` : `${t.stored.encrypting} ${progress}%`}</p>
+    {#if rateText}<p class="phase rate">{rateText}</p>{/if}
     <button type="button" class="btn btn-ghost cancel" onclick={cancel}>{t.cancel}</button>
   {/if}
 
   {#if err}<p class="error">{err}</p>{/if}
+
+  <TransferSpeedPref />
 
   {#if link}
     <p class="ready">{t.stored.linkReady}</p>

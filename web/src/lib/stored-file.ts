@@ -17,6 +17,19 @@ import {
   type StoredManifest,
 } from "./store-crypto";
 import { DOWNLOAD_PREFIX } from "./transfer-link";
+import {
+  emptyStats,
+  legacySliceMax,
+  MAX_FAULTS_WITHOUT_PROGRESS,
+  noteAttempt,
+  TokenBucket,
+  ProgressRate,
+  roomRemainingMs,
+  SliceController,
+  currentSpeedPref,
+  sameSpeedPref,
+  type UploadStats,
+} from "./transfer-control";
 
 export interface UploadResult {
   id: string;
@@ -147,6 +160,20 @@ export class UploadError extends Error {
   constructor(public status: number) {
     super(`upload failed: ${status}`);
     this.name = "UploadError";
+  }
+}
+
+/** A chunked upload that stopped AFTER request bodies had been handed to the
+ *  network, so the server may hold (and have metered) a committed prefix. It is
+ *  never answered by re-uploading everything through the single-shot route: that
+ *  would be a second object and a second debit for bytes already sent. `status`
+ *  is the last server status seen (0 for a network failure); `committedBytes` is
+ *  the last offset the server confirmed — a lower bound, since an unanswered
+ *  request may have committed more. */
+export class UploadIncompleteError extends UploadError {
+  constructor(status: number, public committedBytes: number) {
+    super(status);
+    this.name = "UploadIncompleteError";
   }
 }
 
@@ -350,6 +377,17 @@ export interface UploadProgress {
    * append's ack, and the resume probe that recovers a lost one.
    */
   expiresAt?: number;
+  /**
+   * Server-CONFIRMED upload rate over the recent window, bytes/second (chunked
+   * path only). Absent until there is enough confirmed progress to say anything
+   * honest, and again while progress is stalled.
+   */
+  rate?: number;
+  /** Estimated milliseconds until the last byte is confirmed, from `rate`.
+   *  Not the time until the recipient can open the file. */
+  etaMs?: number;
+  /** Content-free accounting of this upload so far (chunked path only). */
+  stats?: UploadStats;
 }
 
 /** Encrypt files in-browser and POST the ciphertext; returns the link parts. */
@@ -416,19 +454,21 @@ export async function uploadFile(
  *  分支新放开的大文件才拒绝回落。 */
 const FALLBACK_MAX_CIPHER_BYTES = 64 << 20;
 
-/** Resumable upload with a safety net: try the chunked flow, but fall back to
- *  the single-shot uploadFile if the chunked endpoints aren't usable — an older
- *  server without /api/uploads, a storage node without PATCH-append support, or
- *  chunk retries exhausted. A real user/quota error (413/429/401) or an abort is
- *  NOT masked: it propagates. This keeps the rollout from ever regressing an
- *  upload that the single POST would have completed.
+/** Resumable upload with a narrow safety net: try the chunked flow, and fall
+ *  back to the single-shot uploadFile ONLY while no PATCH body has been handed to
+ *  the network — an older server without /api/uploads (init 404/405) or any
+ *  other failure before the first PATCH. A real user/quota error (413/429/401)
+ *  or an abort is NOT masked: it propagates.
  *
- *  The fallback ends where finalize begins. Up to the finalize request nothing
- *  this upload sent can have become an object; from it on, one may exist, and
- *  a single-shot re-send would be a second object, a second debit and a second
- *  upload's traffic for a file the user sent once. Every failure from there is
- *  reported as it is (UploadFinalizeError, UploadError), never retried by
- *  uploading again.
+ *  The fallback ends where the first PATCH begins (L1 R4; it used to end only at
+ *  finalize). From that moment the server may hold — and has metered — a
+ *  committed prefix, and no answer can prove it does not (a first request whose
+ *  answer was lost may have committed everything while an offset read still says
+ *  0). A single-shot re-send would then be a second object and a second debit for
+ *  a file the user sent once. Transient failures are retried inside the chunked
+ *  loop against the same session and ciphertext; whatever still fails is
+ *  reported as it is (UploadIncompleteError, UploadFinalizeError, UploadError),
+ *  never retried by uploading again.
  *
  *  回落有体积闸门：见 FALLBACK_MAX_CIPHER_BYTES。密文超过它就把原始错误原样抛出，
  *  因为单发路径的 2× 峰值会直接把标签页打崩 —— 报错好过崩溃。 */
@@ -438,7 +478,7 @@ export async function uploadFileResumable(
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
-  const stage: ChunkedStage = { finalizing: false };
+  const stage: ChunkedStage = { finalizing: false, wire: false };
   try {
     return await chunkedUpload(files, opts, onProgress, signal, stage);
   } catch (e) {
@@ -446,6 +486,14 @@ export async function uploadFileResumable(
     // The finalize request has been sent: see the doc comment. Checked before
     // everything else below, so no later clause can reopen the fallback.
     if (stage.finalizing) throw e;
+    // A PATCH body has been handed to the network. From that moment the server
+    // may hold — and has metered — a committed prefix, and no answer this client
+    // can get proves otherwise: a first request whose answer was lost commits
+    // everything while an offset read can still say 0. Re-sending the whole file
+    // through the single-shot route would be a second object and a second debit,
+    // so the failure is reported as it is (the chunked loop already retried what
+    // was retryable against the SAME session and ciphertext).
+    if (stage.wire) throw e;
     // A pre-upload has no fallback at all. The single-shot route refuses
     // purpose=pair_room, so falling through would re-encrypt and re-send every
     // byte to earn a 400 — and, worse, would replace the status the caller has to
@@ -485,6 +533,8 @@ export function uploadBufferPeak(): number {
 interface ChunkedStage {
   /** Set immediately before the first finalize request is sent. */
   finalizing: boolean;
+  /** Set immediately before the first PATCH body is handed to fetch. */
+  wire: boolean;
 }
 
 /** The chunked flow: init → PATCH each chunk (per-chunk retry re-syncing to the
@@ -500,7 +550,7 @@ async function chunkedUpload(
   opts: UploadOptions,
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
-  stage: ChunkedStage = { finalizing: false },
+  stage: ChunkedStage = { finalizing: false, wire: false },
 ): Promise<UploadResult> {
   const sealed = checkedManifest(opts);
   const sk = await generateStoreKey();
@@ -528,24 +578,58 @@ async function chunkedUpload(
   //
   // Refused, not escaped: see InvalidStoredObjectIdError.
   const uploadId = checkedStoredObjectId(init.uploadId);
-  const chunkSize: number = init.chunkSize > 0 ? init.chunkSize : 8 << 20;
+  // The server's chunkSize is the PACKING TARGET (bounded so a hostile value
+  // cannot become a giant allocation). Unlimited uploads pack exactly as before
+  // L1: frames until the buffer holds at least the target, the whole buffer one
+  // request (up to one frame over the target). Only a collapse or a speed limit
+  // cuts smaller slices out of the retained ciphertext. No larger target than
+  // the server's is used: a pair room keeps 1 MiB, an ordinary upload 8 MiB.
+  const sliceMax = legacySliceMax(init.chunkSize);
+  const pairRoom = isPairRoom(opts);
 
-  // 打包缓冲：贪婪填到 >= chunkSize 就发。容量留出一整帧的余量，因为最后一帧可能
-  // 跨过 chunkSize 的界 —— 上传块边界不需要对齐帧边界，服务端看到的只是不透明
+  // 打包缓冲：贪婪填到 >= 本次切片大小就发。容量留出一整帧的余量，因为最后一帧可能
+  // 跨过切片的界 —— 上传块边界不需要对齐帧边界，服务端看到的只是不透明
   // 字节流。pending[0, filled) 同时也是**重放缓冲**：它必须保留到服务端确认为止，
-  // 因为服务端会提交部分块，重发的起点可能落在块内部。
-  const pending = new Uint8Array(chunkSize + STORE_CHUNK_SIZE + FRAME_OVERHEAD);
+  // 因为服务端会提交部分块，重发的起点可能落在块内部。缩小的重试只是从这同一段
+  // 已产出的密文里切更短的一片，绝不重新加密。
+  const pending = new Uint8Array(sliceMax + STORE_CHUNK_SIZE + FRAME_OVERHEAD);
   let filled = 0; // 已加密未确认的字节数
   let chunkStart = 0; // pending[0] 对应的全局偏移
   let offset = 0; // 服务端已确认的偏移
   bufferPeak = 0;
 
+  const ctl = new SliceController(sliceMax);
+  const stats = emptyStats();
+  const confirmed = new ProgressRate();
+  const t0 = mono();
+  let highestSent = 0;
+  // End (global offset) of a slice that failed part-way: its retry covers the
+  // rest of THAT slice — shrunk if the failure was a cut — before anything new.
+  let retryEnd: number | undefined;
+  // Consecutive attempts that committed nothing. Reset by any confirmed progress,
+  // so a slow link that keeps moving bytes is never failed for being slow.
+  let faults = 0;
+  // Last server status of a failed attempt (0: network failure or cut).
+  let lastStatus = 0;
+  let deadline: { expiresAtSec: number; serverNowMs: number; receivedAtMono: number } | undefined;
+
+  const rateFields = () => {
+    const now = mono();
+    const rate = confirmed.rate(now);
+    const etaMs = confirmed.etaMs(now, cipherSize);
+    return { ...(rate !== undefined ? { rate } : {}), ...(etaMs !== undefined ? { etaMs } : {}), stats: { ...stats } };
+  };
   // Every server answer that carries a pair-room deadline, forwarded as it
   // arrives rather than kept until finalize: an upload that never gets there is
   // exactly the one whose caller needs it. `offset` is read at call time, so the
   // tick still reports the confirmed position it was published at.
-  const noteDeadline = (expiresAt?: number) => {
-    if (expiresAt !== undefined) onProgress?.({ phase: "uploading", sent: offset, total: cipherSize, expiresAt });
+  const noteDeadline = (expiresAt?: number, date?: string | null) => {
+    if (expiresAt === undefined) return;
+    if (typeof expiresAt === "number" && Number.isFinite(expiresAt)) {
+      const serverNow = date ? Date.parse(date) : NaN;
+      deadline = { expiresAtSec: expiresAt, serverNowMs: Number.isFinite(serverNow) ? serverNow : Date.now(), receivedAtMono: mono() };
+    }
+    onProgress?.({ phase: "uploading", sent: offset, total: cipherSize, expiresAt, ...rateFields() });
   };
   // Set once, on the tick before the first PATCH — see UploadProgress.onWire.
   let onWire = false;
@@ -553,9 +637,19 @@ async function chunkedUpload(
   const gen = encryptFiles(files, sk.key);
   try {
     onProgress?.({ phase: "uploading", sent: 0, total: cipherSize });
+    confirmed.record(t0, 0);
     while (offset < cipherSize) {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-      while (filled < chunkSize) {
+      const pref = currentSpeedPref();
+      const target = ctl.next(pref);
+      // Unlimited and not demoted: greedy packing, byte-for-byte the pre-L1
+      // request shape (and so the same number of requests).
+      const greedy = retryEnd === undefined && ctl.paceRate(pref) === undefined && !ctl.demoted() && target === sliceMax;
+      // The retry of an interrupted slice never reaches past where that slice
+      // ended, and is never larger than the (possibly demoted) target.
+      const want = retryEnd !== undefined ? Math.min(target, retryEnd - chunkStart) : target;
+      const tPrep = mono();
+      while (filled < want) {
         const r = await gen.next();
         if (r.done) break;
         // Honour a cancel mid-encryption instead of only at the network boundary.
@@ -563,43 +657,137 @@ async function chunkedUpload(
         pending.set(r.value, filled);
         filled += r.value.length;
       }
+      stats.prepareMs += mono() - tPrep;
       // 生成器已耗尽却还没喂满声明的 cipherSize —— 公式和实际产出对不上，与其发一个
-      // 永远 finalize 不了的截断 blob，不如报错让上层回落到单发路径。
+      // 永远 finalize 不了的截断 blob，不如报错。第一个 PATCH 之前上层仍可回落到单发
+      // 路径；之后（R4 起）如实报错，不整份重传。
       if (filled === 0) throw new UploadError(0);
       if (filled > bufferPeak) bufferPeak = filled;
+      const sliceLen = greedy ? filled : Math.min(filled, Math.max(1, want));
+
+      // A speed limit spaces requests; every attempt is charged, retries too.
+      // A setting change during the wait gives the reservation back and
+      // re-plans this request under the new setting.
+      const tw = mono();
+      const replan = await paceAttempt(sliceLen, ctl, pref, signal);
+      stats.pacingMs += mono() - tw;
+      if (replan) continue;
 
       if (!onWire) {
         // The last moment at which "nothing was sent" is still true. Announced
         // here rather than after the request, because the whole point is to
         // cover the request whose answer never comes back.
         onWire = true;
+        stage.wire = true;
         onProgress?.({ phase: "uploading", sent: offset, total: cipherSize, onWire: true });
       }
-      const received = await uploadChunk(uploadId, pending.subarray(0, filled), chunkStart, cipherSize, signal, noteDeadline);
-      const consumed = received - chunkStart;
-      // 服务端偏移倒退，或者跑到我们根本还没产出的字节之后：两种情况我们都无法再
-      // 对齐流位置，继续发只会写出一份错位的密文。
-      if (consumed < 0 || consumed > filled) throw new UploadError(0);
-      if (consumed < filled) {
-        // 部分提交：把没被确认的尾巴挪到缓冲区开头，下一轮从这里接着发。
-        pending.copyWithin(0, consumed, filled);
+      const budget = ctl.watchdogMs(sliceLen, {
+        pairRoom,
+        roomRemainingMs: pairRoom && deadline ? roomRemainingMs(deadline, mono()) : undefined,
+        stalls: faults,
+      });
+      const sliceStart = chunkStart;
+      const sliceEnd = sliceStart + sliceLen;
+      highestSent = noteAttempt(stats, highestSent, sliceStart, sliceEnd);
+      const tReq = mono();
+      const answer = await sendSlice(uploadId, pending.subarray(0, sliceLen), chunkStart, cipherSize, signal, budget, noteDeadline);
+      const reqMs = mono() - tReq;
+      stats.requestMs += reqMs;
+
+      let received: number;
+      if (answer.kind === "answer") {
+        received = answer.received;
+      } else {
+        // The request failed (network) or was cut (watchdog). The server commits
+        // whatever bytes landed before the connection ended, so its offset can
+        // lie inside this slice; read it back and continue from there.
+        if (answer.cut) stats.watchdogCuts += 1;
+        lastStatus = answer.status;
+        const tRec = mono();
+        received = await resyncOffset(uploadId, chunkStart, chunkStart, signal, noteDeadline);
+        stats.recoveryMs += mono() - tRec;
       }
-      filled -= consumed;
-      chunkStart = received;
-      offset = received;
-      onProgress?.({ phase: "uploading", sent: offset, total: cipherSize });
+      if (received < chunkStart) {
+        // Behind bytes this client has already been told were committed — most
+        // likely an answer read before a settling append finished. Re-read for a
+        // bounded time; persisting means the bytes are gone and cannot be replayed.
+        const tRec = mono();
+        received = await resyncOffset(uploadId, chunkStart, received, signal, noteDeadline, true);
+        stats.recoveryMs += mono() - tRec;
+      }
+      // The server can only have committed bytes this client actually sent.
+      // `highestSent` is the largest end of every body ever handed to fetch for
+      // this upload (across cuts and retries), so an answer above it claims
+      // ciphertext that never left — accepting it would skip those bytes forever
+      // and finalize a hole. The buffer holding them is NOT proof they were sent:
+      // a paced or demoted slice leaves encrypted bytes behind in `pending`.
+      // An answer up to `highestSent` stays valid even beyond the current slice:
+      // an earlier, larger request may settle after a smaller retry was sent.
+      // Checked before any progress, buffer shift, further PATCH or finalize.
+      if (received > highestSent) throw new UploadError(0);
+      const consumed = received - chunkStart;
+      // 服务端偏移跑到我们根本还没产出的字节之后：无法再对齐流位置，继续发只会写出一份
+      // 错位的密文。
+      if (consumed > filled) throw new UploadError(0);
+
+      if (answer.kind === "answer") ctl.onAnswered(consumed, reqMs);
+      else if (answer.cut) ctl.onCollapse(consumed, sliceLen, reqMs);
+
+      if (consumed > 0) {
+        faults = 0;
+        if (consumed < filled) {
+          // 部分提交：把没被确认的尾巴挪到缓冲区开头，下一轮从这里接着发。
+          pending.copyWithin(0, consumed, filled);
+        }
+        filled -= consumed;
+        chunkStart = received;
+        offset = received;
+        stats.committedBytes = offset;
+        confirmed.record(mono(), offset);
+      }
+      if (answer.kind === "answer") {
+        retryEnd = undefined;
+        if (consumed === 0) {
+          // Answered, yet nothing moved. Before L1 this re-sent the same slice
+          // forever; it now counts toward the same bounded no-progress budget.
+          if (++faults >= MAX_FAULTS_WITHOUT_PROGRESS) throw new UploadIncompleteError(lastStatus, offset);
+          const tB = mono();
+          await abortableSleep(uploadBackoff(faults), signal);
+          stats.recoveryMs += mono() - tB;
+        }
+      } else {
+        // The rest of the failed slice is retried first (as before L1); after a
+        // cut it goes out in smaller slices, because ctl.onCollapse shrank the
+        // target the retry is bounded by.
+        const end = Math.max(retryEnd ?? 0, sliceEnd);
+        retryEnd = received < end ? end : undefined;
+        if (consumed === 0 && ++faults >= MAX_FAULTS_WITHOUT_PROGRESS) throw new UploadIncompleteError(lastStatus, offset);
+        // The authoritative offset shows that EVERY byte of the failed flight —
+        // this slice and any earlier, larger retry still outstanding — was
+        // committed (a 5xx or a lost answer after a complete append). Nothing of
+        // it is left to resend and the server evidently took it, so there is
+        // nothing to back off from: continue at once with the next bytes on the
+        // same session. Any unresolved tail (partial or no progress) still waits.
+        if (retryEnd !== undefined) {
+          const tB = mono();
+          await abortableSleep(uploadBackoff(Math.max(1, faults)), signal);
+          stats.recoveryMs += mono() - tB;
+        }
+      }
+      onProgress?.({ phase: "uploading", sent: offset, total: cipherSize, ...rateFields() });
     }
     // 主循环靠 offset >= cipherSize 收尾，所以这个守卫是**不对称**保护的另一半：
     //   cipherSizeFor 多报 → 生成器先耗尽 → 上面的 filled === 0 兜住；
     //   cipherSizeFor 少报 → 循环提前退出，剩下的帧永远发不出去，而我们会 finalize
     //                        一份被截断、永远解不开的密文，UI 还显示上传成功。
     // 所以 finalize 之前必须确认生成器真的耗尽了。这一次 next() 会再拉一帧，拿到了
-    // 就直接丢弃 —— 此时已经决定回落到单发路径整份重传，这一帧没有用；生成器仍由
-    // 下面的 finally 关掉。
+    // 就直接丢弃 —— 此时已经决定报错（PATCH 已发出，不会再回落整份重传），这一帧
+    // 没有用；生成器仍由下面的 finally 关掉。
     if (!(await gen.next()).done) throw new UploadError(0);
   } finally {
     // 抛错/取消路径上终止生成器，不留悬挂的加密工作。
     await gen.return(undefined).catch(() => {});
+    lastUploadStats = { ...stats };
   }
 
   // finalize (small; retried so a flaky moment doesn't waste the whole upload).
@@ -764,57 +952,172 @@ async function finalizeRecovering(uploadId: string, signal?: AbortSignal): Promi
   }
 }
 
-/** PATCH `chunk`, which covers ciphertext bytes [start, start+chunk.length), and
- *  return the server's new committed offset. On a network error it re-syncs to
- *  the server's real offset — the server commits whatever bytes landed before the
- *  reset, so that offset can fall *inside* the chunk — and replays from there; a
- *  409 means the server was already ahead — take its offset. Non-2xx (413/429/401)
- *  is fatal.
+/** One PATCH attempt's outcome: the server's answer, or a failure after which
+ *  the committed offset must be read back. */
+type SliceOutcome = { kind: "answer"; received: number } | { kind: "fault"; cut: boolean; status: number };
+
+/** Server statuses retried against the same session (the server may have
+ *  committed part of the body before failing): 5xx and 408. Everything else that
+ *  is not 2xx/409 is a definitive refusal. */
+function transientStatus(status: number): boolean {
+  return status >= 500 || status === 408;
+}
+
+/** A server-reported offset this client can act on, or UploadError(0). */
+function checkedOffset(v: unknown): number {
+  if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 0) throw new UploadError(0);
+  return v;
+}
+
+/** PATCH `slice`, which covers ciphertext bytes [start, start+slice.length).
  *
- *  `note` is handed the pair-room deadline of every answer that carries one —
- *  the ack, the 409, and the resume probe — so a caller hears it even on the
- *  attempts that end in a retry rather than a return. */
-async function uploadChunk(
+ *  ONE attempt. A 200 or 409 is an answer carrying the server's committed
+ *  offset (a 409 means the server was elsewhere — take its offset). Any other
+ *  non-2xx (413/429/401/410/…) is fatal and thrown as UploadError. A network
+ *  failure, or a cut by the watchdog after `budgetMs`, is a `fault`: the server
+ *  commits whatever bytes landed before the connection ended, so the caller reads
+ *  the offset back and replays from there out of the SAME retained ciphertext.
+ *
+ *  The user's cancel always wins: it is never reported as a fault, so it never
+ *  leads to an offset read, a retry or a finalize.
+ *
+ *  `note` is handed the pair-room deadline (and the answer's Date) of every
+ *  answer that carries one, so a caller hears it on every path. */
+async function sendSlice(
   uploadId: string,
-  chunk: Uint8Array,
+  slice: Uint8Array,
   start: number,
   total: number,
-  signal?: AbortSignal,
-  note?: (expiresAt?: number) => void,
-): Promise<number> {
-  const end = start + chunk.length;
-  const maxAttempts = 5;
-  let from = start;
-  for (let attempt = 1; ; attempt++) {
+  signal: AbortSignal | undefined,
+  budgetMs: number | undefined,
+  note?: (expiresAt?: number, date?: string | null) => void,
+): Promise<SliceOutcome> {
+  if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+  const cut = new AbortController();
+  let wasCut = false;
+  const onUserAbort = () => cut.abort();
+  signal?.addEventListener("abort", onUserAbort);
+  const timer = budgetMs !== undefined ? setTimeout(() => { wasCut = true; cut.abort(); }, budgetMs) : undefined;
+  try {
     let res: Response;
+    let body: { received?: unknown; expiresAt?: number };
     try {
       res = await fetch(`/api/uploads/${uploadId}`, {
         method: "PATCH",
         credentials: "include",
-        signal,
-        headers: { "Content-Range": `bytes ${from}-${end - 1}/${total}` },
-        body: chunk.subarray(from - start) as Uint8Array<ArrayBuffer>,
+        signal: cut.signal,
+        headers: { "Content-Range": `bytes ${start}-${start + slice.length - 1}/${total}` },
+        body: slice as Uint8Array<ArrayBuffer>,
       });
+      // The server has answered: whatever it committed is settled, so the
+      // watchdog no longer applies to reading the (small) answer body.
+      if (timer !== undefined) clearTimeout(timer);
+      if (res.status !== 409 && !res.ok) {
+        // A transient server failure (5xx/408) is retried: read the committed
+        // offset back and continue with the SAME session and retained
+        // ciphertext. A cancel that arrived meanwhile wins, and the status is
+        // reported as the server gave it, exactly as before L1 (callers key on
+        // it). Every other refusal (400/401/403/404/410/413/429…) is definitive.
+        if (transientStatus(res.status) && !signal?.aborted) return { kind: "fault", cut: false, status: res.status };
+        throw new UploadError(res.status);
+      }
+      body = await res.json();
+    } catch (e) {
+      if (e instanceof UploadError) throw e;
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+      return { kind: "fault", cut: wasCut, status: 0 };
+    }
+    note?.(body.expiresAt, res.headers?.get?.("Date"));
+    return { kind: "answer", received: checkedOffset(body.received) };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    signal?.removeEventListener("abort", onUserAbort);
+  }
+}
+
+/** Re-reads allowed while an offset is BEHIND bytes already confirmed. */
+const SETTLE_PROBES = 3;
+
+/** Read the committed offset back after a failed or cut request.
+ *
+ *  Ordinary mode: one read; an unreadable answer leaves `fallback` (nothing
+ *  known to have moved), and the caller's fault budget decides what happens next.
+ *  Settle mode (`floor` > the value just seen): the server reported an offset
+ *  below bytes it had already confirmed — a status read can race an append that
+ *  is still settling. Re-read a bounded number of times; if it never reaches
+ *  `floor`, those bytes are not in this client's buffer any more and the upload
+ *  fails rather than writing a misaligned ciphertext. */
+async function resyncOffset(
+  uploadId: string,
+  floor: number,
+  fallback: number,
+  signal: AbortSignal | undefined,
+  note: ((expiresAt?: number, date?: string | null) => void) | undefined,
+  settle = false,
+): Promise<number> {
+  const read = async (): Promise<number | undefined> => {
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+    try {
+      return await uploadOffset(uploadId, signal, note);
     } catch (e) {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-      if (attempt >= maxAttempts) throw new UploadError(0);
-      from = await uploadOffset(uploadId, signal, note).catch(() => from);
-      if (from >= end) return from;
-      // 服务端偏移退到我们保留的字节之前 —— 那些字节已经丢了，重放不出来。
-      if (from < start) throw new UploadError(0);
-      await abortableSleep(uploadBackoff(attempt), signal);
-      continue;
+      // As before L1: an unreadable or refused offset read is not itself fatal;
+      // the next PATCH gets the server's real answer (a 410, a 409 …).
+      return undefined;
     }
-    if (res.status === 409) {
-      const ahead = await res.json(); // server ahead
-      note?.(ahead.expiresAt);
-      return ahead.received;
-    }
-    if (!res.ok) throw new UploadError(res.status);
-    const acked = await res.json();
-    note?.(acked.expiresAt);
-    return acked.received;
+  };
+  if (!settle) return (await read()) ?? fallback;
+  for (let i = 0; i < SETTLE_PROBES; i++) {
+    await abortableSleep(500 * 2 ** i, signal);
+    const v = await read();
+    if (v !== undefined && v >= floor) return v;
   }
+  // 服务端偏移退到我们保留的字节之前 —— 那些字节已经丢了，重放不出来。
+  throw new UploadError(0);
+}
+
+/** Monotonic milliseconds. */
+function mono(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+}
+
+/** One token bucket for every upload in this page, so concurrent uploads share
+ *  one limit. */
+const sharedBucket = new TokenBucket(mono);
+
+/** Accounting of the most recent chunked upload (tests and local diagnostics). */
+let lastUploadStats: UploadStats | undefined;
+export function lastChunkedUploadStats(): UploadStats | undefined {
+  return lastUploadStats;
+}
+
+/** Wait until the shared bucket lets one request of `bytes` go, if `pref`
+ *  limits speed. Tokens are taken only at the moment of dispatch, so a cancel or
+ *  a re-plan gives nothing back and moves nobody else's turn. Returns true when
+ *  the setting changed during the wait: the caller must re-plan the request.
+ *  Waits in steps of at most 250 ms so a setting change takes effect within that
+ *  bound; a cancel ends the wait with the module's AbortError. */
+async function paceAttempt(bytes: number, ctl: SliceController, pref: ReturnType<typeof currentSpeedPref>, signal: AbortSignal | undefined): Promise<boolean> {
+  const rate = ctl.paceRate(pref);
+  if (rate === undefined) return false;
+  const capacity = ctl.burstCapacity(pref);
+  const ticket = sharedBucket.enqueue();
+  try {
+    for (;;) {
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+      if (!sameSpeedPref(currentSpeedPref(), pref)) return true;
+      const wait = sharedBucket.tryTake(ticket, bytes, rate, capacity);
+      if (wait <= 0) return false;
+      await abortableSleep(Math.min(250, Math.max(1, wait)), signal);
+    }
+  } finally {
+    sharedBucket.leave(ticket);
+  }
+}
+
+/** Reset shared pacing state between tests. */
+export function resetUploadPacingForTests(): void {
+  sharedBucket.reset();
 }
 
 /** GET the server's committed offset for a resuming upload — and, for a
@@ -822,13 +1125,13 @@ async function uploadChunk(
 async function uploadOffset(
   uploadId: string,
   signal?: AbortSignal,
-  note?: (expiresAt?: number) => void,
+  note?: (expiresAt?: number, date?: string | null) => void,
 ): Promise<number> {
   const res = await fetch(`/api/uploads/${uploadId}`, { credentials: "include", signal });
   if (!res.ok) throw new UploadError(res.status);
   const out = await res.json();
-  note?.(out.expiresAt);
-  return out.received;
+  note?.(out.expiresAt, res.headers?.get?.("Date"));
+  return checkedOffset(out.received);
 }
 
 /** Credentialed JSON request; maps a non-2xx to UploadError(status). When

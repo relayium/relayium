@@ -715,6 +715,12 @@ describe("the countdown under a moving deadline", () => {
   it("will not call the code dead after an upload whose answer never came back", async () => {
     // Bytes went out; every response about them was a 500, which is an answer
     // about the request and none at all about the room.
+    //
+    // Since L1 R4 a 5xx is retried on the same session (offset read, same
+    // ciphertext) and the upload gives up only after MAX_FAULTS_WITHOUT_PROGRESS
+    // = 5 attempts without progress, sleeping 300 + 600 + 1200 + 2400 ms between
+    // them (~4.5 s). The wait for "gave up" below is bounded for exactly that,
+    // with margin, and so is the case itself.
     const server = fakeServer({ patchStatus: 500 });
     setOutbox([file("a.bin")]);
     const mintUntil = NOW() + 2;
@@ -724,7 +730,9 @@ describe("the countdown under a moving deadline", () => {
 
     // The upload gives up (the file goes back to the live link), and then the
     // mint's own window lapses under a card that has nothing else to go on.
-    await until(() => { flushSync(); return uploadTried() && outboxState(0) === "staged"; });
+    const RETRY_BACKOFF_MS = 300 + 600 + 1200 + 2400;
+    await until(() => { flushSync(); return uploadTried() && outboxState(0) === "staged"; }, RETRY_BACKOFF_MS + 5_000);
+    expect(server.patches, "five attempts on the same session, then it gives up").toBe(5);
     await until(() => { flushSync(); return NOW() > mintUntil; });
     await new Promise((r) => setTimeout(r, 1200)); // a full tick past it
     flushSync();
@@ -738,7 +746,7 @@ describe("the countdown under a moving deadline", () => {
     expect(target.textContent).toContain(messages.en.pair.sendCode);
     // And it may not silently promise the code is fine.
     expect(target.textContent).not.toContain(messages.en.pair.ttlUploading);
-  });
+  }, 20_000);
 
   it("still lets the server's 410 end an unconfirmed room", async () => {
     // Doubt is about missing evidence. When the evidence arrives, it wins — the

@@ -12,6 +12,7 @@ import {
   keyFromFragment,
   uploadBufferPeak,
   UploadError,
+  UploadIncompleteError,
   InvalidUploadIdError,
   InvalidStoredObjectIdError,
   StoredDownloadHttpError,
@@ -441,11 +442,13 @@ describe("uploadFileResumable", () => {
     expect(captured.url).toContain("/api/files");
   });
 
-  it("falls back mid-upload with a complete, decryptable single-shot body", async () => {
-    // 上一条是在 init 就 404，生成器根本没启动过。这一条才是真正的中途回落：第一个
-    // PATCH 成功、第二个 500。回落会**重新加密一遍** —— 如果哪天实现复用了已经被
-    // 消费掉一半的生成器，单发 body 会缺掉前面的帧，服务端照收不误，只有下载时才炸。
-    // 所以直接把 XHR 的 body 解密出来逐字节比对，而不是只看 id。
+  it("never re-uploads through the single POST once a PATCH has gone out (B1)", async () => {
+    // Before L1 R4 a 500 on the second PATCH fell back to the single-shot XHR and
+    // re-sent the whole file while the first chunk was already committed and
+    // metered: a second object and a second debit. A 5xx is now retried against
+    // the SAME session and, if it never makes progress, reported as an
+    // UploadIncompleteError carrying the confirmed offset.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let received = 0;
     let patches = 0;
     let finalized = false;
@@ -465,27 +468,40 @@ describe("uploadFileResumable", () => {
         }
         if (method === "GET") return json({ received });
         patches++;
-        if (patches > 1) return json({}, 500); // 中途翻车，非 413/429/401 → 回落
+        if (patches > 1) return json({}, 500); // every later PATCH fails, nothing committed
         received += (await toBytes(init!.body)).length;
         return json({ received });
       }),
     );
     const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
-    const { file, bytes } = multiChunkFixture(3);
+    const { file } = multiChunkFixture(3);
 
-    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
-    expect(out.id).toBe("fid");
-    expect(patches).toBe(2);
+    const out = await settleWithFakeTimers(uploadFileResumable([file], { burnAfterRead: false, ttl: 0 }));
+    vi.useRealTimers();
+    expect(captured.url, "no single-shot re-upload").toBe("");
+    expect(out).toBeInstanceOf(UploadIncompleteError);
+    expect((out as UploadIncompleteError).status).toBe(500);
+    expect((out as UploadIncompleteError).committedBytes).toBe(received);
+    expect(patches).toBe(1 + 5); // bounded: five consecutive attempts without progress
     expect(finalized).toBe(false);
-    // body = uint32BE(len(encManifest)) ‖ encManifest ‖ 帧流；帧流必须是完整的原文。
-    const body = new Uint8Array(await captured.body!.arrayBuffer());
-    const manifestLen = new DataView(body.buffer, body.byteOffset, 4).getUint32(0);
-    const dec = new StoreDecryptor(await keyFromFragment(out.key));
-    const parts: Uint8Array[] = [];
-    for await (const pt of dec.push(body.subarray(4 + manifestLen))) parts.push(pt);
-    for await (const pt of dec.end()) parts.push(pt);
-    expect(concat(parts)).toEqual(bytes);
+    expect(captured.url).toBe(""); // no single-shot re-upload
+    expect(captured.body).toBeNull();
   });
+
+  for (const status of [404, 405]) {
+    it(`still falls back when init answers ${status} (nothing was sent), without a single PATCH`, async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push(`${init?.method ?? "GET"} ${url}`);
+        return { ok: false, status, json: async () => ({}) };
+      }));
+      const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+      const out = await uploadFileResumable([new File([new Uint8Array(4096)], "f.bin")], { burnAfterRead: false, ttl: 0 });
+      expect(out.id).toBe("fid");
+      expect(captured.url).toContain("/api/files");
+      expect(calls.filter((c) => c.startsWith("PATCH"))).toEqual([]);
+    });
+  }
 
   it("refuses to fall back to the single POST for a large file", async () => {
     // 单发路径把整份密文攒起来再 new Blob 复制一遍，峰值约 2× 密文。1 GiB 文件回落
@@ -517,6 +533,7 @@ describe("uploadFileResumable", () => {
   });
 
   it("gives up instead of replaying from an offset behind the buffered bytes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     // 网络错误后服务端把已确认偏移退到我们保留的字节之前（会话丢失/被重建）。那些
     // 字节已经不在重放缓冲里了：硬发只会把缓冲区里错误位置的字节当成流的这一段发
     // 出去（chunk.subarray(负数) 是从**尾部**取），静默写出一份错位的密文。
@@ -555,12 +572,14 @@ describe("uploadFileResumable", () => {
     const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
     const { file } = multiChunkFixture(3);
 
-    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    const out = await settleWithFakeTimers(uploadFileResumable([file], { burnAfterRead: false, ttl: 0 }));
+    vi.useRealTimers();
     // 直接断言：同一个绝对偏移上，客户端从头到尾只发出过同一个字节。
     expect(firstInconsistentOffset(sent)).toBe(-1);
-    // 而且是干净回落到单发 POST，不是硬着头皮 finalize 一份错位的密文。
-    expect(out.id).toBe("fid");
-    expect(captured.url).toContain("/api/files");
+    // 不硬着头皮 finalize 一份错位的密文；也不再整份单发重传（B1：已发出的前缀
+    // 可能已被提交计费）。如实报错。
+    expect(out).toBeInstanceOf(UploadError);
+    expect(captured.url).toBe("");
     expect(finalized).toBe(false);
   });
 
@@ -574,10 +593,10 @@ describe("uploadFileResumable", () => {
     const file = new File([new Uint8Array(1234)], "shrunk.bin");
     Object.defineProperty(file, "size", { value: STORE_CHUNK_SIZE * 3 });
 
-    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
-    expect(out.id).toBe("fid"); // 干净回落到单发 POST
+    await expect(uploadFileResumable([file], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(UploadError);
     expect(state.finalized).toBe(false);
     expect(state.emptyPatches).toBe(0); // 一个空 PATCH 都不该发出去
+    expect(captured.url).toBe(""); // PATCH 已发出：不整份单发重传（B1）
   });
 
   it("refuses to finalize when the declared size undershoots the ciphertext", async () => {
@@ -591,10 +610,9 @@ describe("uploadFileResumable", () => {
     Object.defineProperty(liar, "size", { value: 1 }); // 声明 1 字节，实际吐出一整帧
     const tail = new File([new Uint8Array(1234)], "tail.bin"); // 它的帧会被落下
 
-    const out = await uploadFileResumable([liar, tail], { burnAfterRead: false, ttl: 0 });
-    expect(out.id).toBe("fid"); // 干净回落到单发 POST
+    await expect(uploadFileResumable([liar, tail], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(UploadError);
     expect(state.finalized).toBe(false); // ← 守卫没了的话这里是 true，且密文解不开
-    expect(captured.url).toContain("/api/files");
+    expect(captured.url).toBe(""); // PATCH 已发出：不整份单发重传（B1）
   });
 
   it("never finalizes or sends a single POST when a file read fails mid-upload", async () => {

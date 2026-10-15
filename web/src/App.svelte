@@ -63,6 +63,7 @@
   import { needsSendConfirmation, shownSasCode, autoAcceptsIncomingText } from "./lib/verify-gates";
   import { canReleaseConfirmedSend, queuedReleaseTarget } from "./lib/confirm-send";
   import { verifyPeers, setVerifyPeers } from "./lib/verify-pref.svelte";
+  import TransferSpeedPref from "./lib/TransferSpeedPref.svelte";
   import { folderUploadSupported } from "./lib/platform";
   import { reveal } from "./lib/reveal";
   import Nav from "./lib/Nav.svelte";
@@ -2633,6 +2634,7 @@
     <p class="verify-note">{t.verify.note}</p>
     <p class="verify-note">{t.verify.unaffected}</p>
   </details>
+  <TransferSpeedPref />
 {/snippet}
 
   {#if surfaceShown && dragActive && dropTarget(visiblePeers.length, dropBusy) !== "off"}
