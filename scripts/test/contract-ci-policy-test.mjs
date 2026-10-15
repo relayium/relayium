@@ -92,6 +92,7 @@ const CONTRACT_TREE = "contracts";
 
 const CONTRACTS = "contracts.yml";
 const OPS_DEPLOY = "ops-deploy-contract.yml";
+const TRANSFER_CONTROL = "transfer-control-contract.yml";
 const GO = "go.yml";
 const WEB = "web.yml";
 const SWIFT_PACKAGE = "swift-package.yml";
@@ -228,6 +229,32 @@ const OWNERSHIP = [
         contractJob: "go-contract",
         contractCommand: "go test ./ -run '^TestOpsDeployContract' -count=1",
         workingDirectory: "server",
+        paidRunner: false,
+      },
+    ],
+  },
+  {
+    contract: `${CONTRACT_TREE}/transfer-control-v1.json`,
+    doc: "docs/protocol/relayium-transfer-control-v1.md",
+    lane: TRANSFER_CONTROL,
+    // Same caller-id rule as the two entries above.
+    gateJob: "transfer-contract",
+    // ONE consumer job, one free Ubuntu runner. The Web runtime is the document's
+    // only implementation today: transfer-control.test.ts checks every constant,
+    // controller step, token-bucket step and room-remaining case against
+    // web/src/lib/transfer-control.ts; stored-file.adaptive.test.ts checks the
+    // request-count vectors against stored-file.ts with real encryption. Both
+    // also run inside web.yml's `npm test` on any web/src change. Native ports
+    // will add their consumers here when they exist.
+    consumers: [
+      {
+        language: "Web",
+        test: "web/src/lib/transfer-control.test.ts",
+        workflow: WEB,
+        runs: "npm test",
+        contractJob: "web-contract",
+        contractCommand: "npx vitest run src/lib/transfer-control.test.ts src/lib/stored-file.adaptive.test.ts",
+        workingDirectory: "web",
         paidRunner: false,
       },
     ],

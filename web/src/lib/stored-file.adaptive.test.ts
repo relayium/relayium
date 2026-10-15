@@ -38,6 +38,10 @@ interface SimOpts {
    *  of its body ("always" applies to every PATCH). */
   fail5xx?: Partial<Record<number | "always", "full" | "partial" | "none">>;
   getDelayMs?: number; // delay every offset read
+  /** How the simulated server names a new upload session. Default: by arrival
+   *  order (u1, u2, …), which depends on how fast each client finished its init
+   *  — never assume it matches the order uploads were STARTED in. */
+  sessionId?: (declaredSize: number, arrival: number) => string;
   /** The first N offset reads after a lost answer report this stale value. */
   staleProbes?: { count: number; value: number };
   date?: boolean; // send a Date header (default true)
@@ -60,6 +64,7 @@ function installSim(o: SimOpts) {
   const sessions = new Map<string, { received: number; blob: Uint8Array[] }>();
   let inits = 0;
   const st = {
+    declaredById: new Map<string, number>(),
     get received() { return sessions.get("u1")?.received ?? 0; },
     deadlineMs: t0 + windowMs, // room opened at t0
     roomExpired: false,
@@ -126,8 +131,11 @@ function installSim(o: SimOpts) {
     // rejects at once in browsers), so only live requests count as violations.
     if (userAborted && !(init?.signal as AbortSignal | undefined)?.aborted) st.afterAbort.push(`${method} ${url}`);
     if (method === "POST" && url.startsWith("/api/uploads?")) {
-      const id = `u${++inits}`;
+      const declared = Number(new URL(url, "http://sim").searchParams.get("size"));
+      const arrival = ++inits;
+      const id = o.sessionId ? o.sessionId(declared, arrival) : `u${arrival}`;
       sessions.set(id, { received: 0, blob: [] });
+      (st as unknown as { declaredById: Map<string, number> }).declaredById.set(id, declared);
       return Promise.resolve(respond(200, { uploadId: id, chunkSize: o.chunkSize }));
     }
     if (method === "POST" && url.endsWith("/finalize")) {
@@ -547,26 +555,76 @@ describe("default fast packing is the pre-L1 request shape", () => {
 });
 
 describe("pacing with a cancel in the middle of a queue (Root A/B/C/D, end to end)", () => {
-  it("three capped uploads, the middle one cancelled while waiting: window bound holds, nothing more from it", async () => {
+  // Three uploads of DISTINCT sizes, so each one's session is found by the
+  // ciphertext size its init declared — not by the order inits happened to
+  // reach the server, which depends on real WebCrypto timing (that assumption
+  // made this case fail about once in nine runs).
+  const runMiddleCancel = async (sessionId?: SimOpts["sessionId"]) => {
     const rate = 64 * 1024;
     setSpeedPref({ mode: "cap", capBytesPerSec: rate });
-    const files = [fixture(MiB / 4), fixture(MiB / 4), fixture(MiB / 4)];
-    const sim = installSim({ chunkSize: MiB, schedule: [{ at: 0, bps: 100_000_000 }], prefixOnAbort: true, keepSentBytes: false });
+    const files = [fixture(MiB / 4), fixture(MiB / 4 + 4096), fixture(MiB / 4 + 8192)];
+    const sim = installSim({ chunkSize: MiB, schedule: [{ at: 0, bps: 100_000_000 }], prefixOnAbort: true, keepSentBytes: false, sessionId });
     const t0 = Date.now();
     const acs = files.map(() => new AbortController());
     const ps = files.map((f, i) => uploadFileResumable([f.file], SHARE, undefined, acs[i].signal).then((v) => v, (e) => e));
     let cancelledAt = 0;
     setTimeout(() => { cancelledAt = Date.now(); acs[1].abort(); }, 1_100);
     const out = (await settleWithFakeTimers(Promise.all(ps))) as unknown[];
+    const declared = (sim.st as unknown as { declaredById: Map<string, number> }).declaredById;
+    const sessionOf = (i: number) => {
+      const want = cipherSizeFor([files[i].file]);
+      const ids = [...declared].filter(([, size]) => size === want).map(([id]) => id);
+      expect(ids, `exactly one session declared upload ${i}'s ciphertext size`).toHaveLength(1);
+      return ids[0];
+    };
+    return { sim, out, files, t0, rate, cancelledAt, sessionOf };
+  };
+
+  /** The case's assertions, written against the task -> session mapping. */
+  const assertMiddleCancel = async (r: Awaited<ReturnType<typeof runMiddleCancel>>) => {
+    const { sim, out, files, t0, rate, cancelledAt, sessionOf } = r;
     expect(worstPacingExcess(sim.st.sent, t0, rate), "window bound").toBeLessThanOrEqual(1);
     expect((out[1] as DOMException).name).toBe("AbortError");
     expect(out[0]).not.toBeInstanceOf(Error);
     expect(out[2]).not.toBeInstanceOf(Error);
-    expect(sim.st.sent.filter((x) => x.id === "u2" && x.t > cancelledAt)).toEqual([]);
-    for (const [i, id] of ["u1", "u3"].entries()) {
-      const got = await decrypt(sim.blob(id), (out[i * 2] as { key: string }).key);
-      expect(Buffer.compare(Buffer.from(got), Buffer.from(files[i * 2].plain))).toBe(0);
+    expect(cancelledAt).toBeGreaterThan(0);
+    expect(sim.st.sent.filter((x) => x.id === sessionOf(1) && x.t > cancelledAt), "nothing from the cancelled upload after its cancel").toEqual([]);
+    expect((sim.st as unknown as { xhrOpened: string[] }).xhrOpened).toEqual([]);
+    for (const i of [0, 2]) {
+      const got = await decrypt(sim.blob(sessionOf(i)), (out[i] as { key: string }).key);
+      expect(got.length).toBe(files[i].plain.length);
+      expect(Buffer.compare(Buffer.from(got), Buffer.from(files[i].plain))).toBe(0);
     }
+  };
+
+  /** What the case asserted before: session ids assumed to follow start order. */
+  const oldHardcodedIdsHold = async (r: Awaited<ReturnType<typeof runMiddleCancel>>) => {
+    const { sim, out, files, cancelledAt } = r;
+    if (sim.st.sent.some((x) => x.id === "u2" && x.t > cancelledAt)) return false;
+    for (const [i, id] of ["u1", "u3"].entries()) {
+      try {
+        const got = await decrypt(sim.blob(id), (out[i * 2] as { key: string }).key);
+        if (Buffer.compare(Buffer.from(got), Buffer.from(files[i * 2].plain)) !== 0) return false;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  it("three capped uploads, the middle one cancelled while waiting: window bound holds, nothing more from it", async () => {
+    await assertMiddleCancel(await runMiddleCancel());
+  }, 60_000);
+
+  it("CONTROL: with session ids deliberately NOT in start order, the size-correlated assertions still hold and the old hard-coded ids do not", async () => {
+    // Deterministic permutation, independent of arrival order: the server names
+    // each session after the NEXT upload's size rank (rank 0 -> u2, 1 -> u3, 2 -> u1).
+    const sizes = [MiB / 4, MiB / 4 + 4096, MiB / 4 + 8192].map((n) => cipherSizeFor([new File([new Uint8Array(n)], "x")]));
+    const permuted = (declared: number) => ["u2", "u3", "u1"][sizes.indexOf(declared)];
+    const r = await runMiddleCancel(permuted);
+    expect(r.sessionOf(1), "the cancelled upload is NOT u2 here").toBe("u3");
+    await assertMiddleCancel(r);
+    expect(await oldHardcodedIdsHold(r), "the old start-order assumption must be refuted by this control").toBe(false);
   }, 60_000);
 });
 

@@ -122,7 +122,7 @@ const NOW = new Date("2026-10-01T15:00:00Z");
 
 const LANE_IDS = Object.keys(REGISTRY.lanes);
 const CONDITIONAL = ["web", "go", "macos", "ios", "ios-transfer-interop", "android", "android-interop", "windows",
-  "swift-package", "inbox-swift-interop", "native-web-pairing", "contracts", "ops-contract"];
+  "swift-package", "inbox-swift-interop", "native-web-pairing", "contracts", "ops-contract", "transfer-contract"];
 
 /** A tracked file per lane, so every lane's fingerprint covers something. */
 const TREE_FILES = [
@@ -219,7 +219,7 @@ function asDispatched(w) {
   return w;
 }
 
-const referenced = (sha, ref = `refs/pull/${PR}/merge`) => [...CONDITIONAL.map((id) => (id === "ops-contract" ? "ops-deploy-contract" : id)),
+const referenced = (sha, ref = `refs/pull/${PR}/merge`) => [...CONDITIONAL.map((id) => (id === "ops-contract" ? "ops-deploy-contract" : id === "transfer-contract" ? "transfer-control-contract" : id)),
   "compat", "repo-hygiene"].map((wf) => ({ path: `${REPO}/.github/workflows/${wf}.yml@${sha}`, sha, ref }));
 
 function baseWorld() {

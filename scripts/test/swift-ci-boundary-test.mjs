@@ -203,6 +203,7 @@ const CONTRACTS_SWIFT_FILTER = `${SWIFT_TEST_TARGET}.DeviceInboxAdmissionContrac
  * grow a macOS runner.
  */
 const OPS_DEPLOY_CONTRACT = "ops-deploy-contract.yml";
+const TRANSFER_CONTROL_CONTRACT = "transfer-control-contract.yml";
 
 /**
  * The Swift<->Go interop classes, and the two lanes allowed to run them.
@@ -418,7 +419,8 @@ const SELF_TIMEOUT_MAX = 5;
  * the list still matches what is on disk.
  */
 const PARSED = [
-  SWIFT_PACKAGE, MACOS, IOS, IOS_TRANSFER_INTEROP, NWP, GO, WEB, CONTRACTS, OPS_DEPLOY_CONTRACT, "compat.yml", SELF_HOST,
+  SWIFT_PACKAGE, MACOS, IOS, IOS_TRANSFER_INTEROP, NWP, GO, WEB, CONTRACTS, OPS_DEPLOY_CONTRACT,
+  TRANSFER_CONTROL_CONTRACT, "compat.yml", SELF_HOST,
   // The Android platform's two filtered lanes. Neither may watch a Swift path:
   // `apps/RelayiumKit` is Apple-shared and the Android protocol conformance
   // that reads its frozen fixtures runs in the UNFILTERED `compat.yml`, which

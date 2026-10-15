@@ -250,6 +250,12 @@ const GOVERNED = [
   // false`, matching the workflow: it starts on every change to the one document
   // it owns, and a manual run would produce nothing a push does not.
   { file: "ops-deploy-contract.yml", dispatch: false, call: true, directPr: false },
+  // The transfer-control contract's lane (`contracts/transfer-control-v1.json`).
+  // Same shape as the deploy contract's: one document, one free Ubuntu job,
+  // reached from a pull request only through `merge-gate.yml`. Its consumers are
+  // two Web Vitest files, so it is NOT a job in `contracts.yml` (that would put a
+  // PAID macOS runner on every edit to it) and NOT a path in `web.yml`.
+  { file: "transfer-control-contract.yml", dispatch: false, call: true, directPr: false },
   // The always-on, deliberately UNFILTERED compatibility gate. It is in this
   // list — and not merely in section 6 — so it is bound by the same trigger and
   // concurrency policy as every heavy workflow it runs in front of.
@@ -345,6 +351,7 @@ const GATE_LANES = new Map([
   ["native-web-pairing", "native-web-pairing.yml"],
   ["contracts", "contracts.yml"],
   ["ops-contract", "ops-deploy-contract.yml"],
+  ["transfer-contract", "transfer-control-contract.yml"],
 ]);
 
 /**
@@ -435,6 +442,7 @@ const LITERAL_GROUP_PREFIX = new Map([
   ["native-web-pairing.yml", "native-web-pairing-lane"],
   ["contracts.yml", "contracts-lane"],
   ["ops-deploy-contract.yml", "ops-deploy-contract-lane"],
+  ["transfer-control-contract.yml", "transfer-control-contract-lane"],
   ["repo-hygiene.yml", "repo-hygiene-lane"],
 ]);
 const groupPrefix = (file) => LITERAL_GROUP_PREFIX.get(file) ?? DEFAULT_GROUP_PREFIX;
@@ -3852,6 +3860,15 @@ const RUNNER_BUDGETS = [
     max: 15,
     why: "a runner is held by a `go test` selector that never exits, in a job whose real work is "
       + "a handful of test functions driving one HTTP handler in process",
+  },
+  {
+    // The transfer-control contract's lane: one job, one free Ubuntu runner.
+    // Declared 10: checkout, setup-node, `npm ci --ignore-scripts` and two
+    // Vitest files (~30 s locally, mostly real encryption in the adaptive file).
+    file: "transfer-control-contract.yml",
+    max: 15,
+    why: "a runner is held by a Vitest run that never exits, in a job whose real work is two "
+      + "test files comparing a JSON document with the module that implements it",
   },
   {
     file: IOS,

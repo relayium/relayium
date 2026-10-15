@@ -365,6 +365,19 @@
         }
       }
     },
+    "transfer-contract": {
+      "ubuntuSetup": [
+        {
+          "job": "web-contract",
+          "step": "actions/setup-node"
+        }
+      ],
+      "jobs": {
+        "web-contract": {
+          "profile": "linux-node"
+        }
+      }
+    },
     "web": {
       "ubuntuSetup": [
         {

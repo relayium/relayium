@@ -109,6 +109,7 @@ export const LANES = [
   { id: "native-web-pairing", workflow: "native-web-pairing.yml" },
   { id: "contracts", workflow: "contracts.yml" },
   { id: "ops-contract", workflow: "ops-deploy-contract.yml" },
+  { id: "transfer-contract", workflow: "transfer-control-contract.yml" },
 ];
 
 /**

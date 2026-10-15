@@ -1,6 +1,7 @@
 {
   "version": 1,
   "spec": "docs/protocol/relayium-transfer-control-v1.md",
+  "documentation": "docs/protocol/relayium-transfer-control-v1.md",
   "note": "Client-side behaviour vectors. No wire format change: the server sees ordinary PATCHes. Default unlimited packing is unchanged from before (greedy frames until the buffer holds at least chunkSize; one request may exceed chunkSize by up to one ciphertext frame). Every client port must reproduce these outputs exactly.",
   "constants": {
     "MAX_SLICE_BYTES": 67108864,

@@ -109,6 +109,18 @@
       "why": "ops-deploy-contract.yml's Go consumer lives in server/ and runs inside go.yml's `go test ./...` (ci-path-selection.mjs, ops-deploy-v1 row)."
     },
     {
+      "lane": "transfer-contract",
+      "glob": "web/src/**",
+      "coveredBy": "web",
+      "why": "transfer-control-contract.yml's web-contract job runs two Vitest files from web/src; the same files run in web.yml's `npm test`, which every web/src change selects. The lane watches only its contract document on purpose (scripts/test/fixtures/ci-path-selection.mjs, transfer-control-v1 row)."
+    },
+    {
+      "lane": "web",
+      "glob": "contracts/transfer-control-v1.json",
+      "coveredBy": "transfer-contract",
+      "why": "web/src/lib/transfer-control.test.ts and stored-file.adaptive.test.ts open the transfer-control vectors; a change confined to the document starts transfer-control-contract.yml, which runs exactly those two files, instead of web.yml's full browser suite (scripts/test/contract-ci-policy-test.mjs keeps web.yml out of every contract edit)."
+    },
+    {
       "lane": "swift-package",
       "glob": "server/**",
       "coveredBy": "inbox-swift-interop",

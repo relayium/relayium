@@ -121,6 +121,12 @@
         "go-contract": { "checks": ["go-contract"], "runner": "ubuntu-latest" }
       }
     },
+    "transfer-contract": {
+      "workflow": "transfer-control-contract.yml",
+      "jobs": {
+        "web-contract": { "checks": ["web-contract"], "runner": "ubuntu-latest" }
+      }
+    },
     "web": {
       "workflow": "web.yml",
       "scope": { "job": "scope", "output": "light", "gates": ["test", "windows-temporary-downloader"] },
