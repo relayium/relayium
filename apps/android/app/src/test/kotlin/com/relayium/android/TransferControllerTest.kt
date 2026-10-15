@@ -157,9 +157,11 @@ class TransferControllerTest {
         @Volatile var closedReason: String? = null
         override fun start() = Unit
         override fun onSignal(raw: Json) { signals.add(raw) }
+        /** Observes each accepted file frame at the instant it is sent. */
+        @Volatile var onFileSent: ((ByteArray) -> Unit)? = null
         override fun sendFile(frame: ByteArray): Boolean {
             onOwner("sendFile")
-            return if (acceptFile) { fileFrames.add(frame); true } else false
+            return if (acceptFile) { onFileSent?.invoke(frame); fileFrames.add(frame); true } else false
         }
         override fun sendText(frame: ByteArray): Boolean {
             onOwner("sendText")
@@ -2457,4 +2459,345 @@ class TransferControllerTest {
                 override fun close() { closed.countDown() }
             }
         }
+
+    // ── O7: coalesced durable receive writes ────────────────────────────────
+
+    /**
+     * Real staging files, metered. `durableBytes` is what an fsync has actually
+     * covered — per staging file, the bytes appended before its last
+     * successful sync — so an ACK can be checked against the disk effects that
+     * happened before it was SENT, not against a returned Outcome.
+     */
+    private class MeteredIo : ReceiveStore.FileIo {
+        val appends = java.util.concurrent.atomic.AtomicInteger()
+        val syncs = java.util.concurrent.atomic.AtomicInteger()
+        private val appended = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        private val synced = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        val durableBytes: Long get() = synced.values.sum()
+        val syncEntered = CountDownLatch(1)
+        @Volatile var gate: CountDownLatch? = null
+        @Volatile var failSync = false
+        @Volatile var simulatedSyncMs = 0L
+
+        override fun open(target: File): ReceiveStore.FileIo.Sink {
+            val real = ReceiveStore.FileIo.Real.open(target)
+            val key = target.absolutePath
+            return object : ReceiveStore.FileIo.Sink {
+                override fun append(bytes: ByteArray) {
+                    real.append(bytes)
+                    appends.incrementAndGet()
+                    appended.merge(key, bytes.size.toLong(), Long::plus)
+                }
+                override fun sync() {
+                    syncEntered.countDown()
+                    gate?.let { g ->
+                        gate = null
+                        g.await(10, TimeUnit.SECONDS)
+                    }
+                    if (failSync) throw java.io.IOException("fsync failed")
+                    if (simulatedSyncMs > 0) Thread.sleep(simulatedSyncMs) // SIMULATED cost
+                    real.sync()
+                    syncs.incrementAndGet()
+                    synced[key] = appended[key] ?: 0L
+                }
+                override fun close() = real.close()
+            }
+        }
+    }
+
+    /** Every ACK the controller sent, with the fsync-covered bytes at that instant. */
+    private fun recordAcks(rig: Rig, io: MeteredIo): ConcurrentLinkedQueue<Pair<Long, Long>> {
+        val acks = ConcurrentLinkedQueue<Pair<Long, Long>>()
+        rig.transport.onFileSent = { frame ->
+            RealtimeFrame.parseAck(frame)?.let { acks.add(it to io.durableBytes) }
+        }
+        return acks
+    }
+
+    private fun assertAcksFollowFsync(acks: Collection<Pair<Long, Long>>) {
+        var previous = -1L
+        for ((ack, durable) in acks) {
+            assertTrue("ACK $ack was sent while only $durable bytes were fsync-covered", ack <= durable)
+            assertTrue("ACK $ack repeated or went backwards after $previous", ack > previous)
+            previous = ack
+        }
+    }
+
+    private fun lastAck(rig: Rig): Long =
+        rig.transport.fileFrames.mapNotNull { RealtimeFrame.parseAck(it) }.maxOrNull() ?: 0L
+
+    /** Peer-side: stream one file's chunks, honouring the flow window when asked. */
+    private fun feedFile(
+        rig: Rig,
+        remote: Crypto.SessionKeys,
+        peer: RealtimeSender,
+        content: ByteArray,
+        batchFedBefore: Long = 0,
+        honourWindow: Boolean = true,
+        afterChunk: (Int) -> Unit = {},
+    ) {
+        var chain = Crypto.chainStart()
+        var at = 0
+        var n = 0
+        while (at < content.size) {
+            val chunk = content.copyOfRange(at, minOf(content.size, at + RealtimeFrame.CHUNK_SIZE))
+            if (honourWindow) {
+                awaitTrue("the flow window opens", 20_000) {
+                    batchFedBefore + at + chunk.size - lastAck(rig) <= RealtimeFrame.FLOW_WINDOW_BYTES
+                }
+            }
+            for (frame in peer.chunkFrames(chunk, remote, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)) {
+                rig.transport.events.onFileFrame(frame)
+            }
+            chain = Crypto.chainAdvance(chain, chunk)
+            at += chunk.size
+            afterChunk(n++)
+        }
+        rig.transport.events.onFileFrame(peer.doneFrame(chain, remote))
+    }
+
+    private fun sha256(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private fun content(size: Int, seed: Int): ByteArray = java.util.Random(seed.toLong()).let { r ->
+        ByteArray(size).also(r::nextBytes)
+    }
+
+    private fun privateField(controller: TransferController, name: String): Any? =
+        TransferController::class.java.getDeclaredField(name).apply { isAccessible = true }.get(controller)
+
+    private fun accept(rig: Rig) {
+        rig.controller.acceptIncoming(rig.controller.state.value.promptId, rig.ops.node(rig.treeDir))
+        awaitTrue("accepted") { !rig.controller.state.value.awaitingFolder }
+    }
+
+    @Test
+    fun `chunks queued behind an fsync are written as one run and every ACK follows its fsync`() {
+        val io = MeteredIo().apply { gate = CountDownLatch(1) }
+        val rig = rig(store = ReceiveStore(temp.newFolder("staging-o7-run"), io))
+        val remote = connect(rig)
+        val acks = recordAcks(rig, io)
+        val chunks = 21
+        val data = content(chunks * RealtimeFrame.CHUNK_SIZE, 1)
+        val peer = promptIncoming(rig, remote, listOf(FileMeta("run.bin", data.size.toLong())))
+        accept(rig)
+        val gate = io.gate!!
+        feedFile(rig, remote, peer, data, honourWindow = false) { n ->
+            // Hold the FIRST chunk's fsync so the other 20 queue behind it.
+            if (n == 0) assertTrue(io.syncEntered.await(5, TimeUnit.SECONDS))
+        }
+        assertTrue("nothing is acknowledged while the first fsync is held", acks.isEmpty())
+        gate.countDown()
+        awaitTrue("saved", 20_000) { rig.controller.state.value.savedBatchCount == 1 }
+        assertEquals(sha256(data), sha256(File(rig.treeDir, "run.bin").readBytes()))
+        assertEquals(chunks, io.appends.get())
+        // Nominally 1 held + ceil(20 / 10 chunks per 2 MiB run) = 3 (the 25 ms
+        // append budget may split a run on a loaded host); the old path is 21.
+        assertTrue("expected coalesced fsyncs, saw ${io.syncs.get()} for $chunks chunks", io.syncs.get() * 2 < chunks)
+        assertAcksFollowFsync(acks)
+        assertEquals(data.size.toLong(), acks.last().first)
+        awaitTrue("gauges drained") {
+            privateField(rig.controller, "queuedStorageBytes") == 0L &&
+                privateField(rig.controller, "queuedStorageTasks") == 0
+        }
+    }
+
+    @Test
+    fun `an fsync failure after real appends acknowledges nothing and saves nothing`() {
+        val io = MeteredIo().apply { failSync = true }
+        val rig = rig(store = ReceiveStore(temp.newFolder("staging-o7-syncfail"), io))
+        val remote = connect(rig)
+        val acks = recordAcks(rig, io)
+        val data = content(4 * RealtimeFrame.CHUNK_SIZE, 2)
+        val peer = promptIncoming(rig, remote, listOf(FileMeta("lost.bin", data.size.toLong())))
+        accept(rig)
+        for (frame in peer.chunkFrames(data.copyOf(RealtimeFrame.CHUNK_SIZE), remote, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)) {
+            rig.transport.events.onFileFrame(frame)
+        }
+        awaitTrue("the failed fsync failed the receive") { rig.controller.state.value.errorKey == "error_save_failed" }
+        awaitTrue("REJECT went to the peer") { controlFrames(rig, RealtimeFrame.CTRL_REJECT) >= 1 }
+        assertTrue("appends really happened", io.appends.get() >= 1)
+        assertTrue("no ACK for bytes no fsync covered: $acks", acks.isEmpty())
+        assertEquals(0, rig.controller.state.value.savedBatchCount)
+        assertFalse(File(rig.treeDir, "lost.bin").exists())
+    }
+
+    @Test
+    fun `a cancel with writes still queued leaves no stale ACK, gauge or plaintext for the next batch`() {
+        val io = MeteredIo().apply { gate = CountDownLatch(1) }
+        val rig = rig(store = ReceiveStore(temp.newFolder("staging-o7-cancel"), io))
+        val remote = connect(rig)
+        val acks = recordAcks(rig, io)
+        val a = content(8 * RealtimeFrame.CHUNK_SIZE, 3)
+        val peer = promptIncoming(rig, remote, listOf(FileMeta("a.bin", a.size.toLong())))
+        accept(rig)
+        val gate = io.gate!!
+        for ((n, at) in (0 until a.size step RealtimeFrame.CHUNK_SIZE).withIndex()) {
+            for (frame in peer.chunkFrames(a.copyOfRange(at, at + RealtimeFrame.CHUNK_SIZE), remote, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)) {
+                rig.transport.events.onFileFrame(frame)
+            }
+            if (n == 0) assertTrue(io.syncEntered.await(5, TimeUnit.SECONDS))
+        }
+        val queue = privateField(rig.controller, "writeQueue") as com.relayium.android.storage.DurableWriteQueue
+        assertTrue("A's later chunks are queued", queue.queuedEntries >= 6)
+        rig.controller.cancelReceive()
+        awaitTrue("the cancel retired A") { rig.controller.state.value.incoming.isEmpty() }
+        assertEquals("the retired batch's queued plaintext is gone", 0L, queue.queuedBytes)
+        gate.countDown()
+        peer.batchAborted()
+        rig.transport.events.onFileFrame(RealtimeFrame.BATCH_ABORT)
+        val b0 = content(3 * RealtimeFrame.CHUNK_SIZE + 17, 4)
+        val b1 = ByteArray(0)
+        val b2 = content(5, 5)
+        acks.clear()
+        for (frame in peer.batchFrames(
+            listOf(FileMeta("b0.bin", b0.size.toLong()), FileMeta("b1.bin", 0), FileMeta("b2.bin", 5)),
+            remote, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES,
+        )) {
+            rig.transport.events.onFileFrame(frame)
+        }
+        awaitTrue("B prompted") { rig.controller.state.value.awaitingFolder }
+        accept(rig)
+        feedFile(rig, remote, peer, b0)
+        feedFile(rig, remote, peer, b1)
+        feedFile(rig, remote, peer, b2)
+        awaitTrue("B saved", 20_000) { rig.controller.state.value.savedBatchCount == 1 }
+        assertEquals(sha256(b0), sha256(File(rig.treeDir, "b0.bin").readBytes()))
+        assertEquals(0L, File(rig.treeDir, "b1.bin").length())
+        assertEquals(sha256(b2), sha256(File(rig.treeDir, "b2.bin").readBytes()))
+        assertFalse(File(rig.treeDir, "a.bin").exists())
+        // B's ACKs count B's bytes only: nothing of A leaked into its watermark.
+        assertTrue(acks.all { it.first <= b0.size + 5 })
+        awaitTrue("gauges drained, never negative") {
+            privateField(rig.controller, "queuedStorageBytes") == 0L &&
+                privateField(rig.controller, "queuedStorageTasks") == 0
+        }
+        assertNull(rig.controller.state.value.errorKey)
+    }
+
+    @Test
+    fun `every file of a batch queued behind a held fsync exports whole and in order`() {
+        val io = MeteredIo().apply { gate = CountDownLatch(1) }
+        val rig = rig(store = ReceiveStore(temp.newFolder("staging-o7-multi"), io))
+        val remote = connect(rig)
+        val acks = recordAcks(rig, io)
+        val files = List(4) { content(2 * RealtimeFrame.CHUNK_SIZE + 1000 * it + 1, 10 + it) }
+        val peer = promptIncoming(rig, remote, files.mapIndexed { i, f -> FileMeta("m$i.bin", f.size.toLong()) })
+        accept(rig)
+        val gate = io.gate!!
+        var fed = 0L
+        files.forEachIndexed { i, f ->
+            feedFile(rig, remote, peer, f, batchFedBefore = fed, honourWindow = false) { n ->
+                if (i == 0 && n == 0) assertTrue(io.syncEntered.await(5, TimeUnit.SECONDS))
+            }
+            fed += f.size
+        }
+        gate.countDown()
+        awaitTrue("saved", 20_000) { rig.controller.state.value.savedBatchCount == 1 }
+        files.forEachIndexed { i, f -> assertEquals(sha256(f), sha256(File(rig.treeDir, "m$i.bin").readBytes())) }
+        awaitTrue("COMPLETE") { controlFrames(rig, RealtimeFrame.CTRL_COMPLETE) >= 1 }
+        assertAcksFollowFsync(acks)
+    }
+
+    @Test
+    fun `a storage executor that refuses the write fails the receive truthfully and keeps nothing`() {
+        val io = MeteredIo()
+        val rig = rig(store = ReceiveStore(temp.newFolder("staging-o7-rejected"), io))
+        val remote = connect(rig)
+        val acks = recordAcks(rig, io)
+        val peer = promptIncoming(rig, remote, listOf(FileMeta("r.bin", RealtimeFrame.CHUNK_SIZE.toLong())))
+        accept(rig)
+        (privateField(rig.controller, "storage") as java.util.concurrent.ExecutorService).shutdown()
+        for (frame in peer.chunkFrames(content(RealtimeFrame.CHUNK_SIZE, 6), remote, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)) {
+            rig.transport.events.onFileFrame(frame)
+        }
+        awaitTrue("a visible failure, not a silent stall") { rig.controller.state.value.errorKey == "error_save_failed" }
+        awaitTrue("REJECT went to the peer") { controlFrames(rig, RealtimeFrame.CTRL_REJECT) >= 1 }
+        val queue = privateField(rig.controller, "writeQueue") as com.relayium.android.storage.DurableWriteQueue
+        assertEquals(0, queue.queuedEntries)
+        assertEquals(0L, queue.queuedBytes)
+        awaitTrue("gauges released") {
+            privateField(rig.controller, "queuedStorageBytes") == 0L &&
+                privateField(rig.controller, "queuedStorageTasks") == 0
+        }
+        assertEquals(0, io.appends.get())
+        assertTrue(acks.isEmpty())
+    }
+
+    /**
+     * Real-filesystem before/after: the same batch through the per-chunk path
+     * (a store that does not batch — exactly one write+fsync per chunk, the
+     * shipped behaviour) and through coalesced runs. Counts and whole-file
+     * SHA-256 always; timings are host-JVM numbers, and any sync delay is
+     * SIMULATED. Neither is a phone, SAF or WAN measurement.
+     *
+     * Small by default; RELAYIUM_O7_BENCH_OUT=<dir> runs the 32 MiB + 1000
+     * small-file sizes and writes the JSON there.
+     */
+    @Test
+    fun `real-file before and after - counts and whole-file SHA-256`() {
+        val out = System.getenv("RELAYIUM_O7_BENCH_OUT")?.let(::File)
+        val bigBytes = if (out != null) 32 * 1024 * 1024 else 4 * 1024 * 1024
+        val smallCount = if (out != null) 1000 else 100
+        val delays = if (out != null) {
+            (System.getenv("RELAYIUM_O7_SIM_SYNC_MS") ?: "0,2").split(',').map { it.trim().toLong() }
+        } else {
+            listOf(0L)
+        }
+        val rows = ArrayList<String>()
+        for (delay in delays) {
+            for (batching in listOf(false, true)) {
+                for (shape in listOf("big", "small")) {
+                    val files = if (shape == "big") {
+                        listOf(content(bigBytes, 100))
+                    } else {
+                        List(smallCount) { content(1 + (it * 37) % 4096, 200 + it) }
+                    }
+                    val io = MeteredIo().apply { simulatedSyncMs = delay }
+                    val staging = temp.newFolder("staging-bench-$shape-$batching-$delay")
+                    val store = if (batching) {
+                        ReceiveStore(staging, io)
+                    } else {
+                        object : ReceiveStore(staging, io) { override val batchesWrites = false }
+                    }
+                    val rig = rig(store = store)
+                    val remote = connect(rig)
+                    val acks = recordAcks(rig, io)
+                    val peer = promptIncoming(
+                        rig, remote, files.mapIndexed { i, f -> FileMeta("f%04d.bin".format(i), f.size.toLong()) },
+                    )
+                    accept(rig)
+                    val started = System.nanoTime()
+                    var fed = 0L
+                    for (f in files) {
+                        feedFile(rig, remote, peer, f, batchFedBefore = fed)
+                        fed += f.size
+                    }
+                    awaitTrue("saved", 300_000) { rig.controller.state.value.savedBatchCount == 1 }
+                    val wallMs = (System.nanoTime() - started) / 1_000_000
+                    var shaOk = 0
+                    files.forEachIndexed { i, f ->
+                        if (sha256(f) == sha256(File(rig.treeDir, "f%04d.bin".format(i)).readBytes())) shaOk++
+                    }
+                    assertEquals("every file whole", files.size, shaOk)
+                    assertAcksFollowFsync(acks)
+                    val chunks = files.sumOf { (it.size + RealtimeFrame.CHUNK_SIZE - 1) / RealtimeFrame.CHUNK_SIZE }
+                    assertEquals(chunks, io.appends.get())
+                    if (!batching) assertEquals("the per-chunk path syncs every chunk", chunks, io.syncs.get())
+                    assertTrue(io.syncs.get() <= chunks)
+                    rows.add(
+                        """{"mode":"${if (batching) "after-coalesced" else "before-per-chunk"}","shape":"$shape",""" +
+                            """"files":${files.size},"bytes":$fed,"chunks":$chunks,"appends":${io.appends.get()},""" +
+                            """"fsyncs":${io.syncs.get()},"acks":${acks.size},"shaVerified":$shaOk,""" +
+                            """"simulatedSyncMs":$delay,"hostWallMs":$wallMs}""",
+                    )
+                    rig.controller.shutdown()
+                }
+            }
+        }
+        val json = "{\"classification\":\"host JVM real files; sync delay SIMULATED; not phone/SAF/WAN\",\"rows\":[\n" +
+            rows.joinToString(",\n") + "\n]}\n"
+        println(json)
+        out?.let { File(it, "o7-real-file-bench.json").writeText(json) }
+    }
 }

@@ -471,4 +471,102 @@ class ReceiveStoreTest {
         store.begin(listOf(FileMeta("f.bin", 4)), ops, ops.node(rootDir))
         assertTrue(store.write(0, byteArrayOf(1)) is ReceiveStore.Outcome.Failed)
     }
+
+    // ── O7: the explicit batch pair, and the standalone write it leaves alone ──
+
+    /** Real staging files, with every append/sync/close recorded in order. */
+    private class LoggingIo(val failSync: Boolean = false) : ReceiveStore.FileIo {
+        val log = java.util.Collections.synchronizedList(ArrayList<String>())
+        override fun open(target: File): ReceiveStore.FileIo.Sink {
+            val real = ReceiveStore.FileIo.Real.open(target)
+            val name = target.name
+            return object : ReceiveStore.FileIo.Sink {
+                override fun append(bytes: ByteArray) { real.append(bytes); log.add("append $name ${bytes.size}") }
+                override fun sync() {
+                    if (failSync) { log.add("sync-failed $name"); throw IOException("fsync failed") }
+                    real.sync(); log.add("sync $name")
+                }
+                override fun close() { real.close(); log.add("close $name") }
+            }
+        }
+    }
+
+    @Test
+    fun `the standalone write still appends and fsyncs on every call`() {
+        val io = LoggingIo()
+        val store = ReceiveStore(temp.newFolder("staging-standalone"), io)
+        val (ops, rootDir) = tree()
+        store.begin(listOf(FileMeta("f.bin", 3)), ops, ops.node(rootDir))
+        assertEquals(ReceiveStore.Outcome.Ok, store.write(0, byteArrayOf(1)))
+        assertEquals(ReceiveStore.Outcome.Ok, store.write(0, byteArrayOf(2, 3)))
+        assertEquals(listOf("append 0.part 1", "sync 0.part", "append 0.part 2", "sync 0.part"), io.log)
+    }
+
+    @Test
+    fun `appendStaged makes no durability claim and syncStaged syncs each file once`() {
+        val io = LoggingIo()
+        val store = ReceiveStore(temp.newFolder("staging-batch"), io)
+        val (ops, rootDir) = tree()
+        store.begin(listOf(FileMeta("a.bin", 3), FileMeta("b.bin", 2)), ops, ops.node(rootDir))
+        assertEquals(ReceiveStore.Outcome.Ok, store.appendStaged(0, byteArrayOf(1)))
+        assertEquals(ReceiveStore.Outcome.Ok, store.appendStaged(0, byteArrayOf(2, 3)))
+        assertEquals(ReceiveStore.Outcome.Ok, store.appendStaged(1, byteArrayOf(4, 5)))
+        assertTrue("no sync before syncStaged", io.log.none { it.startsWith("sync") })
+        assertEquals(ReceiveStore.Outcome.Ok, store.syncStaged(listOf(0, 1)))
+        assertEquals(
+            listOf("append 0.part 1", "append 0.part 2", "append 1.part 2", "sync 0.part", "sync 1.part"),
+            io.log,
+        )
+        assertEquals(ReceiveStore.Outcome.Ok, store.export(0))
+        assertEquals(ReceiveStore.Outcome.Ok, store.export(1))
+        assertEquals(listOf<Byte>(1, 2, 3), File(rootDir, "a.bin").readBytes().toList())
+        assertEquals(listOf<Byte>(4, 5), File(rootDir, "b.bin").readBytes().toList())
+    }
+
+    @Test
+    fun `a sync that fails after physical appends is a failure`() {
+        val io = LoggingIo(failSync = true)
+        val store = ReceiveStore(temp.newFolder("staging-syncfail"), io)
+        val (ops, rootDir) = tree()
+        store.begin(listOf(FileMeta("a.bin", 4)), ops, ops.node(rootDir))
+        assertEquals(ReceiveStore.Outcome.Ok, store.appendStaged(0, byteArrayOf(1, 2)))
+        assertTrue(store.syncStaged(listOf(0)) is ReceiveStore.Outcome.Failed)
+        assertEquals(listOf("append 0.part 2", "sync-failed 0.part"), io.log)
+    }
+
+    @Test
+    fun `syncing a file nothing was appended to proves nothing and fails`() {
+        val (store, _) = store()
+        val (ops, rootDir) = tree()
+        store.begin(listOf(FileMeta("a.bin", 4), FileMeta("b.bin", 1)), ops, ops.node(rootDir))
+        assertTrue(store.syncStaged(listOf(1)) is ReceiveStore.Outcome.Failed)
+        assertTrue(store.appendStaged(7, byteArrayOf(1)) is ReceiveStore.Outcome.Failed)
+    }
+
+    @Test
+    fun `only the exact store batches - a subclass keeps its per-chunk write hook`() {
+        assertTrue(ReceiveStore(temp.newFolder("s1")).batchesWrites)
+        val sub = object : ReceiveStore(temp.newFolder("s2")) {
+            override fun write(index: Int, bytes: ByteArray): Outcome = super.write(index, bytes)
+        }
+        assertFalse(sub.batchesWrites)
+    }
+
+    @Test
+    fun `a failing append in the batch pair is a write failure`() {
+        val store = ReceiveStore(
+            temp.newFolder("staging-badappend"),
+            io = object : ReceiveStore.FileIo {
+                override fun open(target: File): ReceiveStore.FileIo.Sink =
+                    object : ReceiveStore.FileIo.Sink {
+                        override fun append(bytes: ByteArray) = throw IOException("disk died")
+                        override fun sync() = Unit
+                        override fun close() = Unit
+                    }
+            },
+        )
+        val (ops, rootDir) = tree()
+        store.begin(listOf(FileMeta("f.bin", 4)), ops, ops.node(rootDir))
+        assertTrue(store.appendStaged(0, byteArrayOf(1)) is ReceiveStore.Outcome.Failed)
+    }
 }

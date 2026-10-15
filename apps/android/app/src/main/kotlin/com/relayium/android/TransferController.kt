@@ -4,6 +4,7 @@ import com.relayium.android.nearby.ConnectionSource
 import com.relayium.android.nearby.NearbyDevice
 import com.relayium.android.nearby.PeerAdmission
 import com.relayium.android.nearby.nearbyDevices
+import com.relayium.android.storage.DurableWriteQueue
 import com.relayium.android.storage.ProviderOps
 import com.relayium.android.storage.ReceiveStore
 import com.relayium.android.transport.IceConfig
@@ -415,6 +416,32 @@ class TransferController(
     private val sessionDispatcher = session.asCoroutineDispatcher()
     private val storage = ScheduledThreadPoolExecutor(1)
 
+    /**
+     * Realtime staging writes awaiting the storage worker. Writes already queued
+     * behind a running one are appended together and fsync'd once per file
+     * before any of them is acknowledged; see [DurableWriteQueue]. A store that
+     * customises its per-chunk [ReceiveStore.write] keeps one write per run.
+     */
+    private val writeQueue = DurableWriteQueue(
+        maxRunBytes = WRITE_RUN_MAX_BYTES,
+        maxRunTasks = if (deps.store.batchesWrites) WRITE_RUN_MAX_TASKS else 1,
+        maxRunNanos = TimeUnit.MILLISECONDS.toNanos(WRITE_RUN_MAX_MS),
+    )
+
+    /** How a run reaches the store: the explicit append/sync pair, or — for a
+     *  store that does not batch — its own synchronous per-chunk [ReceiveStore.write]. */
+    private val writeIo = object : DurableWriteQueue.Io {
+        override fun append(fileIndex: Int, bytes: ByteArray): Boolean =
+            if (deps.store.batchesWrites) {
+                deps.store.appendStaged(fileIndex, bytes) is ReceiveStore.Outcome.Ok
+            } else {
+                deps.store.write(fileIndex, bytes) is ReceiveStore.Outcome.Ok
+            }
+
+        override fun sync(fileIndices: Collection<Int>): Boolean =
+            !deps.store.batchesWrites || deps.store.syncStaged(fileIndices) is ReceiveStore.Outcome.Ok
+    }
+
     init {
         // Staging an earlier incarnation left behind would otherwise wait for
         // the next local receive to be swept. First on the storage thread, so
@@ -495,6 +522,8 @@ class TransferController(
     /** Submit one storage effect, fenced by the receive generation AT EXECUTION
      *  so a cancel drops the effect too, and inert if the executor has stopped. */
     private fun submitStorage(gen: Int, effect: () -> Unit) {
+        // Every non-write effect is an ordering barrier for write coalescing.
+        writeQueue.barrier()
         runCatching {
             storage.execute { if (gen == receiveToken) effect() }
         }
@@ -507,6 +536,8 @@ class TransferController(
         receiveToken = receiveGen
         queuedStorageBytes = 0
         queuedStorageTasks = 0
+        // The retired batch's queued plaintext goes with its accounting.
+        writeQueue.clear()
     }
 
     // ── session objects (session thread only) ───────────────────────────────
@@ -2442,6 +2473,7 @@ class TransferController(
                     _state.value = _state.value.copy(errorKey = "error_integrity", receiveProgress = null)
                 }
                 is FileLaneSession.Action.ReceiveComplete -> {
+                    writeQueue.barrier()
                     storage.execute { deps.store.finish() }
                     _state.value = _state.value.copy(
                         incoming = emptyList(),
@@ -2545,35 +2577,53 @@ class TransferController(
         val gen = receiveGen
         queuedStorageBytes += action.plaintext.size
         queuedStorageTasks++
-        submitStorage(gen) {
-            val outcome = deps.store.write(action.fileIndex, action.plaintext)
-            post(mine) {
-                // A stale completion is not decremented: bumpReceiveGen already
-                // zeroed the retired batch's accounting, so subtracting here too
-                // would drive the gauge negative.
-                if (gen != receiveGen) return@post
-                queuedStorageBytes -= action.plaintext.size
-                queuedStorageTasks--
-                val current = fileLane ?: return@post
-                when (outcome) {
-                    is ReceiveStore.Outcome.Ok -> {
-                        receivedBytes += action.plaintext.size
-                        apply(mine, current.onDurableBytes(receivedBytes))
-                        val meta = current.incomingFiles.getOrNull(action.fileIndex)
-                        if (meta != null) {
-                            _state.value = _state.value.copy(
-                                receiveProgress = Progress(
-                                    meta.name, action.offset + action.plaintext.size, meta.size,
-                                ),
-                            )
-                        }
-                    }
-                    is ReceiveStore.Outcome.Failed -> {
-                        _state.value = _state.value.copy(errorKey = "error_save_failed", receiveProgress = null)
-                        apply(mine, current.cancelIncoming())
-                    }
-                }
+        val entry = DurableWriteQueue.Entry(gen, action.fileIndex, action.offset, action.plaintext)
+        writeQueue.offer(entry)
+        val accepted = runCatching {
+            storage.execute {
+                if (gen != receiveToken) return@execute
+                // Null: an earlier run already made this entry durable (its
+                // completion carries it) or the batch retired it.
+                val run = writeQueue.drain(entry, writeIo) { it == receiveToken } ?: return@execute
+                post(mine) { onWriteRun(mine, gen, run) }
             }
+        }.isSuccess
+        if (!accepted) {
+            // A stopped executor runs nothing: no write and no ACK. The chunk's
+            // plaintext and its queue accounting go now, and the receive ends
+            // truthfully instead of waiting on a completion that cannot come.
+            writeQueue.withdraw(entry)
+            queuedStorageBytes -= entry.byteCount
+            queuedStorageTasks--
+            _state.value = _state.value.copy(errorKey = "error_save_failed", receiveProgress = null)
+            apply(mine, lane.cancelIncoming())
+        }
+    }
+
+    /** Session thread: one drained run's outcome, for every entry in it at once.
+     *  Bytes become `receivedBytes` — and so an ACK — only for a durable run. */
+    private fun onWriteRun(mine: Int, gen: Int, run: DurableWriteQueue.Run) {
+        // A stale completion is not decremented: bumpReceiveGen already zeroed
+        // the retired batch's accounting, so subtracting here too would drive
+        // the gauge negative.
+        if (gen != receiveGen) return
+        val bytes = run.bytes
+        queuedStorageBytes -= bytes
+        queuedStorageTasks -= run.entries.size
+        val current = fileLane ?: return
+        if (run.durable) {
+            receivedBytes += bytes
+            apply(mine, current.onDurableBytes(receivedBytes))
+            val last = run.entries.last()
+            val meta = current.incomingFiles.getOrNull(last.fileIndex)
+            if (meta != null) {
+                _state.value = _state.value.copy(
+                    receiveProgress = Progress(meta.name, last.offset + last.byteCount, meta.size),
+                )
+            }
+        } else {
+            _state.value = _state.value.copy(errorKey = "error_save_failed", receiveProgress = null)
+            apply(mine, current.cancelIncoming())
         }
     }
 
@@ -2618,6 +2668,7 @@ class TransferController(
      * surfaced through [surfaceCleanupWarning], deliberately UNFENCED.
      */
     private fun discardStorage() {
+        writeQueue.barrier()
         runCatching {
             storage.execute {
                 deps.store.discard()
@@ -3716,5 +3767,14 @@ class TransferController(
         /** And a task ceiling, so a flood of tiny writes cannot queue without
          *  bound under the byte ceiling. */
         const val STORAGE_QUEUE_MAX_TASKS = 4_096
+        /** One coalesced durable run: at most this much already-queued
+         *  plaintext, a quarter of the flow window, so the ACK still moves in
+         *  several steps per window rather than one. */
+        const val WRITE_RUN_MAX_BYTES = RealtimeFrame.FLOW_WINDOW_BYTES / 4
+        /** ...at most this many queued chunks... */
+        const val WRITE_RUN_MAX_TASKS = 64
+        /** ...and appending stops taking followers after this long, so a run
+         *  cannot postpone its fsync, and the ACK behind it, indefinitely. */
+        const val WRITE_RUN_MAX_MS = 25L
     }
 }

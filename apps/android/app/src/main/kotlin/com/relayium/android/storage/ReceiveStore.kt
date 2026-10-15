@@ -184,6 +184,50 @@ open class ReceiveStore(
     }
 
     /**
+     * Whether [appendStaged] + [syncStaged] may stand in for a sequence of
+     * [write] calls.
+     *
+     * Only the exact store class says yes by default. A subclass customises the
+     * per-chunk [write] hook — test doubles, the debug hold gate — and batching
+     * past that hook would silently bypass it, so a subclass keeps one write =
+     * one append + one fsync unless it opts in by overriding this.
+     */
+    open val batchesWrites: Boolean
+        get() = javaClass == ReceiveStore::class.java
+
+    /**
+     * Append verified-in-sequence plaintext WITHOUT fsync. This is NOT a
+     * durability claim: nothing may be acknowledged for these bytes until a
+     * [syncStaged] covering [index] has returned [Outcome.Ok] after them.
+     */
+    open fun appendStaged(index: Int, bytes: ByteArray): Outcome {
+        val target = staged[index] ?: return Outcome.Failed(Outcome.Reason.WRITE_FAILED)
+        return try {
+            sinks.getOrPut(index) { io.open(target) }.append(bytes)
+            Outcome.Ok
+        } catch (_: IOException) {
+            Outcome.Failed(Outcome.Reason.WRITE_FAILED)
+        }
+    }
+
+    /**
+     * Flush and fsync each listed staging file once. Every index must have an
+     * open sink — one [appendStaged] opened it — or this fails: a sync of
+     * nothing proves nothing about bytes the caller believes it appended.
+     */
+    open fun syncStaged(indices: Collection<Int>): Outcome {
+        return try {
+            for (index in indices) {
+                val sink = sinks[index] ?: return Outcome.Failed(Outcome.Reason.WRITE_FAILED)
+                sink.sync()
+            }
+            Outcome.Ok
+        } catch (_: IOException) {
+            Outcome.Failed(Outcome.Reason.WRITE_FAILED)
+        }
+    }
+
+    /**
      * Move one VERIFIED file into the user's tree.
      *
      * Ledger-first: the directory or document node enters [created] the moment
