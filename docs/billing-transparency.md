@@ -400,7 +400,7 @@ The dimensions actually checked, each fail-closed at write time:
   which stored file that upload already produced (only while that file still
   exists), or why there is none — it expired, was removed, was refused, or is
   still being completed — so it need not upload again
-  (`answerFinalizeRecovery`, `account/uploads_resumable.go:1679`). Asking is a
+  (`answerFinalizeRecovery`, `account/uploads_resumable.go:1766`). Asking is a
   pure read: no debit, no traffic, no refund. It works only while the server
   still keeps that upload's session record. For a share, and for a Device
   Inbox upload already attached to a delivery, that record is removed about an
@@ -411,7 +411,7 @@ The dimensions actually checked, each fail-closed at write time:
   recovered or sent to a device, and both are then removed by the periodic
   cleanup, which retries a sweep that fails rather than deleting on a deadline
   (`recoverableTombstoneSQL`, `account/sqlite.go:6073`;
-  `recoverableTaskObjectSQL`, `account/sqlite.go:7031`). Until then that
+  `recoverableTaskObjectSQL`, `account/sqlite.go:7056`). Until then that
   unattached file is invisible (no link, not in the file list, not deletable
   by its owner) and still counts toward the account's storage. After the
   record is gone, and for an upload completed by a server version that
@@ -607,9 +607,9 @@ including the admin-audit prune below — see the residual noted at
 
 | Data | Kept for | Where |
 |---|---|---|
-| Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `GC.expireStoredFiles` (`account/gc.go:287`): `ListExpiredStoredFiles`, then per file `removeStoredFileQueuingBlob` deletes the row and durably queues its blob's delete intent in one transaction (`DeleteStoredFileQueuingBlob` (`account/sqlite.go:8829`)); the blob is deleted in the same pass or retried by `GC.drainPending` |
+| Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `GC.expireStoredFiles` (`account/gc.go:287`): `ListExpiredStoredFiles`, then per file `removeStoredFileQueuingBlob` deletes the row and durably queues its blob's delete intent in one transaction (`DeleteStoredFileQueuingBlob` (`account/sqlite.go:8854`)); the blob is deleted in the same pass or retried by `GC.drainPending` |
 | Rolling daily-quota ledger (`upload_events`) | ~25 hours (a small margin past the 24h window it backs) | `pruneMargin`, `account/gc.go:18`, applied at `account/gc.go:321` |
-| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:7130`), in the same prune as `upload_events` |
+| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:7155`), in the same prune as `upload_events` |
 | Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:22`, applied at `account/gc.go:326` |
 | Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:423`) | `auditRetentionDefault`, `account/gc.go:66`, applied at `account/gc.go:332` |
 | Monthly relay/traffic history (`usage_events`, `usage_periods`, `usage_monthly`) | **Not pruned by age at all** while the account is active — this is the billing history the quota math depends on | No prune call for these tables exists in `GC.sweep`; confirmed by reading the full sweep function |
