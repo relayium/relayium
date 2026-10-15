@@ -109,3 +109,93 @@ func itoa(n int) string {
 	}
 	return string(b)
 }
+
+// relayium-append-durability-v1, central side: every append asks for v1 and
+// carries the settled floor only when the caller attached one; a node's answer
+// is attested only when it echoes the version.
+func TestRemoteAppendNegotiatesDurabilityAndDecodesNotDurable(t *testing.T) {
+	type seen struct{ mode, settled string }
+	var last seen
+	var answer func(w http.ResponseWriter)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		last = seen{r.Header.Get(AppendDurabilityHeader), r.Header.Get(SettledThroughHeader)}
+		answer(w)
+	}))
+	defer srv.Close()
+	rbs := NewRemoteBlobStore(srv.URL, "s", "", srv.Client())
+	ctx := context.Background()
+
+	// v1 not-durable answer -> typed, size is the durable one.
+	answer = func(w http.ResponseWriter) {
+		w.Header().Set(AppendDurabilityHeader, AppendDurabilityV1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"notDurable":true,"durable":10,"physical":30,"written":20}`)
+	}
+	size, err := rbs.Append(ctx, "k1", 10, strings.NewReader("x"))
+	var nde *NotDurableError
+	if !errors.As(err, &nde) || size != 10 || nde.Durable != 10 || nde.Physical != 30 || nde.Written != 20 {
+		t.Fatalf("v1 not-durable = %d, %v (%+v)", size, err, nde)
+	}
+	if last.mode != AppendDurabilityV1 || last.settled != "" {
+		t.Fatalf("request headers = %+v; want v1 and no floor", last)
+	}
+
+	// Floor attached -> sent.
+	answer = func(w http.ResponseWriter) {
+		w.Header().Set(AppendDurabilityHeader, AppendDurabilityV1)
+		_, _ = io.WriteString(w, `{"size":31}`)
+	}
+	if size, err := rbs.Append(WithSettledThrough(ctx, 30), "k1", 10, strings.NewReader("x")); err != nil || size != 31 {
+		t.Fatalf("v1 200 = %d, %v", size, err)
+	}
+	if last.settled != "30" {
+		t.Fatalf("settled header = %q; want 30", last.settled)
+	}
+
+	// v1 409 -> attested mismatch.
+	answer = func(w http.ResponseWriter) {
+		w.Header().Set(AppendDurabilityHeader, AppendDurabilityV1)
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"size":40}`)
+	}
+	if size, err := rbs.Append(ctx, "k1", 10, strings.NewReader("")); !errors.Is(err, ErrOffsetMismatch) || errors.Is(err, ErrUnattestedSize) || size != 40 {
+		t.Fatalf("v1 409 = %d, %v", size, err)
+	}
+
+	// Legacy 409 (no echo) -> still a mismatch, but marked unattested.
+	answer = func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"size":40}`)
+	}
+	if size, err := rbs.Append(ctx, "k1", 10, strings.NewReader("")); !errors.Is(err, ErrOffsetMismatch) || !errors.Is(err, ErrUnattestedSize) || size != 40 {
+		t.Fatalf("legacy 409 = %d, %v", size, err)
+	}
+
+	// A not-durable body WITHOUT the echo is not trusted as one: plain failure.
+	answer = func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"notDurable":true,"durable":10,"physical":30,"written":20}`)
+	}
+	if _, err := rbs.Append(ctx, "k1", 10, strings.NewReader("x")); err == nil || errors.Is(err, ErrNotDurable) {
+		t.Fatalf("unechoed not-durable body = %v; want a plain failure", err)
+	}
+
+	// Inconsistent or negative v1 numbers are refused, not believed.
+	for _, body := range []string{
+		`{"notDurable":true,"durable":30,"physical":10,"written":0}`,
+		`{"notDurable":true,"durable":-1,"physical":10,"written":0}`,
+		`{"notDurable":true,"durable":0,"physical":10,"written":11}`,
+		`{"notDurable":false,"durable":0,"physical":10,"written":0}`,
+		`not json`,
+	} {
+		answer = func(w http.ResponseWriter) {
+			w.Header().Set(AppendDurabilityHeader, AppendDurabilityV1)
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, body)
+		}
+		if _, err := rbs.Append(ctx, "k1", 10, strings.NewReader("x")); err == nil || errors.Is(err, ErrNotDurable) {
+			t.Fatalf("malformed %s = %v; want a plain failure", body, err)
+		}
+	}
+}

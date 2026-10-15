@@ -5443,10 +5443,10 @@ func (s *SQLiteStore) CommitUploadProgress(ctx context.Context, p UploadProgress
 		}
 		return nil
 	}
-	var received, maxSize, done int64
+	var received, maxSize, done, metered int64
 	err = tx.QueryRowContext(ctx,
-		`SELECT received, max_size, done FROM upload_sessions WHERE id = ?`, p.SessionID).
-		Scan(&received, &maxSize, &done)
+		`SELECT received, max_size, done, metered FROM upload_sessions WHERE id = ?`, p.SessionID).
+		Scan(&received, &maxSize, &done, &metered)
 	if err == sql.ErrNoRows {
 		// Reaped, or never existed: nothing to advance.
 		if rerr := answerRoom(); rerr != nil {
@@ -5458,6 +5458,7 @@ func (s *SQLiteStore) CommitUploadProgress(ctx context.Context, p UploadProgress
 		return out, err
 	}
 	out.Received = received
+	out.Metered = metered
 	if done != 0 {
 		// Finalized or reaped while this append was in flight. Its bytes are the
 		// documented maxAppendBytes residual: physically present, past a terminal
@@ -5475,24 +5476,36 @@ func (s *SQLiteStore) CommitUploadProgress(ctx context.Context, p UploadProgress
 	// outright (as this did before) instead loses the honest overshoot: a chunk
 	// that trips the file-size cap commits a few kilobytes past it, and those
 	// bytes crossed the wire and must be billed.
+	//
+	// TWO watermarks, one transaction. `received` is the DURABLE offset — what a
+	// client may resume from and what a finalize turns into an object's size —
+	// and moves only to Committed. `metered` is the ACCEPTED high-water: every
+	// offset some append got bytes onto the blob for, durable or not, billed
+	// exactly once. The bill is `accepted - metered`, never `to - received`, so
+	// a byte accepted while the disk could not make it durable is billed then,
+	// and its replay — the same offset, now durable — moves `received` and
+	// costs nothing more. On every row where the two have stayed equal (all of
+	// them, until a flush fails) this is the old arithmetic exactly.
 	to := min(p.Committed, maxSize)
-	if to > received {
-		delta := to - received
-		if p.Billable {
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE upload_sessions SET received = ?, last_activity = ?, metered = metered + ?
-				 WHERE id = ?`, to, p.Now, delta, p.SessionID); err != nil {
-				return out, err
-			}
+	acc := max(to, min(p.Accepted, maxSize))
+	newReceived := max(received, to)
+	newMetered := metered
+	if p.Billable {
+		newMetered = max(metered, acc)
+	}
+	if newReceived > received || newMetered > metered {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE upload_sessions SET received = ?, last_activity = ?, metered = ?
+			 WHERE id = ?`, newReceived, p.Now, newMetered, p.SessionID); err != nil {
+			return out, err
+		}
+		if delta := newMetered - metered; delta > 0 {
 			if err := recordMeterOn(ctx, tx, p.UserID, MeterUpload, delta, p.Now); err != nil {
 				return out, err
 			}
-		} else if _, err := tx.ExecContext(ctx,
-			`UPDATE upload_sessions SET received = ?, last_activity = ? WHERE id = ?`,
-			to, p.Now, p.SessionID); err != nil {
-			return out, err
 		}
-		out.Received = to
+		out.Received = newReceived
+		out.Metered = newMetered
 	}
 	// The room is ASKED ABOUT even when the offset did not move (a stale or
 	// duplicate append, or a refusal that committed nothing): "did anything land"
@@ -5720,11 +5733,11 @@ func (s *SQLiteStore) ClaimUploadSessionCleanup(ctx context.Context, id string, 
 	var r UploadSessionRow
 	var prov residualProvenance
 	err = tx.QueryRowContext(ctx,
-		`SELECT blob_key, node_id, user_id, billable, received, max_size, residual_provenance
+		`SELECT blob_key, node_id, user_id, billable, received, max_size, metered, residual_provenance
 		   FROM upload_sessions
 		  WHERE id = ? AND `+uploadCleanupEligible+`
 		    AND blob_key NOT IN (SELECT blob_key FROM stored_files)`, id, idleBefore).
-		Scan(&r.BlobKey, &r.NodeID, &r.UserID, &r.Billable, &r.Received, &r.MaxSize, &prov)
+		Scan(&r.BlobKey, &r.NodeID, &r.UserID, &r.Billable, &r.Received, &r.MaxSize, &r.Metered, &prov)
 	if err == sql.ErrNoRows {
 		return "", "", false, tx.Commit()
 	}
@@ -5771,18 +5784,30 @@ const residualOwedSQL = `billable <> 0 AND residual_provenance = 1 AND max_size 
 // residualOwed, the deletion-only intent otherwise. The per-row cleanup
 // producers — the orphan claim and a refused finalize — both use it.
 //
-// The floor is `received`: every byte up to it is already on the meter, billed
-// by the appends or by the terminal claim, and both precede any cleanup
-// (uploadCleanupEligible requires metered >= received; a refusal runs after
-// ClaimUploadDone). There is no hold (not_before = 0), exactly as for the
+// The floor is billingFloor — max(received, metered): every byte up to it is
+// already on the meter, billed by the appends or by the terminal claim, and both
+// precede any cleanup (uploadCleanupEligible requires metered >= received; a
+// refusal runs after ClaimUploadDone). `metered` can be the higher of the two:
+// it is the ACCEPTED high-water, and bytes an append accepted without being able
+// to make them durable are billed there while `received` (the durable resume
+// offset) stays behind them. Flooring at `received` alone would bill that
+// still-present tail a second time. There is no hold (not_before = 0), exactly as for the
 // deletion-only claim: an append that lands after the drain's delete finds an
 // empty file at a non-zero offset and writes nothing.
 func handOffTerminalBlobOn(ctx context.Context, tx *sql.Tx, r UploadSessionRow, prov residualProvenance, at int64) error {
 	if residualOwed(r, prov) {
 		return enqueueBilledNodeDeleteOn(ctx, tx, r.BlobKey, r.NodeID, at, 0,
-			r.UserID, MeterUpload, r.MaxSize, r.Received)
+			r.UserID, MeterUpload, r.MaxSize, billingFloor(r))
 	}
 	return enqueueNodeDeleteOn(ctx, tx, r.BlobKey, r.NodeID, at, 0)
+}
+
+// billingFloor is the offset through which a session's bytes are already on
+// the meter: the durable offset `received`, or the accepted high-water
+// `metered` when that is higher (see CommitUploadProgress). An own-node row
+// keeps metered 0, so its floor is `received` exactly as before.
+func billingFloor(r UploadSessionRow) int64 {
+	return max(r.Received, r.Metered)
 }
 
 // PrepareRefusedUploadReclaim is a refused non-pair finalize's ownership step,
@@ -5823,9 +5848,9 @@ func (s *SQLiteStore) PrepareRefusedUploadReclaim(ctx context.Context, sessionID
 	var prov residualProvenance
 	var done, unresolvedAt int64
 	err = tx.QueryRowContext(ctx,
-		`SELECT blob_key, node_id, user_id, billable, received, max_size, done, unresolved_at, residual_provenance
+		`SELECT blob_key, node_id, user_id, billable, received, max_size, metered, done, unresolved_at, residual_provenance
 		   FROM upload_sessions WHERE id = ?`, sessionID).
-		Scan(&r.BlobKey, &r.NodeID, &r.UserID, &r.Billable, &r.Received, &r.MaxSize, &done, &unresolvedAt, &prov)
+		Scan(&r.BlobKey, &r.NodeID, &r.UserID, &r.Billable, &r.Received, &r.MaxSize, &r.Metered, &done, &unresolvedAt, &prov)
 	if err == sql.ErrNoRows {
 		return true, tx.Commit()
 	}
@@ -6014,7 +6039,7 @@ func (s *SQLiteStore) PurgeDoneUploadSessions(ctx context.Context, before, at in
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO pending_node_deletes
 		   (blob_key, node_id, enqueued_at, not_before, bill_user_id, bill_kind, bill_max, billed_through)
-		 SELECT blob_key, node_id, ?, ?, user_id, ?, max_size, received FROM upload_sessions
+		 SELECT blob_key, node_id, ?, ?, user_id, ?, max_size, max(received, metered) FROM upload_sessions
 		  WHERE `+uploadCleanupEligible+`
 		    AND `+residualOwedSQL+`
 		    AND blob_key NOT IN (SELECT blob_key FROM stored_files)

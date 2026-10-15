@@ -659,6 +659,14 @@ type UploadProgress struct {
 	// from it inside the transaction, against the offset the database holds, so a
 	// duplicated or concurrent request cannot bill the same bytes twice.
 	Committed int64
+	// Accepted is the ACCEPTED extent after the append: the absolute offset
+	// through which the blob is known to hold bytes that crossed the network,
+	// durable or not. It is billed (once per offset, against the session's
+	// `metered` high-water) but it is never a resume offset and buys no room
+	// deadline — only Committed, which must be a DURABLE size, does either.
+	// 0 (or anything at or below Committed) means "the same as Committed", which
+	// is every caller whose number is durable.
+	Accepted int64
 	// Billable is false for own-node uploads, which are never metered.
 	Billable bool
 	Now      int64
@@ -672,8 +680,13 @@ type UploadProgress struct {
 
 // UploadProgressResult is what one CommitUploadProgress actually did.
 type UploadProgressResult struct {
-	// Received is the session's committed offset after the call.
+	// Received is the session's committed (durable) offset after the call.
 	Received int64
+	// Metered is the session's accepted, billed-through high-water after the
+	// call, as its row holds it — the server-owned settled floor a later append
+	// may hand the blob store to authorize repairing an accepted-but-not-durable
+	// tail (storage.WithSettledThrough). Always 0 for own-node sessions.
+	Metered int64
 	// RoomOpen reports whether the pairing room named by UploadProgress.RoomID
 	// was still open and inside its deadline at the instant this transaction
 	// wrote. Always true when there is no room.

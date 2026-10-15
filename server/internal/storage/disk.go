@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -42,6 +43,9 @@ type DiskStore struct {
 	// io.Copy); without this, two concurrent chunk PATCHes at the same offset
 	// could both pass the check and interleave their writes, corrupting the blob.
 	locks [diskLockShards]sync.Mutex
+	// durable is the bounded record of sizes this process itself flushed
+	// (knownDurable). Written and read under the key's lock in Append.
+	durable *knownDurable
 }
 
 // syncFile and syncDir are the durability seams. Production flushes file data
@@ -78,7 +82,7 @@ func NewDiskStore(dir string) (*DiskStore, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	return &DiskStore{dir: dir}, nil
+	return &DiskStore{dir: dir, durable: newKnownDurable(knownDurableLimit)}, nil
 }
 
 // Ready proves the configured blob directory is writable now, not merely that
@@ -197,11 +201,17 @@ func (d *DiskStore) Put(ctx context.Context, key string, r io.Reader) (int64, er
 		os.Remove(tmpName)
 		return 0, err
 	}
+	// The old certificate belongs to the replaced inode. A failed directory
+	// flush must not leave it certifying this new name.
+	d.durable.forget(key)
 	// Then the name: until the directory is flushed the rename itself can be
 	// lost, leaving the key missing though the caller was told it was stored.
 	if err := syncDir(shardDir); err != nil {
 		return 0, err
 	}
+	// A Put replaces the object wholesale and has just flushed both its data and
+	// its name: the whole size is this process's own durable write.
+	d.durable.set(key, n)
 	return n, nil
 }
 
@@ -268,6 +278,25 @@ func (c ctxReader) Read(p []byte) (int, error) {
 // blob it was writing to (see account.maxAppendLifetime). Whatever landed
 // before the deadline stays on disk and is reported, because those bytes
 // crossed the network and are owed.
+//
+// DURABILITY (relayium-append-durability-v1). A size this returns with a nil
+// error or ErrOffsetMismatch is DURABLE: every byte below it was flushed —
+// by this call, by an earlier call of this process (knownDurable), or it is
+// the caller's own offset, which the caller vouches for. Anything Append
+// cannot vouch for comes back as a *NotDurableError carrying the durable
+// size, the physical size and this call's own write count, and its returned
+// size is the durable one. In particular:
+//
+//   - a failed file or directory flush leaves the bytes it wrote IN PLACE as
+//     accepted-but-not-durable evidence (they crossed the network and are
+//     billed) and reports only the offset as durable; a later successful
+//     flush can never certify pages an earlier one failed to write;
+//   - a blob already longer than the offset is certified only by this
+//     process's own record of a flush; after a restart, a failed flush or an
+//     eviction it is "not known durable", whatever a fresh fsync would say;
+//   - a settled tail may be rewritten only with matching bytes from a fresh
+//     request, without shortening it. Only the rewritten, flushed prefix is
+//     certified. A probe never repairs and never blesses.
 func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.Reader) (int64, error) {
 	if !validKey.MatchString(key) {
 		return 0, ErrInvalidKey
@@ -294,7 +323,7 @@ func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.R
 	if err := d.ensureShardDir(shardDir); err != nil {
 		return 0, err
 	}
-	f, err := os.OpenFile(full, os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(full, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return 0, err
 	}
@@ -303,34 +332,104 @@ func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.R
 	if err != nil {
 		return 0, err
 	}
+	size := info.Size()
+	certified, known := d.durable.get(key)
+	if known && certified > size {
+		// The record outlived the bytes (an external truncation): it certifies
+		// nothing any more.
+		d.durable.forget(key)
+		known = false
+	}
 	// Strict sequential append: the offset must be exactly the current end, so a
 	// duplicate/stale chunk can't overwrite and a gap can't leave a hole. The
 	// caller re-syncs from the returned size on a mismatch.
-	if info.Size() != offset {
-		return info.Size(), ErrOffsetMismatch
+	if size < offset {
+		return size, ErrOffsetMismatch
+	}
+	if size > offset {
+		switch {
+		case known && certified == size:
+			// Every byte is one this process flushed: a sibling append whose answer
+			// or commit was lost. The caller resumes from the real size, no replay.
+			return size, ErrOffsetMismatch
+		case known && certified > offset:
+			// Part of the tail is certified, the rest is not: the caller is stale
+			// AND the blob holds bytes past what anyone may resume from.
+			return certified, &NotDurableError{Durable: certified, Physical: size, Err: errUncertifiedTail}
+		}
+		settled, ok := SettledThrough(ctx)
+		if !ok || settled < size {
+			// Accepted-but-not-durable: evidence of a bill the ledger may not have
+			// yet. Kept, not trusted, and the body is not read.
+			return offset, &NotDurableError{Durable: offset, Physical: size, Err: errUncertifiedTail}
+		}
+		// The ledger settled the tail. Preserve it: an earlier successful ACK
+		// may still be in flight after restart or certificate eviction. Only
+		// byte-identical overlap may be rewritten by this fresh request.
 	}
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return 0, err
 	}
-	n, err := io.Copy(f, ctxReader{ctx: ctx, r: r})
+	var dst io.Writer = f
+	if size > offset {
+		dst = &verifiedReplayWriter{f: f, at: offset, preservedThrough: size}
+	}
+	n, err := io.Copy(dst, ctxReader{ctx: ctx, r: r})
+	physical := max(size, offset+n)
 	// Flush before the new offset is reported — on the error path too, because
 	// a failed append's committed prefix is still read back (by size) and billed.
 	// One fsync per chunk: chunks are large (up to maxAppendBytes), so this is
 	// one flush per several MiB, not per write. A zero-length append at a
 	// non-zero offset (the size probes) wrote nothing and skips it.
-	if n > 0 || offset == 0 {
-		if serr := syncFile(f); serr != nil && err == nil {
-			err = serr
-		}
+	var flushErr error
+	flushed := n > 0 || (offset == 0 && size == 0)
+	if flushed {
+		flushErr = syncFile(f)
 	}
 	// offset 0 is where the blob is created; its directory entry must be
 	// durable too, or the whole file can vanish with the bytes already billed.
-	if offset == 0 {
-		if serr := syncDir(shardDir); serr != nil && err == nil {
-			err = serr
-		}
+	if offset == 0 && flushed {
+		flushErr = errors.Join(flushErr, syncDir(shardDir))
+	}
+	if flushErr != nil {
+		// The bytes stay where they are — billed, never resumed from — and both
+		// causes are kept: a body that broke off AND a flush that failed.
+		return offset, &NotDurableError{Durable: offset, Physical: physical, Written: n, Err: errors.Join(flushErr, err)}
+	}
+	if flushed {
+		// Only a flush this call itself performed certifies a size. A zero-byte
+		// probe at the current end flushed nothing, and the offset it was asked
+		// at (a billing floor, say) is not a durability claim.
+		d.durable.set(key, offset+n)
+	}
+	if physical > offset+n {
+		return offset + n, &NotDurableError{Durable: offset + n, Physical: physical, Written: n, Err: errors.Join(errUncertifiedTail, err)}
 	}
 	return offset + n, err
+}
+
+// verifiedReplayWriter never shortens a retained tail or changes its contents.
+// io.Copy supplies bounded buffers; ReadAt leaves the sequential write position
+// intact. A conflict refuses the whole buffer before any of it is overwritten.
+type verifiedReplayWriter struct {
+	f                    *os.File
+	at, preservedThrough int64
+}
+
+func (w *verifiedReplayWriter) Write(p []byte) (int, error) {
+	overlap := min(int64(len(p)), max(w.preservedThrough-w.at, 0))
+	if overlap > 0 {
+		old := make([]byte, int(overlap))
+		if _, err := w.f.ReadAt(old, w.at); err != nil {
+			return 0, err
+		}
+		if !bytes.Equal(old, p[:overlap]) {
+			return 0, errors.New("storage: replay conflicts with retained bytes")
+		}
+	}
+	n, err := w.f.Write(p)
+	w.at += int64(n)
+	return n, err
 }
 
 func (d *DiskStore) Delete(ctx context.Context, key string) error {
@@ -344,6 +443,7 @@ func (d *DiskStore) Delete(ctx context.Context, key string) error {
 	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	d.durable.forget(key)
 	return nil
 }
 

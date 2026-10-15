@@ -482,7 +482,7 @@ func closePairRoomOn(ctx context.Context, tx *sql.Tx, id string, at, holdUntil i
 			// meter and every journal INSERT, and the residual still has a durable
 			// owner that GC settles before it deletes. See PendingNodeDelete.BillUserID.
 			if err := enqueueBilledNodeDeleteOn(ctx, tx, r.BlobKey, r.NodeID, at, holdUntil,
-				r.UserID, MeterUpload, r.MaxSize, r.Received); err != nil {
+				r.UserID, MeterUpload, r.MaxSize, billingFloor(r)); err != nil {
 				return PairRoomClosure{}, err
 			}
 		} else if err := enqueueNodeDeleteOn(ctx, tx, r.BlobKey, r.NodeID, at, holdUntil); err != nil {

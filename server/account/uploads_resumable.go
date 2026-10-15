@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -284,21 +285,26 @@ func (s *Service) recoverUploadSize(ctx context.Context, r UploadSessionRow, now
 			r.ID, nodeLabelForLog(r.NodeID), err)
 		return false
 	}
-	size, ok := s.probeBlobSize(ctx, bs, r)
+	ext, ok := s.probeBlobExtent(ctx, bs, r)
 	if !ok {
 		return false
 	}
-	if size <= r.Received {
+	if ext.durable <= r.Received && ext.accepted <= billingFloor(r) {
 		return true
 	}
 	// No room id on purpose: this session is being ENDED, and a dead upload must
 	// not push a pairing room's deadline out on its way to the reaper. The bytes
 	// are billed; the deadline they would have bought is not owed to them.
+	//
+	// The two numbers stay apart here too: a tail the blob holds but cannot vouch
+	// for is billed (Accepted) and is never written into `received`, which a
+	// finalize racing this sweep would turn into an object's size.
 	if _, err := s.store.CommitUploadProgress(ctx, UploadProgress{
-		SessionID: r.ID, UserID: r.UserID, Committed: size, Billable: r.Billable, Now: now,
+		SessionID: r.ID, UserID: r.UserID, Committed: ext.durable, Accepted: ext.accepted,
+		Billable: r.Billable, Now: now,
 	}); err != nil {
 		log.Printf("upload session %s: recording the %d bytes its blob still holds: %v",
-			r.ID, size-r.Received, err)
+			r.ID, ext.accepted-r.Received, err)
 		return false
 	}
 	return true
@@ -789,7 +795,17 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	// layers: a node that swallows the body and never answers is cut here, and a
 	// local copy that would otherwise run as long as the client keeps dripping is
 	// cut inside DiskStore.Append.
-	newSize, err := bs.Append(ctx, sess.BlobKey, sess.Received, capped)
+	//
+	// Every real append carries the session's settled floor (settledFloor), read
+	// from its row at the start of this request: the one number that lets a store
+	// repair an accepted-but-not-durable tail the ledger has ALREADY billed. A
+	// tail past it is left alone, and settled below.
+	// The transport may return before its body-reading goroutine exits. Take
+	// ownership back before inspecting counters or settling; never reuse this
+	// request body for a second Append. Recovery uses a fresh client request.
+	owned := &clientBody{r: capped}
+	newSize, err := bs.Append(storage.WithSettledThrough(ctx, settledFloor(sess)), sess.BlobKey, sess.Received, owned)
+	sent := owned.release(interruptBodyRead(w), clientBodyReleaseWait)
 	if body.sawEOF.Load() {
 		// The whole body has been read, so the connection is reusable — and the
 		// absolute deadline set above must not ride along into the next request on
@@ -822,9 +838,18 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	//
 	// ErrOffsetMismatch is excluded because it already CARRIES the blob's
 	// authoritative size; there is nothing to recover.
-	committed := newSize
-	if err != nil && !errors.Is(err, storage.ErrOffsetMismatch) {
-		committed, _ = s.committedBlobSize(r.Context(), bs, sess, newSize, capped.n)
+	//
+	// A *NotDurableError is excluded for the opposite reason: it carries BOTH
+	// numbers, the durable size the session may resume from and the accepted
+	// extent that is owed, and a probe could only learn the second.
+	committed, accepted := newSize, int64(0)
+	var nde *storage.NotDurableError
+	switch {
+	case errors.As(err, &nde):
+		committed, accepted = notDurableExtent(sess, nde, sent)
+	case err != nil && !errors.Is(err, storage.ErrOffsetMismatch):
+		ext, _ := s.committedBlobExtent(r.Context(), bs, sess, newSize, sent)
+		committed, accepted = ext.durable, ext.accepted
 	}
 
 	// One commit for every outcome: the offset the blob now holds, the bill for
@@ -835,7 +860,7 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	// lose the bytes: the blob's size is the authority, so the retried PATCH
 	// re-derives the same committed offset (through the offset-mismatch path) and
 	// the delta is computed against the offset the database still holds.
-	progress, cerr := s.commitUploadProgress(r.Context(), sess, pairRoom, committed, now)
+	progress, cerr := s.commitUploadProgress(r.Context(), sess, pairRoom, committed, accepted, now)
 	switch {
 	case cerr != nil && errors.Is(err, errTooLarge):
 		// Logged, not 500: the client is being refused either way, and a 500 here
@@ -883,6 +908,13 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 		// The blob and our counter disagree (e.g. a duplicated request lost the
 		// race); report the blob's truth so the client re-syncs.
 		httpx.WriteJSON(w, http.StatusConflict, map[string]any{"received": committed})
+		return
+	}
+	if nde != nil && progress.Received > sess.Received {
+		// Stale request against a blob this process certified further than the
+		// session knew: the durable part is real progress (committed and billed
+		// above), the rest is not. Re-sync to the durable size only.
+		httpx.WriteJSON(w, http.StatusConflict, map[string]any{"received": progress.Received})
 		return
 	}
 	if err != nil {
@@ -981,12 +1013,12 @@ func (s *Service) persistedRoomJoinDeadline(ctx context.Context, roomID string) 
 // Written on a DETACHED context. A client that aborts mid-append is precisely
 // the case this is here to bill, and its cancelled request context would
 // otherwise take the accounting write down with it.
-func (s *Service) commitUploadProgress(ctx context.Context, sess UploadSessionRow, room PairRoom, committed, now int64) (UploadProgressResult, error) {
-	if committed <= sess.Received && room.ID == "" {
-		return UploadProgressResult{Received: sess.Received, RoomOpen: true}, nil
+func (s *Service) commitUploadProgress(ctx context.Context, sess UploadSessionRow, room PairRoom, committed, accepted, now int64) (UploadProgressResult, error) {
+	if committed <= sess.Received && accepted <= billingFloor(sess) && room.ID == "" {
+		return UploadProgressResult{Received: sess.Received, Metered: sess.Metered, RoomOpen: true}, nil
 	}
 	p := UploadProgress{
-		SessionID: sess.ID, UserID: sess.UserID, Committed: committed,
+		SessionID: sess.ID, UserID: sess.UserID, Committed: committed, Accepted: accepted,
 		Billable: sess.Billable, Now: now,
 	}
 	if room.ID != "" {
@@ -1172,8 +1204,9 @@ func (s *Service) reclaimRefusedUpload(ctx context.Context, sess UploadSessionRo
 // unchanged, and the reaper's re-probe is what eventually settles it.
 //
 // The two blob stores fail differently and neither can be trusted blindly:
-//   - local: Append copied what it could and returns offset+n with the error, so
-//     its number is the truth.
+//   - local: Append copied what it could, flushed it, and returns offset+n with
+//     the error, so its number is the truth (a flush that FAILED comes back as
+//     a *NotDurableError instead and never reaches this function).
 //   - remote: the request ended mid-flight, so the node committed some prefix
 //     and answered 500, and Append reports 0 — which is not "nothing landed", it
 //     is "I do not know".
@@ -1182,7 +1215,10 @@ func (s *Service) reclaimRefusedUpload(ctx context.Context, sess UploadSessionRo
 // zero-byte append at the offset we last knew. That probe writes nothing and
 // needs no new node protocol: a node whose size still matches answers 200 with
 // it, and one that committed more answers 409 with the real size — the same
-// re-sync answer the resumable path already relies on.
+// re-sync answer the resumable path already relies on. A v1 node holding bytes
+// it cannot vouch for answers with both numbers (probeBlobExtent), which is how
+// a not-durable append whose answer was LOST is still billed and still not
+// resumed from.
 //
 // `sent` is how many bytes central actually read from the client and forwarded
 // (cappedReader's count), and it is a CEILING on the answer. Everything here
@@ -1191,16 +1227,48 @@ func (s *Service) reclaimRefusedUpload(ctx context.Context, sess UploadSessionRo
 // bytes that crossed central, so anything above that is somebody else's write
 // or a lie, and either way not this account's bill. (max_size is the other,
 // coarser bound, applied inside CommitUploadProgress.)
-func (s *Service) committedBlobSize(ctx context.Context, bs storage.BlobStore, sess UploadSessionRow, reported, sent int64) (int64, bool) {
+func (s *Service) committedBlobExtent(ctx context.Context, bs storage.BlobStore, sess UploadSessionRow, reported, sent int64) (blobExtent, bool) {
 	ceiling := sess.Received + sent
 	if reported > sess.Received {
-		return min(reported, ceiling), true
+		n := min(reported, ceiling)
+		return blobExtent{durable: n, accepted: n}, true
 	}
-	size, ok := s.probeBlobSize(ctx, bs, sess)
+	ext, ok := s.probeBlobExtent(ctx, bs, sess)
 	if !ok {
-		return sess.Received, false
+		return blobExtent{durable: sess.Received, accepted: sess.Received}, false
 	}
-	return min(size, ceiling), true
+	return blobExtent{durable: min(ext.durable, ceiling), accepted: min(ext.accepted, ceiling)}, true
+}
+
+// blobExtent is what a blob says about itself: the size it is known to hold
+// durably (the resume truth) and the size it physically holds (the accepted,
+// billable truth). They differ only when bytes were written that no flush
+// certified; accepted >= durable always.
+type blobExtent struct {
+	durable, accepted int64
+}
+
+// notDurableExtent turns a not-durable append answer into the two numbers the
+// commit needs, keeping apart what was ALREADY on the blob (evidence some
+// earlier request left, bounded like every blob-reported size by max_size in
+// the store) and what THIS request wrote (bounded by the bytes central really
+// read from the client — a node cannot bill a body that never crossed).
+func notDurableExtent(sess UploadSessionRow, nde *storage.NotDurableError, sent int64) (committed, accepted int64) {
+	committed = max(sess.Received, nde.Durable)
+	preexisting := max(nde.Physical-nde.Written, 0)
+	accepted = max(committed, preexisting, sess.Received+min(max(nde.Written, 0), sent))
+	return committed, accepted
+}
+
+// settledFloor is the server-owned floor a real append may hand its store
+// (storage.WithSettledThrough): the session's billed-through high-water, or,
+// for an own-node session that is never billed, an explicit "nothing to wait
+// for". Never derived from anything a client sent.
+func settledFloor(sess UploadSessionRow) int64 {
+	if !sess.Billable {
+		return math.MaxInt64
+	}
+	return sess.Metered
 }
 
 // probeBlobSize asks the blob how many bytes it holds, with a zero-byte append
@@ -1208,20 +1276,39 @@ func (s *Service) committedBlobSize(ctx context.Context, bs storage.BlobStore, s
 // it and answers with the same number, a blob that holds more refuses with the
 // real one. ok=false ⇒ the blob store could not answer.
 //
+// The number is the blob's PHYSICAL size — what it holds, flushed or not —
+// which is what every billing path needs; a path that resumes from the answer
+// must use probeBlobExtent instead.
+//
 // Asking creates the blob if nothing was ever written to it (an append at
 // offset 0 opens the file), which is why every caller either drops the blob
 // immediately afterwards or leaves a session row that will. An empty file is
 // not worth a second node round trip to avoid.
 func (s *Service) probeBlobSize(ctx context.Context, bs storage.BlobStore, sess UploadSessionRow) (int64, bool) {
+	ext, ok := s.probeBlobExtent(ctx, bs, sess)
+	return ext.accepted, ok
+}
+
+// probeBlobExtent is probeBlobSize with both numbers: a v1 store holding bytes
+// past the durable size it can vouch for answers a *NotDurableError, whose
+// Durable is the resume truth and Physical the billable one. A legacy node's
+// mismatch size is physical and unattested; it is taken for both, exactly as
+// before this protocol existed (the residual that only upgrading the node
+// closes).
+func (s *Service) probeBlobExtent(ctx context.Context, bs storage.BlobStore, sess UploadSessionRow) (blobExtent, bool) {
 	pctx, cancel := probeContext(ctx)
 	defer cancel()
 	size, err := bs.Append(pctx, sess.BlobKey, sess.Received, bytes.NewReader(nil))
-	if err == nil || errors.Is(err, storage.ErrOffsetMismatch) {
-		return size, true
+	var nde *storage.NotDurableError
+	switch {
+	case err == nil || errors.Is(err, storage.ErrOffsetMismatch):
+		return blobExtent{durable: size, accepted: size}, true
+	case errors.As(err, &nde):
+		return blobExtent{durable: nde.Durable, accepted: max(nde.Physical, nde.Durable)}, true
 	}
 	log.Printf("upload session %s: could not read back blob %s on node %s: %v",
 		sess.ID, sess.BlobKey, nodeLabelForLog(sess.NodeID), err)
-	return 0, false
+	return blobExtent{}, false
 }
 
 // materializeEmptyBlob makes sure the blob of a zero-byte upload exists, so

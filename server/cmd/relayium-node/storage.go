@@ -115,23 +115,25 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 			http.Error(w, "storage full", http.StatusInsufficientStorage)
 			return
 		}
-		size, err := ds.Append(r.Context(), key, offset, r.Body)
-		if errors.Is(err, storage.ErrOffsetMismatch) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict)
-			_ = json.NewEncoder(w).Encode(map[string]int64{"size": size})
-			return
+		// relayium-append-durability-v1 is negotiated per request: only a central
+		// that asks for it gets its answers (and may authorize a repair). Anyone
+		// else gets the legacy answers deliberately — the same statuses and sizes a
+		// pre-v1 node gave — and no claim beyond them.
+		strict := r.Header.Get(storage.AppendDurabilityHeader) == storage.AppendDurabilityV1
+		ctx := r.Context()
+		if strict {
+			w.Header().Set(storage.AppendDurabilityHeader, storage.AppendDurabilityV1)
+			if v := r.Header.Get(storage.SettledThroughHeader); v != "" {
+				settled, serr := strconv.ParseInt(v, 10, 64)
+				if serr != nil || settled < 0 {
+					http.Error(w, "bad settled floor", http.StatusBadRequest)
+					return
+				}
+				ctx = storage.WithSettledThrough(ctx, settled)
+			}
 		}
-		if errors.Is(err, storage.ErrInvalidKey) {
-			http.Error(w, "bad key", http.StatusBadRequest)
-			return
-		}
-		if err != nil {
-			http.Error(w, "append failed", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]int64{"size": size})
+		size, err := ds.Append(ctx, key, offset, r.Body)
+		writeAppendAnswer(w, strict, size, err)
 	}))
 	mux.HandleFunc("DELETE /blob/{key}", authed(func(w http.ResponseWriter, r *http.Request, key string) {
 		if err := ds.Delete(r.Context(), key); err != nil && !errors.Is(err, storage.ErrInvalidKey) {
@@ -254,4 +256,41 @@ func newDownloadHandler(ds *storage.DiskStore, secret string, guard *replayGuard
 	})
 	registerDownloadRoutes(mux, ds, secret, guard, receipt)
 	return mux
+}
+
+// writeAppendAnswer renders one DiskStore.Append outcome as the PATCH answer.
+//
+// strict (v1): 200 and 409 sizes are durable; a not-durable outcome is 500
+// with a NotDurableBody, so central bills the accepted bytes and resumes only
+// from the durable size.
+//
+// legacy: what a pre-v1 node answered. A blob holding a tail this node cannot
+// vouch for answers 409 with its PHYSICAL size, exactly as before (a legacy
+// central re-syncs from it, and keeps the guarantees it always had — no more);
+// a failed flush is a plain 500.
+func writeAppendAnswer(w http.ResponseWriter, strict bool, size int64, err error) {
+	var nde *storage.NotDurableError
+	switch {
+	case errors.As(err, &nde) && strict:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(storage.NotDurableBody{
+			NotDurable: true, Durable: nde.Durable, Physical: nde.Physical, Written: nde.Written,
+		})
+	case errors.As(err, &nde) && nde.Written == 0 && nde.Physical > nde.Durable:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]int64{"size": nde.Physical})
+	case errors.Is(err, storage.ErrOffsetMismatch):
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]int64{"size": size})
+	case errors.Is(err, storage.ErrInvalidKey):
+		http.Error(w, "bad key", http.StatusBadRequest)
+	case err != nil:
+		http.Error(w, "append failed", http.StatusInternalServerError)
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]int64{"size": size})
+	}
 }

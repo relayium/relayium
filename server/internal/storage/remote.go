@@ -218,6 +218,16 @@ func (r *RemoteBlobStore) GetRange(ctx context.Context, key string, start int64)
 // Append PATCHes a chunk to the node at `offset` (sent via X-Blob-Offset), for
 // resumable uploads. The node replies {"size":N} on success, or 409 with the
 // node's current size on an offset mismatch (surfaced as ErrOffsetMismatch).
+//
+// Every request asks for relayium-append-durability-v1 (AppendDurabilityHeader),
+// and carries the settled floor when the caller attached one
+// (WithSettledThrough). A node that speaks it echoes the header on every
+// answer, and its answers mean what DiskStore.Append's do: 200/409 sizes are
+// durable, and a not-durable answer arrives as a *NotDurableError. A node that
+// does NOT echo it is a legacy node: its 200 is still durable (legacy nodes
+// failed the append on a failed flush), but its 409 size is the PHYSICAL size,
+// which is surfaced joined with ErrUnattestedSize so a caller can tell; and a
+// legacy node never repairs, so the settled floor is inert there.
 func (r *RemoteBlobStore) Append(ctx context.Context, key string, offset int64, body io.Reader) (int64, error) {
 	er := &errCapturingReader{r: body}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, r.url(key), er)
@@ -226,23 +236,39 @@ func (r *RemoteBlobStore) Append(ctx context.Context, key string, offset int64, 
 	}
 	req.Header.Set("Authorization", "Bearer "+r.secret)
 	req.Header.Set("X-Blob-Offset", strconv.FormatInt(offset, 10))
+	req.Header.Set(AppendDurabilityHeader, AppendDurabilityV1)
+	if settled, ok := SettledThrough(ctx); ok {
+		req.Header.Set(SettledThroughHeader, strconv.FormatInt(settled, 10))
+	}
 	resp, err := r.hc.Do(req)
 	if rerr := er.readerErr(); rerr != nil {
 		// The source reader failed (e.g. cappedReader's errTooLarge on an oversize
 		// chunk). Surface it verbatim — without this the http.Client masks it as a
 		// generic transport error, so the caller returns 500 instead of 413 and
 		// clobbers its committed offset with the 0 returned below.
+		if resp != nil {
+			resp.Body.Close()
+		}
 		return 0, rerr
 	}
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
+	attested := resp.Header.Get(AppendDurabilityHeader) == AppendDurabilityV1
+	if attested && resp.StatusCode == http.StatusInternalServerError {
+		if nde, ok := decodeNotDurable(resp.Body); ok {
+			return nde.Durable, nde
+		}
+	}
 	if resp.StatusCode == http.StatusConflict {
 		var out struct {
 			Size int64 `json:"size"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&out)
+		if !attested {
+			return out.Size, errors.Join(ErrOffsetMismatch, ErrUnattestedSize)
+		}
 		return out.Size, ErrOffsetMismatch
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -256,6 +282,24 @@ func (r *RemoteBlobStore) Append(ctx context.Context, key string, offset int64, 
 		return 0, err
 	}
 	return out.Size, nil
+}
+
+// errRemoteNotDurable is the cause a node's not-durable answer is surfaced
+// with; the node's own causes (an fsync errno, say) stay on the node.
+var errRemoteNotDurable = errors.New("storage: node reported the appended bytes are not durable")
+
+// decodeNotDurable reads a v1 node's not-durable body. Anything malformed or
+// internally inconsistent is not an answer (ok=false), and the caller treats
+// the reply as the plain failure it then is.
+func decodeNotDurable(body io.Reader) (*NotDurableError, bool) {
+	var out NotDurableBody
+	if err := json.NewDecoder(io.LimitReader(body, 1024)).Decode(&out); err != nil || !out.NotDurable {
+		return nil, false
+	}
+	if out.Durable < 0 || out.Written < 0 || out.Physical < out.Durable || out.Written > out.Physical {
+		return nil, false
+	}
+	return &NotDurableError{Durable: out.Durable, Physical: out.Physical, Written: out.Written, Err: errRemoteNotDurable}, true
 }
 
 func (r *RemoteBlobStore) Delete(ctx context.Context, key string) error {

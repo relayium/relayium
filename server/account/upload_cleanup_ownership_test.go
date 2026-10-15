@@ -21,12 +21,15 @@ package account
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -192,8 +195,40 @@ func newCleanupNode(t *testing.T) *cleanupNode {
 		switch r.Method {
 		case http.MethodPatch:
 			off, _ := strconv.ParseInt(r.Header.Get("X-Blob-Offset"), 10, 64)
+			// relayium-append-durability-v1, the way cmd/relayium-node answers it
+			// (writeAppendAnswer): a central that asks for v1 gets the echoed
+			// header, its settled floor passed through, and a not-durable outcome
+			// as 500 + body; any other caller gets the legacy answers, where a tail
+			// the node cannot vouch for is a 409 with its physical size.
+			strict := r.Header.Get(storage.AppendDurabilityHeader) == storage.AppendDurabilityV1
+			ctx := r.Context()
+			if strict {
+				w.Header().Set(storage.AppendDurabilityHeader, storage.AppendDurabilityV1)
+				if raw := r.Header.Get(storage.SettledThroughHeader); raw != "" {
+					floor, perr := strconv.ParseInt(raw, 10, 64)
+					if perr != nil || floor < 0 {
+						http.Error(w, "bad settled floor", http.StatusBadRequest)
+						return
+					}
+					ctx = storage.WithSettledThrough(ctx, floor)
+				}
+			}
 			body, _ := io.ReadAll(r.Body)
-			size, aerr := ds.Append(r.Context(), key, off, bytes.NewReader(body))
+			size, aerr := ds.Append(ctx, key, off, bytes.NewReader(body))
+			var nde *storage.NotDurableError
+			if errors.As(aerr, &nde) {
+				switch {
+				case strict:
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = json.NewEncoder(w).Encode(storage.NotDurableBody{
+						NotDurable: true, Durable: nde.Durable, Physical: nde.Physical, Written: nde.Written,
+					})
+					return
+				case nde.Written == 0 && nde.Physical > nde.Durable:
+					size, aerr = nde.Physical, storage.ErrOffsetMismatch
+				}
+			}
 			if errors.Is(aerr, storage.ErrOffsetMismatch) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
@@ -1004,5 +1039,60 @@ func TestAVoidAfterTheCleanupClaimAttachesNoObligation(t *testing.T) {
 	}
 	if got := h.uploadMetered(t); got != metered {
 		t.Fatalf("metered %d, want the unchanged %d", got, metered)
+	}
+}
+
+// newCleanupNode speaks the protocol both ways a real node does. A blob whose
+// bytes were written by ANOTHER DiskStore instance is, to this node, a tail it
+// never flushed: a v1 central learns both numbers from the not-durable answer,
+// a legacy caller gets the physical size in a 409, and neither is told the
+// tail is durable.
+func TestCleanupNodeAnswersAnUncertifiedTailPerProtocol(t *testing.T) {
+	n := newCleanupNode(t)
+	const key = "ab00000000000000000000000000000c"
+	putOnNode(t, n.dir, key) // written through a different DiskStore
+	info, err := os.Stat(filepath.Join(n.dir, key[:2], key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	physical := info.Size()
+
+	rbs := storage.NewRemoteBlobStore(n.URL, "s", "", n.Client())
+	size, err := rbs.Append(context.Background(), key, 0, bytes.NewReader(nil))
+	var nde *storage.NotDurableError
+	if !errors.As(err, &nde) || size != 0 || nde.Durable != 0 || nde.Physical != physical {
+		t.Fatalf("v1 probe = %d, %v (%+v); want durable 0, physical %d", size, err, nde, physical)
+	}
+
+	req, _ := http.NewRequest(http.MethodPatch, n.URL+"/blob/"+key, bytes.NewReader(nil))
+	req.Header.Set("X-Blob-Offset", "0")
+	resp, err := n.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Size int64 `json:"size"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != http.StatusConflict || out.Size != physical || resp.Header.Get(storage.AppendDurabilityHeader) != "" {
+		t.Fatalf("legacy probe = %d size %d echo %q; want the legacy 409 with the physical size and no v1 claim",
+			resp.StatusCode, out.Size, resp.Header.Get(storage.AppendDurabilityHeader))
+	}
+
+	// A covering floor authorizes matching replay, never different ciphertext.
+	retained, err := os.ReadFile(filepath.Join(n.dir, key[:2], key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rbs.Append(storage.WithSettledThrough(context.Background(), physical), key, 0, bytes.NewReader([]byte("new"))); !errors.Is(err, storage.ErrNotDurable) {
+		t.Fatalf("conflicting replay = %v", err)
+	}
+	if size, err := rbs.Append(storage.WithSettledThrough(context.Background(), physical), key, 0, bytes.NewReader(retained)); err != nil || size != physical {
+		t.Fatalf("matching settled replay = %d, %v", size, err)
+	}
+	got, err := os.ReadFile(filepath.Join(n.dir, key[:2], key))
+	if err != nil || !bytes.Equal(got, retained) {
+		t.Fatalf("retained ciphertext changed: %q %v", got, err)
 	}
 }

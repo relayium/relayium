@@ -1,6 +1,7 @@
 package account
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -446,4 +447,160 @@ func TestSettleUnresolvedUploadOnlyTouchesRowsInTheRecoveryState(t *testing.T) {
 	if got.Received != 1000 || got.Metered != 1000 || got.Done {
 		t.Fatalf("a live session was rewritten by a settle: %+v", got)
 	}
+}
+
+// relayium-append-durability-v1, ledger side. `received` (durable) and
+// `metered` (accepted, billed once per offset) move independently: accepted
+// bytes are billed when accepted, their durable replay costs nothing more.
+// RED control: the pre-v1 arithmetic `metered += to - received` bills the
+// replay again (1024).
+func TestCommitUploadProgressSeparatesDurableFromAccepted(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, _ := st.UpsertUserByEmail(ctx, "two@example.com", "T")
+	row := mkUploadRow("two1", u.ID)
+	row.MaxSize = 1000
+	if ok, err := st.CreateUploadSession(ctx, row, 10); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	commit := func(committed, accepted int64) UploadProgressResult {
+		t.Helper()
+		res, err := st.CommitUploadProgress(ctx, UploadProgress{
+			SessionID: row.ID, UserID: u.ID, Committed: committed, Accepted: accepted, Billable: true, Now: 2000,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	check := func(stage string, received, metered, meter int64) {
+		t.Helper()
+		r, _, _ := st.GetUploadSession(ctx, row.ID, u.ID)
+		if r.Received != received || r.Metered != metered || uploadMeterOf(t, st, u.ID) != meter {
+			t.Fatalf("%s: received=%d metered=%d meter=%d; want %d/%d/%d",
+				stage, r.Received, r.Metered, uploadMeterOf(t, st, u.ID), received, metered, meter)
+		}
+	}
+	if res := commit(0, 512); res.Received != 0 || res.Metered != 512 {
+		t.Fatalf("accepted-only result = %+v", res)
+	}
+	check("accepted only", 0, 512, 512)
+	commit(512, 0)
+	check("durable replay", 512, 512, 512)
+	commit(300, 512) // stale and already-billed: nothing moves
+	check("stale", 512, 512, 512)
+	commit(600, 700)
+	check("durable 600, accepted 700", 600, 700, 700)
+	commit(0, 5000) // clamped to max_size
+	check("clamped", 600, 1000, 1000)
+}
+
+func TestAcceptedBytesOfAnOwnNodeUploadAreNeverMetered(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, _ := st.UpsertUserByEmail(ctx, "own@example.com", "O")
+	row := mkUploadRow("own1", u.ID)
+	row.Billable = false
+	if ok, err := st.CreateUploadSession(ctx, row, 10); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	res, err := st.CommitUploadProgress(ctx, UploadProgress{
+		SessionID: row.ID, UserID: u.ID, Committed: 0, Accepted: 512, Billable: false, Now: 2000,
+	})
+	if err != nil || res.Received != 0 || res.Metered != 0 || uploadMeterOf(t, st, u.ID) != 0 {
+		t.Fatalf("own-node accepted commit = %+v, %v, meter %d", res, err, uploadMeterOf(t, st, u.ID))
+	}
+}
+
+// Every terminal hand-off floors its billing obligation at max(received,
+// metered), so an accepted-but-not-durable tail that is still on the blob is
+// not billed a second time by GC. RED control: flooring at `received` (0)
+// leaves 512 of already-billed bytes owed again.
+func TestTerminalHandOffsFloorAtTheAcceptedHighWater(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	u, _ := st.UpsertUserByEmail(ctx, "floor@example.com", "F")
+
+	cleanupRow(t, st, "claimed", u.ID, true, 0, 512, 0, 1000)
+	if _, _, ok, err := st.ClaimUploadSessionCleanup(ctx, "claimed", 5000, 7000); err != nil || !ok {
+		t.Fatalf("claim: %v %v", ok, err)
+	}
+	cleanupRow(t, st, "purged", u.ID, true, 0, 512, 0, 1000)
+	if err := st.PurgeDoneUploadSessions(ctx, 5000, 7000); err != nil {
+		t.Fatal(err)
+	}
+	cleanupRow(t, st, "refused", u.ID, true, 0, 512, 0, 1000)
+	if ok, err := st.PrepareRefusedUploadReclaim(ctx, "refused", "blob-refused", "", 7000); err != nil || !ok {
+		t.Fatalf("refused reclaim: %v %v", ok, err)
+	}
+	for _, id := range []string{"claimed", "purged", "refused"} {
+		q := queueRows(t, st, "blob-"+id)
+		if len(q) != 1 || q[0].BillUserID != u.ID || q[0].BilledThrough != 512 {
+			t.Fatalf("%s obligation = %+v; want one billed row floored at 512", id, q)
+		}
+	}
+}
+
+// The room's deadline moves only on a DURABLE advance: bytes that were merely
+// accepted are billed but buy nothing.
+func TestAnAcceptedOnlyCommitBuysNoRoomDeadline(t *testing.T) {
+	h := newPairHarness(t)
+	ctx := context.Background()
+	h.mintCode("737373", "")
+	blob := bytes.Repeat([]byte("D"), 4096)
+	status, uploadID, _ := h.initPairUpload(t, "737373", len(blob), "")
+	if status != 200 {
+		t.Fatalf("init: %d", status)
+	}
+	if got := h.patch(t, uploadID, blob, 0, 1024, len(blob)); got != 200 {
+		t.Fatalf("first chunk: %d", got)
+	}
+	sess := h.session(t, uploadID)
+	before, _, _ := h.store.GetPairRoom(ctx, sess.PairRoomID)
+	h.advance(60)
+	if _, err := h.store.CommitUploadProgress(ctx, UploadProgress{
+		SessionID: sess.ID, UserID: h.userID, Committed: 1024, Accepted: 3000, Billable: true, Now: h.now,
+		RoomID: sess.PairRoomID, RoomExpiry: h.now + pairRoomJoinWindow,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, _, _ := h.store.GetPairRoom(ctx, sess.PairRoomID)
+	if after.LastUploadAt != before.LastUploadAt {
+		t.Fatalf("accepted-only commit moved the room: %d -> %d", before.LastUploadAt, after.LastUploadAt)
+	}
+	if _, err := h.store.CommitUploadProgress(ctx, UploadProgress{
+		SessionID: sess.ID, UserID: h.userID, Committed: 2048, Billable: true, Now: h.now,
+		RoomID: sess.PairRoomID, RoomExpiry: h.now + pairRoomJoinWindow,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	moved, _, _ := h.store.GetPairRoom(ctx, sess.PairRoomID)
+	if moved.LastUploadAt == before.LastUploadAt {
+		t.Fatal("a durable advance did not move the room")
+	}
+	// And the void that later reclaims it floors its obligation at the
+	// accepted 3000, not the durable 2048.
+	h.advance(pairRoomJoinWindow + 1)
+	h.svc.SweepPairRooms(ctx, h.now)
+	found := false
+	for _, p := range h.pendingDeletes(t) {
+		if p.BlobKey == sess.BlobKey && p.BillUserID != "" {
+			found = true
+			if p.BilledThrough != 3000 {
+				t.Fatalf("void obligation floored at %d; want the accepted 3000", p.BilledThrough)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("the void queued no billing obligation for the blob")
+	}
+}
+
+func uploadMeterOf(t *testing.T, st *SQLiteStore, userID string) int64 {
+	t.Helper()
+	var n int64
+	if err := st.db.QueryRow(`SELECT COALESCE(SUM(upload_bytes), 0) FROM usage_monthly WHERE user_id = ?`, userID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }

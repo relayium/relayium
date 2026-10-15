@@ -17,6 +17,30 @@ var ErrNotFound = errors.New("storage: blob not found")
 // real offset instead of writing a gap or overwriting.
 var ErrOffsetMismatch = errors.New("storage: append offset does not match current size")
 
+// ErrUnattestedSize is joined to ErrOffsetMismatch when the size came from a
+// node that does not speak relayium-append-durability-v1: the number is the
+// blob's PHYSICAL size, which may include bytes no flush certified.
+var ErrUnattestedSize = errors.New("storage: blob size is not attested durable")
+
+// The relayium-append-durability-v1 wire, central -> node. Central sends
+// AppendDurabilityHeader on every append and SettledThroughHeader when it
+// authorizes a repair; a node that speaks the version echoes
+// AppendDurabilityHeader on every answer and reports a not-durable result as
+// HTTP 500 with a NotDurableBody. See docs/protocol/relayium-append-durability-v1.md.
+const (
+	AppendDurabilityHeader = "X-Relayium-Append-Durability"
+	AppendDurabilityV1     = "v1"
+	SettledThroughHeader   = "X-Relayium-Settled-Through"
+)
+
+// NotDurableBody is the JSON a v1 node answers a not-durable append with.
+type NotDurableBody struct {
+	NotDurable bool  `json:"notDurable"`
+	Durable    int64 `json:"durable"`
+	Physical   int64 `json:"physical"`
+	Written    int64 `json:"written"`
+}
+
 // BlobStore persists opaque byte objects keyed by an unguessable token.
 type BlobStore interface {
 	// Put streams r into object `key`, returning the number of bytes written.
@@ -30,6 +54,11 @@ type BlobStore interface {
 	// (0 creates it), and returns the new total size. A mismatched offset yields
 	// ErrOffsetMismatch with the object's real current size, so a resumable
 	// upload can re-sync. Backs chunked uploads.
+	//
+	// Under relayium-append-durability-v1 a returned size is DURABLE; bytes the
+	// store holds but cannot vouch for come back as a *NotDurableError (see
+	// DiskStore.Append), and ErrUnattestedSize marks a mismatch size from a
+	// store that cannot say either way (a legacy node).
 	Append(ctx context.Context, key string, offset int64, r io.Reader) (int64, error)
 	Delete(ctx context.Context, key string) error
 }

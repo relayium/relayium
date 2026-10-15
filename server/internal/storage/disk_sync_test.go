@@ -174,8 +174,17 @@ func TestAppendReportsAFailedFlush(t *testing.T) {
 	_, full := d.paths(key)
 	boom := errors.New("EIO")
 	recordSyncs(t, full, boom)
-	if _, err := d.Append(context.Background(), key, 0, strings.NewReader("data")); !errors.Is(err, boom) {
-		t.Fatalf("Append with a failing flush = %v; want the flush error, not success", err)
+	got, err := d.Append(context.Background(), key, 0, strings.NewReader("data"))
+	if !errors.Is(err, boom) || !errors.Is(err, ErrNotDurable) {
+		t.Fatalf("Append with a failing flush = %v; want the flush error, classified not-durable", err)
+	}
+	// The size it reports is the durable one, never the physical 4 — and the 4
+	// bytes stay on disk as the evidence of what was accepted.
+	if got != 0 {
+		t.Fatalf("Append with a failing flush reported size %d; want the durable 0", got)
+	}
+	if info, serr := os.Stat(full); serr != nil || info.Size() != 4 {
+		t.Fatalf("blob after a failed flush: %v, %v; want the 4 accepted bytes kept", info, serr)
 	}
 }
 

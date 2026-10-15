@@ -70,10 +70,10 @@ var errClientBodyReleased = errors.New("account: upload body already released")
 // running when the handler takes the body back.
 const clientBodyReleaseWait = 5 * time.Second
 
-// clientBody is the single-shot upload's request body as the handler owns it:
+// clientBody is an upload's request body as the handler owns it:
 // it counts every byte read from the client and can be taken back.
 //
-// bs.Put may return while something is still reading its reader:
+// bs.Put and bs.Append may return while something is still reading their reader:
 // RemoteBlobStore hands the body to net/http, whose transport answers as soon
 // as the node's response arrives and keeps copying the request body in its own
 // goroutine (a node answers 401/507 before reading, and 500 mid-stream). Left

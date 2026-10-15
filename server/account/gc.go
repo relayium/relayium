@@ -491,7 +491,8 @@ func (g *GC) deleteTaskObjectQueuingBlob(ctx context.Context, f StoredFile, now,
 // holding more refuses with the real size, and a blob that no longer exists
 // answers 0 — which is definitive, not unknown, and lets the row settle to "owes
 // nothing". ok=false means nothing could ask (node unreachable / no store),
-// which must keep both the blob and the row.
+// which must keep both the blob and the row. The size is PHYSICAL: an
+// accepted-but-not-durable tail is owed exactly like a durable one.
 func (g *GC) probePendingBlob(ctx context.Context, p PendingNodeDelete) (int64, bool) {
 	var bs storage.BlobStore
 	if g.BlobFor != nil {
@@ -514,6 +515,12 @@ func (g *GC) probePendingBlob(ctx context.Context, p PendingNodeDelete) (int64, 
 	size, err := bs.Append(pctx, p.BlobKey, p.BilledThrough, bytes.NewReader(nil))
 	if err == nil || errors.Is(err, storage.ErrOffsetMismatch) {
 		return size, true
+	}
+	// A v1 store holding bytes no flush certified answers with both numbers;
+	// the bill is owed on what the blob physically holds, durable or not.
+	var nde *storage.NotDurableError
+	if errors.As(err, &nde) {
+		return max(nde.Physical, nde.Durable), true
 	}
 	noteNodeErr(ctx, p.NodeID, err)
 	return 0, false
