@@ -177,6 +177,53 @@ func (c *throttledConn) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// tlsTransferPipe exercises the actual TLS and phasedConn layers with explicit
+// backpressure. A TCP receive window can stop an individual socket write even
+// while the application drains buffered bytes; that is not a deterministic
+// fixture for the per-operation deadline refresh this test proves. The TCP
+// dial/handshake and stalled-peer tests above still exercise real sockets.
+func tlsTransferPipe(t *testing.T, fn func(net.Conn)) net.Conn {
+	t.Helper()
+	clientID, err := secure.LoadOrCreateIdentity(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverID, err := secure.LoadOrCreateIdentity(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawClient, rawServer := net.Pipe()
+	exited := make(chan struct{})
+	t.Cleanup(func() {
+		rawClient.Close()
+		rawServer.Close()
+		select {
+		case <-exited:
+		case <-time.After(time.Second):
+			t.Error("TLS pipe receiver did not exit")
+		}
+	})
+	_ = rawClient.SetDeadline(time.Now().Add(daemonHandshakeTimeout))
+	_ = rawServer.SetDeadline(time.Now().Add(daemonHandshakeTimeout))
+	go func() {
+		defer close(exited)
+		defer rawServer.Close()
+		c, _, err := secure.ServerAny(rawServer, serverID)
+		if err != nil {
+			return
+		}
+		_ = rawServer.SetDeadline(time.Time{})
+		fn(c)
+	}()
+	phased := &phasedConn{Conn: rawClient, readIdle: daemonReadIdle, writeIdle: daemonWriteIdle}
+	c, _, err := secure.ClientAny(phased, clientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	phased.startTransfer()
+	return c
+}
+
 // A slow transfer that keeps moving bytes outlives the write idle bound many
 // times over: the bound is per operation, not a cap on the whole transfer.
 func TestDaemonSlowSteadyTransferOutlivesIdleBound(t *testing.T) {
@@ -189,18 +236,13 @@ func TestDaemonSlowSteadyTransferOutlivesIdleBound(t *testing.T) {
 	dst := t.TempDir()
 	var got atomic.Int64
 	done := make(chan error, 1)
-	target := tlsListener(t, func(c net.Conn) {
+	tconn := tlsTransferPipe(t, func(c net.Conn) {
 		defer c.Close()
 		// The receiver reads 8 KiB every 3 ms (~2.7 MB/s).
 		tc := &throttledConn{Conn: c, chunk: 8 << 10, gap: 3 * time.Millisecond, read: &got}
 		_, err := xfer.Receive(duplexConn{r: tc, w: c}, dst, xfer.RecvOpts{AllowSync: true})
 		done <- err
 	})
-	tconn, err := dialDaemon(target, t.TempDir(), &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tconn.Close()
 	const size = 10 << 20 // ~3.8 s at ~2.7 MB/s
 	m, paths := syncManifestFor(t, size)
 	start := time.Now()
@@ -219,8 +261,16 @@ func TestDaemonSlowSteadyTransferOutlivesIdleBound(t *testing.T) {
 	if elapsed < 3*idle {
 		t.Fatalf("transfer took only %s; the link was not slow enough to prove anything (want > %s)", elapsed, 3*idle)
 	}
-	if b, err := os.ReadFile(filepath.Join(dst, "d", "f.bin")); err != nil || len(b) != size {
-		t.Fatalf("installed %d bytes, %v", len(b), err)
+	installed, err := os.ReadFile(filepath.Join(dst, "d", "f.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(installed) != size || !bytes.Equal(installed, source) {
+		t.Fatalf("installed payload differs: %d bytes, want %d", len(installed), size)
 	}
 	t.Logf("%d bytes in %s with a %s write idle bound", size, elapsed, idle)
 }
