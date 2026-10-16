@@ -1,5 +1,55 @@
 # 端到端测试
 
+## 可重复的本地传输性能基线（手动运行）
+
+```sh
+cd web
+npm run build
+npm run bench:transfer -- --out /absolute/path/new-baseline.json
+```
+
+`transfer-performance.mjs` 复用现有 Chrome/CDP 生命周期、配对房间与 API 夹具，
+运行默认构建的界面和真实 WebRTC/加密。两个标签页按轮次交替发送文字、10 KiB
+单文件、8 MiB 单文件、100×10 KiB 文件批次；默认每类每方向 1 次预热、20 次正式
+采样。每个文件须大小和完整 SHA-256 相符且目标已关闭，接收界面显示成功；文字
+须精确呈现并通过 UTF-8 SHA-256 校验。任意轮次失败（包括预热）整份报告均为 FAIL，
+不输出成功子集的分位数。输出文件必须不存在，旧证据不会被覆盖。
+每次文字发送前等待 250 ms，再准备并开始计时；双向交替时每端低于现有 5 条/秒
+防洪保护。间隔在测量区间之外，不能把本工具用作消息吞吐上限的测试。
+
+JSON 保留逐轮数据、测量范围、源码提交/未提交输入哈希、dist 指纹、浏览器与主机
+信息，以及中位数和最近秩 P95。少于 20 次正式样本只输出中位数，P95 为 null；20
+次的经验 P95 也不能当作总体置信区间。首次打开链路到双方 SAS 头部的时间只有
+1 次独立观察，不与复用链路的传输时间混在一起。文件构造、系统选择器、人为思考
+不计时；自动同意开销保留在观测链路内。
+
+浏览器用 `performance.timeOrigin + performance.now()` 记录提交选择/点击发送、
+自动同意、首个写入、全部关闭、完整校验和成功界面的里程碑，CDP 的轮询只负责等待，
+不充当计时器。`verifiedReadyMs` 到接收方可验证使用为止；`selectionToConsentMs`、
+`consentToFirstWriteMs`、`firstWriteToClosedMs` 是可观察区间；`verificationTailMs`
+只是最后关闭（文字为呈现）后的验证尾段，含异步调度，不是总哈希 CPU 时间。
+各阶段的中位数/P95 不可相加当作总时间的分位数。
+
+**范围限制：本机 Chrome、host 候选环回、夹具信令、内存保存目标。** 没有真实
+服务器账号准入、TURN/WAN、原生端、物理磁盘/fsync 或系统导出测量，不能宣称真实
+网络、硬盘或整体产品提速。哈希观察器异步运行，不延迟产品 close，但其开销仍包含
+在观测环境里。报告只含合成数据的计数/时间，不含用户文件内容、密钥、IP 或信令。
+它不改产品、公开发布渠道或托管 CI 的浏览器执行清单。
+
+冒烟、受控慢写与哈希负向控制（各用一个新的输出路径）：
+
+```sh
+npm run bench:transfer -- --samples 2 --warmups 0 --out /absolute/path/smoke.json
+npm run bench:transfer -- --case large --samples 2 --warmups 0 --write-delay-ms 5 --out /absolute/path/slow.json
+npm run bench:transfer -- --case small --samples 1 --warmups 0 --control bad-hash --out /absolute/path/refused.json
+```
+
+最后一条必须非零退出且 JSON 为 FAIL。慢写参数是每次内存写入的模拟延迟，不能称为
+真实 RTT 或磁盘速度。端口 9476（Chrome）和 4196（预览）须空闲；复用已占端口会
+拒绝，正常/失败路径都关闭自身浏览器与预览。全轮有 15 分钟截止时间，各等待也有界。
+
+---
+
 三个脚本，共用三份东西：
 
 - `harness.mjs` —— CDP 客户端、标签页把手、浏览器生命周期、另存为桩、`vite preview`
