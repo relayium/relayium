@@ -55,12 +55,19 @@ func (f *faultCentral) wrap(next http.Handler) http.Handler {
 		f.posts++
 		f.mu.Unlock()
 		switch mode {
-		case "commit-502", "commit-garbage":
+		case "commit-502", "commit-garbage", "commit-drop":
 			rec := httptest.NewRecorder()
 			next.ServeHTTP(rec, r)
 			if rec.Code != http.StatusOK {
 				w.WriteHeader(rec.Code)
 				_, _ = w.Write(rec.Body.Bytes())
+				return
+			}
+			if mode == "commit-drop" {
+				c, _, err := w.(http.Hijacker).Hijack()
+				if err == nil {
+					c.Close()
+				}
 				return
 			}
 			if mode == "commit-502" {
@@ -451,5 +458,90 @@ func TestUpRecordLifecycleE2E(t *testing.T) {
 	code, _, stderr = e.up(big)
 	if code != 1 || e.records() != 0 {
 		t.Fatalf("refused up: code %d records=%d\n%s", code, e.records(), stderr)
+	}
+}
+
+// Hold the actual CLI's last progress write while a real HTTP/1 transport
+// receives central's gateway answer. Closing the unread response closes the
+// connection and releases progress, AFTER sendUpload classifies that answer.
+type finalProgressGate struct {
+	bytes.Buffer
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (g *finalProgressGate) Write(p []byte) (int, error) {
+	if bytes.Contains(p, []byte("  100% ")) {
+		close(g.entered)
+		<-g.release
+	}
+	return g.Buffer.Write(p)
+}
+
+type progressReleaseConn struct {
+	net.Conn
+	release func()
+}
+
+func (c progressReleaseConn) Close() error { c.release(); return c.Conn.Close() }
+
+func TestUpFinalProgressGatewayRetainsRecoveryE2E(t *testing.T) {
+	for _, mode := range []string{"commit-502", "commit-drop"} {
+		t.Run(mode, func(t *testing.T) {
+			e := newUpEnv(t)
+			e.fault.setMode(mode)
+			entered, released := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			release := func() { once.Do(func() { close(released) }) }
+			defer release()
+			base := http.DefaultTransport
+			tr := base.(*http.Transport).Clone()
+			dial := tr.DialContext
+			tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				c, err := dial(ctx, network, addr)
+				if err != nil {
+					return nil, err
+				}
+				return progressReleaseConn{c, release}, nil
+			}
+			http.DefaultTransport = tr
+			defer func() { http.DefaultTransport = base; tr.CloseIdleConnections() }()
+			// A watchdog is cleanup, not the ordering oracle: it must never release the
+			// callback in the accepted run.
+			expired := make(chan struct{})
+			timer := time.AfterFunc(5*time.Second, func() { close(expired); release() })
+			defer timer.Stop()
+			var out bytes.Buffer
+			stderr := &finalProgressGate{entered: entered, release: released}
+			code := runUp([]string{"--json", "--config-dir", e.cfgDir, e.src}, &out, stderr)
+			select {
+			case <-expired:
+				t.Fatal("watchdog released final progress; causal ordering not established")
+			default:
+			}
+			select {
+			case <-entered:
+			default:
+				t.Fatal("final progress callback was not reached")
+			}
+			if code != exitUpUnknown || e.records() != 1 || e.objects() != 1 {
+				t.Fatalf("upload code=%d records=%d objects=%d stderr=%s", code, e.records(), e.objects(), stderr.String())
+			}
+			op := decodeUpDoc(t, out.String()).Operation
+			metered := e.uploadedBytes()
+			e.fault.setMode("")
+			before := e.wire.Load()
+			code, stdout, errout := e.up("--recover", op, "--json")
+			if code != 0 {
+				t.Fatalf("recover code=%d %s %s", code, stdout, errout)
+			}
+			doc := decodeUpDoc(t, stdout)
+			if e.wire.Load()-before > maxProbeWire || e.objects() != 1 || e.uploadedBytes() != metered || e.records() != 0 {
+				t.Fatal("recovery sent a body, charged twice or lost journal lifecycle")
+			}
+			if e.download(doc.Link) != e.body {
+				t.Fatal("recovered key did not open the original bytes")
+			}
+		})
 	}
 }

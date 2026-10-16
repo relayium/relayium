@@ -248,12 +248,10 @@ func (c *Client) sendUpload(ctx context.Context, p *PreparedUpload, opKey string
 		}
 	}
 
-	// bodySent marks the boundary past which the outcome can be unknown: every
-	// body byte has been taken by the transport. It is set BEFORE the pipe is
-	// closed, so no request the transport finished can be seen without it; the
-	// cost is that a connection lost between this and the body's last framing
-	// bytes is reported as unknown when it was in fact a failure — the honest
-	// direction to err in.
+	// Recorded uploads can be committed as soon as Content-Length bytes have
+	// been consumed, even while the producer is still reporting final progress.
+	// Their body reader marks that boundary before returning those bytes to the
+	// transport. The producer mark retains plain Upload's chunked-body behavior.
 	var bodySent atomic.Bool
 	pr, pw := io.Pipe()
 	go func() {
@@ -298,6 +296,7 @@ func (c *Client) sendUpload(ctx context.Context, p *PreparedUpload, opKey string
 	if opKey != "" {
 		req.Header.Set("Idempotency-Key", opKey)
 		req.ContentLength = p.BodyLength
+		req.Body = &uploadBodyBoundary{ReadCloser: pr, length: p.BodyLength, sent: &bodySent}
 	}
 
 	httpc := c.HTTP
@@ -366,6 +365,24 @@ func (c *Client) sendUpload(ctx context.Context, p *PreparedUpload, opKey string
 		return "", 0, unknown(0, errors.New("upload: the confirmation carries no usable id"))
 	}
 	return out.ID, out.ExpiresAt, nil
+}
+
+// uploadBodyBoundary counts bytes consumed, not producer callbacks completed.
+// A transport error after this boundary is conservatively unknown: taking the
+// bytes does not prove delivery, but permits a committed, paid upload.
+type uploadBodyBoundary struct {
+	io.ReadCloser
+	length int64
+	read   atomic.Int64
+	sent   *atomic.Bool
+}
+
+func (b *uploadBodyBoundary) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if b.read.Add(int64(n)) >= b.length {
+		b.sent.Store(true)
+	}
+	return n, err
 }
 
 // maxConfirmBody bounds the upload confirmation read; central's is a few dozen
