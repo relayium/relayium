@@ -17,6 +17,7 @@ import {
   type StoredManifest,
 } from "./store-crypto";
 import { DOWNLOAD_PREFIX } from "./transfer-link";
+import { UploadFrameAhead, UPLOAD_AHEAD_BYTES } from "./upload-frame-ahead";
 import {
   emptyStats,
   legacySliceMax,
@@ -446,7 +447,8 @@ export async function uploadFile(
 /** 允许回落到单发路径的最大密文体积。
  *
  *  uploadFile 会把整份密文攒成帧数组再 `new Blob(parts)` 复制一遍，峰值约 2× 密文。
- *  分片路径的峰值是 chunkSize + 一帧（约 8.6 MiB），与文件大小无关 —— 所以"分片失败
+ *  分片路径的重放缓冲是 chunkSize + 一帧，另有至多 1 MiB + 一帧的加密预取，
+ *  与文件大小无关 —— 所以"分片失败
  *  就回落"这条既有退路，在单文件上限提到 1 GiB 之后，最坏情况是 ~2 GiB 峰值，手机
  *  标签页必崩。崩掉的标签页比一条错误提示糟得多：用户连"重试"都点不到。
  *
@@ -543,8 +545,8 @@ interface ChunkedStage {
  *  current chunk, not the whole upload.
  *
  *  加密与上传是**交织**的：帧从 encryptFiles 一边产出一边填进一个固定容量的打包
- *  缓冲区，填满一个 chunk 就 PATCH 出去，服务端确认后立即丢弃。驻留内存约等于
- *  chunkSize + 一帧，与文件大小无关（旧实现把全部密文攒进数组再 new Blob，峰值
+ *  缓冲区，填满一个 chunk 就 PATCH 出去，服务端确认后立即丢弃。重放缓冲为
+ *  chunkSize + 一帧，另有至多 1 MiB + 一帧的有界加密预取，与文件大小无关（旧实现把全部密文攒进数组再 new Blob，峰值
  *  约 2× 密文，1 GiB 上传在手机上必 OOM）。 */
 async function chunkedUpload(
   files: File[],
@@ -635,7 +637,12 @@ async function chunkedUpload(
   // Set once, on the tick before the first PATCH — see UploadProgress.onWire.
   let onWire = false;
 
-  const gen = encryptFiles(files, sk.key);
+  const source = encryptFiles(files, sk.key, signal);
+  // Small server packing targets (normally pair-room uploads) benefit from
+  // overlap. Large-body Chrome controls regressed with speculative encryption:
+  // retain their original pull path until that behavior is understood.
+  const ahead = sliceMax <= UPLOAD_AHEAD_BYTES ? new UploadFrameAhead(source, signal) : undefined;
+  const gen = ahead ?? source;
   try {
     onProgress?.({ phase: "uploading", sent: 0, total: cipherSize });
     confirmed.record(t0, 0);
@@ -691,7 +698,11 @@ async function chunkedUpload(
       const sliceEnd = sliceStart + sliceLen;
       highestSent = noteAttempt(stats, highestSent, sliceStart, sliceEnd);
       const tReq = mono();
-      const answer = await sendSlice(uploadId, pending.subarray(0, sliceLen), chunkStart, cipherSize, signal, budget, noteDeadline);
+      const flight = sendSlice(uploadId, pending.subarray(0, sliceLen), chunkStart, cipherSize, signal, budget, noteDeadline);
+      // Prepare future frames while this request waits. Never touch `pending`:
+      // it belongs to this flight and remains the exact ciphertext replay tail.
+      ahead?.start();
+      const answer = await flight;
       const reqMs = mono() - tReq;
       stats.requestMs += reqMs;
 
@@ -787,7 +798,7 @@ async function chunkedUpload(
     if (!(await gen.next()).done) throw new UploadError(0);
   } finally {
     // 抛错/取消路径上终止生成器，不留悬挂的加密工作。
-    await gen.return(undefined).catch(() => {});
+    await (ahead ? ahead.close() : source.return(undefined)).catch(() => {});
     lastUploadStats = { ...stats };
   }
 

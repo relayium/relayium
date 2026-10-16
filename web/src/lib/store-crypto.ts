@@ -199,14 +199,17 @@ function readSlice(file: File, off: number): Promise<ArrayBuffer> | undefined {
 // order and frame bytes are exactly the serial ones. File reads cannot be
 // aborted: after an early return the one outstanding read may still settle,
 // but its result is dropped and nothing is sealed or sent from it.
-export async function* encryptFiles(files: File[], key: CryptoKey): AsyncGenerator<Bytes> {
+export async function* encryptFiles(files: File[], key: CryptoKey, signal?: AbortSignal): AsyncGenerator<Bytes> {
   let seq = 1;
   for (const file of files) {
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
     let next = readSlice(file, 0);
     for (let off = 0; off < file.size; off += STORE_CHUNK_SIZE) {
       const piece = new Uint8Array(await next!) as Bytes;
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
       next = readSlice(file, off + STORE_CHUNK_SIZE);
       const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce(seq) }, key, piece));
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
       yield frame(ct);
       seq++;
     }

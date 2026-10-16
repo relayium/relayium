@@ -27,6 +27,21 @@ Performance work is classified before implementation:
    returns the generator. The gain is in the preparation stage; how much of
    it reaches a whole upload depends on the network, and no transfer-speed
    figure is promised.
+   With a server packing target at most 1 MiB (normally pair-room preuploads),
+   the stored uploader also prepares up to 1 MiB plus one whole encrypted
+   frame while awaiting a PATCH answer (2026-10-16). Larger packing targets
+   keep the original pull path: speculative preparation regressed the local
+   Chrome large-body control and its cause is not established. This queue is separate
+   from the unchanged `chunkSize + one frame` packing/replay buffer and the
+   existing one-slice plaintext read-ahead. It uses one serial encryption
+   generator; PATCHes remain serial, with identical bodies, offsets, retry
+   ciphertext and finalize rules. Cancellation stops further generator pulls
+   and checks the signal after pending reads and encryption; an already-started
+   file read or encryption may settle, but cannot start another read or send a
+   request after cancellation. Errors from prefetched frames are observed
+   immediately and consumed in stream order. This hides some preparation time
+   behind network waits; it does not promise a general WAN speedup or change
+   any server capability, quota or accounting rule.
 2. A server hardening change may reject a request that no released client emits,
    but must retain every released request shape. Account-file resume therefore
    continues to accept exactly `Range: bytes=N-`; unsupported explicit-end,
