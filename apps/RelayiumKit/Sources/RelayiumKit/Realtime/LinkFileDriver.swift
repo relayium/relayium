@@ -383,7 +383,7 @@ public final class LinkFileDriver: @unchecked Sendable {
     private var noticing = false
 
     /// Inbound file frames waiting for the receive FIFO to settle.
-    private var inboundBuffer: [[UInt8]] = []
+    private var inboundBuffer = LinkInboundFrameQueue<[UInt8]>()
     private var inboundBufferedBytes = 0
     private var draining = false
 
@@ -1655,7 +1655,7 @@ public final class LinkFileDriver: @unchecked Sendable {
         for timer in timers.values { timer.handle.cancel() }
         timers = [:]
         releaseProducerLocked()
-        inboundBuffer = []
+        inboundBuffer = LinkInboundFrameQueue()
         inboundBufferedBytes = 0
         outbox.removeAll()
         releaseDestinationLocked(batch: destinationSlot?.batch, discard: true)

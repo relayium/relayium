@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import RelayiumKit
 
 // MARK: - deterministic fakes
@@ -437,6 +438,57 @@ final class LinkFileDriverTests: XCTestCase {
 
         XCTAssertEqual(h.destination.written, first + second, "byte-exact, in order")
         XCTAssertEqual(h.driver.bufferedInboundFrames, 0, "and the buffer drained")
+    }
+
+    /// A deterministic disk-open stall accumulates a real encrypted backlog.
+    /// All data and DONE controls must drain in order and commit exactly once.
+    func testADiskStallDrainsAnEncryptedBacklogThroughFinalVerification() throws {
+        let codecs = LinkCodecs(sendKey: [UInt8](repeating: 0x11, count: 32),
+                                recvKey: [UInt8](repeating: 0x22, count: 32))
+        let transport = FakeLinkTransport()
+        let destination = FakeDestination()
+        let opened = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let events = Events()
+        let committed = expectation(description: "verified backlog committed")
+        let driver = LinkFileDriver(
+            identity: LinkIdentity(peerId: "peer", role: .initiator, sas: "123456", codecs: codecs),
+            transport: transport, scheduler: FakeLinkScheduler(),
+            producerFactory: { _ in FakeProducer(frames: []) },
+            destinationFactory: { _, _ in
+                opened.signal()
+                _ = release.wait(timeout: .now() + 10)
+                return destination
+            },
+            ackInterval: 1, onTextFrame: { _ in }, onEvent: { event in
+                events.append(event)
+                if case .inboundFinished(_, true) = event { committed.fulfill() }
+            })
+        defer { release.signal() }
+        let peer = RealtimeSender(sessionKey: [UInt8](repeating: 0x22, count: 32))
+        let body = WireVectors.content(32 * C, seed: 73)
+        let file = meta("backlog.bin", body.count)
+        for frame in try peer.batchFrames([file]) { transport.deliver(.file, frame) }
+        driver.settle()
+        driver.acceptInbound()
+        XCTAssertEqual(opened.wait(timeout: .now() + 5), .success)
+        let frames = try peer.dataFrames([(file, body)])
+        for frame in frames { transport.deliver(.file, frame) }
+        XCTAssertEqual(driver.bufferedInboundFrames, frames.count)
+        XCTAssertTrue(destination.written.isEmpty)
+        XCTAssertFalse(destination.finalized)
+        release.signal()
+        wait(for: [committed], timeout: 5)
+        driver.settle()
+        XCTAssertEqual(destination.written.count, body.count)
+        XCTAssertEqual(SHA256.hash(data: Data(destination.written)), SHA256.hash(data: Data(body)))
+        XCTAssertTrue(destination.finalized)
+        XCTAssertFalse(destination.aborted)
+        XCTAssertEqual(driver.bufferedInboundFrames, 0)
+        XCTAssertFalse(driver.isTerminal)
+        XCTAssertEqual(events.all.filter {
+            if case .inboundFinished(_, true) = $0 { return true }; return false
+        }.count, 1)
     }
 
     // ── stale asynchronous callbacks ────────────────────────────────────────
