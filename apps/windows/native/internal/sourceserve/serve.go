@@ -292,7 +292,15 @@ loop:
 			select {
 			case item, ok = <-inbox:
 			case <-shutdown:
-				break loop
+				// The reader may enqueue work AND signal EOF after the first
+				// empty poll, before this select begins. Both cases are then
+				// ready and selection is random. Recheck already admitted work
+				// before honoring shutdown; never wait for a future request.
+				select {
+				case item, ok = <-inbox:
+				default:
+					break loop
+				}
 			}
 		}
 		{
