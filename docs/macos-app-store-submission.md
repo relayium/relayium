@@ -1,11 +1,28 @@
 # macOS App Store submission
 
-## macOS 1.4.9 (46) — internal TestFlight candidate preparation, 2026-10-16
+## macOS 1.4.9 (46) — available in internal TestFlight, 2026-10-16
 
-Candidate only; not yet uploaded or available. Version 1.4.8 (45) is already
-issued through direct download; the current TestFlight and public Mac App Store
-build is 1.4.7 (44), confirmed by the 2026-10-16 provider snapshot. All ten Mac
-marketing/build settings advance together to 1.4.9 / 46; iOS is unchanged.
+**Delivered for owner testing, 2026-10-16.** App Store Connect build
+`aa7f9264-5932-413a-87cd-84275efc52a9`, macOS `1.4.9 (46)`, is `VALID`
+and `IN_BETA_TESTING` in the existing Relayium Internal group. Automatic tester
+notification is off, What to Test is set in English and Simplified Chinese, and
+the build is absent from the external group and external beta review. A separate
+provider readback verified every existing App Store version, its selected build,
+and group attributes unchanged; no App Store version was created or submitted.
+Public App Store remains `1.4.7`; direct download remains `1.4.8 (45)`.
+All ten Mac marketing/build settings advance together to `1.4.9` / `46`; iOS is
+unchanged.
+
+The single uploaded `Relayium.pkg` is 19,240,799 bytes, SHA-256
+`1f19c0214759cbc9405591e4ef355578101bb1e6fb6b449f216b3ae9c10c83ab`, built from source
+`8111b4a73bb0f4470f670556238eb59408f0c79d` with Xcode 27.0. Archive/export and strict
+distribution signature, sandbox, entitlement, arm64-only, privacy manifest,
+no-debug and no-Sparkle checks passed for the app and Share extension. Apple's
+validate-only check and the single upload both succeeded. The final source had
+146 focused Swift tests passing after the version edit. These are candidate
+checks: full stable-release regression and owner hands-on acceptance remain
+pending. Normal hosted Android compatibility failed at Kotlin dependency
+resolution before tests; no all-platform CI success is claimed.
 
 Since the 1.4.7 TestFlight source `5c308432d`, this candidate includes a bounded
 FIFO for queued incoming file frames, replacing repeated Array shifts while

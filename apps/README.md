@@ -1,10 +1,15 @@
 # Relayium native apps
 
-**Owner test candidate, 2026-10-16:** macOS `1.4.9 (46)` is being prepared
-for internal TestFlight. It is not uploaded yet. It carries the native receive
-FIFO optimization, Apple login-conflict guidance and upload-status accessibility
-identifier since TestFlight `1.4.7 (44)`. Public release follows owner testing and
-manual action; the issued channels below retain their versions.
+**Internal TestFlight, verified 2026-10-16:** macOS `1.4.9 (46)` is `VALID`
+and `IN_BETA_TESTING` in the existing Relayium Internal group, with automatic
+tester notification off and English/Simplified Chinese test notes. App Store
+Connect build `aa7f9264-5932-413a-87cd-84275efc52a9` was built from source
+`8111b4a73bb0f4470f670556238eb59408f0c79d`. Since TestFlight `1.4.7 (44)` it carries
+the native receive FIFO optimization, Apple login-conflict guidance and upload
+status accessibility identifier. This is an owner test candidate; public release
+follows owner testing and manual action. No App Store version or review was
+created or submitted, and existing store selections remain unchanged. The issued
+public channels below retain their versions.
 
 macOS **1.4.8** is published through the direct-download channel. It is build
 `45`, GitHub Release `macos-v1.4.8`, published on 2026-10-12. The separately
