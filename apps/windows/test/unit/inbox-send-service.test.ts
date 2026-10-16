@@ -14,10 +14,10 @@
 // and an unknown is never reported as one, and that progress is what the SERVER
 // took rather than what the producer offered.
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { captureAccount, type AccountContext } from "../../src/main/inbox/account.js";
 import { newAtRestKeyBytes } from "../../src/main/inbox/atrest.js";
@@ -40,9 +40,26 @@ const SELF = "dev-self";
 const TARGET = "dev-target";
 
 const roots: string[] = [];
-afterEach(async () => {
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
-});
+const cleanups = new Set<() => Promise<void>>();
+async function cleanupHarnesses(): Promise<void> {
+  const failures: unknown[] = [];
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup();
+      cleanups.delete(cleanup);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  // Retain both failed owners and their directories for diagnosis/retry.
+  // Removing a directory while its producer can still write is not cleanup.
+  if (failures.length) throw new AggregateError(failures, "Inbox fixture did not stop");
+  while (roots.length) {
+    await rm(roots[0]!, { recursive: true, force: true });
+    roots.shift();
+  }
+}
+afterEach(cleanupHarnesses);
 
 async function realRuntimes(): Promise<{ inbox: InboxRuntime; stored: StoredRuntime }> {
   resetInboxRuntimeForTest();
@@ -239,6 +256,7 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
   const progress: { jobId: string; committed: number; total: number }[] = [];
   const outcomes: { jobId: string; view: InboxSendView }[] = [];
   const failures: unknown[] = [];
+  const releases = new Set<() => void>();
 
   const service = new InboxSendService({
     origin: ORIGIN,
@@ -262,6 +280,26 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
     fetchImpl: central.fetch,
     now: () => 1_000,
     ...over,
+  });
+  // A timed-out test can still have start() parked before it owns a job id.
+  // Release only this fixture's controls, fence/stop the real service, then
+  // join those admissions before deleting the real store beneath them.
+  const starts = new Set<ReturnType<InboxSendService["start"]>>();
+  const start = service.start.bind(service);
+  service.start = (input) => {
+    const result = start(input);
+    starts.add(result);
+    void result.then(() => starts.delete(result), () => starts.delete(result));
+    return result;
+  };
+  cleanups.add(async () => {
+    for (const release of releases) release();
+    await service.quiesce();
+    await Promise.allSettled(starts);
+    // A previously parked start can finish building its binding after the
+    // first fence. Dispose that binding only after admission has unwound.
+    await service.dispose();
+    expect(service.inventory().active).toBe(0);
   });
 
   return {
@@ -296,12 +334,15 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
         central.onCreate = resolve;
       });
       central.holdCreate = held;
+      const unpark = () => {
+        if (central.holdCreate === held) central.holdCreate = null;
+        release();
+        releases.delete(unpark);
+      };
+      releases.add(unpark);
       return {
         arrived,
-        release: () => {
-          central.holdCreate = null;
-          release();
-        },
+        release: unpark,
       };
     },
     /** Park `start` inside its first await, and report when it gets there. */
@@ -314,12 +355,15 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
         state.entered = resolve;
       });
       state.hold = held;
+      const unpark = () => {
+        if (state.hold === held) state.hold = null;
+        release();
+        releases.delete(unpark);
+      };
+      releases.add(unpark);
       return {
         arrived,
-        release: () => {
-          state.hold = null;
-          release();
-        },
+        release: unpark,
       };
     },
     async produce(jobId, contentKey, files, expects) {
@@ -337,6 +381,64 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
 function fileOf(name: string, bytes: number): File {
   return new File([new Uint8Array(bytes).fill(65)], name);
 }
+
+describe("fixture lifetime", () => {
+  it("joins a live un-fed delivery before deleting its directory", async () => {
+    const h = await harness();
+    const started = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+    expect(started.ok).toBe(true);
+    expect(h.service.inventory().active).toBe(1);
+    const root = roots[0]!;
+    await cleanupHarnesses();
+    expect(h.service.inventory().active).toBe(0);
+    await expect(stat(root)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await h.service.start({ target: TARGET, kind: "file", entries: [{ path: "b.bin", size: 8 }], document: 7 })).toMatchObject({ ok: false, refusal: "unavailable" });
+  });
+  it("releases and joins an admission parked before it has a job id", async () => {
+    const h = await harness();
+    const parked = h.park();
+    const starting = h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+    await parked.arrived;
+    expect(h.service.inventory().active).toBe(1);
+    let settled = false;
+    void starting.then(() => { settled = true; });
+    const dispose = h.service.dispose.bind(h.service);
+    const observed = vi.spyOn(h.service, "dispose").mockImplementation(async () => {
+      expect(settled).toBe(true);
+      await dispose();
+    });
+    try { await cleanupHarnesses(); }
+    finally { observed.mockRestore(); }
+    expect(await starting).toMatchObject({ ok: false, refusal: "unavailable" });
+    expect(h.service.inventory().active).toBe(0);
+  });
+  it("releases a held CREATE and joins its in-flight converge", async () => {
+    const h = await harness();
+    const started = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+    if (!started.ok) throw new Error("expected a job");
+    h.central.swallowCreate = true;
+    await h.produce(started.jobId, started.contentKey, [fileOf("a.bin", 8)], started.expects);
+    await h.service.end(started.jobId);
+    h.central.swallowCreate = false;
+    const parked = h.holdCreate();
+    const converging = h.service.converge(started.jobId);
+    await parked.arrived;
+    await cleanupHarnesses();
+    await converging;
+    expect(h.service.inventory().active).toBe(0);
+  });
+  it("retains directories on a failed join, still closes other owners, and retries", async () => {
+    const h = await harness(), other = await harness();
+    const root = roots[0]!;
+    const dispose = vi.spyOn(h.service, "dispose").mockRejectedValueOnce(new Error("controlled join failure"));
+    await expect(cleanupHarnesses()).rejects.toThrow("fixture did not stop");
+    expect((await stat(root)).isDirectory()).toBe(true);
+    expect(await other.service.start({ target: TARGET, kind: "file", entries: [{ path: "b.bin", size: 8 }], document: 7 })).toMatchObject({ ok: false, refusal: "unavailable" });
+    dispose.mockRestore();
+    await cleanupHarnesses();
+    await expect(stat(root)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
 
 describe("Inbox send: choosing a target", () => {
   it("lists the account's OTHER devices and never this one", async () => {
