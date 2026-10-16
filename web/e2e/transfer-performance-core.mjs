@@ -16,12 +16,17 @@ export function options(argv) {
       if (!/^\d+$/.test(value ?? '') || Number(value) < min || Number(value) > max) throw new Error(`invalid ${key}`);
       o[name] = Number(value);
     } else if (key === '--out' && value && !value.startsWith('--')) o.out = value;
+    else if (key === '--phases' && value === 'on') o.phases = true;
+    else if (key === '--phase-delay' && /^(read|encrypt):([1-9]\d{0,2}|1000)$/.test(value ?? '')) {
+      const [phase, ms] = value.split(':'); o.phaseDelay = { phase, ms: Number(ms) };
+    }
     else if (key === '--case' && Object.hasOwn(CASES, value)) o.cases = [value];
     else if (key === '--control' && value === 'bad-hash') o.control = true;
     else throw new Error(`unknown or invalid option ${key}`);
   }
   if (!o.out) throw new Error('--out FILE is required (existing files are never overwritten)');
   if (o.control && o.cases.includes('text')) throw new Error('bad-hash control requires --case small, large or batch');
+  if (o.phaseDelay && (!o.phases || o.cases.includes('text'))) throw new Error('phase delay requires --phases on and a file --case');
   return o;
 }
 

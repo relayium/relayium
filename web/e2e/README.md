@@ -50,6 +50,35 @@ npm run bench:transfer -- --case small --samples 1 --warmups 0 --control bad-has
 
 ---
 
+可选的 API 阶段观测（另存报告，不与上面的未插桩基线合并）：
+
+```sh
+npm run bench:transfer -- --phases on --out /absolute/path/phases.json
+npm run bench:transfer -- --phases on --case small --samples 2 --warmups 0 --phase-delay read:20 --out /absolute/path/read-control.json
+npm run bench:transfer -- --phases on --case small --samples 2 --warmups 0 --phase-delay encrypt:20 --out /absolute/path/encrypt-control.json
+```
+
+开启后使用 schema `relayium-browser-transfer-baseline/2`，每个文件样本的 `phases`
+保留发送、接收两端的 `read`、`encrypt`、`decrypt` 统计：调用数、输入字节数、
+成功/失败/未完成数、累计及最大异步耗时。`phaseSummary` 按文件类别、方向和端点
+汇总每轮 `totalMs` 的中位数/P95（同样至少 20 次正式样本才有 P95）。文字仍使用
+原来的里程碑测量，不输出阶段数据。不开启时保留 schema 1 和原测量路径。
+
+`read` 只观察发送端的 `Blob.arrayBuffer()`，接收端为验证完整 SHA 而重新读取内存
+的操作被排除；发送端读取字节数必须恰好覆盖完整负载。加解密观察两端文件传输期间
+的全部 AES-GCM API 调用，**包括控制帧**。这不是逐文件纯加密成本，也没有测量
+credit 等待、DataChannel 排队、网络或物理写入。时间从 API 调用到 Promise 完成，
+含调度、包装器和受控延迟，**不是 CPU 时间**；操作可以重叠，不能相加或从总耗时中
+扣除以推断网络耗时，也不能把插桩结果与旧基线直接比较后宣称产品提速。
+
+受控延迟只加在该轮发送端首个指定 API 调用前，记录实际 `delayElapsedMs`，要求
+至少观察到请求的延迟（容许 1 ms 时钟精度）。它用于证明指标响应，不能代表磁盘或
+加密硬件性能；后台标签页计时器调度可能显著放大实际延迟。阶段仍未完成、调用失败、
+缺少测量覆盖或哈希错误，均让整份报告 FAIL，两个汇总均为空。包装器只记录数值，
+不记录参数、密钥或明文，也不进入产品构建或托管 CI 的浏览器执行清单。
+
+---
+
 三个脚本，共用三份东西：
 
 - `harness.mjs` —— CDP 客户端、标签页把手、浏览器生命周期、另存为桩、`vite preview`

@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { launchBrowser, newTab, startPreview, sleep, VERIFY_ON } from './harness.mjs';
 import { apiFixtureScript } from './a11y-fixtures.mjs';
 import { CODE_ROOM_ROUTES, codeRoomSignalingScript } from './code-room-fixture.mjs';
-import { CASES, options, installProbe, checkedSample, summarize } from './transfer-performance-core.mjs';
+import { CASES, options, installProbe, checkedSample, summarize, distribution } from './transfer-performance-core.mjs';
+import { installPhaseProbe, checkedPhases } from './transfer-phase-probe.mjs';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -29,6 +30,10 @@ const report = { schema: 'relayium-browser-transfer-baseline/1', status: 'IN_PRO
     percentiles: 'empirical nearest-rank P95, emitted only for n >= 20; no confidence interval or speedup claim',
     exclusions: ['WAN/TURN', 'server admission', 'physical persistence', 'native clients', 'stored upload', 'separate read/encrypt/network CPU attribution'] },
   configuration: opts, provenance: {}, setup: {}, samples: [], summary: null };
+if (opts.phases) {
+  report.schema = 'relayium-browser-transfer-baseline/2';
+  report.scope.phases = 'instrumented Blob reads on sender only; AES-GCM encrypt/decrypt on both peers including control frames; async API wall time including scheduling/wrapper cost, not CPU; overlapping totals must not be added or subtracted from end-to-end time; no network/wait attribution';
+}
 let browser, closeBrowser, preview, deadline, timedOut = false;
 
 async function freePort(port) {
@@ -87,6 +92,10 @@ async function oneSample(sender, receiver, kind, direction, iteration, warmup) {
     })()`);
     await sender.waitFor("document.querySelector('.msgpanel .attach-file')?.disabled === false", 'file selection enabled');
   }
+  if (opts.phases && kind !== 'text') {
+    await sender.evaluate(`window.__transferPhases.arm('sender', ${JSON.stringify(opts.phaseDelay ?? null)})`);
+    await receiver.evaluate("window.__transferPhases.arm('receiver')");
+  }
   const startAt = await sender.evaluate(kind === 'text' ? `(() => {
     const start = performance.timeOrigin + performance.now();
     document.querySelector('.msgpanel button.send').click(); return start;
@@ -101,9 +110,23 @@ async function oneSample(sender, receiver, kind, direction, iteration, warmup) {
   const observation = await receiver.evaluate('window.__transferBaseline.snapshot()');
   // Sender completion is an extra assertion, never a substitute for file hashes.
   if (kind !== 'text') await sender.waitFor("document.querySelector('#xfer-label-send')?.closest('.xfer').classList.contains('ok')", 'sender completion');
-  try { return checkedSample({ kind, direction, iteration, warmup, startAt, observation }); }
+  let phaseObservation;
+  try {
+    const sample = checkedSample({ kind, direction, iteration, warmup, startAt, observation });
+    if (opts.phases && kind !== 'text') {
+      phaseObservation = { sender: await sender.evaluate('window.__transferPhases.snapshot()'),
+        receiver: await receiver.evaluate('window.__transferPhases.snapshot()') };
+      sample.phases = checkedPhases(await sender.evaluate('window.__transferPhases.finish()'),
+        await receiver.evaluate('window.__transferPhases.finish()'), sample.bytes);
+      if (opts.phaseDelay) {
+        const row = sample.phases.sender[opts.phaseDelay.phase];
+        if (row.delayCalls !== 1 || row.delayElapsedMs < opts.phaseDelay.ms - 1) throw new Error('phase delay control not observed');
+      }
+    }
+    return sample;
+  }
   catch (error) {
-    report.failedSample = { kind, direction, iteration, warmup, startAt, observation };
+    report.failedSample = { kind, direction, iteration, warmup, startAt, observation, phaseObservation };
     throw error;
   }
 }
@@ -119,7 +142,8 @@ async function run() {
   const launched = await launchBrowser({ debugPort: 9476 });
   browser = launched.browser; closeBrowser = launched.close;
   report.provenance.browser = await browser.send('Browser.getVersion');
-  const common = VERIFY_ON + apiFixtureScript(CODE_ROOM_ROUTES) + `;(${installProbe.toString()})();`;
+  const common = VERIFY_ON + apiFixtureScript(CODE_ROOM_ROUTES) + `;(${installProbe.toString()})();`
+    + (opts.phases ? `;(${installPhaseProbe.toString()})();` : '');
   const room = `${preview.base}/cross-network#c=927461`;
   const a = await newTab(browser, room, common + codeRoomSignalingScript({ selfId: 'aaaa1111', name: 'Baseline A' }));
   const b = await newTab(browser, room, common + codeRoomSignalingScript({ selfId: 'bbbb2222', name: 'Baseline B' }));
@@ -145,6 +169,15 @@ async function run() {
   }
   if (a.errors.length || b.errors.length) throw new Error(`browser errors: ${[...a.errors, ...b.errors].join('; ')}`);
   report.summary = summarize(report.samples, opts.cases, opts.samples);
+  if (opts.phases) {
+    report.phaseSummary = {};
+    for (const kind of opts.cases.filter(k => k !== 'text')) for (const direction of ['A→B', 'B→A']) {
+      const rows = report.samples.filter(s => !s.warmup && s.kind === kind && s.direction === direction);
+      report.phaseSummary[`${kind}/${direction}`] = Object.fromEntries(['sender', 'receiver'].map(role => [role,
+        Object.fromEntries(['read', 'encrypt', 'decrypt'].map(phase => [phase,
+          distribution(rows.map(s => s.phases[role][phase].totalMs))]))]));
+    }
+  }
   report.status = 'PASS';
 }
 
@@ -161,7 +194,7 @@ try {
   try { if (closeBrowser) await closeBrowser(); } catch (error) { report.status = 'FAIL'; report.failure = `browser close: ${error.message}`; process.exitCode = 1; }
   try { if (preview) await preview.stop(); } catch (error) { report.status = 'FAIL'; report.failure = `preview close: ${error.message}`; process.exitCode = 1; }
   report.finishedAt = new Date().toISOString();
-  if (report.status !== 'PASS') report.summary = null;
+  if (report.status !== 'PASS') { report.summary = null; if (opts.phases) report.phaseSummary = null; }
   writeFileSync(opts.out, JSON.stringify(report, null, 2) + '\n', { flag: 'wx' });
   console.log(`${report.status}: ${opts.out}${report.failure ? ` (${report.failure})` : ''}`);
 }
