@@ -1,5 +1,24 @@
 # macOS App Store submission
 
+## macOS 1.4.9 (46) — internal TestFlight candidate preparation, 2026-10-16
+
+Candidate only; not yet uploaded or available. Version 1.4.8 (45) is already
+issued through direct download; the current TestFlight and public Mac App Store
+build is 1.4.7 (44), confirmed by the 2026-10-16 provider snapshot. All ten Mac
+marketing/build settings advance together to 1.4.9 / 46; iOS is unchanged.
+
+Since the 1.4.7 TestFlight source `5c308432d`, this candidate includes a bounded
+FIFO for queued incoming file frames, replacing repeated Array shifts while
+preserving frame order, byte limits and durable acknowledgements; an actionable
+Apple login-conflict message; and an accessibility identifier for upload status.
+The queue benchmark measures component CPU time, not overall transfer or WAN
+speed. Upload retries/status and the existing wire protocol remain unchanged.
+
+The owner requested internal TestFlight for hands-on testing, then manual public
+release. This task does not create or submit an App Store version, select a store
+build, submit external beta review, publish a direct release or update stable
+feeds. Public App Store 1.4.7 and direct 1.4.8 retain their identities.
+
 ## macOS 1.4.8 (45) — direct download published 2026-10-12
 
 **Published, 2026-10-12T15:17:00Z.** GitHub Release

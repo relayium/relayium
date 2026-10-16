@@ -70,14 +70,12 @@ final class BundleVersionTests: XCTestCase {
         // channels.) This assertion does not advance either channel's
         // published version.
         //
-        // 1.4.7 (44) is consumed too: App Store Connect reads build 44 VALID,
-        // in TestFlight and selected by the 1.4.7 App Store version awaiting
-        // review (root provider readback 2026-10-12), while the direct channel
-        // still publishes 1.4.6. The next candidate is 1.4.8 (45), prepared
-        // for the direct channel; it leaves the 1.4.7 review selection as it
-        // is and is not an App Store upload.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.8", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "45", occurrences: 10)
+        // The 2026-10-16 provider snapshot has TestFlight 1.4.7 (44)
+        // and public App Store 1.4.7. Direct 1.4.8 (45) is issued too.
+        // This distinct 1.4.9 (46) candidate goes only to internal TestFlight;
+        // public release follows the owner's testing and manual action.
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.9", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "46", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon
