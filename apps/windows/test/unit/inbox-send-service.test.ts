@@ -440,6 +440,198 @@ describe("fixture lifetime", () => {
   });
 });
 
+// Owned by cleanup too, so a failed assertion cannot strand shutdown on a hold.
+function admissionGate() {
+  let arrived!: () => void, release!: () => void;
+  const entered = new Promise<void>((resolve) => { arrived = resolve; });
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  cleanups.add(async () => { release(); });
+  return { entered, release, wait: async () => { arrived(); await held; } };
+}
+
+describe("pending admission shutdown", () => {
+  for (const mode of ["quiesce", "dispose"] as const) {
+    it(`${mode} joins credential-blocked admissions and fences new ones immediately`, async () => {
+      const gate = admissionGate();
+      let authorityCalls = 0, runtimeCalls = 0;
+      const runtime = (await realRuntimes()).inbox;
+      const h = await harness({
+        authority: async () => {
+          authorityCalls++;
+          await gate.wait();
+          return { kind: "ok", bearer: "controlled-bearer", epoch: 1 };
+        },
+        runtime: async () => { runtimeCalls++; return runtime; },
+      });
+      const input = { target: TARGET, kind: "file" as const, entries: [{ path: "a.bin", size: 8 }], document: 7 };
+      const starting = Array.from({ length: MAX_ACTIVE_INBOX_SENDS }, () => h.service.start(input));
+      await gate.entered;
+      expect(h.service.inventory().active).toBe(MAX_ACTIVE_INBOX_SENDS);
+      let stopped = false;
+      const stopping = (mode === "dispose"
+        ? Promise.all([h.service.dispose(), h.service.dispose()])
+        : h.service.quiesce()).then(() => { stopped = true; });
+      expect(await h.service.start(input)).toMatchObject({ ok: false, refusal: "unavailable" });
+      // Let immediate shutdown continuations run; the dependency is STILL held.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      gate.release();
+      const answers = await Promise.all(starting);
+      await stopping;
+      expect(answers).toHaveLength(MAX_ACTIVE_INBOX_SENDS);
+      for (const answer of answers) {
+        expect(answer).toMatchObject({ ok: false, refusal: "unavailable" });
+        expect(answer).not.toHaveProperty("contentKey");
+      }
+      expect(h.service.inventory().active).toBe(0);
+      expect(h.central.requests).toEqual([]);
+      expect(authorityCalls).toBe(1);
+      if (mode === "dispose") expect(runtimeCalls).toBe(0);
+      else {
+        // Quiescence is recoverable: Stay may reopen this same service.
+        h.service.resume();
+        const admitted = await h.service.start(input);
+        expect(admitted.ok).toBe(true);
+        if (admitted.ok) await h.service.cancel(admitted.jobId);
+      }
+    });
+
+    it(`${mode} stops a live producer before joining a manifest-blocked admission`, async () => {
+      const gate = admissionGate();
+      const { inbox: runtime, stored } = await realRuntimes();
+      let parkSeal = false, firstID = "", finished!: () => void;
+      let rejectedKey: Uint8Array | undefined;
+      const firstFinished = new Promise<void>((resolve) => { finished = resolve; });
+      const h = await harness({
+        runtime: async () => ({ ...runtime, importStoreKey: async (raw) => {
+          if (parkSeal) rejectedKey = raw;
+          return runtime.importStoreKey(raw);
+        }, sealManifestBytes: async (...args) => {
+          if (parkSeal) await gate.wait();
+          return runtime.sealManifestBytes(...args);
+        } }),
+        storedRuntime: async () => stored,
+        onOutcome: (job) => { if (job.id === firstID) finished(); },
+      });
+      const input = { target: TARGET, kind: "file" as const, entries: [{ path: "a.bin", size: 8 }], document: 7 };
+      const first = await h.service.start(input);
+      if (!first.ok) throw new Error("expected a job");
+      firstID = first.jobId;
+      parkSeal = true;
+      const starting = h.service.start(input);
+      await gate.entered;
+      let stopped = false;
+      const stopping = h.service[mode]().then(() => { stopped = true; });
+      // Semantic completion of the OTHER producer while the admission is held.
+      await firstFinished;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      gate.release();
+      const answer = await starting;
+      await stopping;
+      expect(answer).toMatchObject({ ok: false, refusal: "unavailable" });
+      expect(answer).not.toHaveProperty("contentKey");
+      expect(rejectedKey?.byteLength).toBe(runtime.constants.contentKeyBytes);
+      expect(rejectedKey?.every((byte) => byte === 0)).toBe(true);
+      expect(h.service.inventory().active).toBe(0);
+      expect(h.central.createCalls).toBe(0);
+    });
+  }
+
+  it("Stay during a pending drain permits the resumed send without stopping it later", async () => {
+    const gate = admissionGate();
+    const h = await harness({ authority: async () => {
+      await gate.wait();
+      return { kind: "ok", bearer: "controlled-bearer", epoch: 1 };
+    } });
+    const starting = h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+    await gate.entered;
+    const stopping = h.service.quiesce();
+    h.service.resume();
+    gate.release();
+    const admitted = await starting;
+    expect(admitted.ok).toBe(true);
+    expect((await stopping).active).toBe(1);
+    expect(h.service.inventory().active).toBe(1);
+    if (admitted.ok) await h.service.cancel(admitted.jobId);
+    expect(h.service.inventory().active).toBe(0);
+  });
+
+  it("dispose joins a cold target-list binding without rereading credentials", async () => {
+    const gate = admissionGate();
+    let authorityCalls = 0;
+    const h = await harness({ authority: async () => {
+      authorityCalls++;
+      await gate.wait();
+      return { kind: "ok", bearer: "controlled-bearer", epoch: 1 };
+    } });
+    const listing = h.service.targets();
+    await gate.entered;
+    let stopped = false;
+    const stopping = h.service.dispose().then(() => { stopped = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(false);
+    gate.release();
+    await expect(listing).resolves.toMatchObject({ ok: false, refusal: "unavailable" });
+    await stopping;
+    expect(authorityCalls).toBe(1);
+    expect(h.central.requests).toEqual([]);
+  });
+
+  for (const stage of ["runtime", "storedRuntime", "atRestKeyFor"] as const) {
+    it(`dispose cannot adopt a binding that was paused in ${stage}`, async () => {
+      const gate = admissionGate();
+      const base = await realRuntimes();
+      const calls: string[] = [];
+      let constantsRead = 0;
+      const runtime: InboxRuntime = { ...base.inbox, get constants() {
+        constantsRead++;
+        return base.inbox.constants;
+      } };
+      const heldKey = newAtRestKeyBytes();
+      const step = async (name: typeof stage) => {
+        calls.push(name);
+        if (name === stage) await gate.wait();
+      };
+      const h = await harness({
+        runtime: async () => { await step("runtime"); return runtime; },
+        storedRuntime: async () => { await step("storedRuntime"); return base.stored; },
+        atRestKeyFor: async () => { await step("atRestKeyFor"); return heldKey; },
+      });
+      const starting = h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+      await gate.entered;
+      let stopped = false;
+      const stopping = h.service.dispose().then(() => { stopped = true; });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      gate.release();
+      await expect(starting).resolves.toMatchObject({ ok: false, refusal: "unavailable" });
+      await stopping;
+      const stages = ["runtime", "storedRuntime", "atRestKeyFor"];
+      expect(calls).toEqual(stages.slice(0, stages.indexOf(stage) + 1));
+      // Constructing a coordinator reads these constants; it must never occur.
+      expect(constantsRead).toBe(0);
+      expect(h.service.inventory().active).toBe(0);
+    });
+  }
+
+  it("joins and releases reservations when the pending dependency rejects", async () => {
+    for (const mode of ["quiesce", "dispose"] as const) {
+      const gate = admissionGate(), failure = new Error("controlled credential failure");
+      const h = await harness({ authority: async () => { await gate.wait(); throw failure; } });
+      const starting = h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+      const rejected = expect(starting).rejects.toBe(failure);
+      await gate.entered;
+      const stopping = h.service[mode]();
+      gate.release();
+      await rejected;
+      await stopping;
+      expect(h.service.inventory().active).toBe(0);
+      expect(h.central.requests).toEqual([]);
+    }
+  });
+});
+
 describe("Inbox send: choosing a target", () => {
   it("lists the account's OTHER devices and never this one", async () => {
     const h = await harness();

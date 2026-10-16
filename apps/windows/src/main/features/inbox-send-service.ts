@@ -384,6 +384,8 @@ export class InboxSendService {
    * under concurrent starts.
    */
   #reservations = 0;
+  /** Completion only: bounded by the same admission cap, with no retained keys. */
+  readonly #admitting = new Set<Promise<void>>();
   #fenced = false;
   #disposed = false;
   /** Documents this service has already declared new to the coordinator. */
@@ -486,10 +488,10 @@ export class InboxSendService {
     for (const job of this.#jobs.values()) job.producer.stop();
     if (bound !== null) await bound.coordinator.quiesce();
     await this.settleRevoked();
-    // Retirements and converges are work this feature started; a drain that
-    // reported without joining them would be reporting an inventory it had not
-    // actually reached.
-    await Promise.allSettled([...this.#retiring, ...this.#converging.values()]);
+    // Admissions have no job yet, but still own work (and possibly a key).
+    // Join them AFTER asking existing producers to stop. Nothing below this
+    // wait stops a new producer if Stay resumes admissions while it is held.
+    await Promise.allSettled([...this.#retiring, ...this.#converging.values(), ...this.#admitting]);
     return this.inventory();
   }
 
@@ -507,6 +509,8 @@ export class InboxSendService {
       ...[...this.#jobs.values()].map((job) => job.delivery.done),
       ...this.#retiring,
       ...this.#converging.values(),
+      ...this.#admitting,
+      ...(this.#building === null ? [] : [this.#building]),
     ]);
     this.#jobs.clear();
     this.#settled.clear();
@@ -597,6 +601,7 @@ export class InboxSendService {
   async targets(): Promise<InboxSendTargets> {
     if (this.#disposed) return { ok: false, refusal: "unavailable" };
     const bound = await this.bind();
+    if (this.#disposed) return { ok: false, refusal: "unavailable" };
     if (bound === null) {
       const authority = await this.deps.authority();
       return { ok: false, refusal: authority.kind === "signed-out" ? "signed-out" : "unavailable" };
@@ -679,11 +684,16 @@ export class InboxSendService {
       return { ok: false, refusal: "at-capacity", code: "unresolved-full" };
     }
     this.#reservations += 1;
+    let finished!: () => void;
+    const completion = new Promise<void>((resolve) => { finished = resolve; });
+    this.#admitting.add(completion);
     try {
       return await this.admit(input);
     } finally {
       // Released whatever happened. A registered job counts itself from here.
       this.#reservations -= 1;
+      this.#admitting.delete(completion);
+      finished();
     }
   }
 
@@ -712,6 +722,7 @@ export class InboxSendService {
   }): Promise<InboxSendStart> {
     const epoch = this.deps.accountEpoch();
     const bound = await this.bind();
+    if (this.#disposed || this.#fenced) return { ok: false, refusal: "unavailable" };
     if (bound === null) {
       const authority = await this.deps.authority();
       return { ok: false, refusal: authority.kind === "signed-out" ? "signed-out" : "unavailable" };
@@ -720,7 +731,7 @@ export class InboxSendService {
     // binding speaks for, or the delivery would open under an account that
     // replaced the one the user was looking at. The document is re-checked for
     // the same reason: both can move while the credential is being read.
-    if (bound.epoch !== epoch || this.#disposed || this.#fenced) return { ok: false, refusal: "unavailable" };
+    if (bound.epoch !== epoch) return { ok: false, refusal: "unavailable" };
     if (input.document !== this.deps.currentDocument()) return { ok: false, refusal: "unavailable" };
 
     const descriptors = input.entries.map((entry) => ({ path: entry.path, size: entry.size }));
@@ -1144,12 +1155,14 @@ export class InboxSendService {
     const identity = this.deps.identity();
     if (identity === null) return null;
     const authority = await this.deps.authority();
-    if (authority.kind !== "ok") return null;
+    if (this.#disposed || authority.kind !== "ok") return null;
     if (authority.epoch !== identity.epoch || authority.epoch !== this.deps.accountEpoch()) return null;
     const runtime = await this.deps.runtime();
+    if (this.#disposed) return null;
     const stored = await (this.deps.storedRuntime ?? storedRuntime)();
+    if (this.#disposed) return null;
     const keyBytes = await this.deps.atRestKeyFor(identity.context);
-    if (keyBytes.byteLength !== AT_REST_KEY_BYTES) return null;
+    if (this.#disposed || keyBytes.byteLength !== AT_REST_KEY_BYTES) return null;
     // Re-checked after every await: a sign-out during any of them would leave
     // this building a coordinator around a bearer that is no longer the user's.
     if (this.deps.accountEpoch() !== authority.epoch) return null;
