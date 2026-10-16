@@ -79,18 +79,21 @@ first" and the difference is what decides whether anything is billed:
   the relay it would have used. So **there is no STUN-P2P rung for the browser**,
   and a cross-network browser transfer is a relayed transfer, metered when
   the relay reports billable usage.
-- **CLI:** in the **published CLI (v0.27.0)**, pairing-code
+- **CLI:** in the **published CLI (v0.27.1)**, pairing-code
   sessions — `send`/`receive`, `text` and `pair` — relay every byte through the
   same ciphertext-only TURN relay whenever the server issues one for the code,
   even on one LAN. Those relayed bytes count toward the monthly traffic
   allowance of the account that minted the code only when the relay that
   carries them reports them as billable usage: a Relayium fleet relay node
-  does (its heartbeat rows are stored `billable` — see below), while bytes
-  through Relayium's coturn TURN servers are billed by neither coturn path:
-  the legacy Redis worker is disabled, and the optional coturn metering
-  bridge ingest is off unless an operator configures it — if configured in
-  its default shadow mode, it records measurements and never bills (see
-  below). Routing through a relay is
+  does (its heartbeat rows are stored `billable` — see below), and configured billable Coturn accounting can also contribute accepted
+  usage after authentication and account attribution. The legacy Redis worker
+  is disabled. The optional replacement ingest is off unless configured,
+  defaults to shadow mode (measurements without billable ledger writes), and
+  requires explicit billable mode and an activation time for allowance
+  accounting. This release did not enable billing: both the preceding and
+  current deployed central process reported billable mode. That mode alone
+  does not prove that any particular allocation or every relayed byte was
+  accepted for accounting (see below). Routing through a relay is
   therefore not by itself proof that anything was billed, nor proof that
   nothing was. They go peer to peer (and are unmetered) only when
   no relay is issued. In CLI v0.26.0 and earlier the pairing-code modes are

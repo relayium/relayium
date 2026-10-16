@@ -1,9 +1,9 @@
-# CLI repair candidate (UNRELEASED engineering record)
+# CLI repair release record (v0.27.1)
 
-Status: source candidate on branch `work/cli-repair-author-20261013`, started
-from `961f1d51`. **Not released.** The published CLI (v0.27) does not have any
-of the behaviour below; public pages and the README must not describe these
-flags until a CLI release that contains them is published.
+Status: released on 2026-10-16 as [v0.27.1](https://github.com/relayium/relayium/releases/tag/v0.27.1),
+from commit `e46dc8e18945596abc72ed6a4a78a663006a41c6`. The central
+backend is deployed from the same commit. The release includes the repairs
+below; the deferred work remains deferred.
 
 ## What changed
 
@@ -19,6 +19,13 @@ flags until a CLI release that contains them is published.
 | `inbox status` | `--check` (0 ready / 3 not ready / 1 query failed) requires local enablement, usable directory, worker lock, readable keys, and server-side enrolment, not revoked, presence online, policy `auto`, directory ready, a supported protocol/capability and the active key held. `--json` prints one document on success and failure. |
 | `whoami`, `update --check` | `--json`; `update --json` without `--check` is refused. |
 | `up`/`down` input | `--max-downloads` < 0 refused before credentials/files/network; 0 means the server's default policy (not necessarily unlimited). `down -` reads the link from stdin (8 KiB, one line, not a terminal). Claim-parse errors never repeat the input. The `up` stderr hint no longer repeats the link. |
+
+The release also classifies a recorded upload as unknown once the HTTP
+transport has consumed its complete advertised body, even when the producer
+is still blocked in its final progress callback. A lost response or HTTP 502
+after commit keeps the recovery journal and key; a headers-only recovery
+returns the existing object without another upload or debit. The signed released v0.27.1 CLI was checked against a private central
+upgrade that preserved an object uploaded by the signed v0.27.0 CLI.
 
 ## Compatibility
 
@@ -40,7 +47,7 @@ flags until a CLI release that contains them is published.
   upload stopped part-way is not resumed.
 - Content checking reads every source file once per sync, and the receiver
   hashes same-size copies; large trees cost CPU/IO, not bandwidth.
-- Upload recovery is a JOINT client + origin repair, neither released: the
+- Upload recovery is a joint client + origin repair, released in v0.27.1 and the same deployed central commit: the
   CLI probe sends no byte and waits (bounded) past a proxy's early
   `100 Continue`; the origin (`account` answerUploadOperation) marks every
   answer it gives from a key `Connection: close`, so net/http does not first

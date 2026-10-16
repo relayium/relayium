@@ -13,7 +13,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "Sometimes the other machine isn't yours and you can't SSH into it — a file for a colleague in another office, a build for a client, an archive for a friend across the country. relayium send and receive move it between the two of you across networks, using nothing but a short pairing code that your CLI mints when you send.",
-    "The session is end-to-end encrypted. A short rendezvous on Relayium's server introduces the two ends; whenever the server issues a TURN relay for the code, the file bytes then travel through that relay as ciphertext it cannot read, and count toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage — the relay nodes Relayium operates do; its coturn TURN servers bill nothing today: their optional accounting ingest is off by default and, if configured in shadow mode, only records measurements.",
+    "The session is end-to-end encrypted. A short rendezvous on Relayium's server introduces the two ends; whenever the server issues a TURN relay for the code, the file bytes then travel through that relay as ciphertext it cannot read, and count toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage — the relay nodes Relayium operates do; its coturn TURN servers can also contribute accepted usage when configured for billable accounting, subject to authentication, attribution and accounting acceptance: their optional accounting ingest is off by default and, if configured in shadow mode, only records measurements.",
   ],
   sections: [
     {
@@ -82,7 +82,7 @@ path: relay (selected pair …)`,
     {
       heading: "Relay or peer to peer — and what it counts against",
       body: [
-        "The path line tells you which way the bytes went: relay, or direct / lan for peer to peer. Either way the file is end-to-end encrypted, and either way there is no per-transfer charge — relayed bytes that the relay reports as billable usage are usage accounting against the minting account's monthly traffic allowance; the relay nodes Relayium operates do, while Relayium's coturn TURN servers bill nothing today — their legacy usage ingest is disabled, and their optional accounting ingest is off by default and, if configured in shadow mode, records measurements without writing to the billing ledger, usage periods or any allowance.",
+        "The path line tells you which way the bytes went: relay, or direct / lan for peer to peer. Either way the file is end-to-end encrypted, and either way there is no per-transfer charge — relayed bytes that the relay reports as billable usage are usage accounting against the minting account's monthly traffic allowance; the relay nodes Relayium operates do, while Relayium's coturn TURN servers can also contribute accepted usage when configured for billable accounting, subject to authentication, attribution and accounting acceptance — their legacy usage ingest is disabled, and their optional accounting ingest is off by default and, if configured in shadow mode, records measurements without writing to the billing ledger, usage periods or any allowance.",
         cliDirectFacts.en,
         "If a transfer cannot connect, the reliable answers are a stored link from relayium up, relayium inbox send for a device of your own that is not online right now, or relayium serve with push / sync between two reachable servers you run — that path is direct and not metered.",
       ],
@@ -142,7 +142,7 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "Is the file uploaded anywhere?",
-        a: "It is not stored. The file streams between the two of you, end-to-end encrypted. A small rendezvous handshake on Relayium's server introduces the ends, and whenever the server issues a TURN relay for the code the file's bytes pass through that relay as ciphertext it cannot read — counted toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage (the relay nodes Relayium operates do; its coturn TURN servers bill nothing today: their optional accounting ingest is off by default and, if configured in shadow mode, only records measurements), and never kept.",
+        a: "It is not stored. The file streams between the two of you, end-to-end encrypted. A small rendezvous handshake on Relayium's server introduces the ends, and whenever the server issues a TURN relay for the code the file's bytes pass through that relay as ciphertext it cannot read — counted toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage (the relay nodes Relayium operates do; its coturn TURN servers can also contribute accepted usage when configured for billable accounting, subject to authentication, attribution and accounting acceptance: their optional accounting ingest is off by default and, if configured in shadow mode, only records measurements), and never kept.",
       },
       {
         q: "What if we can't connect?",
@@ -169,7 +169,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "有时候对方的机器不是你的，你也没法用 SSH 登录进去——给另一个办公室的同事发个文件，给客户发个构建产物，给国外的朋友发个压缩包。relayium send 和 receive 会跨网络把文件送到你们两个之间，靠的只是发送时 CLI 为你生成的一个简短配对码。",
-    "会话是端到端加密的。Relayium 服务器上的一次简短会合负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节随后就经这条中继以它读不了的密文传输；中继把它们上报为计费用量时，计入生成配对码那个账号的每月流量额度——Relayium 运营的中继节点会上报，其 coturn TURN 服务器目前不计费：可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值。",
+    "会话是端到端加密的。Relayium 服务器上的一次简短会合负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节随后就经这条中继以它读不了的密文传输；中继把它们上报为计费用量时，计入生成配对码那个账号的每月流量额度——Relayium 运营的中继节点会上报，其 coturn TURN 服务器配置为计费模式时，也可参与额度记账，但须通过认证、账号归属校验及记账接收：可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值。",
   ],
   sections: [
     {
@@ -238,7 +238,7 @@ path: relay (selected pair …)`,
     {
       heading: "走中继还是点对点——以及计入什么",
       body: [
-        "path 那一行会告诉你字节走的是哪条路：relay，或者表示点对点的 direct / lan。两种情况下文件都是端到端加密的，也都不按次收费——中继上报为计费用量的字节只是计入生成配对码那个账号每月流量额度的用量；Relayium 运营的中继节点会这样上报，而 Relayium 的 coturn TURN 服务器目前不计费——旧的用量采集已停用，可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值，不写入计费账本、用量周期或任何额度。",
+        "path 那一行会告诉你字节走的是哪条路：relay，或者表示点对点的 direct / lan。两种情况下文件都是端到端加密的，也都不按次收费——中继上报为计费用量的字节只是计入生成配对码那个账号每月流量额度的用量；Relayium 运营的中继节点会这样上报，而 Relayium 的 coturn TURN 服务器配置为计费模式时，也可参与额度记账，但须通过认证、账号归属校验及记账接收——旧的用量采集已停用，可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值，不写入计费账本、用量周期或任何额度。",
         cliDirectFacts.zh,
         "如果传输连不上，可靠的办法是用 relayium up 创建存储链接，用 relayium inbox send 发给你自己那台此刻不在线的设备，或者在你运行的两台可达服务器之间用 relayium serve 配合 push / sync——这条路径是直连的，不计量。",
       ],
@@ -298,7 +298,7 @@ Code: 483920   (valid 5 minutes)`,
       },
       {
         q: "文件会上传到什么地方吗？",
-        a: "不会被存储。文件在你们两个之间流式传输，端到端加密。Relayium 服务器上的一次很小的会合握手负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节就以它读不了的密文经这条中继传输——中继上报为计费用量时计入生成配对码那个账号的每月流量额度（Relayium 运营的中继节点会上报，其 coturn TURN 服务器目前不计费：可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值），而且从不留存。",
+        a: "不会被存储。文件在你们两个之间流式传输，端到端加密。Relayium 服务器上的一次很小的会合握手负责介绍双方；只要服务器为这个码签发了 TURN 中继，文件字节就以它读不了的密文经这条中继传输——中继上报为计费用量时计入生成配对码那个账号的每月流量额度（Relayium 运营的中继节点会上报，其 coturn TURN 服务器配置为计费模式时，也可参与额度记账，但须通过认证、账号归属校验及记账接收：可选的计量采集默认关闭，如果配置为影子模式，也只记录测量值），而且从不留存。",
       },
       {
         q: "如果连接不上怎么办？",

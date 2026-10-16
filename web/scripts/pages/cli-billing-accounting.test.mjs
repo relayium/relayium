@@ -1,36 +1,9 @@
-// web/scripts/pages/cli-billing-accounting.test.mjs — routing is not billing.
-//
-// A CLI pairing-code session (send / receive, text, pair) is relayed whenever
-// the server issues a TURN relay for the code. Whether those relayed bytes
-// then count toward the code owner's monthly traffic allowance is a separate
-// fact, decided by the relay that carried them:
-//
-//   - a Relayium fleet relay node reports its bytes over the node heartbeat,
-//     stored billable for fleet nodes (server/account/nodes.go) — they count;
-//   - coturn bills nothing today. Its legacy Redis ingest is disabled
-//     (server/main.go guardCoturnRedisMetering). Its re-keyed accounting ingest
-//     is OFF by default: the route exists only when -coturn-metering-relays is
-//     configured (server/main.go coturnMeteringRoute), and production does not
-//     configure it. IF it is configured, its default shadow mode records
-//     measurements but never writes the billable ledger, usage periods or any
-//     allowance (server/account/coturn_metering_store.go ApplyCoturnSnapshot).
-//     So the copy must never say the bridge runs, or that measurements are
-//     being recorded now — only what happens if it is configured.
-//
-// Until 2026-10-02 every maintained public surface said the opposite in one
-// sentence: every relayed byte counts. This file pins the conditional form on
-// the maintained (en, zh) copy that is actually exported and rendered — the
-// article documents' default exports, realtime-facts, the legal documents, the
-// /pricing and /cli shells and the i18n catalogues — and on the twelve
-// generated HTML files those sources produce. It also refuses the opposite
-// overclaim, that relaying is free: fleet relay nodes really do bill. The
-// coturn exception applies to browser and CLI sessions alike, so the generic
-// browser relay statements on the same pages are pinned billable-only too.
-//
-// It deliberately does not test the `currentEn` / `currentZh` objects at the
-// bottom of cli-getting-started.mjs and guides-receive-from-cli.mjs: neither
-// is exported, so no page renders them. The seven archived locales are frozen
-// translations and are out of scope here (archived-fact-errata.test.mjs).
+// Routing alone does not establish billable usage. Fleet accounting and
+// configured billable Coturn accounting can count accepted attributed usage.
+// The optional Coturn route remains off by default; configured shadow mode
+// records measurements without writing the billable ledger. Public copy must
+// neither promise all relays are free nor charge every relayed byte.
+// Maintained EN/ZH and generated surfaces are covered; seven archives stay frozen.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -96,17 +69,18 @@ const ALL_RELAY_FREE = [
 ];
 const allRelayFree = (text) => ALL_RELAY_FREE.filter((re) => re.test(text)).map(String);
 
-// Who reports billable usage, and the durable coturn state: bills nothing
-// today, optional ingest off by default, shadow only IF configured.
+// Who can report billable usage: accounting acceptance remains conditional.
 const WHO = {
-  en: { bills: /relay nodes? Relayium operates/, coturn: /coturn TURN servers bill nothing today/, qualifier: /if configured in shadow mode/i },
-  zh: { bills: /Relayium 运营的中继节点/, coturn: /coturn TURN 服务器目前不计费/, qualifier: /如果配置为影子模式/ },
+  en: { bills: /relay nodes? Relayium operates/, coturn: /coturn TURN servers can also contribute accepted usage when configured for billable accounting, subject to authentication, attribution and accounting acceptance/, qualifier: /if configured in shadow mode/i },
+  zh: { bills: /Relayium 运营的中继节点/, coturn: /coturn TURN 服务器配置为计费模式时，也可参与额度记账，但须通过认证、账号归属校验及记账接收/, qualifier: /如果配置为影子模式/ },
 };
 
 // The r1 state claims this batch retired: coturn "currently only measures",
 // the bridge "runs" in shadow mode, measurements "are" recorded. Production
-// runs no bridge ingest, so each is a false statement about the present.
+// is not established by a configured route alone; do not assert shadow-only accounting.
 const FALSE_CURRENT_STATE = [
+  /coturn TURN servers bill nothing today/i,
+  /coturn TURN 服务器目前不计费/,
   /currently only measure/i,
   /is currently only measured/i,
   /\bruns measure-only\b/i,
@@ -265,6 +239,10 @@ describe("generic browser relay statements on the same pages are billable-only",
     expect(enSec).not.toContain("We record the number of relayed bytes per account");
     expect(zhSec).toContain("我们按账号记录计费中继字节数");
     expect(zhSec).not.toContain("我们按账号记录中继字节数");
+    expect(enSec).not.toContain("only the byte count");
+    expect(enSec).toContain("we cannot inspect relayed plaintext");
+    expect(zhSec).not.toContain("只记录字节数");
+    expect(zhSec).toContain("我们无法检查中继的明文");
   });
 
   it("privacy attributes relayed bytes only when a relay reports billable usage", () => {
@@ -274,9 +252,19 @@ describe("generic browser relay statements on the same pages are billable-only",
     expect(enPriv).toContain("billable relayed-byte totals that relays report for pairing codes you created");
     expect(zhPriv).toContain("Relayium 运营的中继节点上报计费用量时");
     expect(zhPriv).toContain("计费中继字节总量");
-    // Retention is stated only for the configured case, never as current fact.
+    // Both modes retain per-allocation records; shadow alone never bills.
     expect(enPriv).toMatch(/If configured in shadow mode, that ingest records per-allocation measurements that are kept with the code creator's account/);
     expect(zhPriv).toMatch(/如果配置为影子模式，这项采集会记录按分配统计的测量值，随配对码创建端的账号保存/);
+    expect(enPriv).toContain("In both configured billable and shadow modes, account-linked per-allocation records");
+    expect(enPriv).toContain("These records remain while the account exists");
+    expect(enPriv).toContain("replay-denial tombstones");
+    expect(enPriv).toContain("monthly per-account totals alongside the per-allocation accounting records");
+    expect(enPriv).toContain("What is recorded includes byte volumes");
+    expect(zhPriv).toContain("同时保存上文说明的按分配计量记录");
+    expect(zhPriv).toContain("会记录的包括字节量");
+    expect(zhPriv).toContain("在已配置的计费模式和影子模式下");
+    expect(zhPriv).toContain("这些记录在账号存续期间保留");
+    expect(zhPriv).toContain("清除账号关联、用户名哈希、流量计数和时间戳");
   });
 });
 
@@ -298,6 +286,8 @@ describe("the checks themselves go red on the retired claims", () => {
 
   // r1's own wrong current-state wording, verbatim. Each must be caught.
   const R1_FALSE_STATE = [
+    "Relayium coturn TURN servers bill nothing today.",
+    "coturn TURN 服务器目前不计费。",
     "the relay nodes Relayium operates do, while Relayium's coturn TURN servers currently only measure relayed traffic and count none of it toward any allowance.",
     "optional coturn for the TURN relay (its Redis relay-byte ingest is currently disabled; its newer metering bridge runs measure-only in shadow mode).",
     "while traffic through Relayium's coturn TURN servers is currently only measured — those measurement records may be kept with the code creator's account, but they count toward no quota.",
