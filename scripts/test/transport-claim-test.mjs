@@ -159,7 +159,7 @@ function evaluate(w) {
   // 11-16. Each maintained public surface states the CONDITIONAL billing fact
   // in its own words. Without a positive anchor, deleting the topic would pass
   // the structural check below vacuously.
-  claim("billing-scope|readme-conditional", has(w.readme, "reports them as billable usage — the relay nodes Relayium operates do, while Relayium's coturn TURN servers bill nothing today"),
+  claim("billing-scope|readme-conditional", has(w.readme, "reports them as billable usage — the relay nodes Relayium operates do, while Relayium's coturn TURN servers can also contribute accepted usage when configured for billable accounting, subject to authentication, attribution and accounting acceptance"),
     "README no longer says relayed CLI bytes count only when the relay reports billable usage");
   claim("billing-scope|cli-page-en-conditional", has(w.en, "Those bytes count toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage: the relay nodes Relayium operates do"),
     "/cli's English send/receive note no longer states the conditional billing fact");
@@ -242,7 +242,7 @@ const MUTATIONS = {
   "cli-page|zh-mode-scoped": (w) => ({ ...w, zh: w.zh.replace("会原样使用旧的 CLI 对 CLI 配对：它需要一条直连路径，找不到时传输失败，而不是回落到中继", "CLI 需要一条直连路径，找不到时传输失败，而不是回落到中继") }),
   "billing|invariant-separate": (w) => ({ ...w, billing: w.billing.replace("no path lets relayium.com read a file", "relayium.com cannot meter a direct transfer") }),
   "all|no-retired-pledge": (w) => ({ ...w, readme: `${w.readme}\n\nthe CLI never relays file bytes\n` }),
-  "billing-scope|readme-conditional": (w) => ({ ...w, readme: w.readme.replace("reports them as billable usage — the relay nodes Relayium operates do, while Relayium's coturn TURN servers bill nothing today", "reports them as billable usage") }),
+  "billing-scope|readme-conditional": (w) => ({ ...w, readme: w.readme.replace("reports them as billable usage — the relay nodes Relayium operates do, while Relayium's coturn TURN servers can also contribute accepted usage when configured for billable accounting, subject to authentication, attribution and accounting acceptance", "reports them as billable usage") }),
   "billing-scope|cli-page-en-conditional": (w) => ({ ...w, en: w.en.replace("Those bytes count toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage: the relay nodes Relayium operates do", "Those bytes count toward the monthly traffic allowance of the account that minted the code when the relay reports them as billable usage") }),
   "billing-scope|cli-page-zh-conditional": (w) => ({ ...w, zh: w.zh.replace("中继把这些字节上报为计费用量时，它们才计入生成配对码那个账号的每月流量额度：Relayium 运营的中继节点会这样上报", "中继把这些字节上报为计费用量时，它们才计入生成配对码那个账号的每月流量额度") }),
   "billing-scope|facts-conditional": (w) => ({ ...w, facts: w.facts.replace("中继把这些字节上报为计费用量时", "中继把这些字节上报成计费用量时") }),

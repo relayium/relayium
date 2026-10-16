@@ -228,11 +228,12 @@ describe("llms.txt file and ephemeral text product facts", () => {
   // overclaims are wrong: "every relayed byte counts" and "relaying is free".
   it("makes CLI relay billing conditional, neither unconditional nor all-free", () => {
     assert.ok(llms.includes("count toward the code creator's monthly traffic allowance only when the relay reports them as billable usage"));
-    assert.ok(llms.includes("Relayium's fleet relay nodes do, while Relayium's coturn TURN servers bill nothing today"));
+    assert.ok(llms.includes("Relayium's fleet relay nodes do, while Relayium's coturn TURN servers can also contribute accepted usage when configured for billable accounting, subject to authentication, attribution and accounting acceptance"));
     assert.ok(llms.includes("Being relayed is not by itself being billed"));
-    assert.ok(llms.includes("billable relay usage comes from the fleet relay nodes"));
-    // coturn's accounting ingest is off by default (production configures no
-    // bridge route); shadow mode is only what happens IF it is configured.
+    assert.doesNotMatch(llms, /coturn TURN servers bill nothing today|billed by neither coturn path/);
+    assert.ok(llms.includes("billable relay usage can come from fleet relay nodes or configured billable coturn accounting after authentication, attribution and accounting acceptance"));
+    // The optional route is off by default; configured shadow mode writes no
+    // billable ledger. Explicit billable mode can accept attributed usage.
     assert.ok(llms.includes("its legacy Redis relay-byte ingest is disabled; its optional accounting ingest is off by default and, if configured in shadow mode, records measurements without billing anyone"));
     for (const re of [/currently only measure/i, /\bruns measure-only\b/i, /\b(bridge|ingest) (runs|is running|is active|is on)\b/i])
       assert.doesNotMatch(llms, re);
@@ -241,7 +242,7 @@ describe("llms.txt file and ephemeral text product facts", () => {
         assert.match(s, /if configured in shadow mode/i, `coturn measurement without the IF-configured qualifier: ${s}`);
     // The generic relay statements are billable-only too.
     assert.ok(llms.includes("Billable relay usage and hosted storage usage are counted against four separate plan limits"));
-    assert.ok(llms.includes("Billable cross-network relay bandwidth (fleet relay nodes report it; Relayium's coturn TURN servers bill nothing today)"));
+    assert.ok(llms.includes("Billable cross-network relay bandwidth (fleet relay nodes report it; Relayium's coturn TURN servers can also contribute accepted usage when configured for billable accounting, subject to authentication, attribution and accounting acceptance)"));
     assert.ok(!llms.includes("Hosted relay/storage usage is counted"));
     assert.ok(!llms.includes("Cross-network browser relay bandwidth and temporary hosted storage draw"));
     for (const clause of llms.split(/[.;](?=\s)/)) {
@@ -346,7 +347,7 @@ describe("llms.txt file and ephemeral text product facts", () => {
     assert.ok(r.includes(`**In the published CLI (${PUBLISHED_CLI})**, the other end may be a current \`relayium\``));
     assert.ok(r.includes(`**\`pair\` — a live two-way session (since CLI ${FIRST_LINK_CLI})**`));
     assert.ok(r.includes(`In CLI ${LAST_DIRECT_ONLY_CLI} and earlier, the CLI's **Device Inbox is the receive side only**`));
-    assert.ok(r.includes(`adds the sending side: \`relayium inbox send --to <device> <path...>\``));
+    assert.ok(r.includes(`includes the sending side: \`relayium inbox send --to <device> <path...>\``));
     assert.ok(r.includes(`SSH transport is **retired in the published CLI (${PUBLISHED_CLI})**`));
     // The installer relayium.com serves follows the website deployment, not the
     // CLI release, so its source-versus-served wording stays.

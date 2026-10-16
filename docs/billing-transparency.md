@@ -109,7 +109,7 @@ relayium.com can meter. Its **hosted** modes are the exception, and they are
   encrypted server-side storage a browser stored link uses, so they count
   toward monthly traffic — and `up`, being an upload, also against the storage
   cap and the daily upload quota. `relayium inbox send` in the published CLI
-  (v0.27.0) is hosted too: it queues ciphertext for a Device Inbox, metered as
+  (v0.27.1) is hosted too: it queues ciphertext for a Device Inbox, metered as
   any Device Inbox delivery is (see
   [How quotas are enforced](#how-quotas-are-enforced)).
 
@@ -578,7 +578,7 @@ do when you want a bigger one.
 The cross-network paths that consume no relay allowance at all are the CLI's
 **direct** modes — daemon-direct `push`/`sync`, and in CLI v0.26.0 and
 earlier also `send`/`receive`, `text` and `push`/`pull`/`sync` over your own
-SSH — which never ask for a relay. In the published CLI (v0.27.0), which
+SSH — which never ask for a relay. In the published CLI (v0.27.1), which
 retires the SSH transport, `send`/`receive`, `text` and `pair` do ask for one, and their relayed bytes
 follow the conditional rule above: billable only when the relay reports them
 as billable usage. `relayium up` and
