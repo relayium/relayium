@@ -184,13 +184,35 @@ func TestUploadUnusableConfirmationAfterCentralCommittedIsUnknown(t *testing.T) 
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fc := newFaultCentral(t)
-			gw := gatewayTo(t, fc.env.TS.URL, tc.modify)
+			originAnswered := make(chan struct{})
+			gw := gatewayTo(t, fc.env.TS.URL, func(r *http.Response) error {
+				close(originAnswered)
+				return tc.modify(r)
+			})
 			c := fc.client(gw.URL)
 			var h hookWatch
 			h.install(c)
-			id, err := h.upload(c, context.Background(), writeFaultFile(t, 1<<20))
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			confirming := c.Confirming
+			c.Confirming = func() {
+				confirming()
+				// Establish this test's post-commit premise before starting its
+				// synthetic 300ms confirmation timer. Body exposure alone does
+				// not prove commit; slow fsync can still be in flight then.
+				select {
+				case <-originAnswered:
+				case <-ctx.Done():
+				}
+			}
+			id, err := h.upload(c, ctx, writeFaultFile(t, 1<<20))
 			if err == nil {
 				t.Fatalf("Upload succeeded with id %q from an unusable confirmation", id)
+			}
+			select {
+			case <-originAnswered:
+			default:
+				t.Fatalf("origin never answered; post-commit malformed-response premise was not reached: %v", err)
 			}
 			fc.assertOneCommittedUpload(t)
 			assertUnknownOutcome(t, err)
@@ -200,9 +222,32 @@ func TestUploadUnusableConfirmationAfterCentralCommittedIsUnknown(t *testing.T) 
 
 	t.Run("control: the unmodified answer through the same gateway", func(t *testing.T) {
 		fc := newFaultCentral(t)
-		gw := gatewayTo(t, fc.env.TS.URL, nil)
+		originAnswered := make(chan struct{})
+		gw := gatewayTo(t, fc.env.TS.URL, func(*http.Response) error {
+			close(originAnswered)
+			return nil
+		})
 		c := fc.client(gw.URL)
-		id, _, _, err := c.Upload(context.Background(), []string{writeFaultFile(t, 1<<20)}, UploadOpts{})
+		var h hookWatch
+		h.install(c)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		confirming := c.Confirming
+		c.Confirming = func() {
+			confirming()
+			// The control checks parsing a real successful confirmation, not
+			// whether real SQLite/fsync fits the fault fixture's 300ms clock.
+			select {
+			case <-originAnswered:
+			case <-ctx.Done():
+			}
+		}
+		id, err := h.upload(c, ctx, writeFaultFile(t, 1<<20))
+		select {
+		case <-originAnswered:
+		default:
+			t.Fatalf("origin never answered the healthy control: %v", err)
+		}
 		if err != nil {
 			t.Fatalf("upload through the gateway: %v", err)
 		}
@@ -211,6 +256,7 @@ func TestUploadUnusableConfirmationAfterCentralCommittedIsUnknown(t *testing.T) 
 		if id != fs[0].ID {
 			t.Fatalf("id = %q, central stored %q", id, fs[0].ID)
 		}
+		h.assertQuiescent(t)
 	})
 }
 
