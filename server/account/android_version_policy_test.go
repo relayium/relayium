@@ -34,8 +34,8 @@ func TestAndroidClientPolicyIsAnonymousAdvisoryAndInert(t *testing.T) {
 		t.Fatalf("body = %v", body)
 	}
 	for field, want := range map[string]any{
-		"policyRevision": float64(2), "recommendedVersion": "0.3.1",
-		"recommendedBuild": float64(10), "channel": "direct",
+		"policyRevision": float64(3), "recommendedVersion": "0.3.2",
+		"recommendedBuild": float64(11), "channel": "direct",
 	} {
 		if android[field] != want {
 			t.Errorf("%s = %v, want %v", field, android[field], want)

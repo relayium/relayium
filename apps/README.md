@@ -18,9 +18,8 @@ macOS **1.4.10** is published through the direct-download channel. It is build
 `47`, GitHub Release `macos-v1.4.10`, published on 2026-10-17. The separately
 versioned Mac App Store channel is public at [1.4.7](https://apps.apple.com/app/id6801142976), released
 by Apple on 2026-10-12 with build `1.4.7 (44)`, which is recorded separately
-from the direct release, from its own source. Android **0.3.1 (10)** was
-published on 2026-10-12 as a public preview APK (GitHub Release
-`android-v0.3.1`). iOS has no public release: **0.5.1 (12)** has been in
+from the direct release, from its own source. Android **0.3.2 (11)** uses the public preview APK channel
+(`android-v0.3.2`), signed on 2026-10-17 from `d2266e27d`. iOS has no public release: **0.5.1 (12)** has been in
 internal TestFlight testing since 2026-10-12, and **0.5.0 (11)** remains in the
 internal and external testing groups (per the 2026-10-12 provider read-back). The website and Sparkle feed have their own deployment and public verification;
 the public URLs determine the version currently offered.
@@ -53,8 +52,8 @@ the public URLs determine the version currently offered.
   six already-Approved `com.relayium.mac.*` subscription products instead of a
   catalogue of its own.
 - `android/` — native Android client (`com.relayium.android`), Kotlin + Jetpack
-  Compose over a pure-JVM `:protocol` module. **Public preview at 0.3.1
-  (versionCode 10)**, published as GitHub Release `android-v0.3.1`; direct APK only,
+  Compose over a pure-JVM `:protocol` module. **Public preview at 0.3.2
+  (versionCode 11)**, GitHub Release inputs `android-v0.3.2`; direct APK only,
   no Google Play, no Play Services, no Play Billing. Five destinations — Transfer, Nearby, Inbox, Cloud, Account: it mints
   a six-digit code or `/cross-network#c=` link as well as joining one, finds
   devices with no code at all, receives Device Inbox deliveries into app-private
