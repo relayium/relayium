@@ -294,6 +294,9 @@ type Service struct {
 	pairJoins pairJoinQueue
 	// uploadSem caps concurrent in-flight POST /api/files per account (M1).
 	uploadSem *uploadSem
+	// Only a negotiated share upload may hold one unread successor request.
+	uploadPipeline            uploadPipelineWaiters
+	uploadPipelineWaitTimeout time.Duration // zero selects the production bound
 	// diskUsage reads the blob volume's current usage; nil disables the global
 	// disk soft cap (M3b). blobDiskMax<=0 also disables it even if diskUsage is set.
 	diskUsage   func() (used, total uint64, err error)

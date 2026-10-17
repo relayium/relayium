@@ -18,6 +18,7 @@ import {
 } from "./store-crypto";
 import { DOWNLOAD_PREFIX } from "./transfer-link";
 import { UploadFrameAhead, UPLOAD_AHEAD_BYTES } from "./upload-frame-ahead";
+import { uploadPipeline, UPLOAD_PIPELINE_V1, UPLOAD_PIPELINE_WAIT_MS } from "./upload-pipeline";
 import {
   emptyStats,
   legacySliceMax,
@@ -589,13 +590,15 @@ async function chunkedUpload(
   // the server's is used: a pair room keeps 1 MiB, an ordinary upload 8 MiB.
   const sliceMax = legacySliceMax(init.chunkSize);
   const pairRoom = isPairRoom(opts);
+  const usePipeline = init.uploadPipeline === UPLOAD_PIPELINE_V1 && !pairRoom &&
+    (opts.purpose ?? "share") === "share" && typeof XMLHttpRequest !== "undefined" && currentSpeedPref().mode === "fast";
 
   // 打包缓冲：贪婪填到 >= 本次切片大小就发。容量留出一整帧的余量，因为最后一帧可能
   // 跨过切片的界 —— 上传块边界不需要对齐帧边界，服务端看到的只是不透明
   // 字节流。pending[0, filled) 同时也是**重放缓冲**：它必须保留到服务端确认为止，
   // 因为服务端会提交部分块，重发的起点可能落在块内部。缩小的重试只是从这同一段
   // 已产出的密文里切更短的一片，绝不重新加密。
-  const pending = new Uint8Array(sliceMax + STORE_CHUNK_SIZE + FRAME_OVERHEAD);
+  let pending: Uint8Array = new Uint8Array(sliceMax + STORE_CHUNK_SIZE + FRAME_OVERHEAD);
   let filled = 0; // 已加密未确认的字节数
   let chunkStart = 0; // pending[0] 对应的全局偏移
   let offset = 0; // 服务端已确认的偏移
@@ -641,11 +644,68 @@ async function chunkedUpload(
   // Small server packing targets (normally pair-room uploads) benefit from
   // overlap. Large-body Chrome controls regressed with speculative encryption:
   // retain their original pull path until that behavior is understood.
-  const ahead = sliceMax <= UPLOAD_AHEAD_BYTES ? new UploadFrameAhead(source, signal) : undefined;
-  const gen = ahead ?? source;
+  const ahead = !usePipeline && sliceMax <= UPLOAD_AHEAD_BYTES ? new UploadFrameAhead(source, signal) : undefined;
+  let gen: Pick<AsyncIterableIterator<Uint8Array>, "next"> = ahead ?? source;
+  let replaySource: AsyncIterableIterator<Uint8Array> | undefined;
+  let skipPipelineReplay: ((bytes: number) => boolean) | undefined;
   try {
     onProgress?.({ phase: "uploading", sent: 0, total: cipherSize });
     confirmed.record(t0, 0);
+    if (usePipeline) {
+      const cuts: { start: number; length: number; ms: number }[] = [];
+      const piped = await uploadPipeline({
+        source, buffer: pending, target: sliceMax, total: cipherSize, signal,
+        enabled: () => currentSpeedPref().mode === "fast",
+        prepared: (ms) => { stats.prepareMs += ms; },
+        confirmed: (received) => {
+          offset = received; stats.committedBytes = received;
+          confirmed.record(mono(), received);
+          onProgress?.({ phase: "uploading", sent: received, total: cipherSize, ...rateFields() });
+        },
+        send: async (bytes, start, ownedSignal, bodySent) => {
+          if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+          if (!onWire) {
+            onWire = true; stage.wire = true;
+            onProgress?.({ phase: "uploading", sent: offset, total: cipherSize, onWire: true });
+          }
+          highestSent = noteAttempt(stats, highestSent, start, start + bytes.length);
+          const baseBudget = ctl.watchdogMs(bytes.length, { pairRoom: false, stalls: 0 });
+          // Only a future offset includes the negotiated bounded queue wait.
+          const budget = baseBudget !== undefined && start > offset ? baseBudget + UPLOAD_PIPELINE_WAIT_MS : baseBudget;
+          const began = mono();
+          const answer = await sendPipelineSlice(uploadId, bytes, start, cipherSize, ownedSignal, budget, bodySent, noteDeadline);
+          const elapsed = mono() - began; stats.requestMs += elapsed;
+          if (answer.kind === "answer") ctl.onAnswered(Math.max(0, Math.min(bytes.length, answer.received - start)), elapsed);
+          else {
+            lastStatus = answer.status;
+            if (answer.cut) { stats.watchdogCuts++; cuts.push({ start, length: bytes.length, ms: elapsed }); }
+          }
+          return answer;
+        },
+        recover: async (floor) => {
+          const began = mono();
+          let received = await resyncOffset(uploadId, floor, floor, signal, noteDeadline);
+          if (received < floor) received = await resyncOffset(uploadId, floor, received, signal, noteDeadline, true);
+          stats.recoveryMs += mono() - began;
+          return received;
+        },
+      });
+      bufferPeak = Math.max(bufferPeak, piped.bufferPeak);
+      offset = chunkStart = piped.offset;
+      highestSent = Math.max(highestSent, piped.highestSent);
+      pending = piped.buffer; filled = piped.filled;
+      for (const cut of cuts) ctl.onCollapse(Math.max(0, Math.min(cut.length, offset - cut.start)), cut.length, cut.ms);
+      if (!piped.completed) {
+        gen = replaySource = piped.source;
+        skipPipelineReplay = piped.skipReplay;
+        retryEnd = offset < highestSent ? highestSent : undefined;
+        faults = offset === 0 ? 1 : 0;
+        if (retryEnd !== undefined) {
+          const began = mono(); await abortableSleep(uploadBackoff(Math.max(1, faults)), signal);
+          stats.recoveryMs += mono() - began;
+        }
+      }
+    }
     while (offset < cipherSize) {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
       const pref = currentSpeedPref();
@@ -740,18 +800,21 @@ async function chunkedUpload(
       const consumed = received - chunkStart;
       // 服务端偏移跑到我们根本还没产出的字节之后：无法再对齐流位置，继续发只会写出一份
       // 错位的密文。
-      if (consumed > filled) throw new UploadError(0);
+      if (consumed > filled && !skipPipelineReplay?.(consumed - filled)) throw new UploadError(0);
 
-      if (answer.kind === "answer") ctl.onAnswered(consumed, reqMs);
+      // A late ACK covering a retained successor is progress from an older
+      // flight, not evidence that this short retry transferred it instantly.
+      if (answer.kind === "answer") ctl.onAnswered(skipPipelineReplay && received > sliceEnd ? 0 : consumed, reqMs);
       else if (answer.cut) ctl.onCollapse(consumed, sliceLen, reqMs);
 
       if (consumed > 0) {
         faults = 0;
-        if (consumed < filled) {
+        const fromPending = Math.min(consumed, filled);
+        if (fromPending < filled) {
           // 部分提交：把没被确认的尾巴挪到缓冲区开头，下一轮从这里接着发。
-          pending.copyWithin(0, consumed, filled);
+          pending.copyWithin(0, fromPending, filled);
         }
-        filled -= consumed;
+        filled -= fromPending;
         chunkStart = received;
         offset = received;
         stats.committedBytes = offset;
@@ -798,6 +861,7 @@ async function chunkedUpload(
     if (!(await gen.next()).done) throw new UploadError(0);
   } finally {
     // 抛错/取消路径上终止生成器，不留悬挂的加密工作。
+    await replaySource?.return?.().catch(() => {});
     await (ahead ? ahead.close() : source.return(undefined)).catch(() => {});
     lastUploadStats = { ...stats };
   }
@@ -1045,6 +1109,59 @@ async function sendSlice(
     if (timer !== undefined) clearTimeout(timer);
     signal?.removeEventListener("abort", onUserAbort);
   }
+}
+
+/** One negotiated request. XHR exposes the actual body-sent event; fetch
+ * cannot tell the scheduler when it can overlap the next request safely. */
+function sendPipelineSlice(
+  uploadId: string, slice: Uint8Array, start: number, total: number,
+  signal: AbortSignal, budgetMs: number | undefined, bodySent: () => void,
+  note?: (expiresAt?: number, date?: string | null) => void,
+): Promise<SliceOutcome> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new DOMException("aborted", "AbortError")); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.open("PATCH", `/api/uploads/${uploadId}`);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("Content-Range", `bytes ${start}-${start + slice.length - 1}/${total}`);
+    xhr.setRequestHeader("X-Relayium-Upload-Pipeline", UPLOAD_PIPELINE_V1);
+    let wasCut = false, sent = false;
+    const didSend = () => { if (!sent) { sent = true; bodySent(); } };
+    const abort = () => xhr.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    const timer = budgetMs !== undefined ? setTimeout(() => { wasCut = true; xhr.abort(); }, budgetMs) : undefined;
+    const cleanup = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
+    };
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && e.loaded >= slice.length) didSend(); };
+    xhr.upload.onload = didSend;
+    xhr.onreadystatechange = () => { if (xhr.readyState >= 2 && timer !== undefined) clearTimeout(timer); };
+    xhr.onload = () => {
+      cleanup();
+      if (xhr.status !== 409 && (xhr.status < 200 || xhr.status >= 300)) {
+        if (transientStatus(xhr.status)) resolve({ kind: "fault", cut: false, status: xhr.status });
+        else reject(new UploadError(xhr.status));
+        return;
+      }
+      let body: { received?: unknown; expiresAt?: number };
+      try { body = JSON.parse(xhr.responseText); }
+      catch { resolve({ kind: "fault", cut: false, status: 0 }); return; }
+      try {
+        const received = checkedOffset(body.received);
+        note?.(body.expiresAt, xhr.getResponseHeader("Date"));
+        resolve({ kind: "answer", received });
+      } catch (error) { reject(error); }
+    };
+    xhr.onerror = () => { cleanup(); resolve({ kind: "fault", cut: false, status: 0 }); };
+    xhr.onabort = () => {
+      cleanup();
+      if (signal.aborted) reject(new DOMException("aborted", "AbortError"));
+      else resolve({ kind: "fault", cut: wasCut, status: 0 });
+    };
+    try { xhr.send(slice as Uint8Array<ArrayBuffer>); }
+    catch { cleanup(); resolve({ kind: "fault", cut: false, status: 0 }); }
+  });
 }
 
 /** Re-reads allowed while an offset is BEHIND bytes already confirmed. */
