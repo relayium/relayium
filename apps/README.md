@@ -11,8 +11,8 @@ follows owner testing and manual action. No App Store version or review was
 created or submitted, and existing store selections remain unchanged. The issued
 public channels below retain their versions.
 
-macOS **1.4.8** is published through the direct-download channel. It is build
-`45`, GitHub Release `macos-v1.4.8`, published on 2026-10-12. The separately
+macOS **1.4.10** is published through the direct-download channel. It is build
+`45`, GitHub Release `macos-v1.4.10`, published on 2026-10-12. The separately
 versioned Mac App Store channel is public at [1.4.7](https://apps.apple.com/app/id6801142976), released
 by Apple on 2026-10-12 with build `1.4.7 (44)`, which is recorded separately
 from the direct release, from its own source. Android **0.3.1 (10)** was
@@ -35,7 +35,7 @@ authoritative and may still be the previous releases.
   (`SharedLocalizationExport.swift`), so `import RelayiumAppKit` still sees
   `L10n` and nothing at any call site changed.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit
-  package. Released publicly as **1.4.8** (GitHub Release `macos-v1.4.8`).
+  package. Released publicly as **1.4.10** (GitHub Release `macos-v1.4.10`).
 - `mac/RelayiumShare/` — the macOS Share Extension (`com.relayium.mac.Share`),
   embedded in the app at `Contents/PlugIns/RelayiumShare.appex`. Links
   `RelayiumShareKit` only, exactly as the iOS one does, and shares its model —
@@ -43,7 +43,7 @@ authoritative and may still be the previous releases.
   authorize `group.com.relayium.shared` and the team-prefixed wildcard and never
   `group.com.relayium.app`, and Apple documents the macOS form of an App Group
   as `<team>.<group>`, so `AppGroup.identifier` resolves per platform. It ships
-  inside the released 1.4.8 app. The system Share menu is verified to list it; a
+  inside the released 1.4.10 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
   development at 0.5.1 and not public.** The bundle id is macOS's on purpose:
@@ -155,11 +155,11 @@ operational requirement in `docs/CI-PLATFORM-BOUNDARY.md`.
 package. Views live in the app target; all logic worth testing lives in the
 `RelayiumAppKit` target inside that package and is covered by `swift test`.
 
-**Status: released as 1.4.8.** The owner requested this 1.4.8 release, the
+**Status: released as 1.4.10.** The owner requested this 1.4.10 release, the
 recorded decision in `apps/mac/release-readiness.json` remains approved
 (`"approved": true`), and the GitHub release workflow published the notarized
 build as GitHub Release
-[`macos-v1.4.8`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.8):
+[`macos-v1.4.10`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.10):
 a Developer ID-signed, Apple-notarized and stapled `Relayium.dmg` with its
 SHA-256 alongside. Public releases before the 1.4 series are universal; from the 1.4
 series on, every macOS build — Developer ID, Sparkle update, TestFlight, Mac App
@@ -176,7 +176,7 @@ from rewriting it. Its StoreKit build excludes Sparkle. See "Delivery status" in
 the root [`README.md`](../README.md) for what this release does and does not
 include.
 
-**Two macOS channels, and which one this is.** `1.4.8` is the Developer
+**Two macOS channels, and which one this is.** `1.4.10` is the Developer
 ID/GitHub download above. Internal TestFlight builds are separately recorded in
 the submission record below; a direct-download release does not establish that
 the same version is available in TestFlight, and a shared version number never
