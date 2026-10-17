@@ -146,7 +146,8 @@ CREATE TABLE IF NOT EXISTS devices (
   last_ip      TEXT NOT NULL DEFAULT '',
   last_ip_observed_at INTEGER NOT NULL DEFAULT 0,
   -- Client-generated installation lookup hint (43-char RawURLEncoding of 32
-  -- random bytes). '' for every browser row, every CLI and every pre-1.1.3 app.
+  -- random bytes) for apps; 'cli.' plus that encoding for capable CLI clients.
+  -- '' for browser rows and clients that do not supply a validated hint.
   -- Never a credential and never returned by an API: see Device.InstallID and
   -- the partial unique index created by migrateInstallID.
   install_id   TEXT NOT NULL DEFAULT ''
@@ -9561,10 +9562,9 @@ func (s *SQLiteStore) ApproveAndRegisterDeviceAuth(ctx context.Context, userCode
 		name = devicelabel.Fallback
 	}
 	kind := "cli"
-	if approved.InstallID != "" {
-		// Only the native app owns an installation identity. Bodyless and legacy
-		// device-code clients remain CLI; a current Mac must not be presented to
-		// its owner as "Command line" merely because login is browser-delegated.
+	if approved.InstallID != "" && !strings.HasPrefix(approved.InstallID, "cli.") {
+		// Native identifiers keep their existing spelling. CLI hints are
+		// validated at admission and namespaced separately before persistence.
 		kind = "app"
 	}
 	tokenHash := authx.HashToken(rawToken)

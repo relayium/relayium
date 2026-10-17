@@ -274,9 +274,11 @@ browser, and the credential is stored in --config-dir. Needs network access to
 the server.
 
 A machine that already holds a credential (in --config-dir) is refused before
-anything is sent: logging in again would register a new device, leave the old
-credential live, stop Device Inbox receiving enabled here and strand unfinished
-"inbox send" retries. Run "relayium logout" first to switch account or server.
+anything is sent. Run "relayium logout" first to switch account or server.
+On capable servers, an approved login with the same installation identity and
+account reuses the device row and rotates its bearer. The identity survives
+logout; a separate --config-dir represents a separate installation. Legacy
+servers may register a new device; the CLI warns when support is absent.
 
 An account is required only for the hosted and account-bound features: minting a
 pairing code for "send"/"text", "relayium up", and the Device Inbox. It grants
@@ -328,6 +330,17 @@ usage:
   relayium up <path...> [--burn] [--ttl D] [--max-downloads N] [--json] [--config-dir D]
   relayium up --recover <operation> [--json] [--config-dir D]
   relayium up --pending [--json] [--config-dir D]
+  relayium up <path...> --resumable [--burn] [--ttl D] [--max-downloads N] [--json] [--config-dir D]
+  relayium up --resume <operation> [--json] [--config-dir D]
+  relayium up --discard <operation> [--json] [--config-dir D]
+
+--resumable encrypts once into a private local ciphertext copy before uploading.
+It requires disk space for the complete encrypted transfer. --resume sends only
+bytes beyond the server's durable offset from that same copy and session; source
+files are never reread or re-encrypted after restart. --pending lists the records.
+A lost/reaped session is kept for inspection, never silently replaced. --discard
+removes local state only; it does not cancel a remote object or refund traffic.
+Interrupted requests can already have consumed traffic; no zero-replay guarantee.
 
 Files are encrypted on this machine and only the ciphertext is uploaded; the
 printed link carries the key in its "#k=" fragment, which a browser never sends
@@ -365,7 +378,7 @@ flags:
 
 The link goes to stdout, so "relayium up f | pbcopy" copies only the link.
 
-When the answer is lost: before sending, each upload is recorded privately in
+For default uploads, when the answer is lost: each upload is recorded privately in
 --config-dir (the record holds the link's key, like the credential beside it).
 If the whole upload was sent but no usable answer came back — a gateway error,
 a dropped connection, an unreadable confirmation — the server may have stored
@@ -379,11 +392,14 @@ stays unknown, the record is kept, and nothing is uploaded. Recovery waits
 at most 30 seconds for an answer; a server that predates upload recovery
 never confirms one.
 Recovery is refused for another account or server. "up --pending" lists the
-recorded operations (never their keys). An upload stopped part-way is not
-resumed: run "up" again, which uploads and counts a new copy.
+recorded operations (never their keys). Default uploads stopped part-way cannot
+resume bytes. Choose --resumable before starting to retain an encrypted local
+copy, then --resume <id> after interruption. Resuming never rereads the sources
+or silently replaces a missing session.
 
 exit status: 0 uploaded (or recovered); 1 failed, or recovery found it gone;
-2 usage; 3 outcome unknown — the operation is kept for "--recover".
+2 usage; 3 outcome unknown or resumable upload stopped — the operation is kept
+for --recover (default uploads) or --resume (resumable uploads).
 
   --json         print one JSON document: {"status", "link", "id",
                  "expiresAt", "operation"} when uploaded, or {"status",

@@ -72,11 +72,22 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 		// for exactly the same reason device_name is: every shipped CLI and
 		// every pre-1.1.3 app posts without it.
 		InstallID string `json:"install_id"`
+		// Separate wire field and lookup namespace preserve native classification.
+		CLIInstallID string `json:"cli_install_id"`
 	}
 	if err := httpx.DecodeJSONBody(w, r, &in); err != nil && !errors.Is(err, io.EOF) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if in.InstallID != "" && in.CLIInstallID != "" {
+		http.Error(w, "ambiguous installation identity", http.StatusBadRequest)
+		return
+	}
+	hint := validatedInstallID(in.InstallID)
+	if cli := validatedInstallID(in.CLIInstallID); cli != "" {
+		hint = "cli." + cli
+	}
+
 	now := s.now().Unix()
 	deviceCode := authx.RandToken()
 	userCode := genUserCode()
@@ -103,18 +114,19 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 		// fresh device row — the pre-1.1.3 behaviour — which is the fail-closed
 		// direction: it never matches a row, it is never persisted, and no
 		// non-canonical spelling can become a second name for one installation.
-		InstallID: validatedInstallID(in.InstallID),
+		InstallID: hint,
 	}
 	if err := s.store.CreateDeviceAuth(r.Context(), req); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"user_code":        userCode,
-		"device_code":      deviceCode,
-		"verification_uri": s.cfg.BaseURL + "/device",
-		"interval":         devicePollInterval,
-		"expires_in":       int(deviceCodeTTL.Seconds()),
+		"user_code":            userCode,
+		"device_code":          deviceCode,
+		"verification_uri":     s.cfg.BaseURL + "/device",
+		"interval":             devicePollInterval,
+		"expires_in":           int(deviceCodeTTL.Seconds()),
+		"cli_install_identity": true,
 	})
 }
 

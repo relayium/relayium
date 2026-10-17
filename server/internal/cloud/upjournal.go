@@ -19,7 +19,7 @@ import (
 
 // Durable upload operations.
 //
-// `relayium up` is a single POST whose answer can be lost after the server has
+// Default `relayium up` is a single POST whose answer can be lost after the server has
 // stored the upload (a gateway error, a dropped connection, a confirmation that
 // cannot be read). The link is made of the server's id and a key that exists
 // only on this machine, so a lost answer used to mean an upload that counts
@@ -30,14 +30,21 @@ import (
 // parameters and body length, and the server and account it belongs to. When
 // the outcome is unknown, `relayium up --recover <id>` asks the server about
 // that same key WITHOUT sending a body again (RecoverUpload), and rebuilds the
-// link from the server's id and the recorded key. Nothing is ever encrypted or
-// uploaded a second time from a record.
+// link from the server's id and the recorded key. This version-1 recovery never
+// encrypts or uploads a body again.
+//
+// Opt-in version 2 keeps one encrypted local copy and a resumable session.
+// `--resume` validates that copy and continues beyond the server's durable
+// offset, retaining the original key and ciphertext. Sources are never reread
+// or re-encrypted after restart; interrupted requests can replay wire bytes.
 //
 // The record holds a secret (the content key), so it lives beside the
 // credential in the private configuration directory, owner-only, written
 // atomically, and is never printed. It is deleted when the outcome is known:
 // the link was printed, the server proved the object gone, or the request
-// definitely failed before the server could have stored anything.
+// definitely failed before the server could have stored anything. A stopped
+// version-2 operation is kept until its link is printed or it is explicitly
+// discarded locally; discard does not cancel or refund remote work.
 
 // UpOperation is one recorded upload.
 type UpOperation struct {
@@ -52,12 +59,18 @@ type UpOperation struct {
 	MaxDownloads int64  `json:"maxDownloads,omitempty"`
 	BodyLength   int64  `json:"bodyLength"`
 	// FileCount and TotalBytes summarize what was uploaded, for `up --pending`.
-	// File names are deliberately not recorded: recovery never re-reads,
-	// re-encrypts or re-sends anything, and a summary keeps every record small
+	// File names are deliberately not recorded: recovery never re-reads or
+	// re-encrypts sources, and a summary keeps every record small
 	// enough to always load back (maxUpRecord).
 	FileCount  int   `json:"fileCount"`
 	TotalBytes int64 `json:"totalBytes"`
 	CreatedAt  int64 `json:"createdAt"`
+	// Version 2 is an opt-in encrypted local copy and one resumable session.
+	Phase       string `json:"phase,omitempty"`
+	UploadID    string `json:"uploadId,omitempty"`
+	ChunkSize   int64  `json:"chunkSize,omitempty"`
+	HeaderBytes int64  `json:"headerBytes,omitempty"`
+	SpoolSHA256 string `json:"spoolSHA256,omitempty"`
 }
 
 // Opts are the retention options recorded with the operation.
@@ -126,7 +139,7 @@ func randomHex(n int) (string, error) {
 }
 
 func (o UpOperation) validate() error {
-	if o.Version != upOperationVersion || !upIDPattern.MatchString(o.ID) || !upOpKeyPattern.MatchString(o.OpKey) {
+	if (o.Version != upOperationVersion && o.Version != 2) || !upIDPattern.MatchString(o.ID) || !upOpKeyPattern.MatchString(o.OpKey) {
 		return ErrUpOperationCorrupt
 	}
 	if k, err := storecrypto.DecodeKey(o.ContentKey); err != nil || len(k) != 32 {
@@ -137,6 +150,27 @@ func (o UpOperation) validate() error {
 	}
 	if o.FileCount < 0 || o.FileCount > storecrypto.MaxFiles || o.TotalBytes < 0 || o.TotalBytes > storecrypto.MaxSafeInteger || o.TotalBytes > o.BodyLength {
 		return ErrUpOperationCorrupt
+	}
+	if o.Version == 1 {
+		if o.Phase != "" || o.UploadID != "" || o.ChunkSize != 0 || o.HeaderBytes != 0 || o.SpoolSHA256 != "" {
+			return ErrUpOperationCorrupt
+		}
+	} else {
+		if o.HeaderBytes < 4 || o.HeaderBytes > 1<<20 || o.HeaderBytes > o.BodyLength || !spoolHashPattern.MatchString(o.SpoolSHA256) {
+			return ErrUpOperationCorrupt
+		}
+		switch o.Phase {
+		case "planned":
+			if o.UploadID != "" || o.ChunkSize != 0 {
+				return ErrUpOperationCorrupt
+			}
+		case "uploading", "finalizing":
+			if !uploadIDPattern.MatchString(o.UploadID) || o.ChunkSize <= 0 || o.ChunkSize > 16<<20 {
+				return ErrUpOperationCorrupt
+			}
+		default:
+			return ErrUpOperationCorrupt
+		}
 	}
 	return nil
 }
@@ -218,8 +252,13 @@ func SaveUpOperation(cfgDir string, o UpOperation) error {
 	// the checkpoint failed: the new record is withdrawn (best effort) and the
 	// error returned, so the caller sends nothing. Other records are untouched.
 	if err := journalDirSync(dir); err != nil {
-		_ = os.Remove(final)
-		return fmt.Errorf("upload operation record could not be made durable (directory sync failed: %w); nothing was sent", err)
+		if o.Version == 1 {
+			_ = os.Remove(final)
+			return fmt.Errorf("upload operation record could not be made durable (directory sync failed: %w); nothing was sent", err)
+		}
+		// A v2 checkpoint can follow a committed PATCH: never delete its key
+		// or session when a later sync fails. Stop network work and retain it.
+		return fmt.Errorf("resumable checkpoint directory sync failed; visible record retained: %w", err)
 	}
 	return nil
 }
@@ -304,6 +343,8 @@ type UpOperationSummary struct {
 	Bytes     int64  `json:"bytes"`
 	CreatedAt int64  `json:"createdAt"`
 	Problem   string `json:"problem,omitempty"`
+	Resumable bool   `json:"resumable,omitempty"`
+	Phase     string `json:"phase,omitempty"`
 }
 
 // ListUpOperations lists the recorded operations, oldest first. A record that
@@ -327,7 +368,7 @@ func ListUpOperations(cfgDir string) ([]UpOperationSummary, error) {
 			out = append(out, UpOperationSummary{ID: id, Problem: err.Error()})
 			continue
 		}
-		s := UpOperationSummary{ID: id, Server: o.Server, Account: o.Account, Files: o.FileCount, Bytes: o.TotalBytes, CreatedAt: o.CreatedAt}
+		s := UpOperationSummary{ID: id, Server: o.Server, Account: o.Account, Files: o.FileCount, Bytes: o.TotalBytes, CreatedAt: o.CreatedAt, Resumable: o.Version == 2, Phase: o.Phase}
 		out = append(out, s)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt < out[j].CreatedAt })
