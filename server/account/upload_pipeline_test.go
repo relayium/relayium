@@ -387,7 +387,15 @@ func TestUploadPipelineReadAheadOverlapsIngressWithoutEarlyBilling(t *testing.T)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	second := pipelineRequest(ctx, h.ts, h.cookie, id, data[uploadChunkSize:], uploadChunkSize, true)
+	// Client cancellation and waiter removal precede the outer handler's body
+	// cleanup. Observe that handler returning before checking its reservation.
+	finished := make(chan struct{})
+	secondServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(finished)
+		h.ts.Config.Handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(secondServer.Close)
+	second := pipelineRequest(ctx, secondServer, h.cookie, id, data[uploadChunkSize:], uploadChunkSize, true)
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		h.svc.uploadPipeline.mu.Lock()
@@ -406,12 +414,17 @@ func TestUploadPipelineReadAheadOverlapsIngressWithoutEarlyBilling(t *testing.T)
 	}
 	cancel()
 	_ = pipelineAnswer(t, second)
-	waitPipelineWaiter(t, h.svc, 0)
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled request handler did not finish cleanup")
+	}
 	h.svc.uploadPipeline.mu.Lock()
 	held := h.svc.uploadPipeline.held
+	waiters := len(h.svc.uploadPipeline.waiting)
 	h.svc.uploadPipeline.mu.Unlock()
-	if held != 0 || h.meter(t) != 0 {
-		t.Fatal("cancelled staged body leaked or billed")
+	if held != 0 || waiters != 0 || h.meter(t) != 0 {
+		t.Fatalf("cancelled staged body leaked or billed: held=%d waiters=%d meter=%d", held, waiters, h.meter(t))
 	}
 	g.release()
 	if r := pipelineAnswer(t, first); r.status != 200 || r.err != nil {
