@@ -177,6 +177,9 @@ class ResumableUploadServer(
     private val appendCap: Int = Int.MAX_VALUE,
     private val objectId: String = "obj00000000000000000000000000000",
     private val expiresAt: Long = 1_800_000_000L,
+    private val pipelineCapability: String = "",
+    private val onPatchBody: (RecordingHttpServer.Received) -> Unit = {},
+    private val beforeAppend: () -> Unit = {},
 ) : AutoCloseable {
 
     /** The framed ciphertext the blob holds, in offset order. */
@@ -246,7 +249,7 @@ class ResumableUploadServer(
                 synchronized(blob) { blob.reset() }
                 RecordingHttpServer.respond(
                     out,
-                    body = """{"uploadId":"upload000000000000000000000000","chunkSize":$chunkSize}"""
+                    body = """{"uploadId":"upload000000000000000000000000","chunkSize":$chunkSize,"uploadPipeline":"$pipelineCapability"}"""
                         .toByteArray(),
                 )
             }
@@ -254,6 +257,7 @@ class ResumableUploadServer(
             request.method == "PATCH" && request.path.startsWith("/api/uploads/") -> {
                 val range = request.header("Content-Range") ?: ""
                 ranges.add(range)
+                onPatchBody(request)
                 val start = range.removePrefix("bytes ").substringBefore('-').toLongOrNull() ?: -1
                 synchronized(blob) {
                     val have = blob.size().toLong()
@@ -285,6 +289,7 @@ class ResumableUploadServer(
                             body = """{"received":$have}""".toByteArray(),
                         )
                         else -> {
+                            beforeAppend()
                             val take = minOf(request.body.size, appendCap)
                             blob.write(request.body, 0, take)
                             RecordingHttpServer.respond(

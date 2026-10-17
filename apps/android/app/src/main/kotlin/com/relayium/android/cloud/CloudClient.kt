@@ -123,7 +123,11 @@ sealed interface FinalizeAnswer {
 /** A resumable session and the append size the server issued with it. The size
  *  belongs to the SESSION: a later process must persist it rather than guess
  *  today's default. */
-data class ResumableSession(val uploadId: String, val chunkSize: Int)
+data class ResumableSession(
+    val uploadId: String,
+    val chunkSize: Int,
+    val orderedPipeline: Boolean = false,
+)
 
 /**
  * The server's authoritative committed offset, and whether it answered 409.
@@ -365,7 +369,11 @@ class CloudClient(
         if (chunk <= 0 || chunk > PendingUploadStore.MAX_CHUNK_SIZE) {
             throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
         }
-        ResumableSession(id, chunk.toInt())
+        ResumableSession(
+            id, chunk.toInt(),
+            purpose == StoredUploadPurpose.SHARE &&
+                (parsed["uploadPipeline"] as? Json.Str)?.value == "ordered-v1",
+        )
     }
 
     /**
@@ -385,6 +393,8 @@ class CloudClient(
         from: Long,
         payloadTotal: Long,
         token: String,
+        orderedPipeline: Boolean = false,
+        onBodySent: (() -> Unit)? = null,
         onSent: (Long) -> Unit,
     ): UploadOffset = withContext(io) {
         require(length > 0 && length <= body.size) { "an empty append has no Content-Range" }
@@ -396,7 +406,8 @@ class CloudClient(
             .header("User-Agent", userAgent)
             .header("Authorization", "Bearer $token")
             .header("Content-Range", "bytes $from-${from + length - 1}/$payloadTotal")
-            .patch(ProgressBody(body, length, onSent))
+            .apply { if (orderedPipeline) header("X-Relayium-Upload-Pipeline", "ordered-v1") }
+            .patch(ProgressBody(body, length, onSent, onBodySent))
             .build()
         val (status, text) = execute(authed.newCall(request))
         when (status) {
@@ -1558,6 +1569,7 @@ private class ProgressBody(
     private val bytes: ByteArray,
     private val length: Int,
     private val onSent: (Long) -> Unit,
+    private val onBodySent: (() -> Unit)? = null,
 ) : RequestBody() {
 
     override fun contentType() = "application/octet-stream".toMediaType()
@@ -1573,6 +1585,12 @@ private class ProgressBody(
             sink.write(bytes, written, step)
             written += step
             onSent(written.toLong())
+        }
+        // Progress can stop in Okio's buffer. Only this explicit final flush
+        // permits another request to start while the response is pending.
+        if (onBodySent != null) {
+            sink.flush()
+            onBodySent.invoke()
         }
     }
 

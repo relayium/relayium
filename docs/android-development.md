@@ -9,6 +9,23 @@ and update feed move to it with a separate website delivery, pending as of
 2026-10-12; until its own recorded public verification, what relayium.com
 actually serves is authoritative and may still be 0.3.0.
 
+### Android 0.3.2 (11) candidate — ordered Share upload pipeline
+
+The source candidate adds negotiated parallel upload to new large Share a link
+uploads. It sends at most two ciphertext PATCH requests, beginning the next only
+after the previous body has been flushed while its storage confirmation is still
+pending. Progress remains server-confirmed. Missing/unknown server capabilities,
+restored sessions, Device Inbox and small single-request uploads retain their
+existing behavior. Partial/gap/lost answers drain all live requests, check the
+same session and replay the existing immutable encrypted spool serially; no
+re-encryption or replacement publication is used for pipeline recovery.
+Cancellation joins request owners before closing the spool, and finalization
+requires complete durable acceptance plus termination of every request.
+
+This is a source candidate until its exact APK is signed, validated and
+published. The 0.3.1 release facts below remain historical provenance. Transfers
+remain foreground-only; parallel requests do not multiply uplink bandwidth.
+
 ### Android 0.3.1 (10) publication
 
 **Published 2026-10-12T14:12:06Z** as the GitHub pre-release

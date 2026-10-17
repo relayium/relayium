@@ -716,7 +716,7 @@ class CloudUploadModel(
 
             _state.value = State.Uploading(committed, plan.payloadTotal)
             val acked = pump(store, plan, session, committed, authority, mine)
-            if (mine != generation) return
+            if (!owns(mine, authority)) return
 
             // The client's own completeness gate. The server finalizes whatever
             // the blob holds and checks nothing, so this is the only thing
@@ -749,6 +749,34 @@ class CloudUploadModel(
         authority: AccountSession.Authority,
         mine: Int,
     ): Long {
+        if (session.orderedPipeline) {
+            val holder = AtomicReference<PendingUploadStore.PayloadReader?>(null)
+            val confirmed = try {
+                withContext(io) { holder.set(store.openPayload(plan)) }
+                val reader = holder.get()
+                    ?: throw CloudException(CloudFailure(CloudFailure.Kind.SPOOL_UNUSABLE))
+                OrderedUploadPipeline(
+                    total = plan.payloadTotal,
+                    chunkSize = session.chunkSize,
+                    read = { at, bytes, length -> withContext(io) { reader.read(at, bytes, length) } },
+                    send = { at, bytes, length, sent ->
+                        client.patchChunk(
+                            session.uploadId, bytes, length, at, plan.payloadTotal,
+                            authority.token, orderedPipeline = true, onBodySent = sent,
+                        ) { /* Pipeline progress is durable acceptance only. */ }
+                    },
+                    status = { client.uploadOffset(session.uploadId, authority.token) },
+                    owns = { owns(mine, authority) },
+                    onConfirmed = { postProgress(mine, it, plan.payloadTotal) },
+                ).run(from)
+            } finally {
+                withContext(NonCancellable + io) { holder.getAndSet(null)?.close() }
+            }
+            if (!owns(mine, authority) || confirmed == plan.payloadTotal) return confirmed
+            // The pipeline drained every network owner before this recovery.
+            // Replay the same immutable ciphertext/session using the old path.
+            return pump(store, plan, session.copy(orderedPipeline = false), confirmed, authority, mine)
+        }
         var offset = from
         var high = from
         var stalled = 0

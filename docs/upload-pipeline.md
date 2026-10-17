@@ -1,7 +1,8 @@
 # Ordered upload pipeline
 
 Fresh Share a link uploads can keep at most two ciphertext PATCH requests in
-flight. The successor starts after the transport reports that its predecessor's
+flight. Android 0.3.2 adds this capability to freshly initialized resumable Share
+uploads, using its existing encrypted spool; restored sessions stay serial. The successor starts after the transport reports that its predecessor's
 body was sent. This overlaps client ingress with storage confirmation; storage
 still appends one contiguous prefix in order. It does not distribute file parts
 across nodes or change the stored format.

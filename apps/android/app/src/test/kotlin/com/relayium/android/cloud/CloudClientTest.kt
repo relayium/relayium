@@ -59,6 +59,21 @@ class CloudClientTest {
 
     private fun blobBody(): ByteArray = encryptChunks(key, files)
 
+    @Test
+    fun `pipeline capability is exact opt in and never enables device tasks`() {
+        for (capability in listOf("", "ordered-v2", "ordered-v1")) {
+            RecordingHttpServer { _, out ->
+                RecordingHttpServer.respond(out, body =
+                    """{"uploadId":"upload000000000000000000000000","chunkSize":65536,"uploadPipeline":"$capability"}""".toByteArray())
+            }.use { server ->
+                for (purpose in StoredUploadPurpose.entries) {
+                    val result = runBlocking { client(server.origin).initUpload(byteArrayOf(1), false, 3600, 12, "t", purpose) }
+                    assertEquals(capability == "ordered-v1" && purpose == StoredUploadPurpose.SHARE, result.orderedPipeline)
+                }
+            }
+        }
+    }
+
     // ── upload ──────────────────────────────────────────────────────────────
 
     @Test
