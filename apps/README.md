@@ -1,29 +1,29 @@
 # Relayium native apps
 
-**Internal TestFlight, verified 2026-10-16:** macOS `1.4.9 (46)` is `VALID`
-and `IN_BETA_TESTING` in the existing Relayium Internal group, with automatic
-tester notification off and English/Simplified Chinese test notes. App Store
-Connect build `aa7f9264-5932-413a-87cd-84275efc52a9` was built from source
-`8111b4a73bb0f4470f670556238eb59408f0c79d`. Since TestFlight `1.4.7 (44)` it carries
-the native receive FIFO optimization, Apple login-conflict guidance and upload
-status accessibility identifier. This is an owner test candidate; public release
-follows owner testing and manual action. No App Store version or review was
-created or submitted, and existing store selections remain unchanged. The issued
-public channels below retain their versions.
+**Internal TestFlight, verified 2026-10-17:** macOS `1.4.10 (47)` is `VALID`
+and `IN_BETA_TESTING` in the existing Relayium Internal group. App Store Connect
+build `00ac1109-f56f-4487-8d3e-72b25b360ddd` was built from source
+`1030a66db34ff3e75f27ed31d6e526de42b99679`. English and Simplified Chinese test
+notes are set; automatic tester notification is off. Existing App Store versions,
+selected builds and external group membership remain unchanged. No App Store
+version or review was created or submitted.
+
+Since TestFlight `1.4.9 (46)`, Share a link can send the next encrypted part
+while waiting for the preceding part's storage confirmation, with at most two
+requests in flight. Completion still requires server-confirmed durable storage.
+Older servers negotiate serial uploads. This promises no particular WAN speed;
+force-quit recovery and upload-slot recovery are separate work.
 
 macOS **1.4.10** is published through the direct-download channel. It is build
-`45`, GitHub Release `macos-v1.4.10`, published on 2026-10-12. The separately
+`47`, GitHub Release `macos-v1.4.10`, published on 2026-10-17. The separately
 versioned Mac App Store channel is public at [1.4.7](https://apps.apple.com/app/id6801142976), released
 by Apple on 2026-10-12 with build `1.4.7 (44)`, which is recorded separately
 from the direct release, from its own source. Android **0.3.1 (10)** was
 published on 2026-10-12 as a public preview APK (GitHub Release
 `android-v0.3.1`). iOS has no public release: **0.5.1 (12)** has been in
 internal TestFlight testing since 2026-10-12, and **0.5.0 (11)** remains in the
-internal and external testing groups (per the 2026-10-12 provider read-back). The relayium.com download links, Android update feed and
-Sparkle feed move to the new direct releases with a separate website delivery,
-which was still pending when this was written on 2026-10-12; until its own
-recorded public verification, what relayium.com actually serves is
-authoritative and may still be the previous releases.
+internal and external testing groups (per the 2026-10-12 provider read-back). The website and Sparkle feed have their own deployment and public verification;
+the public URLs determine the version currently offered.
 
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
   It vends two products. `RelayiumKit` is the transport stack plus the

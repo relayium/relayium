@@ -1,5 +1,47 @@
 # macOS App Store submission
 
+## macOS 1.4.10 (47) — GitHub direct release and internal TestFlight, 2026-10-17
+
+GitHub [`macos-v1.4.10`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.10)
+publishes the arm64 Developer ID-signed, notarized and stapled DMG, built from
+`1030a66db34ff3e75f27ed31d6e526de42b99679`. Its SHA-256 is
+`0b88805ede0b01ce84dd018e93f9883978442a13285c8a3f575c7e79e5ab760e` (21,429,080 bytes).
+Frozen publication metadata is `4514735535c2c13d6ea514777871426976b237c6`;
+release workflow `39031935451` and frozen metadata gate `39033541903` passed.
+The repository-wide latest release alias remains on the CLI channel.
+The website/Sparkle pair is deployed and verified separately; the public URLs
+are authoritative for the version currently offered. Minimum supported
+`1.3.7 (25)` and recommended `1.3.8` remain unchanged.
+
+Internal TestFlight build `00ac1109-f56f-4487-8d3e-72b25b360ddd` is `VALID`
+and `IN_BETA_TESTING` in the existing Relayium Internal group. It uses a separate
+App Store-signed package from the same source; its SHA-256 is
+`27538965e105b058f95f32161d35a5fe1e62f1eebb7d5edf80f8a4760a2a9c02` (19,309,460 bytes).
+Both app and Share extension passed distribution-signature, entitlement,
+sandbox, arm64-only, privacy, no-debug and no-Sparkle checks. Apple validation
+and one upload succeeded. Independent readback verified English/Simplified
+Chinese notes, automatic notification off, unchanged external membership,
+and every existing App Store version/selected build/group attribute unchanged.
+No App Store version, App Review or external beta review was submitted.
+Public Mac App Store remains `1.4.7`, independently versioned.
+
+Compared with `1.4.9 (46)`, the native runtime change is limited to three shared
+Cloud files: negotiated bounded two-request Share upload overlap. A successor
+may be sent while the predecessor awaits storage confirmation; progress and
+finalization still require durable server acceptance. Legacy servers remain
+serial. The underlying encryption format, limits, pricing and StoreKit source
+are unchanged. No measured WAN speed guarantee or force-quit/session-cap
+recovery fix is implied.
+
+Exact source `1030a66` passed the complete Swift suite: 5,485 tests, three
+existing intentional helper/keychain skips, zero failures; all 27 required live
+interop cases passed without skips. Both macOS UI shards and formal release
+signing/notarization/Gatekeeper gates passed. Owner hands-on ZIP/network testing
+remains unobserved; the owner explicitly instructed both channels to publish.
+StoreKit sandbox acceptance remains the owner-confirmed 2026-10-08 result;
+this release adds no purchase acceptance evidence. Historical sections below
+retain their original dates and channel identities.
+
 ## macOS 1.4.9 (46) — available in internal TestFlight, 2026-10-16
 
 **Delivered for owner testing, 2026-10-16.** App Store Connect build
