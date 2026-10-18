@@ -152,8 +152,9 @@ final class BundleVersionTests: XCTestCase {
         // 0.5.0 (11) is consumed: VALID in TestFlight and selected by the
         // 0.5.0 App Store version still in PREPARE_FOR_SUBMISSION (root
         // provider readback 2026-10-12). The next internal candidate takes a
-        // new visible version, 0.5.1 (12); it does not touch that draft.
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.1", occurrences: 4)
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "12", occurrences: 4)
+        // new visible version, 0.5.1 (12); it did not touch that draft.
+        // Provider 2026-10-18 confirms build12 consumed; parallel Share ships13.
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.2", occurrences: 4)
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "13", occurrences: 4)
     }
 }

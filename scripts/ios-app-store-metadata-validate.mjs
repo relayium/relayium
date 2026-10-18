@@ -171,7 +171,7 @@ const RECORD_NAME = "relayium";
 //     or unrelated candidate, or an observation rewritten to the candidate, is
 //     refused.
 // Current candidate; historical provider observations below remain dated.
-const MARKETING_VERSION = "0.5.1";
+const MARKETING_VERSION = "0.5.2";
 const OBSERVED_IOS_VERSION = "0.3.1";
 // The name the record actually holds. This is NOT a place to propose a rename:
 // the App Store name is owner-controlled, changing it is an App Store Connect
