@@ -19,9 +19,10 @@ macOS **1.4.10** is published through the direct-download channel. It is build
 versioned Mac App Store channel is public at [1.4.7](https://apps.apple.com/app/id6801142976), released
 by Apple on 2026-10-12 with build `1.4.7 (44)`, which is recorded separately
 from the direct release, from its own source. Android **0.3.2 (11)** uses the public preview APK channel
-(`android-v0.3.2`), signed on 2026-10-17 from `d2266e27d`. iOS has no public release: **0.5.1 (12)** has been in
-internal TestFlight testing since 2026-10-12, and **0.5.0 (11)** remains in the
-internal and external testing groups (per the 2026-10-12 provider read-back). The website and Sparkle feed have their own deployment and public verification;
+(`android-v0.3.2`), signed on 2026-10-17 from `d2266e27d`. iOS has no public release: **0.5.2 (13)** has been in
+internal TestFlight testing since 2026-10-18 with parallel stored-link uploads.
+Earlier **0.5.1 (12)** remains internal, and **0.5.0 (11)** remains in the
+internal and external testing groups (per the 2026-10-18 provider read-back). The website and Sparkle feed have their own deployment and public verification;
 the public URLs determine the version currently offered.
 
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
@@ -235,7 +236,13 @@ The macOS status above covers macOS only. iOS development resumed on
 2026-09-01 at version 0.3.0: internal TestFlight builds were used for
 development acceptance before the earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
-offers iOS. The current internal TestFlight build is **`0.5.1 (12)`**: App
+offers iOS. The current internal TestFlight build is **`0.5.2 (13)`**, App Store Connect
+build `c89ab922-5d93-4c5d-8499-ac8825c7208f`, source `bf46878ff`, uploaded once
+on 2026-10-18. It is `VALID` and `IN_BETA_TESTING` internally, notification off,
+export compliance cleared, absent from external testing and every Store
+selection. It carries negotiated two-part stored-link upload overlap; no WAN
+speed or force-quit recovery result is claimed. See the submission record for
+artifact and verification details. The earlier **`0.5.1 (12)`** remains: App
 Store Connect build `751dfe57-b6a4-46d7-b6bb-c0ad3b677012`, built from source
 `d23ca151c`, uploaded once on 2026-10-12 and read back at 15:53 UTC `VALID` and
 `IN_BETA_TESTING` in the existing internal group only — tester notification

@@ -1,5 +1,43 @@
 # iOS App Store and TestFlight submission
 
+## iOS 0.5.2 (13) — internal TestFlight, 2026-10-18
+
+**Provider read-back at 2026-10-18T04:24:42.340824+00:00: `0.5.2 (13)` is `VALID` and
+`IN_BETA_TESTING` in the existing internal TestFlight group.** Tester notification
+is off and `usesNonExemptEncryption` is `false`. It is absent from the external
+group and every App Store version selection; no public App Store submission was made.
+
+- **Source and artifact.** App Store Connect build `c89ab922-5d93-4c5d-8499-ac8825c7208f`; clean pushed source
+  `bf46878ffbc5dbe93e6ad88551370f2321c2d16e`. Signed `Relayium.ipa` is 12,628,472 bytes, SHA-256
+  `9e9818f9e0b59e09c2d64ce4c3bd01ef6d413335458aa97b66209b65cd980e29`. Candidate manifest SHA-256
+  `cc41c7e9ecd38ee202770ebf348183faba96221dc8ca0dd57ed94df8a67ce053`. Apple's validate-only check passed, a fresh complete
+  provider read found the highest consumed iOS build was `12`, and one upload
+  was accepted. The app and Share extension both declare `0.5.2 (13)`.
+- **Changes since (12).** On a compatible server, stored-link uploads can keep
+  at most two parts in flight: the next body starts after the earlier body is
+  sent while its confirmation is pending. Only server-confirmed bytes count as
+  stored. Older servers and Device Inbox retain their compatible upload paths.
+  The shared SDK also carries the already-delivered inbound frame FIFO change.
+  No particular WAN speed or force-quit upload-slot recovery is promised.
+- **Verification.** The five original source CI workflows passed, including
+  device/simulator builds, iPhone/iPad UI checks, full Swift tests and built-App
+  transfer acceptance. Local pipeline/version tests, bilingual metadata mutation
+  checks and candidate-contract tests passed. The archive and exported payload
+  passed signing, provisioning, entitlement and privacy checks; independent
+  inspection covered all three device Mach-O files and bound the actual
+  compiler inputs to the frozen pipeline source.
+- **Distribution and preservation.** Exact English and Simplified Chinese
+  What to Test text comes from the source-bound metadata packet. Independent
+  complete provider reads verified all 36 earlier build rows and beta settings,
+  both groups' attributes and testers, external membership and all eight App
+  Store version selections unchanged. Existing iOS (11), (12) and macOS (47)
+  channels are preserved. No storefront, tester, public Store or external-beta
+  submission was made.
+- **Hands-on checks.** Physical iPhone/iPad upload/download, WAN speed and
+  sleep/wake acceptance remain unobserved. The inherited internal checklist
+  asks testers to compare a large ZIP, download and verify it, and retains the
+  earlier device checks. Purchase/restore testing is outside this round.
+
 ## iOS 0.5.1 (12) — internal TestFlight, 2026-10-12
 
 **Current state, read back 2026-10-12T15:53:18Z: `0.5.1 (12)` is `VALID` and
