@@ -44,11 +44,11 @@ by a different user — a root-run command could otherwise leave root-owned
 
 `--db` defaults to `$RELAYIUM_DB` and `--base-url` to `$RELAYIUM_BASE_URL`;
 neither has a built-in default. When the service gets them from its unit file,
-pass them explicitly. The production shape is:
+pass them explicitly. For example, with a service account and an installed server binary:
 
 ```bash
-sudo -u relayium /opt/relayium/server/relayium-server admin \
-  --db /var/lib/relayium/relayium.db --base-url https://relayium.com <command>
+sudo -u relayium /usr/local/bin/relayium-server admin \
+  --db /var/lib/relayium/relayium.db --base-url https://admin.example.com <command>
 ```
 
 (Below, `ADMIN` stands for that prefix.)
