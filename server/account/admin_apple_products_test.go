@@ -35,14 +35,10 @@ func newAppleCatalogServer(t *testing.T) (*httptest.Server, *Service, *SQLiteSto
 	svc := NewService(store, mail, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute,
 		EnableMagic: true,
-		AdminUser:   "admin", AdminPassword: "secret123",
+		AdminUser:   "admin", AdminEnabled: true,
 	})
 	svc.now = func() time.Time { return time.Unix(appleCatalogNow, 0) }
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	mux.Handle("/api/", svc.Routes())
-	ts := httptest.NewServer(mux)
-	t.Cleanup(ts.Close)
+	ts := serveAdminForTest(t, svc, func(mux *http.ServeMux) { mux.Handle("/api/", svc.Routes()) })
 	return ts, svc, store, mail
 }
 
@@ -199,8 +195,8 @@ func TestAppleCatalogConfirmedWriteAppliesStampsAndAudits(t *testing.T) {
 	if strings.Contains(e.Changes, "updated_at") {
 		t.Errorf("updated_at must not appear as an operator-facing change: %s", e.Changes)
 	}
-	if e.StepUp != StepUpPassword {
-		t.Errorf("audit step-up factor = %q, want %q", e.StepUp, StepUpPassword)
+	if e.StepUp != StepUpPasskey {
+		t.Errorf("audit step-up factor = %q, want %q", e.StepUp, StepUpPasskey)
 	}
 }
 
@@ -328,9 +324,7 @@ func TestAppleCatalogConfirmTokenIsSessionBoundAndSingleUse(t *testing.T) {
 
 	// Session B is a fully authenticated admin with the correct factor. It still
 	// must not be able to spend A's pending action.
-	foreign := postAdminForm(t, ts, sessionB, "/admin/confirm", url.Values{
-		"confirm_token": {tok}, "factor_code": {"secret123"},
-	})
+	foreign := confirmPasskeyOn(t, ts, sessionB, tok)
 	defer foreign.Body.Close()
 	if foreign.StatusCode == http.StatusFound {
 		t.Fatal("SECURITY: a pending catalog write was redeemed by a different session")
@@ -341,9 +335,7 @@ func TestAppleCatalogConfirmTokenIsSessionBoundAndSingleUse(t *testing.T) {
 
 	// And the failed attempt burned the token, so the minting session cannot
 	// use it either — a mismatched session must not get free retries.
-	replay := postAdminForm(t, ts, sessionA, "/admin/confirm", url.Values{
-		"confirm_token": {tok}, "factor_code": {"secret123"},
-	})
+	replay := confirmPasskeyOn(t, ts, sessionA, tok)
 	defer replay.Body.Close()
 	if replay.StatusCode == http.StatusFound {
 		t.Fatal("SECURITY: a pending token survived a foreign redemption attempt")

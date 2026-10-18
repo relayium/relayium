@@ -23,9 +23,7 @@ func TestAdminCredentialCRUD(t *testing.T) {
 		ID: "cred-a", UserHandle: handle, CredJSON: []byte(`{"id":"a"}`),
 		Name: "MacBook", CreatedAt: 1000, LastUsedAt: 0,
 	}
-	if err := st.InsertAdminCredential(ctx, c); err != nil {
-		t.Fatalf("insert: %v", err)
-	}
+	seedAdminCredentialRow(t, st, c)
 
 	got, ok, err := st.GetAdminCredential(ctx, "cred-a")
 	if err != nil || !ok {
@@ -58,8 +56,8 @@ func TestAdminCredentialCRUD(t *testing.T) {
 		t.Fatalf("missing: ok=%v err=%v, want ok=false", ok, err)
 	}
 
-	// 删除
-	if err := st.DeleteAdminCredential(ctx, "cred-a"); err != nil {
+	// 删除：只有本地命令（AdminAuthStore）能删。
+	if _, err := st.AdminAuth().RevokeCredential(ctx, "cred-a", true, 3000, "cli:test"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if _, ok, _ := st.GetAdminCredential(ctx, "cred-a"); ok {
@@ -75,13 +73,10 @@ func TestAdminUserHandleSharedAcrossCredentials(t *testing.T) {
 	handle := []byte("shared-handle-aaaaaaaaaaaaaaaaaa")
 
 	for _, id := range []string{"c1", "c2"} {
-		err := st.InsertAdminCredential(ctx, AdminCredential{
+		seedAdminCredentialRow(t, st, AdminCredential{
 			ID: id, UserHandle: handle, CredJSON: []byte(`{}`),
 			Name: id, CreatedAt: 1, LastUsedAt: 0,
 		})
-		if err != nil {
-			t.Fatalf("insert %s: %v", id, err)
-		}
 	}
 
 	h, ok, err := st.AdminUserHandle(ctx)

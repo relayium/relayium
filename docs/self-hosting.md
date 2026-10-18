@@ -70,8 +70,9 @@ definitions in [`server/main.go`](../server/main.go). The essentials:
 | `RELAYIUM_STUN_URLS` | Comma-separated STUN URLs for cross-network NAT traversal. Empty is derived from `RELAYIUM_TURN_URLS` (a TURN server answers STUN on the same host:port); with neither set, no STUN is advertised and only same-LAN transfers work. |
 | `RELAYIUM_TURN_URLS` / `RELAYIUM_TURN_SECRET` | Optional TURN relay for transfers where a direct P2P connection isn't possible (see [Cross-network transfers](#cross-network-transfers) below). With the bundled `relay` profile the secret must be set in **two** places — see that section; setting only one of them leaves TURN silently off. |
 | `RELAYIUM_REDIS_ADDR` | **Disabled; leave unset.** It used to start a coturn→Redis relay-byte ingest, but that ingest keyed usage by coturn's session id, which restarts from zero on every coturn restart, so it could bill one account for another's traffic. Setting it now starts nothing and only logs a warning at startup; coturn relay traffic is not metered until a re-keyed ingest replaces it. Transfers work either way. |
-| `RELAYIUM_ADMIN_USER` / `RELAYIUM_ADMIN_PASS` | Credentials for the `/admin` console (username defaults to `admin` if unset). It is a full mutating console, not a read-only viewer — see [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. Password empty (the default) disables `/admin` outright — it 404s and falls through to the SPA. |
-| `RELAYIUM_ADMIN_TOTP_SECRET` | Optional TOTP 2FA on top of the admin login. See [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. |
+| `RELAYIUM_ADMIN_ENABLED` | `true` turns on the `/admin` console; off (the default) makes `/admin` 404 and fall through to the SPA. Sign-in is **Passkey-only** and passkeys are managed with the local `relayium-server admin` command — see [Admin dashboard](#admin-dashboard-optional-and-not-read-only) and [admin-passkeys.md](admin-passkeys.md). It is a full mutating console, not a read-only viewer. |
+| `RELAYIUM_ADMIN_USER` | Display name / audit actor for the admin (defaults to `admin`). Not a credential. |
+| `RELAYIUM_ADMIN_PASS` / `RELAYIUM_ADMIN_TOTP_SECRET` | **Deprecated, never used to sign in.** While `RELAYIUM_ADMIN_ENABLED` is unset, a non-empty legacy password only acts as the "on" switch (with a startup warning) so older host configs keep the console enabled; the TOTP secret is ignored. Remove both. |
 | `RELAYIUM_RELEASE_CHECK` | On (`true`) by default: ask GitHub hourly for the newest release and offer it in `/admin`. See [Release check](#release-check-on-by-default) below. `false` disables it — no request is made at all. |
 | `RELAYIUM_BIND` | Docker-compose only (not read by the server itself) — the host address the container's port 8080 is published on. Defaults to the loopback interface only, so a public host doesn't expose plaintext HTTP; set it to the wildcard address (all interfaces) for direct LAN access without a reverse proxy. |
 
@@ -179,8 +180,8 @@ verification link back out of the log to stand in for a user clicking it.
 
 ## Admin dashboard (optional, and NOT read-only)
 
-Setting `RELAYIUM_ADMIN_PASS` turns on an admin console at `/admin`. It is
-**not** a read-only viewer: alongside the user list and a read-only audit
+Setting `RELAYIUM_ADMIN_ENABLED=true` turns on an admin console at `/admin`. It
+is **not** a read-only viewer: alongside the user list and a read-only audit
 log, it can edit site-wide settings, create/edit billing plans, change a
 user's plan, grant a user a time-bounded paid membership, mint and revoke
 node bearer tokens, delete/restore/relabel nodes, and control
@@ -188,9 +189,32 @@ feature/version rollouts (target a track, pause, resume, roll back, or force
 an emergency release). The higher-risk of these actions (settings, plan
 edits, user-plan changes, membership grants, token minting, node deletion,
 emergency rollout) render a confirmation page showing exactly what will
-change before applying it, and re-check a second factor if one is
-configured — but a leaked admin password alone is enough to reach and use
-every route above.
+change before applying it, and require a passkey assertion to apply.
+
+Sign-in is **Passkey-only**: no password, no TOTP, no fallback. Admin
+passkeys are enrolled, approved and revoked only on the server with
+`relayium-server admin` (a one-time enrollment link creates a *pending*
+passkey that you approve at the terminal by its fingerprint). Sessions end
+after 30 minutes idle or 12 hours in total. The full runbook — adding a
+device, backup hardware key, revoking a lost device, recovering from losing
+all devices, and upgrading from the old password/TOTP login — is in
+[admin-passkeys.md](admin-passkeys.md). Enrolling the first passkey on a new
+install:
+
+```bash
+# as the user that owns the database
+relayium-server admin --db /path/to/relayium.db --base-url https://your.host \
+  enroll start --name "My laptop"
+# open the printed link on that laptop, create the passkey, then:
+relayium-server admin --db /path/to/relayium.db --base-url https://your.host \
+  enroll approve <ID> --fingerprint <FINGERPRINT shown in the browser>
+```
+
+With Docker, run it inside the container, where `RELAYIUM_DB` and
+`RELAYIUM_BASE_URL` already come from `server/.env`, so the flags can be
+omitted: `docker compose exec server /app/relayium-server admin enroll start --name "My laptop"`
+(add `-it` if your Compose version does not allocate a terminal by default —
+the command refuses to print the one-time link into a non-terminal).
 
 A **timed membership grant** is deliberately a different thing from changing
 a user's plan, and the difference matters if you self-host with billing on:
@@ -208,8 +232,8 @@ a user's plan, and the difference matters if you self-host with billing on:
   falls back to whatever the provider record says at that moment, or to Free.
 - The duration is counted from the moment you **confirm**, not from the
   moment the confirmation page was drawn, so a grant always hands over the
-  full number of days you asked for however long you take over the second
-  factor. That is why the page previews the rule ("30 whole days from
+  full number of days you asked for however long you take over the passkey
+  confirmation. That is why the page previews the rule ("30 whole days from
   successful confirmation") rather than a fixed timestamp; the exact expiry
   instant is computed once at confirmation and written to the audit log.
 - A grant can only ever raise the effective tier, never lower it, so
@@ -217,29 +241,20 @@ a user's plan, and the difference matters if you self-host with billing on:
   separate revoke: to cut a grant short, grant again with "from now" and a
   short duration, which replaces the old expiry.
 
-Because of that blast radius, treat `/admin` credentials like production
-secrets:
+Because of that blast radius:
 
-- Use a strong, unique `RELAYIUM_ADMIN_PASS` — never reuse a password from
-  elsewhere.
-- Enable TOTP 2FA. Generate a secret from inside the `server/` directory (or
-  `docker compose exec server`):
-
-  ```bash
-  go run . -gen-admin-totp
-  ```
-
-  This prints a QR code and a base32 secret — scan the QR with any TOTP app
-  (Google Authenticator, 1Password, …), then put the secret in
-  `RELAYIUM_ADMIN_TOTP_SECRET` and restart the server. Leaving it unset keeps
-  `/admin` on username/password only, with no second factor on the
-  confirmation step above.
+- Enroll at least two independent authenticators, one of them a hardware
+  security key kept offline as a backup. A synced passkey (iCloud Keychain,
+  Google Password Manager, …) is one credential shared by every device of
+  that account, not several independent ones.
+- Keep shell access to the server tightly held: it is what can enroll and
+  revoke admin passkeys.
 - Consider also restricting `/admin` at your reverse proxy (IP allowlist,
   VPN-only, or an additional auth layer) rather than relying solely on the
   application login.
 
-Leaving `RELAYIUM_ADMIN_PASS` empty (the default) disables `/admin`
-entirely — it 404s and falls through to the SPA.
+Leaving `RELAYIUM_ADMIN_ENABLED` unset (and no legacy `RELAYIUM_ADMIN_PASS`)
+disables `/admin` entirely — it 404s and falls through to the SPA.
 
 ## App Store purchases (off by default)
 

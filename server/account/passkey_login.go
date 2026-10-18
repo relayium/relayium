@@ -32,28 +32,20 @@ const (
 	passkeyCeremonyCap = 2000
 )
 
-// ceremonyKind distinguishes a login ceremony from a registration one. Both
-// kinds travel in the same cookie and live in the same map, so without an
-// explicit tag either finish handler would accept either ceremony. That matters
-// asymmetrically: login/begin needs no authentication at all, so an attacker
-// holding only a stolen admin session could mint a ceremony there and spend it
-// at register/finish, walking straight around the password+TOTP step-up that
-// makes a session leak recoverable rather than permanent. go-webauthn's own
-// structural defense (comparing user.WebAuthnID() to session.UserID) cannot
-// help here because register/finish deliberately assigns the handle from the
-// ceremony — see HandleAdminPasskeyRegisterFinish. This tag is what makes that
-// assignment safe.
+// ceremonyKind distinguishes a login ceremony from a step-up one. Both kinds
+// travel in the same cookie and live in the same table, so without an explicit
+// tag either consumer would accept either ceremony. That matters
+// asymmetrically: login/begin needs no authentication at all, so without the
+// tag a stolen admin session could mint a ceremony there and spend it as a
+// step-up. (Browser registration ceremonies no longer exist: a new passkey is
+// enrolled through a grant-bound challenge stored on its enrollment row, see
+// admin_enroll.go, and can never be satisfied by either kind below.)
 type ceremonyKind string
 
 const (
-	ceremonyLogin    ceremonyKind = "login"
-	ceremonyRegister ceremonyKind = "register"
-	// ceremonyStepUp is minted by /admin/stepup/passkey/begin and spent by the
-	// passkey branch of verifyStepUpFactor. It carries the same asymmetric risk
-	// as ceremonyRegister: login/begin needs no authentication, so without this
-	// tag a stolen session could mint a ceremony there and spend it to satisfy a
-	// step-up passkey check, walking around the second factor that makes a
-	// session leak recoverable. verifyStepUpPasskey rejects any other kind.
+	ceremonyLogin ceremonyKind = "login"
+	// ceremonyStepUp is minted by /admin/stepup/passkey/begin and spent by
+	// verifyStepUpPasskey, which rejects any other kind.
 	ceremonyStepUp ceremonyKind = "stepup"
 )
 
@@ -65,9 +57,13 @@ type passkeyCeremony struct {
 	session webauthn.SessionData
 	name    string
 	expires time.Time
+	// generation is the admin auth generation this ceremony began under (-1
+	// for a row from an older binary). A ceremony begun before a revocation
+	// can never yield a session or a step-up afterwards — see admin_auth_state.
+	generation int64
 }
 
-// adminRegistrationOpts pins registration to a discoverable credential with
+// adminRegistrationOpts pins enrollment to a discoverable credential with
 // user verification, which is what makes username-less one-tap login possible.
 //
 // existing must be the credentials already registered for this user. They are
@@ -76,11 +72,8 @@ type passkeyCeremony struct {
 // platform authenticator asked for a *resident* credential under the same
 // (rpID, user.id) silently replaces the one it already has and hands back a new
 // credential ID — the superseded DB row then lives on forever with
-// last_used_at = 0. Since a never-used credential is this feature's only signal
-// for a planted backdoor, a merely careless double registration would otherwise
-// manufacture a permanent false positive on the single intrusion detector.
-// BeginRegistration never populates CredentialExcludeList on its own; this
-// option is the only thing that fills it.
+// last_used_at = 0. BeginRegistration never populates CredentialExcludeList on
+// its own; this option is the only thing that fills it.
 func adminRegistrationOpts(existing []webauthn.Credential) []webauthn.RegistrationOption {
 	exclude := make([]protocol.CredentialDescriptor, 0, len(existing))
 	for i := range existing {
@@ -134,7 +127,7 @@ func (s *Service) takeCeremony(r *http.Request) (passkeyCeremony, bool) {
 	if err != nil || c.Value == "" {
 		return passkeyCeremony{}, false
 	}
-	kind, blob, name, expires, ok, err := s.store.TakePasskeyCeremony(r.Context(), c.Value)
+	kind, blob, name, expires, gen, ok, err := s.store.TakePasskeyCeremony(r.Context(), c.Value)
 	if err != nil || !ok || s.now().Unix() > expires {
 		return passkeyCeremony{}, false
 	}
@@ -142,7 +135,7 @@ func (s *Service) takeCeremony(r *http.Request) (passkeyCeremony, bool) {
 	if err := json.Unmarshal([]byte(blob), &sess); err != nil {
 		return passkeyCeremony{}, false
 	}
-	return passkeyCeremony{kind: ceremonyKind(kind), session: sess, name: name, expires: time.Unix(expires, 0)}, true
+	return passkeyCeremony{kind: ceremonyKind(kind), session: sess, name: name, expires: time.Unix(expires, 0), generation: gen}, true
 }
 
 // HandleAdminStepUpPasskeyBegin issues a WebAuthn assertion challenge for a
@@ -180,34 +173,50 @@ func (s *Service) HandleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.R
 	httpx.WriteJSON(w, http.StatusOK, assertion)
 }
 
+// stepUpProof is what a verified factor is bound to: the auth generation it
+// was proved under and, for a passkey, the credential that produced it.
+// HandleAdminConfirm re-checks both at the final authorization point, after
+// verification, so a revocation landing while the proof was being verified
+// (or its credential written back) refuses the action.
+type stepUpProof struct {
+	generation   int64
+	credentialID string // "" for grace
+}
+
 // verifyStepUpPasskey validates the WebAuthn assertion a confirmation POST
 // carries in its factor_assertion field against a ceremonyStepUp challenge. It
 // is the passkey arm of verifyStepUpFactor and returns false on any failure —
 // wrong kind, absent/expired ceremony, malformed or invalid assertion, or a
 // clone-warning counter — so the pending action is left unapplied.
-func (s *Service) verifyStepUpPasskey(r *http.Request) bool {
+func (s *Service) verifyStepUpPasskey(r *http.Request) (stepUpProof, bool) {
 	// takeCeremony deletes unconditionally, so a wrong-kind or replayed attempt
 	// burns the challenge just like a valid one — it cannot be retried.
 	cer, ok := s.takeCeremony(r)
 	if !ok || cer.kind != ceremonyStepUp {
-		return false
+		return stepUpProof{}, false
+	}
+	// The revocation fence: a step-up challenge issued before any revocation
+	// (revoke-all, or revoking a passkey) cannot confirm anything after it.
+	// Pre-fence rows carry -1 and always fail here.
+	if gen, err := s.store.AdminAuthGeneration(r.Context()); err != nil || gen != cer.generation {
+		return stepUpProof{}, false
 	}
 	rp, err := s.adminRP()
 	if err != nil {
 		log.Printf("passkey: building relying party failed: %v", err)
-		return false
+		return stepUpProof{}, false
 	}
 	user, err := s.loadAdminPasskeyUser(r.Context())
 	if err != nil || len(user.creds) == 0 {
 		if err != nil {
 			log.Printf("passkey: loading admin passkey user failed: %v", err)
 		}
-		return false
+		return stepUpProof{}, false
 	}
 	parsed, err := protocol.ParseCredentialRequestResponseBody(
 		strings.NewReader(r.FormValue("factor_assertion")))
 	if err != nil {
-		return false
+		return stepUpProof{}, false
 	}
 	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
 		if !bytes.Equal(userHandle, user.handle) {
@@ -217,12 +226,12 @@ func (s *Service) verifyStepUpPasskey(r *http.Request) bool {
 	}
 	cred, err := rp.ValidateDiscoverableLogin(handler, cer.session, parsed)
 	if err != nil {
-		return false
+		return stepUpProof{}, false
 	}
 	// A backwards-going sign counter (two copies of the key in use) is refused
 	// here exactly as it is at login.
 	if cred.Authenticator.CloneWarning {
-		return false
+		return stepUpProof{}, false
 	}
 	// Best effort: a failed sign-counter / last_used_at write-back must not fail
 	// an otherwise valid step-up.
@@ -231,7 +240,12 @@ func (s *Service) verifyStepUpPasskey(r *http.Request) bool {
 			log.Printf("passkey: step-up TouchAdminCredential failed: %v", err)
 		}
 	}
-	return true
+	// The generation equality was checked above, BEFORE the cryptography, so
+	// an obviously stale ceremony is not even verified. It is not the final
+	// word: HandleAdminConfirm re-checks generation + credential after this
+	// returns (stepUpProof), which is what defeats a revocation that lands
+	// during verification or the write-back above.
+	return stepUpProof{generation: cer.generation, credentialID: b64url(cred.ID)}, true
 }
 
 func (s *Service) HandleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
@@ -307,6 +321,10 @@ func (s *Service) HandleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	_, cred, err := rp.FinishPasskeyLogin(handler, cer.session, r)
 	if err != nil {
 		s.adminPasskeyLogins.recordFail(ip, s.now())
+		// Recorded without any detail from the request: a failed assertion
+		// carries nothing an operator needs, and the audit row must never hold
+		// attacker-supplied bytes.
+		s.WriteAudit(r, AuditLoginFail, "-", nil, StepUpNone)
 		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "验证失败"})
 		return
 	}
@@ -315,6 +333,7 @@ func (s *Service) HandleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	// (iCloud Keychain and other synced passkeys never increment).
 	if cred.Authenticator.CloneWarning {
 		s.adminPasskeyLogins.recordFail(ip, s.now())
+		s.WriteAudit(r, AuditLoginFail, "passkey:"+b64url(cred.ID), nil, StepUpNone)
 		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "凭据异常，已拒绝"})
 		return
 	}
@@ -331,7 +350,18 @@ func (s *Service) HandleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 		log.Printf("passkey: marshaling credential for write-back failed: %v", err)
 	}
 	s.adminPasskeyLogins.reset(ip)
-	tok, err := s.newAdminSession(r.Context(), "passkey")
+	// The session is bound to THIS credential: revoking it at the terminal
+	// ends this session, and the session stops validating the moment the
+	// credential row is gone even if that delete raced this insert.
+	tok, err := s.newAdminSession(r.Context(), b64url(cred.ID), cer.generation)
+	if errors.Is(err, ErrAdminSessionRefused) {
+		// The credential was revoked, or every session was revoked, after this
+		// ceremony began — possibly after the assertion above was verified.
+		// The store refused atomically; nothing was issued.
+		s.WriteAudit(r, AuditLoginFail, "passkey:"+b64url(cred.ID), nil, StepUpNone)
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "登录期间凭据或会话已被撤销，请重新登录"})
+		return
+	}
 	if err != nil {
 		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "服务器错误"})
 		return
@@ -339,12 +369,12 @@ func (s *Service) HandleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: tok, Path: "/admin",
 		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
-		MaxAge: int(adminSessionTTL / time.Second),
+		MaxAge: int(adminSessionAbsoluteTTL / time.Second),
 	})
 	// adminAuthMethod 从 r 的 cookie 反查会话；这个请求本身还没带上刚铸造的
 	// cookie（它只被写进了响应），所以这里手动补一份到 r 上，WriteAudit 才能
 	// 读出 auth=passkey 而不是空字符串。
 	r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
-	s.WriteAudit(r, AuditLoginOK, "-", nil, StepUpNone)
+	s.WriteAudit(r, AuditLoginOK, "passkey:"+b64url(cred.ID), nil, StepUpNone)
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

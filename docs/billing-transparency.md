@@ -686,8 +686,11 @@ which flags a given deployment sets (`main.go`):
   every account is, functionally, unlimited-by-payment (still subject to
   whatever plan caps an admin has configured locally).
 - **The admin console** (`/admin`) that can view/edit any of this is off
-  unless `RELAYIUM_ADMIN_PASS` is set — see
-  [`docs/self-hosting.md`](self-hosting.md#admin-dashboard-optional-and-not-read-only).
+  unless `RELAYIUM_ADMIN_ENABLED=true` (or, while that is unset, a deprecated
+  `RELAYIUM_ADMIN_PASS` is still present — it only switches the console on and
+  is never used to sign in). Sign-in is Passkey-only — see
+  [`docs/self-hosting.md`](self-hosting.md#admin-dashboard-optional-and-not-read-only)
+  and the [admin passkey runbook](admin-passkeys.md).
 
 A self-hosted instance with none of those three set stores none of the
 billing-specific data described in this document — no Stripe fields

@@ -214,11 +214,20 @@ type adminLoginData struct {
 	// Lang selects the console language for this request (see admin_i18n.go).
 	// It lives on the data rather than in the FuncMap because templates are
 	// parsed once at package init and the language varies per request.
-	Lang    string
-	Error   string
-	TOTP    bool   // render the 6-digit code field
-	Passkey bool   // render the passkey button (only when a credential exists)
+	Lang  string
+	Error string
+	// Passkey is true when at least one admin passkey is registered. Sign-in is
+	// Passkey-only: with none registered the page explains how to enroll one
+	// from the server instead of rendering a button that cannot succeed.
+	Passkey bool
 	Nonce   string // per-request CSP script nonce for the inline passkey script
+}
+
+// adminEnrollData is passed to adminEnrollTmpl. It carries no enrollment
+// state: the grant lives only in the URL fragment the page's script reads.
+type adminEnrollData struct {
+	Lang  string
+	Nonce string
 }
 
 // confirmPageData is passed to adminConfirmTmpl (RequireStepUp's confirmation
@@ -265,7 +274,7 @@ type confirmPageData struct {
 	// NEVER affect whether this page renders at all — only whether the
 	// factor input below is required. See RequireStepUp's doc comment.
 	NeedFactor bool
-	Factor     string // which factor to prompt for: StepUpPasskey/TOTP/Password
+	Factor     string // StepUpPasskey, or StepUpNone when no passkey is registered (nothing can confirm)
 	Nonce      string // per-request CSP script nonce for the inline passkey script
 }
 
@@ -455,22 +464,22 @@ button:hover{filter:brightness(1.07)}
 [hidden]{display:none!important}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}</style></head>
 <body><div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 16px"><h1 style="margin:0">{{t $.Lang "Relayium 后台"}}</h1><form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form></div>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
-<form method="post" action="/admin/login">
-<input type="text" name="username" placeholder="{{t $.Lang "管理员账号"}}" autofocus autocomplete="username">
-<input type="password" name="password" placeholder="{{t $.Lang "管理员密码"}}" autocomplete="current-password">
-{{if .TOTP}}<input type="text" name="totp" placeholder="{{t $.Lang "6 位验证码"}}" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6">{{end}}
-<button type="submit">{{t $.Lang "登录"}}</button>
-</form>
 {{if .Passkey}}
-<button type="button" id="passkey-login" style="margin-top:12px;background:transparent;color:var(--a);border:1px solid var(--bd)">{{t $.Lang "使用 passkey 登录"}}</button>
+<button type="button" id="passkey-login">{{t $.Lang "使用 passkey 登录"}}</button>
 <p class="err" id="passkey-error" style="margin-top:10px" hidden></p>
 <script nonce="{{.Nonce}}">
 (function(){
   var btn = document.getElementById('passkey-login');
   var err = document.getElementById('passkey-error');
-  // Progressive enhancement: on anything without WebAuthn the button vanishes
-  // and the password form above is untouched.
-  if (!window.PublicKeyCredential || !navigator.credentials) { btn.hidden = true; return; }
+  // Passkey is the only way in, so a browser without WebAuthn gets a plain
+  // explanation rather than a dead button.
+  if (!window.PublicKeyCredential || !navigator.credentials) {
+    btn.disabled = true;
+    err.className = 'muted';
+    err.textContent = '{{t $.Lang "这个浏览器不支持 passkey，请换一个支持 passkey 的浏览器或设备登录。"}}';
+    err.hidden = false;
+    return;
+  }
 {{template "passkeyB64"}}
   btn.addEventListener('click', function(){
     err.hidden = true; btn.disabled = true;
@@ -516,22 +525,26 @@ button:hover{filter:brightness(1.07)}
           // them back apart. So say the one thing true of both, in muted text
           // rather than red: neither case is a failure the operator caused.
           err.className = 'muted';
-          err.textContent = '{{t $.Lang "已取消，或这台设备上没有可用的 passkey。可用下方密码登录后在设置里添加"}}';
+          err.textContent = '{{t $.Lang "已取消，或这台设备上没有可用的 passkey。要添加这台设备，请在服务器上运行 relayium-server admin enroll start。"}}';
         } else {
           err.className = 'err';
-          err.textContent = (e && e.message) || '{{t $.Lang "登录失败，请改用下方密码登录"}}';
+          err.textContent = (e && e.message) || '{{t $.Lang "登录失败，请重试。"}}';
         }
         err.hidden = false;
       });
   });
 })();
 </script>
+{{else}}
+<p class="muted">{{t $.Lang "后台只能用 passkey 登录，目前还没有注册任何 passkey。"}}</p>
+<p class="muted">{{t $.Lang "在服务器上以服务账户运行下面的命令，生成一次性注册链接；在浏览器里创建 passkey 后，回到终端核对指纹并批准。"}}</p>
+<p class="muted"><code>relayium-server admin enroll start --name "MacBook"</code></p>
 {{end}}
 </body></html>`))
 
 // adminConfirmTmpl draws RequireStepUp's confirmation page: the field-level
 // diff a pending high-risk write would apply, plus a form that posts the
-// pending-action token (and, once Task 8 lands, the second factor) to
+// pending-action token (and the passkey assertion) to
 // /admin/confirm. Values interpolated below (Field/Old/New, Action, Target)
 // include admin-supplied strings such as plan names, so this MUST stay
 // html/template (auto-escaping), never text/template or raw string building.
@@ -625,18 +638,16 @@ button:hover{filter:brightness(1.07)}
 <input type="hidden" name="factor_assertion" id="factor-assertion">
 <p class="muted">{{t $.Lang "用你注册的 passkey 确认这项操作。"}}</p>
 <p class="muted" id="passkey-error" hidden></p>
-{{else if eq .Factor "totp"}}
-<label>{{t $.Lang "验证码（TOTP）"}}<input type="text" name="factor_code" inputmode="numeric" autocomplete="off" placeholder="{{t $.Lang "6 位动态验证码"}}"></label>
 {{else}}
-<label>{{t $.Lang "管理员密码"}}<input type="password" name="factor_code" autocomplete="current-password" placeholder="{{t $.Lang "再次输入密码以确认"}}"></label>
+<p class="muted">{{t $.Lang "没有已注册的 passkey，这项高危操作无法确认。请先在服务器上用 relayium-server admin enroll start 注册 passkey。"}}</p>
 {{end}}
 {{else}}
-<p class="muted">{{t $.Lang "刚验证过第二因子，此次操作仍在宽限期内，免再输入 —— 但请确认上面的改动无误。"}}</p>
+<p class="muted">{{t $.Lang "刚用 passkey 确认过，此次操作仍在 60 秒宽限期内，免再确认 —— 但请确认上面的改动无误。"}}</p>
 {{end}}
 <div class="actions">
 {{if and .NeedFactor (eq .Factor "passkey")}}
 <button type="button" id="passkey-confirm">{{t $.Lang "用 passkey 确认执行"}}</button>
-{{else}}
+{{else if not .NeedFactor}}
 <button type="submit">{{t $.Lang "确认执行"}}</button>
 {{end}}
 <a href="/admin">{{t $.Lang "取消"}}</a>
@@ -703,9 +714,121 @@ button:hover{filter:brightness(1.07)}
 {{end}}
 </body></html>`))
 
+// adminEnrollTmpl is the one page a NEW admin passkey is created on. The
+// enrollment grant arrives in the URL fragment (#...), which browsers never
+// send to a server; the script below reads it, removes it from the address
+// bar and history entry at once, and posts it only in request bodies. The
+// page has no language picker on purpose: switching language reloads the
+// page and would drop the fragment. Served no-store / no-referrer
+// (handleAdminEnrollPage). What it produces is a PENDING credential: nothing
+// here can sign in until the operator approves the shown fingerprint at the
+// terminal.
+var adminEnrollTmpl = template.Must(withPasskeyJS(template.New("enroll").Funcs(template.FuncMap{"t": adminT})).Parse(`<!doctype html>
+<html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex">
+<title>{{t $.Lang "Relayium Admin · 添加 passkey"}}</title>
+<style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff;--muted:#6b6375;--soft:#f4f3ec}
+@media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25;--muted:#9ca3af;--soft:#1f2028}}
+*{box-sizing:border-box}
+body{font:15px system-ui;max-width:520px;margin:60px auto;padding:0 16px;color:var(--fg);background:var(--bg)}
+h1{font-size:20px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:20px}
+button{font:inherit;font-weight:500;padding:10px 14px;width:100%;border:0;border-radius:8px;background:var(--a);color:#fff;cursor:pointer}
+button:disabled{opacity:.6;cursor:default}
+:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+.muted{color:var(--muted);font-size:13px;margin:0 0 10px}
+.err{color:#e5484d;margin:10px 0 0}
+.fp{font:600 22px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:1px;background:var(--soft);border-radius:8px;padding:12px;text-align:center;margin:10px 0}
+code{background:var(--soft);border-radius:4px;padding:1px 5px;word-break:break-all}
+[hidden]{display:none!important}</style></head>
+<body>
+<h1>{{t $.Lang "添加后台 passkey"}}</h1>
+<div class="card">
+<div id="enroll-start">
+<p class="muted">{{t $.Lang "这个页面由服务器上的 relayium-server admin enroll start 命令生成的一次性链接打开。创建的 passkey 在你回到终端核对指纹并批准之前不能登录。"}}</p>
+<button type="button" id="enroll-create">{{t $.Lang "在这台设备上创建 passkey"}}</button>
+<p class="err" id="enroll-error" hidden></p>
+</div>
+<div id="enroll-done" hidden>
+<p>{{t $.Lang "passkey 已创建，正在等待终端批准。请核对下面的指纹，然后在服务器上运行："}}</p>
+<p class="fp" id="enroll-fp"></p>
+<p class="muted"><code id="enroll-cmd"></code></p>
+<p class="muted">{{t $.Lang "只有终端里显示的指纹与这里完全一致时才批准。批准前这枚 passkey 无法登录；链接过期后需要重新生成。"}}</p>
+</div>
+</div>
+<script nonce="{{.Nonce}}">
+(function(){
+  // Take the grant out of the address bar and this history entry before
+  // anything else runs, so it is not left behind for a screenshot, a shared
+  // screen, or the back button.
+  var grant = location.hash ? location.hash.slice(1) : '';
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  var btn = document.getElementById('enroll-create');
+  var err = document.getElementById('enroll-error');
+  function show(msg){ err.textContent = msg; err.hidden = false; }
+  if (!grant) {
+    btn.disabled = true;
+    show('{{t $.Lang "链接不完整：请完整打开终端打印的注册链接（包括 # 之后的部分）。"}}');
+    return;
+  }
+  if (!window.PublicKeyCredential || !navigator.credentials) {
+    btn.disabled = true;
+    show('{{t $.Lang "这个浏览器不支持 passkey，请换一个支持 passkey 的浏览器或设备。"}}');
+    return;
+  }
+{{template "passkeyB64"}}
+  function post(path, body){
+    return fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
+      .then(function(r){
+        if (r.ok) return r.json();
+        return r.json().then(function(j){ return j.error; }, function(){ return null; })
+          .then(function(m){ throw new Error(m || '{{t $.Lang "服务器错误 "}}' + r.status); });
+      });
+  }
+  btn.addEventListener('click', function(){
+    err.hidden = true; btn.disabled = true;
+    post('/admin/enroll/begin', {grant: grant})
+      .then(function(o){
+        var pk = o.publicKey;
+        pk.challenge = dec(pk.challenge);
+        pk.user.id = dec(pk.user.id);
+        if (pk.excludeCredentials) pk.excludeCredentials.forEach(function(c){ c.id = dec(c.id); });
+        return navigator.credentials.create({publicKey: pk});
+      })
+      .then(function(c){
+        return post('/admin/enroll/finish', {grant: grant, credential: {
+          id: c.id, rawId: enc(c.rawId), type: c.type,
+          response: {
+            clientDataJSON: enc(c.response.clientDataJSON),
+            attestationObject: enc(c.response.attestationObject)
+          }
+        }});
+      })
+      .then(function(res){
+        grant = '';
+        document.getElementById('enroll-start').hidden = true;
+        document.getElementById('enroll-fp').textContent = res.fingerprint;
+        document.getElementById('enroll-cmd').textContent =
+          'relayium-server admin enroll approve ' + res.enrollment + ' --fingerprint ' + res.fingerprint;
+        document.getElementById('enroll-done').hidden = false;
+      })
+      .catch(function(e){
+        btn.disabled = false;
+        if (e && e.name === 'InvalidStateError') {
+          show('{{t $.Lang "这台设备上已经有一枚后台 passkey，无需重复添加。"}}');
+        } else if (e && e.name === 'NotAllowedError') {
+          show('{{t $.Lang "已取消。可以再点一次重试。"}}');
+        } else {
+          show((e && e.message) || '{{t $.Lang "创建失败，请重试。"}}');
+        }
+      });
+  });
+})();
+</script>
+</body></html>`))
+
 // Every onsubmit="return confirm(...)" in the template text below — on the
-// node restore/remove/delete forms, the token revoke form, the passkey
-// delete form, and the release notice's "发布 ... 到机队" button — is DEAD
+// node restore/remove/delete forms, the token revoke form, and the release
+// notice's "发布 ... 到机队" button — is DEAD
 // CODE, same as rolloutPanelTmpl's own onsubmit attributes (see the doc
 // comment on that var): buildCSP emits script-src 'self' 'nonce-…' with no
 // 'unsafe-inline' / 'unsafe-hashes', so the browser never runs an inline
@@ -730,6 +853,7 @@ var adminUsersTmpl = template.Must(withRolloutPanel(withPasskeyJS(template.New("
 	"t":     adminT,
 	"ts":    func(sec int64) string { return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04") },
 	"bytes": humanBytes,
+	"pkfp":  AdminCredentialFingerprint,
 	"gib":   func(b int64) int64 { return b / (1 << 30) },
 	"period": func(p string) string {
 		if t, err := time.Parse("200601", p); err == nil {
@@ -799,7 +923,7 @@ td .off{color:var(--muted);opacity:.7}
 .apple-products .ap-add{margin-top:12px}
 .apple-gate .ap-gate-state{margin:0 0 8px}
 .passkeys{margin:0 0 28px}.passkeys h2{margin-bottom:12px}
-.passkeys .mint{flex-wrap:wrap;margin-top:12px}
+.passkeys .muted{color:var(--muted);font-size:13px;margin:10px 0 0}
 .never{color:#e5484d;font-weight:600}
 .err{color:#e5484d;margin:10px 0 0}
 /* 自带节点表：整块靠一条琥珀色左边框和一句告警抬头与官方节点表区分开。视觉上
@@ -1307,87 +1431,23 @@ td .off{color:var(--muted);opacity:.7}
 <p class="err">{{t $.Lang "凭据列表读取失败，请查看服务端日志"}}</p>
 {{else}}
 <table>
-<thead><tr><th>{{t $.Lang "名称"}}</th><th>{{t $.Lang "添加时间(UTC)"}}</th><th>{{t $.Lang "最后使用"}}</th><th></th></tr></thead>
+<thead><tr><th>{{t $.Lang "名称"}}</th><th>ID</th><th>{{t $.Lang "指纹"}}</th><th>{{t $.Lang "添加时间(UTC)"}}</th><th>{{t $.Lang "最后使用"}}</th></tr></thead>
 <tbody>
 {{range .Passkeys}}
 <tr>
 <td>{{.Name}}</td>
+<td><code>{{.ID}}</code></td>
+<td><code>{{pkfp .}}</code></td>
 <td>{{ts .CreatedAt}}</td>
 <td>{{if .LastUsedAt}}{{ts .LastUsedAt}}{{else}}<span class="never">{{t $.Lang "从未使用"}}</span>{{end}}</td>
-<td><form method="post" action="/admin/passkey/delete" onsubmit="return confirm('{{t $.Lang "删除这枚 passkey？"}}')">
-<input type="hidden" name="id" value="{{.ID}}"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form></td>
 </tr>
 {{else}}
-<tr><td colspan="4">{{t $.Lang "尚未添加 passkey"}}</td></tr>
+<tr><td colspan="5">{{t $.Lang "尚未添加 passkey"}}</td></tr>
 {{end}}
 </tbody></table>
 {{end}}
-
-<form id="passkey-add" class="mint" hidden>
-<input type="text" name="name" placeholder="{{t $.Lang "设备名称，如 MacBook"}}" required>
-<input type="text" name="username" placeholder="{{t $.Lang "管理员账号"}}" autocomplete="username" required>
-<input type="password" name="password" placeholder="{{t $.Lang "管理员密码"}}" autocomplete="current-password" required>
-<input type="text" name="totp" placeholder="{{t $.Lang "6 位验证码（如已启用）"}}" inputmode="numeric" autocomplete="one-time-code">
-<button type="submit">{{t $.Lang "添加 passkey"}}</button>
-</form>
-<p class="err" id="passkey-add-error" hidden></p>
-<script nonce="{{.Nonce}}">
-(function(){
-  var form = document.getElementById('passkey-add');
-  var err = document.getElementById('passkey-add-error');
-  // The form ships hidden and is revealed only here, so a browser without
-  // WebAuthn (or with JS off) never shows a control that cannot work.
-  if (!window.PublicKeyCredential || !navigator.credentials) return;
-{{template "passkeyB64"}}
-  form.addEventListener('submit', function(ev){
-    ev.preventDefault();
-    err.hidden = true;
-    fetch('/admin/passkey/register/begin', {
-      method:'POST',
-      headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body: new URLSearchParams(new FormData(form)).toString()
-    })
-      .then(function(r){
-        if (r.ok) return r.json();
-        return r.json().then(function(j){ return j.error; }, function(){ return null; })
-          .then(function(m){ throw new Error(m || '{{t $.Lang "验证失败（服务器 "}}' + r.status + '）'); });
-      })
-      .then(function(o){
-        var pk = o.publicKey;
-        pk.challenge = dec(pk.challenge);
-        pk.user.id = dec(pk.user.id);
-        if (pk.excludeCredentials) pk.excludeCredentials.forEach(function(c){ c.id = dec(c.id); });
-        return navigator.credentials.create({publicKey: pk});
-      })
-      .then(function(c){
-        return fetch('/admin/passkey/register/finish', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            id: c.id, rawId: enc(c.rawId), type: c.type,
-            response: {
-              clientDataJSON: enc(c.response.clientDataJSON),
-              attestationObject: enc(c.response.attestationObject)
-            }
-          })
-        });
-      })
-      .then(function(r){
-        if (r.ok) { location.reload(); return; }
-        return r.json().then(function(j){ return j.error; }, function(){ return null; })
-          .then(function(m){ throw new Error(m || '{{t $.Lang "注册失败（服务器 "}}' + r.status + '）'); });
-      })
-      .catch(function(e){
-        // Cancelling the platform prompt is a normal action, not an error.
-        if (e && e.name === 'NotAllowedError') return;
-        err.textContent = (e && e.message) || '{{t $.Lang "注册失败"}}';
-        err.hidden = false;
-      });
-  });
-  // Revealed only now that the handler is attached, so the form can never be
-  // submitted as a plain GET by a half-initialised page.
-  form.hidden = false;
-})();
-</script>
+<p class="muted">{{t $.Lang "这里只读。添加或撤销 passkey、强制登出所有会话，只能在服务器上用 relayium-server admin 命令完成——浏览器（包括已登录的会话）无法增删凭据。"}}</p>
+<p class="muted"><code>relayium-server admin credentials list</code> · <code>relayium-server admin enroll start --name …</code> · <code>relayium-server admin credentials revoke &lt;ID&gt;</code> · <code>relayium-server admin sessions revoke-all</code></p>
 </section>
 {{end}}
 

@@ -2,6 +2,8 @@ package account
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,45 +14,20 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 )
 
-// newStepUpServer starts an /admin-enabled service (user "admin", password
-// "secret123") with the given TOTP secret ("" = TOTP off) and a test-controlled
-// clock. Mutate *clk to move time — both login and step-up read s.now, so the
-// same code cannot be replayed unless the clock is held still on purpose.
-func newStepUpServer(t *testing.T, totpSecret string) (*httptest.Server, *Service, *SQLiteStore, *time.Time) {
+// newStepUpServer starts an /admin-enabled service (user "admin") with a
+// test-controlled clock. Mutate *clk to move time.
+func newStepUpServer(t *testing.T) (*httptest.Server, *Service, *SQLiteStore, *time.Time) {
 	t.Helper()
 	store := newTestStore(t)
 	svc := NewService(store, &capturingMailer{}, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour,
-		AdminUser: "admin", AdminPassword: "secret123", AdminTOTPSecret: totpSecret,
+		AdminUser: "admin", AdminEnabled: true,
 	})
 	now := time.Unix(1_700_000_000, 0)
 	clk := &now
 	svc.now = func() time.Time { return *clk }
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	ts := httptest.NewServer(mux)
-	t.Cleanup(ts.Close)
+	ts := serveAdminForTest(t, svc)
 	return ts, svc, store, clk
-}
-
-// adminLoginCookieTOTP logs in with a TOTP code and returns the session cookie.
-func adminLoginCookieTOTP(t *testing.T, ts *httptest.Server, code string) *http.Cookie {
-	t.Helper()
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := client.PostForm(ts.URL+"/admin/login",
-		url.Values{"username": {"admin"}, "password": {"secret123"}, "totp": {code}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	for _, c := range resp.Cookies() {
-		if c.Name == adminCookie {
-			return c
-		}
-	}
-	t.Fatalf("no admin cookie after TOTP login (status %d)", resp.StatusCode)
-	return nil
 }
 
 // validSettingsForm is a fully populated settings form that passes
@@ -90,7 +67,7 @@ func pendingSettingsConfirm(t *testing.T, ts *httptest.Server, svc *Service, coo
 func TestConfirmWithinGraceNeedsNoFactor(t *testing.T) {
 	ts, svc, _, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(context.Background(), cookie.Value) // 开启宽限期
+	markStepUpForTest(t, svc, cookie.Value) // 开启宽限期
 
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "999")
 	resp := postAdminForm(t, ts, cookie, "/admin/confirm", url.Values{"confirm_token": {tok}})
@@ -107,7 +84,7 @@ func TestConfirmWithinGraceNeedsNoFactor(t *testing.T) {
 func TestGraceConfirmIsAuditedAsGrace(t *testing.T) {
 	ts, svc, store, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(context.Background(), cookie.Value)
+	markStepUpForTest(t, svc, cookie.Value)
 
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "777")
 	resp := postAdminForm(t, ts, cookie, "/admin/confirm", url.Values{"confirm_token": {tok}})
@@ -130,7 +107,7 @@ func TestGraceConfirmIsAuditedAsGrace(t *testing.T) {
 func TestConfirmAuditRecordsTheDiff(t *testing.T) {
 	ts, svc, store, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(context.Background(), cookie.Value)
+	markStepUpForTest(t, svc, cookie.Value)
 
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "333")
 	resp := postAdminForm(t, ts, cookie, "/admin/confirm", url.Values{"confirm_token": {tok}})
@@ -151,117 +128,159 @@ func TestConfirmAuditRecordsTheDiff(t *testing.T) {
 	}
 }
 
-// 正确密码可确认高危操作，且审计里 step_up=password。
-func TestConfirmAppliesWithValidPassword(t *testing.T) {
-	ts, svc, store, _ := newAdminAuditServer(t) // 无 TOTP、无 passkey => 因子是密码
+// A real passkey assertion confirms a high-risk action, audited as passkey.
+func TestConfirmAppliesWithValidPasskey(t *testing.T) {
+	ts, svc, store, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
 
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "555")
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	resp := confirmWithPasskey(t, ts, svc, cookie, tok)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("valid password confirm should apply (302), got %d", resp.StatusCode)
+		t.Fatalf("valid passkey confirm should apply (302), got %d", resp.StatusCode)
 	}
 	if got := svc.ResolveSettings(t.Context()).DailyQuota; got != 555*1024*1024 {
-		t.Fatalf("valid password confirm did not apply; daily_quota=%d", got)
+		t.Fatalf("valid passkey confirm did not apply; daily_quota=%d", got)
 	}
 	entries, _ := store.ListAudit(context.Background(), 10, 0, AuditSettings)
-	if len(entries) != 1 || entries[0].StepUp != StepUpPassword {
-		t.Fatalf("want one settings entry audited as password, got %+v", entries)
+	if len(entries) != 1 || entries[0].StepUp != StepUpPasskey || entries[0].Auth != "passkey" {
+		t.Fatalf("want one settings entry audited as passkey/passkey, got %+v", entries)
 	}
 }
 
-// 错误密码必须拒绝，且操作不得生效。
-func TestConfirmRejectsWrongPassword(t *testing.T) {
+// The old text factors are gone: a password or a 6-digit code in factor_code
+// is ignored and the action is refused — there is no fallback to anything
+// weaker than a passkey.
+func TestConfirmIgnoresPasswordAndTOTPFields(t *testing.T) {
 	ts, svc, _, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
 	before := svc.ResolveSettings(t.Context())
-
-	tok := pendingSettingsConfirm(t, ts, svc, cookie, "321")
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"wrong-password"}})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("wrong password must be rejected with 401, got %d", resp.StatusCode)
+	for _, code := range []string{"secret123", "123456", ""} {
+		tok := pendingSettingsConfirm(t, ts, svc, cookie, "321")
+		resp := postAdminForm(t, ts, cookie, "/admin/confirm",
+			url.Values{"confirm_token": {tok}, "factor_code": {code}})
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("factor_code %q: status %d, want 401", code, resp.StatusCode)
+		}
 	}
 	if svc.ResolveSettings(t.Context()).DailyQuota != before.DailyQuota {
-		t.Fatal("SECURITY: wrong password still applied the setting")
+		t.Fatal("SECURITY: a non-passkey factor applied the setting")
 	}
 }
 
-// 正确 TOTP 可确认，且审计里 step_up=totp。用一个比登录晚两步的时间片，
-// 避免撞上登录已消费掉的那一步。
-func TestConfirmAppliesWithValidTOTP(t *testing.T) {
-	ts, svc, store, clk := newStepUpServer(t, testSecret)
-	cookie := adminLoginCookieTOTP(t, ts, codeAt(t, *clk))
-
-	*clk = clk.Add(60 * time.Second) // 前进两步，得到未消费的验证码
-	tok := pendingSettingsConfirm(t, ts, svc, cookie, "222")
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {codeAt(t, *clk)}})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("valid TOTP confirm should apply (302), got %d", resp.StatusCode)
-	}
-	if got := svc.ResolveSettings(t.Context()).DailyQuota; got != 222*1024*1024 {
-		t.Fatalf("valid TOTP confirm did not apply; daily_quota=%d", got)
-	}
-	entries, _ := store.ListAudit(context.Background(), 10, 0, AuditSettings)
-	if len(entries) != 1 || entries[0].StepUp != StepUpTOTP {
-		t.Fatalf("want one settings entry audited as totp, got %+v", entries)
-	}
-}
-
-// 错误 TOTP 必须拒绝，操作不得生效。
-func TestConfirmRejectsWrongTOTP(t *testing.T) {
-	ts, svc, _, clk := newStepUpServer(t, testSecret)
-	cookie := adminLoginCookieTOTP(t, ts, codeAt(t, *clk))
+// An assertion signed by a key that is not registered (or by the right key
+// over the wrong challenge) is refused.
+func TestConfirmRejectsForeignOrStaleAssertion(t *testing.T) {
+	ts, svc, _, _ := newAdminAuditServer(t)
+	cookie := adminLoginCookie(t, ts)
 	before := svc.ResolveSettings(t.Context())
+	k := adminTestPasskey(t, svc)
+	rp, _ := svc.adminRP()
 
-	tok := pendingSettingsConfirm(t, ts, svc, cookie, "111")
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"000000"}})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("wrong TOTP must be rejected with 401, got %d", resp.StatusCode)
+	for name, forge := range map[string]func(challenge string) string{
+		"unregistered key": func(c string) string {
+			return newTestAuthenticator(t).assertBody(t, rp.Config.RPID, svc.selfOrigin(), c, k.handle)
+		},
+		"wrong challenge": func(string) string {
+			return k.auth.assertBody(t, rp.Config.RPID, svc.selfOrigin(), "d3JvbmctY2hhbGxlbmdl", k.handle)
+		},
+		"foreign origin": func(c string) string {
+			return k.auth.assertBody(t, rp.Config.RPID, "https://evil.example", c, k.handle)
+		},
+	} {
+		tok := pendingSettingsConfirm(t, ts, svc, cookie, "321")
+		cer, good := passkeyStepUp(t, ts, svc, cookie)
+		var parsed struct {
+			Response struct {
+				ClientDataJSON string `json:"clientDataJSON"`
+			} `json:"response"`
+		}
+		_ = json.Unmarshal([]byte(good), &parsed)
+		cd, _ := base64.RawURLEncoding.DecodeString(parsed.Response.ClientDataJSON)
+		var cdj struct {
+			Challenge string `json:"challenge"`
+		}
+		_ = json.Unmarshal(cd, &cdj)
+		form := url.Values{"confirm_token": {tok}, "factor_assertion": {forge(cdj.Challenge)}}
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/admin/confirm", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", "http://example.test")
+		req.AddCookie(cookie)
+		req.AddCookie(cer)
+		client := ts.Client()
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("%s: status %d, want 401", name, resp.StatusCode)
+		}
 	}
 	if svc.ResolveSettings(t.Context()).DailyQuota != before.DailyQuota {
-		t.Fatal("SECURITY: wrong TOTP still applied the setting")
+		t.Fatal("SECURITY: a forged assertion applied the setting")
 	}
 }
 
-// TOTP 重放：登录时用掉的那一步在步进里再用一次必须失败（单调计数器语义不能被绕过）。
-func TestStepUpTOTPCannotBeReplayed(t *testing.T) {
-	ts, svc, _, clk := newStepUpServer(t, testSecret)
-	loginCode := codeAt(t, *clk)
-	cookie := adminLoginCookieTOTP(t, ts, loginCode) // 登录消费了这一步
+// Zero registered passkeys: nothing can confirm a high-risk action, and the
+// factor selector says so instead of falling back to anything.
+func TestHighRiskWithZeroPasskeysHasNoFallback(t *testing.T) {
+	ts, svc, store, _ := newAdminAuditServer(t)
+	cookie := adminLoginCookie(t, ts)
+	tok := pendingSettingsConfirm(t, ts, svc, cookie, "432")
 	before := svc.ResolveSettings(t.Context())
-
-	// 时钟保持不动：同一个码映射到同一步，步进校验必须判定为重放而拒绝。
-	tok := pendingSettingsConfirm(t, ts, svc, cookie, "444")
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {loginCode}})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("replayed TOTP must be rejected with 401, got %d", resp.StatusCode)
+	if _, err := store.db.Exec(`DELETE FROM admin_credentials`); err != nil {
+		t.Fatal(err)
 	}
+	if got := svc.availableStepUpFactor(context.Background()); got != StepUpNone {
+		t.Fatalf("factor with zero passkeys = %q, want none", got)
+	}
+	// verifyStepUpFactor itself refuses every text factor.
+	for _, code := range []string{"secret123", "123456"} {
+		r := httptest.NewRequest("POST", "/admin/confirm", strings.NewReader(url.Values{"factor_code": {code}}.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if f, _, ok := svc.verifyStepUpFactor(r, pendingAction{sessionTok: cookie.Value}); ok {
+			t.Fatalf("zero-passkey step-up accepted %q as %q", code, f)
+		}
+	}
+	// And over HTTP the session is gone with its credential, so nothing applies.
+	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
+		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound || svc.ResolveSettings(t.Context()).DailyQuota != before.DailyQuota {
+		t.Fatalf("zero-passkey confirm: status %d, quota changed=%v", resp.StatusCode,
+			svc.ResolveSettings(t.Context()).DailyQuota != before.DailyQuota)
+	}
+}
+
+// A revoked passkey takes its session's grace window with it: no cached
+// step-up survives the revocation, even mid-confirmation.
+func TestRevokedPasskeyLeavesNoCachedStepUp(t *testing.T) {
+	ts, svc, store, _ := newAdminAuditServer(t)
+	cookie := adminLoginCookie(t, ts)
+	markStepUpForTest(t, svc, cookie.Value)
+	tok := pendingSettingsConfirm(t, ts, svc, cookie, "654")
+	before := svc.ResolveSettings(t.Context())
+	k := adminTestPasskey(t, svc)
+	if _, err := store.AdminAuth().RevokeCredential(context.Background(), k.credID, true, svc.now().Unix(), "cli:test"); err != nil {
+		t.Fatal(err)
+	}
+	resp := postAdminForm(t, ts, cookie, "/admin/confirm", url.Values{"confirm_token": {tok}})
+	resp.Body.Close()
 	if svc.ResolveSettings(t.Context()).DailyQuota != before.DailyQuota {
-		t.Fatal("SECURITY: a replayed TOTP code still applied the setting")
+		t.Fatal("SECURITY: a confirmation applied after its passkey was revoked")
+	}
+	if _, _, _, _, _, ok, _ := store.TakePendingAction(context.Background(), tok); ok {
+		t.Fatal("revocation left the session's pending confirmation behind")
 	}
 }
 
 // kind 混用：一个 login ceremony（login/begin 无需认证即可铸造）绝不能被拿来
 // 满足 step-up 的 passkey 校验 —— 否则拿着会话 cookie 的人可以绕过第二因子。
 func TestLoginCeremonyCannotSatisfyStepUp(t *testing.T) {
-	ts, svc, store, _ := newStepUpServer(t, "") // 无 TOTP
-	// 插一条 passkey 凭据，让 availableStepUpFactor 选中 passkey。
-	if err := store.InsertAdminCredential(context.Background(), AdminCredential{
-		ID: "c1", UserHandle: []byte("handle"), CredJSON: []byte("{}"),
-		Name: "dev", CreatedAt: 1,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	ts, svc, _, _ := newStepUpServer(t)
 	cookie := adminLoginCookie(t, ts)
 	before := svc.ResolveSettings(t.Context())
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "666")
@@ -307,7 +326,7 @@ func TestLoginCeremonyCannotSatisfyStepUp(t *testing.T) {
 func TestMintedTokenPlaintextNeverEntersAudit(t *testing.T) {
 	ts, svc, store, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(context.Background(), cookie.Value) // 用宽限期免因子，专注验证明文不入审计
+	markStepUpForTest(t, svc, cookie.Value) // 用宽限期免因子，专注验证明文不入审计
 
 	// 高危：铸 token 先出确认页，取出 token。
 	resp := postAdminForm(t, ts, cookie, "/admin/nodes/token", url.Values{"name": {"n1"}})
@@ -344,12 +363,7 @@ func TestMintedTokenPlaintextNeverEntersAudit(t *testing.T) {
 // passkey 是可用因子时，确认页必须给出 passkey ceremony（按钮 + 隐藏断言字段），
 // 而不是一个填不了断言的文本框。
 func TestConfirmPageOffersPasskeyCeremony(t *testing.T) {
-	ts, svc, store, _ := newStepUpServer(t, "")
-	if err := store.InsertAdminCredential(context.Background(), AdminCredential{
-		ID: "c1", UserHandle: []byte("handle"), CredJSON: []byte("{}"), Name: "dev", CreatedAt: 1,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	ts, svc, _, _ := newStepUpServer(t)
 	cookie := adminLoginCookie(t, ts)
 	if err := svc.SeedSettings(t.Context()); err != nil {
 		t.Fatal(err)
@@ -366,22 +380,20 @@ func TestConfirmPageOffersPasskeyCeremony(t *testing.T) {
 	}
 }
 
-// TOTP 是可用因子时，确认页给出文本验证码输入框。
-func TestConfirmPagePromptsTextFactorForTOTP(t *testing.T) {
-	ts, svc, _, clk := newStepUpServer(t, testSecret)
-	cookie := adminLoginCookieTOTP(t, ts, codeAt(t, *clk))
+// No confirmation page ever renders a text factor input any more.
+func TestConfirmPageNeverRendersTextFactor(t *testing.T) {
+	ts, svc, _, _ := newStepUpServer(t)
+	cookie := adminLoginCookie(t, ts)
 	if err := svc.SeedSettings(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	resp := postAdminForm(t, ts, cookie, "/admin/settings", validSettingsForm("123"))
 	body := readAll(t, resp)
 	resp.Body.Close()
-
-	if !strings.Contains(body, `name="factor_code"`) {
-		t.Fatalf("TOTP-factor confirm page must render a text factor input; body=%s", body)
-	}
-	if strings.Contains(body, `id="passkey-confirm"`) {
-		t.Fatal("TOTP-factor confirm page must not render a passkey ceremony button")
+	for _, gone := range []string{`name="factor_code"`, `type="password"`, "TOTP"} {
+		if strings.Contains(body, gone) {
+			t.Fatalf("confirm page still renders %s", gone)
+		}
 	}
 }
 

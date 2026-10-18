@@ -53,7 +53,7 @@ func (s *Service) confirmNow(ctx context.Context) int64 {
 //
 // That distinction is a correctness requirement, not a convenience. The page is
 // rendered when the operator submits the form and the write happens when they
-// pass the second factor, with an unbounded human delay in between; a page that
+// confirm with their passkey, with an unbounded human delay in between; a page that
 // printed an exact expiry computed from its own clock would state a timestamp
 // that the write then contradicts by exactly that delay. Nothing may fix the
 // discrepancy by freezing the page's instant and writing it later (that hands
@@ -164,22 +164,18 @@ func (s *Service) RequireStepUp(action string, next http.HandlerFunc) http.Handl
 	}
 }
 
-// availableStepUpFactor picks the second factor to prompt for: passkey (no
-// 30-second replay window, best UX) > TOTP > password re-entry.
-//
-// The last tier's security value is close to zero (it's the same password
-// that was just used to establish the session), but it's still real friction
-// against misclicks, and it keeps a self-hoster who has only ever configured
-// a password from being locked out of high-risk admin actions entirely. The
-// confirmation page nudges that operator to set up real 2FA instead.
+// availableStepUpFactor picks the factor to prompt for. It is a passkey or
+// nothing: there is no TOTP and no password re-entry to fall back to. With no
+// registered passkey it returns StepUpNone, the confirmation page says so, and
+// verifyStepUpFactor refuses — a high-risk write is never confirmable by
+// anything weaker. (A session cannot even exist with zero passkeys, because a
+// session is valid only while its own credential is registered; this is the
+// second, independent wall.)
 func (s *Service) availableStepUpFactor(ctx context.Context) string {
 	if s.AdminPasskeyCount(ctx) > 0 {
 		return StepUpPasskey
 	}
-	if s.AdminTOTPEnabled() {
-		return StepUpTOTP
-	}
-	return StepUpPassword
+	return StepUpNone
 }
 
 // renderConfirmPage draws the confirmation page (see adminConfirmTmpl in
@@ -212,7 +208,9 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 		AuditUserPlanGrant: s.handleAdminGrantUserPlan,
 		AuditTokenMint:     s.handleAdminMintToken,
 		AuditNodeDelete:    s.handleAdminDeleteNode,
-		AuditPasskeyDelete: s.HandleAdminPasskeyDelete,
+		// passkey.delete is deliberately absent: the browser can no longer
+		// remove a passkey, so even a pending action minted under that name by
+		// an older binary resolves to "unknown pending action" and fails closed.
 		// The App Store product catalog write. It is on this path for the reason
 		// stated at its route: the row is read after the money has moved.
 		AuditAppleProduct: s.handleAdminUpsertAppleProduct,
@@ -241,54 +239,35 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 	return h, ok
 }
 
-// verifyStepUpFactor checks the second factor a confirmation POST presents and
-// returns which factor actually satisfied it — StepUpGrace/Passkey/TOTP/
-// Password — so the audit trail can record the truth, or ("", false) when
-// nothing valid was presented, in which case HandleAdminConfirm must NOT apply
-// the pending action.
+// verifyStepUpFactor checks the factor a confirmation POST presents and
+// returns which one actually satisfied it — StepUpGrace or StepUpPasskey — so
+// the audit trail records the truth, or ("", false) when nothing valid was
+// presented, in which case HandleAdminConfirm must NOT apply the pending action.
 //
 // The grace window is checked first and mirrors exactly the NeedFactor
 // computation RequireStepUp did when it rendered this pending action's page: a
-// recent successful step-up on this same session waves the factor. That path
-// returns StepUpGrace, never a real factor name — the audit must not claim a
-// factor was re-checked when it was let through (see StepUpGrace's doc comment).
+// recent successful passkey step-up on this same, still-valid session waves the
+// prompt. It lives on the session row, so a revoked passkey, a revoke-all or an
+// idle/expired session takes it away with the session. That path returns
+// StepUpGrace, never StepUpPasskey — the audit must not claim a passkey was
+// checked when it was not.
 //
-// Which factor is demanded outside the grace window is availableStepUpFactor's
-// call, not the caller's: the client cannot pick a weaker factor than the one
-// the confirmation page offered by choosing which field to fill.
-func (s *Service) verifyStepUpFactor(r *http.Request, pending pendingAction) (string, bool) {
-	if s.stepUpFresh(r.Context(), pending.sessionTok) {
-		return StepUpGrace, true
+// Outside the grace window the only factor is a passkey assertion; a submitted
+// factor_code (the old TOTP/password field) is ignored entirely.
+func (s *Service) verifyStepUpFactor(r *http.Request, pending pendingAction) (string, stepUpProof, bool) {
+	if gen, ok := s.stepUpGrace(r.Context(), pending.sessionTok); ok {
+		return StepUpGrace, stepUpProof{generation: gen}, true
 	}
-	switch s.availableStepUpFactor(r.Context()) {
-	case StepUpPasskey:
-		if s.verifyStepUpPasskey(r) {
-			return StepUpPasskey, true
-		}
-	case StepUpTOTP:
-		// MatchAdminTOTPStep is crypto-only; ClaimTOTPStep atomically spends the
-		// step so a code already used (at login or an earlier step-up, on ANY
-		// instance) is refused. The claim IS the single-use lock now — a false
-		// result (or a store error, failing closed) rejects the factor.
-		if step, ok := s.MatchAdminTOTPStep(r.FormValue("factor_code")); ok {
-			if claimed, err := s.store.ClaimTOTPStep(r.Context(), step); err == nil && claimed {
-				return StepUpTOTP, true
-			}
-		}
-	case StepUpPassword:
-		// Password re-entry is the factor only when neither passkey nor TOTP is
-		// configured, so TOTP is off and the code is irrelevant. The username is
-		// implied — the session is already the admin — so only the password is
-		// prompted; adminUser() feeds the constant-time compare its match half.
-		if _, ok := s.verifyAdminCreds(s.adminUser(), r.FormValue("factor_code"), ""); ok {
-			return StepUpPassword, true
+	if s.availableStepUpFactor(r.Context()) == StepUpPasskey {
+		if proof, ok := s.verifyStepUpPasskey(r); ok {
+			return StepUpPasskey, proof, true
 		}
 	}
-	return "", false
+	return "", stepUpProof{}, false
 }
 
 // HandleAdminConfirm is the confirmation page's POST target. It takes the
-// pending action (burning its token), verifies the second factor, restores the
+// pending action (burning its token), verifies the passkey (or grace), restores the
 // original form onto the request, marks it as step-up-done and forwards to the
 // mapped handler via confirmHandlerFor, then records the audit entry and
 // refreshes the grace window.
@@ -319,16 +298,27 @@ func (s *Service) HandleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown pending action", http.StatusInternalServerError)
 		return
 	}
-	factor, ok := s.verifyStepUpFactor(r, pending)
+	factor, proof, ok := s.verifyStepUpFactor(r, pending)
 	if !ok {
 		if s.stepUpRecordFail(c.Value) {
 			s.refuseStepUpLocked(w, r, c.Value)
 			return
 		}
-		http.Error(w, "second-factor verification failed", http.StatusUnauthorized)
+		http.Error(w, "passkey verification failed; the action was not applied", http.StatusUnauthorized)
 		return
 	}
 	s.stepUpResetFails(c.Value)
+	// The linearization point of a confirmation. After the factor has been
+	// verified (and its credential written back), and immediately before the
+	// action is applied, one statement re-requires: this session still valid,
+	// the auth generation unchanged since the proof was made, and the proving
+	// passkey still registered. Any revocation committed before this point —
+	// of the session's key, of the step-up key, of any key, or revoke-all —
+	// refuses the action; one committed after it is ordered after the action.
+	if authorized, err := s.store.AdminStepUpAuthorized(r.Context(), c.Value, proof.generation, proof.credentialID, s.Now().Unix()); err != nil || !authorized {
+		http.Error(w, "a passkey or session was revoked while this confirmation was being verified; the action was not applied", http.StatusUnauthorized)
+		return
+	}
 
 	form := pending.form
 	// One confirmation, one instant. See confirmNowKey: an action whose written
@@ -372,7 +362,9 @@ func (s *Service) HandleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	if rec.status >= 400 {
 		return
 	}
-	s.markStepUp(r.Context(), c.Value)
+	// Grace is recorded under the proof's generation and only if it is still
+	// current: a revocation after the check above cannot leave stale grace.
+	s.markStepUp(r.Context(), c.Value, proof.generation)
 	// Record even if the diff could not be computed: a high-risk write that
 	// applied must never be missing from the audit log. A beforeImageFor error
 	// (e.g. a transient store read) costs only the field-level changes, not the

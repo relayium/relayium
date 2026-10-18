@@ -114,7 +114,7 @@ func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, for
 	// The alternative — freezing the page's instant and writing it — was rejected
 	// twice over: it silently shortens the N whole days the operator asked for,
 	// and for extend it anchors on a grant that may have lapsed while they were
-	// reaching for their second factor.
+	// reaching for their passkey.
 	//
 	// adminGrantExpiry is called on BOTH paths regardless, so an expiry that
 	// cannot be computed at all (an overflow) is refused on the page rather than
@@ -283,9 +283,6 @@ func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, for
 		}
 		return applePurchaseGateImage(cur), applePurchaseGateImage(want),
 			applePurchaseGateTarget, nil
-
-	case AuditPasskeyDelete:
-		return map[string]any{}, map[string]any{}, "passkey:" + form.Get("id"), nil
 
 	// Node delete has its id in the path wildcard, not the form; HandleAdminConfirm
 	// fills its target from the stashed pathID after this returns.

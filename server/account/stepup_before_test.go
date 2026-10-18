@@ -121,7 +121,6 @@ func TestBeforeImageNamesTargetForFieldlessActions(t *testing.T) {
 	}{
 		{AuditUserPlan, "user:u9", url.Values{"user_id": {"u9"}, "plan_id": {"max"}}},
 		{AuditTokenMint, "token:fleet-a", url.Values{"name": {"fleet-a"}}},
-		{AuditPasskeyDelete, "passkey:pk3", url.Values{"id": {"pk3"}}},
 	}
 	for _, c := range cases {
 		_, _, target, err := svc.beforeImageFor(ctx, c.action, "", c.form)

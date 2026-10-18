@@ -375,8 +375,7 @@ func TestGrantOnCancelledAppleAuthorityPreservesEveryProviderRow(t *testing.T) {
 	}
 
 	tok := extractConfirmToken(t, body)
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	resp := confirmPasskeyOn(t, ts, cookie, tok)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("grant on an authority-bound account = %d, want 302; body=%s", resp.StatusCode, readAll(t, resp))
@@ -432,8 +431,7 @@ func TestGrantWithAmbiguousAppleAttemptWarnsAndLeavesItDispatched(t *testing.T) 
 		t.Fatalf("ambiguous-attempt account was not warned about honestly; body=%.3000s", body)
 	}
 	tok := extractConfirmToken(t, body)
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	resp := confirmPasskeyOn(t, ts, cookie, tok)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("grant = %d, want 302; body=%s", resp.StatusCode, readAll(t, resp))
@@ -545,8 +543,7 @@ func TestGrantNoticeDoesNotClaimAnElapsedSourceIsStillBilling(t *testing.T) {
 		t.Fatalf("the confirmation page does not report the elapsed row honestly; body=%.3000s", body)
 	}
 	tok := extractConfirmToken(t, body)
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	resp := confirmPasskeyOn(t, ts, cookie, tok)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("grant over an elapsed source = %d, want 302; body=%s", resp.StatusCode, readAll(t, resp))
@@ -679,8 +676,7 @@ func TestConfirmedGrantPreviewsAndAuditsTheExactExpiry(t *testing.T) {
 		t.Fatalf("confirmation page does not spell out what from-now does; body=%.3000s", body)
 	}
 	tok := extractConfirmToken(t, body)
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	resp := confirmPasskeyOn(t, ts, cookie, tok)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("confirmed grant = %d, want 302; body=%s", resp.StatusCode, readAll(t, resp))
@@ -749,6 +745,8 @@ func TestConfirmedGrantExtensionStacksOnTheLiveGrant(t *testing.T) {
 
 	// Time passes, but less than the grant's remaining life.
 	at += 3 * adminGrantDaySecs
+	// Three days is far past the 30-minute admin idle timeout: sign in again.
+	cookie = adminLoginCookie(t, ts)
 	second := confirmAction(t, ts, cookie, "/admin/users/grant", grantForm(u.ID, "max", "7", AdminGrantModeExtend))
 	second.Body.Close()
 	if second.StatusCode != http.StatusFound {
@@ -819,8 +817,7 @@ func TestGrantPreviewPromisesTheRuleNotAStaleInstant(t *testing.T) {
 	// genuinely re-checked at the later instant.
 	at = renderedAt + 240
 	tok := extractConfirmToken(t, body)
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	resp := confirmPasskeyOn(t, ts, cookie, tok)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("confirmed grant = %d, want 302; body=%s", resp.StatusCode, readAll(t, resp))
@@ -909,8 +906,7 @@ func TestGrantExtendPreviewNamesTheFallbackWhenTheBaseGrantLapses(t *testing.T) 
 	// Two minutes past it, the base grant is gone.
 	at = base.ExpiresAt + 120
 	tok := extractConfirmToken(t, body)
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	resp := confirmPasskeyOn(t, ts, cookie, tok)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("confirmed extend = %d, want 302; body=%s", resp.StatusCode, readAll(t, resp))
@@ -1102,8 +1098,8 @@ func TestGrantConfirmationIsBoundToPlanDaysAndMode(t *testing.T) {
 	page.Body.Close()
 	tok := extractConfirmToken(t, body)
 
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm", url.Values{
-		"confirm_token": {tok}, "factor_code": {"secret123"},
+	resp := confirmFormPasskeyOn(t, ts, cookie, url.Values{
+		"confirm_token": {tok},
 		// Every field the attacker would want to change.
 		"user_id": {victim.ID}, "plan_id": {"max"},
 		"grant_days": {"1000"}, "grant_mode": {AdminGrantModeExtend},
@@ -1173,14 +1169,12 @@ func TestGrantConfirmFailsClosedWithoutFactorForeignSessionOrReplay(t *testing.T
 	// A token minted by one session, spent by another — and then the burned
 	// token replayed by the session that DID mint it.
 	tok := mint(sessionA)
-	foreign := postAdminForm(t, ts, sessionB, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	foreign := confirmPasskeyOn(t, ts, sessionB, tok)
 	foreign.Body.Close()
 	if foreign.StatusCode == http.StatusFound {
 		t.Fatal("SECURITY: a pending grant was redeemed by a different session")
 	}
-	replay := postAdminForm(t, ts, sessionA, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	replay := confirmPasskeyOn(t, ts, sessionA, tok)
 	replay.Body.Close()
 	if replay.StatusCode == http.StatusFound {
 		t.Fatal("SECURITY: a pending grant token survived a foreign redemption attempt")

@@ -7,15 +7,13 @@ import (
 	"github.com/relayium/relayium/authx"
 )
 
-// Step-up factor attempts are throttled per admin SESSION.
+// Step-up passkey attempts are throttled per admin SESSION.
 //
 // A confirmation POST burns its pending token, but minting another is one
 // re-submit of the original form away, so without a limit the holder of a
-// stolen admin session could keep guessing the second factor (a 6-digit TOTP,
-// or the admin password when that is the factor) — which is exactly what the
-// second factor exists to stop. After the same threshold admin login uses, the
-// session is revoked: whoever holds it has to log in again, and login has its
-// own per-IP lockout.
+// stolen admin session could keep presenting assertions. After the same
+// threshold admin login uses, the session is revoked: whoever holds it has to
+// sign in with a passkey again, and login has its own per-IP lockout.
 //
 // The key is the session alone, not session+IP. Only the session's holder can
 // reach this handler, so there is no one else to lock out, and adding the IP
@@ -61,5 +59,5 @@ func (s *Service) refuseStepUpLocked(w http.ResponseWriter, r *http.Request, ses
 		Name: adminCookie, Value: "", Path: "/admin", MaxAge: -1,
 		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 	})
-	http.Error(w, "too many failed second-factor attempts; this admin session has been signed out", http.StatusTooManyRequests)
+	http.Error(w, "too many failed passkey confirmations; this admin session has been signed out", http.StatusTooManyRequests)
 }

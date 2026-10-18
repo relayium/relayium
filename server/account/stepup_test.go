@@ -10,28 +10,12 @@ import (
 	"testing"
 )
 
-// adminLoginCookie logs into the admin dashboard seeded by newAdminAuditServer
-// (user "admin", password "secret123") and returns the resulting session
-// cookie. No Origin header is sent, matching admin_test.go's adminLogin
-// helper: CSRFGuard lets Origin-less requests through (top-level form post),
-// so login itself doesn't need one.
+// adminLoginCookie returns a passkey-bound admin session cookie for the
+// service behind ts (started with serveAdminForTest). It used to POST the
+// admin password; there is no such path any more.
 func adminLoginCookie(t *testing.T, ts *httptest.Server) *http.Cookie {
 	t.Helper()
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := client.PostForm(ts.URL+"/admin/login",
-		url.Values{"username": {"admin"}, "password": {"secret123"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	for _, c := range resp.Cookies() {
-		if c.Name == adminCookie {
-			return c
-		}
-	}
-	t.Fatal("no admin cookie in login response")
-	return nil
+	return adminCookieForServer(t, ts)
 }
 
 // postAdminForm POSTs form to path with cookie attached AND an Origin header
@@ -147,7 +131,7 @@ func TestLowRiskWriteAppliesDirectly(t *testing.T) {
 func TestGracePeriodStillShowsConfirmPage(t *testing.T) {
 	ts, svc, _, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(context.Background(), cookie.Value)
+	markStepUpForTest(t, svc, cookie.Value)
 	_ = svc.SeedSettings(t.Context())
 	cur := svc.ResolveSettings(t.Context())
 	form := settingsFormFrom(cur)

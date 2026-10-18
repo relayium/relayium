@@ -546,12 +546,9 @@ func TestEmergencyReleaseIsNeverHalfApplied(t *testing.T) {
 	base := newTestStore(t)
 	svc := NewService(armFailStore{base}, &capturingMailer{}, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour,
-		AdminUser: "admin", AdminPassword: "secret123",
+		AdminUser: "admin", AdminEnabled: true,
 	})
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	ts := httptest.NewServer(mux)
-	t.Cleanup(ts.Close)
+	ts := serveAdminForTest(t, svc)
 	cookie := adminLoginCookie(t, ts)
 	ctx := context.Background()
 
@@ -592,15 +589,11 @@ func newRolloutFullServer(t *testing.T) (*httptest.Server, *SQLiteStore) {
 	st := newTestStore(t)
 	svc := NewService(st, &capturingMailer{}, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour,
-		AdminUser: "admin", AdminPassword: "secret123",
+		AdminUser: "admin", AdminEnabled: true,
 		NodeToken: "fleet-secret", EnableUserNodes: true,
 	})
 	svc.now = func() time.Time { return time.Unix(tNow, 0) }
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	svc.RegisterNodeRoutes(mux)
-	ts := httptest.NewServer(mux)
-	t.Cleanup(ts.Close)
+	ts := serveAdminForTest(t, svc, func(mux *http.ServeMux) { svc.RegisterNodeRoutes(mux) })
 	return ts, st
 }
 
