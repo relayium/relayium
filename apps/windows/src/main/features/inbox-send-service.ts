@@ -384,6 +384,8 @@ export class InboxSendService {
    * under concurrent starts.
    */
   #reservations = 0;
+  /** Completion only: bounded by the same admission cap, with no retained keys. */
+  readonly #admitting = new Set<Promise<void>>();
   #fenced = false;
   #disposed = false;
   /** Documents this service has already declared new to the coordinator. */
@@ -396,7 +398,9 @@ export class InboxSendService {
    * holds the credential exactly as a job does, which is the rule
    * `StoredSendService` states for its own auxiliary operations.
    */
-  readonly #auxiliary = new Set<AbortController>();
+  readonly #auxiliary = new Set<{ control: AbortController; settled: Promise<void> }>();
+  /** Quit consent only fences sends; confirmed quiescence also closes reads. */
+  #targetsStopped = false;
   /** Coordinator retirements still joining, so a teardown joins them too. */
   readonly #retiring = new Set<Promise<void>>();
   /**
@@ -430,6 +434,7 @@ export class InboxSendService {
   resume(): void {
     if (this.#disposed) return;
     this.#fenced = false;
+    this.#targetsStopped = false;
     const bound = this.#bound;
     if (bound === null) return;
     try {
@@ -479,26 +484,33 @@ export class InboxSendService {
    */
   async quiesce(): Promise<InboxSendInventory> {
     this.#fenced = true;
+    this.#targetsStopped = true;
+    // Snapshot BEFORE yielding: Stay may start fresh reads during this drain.
+    const auxiliary = [...this.#auxiliary];
     const bound = this.#bound;
     // Both, and both before either is joined: a device-list read in flight
     // holds the bearer just as a delivery does.
-    for (const control of this.#auxiliary) control.abort();
+    for (const operation of auxiliary) operation.control.abort();
     for (const job of this.#jobs.values()) job.producer.stop();
     if (bound !== null) await bound.coordinator.quiesce();
     await this.settleRevoked();
-    // Retirements and converges are work this feature started; a drain that
-    // reported without joining them would be reporting an inventory it had not
-    // actually reached.
-    await Promise.allSettled([...this.#retiring, ...this.#converging.values()]);
+    // Admissions have no job yet, but still own work (and possibly a key).
+    // Join them AFTER asking existing producers to stop. Nothing below this
+    // wait stops a new producer if Stay resumes admissions while it is held.
+    await Promise.allSettled([
+      ...this.#retiring, ...this.#converging.values(), ...this.#admitting,
+      ...auxiliary.map((operation) => operation.settled),
+    ]);
     return this.inventory();
   }
 
   async dispose(): Promise<void> {
     this.#disposed = true;
     this.#fenced = true;
+    const auxiliary = [...this.#auxiliary];
     const bound = this.#bound;
     this.#bound = null;
-    for (const control of this.#auxiliary) control.abort();
+    for (const operation of auxiliary) operation.control.abort();
     for (const job of this.#jobs.values()) job.producer.stop();
     if (bound !== null) await bound.coordinator.dispose();
     // Joined before the registry is cleared: a job dropped while its delivery
@@ -507,6 +519,9 @@ export class InboxSendService {
       ...[...this.#jobs.values()].map((job) => job.delivery.done),
       ...this.#retiring,
       ...this.#converging.values(),
+      ...this.#admitting,
+      ...auxiliary.map((operation) => operation.settled),
+      ...(this.#building === null ? [] : [this.#building]),
     ]);
     this.#jobs.clear();
     this.#settled.clear();
@@ -525,10 +540,10 @@ export class InboxSendService {
    * coordinator.
    */
   async onAccountChanged(): Promise<void> {
+    // Cold reads own work even before a coordinator exists.
+    for (const operation of this.#auxiliary) operation.control.abort();
     const bound = this.#bound;
     if (bound === null) return;
-    // A read issued under the outgoing account's bearer is aborted first.
-    for (const control of this.#auxiliary) control.abort();
     for (const job of this.#jobs.values()) job.producer.stop();
     const identity = this.deps.identity();
     const quiet = await bound.coordinator.invalidateAccount({
@@ -595,39 +610,48 @@ export class InboxSendService {
    * rotate its key, between being listed and being sent to.
    */
   async targets(): Promise<InboxSendTargets> {
-    if (this.#disposed) return { ok: false, refusal: "unavailable" };
-    const bound = await this.bind();
-    if (bound === null) {
-      const authority = await this.deps.authority();
-      return { ok: false, refusal: authority.kind === "signed-out" ? "signed-out" : "unavailable" };
-    }
+    if (this.#disposed || this.#targetsStopped) return { ok: false, refusal: "unavailable" };
     const control = new AbortController();
-    this.#auxiliary.add(control);
-    let rows: readonly Record<string, unknown>[];
+    let finish!: () => void;
+    const settled = new Promise<void>((resolve) => { finish = resolve; });
+    const operation = { control, settled };
+    // Own the WHOLE read, including cold binding and signed-out classification.
+    this.#auxiliary.add(operation);
     try {
-      rows = await bound.transport.devices(control.signal);
-    } catch (err) {
-      this.deps.reportFailure?.(err);
-      return { ok: false, refusal: err instanceof SendApiError ? "transport" : "unavailable" };
+      const bound = await this.bind();
+      if (control.signal.aborted || this.#disposed) return { ok: false, refusal: "unavailable" };
+      if (bound === null) {
+        const authority = await this.deps.authority();
+        if (control.signal.aborted || this.#disposed) return { ok: false, refusal: "unavailable" };
+        return { ok: false, refusal: authority.kind === "signed-out" ? "signed-out" : "unavailable" };
+      }
+      let rows: readonly Record<string, unknown>[];
+      try {
+        rows = await bound.transport.devices(control.signal);
+      } catch (err) {
+        this.deps.reportFailure?.(err);
+        return { ok: false, refusal: err instanceof SendApiError ? "transport" : "unavailable" };
+      }
+      // A sign-out during the read: these are the previous account's devices.
+      if (control.signal.aborted || this.#bound !== bound) return { ok: false, refusal: "unavailable" };
+      const caps = {
+        receiveV3: bound.runtime.constants.capReceiveV3,
+        textV1: bound.runtime.constants.capTextV1,
+        keyAlgorithm: bound.runtime.constants.keyAlgorithm,
+      };
+      const targets: InboxSendTargetView[] = [];
+      for (const row of rows) {
+        const deviceID = typeof row["ID"] === "string" ? row["ID"] : "";
+        if (deviceID.length === 0 || deviceID === bound.deviceID) continue;
+        const inbox = (row["Inbox"] ?? null) as Record<string, unknown> | null;
+        const name = typeof row["Name"] === "string" ? row["Name"] : "";
+        targets.push(describeDevice(deviceID, name, rowRefusal(inbox, caps)));
+      }
+      return { ok: true, targets };
     } finally {
-      this.#auxiliary.delete(control);
+      this.#auxiliary.delete(operation);
+      finish();
     }
-    // A sign-out during the read: these are the previous account's devices.
-    if (control.signal.aborted || this.#bound !== bound) return { ok: false, refusal: "unavailable" };
-    const caps = {
-      receiveV3: bound.runtime.constants.capReceiveV3,
-      textV1: bound.runtime.constants.capTextV1,
-      keyAlgorithm: bound.runtime.constants.keyAlgorithm,
-    };
-    const targets: InboxSendTargetView[] = [];
-    for (const row of rows) {
-      const deviceID = typeof row["ID"] === "string" ? row["ID"] : "";
-      if (deviceID.length === 0 || deviceID === bound.deviceID) continue;
-      const inbox = (row["Inbox"] ?? null) as Record<string, unknown> | null;
-      const name = typeof row["Name"] === "string" ? row["Name"] : "";
-      targets.push(describeDevice(deviceID, name, rowRefusal(inbox, caps)));
-    }
-    return { ok: true, targets };
   }
 
   // -------------------------------------------------------------------------
@@ -679,11 +703,16 @@ export class InboxSendService {
       return { ok: false, refusal: "at-capacity", code: "unresolved-full" };
     }
     this.#reservations += 1;
+    let finished!: () => void;
+    const completion = new Promise<void>((resolve) => { finished = resolve; });
+    this.#admitting.add(completion);
     try {
       return await this.admit(input);
     } finally {
       // Released whatever happened. A registered job counts itself from here.
       this.#reservations -= 1;
+      this.#admitting.delete(completion);
+      finished();
     }
   }
 
@@ -712,6 +741,7 @@ export class InboxSendService {
   }): Promise<InboxSendStart> {
     const epoch = this.deps.accountEpoch();
     const bound = await this.bind();
+    if (this.#disposed || this.#fenced) return { ok: false, refusal: "unavailable" };
     if (bound === null) {
       const authority = await this.deps.authority();
       return { ok: false, refusal: authority.kind === "signed-out" ? "signed-out" : "unavailable" };
@@ -720,7 +750,7 @@ export class InboxSendService {
     // binding speaks for, or the delivery would open under an account that
     // replaced the one the user was looking at. The document is re-checked for
     // the same reason: both can move while the credential is being read.
-    if (bound.epoch !== epoch || this.#disposed || this.#fenced) return { ok: false, refusal: "unavailable" };
+    if (bound.epoch !== epoch) return { ok: false, refusal: "unavailable" };
     if (input.document !== this.deps.currentDocument()) return { ok: false, refusal: "unavailable" };
 
     const descriptors = input.entries.map((entry) => ({ path: entry.path, size: entry.size }));
@@ -1144,12 +1174,14 @@ export class InboxSendService {
     const identity = this.deps.identity();
     if (identity === null) return null;
     const authority = await this.deps.authority();
-    if (authority.kind !== "ok") return null;
+    if (this.#disposed || authority.kind !== "ok") return null;
     if (authority.epoch !== identity.epoch || authority.epoch !== this.deps.accountEpoch()) return null;
     const runtime = await this.deps.runtime();
+    if (this.#disposed) return null;
     const stored = await (this.deps.storedRuntime ?? storedRuntime)();
+    if (this.#disposed) return null;
     const keyBytes = await this.deps.atRestKeyFor(identity.context);
-    if (keyBytes.byteLength !== AT_REST_KEY_BYTES) return null;
+    if (this.#disposed || keyBytes.byteLength !== AT_REST_KEY_BYTES) return null;
     // Re-checked after every await: a sign-out during any of them would leave
     // this building a coordinator around a bearer that is no longer the user's.
     if (this.deps.accountEpoch() !== authority.epoch) return null;

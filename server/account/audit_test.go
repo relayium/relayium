@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// newAdminAuditServer 起一个启用了 /admin 的服务，密码固定为 secret123，并把
+// newAdminAuditServer 起一个启用了 /admin 的服务（Passkey-only），并把
 // store/mailer 一并返回给审计断言用。
 //
 // 注意：admin_test.go 已有一个同名意图但签名不同的 newAdminServer(t, user, pass)
@@ -23,12 +23,9 @@ func newAdminAuditServer(t *testing.T) (*httptest.Server, *Service, *SQLiteStore
 	mail := &capturingMailer{}
 	svc := NewService(store, mail, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour,
-		AdminUser: "admin", AdminPassword: "secret123",
+		AdminUser: "admin", AdminEnabled: true,
 	})
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	ts := httptest.NewServer(mux)
-	t.Cleanup(ts.Close)
+	ts := serveAdminForTest(t, svc)
 	return ts, svc, store, mail
 }
 
@@ -45,15 +42,11 @@ func TestWriteAuditNeverBreaksTheRequest(t *testing.T) {
 
 func TestLoginSuccessIsAudited(t *testing.T) {
 	ts, svc, store, _ := newAdminAuditServer(t)
-	form := strings.NewReader("username=admin&password=secret123")
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/admin/login", form)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := ts.Client().Do(req)
-	if err != nil {
-		t.Fatal(err)
+	resp := passkeyLoginHTTP(t, ts, svc, nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("passkey login: status %d", resp.StatusCode)
 	}
-	defer resp.Body.Close()
-
 	entries, err := store.ListAudit(context.Background(), 10, 0, "login.ok")
 	if err != nil {
 		t.Fatal(err)
@@ -61,24 +54,24 @@ func TestLoginSuccessIsAudited(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("want 1 login.ok audit entry, got %d", len(entries))
 	}
-	if entries[0].Auth != "password" {
-		t.Fatalf("want auth=password, got %q", entries[0].Auth)
+	if entries[0].Auth != "passkey" || entries[0].Target != "passkey:"+adminTestPasskey(t, svc).credID {
+		t.Fatalf("want auth=passkey naming the credential, got %+v", entries[0])
 	}
-	_ = svc
 }
 
-// 登录失败必须留痕 —— 这是现在完全缺失的线索：有人在撞密码时无从得知。
+// 登录失败必须留痕：有人在用错误的 passkey 断言撞后台时要能看到。
 func TestLoginFailureIsAudited(t *testing.T) {
-	ts, _, store, _ := newAdminAuditServer(t)
-	form := strings.NewReader("username=admin&password=wrong")
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/admin/login", form)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := ts.Client().Do(req)
-	if err != nil {
-		t.Fatal(err)
+	ts, svc, store, _ := newAdminAuditServer(t)
+	adminTestPasskey(t, svc)
+	rp, _ := svc.adminRP()
+	k := adminTestPasskey(t, svc)
+	resp := passkeyLoginHTTP(t, ts, svc, func(string) string {
+		return k.auth.assertBody(t, rp.Config.RPID, svc.selfOrigin(), "d3JvbmctY2hhbGxlbmdl", k.handle)
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("bad assertion: status %d", resp.StatusCode)
 	}
-	defer resp.Body.Close()
-
 	entries, err := store.ListAudit(context.Background(), 10, 0, "login.fail")
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +81,8 @@ func TestLoginFailureIsAudited(t *testing.T) {
 	}
 }
 
-// 红线：审计表里绝不能出现管理员密码，哪怕是失败尝试里输错的那个。
+// 红线：审计表里绝不能出现请求里提交的任何秘密 —— 包括有人仍向已移除的密码
+// 登录端点提交的密码。
 func TestLoginFailureAuditNeverContainsThePassword(t *testing.T) {
 	ts, _, store, _ := newAdminAuditServer(t)
 	const attempted = "hunter2-should-never-be-logged"

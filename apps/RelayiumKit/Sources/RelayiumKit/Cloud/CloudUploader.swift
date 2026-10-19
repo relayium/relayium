@@ -51,6 +51,8 @@ func uploadManifestMatches(purpose: UploadPurpose, manifest: UploadManifest) -> 
 
 /// The chunked upload: encrypt and send interleaved, so resident memory is one
 /// upload chunk plus one frame rather than the whole ciphertext.
+/// A negotiated share pipeline owns at most two such chunks until their
+/// requests terminate; older servers and other upload purposes stay serial.
 ///
 /// Mirrors `web/src/lib/stored-file.ts`'s chunkedUpload, including its two
 /// asymmetric guards. `cipherSizeFor` is computed before encryption because the
@@ -128,17 +130,29 @@ public final class CloudUploader {
                        token: String,
                        onActivity: UploadActivityHandler? = nil,
                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
+        try await uploadReportingPipeline(sources: sources, purpose: purpose,
+            burnAfterRead: burnAfterRead, ttl: ttl, token: token,
+            onActivity: onActivity, onProgress: onProgress, onPipeline: {})
+    }
+
+    private func uploadReportingPipeline(sources: [PlaintextSource], purpose: UploadPurpose,
+                       burnAfterRead: Bool, ttl: Int, token: String,
+                       onActivity: UploadActivityHandler?,
+                       onProgress: @escaping (Int, Int) -> Void,
+                       onPipeline: () -> Void) async throws -> UploadOutcome {
         let trace = UploadTrace(now: pacing.now, emit: onActivity)
         return try await trace.run {
             try await self.uploadTraced(sources: sources, purpose: purpose,
                                         burnAfterRead: burnAfterRead, ttl: ttl,
-                                        token: token, trace: trace, onProgress: onProgress)
+                                        token: token, trace: trace, onProgress: onProgress,
+                                        onPipeline: onPipeline)
         }
     }
 
     private func uploadTraced(sources: [PlaintextSource], purpose: UploadPurpose,
                         burnAfterRead: Bool, ttl: Int, token: String, trace: UploadTrace,
-                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
+                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void,
+                        onPipeline: () -> Void) async throws -> UploadOutcome {
         // This path mints its own content key and hands back a `#k=` capability,
         // which is a public share by definition — so the shared manifest is the
         // only coherent frame 0 here, and the check states it rather than
@@ -150,9 +164,19 @@ public final class CloudUploader {
         let header = try Self.manifestHeader(key: raw, sources: sources)
         let total = try Self.checkedCipherSize(sources.map(\.size))
 
-        let (issuedId, chunkSize) = try await transport.initUpload(
-            header: header, purpose: purpose, burnAfterRead: burnAfterRead,
-            ttl: ttl, size: total, token: token)
+        let issuedId: String, chunkSize: Int
+        var usePipeline = false
+        if let parallel = transport as? any PipelinedResumableTransport {
+            let session = try await parallel.initPipelinedUpload(header: header, purpose: purpose,
+                burnAfterRead: burnAfterRead, ttl: ttl, size: total, token: token)
+            issuedId = session.uploadId; chunkSize = session.chunkSize
+            usePipeline = session.supportsPipeline && purpose == .share
+            if usePipeline { onPipeline() }
+        } else {
+            (issuedId, chunkSize) = try await transport.initUpload(
+                header: header, purpose: purpose, burnAfterRead: burnAfterRead,
+                ttl: ttl, size: total, token: token)
+        }
         // The first thing this function does with the server's answer, and
         // deliberately before any file bytes are encrypted or sent — the
         // encryptor below is not even constructed yet. `uploadId` is appended as
@@ -167,8 +191,13 @@ public final class CloudUploader {
         let uploadId = try StoredObjectID.checked(issuedId)
         guard validUploadChunkSize(chunkSize) else { throw CloudError.decoding }
         let enc = ChunkEncryptor(key: raw, sources: sources)
-        try await pump(enc: enc, uploadId: uploadId, chunkSize: chunkSize,
-                       from: 0, total: total, token: token, trace: trace, onProgress: onProgress)
+        if usePipeline, let parallel = transport as? any PipelinedResumableTransport {
+            try await pumpPipeline(enc: enc, uploadId: uploadId, chunkSize: chunkSize,
+                total: total, token: token, parallel: parallel, trace: trace, onProgress: onProgress)
+        } else {
+            try await pump(enc: enc, uploadId: uploadId, chunkSize: chunkSize,
+                           from: 0, total: total, token: token, trace: trace, onProgress: onProgress)
+        }
 
         try Task.checkCancellation()
         trace.enter(.finalizing)
@@ -309,14 +338,19 @@ public final class CloudUploader {
     /// is unchanged, and the memory guards still measure it.
     private func pump(enc: ChunkEncryptor, uploadId: String, chunkSize: Int,
                       from: Int, total: Int, token: String, trace: UploadTrace,
-                      onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws {
+                      onProgress: @escaping (_ sent: Int, _ total: Int) -> Void,
+                      initialPending: consuming Data = Data(),
+                      replayBytes: consuming [Data] = [],
+                      replayHighestSent: Int? = nil, priorBufferPeak: Int = 0) async throws {
         // Held bytes double as the replay buffer: the server can commit part of a
         // chunk, so the unacknowledged tail must survive until it is acked.
         //
         // `Data`, not `[UInt8]`: the transport takes a slice of this buffer, and
         // a Data slice shares its storage while an Array slice has to be copied
         // into a new allocation to cross the call.
-        var pending = Data()
+        var pending = consume initialPending
+        var replay = UploadCipherReplay(consume replayBytes)
+        var highestSent = replayHighestSent ?? from
         pending.reserveCapacity(chunkSize + STORE_CHUNK_SIZE + FRAME_OVERHEAD)
         var chunkStart = from
         var offset = from
@@ -324,7 +358,7 @@ public final class CloudUploader {
         /// the frame is sealed whole — the seal is what makes the tail
         /// byte-identical to the run this one continues.
         var drop = enc.dropFromFirstFrame
-        bufferPeak = 0
+        bufferPeak = priorBufferPeak
         bytesCopiedToTransport = 0
         packingBufferReallocations = 0
         var lastStorageBase: UInt = 0
@@ -345,7 +379,7 @@ public final class CloudUploader {
         while offset < total {
             try Task.checkCancellation()
             while pending.count < chunkSize {
-                guard var f = try enc.next() else { break }
+                guard var f = try replay.next() ?? enc.next() else { break }
                 try Task.checkCancellation()
                 if drop > 0 {
                     // Only ever the first frame, and only ever a prefix of it.
@@ -363,6 +397,7 @@ public final class CloudUploader {
             // In-flight progress, so the bar follows the bytes rather than the
             // chunk boundaries.
             gate.floor(offset)
+            highestSent = max(highestSent, chunkStart + pending.count)
             let received = try await patchWithRetry(
                 uploadId: uploadId, bytes: pending,
                 chunkStart: chunkStart, total: total, token: token, trace: trace,
@@ -370,7 +405,10 @@ public final class CloudUploader {
             var consumed = received - chunkStart
             // Offset moving backwards, or past bytes we never produced: either way
             // we can no longer align, and sending more writes a misplaced stream.
-            if consumed < 0 || consumed > pending.count { throw CloudError.server(status: 0) }
+            if consumed < 0 || received > highestSent { throw CloudError.server(status: 0) }
+            if consumed > pending.count {
+                guard replayHighestSent != nil, replay.skip(consumed - pending.count) else { throw CloudError.server(status: 0) }
+            }
             if consumed == 0 {
                 // A 200 or 409 that names the offset this request started at:
                 // the server answered, and holds nothing more than before. Once
@@ -412,8 +450,11 @@ public final class CloudUploader {
                 if stored == chunkStart { continue }
                 // The same alignment rule as an acknowledgement: inside the
                 // bytes held, or the stream can no longer be placed.
-                guard stored > chunkStart, stored - chunkStart <= pending.count else {
+                guard stored > chunkStart, stored <= highestSent else {
                     throw CloudError.server(status: 0)
+                }
+                if stored - chunkStart > pending.count {
+                    guard replayHighestSent != nil, replay.skip(stored - chunkStart - pending.count) else { throw CloudError.server(status: 0) }
                 }
                 trace.count(\.offsetRecoveries)
                 consumed = stored - chunkStart
@@ -445,7 +486,56 @@ public final class CloudUploader {
         }
         // The other half of the asymmetric guard: the loop ends on offset >= total,
         // so an under-reporting formula would leave frames unsent. Confirm dry.
+        if !replay.isEmpty { throw CloudError.server(status: 0) }
         if try enc.next() != nil { throw CloudError.server(status: 0) }
+    }
+
+    private func pumpPipeline(enc: ChunkEncryptor, uploadId: String, chunkSize: Int,
+                              total: Int, token: String, parallel: any PipelinedResumableTransport,
+                              trace: UploadTrace,
+                              onProgress: @escaping (Int, Int) -> Void) async throws {
+        bufferPeak = 0; bytesCopiedToTransport = 0; packingBufferReallocations = 0
+        let gate = ProgressGate(onProgress)
+        gate.floor(0); onProgress(0, total)
+        let result = try await runNativeUploadPipeline(chunkSize: chunkSize, total: total,
+            next: { try enc.next() },
+            send: { bytes, start, sent in
+                let request = trace.beginRequest()
+                let count = bytes.count
+                let lifetime = UploadPipelineProgressLifetime()
+                defer { lifetime.close() }
+                do {
+                    let answer = try await parallel.patchPipelinedChunk(uploadId: uploadId,
+                        bytes: bytes, from: start, to: start + count, total: total, token: token,
+                        onBytesSent: { n in
+                            lifetime.perform {
+                                let loaded = min(max(0, n), count)
+                                gate.report(start + loaded, total)
+                                if loaded == count { trace.bodySent(request); sent() }
+                            }
+                        })
+                    if case .serverAhead = answer { trace.count(\.serverAheadAnswers) }
+                    return answer
+                } catch { trace.noteTransportFailure(error); throw error }
+            },
+            recover: { floor in
+                trace.enter(.checkingOffset); trace.count(\.offsetQueries)
+                do { return try await self.transport.uploadOffset(uploadId: uploadId, token: token) }
+                catch let e as CloudError {
+                    if e == .unauthorized || e == .quota || e == .rateLimited || e == .dailyQuota || e == .monthlyTraffic || e == .notFound { throw e }
+                    try Task.checkCancellation(); return floor
+                }
+            },
+            confirmed: { n in gate.commit(n, total) },
+            buffered: { n in self.bufferPeak = max(self.bufferPeak, n) })
+        if !result.completed {
+            trace.count(\.transportRetries)
+            try await pump(enc: enc, uploadId: uploadId, chunkSize: chunkSize,
+                from: result.offset, total: total, token: token, trace: trace,
+                onProgress: onProgress, initialPending: result.takePending(),
+                replayBytes: result.takeQueued(), replayHighestSent: result.highestSent,
+                priorBufferPeak: result.bufferPeak)
+        }
     }
 
     /// `cipherSizeFor` is the wire-format reference used by interop tests, but
@@ -903,11 +993,12 @@ extension CloudUploader {
         onActivity: UploadActivityHandler? = nil,
         onProgress: @escaping (_ sent: Int, _ total: Int) -> Void
     ) async throws -> UploadOutcome {
+        var pipelineNegotiated = false
         do {
-            return try await upload(sources: sources, purpose: .share,
+            return try await uploadReportingPipeline(sources: sources, purpose: .share,
                                     burnAfterRead: burnAfterRead,
                                     ttl: ttl, token: token, onActivity: onActivity,
-                                    onProgress: onProgress)
+                                    onProgress: onProgress, onPipeline: { pipelineNegotiated = true })
         } catch is CancellationError {
             throw CancellationError()
         } catch let e as StoredLinkKeyError {
@@ -920,6 +1011,9 @@ extension CloudUploader {
             // nothing to retry — the same id would be refused again.
             throw e
         } catch let e as CloudError {
+            // This server proved it supports the chunk protocol. A failure
+            // after negotiation must not create a second upload/content key.
+            if pipelineNegotiated { throw e }
             // Never mask a failure the user can act on, and never retry it.
             if e == .unauthorized || e == .quota || e == .rateLimited { throw e }
             if cipherSizeFor(sources.map(\.size)) > FALLBACK_MAX_CIPHER_BYTES { throw e }

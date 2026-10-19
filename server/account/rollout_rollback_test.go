@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -292,12 +291,9 @@ func TestByoRollbackStoreFailureIs500AndDoesNotLeakRawError(t *testing.T) {
 	}
 	fs := &rollbackFailStore{SQLiteStore: base}
 	svc := NewService(fs, &capturingMailer{}, Config{
-		BaseURL: "http://example.test", AdminUser: "boss", AdminPassword: "s3cret",
+		BaseURL: "http://example.test", AdminUser: "boss", AdminEnabled: true,
 	})
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	ts := httptest.NewServer(mux)
-	t.Cleanup(ts.Close)
+	ts := serveAdminForTest(t, svc)
 	cookie := adminLogin(t, ts)
 
 	fs.failByoRead = true

@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"log"
 	"math"
@@ -18,7 +17,6 @@ import (
 
 const (
 	adminCookie          = "relayium_admin"
-	adminSessionTTL      = 12 * time.Hour
 	adminUsersPerPage    = 50
 	adminSectionOverview = "overview"
 	adminSectionUsers    = "users"
@@ -37,15 +35,16 @@ const (
 	// 86400 into seconds; 100 years is far beyond any sane retention.
 	maxRetentionDays = int64(100 * 365)
 
-	// defaultAdminUser is the admin username used when AdminUser is unconfigured
-	// (deployments that only set a password).
+	// defaultAdminUser is the admin display/audit name used when AdminUser is
+	// unconfigured.
 	defaultAdminUser = "admin"
 
-	// stepUpGraceSecs 是一次成功步进之后，同一会话内高危操作免再验第二因子的窗口。
+	// stepUpGraceSecs 是一次成功 passkey 步进之后，同一会话内高危操作免再验的窗口。
 	//
-	// 存在的理由是 TOTP：totp.go 的单调计数器让同一个 30 秒窗口的验证码只能用一次，
-	// 没有宽限期的话连续两次高危操作必须干等下一个码。**确认页不受影响，照常展示**，
-	// 所以防误点击的能力一点没打折 —— 免掉的只是重复掉码。
+	// 保留它的理由不再是 TOTP（已移除），而是连续的高危操作（例如先改套餐再给同一
+	// 用户授权）不必在一分钟内连按两次 passkey。**确认页不受影响，照常展示**，防误点
+	// 的 diff 一点没打折。宽限期记在会话行上：撤销 passkey、revoke-all 或会话过期都
+	// 会连同它一起失效，不存在"钥匙已删、宽限期还在"的缓存。
 	stepUpGraceSecs = 60
 )
 
@@ -491,10 +490,12 @@ func contains(ss []string, s string) bool {
 	return false
 }
 
-// AdminEnabled 报告是否配置了管理员密码。账号有默认值，故只以密码为开关。
-func (s *Service) AdminEnabled() bool { return s.Cfg().AdminPassword != "" }
+// AdminEnabled 报告 /admin 是否开启。它与任何秘密无关：管理员认证只有 passkey，
+// 开关由 main 从 RELAYIUM_ADMIN_ENABLED（或迁移期的旧 RELAYIUM_ADMIN_PASS 是否
+// 非空这一"开启提示"）解析而来，见 server/main.go resolveAdminEnabled。
+func (s *Service) AdminEnabled() bool { return s.Cfg().AdminEnabled }
 
-// adminUser 返回有效管理员账号，未配置时默认为 "admin"（向后兼容只设密码的部署）。
+// adminUser 返回管理员显示/审计名，未配置时默认为 "admin"。它不是凭据。
 func (s *Service) adminUser() string {
 	if s.Cfg().AdminUser == "" {
 		return defaultAdminUser
@@ -502,7 +503,7 @@ func (s *Service) adminUser() string {
 	return s.Cfg().AdminUser
 }
 
-// RegisterAdmin 在根 mux 上挂载 /admin 路由（仅当配置了密码）。
+// RegisterAdmin 在根 mux 上挂载 /admin 路由（仅当 AdminEnabled）。
 func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	if !s.AdminEnabled() {
 		return
@@ -519,7 +520,11 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// this handler never mutates anything).
 	mux.HandleFunc("GET /admin/audit", s.handleAdminAudit)
 	mux.HandleFunc("GET /admin/version-policy", s.handleAdminVersionPolicy)
-	mux.Handle("POST /admin/login", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogin)))
+	// Password/TOTP login is gone. The route stays, answering 410 without
+	// reading the form, so an old bookmark or script gets a clear refusal
+	// instead of falling through to the SPA — and so no future handler can be
+	// mounted here by accident.
+	mux.Handle("POST /admin/login", http.HandlerFunc(s.handleAdminRemovedEndpoint))
 	mux.Handle("POST /admin/logout", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogout)))
 	// A display preference, but still a state change, so it goes through the same
 	// CSRF guard as every other POST here rather than being a convenient link.
@@ -530,21 +535,27 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyLoginBegin))))
 	mux.Handle("POST /admin/passkey/login/finish",
 		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyLoginFinish))))
-	mux.Handle("POST /admin/passkey/register/begin",
-		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyRegisterBegin))))
-	mux.Handle("POST /admin/passkey/register/finish",
-		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyRegisterFinish))))
-	// Step-up passkey assertion challenge, issued to the confirmation page when
-	// passkey is the offered factor. fetch-only like the other passkey
-	// endpoints, so a missing Origin is a forgery signal.
+	// The browser can no longer add or remove an admin passkey, even from a
+	// logged-in session: credential management is the local
+	// `relayium-server admin` command. The three old routes answer 410 and do
+	// nothing; the handlers behind them are inert (passkey_register.go).
+	mux.Handle("POST /admin/passkey/register/begin", http.HandlerFunc(s.handleAdminRemovedEndpoint))
+	mux.Handle("POST /admin/passkey/register/finish", http.HandlerFunc(s.handleAdminRemovedEndpoint))
+	mux.Handle("POST /admin/passkey/delete", http.HandlerFunc(s.handleAdminRemovedEndpoint))
+	// Enrollment of a NEW passkey, authorized by a one-time grant the local
+	// command printed (admin_enroll.go). It needs no admin session — that is
+	// the point: it works with zero registered passkeys — and it can only ever
+	// produce a PENDING credential that the same local command must approve.
+	mux.HandleFunc("GET /admin/enroll", s.handleAdminEnrollPage)
+	mux.Handle("POST /admin/enroll/begin",
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminEnrollBegin))))
+	mux.Handle("POST /admin/enroll/finish",
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminEnrollFinish))))
+	// Step-up passkey assertion challenge, issued to the confirmation page.
+	// fetch-only like the other passkey endpoints, so a missing Origin is a
+	// forgery signal.
 	mux.Handle("POST /admin/stepup/passkey/begin",
 		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminStepUpPasskeyBegin))))
-	// Delete is a plain form submission, not fetch, so it gets CSRFGuard only.
-	// It is high-risk (see the reversed exemption note on
-	// HandleAdminPasskeyDelete in passkey_register.go) so it also goes
-	// through RequireStepUp, same as the other five below.
-	mux.Handle("POST /admin/passkey/delete",
-		s.CSRFGuard(s.RequireStepUp(AuditPasskeyDelete, s.HandleAdminPasskeyDelete)))
 	// These six are high-risk writes: RequireStepUp intercepts the POST,
 	// stashes it as a pending action, and renders a confirmation page
 	// showing the diff instead of applying it directly. The actual write
@@ -629,7 +640,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// 渲染出一个必然 404 的按钮。两道守卫都在 handler 里复查。
 	mux.Handle("POST /admin/rollout/{id}/retry", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutRetry)))
 	// 紧急发布跳过分批、对整条轨道一次性放行 —— 没有金丝雀能再兜住这次发布了，
-	// 所以它和删除节点一样走 RequireStepUp：确认页展示 diff、校验第二因子、
+	// 所以它和删除节点一样走 RequireStepUp：确认页展示 diff、校验 passkey、
 	// 由 HandleAdminConfirm 落审计。
 	mux.Handle("POST /admin/rollout/{id}/emergency",
 		s.CSRFGuard(s.RequireStepUp(AuditRolloutEmergency, s.handleAdminRolloutEmergency)))
@@ -668,51 +679,75 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/release/dismiss", s.CSRFGuard(http.HandlerFunc(s.handleAdminReleaseDismiss)))
 }
 
-// newAdminSession mints a session token and records how it was established
-// (auth: "password" | "passkey") so the audit trail can report it later. The
-// session lives in the store (shared across instances); an insert failure is
-// returned so the caller aborts the login rather than handing out a cookie for a
-// session that isn't recorded.
-// adminCredFP fingerprints the admin credentials (password + TOTP secret). A
-// session carries the fingerprint in force when it was minted; validAdmin
-// rejects it once the live credentials differ, so rotating the password/secret
-// and restarting revokes every prior session — the classic incident response for
-// a leaked cookie, which persisting sessions had quietly broken.
-func (s *Service) adminCredFP() string {
-	return authx.HashToken(s.Cfg().AdminPassword + "\x00" + s.Cfg().AdminTOTPSecret)
-}
-
-func (s *Service) newAdminSession(ctx context.Context, auth string) (string, error) {
+// newAdminSession mints a session token for a successful passkey login and
+// binds it to the credential that produced the assertion, so revoking that
+// passkey (local command) ends exactly this session. The session lives in the
+// store (shared across instances); an insert failure is returned so the caller
+// aborts the login rather than handing out a cookie for an unrecorded session.
+//
+// generation is the auth generation captured when the login ceremony began;
+// the store mints only if it is still current and the credential still exists
+// (ErrAdminSessionRefused otherwise).
+func (s *Service) newAdminSession(ctx context.Context, credentialID string, generation int64) (string, error) {
 	tok := authx.RandToken()
-	if err := s.Store().CreateAdminSession(ctx, tok, auth, s.adminCredFP(), s.Now().Add(adminSessionTTL).Unix()); err != nil {
+	if err := s.Store().CreateAdminSession(ctx, tok, credentialID, generation, s.Now().Unix()); err != nil {
 		return "", err
 	}
 	return tok, nil
 }
 
+// validAdmin authenticates an admin request AND refreshes the session's idle
+// timer. It is the only refreshing lookup: it runs once per authenticated
+// admin request (isAdminReq), so only the operator's own activity keeps a
+// session alive. Fail closed on a store error: a DB blip must not admit an
+// unverified admin.
 func (s *Service) validAdmin(ctx context.Context, tok string) bool {
 	if tok == "" {
 		return false
 	}
-	// Fail closed on a store error: a DB blip must not admit an unverified admin.
-	_, _, ok, err := s.Store().AdminSession(ctx, tok, s.adminCredFP(), s.Now().Unix())
+	_, ok, err := s.Store().TouchAdminSession(ctx, tok, s.Now().Unix())
 	return err == nil && ok
 }
 
-// markStepUp 记下这次步进成功的时刻，开启宽限期。Best-effort: a failed write just
-// means the operator re-enters the factor on the next high-risk action.
-func (s *Service) markStepUp(ctx context.Context, tok string) {
-	_ = s.Store().MarkAdminStepUp(ctx, tok, s.Now().Unix())
+// adminSessionInfo reads a valid session WITHOUT refreshing it — for the audit
+// writer and the step-up grace check, which must never extend a session.
+func (s *Service) adminSessionInfo(ctx context.Context, tok string) (AdminSessionInfo, bool) {
+	if tok == "" {
+		return AdminSessionInfo{}, false
+	}
+	info, ok, err := s.Store().AdminSession(ctx, tok, s.Now().Unix())
+	if err != nil || !ok {
+		return AdminSessionInfo{}, false
+	}
+	return info, true
 }
 
-// stepUpFresh 报告该会话是否仍在宽限期内。Fail closed on a store error / missing
-// session (require the factor).
-func (s *Service) stepUpFresh(ctx context.Context, tok string) bool {
-	_, lastStepUpAt, ok, err := s.Store().AdminSession(ctx, tok, s.adminCredFP(), s.Now().Unix())
-	if err != nil || !ok || lastStepUpAt == 0 {
-		return false
+// markStepUp 记下这次步进成功的时刻，开启宽限期，并绑定到证明所在的 generation：
+// 只有该 generation 仍是当前值时才写入（同一条语句里判断），所以验证之后、记录之前
+// 发生的任何撤销都不能留下来自已撤销密钥的宽限期。Best-effort: a refused or failed
+// write just means the operator confirms with the passkey again next time.
+func (s *Service) markStepUp(ctx context.Context, tok string, generation int64) {
+	_, _ = s.Store().MarkAdminStepUp(ctx, tok, s.Now().Unix(), generation)
+}
+
+// stepUpFresh 报告该会话是否仍在宽限期内，并返回宽限期所绑定的 generation。宽限期
+// 只在它被证明时的 generation 仍是当前值时才算数：撤销任何一枚 passkey 或
+// revoke-all 都会立刻终止所有会话缓存的步进权限。Fail closed on a store error /
+// missing / revoked / idle session (require the passkey).
+func (s *Service) stepUpGrace(ctx context.Context, tok string) (int64, bool) {
+	info, ok := s.adminSessionInfo(ctx, tok)
+	if !ok || info.LastStepUpAt == 0 || info.StepUpGeneration < 0 || info.StepUpGeneration != info.CurrentGeneration {
+		return 0, false
 	}
-	return s.Now().Unix()-lastStepUpAt < stepUpGraceSecs
+	if s.Now().Unix()-info.LastStepUpAt >= stepUpGraceSecs {
+		return 0, false
+	}
+	return info.StepUpGeneration, true
+}
+
+func (s *Service) stepUpFresh(ctx context.Context, tok string) bool {
+	_, ok := s.stepUpGrace(ctx, tok)
+	return ok
 }
 
 func (s *Service) isAdminReq(r *http.Request) bool {
@@ -726,85 +761,26 @@ func (s *Service) adminUsername() string {
 	return s.adminUser()
 }
 
-// adminAuthMethod 报告当前会话是怎么建立的（password / passkey），供审计记录使用。
+// adminAuthMethod 报告当前会话是怎么建立的（只可能是 passkey），供审计记录使用。
+// 只读，不刷新空闲计时。
 func (s *Service) adminAuthMethod(r *http.Request) string {
 	c, err := r.Cookie(adminCookie)
 	if err != nil {
 		return ""
 	}
-	auth, _, ok, err := s.Store().AdminSession(r.Context(), c.Value, s.adminCredFP(), s.Now().Unix())
-	if err != nil || !ok {
+	info, ok := s.adminSessionInfo(r.Context(), c.Value)
+	if !ok {
 		return ""
 	}
-	return auth
+	return info.Auth
 }
 
-// verifyAdminCreds runs the constant-time username/password comparison plus the
-// TOTP match shared by password login and passkey-registration step-up. Both
-// fields are combined without short-circuit, so neither a wrong username nor a
-// wrong password is distinguishable by timing. It does NOT consume the TOTP
-// step; callers commit it only after full success.
-func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok bool) {
-	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser()))
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.Cfg().AdminPassword))
-	credsOK := userOK&passOK == 1
-	step, totpOK := int64(0), true
-	if s.AdminTOTPEnabled() {
-		step, totpOK = s.MatchAdminTOTPStep(code)
-	}
-	return step, credsOK && totpOK
-}
-
-func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
-	ip := s.rateLimitIP(r)
-	if s.AdminLoginLocked(ip) {
-		s.renderAdminLogin(w, r, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试",
-			s.AdminPasskeyCount(r.Context()) > 0)
-		return
-	}
-
-	totpStep, ok := s.verifyAdminCreds(
-		r.FormValue("username"), r.FormValue("password"), r.FormValue("totp"))
-	if !ok {
-		s.AdminLoginRecordFail(ip)
-		s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
-			s.AdminPasskeyCount(r.Context()) > 0)
-		// 只记"有人试过且失败了"。绝不记录尝试的用户名或密码：
-		// 用户名常被误输成密码，把它记下来等于把密码写进日志。
-		s.WriteAudit(r, AuditLoginFail, "-", nil, StepUpNone)
-		return
-	}
-
-	if s.AdminTOTPEnabled() {
-		// Atomically spend the TOTP step (replay guard). A false result means the
-		// code was already used — on this or any instance — so treat it exactly
-		// like a bad credential: record the failure and show the generic error.
-		if claimed, cerr := s.Store().ClaimTOTPStep(r.Context(), totpStep); cerr != nil || !claimed {
-			s.AdminLoginRecordFail(ip)
-			s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
-				s.AdminPasskeyCount(r.Context()) > 0)
-			s.WriteAudit(r, AuditLoginFail, "-", nil, StepUpNone)
-			return
-		}
-	}
-	s.AdminLoginReset(ip)
-	tok, err := s.newAdminSession(r.Context(), "password")
-	if err != nil {
-		s.renderAdminLogin(w, r, http.StatusInternalServerError, "服务器错误，请稍后再试",
-			s.AdminPasskeyCount(r.Context()) > 0)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name: adminCookie, Value: tok, Path: "/admin",
-		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
-		MaxAge: int(adminSessionTTL / time.Second),
-	})
-	// adminAuthMethod 从 r 的 cookie 反查会话；这个请求本身还没带上刚铸造的
-	// cookie（它只被写进了响应），所以这里手动补一份到 r 上，WriteAudit 才能
-	// 读出 auth=password 而不是空字符串。
-	r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
-	s.WriteAudit(r, AuditLoginOK, "-", nil, StepUpNone)
-	http.Redirect(w, r, "/admin", http.StatusFound)
+// handleAdminRemovedEndpoint answers the retired password-login and browser
+// credential-management routes. It reads nothing from the request — no form,
+// no cookie — so it cannot authenticate, mint, add or delete anything.
+func (s *Service) handleAdminRemovedEndpoint(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	http.Error(w, "gone: admin sign-in is Passkey-only, and passkeys are managed with the local `relayium-server admin` command", http.StatusGone)
 }
 
 func (s *Service) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
@@ -1706,13 +1682,14 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
 }
 
-// renderAdminLogin draws the login page. passkey controls only the extra
-// passkey button; the password+TOTP form below it is the fallback channel and
-// renders unconditionally.
+// renderAdminLogin draws the login page: a passkey button and nothing else.
+// passkey reports whether any credential is registered; with none, the page
+// explains how to enroll one from the server instead of offering a button that
+// cannot succeed.
 func (s *Service) renderAdminLogin(w http.ResponseWriter, r *http.Request, status int, errMsg string, passkey bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_ = adminLoginTmpl.Execute(w, adminLoginData{
-		Lang: adminLangFrom(r), Error: errMsg, TOTP: s.AdminTOTPEnabled(), Passkey: passkey, Nonce: CSPNonce(r),
+		Lang: adminLangFrom(r), Error: errMsg, Passkey: passkey, Nonce: CSPNonce(r),
 	})
 }

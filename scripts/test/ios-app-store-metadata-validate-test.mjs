@@ -135,11 +135,11 @@ function accepts(label, text, extraArgs = []) {
 // ── the baseline ─────────────────────────────────────────────────────────────
 
 accepts("the shipped packet passes", shippedRaw);
-accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.5.1"]);
+accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.5.2"]);
 
 // ── the candidate version and the observed version are different facts ─────
 //
-// The packet is drafted for 0.5.1 while App Store Connect was last read back
+// The packet is drafted for 0.5.2 while App Store Connect was last read back
 // holding 0.3.1, which is in review. The validator lets those two differ, and
 // that permission is exactly what these cases exist to keep narrow: it must not
 // turn into "any mismatch is fine", and it must not let the observation be
@@ -149,22 +149,22 @@ accepts("the shipped packet passes against its own declared version", shippedRaw
   const shipped = clone();
   const observed = shipped.appStoreConnectObservation.records.find((entry) => entry.targetForIosRelease);
   cases += 1;
-  if (shipped.record.marketingVersion !== "0.5.1" || observed?.observedVersion !== "0.3.1") {
+  if (shipped.record.marketingVersion !== "0.5.2" || observed?.observedVersion !== "0.3.1") {
     bad(
-      "the shipped packet drafts 0.5.1 against an observed 0.3.1",
+      "the shipped packet drafts 0.5.2 against an observed 0.3.1",
       `record.marketingVersion is ${shipped.record.marketingVersion}, observedVersion is ${observed?.observedVersion}`,
     );
   } else {
-    ok("the shipped packet drafts 0.5.1 against an observed 0.3.1");
+    ok("the shipped packet drafts 0.5.2 against an observed 0.3.1");
   }
 }
 
 const iosTarget = (p) => p.appStoreConnectObservation.records.find((entry) => entry.targetForIosRelease);
 
 rejects(
-  "an observation rewritten to the candidate version, as though 0.5.1 had been read back",
+  "an observation rewritten to the candidate version, as though 0.5.2 had been read back",
   (p) => {
-    iosTarget(p).observedVersion = "0.5.1";
+    iosTarget(p).observedVersion = "0.5.2";
   },
   "never to match the candidate",
 );
@@ -202,29 +202,29 @@ rejects(
   (p) => {
     p.record.marketingVersion = "0.3.1";
   },
-  "not the '0.5.1' this packet was written for",
+  "not the '0.5.2' this packet was written for",
 );
 
 rejects(
   "an observation note claiming the candidate version was observed",
   (p) => {
     const field = p.appStoreConnectObservation.observedFields.find((entry) => entry.id === "version");
-    field.observed = `${field.observed} On a later reading the record showed 0.5.1 selected for review.`;
+    field.observed = `${field.observed} On a later reading the record showed 0.5.2 selected for review.`;
   },
-  "no read-back of '0.5.1' exists",
+  "no read-back of '0.5.2' exists",
 );
 
 rejects(
   "an observed record note naming the candidate version",
   (p) => {
-    iosTarget(p).note = `${iosTarget(p).note} It now reads 0.5.1.`;
+    iosTarget(p).note = `${iosTarget(p).note} It now reads 0.5.2.`;
   },
-  "no read-back of '0.5.1' exists",
+  "no read-back of '0.5.2' exists",
 );
 
 // The guard names WHOLE versions. A different version that merely contains the
 // candidate's digits is not a claim about the candidate, and refusing it would
-// make the guard noise that somebody eventually deletes. (`0.5.10` would be the
+// make the guard noise that somebody eventually deletes. (`0.5.20` would be the
 // sharper probe, but the packet's decimal-price rule refuses it on its own.)
 cases += 1;
 {
@@ -242,9 +242,9 @@ cases += 1;
 rejects(
   "TestFlight text left describing the previous version",
   (p) => {
-    p.testFlight.betaAppDescription["en-US"] = p.testFlight.betaAppDescription["en-US"].replace("the 0.5.1 line", "the 0.3.1 line");
+    p.testFlight.betaAppDescription["en-US"] = p.testFlight.betaAppDescription["en-US"].replace("the 0.5.2 line", "the 0.3.1 line");
   },
-  "names version '0.3.1', but this packet is drafted for '0.5.1'",
+  "names version '0.3.1', but this packet is drafted for '0.5.2'",
 );
 
 rejects(
@@ -252,7 +252,7 @@ rejects(
   (p) => {
     p.testFlight.whatToTest["zh-Hans"] = `${p.testFlight.whatToTest["zh-Hans"]}\n9. 与 0.3.1 对照。`;
   },
-  "names version '0.3.1', but this packet is drafted for '0.5.1'",
+  "names version '0.3.1', but this packet is drafted for '0.5.2'",
 );
 
 rejects(
@@ -642,16 +642,16 @@ rejects(
 rejects(
   "a marketing version the packet was not drafted for",
   (p) => {
-    p.record.marketingVersion = "0.5.2";
+    p.record.marketingVersion = "0.5.3";
   },
-  "not the '0.5.1' this packet was written for",
+  "not the '0.5.2' this packet was written for",
 );
 
 cases += 1;
 assertRejected(
   "a candidate whose version disagrees with the packet",
-  runOn(shippedRaw, ["--expect-version", "0.5.2"]),
-  "this run was told the candidate is '0.5.2'",
+  runOn(shippedRaw, ["--expect-version", "0.5.3"]),
+  "this run was told the candidate is '0.5.3'",
 );
 
 // ── URLs ─────────────────────────────────────────────────────────────────────
@@ -1329,9 +1329,9 @@ accepts(
 rejects(
   "the observed version drifting from the version this packet is drafted for",
   (p) => {
-    p.appStoreConnectObservation.records[0].observedVersion = "0.5.1";
+    p.appStoreConnectObservation.records[0].observedVersion = "0.5.2";
   },
-  "reports the target's version as '0.5.1', but it was read back as '0.3.1'",
+  "reports the target's version as '0.5.2', but it was read back as '0.3.1'",
 );
 
 rejects(
@@ -2680,7 +2680,7 @@ manifestRejects(
   "declares no NSPrivacyCollectedDataTypes",
 );
 
-// ── the What to Test contract for the 0.5.1 (12) internal round ──────────────
+// ── the What to Test contract for the 0.5.2 (13) internal round ──────────────
 //
 // The validator holds the What to Test text to Apple's limits, to the pinned
 // account and two-device disclosures, to one version and to no background or
@@ -2703,8 +2703,11 @@ manifestRejects(
 // them has been recorded. The (11) list of changes, including the discard
 // clean-up line, is no longer the round's "new" paragraph.
 //
+// 0.5.2 (13) adds bounded two-part Share overlap, body-before-successor ordering,
+// and durable-only progress; the 12 and 11 regression checks remain.
+//
 //   internal-only     the text says this round is internal testing only;
-//   identity          it names 0.5.1 (12) and calls the previous build (11);
+//   identity          it names 0.5.2 (13) and calls the previous build (12);
 //   c03-pending       it says sandbox purchase/cancellation verification is
 //                     still pending;
 //   no-purchase       it tells testers not to purchase and not to restore;
@@ -2751,10 +2754,13 @@ const NOTES_CONTRACT = {
     storekit: /StoreKit/i,
     whole: [
       ["internal-only", /\binternal (?:testing|testers?) only\b/i],
-      ["identity", /\b0\.5\.1 \(12\)/],
+      ["identity", /\b0\.5\.2 \(13\)/],
+      ["parallel", /overlap at most two parts/],
+      ["body-order", /next body starts after the prior body is sent, before confirmation/],
+      ["stored", /Only confirmed bytes count as stored/],
       // Anchored to "previous build": (11) is also named by the carried-forward
       // checks, so a bare "(11)" would survive deleting the comparison.
-      ["identity", /\bprevious build \(11\)/],
+      ["identity", /\bprevious build \(12\)/],
       ["no-purchase", /\b(?:do not|don't|never)\b[^.]*\b(?:purchase|buy)\b/i],
       ["no-purchase", /\b(?:do not|don't|never|nor)\b[^.]*\brestor(?:e|ing) purchases?\b/i],
       ["wan-truth", /\bdifferent network\b/i],
@@ -2795,8 +2801,11 @@ const NOTES_CONTRACT = {
     storekit: /StoreKit/i,
     whole: [
       ["internal-only", /仅(?:供|限)内部测试/],
-      ["identity", /0\.5\.1 \(12\)/],
-      ["identity", /上一构建 \(11\)/],
+      ["identity", /0\.5\.2 \(13\)/],
+      ["parallel", /最多并行两段/],
+      ["body-order", /前一段正文发完后，可在等待确认时开始下一段/],
+      ["stored", /只有服务器确认的字节计入已存储/],
+      ["identity", /上一构建 \(12\)/],
       ["no-purchase", /(?:请勿|不要|勿)[^。]*购买/],
       ["no-purchase", /(?:请勿|不要|勿)[^。]*恢复购买/],
       ["wan-truth", /不同的网络/],
@@ -2888,6 +2897,16 @@ function replaceOnce(text, from, to) {
   const parts = text.split(from);
   return parts.length === 2 ? parts.join(to) : undefined;
 }
+
+// The new upload notes must retain the bounded overlap and durable progress facts.
+for (const [locale, phrase, rule] of [
+  ["en-US", "overlap at most two parts", "parallel"],
+  ["en-US", "next body starts after the prior body is sent, before confirmation", "body-order"],
+  ["en-US", "Only confirmed bytes count as stored", "stored"],
+  ["zh-Hans", "最多并行两段", "parallel"],
+  ["zh-Hans", "前一段正文发完后，可在等待确认时开始下一段", "body-order"],
+  ["zh-Hans", "只有服务器确认的字节计入已存储", "stored"],
+]) contractRejects(`${locale} loses ${rule}`, locale, (t) => replaceOnce(t, phrase, ""), rule);
 
 // Purchases and restores: C03 is still open.
 contractRejects(
@@ -2998,15 +3017,15 @@ contractRejects(
   "internal-only",
 );
 contractRejects(
-  "the previous build no longer named as (11)",
+  "the previous build no longer named as (12)",
   "en-US",
-  (t) => replaceOnce(t, "compared with the previous build (11)", "compared with the previous build"),
+  (t) => replaceOnce(t, "compared with the previous build (12)", "compared with the previous build"),
   "identity",
 );
 contractRejects(
-  "the Chinese previous build no longer named as (11)",
+  "the Chinese previous build no longer named as (12)",
   "zh-Hans",
-  (t) => replaceOnce(t, "对比上一构建 (11)，", ""),
+  (t) => replaceOnce(t, "对比上一构建 (12)，", ""),
   "identity",
 );
 
@@ -3147,7 +3166,7 @@ for (const locale of ["en-US", "zh-Hans"]) {
 rejects(
   "the English What to Test naming the previous build by its version",
   (p) => {
-    p.testFlight.whatToTest["en-US"] = p.testFlight.whatToTest["en-US"].replace("the previous build (11)", "the previous build 0.5.0 (11)");
+    p.testFlight.whatToTest["en-US"] = p.testFlight.whatToTest["en-US"].replace("the previous build (12)", "the previous build 0.5.0 (11)");
   },
   "testFlight.whatToTest.en-US: names version '0.5.0'",
 );

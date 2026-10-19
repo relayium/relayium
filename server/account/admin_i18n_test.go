@@ -41,43 +41,49 @@ func TestAdminTFallsBackToChinese(t *testing.T) {
 	if got := adminT("en", "这一句还没有翻译"); got != "这一句还没有翻译" {
 		t.Errorf("untranslated string in English = %q, want the Chinese back", got)
 	}
-	if got := adminT("zh", "登录"); got != "登录" {
+	if got := adminT("zh", "使用 passkey 登录"); got != "使用 passkey 登录" {
 		t.Errorf("Chinese request returned %q", got)
 	}
-	if got := adminT("en", "登录"); got != "Sign in" {
-		t.Errorf("English %q, want %q", got, "Sign in")
+	if got := adminT("en", "使用 passkey 登录"); got != "Sign in with a passkey" {
+		t.Errorf("English %q, want %q", got, "Sign in with a passkey")
 	}
 }
 
 func TestAdminLoginRendersInEnglish(t *testing.T) {
-	var sb strings.Builder
-	if err := adminLoginTmpl.Execute(&sb, adminLoginData{Lang: "en", TOTP: true, Passkey: true}); err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	out := sb.String()
-	for _, want := range []string{"Relayium admin", "Admin username", "Admin password", "Sign in"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("English login page missing %q", want)
+	for _, passkey := range []bool{true, false} {
+		var sb strings.Builder
+		if err := adminLoginTmpl.Execute(&sb, adminLoginData{Lang: "en", Passkey: passkey}); err != nil {
+			t.Fatalf("execute: %v", err)
 		}
-	}
-	// And the Chinese it replaced is gone, so this cannot pass on a page that
-	// simply renders both.
-	for _, gone := range []string{"管理员账号", "管理员密码"} {
-		if strings.Contains(out, gone) {
-			t.Errorf("English login page still shows %q", gone)
+		out := sb.String()
+		want := []string{"Relayium admin", "Sign in with a passkey"}
+		if !passkey {
+			want = []string{"Relayium admin", "The admin console accepts passkeys only"}
+		}
+		for _, w := range want {
+			if !strings.Contains(out, w) {
+				t.Errorf("English login page (passkey=%v) missing %q", passkey, w)
+			}
+		}
+		// No Chinese left, and — Passkey-only — no password or code field at all.
+		if cjk.MatchString(strings.Split(out, "</style>")[1]) && strings.Contains(out, "使用 passkey 登录") {
+			t.Errorf("English login page (passkey=%v) still shows Chinese", passkey)
+		}
+		for _, gone := range []string{`name="password"`, `name="username"`, `name="totp"`, `action="/admin/login"`} {
+			if strings.Contains(out, gone) {
+				t.Errorf("login page (passkey=%v) still renders %s", passkey, gone)
+			}
 		}
 	}
 }
 
 func TestAdminLoginStillRendersChineseByDefault(t *testing.T) {
-	// The zero value of Lang is "", which must keep the console exactly as it
-	// was. A regression here is invisible to Chinese operators until they see an
-	// English console one morning.
+	// The zero value of Lang is "", which must keep the console in Chinese.
 	var sb strings.Builder
-	if err := adminLoginTmpl.Execute(&sb, adminLoginData{}); err != nil {
+	if err := adminLoginTmpl.Execute(&sb, adminLoginData{Passkey: true}); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if !strings.Contains(sb.String(), "管理员账号") {
+	if !strings.Contains(sb.String(), "使用 passkey 登录") {
 		t.Error("default render is no longer Chinese")
 	}
 }

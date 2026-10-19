@@ -8,22 +8,12 @@ import (
 )
 
 func TestAdminDashboardShowsPerUserColumns(t *testing.T) {
-	// newAdminServer (admin_test.go) already seeds one user and sets admin creds.
+	// newAdminServer (admin_test.go) already seeds one user and enables /admin.
 	ts, _ := newAdminServer(t, "admin", "s3cret")
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	resp, _ := client.PostForm(ts.URL+"/admin/login",
-		map[string][]string{"username": {"admin"}, "password": {"s3cret"}})
-	var cookie *http.Cookie
-	for _, c := range resp.Cookies() {
-		if c.Name == adminCookie {
-			cookie = c
-		}
-	}
-	if cookie == nil {
-		t.Fatal("login did not set admin cookie")
-	}
+	cookie := adminLogin(t, ts)
 
 	req, _ := http.NewRequest("GET", ts.URL+"/admin/users", nil)
 	req.AddCookie(cookie)

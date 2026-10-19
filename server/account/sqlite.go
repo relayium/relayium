@@ -146,7 +146,8 @@ CREATE TABLE IF NOT EXISTS devices (
   last_ip      TEXT NOT NULL DEFAULT '',
   last_ip_observed_at INTEGER NOT NULL DEFAULT 0,
   -- Client-generated installation lookup hint (43-char RawURLEncoding of 32
-  -- random bytes). '' for every browser row, every CLI and every pre-1.1.3 app.
+  -- random bytes) for apps; 'cli.' plus that encoding for capable CLI clients.
+  -- '' for browser rows and clients that do not supply a validated hint.
   -- Never a credential and never returned by an API: see Device.InstallID and
   -- the partial unique index created by migrateInstallID.
   install_id   TEXT NOT NULL DEFAULT ''
@@ -675,10 +676,9 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`CREATE TABLE IF NOT EXISTS download_receipts (
   nonce TEXT PRIMARY KEY, at INTEGER NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS idx_download_receipts_at ON download_receipts(at)`,
-		// Admin TOTP replay guard (multi-instance): a single-row monotonic step
-		// counter, advanced atomically by ClaimTOTPStep. Persisting it makes admin
-		// 2FA "one code, one use" hold across instances and across restarts, instead
-		// of a per-process in-memory counter. See the multi-instance-state-migration doc in relayium-ops.
+		// Retired admin TOTP replay guard. Admin login is Passkey-only and nothing
+		// reads this table any more; it is still created so a rollback to an
+		// older binary finds the shape it expects.
 		`CREATE TABLE IF NOT EXISTS admin_totp_guard (
   id INTEGER PRIMARY KEY CHECK (id = 1), last_step INTEGER NOT NULL DEFAULT 0)`,
 		`INSERT OR IGNORE INTO admin_totp_guard (id, last_step) VALUES (1, 0)`,
@@ -1842,18 +1842,21 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
 		db.Close()
 		return nil, err
 	}
-	// cred_fp binds an admin session to a fingerprint of the admin credentials
-	// (password + TOTP secret) in force when it was minted. Before the sessions
-	// were persisted, rotating the admin password and RESTARTING was the standard
-	// way to revoke a leaked cookie (the in-memory map was wiped); with sessions
-	// in the DB that no longer worked. validAdmin now also matches cred_fp against
-	// the current credentials, so a rotate+restart invalidates every prior session
-	// again. Existing rows read '' and won't match the (non-empty) live
-	// fingerprint, so they're invalidated on the deploy that adds this — admins
-	// simply re-login once.
+	// cred_fp is a retired column: it bound a session to a fingerprint of the
+	// old admin password + TOTP secret. Admin sessions are now Passkey-only and
+	// bound to a credential instead (admin_auth_store.go); new rows write '' and
+	// nothing reads it. The ALTER stays so a database that never had the column
+	// still accepts this binary's INSERT, which names it.
 	if _, err := db.ExecContext(context.Background(),
 		`ALTER TABLE admin_sessions ADD COLUMN cred_fp TEXT NOT NULL DEFAULT ''`); err != nil &&
 		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, err
+	}
+	// Passkey-only admin auth (admin_auth_store.go): session age/idle/credential
+	// columns and the enrollment table. Admin tables only; shared with the
+	// local `admin` command so both leave the same shape.
+	if err := ensureAdminAuthSchema(context.Background(), db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -5060,87 +5063,14 @@ func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash stri
 	return err
 }
 
-// ClaimTOTPStep atomically advances the admin TOTP replay guard to `step` iff it
-// is strictly newer than the last committed step. Single UPDATE on the serialized
-// writer, so the decision is atomic across instances sharing the DB file: two
-// concurrent logins with the same code race here and exactly one gets
-// RowsAffected==1. ok=false ⇒ the step was already spent (replay / stale).
-func (s *SQLiteStore) ClaimTOTPStep(ctx context.Context, step int64) (bool, error) {
-	// Normal path: claim iff `step` is strictly newer than the last used step.
-	// Self-heal path (`last_step - step > totpForwardHealSteps`): the guard is
-	// implausibly far in the FUTURE relative to this code's step. `step` always
-	// tracks wall-clock (MatchAdminTOTPStep only accepts codes within ±1 step of
-	// now), so a last_step many steps ahead can only come from a transient forward
-	// clock jump (e.g. an NTP glitch) that committed a future step; once the clock
-	// is corrected every real code would be rejected forever without this. Healing
-	// resets the guard to the current step, so replay protection is unchanged (a
-	// re-presented code is still `step == last_step`, not claimed). The margin is
-	// wide enough that legit ±1 skew never triggers it.
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE admin_totp_guard SET last_step = ?
-		 WHERE id = 1 AND (? > last_step OR last_step - ? > ?)`,
-		step, step, step, totpForwardHealSteps)
-	if err != nil {
-		return false, err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	return n == 1, nil
-}
-
 // Admin bearer tokens (session cookie, pending-action token + its bound session
 // token, passkey-ceremony token) are stored as SHA-256 hashes, never raw — the
 // same discipline the rest of the codebase applies to magic/CLI/fleet/node
 // tokens. Callers pass the raw secret; the store hashes it on every write and
 // every lookup, so a read of the DB file or a backup yields only hashes, not a
 // copy-pasteable live admin credential. Hashing is confined to the store so no
-// caller can accidentally persist a raw token.
-
-// CreateAdminSession stores a new admin session (shared across instances). credFP
-// pins it to the admin credentials in force at mint time (see cred_fp migration).
-func (s *SQLiteStore) CreateAdminSession(ctx context.Context, token, auth, credFP string, expires int64) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO admin_sessions (token, auth, cred_fp, expires, last_step_up_at) VALUES (?, ?, ?, ?, 0)`,
-		authx.HashToken(token), auth, credFP, expires)
-	return err
-}
-
-// AdminSession returns a live admin session (expires > now) whose cred_fp still
-// matches the current credentials. ok=false for missing/expired/credential-
-// rotated; err is only a real store failure (caller fails closed).
-func (s *SQLiteStore) AdminSession(ctx context.Context, token, credFP string, now int64) (auth string, lastStepUpAt int64, ok bool, err error) {
-	err = s.db.QueryRowContext(ctx,
-		`SELECT auth, last_step_up_at FROM admin_sessions WHERE token = ? AND cred_fp = ? AND expires > ?`,
-		authx.HashToken(token), credFP, now).Scan(&auth, &lastStepUpAt)
-	if err == sql.ErrNoRows {
-		return "", 0, false, nil
-	}
-	if err != nil {
-		return "", 0, false, err
-	}
-	return auth, lastStepUpAt, true, nil
-}
-
-// MarkAdminStepUp records the time of a successful step-up (opens the grace window).
-func (s *SQLiteStore) MarkAdminStepUp(ctx context.Context, token string, at int64) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE admin_sessions SET last_step_up_at = ? WHERE token = ?`, at, authx.HashToken(token))
-	return err
-}
-
-// DeleteAdminSession removes a session (logout).
-func (s *SQLiteStore) DeleteAdminSession(ctx context.Context, token string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_sessions WHERE token = ?`, authx.HashToken(token))
-	return err
-}
-
-// PurgeExpiredAdminSessions drops sessions past their expiry (GC housekeeping).
-func (s *SQLiteStore) PurgeExpiredAdminSessions(ctx context.Context, now int64) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_sessions WHERE expires <= ?`, now)
-	return err
-}
+// caller can accidentally persist a raw token. Session methods live in
+// admin_auth_store.go.
 
 // PutPendingAction stores a pending high-risk action, purging expired rows and
 // enforcing the cap in one transaction. ok=false (nothing stored) when the cap
@@ -5211,8 +5141,9 @@ func (s *SQLiteStore) PutPasskeyCeremony(ctx context.Context, token, kind, sessi
 		return false, nil // reject, don't evict (a flood must not knock out a live login)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO admin_passkey_ceremonies (token, kind, session, name, expires)
-		 VALUES (?, ?, ?, ?, ?)`, authx.HashToken(token), kind, session, name, expires); err != nil {
+		`INSERT INTO admin_passkey_ceremonies (token, kind, session, name, expires, auth_generation)
+		 VALUES (?, ?, ?, ?, ?, (SELECT generation FROM admin_auth_state WHERE id = 1))`,
+		authx.HashToken(token), kind, session, name, expires); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -5221,19 +5152,21 @@ func (s *SQLiteStore) PutPasskeyCeremony(ctx context.Context, token, kind, sessi
 // TakePasskeyCeremony atomically claims (deletes) a ceremony by token. ok=false
 // means no such token. The DELETE ... RETURNING makes it exactly-once across
 // instances; a wrong-kind/replayed attempt still burns the challenge (the caller
-// checks kind and expiry).
-func (s *SQLiteStore) TakePasskeyCeremony(ctx context.Context, token string) (kind, session, name string, expires int64, ok bool, err error) {
+// checks kind and expiry). generation is the auth generation the ceremony
+// began under (-1 for a row written by an older binary), which the caller must
+// present to CreateAdminSession / check before accepting a step-up.
+func (s *SQLiteStore) TakePasskeyCeremony(ctx context.Context, token string) (kind, session, name string, expires, generation int64, ok bool, err error) {
 	err = s.db.QueryRowContext(ctx,
 		`DELETE FROM admin_passkey_ceremonies WHERE token = ?
-		 RETURNING kind, session, name, expires`, authx.HashToken(token),
-	).Scan(&kind, &session, &name, &expires)
+		 RETURNING kind, session, name, expires, auth_generation`, authx.HashToken(token),
+	).Scan(&kind, &session, &name, &expires, &generation)
 	if err == sql.ErrNoRows {
-		return "", "", "", 0, false, nil
+		return "", "", "", 0, -1, false, nil
 	}
 	if err != nil {
-		return "", "", "", 0, false, err
+		return "", "", "", 0, -1, false, err
 	}
-	return kind, session, name, expires, true, nil
+	return kind, session, name, expires, generation, true, nil
 }
 
 const uploadSessionCols = `id, user_id, blob_key, node_id, billable, enc_manifest, ttl, max_dl, max_size, received, created_at, done, purpose, pair_room_id, metered, unresolved_at`
@@ -9561,10 +9494,9 @@ func (s *SQLiteStore) ApproveAndRegisterDeviceAuth(ctx context.Context, userCode
 		name = devicelabel.Fallback
 	}
 	kind := "cli"
-	if approved.InstallID != "" {
-		// Only the native app owns an installation identity. Bodyless and legacy
-		// device-code clients remain CLI; a current Mac must not be presented to
-		// its owner as "Command line" merely because login is browser-delegated.
+	if approved.InstallID != "" && !strings.HasPrefix(approved.InstallID, "cli.") {
+		// Native identifiers keep their existing spelling. CLI hints are
+		// validated at admission and namespaced separately before persistence.
 		kind = "app"
 	}
 	tokenHash := authx.HashToken(rawToken)
@@ -9769,22 +9701,7 @@ func (s *SQLiteStore) DeleteCLIToken(ctx context.Context, tokenHash string) erro
 }
 
 func (s *SQLiteStore) ListAdminCredentials(ctx context.Context) ([]AdminCredential, error) {
-	rows, err := s.db.QueryContext(ctx, `
-SELECT id, user_handle, cred_json, name, created_at, last_used_at
-FROM admin_credentials ORDER BY created_at, id`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []AdminCredential
-	for rows.Next() {
-		var c AdminCredential
-		if err := rows.Scan(&c.ID, &c.UserHandle, &c.CredJSON, &c.Name, &c.CreatedAt, &c.LastUsedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
+	return listAdminCredentials(ctx, s.db)
 }
 
 // CountAdminCredentials counts rows without touching cred_json. The login page
@@ -9812,23 +9729,10 @@ FROM admin_credentials WHERE id = ?`, id).
 	return c, true, nil
 }
 
-func (s *SQLiteStore) InsertAdminCredential(ctx context.Context, c AdminCredential) error {
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO admin_credentials (id, user_handle, cred_json, name, created_at, last_used_at)
-VALUES (?, ?, ?, ?, ?, ?)`,
-		c.ID, c.UserHandle, c.CredJSON, c.Name, c.CreatedAt, c.LastUsedAt)
-	return err
-}
-
 func (s *SQLiteStore) TouchAdminCredential(ctx context.Context, id string, credJSON []byte, lastUsedAt int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE admin_credentials SET cred_json = ?, last_used_at = ? WHERE id = ?`,
 		credJSON, lastUsedAt, id)
-	return err
-}
-
-func (s *SQLiteStore) DeleteAdminCredential(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_credentials WHERE id = ?`, id)
 	return err
 }
 

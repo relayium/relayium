@@ -46,57 +46,55 @@ func fetchAdminHome(t *testing.T, srv *httptest.Server, session *http.Cookie) st
 	return string(b)
 }
 
-// 登录页在任何存储状态下都必须渲染得出来：密码+TOTP 是兜底通道，
-// 查 passkey 数量这一步绝不能把它打挂。
+// 登录页在任何存储状态下都必须渲染得出来；没有存储可问时不提供 passkey 按钮，
+// 也绝不退回任何密码表单。
 func TestLoginPageRendersWithoutStore(t *testing.T) {
-	s := NewService(nil, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
+	s := NewService(nil, nil, Config{AdminUser: "admin", AdminEnabled: true})
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/admin", nil)
 	s.renderAdminLogin(w, r, http.StatusOK, "", s.AdminPasskeyCount(r.Context()) > 0)
 
 	body := w.Body.String()
-	if !strings.Contains(body, `name="password"`) {
-		t.Fatalf("password form missing when store is unavailable")
+	if strings.Contains(body, `name="password"`) || strings.Contains(body, `action="/admin/login"`) {
+		t.Fatalf("a password form came back when the store is unavailable")
 	}
 	if strings.Contains(body, "passkey-login") {
 		t.Fatalf("passkey button offered with no store to confirm credentials exist")
 	}
+	if !strings.Contains(body, "relayium-server admin enroll start") {
+		t.Fatalf("login page does not tell the operator how to enroll a passkey")
+	}
 }
 
-// 没有注册任何 passkey 时不得渲染 passkey 按钮：点了只会得到
-// 「无可用凭据」，等于给一条死路。
+// 没有注册任何 passkey 时不得渲染 passkey 按钮（点了只会失败），而是说明如何在
+// 服务器上注册；也没有任何密码后备。
 func TestLoginPageHidesPasskeyButtonWhenNoneRegistered(t *testing.T) {
-	srv, _ := newAdminServer(t, "admin", "pw")
+	srv, _ := newAdminServer(t, "admin", "on")
 	html := fetchAdminLogin(t, srv)
 	if strings.Contains(html, "passkey-login") {
 		t.Fatalf("passkey button rendered with zero credentials registered")
 	}
-	// 密码表单必须在
-	if !strings.Contains(html, `name="password"`) {
-		t.Fatalf("password form missing")
+	if strings.Contains(html, `name="password"`) {
+		t.Fatalf("password form rendered on the Passkey-only login page")
+	}
+	if !strings.Contains(html, "relayium-server admin enroll start") {
+		t.Fatalf("zero-passkey login page does not explain enrollment")
 	}
 }
 
-// 注册后按钮出现，但密码表单必须原样保留（渐进增强，绝不砸旧路径）。
-func TestLoginPageShowsPasskeyButtonAndKeepsPasswordForm(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-	registerViaHTTP(t, srv, s, session, "MacBook")
+// 有凭据时登录页只有 passkey 按钮：没有账号/密码/验证码字段。
+func TestLoginPageIsPasskeyOnly(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "on")
+	adminTestPasskey(t, s)
 
 	html := fetchAdminLogin(t, srv)
 	if !strings.Contains(html, "passkey-login") {
-		t.Fatalf("passkey button missing after registration")
+		t.Fatalf("passkey button missing with a registered credential")
 	}
-	if !strings.Contains(html, `name="password"`) {
-		t.Fatalf("password form disappeared — progressive enhancement broken")
-	}
-	if !strings.Contains(html, `name="username"`) {
-		t.Fatalf("username field disappeared")
-	}
-	// 渐进增强的全部依据是「密码表单先写完，passkey 块才开始」：
-	// 顺序反了的话，passkey 块里的模板错误就能把已写出的表单截断。
-	if strings.Index(html, "</form>") > strings.Index(html, "passkey-login") {
-		t.Fatalf("passkey block precedes the password form — a failure inside it could truncate the form")
+	for _, gone := range []string{`name="password"`, `name="username"`, `name="totp"`, `action="/admin/login"`} {
+		if strings.Contains(html, gone) {
+			t.Fatalf("login page still renders %s", gone)
+		}
 	}
 	// 取消平台弹窗是正常操作，不该报红：这条分支必须存在。
 	if !strings.Contains(html, "NotAllowedError") {
@@ -118,21 +116,33 @@ func assertPasskeyB64(t *testing.T, html, where string) {
 	}
 }
 
-// 设置页必须列出已注册凭据及其名字。
-func TestAdminHomeListsPasskeys(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-	registerViaHTTP(t, srv, s, session, "我的-MacBook")
+// 后台列出已注册凭据（名称、ID、指纹），但只读：没有删除或添加控件。
+func TestAdminHomeListsPasskeysReadOnly(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "on")
+	k := adminTestPasskey(t, s)
+	session := adminSessionCookie(t, s)
+	// A second, never-used credential with a distinctive name.
+	other := newRealAdminCredential(t, s, newTestAuthenticator(t), k.handle, "我的-MacBook")
+	seedAdminCredentialRow(t, s.store, other)
 
 	html := fetchAdminHome(t, srv, session)
-	if !strings.Contains(html, "我的-MacBook") {
+	if !strings.Contains(html, "我的-MacBook") || !strings.Contains(html, other.ID) {
 		t.Fatalf("registered passkey not listed on admin home")
 	}
-	// 刚注册、尚未用过的凭据必须显眼地标为「从未使用」——被植入的
-	// 后门凭据正是靠这一列现形的。断言要连样式钩子一起盯：光有文字、
-	// 丢了 class="never" 的话视觉区分就没了，而这才是要求的本体。
+	if !strings.Contains(html, AdminCredentialFingerprint(other)) {
+		t.Fatalf("passkey fingerprint not shown")
+	}
+	// 尚未用过的凭据必须显眼地标为「从未使用」——被植入的后门凭据正是靠这一列现形的。
 	if !strings.Contains(html, `<span class="never">从未使用</span>`) {
 		t.Fatalf("never-used credential not visually marked (class=never) as such")
+	}
+	for _, gone := range []string{"/admin/passkey/delete", "/admin/passkey/register", `id="passkey-add"`} {
+		if strings.Contains(html, gone) {
+			t.Fatalf("admin home still renders browser credential management (%s)", gone)
+		}
+	}
+	if !strings.Contains(html, "relayium-server admin credentials revoke") {
+		t.Fatalf("admin home does not point at the terminal for credential management")
 	}
 }
 
@@ -152,14 +162,13 @@ func TestAdminHomeShowsPasskeyReadFailureInsteadOfEmptyList(t *testing.T) {
 	_, _ = store.UpsertUserByEmail(context.Background(), "seen@example.com", "Seen")
 	svc := NewService(passkeyListFailStore{store}, &capturingMailer{}, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour,
-		AdminUser: "admin", AdminPassword: "pw",
+		AdminUser: "admin", AdminEnabled: true,
 	})
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
+	srv := serveAdminForTest(t, svc)
 
-	session := adminPasswordLogin(t, srv, svc)
+	// The wrapper store fails only the credential LIST; seed through the real
+	// store underneath so the session itself is valid.
+	session := adminSessionCookie(t, NewService(store, nil, Config{BaseURL: "http://example.test", AdminUser: "admin", AdminEnabled: true}))
 	// fetchAdminHome 对非 200 直接 fatal：读失败不得把整个后台打挂。
 	html := fetchAdminHome(t, srv, session)
 	if !strings.Contains(html, "凭据列表读取失败") {
@@ -174,19 +183,14 @@ func TestAdminHomeShowsPasskeyReadFailureInsteadOfEmptyList(t *testing.T) {
 	}
 }
 
-// 后台页没有凭据时也必须能打开，并给出空态提示。
+// 凭据表为空的后台页（会话来自另一实例刚撤销前的瞬间不可能出现，这里直接渲染模板）
+// 给出空态提示。
 func TestAdminHomeShowsEmptyPasskeyState(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-
-	html := fetchAdminHome(t, srv, session)
-	if !strings.Contains(html, "尚未添加 passkey") {
+	var sb strings.Builder
+	if err := adminUsersTmpl.Execute(&sb, adminHomeData{Section: adminSectionOverview}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sb.String(), "尚未添加 passkey") {
 		t.Fatalf("empty passkey state missing from admin home")
 	}
-	// 添加表单默认 hidden，只有 JS 确认浏览器支持 WebAuthn 后才揭开——
-	// 否则等于摆一个按了必然失败的控件。
-	if !strings.Contains(html, `id="passkey-add" class="mint" hidden`) {
-		t.Fatalf("add-passkey form should ship hidden and be revealed by JS")
-	}
-	assertPasskeyB64(t, html, "admin home")
 }

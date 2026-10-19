@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -78,24 +79,16 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// A machine that already holds a credential is not logged in again by
-	// accident. A new login registers a NEW device: the old credential would
-	// stay live on the server with nothing here left to revoke it, Device Inbox
-	// receiving enabled here would stop (it belongs to the old device), and
-	// unfinished `inbox send` work started by the old device could no longer be
-	// retried. So the refusal comes first -- before any request, and before
-	// anything in --config-dir is touched. Switching is two explicit steps:
-	// `logout` (which revokes on the server) and then `login`. A credential file
-	// that cannot be read is refused too: it is not this command's to replace.
+	// Refuse an existing credential before any network or filesystem changes.
+	// Account/server switching must be explicit; an approved login can rotate
+	// the existing installation's bearer on capable servers.
 	if existing, ok, lerr := cloud.Load(cfgDir); lerr != nil {
 		fmt.Fprintf(stderr, "login: the existing credential in %s cannot be read (%v); it was left untouched.\n", cfgDir, lerr)
 		fmt.Fprintln(stderr, "  run `relayium logout --local-only` to clear it, or fix the file, then log in again")
 		return 1
 	} else if ok {
 		fmt.Fprintf(stderr, "login: this machine is already logged in as %s (%s).\n", existing.AccountEmail, existing.Server)
-		fmt.Fprintln(stderr, "  Logging in again would register a NEW device: the current credential would stay valid on the server,")
-		fmt.Fprintln(stderr, "  Device Inbox receiving enabled here would stop until you re-enable it, and unfinished")
-		fmt.Fprintln(stderr, "  `relayium inbox send` work started from this device could no longer be retried.")
+		fmt.Fprintln(stderr, "  A new login could replace the current credential and disrupt active Device Inbox work.")
 		fmt.Fprintln(stderr, "  To use another account or server: run `relayium logout` first (it revokes the current")
 		fmt.Fprintln(stderr, "  credential on the server), then `relayium login`. Nothing was changed.")
 		return 1
@@ -114,7 +107,31 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 		label = defaultDeviceName()
 	}
 
+	lock, err := cloud.LockLogin(cfgDir)
+	if err != nil {
+		fmt.Fprintln(stderr, "login: could not exclusively own this login:", err)
+		return 1
+	}
+	defer lock.Release()
+	// Another process may have completed login between the first check and
+	// lock acquisition. Never replace its credential with a second approval.
+	if _, exists, err := cloud.Load(cfgDir); err != nil || exists {
+		fmt.Fprintln(stderr, "login: credentials changed while waiting; nothing was replaced")
+		return 1
+	}
+	installation, err := cloud.InstallationID(cfgDir, server)
+	if err != nil {
+		fmt.Fprintln(stderr, "login: could not load this installation identity:", err)
+		if errors.Is(err, cloud.ErrInstallationUnsafe) {
+			fmt.Fprintf(stderr, "Inspect permissions and restore %s from a trusted backup; for a separate installation use a new --config-dir. Nothing was replaced.\n", filepath.Join(cfgDir, "cli-installations"))
+		}
+		return 1
+	}
+
 	notify := func(start cloud.DeviceStart) {
+		if !start.CLIInstallIdentity {
+			fmt.Fprintln(stderr, "This server does not support stable CLI installation identity; this login may register a new device.")
+		}
 		fmt.Fprintf(stderr, "Open %s and enter code: %s\n", start.VerificationURI, start.UserCode)
 		// The exact label central was asked to bind to THIS request, printed
 		// before approval so the row that appears in My Devices is one the
@@ -126,6 +143,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 
 	client := cloud.NewClient(server)
 	client.DeviceName = label
+	client.InstallationID = installation
 	creds, err := client.Login(context.Background(), notify)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -347,8 +365,8 @@ func truncatedTTLNotice(requestedSecs, expiresAt, now int64) string {
 func runUp(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("up", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var burn, asJSON, pending bool
-	var ttlArg, recoverID string
+	var burn, asJSON, pending, resumable bool
+	var ttlArg, recoverID, resumeID, discardID string
 	var maxDownloads int64
 	var server, configDir string
 	fs.BoolVar(&burn, "burn", false, "delete after first download")
@@ -359,6 +377,9 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&asJSON, "json", false, "print one JSON document with the outcome")
 	fs.StringVar(&recoverID, "recover", "", "ask the server for the outcome of an earlier upload whose outcome was unknown")
 	fs.BoolVar(&pending, "pending", false, "list uploads whose outcome is still unknown")
+	fs.BoolVar(&resumable, "resumable", false, "keep encrypted local copy for cross-process byte resume")
+	fs.StringVar(&resumeID, "resume", "", "resume a recorded encrypted upload")
+	fs.StringVar(&discardID, "discard", "", "remove a recorded resumable upload and its local copy")
 	if wantsHelpFS(fs, args) {
 		fmt.Fprint(stdout, upUsage)
 		return 0
@@ -368,8 +389,18 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	}
 	out := upOutput{stdout: stdout, stderr: stderr, json: asJSON}
 	paths := fs.Args()
+	if resumeID != "" || discardID != "" {
+		if len(paths) != 0 || burn || ttlArg != "" || maxDownloads != 0 || server != "" || pending || recoverID != "" || resumable || (resumeID != "" && discardID != "") {
+			fmt.Fprintln(stderr, "up: --resume and --discard take one operation and no upload options")
+			return 2
+		}
+		if discardID != "" {
+			return upResume(discardID, configDir, out, true)
+		}
+		return upResume(resumeID, configDir, out, false)
+	}
 	if recoverID != "" || pending {
-		if len(paths) != 0 || burn || ttlArg != "" || maxDownloads != 0 || server != "" || (recoverID != "" && pending) {
+		if len(paths) != 0 || burn || ttlArg != "" || maxDownloads != 0 || server != "" || (recoverID != "" && pending) || resumable {
 			fmt.Fprintln(stderr, "up: --recover <id> and --pending take no paths and no upload options")
 			return 2
 		}
@@ -436,6 +467,9 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	op, err := cloud.NewUpOperation(prep, client.Server, creds.AccountEmail, time.Now().Unix())
 	if err != nil {
 		return out.fail("prepare_failed", err)
+	}
+	if resumable {
+		return upResumable(cfgDir, client, prep, op, out)
 	}
 	lock, err := cloud.LockUpOperation(cfgDir, op.ID)
 	if err != nil {

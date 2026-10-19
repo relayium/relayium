@@ -167,6 +167,63 @@ class CloudRecoveryTest {
 
     private fun keyOf(link: String): ByteArray = decodeStoreKey(link.substringAfter("#k="))
 
+    @Test
+    fun `negotiated pipeline sends second body while first awaits storage and finalizes exact ciphertext`() {
+        val first = java.util.concurrent.CountDownLatch(1)
+        val second = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val requests = java.util.concurrent.atomic.AtomicInteger()
+        val blocked = java.util.concurrent.atomic.AtomicBoolean()
+        ResumableUploadServer(
+            pipelineCapability = "ordered-v1",
+            onPatchBody = { request ->
+                assertEquals("ordered-v1", request.header("X-Relayium-Upload-Pipeline"))
+                if (requests.incrementAndGet() == 2) second.countDown()
+            },
+            beforeAppend = {
+                if (blocked.compareAndSet(false, true)) {
+                    first.countDown()
+                    check(release.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                }
+            },
+        ).use { server ->
+            try {
+                val account = account()
+                signIn(account)
+                val model = model(server, account)
+                startUpload(model)
+                assertTrue(first.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                assertTrue(second.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                assertEquals(2, requests.get())
+                assertEquals(0, server.finalizeCount)
+                assertEquals(0L, (model.state.value as CloudUploadModel.State.Uploading).sent)
+                release.countDown()
+                val ready = await({ model.state.value }) { it is CloudUploadModel.State.Ready }
+                    as CloudUploadModel.State.Ready
+                assertEquals(1, server.initCount)
+                assertEquals(1, server.finalizeCount)
+                val files = decode(server, keyOf(ready.link))
+                selection.forEachIndexed { i, file -> assertArrayEquals(bytesFor(file), files[i]) }
+            } finally { release.countDown() }
+        }
+    }
+
+    @Test
+    fun `negotiated partial append drains and replays immutable spool serially`() {
+        ResumableUploadServer(appendCap = 17_000, pipelineCapability = "ordered-v1").use { server ->
+            val account = account()
+            signIn(account)
+            val model = model(server, account)
+            startUpload(model)
+            val ready = await({ model.state.value }) { it is CloudUploadModel.State.Ready }
+                as CloudUploadModel.State.Ready
+            assertEquals(1, server.initCount)
+            assertEquals(1, server.finalizeCount)
+            val files = decode(server, keyOf(ready.link))
+            selection.forEachIndexed { i, file -> assertArrayEquals(bytesFor(file), files[i]) }
+        }
+    }
+
     // ── the cases ───────────────────────────────────────────────────────────
 
     @Test

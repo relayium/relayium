@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Five wrong factors on one session: the fifth answers 429 and the session is
+// Five failed passkey confirmations on one session: the fifth answers 429 and the session is
 // revoked, so it can no longer reach the admin at all.
 func TestStepUpFactorFailuresLockAndRevokeSession(t *testing.T) {
 	ts, svc, store, _ := newAdminAuditServer(t)
@@ -18,7 +18,7 @@ func TestStepUpFactorFailuresLockAndRevokeSession(t *testing.T) {
 	for i := 0; i < adminLoginMaxFails; i++ {
 		tok := pendingSettingsConfirm(t, ts, svc, cookie, "321")
 		resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-			url.Values{"confirm_token": {tok}, "factor_code": {"wrong-password"}})
+			url.Values{"confirm_token": {tok}, "factor_code": {"not-an-assertion"}})
 		resp.Body.Close()
 		codes = append(codes, resp.StatusCode)
 	}
@@ -30,13 +30,13 @@ func TestStepUpFactorFailuresLockAndRevokeSession(t *testing.T) {
 	if last := codes[adminLoginMaxFails-1]; last != http.StatusTooManyRequests {
 		t.Fatalf("attempt %d: want 429 at the threshold, got %d (all: %v)", adminLoginMaxFails, last, codes)
 	}
-	if _, _, ok, err := store.AdminSession(context.Background(), cookie.Value, svc.adminCredFP(), svc.Now().Unix()); err != nil || ok {
+	if _, ok, err := store.AdminSession(context.Background(), cookie.Value, svc.Now().Unix()); err != nil || ok {
 		t.Fatalf("session must be revoked after the lockout: ok=%v err=%v", ok, err)
 	}
 	// The dead session cannot even reach the confirmation handler again, let
-	// alone apply a change with the right password.
+	// alone apply a change.
 	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {"x"}, "factor_code": {"secret123"}})
+		url.Values{"confirm_token": {"x"}})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/admin" {
 		t.Fatalf("revoked session got %d -> %s", resp.StatusCode, resp.Header.Get("Location"))
@@ -53,15 +53,14 @@ func TestStepUpCorrectFactorAfterFailuresStillApplies(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		tok := pendingSettingsConfirm(t, ts, svc, cookie, "321")
 		resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-			url.Values{"confirm_token": {tok}, "factor_code": {"wrong-password"}})
+			url.Values{"confirm_token": {tok}, "factor_code": {"not-an-assertion"}})
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("wrong factor %d: want 401, got %d", i+1, resp.StatusCode)
 		}
 	}
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "555")
-	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	resp := confirmWithPasskey(t, ts, svc, cookie, tok)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("correct factor after 2 failures should apply (302), got %d", resp.StatusCode)
@@ -92,12 +91,12 @@ func TestStepUpThrottleIsPerSession(t *testing.T) {
 	for i := 0; i < adminLoginMaxFails; i++ {
 		tok := pendingSettingsConfirm(t, ts, svc, a, "321")
 		resp := postAdminForm(t, ts, a, "/admin/confirm",
-			url.Values{"confirm_token": {tok}, "factor_code": {"wrong-password"}})
+			url.Values{"confirm_token": {tok}, "factor_code": {"not-an-assertion"}})
 		resp.Body.Close()
 	}
 	tok := pendingSettingsConfirm(t, ts, svc, b, "444")
 	resp := postAdminForm(t, ts, b, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"wrong-password"}})
+		url.Values{"confirm_token": {tok}, "factor_code": {"not-an-assertion"}})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("session b's first failure must be a plain 401, got %d", resp.StatusCode)

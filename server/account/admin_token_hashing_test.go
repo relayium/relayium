@@ -16,7 +16,9 @@ func TestAdminSessionTokenStoredHashed(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	const raw = "raw-admin-session-token"
-	if err := store.CreateAdminSession(ctx, raw, "password", "", 1<<40); err != nil {
+	const now = int64(1_700_000_000)
+	seedAdminCredentialRow(t, store, AdminCredential{ID: "cred-1", UserHandle: []byte("h"), CredJSON: []byte("{}"), Name: "k"})
+	if err := store.CreateAdminSession(ctx, raw, "cred-1", 0, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -33,15 +35,15 @@ func TestAdminSessionTokenStoredHashed(t *testing.T) {
 	}
 
 	// Lookup by the raw token must still resolve the session.
-	auth, _, ok, err := store.AdminSession(ctx, raw, "", 0)
-	if err != nil || !ok || auth != "password" {
-		t.Fatalf("AdminSession(raw) = %q/%v/%v, want password/true/nil", auth, ok, err)
+	info, ok, err := store.AdminSession(ctx, raw, now)
+	if err != nil || !ok || info.Auth != "passkey" || info.CredentialID != "cred-1" {
+		t.Fatalf("AdminSession(raw) = %+v/%v/%v, want passkey session for cred-1", info, ok, err)
 	}
 	// Deleting by the raw token must remove the (hashed) row.
 	if err := store.DeleteAdminSession(ctx, raw); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok, _ := store.AdminSession(ctx, raw, "", 0); ok {
+	if _, ok, _ := store.AdminSession(ctx, raw, now); ok {
 		t.Fatal("session survived DeleteAdminSession(raw)")
 	}
 }
@@ -99,7 +101,7 @@ func TestPasskeyCeremonyTokenStoredHashed(t *testing.T) {
 		t.Fatalf("stored = %q, want authx.HashToken(raw) = %q", stored, authx.HashToken(tok))
 	}
 
-	kind, _, _, _, ok, err := store.TakePasskeyCeremony(ctx, tok)
+	kind, _, _, _, _, ok, err := store.TakePasskeyCeremony(ctx, tok)
 	if err != nil || !ok || kind != "login" {
 		t.Fatalf("TakePasskeyCeremony(raw) = %q/%v/%v", kind, ok, err)
 	}

@@ -13,24 +13,33 @@ import (
 // rpDisplayName is shown by the platform's passkey prompt.
 const rpDisplayName = "Relayium 后台"
 
-// adminRP builds the WebAuthn relying party from BaseURL. RPID must be the bare
-// host with no port (browsers reject a port in the RP ID), while the origin
-// check uses the full scheme://host[:port] value.
-func (s *Service) adminRP() (*webauthn.WebAuthn, error) {
-	origin := s.selfOrigin()
-	if origin == "" {
-		return nil, errors.New("passkey: BaseURL 未配置或无效")
+// AdminRelyingParty derives the WebAuthn origin and RP ID from a base URL.
+// RPID must be the bare host with no port (browsers reject a port in the RP
+// ID), while the origin check uses the full scheme://host[:port] value. The
+// server and the local admin command both use this one function, so the
+// binding a grant is minted with and the one it is checked against cannot
+// drift apart.
+func AdminRelyingParty(baseURL string) (origin, rpID string, err error) {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", "", errors.New("passkey: BaseURL 未配置或无效")
 	}
-	u, err := url.Parse(origin)
+	origin = u.Scheme + "://" + u.Host
+	rpID = u.Hostname()
+	if rpID == "" {
+		return "", "", errors.New("passkey: BaseURL 缺少 host")
+	}
+	return origin, rpID, nil
+}
+
+// adminRP builds the WebAuthn relying party from BaseURL.
+func (s *Service) adminRP() (*webauthn.WebAuthn, error) {
+	origin, rpID, err := AdminRelyingParty(s.cfg.BaseURL)
 	if err != nil {
 		return nil, err
 	}
-	host := u.Hostname()
-	if host == "" {
-		return nil, errors.New("passkey: BaseURL 缺少 host")
-	}
 	return webauthn.New(&webauthn.Config{
-		RPID:          host,
+		RPID:          rpID,
 		RPDisplayName: rpDisplayName,
 		RPOrigins:     []string{origin},
 	})
@@ -51,8 +60,8 @@ func (u *adminPasskeyUser) WebAuthnDisplayName() string                { return 
 func (u *adminPasskeyUser) WebAuthnCredentials() []webauthn.Credential { return u.creds }
 
 // loadAdminPasskeyUser assembles the admin user from stored credentials. With
-// no credentials registered the handle is empty; the first registration mints
-// one.
+// no credentials registered the handle is empty; the first enrollment mints
+// one (AdminAuthStore.StartEnrollment).
 func (s *Service) loadAdminPasskeyUser(ctx context.Context) (*adminPasskeyUser, error) {
 	u := &adminPasskeyUser{name: s.adminUser()}
 	handle, ok, err := s.store.AdminUserHandle(ctx)
@@ -81,9 +90,9 @@ func (s *Service) loadAdminPasskeyUser(ctx context.Context) (*adminPasskeyUser, 
 // AdminPasskeyCount reports how many passkeys are registered; 0 means the login
 // page must not offer the passkey button.
 func (s *Service) AdminPasskeyCount(ctx context.Context) int {
-	// The login page calls this on every render, including the failure paths.
-	// Password+TOTP is the fallback channel, so nothing here may take that page
-	// down: with no store to ask, answer "no passkeys" and render the form.
+	// The login page calls this on every render. With no store to ask, answer
+	// "no passkeys": the page then explains how to enroll one, and nothing can
+	// sign in or confirm a high-risk action (both require a registered key).
 	if s.store == nil {
 		return 0
 	}

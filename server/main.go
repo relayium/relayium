@@ -20,10 +20,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mdp/qrterminal/v3"
-	"github.com/pquerna/otp"
-	"github.com/pquerna/otp/totp"
 	"github.com/relayium/relayium/account"
+	"github.com/relayium/relayium/admincmd"
 	coturnwire "github.com/relayium/relayium/internal/coturnbridge/wire"
 	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/storage"
@@ -328,6 +326,15 @@ func registerHealthRoutes(mux *http.ServeMux, probe func() readinessProbe) {
 const defaultListenAddress = ":8080"
 
 func main() {
+	// `relayium-server admin ...` is the local, privileged admin-passkey manager
+	// (server/admincmd). It is dispatched before ANYTHING else — before the .env
+	// file, flag parsing, mail/billing validation, the database's full boot
+	// migrations and every background job — so running it against a live
+	// production database opens only the admin tables and touches nothing else.
+	if len(os.Args) > 1 && os.Args[1] == "admin" {
+		os.Exit(admincmd.Main(os.Args[2:], os.Stdout, os.Stderr))
+	}
+
 	// Load an optional .env file before computing flag defaults, so each flag
 	// can fall back to a RELAYIUM_* variable. Precedence: explicit CLI flag >
 	// real environment variable > .env file > built-in default. The .env path
@@ -385,9 +392,20 @@ func main() {
 	appleServerAPIProbeEnvironment := flag.String("apple-server-api-probe-environment", "all", "probe target: all, Production, or Sandbox (used only with -apple-server-api-probe)")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
-	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
-	adminTOTPSecret := flag.String("admin-totp-secret", envStr("RELAYIUM_ADMIN_TOTP_SECRET", ""), "base32 TOTP secret for admin 2FA (empty disables 2FA)")
-	genAdminTOTP := flag.Bool("gen-admin-totp", false, "generate a new admin TOTP secret + QR and exit")
+	// Admin sign-in is Passkey-only (docs/admin-passkeys.md). The console is
+	// switched on by RELAYIUM_ADMIN_ENABLED; the two legacy secrets below are
+	// still ACCEPTED so an existing host config keeps booting, but neither is
+	// ever compared against anything: a non-empty legacy password only serves
+	// as the "on" hint when RELAYIUM_ADMIN_ENABLED is unset, and the TOTP
+	// secret is ignored without even being parsed.
+	adminEnabledFlag := flag.String("admin-enabled", envStr("RELAYIUM_ADMIN_ENABLED", ""), "enable the Passkey-only admin console at /admin (true/false). Unset: enabled only when the deprecated RELAYIUM_ADMIN_PASS is non-empty")
+	// The deprecated secrets are deliberately NOT used as flag defaults: a flag
+	// default is printed by -h, which would echo a legacy password or TOTP
+	// secret from the environment/.env to the terminal. Only their PRESENCE
+	// matters (legacyAdminSecretsSet below), never their value.
+	adminPass := flag.String("admin-pass", "", "DEPRECATED, never used to sign in: when RELAYIUM_ADMIN_ENABLED is unset, a non-empty value (or a non-empty RELAYIUM_ADMIN_PASS) only enables /admin (Passkey-only)")
+	adminTOTPSecret := flag.String("admin-totp-secret", "", "DEPRECATED and ignored (as is RELAYIUM_ADMIN_TOTP_SECRET): admin sign-in and step-up are Passkey-only")
+	genAdminTOTP := flag.Bool("gen-admin-totp", false, "REMOVED: admin TOTP no longer exists (exits with an error)")
 	blobDir := flag.String("blob-dir", envStr("RELAYIUM_BLOB_DIR", "./blobs"), "directory for stored-transfer ciphertext blobs")
 	maxFileSize := flag.Int64("max-file-size", envInt64("RELAYIUM_MAX_FILE_SIZE", 1<<30), "stored-transfer max single-file size in bytes (default 1 GiB)")
 	nodeTrafficDefault := flag.Int64("node-traffic-default", envInt64("RELAYIUM_NODE_TRAFFIC_DEFAULT", 1<<40), "default monthly relay-traffic cap per official node in bytes, 0 = unlimited (default 1 TiB)")
@@ -455,6 +473,7 @@ func main() {
 	// flag). Safe to drop from the host config at leisure.
 	_ = flag.Int64("relay-monthly-free", envInt64("RELAYIUM_RELAY_MONTHLY_FREE", 0),
 		"deprecated: superseded by per-plan monthly traffic quota; accepted but ignored")
+	redactSecretFlagDefaults(flag.CommandLine)
 	flag.Parse()
 	if *stripeSecretKey != "" && *stripePortalConfig == "" {
 		log.Fatal("RELAYIUM_STRIPE_PORTAL_CONFIG is required when Stripe billing is enabled")
@@ -464,23 +483,21 @@ func main() {
 	}
 
 	if *genAdminTOTP {
-		if err := generateAdminTOTP(*adminUser); err != nil {
-			log.Fatalf("generate admin TOTP: %v", err)
-		}
-		return
+		log.Fatal("-gen-admin-totp was removed: admin sign-in is Passkey-only; enroll a passkey with `relayium-server admin enroll start` (docs/admin-passkeys.md)")
 	}
 
 	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
 	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 
-	// Config validation must not depend on DB availability: a malformed
-	// RELAYIUM_ADMIN_TOTP_SECRET should fail fast on every normal startup,
-	// regardless of whether SQLite opens successfully.
-	if err := account.ValidateAdminTOTPSecret(*adminTOTPSecret); err != nil {
+	// Admin enablement is decided before the database opens, like the rest of
+	// the config validation: a contradictory value fails every boot.
+	legacyPass, legacyTOTP := legacyAdminSecretsSet(*adminPass, *adminTOTPSecret)
+	adminEnabled, adminNotes, err := resolveAdminEnabled(*adminEnabledFlag, legacyPass, legacyTOTP)
+	if err != nil {
 		log.Fatalf("%v", err)
 	}
-	if *adminTOTPSecret != "" && *adminPass == "" {
-		log.Printf("WARNING: RELAYIUM_ADMIN_TOTP_SECRET set but admin password empty; /admin disabled, 2FA ignored")
+	for _, n := range adminNotes {
+		log.Print(n)
 	}
 
 	// Mail transport is resolved here, for the same reason: a contradictory
@@ -957,8 +974,7 @@ func main() {
 			AppleDomainAssocFile: *appleDomainAssoc,
 			EnableMagic:          *enableMagic,
 			AdminUser:            *adminUser,
-			AdminPassword:        *adminPass,
-			AdminTOTPSecret:      *adminTOTPSecret,
+			AdminEnabled:         adminEnabled,
 			MaxFileSize:          *maxFileSize,
 			NodeTrafficDefault:   *nodeTrafficDefault,
 			DailyQuota:           *dailyQuota,
@@ -1454,32 +1470,76 @@ func serveUntilStopped(stop context.Context, srv httpServer, bg *backgroundGroup
 	return nil
 }
 
-// generateAdminTOTP creates a fresh TOTP secret for the admin dashboard,
-// prints a scannable terminal QR plus the raw secret/otpauth URL, and
-// returns without starting the server.
-func generateAdminTOTP(adminUser string) error {
-	if adminUser == "" {
-		adminUser = "admin"
+// secretBearingFlags are flags whose default is read from the environment or
+// .env and can carry a credential. -h prints a flag's DefValue, so for these
+// the DISPLAYED default is blanked. Only that help metadata changes: the
+// flag's Value (what the server actually uses) and the precedence explicit
+// flag > env > .env > built-in are untouched. Non-secret defaults (listen
+// address, limits, URLs) stay visible. redis-addr is listed because a Redis
+// URL can embed a password, even though the ingest it configures is disabled.
+var secretBearingFlags = []string{
+	"smtp-pass", "google-secret", "turn-secret", "turn-relays", "node-token",
+	"stripe-secret-key", "stripe-webhook-secret", "billing-hold-secret", "redis-addr",
+	// The deprecated admin secrets already default to "" (never env-derived);
+	// listed so a future edit cannot quietly reintroduce the R5 leak.
+	"admin-pass", "admin-totp-secret",
+}
+
+// redactSecretFlagDefaults blanks the help-display default of every
+// secretBearingFlags entry registered on fs. It must run after the flags are
+// defined and before fs.Parse; it never reads or changes a flag's value.
+func redactSecretFlagDefaults(fs *flag.FlagSet) {
+	for _, name := range secretBearingFlags {
+		if f := fs.Lookup(name); f != nil {
+			f.DefValue = ""
+		}
 	}
-	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "Relayium",
-		AccountName: adminUser,
-		Period:      30,
-		Digits:      otp.DigitsSix,
-		Algorithm:   otp.AlgorithmSHA1,
-	})
-	if err != nil {
-		return err
+}
+
+// legacyAdminSecretsSet reports only whether the deprecated admin password and
+// TOTP secret are present — from the explicit flags or from the environment
+// (which already includes the .env file). The values are never returned,
+// stored, compared or logged.
+func legacyAdminSecretsSet(passFlag, totpFlag string) (pass, totp bool) {
+	return passFlag != "" || os.Getenv("RELAYIUM_ADMIN_PASS") != "",
+		totpFlag != "" || os.Getenv("RELAYIUM_ADMIN_TOTP_SECRET") != ""
+}
+
+// resolveAdminEnabled decides whether /admin is on. explicit is
+// RELAYIUM_ADMIN_ENABLED / -admin-enabled ("" = unset). legacyPass and
+// legacyTOTP report whether the deprecated secrets are set; their VALUES never
+// reach this function, so no secret can be logged or compared here.
+//
+//   - explicit true/false wins.
+//   - unset + legacy password set: on, with a migration warning. This is the
+//     only thing the old password still does — it is an enablement hint for a
+//     host config written before Passkey-only, never an authenticator.
+//   - unset + no legacy password: off (the dashboard stays disabled by default).
+//
+// The returned notes are log lines; none contains a secret.
+func resolveAdminEnabled(explicit string, legacyPass, legacyTOTP bool) (bool, []string, error) {
+	var notes []string
+	enabled := false
+	switch strings.ToLower(strings.TrimSpace(explicit)) {
+	case "":
+		if legacyPass {
+			enabled = true
+			notes = append(notes, "WARNING: /admin is enabled only because the deprecated RELAYIUM_ADMIN_PASS is set. Admin sign-in is Passkey-only and that password is NEVER used to sign in; set RELAYIUM_ADMIN_ENABLED=true and remove RELAYIUM_ADMIN_PASS (docs/admin-passkeys.md).")
+		}
+	case "1", "true", "yes", "on":
+		enabled = true
+		if legacyPass {
+			notes = append(notes, "WARNING: RELAYIUM_ADMIN_PASS is set but ignored (admin sign-in is Passkey-only); remove it from the host config.")
+		}
+	case "0", "false", "no", "off":
+		enabled = false
+	default:
+		return false, nil, fmt.Errorf("invalid RELAYIUM_ADMIN_ENABLED %q (want true or false)", explicit)
 	}
-	fmt.Println("扫描下面的二维码，或手动输入密钥到你的验证器 App：")
-	fmt.Println()
-	qrterminal.GenerateHalfBlock(key.URL(), qrterminal.L, os.Stdout)
-	fmt.Println()
-	fmt.Println("Secret (base32):", key.Secret())
-	fmt.Println("otpauth URL:    ", key.URL())
-	fmt.Println()
-	fmt.Println("把 Secret 填入 RELAYIUM_ADMIN_TOTP_SECRET 后重启服务即可启用 2FA。")
-	return nil
+	if legacyTOTP {
+		notes = append(notes, "WARNING: RELAYIUM_ADMIN_TOTP_SECRET is set but ignored (admin step-up is Passkey-only); remove it from the host config.")
+	}
+	return enabled, notes, nil
 }
 
 // coturnRedisMeteringDisabledLog is the one startup line printed when

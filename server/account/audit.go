@@ -39,7 +39,19 @@ const (
 	AuditNodeDeregister = "node.deregister"
 	AuditTokenMint      = "token.mint"
 	AuditTokenRevoke    = "token.revoke"
-	AuditPasskeyDelete  = "passkey.delete"
+	// AuditPasskeyDelete is historical: the browser could once delete a
+	// passkey. Kept so old rows stay filterable; nothing writes it any more.
+	AuditPasskeyDelete = "passkey.delete"
+	// Passkey-only admin credential lifecycle. Every one of these except
+	// enroll.finish is written by the local `relayium-server admin` command
+	// (auth "cli", ip "local"); enroll.finish is the browser producing a
+	// PENDING credential, which by itself grants nothing.
+	AuditPasskeyEnrollStart     = "passkey.enroll.start"
+	AuditPasskeyEnrollFinish    = "passkey.enroll.finish"
+	AuditPasskeyEnrollApprove   = "passkey.enroll.approve"
+	AuditPasskeyEnrollCancel    = "passkey.enroll.cancel"
+	AuditPasskeyRevoke          = "passkey.revoke"
+	AuditAdminSessionsRevokeAll = "admin.sessions.revoke-all"
 	// AuditAppleProduct records an operator writing one row of the App Store
 	// product catalog — creating a mapping, repointing it at another tier or
 	// cycle, or retiring it.
@@ -136,7 +148,10 @@ var auditActions = []string{
 	AuditLoginOK, AuditLoginFail, AuditLogout, AuditSettings, AuditVersionPolicy,
 	AuditPlanUpsert, AuditUserPlan, AuditUserPlanGrant, AuditNodeDelete, AuditNodeLimits,
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
-	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete, AuditAppleProduct,
+	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
+	AuditPasskeyEnrollStart, AuditPasskeyEnrollFinish, AuditPasskeyEnrollApprove,
+	AuditPasskeyEnrollCancel, AuditPasskeyRevoke, AuditAdminSessionsRevokeAll,
+	AuditAppleProduct,
 	AuditApplePurchases, AuditAppleLegacyRelease,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
 	AuditRolloutRollback, AuditRolloutEmergency, AuditRolloutRetry,
@@ -146,8 +161,10 @@ var auditActions = []string{
 
 // 步进因子取值。"" = 该操作无需步进；grace = 落在宽限期内跳过了校验。
 const (
-	StepUpNone     = ""
-	StepUpPasskey  = "passkey"
+	StepUpNone    = ""
+	StepUpPasskey = "passkey"
+	// StepUpTOTP / StepUpPassword are historical step_up values on old audit
+	// rows. Nothing can produce them any more: step-up is Passkey-only.
 	StepUpTOTP     = "totp"
 	StepUpPassword = "password"
 	StepUpGrace    = "grace"

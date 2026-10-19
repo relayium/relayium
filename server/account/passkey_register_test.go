@@ -10,270 +10,123 @@ import (
 	"testing"
 )
 
-// adminPasswordLogin logs in through the password path and returns the session cookie.
-func adminPasswordLogin(t *testing.T, srv *httptest.Server, s *Service) *http.Cookie {
+// The browser can no longer add or remove an admin passkey — not with a
+// stolen session cookie, not through the old endpoints, not by calling the old
+// handlers directly, and not through a pending confirmation minted by an older
+// binary. Credentials change only through AdminAuthStore (the local command).
+
+func adminCredentialIDs(t *testing.T, s *Service) []string {
 	t.Helper()
-	// The login handler answers with a redirect to /admin; without this the
-	// client would follow it and resp.Cookies() would read the dashboard's
-	// (cookie-less) response instead of the login one.
-	srv.Client().CheckRedirect = func(*http.Request, []*http.Request) error {
-		return http.ErrUseLastResponse
-	}
-	req, _ := http.NewRequest("POST", srv.URL+"/admin/login",
-		strings.NewReader("username=admin&password=pw"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", s.selfOrigin())
-	resp, err := srv.Client().Do(req)
-	if err != nil {
-		t.Fatalf("password login: %v", err)
-	}
-	defer resp.Body.Close()
-	for _, c := range resp.Cookies() {
-		if c.Name == adminCookie {
-			return c
-		}
-	}
-	t.Fatalf("no admin session cookie")
-	return nil
-}
-
-// registerViaHTTP drives a full register begin+finish through the HTTP endpoints.
-func registerViaHTTP(t *testing.T, srv *httptest.Server, s *Service, session *http.Cookie, name string) {
-	t.Helper()
-	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
-		strings.NewReader("username=admin&password=pw&name="+url.QueryEscape(name)))
-	breq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	breq.Header.Set("Origin", s.selfOrigin())
-	breq.AddCookie(session)
-	bresp, err := srv.Client().Do(breq)
-	if err != nil {
-		t.Fatalf("register begin: %v", err)
-	}
-	// Check begin before touching its body: a 503 (ceremony cap) or 401 (step-up)
-	// here otherwise resurfaces as an opaque 400 from finish, pointing at the
-	// wrong endpoint entirely.
-	if bresp.StatusCode != http.StatusOK {
-		bresp.Body.Close()
-		t.Fatalf("register begin %q: status=%d want 200", name, bresp.StatusCode)
-	}
-	var opts struct {
-		PublicKey struct {
-			Challenge string `json:"challenge"`
-		} `json:"publicKey"`
-	}
-	if err := json.NewDecoder(bresp.Body).Decode(&opts); err != nil {
-		bresp.Body.Close()
-		t.Fatalf("register begin %q: decode: %v", name, err)
-	}
-	cookies := bresp.Cookies()
-	bresp.Body.Close()
-	if opts.PublicKey.Challenge == "" {
-		t.Fatalf("register begin %q: empty challenge", name)
-	}
-
-	rp, _ := s.adminRP()
-	auth := newTestAuthenticator(t)
-	freq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/finish",
-		strings.NewReader(auth.registerBody(t, rp.Config.RPID, s.selfOrigin(), opts.PublicKey.Challenge)))
-	freq.Header.Set("Content-Type", "application/json")
-	freq.Header.Set("Origin", s.selfOrigin())
-	freq.AddCookie(session)
-	for _, c := range cookies {
-		freq.AddCookie(c)
-	}
-	fresp, err := srv.Client().Do(freq)
-	if err != nil {
-		t.Fatalf("register finish: %v", err)
-	}
-	defer fresp.Body.Close()
-	if fresp.StatusCode != http.StatusOK {
-		t.Fatalf("register finish %q: status=%d", name, fresp.StatusCode)
-	}
-}
-
-// step-up 是本功能最重要的安全边界：仅凭已登录会话不得注册新 passkey，
-// 否则一次会话 cookie 泄露即可升级为永久后门。
-func TestPasskeyRegisterRequiresStepUp(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-
-	// 先用密码登录拿到管理员会话
-	session := adminPasswordLogin(t, srv, s)
-
-	// 有会话但不带密码 → 必须被拒
-	req, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
-		strings.NewReader("name=Laptop"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", s.selfOrigin())
-	req.AddCookie(session)
-	resp, err := srv.Client().Do(req)
-	if err != nil {
-		t.Fatalf("do: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusOK {
-		t.Fatalf("register/begin succeeded with session only — step-up not enforced")
-	}
-
-	// 带正确密码 → 放行
-	ok, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
-		strings.NewReader("username=admin&password=pw&name=Laptop"))
-	ok.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	ok.Header.Set("Origin", s.selfOrigin())
-	ok.AddCookie(session)
-	okResp, err := srv.Client().Do(ok)
-	if err != nil {
-		t.Fatalf("do: %v", err)
-	}
-	defer okResp.Body.Close()
-	if okResp.StatusCode != http.StatusOK {
-		t.Fatalf("register/begin with correct creds: status=%d want 200", okResp.StatusCode)
-	}
-}
-
-// step-up 是完整的密码+TOTP 复验：开了 TOTP 时，光有密码不够。
-func TestPasskeyRegisterStepUpHonorsTOTP(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-	s.cfg.AdminTOTPSecret = testSecret
-	// A session is pinned to the credentials in force when it was minted (cred_fp),
-	// so enabling TOTP invalidates the pre-TOTP session — exactly as a real admin
-	// would set the secret at startup and log in after. Re-mint under the new
-	// credentials so this test exercises the register/begin TOTP check, not
-	// credential-rotation revocation (covered elsewhere).
-	tok, err := s.newAdminSession(context.Background(), "password")
+	rows, err := s.store.ListAdminCredentials(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	session = &http.Cookie{Name: adminCookie, Value: tok}
-
-	begin := func(form string) int {
-		t.Helper()
-		req, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
-			strings.NewReader(form))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("Origin", s.selfOrigin())
-		req.AddCookie(session)
-		resp, err := srv.Client().Do(req)
-		if err != nil {
-			t.Fatalf("do: %v", err)
-		}
-		defer resp.Body.Close()
-		return resp.StatusCode
+	var ids []string
+	for _, r := range rows {
+		ids = append(ids, r.ID)
 	}
-
-	if code := begin("username=admin&password=pw&name=Laptop"); code == http.StatusOK {
-		t.Fatalf("register/begin accepted a missing TOTP code while TOTP is on")
-	}
-	if code := begin("username=admin&password=pw&totp=000000&name=Laptop"); code == http.StatusOK {
-		t.Fatalf("register/begin accepted a wrong TOTP code")
-	}
-	form := "username=admin&password=pw&name=Laptop&totp=" + codeAt(t, s.now())
-	if code := begin(form); code != http.StatusOK {
-		t.Fatalf("register/begin with a valid TOTP code: status=%d want 200", code)
-	}
-	// The step must have been consumed, so the same code cannot be replayed.
-	if code := begin(form); code == http.StatusOK {
-		t.Fatalf("register/begin replayed an already-used TOTP code")
-	}
+	return ids
 }
 
-// 未登录会话根本不能碰注册端点。
-func TestPasskeyRegisterRequiresSession(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	req, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
-		strings.NewReader("username=admin&password=pw&name=Laptop"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", s.selfOrigin())
-	resp, err := srv.Client().Do(req)
-	if err != nil {
-		t.Fatalf("do: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusOK {
-		t.Fatalf("register/begin succeeded without an admin session")
-	}
-}
+func TestBrowserCannotAddOrDeletePasskeysEvenWithASession(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "on")
+	stolen := adminSessionCookie(t, s) // a fully valid admin session
+	existing := adminTestPasskey(t, s).credID
+	before := adminCredentialIDs(t, s)
 
-// 完整注册往返：begin(step-up) → authenticator → finish → 入库。
-func TestPasskeyRegisterEndToEnd(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-
-	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
-		strings.NewReader("username=admin&password=pw&name=MacBook"))
-	breq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// A login challenge any client can mint, to give a register/finish body the
+	// best possible chance of being well-formed.
+	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/begin", nil)
 	breq.Header.Set("Origin", s.selfOrigin())
-	breq.AddCookie(session)
 	bresp, err := srv.Client().Do(breq)
 	if err != nil {
-		t.Fatalf("begin: %v", err)
+		t.Fatal(err)
 	}
 	var opts struct {
 		PublicKey struct {
 			Challenge string `json:"challenge"`
 		} `json:"publicKey"`
 	}
-	json.NewDecoder(bresp.Body).Decode(&opts)
+	_ = json.NewDecoder(bresp.Body).Decode(&opts)
+	ceremony := bresp.Cookies()
 	bresp.Body.Close()
-	cookies := bresp.Cookies()
-	if opts.PublicKey.Challenge == "" {
-		t.Fatalf("empty challenge")
-	}
 
 	rp, _ := s.adminRP()
-	auth := newTestAuthenticator(t)
-	body := auth.registerBody(t, rp.Config.RPID, s.selfOrigin(), opts.PublicKey.Challenge)
-	freq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/finish",
-		strings.NewReader(body))
-	freq.Header.Set("Content-Type", "application/json")
-	freq.Header.Set("Origin", s.selfOrigin())
-	freq.AddCookie(session)
-	for _, c := range cookies {
-		freq.AddCookie(c)
+	attacker := newTestAuthenticator(t)
+	attempts := []struct {
+		path, ctype, body string
+	}{
+		{"/admin/passkey/register/begin", "application/x-www-form-urlencoded", "name=evil&username=admin&password=pw"},
+		{"/admin/passkey/register/finish", "application/json", attacker.registerBody(t, rp.Config.RPID, s.selfOrigin(), opts.PublicKey.Challenge)},
+		{"/admin/passkey/delete", "application/x-www-form-urlencoded", "id=" + url.QueryEscape(existing)},
 	}
-	fresp, err := srv.Client().Do(freq)
-	if err != nil {
-		t.Fatalf("finish: %v", err)
-	}
-	defer fresp.Body.Close()
-	if fresp.StatusCode != http.StatusOK {
-		t.Fatalf("finish status=%d want 200", fresp.StatusCode)
+	for _, a := range attempts {
+		req, _ := http.NewRequest("POST", srv.URL+a.path, strings.NewReader(a.body))
+		req.Header.Set("Content-Type", a.ctype)
+		req.Header.Set("Origin", s.selfOrigin())
+		req.AddCookie(stolen)
+		for _, c := range ceremony {
+			req.AddCookie(c)
+		}
+		resp, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusGone {
+			t.Errorf("POST %s with a valid session: status %d, want 410", a.path, resp.StatusCode)
+		}
 	}
 
-	rows, err := s.store.ListAdminCredentials(context.Background())
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("stored %d credentials err=%v, want 1", len(rows), err)
+	// The handlers themselves, called directly with the session (bypassing the
+	// mux), are inert too.
+	for name, h := range map[string]http.HandlerFunc{
+		"register/begin":  s.HandleAdminPasskeyRegisterBegin,
+		"register/finish": s.HandleAdminPasskeyRegisterFinish,
+		"delete":          s.HandleAdminPasskeyDelete,
+	} {
+		w := callAdminHandler(h, stolen, url.Values{"id": {existing}, "name": {"evil"}}, nil)
+		if w.Code != http.StatusGone {
+			t.Errorf("direct %s: status %d, want 410", name, w.Code)
+		}
 	}
-	if rows[0].Name != "MacBook" {
-		t.Fatalf("name=%q want MacBook", rows[0].Name)
+
+	after := adminCredentialIDs(t, s)
+	if len(after) != len(before) || after[0] != existing {
+		t.Fatalf("browser changed the credential table: before %v after %v", before, after)
 	}
-	if len(rows[0].UserHandle) != 32 {
-		t.Fatalf("user handle len=%d want 32", len(rows[0].UserHandle))
+	if !s.validAdmin(context.Background(), stolen.Value) {
+		t.Fatal("the session itself should be unaffected by refused attempts")
 	}
 }
 
-// 第二枚凭据必须复用同一 user handle。
-func TestPasskeyRegisterReusesUserHandle(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-	registerViaHTTP(t, srv, s, session, "第一台")
-	registerViaHTTP(t, srv, s, session, "第二台")
-
-	rows, _ := s.store.ListAdminCredentials(context.Background())
-	if len(rows) != 2 {
-		t.Fatalf("got %d credentials, want 2", len(rows))
+// A pending "passkey.delete" confirmation minted by an older binary (still in
+// admin_pending_actions across an upgrade) must not delete anything when
+// confirmed: the action has no handler any more and fails closed.
+func TestLegacyPasskeyDeleteConfirmationFailsClosed(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "on")
+	session := adminSessionCookie(t, s)
+	existing := adminTestPasskey(t, s).credID
+	markStepUpForTest(t, s, session.Value) // grace: no factor needed
+	form := url.Values{"id": {existing}}
+	if ok, err := s.store.PutPendingAction(context.Background(), "legacy-tok", session.Value,
+		AuditPasskeyDelete, form.Encode(), "", s.now().Unix(), s.now().Unix()+300, 16); err != nil || !ok {
+		t.Fatalf("seed pending: %v %v", ok, err)
 	}
-	if string(rows[0].UserHandle) != string(rows[1].UserHandle) {
-		t.Fatalf("user handle differs between credentials")
+	resp := postAdminForm(t, srv, session, "/admin/confirm", url.Values{"confirm_token": {"legacy-tok"}})
+	resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Fatalf("legacy passkey.delete confirmation: status %d, want a refusal", resp.StatusCode)
+	}
+	if ids := adminCredentialIDs(t, s); len(ids) != 1 || ids[0] != existing {
+		t.Fatalf("legacy confirmation deleted a credential: %v", ids)
 	}
 }
 
-// 改掉管理员用户名后，已注册的 passkey 必须仍然可用。
+// 改掉管理员用户名后，已注册的 passkey 必须仍然可用（handle 与用户名解耦）。
 func TestPasskeySurvivesAdminUsernameChange(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-	registerViaHTTP(t, srv, s, session, "MacBook")
-
+	_, s := newAdminServer(t, "admin", "on")
+	adminTestPasskey(t, s)
 	before, _, _ := s.store.AdminUserHandle(context.Background())
 	s.cfg.AdminUser = "someone-else"
 	user, err := s.loadAdminPasskeyUser(context.Background())
@@ -288,326 +141,44 @@ func TestPasskeySurvivesAdminUsernameChange(t *testing.T) {
 	}
 }
 
-// ceremonyErr 读出 JSON 错误体里的 error 字段。跨 kind 的断言必须落到具体消息上：
-// register/finish 对"ceremony 取不到/kind 不对"和"attestation 验签失败"都返回 400，
-// 单看状态码无法区分二者，而这两者的差别正是本组测试存在的理由。
-func ceremonyErr(t *testing.T, resp *http.Response) string {
-	t.Helper()
-	var body struct {
-		Error string `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode error body: %v", err)
-	}
-	return body.Error
-}
-
-// 本功能最重要的安全边界：仅凭一枚被盗的管理员会话不得注册新 passkey。
-// login/begin 完全不需要认证，所以攻击者可以在那里免费铸一枚 ceremony，再拿去
-// register/finish 兑换 —— 若 ceremony 不区分种类，这条路径就绕开了 step-up，
-// 一次会话泄露即升级为永久后门。
-//
-// 断言必须精确到"注册已过期，请重试"（kind/takeCeremony 拒绝路径的唯一消息），
-// 不能用宽松的 != 200：登录 ceremony 的 SessionData.CredParams 是空的，
-// attestation 会顺带以"algorithm not supported"失败，同样返回 400。那是
-// go-webauthn 的实现细节而非我们的检查，换个默认填充 CredParams 的版本就会
-// 悄悄失效。拿掉 kind 检查后，这条断言必须变红。
-func TestPasskeyLoginCeremonyCannotBeSpentAtRegisterFinish(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-
-	// 无需任何认证即可拿到一枚登录 ceremony
-	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/begin", nil)
-	breq.Header.Set("Origin", s.selfOrigin())
-	bresp, err := srv.Client().Do(breq)
-	if err != nil {
-		t.Fatalf("login begin: %v", err)
-	}
-	if bresp.StatusCode != http.StatusOK {
-		bresp.Body.Close()
-		t.Fatalf("login begin status=%d want 200", bresp.StatusCode)
-	}
-	var opts struct {
-		PublicKey struct {
-			Challenge string `json:"challenge"`
-		} `json:"publicKey"`
-	}
-	if err := json.NewDecoder(bresp.Body).Decode(&opts); err != nil {
-		bresp.Body.Close()
-		t.Fatalf("login begin decode: %v", err)
-	}
-	cookies := bresp.Cookies()
-	bresp.Body.Close()
-	if opts.PublicKey.Challenge == "" {
-		t.Fatalf("empty challenge")
-	}
-
-	// 用被盗会话 + 登录 ceremony 去兑换注册
-	rp, _ := s.adminRP()
-	auth := newTestAuthenticator(t)
-	freq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/finish",
-		strings.NewReader(auth.registerBody(t, rp.Config.RPID, s.selfOrigin(), opts.PublicKey.Challenge)))
-	freq.Header.Set("Content-Type", "application/json")
-	freq.Header.Set("Origin", s.selfOrigin())
-	freq.AddCookie(session)
-	for _, c := range cookies {
-		freq.AddCookie(c)
-	}
-	fresp, err := srv.Client().Do(freq)
-	if err != nil {
-		t.Fatalf("register finish: %v", err)
-	}
-	defer fresp.Body.Close()
-	if fresp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("cross-kind register/finish status=%d want 400", fresp.StatusCode)
-	}
-	if msg := ceremonyErr(t, fresp); msg != "注册已过期，请重试" {
-		t.Fatalf("cross-kind register/finish error=%q, want %q — a different message means the "+
-			"ceremony kind check did not reject this; attestation (or something else) did, which is "+
-			"exactly the incidental defense this test exists to replace",
-			msg, "注册已过期，请重试")
-	}
-
-	// 绝不能有凭据落库
-	rows, _ := s.store.ListAdminCredentials(context.Background())
-	if len(rows) != 0 {
-		t.Fatalf("a credential was registered via a login ceremony: %d rows", len(rows))
-	}
-}
-
-// 反方向同样必须关死：注册 ceremony 不得在 login/finish 兑换成管理员会话。
-// （这一向另有 ValidatePasskeyLogin 对非空 UserID 的拒绝兜底，但那同样是库的
-// 实现细节，这里断言的是我们自己的 kind 检查。）
-func TestPasskeyRegisterCeremonyCannotBeSpentAtLoginFinish(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	// 先注册一枚真实凭据，好让 login/finish 在 kind 检查之外本可以走通
-	auth, handle := registerTestPasskey(t, s)
-	session := adminPasswordLogin(t, srv, s)
-
-	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
-		strings.NewReader("username=admin&password=pw&name=Laptop"))
-	breq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	breq.Header.Set("Origin", s.selfOrigin())
-	breq.AddCookie(session)
-	bresp, err := srv.Client().Do(breq)
-	if err != nil {
-		t.Fatalf("register begin: %v", err)
-	}
-	if bresp.StatusCode != http.StatusOK {
-		bresp.Body.Close()
-		t.Fatalf("register begin status=%d want 200", bresp.StatusCode)
-	}
-	var opts struct {
-		PublicKey struct {
-			Challenge string `json:"challenge"`
-		} `json:"publicKey"`
-	}
-	if err := json.NewDecoder(bresp.Body).Decode(&opts); err != nil {
-		bresp.Body.Close()
-		t.Fatalf("register begin decode: %v", err)
-	}
-	cookies := bresp.Cookies()
-	bresp.Body.Close()
-	if opts.PublicKey.Challenge == "" {
-		t.Fatalf("empty challenge")
-	}
-
-	rp, _ := s.adminRP()
-	freq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/finish",
-		strings.NewReader(auth.assertBody(t, rp.Config.RPID, s.selfOrigin(), opts.PublicKey.Challenge, handle)))
-	freq.Header.Set("Content-Type", "application/json")
-	freq.Header.Set("Origin", s.selfOrigin())
-	for _, c := range cookies {
-		freq.AddCookie(c)
-	}
-	fresp, err := srv.Client().Do(freq)
-	if err != nil {
-		t.Fatalf("login finish: %v", err)
-	}
-	defer fresp.Body.Close()
-	if fresp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("cross-kind login/finish status=%d want 400", fresp.StatusCode)
-	}
-	for _, c := range fresp.Cookies() {
-		if c.Name == adminCookie && c.Value != "" {
-			t.Fatalf("a register ceremony minted an admin session at login/finish")
+// The password-login route answers 410 and never issues a cookie, whatever is
+// posted — including what used to be the correct legacy password.
+func TestLegacyPasswordLoginCannotIssueASession(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "on")
+	adminTestPasskey(t, s)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	for _, form := range []url.Values{
+		{"username": {"admin"}, "password": {"on"}},
+		{"username": {"admin"}, "password": {"pw"}, "totp": {"123456"}},
+		{},
+	} {
+		req, _ := http.NewRequest("POST", srv.URL+"/admin/login", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", s.selfOrigin())
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusGone {
+			t.Errorf("POST /admin/login: status %d, want 410", resp.StatusCode)
+		}
+		for _, c := range resp.Cookies() {
+			if c.Name == adminCookie && c.Value != "" {
+				t.Fatalf("password POST issued an admin cookie")
+			}
 		}
 	}
-	if msg := ceremonyErr(t, fresp); msg != "验证已过期，请重试" {
-		t.Fatalf("cross-kind login/finish error=%q, want %q — a different message means something "+
-			"other than the ceremony kind check rejected this", msg, "验证已过期，请重试")
+	var n int
+	_ = s.store.(*SQLiteStore).db.QueryRow(`SELECT COUNT(*) FROM admin_sessions`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("password POST created %d session rows", n)
 	}
-}
-
-// 跨 kind 的尝试必须同样消费掉 ceremony：错一次就作废，不得换个端点重试。
-func TestPasskeyCrossKindAttemptConsumesCeremony(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-
-	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/begin", nil)
-	breq.Header.Set("Origin", s.selfOrigin())
-	bresp, err := srv.Client().Do(breq)
-	if err != nil {
-		t.Fatalf("login begin: %v", err)
-	}
-	// begin 必须真的成功过。若它返回 429/503，压根就不会有 ceremony 被建出来，
-	// 末尾那句 len(...)==0 会因为完全无关的理由通过——这个测试守的是安全边界，
-	// 不能允许它空转。
-	if bresp.StatusCode != http.StatusOK {
-		bresp.Body.Close()
-		t.Fatalf("login begin: status=%d want 200", bresp.StatusCode)
-	}
-	var opts struct {
-		PublicKey struct {
-			Challenge string `json:"challenge"`
-		} `json:"publicKey"`
-	}
-	json.NewDecoder(bresp.Body).Decode(&opts)
-	cookies := bresp.Cookies()
-	bresp.Body.Close()
-
-	// 用错之前先确认确实有且只有这一枚 ceremony 在飞：这样末尾的 0 才代表
-	// "被吃掉了"，而不是"从来没有过"。
-	if before := ceremonyCount(t, s); before != 1 {
-		t.Fatalf("before cross-kind attempt: %d ceremonies alive, want exactly 1", before)
-	}
-
-	// 先拿去 register/finish 用错（被拒），ceremony 应当已被吃掉
-	rp, _ := s.adminRP()
-	auth := newTestAuthenticator(t)
-	wrong, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/finish",
-		strings.NewReader(auth.registerBody(t, rp.Config.RPID, s.selfOrigin(), opts.PublicKey.Challenge)))
-	wrong.Header.Set("Content-Type", "application/json")
-	wrong.Header.Set("Origin", s.selfOrigin())
-	wrong.AddCookie(session)
-	for _, c := range cookies {
-		wrong.AddCookie(c)
-	}
-	wresp, err := srv.Client().Do(wrong)
-	if err != nil {
-		t.Fatalf("register finish: %v", err)
-	}
-	// 必须是 kind 判别器那条 400（"注册已过期，请重试"）。只断言"非 200"是不够的：
-	// 401（未登录）、400（真的验签失败）都能让宽松断言过关，而那两条都说明请求
-	// 死在了别处，根本没触到跨 kind 这道门。
-	var werr struct {
-		Error string `json:"error"`
-	}
-	json.NewDecoder(wresp.Body).Decode(&werr)
-	wresp.Body.Close()
-	if wresp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("cross-kind register/finish: status=%d want 400", wresp.StatusCode)
-	}
-	if werr.Error != "注册已过期，请重试" {
-		t.Fatalf("cross-kind register/finish: error=%q want %q (a different message means the "+
-			"request was rejected somewhere other than the ceremony-kind check)",
-			werr.Error, "注册已过期，请重试")
-	}
-
-	// 同一枚 ceremony 现在连它本来的用途也不该再能用
-	if n := ceremonyCount(t, s); n != 0 {
-		t.Fatalf("cross-kind attempt left %d ceremonies alive; it must consume like any other finish", n)
-	}
-}
-
-// 第二次注册必须把已有凭据放进 excludeCredentials 下发。
-//
-// 平台认证器在同一个 (rpID, user.id) 下再造一枚 resident 凭据时，是「替换」而不是
-// 「新增」：旧凭据在设备上没了，返回的却是一个新 credential ID，于是库里那行旧记录
-// 永远留着且 last_used_at = 0。而「从未使用」正是本功能识别被植入凭据的唯一信号，
-// 所以一次无心的重复注册就会在唯一的入侵探测器上制造出永久误报。
-// go-webauthn 的 BeginRegistration 不会自己填 CredentialExcludeList，
-// 只有 webauthn.WithExclusions 会——这个测试盯的就是那一个选项。
-func TestPasskeyRegisterExcludesExistingCredentials(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-	registerViaHTTP(t, srv, s, session, "MacBook")
-
-	rows, err := s.store.ListAdminCredentials(context.Background())
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("setup: rows=%d err=%v want exactly 1 credential", len(rows), err)
-	}
-	existingID := rows[0].ID
-
-	// 再发起一次注册，只看 begin 下发的创建参数，不必走完 finish。
-	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
-		strings.NewReader("username=admin&password=pw&name="+url.QueryEscape("第二台")))
-	breq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	breq.Header.Set("Origin", s.selfOrigin())
-	breq.AddCookie(session)
-	bresp, err := srv.Client().Do(breq)
-	if err != nil {
-		t.Fatalf("second register begin: %v", err)
-	}
-	defer bresp.Body.Close()
-	if bresp.StatusCode != http.StatusOK {
-		t.Fatalf("second register begin: status=%d want 200", bresp.StatusCode)
-	}
-	var opts struct {
-		PublicKey struct {
-			ExcludeCredentials []struct {
-				ID string `json:"id"`
-			} `json:"excludeCredentials"`
-		} `json:"publicKey"`
-	}
-	if err := json.NewDecoder(bresp.Body).Decode(&opts); err != nil {
-		t.Fatalf("decode creation options: %v", err)
-	}
-
-	if len(opts.PublicKey.ExcludeCredentials) == 0 {
-		t.Fatalf("second registration sent no excludeCredentials; the authenticator would " +
-			"silently replace the existing resident credential and strand its DB row at " +
-			"last_used_at = 0 (a permanent false positive on the planted-credential signal)")
-	}
-	var found bool
-	for _, c := range opts.PublicKey.ExcludeCredentials {
-		if c.ID == existingID {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("excludeCredentials %v does not carry the registered credential %q",
-			opts.PublicKey.ExcludeCredentials, existingID)
-	}
-}
-
-// 删除必须要求已登录会话，且成功后凭据消失。
-func TestPasskeyDelete(t *testing.T) {
-	srv, s := newAdminServer(t, "admin", "pw")
-	session := adminPasswordLogin(t, srv, s)
-	registerViaHTTP(t, srv, s, session, "MacBook")
-	rows, _ := s.store.ListAdminCredentials(context.Background())
-	id := rows[0].ID
-
-	// 无会话 → 拒绝
-	noAuth, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/delete",
-		strings.NewReader("id="+url.QueryEscape(id)))
-	noAuth.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	noAuth.Header.Set("Origin", s.selfOrigin())
-	nresp, _ := srv.Client().Do(noAuth)
-	nresp.Body.Close()
-	rows, _ = s.store.ListAdminCredentials(context.Background())
-	if len(rows) != 1 {
-		t.Fatalf("credential deleted without a session")
-	}
-
-	// 有会话 → 删除。
-	//
-	// Calls HandleAdminPasskeyDelete directly rather than through the real
-	// POST /admin/passkey/delete route: that route now sits behind
-	// RequireStepUp (Task 7 gates passkey deletion as high-risk — see the
-	// doc comment on HandleAdminPasskeyDelete), which renders a confirmation
-	// page instead of deleting anything. This asserts the handler's own
-	// deletion logic; the route's step-up gating is covered by
-	// stepup_test.go.
-	req, _ := http.NewRequest("POST", "/admin/passkey/delete",
-		strings.NewReader("id="+url.QueryEscape(id)))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(session)
+	// The handler does not even read the request: a direct call is the same.
 	w := httptest.NewRecorder()
-	s.HandleAdminPasskeyDelete(w, req)
-	rows, _ = s.store.ListAdminCredentials(context.Background())
-	if len(rows) != 0 {
-		t.Fatalf("credential still present after delete: %d", len(rows))
+	s.handleAdminRemovedEndpoint(w, httptest.NewRequest("POST", "/admin/login", strings.NewReader("password=on")))
+	if w.Code != http.StatusGone || len(w.Result().Cookies()) != 0 {
+		t.Fatalf("removed endpoint: %d %v", w.Code, w.Result().Cookies())
 	}
 }

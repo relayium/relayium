@@ -23,8 +23,8 @@ import (
 func TestAdminNodeDrainingTogglePersists(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
-	s := NewService(store, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
-	tok, err := s.newAdminSession(ctx, "password")
+	s := NewService(store, nil, Config{AdminUser: "admin", AdminEnabled: true})
+	tok, err := newTestAdminSession(t, s), error(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestAdminNodeDrainingTogglePersists(t *testing.T) {
 
 func TestAdminNodeDrainingRequiresAdmin(t *testing.T) {
 	store := newTestStore(t)
-	s := NewService(store, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
+	s := NewService(store, nil, Config{AdminUser: "admin", AdminEnabled: true})
 	n, err := store.UpsertNode(context.Background(), Node{OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "t"})
 	if err != nil {
 		t.Fatal(err)
@@ -118,9 +118,9 @@ func TestAdminHomeShowsNodeFileCountAndSafeFromTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := NewService(store, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
+	s := NewService(store, nil, Config{AdminUser: "admin", AdminEnabled: true})
 	s.now = func() time.Time { return time.Unix(1_700_000_500, 0) }
-	tok, err := s.newAdminSession(ctx, "password")
+	tok, err := newTestAdminSession(t, s), error(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,9 +158,9 @@ func TestAdminHomeNodeWithNoFilesShowsZeroWait(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	s := NewService(store, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
+	s := NewService(store, nil, Config{AdminUser: "admin", AdminEnabled: true})
 	s.now = func() time.Time { return time.Unix(1_700_000_500, 0) }
-	tok, err := s.newAdminSession(ctx, "password")
+	tok, err := newTestAdminSession(t, s), error(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

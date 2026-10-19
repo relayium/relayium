@@ -3,11 +3,52 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The release manifest selects 0.3.1 (versionCode 10), published on
-2026-10-12 as GitHub Release `android-v0.3.1`. The relayium.com download link
-and update feed move to it with a separate website delivery, pending as of
-2026-10-12; until its own recorded public verification, what relayium.com
-actually serves is authoritative and may still be 0.3.0.
+any kind. The release manifest selects 0.3.2 (versionCode 11), signed on
+2026-10-17 for the GitHub direct-APK preview channel `android-v0.3.2`.
+The release asset and relayium.com update feed are published and verified in
+separate steps; actual public URLs determine the version currently available.
+
+### Android 0.3.2 (11) release inputs
+
+`Relayium-0.3.2-11.apk` is built from clean, pushed source
+`d2266e27dce70d72622be85d6efa2b6158275b43`. Its SHA-256 is
+`1dbe6e3cf75fb704d408cccd15875fcb7406ac9d4cc6668ed4f0a061f2a03fe4`,
+size 46,053,962 bytes. The established signing certificate remains
+`ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`.
+The subsequent metadata-only commit carries these release inputs; the Android
+runtime tree remains identical to the APK source, with no repackaging.
+
+Against published 0.3.1, this release adds negotiated parallel upload to new
+large Share a link uploads and includes the earlier receiver write-batching
+change. It sends at most two ciphertext PATCH requests, beginning the next only
+after the previous body has been flushed while storage confirmation is pending.
+Progress remains server-confirmed. Missing/unknown capabilities, restored
+sessions, Device Inbox and small single-request uploads retain their existing
+behavior. Partial/gap/lost answers drain all live requests, check the same
+session and replay the immutable encrypted spool serially. Cancellation joins
+request owners before closing the spool; finalization requires all bytes to be
+accepted and every request to terminate. No encryption, saved-plan format,
+permissions, pricing, quota or storage-node protocol change is needed.
+
+Acceptance: 1,724 protocol/app JVM tests, zero skips or failures, lint and
+both debug/release builds passed. Real loopback HTTP with the production model,
+client and spool proved second-body arrival while first storage confirmation
+was held, and full decryption after partial-answer recovery. Disabling the
+pipeline fails that same overlap case. All unsigned ZIP entries remain
+byte-identical after signing, with only signature entries added; v2/v3 signature,
+16 KB alignment, unchanged ABIs/permissions/components and inert release hooks
+were observed with the SDK. An isolated API 36 emulator upgraded the actual
+0.3.1 APK in place, retaining UID and private data marker, cold-launched cleanly,
+and refused downgrade; a one-byte APK mutation failed real signature verification.
+These are automated/emulator results, not physical-phone or WAN acceptance.
+
+Repository advisory policy revision 3 recommends 0.3.2 (11). A running older
+backend can still serve revision 2 / 0.3.1 until a separately authorized promotion;
+that is advisory and an installed newer client ignores the older recommendation.
+The primary install/update feed is `/apps/android/update.json`. Publishing these
+inputs does not itself switch the website or server pin. Transfers remain
+foreground-only; no specific network speed is promised. The 0.3.1 and older
+records below retain their historical release provenance.
 
 ### Android 0.3.1 (10) publication
 

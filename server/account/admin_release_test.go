@@ -2,8 +2,6 @@ package account
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -231,14 +229,11 @@ func TestAdminRolloutRefusesOnAPausedRollout(t *testing.T) {
 func TestAdminNoticeAbsentWhenTheCheckIsDisabled(t *testing.T) {
 	store := newTestStore(t)
 	svc := NewService(store, &capturingMailer{}, Config{
-		BaseURL: "http://example.test", AdminUser: "boss", AdminPassword: "s3cret",
+		BaseURL: "http://example.test", AdminUser: "boss", AdminEnabled: true,
 		MaxFileSize: 50 << 20, DailyQuota: 200 << 20, DefaultTTL: 86400, MaxTTL: 604800,
 		ReleaseCheck: false,
 	})
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	ts := httptest.NewServer(mux)
-	t.Cleanup(ts.Close)
+	ts := serveAdminForTest(t, svc)
 
 	cookie := adminLogin(t, ts)
 	ctx := context.Background()

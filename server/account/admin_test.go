@@ -18,16 +18,14 @@ func newAdminServer(t *testing.T, user, pass string) (*httptest.Server, *Service
 	_, _ = store.UpsertUserByEmail(context.Background(), "seen@example.com", "Seen")
 	svc := NewService(store, &capturingMailer{}, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour,
-		AdminUser: user, AdminPassword: pass,
+		AdminUser: user, AdminEnabled: pass != "",
 	})
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	ts := httptest.NewServer(mux)
-	t.Cleanup(ts.Close)
+	ts := serveAdminForTest(t, svc)
 	return ts, svc
 }
 
-func TestAdminDisabledWhenNoPassword(t *testing.T) {
+// The dashboard stays off unless explicitly enabled.
+func TestAdminDisabledByDefault(t *testing.T) {
 	ts, _ := newAdminServer(t, "admin", "")
 	resp, _ := ts.Client().Get(ts.URL + "/admin")
 	if resp.StatusCode != http.StatusNotFound {
@@ -36,14 +34,10 @@ func TestAdminDisabledWhenNoPassword(t *testing.T) {
 }
 
 func TestAdminUserDefaultsToAdminWhenUnset(t *testing.T) {
-	// 不配账号时默认为 "admin"（向后兼容只设密码的部署）。
-	ts, _ := newAdminServer(t, "", "s3cret")
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, _ := client.PostForm(ts.URL+"/admin/login",
-		map[string][]string{"username": {"admin"}, "password": {"s3cret"}})
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("default username 'admin' should log in, got %d", resp.StatusCode)
+	// The configured username is display/audit identity only; unset means "admin".
+	_, svc := newAdminServer(t, "", "on")
+	if got := svc.adminUser(); got != "admin" {
+		t.Fatalf("default admin user = %q, want admin", got)
 	}
 }
 
@@ -51,7 +45,7 @@ func newAdminSettingsServer(t *testing.T) (*httptest.Server, *Service, *SQLiteSt
 	t.Helper()
 	store := newTestStore(t)
 	svc := NewService(store, &capturingMailer{}, Config{
-		BaseURL: "http://example.test", AdminUser: "boss", AdminPassword: "s3cret",
+		BaseURL: "http://example.test", AdminUser: "boss", AdminEnabled: true,
 		MaxFileSize: 50 << 20, DailyQuota: 200 << 20, DefaultTTL: 86400, MaxTTL: 604800,
 		// The release notice is on by default in production (RELAYIUM_RELEASE_CHECK
 		// defaults true); tests that build the dashboard through this helper — the
@@ -59,10 +53,7 @@ func newAdminSettingsServer(t *testing.T) (*httptest.Server, *Service, *SQLiteSt
 		// value is off like every other feature flag in this struct.
 		ReleaseCheck: true,
 	})
-	mux := http.NewServeMux()
-	svc.RegisterAdmin(mux)
-	ts := httptest.NewServer(mux)
-	t.Cleanup(ts.Close)
+	ts := serveAdminForTest(t, svc)
 	return ts, svc, store
 }
 
@@ -87,19 +78,11 @@ func callAdminHandler(h http.HandlerFunc, cookie *http.Cookie, form url.Values, 
 	return w
 }
 
+// adminLogin returns a passkey-bound admin session cookie for the service
+// behind ts. (It used to POST a password; that path no longer exists.)
 func adminLogin(t *testing.T, ts *httptest.Server) *http.Cookie {
 	t.Helper()
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, _ := client.PostForm(ts.URL+"/admin/login",
-		map[string][]string{"username": {"boss"}, "password": {"s3cret"}})
-	for _, c := range resp.Cookies() {
-		if c.Name == adminCookie {
-			return c
-		}
-	}
-	t.Fatal("no admin cookie")
-	return nil
+	return adminCookieForServer(t, ts)
 }
 
 // These settings tests call handleAdminSettings directly rather than through
@@ -207,127 +190,27 @@ func TestAdminSettingsRequiresAdmin(t *testing.T) {
 }
 
 func TestAdminLoginGate(t *testing.T) {
-	ts, _ := newAdminServer(t, "boss", "s3cret")
+	ts, _ := newAdminServer(t, "boss", "on")
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	// 未登录 GET /admin => 登录表单（含账号与密码字段）。
+	// 未登录 GET /admin => 只有 passkey 登录，没有账号/密码字段。
 	resp, _ := client.Get(ts.URL + "/admin")
-	if resp.StatusCode != http.StatusOK || !bodyContains(resp, "username") {
-		t.Fatalf("unauth admin should show login form with a username field")
+	body := readAll(t, resp)
+	if resp.StatusCode != http.StatusOK || strings.Contains(body, `name="password"`) || strings.Contains(body, `name="username"`) {
+		t.Fatalf("login page must be passkey-only (status %d)", resp.StatusCode)
 	}
-
-	hasCookie := func(resp *http.Response) bool {
-		for _, c := range resp.Cookies() {
-			if c.Name == adminCookie {
-				return true
-			}
-		}
-		return false
-	}
-
-	// 错误密码（账号对）=> 不设 cookie。
-	resp, _ = client.PostForm(ts.URL+"/admin/login",
-		map[string][]string{"username": {"boss"}, "password": {"wrong"}})
-	if hasCookie(resp) {
-		t.Fatalf("wrong password must not set admin cookie")
-	}
-
-	// 错误账号（密码对）=> 不设 cookie。
-	resp, _ = client.PostForm(ts.URL+"/admin/login",
-		map[string][]string{"username": {"nobody"}, "password": {"s3cret"}})
-	if hasCookie(resp) {
-		t.Fatalf("wrong username must not set admin cookie")
-	}
-
-	// 账号+密码都对 => 设 cookie + 重定向。
-	resp, _ = client.PostForm(ts.URL+"/admin/login",
-		map[string][]string{"username": {"boss"}, "password": {"s3cret"}})
+	// 未登录访问用户页 => 重定向回登录。
+	resp, _ = client.Get(ts.URL + "/admin/users")
 	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("good login should redirect, got %d", resp.StatusCode)
+		t.Fatalf("unauthenticated /admin/users: want 302, got %d", resp.StatusCode)
 	}
-	var cookie *http.Cookie
-	for _, c := range resp.Cookies() {
-		if c.Name == adminCookie {
-			cookie = c
-		}
-	}
-	if cookie == nil {
-		t.Fatalf("good login set no admin cookie")
-	}
-
-	// 带 cookie GET /admin/users => 用户列表含 seeded 邮箱。
+	// passkey 会话 => 用户列表含 seeded 邮箱。
 	req, _ := http.NewRequest("GET", ts.URL+"/admin/users", nil)
-	req.AddCookie(cookie)
+	req.AddCookie(adminLogin(t, ts))
 	resp, _ = client.Do(req)
 	if !bodyContains(resp, "seen@example.com") {
 		t.Fatalf("authed admin should list users")
-	}
-}
-
-func TestAdminLoginTOTP(t *testing.T) {
-	base := time.Unix(1_700_000_000, 0)
-	s := NewService(newTestStore(t), nil, Config{AdminUser: "admin", AdminPassword: "pw", AdminTOTPSecret: testSecret})
-	s.now = func() time.Time { return base }
-
-	post := func(user, pass, code string) *httptest.ResponseRecorder {
-		form := url.Values{"username": {user}, "password": {pass}, "totp": {code}}
-		r := httptest.NewRequest("POST", "/admin/login", strings.NewReader(form.Encode()))
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		r.RemoteAddr = "7.7.7.7:1111"
-		w := httptest.NewRecorder()
-		s.handleAdminLogin(w, r)
-		return w
-	}
-
-	// good creds + good code -> 302 redirect with cookie
-	w := post("admin", "pw", codeAt(t, base))
-	if w.Code != http.StatusFound {
-		t.Fatalf("valid login: want 302, got %d", w.Code)
-	}
-	if len(w.Result().Cookies()) == 0 {
-		t.Fatal("valid login should set admin cookie")
-	}
-
-	// good creds + wrong code -> 401
-	if w := post("admin", "pw", "000000"); w.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong code: want 401, got %d", w.Code)
-	}
-}
-
-// TestAdminLoginTOTPNotBurnedByWrongCreds is a regression test for the
-// replay-guard bug: a valid TOTP code submitted alongside a WRONG password
-// must not advance adminTOTPLastStep. The legitimate admin must still be
-// able to use that same code with the CORRECT password afterward.
-func TestAdminLoginTOTPNotBurnedByWrongCreds(t *testing.T) {
-	base := time.Unix(1_700_000_000, 0)
-	s := NewService(newTestStore(t), nil, Config{AdminUser: "admin", AdminPassword: "pw", AdminTOTPSecret: testSecret})
-	s.now = func() time.Time { return base }
-
-	post := func(user, pass, code string) *httptest.ResponseRecorder {
-		form := url.Values{"username": {user}, "password": {pass}, "totp": {code}}
-		r := httptest.NewRequest("POST", "/admin/login", strings.NewReader(form.Encode()))
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		r.RemoteAddr = "9.9.9.9:3333"
-		w := httptest.NewRecorder()
-		s.handleAdminLogin(w, r)
-		return w
-	}
-
-	code := codeAt(t, base)
-
-	// Wrong password + correct current code -> 401, and must NOT consume the step.
-	if w := post("admin", "wrong", code); w.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong password + right code: want 401, got %d", w.Code)
-	}
-
-	// Correct password + the SAME code -> must still succeed (302 + cookie).
-	w := post("admin", "pw", code)
-	if w.Code != http.StatusFound {
-		t.Fatalf("right creds + same code after failed attempt: want 302, got %d", w.Code)
-	}
-	if len(w.Result().Cookies()) == 0 {
-		t.Fatal("successful login should set admin cookie")
 	}
 }
 
@@ -340,11 +223,11 @@ func TestAdminUsersPaging(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s := NewService(store, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
+	s := NewService(store, nil, Config{AdminUser: "admin", AdminEnabled: true})
 	s.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
 
 	get := func(query string) *httptest.ResponseRecorder {
-		tok, _ := s.newAdminSession(context.Background(), "password")
+		tok := newTestAdminSession(t, s)
 		r := httptest.NewRequest("GET", "/admin/users"+query, nil)
 		r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
 		w := httptest.NewRecorder()
@@ -389,29 +272,5 @@ func TestAdminUsersPaging(t *testing.T) {
 	}
 	if !strings.Contains(body, "第 1 / 1 页") {
 		t.Fatal("overflow page did not fall back to page 1")
-	}
-}
-
-func TestAdminLoginLockout(t *testing.T) {
-	base := time.Unix(1_700_000_000, 0)
-	s := NewService(nil, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
-	s.now = func() time.Time { return base }
-
-	fail := func() *httptest.ResponseRecorder {
-		form := url.Values{"username": {"admin"}, "password": {"wrong"}}
-		r := httptest.NewRequest("POST", "/admin/login", strings.NewReader(form.Encode()))
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		r.RemoteAddr = "8.8.8.8:2222"
-		w := httptest.NewRecorder()
-		s.handleAdminLogin(w, r)
-		return w
-	}
-	for i := 0; i < adminLoginMaxFails; i++ {
-		if w := fail(); w.Code != http.StatusUnauthorized {
-			t.Fatalf("fail %d: want 401, got %d", i, w.Code)
-		}
-	}
-	if w := fail(); w.Code != http.StatusTooManyRequests {
-		t.Fatalf("after threshold: want 429, got %d", w.Code)
 	}
 }

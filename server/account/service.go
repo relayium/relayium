@@ -90,8 +90,12 @@ type Config struct {
 	ApplePrivateKey      *ecdsa.PrivateKey // parsed .p8; nil when code exchange is off
 	AppleDomainAssocFile string            // path to apple-developer-domain-association.txt
 	AdminUser            string
-	AdminPassword        string
-	AdminTOTPSecret      string // base32 TOTP secret; empty disables admin 2FA
+	// AdminEnabled turns on /admin. Admin authentication is Passkey-only: there
+	// is no admin password or TOTP secret in this struct, so nothing in the
+	// request path can compare a submitted secret against one. main resolves
+	// this from RELAYIUM_ADMIN_ENABLED, falling back to "a legacy
+	// RELAYIUM_ADMIN_PASS is set" only as a migration enablement hint.
+	AdminEnabled bool
 	// Stored-transfer limits (env/flag defaults; DB settings table overrides these live).
 	MaxFileSize int64 // bytes
 	// NodeTrafficDefault 是官方节点月度中继流量的默认上限（字节）；0 = 不限。
@@ -176,10 +180,9 @@ type Service struct {
 	// multi-instance safe) — no process-local session map or counter here anymore.
 	// See the multi-instance-state-migration doc in relayium-ops.
 	adminLogins *loginThrottle
-	// adminPasskeyLogins is a SEPARATE bucket from adminLogins on purpose: if
-	// passkey failures counted against the password bucket, an attacker could
-	// spam failed passkey attempts to lock out the password fallback — the one
-	// escape hatch when passkeys are unavailable.
+	// adminPasskeyLogins throttles failed passkey logins per IP. adminLogins
+	// (above) now carries only the per-session step-up failure counter and the
+	// per-IP enrollment-finish failures (distinct key prefixes).
 	adminPasskeyLogins *loginThrottle
 	// passkeyCeremonies now live in the store (admin_passkey_ceremonies, item #3),
 	// spendable exactly once on any instance — no process-local map here.
@@ -294,6 +297,9 @@ type Service struct {
 	pairJoins pairJoinQueue
 	// uploadSem caps concurrent in-flight POST /api/files per account (M1).
 	uploadSem *uploadSem
+	// Only a negotiated share upload may hold one unread successor request.
+	uploadPipeline            uploadPipelineWaiters
+	uploadPipelineWaitTimeout time.Duration // zero selects the production bound
 	// diskUsage reads the blob volume's current usage; nil disables the global
 	// disk soft cap (M3b). blobDiskMax<=0 also disables it even if diskUsage is set.
 	diskUsage   func() (used, total uint64, err error)

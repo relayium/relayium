@@ -10,17 +10,14 @@ import (
 
 // confirmAction drives a high-risk write all the way through: it POSTs the
 // original form (rendering the confirm page), extracts the token, then POSTs
-// /admin/confirm with the password factor. Returns the confirm response.
+// /admin/confirm with a real passkey assertion. Returns the confirm response.
 func confirmAction(t *testing.T, ts *httptest.Server, cookie *http.Cookie, path string, form url.Values) *http.Response {
 	t.Helper()
 	resp := postAdminForm(t, ts, cookie, path, form)
 	body := readAll(t, resp)
 	resp.Body.Close()
 	tok := extractConfirmToken(t, body)
-	return postAdminForm(t, ts, cookie, "/admin/confirm", url.Values{
-		"confirm_token": {tok},
-		"factor_code":   {"secret123"}, // password factor for newAdminAuditServer
-	})
+	return confirmPasskeyOn(t, ts, cookie, tok)
 }
 
 // A path-scoped confirmable action (node delete carries its id in the URL, not

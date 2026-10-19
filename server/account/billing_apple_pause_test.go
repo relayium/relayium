@@ -430,8 +430,8 @@ func TestApplePurchaseGateConfirmedPauseAppliesAndAudits(t *testing.T) {
 	if e.Changes != want {
 		t.Errorf("audit changes = %s, want %s", e.Changes, want)
 	}
-	if e.StepUp != StepUpPassword {
-		t.Errorf("audit step-up factor = %q, want %q", e.StepUp, StepUpPassword)
+	if e.StepUp != StepUpPasskey {
+		t.Errorf("audit step-up factor = %q, want %q", e.StepUp, StepUpPasskey)
 	}
 }
 

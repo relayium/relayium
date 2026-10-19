@@ -164,6 +164,16 @@ func splitLinkDevFlags(args []string) (linkDevOpts, []string, error) {
 }
 
 func runLinkDev(args []string, stdout, stderr io.Writer) int {
+	return runLinkDevContext(context.Background(), args, stdout, stderr)
+}
+
+// runLinkDevContext is runLinkDev under a caller's parent context: the
+// whole-run timeout is derived from parent, and cancelling parent ends the
+// run the way the timeout does (the driver loop returns and shutdown leaves
+// the room). The public entry passes context.Background(), so its behaviour
+// is unchanged; the in-process test harness passes a per-end context it can
+// cancel and then join.
+func runLinkDevContext(parent context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, linkDevUsage)
 		return 2
@@ -266,8 +276,14 @@ func runLinkDev(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), linkDevSessionTimeout)
+	ctx, cancel := context.WithTimeout(parent, linkDevSessionTimeout)
 	defer cancel()
+	// A run already cancelled never dials: no room join, no membership to
+	// release. (Unreachable from runLinkDev, whose parent is Background.)
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 
 	room, err := rzvous.JoinRoom(ctx, f.server, code, name, []string{rzvous.ProtoLink})
 	if err != nil {

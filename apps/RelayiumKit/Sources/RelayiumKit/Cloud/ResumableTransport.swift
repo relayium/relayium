@@ -1,6 +1,6 @@
 import Foundation
 
-public enum PatchOutcome: Equatable {
+public enum PatchOutcome: Equatable, Sendable {
     /// The server committed up to `received` (which may be inside the chunk we
     /// sent — it commits whatever landed before a reset).
     case committed(received: Int)
@@ -144,7 +144,28 @@ func finalizeAnswer(status: Int, body: Data, retryAfter: String?) -> FinalizeAns
     }
 }
 
-public struct HTTPResumableTransport: ResumableTransport {
+/// Only a transport explicitly promising concurrent safety can use the two
+/// request path. Existing conformers retain the serial protocol unchanged.
+public protocol PipelinedResumableTransport: ResumableTransport, Sendable {
+    func initPipelinedUpload(header: [UInt8], purpose: UploadPurpose,
+                            burnAfterRead: Bool, ttl: Int, size: Int,
+                            token: String) async throws -> PipelinedUploadSession
+    func patchPipelinedChunk(uploadId: String, bytes: Data, from: Int, to: Int,
+                             total: Int, token: String,
+                             onBytesSent: (@Sendable (Int) -> Void)?) async throws -> PatchOutcome
+}
+
+public struct PipelinedUploadSession: Sendable {
+    public let uploadId: String
+    public let chunkSize: Int
+    public let pipelineVersion: String?
+    public init(uploadId: String, chunkSize: Int, pipelineVersion: String? = nil) {
+        self.uploadId = uploadId; self.chunkSize = chunkSize; self.pipelineVersion = pipelineVersion
+    }
+    var supportsPipeline: Bool { pipelineVersion == "ordered-v1" }
+}
+
+public struct HTTPResumableTransport: PipelinedResumableTransport {
     let baseURL: URL
     let session: URLSession
 
@@ -156,6 +177,14 @@ public struct HTTPResumableTransport: ResumableTransport {
     public func initUpload(header: [UInt8], purpose: UploadPurpose,
                            burnAfterRead: Bool, ttl: Int,
                            size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
+        let result = try await initPipelinedUpload(header: header, purpose: purpose,
+            burnAfterRead: burnAfterRead, ttl: ttl, size: size, token: token)
+        return (result.uploadId, result.chunkSize)
+    }
+
+    public func initPipelinedUpload(header: [UInt8], purpose: UploadPurpose,
+                                    burnAfterRead: Bool, ttl: Int,
+                                    size: Int, token: String) async throws -> PipelinedUploadSession {
         // Refused, never rewritten. The server refuses this pair too
         // (`resolveUploadRetention`), but discovering it there costs the whole
         // staging pass, and quietly clearing the flag instead would hand the
@@ -185,20 +214,37 @@ public struct HTTPResumableTransport: ResumableTransport {
         req.httpBody = Data(header)
         let (data, http) = try await send(req)
         guard http.statusCode == 200 else { throw statusError(http, data) }
-        struct Body: Decodable { let uploadId: String; let chunkSize: Int }
+        struct Body: Decodable { let uploadId: String; let chunkSize: Int; let uploadPipeline: String? }
         guard let b = try? JSONDecoder().decode(Body.self, from: data) else { throw CloudError.decoding }
         // The server may report 0 to mean "use your default" — same rule as web.
-        return (b.uploadId, b.chunkSize > 0 ? b.chunkSize : DEFAULT_UPLOAD_CHUNK_SIZE)
+        return PipelinedUploadSession(uploadId: b.uploadId,
+            chunkSize: b.chunkSize > 0 ? b.chunkSize : DEFAULT_UPLOAD_CHUNK_SIZE,
+            pipelineVersion: b.uploadPipeline)
     }
 
     public func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
                            total: Int, token: String,
                            onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome {
+        try await patch(uploadId: uploadId, bytes: bytes, from: from, to: to,
+                        total: total, token: token, pipeline: false, onBytesSent: onBytesSent)
+    }
+
+    public func patchPipelinedChunk(uploadId: String, bytes: Data, from: Int, to: Int,
+                                    total: Int, token: String,
+                                    onBytesSent: (@Sendable (Int) -> Void)?) async throws -> PatchOutcome {
+        try await patch(uploadId: uploadId, bytes: bytes, from: from, to: to,
+                        total: total, token: token, pipeline: true, onBytesSent: onBytesSent)
+    }
+
+    private func patch(uploadId: String, bytes: Data, from: Int, to: Int,
+                       total: Int, token: String, pipeline: Bool,
+                       onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome {
         var req = URLRequest(url: baseURL.appendingPathComponent("api/uploads/\(uploadId)"))
         req.httpMethod = "PATCH"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue(contentRangeHeader(from: from, to: to, total: total),
                      forHTTPHeaderField: "Content-Range")
+        if pipeline { req.setValue("ordered-v1", forHTTPHeaderField: "X-Relayium-Upload-Pipeline") }
         // Assigned, not re-wrapped: `Data(bytes)` here was one of three full
         // copies of every chunk that the memory investigation found.
         req.httpBody = bytes

@@ -430,15 +430,13 @@ func TestUserPlanConfirmTokenIsSessionBoundAndSingleUse(t *testing.T) {
 	resp.Body.Close()
 	tok := extractConfirmToken(t, body)
 
-	foreign := postAdminForm(t, ts, sessionB, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	foreign := confirmPasskeyOn(t, ts, sessionB, tok)
 	foreign.Body.Close()
 	if foreign.StatusCode == http.StatusFound {
 		t.Fatal("SECURITY: a pending plan change was redeemed by a different session")
 	}
 	// The failed attempt burned the token: the minting session gets no retry.
-	replay := postAdminForm(t, ts, sessionA, "/admin/confirm",
-		url.Values{"confirm_token": {tok}, "factor_code": {"secret123"}})
+	replay := confirmPasskeyOn(t, ts, sessionA, tok)
 	replay.Body.Close()
 	if replay.StatusCode == http.StatusFound {
 		t.Fatal("SECURITY: a pending plan token survived a foreign redemption attempt")

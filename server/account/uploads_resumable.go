@@ -574,7 +574,7 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "too many concurrent uploads", http.StatusTooManyRequests)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"uploadId": row.ID, "chunkSize": chunkSizeFor(purpose)})
+	httpx.WriteJSON(w, http.StatusOK, withUploadPipeline(map[string]any{"uploadId": row.ID, "chunkSize": chunkSizeFor(purpose)}, row))
 }
 
 // pairRoomChunkSize is the chunk a pre-upload is told to use.
@@ -712,6 +712,36 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 		http.Error(w, "bad Content-Range", http.StatusBadRequest)
 		return
 	}
+	// A staged body's original network EOF is proven even on early exits from
+	// the offset wait. Release only after the ordinary owned append has drained.
+	defer func() {
+		if staged, ok := r.Body.(*pipelineReadAhead); ok {
+			_ = staged.Close()
+			_ = rc.SetReadDeadline(time.Time{})
+		}
+	}()
+	if r.Header.Get(uploadPipelineHeader) == uploadPipelineV1 {
+		// The predecessor can be served here or on another instance. Refresh
+		// the complete owned row before entering the unchanged append path.
+		sess, ok, err = s.awaitUploadOffset(ctx, sess, start, r)
+		if errors.Is(err, errTooLarge) {
+			http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			http.Error(w, "incomplete upload body", http.StatusBadRequest)
+			return
+		}
+		if err != nil {
+			http.Error(w, "upload status unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if !ok {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+	}
+	defer s.uploadPipeline.notify(u.ID, uploadID)
 	// A pre-upload's room can end WHILE the upload runs — nobody joined inside
 	// the window, or the ceiling was reached. Re-derived on every append, not
 	// only at init, because continuing to accept (and bill) bytes for ciphertext
@@ -1813,7 +1843,7 @@ func (s *Service) handleUploadStatus(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	body := map[string]any{"received": sess.Received}
+	body := withUploadPipeline(map[string]any{"received": sess.Received}, sess)
 	// For a pre-upload, also where its room is joinable until — this is the
 	// request a client falls back to when an append's answer is lost, and the
 	// deadline that append bought is precisely what it came back for.

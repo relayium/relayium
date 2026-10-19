@@ -73,11 +73,20 @@ func (o upOutput) uploaded(cfgDir string, op cloud.UpOperation, link, id string,
 	}
 	if err != nil {
 		fmt.Fprintf(o.stderr, "the upload is stored, but its link could not be written (%v).\n", err)
-		fmt.Fprintf(o.stderr, "  It is kept as operation %s: `relayium up --recover %s` prints it again.\n", op.ID, op.ID)
+		command := "--recover"
+		if op.Version == 2 {
+			command = "--resume"
+		}
+		fmt.Fprintf(o.stderr, "  It is kept as operation %s: `relayium up %s %s` prints it again.\n", op.ID, command, op.ID)
 		return 1
 	}
 	if rerr := cloud.RemoveUpOperation(cfgDir, op.ID); rerr != nil {
 		fmt.Fprintf(o.stderr, "note: could not remove the finished operation record %s: %v\n", op.ID, rerr)
+	}
+	if op.Version == 2 {
+		if err := cloud.RemoveUpSpool(cfgDir, op.ID); err != nil {
+			fmt.Fprintln(o.stderr, "note: finished encrypted copy could not be removed:", err)
+		}
 	}
 	if !o.json {
 		// Keep stdout machine-composable: `relayium up ... | pbcopy` must copy
@@ -120,6 +129,9 @@ func upRecover(id, configDir string, out upOutput) int {
 		return out.fail("no_such_operation", err)
 	case err != nil:
 		return out.fail("operation_unusable", err)
+	}
+	if op.Version == 2 {
+		return out.fail("use_resume", fmt.Errorf("this upload has an encrypted local copy; use `relayium up --resume %s`", op.ID))
 	}
 	creds, ok, err := cloud.Load(cfgDir)
 	if err != nil {
@@ -195,6 +207,9 @@ func upPending(configDir string, out upOutput) int {
 		}
 		fmt.Fprintf(out.stdout, "%s  %s  %d file(s), %d bytes  %s  %s\n", s.ID,
 			time.Unix(s.CreatedAt, 0).UTC().Format(time.RFC3339), s.Files, s.Bytes, s.Account, s.Server)
+		if s.Resumable {
+			fmt.Fprintf(out.stdout, "  encrypted copy: %s; continue with `relayium up --resume %s`\n", s.Phase, s.ID)
+		}
 	}
 	return 0
 }

@@ -39,13 +39,11 @@ func registerTestPasskey(t *testing.T, s *Service) (*testAuthenticator, []byte) 
 		t.Fatalf("finish: %v", err)
 	}
 	blob, _ := json.Marshal(cred)
-	err = s.store.InsertAdminCredential(ctx, AdminCredential{
+	seedAdminCredentialRow(t, s.store, AdminCredential{
 		ID: b64url(cred.ID), UserHandle: handle, CredJSON: blob,
 		Name: "测试设备", CreatedAt: s.now().Unix(),
 	})
-	if err != nil {
-		t.Fatalf("insert: %v", err)
-	}
+	_ = ctx
 	return auth, handle
 }
 
@@ -160,9 +158,10 @@ func TestPasskeyEndpointsRequireOrigin(t *testing.T) {
 	}
 }
 
-// 核心安全断言：passkey 失败刷爆后，密码后备通道必须仍然可用；同时 passkey
-// 自己的桶必须确实生效（否则下面"密码没被锁"这条断言在桶是空操作时也会通过）。
-func TestPasskeyThrottleDoesNotLockPasswordLogin(t *testing.T) {
+// Passkey login failures are throttled per IP: the bucket must actually lock
+// (otherwise an unauthenticated client could grind assertions forever). There
+// is no password channel left for the lock to spill into.
+func TestPasskeyLoginFailuresAreThrottled(t *testing.T) {
 	srv, s := newAdminServer(t, "admin", "pw")
 	auth, handle := registerTestPasskey(t, s)
 	rp, _ := s.adminRP()
@@ -208,19 +207,6 @@ func TestPasskeyThrottleDoesNotLockPasswordLogin(t *testing.T) {
 			adminLoginMaxFails+3)
 	}
 
-	// 密码通道必须没被连带锁死
-	form := strings.NewReader("username=admin&password=pw")
-	preq, _ := http.NewRequest("POST", srv.URL+"/admin/login", form)
-	preq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	preq.Header.Set("Origin", s.selfOrigin())
-	presp, err := srv.Client().Do(preq)
-	if err != nil {
-		t.Fatalf("password login: %v", err)
-	}
-	defer presp.Body.Close()
-	if presp.StatusCode == http.StatusTooManyRequests {
-		t.Fatalf("passkey failures locked the password fallback — throttle buckets are shared")
-	}
 }
 
 // 克隆凭据（计数器回退）必须被拒。
@@ -388,7 +374,7 @@ func ceremonyCount(t *testing.T, s *Service) int {
 // trip) and only once — the second attempt on A fails.
 func TestPasskeyCeremonySharedAcrossInstances(t *testing.T) {
 	store := newTestStore(t)
-	mk := func() *Service { return NewService(store, nil, Config{AdminUser: "admin", AdminPassword: "pw"}) }
+	mk := func() *Service { return NewService(store, nil, Config{AdminUser: "admin", AdminEnabled: true}) }
 	svcA, svcB := mk(), mk()
 
 	rec := httptest.NewRecorder()

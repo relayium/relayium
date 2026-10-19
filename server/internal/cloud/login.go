@@ -32,6 +32,9 @@ type Client struct {
 	// arrival and never authorizes anything on it.
 	DeviceName string
 
+	// InstallationID is an optional per-origin CLI lookup hint, never a credential.
+	InstallationID string
+
 	// Progress, if set, is called during Upload and Download with the number of
 	// plaintext bytes transferred so far and the total (from the manifest / the
 	// summed source file sizes). total may be 0 for an empty transfer. It lets a
@@ -221,11 +224,12 @@ func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // DeviceStart is the response from POST /api/cli/device/start.
 type DeviceStart struct {
-	UserCode        string
-	VerificationURI string
-	DeviceCode      string
-	Interval        int
-	ExpiresIn       int
+	CLIInstallIdentity bool
+	UserCode           string
+	VerificationURI    string
+	DeviceCode         string
+	Interval           int
+	ExpiresIn          int
 }
 
 // deviceStartRequest is the optional body of POST /api/cli/device/start. The
@@ -233,15 +237,17 @@ type DeviceStart struct {
 // the identity a human approves is the identity that gets persisted — and so
 // the terminal can print it while they decide.
 type deviceStartRequest struct {
-	DeviceName string `json:"device_name,omitempty"`
+	CLIInstallID string `json:"cli_install_id,omitempty"`
+	DeviceName   string `json:"device_name,omitempty"`
 }
 
 type deviceStartResponse struct {
-	UserCode        string `json:"user_code"`
-	DeviceCode      string `json:"device_code"`
-	VerificationURI string `json:"verification_uri"`
-	Interval        int    `json:"interval"`
-	ExpiresIn       int    `json:"expires_in"`
+	CLIInstallIdentity bool   `json:"cli_install_identity"`
+	UserCode           string `json:"user_code"`
+	DeviceCode         string `json:"device_code"`
+	VerificationURI    string `json:"verification_uri"`
+	Interval           int    `json:"interval"`
+	ExpiresIn          int    `json:"expires_in"`
 }
 
 // postJSON POSTs body (marshaled as JSON, or no body if nil) to path and
@@ -291,15 +297,16 @@ func (c *Client) DeviceStart(ctx context.Context) (DeviceStart, error) {
 	// A server that predates labels ignores the extra field, and one that
 	// postdates it treats an absent field as "no label" — so neither direction
 	// of a mixed-version fleet needs to know which side it is talking to.
-	if err := c.postJSON(ctx, "/api/cli/device/start", deviceStartRequest{DeviceName: c.DeviceName}, &resp); err != nil {
+	if err := c.postJSON(ctx, "/api/cli/device/start", deviceStartRequest{DeviceName: c.DeviceName, CLIInstallID: c.InstallationID}, &resp); err != nil {
 		return DeviceStart{}, err
 	}
 	return DeviceStart{
-		UserCode:        resp.UserCode,
-		VerificationURI: resp.VerificationURI,
-		DeviceCode:      resp.DeviceCode,
-		Interval:        resp.Interval,
-		ExpiresIn:       resp.ExpiresIn,
+		CLIInstallIdentity: resp.CLIInstallIdentity,
+		UserCode:           resp.UserCode,
+		VerificationURI:    resp.VerificationURI,
+		DeviceCode:         resp.DeviceCode,
+		Interval:           resp.Interval,
+		ExpiresIn:          resp.ExpiresIn,
 	}, nil
 }
 

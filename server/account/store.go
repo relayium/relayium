@@ -1784,20 +1784,26 @@ type Store interface {
 	// written, and the returned User is the zero value.
 	InsertPasswordUserDedupedByCanonical(ctx context.Context, email, displayName, canonical, passwordHash string) (u User, taken bool, err error)
 	HasPassword(ctx context.Context, userID string) (bool, error)
-	// ClaimTOTPStep atomically advances the admin TOTP replay guard to `step` iff
-	// step is strictly newer than the last committed one, in a single writer
-	// statement. ok=false means the step was already spent on ANY instance
-	// (replay / stale) — this is what makes admin 2FA "one code, one use" hold
-	// across instances and across process restarts. Call it after the credential
-	// check passes; a false result must fail the login / step-up.
-	ClaimTOTPStep(ctx context.Context, step int64) (ok bool, err error)
-	// Admin sessions live in the store (shared across instances), not a
-	// per-process map. See the multi-instance-state-migration doc in relayium-ops, item #4.
-	CreateAdminSession(ctx context.Context, token, auth, credFP string, expires int64) error
-	AdminSession(ctx context.Context, token, credFP string, now int64) (auth string, lastStepUpAt int64, ok bool, err error)
-	MarkAdminStepUp(ctx context.Context, token string, at int64) error
+	// Admin sessions live in the store (shared across instances). They are
+	// Passkey-only and bound to the credential that created them; see
+	// admin_auth_store.go for the validity predicate (12h absolute, 30m idle,
+	// credential still registered). AdminSession reads without refreshing;
+	// TouchAdminSession validates and refreshes the idle timer atomically.
+	CreateAdminSession(ctx context.Context, token, credentialID string, generation, now int64) error
+	AdminAuthGeneration(ctx context.Context) (int64, error)
+	AdminSession(ctx context.Context, token string, now int64) (AdminSessionInfo, bool, error)
+	TouchAdminSession(ctx context.Context, token string, now int64) (AdminSessionInfo, bool, error)
+	MarkAdminStepUp(ctx context.Context, token string, at, generation int64) (bool, error)
+	AdminStepUpAuthorized(ctx context.Context, token string, generation int64, credentialID string, now int64) (bool, error)
 	DeleteAdminSession(ctx context.Context, token string) error
 	PurgeExpiredAdminSessions(ctx context.Context, now int64) error
+	// Browser half of admin passkey enrollment. A grant authorizes only a
+	// PENDING credential; approval is AdminAuthStore.ApproveEnrollment, which
+	// is reachable from the local command alone.
+	AdminEnrollmentByGrant(ctx context.Context, grant string, now int64) (AdminEnrollment, bool, error)
+	SetAdminEnrollmentChallenge(ctx context.Context, id, challenge string, now, challengeExpires int64) (bool, error)
+	FinishAdminEnrollment(ctx context.Context, id, challenge, credID string, credJSON []byte, fingerprint string, now int64) (bool, error)
+	FailAdminEnrollmentFinish(ctx context.Context, id string, now int64) error
 	// Pending high-risk actions live in the store (claimable exactly once on any
 	// instance). See the multi-instance-state-migration doc in relayium-ops, item #2.
 	PutPendingAction(ctx context.Context, token, sessionTok, action, form, pathID string, now, expires int64, cap int) (ok bool, err error)
@@ -1805,7 +1811,7 @@ type Store interface {
 	// In-flight WebAuthn ceremonies live in the store (spendable exactly once on
 	// any instance). session is the json-encoded webauthn.SessionData. Item #3.
 	PutPasskeyCeremony(ctx context.Context, token, kind, session, name string, now, expires int64, cap int) (ok bool, err error)
-	TakePasskeyCeremony(ctx context.Context, token string) (kind, session, name string, expires int64, ok bool, err error)
+	TakePasskeyCeremony(ctx context.Context, token string) (kind, session, name string, expires, generation int64, ok bool, err error)
 	// Resumable upload sessions live in the store (multi-instance + restart-safe).
 	// See the multi-instance-state-migration doc in relayium-ops, item #9.
 	CreateUploadSession(ctx context.Context, row UploadSessionRow, maxPerUser int) (ok bool, err error)
@@ -2903,13 +2909,13 @@ type Store interface {
 	// on every render, so it must not pull cred_json blobs into memory.
 	CountAdminCredentials(ctx context.Context) (int, error)
 	GetAdminCredential(ctx context.Context, id string) (AdminCredential, bool, error)
-	InsertAdminCredential(ctx context.Context, c AdminCredential) error
 	// TouchAdminCredential writes back the updated credential record and the
 	// last-used timestamp after a successful login.
 	TouchAdminCredential(ctx context.Context, id string, credJSON []byte, lastUsedAt int64) error
-	DeleteAdminCredential(ctx context.Context, id string) error
+	// There is deliberately no insert or delete here: the request path cannot
+	// add or remove an admin passkey. AdminAuthStore (local command) does both.
 	// AdminUserHandle returns the shared WebAuthn user handle, ok=false when no
-	// credential is registered yet (the first registration mints one).
+	// credential is registered yet (the first enrollment mints one).
 	AdminUserHandle(ctx context.Context) ([]byte, bool, error)
 	// InsertAudit 追加一条管理员操作记录。审计写入失败绝不能让业务操作回滚：
 	// 调用方记录错误后继续（见 WriteAudit）。

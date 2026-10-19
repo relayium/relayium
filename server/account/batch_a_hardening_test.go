@@ -9,33 +9,23 @@ import (
 	"testing"
 )
 
-// Rotating the admin credentials (password or TOTP secret) must invalidate every
-// prior session — the incident response for a leaked admin cookie that persisting
-// sessions had broken. cred_fp binds a session to the credentials at mint time.
-func TestAdminSessionRevokedOnCredentialRotation(t *testing.T) {
-	_, svc, _, _ := newAdminAuditServer(t)
+// The old incident response — rotate the admin password and restart — no
+// longer exists, because there is no admin password. Its replacement is
+// revoking at the terminal: revoking the passkey that opened a session ends
+// that session, and revoke-all ends every session.
+func TestAdminSessionRevokedWithItsPasskey(t *testing.T) {
+	_, svc, store, _ := newAdminAuditServer(t)
 	ctx := context.Background()
-	tok, err := svc.newAdminSession(ctx, "password")
-	if err != nil {
-		t.Fatal(err)
-	}
+	tok := newTestAdminSession(t, svc)
 	if !svc.validAdmin(ctx, tok) {
 		t.Fatal("a freshly minted session must validate")
 	}
-	// Rotate the password: the live fingerprint changes, so the old session dies.
-	svc.cfg.AdminPassword = svc.cfg.AdminPassword + "-rotated"
+	k := adminTestPasskey(t, svc)
+	if _, err := store.AdminAuth().RevokeCredential(ctx, k.credID, true, svc.now().Unix(), "cli:test"); err != nil {
+		t.Fatal(err)
+	}
 	if svc.validAdmin(ctx, tok) {
-		t.Fatal("rotating the admin password must invalidate prior sessions")
-	}
-	// A session minted under the new credentials works again.
-	tok2, _ := svc.newAdminSession(ctx, "password")
-	if !svc.validAdmin(ctx, tok2) {
-		t.Fatal("a session minted under the new credentials must validate")
-	}
-	// Rotating the TOTP secret also revokes.
-	svc.cfg.AdminTOTPSecret = "NEWSECRETJBSWY3DP"
-	if svc.validAdmin(ctx, tok2) {
-		t.Fatal("rotating the TOTP secret must invalidate prior sessions")
+		t.Fatal("revoking the passkey must invalidate the sessions it opened")
 	}
 }
 

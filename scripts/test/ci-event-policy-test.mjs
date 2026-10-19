@@ -462,20 +462,20 @@ const RENEW_WEIGHTS = "scripts/go-race-timings-renewal.json";
 const TIMINGS_TOOL = "scripts/go-race-timings.go";
 /**
  * The account lane's measured profile, pinned to the exact corpus root and an
- * independent review accepted: run 37421626823 attempt 1 at e4b538f18, all
- * eight account shard archives verified against their API digests, 2652
- * tests summing to 6392.31 s. The previous corpus (run 36893745143 at
+ * independent review accepted: run 39196358463 attempt 1 at 793047d24, all
+ * eight account shard archives verified against their API digests, 2709
+ * tests summing to 6964.89 s. The previous corpus (run 36893745143 at
  * 7c47921b9) is refused by digest and provenance. Replacing it needs a new
  * accepted corpus and a deliberate edit here.
  */
 const ACCOUNT_WEIGHTS = "scripts/go-race-timings-account.json";
-const ACCOUNT_WEIGHTS_SHA256 = "0197b9a6106066538c8dec3d1f0507b5e78417ce951e97676ff1c22c6efc9c05";
+const ACCOUNT_WEIGHTS_SHA256 = "09a61cde70adcef35d8786f3de7155dfd683676629e8b854c26f87c2ca0dce31";
 const ACCOUNT_WEIGHTS_PROVENANCE = {
-  kind: "go-test-json-corpus", sourceSHA: "e4b538f1888be95d9e9cf3bb131578fad29e6bb7",
-  toolchain: "go version go1.26.6 linux/amd64", runID: 37421626823, runAttempt: 1, race: true, count: 1, complete: true,
+  kind: "go-test-json-corpus", sourceSHA: "793047d24583fa18284fa8f900bd1bf29f53e499",
+  toolchain: "go version go1.26.9 linux/amd64", runID: 39196358463, runAttempt: 1, race: true, count: 1, complete: true,
 };
-const ACCOUNT_WEIGHTS_TESTS = 2652;
-const ACCOUNT_WEIGHTS_SUM_SECONDS = 6392.31;
+const ACCOUNT_WEIGHTS_TESTS = 2709;
+const ACCOUNT_WEIGHTS_SUM_SECONDS = 6964.89;
 
 const failures = [];
 function check(ok, message) {
@@ -826,6 +826,75 @@ for (const file of files) {
     docs.set(file, parseYaml(text));
   } catch (err) {
     check(false, `${file} could not be parsed: ${err.message}`);
+  }
+}
+
+// The standalone handoff entry point is required by guard coverage even
+// though the publication suite imports it too. Keep that deliberate duplicate
+// coverage out of the publication job's finite serial budget.
+function macosGuardJobIsolationFailures(doc) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  for (const [id, command] of [
+    ["macos-publish-order", "node scripts/test/macos-publish-order-test.mjs"],
+    ["macos-handoff", "node scripts/test/macos-handoff-test.mjs"],
+  ]) {
+    const job = doc?.jobs?.[id];
+    if (!job) { out.push(`${id}: missing independent guard job`); continue; }
+    need(job["runs-on"] === "ubuntu-latest" && String(job["timeout-minutes"]) === "5",
+      `${id}: keep the existing Ubuntu runner and hard five-minute budget`);
+    need(job.if === undefined && job.needs === undefined,
+      `${id}: must run unconditionally without serial job dependencies`);
+    need(job["continue-on-error"] === undefined || job["continue-on-error"] === false,
+      `${id}: guard failures must fail the workflow`);
+    const steps = Array.isArray(job.steps) ? job.steps : [];
+    const runs = steps.filter((step) => typeof step.run === "string");
+    need(runs.length === 1 && runs[0].run.trim() === command,
+      `${id}: its finite budget must contain one direct suite: ${command}`);
+    need(steps.every((step) => step.if === undefined
+      && (step["continue-on-error"] === undefined || step["continue-on-error"] === false)),
+    `${id}: no conditional or soft-failing guard steps`);
+    need(steps.some((step) => step.uses?.startsWith("actions/setup-node@")
+      && String(step.with?.["node-version"]) === "24"), `${id}: run the guards on Node 24`);
+  }
+  return out;
+}
+
+{
+  const hygiene = docs.get("repo-hygiene.yml");
+  for (const message of macosGuardJobIsolationFailures(hygiene)) check(false, message);
+  if (hygiene?.jobs?.["macos-handoff"]) {
+    const mutate = (fn) => { const doc = structuredClone(hygiene); fn(doc.jobs); return doc; };
+    const controls = [
+      ["the original combined job", "one direct suite", (jobs) => {
+        jobs["macos-publish-order"].steps.push(...jobs["macos-handoff"].steps.filter((step) => step.run));
+        delete jobs["macos-handoff"];
+      }],
+      ["standalone guard omitted", "missing independent guard", (jobs) => { delete jobs["macos-handoff"]; }],
+      ["a larger timeout", "five-minute budget", (jobs) => { jobs["macos-publish-order"]["timeout-minutes"] = 10; }],
+      ["handoff job conditional", "unconditionally", (jobs) => { jobs["macos-handoff"].if = "false"; }],
+      ["handoff job serialized", "serial job dependencies", (jobs) => { jobs["macos-handoff"].needs = "macos-publish-order"; }],
+      ["handoff job soft-fails", "fail the workflow", (jobs) => { jobs["macos-handoff"]["continue-on-error"] = true; }],
+      ["handoff command conditional", "conditional or soft-failing", (jobs) => {
+        jobs["macos-handoff"].steps.find((step) => step.run).if = "false";
+      }],
+      ["handoff command soft-fails", "conditional or soft-failing", (jobs) => {
+        jobs["macos-handoff"].steps.find((step) => step.run)["continue-on-error"] = "${{ true }}";
+      }],
+      ["another serial suite", "one direct suite", (jobs) => {
+        jobs["macos-publish-order"].steps.push({ run: "node scripts/test/macos-handoff-test.mjs" });
+      }],
+      ["an ignored command failure", "one direct suite", (jobs) => {
+        jobs["macos-handoff"].steps.find((step) => step.run).run += " || true";
+      }],
+      ["a different Node version", "Node 24", (jobs) => {
+        jobs["macos-handoff"].steps.find((step) => step.uses?.startsWith("actions/setup-node@")).with["node-version"] = 22;
+      }],
+    ];
+    for (const [label, reason, mutation] of controls) {
+      check(macosGuardJobIsolationFailures(mutate(mutation)).some((message) => message.includes(reason)),
+        `macOS guard isolation control ${label} did not reject ${reason}`);
+    }
   }
 }
 
@@ -2755,25 +2824,30 @@ if (go) {
     // Controls: each change to the profile is reported, for its own reason.
     const ACCOUNT_PROFILE_CONTROLS = [
       { name: "one weight edited", expect: /sha256 .* want the accepted/,
-        raw: accountRaw.replace(/"seconds": 124\.87/, '"seconds": 1.87') },
-      { name: "one weight edited, sum", expect: /measured weights sum to 6269\.31 s, want 6392\.31/,
-        raw: accountRaw.replace(/"seconds": 124\.87/, '"seconds": 1.87') },
-      { name: "a different run", expect: /provenance\.runID is 1, want 37421626823/,
-        raw: accountRaw.replace('"runID": 37421626823', '"runID": 1') },
-      { name: "the previous accepted corpus's run", expect: /provenance\.runID is 36893745143, want 37421626823/,
-        raw: accountRaw.replace('"runID": 37421626823', '"runID": 36893745143') },
+        raw: accountRaw.replace(/"seconds": 144\.05/, '"seconds": 1.05') },
+      { name: "one weight edited, sum", expect: /measured weights sum to 6821\.89 s, want 6964\.89/,
+        raw: accountRaw.replace(/"seconds": 144\.05/, '"seconds": 1.05') },
+      { name: "a different run", expect: /provenance\.runID is 1, want 39196358463/,
+        raw: accountRaw.replace('"runID": 39196358463', '"runID": 1') },
+      { name: "the previous accepted corpus's run", expect: /provenance\.runID is 36893745143, want 39196358463/,
+        raw: accountRaw.replace('"runID": 39196358463', '"runID": 36893745143') },
+      { name: "the superseded account corpus's run", expect: /provenance\.runID is 37421626823, want 39196358463/,
+        raw: accountRaw.replace('"runID": 39196358463', '"runID": 37421626823') },
+      { name: "the superseded account corpus's commit", expect: /provenance\.sourceSHA is "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"/,
+        raw: accountRaw.replace('"sourceSHA": "793047d24583fa18284fa8f900bd1bf29f53e499"',
+          '"sourceSHA": "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"') },
       { name: "another attempt", expect: /provenance\.runAttempt is 2/, raw: accountRaw.replace('"runAttempt": 1', '"runAttempt": 2') },
       { name: "another commit", expect: /provenance\.sourceSHA/,
-        raw: accountRaw.replace('"sourceSHA": "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"', `"sourceSHA": "${"0".repeat(40)}"`) },
+        raw: accountRaw.replace('"sourceSHA": "793047d24583fa18284fa8f900bd1bf29f53e499"', `"sourceSHA": "${"0".repeat(40)}"`) },
       { name: "the previous accepted corpus's commit", expect: /provenance\.sourceSHA is "7c47921b94b9120d528badc138d34fa0c8a6f1e9"/,
-        raw: accountRaw.replace('"sourceSHA": "e4b538f1888be95d9e9cf3bb131578fad29e6bb7"',
+        raw: accountRaw.replace('"sourceSHA": "793047d24583fa18284fa8f900bd1bf29f53e499"',
           '"sourceSHA": "7c47921b94b9120d528badc138d34fa0c8a6f1e9"') },
       { name: "measured without -race", expect: /provenance\.race is false/, raw: accountRaw.replace('"race": true', '"race": false') },
       { name: "the renewal profile in its place", expect: /package \.\/account, pattern \^Test/,
         raw: readFileSync(resolve(repoRoot, RENEW_WEIGHTS), "utf8") },
       { name: "a truncated test list", expect: /want at least 1000 unique test names/,
         raw: JSON.stringify({ ...JSON.parse(accountRaw), tests: JSON.parse(accountRaw).tests.slice(0, 10) }) },
-      { name: "one measured test dropped", expect: /want exactly the 2652 measured tests; got 2651 entries/,
+      { name: "one measured test dropped", expect: /want exactly the 2709 measured tests; got 2708 entries/,
         raw: JSON.stringify({ ...JSON.parse(accountRaw), tests: JSON.parse(accountRaw).tests.slice(1) }) },
       { name: "a negative weight", expect: /finite weight in \[0, 21600\]/,
         raw: JSON.stringify({ ...JSON.parse(accountRaw),

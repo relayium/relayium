@@ -49,9 +49,10 @@ func uploadStatusError(status int) error {
 
 // uploadFile pairs a manifest entry with the absolute path to read it from.
 type uploadFile struct {
-	name string // relative, forward-slash path as recorded in the manifest
-	path string // absolute source path on disk
-	size int64  // as stat'd when the upload was prepared
+	name     string // relative, forward-slash path as recorded in the manifest
+	path     string // absolute source path on disk
+	size     int64  // as stat'd when the upload was prepared
+	snapshot os.FileInfo
 }
 
 // walkUploadPaths expands paths (files and/or directory trees) into the flat
@@ -178,6 +179,7 @@ func PrepareUpload(paths []string, opt UploadOpts) (*PreparedUpload, error) {
 			return nil, err
 		}
 		files[i].size = info.Size()
+		files[i].snapshot = info
 		manifest.Files[i] = storecrypto.FileEntry{Name: f.name, Size: info.Size()}
 		total += info.Size()
 	}

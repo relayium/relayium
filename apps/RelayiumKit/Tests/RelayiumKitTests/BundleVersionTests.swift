@@ -74,8 +74,11 @@ final class BundleVersionTests: XCTestCase {
         // and public App Store 1.4.7. Direct 1.4.8 (45) is issued too.
         // This distinct 1.4.9 (46) candidate goes only to internal TestFlight;
         // public release follows the owner's testing and manual action.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.9", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "46", occurrences: 10)
+        // The 2026-10-17 complete provider inventory confirms 1.4.9 (46)
+        // is consumed and 1.4.10 (47) is available. The parallel-share owner
+        // candidate advances both values; this does not publish any channel.
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.10", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "47", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon
@@ -149,8 +152,9 @@ final class BundleVersionTests: XCTestCase {
         // 0.5.0 (11) is consumed: VALID in TestFlight and selected by the
         // 0.5.0 App Store version still in PREPARE_FOR_SUBMISSION (root
         // provider readback 2026-10-12). The next internal candidate takes a
-        // new visible version, 0.5.1 (12); it does not touch that draft.
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.1", occurrences: 4)
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "12", occurrences: 4)
+        // new visible version, 0.5.1 (12); it did not touch that draft.
+        // Provider 2026-10-18 confirms build12 consumed; parallel Share ships13.
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.2", occurrences: 4)
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "13", occurrences: 4)
     }
 }

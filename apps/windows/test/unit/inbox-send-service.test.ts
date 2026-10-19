@@ -14,10 +14,10 @@
 // and an unknown is never reported as one, and that progress is what the SERVER
 // took rather than what the producer offered.
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { captureAccount, type AccountContext } from "../../src/main/inbox/account.js";
 import { newAtRestKeyBytes } from "../../src/main/inbox/atrest.js";
@@ -40,9 +40,26 @@ const SELF = "dev-self";
 const TARGET = "dev-target";
 
 const roots: string[] = [];
-afterEach(async () => {
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
-});
+const cleanups = new Set<() => Promise<void>>();
+async function cleanupHarnesses(): Promise<void> {
+  const failures: unknown[] = [];
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup();
+      cleanups.delete(cleanup);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  // Retain both failed owners and their directories for diagnosis/retry.
+  // Removing a directory while its producer can still write is not cleanup.
+  if (failures.length) throw new AggregateError(failures, "Inbox fixture did not stop");
+  while (roots.length) {
+    await rm(roots[0]!, { recursive: true, force: true });
+    roots.shift();
+  }
+}
+afterEach(cleanupHarnesses);
 
 async function realRuntimes(): Promise<{ inbox: InboxRuntime; stored: StoredRuntime }> {
   resetInboxRuntimeForTest();
@@ -239,6 +256,7 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
   const progress: { jobId: string; committed: number; total: number }[] = [];
   const outcomes: { jobId: string; view: InboxSendView }[] = [];
   const failures: unknown[] = [];
+  const releases = new Set<() => void>();
 
   const service = new InboxSendService({
     origin: ORIGIN,
@@ -262,6 +280,26 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
     fetchImpl: central.fetch,
     now: () => 1_000,
     ...over,
+  });
+  // A timed-out test can still have start() parked before it owns a job id.
+  // Release only this fixture's controls, fence/stop the real service, then
+  // join those admissions before deleting the real store beneath them.
+  const starts = new Set<ReturnType<InboxSendService["start"]>>();
+  const start = service.start.bind(service);
+  service.start = (input) => {
+    const result = start(input);
+    starts.add(result);
+    void result.then(() => starts.delete(result), () => starts.delete(result));
+    return result;
+  };
+  cleanups.add(async () => {
+    for (const release of releases) release();
+    await service.quiesce();
+    await Promise.allSettled(starts);
+    // A previously parked start can finish building its binding after the
+    // first fence. Dispose that binding only after admission has unwound.
+    await service.dispose();
+    expect(service.inventory().active).toBe(0);
   });
 
   return {
@@ -296,12 +334,15 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
         central.onCreate = resolve;
       });
       central.holdCreate = held;
+      const unpark = () => {
+        if (central.holdCreate === held) central.holdCreate = null;
+        release();
+        releases.delete(unpark);
+      };
+      releases.add(unpark);
       return {
         arrived,
-        release: () => {
-          central.holdCreate = null;
-          release();
-        },
+        release: unpark,
       };
     },
     /** Park `start` inside its first await, and report when it gets there. */
@@ -314,12 +355,15 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
         state.entered = resolve;
       });
       state.hold = held;
+      const unpark = () => {
+        if (state.hold === held) state.hold = null;
+        release();
+        releases.delete(unpark);
+      };
+      releases.add(unpark);
       return {
         arrived,
-        release: () => {
-          state.hold = null;
-          release();
-        },
+        release: unpark,
       };
     },
     async produce(jobId, contentKey, files, expects) {
@@ -337,6 +381,436 @@ async function harness(over: Partial<InboxSendDeps> = {}): Promise<Harness> {
 function fileOf(name: string, bytes: number): File {
   return new File([new Uint8Array(bytes).fill(65)], name);
 }
+
+describe("fixture lifetime", () => {
+  it("joins a live un-fed delivery before deleting its directory", async () => {
+    const h = await harness();
+    const started = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+    expect(started.ok).toBe(true);
+    expect(h.service.inventory().active).toBe(1);
+    const root = roots[0]!;
+    await cleanupHarnesses();
+    expect(h.service.inventory().active).toBe(0);
+    await expect(stat(root)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await h.service.start({ target: TARGET, kind: "file", entries: [{ path: "b.bin", size: 8 }], document: 7 })).toMatchObject({ ok: false, refusal: "unavailable" });
+  });
+  it("releases and joins an admission parked before it has a job id", async () => {
+    const h = await harness();
+    const parked = h.park();
+    const starting = h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+    await parked.arrived;
+    expect(h.service.inventory().active).toBe(1);
+    let settled = false;
+    void starting.then(() => { settled = true; });
+    const dispose = h.service.dispose.bind(h.service);
+    const observed = vi.spyOn(h.service, "dispose").mockImplementation(async () => {
+      expect(settled).toBe(true);
+      await dispose();
+    });
+    try { await cleanupHarnesses(); }
+    finally { observed.mockRestore(); }
+    expect(await starting).toMatchObject({ ok: false, refusal: "unavailable" });
+    expect(h.service.inventory().active).toBe(0);
+  });
+  it("releases a held CREATE and joins its in-flight converge", async () => {
+    const h = await harness();
+    const started = await h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+    if (!started.ok) throw new Error("expected a job");
+    h.central.swallowCreate = true;
+    await h.produce(started.jobId, started.contentKey, [fileOf("a.bin", 8)], started.expects);
+    await h.service.end(started.jobId);
+    h.central.swallowCreate = false;
+    const parked = h.holdCreate();
+    const converging = h.service.converge(started.jobId);
+    await parked.arrived;
+    await cleanupHarnesses();
+    await converging;
+    expect(h.service.inventory().active).toBe(0);
+  });
+  it("retains directories on a failed join, still closes other owners, and retries", async () => {
+    const h = await harness(), other = await harness();
+    const root = roots[0]!;
+    const dispose = vi.spyOn(h.service, "dispose").mockRejectedValueOnce(new Error("controlled join failure"));
+    await expect(cleanupHarnesses()).rejects.toThrow("fixture did not stop");
+    expect((await stat(root)).isDirectory()).toBe(true);
+    expect(await other.service.start({ target: TARGET, kind: "file", entries: [{ path: "b.bin", size: 8 }], document: 7 })).toMatchObject({ ok: false, refusal: "unavailable" });
+    dispose.mockRestore();
+    await cleanupHarnesses();
+    await expect(stat(root)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+// Owned by cleanup too, so a failed assertion cannot strand shutdown on a hold.
+function admissionGate() {
+  let arrived!: () => void, release!: () => void;
+  const entered = new Promise<void>((resolve) => { arrived = resolve; });
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  cleanups.add(async () => { release(); });
+  return { entered, release, wait: async () => { arrived(); await held; } };
+}
+
+describe("target-read shutdown", () => {
+  for (const mode of ["quiesce", "dispose"] as const) {
+    it(`${mode} joins cold discovery and prevents its late request`, async () => {
+      const gate = admissionGate();
+      let calls = 0;
+      const h = await harness({ authority: async () => {
+        calls++;
+        await gate.wait();
+        return { kind: "ok", bearer: "controlled-bearer", epoch: 1 };
+      } });
+      const listing = h.service.targets();
+      await gate.entered;
+      let stopped = false;
+      const stopping = h.service[mode]().then(() => { stopped = true; });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      gate.release();
+      expect(await listing).toEqual({ ok: false, refusal: "unavailable" });
+      await stopping;
+      expect(calls).toBe(1);
+      expect(h.central.requests).toEqual([]);
+    });
+    it(`${mode} joins signed-out classification already past binding`, async () => {
+      const gate = admissionGate();
+      let calls = 0;
+      const h = await harness({ authority: async () => {
+        if (calls++ > 0) await gate.wait();
+        return { kind: "signed-out" };
+      } });
+      const listing = h.service.targets();
+      await gate.entered;
+      let stopped = false;
+      const stopping = h.service[mode]().then(() => { stopped = true; });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      gate.release();
+      expect(await listing).toEqual({ ok: false, refusal: "unavailable" });
+      await stopping;
+      expect(calls).toBe(2);
+      expect(h.central.requests).toEqual([]);
+    });
+
+    it(`${mode} stops a live producer before joining a held device read`, async () => {
+      const gate = admissionGate();
+      let hold = false, outcome!: () => void;
+      const ended = new Promise<void>((resolve) => { outcome = resolve; });
+      const h: Harness = await harness({
+        onOutcome: () => { outcome(); },
+        fetchImpl: async (input, init) => {
+          if (hold && new URL(String(input)).pathname === "/api/devices") await gate.wait();
+          return h.central.fetch(input, init);
+        },
+      });
+      const started = await h.service.start({
+        target: TARGET, kind: "file", entries: [{ path: "held.bin", size: 8 }], document: 7,
+      });
+      expect(started.ok).toBe(true);
+      hold = true;
+      const listing = h.service.targets();
+      await gate.entered;
+      let stopped = false;
+      const stopping = h.service[mode]().then(() => { stopped = true; });
+      // The real coordinator must stop this unfed producer while the read is
+      // STILL held. Await its actual outcome, not a chosen number of turns.
+      await ended;
+      expect(stopped).toBe(false);
+      gate.release();
+      expect((await listing).ok).toBe(false);
+      await stopping;
+      expect(h.service.inventory().active).toBe(0);
+      expect(h.central.createCalls).toBe(0);
+    });
+
+    for (const phase of ["fetch", "body"] as const) {
+      it(`${mode} aborts and joins every discovery held in ${phase}`, async () => {
+        const gates = [admissionGate(), admissionGate()];
+        const signals: AbortSignal[] = [];
+        let calls = 0;
+        const h = await harness({ fetchImpl: async (_input, init) => {
+          const gate = gates[calls++]!;
+          signals.push(init!.signal!);
+          if (phase === "fetch") {
+            await gate.wait();
+            return json(200, { devices: [{ ID: TARGET }] });
+          }
+          return new Response(new ReadableStream<Uint8Array>({
+            async start(controller) {
+              await gate.wait();
+              controller.enqueue(new TextEncoder().encode(JSON.stringify({ devices: [{ ID: TARGET }] })));
+              controller.close();
+            },
+          }), { status: 200 });
+        } });
+        const listings = [h.service.targets(), h.service.targets()];
+        await Promise.all(gates.map((gate) => gate.entered));
+        let stopped = false;
+        const stopping = h.service[mode]().then(() => { stopped = true; });
+        expect(signals.map((signal) => signal.aborted)).toEqual([true, true]);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(stopped).toBe(false);
+        gates[0]!.release();
+        expect(await listings[0]).toEqual({ ok: false, refusal: "unavailable" });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(stopped).toBe(false);
+        gates[1]!.release();
+        expect(await listings[1]).toEqual({ ok: false, refusal: "unavailable" });
+        await stopping;
+        expect(calls).toBe(2);
+        expect(h.failures).toEqual([]);
+      });
+    }
+  }
+  it("permits pre-consent discovery but closes it after quiesce until Stay", async () => {
+    const h = await harness();
+    h.service.fence();
+    expect((await h.service.targets()).ok).toBe(true);
+    await h.service.quiesce();
+    const requests = h.central.requests.length;
+    expect(await h.service.targets()).toEqual({ ok: false, refusal: "unavailable" });
+    expect(h.central.requests).toHaveLength(requests);
+    h.service.resume();
+    expect((await h.service.targets()).ok).toBe(true);
+  });
+  it("Stay opens fresh discovery without reviving an old read or extending its drain", async () => {
+    const gates = [admissionGate(), admissionGate()];
+    let calls = 0;
+    const h = await harness({ fetchImpl: async () => {
+      await gates[calls++]!.wait();
+      return json(200, { devices: [{ ID: TARGET }] });
+    } });
+    const old = h.service.targets();
+    await gates[0]!.entered;
+    let stopped = false;
+    const stopping = h.service.quiesce().then(() => { stopped = true; });
+    h.service.resume();
+    const fresh = h.service.targets();
+    await gates[1]!.entered;
+    gates[0]!.release();
+    expect(await old).toEqual({ ok: false, refusal: "unavailable" });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(true);
+    await stopping;
+    gates[1]!.release();
+    expect(await fresh).toMatchObject({ ok: true, targets: [{ deviceID: TARGET }] });
+  });
+  it("an account notification revokes discovery before a binding exists", async () => {
+    const gate = admissionGate();
+    let calls = 0;
+    const h = await harness({ authority: async () => {
+      calls++;
+      await gate.wait();
+      return { kind: "ok", bearer: "controlled-bearer", epoch: 1 };
+    } });
+    const listing = h.service.targets();
+    await gate.entered;
+    await h.service.onAccountChanged();
+    gate.release();
+    expect(await listing).toEqual({ ok: false, refusal: "unavailable" });
+    expect(calls).toBe(1);
+    expect(h.central.requests).toEqual([]);
+  });
+  it("a rejected cold binding releases discovery ownership and permits a later read", async () => {
+    const gate = admissionGate(), failure = new Error("controlled discovery failure");
+    let calls = 0;
+    const h = await harness({ authority: async () => {
+      if (calls++ === 0) { await gate.wait(); throw failure; }
+      return { kind: "ok", bearer: "controlled-bearer", epoch: 1 };
+    } });
+    const listing = h.service.targets();
+    const rejected = expect(listing).rejects.toBe(failure);
+    await gate.entered;
+    const stopping = h.service.quiesce();
+    gate.release();
+    await rejected;
+    await stopping;
+    h.service.resume();
+    expect((await h.service.targets()).ok).toBe(true);
+  });
+});
+
+describe("pending admission shutdown", () => {
+  for (const mode of ["quiesce", "dispose"] as const) {
+    it(`${mode} joins credential-blocked admissions and fences new ones immediately`, async () => {
+      const gate = admissionGate();
+      let authorityCalls = 0, runtimeCalls = 0;
+      const runtime = (await realRuntimes()).inbox;
+      const h = await harness({
+        authority: async () => {
+          authorityCalls++;
+          await gate.wait();
+          return { kind: "ok", bearer: "controlled-bearer", epoch: 1 };
+        },
+        runtime: async () => { runtimeCalls++; return runtime; },
+      });
+      const input = { target: TARGET, kind: "file" as const, entries: [{ path: "a.bin", size: 8 }], document: 7 };
+      const starting = Array.from({ length: MAX_ACTIVE_INBOX_SENDS }, () => h.service.start(input));
+      await gate.entered;
+      expect(h.service.inventory().active).toBe(MAX_ACTIVE_INBOX_SENDS);
+      let stopped = false;
+      const stopping = (mode === "dispose"
+        ? Promise.all([h.service.dispose(), h.service.dispose()])
+        : h.service.quiesce()).then(() => { stopped = true; });
+      expect(await h.service.start(input)).toMatchObject({ ok: false, refusal: "unavailable" });
+      // Let immediate shutdown continuations run; the dependency is STILL held.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      gate.release();
+      const answers = await Promise.all(starting);
+      await stopping;
+      expect(answers).toHaveLength(MAX_ACTIVE_INBOX_SENDS);
+      for (const answer of answers) {
+        expect(answer).toMatchObject({ ok: false, refusal: "unavailable" });
+        expect(answer).not.toHaveProperty("contentKey");
+      }
+      expect(h.service.inventory().active).toBe(0);
+      expect(h.central.requests).toEqual([]);
+      expect(authorityCalls).toBe(1);
+      if (mode === "dispose") expect(runtimeCalls).toBe(0);
+      else {
+        // Quiescence is recoverable: Stay may reopen this same service.
+        h.service.resume();
+        const admitted = await h.service.start(input);
+        expect(admitted.ok).toBe(true);
+        if (admitted.ok) await h.service.cancel(admitted.jobId);
+      }
+    });
+
+    it(`${mode} stops a live producer before joining a manifest-blocked admission`, async () => {
+      const gate = admissionGate();
+      const { inbox: runtime, stored } = await realRuntimes();
+      let parkSeal = false, firstID = "", finished!: () => void;
+      let rejectedKey: Uint8Array | undefined;
+      const firstFinished = new Promise<void>((resolve) => { finished = resolve; });
+      const h = await harness({
+        runtime: async () => ({ ...runtime, importStoreKey: async (raw) => {
+          if (parkSeal) rejectedKey = raw;
+          return runtime.importStoreKey(raw);
+        }, sealManifestBytes: async (...args) => {
+          if (parkSeal) await gate.wait();
+          return runtime.sealManifestBytes(...args);
+        } }),
+        storedRuntime: async () => stored,
+        onOutcome: (job) => { if (job.id === firstID) finished(); },
+      });
+      const input = { target: TARGET, kind: "file" as const, entries: [{ path: "a.bin", size: 8 }], document: 7 };
+      const first = await h.service.start(input);
+      if (!first.ok) throw new Error("expected a job");
+      firstID = first.jobId;
+      parkSeal = true;
+      const starting = h.service.start(input);
+      await gate.entered;
+      let stopped = false;
+      const stopping = h.service[mode]().then(() => { stopped = true; });
+      // Semantic completion of the OTHER producer while the admission is held.
+      await firstFinished;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      gate.release();
+      const answer = await starting;
+      await stopping;
+      expect(answer).toMatchObject({ ok: false, refusal: "unavailable" });
+      expect(answer).not.toHaveProperty("contentKey");
+      expect(rejectedKey?.byteLength).toBe(runtime.constants.contentKeyBytes);
+      expect(rejectedKey?.every((byte) => byte === 0)).toBe(true);
+      expect(h.service.inventory().active).toBe(0);
+      expect(h.central.createCalls).toBe(0);
+    });
+  }
+
+  it("Stay during a pending drain permits the resumed send without stopping it later", async () => {
+    const gate = admissionGate();
+    const h = await harness({ authority: async () => {
+      await gate.wait();
+      return { kind: "ok", bearer: "controlled-bearer", epoch: 1 };
+    } });
+    const starting = h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+    await gate.entered;
+    const stopping = h.service.quiesce();
+    h.service.resume();
+    gate.release();
+    const admitted = await starting;
+    expect(admitted.ok).toBe(true);
+    expect((await stopping).active).toBe(1);
+    expect(h.service.inventory().active).toBe(1);
+    if (admitted.ok) await h.service.cancel(admitted.jobId);
+    expect(h.service.inventory().active).toBe(0);
+  });
+
+  it("dispose joins a cold target-list binding without rereading credentials", async () => {
+    const gate = admissionGate();
+    let authorityCalls = 0;
+    const h = await harness({ authority: async () => {
+      authorityCalls++;
+      await gate.wait();
+      return { kind: "ok", bearer: "controlled-bearer", epoch: 1 };
+    } });
+    const listing = h.service.targets();
+    await gate.entered;
+    let stopped = false;
+    const stopping = h.service.dispose().then(() => { stopped = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(false);
+    gate.release();
+    await expect(listing).resolves.toMatchObject({ ok: false, refusal: "unavailable" });
+    await stopping;
+    expect(authorityCalls).toBe(1);
+    expect(h.central.requests).toEqual([]);
+  });
+
+  for (const stage of ["runtime", "storedRuntime", "atRestKeyFor"] as const) {
+    it(`dispose cannot adopt a binding that was paused in ${stage}`, async () => {
+      const gate = admissionGate();
+      const base = await realRuntimes();
+      const calls: string[] = [];
+      let constantsRead = 0;
+      const runtime: InboxRuntime = { ...base.inbox, get constants() {
+        constantsRead++;
+        return base.inbox.constants;
+      } };
+      const heldKey = newAtRestKeyBytes();
+      const step = async (name: typeof stage) => {
+        calls.push(name);
+        if (name === stage) await gate.wait();
+      };
+      const h = await harness({
+        runtime: async () => { await step("runtime"); return runtime; },
+        storedRuntime: async () => { await step("storedRuntime"); return base.stored; },
+        atRestKeyFor: async () => { await step("atRestKeyFor"); return heldKey; },
+      });
+      const starting = h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+      await gate.entered;
+      let stopped = false;
+      const stopping = h.service.dispose().then(() => { stopped = true; });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      gate.release();
+      await expect(starting).resolves.toMatchObject({ ok: false, refusal: "unavailable" });
+      await stopping;
+      const stages = ["runtime", "storedRuntime", "atRestKeyFor"];
+      expect(calls).toEqual(stages.slice(0, stages.indexOf(stage) + 1));
+      // Constructing a coordinator reads these constants; it must never occur.
+      expect(constantsRead).toBe(0);
+      expect(h.service.inventory().active).toBe(0);
+    });
+  }
+
+  it("joins and releases reservations when the pending dependency rejects", async () => {
+    for (const mode of ["quiesce", "dispose"] as const) {
+      const gate = admissionGate(), failure = new Error("controlled credential failure");
+      const h = await harness({ authority: async () => { await gate.wait(); throw failure; } });
+      const starting = h.service.start({ target: TARGET, kind: "file", entries: [{ path: "a.bin", size: 8 }], document: 7 });
+      const rejected = expect(starting).rejects.toBe(failure);
+      await gate.entered;
+      const stopping = h.service[mode]();
+      gate.release();
+      await rejected;
+      await stopping;
+      expect(h.service.inventory().active).toBe(0);
+      expect(h.central.requests).toEqual([]);
+    }
+  });
+});
 
 describe("Inbox send: choosing a target", () => {
   it("lists the account's OTHER devices and never this one", async () => {

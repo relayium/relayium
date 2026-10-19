@@ -91,7 +91,7 @@ func TestLoginRefusesWhenAlreadyLoggedIn(t *testing.T) {
 		if code == 0 {
 			t.Fatalf("login %v succeeded over an existing credential", args)
 		}
-		for _, want := range []string{"already logged in as a@example.com", "relayium logout", "NEW device", "Nothing was changed"} {
+		for _, want := range []string{"already logged in as a@example.com", "relayium logout", "replace the current credential", "Nothing was changed"} {
 			if !strings.Contains(errOut.String(), want) {
 				t.Fatalf("login %v: stderr should say %q:\n%s", args, want, errOut.String())
 			}
