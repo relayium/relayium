@@ -810,6 +810,10 @@ jobs:
       # and 35 deleted names; its conservative fallback distorted planned
       # balance. Run 39251249085 exhausted one shard's unchanged 20m budget;
       # that incomplete run is NOT the source of these measured weights.
+      # First hosted consumption, run 39280686935 attempt 1: all 2709 account
+      # results covered (2708 PASS, one existing fixture SKIP); package walls
+      # 1043.575-1138.780s, each below the unchanged 1200s limit. One cohort
+      # establishes budget acceptance, not a future timing guarantee.
       # A test added since plans at the largest measured weight (144.05s),
       # so it joins first rather than last;
       # a measured entry for a deleted test is ignored. All eight jobs derive

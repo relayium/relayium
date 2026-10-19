@@ -829,6 +829,75 @@ for (const file of files) {
   }
 }
 
+// The standalone handoff entry point is required by guard coverage even
+// though the publication suite imports it too. Keep that deliberate duplicate
+// coverage out of the publication job's finite serial budget.
+function macosGuardJobIsolationFailures(doc) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  for (const [id, command] of [
+    ["macos-publish-order", "node scripts/test/macos-publish-order-test.mjs"],
+    ["macos-handoff", "node scripts/test/macos-handoff-test.mjs"],
+  ]) {
+    const job = doc?.jobs?.[id];
+    if (!job) { out.push(`${id}: missing independent guard job`); continue; }
+    need(job["runs-on"] === "ubuntu-latest" && String(job["timeout-minutes"]) === "5",
+      `${id}: keep the existing Ubuntu runner and hard five-minute budget`);
+    need(job.if === undefined && job.needs === undefined,
+      `${id}: must run unconditionally without serial job dependencies`);
+    need(job["continue-on-error"] === undefined || job["continue-on-error"] === false,
+      `${id}: guard failures must fail the workflow`);
+    const steps = Array.isArray(job.steps) ? job.steps : [];
+    const runs = steps.filter((step) => typeof step.run === "string");
+    need(runs.length === 1 && runs[0].run.trim() === command,
+      `${id}: its finite budget must contain one direct suite: ${command}`);
+    need(steps.every((step) => step.if === undefined
+      && (step["continue-on-error"] === undefined || step["continue-on-error"] === false)),
+    `${id}: no conditional or soft-failing guard steps`);
+    need(steps.some((step) => step.uses?.startsWith("actions/setup-node@")
+      && String(step.with?.["node-version"]) === "24"), `${id}: run the guards on Node 24`);
+  }
+  return out;
+}
+
+{
+  const hygiene = docs.get("repo-hygiene.yml");
+  for (const message of macosGuardJobIsolationFailures(hygiene)) check(false, message);
+  if (hygiene?.jobs?.["macos-handoff"]) {
+    const mutate = (fn) => { const doc = structuredClone(hygiene); fn(doc.jobs); return doc; };
+    const controls = [
+      ["the original combined job", "one direct suite", (jobs) => {
+        jobs["macos-publish-order"].steps.push(...jobs["macos-handoff"].steps.filter((step) => step.run));
+        delete jobs["macos-handoff"];
+      }],
+      ["standalone guard omitted", "missing independent guard", (jobs) => { delete jobs["macos-handoff"]; }],
+      ["a larger timeout", "five-minute budget", (jobs) => { jobs["macos-publish-order"]["timeout-minutes"] = 10; }],
+      ["handoff job conditional", "unconditionally", (jobs) => { jobs["macos-handoff"].if = "false"; }],
+      ["handoff job serialized", "serial job dependencies", (jobs) => { jobs["macos-handoff"].needs = "macos-publish-order"; }],
+      ["handoff job soft-fails", "fail the workflow", (jobs) => { jobs["macos-handoff"]["continue-on-error"] = true; }],
+      ["handoff command conditional", "conditional or soft-failing", (jobs) => {
+        jobs["macos-handoff"].steps.find((step) => step.run).if = "false";
+      }],
+      ["handoff command soft-fails", "conditional or soft-failing", (jobs) => {
+        jobs["macos-handoff"].steps.find((step) => step.run)["continue-on-error"] = "${{ true }}";
+      }],
+      ["another serial suite", "one direct suite", (jobs) => {
+        jobs["macos-publish-order"].steps.push({ run: "node scripts/test/macos-handoff-test.mjs" });
+      }],
+      ["an ignored command failure", "one direct suite", (jobs) => {
+        jobs["macos-handoff"].steps.find((step) => step.run).run += " || true";
+      }],
+      ["a different Node version", "Node 24", (jobs) => {
+        jobs["macos-handoff"].steps.find((step) => step.uses?.startsWith("actions/setup-node@")).with["node-version"] = 22;
+      }],
+    ];
+    for (const [label, reason, mutation] of controls) {
+      check(macosGuardJobIsolationFailures(mutate(mutation)).some((message) => message.includes(reason)),
+        `macOS guard isolation control ${label} did not reject ${reason}`);
+    }
+  }
+}
+
 /**
  * Workflows this file parses for their RUNNER BUDGET and escape hatches only.
  *

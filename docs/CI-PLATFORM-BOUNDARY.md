@@ -1526,6 +1526,24 @@ evidence and corpus refusals, and runs the renewal and account steps cut from
 `go.yml` against canned streams to show go test's status survives `tee` and
 render while the evidence is still written.
 
+The first hosted consumption of this profile, run 39280686935 attempt 1 at
+`a6bd18040`, covered all 2709 tests with 2708 PASS and the same fixture SKIP.
+Every package finished within the unchanged 1200 s budget: 1043.575–1138.780 s.
+All eight raw archives matched their immutable API digests, and their exact
+assignments matched an independent planner. This is one observed cohort,
+not a guaranteed runtime or a causal end-to-end speedup. API status reports
+lagged the actual execution timestamps; account test results and elapsed
+times come from the raw test streams, not apparent polling wait time.
+
+The unfiltered hygiene workflow keeps `macos-publish-order` and `macos-handoff`
+as separate unconditional five-minute jobs. The publication suite retains its
+embedded handoff controls, and the standalone entry point still runs directly
+to satisfy guard coverage. Previously both commands ran serially in the
+publication job, which hit its five-minute job limit despite passing all
+assertions. Separating jobs preserves every check and each existing budget.
+The event-policy guard refuses recombining them, skipping or soft-failing
+either suite, adding serial suites, or changing those job budgets.
+
 Locally, `scripts/test/go-local.sh` (from any directory) runs the same two
 halves: `ordinary` is `test`'s command with `-count=1` and Go's default
 `-timeout 10m` written out, and `renewal` runs the whole renewal pattern in one
