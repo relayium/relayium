@@ -14,6 +14,7 @@ import { apiFixtureScript } from './a11y-fixtures.mjs';
 import { CODE_ROOM_ROUTES, codeRoomSignalingScript } from './code-room-fixture.mjs';
 import { CASES, options, installProbe, checkedSample, summarize, distribution } from './transfer-performance-core.mjs';
 import { installPhaseProbe, checkedPhases } from './transfer-phase-probe.mjs';
+import { installTransportProbe, checkedTransport, summarizeTransport, TRANSPORT_LABELS, TRANSPORT_INTERVAL_MS, TRANSPORT_PROBE_VERSION } from './transfer-transport-probe.mjs';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -33,6 +34,15 @@ const report = { schema: 'relayium-browser-transfer-baseline/1', status: 'IN_PRO
 if (opts.phases) {
   report.schema = 'relayium-browser-transfer-baseline/2';
   report.scope.phases = 'instrumented Blob reads on sender only; AES-GCM encrypt/decrypt on both peers including control frames; async API wall time including scheduling/wrapper cost, not CPU; overlapping totals must not be added or subtracted from end-to-end time; no network/wait attribution';
+}
+if (opts.transport) {
+  report.schema = 'relayium-browser-transfer-baseline/3';
+  report.scope.transportProbe = { version: TRANSPORT_PROBE_VERSION, labels: TRANSPORT_LABELS, samplingIntervalMs: TRANSPORT_INTERVAL_MS,
+    queue: 'RTCDataChannel.bufferedAmount read in the same task after each observed send (peak of the JS-visible value only) and by setInterval polling; poll maxGapMs is the largest observed gap including arm→first and last→finish, so sampled maxima are lower bounds; background-tab timer throttling can widen gaps; any failed observation fails the run without altering the native send',
+    candidatePair: 'numeric deltas of one selected candidate pair (transport.selectedCandidatePairId; only when no transport states a selection, the single nominated succeeded pair) between getStats() snapshots taken before the measured start and after completion; bytesSent/bytesReceived are candidate-pair payload bytes excluding packet headers, padding and ICE connectivity checks, which may include DTLS/SCTP and application control traffic, not file bytes; snapshots may be cached and bracket more than the transfer',
+    selectionIdentity: 'the same transport, pair and local/remote candidates are required at both boundaries; when the browser supplies transport.selectedCandidatePairChanges it must be equal at both boundaries, otherwise (absent at both) only boundary identity is checked and a switch away and back between the snapshots would not be detected; any mismatch, partial or malformed value FAILS the run',
+    rtt: 'latestStunRttMs is currentRoundTripTime of the latest STUN connectivity/consent check at the after snapshot, converted to ms; it may predate the file and is null when not supplied (a supplied 0 is kept); meanStunRttMs uses only responses received between the snapshots, else null',
+    meaning: 'No credit-wait, queueing-time, network-exclusive, CPU, capacity or physical-disk attribution; statistics are asynchronous snapshots, not causal bottleneck proof; observation and polling can perturb timing; local loopback only, no WAN claim' };
 }
 let browser, closeBrowser, preview, deadline, timedOut = false;
 
@@ -96,6 +106,10 @@ async function oneSample(sender, receiver, kind, direction, iteration, warmup) {
     await sender.evaluate(`window.__transferPhases.arm('sender', ${JSON.stringify(opts.phaseDelay ?? null)})`);
     await receiver.evaluate("window.__transferPhases.arm('receiver')");
   }
+  if (opts.transport && kind !== 'text') {
+    await sender.evaluate("window.__transferTransport.arm('sender')");
+    await receiver.evaluate("window.__transferTransport.arm('receiver')");
+  }
   const startAt = await sender.evaluate(kind === 'text' ? `(() => {
     const start = performance.timeOrigin + performance.now();
     document.querySelector('.msgpanel button.send').click(); return start;
@@ -110,7 +124,7 @@ async function oneSample(sender, receiver, kind, direction, iteration, warmup) {
   const observation = await receiver.evaluate('window.__transferBaseline.snapshot()');
   // Sender completion is an extra assertion, never a substitute for file hashes.
   if (kind !== 'text') await sender.waitFor("document.querySelector('#xfer-label-send')?.closest('.xfer').classList.contains('ok')", 'sender completion');
-  let phaseObservation;
+  let phaseObservation, transportObservation;
   try {
     const sample = checkedSample({ kind, direction, iteration, warmup, startAt, observation });
     if (opts.phases && kind !== 'text') {
@@ -123,10 +137,16 @@ async function oneSample(sender, receiver, kind, direction, iteration, warmup) {
         if (row.delayCalls !== 1 || row.delayElapsedMs < opts.phaseDelay.ms - 1) throw new Error('phase delay control not observed');
       }
     }
+    if (opts.transport && kind !== 'text') {
+      transportObservation = { sender: await sender.evaluate('window.__transferTransport.finish()') };
+      transportObservation.receiver = await receiver.evaluate('window.__transferTransport.finish()');
+      sample.transport = checkedTransport(transportObservation.sender, transportObservation.receiver, sample.bytes);
+      sample.transportRaw = transportObservation;
+    }
     return sample;
   }
   catch (error) {
-    report.failedSample = { kind, direction, iteration, warmup, startAt, observation, phaseObservation };
+    report.failedSample = { kind, direction, iteration, warmup, startAt, observation, phaseObservation, transportObservation };
     throw error;
   }
 }
@@ -143,7 +163,8 @@ async function run() {
   browser = launched.browser; closeBrowser = launched.close;
   report.provenance.browser = await browser.send('Browser.getVersion');
   const common = VERIFY_ON + apiFixtureScript(CODE_ROOM_ROUTES) + `;(${installProbe.toString()})();`
-    + (opts.phases ? `;(${installPhaseProbe.toString()})();` : '');
+    + (opts.phases ? `;(${installPhaseProbe.toString()})();` : '')
+    + (opts.transport ? `;(${installTransportProbe.toString()})(window, ${JSON.stringify({ labels: TRANSPORT_LABELS, intervalMs: TRANSPORT_INTERVAL_MS })});` : '');
   const room = `${preview.base}/cross-network#c=927461`;
   const a = await newTab(browser, room, common + codeRoomSignalingScript({ selfId: 'aaaa1111', name: 'Baseline A' }));
   const b = await newTab(browser, room, common + codeRoomSignalingScript({ selfId: 'bbbb2222', name: 'Baseline B' }));
@@ -178,6 +199,12 @@ async function run() {
           distribution(rows.map(s => s.phases[role][phase].totalMs))]))]));
     }
   }
+  if (opts.transport) {
+    report.transportSummary = {};
+    for (const kind of opts.cases.filter(k => k !== 'text')) for (const direction of ['A→B', 'B→A']) {
+      report.transportSummary[`${kind}/${direction}`] = summarizeTransport(report.samples.filter(s => !s.warmup && s.kind === kind && s.direction === direction));
+    }
+  }
   report.status = 'PASS';
 }
 
@@ -194,7 +221,7 @@ try {
   try { if (closeBrowser) await closeBrowser(); } catch (error) { report.status = 'FAIL'; report.failure = `browser close: ${error.message}`; process.exitCode = 1; }
   try { if (preview) await preview.stop(); } catch (error) { report.status = 'FAIL'; report.failure = `preview close: ${error.message}`; process.exitCode = 1; }
   report.finishedAt = new Date().toISOString();
-  if (report.status !== 'PASS') { report.summary = null; if (opts.phases) report.phaseSummary = null; }
+  if (report.status !== 'PASS') { report.summary = null; if (opts.phases) report.phaseSummary = null; if (opts.transport) report.transportSummary = null; }
   writeFileSync(opts.out, JSON.stringify(report, null, 2) + '\n', { flag: 'wx' });
   console.log(`${report.status}: ${opts.out}${report.failure ? ` (${report.failure})` : ''}`);
 }

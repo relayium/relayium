@@ -79,6 +79,74 @@ credit 等待、DataChannel 排队、网络或物理写入。时间从 API 调�
 
 ---
 
+可选的 WebRTC 传输观测（另存报告；可与 `--phases on` 同时开启）：
+
+```sh
+npm run bench:transfer -- --transport on --case large --out /absolute/path/transport-large.json
+npm run bench:transfer -- --transport on --phases on --case small --samples 2 --warmups 0 --out /absolute/path/both.json
+```
+
+开启后 schema 为 `relayium-browser-transfer-baseline/3`（`configuration.phases` 表示是否
+同时含阶段数据），探针自身版本见 `scope.transportProbe.version`（当前 2）。不开启时
+schema 1/2 与原测量路径不变，也不安装探针、不取统计、不轮询。文字样本不变，不做传输
+观测；只有文件样本带 `transport`（校验后的派生值）和 `transportRaw`（两端原始数值
+观测）。`transportSummary` 按文件类别和方向给出若干发送端数值的中位数/P95，每项都写明
+`unit`（`bytes`/`ms`/`count`）和 `nullCount`；字节值不会放进 `medianMs` 一类字段。
+
+`transfer-transport-probe.mjs` 在页面加载前包装 `RTCPeerConnection` 构造（只为
+登记实例并用监听器得知入站通道归属，不替换产品的 `ondatachannel`）、
+`createDataChannel` 和 `RTCDataChannel.prototype.send`。原生调用的接收者、参数、
+返回值和同步异常保持不变；所有观测读取（负载大小、`bufferedAmount`）都在隔离的
+观测边界内，读取失败只记入 `observationFailures` 并让该样本 FAIL，绝不替换原生结果
+或异常，也不阻止原生调用。不改变发送时机、字节、计时器、加密或流控。每轮开始前
+两端各绑定**唯一**一个 `connected` 的连接及其 `relayium`、`relayium-text` 两条打开的
+通道：
+
+- **队列占用**：每次被观测的 `send` 后在同一任务内读一次 `bufferedAmount`
+  （`maxAfterSendBufferedBytes`，是 JS 可见值的峰值，不是底层 SCTP/套接字队列），
+  并以 10 ms `setInterval` 轮询（`sampled` 的次数/非零次数/最大值/累计）。
+  `sampling.maxGapMs` 是含"绑定→首次轮询""末次轮询→结束"在内的最大间隔，轮询所得
+  最大值只是下界。**后台标签页的计时器会被节流**：R1 实测作为后台页的发送端一轮
+  可能只轮询 0–3 次、间隔约 0.26–1 s，所以两个方向的轮询数据不能直接比较，必须一起
+  看 `tickCount`/`maxGapMs`。轮询读取出错会停止自身计时器并让样本 FAIL；`finish`
+  与 `abort` 总会清除计时器。这些都不是"在信用窗口上等待的时间"，也不是字节排队时长。
+- **candidate-pair 计数**（字段 `candidatePair`）：开始前与完成后各取一次 `getStats()`，
+  用 `transport.selectedCandidatePairId` 选定的 candidate-pair；只有当**没有任何**
+  transport 声明选择时，才接受唯一一个 nominated 且 succeeded 的 pair。显式选择格式
+  错误或指向不存在的 pair 时直接 FAIL，不退回猜测。`bytesSent/bytesReceived` 按 W3C
+  定义是该 pair 的**负载字节**，不含包头、填充和 ICE 连通性检查，可能包含 DTLS/SCTP
+  与应用控制流量；**既不是文件字节，也不是完整线路字节**。快照是异步的、浏览器可能
+  返回短时缓存，区间比实际传输更宽。
+- **选择是否稳定**：两次快照的 transport、pair、本端/远端候选必须相同。浏览器提供
+  `transport.selectedCandidatePairChanges` 时，两端数值必须相等（导出为
+  `pairChanges` 与 `candidatePair.selectedPairChanges`），因此"切走又切回"会被发现；
+  只在一侧出现、负数、非整数或非数字均 FAIL。浏览器不提供时为 `null`，此时只保证
+  两个边界上的身份一致，无法发现两次快照之间切走又切回的情况。
+- **RTT**：`latestStunRttMs` 是结束快照里 `currentRoundTripTime`（最近一次 STUN
+  连通性/同意检查的往返时间，秒）换算成毫秒，可能早于本次文件传输；浏览器给出 0 就
+  记 0，没给就是 `null`，绝不用 0 代替缺失。`meanStunRttMs` 只在两次快照之间确有新的
+  STUN 响应、且总 RTT 两端都存在时才计算，否则为 `null`。
+
+选定 pair 不要求 `state` 为 `succeeded`：`selectedCandidatePairId` 本身就是权威选择。
+R1 的一次真实批量运行中，接收端在结束快照因"选定 pair 缺失或非 succeeded"被拒；当时
+未保留实际状态值，所以**原因未证实**，这里不声称是 libwebrtc 的普遍行为。
+`sendThrows` 只记录原生 `send` 抛出的次数并原样重抛，不据此判定。
+
+校验要求：支持的可选字段缺失（undefined/null）记为 `null`；一旦提供就必须是有限的
+非负数，字符串、NaN、Infinity、负数直接 FAIL，不会被当作"缺失"。计数器还须为整数、
+没有回退（重置）、没有只在一侧存在的部分字段、没有未知负载类型、没有在未绑定通道上
+的发送、`observationFailures` 为 0；发送端文件通道字节不少于文件大小；各自 pair
+发送负载字节不少于自身应用层发送，对端 pair 接收负载字节不少于本端应用层发送（只是
+一致性检查）。任何一项不满足、钩子缺失、生命周期乱序或迟到的异步结果，整份报告 FAIL，
+所有汇总均为 null。导出只含数值和经白名单校验的候选类型/协议；不记录负载、SDP、IP、
+端口、候选/连接 ID、密钥或 URL（ID 只在页面内用于绑定）。
+
+**范围：本机 Chrome、host 环回、内存目标。** 轮询本身运行在页面事件循环上，可能
+扰动时间。不能据此推断信用等待、网络独占时间、CPU、容量、物理磁盘、WAN 表现或提速；
+统计是异步快照，不是瓶颈的因果证明。
+
+---
+
 三个脚本，共用三份东西：
 
 - `harness.mjs` —— CDP 客户端、标签页把手、浏览器生命周期、另存为桩、`vite preview`

@@ -17,6 +17,7 @@ export function options(argv) {
       o[name] = Number(value);
     } else if (key === '--out' && value && !value.startsWith('--')) o.out = value;
     else if (key === '--phases' && value === 'on') o.phases = true;
+    else if (key === '--transport' && value === 'on') o.transport = true;
     else if (key === '--phase-delay' && /^(read|encrypt):([1-9]\d{0,2}|1000)$/.test(value ?? '')) {
       const [phase, ms] = value.split(':'); o.phaseDelay = { phase, ms: Number(ms) };
     }
@@ -27,6 +28,7 @@ export function options(argv) {
   if (!o.out) throw new Error('--out FILE is required (existing files are never overwritten)');
   if (o.control && o.cases.includes('text')) throw new Error('bad-hash control requires --case small, large or batch');
   if (o.phaseDelay && (!o.phases || o.cases.includes('text'))) throw new Error('phase delay requires --phases on and a file --case');
+  if (o.transport && !o.cases.some(kind => kind !== 'text')) throw new Error('--transport on requires at least one file case');
   return o;
 }
 
