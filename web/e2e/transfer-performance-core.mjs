@@ -4,29 +4,43 @@ export const CASES = {
   small: { files: 1, bytes: 10 * 1024 },
   large: { files: 1, bytes: 8 * 1024 * 1024 },
   batch: { files: 100, bytes: 10 * 1024 },
+  // Opt-in only (never in DEFAULT_CASES): equal total bytes, one byte stream.
+  // 1000 is exactly the product's MAX_FILES; the fixture is in transfer-fixture.mjs.
+  small1000: { files: 1000, bytes: 1024, fixture: true },
+  concat1000: { files: 1, bytes: 1000 * 1024, fixture: true },
 };
+export const DEFAULT_CASES = ['text', 'small', 'large', 'batch'];
+export const PRESETS = { 'small-files': ['small1000', 'concat1000'] };
+export const CONTROLS = ['bad-hash', 'bad-hash-last'];
 
 export function options(argv) {
-  const o = { samples: 20, warmups: 1, writeDelayMs: 0, textSpacingMs: 250, cases: Object.keys(CASES), control: false };
+  const o = { samples: 20, warmups: 1, writeDelayMs: 0, textSpacingMs: 250, cases: [...DEFAULT_CASES], control: false };
   const numbers = { '--samples': ['samples', 1, 100], '--warmups': ['warmups', 0, 10], '--write-delay-ms': ['writeDelayMs', 0, 1000] };
+  const seen = new Set();
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i], value = argv[++i];
+    // A repeated flag used to be last-wins; refuse rather than guess the intent.
+    if (seen.has(key)) throw new Error(`duplicate option ${key}`);
+    seen.add(key);
     if (numbers[key]) {
       const [name, min, max] = numbers[key];
       if (!/^\d+$/.test(value ?? '') || Number(value) < min || Number(value) > max) throw new Error(`invalid ${key}`);
       o[name] = Number(value);
     } else if (key === '--out' && value && !value.startsWith('--')) o.out = value;
     else if (key === '--phases' && value === 'on') o.phases = true;
+    else if (key === '--transport' && value === 'on') o.transport = true;
     else if (key === '--phase-delay' && /^(read|encrypt):([1-9]\d{0,2}|1000)$/.test(value ?? '')) {
       const [phase, ms] = value.split(':'); o.phaseDelay = { phase, ms: Number(ms) };
     }
     else if (key === '--case' && Object.hasOwn(CASES, value)) o.cases = [value];
-    else if (key === '--control' && value === 'bad-hash') o.control = true;
+    else if (key === '--case' && Object.hasOwn(PRESETS, value)) o.cases = [...PRESETS[value]];
+    else if (key === '--control' && CONTROLS.includes(value)) o.control = value === 'bad-hash-last' ? 'last' : true;
     else throw new Error(`unknown or invalid option ${key}`);
   }
   if (!o.out) throw new Error('--out FILE is required (existing files are never overwritten)');
-  if (o.control && o.cases.includes('text')) throw new Error('bad-hash control requires --case small, large or batch');
+  if (o.control && o.cases.includes('text')) throw new Error('bad-hash control requires a file --case (or the small-files preset)');
   if (o.phaseDelay && (!o.phases || o.cases.includes('text'))) throw new Error('phase delay requires --phases on and a file --case');
+  if (o.transport && !o.cases.some(kind => kind !== 'text')) throw new Error('--transport on requires at least one file case');
   return o;
 }
 

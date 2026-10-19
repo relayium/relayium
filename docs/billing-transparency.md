@@ -79,7 +79,7 @@ first" and the difference is what decides whether anything is billed:
   the relay it would have used. So **there is no STUN-P2P rung for the browser**,
   and a cross-network browser transfer is a relayed transfer, metered when
   the relay reports billable usage.
-- **CLI:** in the **published CLI (v0.27.1)**, pairing-code
+- **CLI:** in the **published CLI (v0.27.2)**, pairing-code
   sessions — `send`/`receive`, `text` and `pair` — relay every byte through the
   same ciphertext-only TURN relay whenever the server issues one for the code,
   even on one LAN. Those relayed bytes count toward the monthly traffic
@@ -109,7 +109,7 @@ relayium.com can meter. Its **hosted** modes are the exception, and they are
   encrypted server-side storage a browser stored link uses, so they count
   toward monthly traffic — and `up`, being an upload, also against the storage
   cap and the daily upload quota. `relayium inbox send` in the published CLI
-  (v0.27.1) is hosted too: it queues ciphertext for a Device Inbox, metered as
+  (v0.27.2) is hosted too: it queues ciphertext for a Device Inbox, metered as
   any Device Inbox delivery is (see
   [How quotas are enforced](#how-quotas-are-enforced)).
 
@@ -578,12 +578,18 @@ do when you want a bigger one.
 The cross-network paths that consume no relay allowance at all are the CLI's
 **direct** modes — daemon-direct `push`/`sync`, and in CLI v0.26.0 and
 earlier also `send`/`receive`, `text` and `push`/`pull`/`sync` over your own
-SSH — which never ask for a relay. In the published CLI (v0.27.1), which
+SSH — which never ask for a relay. In the published CLI (v0.27.2), which
 retires the SSH transport, `send`/`receive`, `text` and `pair` do ask for one, and their relayed bytes
 follow the conditional rule above: billable only when the relay reports them
 as billable usage. `relayium up` and
 `relayium down` are cross-network too, but they are hosted rather than direct,
-so they draw on the same limits a browser stored link does.
+so they draw on the same limits a browser stored link does. Since CLI v0.27.2,
+the opt-in `relayium up --resumable` / `--resume` continues the same upload
+session from the same local ciphertext rather than starting another, under
+those same limits; bytes an interrupted request already delivered can still
+have counted, and `--discard` removes only local recovery state — it does not
+cancel anything on the server or refund traffic. See
+[CLI installation identity and resumable uploads](cli-resumable-upload.md).
 
 **What actually reaches a limit on the Free tier**, in the plan table's own
 four dimensions: monthly traffic (hosted upload + hosted download + billable

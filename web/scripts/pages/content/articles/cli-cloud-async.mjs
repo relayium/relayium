@@ -223,7 +223,7 @@ downloads/report.pdf
       },
       {
         q: "What happens if a download is interrupted?",
-        a: "Inside one run, down handles it: it reconnects up to five attempts and continues by HTTP Range from the last complete encrypted frame, or restarts the file within that run if the server ignores Range. Once the attempts are spent it removes the partial output instead of leaving a truncated file, so a later relayium down starts from the beginning rather than picking up where the last one stopped. Only relayium sync resumes across separate runs.",
+        a: "Inside one run, down handles it: it reconnects up to five attempts and continues by HTTP Range from the last complete encrypted frame, or restarts the file within that run if the server ignores Range. Once the attempts are spent it removes the partial output instead of leaving a truncated file, so a later relayium down starts from the beginning rather than picking up where the last one stopped. Across separate runs only two things resume: relayium sync, and an upload started with relayium up --resumable, which relayium up --resume continues from its private local encrypted copy. A download never does.",
       },
     ],
   },
@@ -455,7 +455,7 @@ downloads/report.pdf
       },
       {
         q: "下载被中断了会怎样？",
-        a: "在同一次运行内，down 自己会处理：最多重连五次，并用 HTTP Range 从最后一个完整密文帧继续；服务端若忽略 Range，它就在这一次运行里重头再下。尝试用尽后它会删掉半截的输出，而不是留下一个截断文件——所以之后再跑 relayium down 是从头开始的，而不是接着上一次。只有 relayium sync 才会跨运行续传。",
+        a: "在同一次运行内，down 自己会处理：最多重连五次，并用 HTTP Range 从最后一个完整密文帧继续；服务端若忽略 Range，它就在这一次运行里重头再下。尝试用尽后它会删掉半截的输出，而不是留下一个截断文件——所以之后再跑 relayium down 是从头开始的，而不是接着上一次。会跨运行续传的只有两种：relayium sync，以及用 relayium up --resumable 启动的上传——relayium up --resume 会从它私有的本地加密副本继续。下载从不跨运行续传。",
       },
     ],
   },
