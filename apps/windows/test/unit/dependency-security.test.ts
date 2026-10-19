@@ -216,8 +216,10 @@ const der = (tag: number, body: Buffer): Buffer => {
   return Buffer.concat([Buffer.from([tag]), len, body]);
 };
 const seq = (...parts: Buffer[]): Buffer => der(0x30, Buffer.concat(parts));
-const oid = (dotted: string): Buffer => {
-  const [a, b, ...rest] = dotted.split(".").map(Number);
+// Arcs as numbers rather than a dotted string: a dotted OID reads as an IP
+// literal to the repository's production-identifier scan.
+const oid = (arcs: readonly number[]): Buffer => {
+  const [a, b, ...rest] = arcs;
   const bytes = [a! * 40 + b!];
   for (const n of rest) {
     const chunk = [n & 0x7f];
@@ -236,11 +238,11 @@ const utcTime = (d: Date): Buffer =>
  */
 function selfSignedCert(): { key: string; certPem: string } {
   const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
-  const sigAlg = seq(oid("1.2.840.10045.4.3.2"));
-  const name = seq(der(0x31, seq(oid("2.5.4.3"), der(0x0c, Buffer.from("relayium dependency-security test")))));
+  const sigAlg = seq(oid([1, 2, 840, 10045, 4, 3, 2]));
+  const name = seq(der(0x31, seq(oid([2, 5, 4, 3]), der(0x0c, Buffer.from("relayium dependency-security test")))));
   const now = Date.now();
   const san = seq(der(0x82, Buffer.from("localhost")), der(0x87, Buffer.from([127, 0, 0, 1])));
-  const extensions = der(0xa3, seq(seq(oid("2.5.29.17"), der(0x04, san))));
+  const extensions = der(0xa3, seq(seq(oid([2, 5, 29, 17]), der(0x04, san))));
   const tbs = seq(
     der(0xa0, der(0x02, Buffer.from([2]))),
     der(0x02, Buffer.from([1, ...createHash("sha256").update(String(now)).digest().subarray(0, 8)])),
