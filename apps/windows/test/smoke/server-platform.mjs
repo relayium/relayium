@@ -274,6 +274,9 @@ function runOwned(file, args, { cwd, env, timeoutMs, label, register }) {
   });
 }
 
+// The cold-database probe uses the same bounded, registered child lifecycle.
+export { runOwned as runOwnedFixtureChild };
+
 /**
  * The shared build primitive: Inbox, realtime and any later fixture use this one
  * so the overlay decision cannot drift between them.
