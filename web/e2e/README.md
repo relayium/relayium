@@ -47,6 +47,31 @@ npm run bench:transfer -- --case small --samples 1 --warmups 0 --control bad-has
 最后一条必须非零退出且 JSON 为 FAIL。慢写参数是每次内存写入的模拟延迟，不能称为
 真实 RTT 或磁盘速度。端口 9476（Chrome）和 4196（预览）须空闲；复用已占端口会
 拒绝，正常/失败路径都关闭自身浏览器与预览。全轮有 15 分钟截止时间，各等待也有界。
+同一选项重复出现会被拒绝（以前是最后一个生效）。
+
+---
+
+可选的小文件对照负载（不在默认运行中，另存报告）：
+
+```sh
+npm run bench:transfer -- --case small-files --out /absolute/path/small-files.json
+npm run bench:transfer -- --case small1000 --samples 1 --warmups 0 --control bad-hash-last --out /absolute/path/refused-last.json
+```
+
+`small-files` 预设依次运行 `small1000`（1000 个 1024 B 文件，恰为产品的
+`MAX_FILES` 上限）和 `concat1000`（1 个 1,024,000 B 文件），总字节相同，且单文件
+恰好是 1000 个小文件按序拼接（`transfer-fixture.mjs`：工作负载第 k 字节只取决于
+k）。默认四类的旧图案每 251 个文件重复，交换第 0 与 251 个文件仍能通过哈希检查；
+新夹具要求 1000 个完整 SHA-256 互不相同、单文件等于拼接，否则在启动浏览器前拒绝。
+报告的 `fixture` 字段记录摘要列表与单文件哈希，便于独立重算。两个案例也可单独用
+`--case small1000` / `--case concat1000` 做冒烟或负向控制；`--control bad-hash`
+篡改首个文件的期望值，`bad-hash-last` 篡改最后一个（第 1000 个）。
+
+每个文件都要关闭并通过完整哈希，加上接收方成功界面，计时才结束。哈希观察器、
+界面更新等开销随文件数增长并**包含在内**，因此两者之差是工作负载证据，不是逐文件
+产品成本、建链、CPU、磁盘或 WAN 的归因，也不代表 O5 已完成或产品提速。与默认
+案例同样复用一次配对的链路、自动同意、内存目标；每个案例每方向至少 20 次正式样本
+才有 P95。`--phases on`、`--transport on` 可与这些案例组合使用。
 
 ---
 
