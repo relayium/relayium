@@ -229,7 +229,7 @@
 "upload.expiresAfter" = "有效期";
 "upload.burnAfterRead" = "首次下载后即删除";
 "upload.keepOpen" = "请保持 Relayium 打开，直到这次传输完成。离开或关闭应用会暂停上传——它不会在后台继续——但文件已保存在本机，重新打开 Relayium 后可以继续上传。";
-"upload.macKeepOpen" = "请保持 Relayium 打开，直到这次上传完成。关闭应用会终止上传；重新打开 Relayium 后需要再次开始上传。";
+"upload.macKeepOpen" = "上传期间请保持 Relayium 打开。如果应用退出，重新打开后可选择“继续上传”恢复已保存的上传；应用关闭期间不会继续上传。";
 "upload.preparing" = "正在准备你的文件……";
 "upload.checkingRecovery" = "正在检查是否有暂停的上传……";
 "upload.interruptedTitle" = "上传已暂停";
@@ -1204,3 +1204,9 @@
 "send.errorUploadDailyQuota" = "上传超出剩余的每日上传额度。请检查账户额度后再试。文件仍保留在本机。";
 "send.errorUploadMonthlyTraffic" = "剩余的每月流量额度不足以完成此次上传。请检查账户额度后再试。文件仍保留在本机。";
 "send.errorUploadRateLimited" = "上传请求过于频繁，请稍后再试。文件仍保留在本机。";
+
+"upload.recoveryUnconfirmed" = "无法确认这次上传是否已完成。“继续上传”会确认同一次上传，不会另开一次。“删除本机副本”只会移除保存在这台 Mac 上的恢复数据。";
+
+"upload.recoveryUnavailable" = "这次上传已无法继续。可以丢弃恢复数据，再次选择文件并发起新的上传；新上传会重新计量。";
+
+"upload.recoveryStateWriteFailed" = "无法保存上传恢复状态，因此尚未请求完成上传。请选择“继续上传”重试。";

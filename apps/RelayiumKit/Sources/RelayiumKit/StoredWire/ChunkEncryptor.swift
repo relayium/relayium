@@ -225,7 +225,7 @@ public struct FileURLSource: PlaintextSource {
 /// Yields the same framed ciphertext stream as `encryptChunks`, one frame at a
 /// time. `seq` is global across files and starts at 1, because 0 is the
 /// manifest — the same rule the batch encoder and the web both follow.
-public final class ChunkEncryptor {
+public final class ChunkEncryptor: UploadCipherSource {
     private let key: [UInt8]
     private var sources: [PlaintextSource]
     private var index = 0

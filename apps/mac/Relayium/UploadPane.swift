@@ -55,6 +55,9 @@ struct UploadPane: View {
             // that did move. See `PathRailPresentation.storedSend`.
             PathRail(stops: PathRailPresentation.storedSend(model.state))
             content
+            if let warning = model.cleanupWarning {
+                InlineMessage(.warning, warning)
+            }
         }
         // The store owns "what the user chose"; the model owns "what is being
         // uploaded". Pushing on every revision keeps them one fact rather than
@@ -117,19 +120,16 @@ struct UploadPane: View {
             } else {
                 gateCard
             }
-        case .checkingRecovery, .preparing, .restarting:
-            // R3-G's durable recovery is the iOS app's: this pane is built with
-            // no `PendingUploadSupport`, so neither state is reachable here.
-            // Handled rather than defaulted, so adding a state to the shared
-            // model stays a compile error on this platform instead of a silent
-            // blank card.
-            uploadingCard(sent: 0, total: 0)
+        case .checkingRecovery:
+            preparationCard(.uploadHeading)
+        case .preparing:
+            preparationCard(.uploadPreparing)
+        case .restarting:
+            preparationCard(.uploadRestarting)
         case let .uploading(sent, total):
             uploadingCard(sent: sent, total: total)
-        case .interrupted:
-            // Same: unreachable without a pending store. Falling back to the
-            // selection keeps the user's files in front of them.
-            if case .allowed = gate { sendCard(showsOptions: false) } else { gateCard }
+        case let .interrupted(files, bytes, message):
+            interruptedCard(files: files, bytes: bytes, message: message)
         case let .done(link, expiresAt, keyWarning):
             linkReadyCard(link: link, expiresAt: expiresAt, keyWarning: keyWarning)
         case let .failed(message):
@@ -247,6 +247,43 @@ struct UploadPane: View {
     }
 
     // MARK: - running
+
+    private func preparationCard(_ key: L10nKey) -> some View {
+        SectionCard(title: L10n.t(.uploadHeading)) {
+            ProgressView { Text(L10n.t(key)) }
+            PendingFileList(sessionFiles: model.sessionFiles)
+            Button(L10n.t(.commonCancel)) { model.cancel() }
+                .buttonStyle(.referenceSecondary)
+        }
+    }
+
+    private func interruptedCard(files: Int, bytes: Int, message: String?) -> some View {
+        SectionCard(title: L10n.t(.uploadInterruptedTitle)) {
+            Text(L10n.t(.uploadInterruptedBody, [L10n.plural(.selectionFiles, files),
+                ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)]))
+                .foregroundStyle(Palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            PendingFileList(sessionFiles: model.sessionFiles)
+            if let message {
+                Text(L10n.t(.uploadInterruptedReason, [L10n.token(message)]))
+                    .foregroundStyle(Palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button(L10n.t(.uploadResume)) {
+                guard let token = session.bearerToken, !token.isEmpty,
+                      case .allowed = AccountGate.from(session.state, bearer: token) else {
+                    navigation.selectAccount(intent: .signIn)
+                    return
+                }
+                model.resume(token: token)
+            }
+            .buttonStyle(.referencePrimary)
+            .accessibilityIdentifier("storedSend.resume")
+            Button(L10n.t(.uploadDiscard), role: .destructive) { model.discardPendingJob() }
+                .buttonStyle(.referenceSecondary)
+                .accessibilityIdentifier("storedSend.discard")
+        }
+    }
 
     private func uploadingCard(sent: Int, total: Int) -> some View {
         SectionCard(title: L10n.t(.uploadHeading)) {

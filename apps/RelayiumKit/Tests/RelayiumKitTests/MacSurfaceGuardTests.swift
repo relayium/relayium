@@ -6104,14 +6104,19 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// macOS cannot resume a stored upload after the app closes, so its running
-    /// surface must not reuse iOS's durable-resume explanation.
+    /// The Mac explains foreground uploads and exposes its own durable actions.
+    /// Composition must install both protected storage and app-lifetime identity.
     func testMacUploadShowsItsOwnForegroundOnlyWarning() throws {
         let upload = try source(named: "UploadPane.swift")
         XCTAssertTrue(upload.contains("Text(L10n.t(.uploadMacKeepOpen))"),
                       "the Mac upload does not warn that closing stops it")
         XCTAssertFalse(upload.contains("Text(L10n.t(.uploadKeepOpen))"),
-                       "the Mac promises iOS-only upload recovery")
+                       "the Mac reused a different platform's explanation")
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains("durableShares: true"))
+        XCTAssertTrue(app.contains("uploads.observe(account.$state)"))
+        XCTAssertTrue(upload.contains("model.resume(token: token)"))
+        XCTAssertTrue(upload.contains("model.discardPendingJob()"))
     }
 
     // MARK: - the component vocabulary, everywhere
@@ -7319,9 +7324,9 @@ extension MacSurfaceGuardTests {
         XCTAssertEqual(MacAppShellFirstLaunch.violations(in: ui), [])
         XCTAssertEqual(try MacAppShellFirstLaunch.parsedFixtures(in: ui), MacAppShellFirstLaunch.fixtures)
         let declared = MacAppShellFirstLaunch.declaredTests(in: ui)
-        XCTAssertEqual(declared.count, 43, "the macOS shell suite changed size; re-read this route")
+        XCTAssertEqual(declared.count, 44, "the macOS shell suite changed size; re-read this route")
         let throwing = Set(declared.filter { $0.isThrowing }.map { $0.name })
-        XCTAssertEqual(throwing.count, 10)
+        XCTAssertEqual(throwing.count, 11)
         XCTAssertEqual(throwing
             .intersection(MacAppShellFirstLaunch.fixtures.keys).count, 7)
         for name in MacAppShellFirstLaunch.fixtures.keys {

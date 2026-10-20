@@ -42,7 +42,8 @@ public enum PendingUploadTestRootReset {
     /// previous run's device delivery — and its key — survive into the next.
     public static func discardRoots(besides shared: URL,
                                     fileManager: FileManager = .default) -> [String] {
-        let roots = [shared, PendingUploadStore.protectedDeviceRoot(besides: shared)]
+        let roots = [shared, PendingUploadStore.protectedDeviceRoot(besides: shared),
+                     PendingUploadStore.protectedShareRoot(besides: shared)]
         var ids: [String] = []
         for root in roots {
             let entries = (try? fileManager.contentsOfDirectory(

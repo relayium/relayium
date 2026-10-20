@@ -36,6 +36,9 @@ final class PendingUploadTestRootResetTests: XCTestCase {
         let production = base.appendingPathComponent("PendingUploads", isDirectory: true)
 
         let shareJob = UUID().uuidString, secondShareJob = UUID().uuidString
+        let spoolJob = UUID().uuidString
+        let spoolRoot = PendingUploadStore.protectedShareRoot(besides: shared)
+        try makeJob(spoolJob, in: spoolRoot)
         let deliveryJob = UUID().uuidString, realJob = UUID().uuidString
         let strayFile = UUID().uuidString, keyWithoutJob = UUID().uuidString
         try makeJob(shareJob, in: shared)
@@ -46,12 +49,12 @@ final class PendingUploadTestRootResetTests: XCTestCase {
         try Data().write(to: shared.appendingPathComponent(strayFile))
 
         let keys = InMemoryStoredLinkKeyStore()
-        for id in [shareJob, secondShareJob, deliveryJob, realJob, strayFile, keyWithoutJob] {
+        for id in [shareJob, secondShareJob, deliveryJob, spoolJob, realJob, strayFile, keyWithoutJob] {
             try await keys.save(id: id, keyB64url: key)
         }
 
         let discarded = PendingUploadTestRootReset.discardRoots(besides: shared)
-        XCTAssertEqual(Set(discarded), [shareJob, secondShareJob, deliveryJob])
+        XCTAssertEqual(Set(discarded), [shareJob, secondShareJob, deliveryJob, spoolJob])
         XCTAssertFalse(FileManager.default.fileExists(atPath: shared.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: sibling.path),
                        "the protected sibling is part of the acceptance root")
@@ -59,14 +62,14 @@ final class PendingUploadTestRootResetTests: XCTestCase {
 
         // Negative control: the directories are gone and every key is still
         // there. This is the defect — deleting the root alone orphans them.
-        for id in [shareJob, secondShareJob, deliveryJob] {
+        for id in [shareJob, secondShareJob, deliveryJob, spoolJob] {
             let stillStored = try await keys.key(for: id)
             XCTAssertNotNil(stillStored, "directory removal alone must not be what removes a key")
         }
 
         await PendingUploadTestRootReset.removeKeys(for: discarded, from: keys)
 
-        for id in [shareJob, secondShareJob, deliveryJob] {
+        for id in [shareJob, secondShareJob, deliveryJob, spoolJob] {
             let removed = try await keys.key(for: id)
             XCTAssertNil(removed, "the key of discarded job \(id) was left behind")
         }
@@ -130,9 +133,21 @@ final class PendingUploadTestRootResetTests: XCTestCase {
             let debug = try XCTUnwrap(mode.components(
                 separatedBy: "static func makePendingUploadKeyStore() -> StoredLinkKeyStore? {\n")
                 .dropFirst().first)
-            XCTAssertTrue(debug.hasPrefix("        guard isActive else { return nil }\n"
-                                          + "        return InMemoryStoredLinkKeyStore()"),
-                          "\(platform)'s DEBUG store is not the in-memory one, gated on UI-test mode")
+            XCTAssertTrue(debug.hasPrefix("        guard isActive else { return nil }\n"),
+                          "\(platform)'s DEBUG store is not gated on UI-test mode")
+            if platform == "mac" {
+                let end = try XCTUnwrap(debug.range(of: "\n    }"))
+                let body = String(debug[..<end.lowerBound])
+                XCTAssertTrue(body.contains("return InMemoryStoredLinkKeyStore()"))
+                XCTAssertTrue(body.contains("if let fixture = shareRecoveryTestRoot()"))
+                XCTAssertTrue(body.contains("return ShareRecoveryFixtureKeys(root: fixture.appendingPathExtension(\"keys\"))"))
+                XCTAssertFalse(body.contains("AppEnvironment.makePendingUploadKeyStore"))
+                XCTAssertTrue(debug.contains("let run = UUID(uuidString: value)"))
+                XCTAssertTrue(debug.contains("ProcessInfo.processInfo.environment[\"RELAYIUM_UI_SHARE_RECOVERY_RUN\"]"))
+            } else {
+                XCTAssertTrue(debug.hasPrefix("        guard isActive else { return nil }\n"
+                                              + "        return InMemoryStoredLinkKeyStore()"))
+            }
         }
     }
 }

@@ -120,6 +120,8 @@ final class AppShellUITests: XCTestCase {
     /// without a fixture, so each name maps to the selector the compiler derives
     /// for it; every other name resolves to the selector of its own spelling.
     private static let throwingTestSelectors: [String: Selector] = [
+        "testAnAppRelaunchOffersTheSavedShareAndResumesAfterTheOriginalIsDeleted":
+            #selector(AppShellUITests.testAnAppRelaunchOffersTheSavedShareAndResumesAfterTheOriginalIsDeleted),
         "testASignedInStoredSendNamesTheFileItWouldUpload":
             #selector(AppShellUITests.testASignedInStoredSendNamesTheFileItWouldUpload),
         "testAStoredSendSelectionCanBeExtendedAndClearedAfterLeavingAndReturning":
@@ -1900,14 +1902,44 @@ final class AppShellUITests: XCTestCase {
                        "the sign-in form survived a successful sign-in")
     }
 
-    /// Cancelling an upload in flight returns the task to the user, with nothing
-    /// half-finished left claiming to be a result.
-    ///
-    /// The contract differs from iOS ON PURPOSE and the test says so rather than
-    /// copying the other platform's: macOS builds its upload model without a
-    /// pending store, so `.interrupted` falls back to the selection and keeps
-    /// the chosen files in front of the user, instead of offering Resume and
-    /// Discard. Asserting iOS's surface here would invent a requirement.
+    /// Real Mac composition across application processes, with UUID-scoped
+    /// Debug fixture storage. Financial/byte identity is separately exercised
+    /// against actual HTTP/SQLite/DiskStore by the SIGKILL worker acceptance.
+    func testAnAppRelaunchOffersTheSavedShareAndResumesAfterTheOriginalIsDeleted() throws {
+        app.terminate()
+        app.launchEnvironment["RELAYIUM_UI_SHARE_RECOVERY_RUN"] = UUID().uuidString
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-stall-upload"]
+        app.launch(); ensureProductWindowIsOpen()
+        var window = mainWindow
+        sidebarDestination("Share a link", in: window).click()
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("Restart proof \(UUID()).bin")
+        try Data(repeating: 0x52, count: 4096).write(to: file)
+        pendingFileFixture = file
+        chooseFixture(file, in: window)
+        let send = window.buttons["Send"]
+        XCTAssertTrue(send.waitForExistence(timeout: 15)); send.click()
+        XCTAssertTrue(waitForUploadActivity(in: window, toSay: Self.inFlightActivity["en"]!, timeout: 20))
+        app.terminate()
+        try FileManager.default.removeItem(at: file)
+        pendingFileFixture = nil
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-signed-in"]
+        app.launch(); ensureProductWindowIsOpen()
+        window = mainWindow
+        sidebarDestination("Share a link", in: window).click()
+        let resume = window.buttons["storedSend.resume"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 20), "a new app process did not offer the saved upload")
+        XCTAssertTrue(window.buttons["storedSend.discard"].exists)
+        let link = window.descendants(matching: .any)["storedSend.resultLink"].firstMatch
+        XCTAssertFalse(link.exists, "launch must not automatically finish the transfer")
+        XCTAssertTrue(window.descendants(matching: .any)["pendingFile.0"].firstMatch.exists)
+        resume.click()
+        XCTAssertTrue(link.waitForExistence(timeout: 30))
+        let shown = (link.value as? String) ?? link.label
+        XCTAssertTrue(shown.contains("/d/obj_uitest#k="))
+    }
+
+    /// Cancel pauses the durable Mac job. Recovery stays explicit and never
+    /// shows a result until the same server session is confirmed.
     func testCancellingAnUploadInFlightReturnsTheTask() throws {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
@@ -1941,8 +1973,10 @@ final class AppShellUITests: XCTestCase {
                       "an upload in flight does not say what it is doing")
         cancel.click()
 
-        XCTAssertTrue(chooser.waitForExistence(timeout: 20),
-                      "a cancelled upload did not return the selection")
+        XCTAssertTrue(window.buttons["storedSend.resume"].waitForExistence(timeout: 20),
+                      "a cancelled upload did not offer durable recovery")
+        XCTAssertTrue(window.buttons["storedSend.discard"].exists,
+                      "a paused upload cannot be discarded")
         XCTAssertFalse(uploadActivityLine(in: window).exists,
                        "a cancelled upload left its activity line on screen")
         let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
@@ -1951,6 +1985,9 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(window.descendants(matching: .any)["storedSend.resultLink"]
             .firstMatch.exists,
             "a cancelled upload left a capability link on screen")
+        window.buttons["storedSend.discard"].click()
+        XCTAssertTrue(chooser.waitForExistence(timeout: 20), "Discard did not return to the selection")
+        XCTAssertFalse(window.buttons["storedSend.resume"].exists)
     }
 
     /// **Staging is available whenever the transfer pipeline is free, and never
@@ -2002,12 +2039,8 @@ final class AppShellUITests: XCTestCase {
                        "the pairing screen composes a message before connecting")
     }
 
-    /// An upload that fails mid-transfer keeps the user's files in front of them.
-    ///
-    /// As with cancelling, macOS builds its upload model without a pending store,
-    /// so the recovery it offers is the selection itself rather than Resume and
-    /// Discard. The claim that matters on both platforms is the same: the work
-    /// is not thrown away and no link is produced from a failure.
+    /// A failed transfer retains ciphertext and offers explicit recovery,
+    /// preserving its file identity without inventing a completed link.
     func testAFailedUploadKeepsTheWorkAndOffersToCarryOn() throws {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
@@ -2028,6 +2061,8 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(sendAction.waitForExistence(timeout: 15))
         sendAction.click()
 
+        XCTAssertTrue(window.buttons["storedSend.resume"].waitForExistence(timeout: 30))
+        XCTAssertTrue(window.buttons["storedSend.discard"].exists)
         let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
         XCTAssertTrue(identity.waitForExistence(timeout: 30),
                       "a failed upload lost the files the user had chosen")
@@ -2096,7 +2131,7 @@ final class AppShellUITests: XCTestCase {
     ///   the sentence that stops this state reading as a frozen transfer;
     /// - it then ENDS on its own, inside a bound far shorter than any real
     ///   timeout, so a loop that resent forever fails here;
-    /// - it ends as a recoverable failure: Try again, the chosen file still
+    /// - it ends as a recoverable pause: Resume, the chosen file still
     ///   listed, no activity line and no capability link. A finalize would
     ///   have produced one — the fixture answers finalize normally — so no link
     ///   is also the evidence that nothing claimed the bytes were stored.
@@ -2128,8 +2163,8 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(link.exists,
                        "an upload the server never acknowledged produced a link while retrying")
 
-        let tryAgain = window.buttons["Try again"]
-        guard tryAgain.waitForExistence(timeout: 30) else {
+        let resume = window.buttons["storedSend.resume"]
+        guard resume.waitForExistence(timeout: 30) else {
             attachDiagnostics(named: "nonadvancing-upload-never-ended")
             return XCTFail("an upload the server never acknowledged did not stop retrying")
         }

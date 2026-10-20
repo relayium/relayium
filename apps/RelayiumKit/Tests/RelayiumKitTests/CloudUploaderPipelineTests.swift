@@ -100,6 +100,9 @@ private actor PipelineTestTransport: PipelinedResumableTransport {
         if active != 0 || committed.count != total { badFinalize = true }
         return UploadResult(id: "fid", expiresAt: 4242)
     }
+    func finalizeUploadRecovering(uploadId: String, token: String) async throws -> FinalizeAnswer {
+        .completed(try await finalizeUpload(uploadId: uploadId, token: token), recovered: false)
+    }
     func snapshot() -> Snapshot {
         Snapshot(count: records.count, active: active, peak: peak, finalized: finalized, gets: gets,
                  serial: serial, badResync: badResync, badFinalize: badFinalize, committed: committed)
@@ -122,6 +125,32 @@ final class CloudUploaderPipelineTests: XCTestCase {
         let actual = try decryptor.push(ciphertext).flatMap { $0 }
         try decryptor.end(expectedBytes: plain.count)
         XCTAssertEqual(SHA256.hash(data: Data(actual)), SHA256.hash(data: Data(plain)))
+    }
+
+    func testDurableShareSpoolPreservesTwoOutstandingRequestsAndExactCiphertext() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("spool-pipeline-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bytes = plain(), key = generateStoreKey(), file = root.appendingPathComponent("cipher")
+        let record = try CiphertextSpool.prepare(at: file, sources: [DataSource(name: "a", bytes: bytes)], key: key)
+        let transport = PipelineTestTransport(), uploader = CloudUploader(transport: transport)
+        let task = Task { try await uploader.resumeShareSpool(at: file, record: record, key: key,
+            session: nil, burnAfterRead: false, ttl: 3600, token: "test",
+            onUploadSession: { _, _ in }, onFinalizing: { _ in }, onProgress: { _, _ in }) }
+        do {
+            try await wait { await transport.snapshot().count == 2 }
+            let held = await transport.snapshot()
+            XCTAssertEqual(held.active, 2); XCTAssertTrue(held.committed.isEmpty)
+            for i in 0..<4 {
+                try await wait { await transport.snapshot().count > i }
+                try await transport.commit(i)
+            }
+            let outcome = try await task.value, final = await transport.snapshot()
+            XCTAssertEqual(final.peak, 2); XCTAssertEqual(final.finalized, 1)
+            XCTAssertFalse(final.badFinalize); XCTAssertFalse(final.badResync)
+            XCTAssertLessThanOrEqual(uploader.bufferPeak, 2 * (STORE_CHUNK_SIZE * 2 + FRAME_OVERHEAD))
+            try authenticate(outcome, final.committed, bytes)
+        } catch { task.cancel(); _ = try? await task.value; throw error }
     }
 
     func testTwoRequestsOverlapConfirmationAndAuthenticateWholeFile() async throws {

@@ -201,6 +201,7 @@ enum UITestMode {
     /// opens on Resume upload instead of a fresh selection. Same rule as the
     /// keychain: isolating one store is not isolating the app.
     static func pendingUploadRoot() -> URL? {
+        if let fixture = shareRecoveryTestRoot() { return fixture }
         // Application Support, deliberately. `IOSSurfaceGuardTests` refuses
         // temporaryDirectory, downloadsDirectory and cachesDirectory anywhere in
         // these sources, because a received file must never land somewhere the
@@ -243,7 +244,45 @@ enum UITestMode {
     /// so no job survives into a relaunch that would look for its key.
     static func makePendingUploadKeyStore() -> StoredLinkKeyStore? {
         guard isActive else { return nil }
+        if let fixture = shareRecoveryTestRoot() {
+            return ShareRecoveryFixtureKeys(root: fixture.appendingPathExtension("keys"))
+        }
         return InMemoryStoredLinkKeyStore()
+    }
+
+    /// Debug-only, explicitly opted-in UUID scope for an actual app relaunch.
+    /// These are throwaway fixture keys, never the installed app's Keychain.
+    private static func shareRecoveryTestRoot() -> URL? {
+        guard isActive,
+              let value = ProcessInfo.processInfo.environment["RELAYIUM_UI_SHARE_RECOVERY_RUN"],
+              let run = UUID(uuidString: value),
+              let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        return support.appendingPathComponent("uitest-share-recovery-" + run.uuidString, isDirectory: true)
+    }
+
+    private actor ShareRecoveryFixtureKeys: StoredLinkKeyStore {
+        let root: URL
+        init(root: URL) { self.root = root }
+        func key(for id: String) async throws -> String? {
+            let file = root.appendingPathComponent(try StoredObjectID.checked(id))
+            guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+            return String(data: try Data(contentsOf: file), encoding: .utf8)
+        }
+        func save(id: String, keyB64url: String) async throws {
+            _ = try decodeStoreKey(keyB64url)
+            let file = root.appendingPathComponent(try StoredObjectID.checked(id))
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+            try Data(keyB64url.utf8).write(to: file, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        }
+        func remove(id: String) async throws {
+            let file = root.appendingPathComponent(try StoredObjectID.checked(id))
+            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+            if (try? FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty) == true {
+                try FileManager.default.removeItem(at: root)
+            }
+        }
     }
 
     /// The stored-link key store an acceptance launch may use.

@@ -46,6 +46,8 @@ public struct PendingUploadPlan: Codable, Equatable {
     /// not see the init response, so guessing the current default would change
     /// PATCH boundaries whenever the server configuration changes.
     public var uploadChunkSize: Int?
+    /// Mac-only complete encrypted stream, in a separate sibling root.
+    public var shareSpool: CiphertextSpoolRecord? = nil
     /// The user discarded this job. Kept as a tombstone until directory
     /// removal succeeds, so a failed delete can never turn Discard back into a
     /// Resume offer on the next launch.
@@ -209,8 +211,8 @@ public struct PendingUploadPlan: Codable, Equatable {
     /// unreadable plan is one a sweep may delete — and it is interpreted
     /// fail-closed (`deviceSessionState`).
     ///
-    /// Only written in the protected `DeviceInboxSends` root, which no earlier
-    /// build enumerates, so no earlier build can drop it by re-encoding the plan.
+    /// Written only in protected Inbox or durable Mac Share sibling roots,
+    /// which older builds do not enumerate or re-encode.
     public var sessionPhase: String? = nil
     /// The session `sessionPhase` describes. A phase that names any other
     /// session describes nothing this plan can prove.
@@ -361,7 +363,7 @@ public enum PendingDeviceTerminal: String, Equatable, Sendable {
 /// The durable writes a test can make fail. Internal: reachable only through
 /// `@testable import`, never by a production caller.
 enum PendingUploadWrite: Equatable {
-    case uploadSession, finalizing, finalized, terminal, retired
+    case shareSpool, uploadSession, finalizing, finalized, terminal, retired
 }
 
 /// Why the protected Device Inbox root does not exclusively own a job.
@@ -410,6 +412,7 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// deliveries may be migrated OUT of, and the root whose same-named job
     /// directory makes a job a conflict nobody executes.
     private let legacyRoot: URL?
+    public let durableShares: Bool
 
     /// Whether this is the protected Device Inbox root (`DeviceInboxSends`).
     /// Only such a store stages deliveries, records session phases and may be
@@ -430,7 +433,8 @@ public final class PendingUploadStore: @unchecked Sendable {
 
     /// The shared root. Share jobs live here — and, for builds up to 1.4.3,
     /// device deliveries too. It never stages a new delivery.
-    public init(root: URL, fileManager: FileManager = .default) {
+    public init(root: URL, fileManager: FileManager = .default, durableShares: Bool = false) {
+        self.durableShares = durableShares
         self.root = root
         self.fileManager = fileManager
         self.legacyRoot = nil
@@ -445,6 +449,7 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// rewrite (dropping the phase fields) nor re-upload a delivery here.
     public init(protectedDeviceRoot: URL, migratingFrom legacyRoot: URL,
                 fileManager: FileManager = .default) {
+        self.durableShares = false
         self.root = protectedDeviceRoot
         self.fileManager = fileManager
         self.legacyRoot = legacyRoot
@@ -457,6 +462,11 @@ public final class PendingUploadStore: @unchecked Sendable {
         let name = shared.lastPathComponent == "PendingUploads"
             ? "DeviceInboxSends" : shared.lastPathComponent + ".DeviceInboxSends"
         return shared.deletingLastPathComponent().appendingPathComponent(name, isDirectory: true)
+    }
+
+    /// Sibling, never inside a root older binaries enumerate and sweep.
+    public static func protectedShareRoot(besides shared: URL) -> URL {
+        shared.deletingLastPathComponent().appendingPathComponent(shared.lastPathComponent + ".StoredShareSpools", isDirectory: true)
     }
 
     /// The protected Device Inbox store paired with this shared store.
@@ -591,6 +601,9 @@ public final class PendingUploadStore: @unchecked Sendable {
         let staged = stagedRoot(for: jobId)
         do {
             try fileManager.createDirectory(at: staged, withIntermediateDirectories: true)
+            if durableShares {
+                try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: job.path)
+            }
             // Set on the job directory before a byte lands in it. These are copies
             // of the user's files, kept only until the upload finishes; restoring
             // them onto another device is not something anyone asked for.
@@ -728,7 +741,8 @@ public final class PendingUploadStore: @unchecked Sendable {
         // `ownershipConflicts`, which judges by directory names alone.
         return plans()
             .filter { $0.accountId == accountId && !$0.retired && $0.finalizedStoredId == nil
-                && $0.effectivePurpose == .share && !protectedRootHolds(jobId: $0.jobId) }
+                && $0.effectivePurpose == .share && !protectedRootHolds(jobId: $0.jobId)
+                && (!durableShares || $0.shareSpool != nil) }
             .sorted { $0.createdAt > $1.createdAt }
             .first { (try? verifyStaging($0)) != nil }
     }
@@ -912,6 +926,19 @@ public final class PendingUploadStore: @unchecked Sendable {
               plan.files.count <= MAX_FILES
         else { return false }
 
+        if plan.shareSpool != nil, !durableShares { return false }
+        if durableShares {
+            guard plan.effectivePurpose == .share else { return false }
+            switch plan.deviceSessionState {
+            case .noSession, .uploading, .finalizing: break
+            default: return false
+            }
+            if let spool = plan.shareSpool {
+                guard spool.size >= 0, spool.sha256.count == 32,
+                      spool.authentication.count == 32, !spool.header.isEmpty else { return false }
+            } else if plan.uploadId != nil { return false }
+        }
+
         if let finalized = plan.finalizedStoredId,
            (try? StoredObjectID.checked(finalized)) != finalized { return false }
 
@@ -939,7 +966,12 @@ public final class PendingUploadStore: @unchecked Sendable {
             guard !overflow else { return false }
             total = next
         }
-        return total < Int.max / 2
+        guard total < Int.max / 2 else { return false }
+        // Sizes must be nonnegative and bounded BEFORE calling the legacy
+        // arithmetic helper; malformed on-disk metadata must not trap a launch.
+        if let spool = plan.shareSpool,
+           spool.size != cipherSizeFor(plan.files.map(\.size)) { return false }
+        return true
     }
 
     /// The device metadata is coherent as a SET, in both directions.
@@ -1021,6 +1053,14 @@ public final class PendingUploadStore: @unchecked Sendable {
 
     @discardableResult
     private func verifyStaging(_ plan: PendingUploadPlan) throws -> Bool {
+        if durableShares, let spool = plan.shareSpool {
+            let attributes = try fileManager.attributesOfItem(atPath: spoolURL(for: plan).path)
+            guard attributes[.type] as? FileAttributeType == .typeRegular,
+                  (attributes[.size] as? NSNumber)?.intValue == spool.size else {
+                throw PendingUploadError.stagingMissing
+            }
+            return true
+        }
         for file in plan.files {
             let url = try stagedURL(jobId: plan.jobId, staged: file.staged)
             let attributes = try? fileManager.attributesOfItem(atPath: url.path)
@@ -1065,6 +1105,14 @@ public final class PendingUploadStore: @unchecked Sendable {
         }
         let checked = try StoredObjectID.checked(id)
         var updated = current
+        if durableShares {
+            if injectedFailure(.uploadSession) { throw PendingUploadError.stagingMissing }
+            guard current.shareSpool != nil, current.uploadId == nil else {
+                throw PendingUploadError.unusableSelection
+            }
+            updated.sessionPhase = "uploading"
+            updated.phaseUploadId = checked
+        }
         if isProtectedDeviceStore {
             // A new session may replace only nothing, or a session this sender
             // opened and central has reaped before any finalize. Never one a
@@ -1086,6 +1134,45 @@ public final class PendingUploadStore: @unchecked Sendable {
         updated.uploadChunkSize = chunkSize
         try write(updated)
         return updated
+    }
+
+    public func spoolURL(for plan: PendingUploadPlan) -> URL {
+        jobURL(for: plan.jobId).appendingPathComponent("ciphertext.bin")
+    }
+
+    /// Complete encryption before any session exists. The atomic plan write is
+    /// the commit; after it, plaintext copies are never used again.
+    public func sealShare(_ plan: PendingUploadPlan, key: [UInt8]) throws -> PendingUploadPlan {
+        lock.lock(); defer { lock.unlock() }
+        guard durableShares, let current = currentPlan(jobId: plan.jobId),
+              current.accountId == plan.accountId, !current.retired,
+              current.uploadId == nil, current.shareSpool == nil else {
+            throw PendingUploadError.unusableSelection
+        }
+        if injectedFailure(.shareSpool) { throw CocoaError(.fileWriteOutOfSpace) }
+        let record = try CiphertextSpool.prepare(at: spoolURL(for: current), sources: sources(for: current), key: key)
+        var updated = current
+        updated.shareSpool = record
+        try write(updated)
+        // Failed plaintext cleanup is retried by eventual whole-job cleanup;
+        // it can never be selected as the ciphertext producer.
+        try? fileManager.removeItem(at: stagedRoot(for: current.jobId))
+        return updated
+    }
+
+    public func markShareFinalizing(uploadId: String, for plan: PendingUploadPlan) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard durableShares, let current = currentPlan(jobId: plan.jobId),
+              current.accountId == plan.accountId, !current.retired,
+              current.finalizedStoredId == nil, current.shareSpool != nil,
+              current.uploadId == uploadId, current.phaseUploadId == uploadId,
+              current.sessionPhase == "uploading" || current.sessionPhase == "finalizing" else {
+            throw PendingUploadError.stagingMissing
+        }
+        if injectedFailure(.finalizing) { throw PendingUploadError.stagingMissing }
+        var updated = current
+        updated.sessionPhase = "finalizing"
+        try write(updated)
     }
 
     /// Record that a finalize of `uploadId` may be sent. Called before EVERY
@@ -1462,6 +1549,13 @@ public final class PendingUploadStore: @unchecked Sendable {
     public func sweepIncomplete() -> [String] {
         lock.lock()
         defer { lock.unlock() }
+        if durableShares {
+            var released: [String] = []
+            for plan in plans() where plan.retired || (plan.uploadId == nil && plan.shareSpool == nil) {
+                if purge(plan) { released.append(plan.jobId) }
+            }
+            return released.sorted()
+        }
         // The protected root deletes only what a person or a finished job
         // already released: a readable, exclusively owned plan that is retired
         // (Discard's tombstone) or a finalized share. An unreadable,

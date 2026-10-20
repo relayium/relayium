@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import os
 import RelayiumKit
 import RelayiumShareKit
@@ -101,9 +102,8 @@ public final class CloudUploadModel: ObservableObject {
     /// reads — one installation, one answer to "do I have this key".
     private let keyStore: StoredLinkKeyStore
     private let origin: String
-    /// Durable recovery, or nil on a platform that does not offer it. macOS
-    /// passes nothing: its uploads are not interrupted by the OS suspending the
-    /// app, and claiming a resume it has not shipped would be a lie in a menu.
+    /// Durable recovery. Mac uses a complete ciphertext spool in an isolated
+    /// root; iOS retains its existing staged-file path.
     private let pending: PendingUploadSupport?
     /// The ready account these staged bytes belong to. Written by the send
     /// model when the session changes; a job is only ever prepared, recovered
@@ -155,6 +155,30 @@ public final class CloudUploadModel: ObservableObject {
         self.keyStore = keyStore
         self.origin = origin
         self.pending = pending
+    }
+
+    private var accountObservation: AnyCancellable?
+
+    /// Mac owns this subscription for the app lifetime, including closed windows.
+    /// Like the Inbox sender, it must isolate an outgoing account synchronously.
+    /// iOS continues to use SendSelectionModel's existing observer.
+    public func observe<P: Publisher>(_ states: P)
+        where P.Output == SessionState, P.Failure == Never {
+        accountObservation = states.map(SendAccountContext.context(for:)).removeDuplicates()
+            .sink { [weak self] context in
+                guard let self, context.userId != self.accountId else { return }
+                if self.accountId != nil {
+                    if case .done = self.state {
+                        // The visible link may be the only accessible key when
+                        // Keychain is locked; account changes must not erase it.
+                        self.accountId = nil
+                    } else {
+                        self.purgePendingJob()
+                    }
+                    self.forgetSelectionForAccountChange()
+                }
+                self.recoverPendingJob(for: context.userId)
+            }
     }
 
     public var isBusy: Bool {
@@ -281,7 +305,18 @@ public final class CloudUploadModel: ObservableObject {
         let g = generation
         cleanupWarning = nil
 
-        // Without durable recovery (macOS today) this is the original path,
+        if pending?.store.durableShares == true, accountId?.isEmpty != false {
+            fail(CloudError.unauthorized, g: g)
+            return
+        }
+        if let pending, pending.store.durableShares, job == nil,
+           pending.store.plan(for: accountId) != nil {
+            // A selection made before login cannot hide an older durable job.
+            state = .idle
+            recoverPendingJob(for: accountId)
+            return
+        }
+        // Without durable recovery this is the original path,
         // unchanged: one live uploader, one in-memory key, no staged copy.
         guard let pending, let accountId, !accountId.isEmpty else {
             state = .uploading(sent: 0, total: 0)
@@ -334,7 +369,7 @@ public final class CloudUploadModel: ObservableObject {
                                       burnAfterRead: burn, ttl: ttl,
                                       sourceDraftId: source)
                 }
-                let plan = try await withTaskCancellationHandler {
+                var plan = try await withTaskCancellationHandler {
                     try await preparation.value
                 } onCancel: {
                     preparation.cancel()
@@ -353,6 +388,15 @@ public final class CloudUploadModel: ObservableObject {
                     // draft, so it stays and is offered again.
                     store.purge(plan)
                     throw error
+                }
+                try Task.checkCancellation()
+                if store.durableShares {
+                    let sealing = Task.detached(priority: .userInitiated) { [plan] in
+                        try store.sealShare(plan, key: key)
+                    }
+                    plan = try await withTaskCancellationHandler { try await sealing.value }
+                        onCancel: { sealing.cancel() }
+                    stagedPlan = plan
                 }
                 try Task.checkCancellation()
                 wasAdopted = self.adopt(plan, g: g)
@@ -431,35 +475,69 @@ public final class CloudUploadModel: ObservableObject {
     private func run(plan: PendingUploadPlan, key: [UInt8], token: String, g: Int) async {
         guard let pending else { return }
         do {
-            let sources = try pending.store.sources(for: plan)
-            let known = plan.uploadId
-            let outcome = try await uploader.resume(
-                sources: sources, key: key, uploadId: plan.uploadId,
-                uploadChunkSize: plan.uploadChunkSize,
-                // From the plan, never from this model's own state: a resume
-                // may run in a process that never saw the send being started,
-                // and the purpose decides the object's authorization model.
-                purpose: plan.effectivePurpose,
-                // This model drives SHARE uploads, so frame 0 is the shared
-                // Stored-Wire manifest and stays byte-identical to what it has
-                // always been. A device delivery is `InboxSendCoordinator`'s,
-                // and it seals the dedicated v2 document instead.
-                manifest: .storedWire,
-                burnAfterRead: plan.burnAfterRead, ttl: plan.ttl, token: token,
-                onUploadSession: { [weak self] id, chunkSize in
-                    // Persisted from the uploader's own context, before bytes
-                    // move. A session recorded after the first PATCH is a
-                    // session a crash can orphan.
-                    let updated = try pending.store.setUploadSession(
-                        id: id, chunkSize: chunkSize, for: plan)
-                    Task { @MainActor in
-                        self?.sessionEstablished(updated, replaced: known != nil && known != id, g: g)
-                    }
-                },
-                onActivity: Self.activityForwarder(to: self, g: g),
-                onProgress: { [weak self] sent, total in
-                    Task { @MainActor in self?.report(sent: sent, total: total, g: g) }
-                })
+            let original = plan
+            let plan: PendingUploadPlan
+            if pending.store.durableShares {
+                guard let latest = pending.store.plan(for: original.accountId), latest.jobId == original.jobId,
+                      self.accountId == original.accountId, g == self.generation else {
+                    throw PendingUploadError.stagingMissing
+                }
+                plan = latest
+                self.job = latest
+            } else { plan = original }
+            let outcome: UploadOutcome
+            if pending.store.durableShares {
+                guard let record = plan.shareSpool else { throw PendingUploadError.stagingMissing }
+                let session: DeliverySession?
+                switch plan.deviceSessionState {
+                case .noSession: session = nil
+                case .uploading(let id):
+                    session = DeliverySession(uploadId: id, chunkSize: plan.uploadChunkSize ?? 0, provenance: .trustedUploading)
+                case .finalizing(let id):
+                    session = DeliverySession(uploadId: id, chunkSize: plan.uploadChunkSize ?? 0, provenance: .finalizing)
+                default: throw PendingUploadError.unusableSelection
+                }
+                outcome = try await uploader.resumeShareSpool(at: pending.store.spoolURL(for: plan), record: record,
+                    key: key, session: session, burnAfterRead: plan.burnAfterRead, ttl: plan.ttl, token: token,
+                    onUploadSession: { id, chunk in
+                        _ = try pending.store.setUploadSession(id: id, chunkSize: chunk, for: plan)
+                    }, onFinalizing: { id in
+                        try pending.store.markShareFinalizing(uploadId: id, for: plan)
+                    }, onActivity: Self.activityForwarder(to: self, g: g),
+                    onProgress: { [weak self] sent, total in
+                        Task { @MainActor in self?.report(sent: sent, total: total, g: g) }
+                    })
+            } else {
+                let sources = try pending.store.sources(for: plan)
+                let known = plan.uploadId
+                outcome = try await uploader.resume(
+                    sources: sources, key: key, uploadId: plan.uploadId,
+                    uploadChunkSize: plan.uploadChunkSize,
+                    // From the plan, never from this model's own state: a resume
+                    // may run in a process that never saw the send being started,
+                    // and the purpose decides the object's authorization model.
+                    purpose: plan.effectivePurpose,
+                    // This model drives SHARE uploads, so frame 0 is the shared
+                    // Stored-Wire manifest and stays byte-identical to what it has
+                    // always been. A device delivery is `InboxSendCoordinator`'s,
+                    // and it seals the dedicated v2 document instead.
+                    manifest: .storedWire,
+                    burnAfterRead: plan.burnAfterRead, ttl: plan.ttl, token: token,
+                    onUploadSession: { [weak self] id, chunkSize in
+                        // Persisted from the uploader's own context, before bytes
+                        // move. A session recorded after the first PATCH is a
+                        // session a crash can orphan.
+                        let updated = try pending.store.setUploadSession(
+                            id: id, chunkSize: chunkSize, for: plan)
+                        Task { @MainActor in
+                            self?.sessionEstablished(updated, replaced: known != nil && known != id, g: g)
+                        }
+                    },
+                    onActivity: Self.activityForwarder(to: self, g: g),
+                    onProgress: { [weak self] sent, total in
+                        Task { @MainActor in self?.report(sent: sent, total: total, g: g) }
+                    })
+            }
             // The session callback has already committed the newest plan to
             // disk. Use that version for finalization even if its MainActor UI
             // callback has not run yet.
@@ -501,6 +579,16 @@ public final class CloudUploadModel: ObservableObject {
             return nil
         }
         await finish(outcome, g: presentationGeneration ?? g)
+        if pending.store.durableShares {
+            // Prove the final key is readable and equal before removing its
+            // pending copy. A locked Keychain keeps the finalized salvage job.
+            let saved = try? await keyStore.key(for: outcome.id)
+            guard saved == outcome.keyB64url else {
+                if self.job?.jobId == plan.jobId { self.job = nil }
+                if presentationGeneration == self.generation { self.cleanupWarning = L10n.t(.uploadCleanupFailed) }
+                return
+            }
+        }
         do {
             try await pending.keys.remove(id: plan.jobId)
         } catch {
@@ -769,7 +857,19 @@ public final class CloudUploadModel: ObservableObject {
         discard(plan, using: pending)
     }
 
-    private func discard(_ plan: PendingUploadPlan, using pending: PendingUploadSupport) {
+    @discardableResult
+    private func discard(_ plan: PendingUploadPlan, using pending: PendingUploadSupport) -> Bool {
+        // On Mac a completed record may have appeared while its key save was
+        // awaiting Keychain. Never remove its only pending key on a failed
+        // tombstone: salvage must retain the object-to-key mapping.
+        let durableTombstone: PendingUploadPlan?
+        if pending.store.durableShares {
+            do { durableTombstone = try pending.store.markRetired(plan) }
+            catch {
+                cleanupWarning = L10n.t(.uploadCleanupFailed)
+                return false
+            }
+        } else { durableTombstone = nil }
         generation += 1
         job = nil
         restorePickedState()
@@ -784,13 +884,13 @@ public final class CloudUploadModel: ObservableObject {
         // the conflict appeared after the job was already on screen.
         if pending.store.protectedRootHolds(jobId: plan.jobId) {
             cleanupWarning = L10n.t(.sendErrorOwnershipConflict)
-            return
+            return false
         }
         let cleanupGeneration = generation
         // Record Discard before the asynchronous keychain cleanup begins. A
         // force-quit on the next line must still leave a job the launch sweep
         // deletes rather than a job recovery offers.
-        let cleanupPlan = (try? pending.store.markRetired(plan)) ?? plan
+        let cleanupPlan = durableTombstone ?? ((try? pending.store.markRetired(plan)) ?? plan)
         cleanupTask = Task { [weak self] in
             var failed = false
             do { try await pending.keys.remove(id: cleanupPlan.jobId) }
@@ -799,6 +899,7 @@ public final class CloudUploadModel: ObservableObject {
             guard failed, let self, cleanupGeneration == self.generation else { return }
             self.cleanupWarning = L10n.t(.uploadCleanupFailed)
         }
+        return true
     }
 
     /// The account left. Hide the job SYNCHRONOUSLY — before any await, so no
@@ -815,7 +916,15 @@ public final class CloudUploadModel: ObservableObject {
         recoveryTask?.cancel()
         recoveryTask = nil
         if let pending, let plan = job ?? undisplayed {
-            discard(plan, using: pending)
+            if !discard(plan, using: pending), pending.store.durableShares {
+                // A failed delete must retain recovery inputs, but the next
+                // account must never inherit their presentation or callbacks.
+                generation += 1
+                job = nil
+                lastPicked = []
+                sessionFiles = []
+                state = .idle
+            }
         } else {
             generation += 1
             restorePickedState()
@@ -850,8 +959,20 @@ public final class CloudUploadModel: ObservableObject {
     private func interrupt(_ error: Error, g: Int) {
         guard g == generation else { return }
         guard let plan = job else { return fail(error, g: g) }
-        state = .interrupted(files: plan.files.count, bytes: plan.totalBytes,
-                             message: ErrorCopy.message(for: error))
+        let message: String
+        if pending?.store.durableShares == true, let recovery = error as? DeliveryUploadError {
+            switch recovery {
+            case .unconfirmed(.notFound) where plan.sessionPhase == "uploading":
+                message = L10n.t(.uploadRecoveryUnavailable)
+            case .notCompleted:
+                message = L10n.t(.uploadRecoveryUnavailable)
+            case .finalizeStateNotRecorded:
+                message = L10n.t(.uploadRecoveryStateWriteFailed)
+            default:
+                message = L10n.t(.uploadRecoveryUnconfirmed)
+            }
+        } else { message = ErrorCopy.message(for: error) }
+        state = .interrupted(files: plan.files.count, bytes: plan.totalBytes, message: message)
     }
 
     /// Cancellation with a staged job behind it is a pause, not a loss.

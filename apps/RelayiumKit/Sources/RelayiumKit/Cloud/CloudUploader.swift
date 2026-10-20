@@ -336,7 +336,7 @@ public final class CloudUploader {
     /// landed inside a frame. Everything else — the packing buffer, the
     /// no-copy slice handed to the transport, the replay on a partial commit —
     /// is unchanged, and the memory guards still measure it.
-    private func pump(enc: ChunkEncryptor, uploadId: String, chunkSize: Int,
+    private func pump(enc: any UploadCipherSource, uploadId: String, chunkSize: Int,
                       from: Int, total: Int, token: String, trace: UploadTrace,
                       onProgress: @escaping (_ sent: Int, _ total: Int) -> Void,
                       initialPending: consuming Data = Data(),
@@ -490,7 +490,7 @@ public final class CloudUploader {
         if try enc.next() != nil { throw CloudError.server(status: 0) }
     }
 
-    private func pumpPipeline(enc: ChunkEncryptor, uploadId: String, chunkSize: Int,
+    private func pumpPipeline(enc: any UploadCipherSource, uploadId: String, chunkSize: Int,
                               total: Int, token: String, parallel: any PipelinedResumableTransport,
                               trace: UploadTrace,
                               onProgress: @escaping (Int, Int) -> Void) async throws {
@@ -637,7 +637,7 @@ public enum DeliverySessionProvenance: Equatable, Sendable {
     case unproven
 }
 
-/// A recorded session handed to `resumeRecoverable`.
+/// A recorded session handed to a finalize-recoverable sender.
 public struct DeliverySession: Equatable, Sendable {
     public let uploadId: String
     public let chunkSize: Int
@@ -732,8 +732,8 @@ extension CloudUploader {
     ///
     /// Separate from `resume` on purpose: `resume` keeps the share path's
     /// existing behaviour — including its 404-means-reaped re-init, which can
-    /// duplicate a share object after a lost finalize answer (a known residual,
-    /// B30, not a behaviour this function relies on). Here the caller's durable
+    /// duplicate a legacy iOS share after a lost finalize answer. Mac shares
+    /// use `resumeShareSpool` instead. Here the caller's durable
     /// record decides:
     ///
     ///  * `onUploadSession` persists a new session (with its trusted phase)
@@ -1378,5 +1378,81 @@ final class UploadTrace: @unchecked Sendable {
     var snapshot: UploadDiagnostics {
         lock.lock(); defer { lock.unlock() }
         return d
+    }
+}
+
+
+extension CloudUploader {
+    /// Mac stored shares replay only durable ciphertext. A recorded missing
+    /// session never silently re-uploads metered bytes, regardless of phase.
+    public func resumeShareSpool(at url: URL, record: CiphertextSpoolRecord,
+                                 key: [UInt8], session: DeliverySession?,
+                                 burnAfterRead: Bool, ttl: Int, token: String,
+                                 onUploadSession: (String, Int) throws -> Void,
+                                 onFinalizing: (String) throws -> Void,
+                                 onActivity: UploadActivityHandler? = nil,
+                                 onProgress: @escaping (Int, Int) -> Void) async throws -> UploadOutcome {
+        let trace = UploadTrace(now: pacing.now, emit: onActivity)
+        return try await trace.run {
+            // Bind key and encrypted manifest to this stream before any network.
+            guard record.authenticates(key: key) else { throw StoredWireError.lengthMismatch }
+            // Validate/pin before INIT, offset query or finalization.
+            let initial = try CiphertextSpool(at: url, record: record)
+            let id: String
+            let chunk: Int
+            var offset = 0
+            var parallel: (any PipelinedResumableTransport)?
+            if let session {
+                id = try StoredObjectID.checked(session.uploadId)
+                chunk = session.chunkSize
+                guard validUploadChunkSize(chunk) else { throw CloudError.decoding }
+                trace.enter(.checkingOffset); trace.count(\.offsetQueries)
+                do { offset = try await transport.uploadOffset(uploadId: id, token: token) }
+                catch CloudError.notFound {
+                    guard session.provenance != .trustedUploading else {
+                        throw DeliveryUploadError.unconfirmed(.notFound)
+                    }
+                    offset = record.size
+                }
+                guard offset >= 0, offset <= record.size else { throw DeliveryUploadError.inconsistentSession }
+                if session.provenance != .trustedUploading, offset != record.size {
+                    throw DeliveryUploadError.inconsistentSession
+                }
+            } else {
+                trace.enter(.openingSession)
+                let issued: (String, Int)
+                if let pipeline = transport as? any PipelinedResumableTransport {
+                    let opened = try await pipeline.initPipelinedUpload(header: [UInt8](record.header),
+                        purpose: .share, burnAfterRead: burnAfterRead, ttl: ttl, size: record.size, token: token)
+                    issued = (opened.uploadId, opened.chunkSize)
+                    if opened.supportsPipeline { parallel = pipeline }
+                } else {
+                    issued = try await transport.initUpload(header: [UInt8](record.header), purpose: .share,
+                        burnAfterRead: burnAfterRead, ttl: ttl, size: record.size, token: token)
+                }
+                id = try StoredObjectID.checked(issued.0); chunk = issued.1
+                guard validUploadChunkSize(chunk) else { throw CloudError.decoding }
+                try onUploadSession(id, chunk)
+            }
+            if offset < record.size {
+                if let parallel {
+                    try await pumpPipeline(enc: initial, uploadId: id, chunkSize: chunk,
+                        total: record.size, token: token, parallel: parallel, trace: trace, onProgress: onProgress)
+                } else {
+                    let replay: any UploadCipherSource = offset == 0 ? initial
+                        : try CiphertextSpool(at: url, record: record, offset: offset)
+                    try await pump(enc: replay, uploadId: id, chunkSize: chunk, from: offset,
+                        total: record.size, token: token, trace: trace, onProgress: onProgress)
+                }
+            } else { onProgress(record.size, record.size) }
+            try Task.checkCancellation()
+            trace.enter(.finalizing)
+            let result = try await finalizeRecovering(id, sent: session?.provenance != nil && session?.provenance != .trustedUploading,
+                policy: FinalizeRecoveryPolicy(), token: token, beforeEachRequest: {
+                    do { try onFinalizing(id) }
+                    catch { throw DeliveryUploadError.finalizeStateNotRecorded }
+                })
+            return UploadOutcome(id: result.id, expiresAt: result.expiresAt, keyB64url: encodeStoreKey(key))
+        }
     }
 }

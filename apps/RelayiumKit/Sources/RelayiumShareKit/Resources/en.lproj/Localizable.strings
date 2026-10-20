@@ -230,7 +230,7 @@
 "upload.expiresAfter" = "Expires after";
 "upload.burnAfterRead" = "Delete after first download";
 "upload.keepOpen" = "Keep Relayium open until this finishes. Leaving the app or closing it can pause the upload — it never continues in the background — but your files are saved on this device, so reopening Relayium lets you continue the upload.";
-"upload.macKeepOpen" = "Keep Relayium open until this upload finishes. Closing the app stops it; reopen Relayium and start the upload again.";
+"upload.macKeepOpen" = "Keep Relayium open while uploading. If the app quits, reopen it and choose Resume to continue the saved upload. Uploading does not continue while the app is closed.";
 "upload.preparing" = "Preparing your files…";
 "upload.checkingRecovery" = "Checking for a paused upload…";
 "upload.interruptedTitle" = "Upload paused";
@@ -1228,3 +1228,9 @@
 "send.errorUploadDailyQuota" = "The upload exceeds your remaining daily upload allowance. Check your account allowance before trying again. Your files are still on this device.";
 "send.errorUploadMonthlyTraffic" = "Your remaining monthly traffic allowance is insufficient for this upload. Check your account allowance before trying again. Your files are still on this device.";
 "send.errorUploadRateLimited" = "Too many upload requests. Please wait before trying again. Your files are still on this device.";
+
+"upload.recoveryUnconfirmed" = "Couldn't confirm whether this upload finished. Resume checks the same upload; it won't start another. Discard only removes the recovery data saved on this Mac.";
+
+"upload.recoveryUnavailable" = "This upload can no longer be continued. Discard its recovery data and choose the files again to start a new upload, which counts as a new upload.";
+
+"upload.recoveryStateWriteFailed" = "Couldn't save the upload's recovery state, so its completion was not requested. Choose Resume to try again.";

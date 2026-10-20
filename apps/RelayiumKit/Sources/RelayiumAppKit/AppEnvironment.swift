@@ -1750,12 +1750,15 @@ public enum AppEnvironment {
     /// uploads share. A shipped launch passes nil and gets that namespace.
     public static func makePendingUploadSupport(drafts: SharedDraftStore?,
                                                 root: URL? = nil,
-                                                keys: StoredLinkKeyStore? = nil)
+                                                keys: StoredLinkKeyStore? = nil,
+                                                durableShares: Bool = false)
         -> PendingUploadSupport {
         let defaultRoot = isEngineeringCandidate
             ? applicationSupportRoot(create: false)!.appendingPathComponent("PendingUploads", isDirectory: true)
             : PendingUploadStore.defaultRoot()
-        return PendingUploadSupport(store: PendingUploadStore(root: root ?? defaultRoot),
+        let sharedRoot = root ?? defaultRoot
+        let ownedRoot = durableShares ? PendingUploadStore.protectedShareRoot(besides: sharedRoot) : sharedRoot
+        return PendingUploadSupport(store: PendingUploadStore(root: ownedRoot, durableShares: durableShares),
                              keys: keys ?? makePendingUploadKeyStore(),
                              drafts: drafts)
     }

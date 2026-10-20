@@ -73,8 +73,8 @@ public protocol ResumableTransport {
                     onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome
     func uploadOffset(uploadId: String, token: String) async throws -> Int
     func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult
-    /// A finalize that carries `{"recoverFinalized":true}`, for the Device Inbox
-    /// sender only (`CloudUploader.resumeRecoverable`). Against a session that
+    /// A finalize that carries `{"recoverFinalized":true}`, for Device Inbox
+    /// and durable Mac Share recovery. Against a session that
     /// is already terminal central answers from its durable finalize record
     /// instead of refusing, so a lost answer can be recovered without a second
     /// object. Against an OPEN session it is an ordinary finalize — which is why
@@ -83,7 +83,7 @@ public protocol ResumableTransport {
     /// A requirement with a default: every conformer that predates it inherits
     /// an implementation that throws, so a test fake that forgot it fails
     /// closed (the caller reports "could not confirm") rather than inventing an
-    /// object. `finalizeUpload` keeps its exact request for every share caller.
+    /// object. `finalizeUpload` keeps its exact request for legacy share callers.
     func finalizeUploadRecovering(uploadId: String, token: String) async throws -> FinalizeAnswer
 }
 

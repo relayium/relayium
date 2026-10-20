@@ -448,7 +448,10 @@ struct RelayiumApp: App {
         let storedKeys = UITestMode.makeStoredLinkKeyStore()
             ?? AppEnvironment.makeStoredLinkKeyStore()
         let uploads = AppEnvironment.makeUploadModel(
-            keyStore: storedKeys, transport: UITestMode.makeAccountTransport())
+            keyStore: storedKeys,
+            pending: AppEnvironment.makePendingUploadSupport(drafts: nil,
+                root: UITestMode.pendingUploadRoot(), keys: UITestMode.makePendingUploadKeyStore(), durableShares: true),
+            transport: UITestMode.makeAccountTransport())
         let downloads = AppEnvironment.makeDownloadModel(
             transport: UITestMode.makeAccountTransport())
         let management = AppEnvironment.makeAccountManagementModel(
@@ -462,6 +465,9 @@ struct RelayiumApp: App {
         let account = AppEnvironment.makeSession(tokenStore: UITestMode.makeTokenStore(),
                                                  transport: UITestMode.makeAccountTransport())
         _session = StateObject(wrappedValue: account)
+        // Ordinary Share recovery belongs to the app, including menu-bar-only
+        // operation. A view task would miss sign-out while its window is closed.
+        uploads.observe(account.$state)
         // Subscribed HERE, in init, and not from a `.task` on any view or scene.
         // That is the whole point: the signal is raised by a network response
         // that can land after the account destination has been replaced by

@@ -860,6 +860,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// and reopening requires starting it again rather than offering Resume.
     case uploadMacKeepOpen = "upload.macKeepOpen"
     /// Copying the selection into this app's own storage, before any upload.
+    case uploadRecoveryUnconfirmed = "upload.recoveryUnconfirmed"
+    case uploadRecoveryUnavailable = "upload.recoveryUnavailable"
+    case uploadRecoveryStateWriteFailed = "upload.recoveryStateWriteFailed"
     case uploadPreparing = "upload.preparing"
     /// Checking local disk and Keychain for an interrupted stored upload.
     case uploadCheckingRecovery = "upload.checkingRecovery"
