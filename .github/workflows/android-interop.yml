@@ -196,6 +196,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            apps/android/**/*.gradle.kts
+            apps/android/gradle.properties
+            apps/android/gradle/libs.versions.toml
+            apps/android/gradle/wrapper/gradle-wrapper.properties
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: needs.evidence.outputs.reuse != 'true'
         with:
@@ -250,9 +256,17 @@ jobs:
       # build with an updater and there is no newer public release to check
       # against. Nothing it does downloads or installs anything; the download
       # test intercepts the real ACTION_VIEW Intent and blocks the launch.
+      - name: Check the metadata observer
+        if: needs.evidence.outputs.reuse != 'true'
+        run: node scripts/test/android-transport-observer-test.mjs
+      - name: Prepare private acceptance scratch
+        if: needs.evidence.outputs.reuse != 'true'
+        run: mkdir -p "$RUNNER_TEMP/android-interop"
       - name: Run the Android ↔ Web interop and UI acceptances
         if: needs.evidence.outputs.reuse != 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          TMPDIR: ${{ runner.temp }}/android-interop
         with:
           api-level: 36
           target: default
@@ -265,3 +279,17 @@ jobs:
             ./scripts/android-ui-acceptance.sh
             ./scripts/android-ui-session-acceptance.sh
             ./scripts/android-update-acceptance.sh
+
+      # Failure roots are kept by the fixture after owned children exit. Only
+      # synthetic observations are uploaded; server logs and credentials stay out.
+      - name: Keep failed interop observations
+        if: always() && needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-interop-observations-attempt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/android-interop/relayium-acceptance-*/browser-*.transport.json
+            ${{ runner.temp }}/android-interop/relayium-acceptance-*/android-failure-*.json
+            ${{ runner.temp }}/android-interop/relayium-acceptance-*/instrument-*.log
+          if-no-files-found: warn
+          retention-days: 7

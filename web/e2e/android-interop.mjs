@@ -28,6 +28,7 @@
  * precondition (no workspace, no composer): that is reported by failing.
  */
 import { spawn } from "node:child_process";
+import { TRANSPORT_OBSERVER } from "./android-transport-observer.mjs";
 import { linkSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -222,6 +223,8 @@ const observed = {
    *  history, never from the `role` field above, which is this file's own
    *  arithmetic. `null` until the page has been read at least once. */
   wire: null,
+  transport: null,
+  pageState: null,
   verify: VERIFY,
   receivedMessages: [],
   /** One record per COMPLETED save: `{name, size, sha256}`. The shell compares
@@ -261,6 +264,10 @@ async function ephemeralPort() {
 
 function writeObservation() {
   writeFileSync(OUT, JSON.stringify(observed, null, 2) + "\n");
+  // The retained CI sidecar never includes the pairing code or fixture payload.
+  writeFileSync(OUT.replace(/\.json$/, "") + ".transport.json", JSON.stringify({
+    round: ROUND, transport: observed.transport, pageState: observed.pageState,
+  }, null, 2) + "\n");
 }
 
 /**
@@ -760,11 +767,29 @@ function spawnOwnedChrome(debugPort) {
 let owned = null;
 let closing = null;
 const closeOwned = () => (closing ??= (owned ? owned.close() : Promise.resolve()).catch(() => {}));
-const onSignal = (signal) => {
+let activeTab = null;
+async function snapshotTransport() {
+  if (!activeTab) return;
+  let timer;
+  try {
+    const state = await Promise.race([activeTab.evaluate(`({
+      transport: window.__androidTransport ?? null,
+      workspace: !!document.querySelector('.workspace-head'),
+      attachment: !!document.querySelector('.msgpanel .attach-file'),
+      attachmentDisabled: document.querySelector('.msgpanel .attach-file')?.disabled ?? null,
+    })`), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("snapshot timeout")), 1500); })]);
+    observed.transport = state.transport;
+    observed.pageState = { workspace: state.workspace, attachment: state.attachment,
+      attachmentDisabled: state.attachmentDisabled, errors: activeTab.errors.length };
+  } catch { /* Preserve the original verdict even when the page has died. */ }
+  finally { clearTimeout(timer); }
+}
+const onSignal = async (signal) => {
   console.error(`  received ${signal}: closing this run's browser`);
   // Persist whatever was observed before the run was torn down — a terminated
   // run's observation is exactly what a stuck-round diagnosis needs, and the
   // finally that normally writes it does not run on a signal.
+  await snapshotTransport();
   try { writeObservation(); } catch { /* nothing more to save */ }
   closeOwned().finally(() => process.exit(signal === "SIGINT" ? 130 : 143));
 };
@@ -782,7 +807,8 @@ async function run() {
   try {
     const preference = VERIFY === "on" ? VERIFY_ON : VERIFY_DEFAULT;
     tab = await newTab(browser, `${ORIGIN}/cross-network#c=${CODE}`,
-                       preference + WIRE_OBSERVER + SAVE_STUB + SAVE_LEDGER);
+                       TRANSPORT_OBSERVER + preference + WIRE_OBSERVER + SAVE_STUB + SAVE_LEDGER);
+    activeTab = tab;
     await setWideViewport(tab, 1280, 900);
 
     // ONE connection budget for the welcome AND the Android peer's arrival —
@@ -993,7 +1019,9 @@ async function run() {
     // batch is long aborted, so it closes nothing.
     await tab?.evaluate?.("window.__releaseForbidden = true").catch(() => {});
     if (tab) await snapshotWire(tab).catch(() => {});
+    await snapshotTransport();
     writeObservation();
+    activeTab = null;
     if (!KEEP) await closeOwned();
   }
 }

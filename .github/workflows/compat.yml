@@ -424,6 +424,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            apps/android/**/*.gradle.kts
+            apps/android/gradle.properties
+            apps/android/gradle/libs.versions.toml
+            apps/android/gradle/wrapper/gradle-wrapper.properties
       - name: Run the pure-JVM Android protocol conformance suite
         if: needs.evidence.outputs.reuse != 'true'
         shell: bash
