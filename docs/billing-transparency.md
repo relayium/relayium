@@ -403,7 +403,7 @@ The dimensions actually checked, each fail-closed at write time:
   which stored file that upload already produced (only while that file still
   exists), or why there is none — it expired, was removed, was refused, or is
   still being completed — so it need not upload again
-  (`answerFinalizeRecovery`, `account/uploads_resumable.go:1766`). Asking is a
+  (`answerFinalizeRecovery`, `account/uploads_resumable.go:1814`). Asking is a
   pure read: no debit, no traffic, no refund. It works only while the server
   still keeps that upload's session record. For a share, and for a Device
   Inbox upload already attached to a delivery, that record is removed about an
