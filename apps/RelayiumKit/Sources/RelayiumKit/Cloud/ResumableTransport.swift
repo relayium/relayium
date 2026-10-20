@@ -212,6 +212,12 @@ public struct HTTPResumableTransport: PipelinedResumableTransport {
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         req.httpBody = Data(header)
+        // A server that does not know this packing hint keeps its 8 MiB default.
+        // The server chooses the actual size. Larger batches use more client
+        // buffer, within unchanged server caps, framing and request concurrency.
+        if purpose == .share, size >= 64 << 20 {
+            req.setValue("large-v1", forHTTPHeaderField: "X-Relayium-Upload-Chunk")
+        }
         let (data, http) = try await send(req)
         guard http.statusCode == 200 else { throw statusError(http, data) }
         struct Body: Decodable { let uploadId: String; let chunkSize: Int; let uploadPipeline: String? }
