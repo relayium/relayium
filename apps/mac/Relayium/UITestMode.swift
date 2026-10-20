@@ -193,7 +193,8 @@ enum UITestMode {
 
 
 
-    /// A staging root of this launch's own, emptied before use.
+    /// Ordinary UI launches reset their staging roots. The explicitly opted-in
+    /// UUID recovery fixture retains its own root across application processes.
     ///
     /// A cancelled upload stays resumable by design, so its staged bytes outlive
     /// the process — and therefore outlive the run. Without a root of its own an
@@ -240,8 +241,9 @@ enum UITestMode {
     /// keychain namespace (`pending-upload-key:<jobId>`), which the installed
     /// app's real pending uploads share (N-0928-6). In memory, a run's keys
     /// cannot reach that namespace or outlive the process — and nothing needs
-    /// them to: `pendingUploadRoot` empties the staging root on every launch,
-    /// so no job survives into a relaunch that would look for its key.
+    /// them to: ordinary UI launches reset their roots. Only the UUID-scoped
+    /// relaunch fixture below persists throwaway keys in its private directory;
+    /// it still never reads or writes the installed product's Keychain.
     static func makePendingUploadKeyStore() -> StoredLinkKeyStore? {
         guard isActive else { return nil }
         if let fixture = shareRecoveryTestRoot() {

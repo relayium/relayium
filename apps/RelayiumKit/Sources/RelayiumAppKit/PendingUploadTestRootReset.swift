@@ -30,8 +30,8 @@ import RelayiumKit
 /// store, to `AppEnvironment.makePendingUploadSupport`. This reset still runs,
 /// because a staging root left by a run from before that change holds jobs
 /// whose keys ARE in the keychain; for a newer run's jobs the deletes are
-/// no-ops. Nothing in the suite relies on a key surviving a relaunch; a job
-/// directory never survives one.
+/// no-ops. These ordinary UI-test roots do not survive a relaunch. The Mac's
+/// explicit UUID recovery fixture uses a different root and throwaway file keys.
 public enum PendingUploadTestRootReset {
     /// Discard `shared` AND its protected Device Inbox sibling, returning the
     /// id of every job directory that was in either. Synchronous, so both roots

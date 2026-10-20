@@ -856,13 +856,14 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// stays silent about is one the user discovers by losing a transfer, and a
     /// recovery it stays silent about is one they never use.
     case uploadKeepOpen = "upload.keepOpen"
-    /// macOS has no `PendingUploadSupport`: closing the app ends this upload,
-    /// and reopening requires starting it again rather than offering Resume.
+    /// Mac uploads stop when the app closes; reopening offers explicit
+    /// recovery from its saved ciphertext, without a background upload service.
     case uploadMacKeepOpen = "upload.macKeepOpen"
-    /// Copying the selection into this app's own storage, before any upload.
+    /// Uncertain completion never authorizes another upload.
     case uploadRecoveryUnconfirmed = "upload.recoveryUnconfirmed"
     case uploadRecoveryUnavailable = "upload.recoveryUnavailable"
     case uploadRecoveryStateWriteFailed = "upload.recoveryStateWriteFailed"
+    /// Copying/sealing into this app's own storage before any upload.
     case uploadPreparing = "upload.preparing"
     /// Checking local disk and Keychain for an interrupted stored upload.
     case uploadCheckingRecovery = "upload.checkingRecovery"
