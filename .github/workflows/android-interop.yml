@@ -51,6 +51,7 @@ on:
       # for every round's comparison — so an edit to it must re-run the real
       # integration, not only the oracle's own mutation test in repo-hygiene.
       - 'scripts/test/android-interop-oracle.py'
+      - 'scripts/test/android-transport-observer-test.mjs'
       - 'scripts/android-ui-acceptance.sh'
       - 'scripts/android-ui-session-acceptance.sh'
       # The update acceptance and, separately, the manifest it must agree with.
