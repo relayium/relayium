@@ -11,10 +11,12 @@ never copied, by:
 - Android: `apps/android/protocol` (`CryptoVectorTest.kt`).
 - Windows: `apps/windows/test/unit/protocol-fixtures.test.ts`.
 - Go: `server/internal/linkcrypto/vectors_test.go` (every block). `server/internal/linkcrypto`
-  is a library only: no CLI command or other Go code uses it yet, so these vectors
-  passing is not evidence that any Go program interoperates with another client.
-  It covers every derivation in this document; the `relayium-preupload-v1\0`
-  subkey defined in `relayium-realtime-wire-v1.md` is not implemented there.
+  is used by `server/internal/linksession` and the CLI's shared-link commands.
+  Vector equivalence alone is not network interoperability evidence; the real
+  peer/transport suites establish that separately. It covers every derivation
+  in this document; the `relayium-preupload-v1\0` subkey defined in
+  `relayium-realtime-wire-v1.md` is not implemented there, and the CLI does not
+  advertise `preupload/1`.
 
 ## Key agreement
 - Primitive: libsodium `crypto_kx` (X25519 + BLAKE2b KDF).

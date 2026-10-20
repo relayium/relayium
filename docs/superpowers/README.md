@@ -37,3 +37,10 @@ evidence that the product behaves some way is the one use it does not support.
 Do not update these files to match new behaviour. They are a record of what was
 decided when, and editing them to agree with the present destroys the only thing
 they are for.
+
+## Historical link context
+
+The relative `apps/ios` link in
+`plans/2026-08-03-native-ios-r3b-account-session.md` was written against the
+repository root. Resolve it as [apps/ios](../../apps/ios); the dated plan body
+is preserved. For current documentation start at [docs/README.md](../README.md).

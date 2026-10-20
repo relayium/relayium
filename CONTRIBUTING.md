@@ -39,13 +39,16 @@ peers that are both online — and contributions of all kinds are welcome.
 
 ## Development setup
 
-Prerequisites: **Go 1.22+** and **Node 20+**. See the [Quick start](README.md#quick-start-run-it-locally)
+Prerequisites: use the Go version declared in [`server/go.mod`](server/go.mod)
+and **Node 24**, matching the Web CI lane. Older blanket “Go 1.22+ / Node 20+”
+guidance does not satisfy the current locked dependencies. See the
+[Quick start](README.md#quick-start-run-it-locally)
 in the README to build and run locally.
 
 ```bash
 # Web client
 cd web
-npm install
+npm ci
 npm run dev      # UI work (Vite dev server)
 npm run build    # production build into web/dist/
 

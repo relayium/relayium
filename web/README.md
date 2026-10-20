@@ -1,7 +1,7 @@
 # `web/` — the Relayium web client
 
 The Svelte 5 single-page app served at [relayium.com](https://relayium.com/),
-plus the static-page generator that prerenders ~450 crawler-facing pages into
+plus the static-page generator that prerenders crawler-facing pages into
 `public/`. It is built with Vite and TypeScript, and licensed **AGPL-3.0** (see
 [`LICENSE`](LICENSE)) — unlike `apps/`, which is Apache-2.0.
 
@@ -17,7 +17,7 @@ this directory.
 
 | Command | What it does |
 | --- | --- |
-| `npm install` | Install dependencies (Node 20+). |
+| `npm ci` | Install the exact locked dependencies using Node 24, matching Web CI. Check installed engines after a dependency update; Node 20 or an odd-numbered major is not automatically supported by the full toolchain. |
 | `npm run dev` | Generate static pages, then start the Vite dev server. Good for UI work; signaling is same-origin, so it cannot complete a real transfer on its own. |
 | `npm run build` | Generate static pages, then build into `dist/`. |
 | `npm run preview` | Serve a build that has already been produced. |

@@ -1,4 +1,4 @@
-# Relayium Web MVP — Manual Acceptance Procedure
+# Relayium Web — Acceptance Procedures and Execution Records
 
 This document is the repeatable acceptance script for spec §7 criteria 1–6.
 
@@ -17,7 +17,9 @@ matrix that no headless check can stand in for: **[TESTING-accessibility.md](TES
 
 ## 0. Prerequisites
 
-- Go 1.22+ and Node 20+ installed.
+- The Go version declared in [`server/go.mod`](../server/go.mod), and Node 24
+  as used by Web CI. Use `npm ci` with the current lockfile; old Go 1.22 / Node 20
+  prerequisites do not describe the current toolchain.
 - Two machines (or two browser windows for intra-machine tests) on the same LAN, or two tabs
   pointing at `http://localhost:<port>` for a quick sanity check of the UI only.
 - Chrome 114+ recommended for criterion 2 (streaming-to-disk via `showSaveFilePicker`).

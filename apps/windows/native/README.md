@@ -1,12 +1,20 @@
 # `apps/windows/native` — Windows receive IO core
 
+Current integration status (2026-10-20 source review): the IO helper is now
+composed by `src/main/io/native-helper-client.ts`, bundled by
+`electron-builder.yml`, and built/exercised in `.github/workflows/windows.yml`.
+See [DURABLE-PARITY.md](../DURABLE-PARITY.md) for the dated Windows acceptance
+and its limits. This is still a development client, not a public signed Windows
+release. The original first-core execution account below is historical;
+its “not integrated / no adapter / no CI” statements no longer describe source.
+
 An independent Go module producing `relayium-io-helper.exe`: the privileged
 filesystem half of a Windows receive lease. It is the component that can do what
 Node's `fs` cannot on Windows — publish a completed file without ever replacing
 an existing one, and stay contained in the folder the user chose even while
 directories are being swapped underneath it.
 
-**Status: core only, first Windows runtime evidence in hand. Not integrated.**
+**Original first-core checkpoint (historical): core only, first Windows runtime evidence in hand; not yet integrated at that date.**
 There is no Electron adapter, no `electron-builder` packaging and no CI
 registration here; those are a later, separately owned slice.
 

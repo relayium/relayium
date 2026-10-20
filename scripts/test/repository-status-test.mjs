@@ -118,7 +118,10 @@ describe("public repository status", () => {
     assert.ok(!readme.includes("This repository is **M0**"));
     assert.ok(!readme.includes("This is an early MVP"));
 
-    assert.ok(security.includes("active, pre-1.0 development"));
+    assert.ok(security.includes("active development"));
+    assert.doesNotMatch(security, /pre-1\.0 development/i, "independent 1.x clients cannot be called pre-1.0");
+    assert.match(security, /has \*\*not\*\*[\s\S]*?independent security audit/i,
+      "active development must retain the unaudited-security disclosure");
     assert.ok(!security.includes("early MVP"));
     assert.ok(!security.includes("(**M0**)"));
   });

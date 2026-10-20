@@ -1,8 +1,11 @@
 # Relayium Device Inbox v3 — authenticated sender-device identity
 
-Status: Stage 1 implemented in central, Web sender, shared protocol codecs and
-tests. Native conversation presentation and local unread storage are later
-stages; v3 must not deploy until the coordinated clients are ready.
+Status (source review, 2026-10-20): v3 is implemented in central, Web, CLI and
+native protocol layers. Apple and Android clients also implement conversation
+presentation and local unread storage; those are no longer an unimplemented
+Stage 1 prerequisite. Platform release and physical-device acceptance remain
+separate; see [apps/README.md](../../apps/README.md). This specification does
+not itself authorize a deployment or publish a client.
 
 v3 replaces v2 without a compatibility stack. Everything in
 `relayium-device-inbox-v2.md` remains unchanged except the version/capability

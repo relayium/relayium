@@ -8,8 +8,11 @@ trip and the forced-kill-of-the-sealing-parent case **passed** there. The tamper
 oracle **failed**: it demanded an error at every mutated blob position, which is
 not a property this helper implements or needs. That test has since been
 corrected to the refuse-or-identical property described under *What a tampered
-blob must do* below, and **the corrected oracle awaits the next Windows run** —
-until that run completes, nothing here claims it has executed on a real host.
+blob must do* below. **The corrected oracle subsequently executed on Windows**:
+run `34674997632` and the acceptance recorded in
+[DURABLE-PARITY.md](../DURABLE-PARITY.md) report 620 single-byte mutations —
+588 refused with no output, 32 opened byte-for-byte unchanged, zero altered.
+The original failed demand is retained as history, not a current pending test.
 **Cross-user protection is PROVEN as of run 34674997632; power-loss behaviour
 remains UNPROVEN.**
 

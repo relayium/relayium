@@ -1,4 +1,8 @@
-# Device Inbox v2 local engineering candidate
+# Local engineering candidate for Device Inbox
+
+The `*-device-inbox-v2-*` script names below are retained compatibility names;
+current Device Inbox negotiates v3. This is a local engineering procedure, not
+a distributable release or an App Store/TestFlight channel record.
 
 This candidate is a separate Release product. It is compiled for
 `http://127.0.0.1:18080`, uses bundle id `com.relayium.mac.engineering`, has its
@@ -12,7 +16,7 @@ The artifact folder must end in the current eight-character commit id:
 
 ```sh
 SHA=$(git rev-parse --short=8 HEAD)
-ARTIFACT=/Users/lily/code/relayium/test-builds/macos/1.2.9-local-v0.20-$SHA
+ARTIFACT=/Users/lily/code/relayium/test-builds/macos/local-$SHA
 scripts/build-macos-engineering-candidate.sh "$ARTIFACT"
 ```
 

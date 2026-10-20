@@ -2,20 +2,22 @@
 
 Status: **Phase 1D delivered.** Both halves exist. This document is the
 *receiving* half — the `relayium inbox` commands that run on the machine files
-land on. The *sending* half is the Web one: sign in at relayium.com, open
-**Device Inbox** (`/device-inbox`), and each enrolled device appears there with a
-**Send files** button and a drop target when receiving is enabled. `/cli`
-introduces the whole flow end to end. This document
-describes what exists, and says so where something does not.
+land on. Sending is also implemented in the CLI (`relayium inbox send`),
+Web and native apps. On the Web, sign in at relayium.com and open **Device Inbox**
+(`/device-inbox`); each enrolled device appears there with a **Send files**
+button and a drop target when receiving is enabled. For CLI send, retry,
+history and opt-in cross-process recovery, see
+[cli-resumable-upload.md](cli-resumable-upload.md) and `relayium inbox send --help`.
+CLI Inbox text sending is not implemented; the realtime `text` command is a
+separate route. `/cli` introduces the flow end to end.
 
 Authorities, all in this repository — the product requirements this was built from
 are not published here, so nothing below cites them:
 
-- Wire protocol: [`protocol/relayium-device-inbox-v1.md`](protocol/relayium-device-inbox-v1.md)
-  (enrolment and key lifecycle §7, the queue state machine §13, claims and leases §15,
-  destination rules §21, commit and recovery §22) and
-  [`protocol/relayium-device-inbox-v2.md`](protocol/relayium-device-inbox-v2.md)
-  (content kind, the encrypted manifest, negotiation).
+- Wire protocol: [`v3`](protocol/relayium-device-inbox-v3.md) is the accepted
+  version. [`v1`](protocol/relayium-device-inbox-v1.md) retains inherited
+  enrolment, claims, destination and commit rules; [`v2`](protocol/relayium-device-inbox-v2.md)
+  retains inherited content-kind vocabulary. These are not downgrade protocols.
 - Frozen invariants: [`DEVICE-INBOX-ADMISSION-CONTRACT.md`](DEVICE-INBOX-ADMISSION-CONTRACT.md).
 - Implementation: `server/internal/inboxclient/`, `server/cmd/relayium/inbox.go`.
 
@@ -36,14 +38,15 @@ Relayium never sees the plaintext, the file names, the directory structure, the
 content key or this device's private key. The content key is sealed to a public
 key this machine published; only this machine holds the other half.
 
-### What it is not: server-to-server transfer
+### Two machine-to-machine routes with different trust models
 
-`relayium inbox` is the **receive side only**. There is no CLI command that sends
-into an inbox — the sending half is the Web app or a native app, as stated above —
-so an inbox cannot be one end of a machine-to-machine pipeline.
+`relayium inbox send --to <device> <path...>` sends files to a device enrolled
+in your account. It uses encrypted stored delivery and the account's policy,
+quota and receiving settings; the recipient may be offline. Do not describe the
+whole `inbox` command family as receive-only.
 
-If what you want is one server handing files to another server, that is a
-different route entirely, and it needs no Relayium account on either side:
+For direct daemon transfers between machines, `serve` / `push` / `sync` are a
+separate route that needs no Relayium account on either side:
 
 ```sh
 # on the RECEIVING server

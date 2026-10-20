@@ -2,11 +2,11 @@
 
 Status: this document is the `0.3.2 (8)` record. That alignment was delivered
 to internal TestFlight only, from `9880648a`, and was never a public release.
-The current iOS channel state is one version further on: `0.4.0 (9)`, from
-frozen source `4d694a9e`, was uploaded to the same record on 2026-09-18,
-processed `VALID` and is `IN_BETA_TESTING` with the internal group only — still
-internal, still not a public release — see `docs/ios-app-store-submission.md`
-for that checkpoint. This document records
+The latest recorded iOS channel checkpoint is `0.5.2 (13)`, accepted into
+internal TestFlight on 2026-10-18; this is not a public App Store release.
+The earlier `0.4.0 (9)` upload was a 2026-09-18 checkpoint, not the current
+candidate. See [ios-app-store-submission.md](ios-app-store-submission.md)
+for the dated delivery records; this audit did not re-query private Apple state. This document records
 what the iOS app changed to read as the same product as macOS 1.4.0, what it
 deliberately did not copy, and how the change is verified; read every statement
 below as `0.3.2`.

@@ -1,5 +1,12 @@
 # iOS App Store and TestFlight submission
 
+Read this as a dated submission ledger: the newest recorded internal build is
+`0.5.2 (13)` below. Older sections' “current” / “pending” refer to their own
+dates, not today's channel or a request to downgrade/re-test an old build.
+The owner confirmed the earlier StoreKit sandbox/WAN acceptance on 2026-10-08;
+that closes that earlier queue, not every later build's physical-device checks.
+This documentation review makes no new private Apple-state assertion.
+
 ## iOS 0.5.2 (13) — internal TestFlight, 2026-10-18
 
 **Provider read-back at 2026-10-18T04:24:42.340824+00:00: `0.5.2 (13)` is `VALID` and

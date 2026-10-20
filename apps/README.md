@@ -1,12 +1,14 @@
 # Relayium native apps
 
-**Internal TestFlight, verified 2026-10-17:** macOS `1.4.10 (47)` is `VALID`
-and `IN_BETA_TESTING` in the existing Relayium Internal group. App Store Connect
-build `00ac1109-f56f-4487-8d3e-72b25b360ddd` was built from source
-`1030a66db34ff3e75f27ed31d6e526de42b99679`. English and Simplified Chinese test
-notes are set; automatic tester notification is off. Existing App Store versions,
+**Internal TestFlight, read back 2026-10-17.** The current internal TestFlight
+build is `1.4.10 (47)`: App Store Connect build
+`00ac1109-f56f-4487-8d3e-72b25b360ddd`, built from source
+`1030a66db34ff3e75f27ed31d6e526de42b99679`, `VALID` and `IN_BETA_TESTING` in the
+existing Relayium Internal group. English and Simplified Chinese test notes
+are set; automatic tester notification is off. Existing App Store versions,
 selected builds and external group membership remain unchanged. No App Store
-version or review was created or submitted.
+version or review was created or submitted. This is the latest recorded
+checkpoint, not a fresh private-provider query by the documentation review.
 
 Since TestFlight `1.4.9 (46)`, Share a link can send the next encrypted part
 while waiting for the preceding part's storage confirmation, with at most two
@@ -26,14 +28,16 @@ internal and external testing groups (per the 2026-10-18 provider read-back). Th
 the public URLs determine the version currently offered.
 
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
-  It vends two products. `RelayiumKit` is the transport stack plus the
+  It vends four products. `RelayiumKit` is the transport stack plus the
   `RelayiumAppKit` view-model layer, which both apps link. `RelayiumShareKit` is
   Foundation-only — the two shipped localization catalogs, `L10n`, and the App Group
   shared-draft store — and exists so the iOS share extension can render the same
   copy and stage the same files without mapping WebRTC, libsodium, an account
   client and an uploader into an `.appex`. `RelayiumAppKit` re-exports it
   (`SharedLocalizationExport.swift`), so `import RelayiumAppKit` still sees
-  `L10n` and nothing at any call site changed.
+  `L10n` and nothing at any call site changed. The other products are
+  `RelayiumStoreKit` (the isolated StoreKit adapter) and `RelayiumLocalPeerKit`
+  (native local-peer composition); `Package.swift` defines the product boundary.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit
   package. Released publicly as **1.4.10** (GitHub Release `macos-v1.4.10`).
 - `mac/RelayiumShare/` — the macOS Share Extension (`com.relayium.mac.Share`),
@@ -46,7 +50,7 @@ the public URLs determine the version currently offered.
   inside the released 1.4.10 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
-  development at 0.5.1 and not public.** The bundle id is macOS's on purpose:
+  development at 0.5.2 and not public.** The bundle id is macOS's on purpose:
   iOS and macOS are two platforms of ONE universal-purchase App Store record
   (Apple ID `6801142976`), and Apple requires every platform in such a record to
   carry the same Bundle ID. That is also what puts an iOS build in front of the
@@ -103,7 +107,7 @@ the public URLs determine the version currently offered.
   outstanding gap are tracked in `windows/DURABLE-PARITY.md`.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
-  only. **In development at 0.5.1 and not public.** Its identifier is *not*
+  only. **In development at 0.5.2 and not public.** Its identifier is *not*
   `com.relayium.mac.Share` — that is the macOS extension. The target record's
   iOS TestFlight build metadata reports extension application identifier
   `7PVYUG4YQS.com.relayium.mac.ShareIOS`, so that is what this project must
@@ -187,8 +191,8 @@ number — the one [`web/mac-app-store-release.json`](../web/mac-app-store-relea
 records. Those two manifests are what each channel actually serves; no
 sentence here is.
 
-**Internal TestFlight, read back 2026-10-12.** The current internal TestFlight
-build is `1.4.7 (44)`: App Store Connect build
+**Historical TestFlight checkpoint, read back 2026-10-12.** At that read-back the internal
+build was `1.4.7 (44)`: App Store Connect build
 `1b6d2103-702d-4585-b11d-a9face6901d9`, built from source `5c308432d`,
 `VALID` and `IN_BETA_TESTING` in the existing internal group, tester
 notification off, and approved for the existing external group as recorded in
@@ -1264,7 +1268,7 @@ Developer ID identity.
 
 `apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.mac`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
-same local `RelayiumKit` package. **In development at 0.5.1 and not public** —
+same local `RelayiumKit` package. **In development at 0.5.2 and not public** —
 internal TestFlight builds were used for development acceptance before the
 earlier pause, but there is no public App Store listing and the website offers
 no iOS download.

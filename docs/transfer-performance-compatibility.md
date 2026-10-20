@@ -1,5 +1,12 @@
 # Transfer performance and removable compatibility boundary
 
+Current-source addendum (2026-10-20): the phase-1 compatibility boundary below
+is retained. Later [ordered upload pipelining](upload-pipeline.md) and the
+[source-only large-share packing preference](upload-chunk-tuning.md) are
+separately documented. The original phase's “adds no capability” statement and
+Web serial-controller examples do not describe those later opt-in paths.
+No minimum-client cutover, release or further speed work is authorized here.
+
 Status: phase 1 implementation, 2026-08-25. This document is the delivery
 contract for the transfer-performance review. It does not raise a minimum client
 version and does not authorize a macOS release.

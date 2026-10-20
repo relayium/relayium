@@ -5,12 +5,14 @@ manifest codec, and the `x25519-sealedbox-v1` content-key wrap. It lives in
 `apps/android/protocol/src/main/kotlin/com/relayium/protocol/inbox/`, has no
 Android dependency, and runs in the SDK-free `:protocol:test` lane.
 
-**This is not a shipped Inbox feature.** No Android build registers a device
-inbox, announces a capability, claims a task or receives a delivery. What exists
-is the layer those things will be built on, pinned to the same frozen vectors and
-the same libsodium bytes the other clients are pinned to, so the app slice that
-follows starts from a codec that already agrees with central, the Web, the CLI
-and RelayiumKit.
+**Scope: the protocol foundation, now used by the shipped Android Inbox.**
+The later app runtime registers a device, announces capabilities, claims tasks
+and commits received content; see
+[android-inbox-development.md](android-inbox-development.md) and
+[android-development.md](android-development.md) for implementation and channel
+records. This page defines the pure codec layer and frozen vectors shared with
+central, Web, CLI and RelayiumKit; it is not evidence of physical-phone or WAN
+acceptance. The original “no Android build receives” checkpoint is superseded.
 
 ## The three files
 

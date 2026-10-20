@@ -3,14 +3,15 @@
 Relayium's whole reason to exist is end-to-end encryption, so we take security reports seriously and
 appreciate responsible disclosure.
 
-> ⚠️ **Status:** Relayium is under active, pre-1.0 development and has **not**
+> ⚠️ **Status:** Relayium is under active development and has **not**
 > undergone an independent security audit. Please do not rely on it for
 > high-stakes threats yet.
 
 ## Supported versions
 
-The project is pre-1.0 and moves fast. Only the **latest `main`**, latest
-published release, and live deployment at
+The project moves fast and its clients have independent version numbers.
+Only the **latest `main`**, latest published release in each supported channel,
+and live deployment at
 [relayium.com](https://relayium.com/) are supported for security fixes.
 
 ## Reporting a vulnerability
@@ -39,8 +40,11 @@ Especially valuable areas to scrutinize:
 - **Transfer protocol** (`web/src/lib/transfer.ts`) — framing, chunk integrity, the batch nonce counter.
 - **WebRTC / signaling** (`web/src/lib/webrtc.ts`, `web/src/lib/signaling.ts`, `server/`) — what the
   signaling server can observe or tamper with, and whether the SAS reliably catches a MITM.
-- **Admin dashboard auth** (`server/account/admin.go`, `totp.go`, `throttle.go`) — the optional
-  TOTP 2FA gate on `/admin` login; see [`docs/self-hosting.md`](docs/self-hosting.md) for the deployer setup guide.
+- **Admin dashboard auth** (`server/account/admin.go`, local `relayium-server admin`
+  commands and the passkey/session handlers) — Passkey-only sign-in, privileged
+  confirmation and server-local enrollment/revocation. Password and TOTP sign-in
+  are retired; see [`docs/admin-passkeys.md`](docs/admin-passkeys.md) for the
+  current deployer and recovery guide.
 - **TURN/relay credentials and metering** (`server/account/turn.go`, `server/internal/metering/`) —
   ephemeral TURN-REST credential issuance, the multi-relay pool, and relay-usage/quota attribution for
   cross-network pairing-code transfers.
@@ -55,8 +59,9 @@ Especially valuable areas to scrutinize:
   content key to a target device's public key; claim, lease and idempotency
   handling; and the boundary that a capability link authenticates nothing and can
   never cause a device to write to disk. The wire contract is
-  [`docs/protocol/relayium-device-inbox-v1.md`](docs/protocol/relayium-device-inbox-v1.md)
-  and [`v2`](docs/protocol/relayium-device-inbox-v2.md); the frozen invariants are
+  [`v3`](docs/protocol/relayium-device-inbox-v3.md), with the retained vocabulary
+  and bounds in [`v1`](docs/protocol/relayium-device-inbox-v1.md) and
+  [`v2`](docs/protocol/relayium-device-inbox-v2.md); the frozen invariants are
   [`docs/DEVICE-INBOX-ADMISSION-CONTRACT.md`](docs/DEVICE-INBOX-ADMISSION-CONTRACT.md).
 
 Out of scope for now:

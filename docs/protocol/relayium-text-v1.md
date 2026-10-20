@@ -1,10 +1,12 @@
 # Relayium ephemeral text v1 (authoritative)
 
-Ephemeral, session-scoped messages. Two independent transports carry them and they
-do **not** interoperate: the browser/native realtime path (frame kind 9 on a
-DataChannel) and the CLI pairing-code path (`MsgText` over pinned TLS). Both are
-defined here because both are "text v1"; neither can pair with the other, for the
-same reason their file transfers cannot.
+Ephemeral, session-scoped messages. Current browser, native and published CLI
+(v0.27.0 and later) pairing clients share the `link/1` realtime transport and
+its AEAD text lane (frame kind 9 on a DataChannel). See
+[relayium-link-v1.md](relayium-link-v1.md) for capability negotiation and peer
+compatibility. This document also retains the distinct, historical CLI
+`MsgText` over pinned-TLS contract for v0.26.0 and earlier; it is not the current
+CLI's default transport and does not interoperate with the DataChannel lane.
 
 Nothing is stored server-side. Messages exist only in the two peers' memory.
 
@@ -191,9 +193,14 @@ There is no credit/window scheme. Messages are human-paced and never touch disk,
 so there is no slow consumer to pace against, and a credit loop would mean
 acknowledgements.
 
-## CLI path (pairing code)
+## Historical CLI path (v0.26.0 and earlier)
 
-The CLI shares no transfer code and no crypto with the browser. Confidentiality is
+The remainder of this section describes the legacy pinned-TLS adapter only.
+Current `text`/`pair` commands compose `server/internal/linksession`; their
+DataChannel messages follow the realtime contract above. Do not infer current
+CLI routing, crypto or interoperability from this historical section.
+
+The legacy CLI shares no transfer code and no crypto with the browser. Confidentiality is
 TLS 1.3 with both certificates pinned through the commit-reveal that produces the
 SAS (relayium-handshake-v1.md is the browser's variant; the CLI commits to a
 certificate fingerprint instead of a crypto_kx public key, and the two SAS

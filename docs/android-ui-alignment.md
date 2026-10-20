@@ -1,7 +1,11 @@
 # Android alignment with macOS 1.4.0
 
-Status: private engineering candidate, not a release. It builds on the
-previously accepted Android reference UI (neutral page and card surfaces, 11dp
+Status: this is the original UI-alignment implementation record. The Android
+public-preview channel has since reached `0.3.2 (11)`; the current UI source
+retains this alignment. See [android-development.md](android-development.md)
+for release evidence. The original candidate status is not a current release
+blocker, and this document supplies no physical-device acceptance. It builds
+on the previously accepted Android reference UI (neutral page and card surfaces, 11dp
 cards with a hairline edge, grouped rows) and the retained stored-recovery
 change.
 

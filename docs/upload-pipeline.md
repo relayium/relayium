@@ -1,5 +1,11 @@
 # Ordered upload pipeline
 
+Channel/status note (2026-10-20): pipelining shipped in macOS 1.4.10 and Android
+0.3.2; iOS 0.5.2 internal TestFlight is a separate recorded channel. The later
+[large-share packing preference](upload-chunk-tuning.md) is source-delivered,
+with no backend deployment or new app release by that task. Request concurrency
+and append limits below remain unchanged.
+
 Fresh Share a link uploads can keep at most two ciphertext PATCH requests in
 flight. Android 0.3.2 adds this capability to freshly initialized resumable Share
 uploads, using its existing encrypted spool; restored sessions stay serial. The successor starts after the transport reports that its predecessor's

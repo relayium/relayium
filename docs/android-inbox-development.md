@@ -51,9 +51,10 @@ The protocol foundation (`protocol/.../inbox/**`) is documented separately in
   claim — enforced in this client, not only by the server refusing to queue.
   `ask` holds each delivery until a person on this device accepts it; `auto`
   accepts deliveries from the account's own devices.
-- **Receiving happens only while the surface is open.** There is no background
-  service and no notification, and the copy says so. Stopping tells the server
-  the device is offline rather than leaving senders to wait out a presence TTL.
+- **Receiving happens while the app is in the foreground, across all five
+  destinations.** Selecting the Inbox tab is not required. There is no
+  background service or notification, and the copy says so. Stopping tells the
+  server the device is offline rather than leaving senders to wait out a presence TTL.
 - **Sending** stages a durable job — content key, sealed manifest, framed
   ciphertext and idempotency key — before anything reaches the network, then
   uploads the ciphertext as a `device_task` object and creates the task. A retry

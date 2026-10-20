@@ -1,6 +1,8 @@
 # Android realtime receive: coalesced durable writes (O7)
 
-Status: source batch, not released. Physical-device throughput, SAF export and
+Status: this records the 2026-10-15 source batch. The later public-preview
+Android `0.3.2 (11)` release includes this receive batching; see
+[android-development.md](../android-development.md). Physical-device throughput, SAF export and
 process-kill/power-loss behaviour are **unverified** — no Android phone was
 connected. Nothing here is a phone, SAF or WAN measurement.
 

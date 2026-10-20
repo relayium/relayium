@@ -1,5 +1,12 @@
 # Relayium stored-upload transfer control, v1 (client-side)
 
+Scope note (2026-10-20): this is the Web serial/paced slice controller, not a
+claim that every fresh upload is serial. Eligible fast Share uploads can use
+[ordered-v1](../upload-pipeline.md); Apple source additionally offers the
+separate [large-file packing preference](../upload-chunk-tuning.md).
+The fixed 8-MiB examples below describe this controller's legacy/default path;
+none is a universal file-size or server append limit.
+
 Status: Web implementation (`web/src/lib/transfer-control.ts`, used by
 `web/src/lib/stored-file.ts`). Vectors: `contracts/transfer-control-v1.json`.
 Other clients (CLI, Swift, Android, Windows) are expected to port the same

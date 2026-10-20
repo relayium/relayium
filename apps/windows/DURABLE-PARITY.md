@@ -1,5 +1,11 @@
 # Windows desktop client
 
+Evidence scope (2026-10-20): the status/table below records the named September
+integration and its execution. It is not a freshly queried latest-CI result or
+a fixed parity target against today's macOS version. Windows source is `0.0.2`;
+there is still no public signed native Windows release. Later source changes
+and their own hosted acceptance do not prove physical-device/WAN acceptance.
+
 The Windows client is in development toward parity with released macOS 1.3.10.
 It is intended for direct distribution as an EXE outside the Microsoft Store.
 It is **not feature complete, not signed, and has no public release.**
