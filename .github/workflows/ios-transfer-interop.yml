@@ -305,7 +305,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-session-acceptance-diagnosis
-          path: ${{ runner.temp }}/relayium-acceptance-*/**/*.log
+          path: |
+            ${{ runner.temp }}/relayium-acceptance-*/**/*.log
+            ${{ runner.temp }}/relayium-acceptance-*/ios-session.xcresult
           retention-days: 7
           if-no-files-found: ignore
       # PR→main evidence: the toolchain this job actually ran on, captured after

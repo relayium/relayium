@@ -198,6 +198,7 @@ say "== driving RelayiumUITests/LocalSessionUITests against the built app =="
 xcodebuild -project "$project" -scheme Relayium \
   -destination "platform=iOS Simulator,id=$device_id" \
   -derivedDataPath "$derived_data" \
+  -resultBundlePath "$run_root/ios-session.xcresult" \
   "${@:--only-testing:RelayiumUITests/LocalSessionUITests}" \
   test >"$run_root/xcodebuild.log" 2>&1 &
 xcodebuild_pid=$!

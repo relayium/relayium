@@ -8,7 +8,62 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { containsText, splitText } from './lib/swift-source-text.mjs';
+import { matchesFilter } from '../ci/select-lanes.mjs';
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
+
+test('a failed iOS session writes its partial result bundle into the retained run', () => {
+  const launcher = read('scripts/ios-ui-session-acceptance.sh');
+  const workflow = read('.github/workflows/ios-transfer-interop.yml');
+  const retain = workflow.split('      - name: Retain acceptance diagnosis\n')[1]?.split('\n      - name:')[0];
+  assert.ok(retain, 'the failure artifact step is missing');
+  const path = retain.match(/^          path: (.*)\n((?:            .*\n)*)/m);
+  assert.ok(path, 'the failure artifact paths cannot be read');
+  const patterns = path[1] === '|' ? path[2].trim().split('\n').map(s => s.trim()) : [path[1]];
+  const command = launcher.match(/^xcodebuild -project[^]*?2>&1 &\n/m)?.[0];
+  assert.ok(command, 'the real xcodebuild invocation is missing');
+  const work = mkdtempSync(join(tmpdir(), 'ios-result-retention-'));
+  try {
+    const bin = join(work, 'bin');
+    mkdirSync(bin);
+    // This is an argv/output fixture, not an executed XCTest result. Preserve
+    // exit 65 and a partial bundle, including when the runner cannot start.
+    writeFileSync(join(bin, 'xcodebuild'), `#!/bin/bash
+bundle=; previous=
+for arg; do
+  if [ "$previous" = -resultBundlePath ]; then bundle="$arg"; fi
+  previous="$arg"
+done
+printf '%s\\n' "$bundle" > "$BUNDLE_ARGV"
+if [ -n "$bundle" ]; then /bin/mkdir -p "$bundle/Data"; printf partial > "$bundle/Info.plist"; fi
+printf 'simulated UI runner initialization failure\\n'
+exit 65
+`, { mode: 0o755 });
+    const run = (invocation, label) => {
+      const root = join(work, `relayium-acceptance-${label} with spaces`);
+      mkdirSync(root);
+      const argv = join(root, 'bundle-argv');
+      const result = spawnSync('/bin/bash', ['-c',
+        `project=fixture; device_id=fixture; derived_data="$DERIVED_DATA"; run_root="$RUN_ROOT"\n${invocation}wait $!`],
+      { cwd: root, env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, RUN_ROOT: root,
+        DERIVED_DATA: join(work, 'external-derived-data'), BUNDLE_ARGV: argv }, encoding: 'utf8' });
+      assert.equal(result.status, 65, result.stderr);
+      assert.match(readFileSync(join(root, 'xcodebuild.log'), 'utf8'), /simulated UI runner initialization failure/);
+      return { root, bundle: readFileSync(argv, 'utf8').trim() };
+    };
+    const actual = run(command, 'current');
+    assert.equal(actual.bundle, join(actual.root, 'ios-session.xcresult'),
+      'the partial result stays outside the run that the failure artifact retains');
+    assert.equal(readFileSync(join(actual.bundle, 'Info.plist'), 'utf8'), 'partial');
+    const selected = patterns.map(p => p.replace('${{ runner.temp }}', work));
+    assert.ok(matchesFilter(selected, actual.bundle), 'the workflow drops the result bundle the launcher wrote');
+    assert.ok(!matchesFilter(selected.filter(p => !p.endsWith('/ios-session.xcresult')), actual.bundle),
+      'the old logs-only upload must reject the result bundle');
+    const withoutBundle = command.replace(/^  -resultBundlePath .*\n/m, '');
+    assert.notEqual(withoutBundle, command, 'the missing-writer control changed nothing');
+    assert.equal(run(withoutBundle, 'old-writer').bundle, '',
+      'a missing resultBundlePath must not pretend to retain an XCTest bundle');
+  } finally { rmSync(work, { recursive: true, force: true }); }
+});
 
 test('the iOS built-App harness drives the link and the Mac one still drives the room', () => {
   const ios = read('scripts/ios-ui-session-acceptance.sh');

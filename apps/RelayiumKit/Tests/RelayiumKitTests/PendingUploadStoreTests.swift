@@ -1,4 +1,7 @@
 import XCTest
+#if os(macOS)
+import Darwin
+#endif
 @testable import RelayiumAppKit
 @testable import RelayiumKit
 
@@ -161,6 +164,68 @@ final class PendingUploadStoreTests: XCTestCase {
             FileManager.default.attributesOfItem(atPath: staged.path)[.posixPermissions] as? NSNumber)
         XCTAssertEqual(permissions.intValue & 0o777, 0o400)
     }
+
+    #if os(macOS)
+    /// Exercise real Foundation and staging with only this child's backup
+    /// service lookup denied. The filesystem marker must still be present.
+    func testUnavailableBackupServiceDoesNotRejectAMarkedMacPreparation() throws {
+        let childFlag = "RELAYIUM_BACKUP_EXCLUSION_CHILD"
+        if ProcessInfo.processInfo.environment[childFlag] == "1" {
+            for durable in [false, true] {
+                let store = PendingUploadStore(root: root.appendingPathComponent("jobs-\(durable)"),
+                                               durableShares: durable)
+                let plan = try store.prepare(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                                             accountId: "fixture", burnAfterRead: false, ttl: 3600)
+                let path = store.jobURL(for: plan.jobId).path
+                // Test-only inspection of the marker written by Foundation;
+                // its policy query depends on the unavailable backup service.
+                let attribute = "com.apple.metadata:com_apple_backup_excludeItem"
+                let size = getxattr(path, attribute, nil, 0, 0, 0)
+                guard size > 0, size < 4096 else { return XCTFail("backup exclusion marker missing") }
+                var bytes = [UInt8](repeating: 0, count: size)
+                let read = bytes.withUnsafeMutableBytes {
+                    getxattr(path, attribute, $0.baseAddress, $0.count, 0, 0)
+                }
+                XCTAssertEqual(read, size)
+                let marker = try PropertyListSerialization.propertyList(from: Data(bytes), format: nil)
+                XCTAssertEqual(marker as? String, "com.apple.backupd")
+                var staged = try XCTUnwrap(store.sources(for: plan).first)
+                XCTAssertEqual(try staged.read(8), [1, 2, 3])
+            }
+            print("BACKUP_EXCLUSION_CHILD_PASS")
+            return
+        }
+        let log = root.appendingPathComponent("child.log")
+        XCTAssertTrue(FileManager.default.createFile(atPath: log.path, contents: nil))
+        let output = try FileHandle(forWritingTo: log)
+        defer { try? output.close() }
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        child.arguments = ["-p", "(version 1)(allow default)(deny mach-lookup (global-name \"com.apple.backupd.sandbox.xpc\"))",
+                           "/usr/bin/xcrun", "xctest", "-XCTest",
+                           "RelayiumKitTests.PendingUploadStoreTests/testUnavailableBackupServiceDoesNotRejectAMarkedMacPreparation",
+                           Bundle(for: Self.self).bundleURL.path]
+        var environment = ["PATH": "/usr/bin:/bin", childFlag: "1"]
+        for key in ["HOME", "TMPDIR", "DEVELOPER_DIR", "DYLD_FRAMEWORK_PATH", "DYLD_LIBRARY_PATH"] {
+            environment[key] = ProcessInfo.processInfo.environment[key]
+        }
+        child.environment = environment
+        child.standardOutput = output
+        child.standardError = output
+        let finished = DispatchSemaphore(value: 0)
+        child.terminationHandler = { _ in finished.signal() }
+        try child.run()
+        if finished.wait(timeout: .now() + 30) == .timedOut {
+            if child.isRunning { kill(child.processIdentifier, SIGKILL) }
+            child.waitUntilExit()
+            return XCTFail("the isolated backup-service regression did not finish")
+        }
+        child.waitUntilExit()
+        let text = try String(contentsOf: log, encoding: .utf8)
+        XCTAssertEqual(child.terminationStatus, 0, text)
+        XCTAssertTrue(text.contains("BACKUP_EXCLUSION_CHILD_PASS"), text)
+    }
+    #endif
 
     /// Preparation copies from the ALREADY-PINNED source, never from a path it
     /// looks up again: the descriptor is what makes the bytes the ones the user

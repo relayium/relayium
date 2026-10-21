@@ -611,10 +611,17 @@ public final class PendingUploadStore: @unchecked Sendable {
             var values = URLResourceValues()
             values.isExcludedFromBackup = true
             try excluded.setResourceValues(values)
+            // Setting the backup hint must succeed before copying any bytes.
+            // On macOS, reading it back consults backupd's sandbox XPC service:
+            // an unavailable service reports false even after the hint was
+            // persisted. Keep the throwing setter mandatory, and preserve the
+            // existing iOS readback without making Mac staging depend on backupd.
+            #if os(iOS)
             guard try excluded.resourceValues(forKeys: [.isExcludedFromBackupKey])
                 .isExcludedFromBackup == true else {
                 throw PendingUploadError.unusableSelection
             }
+            #endif
 
             lastCopyBufferPeak = 0
             var entries: [PendingUploadFile] = []
