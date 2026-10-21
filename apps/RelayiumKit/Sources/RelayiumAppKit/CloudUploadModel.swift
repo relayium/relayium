@@ -363,6 +363,9 @@ public final class CloudUploadModel: ObservableObject {
             var stagedPlan: PendingUploadPlan?
             var keyWasSaved = false
             var wasAdopted = false
+            #if DEBUG
+            var preparationStage = "stage-files"
+            #endif
             do {
                 let preparation = Task.detached(priority: .userInitiated) {
                     try store.prepare(files: files, accountId: accountId,
@@ -377,6 +380,9 @@ public final class CloudUploadModel: ObservableObject {
                 stagedPlan = plan
                 try Task.checkCancellation()
                 let key = generateStoreKey()
+                #if DEBUG
+                preparationStage = "save-key"
+                #endif
                 do {
                     try await pending.keys.save(id: plan.jobId, keyB64url: encodeStoreKey(key))
                     keyWasSaved = true
@@ -391,6 +397,9 @@ public final class CloudUploadModel: ObservableObject {
                 }
                 try Task.checkCancellation()
                 if store.durableShares {
+                    #if DEBUG
+                    preparationStage = "seal-share"
+                    #endif
                     let sealing = Task.detached(priority: .userInitiated) { [plan] in
                         try store.sealShare(plan, key: key)
                     }
@@ -435,6 +444,15 @@ public final class CloudUploadModel: ObservableObject {
                     store.purge(plan)
                 }
                 self.fail(error, g: g)
+                #if DEBUG
+                // Only throwaway UI fixtures expose this bounded diagnostic.
+                // Never include paths, account IDs, keys or arbitrary errors.
+                if ProcessInfo.processInfo.arguments.contains("--relayium-ui-testing"),
+                   let failure = error as? PendingUploadError, g == self.generation {
+                    self.state = .failed(ErrorCopy.message(for: error)
+                        + " [" + preparationStage + ":" + String(describing: failure) + "]")
+                }
+                #endif
             }
         }
     }

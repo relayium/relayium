@@ -288,6 +288,7 @@ struct DeviceInboxView: View {
         // The answer, beside the button that asked.
         if let answer = InboxManualCheckPresentation.feedback(for: inbox.manualCheck) {
             InlineMessage(inbox.manualCheck == .failed ? .warning : .info, answer)
+                .accessibilityLabel(answer)
                 .accessibilityIdentifier("inbox-check-result")
         }
     }
