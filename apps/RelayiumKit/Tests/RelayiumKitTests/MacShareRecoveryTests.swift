@@ -220,9 +220,13 @@ final class MacShareRecoveryTests: XCTestCase {
         await model.cleanupTask?.value
         await model.recoveryTask?.value
         XCTAssertEqual(model.state, .idle)
-        XCTAssertNil(store().plan(for: "A"))
-        let removed = try await keys.key(for: plan.jobId)
-        XCTAssertNil(removed)
+        XCTAssertNotNil(store().plan(for: "A"))
+        let retained = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(retained, encodeStoreKey(key))
+        XCTAssertTrue(transport.events.isEmpty)
+        session.send(ready("A"))
+        await model.recoveryTask?.value
+        guard case .interrupted = model.state else { return XCTFail("same-account re-entry must offer the retained job") }
         XCTAssertTrue(transport.events.isEmpty)
     }
 
@@ -418,5 +422,49 @@ final class MacShareRecoveryTests: XCTestCase {
         XCTAssertNil(store().plan(for: "A"))
         let savedKey = try await finalKeys.key(for: "object-1")
         XCTAssertNotNil(savedKey)
+    }
+
+    func testAccountDepartureAfterLostFinalizeKeepsTheOnlyKeyForExplicitSameAccountRecovery() async throws {
+        let pendingKeys = InMemoryStoredLinkKeyStore(), finalKeys = InMemoryStoredLinkKeyStore()
+        let transport = Transport(); transport.interruptAfterFinalize = true
+        let model = CloudUploadModel(uploader: CloudUploader(transport: transport), keyStore: finalKeys,
+            origin: "https://example.invalid", pending: PendingUploadSupport(store: store(), keys: pendingKeys))
+        let session = CurrentValueSubject<SessionState, Never>(ready("A"))
+        model.observe(session); await model.recoveryTask?.value
+        let original = root.appendingPathComponent("original.bin")
+        try Data([1, 2, 3]).write(to: original)
+        model.pick([original]); model.start(token: "private-test"); await model.task?.value
+        guard case .interrupted = model.state else { return XCTFail("lost finalized reply must pause") }
+        let plan = try XCTUnwrap(store().plan(for: "A"))
+        XCTAssertEqual(plan.sessionPhase, "finalizing")
+        XCTAssertEqual(transport.objects, 1)
+        let pendingKey = try await pendingKeys.key(for: plan.jobId)
+        XCTAssertNotNil(pendingKey)
+        let unsaved = try await finalKeys.key(for: "object-1")
+        XCTAssertNil(unsaved, "the pending key is the only copy")
+        try FileManager.default.removeItem(at: original)
+        let events = transport.events
+
+        session.send(ready("B"))
+        XCTAssertEqual(model.accountId, "B")
+        XCTAssertTrue(model.sessionFiles.isEmpty)
+        await model.cleanupTask?.value; await model.recoveryTask?.value
+        XCTAssertEqual(model.state, .idle)
+        XCTAssertNotNil(store().plan(for: "A"), "account departure must not discard an uncertain paid object")
+        let retained = try await pendingKeys.key(for: plan.jobId)
+        XCTAssertEqual(retained, pendingKey, "do not delete the only key")
+        XCTAssertEqual(transport.events, events)
+
+        session.send(ready("A")); await model.recoveryTask?.value
+        guard case .interrupted = model.state else { return XCTFail("same account must recover its saved job") }
+        XCTAssertEqual(store().plan(for: "A")?.uploadId, plan.uploadId)
+        XCTAssertEqual(transport.events, events, "account entry must not send")
+        model.resume(token: "private-test"); await model.task?.value
+        guard case .done = model.state else { return XCTFail("explicit resume must recover the existing link") }
+        XCTAssertEqual(transport.objects, 1)
+        XCTAssertEqual(transport.events.filter { $0 == "init" }.count, 1)
+        XCTAssertEqual(transport.events.filter { $0 == "patch" }.count, 1)
+        let saved = try await finalKeys.key(for: "object-1")
+        XCTAssertEqual(saved, pendingKey)
     }
 }

@@ -36,8 +36,11 @@ use the durable offset and recorded cap through the serial recovery pump.
 Uploading requires a running app; this feature adds no closed-app background
 upload service.
 
-Cancel pauses an adopted job. Discard and account departure remove only local
-pending data and its pending key; they never delete a published object. A final
+Cancel pauses an adopted job. Account departure immediately hides the outgoing
+job and cancels its attempt while retaining account-bound ciphertext and its
+pending key. Signing back into that account offers explicit recovery; a different
+account cannot see or resume it. Only an explicit Discard removes local pending
+data and its pending key; it never deletes a published object. A final
 link already on screen survives an account change. After success, the pending
 key is removed only after the final link key is proven saved; a locked Keychain
 keeps a finalized salvage record for a later local retry. Disk cleanup failures

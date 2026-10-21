@@ -850,8 +850,8 @@ public final class CloudUploadModel: ObservableObject {
 
     private nonisolated static let salvageLog = Logger(subsystem: "com.relayium", category: "upload")
 
-    /// Forget the job on this screen and remove it from disk. What "Discard"
-    /// means, and also what an account leaving means.
+    /// Explicitly discard the local job. Account departure is separate: a
+    /// durable Mac job can name an object whose finalize answer was lost.
     public func discardPendingJob() {
         guard let pending, let plan = job else { return }
         discard(plan, using: pending)
@@ -903,9 +903,25 @@ public final class CloudUploadModel: ObservableObject {
     }
 
     /// The account left. Hide the job SYNCHRONOUSLY — before any await, so no
-    /// runloop turn exists in which the next account could see it — and then
-    /// remove it.
+    /// runloop turn exists in which the next account could see it. Durable Mac
+    /// jobs retain their account-bound recovery inputs: departure is not consent
+    /// to destroy the only key of a possibly completed, metered object.
     public func purgePendingJob() {
+        if pending?.store.durableShares == true {
+            task?.cancel()
+            task = nil
+            recoveryTask?.cancel()
+            recoveryTask = nil
+            generation += 1
+            job = nil
+            accountId = nil
+            lastPicked = []
+            sourceDraftId = nil
+            sessionFiles = []
+            uploadActivity = nil
+            state = .idle
+            return
+        }
         // Recovery may still be checking Keychain and therefore may not have
         // assigned `job` yet. Resolve the outgoing account's plan before its
         // identity is cleared, so a sign-out in that brief window still obeys
@@ -916,15 +932,7 @@ public final class CloudUploadModel: ObservableObject {
         recoveryTask?.cancel()
         recoveryTask = nil
         if let pending, let plan = job ?? undisplayed {
-            if !discard(plan, using: pending), pending.store.durableShares {
-                // A failed delete must retain recovery inputs, but the next
-                // account must never inherit their presentation or callbacks.
-                generation += 1
-                job = nil
-                lastPicked = []
-                sessionFiles = []
-                state = .idle
-            }
+            discard(plan, using: pending)
         } else {
             generation += 1
             restorePickedState()
