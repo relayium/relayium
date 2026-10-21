@@ -868,10 +868,36 @@ public final class CloudUploadModel: ObservableObject {
 
     private nonisolated static let salvageLog = Logger(subsystem: "com.relayium", category: "upload")
 
-    /// Explicitly discard the local job. Account departure is separate: a
-    /// durable Mac job can name an object whose finalize answer was lost.
+    /// A confirmation names one paused job and the account/operation that
+    /// offered it. It cannot authorize deletion after a resume or account change.
+    private let discardConfirmationOwner = UUID()
+
+    public struct DiscardConfirmation: Equatable, Sendable {
+        fileprivate let modelId: UUID
+        fileprivate let jobId: String
+        fileprivate let accountId: String
+        fileprivate let generation: Int
+    }
+
+    public func makeDiscardConfirmation() -> DiscardConfirmation? {
+        guard pending?.store.durableShares == true, case .interrupted = state,
+              let job, accountId == job.accountId else { return nil }
+        return DiscardConfirmation(modelId: discardConfirmationOwner,
+                                   jobId: job.jobId, accountId: job.accountId,
+                                   generation: generation)
+    }
+
+    public func discardPendingJob(confirming confirmation: DiscardConfirmation) {
+        guard let current = makeDiscardConfirmation(), current == confirmation,
+              let pending, let job else { return }
+        discard(job, using: pending)
+    }
+
+    /// Legacy staged-file callers keep their existing explicit-discard action.
+    /// A durable Mac job can hold the only key for an already-metered object;
+    /// its destructive action must use the confirmation-bound overload above.
     public func discardPendingJob() {
-        guard let pending, let plan = job else { return }
+        guard let pending, !pending.store.durableShares, let plan = job else { return }
         discard(plan, using: pending)
     }
 

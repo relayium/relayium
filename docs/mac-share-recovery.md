@@ -45,8 +45,12 @@ upload service.
 Cancel pauses an adopted job. Account departure immediately hides the outgoing
 job and cancels its attempt while retaining account-bound ciphertext and its
 pending key. Signing back into that account offers explicit recovery; a different
-account cannot see or resume it. Only an explicit Discard removes local pending
-data and its pending key; it never deletes a published object. A final
+account cannot see or resume it. Only a confirmed Discard removes local pending data and its pending key. The
+confirmation explains that losing the only recovery key can permanently lose
+access to an already-completed upload, and does not delete the server object
+or refund usage. Cancelling the dialog preserves recovery without any request.
+The confirmation is bound to one model, account, job and operation generation;
+a resume or account change invalidates an earlier confirmation. A final
 link already on screen survives an account change. After success, the pending
 key is removed only after the final link key is proven saved; a locked Keychain
 keeps a finalized salvage record for a later local retry. Disk cleanup failures
@@ -63,6 +67,10 @@ These tests cover app/process termination, not system power loss. Phase records
 use Foundation atomic writes; full disk and directory flush durability after a
 power failure has not been established. A force quit during preparation can
 also leave private plaintext staging in a directory without a readable plan;
-the conservative recovery sweep retains unexplained directories. Explicit
-Discard of a finalizing job removes local recovery inputs even if a server
-completion cannot yet be confirmed; it is not a server cancellation or refund.
+the conservative recovery sweep retains unexplained directories. Confirmed Discard of a finalizing job removes local recovery inputs even if a
+server completion cannot yet be confirmed. This requires the explicit warning
+and confirmation above; it is not a server cancellation or refund.
+
+If a recovery-state write fails before a completion request, the app states
+that this request was not sent, without claiming an earlier request could not
+have completed. Resume checks the same upload rather than opening another.

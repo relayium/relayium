@@ -1,4 +1,7 @@
 import XCTest
+#if os(macOS)
+import Darwin
+#endif
 @testable import RelayiumKit
 @testable import RelayiumShareKit
 
@@ -393,6 +396,64 @@ final class SharedDraftStoreTests: XCTestCase {
     }
 
     // MARK: - the copy is bounded, and what it leaves is immutable
+
+    #if os(macOS)
+    func testUnavailableBackupServiceStillPublishesAMarkedMacShareDraft() throws {
+        let childFlag = "RELAYIUM_SHARED_DRAFT_BACKUP_CHILD"
+        if ProcessInfo.processInfo.environment[childFlag] == "1" {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let source = root.appendingPathComponent("source.bin")
+            try Data([1, 2, 3]).write(to: source)
+            let writer = try store.beginDraft()
+            try writer.adopt(source, suggestedName: "source.bin")
+            let plan = try writer.publish()
+            let path = store.draftURL(id: plan.id).path
+            let attribute = "com.apple.metadata:com_apple_backup_excludeItem"
+            let size = getxattr(path, attribute, nil, 0, 0, 0)
+            guard size > 0, size < 4096 else { return XCTFail("backup exclusion marker missing") }
+            var bytes = [UInt8](repeating: 0, count: size)
+            let read = bytes.withUnsafeMutableBytes {
+                getxattr(path, attribute, $0.baseAddress, $0.count, 0, 0)
+            }
+            XCTAssertEqual(read, size)
+            let marker = try PropertyListSerialization.propertyList(from: Data(bytes), format: nil)
+            XCTAssertEqual(marker as? String, "com.apple.backupd")
+            XCTAssertEqual(try Data(contentsOf: store.stagedFiles(for: plan)[0].url), Data([1, 2, 3]))
+            XCTAssertEqual(store.drafts().map(\.id), [plan.id])
+            print("SHARED_DRAFT_BACKUP_CHILD_PASS")
+            return
+        }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let log = root.appendingPathComponent("child.log")
+        XCTAssertTrue(FileManager.default.createFile(atPath: log.path, contents: nil))
+        let output = try FileHandle(forWritingTo: log)
+        defer { try? output.close() }
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        child.arguments = ["-p", "(version 1)(allow default)(deny mach-lookup (global-name \"com.apple.backupd.sandbox.xpc\"))",
+                           "/usr/bin/xcrun", "xctest", "-XCTest",
+                           "RelayiumKitTests.SharedDraftStoreTests/testUnavailableBackupServiceStillPublishesAMarkedMacShareDraft",
+                           Bundle(for: Self.self).bundleURL.path]
+        var environment = ["PATH": "/usr/bin:/bin", childFlag: "1"]
+        for name in ["HOME", "TMPDIR", "DEVELOPER_DIR", "DYLD_FRAMEWORK_PATH", "DYLD_LIBRARY_PATH"] {
+            environment[name] = ProcessInfo.processInfo.environment[name]
+        }
+        child.environment = environment
+        child.standardOutput = output; child.standardError = output
+        let finished = DispatchSemaphore(value: 0)
+        child.terminationHandler = { _ in finished.signal() }
+        try child.run()
+        if finished.wait(timeout: .now() + 30) == .timedOut {
+            if child.isRunning { kill(child.processIdentifier, SIGKILL) }
+            child.waitUntilExit()
+            return XCTFail("the isolated Share draft regression did not finish")
+        }
+        child.waitUntilExit()
+        let text = try String(contentsOf: log, encoding: .utf8)
+        XCTAssertEqual(child.terminationStatus, 0, text)
+        XCTAssertTrue(text.contains("SHARED_DRAFT_BACKUP_CHILD_PASS"), text)
+    }
+    #endif
 
     func testTheCopyIsChunkedAndTheStagedFilesAreReadOnlyAndExcludedFromBackup() throws {
         // Comfortably more than one chunk, so the loop actually loops.

@@ -77,8 +77,11 @@ final class BundleVersionTests: XCTestCase {
         // The 2026-10-17 complete provider inventory confirms 1.4.9 (46)
         // is consumed and 1.4.10 (47) is available. The parallel-share owner
         // candidate advances both values; this does not publish any channel.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.10", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "47", occurrences: 10)
+        // Complete read-only GitHub and Apple inventories on 2026-10-21
+        // confirm 1.4.10 (47) is issued, and 1.5.0 (48) is unused. Restart
+        // recovery adds a compatible user-visible capability (minor release).
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.5.0", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "48", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon

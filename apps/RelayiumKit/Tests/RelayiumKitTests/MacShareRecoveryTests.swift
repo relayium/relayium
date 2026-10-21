@@ -303,6 +303,98 @@ final class MacShareRecoveryTests: XCTestCase {
         XCTAssertEqual(t.objects, 1)
     }
 
+    func testUnconfirmedDiscardWithoutConfirmationPreservesTheOnlyRecoveryKey() async throws {
+        let s = store(), keys = InMemoryStoredLinkKeyStore()
+        let plan = try s.setUploadSession(id: "session-1", chunkSize: 65536, for: prepare([1]))
+        try s.markShareFinalizing(uploadId: "session-1", for: plan)
+        try await keys.save(id: plan.jobId, keyB64url: encodeStoreKey(key))
+        let transport = Transport()
+        let model = CloudUploadModel(uploader: CloudUploader(transport: transport),
+            keyStore: InMemoryStoredLinkKeyStore(), origin: "https://example.invalid",
+            pending: PendingUploadSupport(store: s, keys: keys))
+        model.recoverPendingJob(for: "A"); await model.recoveryTask?.value
+        model.discardPendingJob(); await model.cleanupTask?.value
+        XCTAssertNotNil(s.plan(for: "A"), "an unconfirmed deletion must retain recovery")
+        let retained = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(retained, encodeStoreKey(key), "an unconfirmed deletion must retain the only key")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: s.spoolURL(for: plan).path))
+        XCTAssertTrue(transport.events.isEmpty, "asking for confirmation must never contact the server")
+    }
+
+    func testStaleDiscardAfterAccountDepartureCannotDeleteButFreshConfirmationCan() async throws {
+        let s = store(), keys = InMemoryStoredLinkKeyStore(), transport = Transport()
+        let plan = try prepare([1, 2])
+        try await keys.save(id: plan.jobId, keyB64url: encodeStoreKey(key))
+        let model = CloudUploadModel(uploader: CloudUploader(transport: transport),
+            keyStore: InMemoryStoredLinkKeyStore(), origin: "https://example.invalid",
+            pending: PendingUploadSupport(store: s, keys: keys))
+        let session = CurrentValueSubject<SessionState, Never>(ready("A"))
+        model.observe(session); await model.recoveryTask?.value
+        let stale = try XCTUnwrap(model.makeDiscardConfirmation())
+        XCTAssertNotNil(s.plan(for: "A"), "opening or cancelling confirmation changes nothing")
+        session.send(.loggedOut)
+        XCTAssertNil(model.makeDiscardConfirmation())
+        session.send(ready("A")); await model.recoveryTask?.value
+        model.discardPendingJob(confirming: stale); await model.cleanupTask?.value
+        XCTAssertNotNil(s.plan(for: "A"))
+        let retained = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(retained, encodeStoreKey(key))
+        let fresh = try XCTUnwrap(model.makeDiscardConfirmation())
+        XCTAssertNotEqual(stale, fresh)
+        model.discardPendingJob(confirming: fresh); await model.cleanupTask?.value
+        XCTAssertNil(s.plan(for: "A"))
+        let removed = try await keys.key(for: plan.jobId)
+        XCTAssertNil(removed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: s.spoolURL(for: plan).path))
+        XCTAssertTrue(transport.events.isEmpty, "confirmed local deletion must never delete a server object")
+    }
+
+    func testConfirmationFromAnotherModelCannotDeleteEvenTheSameSavedJob() async throws {
+        let s = store(), keys = InMemoryStoredLinkKeyStore(), transport = Transport()
+        let plan = try prepare([1])
+        try await keys.save(id: plan.jobId, keyB64url: encodeStoreKey(key))
+        func makeModel() -> CloudUploadModel {
+            CloudUploadModel(uploader: CloudUploader(transport: transport),
+                keyStore: InMemoryStoredLinkKeyStore(), origin: "https://example.invalid",
+                pending: PendingUploadSupport(store: s, keys: keys))
+        }
+        let first = makeModel(), second = makeModel()
+        first.recoverPendingJob(for: "A"); await first.recoveryTask?.value
+        let firstToken = try XCTUnwrap(first.makeDiscardConfirmation())
+        second.recoverPendingJob(for: "A"); await second.recoveryTask?.value
+        XCTAssertNotEqual(firstToken, try XCTUnwrap(second.makeDiscardConfirmation()))
+        second.discardPendingJob(confirming: firstToken); await second.cleanupTask?.value
+        XCTAssertNotNil(s.plan(for: "A"))
+        let retained = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(retained, encodeStoreKey(key))
+        XCTAssertTrue(transport.events.isEmpty)
+    }
+
+    func testResumingInvalidatesAnEarlierDiscardConfirmation() async throws {
+        let s = store(), keys = InMemoryStoredLinkKeyStore(), transport = Transport()
+        let plan = try s.setUploadSession(id: "session-1", chunkSize: 65536, for: prepare([1]))
+        try s.markShareFinalizing(uploadId: "session-1", for: plan)
+        try await keys.save(id: plan.jobId, keyB64url: encodeStoreKey(key))
+        transport.missing = true; transport.oldServer = true
+        let model = CloudUploadModel(uploader: CloudUploader(transport: transport),
+            keyStore: InMemoryStoredLinkKeyStore(), origin: "https://example.invalid",
+            pending: PendingUploadSupport(store: s, keys: keys))
+        model.recoverPendingJob(for: "A"); await model.recoveryTask?.value
+        let stale = try XCTUnwrap(model.makeDiscardConfirmation())
+        model.resume(token: "private-test")
+        XCTAssertNil(model.makeDiscardConfirmation(), "running work cannot be confirmed for deletion")
+        await model.task?.value
+        guard case .interrupted = model.state else { return XCTFail("old server must retain the uncertain upload") }
+        let events = transport.events
+        model.discardPendingJob(confirming: stale); await model.cleanupTask?.value
+        XCTAssertNotNil(s.plan(for: "A"))
+        let retained = try await keys.key(for: plan.jobId)
+        XCTAssertEqual(retained, encodeStoreKey(key))
+        XCTAssertNotEqual(stale, try XCTUnwrap(model.makeDiscardConfirmation()))
+        XCTAssertEqual(transport.events, events)
+        XCTAssertEqual(events, ["offset", "finalize"])
+    }
+
     func testDiscardCannotDeleteTheOnlyKeyOfAShareThatFinalizedWhileKeySaveWasPending() async throws {
         let plan = try prepare([1])
         let keys = InMemoryStoredLinkKeyStore(); try await keys.save(id: plan.jobId, keyB64url: encodeStoreKey(key))
@@ -313,7 +405,8 @@ final class MacShareRecoveryTests: XCTestCase {
             origin: "https://example.invalid", pending: PendingUploadSupport(store: s, keys: keys))
         model.recoverPendingJob(for: "A"); await model.recoveryTask?.value
         _ = try s.markFinalized(live, storedId: "object-1")
-        model.discardPendingJob(); await model.cleanupTask?.value
+        model.discardPendingJob(confirming: try XCTUnwrap(model.makeDiscardConfirmation()))
+        await model.cleanupTask?.value
         let retained = try await keys.key(for: plan.jobId)
         XCTAssertEqual(retained, encodeStoreKey(key))
         XCTAssertEqual(s.finalizedSharesAwaitingSalvage().count, 1)
@@ -334,7 +427,7 @@ final class MacShareRecoveryTests: XCTestCase {
             origin: "https://example.invalid", pending: PendingUploadSupport(store: s, keys: keys))
         let session = CurrentValueSubject<SessionState, Never>(ready("A")); model.observe(session)
         await model.recoveryTask?.value
-        model.discardPendingJob()
+        model.discardPendingJob(confirming: try XCTUnwrap(model.makeDiscardConfirmation()))
         guard case .interrupted = model.state else { return XCTFail("failed Discard must retain the offer") }
         let retained = try await keys.key(for: plan.jobId)
         XCTAssertNotNil(retained)

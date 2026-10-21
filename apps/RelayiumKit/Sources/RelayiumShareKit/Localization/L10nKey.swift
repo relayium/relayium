@@ -863,6 +863,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case uploadRecoveryUnconfirmed = "upload.recoveryUnconfirmed"
     case uploadRecoveryUnavailable = "upload.recoveryUnavailable"
     case uploadRecoveryStateWriteFailed = "upload.recoveryStateWriteFailed"
+    case uploadDiscardConfirmTitle = "upload.discardConfirmTitle"
+    case uploadDiscardConfirmBody = "upload.discardConfirmBody"
     /// Copying/sealing into this app's own storage before any upload.
     case uploadPreparing = "upload.preparing"
     /// Checking local disk and Keychain for an interrupted stored upload.

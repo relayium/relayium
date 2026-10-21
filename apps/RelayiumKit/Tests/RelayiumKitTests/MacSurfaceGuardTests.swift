@@ -6116,7 +6116,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(app.contains("durableShares: true"))
         XCTAssertTrue(app.contains("uploads.observe(account.$state)"))
         XCTAssertTrue(upload.contains("model.resume(token: token)"))
-        XCTAssertTrue(upload.contains("model.discardPendingJob()"))
+        XCTAssertTrue(upload.contains("model.makeDiscardConfirmation()"))
+        XCTAssertTrue(upload.contains("model.discardPendingJob(confirming: confirmation)"))
+        XCTAssertTrue(upload.contains(".uploadDiscardConfirmBody"))
     }
 
     // MARK: - the component vocabulary, everywhere

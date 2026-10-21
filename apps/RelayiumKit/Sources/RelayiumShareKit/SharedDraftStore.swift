@@ -160,10 +160,15 @@ public final class SharedDraftStore: @unchecked Sendable {
             var values = URLResourceValues()
             values.isExcludedFromBackup = true
             try excluded.setResourceValues(values)
+            // On Mac the policy query can report false when backupd is
+            // unavailable even though this throwing setter persisted the hint.
+            // Keep marking mandatory before any copy; iOS keeps its readback.
+            #if os(iOS)
             guard try excluded.resourceValues(forKeys: [.isExcludedFromBackupKey])
                 .isExcludedFromBackup == true else {
                 throw SharedDraftError.storageFailed
             }
+            #endif
         } catch {
             try? fileManager.removeItem(at: staging)
             throw SharedDraftError.storageFailed

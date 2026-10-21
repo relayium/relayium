@@ -1209,4 +1209,7 @@
 
 "upload.recoveryUnavailable" = "这次上传已无法继续。可以丢弃恢复数据，再次选择文件并发起新的上传；新上传会重新计量。";
 
-"upload.recoveryStateWriteFailed" = "无法保存上传恢复状态，因此尚未请求完成上传。请选择“继续上传”重试。";
+"upload.recoveryStateWriteFailed" = "无法保存恢复状态，因此未发送这次完成请求。之前的完成请求仍可能已成功。请选择“继续上传”核对同一次上传。";
+
+"upload.discardConfirmTitle" = "删除这次上传的本机副本？";
+"upload.discardConfirmBody" = "这次上传可能已完成。删除本机副本可能永久失去找回分享链接的唯一方式；服务器上的文件不会因此删除，也不会退还已计用量。若要先核对同一次上传，请取消并选择“继续上传”。";

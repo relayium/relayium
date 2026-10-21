@@ -1233,4 +1233,7 @@
 
 "upload.recoveryUnavailable" = "This upload can no longer be continued. Discard its recovery data and choose the files again to start a new upload, which counts as a new upload.";
 
-"upload.recoveryStateWriteFailed" = "Couldn't save the upload's recovery state, so its completion was not requested. Choose Resume to try again.";
+"upload.recoveryStateWriteFailed" = "Couldn't save recovery state, so this completion request wasn't sent. An earlier request may have finished. Choose Resume to check the same upload.";
+
+"upload.discardConfirmTitle" = "Discard this saved upload?";
+"upload.discardConfirmBody" = "The upload may already be complete. Discarding can permanently remove your only way to recover its link. It does not delete the file on the server or refund usage. To check the same upload first, cancel and choose Resume.";

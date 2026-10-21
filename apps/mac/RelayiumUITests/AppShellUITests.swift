@@ -1986,7 +1986,17 @@ final class AppShellUITests: XCTestCase {
             .firstMatch.exists,
             "a cancelled upload left a capability link on screen")
         window.buttons["storedSend.discard"].click()
-        XCTAssertTrue(chooser.waitForExistence(timeout: 20), "Discard did not return to the selection")
+        let keep = app.buttons["storedSend.discard.cancel"]
+        XCTAssertTrue(keep.waitForExistence(timeout: 10), "Discard must ask before deleting recovery")
+        keep.click()
+        XCTAssertTrue(window.buttons["storedSend.resume"].waitForExistence(timeout: 10),
+                      "cancelling confirmation must preserve the saved upload")
+        XCTAssertTrue(identity.exists, "cancelling confirmation lost the saved files")
+        window.buttons["storedSend.discard"].click()
+        let confirm = app.buttons["storedSend.discard.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.click()
+        XCTAssertTrue(chooser.waitForExistence(timeout: 20), "Confirmed Discard did not return to the selection")
         XCTAssertFalse(window.buttons["storedSend.resume"].exists)
     }
 

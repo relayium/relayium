@@ -44,6 +44,8 @@ struct UploadPane: View {
     /// command string for the same reason `copiedLink` is keyed by the link: a
     /// later upload must not inherit the previous result's tick.
     @State private var copiedCommand: String?
+    @State private var discardConfirmation: CloudUploadModel.DiscardConfirmation?
+
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.section) {
@@ -59,6 +61,22 @@ struct UploadPane: View {
                 InlineMessage(.warning, warning)
             }
         }
+        .alert(L10n.t(.uploadDiscardConfirmTitle), isPresented: Binding(
+            get: { discardConfirmation != nil },
+            set: { if !$0 { discardConfirmation = nil } }
+        ), presenting: discardConfirmation) { confirmation in
+            Button(L10n.t(.uploadDiscard), role: .destructive) {
+                model.discardPendingJob(confirming: confirmation)
+                discardConfirmation = nil
+            }
+            .accessibilityIdentifier("storedSend.discard.confirm")
+            Button(L10n.t(.commonCancel), role: .cancel) { discardConfirmation = nil }
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("storedSend.discard.cancel")
+        } message: { _ in
+            Text(L10n.t(.uploadDiscardConfirmBody))
+        }
+        .onChange(of: model.state) { _ in discardConfirmation = nil }
         // The store owns "what the user chose"; the model owns "what is being
         // uploaded". Pushing on every revision keeps them one fact rather than
         // two — including the empty case, which has to reach `clearSelection`
@@ -279,7 +297,9 @@ struct UploadPane: View {
             }
             .buttonStyle(.referencePrimary)
             .accessibilityIdentifier("storedSend.resume")
-            Button(L10n.t(.uploadDiscard), role: .destructive) { model.discardPendingJob() }
+            Button(L10n.t(.uploadDiscard), role: .destructive) {
+                discardConfirmation = model.makeDiscardConfirmation()
+            }
                 .buttonStyle(.referenceSecondary)
                 .accessibilityIdentifier("storedSend.discard")
         }
