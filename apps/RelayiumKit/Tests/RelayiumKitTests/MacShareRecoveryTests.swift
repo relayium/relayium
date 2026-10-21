@@ -368,6 +368,7 @@ final class MacShareRecoveryTests: XCTestCase {
         var interruptAfterFinalize = false
         var objects = 0
         var beforeFinalize: (() -> Void)?
+        var afterFinalizeCommit: (() async -> Void)?
         func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             events.append("init"); return ("session-1", 65536)
@@ -388,6 +389,7 @@ final class MacShareRecoveryTests: XCTestCase {
             if oldServer { return .unconfirmedConflict }
             let recovered = completed
             if !completed { objects += 1 }; completed = true; missing = true
+            await afterFinalizeCommit?()
             if interruptAfterFinalize { interruptAfterFinalize = false; throw CancellationError() }
             return .completed(UploadResult(id: "object-1", expiresAt: 42), recovered: recovered)
         }
@@ -445,6 +447,16 @@ final class MacShareRecoveryTests: XCTestCase {
         try FileManager.default.removeItem(at: original)
         let events = transport.events
 
+        session.send(.loggedOut)
+        XCTAssertNil(model.accountId)
+        XCTAssertTrue(model.sessionFiles.isEmpty)
+        await model.cleanupTask?.value
+        XCTAssertNotNil(store().plan(for: "A"))
+        let afterLogout = try await pendingKeys.key(for: plan.jobId)
+        XCTAssertEqual(afterLogout, pendingKey)
+        session.send(.unavailable(message: "account unavailable"))
+        XCTAssertNil(model.accountId)
+        XCTAssertNotNil(store().plan(for: "A"))
         session.send(ready("B"))
         XCTAssertEqual(model.accountId, "B")
         XCTAssertTrue(model.sessionFiles.isEmpty)
@@ -466,5 +478,39 @@ final class MacShareRecoveryTests: XCTestCase {
         XCTAssertEqual(transport.events.filter { $0 == "patch" }.count, 1)
         let saved = try await finalKeys.key(for: "object-1")
         XCTAssertEqual(saved, pendingKey)
+    }
+
+    func testAccountDepartureWhileFinalizeIsInFlightRetainsTheOriginalSessionAndKey() async throws {
+        let keys = InMemoryStoredLinkKeyStore(), finalKeys = InMemoryStoredLinkKeyStore()
+        let transport = Transport(); transport.interruptAfterFinalize = true
+        let model = CloudUploadModel(uploader: CloudUploader(transport: transport), keyStore: finalKeys,
+            origin: "https://example.invalid", pending: PendingUploadSupport(store: store(), keys: keys))
+        let session = CurrentValueSubject<SessionState, Never>(ready("A"))
+        model.observe(session); await model.recoveryTask?.value
+        transport.afterFinalizeCommit = { await MainActor.run { session.send(.loggedOut) } }
+        let source = root.appendingPathComponent("inflight.bin")
+        try Data([7, 8, 9]).write(to: source)
+        model.pick([source]); model.start(token: "private-test")
+        let attempt = model.task
+        await attempt?.value
+        XCTAssertNil(model.accountId)
+        XCTAssertTrue(model.sessionFiles.isEmpty)
+        XCTAssertEqual(model.state, .idle)
+        let plan = try XCTUnwrap(store().plan(for: "A"))
+        XCTAssertEqual(plan.sessionPhase, "finalizing")
+        let retained = try await keys.key(for: plan.jobId)
+        XCTAssertNotNil(retained)
+        XCTAssertEqual(transport.objects, 1)
+        transport.afterFinalizeCommit = nil
+        let events = transport.events
+        session.send(ready("A")); await model.recoveryTask?.value
+        guard case .interrupted = model.state else { return XCTFail("same account must recover the in-flight completion") }
+        XCTAssertEqual(transport.events, events)
+        model.resume(token: "private-test"); await model.task?.value
+        guard case .done = model.state else { return XCTFail("resume must recover the original object") }
+        XCTAssertEqual(transport.objects, 1)
+        XCTAssertEqual(transport.events.filter { $0 == "init" }.count, 1)
+        let saved = try await finalKeys.key(for: "object-1")
+        XCTAssertEqual(saved, retained)
     }
 }

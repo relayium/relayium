@@ -1,6 +1,6 @@
 # Mac stored-link upload recovery
 
-Source implementation candidate, 2026-10-20. This document does not claim that
+Source implementation candidate, 2026-10-21. This document does not claim that
 an existing released 1.4.10 binary contains this feature. Independent financial
 reviews and Git delivery remain required before shipping this change.
 
@@ -31,6 +31,12 @@ opening another upload. Old-server conflicts and uncertain results keep the
 recovery data. Expired or removed completed objects cannot be recovered; a new
 send requires the user's choice and counts as a new upload.
 
+The reviewed server retains a Share finalize-recovery record for about one hour
+of idleness (`pendingUploadTTL = 3600`); recovery reads do not extend that window.
+The encrypted object can outlive its recovery record. A later 404 therefore
+cannot prove that the object was never created or metered, and does not permit
+an automatic replacement upload.
+
 New uploads retain negotiated ordered two-request pipelining. Restarted sessions
 use the durable offset and recorded cap through the serial recovery pump.
 Uploading requires a running app; this feature adds no closed-app background
@@ -52,3 +58,11 @@ old-server refusal, final-key salvage, bounded two-request overlap, and private
 SIGKILL/fresh-process tests against the actual HTTP handlers with file-backed
 SQLite and DiskStore. Source-bound receipts are kept in the workspace task
 artifacts; they are not published with the repositories.
+
+These tests cover app/process termination, not system power loss. Phase records
+use Foundation atomic writes; full disk and directory flush durability after a
+power failure has not been established. A force quit during preparation can
+also leave private plaintext staging in a directory without a readable plan;
+the conservative recovery sweep retains unexplained directories. Explicit
+Discard of a finalizing job removes local recovery inputs even if a server
+completion cannot yet be confirmed; it is not a server cancellation or refund.
