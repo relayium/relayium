@@ -1,8 +1,8 @@
 # Mac stored-link upload recovery
 
-Source implementation candidate, 2026-10-21. This document does not claim that
-an existing released 1.4.10 binary contains this feature. Independent financial
-reviews and Git delivery remain required before shipping this change.
+Source implementation, 2026-10-21. An existing released 1.4.10 binary does not
+contain this feature. Distributing this implementation requires a separately
+qualified app release; source delivery is not an app release.
 
 The Mac app owns recovery for ordinary **Share a link** uploads, separately from
 Device Inbox. It observes the signed-in account for the whole app lifetime,
