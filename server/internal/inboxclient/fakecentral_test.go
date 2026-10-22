@@ -453,6 +453,12 @@ func (fc *fakeCentral) blob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	corrupt, truncate, ignoreRange := fc.corruptBlobByte, fc.truncateBlobTo, fc.ignoreRange
+	// Copied while locked: requeue and claim rewrite the token under fc.mu, and
+	// a cancelled worker's request can still be here when they do.
+	claim := ""
+	if t != nil {
+		claim = t.claimToken
+	}
 	fc.mu.Unlock()
 
 	if t == nil {
@@ -461,7 +467,7 @@ func (fc *fakeCentral) blob(w http.ResponseWriter, r *http.Request) {
 	}
 	// The claim token is required IN ADDITION to the device bearer: a device
 	// with several workers must not be able to read another worker's task.
-	if stale || token == "" || token != t.claimToken {
+	if stale || token == "" || token != claim {
 		writeErr(w, 409, "stale_claim")
 		return
 	}
@@ -788,3 +794,53 @@ func framedSize(n int) int {
 }
 
 var _ = binary.BigEndian
+
+// TestFakeCentralBlobReadsClaimTokenUnderLock pins the fixture's own locking.
+// A worker cancelled mid-download can leave its blob request running while the
+// test requeues the task, so the claim check must read the token under fc.mu
+// like every other access to it. Run with -race; the requeue loop overlaps the
+// blob requests on purpose.
+func TestFakeCentralBlobReadsClaimTokenUnderLock(t *testing.T) {
+	f := newFixture(t)
+	f.enrol()
+	fc := f.fc
+	id := fc.enqueue(t, srcFile{Name: "claim.txt", Data: []byte("claim")})
+	url := fc.server.URL + "/api/devices/" + fc.deviceID + "/inbox/tasks/" + id + "/blob"
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				fc.requeue(id)
+			}
+		}
+	}()
+	defer func() {
+		close(stop)
+		wg.Wait()
+	}()
+
+	for i := 0; i < 200; i++ {
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+fc.token)
+		req.Header.Set(ClaimTokenHeader, "not-the-claim")
+		resp, err := fc.server.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		// A requeued task has no claim, so any presented token is stale.
+		if resp.StatusCode != http.StatusConflict {
+			t.Fatalf("request %d: status %d, want 409 stale_claim", i, resp.StatusCode)
+		}
+	}
+}

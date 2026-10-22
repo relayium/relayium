@@ -18,7 +18,6 @@ import (
 	"github.com/relayium/relayium/authx"
 	"github.com/relayium/relayium/httpx"
 	"github.com/relayium/relayium/internal/storage"
-	"github.com/relayium/relayium/internal/storecrypto"
 )
 
 // uploadChunkSize is the chunk size the client is told to use: large enough to
@@ -34,9 +33,9 @@ const uploadChunkSize = 8 << 20 // 8 MiB
 // write the whole remaining budget (~MaxSize, up to ~1 GiB) past `received`,
 // making it an unbounded free-storage primitive. Bounding each append caps that
 // residual to one chunk's worth (concurrent same-offset appends clobber rather
-// than sum, per the blob's offset check). Legacy packing peaks near 8.2 MiB;
-// the negotiated large-share target also leaves whole-frame headroom below
-// this unchanged cap. Fully closing the residual would need a blob-seal op the
+// than sum, per the blob's offset check). It sits comfortably above the client's
+// real chunk peak (chunkSize + one ~192 KiB frame ≈ 8.2 MiB), so conforming
+// clients never hit it. Fully closing the residual would need a blob-seal op the
 // node protocol doesn't have. (A var, not a const, only so a test can shrink it
 // to exercise the bound with tiny payloads — production never reassigns it.)
 var maxAppendBytes int64 = 2 * uploadChunkSize // 16 MiB
@@ -575,7 +574,7 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "too many concurrent uploads", http.StatusTooManyRequests)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, withUploadPipeline(map[string]any{"uploadId": row.ID, "chunkSize": negotiatedUploadChunkSize(purpose, declared, r.Header.Get("X-Relayium-Upload-Chunk"))}, row))
+	httpx.WriteJSON(w, http.StatusOK, withUploadPipeline(map[string]any{"uploadId": row.ID, "chunkSize": chunkSizeFor(purpose)}, row))
 }
 
 // pairRoomChunkSize is the chunk a pre-upload is told to use.
@@ -588,23 +587,6 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 // eight times as many PATCHes (and deadline writes) per megabyte, which is
 // nothing next to the bytes they carry.
 const pairRoomChunkSize = 1 << 20 // 1 MiB
-
-// Large native shares may amortise request/confirmation overhead without
-// raising the existing append cap. Whole-frame native packing can overshoot its
-// target by one frame, so leave that headroom below the original 16 MiB ceiling.
-// This is an opt-in packing hint only: it grants no additional write budget and
-// changes neither persisted offsets nor the byte ledger. Legacy/unknown peers,
-// small shares, device deliveries and pair rooms keep their existing hint.
-func negotiatedUploadChunkSize(purpose string, declared int64, capability string) int64 {
-	if purpose != StoredPurposeShare || declared < 64<<20 || capability != "large-v1" {
-		return chunkSizeFor(purpose)
-	}
-	target := min(int64(16<<20), maxAppendBytes) - int64(storecrypto.MaxFrameCT+4)
-	if target <= uploadChunkSize {
-		return uploadChunkSize
-	}
-	return target
-}
 
 func chunkSizeFor(purpose string) int64 {
 	if purpose == StoredPurposePairRoom {

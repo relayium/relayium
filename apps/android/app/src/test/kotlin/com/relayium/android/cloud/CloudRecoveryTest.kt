@@ -208,6 +208,48 @@ class CloudRecoveryTest {
         }
     }
 
+    /**
+     * Pipelined bodies travel on separate connections, so the server can receive
+     * them in either order. The real server holds a pipelined append until its
+     * predecessor lands; this pins that the client keeps pipelining through such
+     * an overtake rather than falling back, and that nothing is resent.
+     *
+     * The first append is held at the server until the second has arrived and
+     * is waiting, so the overtake happens on every run instead of by chance.
+     */
+    @Test
+    fun `negotiated pipeline completes when a later body reaches the server first`() {
+        val overtaken = java.util.concurrent.CountDownLatch(1)
+        val requests = java.util.concurrent.atomic.AtomicInteger()
+        ResumableUploadServer(
+            pipelineCapability = "ordered-v1",
+            onPatchBody = {
+                if (requests.incrementAndGet() == 1) {
+                    check(overtaken.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                }
+            },
+            onPipelineWait = { start -> if (start > 0) overtaken.countDown() },
+        ).use { server ->
+            val account = account()
+            signIn(account)
+            val model = model(server, account)
+            startUpload(model)
+            val ready = await({ model.state.value }) { it is CloudUploadModel.State.Ready }
+                as CloudUploadModel.State.Ready
+            assertTrue(server.pipelineWaits.get() >= 1)
+            assertEquals(1, server.initCount)
+            assertEquals(1, server.finalizeCount)
+            // Every append was pipelined and each range was sent exactly once:
+            // no serial fallback, no replay.
+            assertTrue(server.pipelineHeaders.all { it == "ordered-v1" })
+            assertEquals(server.ranges.size, server.ranges.toSet().size)
+            val expected = cipherSize(selection.map { it.size })
+            assertEquals(expected, server.committed.toLong())
+            val files = decode(server, keyOf(ready.link))
+            selection.forEachIndexed { i, file -> assertArrayEquals(bytesFor(file), files[i]) }
+        }
+    }
+
     @Test
     fun `negotiated partial append drains and replays immutable spool serially`() {
         ResumableUploadServer(appendCap = 17_000, pipelineCapability = "ordered-v1").use { server ->

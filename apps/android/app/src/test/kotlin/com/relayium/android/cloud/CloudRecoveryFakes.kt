@@ -169,6 +169,14 @@ class ScriptedDurableFiles : DurableFiles {
  * silently capped, a start below the committed offset is answered 200 and one
  * above it 409, and finalize neither verifies completeness nor returns an object
  * id for a session it has already claimed.
+ *
+ * An append that declares `X-Relayium-Upload-Pipeline: ordered-v1` on a session
+ * that advertised it is first held, bounded, until the blob reaches its start —
+ * the real server's `awaitUploadOffset`. Concurrent pipelined requests travel
+ * on separate connections and may arrive in either order; without that wait a
+ * later body that overtakes an earlier one is answered 409 at once, where the
+ * real server answers the gap only after that wait, and the client's correct
+ * serial fallback then runs.
  */
 class ResumableUploadServer(
     /** What init advertises. */
@@ -180,6 +188,14 @@ class ResumableUploadServer(
     private val pipelineCapability: String = "",
     private val onPatchBody: (RecordingHttpServer.Received) -> Unit = {},
     private val beforeAppend: () -> Unit = {},
+    /** Called, outside the blob lock, each time a pipelined append starts
+     *  waiting for its predecessor — so a test can order arrivals without
+     *  sleeping. */
+    private val onPipelineWait: (start: Long) -> Unit = {},
+    /** The bound on that wait. Below the client's 30s read deadline, so an
+     *  append whose predecessor never lands still gets the ordinary gap answer
+     *  within the same request, as on the real server. */
+    private val pipelineWaitMs: Long = 10_000,
 ) : AutoCloseable {
 
     /** The framed ciphertext the blob holds, in offset order. */
@@ -235,6 +251,49 @@ class ResumableUploadServer(
     /** Every Content-Range the client actually sent. */
     val ranges = java.util.Collections.synchronizedList(ArrayList<String>())
 
+    /** Every pipeline header value the client sent with an append, in arrival
+     *  order (null where the header was absent). */
+    val pipelineHeaders = java.util.Collections.synchronizedList(ArrayList<String?>())
+
+    /** How many pipelined appends waited for a predecessor. */
+    val pipelineWaits = java.util.concurrent.atomic.AtomicInteger()
+
+    /**
+     * Failures thrown by the test's own callbacks.
+     *
+     * The loopback server closes the connection when a handler throws, which
+     * the client can only see as a network failure. Recording them here lets
+     * [close] report the assertion that actually failed instead.
+     */
+    val callbackFailures = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
+
+    private inline fun <T> callback(block: () -> T): T = try {
+        block()
+    } catch (e: Throwable) {
+        callbackFailures.add(e)
+        throw e
+    }
+
+    /** Hold a pipelined append, bounded, until the blob reaches [start]. Called
+     *  with the blob lock held; waiting releases it. */
+    private fun awaitPredecessor(start: Long) {
+        val deadline = System.nanoTime() + pipelineWaitMs * 1_000_000
+        var announced = false
+        while (blob.size().toLong() < start) {
+            val left = (deadline - System.nanoTime()) / 1_000_000
+            if (left <= 0) return
+            if (!announced) {
+                announced = true
+                pipelineWaits.incrementAndGet()
+                // Announce from another thread: the callback must not run under
+                // the blob lock, and this thread may not release it except by
+                // waiting.
+                Thread { callback { onPipelineWait(start) } }.also { it.isDaemon = true }.start()
+            }
+            (blob as Object).wait(left)
+        }
+    }
+
     val committed: Int get() = synchronized(blob) { blob.size() }
 
     fun payload(): ByteArray = synchronized(blob) { blob.toByteArray() }
@@ -257,9 +316,14 @@ class ResumableUploadServer(
             request.method == "PATCH" && request.path.startsWith("/api/uploads/") -> {
                 val range = request.header("Content-Range") ?: ""
                 ranges.add(range)
-                onPatchBody(request)
+                val pipelined = request.header("X-Relayium-Upload-Pipeline")
+                pipelineHeaders.add(pipelined)
+                callback { onPatchBody(request) }
                 val start = range.removePrefix("bytes ").substringBefore('-').toLongOrNull() ?: -1
                 synchronized(blob) {
+                    if (pipelined == "ordered-v1" && pipelineCapability == "ordered-v1") {
+                        awaitPredecessor(start)
+                    }
                     val have = blob.size().toLong()
                     when {
                         refuseAppends || have >= refuseAppendsAfter -> RecordingHttpServer.respond(
@@ -289,9 +353,10 @@ class ResumableUploadServer(
                             body = """{"received":$have}""".toByteArray(),
                         )
                         else -> {
-                            beforeAppend()
+                            callback { beforeAppend() }
                             val take = minOf(request.body.size, appendCap)
                             blob.write(request.body, 0, take)
+                            (blob as Object).notifyAll()
                             RecordingHttpServer.respond(
                                 out,
                                 body = """{"received":${blob.size()}}""".toByteArray(),
@@ -344,5 +409,8 @@ class ResumableUploadServer(
 
     val origin: String get() = server.origin
 
-    override fun close() = server.close()
+    override fun close() {
+        server.close()
+        callbackFailures.peek()?.let { throw AssertionError("a server-side test callback failed", it) }
+    }
 }
