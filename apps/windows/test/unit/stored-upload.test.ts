@@ -18,7 +18,7 @@ import { mkdtemp, readFile, rm, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, onTestFailed } from "vitest";
 
 import { SecretStore, type SecretCipher } from "../../src/main/secrets.js";
 import type { StoredRuntime } from "../../src/main/stored/runtime-contract.js";
@@ -92,7 +92,11 @@ interface Session {
   readonly id: string;
   readonly manifest: Uint8Array;
   readonly chunks: Uint8Array[];
+  /** What the BLOB holds — the authority for an append. */
   received: number;
+  /** What the session row says (`sess.Received`). Equal to `received` except
+   *  after a lost append, when the row lags the blob it mirrors. */
+  mirror: number;
   done: boolean;
 }
 
@@ -114,8 +118,17 @@ interface ServerOptions {
   readonly uploadId?: string;
   /** Fail the Nth PATCH (1-based) with this status before committing. */
   readonly failAppend?: { readonly nth: number; readonly status: number };
-  /** Reject the Nth PATCH at the transport level (a lost connection). */
+  /** Reject the Nth PATCH at the transport level (a lost connection) BEFORE
+   *  anything is committed: the server never saw the bytes. */
   readonly dropAppend?: { readonly nth: number };
+  /**
+   * Commit the Nth PATCH to the blob, then lose the answer — and leave the
+   * session row behind the blob, the race `uploads_resumable.go` reports as
+   * `storage.ErrOffsetMismatch`. The resume probe then answers the row's stale
+   * offset, the client replays from it, and the blob refuses with 409 and its
+   * real size: the genuine 409 gap.
+   */
+  readonly loseAppendResponse?: { readonly nth: number };
   /** Answer every PATCH 409 with this fixed offset. */
   readonly stickyOffset?: number;
   /** Report an offset BEHIND what the client sent. */
@@ -132,6 +145,12 @@ interface ServerOptions {
 
 class FakeServer {
   readonly requests: string[] = [];
+  /** Every answer, as `METHOD path → status` (or `→ threw`). */
+  readonly answers: string[] = [];
+  /** Timestamped request/answer stages, printed when a test fails — so a slow
+   *  or stalled run says WHERE the time went instead of only that it ran out. */
+  readonly trace: string[] = [];
+  private readonly born = performance.now();
   readonly sessions = new Map<string, Session>();
   readonly objects = new Map<string, StoredObject>();
   private appendCount = 0;
@@ -150,9 +169,29 @@ class FakeServer {
     return (id) => this.objects.get(id)?.blob;
   }
 
+  /** Record a stage against this server's own clock. */
+  mark(stage: string): void {
+    this.trace.push(`+${(performance.now() - this.born).toFixed(1)}ms ${stage}`);
+  }
+
   readonly fetch = (async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const target = new URL(String(url));
     const method = init?.method ?? "GET";
+    const label = `${method} ${target.pathname}`;
+    this.mark(`→ ${label}`);
+    try {
+      const response = await this.route(target, method, init);
+      this.answers.push(`${label} → ${String(response.status)}`);
+      this.mark(`← ${label} ${String(response.status)}`);
+      return response;
+    } catch (error) {
+      this.answers.push(`${label} → threw`);
+      this.mark(`← ${label} threw`);
+      throw error;
+    }
+  }) as unknown as typeof fetch;
+
+  private async route(target: URL, method: string, init?: RequestInit): Promise<Response> {
     this.requests.push(`${method} ${target.pathname}`);
     // Every authenticated request must carry the bearer and nothing else.
     const headers = (init?.headers ?? {}) as Record<string, string>;
@@ -169,7 +208,7 @@ class FakeServer {
     if (method === "DELETE" && target.pathname.startsWith("/api/files/")) return this.remove(target);
     if (method === "GET" && target.pathname.endsWith("/meta")) return this.meta(target);
     return json(404, { error: "no route" });
-  }) as unknown as typeof fetch;
+  }
 
   private async init(target: URL, init?: RequestInit): Promise<Response> {
     await this.options.onInit?.();
@@ -183,6 +222,7 @@ class FakeServer {
       manifest: body.subarray(4),
       chunks: [],
       received: 0,
+      mirror: 0,
       done: false,
     });
     void target;
@@ -206,8 +246,16 @@ class FakeServer {
     }
     const range = (init?.headers as Record<string, string>)["content-range"] ?? "";
     const start = Number(/^bytes (\d+)-/.exec(range)?.[1] ?? "-1");
-    if (start < session.received) return json(200, { received: session.received });
-    if (start > session.received) return json(409, { received: session.received });
+    // The row's check first, as the handler does: a stale start is acked, a
+    // gap past the row is 409 with the row's offset.
+    if (start < session.mirror) return json(200, { received: session.mirror });
+    if (start > session.mirror) return json(409, { received: session.mirror });
+    if (session.received !== session.mirror) {
+      // The row agrees but the blob is ahead of it: the blob's own offset check
+      // refuses, and the answer is the blob's truth. The row catches up.
+      session.mirror = session.received;
+      return json(409, { received: session.received });
+    }
     const chunk = new Uint8Array(init?.body as Uint8Array);
     const take =
       this.options.commitLimit === undefined
@@ -215,6 +263,11 @@ class FakeServer {
         : Math.min(chunk.byteLength, this.options.commitLimit);
     session.chunks.push(chunk.subarray(0, take));
     session.received += take;
+    if (this.options.loseAppendResponse?.nth === this.appendCount) {
+      // Committed to the blob; the row never heard, and neither did the client.
+      throw new TypeError("fetch failed");
+    }
+    session.mirror = session.received;
     if (this.options.regressAfter !== undefined && session.received > this.options.regressAfter) {
       return json(200, { received: this.options.regressAfter });
     }
@@ -230,7 +283,7 @@ class FakeServer {
     // 404 once terminal, exactly as the real handler does: a done session has
     // nowhere to resume to.
     if (!session || session.done) return json(404, { error: "not found" });
-    return json(200, { received: session.received });
+    return json(200, { received: session.mirror });
   }
 
   private finalize(target: URL): Response {
@@ -521,10 +574,43 @@ describe("a complete upload", () => {
 });
 
 describe("the offset algebra", () => {
+  /** Print where the time went if this test fails — a timeout included. */
+  function traceOnFailure(server: FakeServer): void {
+    onTestFailed(() => {
+      console.error(`stored-upload stages:\n  ${server.trace.join("\n  ")}`);
+    });
+  }
+
+  /** The blob the server assembled is the encoder's bytes, once, in order —
+   *  nothing re-encrypted, nothing duplicated, nothing skipped — and it opens
+   *  to the original plaintext. */
+  async function expectExactRecovery(
+    server: FakeServer,
+    contentKey: string,
+    picked: readonly Picked[],
+  ): Promise<void> {
+    expect(server.objects.size).toBe(1);
+    const object = [...server.objects.values()][0]!;
+    const frames = await produce(picked, contentKey, runtime.constants);
+    expect(Buffer.from(object.blob).equals(Buffer.from(concat(frames.map((frame) => frame.bytes))))).toBe(true);
+    const key = await runtime.importKeyFromFragment(contentKey);
+    const decryptor = runtime.createDecryptor(key);
+    const parts: Uint8Array[] = [];
+    const total = picked.reduce((n, entry) => n + entry.data.byteLength, 0);
+    for await (const part of decryptor.push(object.blob)) parts.push(part);
+    for await (const part of decryptor.end(total)) parts.push(part);
+    expect(Buffer.from(concat(parts)).equals(Buffer.from(concat(picked.map((entry) => entry.data))))).toBe(true);
+  }
+
+  // Not a fill: a periodic pattern makes a replay from the wrong offset, or a
+  // swapped chunk, produce different ciphertext rather than identical bytes.
+  const patterned = (length: number): Uint8Array => Uint8Array.from({ length }, (_, i) => (i * 31 + 7) % 251);
+
   it("replays the exact unacknowledged suffix after a partial commit", async () => {
     const data = new Uint8Array(runtime.constants.storeChunkSize + 500).fill(3);
     // The server takes 1000 bytes per PATCH, so almost every append is partial.
     const server = new FakeServer({ commitLimit: 1000, chunkSize: 64 * 1024 });
+    traceOnFailure(server);
     const { svc } = await service(server);
     const { started, outcome } = await upload(svc, [{ path: "a.bin", data }]);
     expect(outcome?.status).toBe("published");
@@ -539,18 +625,54 @@ describe("the offset algebra", () => {
   });
 
   it("recovers from a 409 gap by resyncing to the server's offset", async () => {
-    // A dropped connection, then a 409: the engine re-reads the offset and
-    // replays from it.
-    const server = new FakeServer({ chunkSize: 64 * 1024, dropAppend: { nth: 1 } });
+    // The first append lands in the blob but its answer is lost, and the
+    // session row has not caught up: the resume probe says 0. The replay from 0
+    // meets the blob's own offset check — 409 with the real size — and the
+    // engine moves its retained window forward to it instead of resending.
+    const server = new FakeServer({ chunkSize: 64 * 1024, loseAppendResponse: { nth: 1 } });
+    traceOnFailure(server);
     const { svc } = await service(server);
-    const data = new Uint8Array(100_000).fill(9);
-    const { outcome } = await upload(svc, [{ path: "a.bin", data }]);
+    const picked: Picked[] = [{ path: "a.bin", data: patterned(100_000) }];
+    const { started, outcome } = await upload(svc, picked);
+    server.mark("settled");
     expect(outcome?.status).toBe("published");
-    expect(server.requests).toContain("GET /api/uploads/up0001");
+    if (!started.ok) return;
+    expect(server.answers).toEqual([
+      "POST /api/uploads → 200",
+      "PATCH /api/uploads/up0001 → threw",
+      "GET /api/uploads/up0001 → 200",
+      "PATCH /api/uploads/up0001 → 409",
+      "PATCH /api/uploads/up0001 → 200",
+      "POST /api/uploads/up0001/finalize → 200",
+    ]);
+    await expectExactRecovery(server, started.contentKey, picked);
+  });
+
+  it("resyncs after a dropped connection that committed nothing", async () => {
+    // The connection fails before the server sees a byte. The probe confirms
+    // 0, the same retained bytes go again, and there is no 409 to recover from.
+    const server = new FakeServer({ chunkSize: 64 * 1024, dropAppend: { nth: 1 } });
+    traceOnFailure(server);
+    const { svc } = await service(server);
+    const picked: Picked[] = [{ path: "a.bin", data: patterned(100_000) }];
+    const { started, outcome } = await upload(svc, picked);
+    server.mark("settled");
+    expect(outcome?.status).toBe("published");
+    if (!started.ok) return;
+    expect(server.answers).toEqual([
+      "POST /api/uploads → 200",
+      "PATCH /api/uploads/up0001 → threw",
+      "GET /api/uploads/up0001 → 200",
+      "PATCH /api/uploads/up0001 → 200",
+      "PATCH /api/uploads/up0001 → 200",
+      "POST /api/uploads/up0001/finalize → 200",
+    ]);
+    await expectExactRecovery(server, started.contentKey, picked);
   });
 
   it("fails rather than re-encrypting when the server's offset regresses", async () => {
     const server = new FakeServer({ chunkSize: 64 * 1024, regressAfter: 10 });
+    traceOnFailure(server);
     const { svc } = await service(server);
     const { outcome } = await upload(svc, [{ path: "a.bin", data: new Uint8Array(80_000).fill(1) }]);
     expect(outcome?.status).toBe("failed");
@@ -563,6 +685,7 @@ describe("the offset algebra", () => {
 
   it("fails when the server claims an offset past everything produced", async () => {
     const server = new FakeServer({ chunkSize: 64 * 1024, aheadBy: 5_000 });
+    traceOnFailure(server);
     const { svc } = await service(server);
     const { outcome } = await upload(svc, [{ path: "a.bin", data: new Uint8Array(70_000).fill(1) }]);
     expect(outcome?.status).toBe("failed");
@@ -572,6 +695,7 @@ describe("the offset algebra", () => {
 
   it("stops asking when a server makes no progress", async () => {
     const server = new FakeServer({ chunkSize: 64 * 1024, stickyOffset: 0 });
+    traceOnFailure(server);
     const { svc } = await service(server);
     const { outcome } = await upload(svc, [{ path: "a.bin", data: new Uint8Array(70_000).fill(1) }]);
     expect(outcome?.status).toBe("failed");
