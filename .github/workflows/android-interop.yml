@@ -292,5 +292,6 @@ jobs:
             ${{ runner.temp }}/android-interop/relayium-acceptance-*/browser-*.transport.json
             ${{ runner.temp }}/android-interop/relayium-acceptance-*/android-failure-*.json
             ${{ runner.temp }}/android-interop/relayium-acceptance-*/instrument-*.log
+            ${{ runner.temp }}/android-interop/relayium-acceptance-*/gradle.log
           if-no-files-found: warn
           retention-days: 7

@@ -280,7 +280,7 @@ acceptance_server_static="$repo/web/dist"
 
 say "== building the debug APK and its instrumentation =="
 [ -x "$gradle_bin" ] || gradle_bin="gradle"
-( cd "$repo/apps/android" && "$gradle_bin" -Prelayium.android=true \
+( cd "$repo/apps/android" && "$gradle_bin" --info --stacktrace -Prelayium.android=true \
     :app:assembleDebug :app:assembleDebugAndroidTest >"$run_root/gradle.log" 2>&1 ) \
   || fail "the Android build failed: $(tail -30 "$run_root/gradle.log")"
 app_apk="$repo/apps/android/app/build/outputs/apk/debug/app-debug.apk"
