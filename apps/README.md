@@ -20,9 +20,9 @@ macOS **1.5.0** is published through the direct-download channel.
 GitHub Release `macos-v1.5.0` carries the signed DMG; its version, build and
 download URL are recorded in [`web/native-releases.json`](../web/native-releases.json).
 The separately
-versioned Mac App Store channel is public at [1.4.7](https://apps.apple.com/app/id6801142976), released
-by Apple on 2026-10-12 with build `1.4.7 (44)`, which is recorded separately
-from the direct release, from its own source. Android **0.3.2 (11)** uses the public preview APK channel
+versioned Mac App Store channel is public at [1.4.10](https://apps.apple.com/app/id6801142976), released
+by Apple on 2026-10-21. Its version and publication date are recorded separately
+from the direct release in `web/mac-app-store-release.json`. Android **0.3.2 (11)** uses the public preview APK channel
 (`android-v0.3.2`), signed on 2026-10-17 from `d2266e27d`. iOS has no public release: **0.5.2 (13)** has been in
 internal TestFlight testing since 2026-10-18 with parallel stored-link uploads.
 Earlier **0.5.1 (12)** remains internal, and **0.5.0 (11)** remains in the
@@ -173,7 +173,7 @@ Store and private candidates — is Apple silicon (`arm64`) only, and its Sparkl
 feed item carries `<sparkle:hardwareRequirements>arm64` so an Intel Mac is never
 offered it. Distribution is that direct download and Sparkle
 updates from it. The separately versioned Mac App Store channel is also public,
-currently at [1.4.7](https://apps.apple.com/app/id6801142976) under App Apple ID
+currently at [1.4.10](https://apps.apple.com/app/id6801142976) under App Apple ID
 `6801142976`. [`web/mac-app-store-release.json`](../web/mac-app-store-release.json)
 is the record of that version and the day Apple published it. The generated
 release pages interpolate it; the two READMEs state it in prose, and the macOS

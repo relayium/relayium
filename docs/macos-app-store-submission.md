@@ -1,5 +1,38 @@
 # macOS App Store submission
 
+## macOS 1.5.0 (48) — GitHub direct release, 2026-10-22
+
+GitHub [`macos-v1.5.0`](https://github.com/relayium/relayium/releases/tag/macos-v1.5.0)
+publishes the arm64 Developer ID-signed, Apple-notarized and stapled DMG from
+`51c8db57ca853c51e9d3baa68bba029d5c08ca95`. SHA-256: `de0392185db5005daacea128df80c7d16a5bd637e76819401425cfd93ad7a392` (21489776 bytes).
+Frozen metadata `dcd0c703b2b64624378411d3d93db05ffb637559`, release workflow `39749958580`, and original frozen
+gate `39751061666` passed. Authenticated publication handoff passed before and after
+release creation; anonymous downloads matched all three published assets.
+The DMG passed signature, stapling and Gatekeeper verification; its Sparkle
+Ed25519 signature passed and a corrupted signature was rejected. The repository
+latest alias remains on the CLI channel. The website and Sparkle delivery are
+verified separately; their public URLs determine the currently offered version.
+Minimum supported `1.3.7 (25)` and recommended `1.3.8` remain unchanged.
+
+This release includes Mac ordinary Share upload recovery across force-quit and
+restart, account-bound recovery isolation, and an explicit destructive discard
+confirmation. Discard cannot undo a request that may already have completed.
+Recovery depends on an intact staged package and key; server recovery records
+last about one hour. It adds no power-loss durability or measured WAN speed
+guarantee. The full hosted Swift suite (5,522 tests) passed with six existing conditional skips;
+Mac UI and cross-platform interoperability checks passed on the exact source.
+Go build prerequisites are `1.26.10` and account race tests use 12 complete shards
+under the original 20-minute package ceiling. Earlier failed CI cohorts are
+retained; a later passing Android cohort does not prove the prior timeout cause.
+
+This is the Developer ID/GitHub channel. It creates no TestFlight build or App
+Store submission; the separately versioned public Mac App Store is `1.4.10`, published by Apple
+on 2026-10-21T23:02:02Z and independently read back on 2026-10-22. The public
+lookup does not establish a build number; a separate authenticated readback
+confirmed build `47`, as recorded in the current release state below.
+Previous dated TestFlight/Store records below retain their original identities.
+
+
 ## macOS 1.4.10 (47) — GitHub direct release and internal TestFlight, 2026-10-17
 
 GitHub [`macos-v1.4.10`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.10)
@@ -564,8 +597,8 @@ an authenticated Apple session.
 
 Nothing in this document authorizes enabling sales, adding an item for review,
 or releasing a version. The release type is set per App Store version: the
-current `1.4.7` version was "after approval" (App Store Connect
-`AFTER_APPROVAL`, read back unchanged on 2026-10-12), so Apple's approval
+current `1.4.10` version is "after approval" (App Store Connect
+`AFTER_APPROVAL`, read back on 2026-10-22), so Apple's approval
 released it; earlier versions recorded below used manual release. This record
 states what each version used and sets no standing policy for the next one.
 
@@ -578,8 +611,8 @@ states what each version used and sets no standing policy for the next one.
 | Platforms | macOS only |
 | Bundle ID | `com.relayium.mac` |
 | SKU | `relayium-macos` |
-| Current published version | `1.4.7` (build `44`), public since 2026-10-12 — from `web/mac-app-store-release.json` |
-| Release method | After approval (`AFTER_APPROVAL`) for the current `1.4.7` version; set per version |
+| Current published version | `1.4.10` (build `47`), public since 2026-10-21 — from `web/mac-app-store-release.json` |
+| Release method | After approval (`AFTER_APPROVAL`) for the current `1.4.10` version; set per version |
 | Primary category | Utilities |
 | Secondary category | Productivity |
 | Subtitle | End-to-end encrypted transfer |
@@ -588,26 +621,28 @@ states what each version used and sets no standing policy for the next one.
 
 ### Current release state
 
-**`1.4.7` (build `44`) is PUBLISHED on the Mac App Store, public since 2026-10-12.**
-It is not a pending submission and must not be described as the
-next release. Evidence, 2026-10-12: a root App Store Connect read at
-15:15:26Z returned App Store version `7c861dca-21f6-4735-aeed-e30f653587a2`,
-`1.4.7`, `READY_FOR_SALE` (`READY_FOR_DISTRIBUTION`), with build
-`1b6d2103-702d-4585-b11d-a9face6901d9` (`44`) selected, the same build
-submitted on 2026-10-09; Apple's public lookup returned version `1.4.7`,
-bundle `com.relayium.mac`, `currentVersionReleaseDate`
-`2026-10-12T14:47:38Z`. That version's release type was "after approval",
-so Apple's approval released it. StoreKit sandbox purchase acceptance (C03)
-is still pending. Build `44` is consumed by it, and build `45` by the
-Developer ID `1.4.8` release, so the next archive of any version needs a
-build number strictly above `45`, read back again before use.
+**`1.4.10` is PUBLISHED on the Mac App Store, public since 2026-10-21.**
+It is not a pending submission. Fresh public Apple lookup on 2026-10-22 returned
+version `1.4.10`, bundle `com.relayium.mac`, and publication timestamp
+`2026-10-21T23:02:02Z`. A separate authenticated App Store Connect read returned
+version `e366b610-cda7-4bb8-871d-12e6b9e561a6` in `READY_FOR_SALE`, release type
+`AFTER_APPROVAL`, selecting build `00ac1109-f56f-4487-8d3e-72b25b360ddd`,
+version `47`, processing state `VALID`. The build number comes from that build
+relationship, not from the public lookup or the independently signed DMG.
+This metadata correction made no Apple write, upload or release action.
 
-The previous published version, `1.4.0` (build `38`), public since
+StoreKit sandbox acceptance (C03) remains the owner's confirmed 2026-10-08
+result; this correction adds no purchase execution. Build `47` is issued for
+Store 1.4.10 and build `48` for the Developer ID 1.5.0 release. Any future archive
+must consult current Apple/public and privately issued tuples again; at this
+checkpoint a different new candidate requires a build above `48`.
+
+An earlier published version, `1.4.0` (build `38`), public since
 2026-09-17, is recorded below for continuity. The canonical record is `web/mac-app-store-release.json`
 (`version`, `publishedAt`, `appleId`, `url`); every other surface that prints
 the App Store version — the root `README.md`, `apps/README.md`, the nine
 `/releases` pages — interpolates or is checked against that file, and
-`web/scripts/pages/app-store-release.test.mjs` holds this document to it too.
+`scripts/test/app-store-release-test.mjs` holds this document to it too.
 
 Evidence for that state, read on 2026-09-20 and retained in the workspace
 release artifact `artifacts/macos-renewal-release-20260920/`: the authenticated
