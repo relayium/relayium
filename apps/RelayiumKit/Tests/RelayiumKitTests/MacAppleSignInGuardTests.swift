@@ -280,12 +280,12 @@ final class MacAppleSignInGuardTests: XCTestCase {
 
     // MARK: - version
 
-    /// Candidate 1.4.10 (47) is prepared for owner testing; public App Store
-    /// 1.4.7 and direct download 1.4.8 retain their separately issued identities.
-    func testTheCandidateIsVersionOnePointFourPointTen() throws {
+    /// Candidate 1.5.0 (48) retains the accepted App Store review safeguards.
+    /// Each public distribution channel keeps its separately issued identity.
+    func testTheCandidateIsVersionOnePointFivePointZero() throws {
         let project = projectText
-        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.4.10;"))
-        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.4.9;"),
+        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.5.0;"))
+        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.4.10;"),
                        "a target was left on the previous version")
         // **The App Store review fixes must not come back.** The app is named
         // `Relayium`, never "… for Mac", and the login item is never registered
