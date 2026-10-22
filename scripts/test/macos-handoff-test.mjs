@@ -874,7 +874,7 @@ export async function run() {
         await expect("Mac UI matrix reported unexpanded", () => G(honest.filter(([n]) => !MAC_UI.includes(n)).concat([["macos / ui-smoke (${{ matrix.suite }})", "skipped"]])), /outside the base-owned roster/);
         await expect("Go account shard absent", () => G(honest.filter(([n]) => n !== "go / race account shard 3")), /lacks required job\(s\) go \/ race account shard 3/);
         await expect("Go account shard skipped", () => G(honest.map(([n, c]) => (n === "go / race account shard 5" ? [n, "skipped"] : [n, c]))), /shard 5" concluded skipped/);
-        await expect("Go account shard renamed filler", () => G(honest.map(([n, c]) => (n === "go / race account shard 0" ? ["go / race account shard 8", c] : [n, c]))), /shard 8" outside the base-owned roster/);
+        await expect("Go account shard renamed filler", () => G(honest.map(([n, c]) => (n === "go / race account shard 0" ? ["go / race account shard 12", c] : [n, c]))), /shard 12" outside the base-owned roster/);
         await expect("web required jobs absent with auxiliary success", () => G(honest.filter(([n]) => !n.startsWith("web / ") || n === "web / evidence")), /lacks required job\(s\) web \/ scope/);
         await expect("Mac signed-build skipped", () => G(honest.map(([n, c]) => (n === "macos / signed-build" ? [n, "skipped"] : [n, c]))), /signed-build" concluded skipped/);
         await expect("positive: a carried job from an earlier attempt in attempt 2", () => G(honest.map(([n, c]) => (n === "go / test" ? [n, c, { run_attempt: 1 }] : [n, c])), 2));
