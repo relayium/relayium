@@ -25,7 +25,7 @@
 // ## And the race lane
 //
 // `go.yml`'s race gate was one `go test -race -timeout 45m ./...` measured at
-// ~43m35s, i.e. a lane that expires before it detects. It is now an eight-way
+// ~43m35s, i.e. a lane that expires before it detects. It is now a twelve-way
 // shard matrix over `server/account` plus one job for every other package, and
 // the full serial run moved to a non-gating nightly workflow so ordering
 // defects stay visible. Each of those pieces is individually deletable without
@@ -453,7 +453,7 @@ const CANCEL = "${{ github.event_name == 'pull_request' }}";
 
 const ACCOUNT_PKG = "github.com/relayium/relayium/account";
 const SHARD_HELPER = "scripts/go-race-shard.go";
-const SHARDS = 8;
+const SHARDS = 12;
 /** The A11 relay-renewal driver tests' job, and the one pattern (section 3b). */
 const RENEW_JOB = "link-renew";
 const RENEW_PATTERN = "^(TestLinkRenew|TestLDRenew)";
@@ -2477,7 +2477,7 @@ function triggerFailures(world) {
 /** Every file whose concurrency block this policy binds. */
 const CONCURRENCY_GOVERNED = [...files, MACOS_RELEASE, ...EXTRA_PARSED];
 
-// ── 3. the race shards: account (FNV, eight) and renewal (weighted, two) ────
+// ── 3. the race shards: account (weighted, twelve) and renewal (weighted, two) ────
 //
 // Two jobs carry a `strategy.matrix.shard`, and each is proved on its own:
 // its exact index list, fail-fast off, the planner invoked with its shard count
@@ -2683,8 +2683,8 @@ if (go) {
   };
   const upload = (job) => (doc) => doc.jobs[job].steps.find((s) => /upload-artifact/.test(s.uses ?? ""));
   const GO_LANE_CONTROLS = [
-    { name: "an account matrix index is dropped", expect: /race-account: matrix\.shard is .*want 0\.\.7/,
-      mutate: (d) => { d.jobs["race-account"].strategy.matrix.shard = ["0", "1", "2", "3", "4", "5", "7"]; } },
+    { name: "an account matrix index is dropped", expect: /race-account: matrix\.shard is .*want 0\.\.11/,
+      mutate: (d) => { d.jobs["race-account"].strategy.matrix.shard = ["0", "1", "2", "3", "4", "5", "7", "8", "9", "10", "11"]; } },
     { name: "a renewal matrix index is dropped", expect: /link-renew: matrix\.shard is .*want 0\.\.1/,
       mutate: (d) => { d.jobs[RENEW_JOB].strategy.matrix.shard = ["0"]; } },
     { name: "the renewal matrix is removed", expect: /strategy\.matrix\.shard` are .*want exactly/,
@@ -2701,7 +2701,7 @@ if (go) {
     { name: "the account lane plans with the renewal profile", expect: /race-account: uses `-weights \.\.\/scripts\/go-race-timings-renewal\.json`/,
       mutate: editRun("race-account", `-weights ../${ACCOUNT_WEIGHTS} `, `-weights ../${RENEW_WEIGHTS} `) },
     { name: "the account lane narrows its listed tests", expect: /race-account: uses `-pattern`/,
-      mutate: editRun("race-account", "-shards 8 ", "-pattern '^TestA' -shards 8 ") },
+      mutate: editRun("race-account", "-shards 12 ", "-pattern '^TestA' -shards 12 ") },
     { name: "the renewal shard count drifts", expect: /link-renew: the scripts\/go-race-shard\.go call lacks `-shards 2`/,
       mutate: editRun(RENEW_JOB, "-shards 2 ", "-shards 3 ") },
     { name: "a renewal shard may SKIP", expect: /link-renew: the scripts\/go-race-timings\.go evidence call lacks `-forbid-skip`/,

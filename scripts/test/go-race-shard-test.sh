@@ -1134,7 +1134,7 @@ else
 fi
 
 # The go.yml account step itself, against a throw-away `account` package of
-# nine tests and a synthetic profile for it in the step's ../scripts layout:
+# thirteen tests and a synthetic profile for it in the step's ../scripts layout:
 # the plan must be weighted, the evidence complete and lane account.
 acct_step="$work/acct-step.sh"
 awk '
@@ -1151,40 +1151,40 @@ fi
 mkdir -p "$work/srv/account"
 {
   printf 'package account\n\nimport "testing"\n\n'
-  for n in 1 2 3 4 5 6 7 8 9; do printf 'func TestAcct%s(t *testing.T) {}\n' "$n"; done
+  for n in 1 2 3 4 5 6 7 8 9 10 11 12 13; do printf 'func TestAcct%s(t *testing.T) {}\n' "$n"; done
 } > "$work/srv/account/a_test.go"
-acct_tests='[{"name":"TestAcct1","seconds":9},{"name":"TestAcct2","seconds":8},{"name":"TestAcct3","seconds":7},{"name":"TestAcct4","seconds":6},{"name":"TestAcct5","seconds":5},{"name":"TestAcct6","seconds":4},{"name":"TestAcct7","seconds":3},{"name":"TestAcct8","seconds":2},{"name":"TestAcct9","seconds":1}]'
+acct_tests='[{"name":"TestAcct1","seconds":13},{"name":"TestAcct2","seconds":12},{"name":"TestAcct3","seconds":11},{"name":"TestAcct4","seconds":10},{"name":"TestAcct5","seconds":9},{"name":"TestAcct6","seconds":8},{"name":"TestAcct7","seconds":7},{"name":"TestAcct8","seconds":6},{"name":"TestAcct9","seconds":5},{"name":"TestAcct10","seconds":4},{"name":"TestAcct11","seconds":3},{"name":"TestAcct12","seconds":2},{"name":"TestAcct13","seconds":1}]'
 weights_doc ./account '^Test' "$prov" "$acct_tests" > "$work/scripts/go-race-timings-account.json"
-printf 'TestAcct1\nTestAcct2\nTestAcct3\nTestAcct4\nTestAcct5\nTestAcct6\nTestAcct7\nTestAcct8\nTestAcct9\n' > "$work/acct9.txt"
-go run "$helper" -weights "$work/scripts/go-race-timings-account.json" -names-from "$work/acct9.txt" -shards 8 -shard 0 -list > "$work/acct9-0.txt" 2>/dev/null \
-  || fail "the nine-test account plan was refused"
-: > "$work/acct9-stream.json"
-while read -r n; do ev_line pass "$n" 0.2 >> "$work/acct9-stream.json"; done < "$work/acct9-0.txt"
+printf 'TestAcct1\nTestAcct2\nTestAcct3\nTestAcct4\nTestAcct5\nTestAcct6\nTestAcct7\nTestAcct8\nTestAcct9\nTestAcct10\nTestAcct11\nTestAcct12\nTestAcct13\n' > "$work/acct13.txt"
+go run "$helper" -weights "$work/scripts/go-race-timings-account.json" -names-from "$work/acct13.txt" -shards 12 -shard 0 -list > "$work/acct13-0.txt" 2>/dev/null \
+  || fail "the thirteen-test account plan was refused"
+: > "$work/acct13-stream.json"
+while read -r n; do ev_line pass "$n" 0.2 >> "$work/acct13-stream.json"; done < "$work/acct13-0.txt"
 saved_step=$step
 step=$acct_step
-rc=$(run_step 0 "$work/acct9-stream.json" 0)
+rc=$(run_step 0 "$work/acct13-stream.json" 0)
 if [ "$rc" = 0 ] && grep -q '"mode": "weighted"' "$work/rt/go-race-timing/evidence.json" \
   && grep -q '"lane": "account"' "$work/rt/go-race-timing/evidence.json" && grep -q '"complete": true' "$work/rt/go-race-timing/evidence.json"; then
   ok "the account step plans weighted and writes complete account evidence"
 else
   fail "the account step exited $rc or did not write complete weighted evidence: $(tail -3 "$work/step-out" | tr '\n' ' ')"
 fi
-rc=$(run_step 0 "$work/acct9-stream.json" 1)
+rc=$(run_step 0 "$work/acct13-stream.json" 1)
 if [ "$rc" = 1 ] && [ -s "$work/rt/go-race-timing/evidence.json" ]; then
   ok "a failing account go test keeps its exit status and its evidence"
 else
   fail "a failing account go test made the step exit $rc, or lost its evidence"
 fi
 # An account skip is the package's own and stays allowed in this lane.
-{ head -n 1 "$work/acct9-0.txt" | while read -r n; do ev_line skip "$n" 0; done; tail -n +2 "$work/acct9-0.txt" | while read -r n; do ev_line pass "$n" 0.2; done; } > "$work/acct9-skip.json"
-rc=$(run_step 0 "$work/acct9-skip.json" 0)
+{ head -n 1 "$work/acct13-0.txt" | while read -r n; do ev_line skip "$n" 0; done; tail -n +2 "$work/acct13-0.txt" | while read -r n; do ev_line pass "$n" 0.2; done; } > "$work/acct13-skip.json"
+rc=$(run_step 0 "$work/acct13-skip.json" 0)
 if [ "$rc" = 0 ]; then
   ok "a reasoned top-level SKIP stays allowed in the weighted account lane"
 else
   fail "a SKIP failed the account step (exit $rc): $(tail -3 "$work/step-out" | tr '\n' ' ')"
 fi
 rm -f "$work/scripts/go-race-timings-account.json"
-rc=$(run_step 0 "$work/acct9-stream.json" 0)
+rc=$(run_step 0 "$work/acct13-stream.json" 0)
 if [ "$rc" != 0 ]; then
   ok "without its profile the account step fails instead of planning FNV"
 else

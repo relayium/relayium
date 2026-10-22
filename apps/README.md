@@ -16,8 +16,10 @@ requests in flight. Completion still requires server-confirmed durable storage.
 Older servers negotiate serial uploads. This promises no particular WAN speed;
 force-quit recovery and upload-slot recovery are separate work.
 
-macOS **1.4.10** is published through the direct-download channel. It is build
-`47`, GitHub Release `macos-v1.4.10`, published on 2026-10-17. The separately
+macOS **1.4.10** is published through the direct-download channel.
+GitHub Release `macos-v1.4.10` carries the signed DMG; its version, build and
+download URL are recorded in [`web/native-releases.json`](../web/native-releases.json).
+The separately
 versioned Mac App Store channel is public at [1.4.7](https://apps.apple.com/app/id6801142976), released
 by Apple on 2026-10-12 with build `1.4.7 (44)`, which is recorded separately
 from the direct release, from its own source. Android **0.3.2 (11)** uses the public preview APK channel

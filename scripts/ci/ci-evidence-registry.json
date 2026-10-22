@@ -38,7 +38,11 @@
         "race-account": {
           "checks": [
             "race account shard 0", "race account shard 1", "race account shard 2", "race account shard 3",
-            "race account shard 4", "race account shard 5", "race account shard 6", "race account shard 7"
+            "race account shard 4", "race account shard 5", "race account shard 6", "race account shard 7",
+            "race account shard 8",
+            "race account shard 9",
+            "race account shard 10",
+            "race account shard 11"
           ],
           "runner": "ubuntu-latest"
         },
