@@ -462,10 +462,14 @@ func TestUploadBodyCutMidStreamOnTheSocketStoresNothingAndIsNotRetried(t *testin
 	if px.cuts.Load() != 1 {
 		t.Fatalf("the proxy cut %d times; the fault did not fire", px.cuts.Load())
 	}
+	fc.assertNothingStoredAfter(t, probe)
+	// Counted only now: the reset reaches the client while central may not yet
+	// have dispatched the request it already holds. Central counts the POST
+	// before the probe wraps its body, so the ended read above implies the
+	// count; the cleanup window above also lets a re-send arrive and be counted.
 	if n := fc.posts(); n != 1 {
 		t.Fatalf("central saw %d upload POSTs; a broken stream must never be re-sent", n)
 	}
-	fc.assertNothingStoredAfter(t, probe)
 	if got := probe.n.Load(); got >= 24<<20 {
 		t.Fatalf("central read %d bytes; want fewer than the body", got)
 	}
