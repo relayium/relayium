@@ -281,13 +281,23 @@ func TestUploadCommittedThenAnswerWithheldIsUnconfirmedNotFailed(t *testing.T) {
 	if !errors.As(err, &unconfirmed) {
 		t.Fatalf("err = %v; a withheld answer must be reported as unconfirmed, not as a failure", err)
 	}
-	if el := time.Since(start); el > 10*time.Second {
-		t.Fatalf("took %s; the wait for the answer is not bounded", el)
-	}
+	// The client may give up (confirm deadline) before central's handler replies;
+	// Hit marks that reply, commit or refusal, and stored == 1 below proves commit.
+	// Wait for it within the same 10s from start, which the check below holds
+	// the whole observation to.
+	wait := time.NewTimer(time.Until(start.Add(10 * time.Second)))
+	defer wait.Stop()
 	select {
 	case <-hold.Hit:
 	default:
-		t.Fatal("the withheld request never reached central")
+		select {
+		case <-hold.Hit:
+		case <-wait.C:
+			t.Fatal("the withheld request never reached central")
+		}
+	}
+	if el := time.Since(start); el > 10*time.Second {
+		t.Fatalf("took %s; the wait for the answer is not bounded", el)
 	}
 	if n := fc.stored(t); n != 1 {
 		t.Fatalf("central holds %d objects; the unconfirmed upload did arrive (want 1)", n)
