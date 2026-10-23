@@ -736,9 +736,31 @@ describe("an account change", () => {
   it("does not stop receiving when only the document changed", async () => {
     // A reload replaces the document and fires the same watcher. Background
     // receiving must survive it — that is the resident invariant.
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
+    //
+    // The name to compare against is the one the service has PUBLISHED, and it
+    // publishes at the end of its first pass — after the awaited heartbeat,
+    // reconcile and pending list. `calls.enrol` counts the request when it is
+    // dispatched, which is earlier, so reading the view right after it raced
+    // that publication (hosted Windows read "" and later "A PC"). The first
+    // heartbeat is parked here so the order is fixed rather than scheduled:
+    // enrolled, no named view yet; released; then the initial named view.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holding = true;
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+      apiOptions: { hold: () => (holding ? held : null) },
+    });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
+    await waitFor("the first pass parked on its heartbeat", () => h.calls.heartbeat > 0);
+    expect(h.service.view().deviceName).toBe("");
+    holding = false;
+    release();
+    await waitFor("the initial named view", () => h.service.view().deviceName !== "" && status(h) === "idle");
     const name = h.service.view().deviceName;
+    expect(name).toBe("A PC");
 
     h.service.onAuthorityChanged(); // same epoch: a document change
 
