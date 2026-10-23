@@ -1,7 +1,12 @@
 # Native large-share upload packing
 
-Source implementation, 2026-10-20; this is not an app release or a production
-deployment record. macOS 1.4.10 binaries predate this change.
+Source implementation introduced 2026-10-20. This document records the source
+and client contract; it is not an app release or a production deployment
+record. The published macOS 1.5.0 client offers the capability; macOS 1.4.10
+binaries predate it and keep the 8 MiB default. The larger target applies only
+when both the client and the server support it. Server source with this
+capability is in
+[fbe308b](https://github.com/relayium/relayium/commit/fbe308bede975a22a16e339e954791215e7960d9).
 
 ## Negotiation and compatibility
 

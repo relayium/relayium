@@ -68,6 +68,12 @@ type ldHub struct {
 	// one. Nothing here feeds an assertion.
 	trail ldTrail
 	diag  func() string
+
+	// Release observation (startLinkDevHubICE only): the real hub, and how
+	// many /ws handlers have been entered and have returned. A member is
+	// released when the hub counts it gone and its handler has returned.
+	sig              *signal.Hub
+	wsOpened, wsDone atomic.Int32
 }
 
 // ldTrail is a bounded, timestamped event log that is safe to read while the
@@ -141,6 +147,7 @@ func startLinkDevHubICE(t *testing.T, ice http.HandlerFunc) *ldHub {
 	t.Helper()
 	h := &ldHub{joins: make(chan string, 16), ice: ice}
 	hub := signal.NewHub()
+	h.sig = hub
 	var seq int32
 	handle := signal.ServeWSObserved(hub, func() string { return fmt.Sprintf("peer%d", atomic.AddInt32(&seq, 1)) },
 		func(room, id string, peers int, members []string) {
@@ -149,6 +156,8 @@ func startLinkDevHubICE(t *testing.T, ice http.HandlerFunc) *ldHub {
 		})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		h.wsOpened.Add(1)
+		defer h.wsDone.Add(1)
 		c, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			return
@@ -550,14 +559,27 @@ func ldStart(ctx context.Context, t *testing.T, bin string, p ldPeer) <-chan ldR
 }
 
 // ldStartLive is ldStart that also hands back the end's live output.
+//
+// Both kinds of end honour ctx: an old binary is killed by it, and an
+// in-process end runs under a context derived from it, so cancelling ctx
+// ends the run (it leaves the room) as the session timeout would. An
+// in-process end is also owned by the test: a cleanup registered before it
+// starts cancels it and joins its completion (ldJoinEnd), on a normal return
+// and on t.Fatal alike, before the fixture registered earlier is torn down.
+// The join waits on its own signal, never on ch, so the result stays for
+// whoever reads it.
 func ldStartLive(ctx context.Context, t *testing.T, bin string, p ldPeer) (<-chan ldResult, *ldLive) {
 	t.Helper()
 	ch := make(chan ldResult, 1)
 	live := &ldLive{}
 	if !p.old {
-		argv := append([]string{"__link", p.cmd, "--server", p.via}, p.args...)
+		argv := append([]string{p.cmd, "--server", p.via}, p.args...)
+		ectx, cancel := context.WithCancel(ctx)
+		done := make(chan struct{})
+		t.Cleanup(func() { ldJoinEnd(t, cancel, done) })
 		go func() {
-			code := Run(argv, &live.out, &live.errb)
+			defer close(done)
+			code := runLinkDevContext(ectx, argv, &live.out, &live.errb)
 			ch <- ldResult{code, live.out.String(), live.errb.String()}
 		}()
 		return ch, live
@@ -577,6 +599,27 @@ func ldStartLive(ctx context.Context, t *testing.T, bin string, p ldPeer) (<-cha
 		ch <- ldResult{cmd.ProcessState.ExitCode(), out.String(), errb.String()}
 	}()
 	return ch, live
+}
+
+// ldEndJoinWait bounds how long a test's cleanup waits for a cancelled
+// in-process end to return. Test-only; no runtime timer depends on it.
+const ldEndJoinWait = 30 * time.Second
+
+// ldEndStackMax bounds the goroutine dump an unjoined end reports.
+const ldEndStackMax = 64 << 10
+
+// ldJoinEnd cancels an in-process end and waits for it to return. An end
+// cannot be killed in process: one that does not return within
+// ldEndJoinWait is reported as a test failure, with a bounded goroutine
+// dump, and left behind.
+func ldJoinEnd(t *testing.T, cancel context.CancelFunc, done <-chan struct{}) {
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(ldEndJoinWait):
+		t.Errorf("an in-process link-dev end did not return within %s of its cancellation; it is left running\n%s",
+			ldEndJoinWait, ldStacks(ldEndStackMax))
+	}
 }
 
 // ldPairUp runs first until the hub has admitted it, then second, and waits
@@ -2627,7 +2670,7 @@ func TestLinkDevOverrunDiagnosticsOnRealFixture(t *testing.T) {
 	if !late || ra.code != -9 {
 		t.Errorf("late=%t first=%s", late, ra)
 	}
-	for _, want := range []string{"join peer1 room=testroom peers=1", "relay " + lt.addr + ": live allocations ", "first still running=true", "cmd/relayium.Run("} {
+	for _, want := range []string{"join peer1 room=testroom peers=1", "relay " + lt.addr + ": live allocations ", "first still running=true", "cmd/relayium.runLinkDevContext("} {
 		if !strings.Contains(report, want) {
 			t.Errorf("report lacks %q", want)
 		}
