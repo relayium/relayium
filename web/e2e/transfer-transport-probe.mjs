@@ -9,7 +9,14 @@
  * report). Candidate-pair bytesSent/bytesReceived are that pair's payload
  * bytes, excluding packet headers, padding and ICE connectivity checks; they
  * may include DTLS/SCTP and application control traffic and are not file
- * bytes. Sampling runs on the page's event loop and may perturb timing. */
+ * bytes. Sampling runs on the page's event loop and may perturb timing.
+ *
+ * Opt-in `relayProtocol` (config `{ relayProtocol: true }`, used only by the
+ * relay diagnostics): the selected LOCAL candidate additionally reports the
+ * browser-supplied `relayProtocol` (udp/tcp/tls — the client↔TURN hop) when the
+ * browser supplies it, and null when it does not. It is never inferred from the
+ * candidate's own protocol or from a URL. Without the option the observation is
+ * byte-for-byte what it always was. */
 
 export const TRANSPORT_PROBE_VERSION = 2;
 export const TRANSPORT_LABELS = ['relayium', 'relayium-text'];
@@ -18,6 +25,7 @@ const CANDIDATE_TYPES = ['host', 'srflx', 'prflx', 'relay'];
 const PROTOCOLS = ['udp', 'tcp'];
 const REQUIRED_COUNTERS = ['timestamp', 'bytesSent', 'bytesReceived'];
 const OPTIONAL_COUNTERS = ['packetsSent', 'packetsReceived', 'responsesReceived', 'totalRoundTripTime', 'currentRoundTripTime'];
+export const RELAY_PROTOCOLS = ['udp', 'tcp', 'tls'];
 
 /** Injected into each page before the product loads, as
  * `(${installTransportProbe})(window, { labels, intervalMs })`, so it must stay
@@ -25,6 +33,8 @@ const OPTIONAL_COUNTERS = ['packetsSent', 'packetsReceived', 'responsesReceived'
 export function installTransportProbe(env = globalThis, config = {}) {
   if (env.__transferTransport) throw new Error('transport probe already installed');
   const labels = config.labels, intervalMs = config.intervalMs;
+  if (config.relayProtocol !== undefined && config.relayProtocol !== true) throw new Error('invalid transport probe configuration');
+  const withRelayProtocol = config.relayProtocol === true;
   if (!Array.isArray(labels) || !labels.length || !Number.isInteger(intervalMs) || intervalMs < 1 || intervalMs > 1000) throw new Error('invalid transport probe configuration');
   const Peer = env.RTCPeerConnection, Channel = env.RTCDataChannel;
   if (typeof Peer !== 'function' || typeof Peer.prototype?.createDataChannel !== 'function'
@@ -157,7 +167,10 @@ export function installTransportProbe(env = globalThis, config = {}) {
     const end = (id, type) => {
       const c = stats.get(id);
       if (c?.type !== type || !CANDIDATE_TYPES.includes(c.candidateType) || !PROTOCOLS.includes(c.protocol)) throw new Error(`invalid ${type}`);
-      return { candidateType: c.candidateType, protocol: c.protocol };
+      if (!withRelayProtocol || type !== 'local-candidate') return { candidateType: c.candidateType, protocol: c.protocol };
+      const hop = c.relayProtocol;
+      if (hop !== undefined && hop !== null && !['udp', 'tcp', 'tls'].includes(hop)) throw new Error('malformed local-candidate relayProtocol');
+      return { candidateType: c.candidateType, protocol: c.protocol, relayProtocol: hop ?? null };
     };
     const counters = {};
     for (const key of REQUIRED_COUNTERS) counters[key] = metric(pair, key, true);
@@ -237,11 +250,15 @@ export function installTransportProbe(env = globalThis, config = {}) {
 const int = v => Number.isSafeInteger(v) && v >= 0;
 const finite = v => Number.isFinite(v) && v >= 0;
 
-function checkedRole(value, role, intervalMs) {
+/** One side's observation, validated on its own. Exported for a run that has
+ * only one browser side (the relay diagnostics' native counterpart). */
+export function checkedRole(value, role, intervalMs = TRANSPORT_INTERVAL_MS) {
   if (value?.version !== TRANSPORT_PROBE_VERSION || value.role !== role) throw new Error(`missing ${role} transport observation`);
   const s = value.selection;
   if (!['transport.selectedCandidatePairId', 'unique-nominated-succeeded'].includes(s?.method)
     || ![s.local, s.remote].every(e => CANDIDATE_TYPES.includes(e?.candidateType) && PROTOCOLS.includes(e?.protocol))) throw new Error(`invalid ${role} selection`);
+  if (Object.hasOwn(s.remote, 'relayProtocol') || (Object.hasOwn(s.local, 'relayProtocol')
+    && s.local.relayProtocol !== null && !RELAY_PROTOCOLS.includes(s.local.relayProtocol))) throw new Error(`invalid ${role} relayProtocol`);
   const { before, after } = value.counters ?? {};
   const delta = {};
   // currentRoundTripTime is a gauge, read from the after snapshot only below.

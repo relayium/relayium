@@ -49,9 +49,23 @@
  *
  * A failed run never writes the ready file. Neither flag alone is accepted, and
  * with neither this runs standalone exactly as it always has.
+ *
+ * ## Opt-in relay diagnostics (`--relay-diagnostics FILE --file-size N`)
+ *
+ * Used only by `scripts/realtime-relay-diagnostics.sh`, against its PRIVATE
+ * diagnostic bundle (relay-diagnostics-build.mjs). The browser then sends a
+ * synthetic N-byte file instead of `--file-body`, receives the native file by
+ * SHA-256 instead of by hex, and around each of the two file batches records the
+ * transport probe (with the TURN-hop relayProtocol) and the product's own
+ * TransferSample numeric copy. FILE is a RAW, run-private observation (no
+ * addresses, ids, credentials or contents by construction of the probes); the
+ * exported report is assembled and privacy-checked by
+ * realtime-relay-diagnostics.mjs. Without these flags nothing below changes.
  */
 import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { argFlag, argPresent, launchBrowser, newTab, ok, sleep, SAVE_STUB, VERIFY_DEFAULT, VERIFY_ON, setWideViewport, withWatchdog } from "./harness.mjs";
+import { installTransportProbe, TRANSPORT_LABELS, TRANSPORT_INTERVAL_MS } from "./transfer-transport-probe.mjs";
+import { installRelayDiagnosticsProbe } from "./relay-diagnostics-probe.mjs";
 
 const ORIGIN = argFlag("--origin", "");
 const CODE = argFlag("--code", "");
@@ -85,6 +99,14 @@ const READY_FILE = argFlag("--ready-file", "");
 const RELEASE_FILE = argFlag("--release-file", "");
 const RELEASE_MS = Number(argFlag("--release-ms", "60000"));
 const GLOBAL_TIMEOUT_MS = 6 * 60_000;
+const DIAGNOSTICS = argFlag("--relay-diagnostics", "");
+const FILE_SIZE = Number(argFlag("--file-size", "0"));
+/** Diagnostics only: written (content = --code) once the RECEIVE observation is
+ * armed, so the shell drives the native send only after it. */
+const RECV_ARMED_FILE = argFlag("--recv-armed-file", "");
+/** Diagnostics only, a control knob: delay arming the receive observation, to
+ * prove the shell's barrier really waits for it. Bounded; 0 by default. */
+const RECV_ARM_DELAY_MS = Number(argFlag("--recv-arm-delay-ms", "0"));
 
 if (!ORIGIN || !CODE || !OUT) {
   console.error("usage: native-pairing-browser.mjs --origin URL --code CODE --out FILE [...]");
@@ -98,6 +120,30 @@ if (!READY_FILE !== !RELEASE_FILE
     || !(Number.isFinite(RELEASE_MS) && RELEASE_MS > 0)) {
   console.error("usage: --ready-file and --release-file go together (with an optional positive --release-ms)");
   process.exit(2);
+}
+if ((!DIAGNOSTICS) !== (!argPresent("--file-size")) || (!DIAGNOSTICS) !== (!RECV_ARMED_FILE)
+    || (!DIAGNOSTICS && argPresent("--recv-arm-delay-ms"))
+    || (DIAGNOSTICS && (!DIAGNOSTICS.startsWith("/") || !RECV_ARMED_FILE.startsWith("/")
+      || !Number.isSafeInteger(FILE_SIZE) || FILE_SIZE < 1 || FILE_SIZE > 64 * 1024 * 1024
+      || !Number.isSafeInteger(RECV_ARM_DELAY_MS) || RECV_ARM_DELAY_MS < 0 || RECV_ARM_DELAY_MS > 20_000))) {
+  console.error("usage: --relay-diagnostics /abs/raw.json, --file-size N (1..64 MiB) and --recv-armed-file /abs/marker go together"
+    + " (optional --recv-arm-delay-ms 0..20000)");
+  process.exit(2);
+}
+
+/** Raw diagnostics observation (opt-in only). */
+const diagnostics = { version: 1, fileSize: FILE_SIZE, send: null, recv: null };
+
+/**
+ * Probe calls that must not END the run when they fail: a selected pair that
+ * moved during a batch (seen on direct host routes) poisons the transport probe,
+ * and that is a finding for the assembler to classify, not a reason for the
+ * browser half to abandon the native counterpart mid-round. The raw error text
+ * stays out of the observation; only the fact of failure is recorded.
+ */
+async function observed_or_failed(tab, expression) {
+  try { return { value: await tab.evaluate(expression), failed: false }; }
+  catch { return { value: null, failed: true }; }
 }
 
 const HEAD = ".workspace-head";
@@ -216,8 +262,12 @@ async function run() {
   closeBrowser = close;
   try {
     const preference = VERIFY === "on" ? VERIFY_ON : VERIFY_DEFAULT;
+    const probes = DIAGNOSTICS
+      ? `;(${installTransportProbe.toString()})(window, ${JSON.stringify({ labels: TRANSPORT_LABELS, intervalMs: TRANSPORT_INTERVAL_MS, relayProtocol: true })});`
+        + `;(${installRelayDiagnosticsProbe.toString()})(window, {});`
+      : "";
     const tab = await newTab(browser, `${ORIGIN}/cross-network#c=${CODE}`,
-                             preference + EXPOSE_IDS + SAVE_STUB);
+                             preference + EXPOSE_IDS + SAVE_STUB + probes);
     await setWideViewport(tab, 1280, 900);
 
     // The peer appears, and the page decides for itself whether it is a link
@@ -282,7 +332,23 @@ async function run() {
     ok("browser sent a message");
 
     // ── the browser sends a file ─────────────────────────────────────────
-    await tab.evaluate(`(() => {
+    if (DIAGNOSTICS) {
+      diagnostics.sendArmFailed = (await observed_or_failed(tab, "window.__transferTransport.arm('sender')")).failed;
+      await tab.evaluate("window.__relayiumRelayDiagnostics.arm('send')");
+      diagnostics.sendStartAt = await tab.evaluate("performance.timeOrigin + performance.now()");
+    }
+    await tab.evaluate(DIAGNOSTICS ? `(() => {
+      const input = document.querySelector('${ATTACH_FILE}');
+      if (!input) throw new Error('no attachment control in the unified workspace');
+      if (input.disabled) throw new Error('the attachment control was disabled');
+      const body = new Uint8Array(${FILE_SIZE});
+      for (let i = 0; i < body.length; i++) body[i] = (i * 37 + 11) % 251;
+      const dt = new DataTransfer();
+      dt.items.add(new File([body], ${JSON.stringify(FILE_NAME)}, { type: 'application/octet-stream' }));
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()` : `(() => {
       const input = document.querySelector('${ATTACH_FILE}');
       if (!input) throw new Error('no attachment control in the unified workspace');
       if (input.disabled) throw new Error('the attachment control was disabled');
@@ -294,6 +360,24 @@ async function run() {
       return true;
     })()`);
     ok("browser attached a file");
+    if (DIAGNOSTICS) {
+      await tab.waitFor("document.querySelector('#xfer-label-send')?.closest('.xfer')?.classList.contains('ok')", "the browser's file batch to complete", 180_000);
+      diagnostics.sendDoneAt = await tab.evaluate("performance.timeOrigin + performance.now()");
+      await tab.waitFor("window.__relayiumRelayDiagnostics.peek().hasSample", "the browser's send sample", 5_000).catch(() => {});
+      const sendTransport = diagnostics.sendArmFailed ? { value: null, failed: true }
+        : await observed_or_failed(tab, "window.__transferTransport.finish()");
+      diagnostics.send = { transport: sendTransport.value, transportFailed: sendTransport.failed,
+                           sample: await tab.evaluate("window.__relayiumRelayDiagnostics.take()") };
+      // Armed BEFORE the native side is driven (the shell waits for this side's
+      // file to land first), so the inbound batch is bracketed from its start.
+      // A probe poisoned by the send batch refuses to arm; that is recorded.
+      if (RECV_ARM_DELAY_MS) await sleep(RECV_ARM_DELAY_MS);
+      diagnostics.recvArmFailed = (await observed_or_failed(tab, "window.__transferTransport.arm('receiver')")).failed;
+      await tab.evaluate("window.__relayiumRelayDiagnostics.arm('recv')");
+      // The barrier the shell waits on before it drives the native send.
+      writeAtomically(RECV_ARMED_FILE, CODE);
+      ok("relay diagnostics: send batch observed; receive observation armed");
+    }
 
     // ── and receives the native side's message and file ──────────────────
     await tab.waitFor(
@@ -311,7 +395,25 @@ async function run() {
       .catch(() => { /* already accepted, or the card auto-resolved */ });
 
     await tab.waitFor("!!window.__e2e && window.__e2e.closed", "the native peer's file to be written", 180_000);
-    const saved = await tab.evaluate(`(() => {
+    if (DIAGNOSTICS) {
+      diagnostics.recvClosedAt = await tab.evaluate("performance.timeOrigin + performance.now()");
+      await tab.waitFor("window.__relayiumRelayDiagnostics.peek().hasSample", "the browser's receive sample", 5_000).catch(() => {});
+      const recvTransport = diagnostics.recvArmFailed ? { value: null, failed: true }
+        : await observed_or_failed(tab, "window.__transferTransport.finish()");
+      diagnostics.recv = { transport: recvTransport.value, transportFailed: recvTransport.failed,
+                           sample: await tab.evaluate("window.__relayiumRelayDiagnostics.take()") };
+      const digest = await tab.evaluate(`(async () => {
+        const hash = await crypto.subtle.digest('SHA-256', await new Blob(window.__e2e.chunks).arrayBuffer());
+        return { name: window.__e2e.name, bytes: window.__e2e.bytes,
+                 sha256: [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('') };
+      })()`);
+      observed.receivedFileName = digest.name;
+      observed.receivedFileBytes = digest.bytes;
+      observed.receivedFileSha256 = digest.sha256;
+      writeAtomically(DIAGNOSTICS, JSON.stringify(diagnostics) + "\n");
+      ok(`browser received ${digest.name} (${digest.bytes} bytes, digest recorded)`);
+    }
+    const saved = DIAGNOSTICS ? { name: observed.receivedFileName, hex: "" } : await tab.evaluate(`(() => {
       const bytes = window.__e2e.chunks.reduce((n, c) => n + c.byteLength, 0);
       const out = new Uint8Array(bytes);
       let o = 0;
@@ -323,7 +425,7 @@ async function run() {
     })()`);
     observed.receivedFileName = saved.name;
     observed.receivedFileHex = saved.hex;
-    ok(`browser received ${saved.name} (${saved.hex.length / 2} bytes)`);
+    if (!DIAGNOSTICS) ok(`browser received ${saved.name} (${saved.hex.length / 2} bytes)`);
 
     if (EXPECT_NAME && saved.name !== EXPECT_NAME) {
       throw new Error(`expected ${EXPECT_NAME}, received ${saved.name}`);

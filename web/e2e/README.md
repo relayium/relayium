@@ -245,6 +245,56 @@ TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test
   作业，紧跟 `npm run build` 和 a11y 扫描）。它不需要 Go 服务器：会合与 ICE 由一份
   受控夹具提供（见下）。
 
+## 实时中继（TURN）路径诊断（可选，手动或 `native-web-pairing.yml`）
+
+`scripts/realtime-relay-diagnostics.sh` 是一个**诊断工具，不是验收门，也不是网络基准**。
+它让一次真实的传输走真实的 TURN 中继，然后按批次记录两侧的时间去了哪里，并拒绝任何
+没有真的走 relay↔relay 的批次。
+
+```bash
+# 需要 PATH 上的 node（web/node_modules 已装）、go，native 档还要 swift
+scripts/realtime-relay-diagnostics.sh web          --out-dir /abs/dir [--samples N] [--file-mib N]
+scripts/realtime-relay-diagnostics.sh web-controls --out-dir /abs/dir
+scripts/realtime-relay-diagnostics.sh native       --out-dir /abs/dir [--file-mib N] [--control direct-fallback]
+scripts/test/local-turn-fixture-test.sh   # 中继 helper 和隐私/隔离规则的便宜守卫
+```
+
+- **中继**：`scripts/interop/local-turn-fixture.go`，仓库自己钉住的 pion/turn
+  （`server/third_party/pion-turn`），只听 127.0.0.1，UDP 和 TCP 同端口，TURN REST 凭据。
+  用 `go build -overlay` 借 `server/go.mod` 编译，不往 `server/` 写任何文件；它**不等价于**
+  生产中继。
+- **Web↔Web 档**：两个 Chrome 标签页跑一个**私有诊断构建**（`relay-diagnostics-build.mjs`：
+  只在内存里改写 `src/App.svelte` 里恰好一行 `onTransferSample`，把六个数值/枚举字段的副本
+  交给 `relay-diagnostics-probe.mjs`；`npm run build` 与 `vite.config.ts` 完全不受影响）。
+  code-room 夹具的 `/api/ice` 里放一条回环 TURN，产品自己的 `chooseRtcConfig` 因此强制
+  relay-only。默认的 `CODE_ROOM_ROUTES` 仍然是空 ICE。
+- **native↔Web 档**：macOS 应用自己的 `AppPairLinkHost` 对一个 Chrome，走真配对码和临时本地
+  服务器；服务器用**已有的** `-turn-urls` / `RELAYIUM_TURN_SECRET` 把 TURN 指到 helper。
+  浏览器先发自己的文件，看到 COMPLETE、收好那一批的观测并**武装接收观测**之后写一个私有
+  标记；脚本等到这个标记才驱动 native 发送（`RELAYIUM_DIAG_RECV_ARM_DELAY_MS` 只是证明这道
+  屏障的控制旋钮）。STUN-only 的 `acceptance_start_server` 守卫没有被使用，也没有被放宽。
+- **路由证明**：每一批在两个边界上选中的候选对两端都必须是 `relay`（transport probe，
+  身份不变），且 helper 的 relay 套接字字节计数器分别**逐批**把这批数据括住（native 档：
+  浏览器发送前 / 发送完成且接收观测武装后 / native 发送后；每个括号也含该区间的文字和控制
+  流量，所以是下界佐证，不是逐批字节计数）。计数器任何一个分量回退都拒绝。`relayProtocol`
+  只取浏览器自己给的本地候选统计，没给就是 null，不按协议猜。
+- **时间口径**：`TransferSample` 各字段只在各自一侧、各自时钟上；`bufferPacingWaitMs` 是
+  缓冲**加**节流等待；接收侧的 credit/buffer 是 null（按构造为 0，不是测量）；
+  `senderLoopOtherMs` 不是网络时间；跨两侧的唯一区间 `controller*UpperBoundMs` 用 Node
+  控制器自己的单调时钟，含 CDP 往返和轮询，是上界；`receiver*` 只在接收页内部相减。
+  不做任何时钟对齐假设。native 的细分阶段 app 模型没有暴露，报告为 null 加原因；
+  native 侧的完成只以内部全量 SHA 比对的布尔值导出。
+- **控制**：direct-fallback → `route-not-relay`；wrong-credential → `link-setup-failed`；
+  bad-hash → `file-verification-failed`；observer-throws → 文件照样校验通过但样本记为缺失；
+  cancel → 没有干净样本；slow-receiver → 发送方 credit 等待必须显著上升。每个控制都必须给出
+  它声明的结果，否则这次运行就是失败。
+- **隐私**：报告只由白名单键、数值、布尔、null 和固定词表组成（固定键白名单；形如哈希/时间
+  的字符串只允许出现在各自唯一的出处路径上），写出前还要扫描本次运行自己的秘密和地址/URL/
+  凭据形状。TURN 秘密只走环境变量；`/api/ice` 响应体、计数器、原始观测和错误日志都放在运行
+  根目录**之外**的 0700 私有目录里，所以现有工作流的失败上传通配符选不到它们；成功后删除。
+- **不声称**：两个端点和中继在**同一台机器、同一个内核**上——这只证明中继代码路径和分阶段
+  归因，不是 WAN、不是吞吐、不是提速，也不能据此调参。真正的广域诊断需要独立的网络端点。
+
 ## CI 里真正跑的浏览器道次
 
 `.github/workflows/web.yml` 一共起七条真浏览器道次：

@@ -1950,6 +1950,90 @@ try {
   rmSync(scratch, { recursive: true, force: true });
 }
 
+// ── 6. the opt-in realtime relay diagnostics cells ─────────────────────────
+//
+// `scripts/realtime-relay-diagnostics.sh` runs in exactly two places, both in
+// this workflow and nowhere else (no fan-out into other lanes): its native tier
+// and that tier's direct-fallback control in the macOS `pairing` job, its Web
+// tier and Web controls in the ubuntu `cli-web` job, which also runs the TURN
+// helper's own guard as a separate inline step (the form ci-guard-coverage
+// reads). Every input it reads triggers this workflow, and none of those steps
+// may be advisory, unbounded or swallow its exit status. It must never borrow
+// the STUN-only `acceptance_start_server`, whose relay refusal stays intact.
+const RELAY_RUNNER = "scripts/realtime-relay-diagnostics.sh";
+const RELAY_GUARD = "bash scripts/test/local-turn-fixture-test.sh";
+const RELAY_INPUTS = [RELAY_RUNNER, "scripts/interop/local-turn-fixture.go", "scripts/test/local-turn-fixture-test.sh"];
+const RELAY_CELLS = [
+  { command: `${RELAY_RUNNER} native --out-dir`, runner: /^macos-/ },
+  { command: `${RELAY_RUNNER} native --control direct-fallback --out-dir`, runner: /^macos-/ },
+  { command: `${RELAY_RUNNER} web --samples 3 --out-dir`, runner: /^ubuntu-/ },
+  { command: `${RELAY_RUNNER} web-controls --out-dir`, runner: /^ubuntu-/ },
+  { command: RELAY_GUARD, runner: /^ubuntu-/ },
+];
+
+function relayFailures(sources) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  for (const [file, text] of sources) {
+    if (file === ACCEPTANCE_WORKFLOW) continue;
+    const code = stripComments(text);
+    need(!code.includes(RELAY_RUNNER) && !code.includes("local-turn-fixture-test.sh"),
+      `${file} runs the relay diagnostics or its guard; they belong to ${ACCEPTANCE_WORKFLOW} alone`);
+  }
+  const workflow = sources.get(ACCEPTANCE_WORKFLOW);
+  if (workflow === undefined) { need(false, `${ACCEPTANCE_WORKFLOW} is missing`); return out; }
+  const push = triggers(workflow)?.get("push") ?? [];
+  for (const input of RELAY_INPUTS) need(push.includes(input), `${ACCEPTANCE_WORKFLOW} push.paths lost relay diagnostics input ${input}`);
+  for (const cell of RELAY_CELLS) {
+    const hits = [];
+    for (const job of jobNames(workflow)) {
+      const lines = jobLines(workflow, job) ?? [];
+      const runsOn = stripComments(lines.join("\n")).match(/^ {4}runs-on:\s*(.+)$/m)?.[1] ?? "";
+      for (const step of steps(lines)) {
+        for (const line of step.code) if (line.includes(cell.command)) hits.push({ job, runsOn, step, line });
+      }
+    }
+    need(hits.length === 1, `expected exactly one step line running "${cell.command}"; found ${hits.length}`);
+    if (hits.length !== 1) continue;
+    const { job, runsOn, step, line } = hits[0];
+    need(cell.runner.test(runsOn.replace(/.*'(macos-[^']+)'.*/, "$1")), `"${cell.command}" runs in ${job} on ${runsOn}, not the runner it needs`);
+    const text = step.code.join("\n");
+    need(/^\s{8}timeout-minutes:\s*\d+\s*$/m.test(text), `the step running "${cell.command}" has no timeout-minutes of its own`);
+    need(!/continue-on-error/.test(text), `the step running "${cell.command}" sets continue-on-error`);
+    need(!/\|\|\s*(true|:|echo|exit 0)/.test(line), `"${cell.command}" swallows its own exit status`);
+  }
+  return out;
+}
+for (const message of relayFailures(realSources())) check(false, message);
+
+const RELAY_MUTATIONS = [
+  { name: "a relay input drops out of the trigger list", expect: "lost relay diagnostics input scripts/interop/local-turn-fixture.go",
+    mutate: (s) => withText(s, ACCEPTANCE_WORKFLOW, "      - 'scripts/interop/local-turn-fixture.go'\n", "") },
+  { name: "the guard folds back into the mixed block", expect: `"${RELAY_GUARD}"; found 0`,
+    mutate: (s) => withText(s, ACCEPTANCE_WORKFLOW, `run: ${RELAY_GUARD}`, "run: scripts/test/local-turn-fixture-test.sh") },
+  { name: "the native direct-fallback control is dropped", expect: "native --control direct-fallback --out-dir\"; found 0",
+    mutate: (s) => withText(s, ACCEPTANCE_WORKFLOW, "native --control direct-fallback --out-dir", "native --out-dir-removed") },
+  { name: "the web controls become advisory", expect: "web-controls --out-dir\" swallows",
+    mutate: (s) => withText(s, ACCEPTANCE_WORKFLOW, `web-controls --out-dir "$RUNNER_TEMP/relay-diagnostics"`, `web-controls --out-dir "$RUNNER_TEMP/relay-diagnostics" || true`) },
+  { name: "the relay runner fans out into another lane", expect: "web.yml runs the relay diagnostics",
+    mutate: (s) => withText(s, "web.yml", "      - run: npm run test:e2e:mixed", `      - run: ${RELAY_RUNNER} web --out-dir /tmp/x\n      - run: npm run test:e2e:mixed`) },
+];
+for (const mutation of RELAY_MUTATIONS) {
+  const got = relayFailures(mutation.mutate(realSources()));
+  check(got.some((message) => message.includes(mutation.expect)),
+    `relay mutation "${mutation.name}" was not reported (got ${JSON.stringify(got)})`);
+}
+{
+  const runnerText = await readFile(resolve(repoRoot, RELAY_RUNNER), "utf8");
+  const library = await readFile(resolve(repoRoot, "scripts/lib/local-acceptance.sh"), "utf8");
+  check(!stripComments(runnerText).split("\n").some((line) => /(^|[^_])acceptance_start_server\b/.test(line)),
+    `${RELAY_RUNNER} calls the STUN-only acceptance_start_server`);
+  check(library.includes("is not STUN: a local run must never be offered a relay"),
+    "the STUN-only relay refusal in scripts/lib/local-acceptance.sh is gone");
+  check(stripComments(await readFile(resolve(repoRoot, ACCEPTANCE), "utf8")).includes("acceptance_start_server"),
+    `${ACCEPTANCE} no longer starts its server through the STUN-only guard`);
+}
+
 if (failures.length > 0) {
   for (const failure of failures) process.stderr.write(`FAIL: ${failure}\n`);
   process.stderr.write(`\n${failures.length} delivery-gate assertion(s) failed\n`);
@@ -1984,5 +2068,7 @@ process.stdout.write(
   + `${REQUIRED_VECTORS.length} vector registration(s) `
   + `(${REQUIRED_VECTORS.map((entry) => entry.fixture).join(", ")}) are still named in `
   + `${VECTOR_CHECKER}'s table in code rather than in prose, which `
-  + `${REGISTRATION_MUTATIONS.length} further mutations prove can fail\n`,
+  + `${REGISTRATION_MUTATIONS.length} further mutations prove can fail; the relay diagnostics run in exactly `
+  + `${RELAY_CELLS.length} bounded cells of this workflow only, every input triggers it, the STUN-only guard is intact, and `
+  + `${RELAY_MUTATIONS.length} relay mutations prove those can fail\n`,
 );

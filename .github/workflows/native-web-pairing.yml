@@ -135,6 +135,13 @@ on:
       - 'server/**'
       - 'scripts/native-web-pairing-acceptance.sh'
       - 'scripts/lib/local-acceptance.sh'
+      # The opt-in realtime relay diagnostics this workflow also runs (a step in
+      # `pairing` for the native tier, a step in `cli-web` for the Web tier and
+      # its controls): the runner, its loopback pion TURN helper (built against
+      # `server/**`'s module) and that helper's gate, one file at a time.
+      - 'scripts/realtime-relay-diagnostics.sh'
+      - 'scripts/interop/local-turn-fixture.go'
+      - 'scripts/test/local-turn-fixture-test.sh'
       # A12: the CLI peer cells this workflow also hosts (`cli-web`, and the
       # CLI ↔ macOS step in `pairing`), named one file at a time for the same
       # reason as the two above. The CLI itself is under `server/**` and the
@@ -474,6 +481,33 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: scripts/interop/cli-mac-acceptance.sh
+      # Opt-in realtime RELAY diagnostics, native tier: the same app model
+      # (`AppPairLinkHost`) against Chrome on a PRIVATE diagnostic bundle, through
+      # a loopback pion TURN helper the throwaway server issues through its
+      # existing TURN REST configuration. Diagnostic, numeric-only, local: it
+      # proves the relay code path and refuses any batch that was not relay↔relay;
+      # it is not WAN, throughput or production-relay evidence. The second run is
+      # its control: the same server WITHOUT TURN must be refused as not relayed.
+      # Its own bounded budget; the acceptance steps above keep theirs.
+      - name: Realtime relay diagnostics, macOS native to browser over a loopback TURN helper
+        if: needs.evidence.outputs.reuse != 'true'
+        timeout-minutes: 10
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          scripts/realtime-relay-diagnostics.sh native --out-dir "$RUNNER_TEMP/relay-diagnostics"
+          scripts/realtime-relay-diagnostics.sh native --control direct-fallback --out-dir "$RUNNER_TEMP/relay-diagnostics"
+      # The reports are built from whitelisted numbers and fixed strings and are
+      # scanned for the run's own secrets before they are written, so they are
+      # kept on success too: they are the diagnostic's output.
+      - name: Keep the native relay diagnostics reports
+        if: always() && needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: realtime-relay-diagnostics-native-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/relay-diagnostics/*.json
+          if-no-files-found: ignore
+          retention-days: 7
       # A failed run keeps its per-run root for diagnosis, and the browser log,
       # the peer log and the two observation files inside it are the only record
       # of which side stopped agreeing. Failure-only and short-lived: nothing in
@@ -584,6 +618,35 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: scripts/interop/cli-web-acceptance.sh
+      # Opt-in realtime RELAY diagnostics, Web tier: two Chrome tabs on a PRIVATE
+      # diagnostic bundle relayed through a loopback pion TURN helper, then every
+      # control (direct fallback, wrong credential, bad hash, observer fault,
+      # cancel, slow receiver), each of which must produce its stated outcome.
+      # The helper's own gate runs first, as its own step. Here rather than in web.yml because
+      # this ubuntu job already has Go, Node and Chrome and a budget with room;
+      # its own bounded budget, the CLI acceptance above keeps its own.
+      - name: Loopback TURN helper and relay diagnostics guard (scripts/test/local-turn-fixture-test.sh)
+        if: needs.evidence.outputs.reuse != 'true'
+        timeout-minutes: 5
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: bash scripts/test/local-turn-fixture-test.sh
+      - name: Realtime relay diagnostics, Web to Web over a loopback TURN helper, with controls
+        if: needs.evidence.outputs.reuse != 'true'
+        timeout-minutes: 12
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          scripts/realtime-relay-diagnostics.sh web --samples 3 --out-dir "$RUNNER_TEMP/relay-diagnostics"
+          scripts/realtime-relay-diagnostics.sh web-controls --out-dir "$RUNNER_TEMP/relay-diagnostics"
+      - name: Keep the Web relay diagnostics reports
+        if: always() && needs.evidence.outputs.reuse != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: realtime-relay-diagnostics-web-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/relay-diagnostics/*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Retain CLI pairing diagnosis
         if: failure() && needs.evidence.outputs.reuse != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

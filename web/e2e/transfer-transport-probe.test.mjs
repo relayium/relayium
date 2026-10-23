@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { installTransportProbe, checkedTransport, quantiles, summarizeTransport, TRANSPORT_LABELS, TRANSPORT_PROBE_VERSION } from './transfer-transport-probe.mjs';
+import { installTransportProbe, checkedTransport, checkedRole, quantiles, summarizeTransport, TRANSPORT_LABELS, TRANSPORT_PROBE_VERSION } from './transfer-transport-probe.mjs';
 import { options } from './transfer-performance-core.mjs';
 
 const pairRow = (over = {}) => ({ id: 'CP1', type: 'candidate-pair', state: 'succeeded', nominated: true,
@@ -14,7 +14,7 @@ function report({ pair = {}, transport = true, changes, local = {}, extra = [] }
   return new Map(rows.map(r => [r.id, r]));
 }
 
-function fixture() {
+function fixture(extra = {}) {
   let now = 0, interval = null;
   const sent = [];
   class Channel {
@@ -36,7 +36,7 @@ function fixture() {
   Peer.generateCertificate = () => 'static';
   const env = { RTCPeerConnection: Peer, RTCDataChannel: Channel, Blob, performance: { now: () => now },
     setInterval: fn => { interval = fn; return 1; }, clearInterval: () => { interval = null; } };
-  installTransportProbe(env, { labels: TRANSPORT_LABELS, intervalMs: 10 });
+  installTransportProbe(env, { labels: TRANSPORT_LABELS, intervalMs: 10, ...extra });
   const probe = env.__transferTransport;
   const connect = (initiator = true) => {
     const pc = new env.RTCPeerConnection({ iceServers: [] });
@@ -305,5 +305,48 @@ describe('transport acceptance', () => {
     expect(options(['--out', '/x']).transport).toBeUndefined();
     expect(options(['--out', '/x', '--transport', 'on', '--phases', 'on'])).toMatchObject({ transport: true, phases: true });
     for (const args of [['--transport', 'off'], ['--transport'], ['--transport', 'on', '--case', 'text']]) expect(() => options(['--out', '/x', ...args])).toThrow();
+  });
+});
+
+describe('opt-in TURN-hop relayProtocol (relay diagnostics only)', () => {
+  const relayStats = (local = {}, remote = {}) => report({ local: { candidateType: 'relay', ...local } });
+  async function relayObserved(f, role, local) {
+    const { pc, lanes } = f.connect(role === 'sender');
+    pc.stats = [relayStats(local), report({ local: { candidateType: 'relay', ...local }, pair: { timestamp: 2000, bytesSent: 400, bytesReceived: 400 } })];
+    await f.probe.arm(role);
+    lanes[0].send(new Uint8Array(100));
+    f.advance(10); f.tick(); lanes[0].bufferedAmount = 0;
+    return f.probe.finish();
+  }
+  it('without the option the selection shape is exactly what it always was', async () => {
+    const out = await relayObserved(fixture(), 'sender', { relayProtocol: 'tcp' });
+    expect(out.selection.local).toEqual({ candidateType: 'relay', protocol: 'udp' });
+    expect(JSON.stringify(out)).not.toContain('relayProtocol');
+  });
+  it('reports the browser-supplied hop protocol on the local candidate only', async () => {
+    for (const hop of ['udp', 'tcp', 'tls']) {
+      const out = await relayObserved(fixture({ relayProtocol: true }), 'sender', { relayProtocol: hop });
+      expect(out.selection.local).toEqual({ candidateType: 'relay', protocol: 'udp', relayProtocol: hop });
+      expect(Object.hasOwn(out.selection.remote, 'relayProtocol')).toBe(false);
+      expect(checkedRole(out, 'sender').selection.local.relayProtocol).toBe(hop);
+    }
+  });
+  it('an absent stat is null, never guessed from the candidate protocol', async () => {
+    const out = await relayObserved(fixture({ relayProtocol: true }), 'sender', {});
+    expect(out.selection.local.relayProtocol).toBeNull();
+    expect(out.selection.local.protocol).toBe('udp');
+  });
+  it('refuses a malformed hop protocol and a malformed option', async () => {
+    const f = fixture({ relayProtocol: true }), { pc } = f.connect();
+    pc.stats = [relayStats({ relayProtocol: 'quic' })];
+    await expect(f.probe.arm('sender')).rejects.toThrow('relayProtocol');
+    expect(() => fixture({ relayProtocol: 'yes' })).toThrow('invalid transport probe configuration');
+  });
+  it('validation rejects a remote hop protocol or an unknown value', async () => {
+    const good = await relayObserved(fixture({ relayProtocol: true }), 'sender', { relayProtocol: 'udp' });
+    const remote = structuredClone(good); remote.selection.remote.relayProtocol = 'udp';
+    expect(() => checkedRole(remote, 'sender')).toThrow('relayProtocol');
+    const unknown = structuredClone(good); unknown.selection.local.relayProtocol = 'sctp';
+    expect(() => checkedRole(unknown, 'sender')).toThrow('relayProtocol');
   });
 });
