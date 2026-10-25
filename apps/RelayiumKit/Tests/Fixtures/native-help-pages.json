@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "paths": [
+    "guides/push-to-cloud-pull-on-another-computer",
+    "guides/send-a-file-to-someone",
+    "guides/what-is-peer-to-peer-file-transfer",
+    "zh/guides/push-to-cloud-pull-on-another-computer",
+    "zh/guides/send-a-file-to-someone",
+    "zh/guides/what-is-peer-to-peer-file-transfer"
+  ]
+}

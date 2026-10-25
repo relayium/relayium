@@ -312,6 +312,8 @@ jobs:
         run: node scripts/test/keychain-entitlement-boundary-test.mjs
       - name: native claims track Web routes and server aggregate schema
         run: node scripts/test/native-cross-directory-claims-test.mjs
+      - name: native help links resolve to published pages
+        run: node scripts/test/native-help-pages-test.mjs
       - name: public SAS claims stay protocol-specific
         run: node scripts/test/public-sas-copy-test.mjs
       - name: text retention claims stay scoped to the server

@@ -8,6 +8,41 @@ import XCTest
 /// points somewhere the site does not publish.
 final class HelpPresentationTests: XCTestCase {
 
+    /// The Linux policy checks these pages even when only the Web changes and
+    /// this Swift workflow is not selected. Bind its test-only contract to the
+    /// URLs the actual native models produce, rather than maintaining a second
+    /// language list or a separate implementation of the URL rule in Node.
+    func testNativeHelpPagesMatchTheLinuxPublicationContract() throws {
+        struct Contract: Decodable {
+            let schema: Int
+            let paths: [String]
+        }
+        let data = try RepoRoot.data(
+            "apps/RelayiumKit/Tests/Fixtures/native-help-pages.json")
+        let contract = try JSONDecoder().decode(Contract.self, from: data)
+        XCTAssertEqual(contract.schema, 1)
+        XCTAssertFalse(contract.paths.isEmpty, "the publication contract must not be empty")
+        XCTAssertEqual(contract.paths.count, Set(contract.paths).count,
+                       "duplicate page paths hide a missing publication")
+
+        let guides = MacSurface.allCases.compactMap { HelpPresentation.topic(for: $0)?.guide }
+            + IOSSurface.allCases.compactMap { HelpPresentation.topic(forIOS: $0)?.guide }
+        let actual = Set(guides.filter { guide in
+            // English-only destinations are Web application routes, not
+            // static guide pages under web/public.
+            if case .localizedGuide = guide { return true }
+            return false
+        }.flatMap { guide in
+            AppLanguage.allCases.map { language in
+                HelpPresentation.url(for: guide, language: language).path
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            }
+        })
+        XCTAssertFalse(actual.isEmpty, "the native model must actually produce help links")
+        XCTAssertEqual(actual, Set(contract.paths),
+                       "update the shared publication contract when native help URLs change")
+    }
+
     /// The site's own guide slugs, taken from what `web/public` actually
     /// publishes. A link to a slug that is not here is a 404 shipped in every
     /// language.
