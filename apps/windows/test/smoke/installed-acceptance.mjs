@@ -634,7 +634,10 @@ function launchInstalled(port, extraEnv = {}) {
  *
  * So readiness is a property of the BRIDGE, not of the target list, and it is
  * bounded: within `DEADLINE.launch` there must be a page on the app scheme whose
- * `globalThis.relayium.auth.state` is callable. Anything else is a hard failure
+ * `globalThis.relayium.auth.state` is callable AND the renderer has mounted its
+ * shell. The preload runs before the renderer: a usable bridge alone can still
+ * leave the caller reading an empty body. Both facts share the existing launch
+ * deadline. Anything else is a hard failure
  * with the last observation attached — never a relaxed assertion, and never a
  * skip.
  *
@@ -670,6 +673,14 @@ async function attachToApp(port, label) {
       );
       if (bridged !== true) {
         last = `page ${page.url} has no bridge yet`;
+        attempt.close();
+        return false;
+      }
+      const rendered = await attempt.evaluate(
+        "typeof document.body?.innerText === 'string' && document.body.innerText.includes('Relayium')",
+      );
+      if (rendered !== true) {
+        last = `page ${page.url} has a bridge but its shell has not rendered yet`;
         attempt.close();
         return false;
       }
