@@ -6,14 +6,19 @@ import vm from "node:vm";
 // or bypassing its platform/ownership guards. Only the external CDP/poll seam
 // is a fixture. The bridge and renderer intentionally become ready separately.
 const source = readFileSync(new URL("../smoke/installed-acceptance.mjs", import.meta.url), "utf8");
-const start = source.indexOf("async function attachToApp(");
-const end = source.indexOf("\n// ---------------------------------------------------------------------------\n// The run.", start);
-if (start < 0 || end <= start) throw new Error("cannot locate the actual installed readiness function");
-const body = source.slice(start, end);
+function attachBody(text: string) {
+  // checkout uses CRLF on Windows; both forms are the same JavaScript source.
+  const normalized = text.replace(/\r\n/g, "\n");
+  const start = normalized.indexOf("async function attachToApp(");
+  const end = normalized.indexOf("\n// ---------------------------------------------------------------------------\n// The run.", start);
+  if (start < 0 || end <= start) throw new Error("cannot locate the actual installed readiness function");
+  return normalized.slice(start, end);
+}
 
 function fixture(options: {
   bridge?: boolean; mounted?: boolean; mountAfterFirstPoll?: boolean;
   throwsFirstRender?: boolean; appTarget?: boolean;
+  lineEnding?: "\n" | "\r\n";
 } = {}) {
   let mounted = options.mounted ?? false;
   let polls = 0, opens = 0, closes = 0, shellReads = 0, budget = 0;
@@ -48,12 +53,23 @@ function fixture(options: {
     },
     check: (label: string, _ok: boolean, detail: string) => failures.push(`${label}: ${detail}`),
   });
-  const attach = vm.runInContext(body + "\nattachToApp", context) as
+  const input = options.lineEnding ? source.replace(/\r?\n/g, options.lineEnding) : source;
+  const attach = vm.runInContext(attachBody(input) + "\nattachToApp", context) as
     (port: number, label: string) => Promise<{ target: unknown; cdp: { close: () => void } } | null>;
   return { run: () => attach(1, "fixture"), state: () => ({ mounted, polls, opens, closes, shellReads, budget, failures }) };
 }
 
 describe("installed artifact readiness waits for the actual shell", () => {
+  it.each(["\n", "\r\n"] as const)("runs the actual readiness predicate with %j checkout line endings", async lineEnding => {
+    const f = fixture({ lineEnding, mountAfterFirstPoll: true });
+    expect(await f.run()).not.toBeNull();
+    expect(f.state()).toMatchObject({ mounted: true, polls: 2, closes: 1, shellReads: 2 });
+  });
+
+  it("refuses a missing function instead of testing an empty or different snippet", () => {
+    expect(() => attachBody(source.replace("async function attachToApp(", "async function missing(")))
+      .toThrow("cannot locate the actual installed readiness function");
+  });
   it("returns a usable bridge and an already mounted renderer on the first poll", async () => {
     const f = fixture({ mounted: true });
     expect(await f.run()).not.toBeNull();
