@@ -3,14 +3,14 @@
   "android": {
     "available": true,
     "applicationId": "com.relayium.android",
-    "versionCode": 11,
-    "versionName": "0.3.2",
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.3.2/Relayium-0.3.2-11.apk",
-    "sha256": "1dbe6e3cf75fb704d408cccd15875fcb7406ac9d4cc6668ed4f0a061f2a03fe4",
-    "size": 46053962,
+    "versionCode": 12,
+    "versionName": "0.3.3",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.3.3/Relayium-0.3.3-12.apk",
+    "sha256": "afbefce64d56d0e5629e8c246bde43372d26576e10d2174fd11df67ac2b4cc0e",
+    "size": 46058058,
     "notes": {
-      "en": "Public preview 0.3.2. New large Share a link uploads can send the next encrypted part while the previous part awaits storage confirmation, with at most two requests. Also includes batched durable receive writes. Older servers and restored uploads keep serial sending. Transfers remain foreground-only; no specific network speed is promised. Direct APK; no Google Play or Play Billing.",
-      "zh": "公开预览版 0.3.2。新建的大文件分享链接上传可在上一片等待保存确认时发送下一片，最多同时两个请求；并包含接收端批量持久化写入优化。旧服务端和恢复任务保持顺序上传。传输仍需保持应用在前台，不承诺具体网络速度。仅以 APK 分发，不在 Google Play 上架，不含 Play 结算。"
+      "en": "Public preview 0.3.3. Nearby LAN sessions have a clearer file area with drag feedback. On Android devices supporting split screen, drag files from another app or use the file picker. Read permission lasts through asynchronous file reads and is released on completion or refusal. Files only; transfers remain foreground-only. Direct APK; no Google Play or Play Billing.",
+      "zh": "公开预览版 0.3.3。局域网“附近”连接增加清晰的文件区和拖入高亮。在支持分屏的安卓设备上，可从其他应用拖入文件，也可继续点选文件。读取权限保留到异步读取结束，在完成或拒绝时释放。拖入仅支持文件；传输仍需保持应用在前台。仅以 APK 分发，不在 Google Play 上架，不含 Play 结算。"
     }
   }
 }

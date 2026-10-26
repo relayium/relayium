@@ -3,10 +3,52 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The release manifest selects 0.3.2 (versionCode 11), signed on
-2026-10-17 for the GitHub direct-APK preview channel `android-v0.3.2`.
+any kind. The release manifest selects 0.3.3 (versionCode 12), signed on
+2026-10-26 for the GitHub direct-APK preview channel `android-v0.3.3`.
 The release asset and relayium.com update feed are published and verified in
 separate steps; actual public URLs determine the version currently available.
+
+### Android 0.3.3 (12) release inputs
+
+`Relayium-0.3.3-12.apk` comes from clean, pushed source
+`1db78a4a730c4db44e6f7509cf13489475cbb9e3`. SHA-256:
+`afbefce64d56d0e5629e8c246bde43372d26576e10d2174fd11df67ac2b4cc0e`; size 46,058,058 bytes.
+The established signing certificate is unchanged:
+`ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`. The subsequent metadata commit
+carries these artifact-derived facts; its Android tree equals this source.
+
+Connected Nearby LAN sessions now show a bordered file area, drag highlight,
+preparation state and readable refusal hint. On Android devices supporting
+split screen, files can be dragged from another app; the existing picker and
+receiving consent remain available. Folder drag is not supported. Content URI
+read grants survive metadata IO and asynchronous reads, and close once after
+completion, refusal, cancellation or the link ending. Link identity and actual
+serialized admission are rechecked before sending; stale and duplicate drops
+cannot replace another selection. Recoverable interruptions block new drops
+without prematurely revoking an active source grant. No protocol, runtime
+dependency, manifest permission/component, account, billing or other-platform
+application change is included.
+
+Acceptance: 1,740 protocol/app JVM tests with zero failures or skips; debug and
+release lint/builds; six actual API 36 emulator cases including picker, busy
+state, Chinese dark mode at 2x font scale, real split-screen cross-UID file drag,
+asynchronous reads after the system drop callback returned, grant revocation,
+text refusal and actual missing-read-grant denial. The maintained file-drop
+driver is invoked by the existing Android interop workflow. The framework drag
+and controller/link fences are tested separately; this does not claim a new
+end-to-end network drag throughput result. Signed v2/v3 APK, 16 KB alignment,
+unsigned entry equality, unchanged manifest/ABIs and inert release hooks were
+observed with the SDK. An owned emulator upgraded the actual published 0.3.2
+in place with UID/private marker retained, cold-launched, refused downgrade,
+and rejected a one-byte APK mutation. Physical-phone and WAN acceptance are
+not claimed. Transfers remain foreground-only.
+
+Repository advisory policy revision 4 recommends 0.3.3 (12). The deployed
+backend remains independently pinned and may still serve an older advisory;
+newer installed clients ignore an older recommendation. The primary feed is
+`/apps/android/update.json`. GitHub asset publication, anonymous APK verification
+and subsequent website activation are separate gates; these inputs alone are
+not a live-feed claim. The earlier release records below remain historical.
 
 ### Android 0.3.2 (11) release inputs
 
