@@ -443,4 +443,10 @@
     <string name="nearby_busy_end">结束当前传输</string>
     <string name="transfer_nearby_running">“附近”正在运行。在这里加入或创建配对码会结束它，请先停止“附近”。</string>
     <string name="transfer_stop_nearby">停止“附近”</string>
+    <!-- Connected LAN file entry and system drag feedback. -->
+    <string name="files_drop_title">发送文件</string>
+    <string name="files_drop_hint">选择文件，或在分屏时从其他应用拖入这里。</string>
+    <string name="files_drop_active">松开即可向当前连接的设备发送文件。</string>
+    <string name="files_drop_preparing">正在准备所选文件…</string>
+    <string name="files_drop_rejected">这些文件未能发送，请重新选择文件，或重新连接设备。</string>
 </resources>

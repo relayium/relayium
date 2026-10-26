@@ -53,6 +53,7 @@ on:
       - 'scripts/test/android-interop-oracle.py'
       - 'scripts/test/android-transport-observer-test.mjs'
       - 'scripts/android-ui-acceptance.sh'
+      - 'scripts/android-file-drop-acceptance.sh'
       - 'scripts/android-ui-session-acceptance.sh'
       # The update acceptance and, separately, the manifest it must agree with.
       # `web/android-release.json` is a RUNTIME input in the same sense the
@@ -280,6 +281,7 @@ jobs:
             ./scripts/android-ui-acceptance.sh
             ./scripts/android-ui-session-acceptance.sh
             ./scripts/android-update-acceptance.sh
+            ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}" ./scripts/android-file-drop-acceptance.sh
 
       # Failure roots are kept by the fixture after owned children exit. Only
       # synthetic observations are uploaded; server logs and credentials stay out.
@@ -293,5 +295,7 @@ jobs:
             ${{ runner.temp }}/android-interop/relayium-acceptance-*/android-failure-*.json
             ${{ runner.temp }}/android-interop/relayium-acceptance-*/instrument-*.log
             ${{ runner.temp }}/android-interop/relayium-acceptance-*/gradle.log
+            apps/android/build/file-drop-acceptance/instrumentation.log
+            apps/android/build/file-drop-acceptance/screenshots/**/*.png
           if-no-files-found: warn
           retention-days: 7

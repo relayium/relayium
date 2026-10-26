@@ -509,4 +509,10 @@
     <string name="nearby_busy_end">End the current transfer</string>
     <string name="transfer_nearby_running">Nearby is running. Joining or creating a code here would end it, so stop Nearby first.</string>
     <string name="transfer_stop_nearby">Stop Nearby</string>
+    <!-- Connected LAN file entry and system drag feedback. -->
+    <string name="files_drop_title">Send files</string>
+    <string name="files_drop_hint">Choose files, or drag them here from another app in split screen.</string>
+    <string name="files_drop_active">Release to send files to the connected device.</string>
+    <string name="files_drop_preparing">Preparing your file selection…</string>
+    <string name="files_drop_rejected">These files could not be sent. Choose them again, or reconnect.</string>
 </resources>

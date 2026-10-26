@@ -2892,20 +2892,31 @@ class TransferController(
      * a window in which a new join connects to a DIFFERENT peer and inherits
      * the old pick. Null skips the fence for callers with no picker round-trip.
      */
-    fun sendFiles(sources: List<OutgoingSource>, expectedLink: Int? = null) = post {
-        if (expectedLink != null && expectedLink != epoch) return@post
-        val lane = fileLane ?: return@post
-        if (sources.isEmpty() || _state.value.fileLaneDown) return@post
-        if (verificationPending) {
-            // HELD, not sent and not dropped: the user asked for this batch and
-            // is owed it once they have compared the codes. One batch, as the
-            // lane itself carries one at a time; a second is refused.
-            if (heldBatch == null) {
-                heldBatch = HeldBatch(sources, epoch)
-                _state.value = _state.value.copy(heldFiles = sources.size)
-            }
+    fun sendFiles(
+        sources: List<OutgoingSource>,
+        expectedLink: Int? = null,
+        onAdmission: ((Boolean) -> Boolean)? = null,
+    ) = post {
+        if (expectedLink != null && expectedLink != epoch) {
+            onAdmission?.invoke(false)
             return@post
         }
+        val lane = fileLane
+        if (lane == null || sources.isEmpty() || _state.value.fileLaneDown) {
+            onAdmission?.invoke(false)
+            return@post
+        }
+        if (verificationPending) {
+            // Existing callers retain the same held-batch semantics. Resource
+            // owners also learn whether this executor actually took the batch.
+            if (heldBatch == null) {
+                if (onAdmission?.invoke(true) == false) return@post
+                heldBatch = HeldBatch(sources, epoch)
+                _state.value = _state.value.copy(heldFiles = sources.size)
+            } else onAdmission?.invoke(false)
+            return@post
+        }
+        if (onAdmission?.invoke(true) == false) return@post
         startOutgoing(lane, sources)
     }
 

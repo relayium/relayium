@@ -293,6 +293,20 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
      *  told apart from its not having begun yet. */
     private var sessionSendObserved = false
 
+    private val _dropBusy = MutableStateFlow(false)
+    internal val dropBusy: StateFlow<Boolean> = _dropBusy.asStateFlow()
+    private val dropLease = com.relayium.android.integration.SessionDropLease { _dropBusy.value = it }
+
+    private fun dropContext(s: TransferController.State = controller.state.value) =
+        com.relayium.android.integration.SessionDropLease.context(s)
+
+    /** Takes ownership of this transient grant even when admission refuses. */
+    internal fun sendDropped(uris: List<Uri>, startLink: Int, permission: java.io.Closeable): Boolean {
+        val ticket = dropLease.begin(startLink, dropContext(), permission) ?: return false
+        sendSelected(uris, startLink, ticket)
+        return true
+    }
+
     /**
      * The identity the destructive invalidations have already been applied for.
      *
@@ -654,6 +668,7 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
         // the sources can no longer be read.
         viewModelScope.launch {
             controller.state.collect { state ->
+                dropLease.observe(dropContext(state))
                 val owner = sessionDispatch ?: return@collect
                 if (state.sendProgress != null) {
                     sessionSendObserved = true
@@ -1174,42 +1189,76 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
      * guessed: an invented size would become a manifest the transfer then
      * fails to honour.
      */
-    fun sendPicked(uris: List<Uri>, linkId: Int) {
-        if (uris.isEmpty()) return
+    fun sendPicked(uris: List<Uri>, linkId: Int) = sendSelected(uris, linkId, null)
+
+    private fun sendSelected(
+        uris: List<Uri>,
+        linkId: Int,
+        drop: com.relayium.android.integration.SessionDropLease.Ticket?,
+    ) {
+        if (uris.isEmpty()) { drop?.let(dropLease::abandon); return }
         viewModelScope.launch(Dispatchers.IO) {
-            val resolver = getApplication<Application>().contentResolver
-            val sources = ArrayList<TransferController.OutgoingSource>(uris.size)
-            for (uri in uris) {
-                var name: String? = null
-                var size: Long = -1
-                runCatching {
-                    resolver.query(uri, null, null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val nameIx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                            val sizeIx = cursor.getColumnIndex(OpenableColumns.SIZE)
-                            if (nameIx >= 0) name = cursor.getString(nameIx)
-                            if (sizeIx >= 0 && !cursor.isNull(sizeIx)) size = cursor.getLong(sizeIx)
+            var handedOff = false
+            try {
+                if (drop != null && !dropLease.maySubmit(drop, dropContext())) return@launch
+                val resolver = getApplication<Application>().contentResolver
+                val sources = ArrayList<TransferController.OutgoingSource>(uris.size)
+                for (uri in uris) {
+                    if (drop != null) {
+                        if (!dropLease.maySubmit(drop, dropContext())) return@launch
+                        // A SAF directory is not a readable file. Do not advertise
+                        // folder drag support by inventing a zero-byte document.
+                        val type = runCatching { resolver.getType(uri) }
+                        if (type.isFailure || type.getOrNull() == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) {
+                            publishPick(linkId, PickError(PickError.Kind.UNREADABLE, null, linkId))
+                            return@launch
                         }
                     }
+                    var name: String? = null
+                    var size: Long = -1
+                    runCatching {
+                        resolver.query(uri, null, null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val nameIx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                                val sizeIx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                                if (nameIx >= 0) name = cursor.getString(nameIx)
+                                if (sizeIx >= 0 && !cursor.isNull(sizeIx)) size = cursor.getLong(sizeIx)
+                            }
+                        }
+                    }
+                    if (drop != null) {
+                        name = com.relayium.android.ingress.SharedItemMetadata.displayName(name)
+                        size = com.relayium.android.ingress.SharedItemMetadata.size(size) ?: -1
+                    }
+                    val fixedName = name
+                    if (fixedName.isNullOrBlank()) {
+                        publishPick(linkId, PickError(PickError.Kind.UNREADABLE, null, linkId))
+                        return@launch
+                    }
+                    if (size < 0) {
+                        publishPick(linkId, PickError(PickError.Kind.UNKNOWN_SIZE, fixedName, linkId))
+                        return@launch
+                    }
+                    sources.add(
+                        TransferController.OutgoingSource(FileMeta(fixedName, size)) {
+                            resolver.openInputStream(uri)
+                                ?: throw java.io.IOException("provider returned no stream for $fixedName")
+                        },
+                    )
                 }
-                val fixedName = name
-                if (fixedName.isNullOrBlank()) {
-                    publishPick(linkId, PickError(PickError.Kind.UNREADABLE, null, linkId))
-                    return@launch
+                publishPick(linkId, null)
+                if (drop != null && !dropLease.maySubmit(drop, dropContext())) return@launch
+                if (drop == null) controller.sendFiles(sources, expectedLink = linkId)
+                else controller.sendFiles(sources, expectedLink = linkId) { accepted ->
+                    if (accepted && !dropLease.maySubmit(drop, dropContext())) {
+                        dropLease.abandon(drop)
+                        false
+                    } else dropLease.admission(drop, accepted)
                 }
-                if (size < 0) {
-                    publishPick(linkId, PickError(PickError.Kind.UNKNOWN_SIZE, fixedName, linkId))
-                    return@launch
-                }
-                sources.add(
-                    TransferController.OutgoingSource(FileMeta(fixedName, size)) {
-                        resolver.openInputStream(uri)
-                            ?: throw java.io.IOException("provider returned no stream for $fixedName")
-                    },
-                )
+                handedOff = true
+            } finally {
+                if (!handedOff) drop?.let(dropLease::abandon)
             }
-            publishPick(linkId, null)
-            controller.sendFiles(sources, expectedLink = linkId)
         }
     }
 
@@ -2125,6 +2174,7 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
         // Every outstanding capability over this account's deliveries ends with
         // the process that granted it. Nothing here survives into a new one.
         SharedFileGrants.revokeAll()
+        dropLease.close()
         sessionDispatch = own(sessionDispatch, null)
         cloudDispatch = own(cloudDispatch, null)
         inboxDispatch = own(inboxDispatch, null)

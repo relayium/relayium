@@ -368,10 +368,22 @@ private fun FilesCard(
 
             // ── outgoing ────────────────────────────────────────────────────
             if (state.outgoing.isEmpty()) {
+                if (state.nearby.active) {
+                    val dropBusy by viewModel.dropBusy.collectAsStateWithLifecycle()
+                    SessionFileDrop(
+                        linkId = state.linkId,
+                        enabled = state.phase == TransferController.Phase.CONNECTED &&
+                            !state.linkInterrupted && state.heldFiles == 0,
+                        busy = dropBusy,
+                        chooseFiles = { pickers.chooseFiles(state.linkId) },
+                        dropFiles = viewModel::sendDropped,
+                    )
+                } else {
                 PrimaryAction(
                     label = stringResource(R.string.files_pick),
                     onClick = { pickers.chooseFiles(state.linkId) },
                 )
+                }
             } else {
                 state.outgoing.forEach { meta ->
                     Text(

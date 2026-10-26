@@ -372,6 +372,68 @@ class TransferControllerTest {
         rig.transport.fileFrames.count { RealtimeFrame.kindOf(it) == RealtimeFrame.KIND_BATCH_ENC }
 
     @Test
+    fun `file admission releases stale selection on actual session executor`() {
+        val rig = rig(); connect(rig)
+        val answers = ConcurrentLinkedQueue<Boolean>()
+        rig.controller.sendFiles(oneFile(), rig.controller.state.value.linkId + 1) {
+            answers.add(it); true
+        }
+        awaitTrue("stale admission answered") { answers.size == 1 }
+        assertEquals(listOf(false), answers.toList())
+        assertEquals(0, manifestsSent(rig))
+        assertTrue(rig.controller.state.value.outgoing.isEmpty())
+    }
+
+    @Test
+    fun `invalidated resource owner vetoes before any outgoing mutation`() {
+        val rig = rig(); connect(rig)
+        val answers = ConcurrentLinkedQueue<Boolean>()
+        rig.controller.sendFiles(oneFile(), rig.controller.state.value.linkId) {
+            answers.add(it); false
+        }
+        // A second actual executor task is the observation barrier: a missing
+        // veto would already have emitted its manifest before this answer.
+        rig.controller.sendFiles(emptyList()) { answers.add(it); true }
+        awaitTrue("both executor admission answers") { answers.size == 2 }
+        assertEquals(listOf(true, false), answers.toList())
+        assertEquals(0, manifestsSent(rig))
+        assertTrue(rig.controller.state.value.outgoing.isEmpty())
+    }
+
+    @Test
+    fun `resource veto cannot leave a batch held behind verification`() {
+        val rig = rig(verifyPeers = { true }); connect(rig)
+        val answers = ConcurrentLinkedQueue<Boolean>()
+        rig.controller.sendFiles(oneFile()) { answers.add(it); false }
+        rig.controller.sendFiles(emptyList()) { answers.add(it); true }
+        awaitTrue("held veto and barrier answered") { answers.size == 2 }
+        assertEquals(listOf(true, false), answers.toList())
+        assertEquals(0, rig.controller.state.value.heldFiles)
+        assertEquals(0, manifestsSent(rig))
+    }
+
+    @Test
+    fun `admitted resources retain existing immediate manifest semantics`() {
+        val rig = rig(); connect(rig)
+        val answers = ConcurrentLinkedQueue<Boolean>()
+        rig.controller.sendFiles(oneFile()) { answers.add(it); true }
+        awaitTrue("actual manifest") { manifestsSent(rig) == 1 }
+        assertEquals(listOf(true), answers.toList())
+    }
+
+    @Test
+    fun `held resource admission refuses a second selection exactly once`() {
+        val rig = rig(verifyPeers = { true }); connect(rig)
+        val answers = ConcurrentLinkedQueue<Boolean>()
+        rig.controller.sendFiles(oneFile()) { answers.add(it); true }
+        rig.controller.sendFiles(oneFile("second.bin")) { answers.add(it); true }
+        awaitTrue("held and refused answered") { answers.size == 2 }
+        assertEquals(listOf(true, false), answers.toList())
+        assertEquals(1, rig.controller.state.value.heldFiles)
+        assertEquals(0, manifestsSent(rig))
+    }
+
+    @Test
     fun `with verification off nothing is held, exactly as before`() {
         val rig = rig(verifyPeers = { false })
         connect(rig)

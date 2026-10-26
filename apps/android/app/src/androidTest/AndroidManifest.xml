@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Instrumentation APK only; neither component enters a release APK. -->
+        <activity android:name="com.relayium.android.SessionDropSourceActivity"
+            android:exported="true" android:resizeableActivity="true"
+            android:label="File drag fixture" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <provider android:name="com.relayium.android.SessionDropFixtureProvider"
+            android:authorities="org.relayium.android.dropfixture"
+            android:exported="false" android:grantUriPermissions="true" />
+    </application>
+</manifest>
