@@ -42,6 +42,7 @@
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
   import { startBrowserThemeColor } from "./lib/browser-theme-color";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
+  import { dropWorkspaceFiles } from "./lib/workspace-file-drop";
   import { outbox, setOutbox, clearOutbox, uploadedRefs, uploadedFingerprint } from "./lib/outbox.svelte";
   import { resetPreupload } from "./lib/preupload.svelte";
   import { createStoredReceiver } from "./lib/preupload-receive.svelte";
@@ -983,6 +984,34 @@
         ? showTransfer
         : !unsupported,
   );
+
+  // An open LAN workspace owns its target even with several nearby devices.
+  // New batches queue on that link; the roster's busy/first-peer rule is not it.
+  const lanWorkspace = $derived(currentRoute() === "lan" && workspace.usingMixed);
+  const lanAttachments = $derived(unifiedAttachments && workspace.routes(workspace.linkPeerId));
+  const windowDropTarget = $derived(lanWorkspace
+    ? lanAttachments ? "send" : "off"
+    : dropTarget(visiblePeers.length, dropBusy));
+
+  function receiveWorkspaceDrop(transfer: DataTransfer) {
+    // A local target may consume the event before it reaches the window.
+    // Completing this gesture must also dismiss the page-wide drag feedback.
+    dragDepth = 0;
+    dragActive = false;
+    void dropWorkspaceFiles(transfer, () =>
+      surfaceShown && lanWorkspace && lanAttachments
+        ? { peerId: workspace.linkPeerId, generation: workspace.linkGeneration, epoch: linkEpoch }
+        : null,
+      (peerId, files) => workspace.sendFiles(peerId, files),
+      (reason) => flash(reason === "changed" ? messages[lang()].workspace.dropChanged
+        : messages[lang()].workspace.dropUnreadable));
+  }
+
+  function receiveWorkspaceWindowDrop(e: DragEvent) {
+    if (!surfaceShown || !lanWorkspace || !lanAttachments || !e.dataTransfer) return;
+    e.preventDefault();
+    receiveWorkspaceDrop(e.dataTransfer);
+  }
 
   // EVERY route renders inside the settings-style shell. The first cut wrapped
   // only the four transfer destinations and the result was two products — a
@@ -1966,6 +1995,14 @@
       // it up after a refused drop would be a highlight with nothing behind it.
       dragDepth = 0;
       dragActive = false;
+      // The visible attachment target already handled it; still clear the
+      // window overlay without submitting a second copy of the batch.
+      if (e.defaultPrevented) return;
+
+      if (surfaceShown && lanWorkspace) {
+        receiveWorkspaceWindowDrop(e);
+        return;
+      }
 
       // **Every gate BEFORE `preventDefault`, because preventDefault IS the
       // consumption.**
@@ -2566,7 +2603,7 @@
       errorKey={surfaceText.errorKey}
       prefill={textCompose}
       unified={mixed}
-      attachmentsEnabled={unifiedAttachments}
+      attachmentsEnabled={currentRoute() === "lan" ? lanAttachments : unifiedAttachments}
       folderPickSupported={folderUploadSupported}
       bind:revealTarget={textReveal}
       onSend={sendSurfaceText}
@@ -2577,6 +2614,7 @@
       onPrefillConsumed={() => (textCompose = "")}
       onPickFiles={(e) => pickFile(e, workspace.linkPeerId)}
       onPickFolder={(e) => pickFile(e, workspace.linkPeerId)}
+      onDropFiles={currentRoute() === "lan" ? receiveWorkspaceDrop : undefined}
       onRestart={restartText}
     />
     {/key}
@@ -2714,11 +2752,11 @@
   <TransferSpeedPref />
 {/snippet}
 
-  {#if surfaceShown && dragActive && dropTarget(visiblePeers.length, dropBusy) !== "off"}
+  {#if surfaceShown && dragActive && windowDropTarget !== "off"}
     <div class="dropzone" transition:fade={{ duration: 140 }}>
       <div class="dropzone-inner">
-        {dropTarget(visiblePeers.length, dropBusy) === "send"
-          ? t.dragSendOne(visiblePeers[0].name)
+        {windowDropTarget === "send"
+          ? t.dragSendOne(lanWorkspace ? nameOf(workspace.linkPeerId) : visiblePeers[0].name)
           : t.dragSendMany}
       </div>
     </div>

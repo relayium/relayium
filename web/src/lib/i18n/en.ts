@@ -1483,6 +1483,9 @@ const en: Messages = {
     etaLine: (secs) => (secs < 60 ? "less than a minute left" : secs < 3600 ? `about ${Math.round(secs / 60)} min left` : `about ${(secs / 3600).toFixed(1)} h left`),
   },
   workspace: {
+    dropHint: "Drop files or folders here, or choose below",
+    dropUnreadable: "Couldn't read the dropped files. Choose them with the buttons and try again.",
+    dropChanged: "The connection changed while reading these files. Drop them again on the intended device.",
     heading: "Connected device",
     peer: (name) => `Connected to ${name}`,
     disconnect: "Disconnect",

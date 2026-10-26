@@ -1443,6 +1443,9 @@ const zh: Messages = {
     etaLine: (secs) => (secs < 60 ? "剩余不到一分钟" : secs < 3600 ? `剩余约 ${Math.round(secs / 60)} 分钟` : `剩余约 ${(secs / 3600).toFixed(1)} 小时`),
   },
   workspace: {
+    dropHint: "将文件或文件夹拖到这里，也可用下方按钮选择",
+    dropUnreadable: "无法读取拖入的文件，请用按钮重新选择。",
+    dropChanged: "读取文件期间连接已改变，请确认接收设备后重新拖入。",
     heading: "已连接的设备",
     peer: (name) => `已连接到 ${name}`,
     disconnect: "断开连接",

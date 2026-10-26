@@ -1684,6 +1684,9 @@ export interface Messages {
   // path badge, verification code and disconnect action. Legacy peers never reach
   // these strings — they keep the separate file and message surfaces.
   workspace: {
+    dropHint: string;
+    dropUnreadable: string;
+    dropChanged: string;
     heading: string; // accessible name of the trust header region
     peer: (name: string) => string;
     disconnect: string; // closes both lanes and erases the link keys

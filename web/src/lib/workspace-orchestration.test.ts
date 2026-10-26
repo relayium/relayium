@@ -406,7 +406,8 @@ describe("the mixed workspace owns the screen", () => {
 
   it("wires attachment, folder and restart through the existing pickers", () => {
     expect(surface).toContain("unified={mixed}");
-    expect(surface).toContain("attachmentsEnabled={unifiedAttachments}");
+    expect(surface).toContain('attachmentsEnabled={currentRoute() === "lan" ? lanAttachments : unifiedAttachments}');
+    expect(app).toContain('const lanAttachments = $derived(unifiedAttachments && workspace.routes(workspace.linkPeerId));');
     expect(surface).toContain("folderPickSupported={folderUploadSupported}");
     // The same picker the peer card uses; no second transfer entry point.
     expect(surface).toContain("onPickFiles={(e) => pickFile(e, workspace.linkPeerId)}");

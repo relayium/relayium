@@ -22,13 +22,14 @@
   import type { TextMessage, TextStatus, TextErrorKey } from "./text-model";
   import type { ConnPath } from "./webrtc";
   import Icon from "./Icon.svelte";
+  import { hasFiles } from "./drag";
 
   let {
     status, peerName, sasCode, path, history, errorKey, prefill = "", showSas = true,
     unified = false, attachmentsEnabled = false, folderPickSupported = false,
     revealTarget = $bindable(),
     onSend, onAccept, onReject, onClear, onEnd, onPrefillConsumed,
-    onPickFiles, onPickFolder, onRestart,
+    onPickFiles, onPickFolder, onRestart, onDropFiles,
   }: {
     status: TextStatus;
     peerName: string;
@@ -68,6 +69,8 @@
      *  mapping and the input reset belong to the caller that owns the transfer. */
     onPickFiles?: (e: Event) => void;
     onPickFolder?: (e: Event) => void;
+    /** LAN-only affordance. File reading and workspace admission stay in App. */
+    onDropFiles?: (transfer: DataTransfer) => void;
     /** Unified terminal states offer this instead of silently reopening. A dead
      *  conversation reopening by itself would re-run consent on the peer without
      *  anyone asking for it. */
@@ -111,6 +114,8 @@
     unified && !!onPickFiles && (status !== "incomingRequest" || attachmentsEnabled),
   );
   const showFolderPick = $derived(folderPickSupported && !!onPickFolder);
+  let fileDragDepth = $state(0);
+  const fileDragOver = $derived(fileDragDepth > 0 && attachmentsEnabled);
 
   // 新的在最上面。`history` 本身仍然是时间顺序（协议、通知、保留逻辑都靠它），这里
   // 只反转**渲染**：这是一个只增不减的列表，把刚到的那条放在底部就等于每来一条都要
@@ -153,6 +158,35 @@
      coarse 触控下限，:disabled 对 <label> 不生效所以停用态走 .is-disabled。
      aria-labelledby 指向那段可见文案本身，所以读屏器念出来的名字就是屏幕上写的。 -->
 {#snippet attachments()}
+  <div class:attachment-drop={!!onDropFiles} class:dragover={fileDragOver}
+    class:drop-disabled={!!onDropFiles && !attachmentsEnabled}
+    role="group" aria-label={t.sendFile} aria-disabled={!attachmentsEnabled}
+    ondragenter={(e) => {
+      if (!onDropFiles || !hasFiles(e.dataTransfer?.types)) return;
+      e.preventDefault(); fileDragDepth++;
+    }}
+    ondragover={(e) => {
+      if (!onDropFiles || !hasFiles(e.dataTransfer?.types)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = attachmentsEnabled ? "copy" : "none";
+    }}
+    ondragleave={(e) => {
+      if (!onDropFiles) return;
+      fileDragDepth = Math.max(0, fileDragDepth - 1);
+    }}
+    ondrop={(e) => {
+      if (!onDropFiles || !hasFiles(e.dataTransfer?.types)) return;
+      e.preventDefault(); fileDragDepth = 0;
+      if (attachmentsEnabled && e.dataTransfer) onDropFiles(e.dataTransfer);
+    }}>
+  {#if onDropFiles}
+    <div class="attachment-hint">
+      <span class="drop-icon" aria-hidden="true"><Icon name="file" /></span>
+      <span class="drop-copy"><strong>{t.sendFile}</strong>
+        <span>{fileDragOver ? t.dragSendOne(peerName) : t.workspace.dropHint}</span>
+      </span>
+    </div>
+  {/if}
   <div class="attach">
     <label class="btn btn-secondary btn-sm" class:is-disabled={!attachmentsEnabled}>
       <span class="at-icon" aria-hidden="true"><Icon name="file" /></span><span class="at-label" id="msg-attach-file">{t.sendFile}</span>
@@ -180,6 +214,7 @@
       </label>
     {/if}
   </div>
+  </div>
 {/snippet}
 
 <section class="ui-card ui-stack msgpanel">
@@ -187,6 +222,9 @@
     <!-- 统一工作区里 SAS 只在顶部那一处渲染，这个面板没有验证框可滚。用一个零高度
          锚点接住那次一次性 reveal，指向会话顶部——和 App.svelte 的活动锚点同一套做法。 -->
     <div class="reveal-anchor" bind:this={revealTarget} aria-hidden="true"></div>
+  {/if}
+  {#if showAttachments && onDropFiles && status !== "incomingRequest"}
+    {@render attachments()}
   {/if}
   <h2>{t.text.panelTitle}</h2>
 
@@ -258,7 +296,7 @@
         placeholder={t.text.composePlaceholder}
       ></textarea>
       <!-- 附件在草稿框和 Send 之间：Tab 顺序就是"写字 → 加附件 → 发送"。 -->
-      {#if showAttachments}{@render attachments()}{/if}
+      {#if showAttachments && !onDropFiles}{@render attachments()}{/if}
       <div class="compose-foot">
         <!-- 有意不加 aria-live：每敲一个键都变的值放进 live region 会把读屏器灌满。
              DownloadPage 里已经把这条反模式写下来了。 -->
@@ -269,7 +307,7 @@
       {#if overLimit}
         <p class="over-note">{t.text.tooLong} {t.text.useFileInstead}</p>
       {/if}
-    {:else if showAttachments}
+    {:else if showAttachments && !onDropFiles}
       <!-- A conversation that ended does not end the link. Files still go, so the
            attachment controls stay exactly where they were. -->
       {@render attachments()}
@@ -394,6 +432,17 @@
   /* 附件按钮行。和 peer card 上那一行同样的排布：图标不压缩，文案可以在窄屏和
      长翻译（de/pt）下换行而不是把按钮撑出卡片。 */
   .attach { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .attachment-drop {
+    display: grid; gap: var(--space-3); padding: var(--space-4);
+    border: 1px dashed var(--control-border); border-radius: var(--radius-sm);
+    background: var(--surface); min-inline-size: 0;
+  }
+  .attachment-drop.dragover { border-color: var(--accent); background: var(--code-bg); }
+  .attachment-drop.drop-disabled { opacity: .6; }
+  .attachment-hint { display: flex; align-items: center; gap: var(--space-2); color: var(--text); font-size: var(--fs-sm); }
+  .drop-icon { display: inline-flex; flex: none; color: var(--accent); }
+  .drop-copy { display: grid; gap: var(--space-1); min-inline-size: 0; }
+  .drop-copy strong { color: var(--text-h); font-weight: 600; }
   .at-icon { flex: none; }
   .at-label { min-inline-size: 0; overflow-wrap: anywhere; }
   .over-note { margin: 0; font-size: var(--fs-sm); color: var(--danger); }

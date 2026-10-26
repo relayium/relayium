@@ -946,13 +946,22 @@ async function mixedScenario(browser, base) {
   await b.evaluate("scrollTo(0, 0); true");
   act("sticky-sas", "the sole SAS stayed pinned after scrolling a long file manifest");
 
-  // ── 五、传输中再选文件 → 可见、可取消的队列，而不是被禁用的控件 ───────────
-  // pickFiles 自己就会在附件控件是 disabled 的时候抛错，所以"排队而不是禁用"这条
-  // 规矩在选之前和选之后各钉了一次。
-  await a.evaluate(pickFiles(`
+  // ── 五、传输中拖入文件 → 可见、可取消的队列，而不是被禁用的控件 ───────────
+  // The first batch used the file picker. This second gesture exercises the
+  // visible LAN drop target AND its bubbling window handler: submitting twice
+  // would produce two queue rows and fail the existing exact-batch assertions.
+  await a.evaluate(`(() => {
+    const target = document.querySelector('.msgpanel .attachment-drop');
+    if (!target || target.getAttribute('aria-disabled') === 'true') {
+      throw new Error('the live LAN attachment drop target is absent or disabled');
+    }
+    const dt = new DataTransfer();
     dt.items.add(new File(['queued-one'], 'queued-one.txt', { type: 'text/plain' }));
     dt.items.add(new File(['queued-two'], 'queued-two.txt', { type: 'text/plain' }));
-  `));
+    target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    return target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  })()`);
   //
   // 这里的两个数**不是**一回事，早先那版把它们混成了一个 `li` 计数：一次选择是一个
   // 批次（`.batch`），批次里有 N 个文件行（`.file-list li`）。`QueuedBatches` 改成

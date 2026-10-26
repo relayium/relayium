@@ -726,3 +726,64 @@ describe("MessagePanel — legacy mode is untouched", () => {
     expect(target.querySelector("button.end")).not.toBe(null);
   });
 });
+
+// Bubbling DOM events also reach the page: defaultPrevented marks a handled
+// drop, so the window handler can clear feedback without submitting twice.
+describe("MessagePanel — LAN attachment drop area", () => {
+  function drag(type: string, types = ["Files"]) {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    const transfer = { types, dropEffect: "none" };
+    Object.defineProperty(e, "dataTransfer", { value: transfer });
+    return { e, transfer };
+  }
+  const zone = () => target.querySelector(".attachment-drop") as HTMLElement;
+  it("shows a localized target with accessible file and folder controls", () => {
+    unified({ onDropFiles: vi.fn(), folderPickSupported: true });
+    expect(zone().textContent).toContain(messages.en.workspace.dropHint);
+    expect(zone().getAttribute("role")).toBe("group");
+    expect(fileInput()!.disabled).toBe(false); expect(folderInput()!.disabled).toBe(false);
+    expect(zone().compareDocumentPosition(ta()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Revealing the workspace starts before its file area, not after it.
+    expect(target.querySelector(".reveal-anchor")!.compareDocumentPosition(zone())
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("highlights nested drags and forwards the original transfer once", () => {
+    const onDropFiles = vi.fn(); unified({ onDropFiles });
+    zone().dispatchEvent(drag("dragenter").e);
+    zone().querySelector(".at-icon")!.dispatchEvent(drag("dragenter").e);
+    zone().querySelector(".at-icon")!.dispatchEvent(drag("dragleave").e);
+    flushSync(); expect(zone().classList.contains("dragover")).toBe(true);
+    expect(zone().textContent).toContain(messages.en.dragSendOne("Alice"));
+    const over = drag("dragover"); zone().dispatchEvent(over.e);
+    expect(over.transfer.dropEffect).toBe("copy");
+    const seen = vi.fn((e: Event) => expect(e.defaultPrevented).toBe(true));
+    window.addEventListener("drop", seen);
+    try {
+      const drop = drag("drop"); zone().dispatchEvent(drop.e); flushSync();
+      expect(onDropFiles).toHaveBeenCalledExactlyOnceWith(drop.transfer);
+      expect(seen).toHaveBeenCalledOnce(); expect(zone().classList.contains("dragover")).toBe(false);
+    } finally { window.removeEventListener("drop", seen); }
+  });
+  it("keeps text and URL drags native to the message composer", () => {
+    const onDropFiles = vi.fn(); unified({ onDropFiles });
+    for (const type of ["dragenter", "dragover", "drop"]) {
+      const { e } = drag(type, ["text/plain", "text/uri-list"]);
+      zone().dispatchEvent(e); expect(e.defaultPrevented).toBe(false);
+    }
+    flushSync(); expect(onDropFiles).not.toHaveBeenCalled();
+    expect(zone().classList.contains("dragover")).toBe(false);
+  });
+  it("never sends or highlights when attachments are disabled", () => {
+    const onDropFiles = vi.fn(); unified({ onDropFiles, attachmentsEnabled: false });
+    zone().dispatchEvent(drag("dragenter").e);
+    const over = drag("dragover"); zone().dispatchEvent(over.e); flushSync();
+    expect(over.transfer.dropEffect).toBe("none"); expect(zone().getAttribute("aria-disabled")).toBe("true");
+    expect(zone().classList.contains("dragover")).toBe(false);
+    zone().dispatchEvent(drag("drop").e);
+    expect(onDropFiles).not.toHaveBeenCalled(); expect(fileInput()!.disabled).toBe(true);
+  });
+  it("adds no LAN drag instruction to cross-network or legacy panels", () => {
+    unified(); expect(zone()).toBeNull(); expect(fileInput()).not.toBeNull();
+    reset(); open(); expect(zone()).toBeNull();
+  });
+});
