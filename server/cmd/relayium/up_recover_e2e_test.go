@@ -451,12 +451,17 @@ func TestUpRecordLifecycleE2E(t *testing.T) {
 	if code != 0 || !strings.Contains(stdout, "/d/") || e.records() != 0 || e.objects() != 1 {
 		t.Fatalf("plain up: code %d records=%d\n%s\n%s", code, e.records(), stdout, stderr)
 	}
+	// Keep this definite-refusal case on the small, single-request route.
+	// A large resumable upload instead keeps its encrypted recovery material.
+	if err := e.store.SetSetting(context.Background(), account.SettingMaxFileSize, 128<<10, time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
 	big := filepath.Join(t.TempDir(), "big.bin")
-	if err := os.WriteFile(big, make([]byte, 2<<20), 0o644); err != nil { // over the 1 MiB fixture limit
+	if err := os.WriteFile(big, make([]byte, 256<<10), 0o644); err != nil { // over the 128 KiB fixture limit
 		t.Fatal(err)
 	}
 	code, _, stderr = e.up(big)
-	if code != 1 || e.records() != 0 {
+	if code != 1 || e.records() != 0 || e.objects() != 1 {
 		t.Fatalf("refused up: code %d records=%d\n%s", code, e.records(), stderr)
 	}
 }

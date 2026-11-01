@@ -334,8 +334,10 @@ usage:
   relayium up --resume <operation> [--json] [--config-dir D]
   relayium up --discard <operation> [--json] [--config-dir D]
 
---resumable encrypts once into a private local ciphertext copy before uploading.
-It requires disk space for the complete encrypted transfer. --resume sends only
+Uploads with an encrypted request body larger than 1 MiB automatically use
+resumable upload. --resumable also enables it for smaller transfers. This
+encrypts once into a private local ciphertext copy before uploading and requires
+disk space for the complete encrypted transfer. --resume sends only
 bytes beyond the server's durable offset from that same copy and session; source
 files are never reread or re-encrypted after restart. --pending lists the records.
 A lost/reaped session is kept for inspection, never silently replaced. --discard

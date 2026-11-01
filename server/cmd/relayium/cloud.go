@@ -359,6 +359,11 @@ func truncatedTTLNotice(requestedSecs, expiresAt, now int64) string {
 		formatTTL(granted), formatTTL(requestedSecs))
 }
 
+// Single-request uploads stay within the resumable engine's 1 MiB body bound.
+// Larger uploads choose that engine before sending anything: retrying a failed
+// single POST could create a second object after an unconfirmed first commit.
+const singleRequestUploadLimit int64 = 1 << 20
+
 // runUp encrypts paths client-side and uploads them to the account-bound
 // cloud store, printing a claim link that works both in a browser (the
 // web /d/ page) and via `relayium down`.
@@ -377,7 +382,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&asJSON, "json", false, "print one JSON document with the outcome")
 	fs.StringVar(&recoverID, "recover", "", "ask the server for the outcome of an earlier upload whose outcome was unknown")
 	fs.BoolVar(&pending, "pending", false, "list uploads whose outcome is still unknown")
-	fs.BoolVar(&resumable, "resumable", false, "keep encrypted local copy for cross-process byte resume")
+	fs.BoolVar(&resumable, "resumable", false, "also use resumable upload for small transfers")
 	fs.StringVar(&resumeID, "resume", "", "resume a recorded encrypted upload")
 	fs.StringVar(&discardID, "discard", "", "remove a recorded resumable upload and its local copy")
 	if wantsHelpFS(fs, args) {
@@ -468,7 +473,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return out.fail("prepare_failed", err)
 	}
-	if resumable {
+	if resumable || prep.BodyLength > singleRequestUploadLimit {
 		return upResumable(cfgDir, client, prep, op, out)
 	}
 	lock, err := cloud.LockUpOperation(cfgDir, op.ID)
