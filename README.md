@@ -120,7 +120,7 @@ curl -fsSL https://relayium.com/install.sh | sh
 machines directly: file and message bytes never pass through Relayium's servers, and nothing is metered.
 `serve` + `push`/`sync` over daemon-direct is always one of them. In CLI v0.26.0 and earlier, and with an
 older CLI peer, the pairing-code modes are too: there `send`/`receive`/`text` touch our servers at all
-only for a tiny rendezvous handshake (never the content). In the published CLI (v0.27.3), a pairing-code
+only for a tiny rendezvous handshake (never the content). In the published CLI (v0.27.4), a pairing-code
 session goes through a TURN relay whenever the server issues one, so it can be relayed and metered — see
 `send` / `receive` below.
 
@@ -129,18 +129,21 @@ pair `relayium up` / `relayium down`: `up` uploads a client-side-encrypted copy 
 so that a browser can open the link, which is the whole point of it — and that means it counts against your
 account plan's storage cap, monthly traffic allowance, daily upload quota and retention window, exactly like
 a stored download link created in the browser. Downloading with `relayium down` still needs no account.
-In the published CLI v0.27.3, `relayium login` and `relayium up` refuse a plain `http://` server
+In the published CLI v0.27.4, `relayium login` and `relayium up` refuse a plain `http://` server
 unless it is a loopback address (a local development server), and `up` accepts `--config-dir`.
-Since CLI v0.27.2, `relayium up <path...> --resumable` is an opt-in recovery mode: before sending file
+Since CLI v0.27.4, `relayium up` automatically uses recoverable, chunked uploads when the complete
+encrypted request body exceeds 1 MiB. Add `--resumable` to opt in for smaller transfers. Before sending file
 data it encrypts once into a private local ciphertext copy (so it needs disk space for the whole encrypted
 transfer) and records the operation. After an interruption, even in a new process,
 `relayium up --resume <operation>` continues the same upload session from that same copy and key, for the
 same account and server, sending only the bytes beyond the server's durable offset; it never rereads or
 re-encrypts the source files and never silently starts a replacement upload. `relayium up --discard
 <operation>` removes only the local recovery state — it does not cancel a remote object or refund traffic.
-Interrupted requests can already have consumed traffic, so there is no zero-replay guarantee, and an
-upload started without `--resumable` still cannot resume its bytes. The same release keeps a stable
-per-server CLI installation identity in the configuration directory: on a capable server, approving a new
+Interrupted requests can already have consumed traffic, so there is no zero-replay guarantee, and a
+small single-request upload started without `--resumable` cannot resume its bytes. CLI v0.27.2 and v0.27.3
+require `--resumable` for cross-process upload recovery; earlier versions must be upgraded first.
+Since v0.27.2, the CLI also keeps a stable per-server CLI installation identity in the configuration
+directory: on a capable server, approving a new
 login for the same account reuses that installation's device entry and rotates its token. The identity is
 a lookup hint, never a credential; copying the configuration directory copies it, and a separate
 `--config-dir` is a separate installation. See

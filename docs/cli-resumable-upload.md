@@ -29,17 +29,20 @@ classified as an app; do not rewrite device rows or credentials automatically.
 
 ## Resuming the same upload
 
-`relayium up <path...> --resumable` creates one private encrypted local copy and
-an operation record containing its recovery key before sending file data.
+A recoverable `relayium up` creates one private encrypted local copy and an
+operation record containing its recovery key before sending file data.
 `relayium up --resume <operation>` validates that copy, account and server, then
 continues the same named session with the same ciphertext. A missing session
 does not start a replacement upload. A lost finalize answer can be recovered
 without another PATCH. Unknown outcomes require checking the account file list
 before sending again; local recovery material is kept.
 
-The mode is opt-in: choose `--resumable` before the upload starts, because a
-default upload stopped part-way cannot resume its bytes. The local copy needs
-disk space for the complete encrypted transfer, and `--resume` never rereads or
+In CLI v0.27.4, a complete encrypted request body larger than 1 MiB selects this
+mode automatically, before any upload request. Smaller uploads require
+`--resumable`, as did every upload on CLI v0.27.2 and v0.27.3. Earlier versions
+must be upgraded first. A single-request upload stopped part-way cannot resume
+its bytes. The local copy needs disk space for the complete encrypted transfer,
+and `--resume` never rereads or
 re-encrypts the source files. Interrupted requests can already have consumed
 traffic, so there is no zero-replay guarantee. Recovery stays with that
 configuration directory, account and server: it does not move an upload to
@@ -52,3 +55,12 @@ refund. A process crash between publishing the encrypted copy and saving its
 record can leave an unlisted `.cipher` file without a saved key; no upload has
 started at that point. There is no automatic orphan scanner: concurrent spool
 creation must not be mistaken for an orphan and deleted.
+
+## 简体中文摘要
+
+CLI v0.27.4 会为加密请求体超过 1 MiB 的上传自动启用分片续传；较小的上传仍可用
+`--resumable` 显式启用。CLI v0.27.2 和 v0.27.3 需要显式添加参数；更早版本须先升级。
+此模式会先创建完整的私有密文副本，因此需要足够的本地磁盘空间。中断后使用
+`relayium up --resume <操作 ID>` 继续同一会话，不重新读取或加密原文件。
+恢复仍绑定同一配置目录、账号和服务器；中断请求可能已消耗流量，不保证零重传。
+`--discard` 只删除本地恢复材料，不取消远端对象，也不退还已消耗的流量。
