@@ -1,5 +1,41 @@
 # macOS App Store submission
 
+## macOS 1.5.1 (49) — internal TestFlight, 2026-11-13
+
+Internal TestFlight build `8c410098-314d-45d2-99f3-b2f70c758067` is `VALID`
+and `IN_BETA_TESTING` in the existing Relayium Internal group. The separate
+App Store-signed arm64 package was built from
+`0ff7f1713589c46dbcf47cfd4010c81d368f789e`; SHA-256
+`a52bb92392cf4da0fc590f88f536dce6c14098f7b1083a22801005cf85981c5e`
+(19,415,373 bytes). App and Share extension passed strict distribution-signature,
+sandbox, entitlement, privacy, no-debug and no-Sparkle checks. Apple validation
+and exactly one upload succeeded. Provider readback verified English/Simplified
+Chinese test notes, automatic notification off, unchanged external membership,
+and existing App Store versions, selected builds and group attributes unchanged.
+No App Store version, App Review or external beta review was submitted.
+The public Mac App Store remains independently versioned at `1.4.10 (47)`.
+
+Device Inbox now exposes Check now inside device conversations as well as the
+overview, without cancelling an active receive. Receive status identifies the
+file and reports actual received bytes, verification and a stalled-progress
+message. A sent item's live remote state is shown while it is being received.
+Share a link's Send another clears the completed selection; failed-upload retry
+keeps it. Since the previous internal build `1.4.10 (47)`, this candidate also
+includes the ordinary Share upload restart-recovery behavior described in the
+`1.5.0` direct-release record below, with the same limitations.
+
+The exact native source passed the full Swift suite: 5,530 tests, six existing
+conditional skips, zero failures; all 28 required named interop cases executed
+without skips. An actual controlled 66 MB CLI-to-native transfer passed full
+file SHA-256 verification. That loopback result establishes functional transfer
+and progress behavior; it does not establish WAN throughput. The reported
+37-minute transfer between different networks remains unresolved. Owner
+hands-on testing on those two Macs is still required. StoreKit sandbox evidence
+remains the owner's 2026-10-08 confirmation; this build adds no purchase test.
+Later source `1c3e4125501a7b76666171f63a6b6272883b1bfe` changes only two Go test
+fixtures for Go 1.26.11 compatibility; all native source trees are byte-identical.
+Earlier failed CI cohorts are preserved and are not described as fully passing.
+
 ## macOS 1.5.0 (48) — GitHub direct release, 2026-10-22
 
 GitHub [`macos-v1.5.0`](https://github.com/relayium/relayium/releases/tag/macos-v1.5.0)
