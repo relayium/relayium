@@ -868,9 +868,9 @@ final class DeviceInboxUITests: XCTestCase {
 
     // MARK: - working
 
-    /// A delivery in progress says so. The label names no file: this window can
-    /// be on a shared screen.
-    func testAWorkingInboxSaysSoWithoutNamingTheDelivery() {
+    /// The generic status remains private; the explicit Inbox surface identifies
+    /// the file before it is saved, even when no payload bytes have arrived.
+    func testAWorkingInboxIdentifiesTheFileAndShowsRealReceiveProgress() {
         launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-working"])
         let window = openDeviceInboxDestination()
 
@@ -883,8 +883,14 @@ final class DeviceInboxUITests: XCTestCase {
 
         XCTAssertTrue(element("inbox-pause", in: window).exists,
                       "a running inbox cannot be paused")
-        XCTAssertFalse(visibleText(in: window).contains("brief.txt"),
-                       "the in-progress surface named the file being received")
+        let files = element("inbox-receive-files", in: window)
+        XCTAssertTrue(files.waitForExistence(timeout: 10))
+        XCTAssertTrue(((files.value as? String) ?? files.label).contains("brief.txt"))
+        XCTAssertTrue(element("inbox-receive-bytes", in: window).exists)
+        XCTAssertFalse(((status.value as? String) ?? status.label).contains("brief.txt"),
+                       "the generic status exposed a file name")
+        XCTAssertFalse(element("inbox-result", in: window).exists,
+                       "a held download was already reported as saved")
     }
 
     // MARK: - check now
@@ -1008,6 +1014,12 @@ final class DeviceInboxUITests: XCTestCase {
         XCTAssertTrue(openConversation.exists, "no conversation was rendered")
         pressOnScreen(openConversation, "the conversation's Open action", in: window)
         requireDevicePageOpened(after: openConversation, in: window)
+
+        let check = revealed("inbox-check-now", in: window, timeout: 10)
+        XCTAssertTrue(check.exists, "the conversation has no Check now")
+        XCTAssertTrue(check.isEnabled)
+        XCTAssertTrue(element("inbox-detail-receive-status", in: window).exists,
+                      "the device page gives no receive status")
 
         // The history half.
         XCTAssertTrue(revealed("inbox-timeline", in: window, timeout: 20).exists,

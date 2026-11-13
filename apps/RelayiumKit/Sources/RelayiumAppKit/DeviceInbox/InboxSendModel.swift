@@ -1205,6 +1205,15 @@ public final class InboxSendModel: ObservableObject {
         publish()
     }
 
+    /// The current task state for a timeline row. Durable history deliberately
+    /// keeps its legacy vocabulary; it must not flatten live downloading,
+    /// verifying, attention or retry states into “waiting for the device”.
+    public func activity(for entry: InboxTimelineEntry) -> InboxSendActivity? {
+        guard entry.direction == .sent, let job = entry.jobID,
+              let record = records[job], record.targetDeviceID == entry.peerDeviceID else { return nil }
+        return record.activity
+    }
+
     // MARK: - watching one delivery
 
     /// Re-read one task's state until it can never change again.

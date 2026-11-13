@@ -1414,6 +1414,28 @@ final class InboxSendModelTests: XCTestCase {
 
     /// **`saved` is reachable from one predicate.** Every local phase maps to
     /// `sending`, and the durable enum has no state nothing can write.
+    func testTimelineUsesTheLiveRemoteStateWithoutChangingDurableVocabulary() async throws {
+        let (model, _) = await signedIn()
+        model.selectTarget(deviceID)
+        sender.createOutcomes = [.success(InboxTaskCreation(task: task(state: .downloading, idempotencyKey: "live"), created: true))]
+        sender.taskResults = [.success(task(state: .downloading, idempotencyKey: "live"))]
+        model.sendText("state probe", token: "bearer")
+        await waitUntil("downloading") { model.items.first?.activity == .tracking(.downloading) }
+        let item = try XCTUnwrap(model.items.first)
+        let entry = InboxTimelineEntry.sent(jobID: item.id, peerDeviceID: deviceID,
+                                           peerNameSnapshot: "Mac", kind: .message,
+                                           at: Date(), byteCount: 11, state: .created)
+        XCTAssertEqual(model.activity(for: entry), .tracking(.downloading))
+        let live = InboxSendPresentation.status(for: try XCTUnwrap(model.activity(for: entry)), language: .en)
+        XCTAssertNotEqual(live, InboxTimelinePresentation.state(of: entry, language: .en))
+        let spoken = InboxTimelinePresentation.accessibilityLabel(of: entry, peerName: "Mac", language: .en, liveState: live)
+        XCTAssertTrue(spoken.contains(live))
+        let other = InboxTimelineEntry.sent(jobID: item.id, peerDeviceID: "another-device",
+                                           peerNameSnapshot: "Other", kind: .message,
+                                           at: Date(), byteCount: 11, state: .created)
+        XCTAssertNil(model.activity(for: other))
+    }
+
     func testTheDurableSentStateReachesSavedOnlyFromTrackingSaved() {
         XCTAssertEqual(InboxSendModel.sentState(for: .staged), .staged)
         XCTAssertEqual(InboxSendModel.sentState(for: .preparing), .sending)

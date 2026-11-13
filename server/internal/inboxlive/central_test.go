@@ -68,7 +68,7 @@ func TestSwiftLiveInteropCentral(t *testing.T) {
 	}
 	fault := os.Getenv("RELAYIUM_SWIFT_LIVE_FAULT")
 	switch fault {
-	case "", "final-tag", "hang-pending":
+	case "", "final-tag", "hang-pending", "large-file":
 	case "exit-before-ready":
 		// Harness-control mode: a helper that dies before it is ready.
 		os.Exit(3)
@@ -81,7 +81,13 @@ func TestSwiftLiveInteropCentral(t *testing.T) {
 		t.Fatalf("unknown RELAYIUM_SWIFT_LIVE_FAULT %q", fault)
 	}
 
-	env := sendtest.New(t, 8<<20)
+	maxFile := int64(8 << 20)
+	if fault == "large-file" {
+		// Explicit large-transfer acceptance only. The ordinary fixture and
+		// all fault controls retain their original 8 MiB account limit.
+		maxFile = 128 << 20
+	}
+	env := sendtest.New(t, maxFile)
 	uid := env.User("owner@example.com")
 	receiverTok := env.Login(uid, "swift-receiver")
 	senderTok := env.Login(uid, "cli-sender")

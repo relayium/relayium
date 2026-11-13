@@ -468,8 +468,8 @@ one connection for both, and the sentence with it.
 **Device Inbox can be checked on demand.** The resident receiver polls central
 on its own schedule — every 30 s while idle, sooner right after a delivery,
 longer while blocked or backing off from a failure — and that schedule is
-unchanged. While the inbox is ready, asking, or has just saved something, its
-status head also offers **Check now** (`inbox-check-now`,
+unchanged. Its overview and device conversation pages offer **Check now**
+whenever the current receiver generation permits it (`inbox-check-now`,
 `InboxController.checkNow()`). It wakes the loop that is already running for one
 extra pass; it is not Try again, which restarts the receiver and would cancel a
 delivery mid-download. The button reads Checking… and is disabled until a pass
@@ -483,11 +483,24 @@ arrived — only a durable receipt does that. Its limits:
   unfinished upload is not a task yet;
 - it does not make bytes move faster;
 - under Ask it answers nothing: held deliveries still need Receive or Decline;
-- it is not offered while the inbox is Off, paused, missing its folder,
-  signed out, offline or failed.
+- it is not offered without an active receiver generation (including Off,
+  paused, signed out or failed); it does not bypass retry backoff.
 
 This first ships in the private 1.3.14 (34) preview. iOS does not render the
 control, and its schedule is unchanged.
+
+The macOS receive view now shows authenticated file names and actual plaintext
+bytes received, including inside the matching device conversation. A stalled
+byte count gets an explicit waiting-for-connection message after ten seconds;
+100% downloaded still requires verification and durable commit before Saved.
+Names stay on this private surface, outside generic menu-bar status and logs.
+Outgoing conversation rows use the live task state instead of flattening
+Downloading and Verifying to Waiting for the other device. These changes do
+not establish a cross-network throughput improvement.
+
+After a successful Share a link upload, Send another clears the selection and
+releases its access scopes without deleting the original files or the saved
+link. Try again after a failed upload retains the selection.
 
 There is no sidebar footer. Whether this Mac can be reached right now is stated
 once, in LAN Transfer's status head, beside the switch that pauses and resumes

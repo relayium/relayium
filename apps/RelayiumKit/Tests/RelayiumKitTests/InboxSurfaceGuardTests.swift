@@ -485,10 +485,12 @@ final class InboxSurfaceGuardTests: XCTestCase {
                       "the branch with no generation renders the full control set")
         for guarded in ["if offersControls,\n               let recovery",
                         "if offersControls, canPause",
-                        "if offersControls, inbox.canCheckNow,"] {
+                        "if offersControls { InboxCheckControl(inbox: inbox) }"] {
             XCTAssertTrue(surface.contains(guarded),
                           "a control that needs a generation is rendered unguarded")
         }
+        XCTAssertTrue(surface.contains("if inbox.canCheckNow {"),
+                      "the shared check control bypasses the controller's generation gate")
         XCTAssertTrue(surface.contains(".accessibilityIdentifier(\"inbox-open-account\")"),
                       "an account the receiver refused is a dead end with no route out")
     }
@@ -1473,7 +1475,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
                      "testAReadyAutomaticInboxNamesItsFolderAndItsPolicy",
                      "testAFolderAttentionStateAsksForTheFolderRatherThanARetry",
                      "testMultipleAskDeliveriesAreVisiblyDistinct",
-                     "testAWorkingInboxSaysSoWithoutNamingTheDelivery",
+                     "testAWorkingInboxIdentifiesTheFileAndShowsRealReceiveProgress",
                      // Renamed with the surface it drives: the rows name their
                      // files now and the Finder action belongs to the section.
                      "testACompletedDeliveryNamesItsFilesAndOffersOneFinderAction",
@@ -1540,6 +1542,17 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(window.contains(".disabled(inbox.manualCheck == .checking)"),
                       "a running check can be pressed again")
         XCTAssertTrue(surface.contains(".accessibilityIdentifier(\"inbox-check-result\")"))
+    }
+
+    func testConversationAndOverviewShareTheSameCheckAndRealProgress() throws {
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+        let page = try macSource("DeviceInbox/DeviceConversationPage.swift")
+        XCTAssertTrue(page.contains("InboxCheckControl(inbox: inbox, showsStatus: true)"))
+        XCTAssertTrue(page.contains("progress.sourceDeviceID == peerID"), "another peer's file leaked into this conversation")
+        XCTAssertTrue(page.contains("InboxReceiveProgressView(progress: progress)"))
+        XCTAssertTrue(surface.contains("InboxReceiveProgressView(progress: progress)"))
+        XCTAssertTrue(page.contains("deliveries.activity(for: entry)"), "timeline still flattens live states to waiting")
+        XCTAssertTrue(page.contains("liveState: timelineState(entry)"), "VoiceOver describes a stale state")
     }
 
     /// The acceptance fixture exists only in DEBUG. What it substitutes is the

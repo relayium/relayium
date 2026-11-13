@@ -273,15 +273,18 @@ final class InboxPassRecord: @unchecked Sendable {
     private var _pending: [InboxTask] = []
     private var _sawPending = false
     private var _blocker: InboxDeviceErrorCode?
+    private var _progress: InboxReceiveProgress?
 
     var receipts: [InboxReceipt] { sync { _receipts } }
     var pending: [InboxTask] { sync { _pending } }
     var sawPending: Bool { sync { _sawPending } }
     var blocker: InboxDeviceErrorCode? { sync { _blocker } }
+    var progress: InboxReceiveProgress? { sync { _progress } }
 
     func add(_ receipt: InboxReceipt) { sync { _receipts.append(receipt) } }
     func observe(pending: [InboxTask]) { sync { _pending = pending; _sawPending = true } }
     func block(_ code: InboxDeviceErrorCode) { sync { _blocker = code } }
+    func observe(progress: InboxReceiveProgress) { sync { _progress = progress } }
 
     /// Non-`async` on purpose: taking an `NSLock` directly inside an `async`
     /// function is an error under the Swift 6 language mode.
@@ -341,6 +344,7 @@ public final class InboxController: ObservableObject {
     }
     /// The user's last "check now", published for the status card.
     @Published public private(set) var manualCheck: InboxManualCheck = .none
+    @Published public private(set) var receiveProgress: InboxReceiveProgress?
     /// The user's own answer, mirrored for the settings control.
     @Published public private(set) var policy: InboxAutoAccept = .off
     @Published public private(set) var folder: InboxFolderSummary = .none
@@ -578,6 +582,7 @@ public final class InboxController: ObservableObject {
     }
 
     private func stopLoop() {
+        receiveProgress = nil
         loop?.cancel()
         loop = nil
         // A check asked of the loop being stopped is not carried into the next
@@ -770,7 +775,22 @@ public final class InboxController: ObservableObject {
                 break
             }
         }
+        live.onProgress = { [weak self] progress in
+            record.observe(progress: progress)
+            Task { @MainActor in
+                guard let self, self.isCurrent(generation), self.passToken == token else { return }
+                // Actor hops may run out of order. Always publish the latest
+                // synchronous observation, including across tasks in one pass.
+                self.receiveProgress = record.progress
+            }
+        }
+        defer {
+            // Invalidate queued progress hops even when pass throws. An old
+            // frame must never restore progress after cancellation or failure.
+            if passToken == token { passToken += 1; receiveProgress = nil }
+        }
         let result = try await live.pass()
+        receiveProgress = nil
         // Invalidate BEFORE reading the record, so nothing else can publish over
         // the decision about to be made.
         passToken += 1

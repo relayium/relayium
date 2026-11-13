@@ -486,28 +486,9 @@ struct DeviceInboxSurface: View {
                 InlineMessage(.failure, InboxSettingsErrorCopy.message(error))
                     .accessibilityIdentifier("inbox-error")
             }
-            // Check now wakes the loop that is already running. It is never
-            // `retryNow()`: that restarts the generation and would cancel a
-            // delivery mid-download. Offered only in healthy waiting states, and
-            // kept on screen — disabled, saying Checking… — until the pass that
-            // answers it returns, so a second press cannot queue a second pass.
-            if offersControls, inbox.canCheckNow,
-               inbox.manualCheck == .checking
-                || InboxManualCheckPresentation.offersCheck(in: inbox.state) {
-                Button(InboxManualCheckPresentation
-                    .label(isChecking: inbox.manualCheck == .checking)) {
-                    inbox.checkNow()
-                }
-                .buttonStyle(.referenceSecondary)
-                .disabled(inbox.manualCheck == .checking)
-                .accessibilityIdentifier("inbox-check-now")
-            }
-            // The answer, beside the button that asked. It never says anything
-            // arrived; the status line above does that from a durable receipt.
-            if offersControls,
-               let answer = InboxManualCheckPresentation.feedback(for: inbox.manualCheck) {
-                InlineMessage(inbox.manualCheck == .failed ? .warning : .info, answer)
-                    .accessibilityIdentifier("inbox-check-result")
+            if offersControls { InboxCheckControl(inbox: inbox) }
+            if let progress = inbox.receiveProgress {
+                InboxReceiveProgressView(progress: progress)
             }
             // Pause is offered only where it means something. A paused inbox
             // already renders Resume as its recovery action above, and pausing
@@ -1011,4 +992,69 @@ struct DeviceInboxSurface: View {
 func copyReceivedMessage(_ text: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
+}
+
+/// Both the overview and a device conversation use the same receive loop and
+/// feedback. Checking never cancels an in-flight download or claims in parallel.
+struct InboxCheckControl: View {
+    @ObservedObject var inbox: InboxController
+    var showsStatus = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            if showsStatus {
+                Text(InboxStatusPresentation.text(for: inbox.state))
+                    .font(.callout)
+                    .accessibilityIdentifier("inbox-detail-receive-status")
+            }
+            if inbox.canCheckNow {
+                Button(InboxManualCheckPresentation.label(isChecking: inbox.manualCheck == .checking)) {
+                    inbox.checkNow()
+                }
+                .buttonStyle(.referenceSecondary)
+                .disabled(inbox.manualCheck == .checking)
+                .accessibilityIdentifier("inbox-check-now")
+            }
+            if let answer = InboxManualCheckPresentation.feedback(for: inbox.manualCheck) {
+                InlineMessage(inbox.manualCheck == .failed ? .warning : .info, answer)
+                    .accessibilityIdentifier("inbox-check-result")
+            }
+        }
+    }
+}
+
+/// File identities stay on the private Inbox surface, never the menu-bar status
+/// or logs. Even 100% downloaded remains Receiving/Verifying until commit.
+struct InboxReceiveProgressView: View {
+    let progress: InboxReceiveProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            Text(L10n.t(progress.phase == .receiving ? .inboxStatusWorking : .sendStateVerifying))
+                .font(.callout.weight(.semibold))
+            Text(progress.fileNames.prefix(3).joined(separator: " · "))
+                .font(.callout)
+                .lineLimit(3)
+                .textSelection(.enabled)
+                .accessibilityIdentifier("inbox-receive-files")
+            ProgressView(value: Double(progress.receivedBytes),
+                         total: Double(max(progress.totalBytes, 1)))
+                .accessibilityLabel(L10n.t(.inboxStatusWorking))
+            Text(L10n.t(.inboxReceiveBytes, [L10n.bytes(progress.receivedBytes), L10n.bytes(progress.totalBytes)]))
+                .font(.subheadline)
+                .accessibilityIdentifier("inbox-receive-bytes")
+            if progress.phase == .receiving {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    if context.date.timeIntervalSince(progress.updatedAt) >= 10 {
+                        Text(L10n.t(.inboxReceiveNoProgress, [L10n.number(Int(context.date.timeIntervalSince(progress.updatedAt)))]))
+                            .font(.subheadline)
+                            .foregroundStyle(Palette.textSecondary)
+                            .accessibilityIdentifier("inbox-receive-waiting")
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("inbox-receive-progress")
+    }
 }

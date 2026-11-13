@@ -338,13 +338,16 @@ final class InboxControllerTests: XCTestCase {
         harness.controller.session(identity(accountA))
 
         await waitUntil({ transport.blobGate.isWaiting }, "the delivery never started streaming")
+        await waitUntil({ harness.controller.receiveProgress != nil }, "progress identity never arrived")
         harness.controller.setPolicy(.off)
+        XCTAssertNil(harness.controller.receiveProgress, "old progress survived the policy change")
         transport.blobGate.open()
 
         await waitUntil({ harness.controller.state == .disabled },
                         "the inbox did not settle on the user's new answer")
         XCTAssertTrue(harness.controller.results.isEmpty,
                       "a delivery taken under the old policy published a result under the new one")
+        XCTAssertNil(harness.controller.receiveProgress, "late callbacks restored the cancelled transfer")
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: harness.root.appendingPathComponent("a.txt").path),
             "a delivery taken under the old policy still wrote after the user switched Off")
@@ -1150,6 +1153,11 @@ final class InboxControllerTests: XCTestCase {
         await waitUntil({ transport.blobGate.isWaiting }, "the download never started")
         await waitUntil({ harness.controller.state == .working }, "the download was not shown")
 
+        await waitUntil({ harness.controller.receiveProgress != nil }, "file identity was never published")
+        XCTAssertEqual(harness.controller.receiveProgress?.taskID, "task1")
+        XCTAssertEqual(harness.controller.receiveProgress?.receivedBytes, 0)
+        XCTAssertFalse(harness.controller.receiveProgress?.fileNames.isEmpty ?? true)
+        XCTAssertTrue(harness.controller.results.isEmpty, "an in-flight file was shown as saved")
         XCTAssertTrue(harness.controller.canCheckNow)
         XCTAssertTrue(harness.controller.checkNow())
         XCTAssertTrue(harness.controller.checkNow())
@@ -1174,6 +1182,7 @@ final class InboxControllerTests: XCTestCase {
                        "the follow-up check claimed again")
         XCTAssertEqual(harness.controller.results.map(\.taskID), ["task1"],
                        "the delivery was not receipted exactly once")
+        XCTAssertNil(harness.controller.receiveProgress, "finished progress stayed on screen")
         XCTAssertEqual(harness.notifier.delivered, [.saved(files: 1)])
         XCTAssertEqual(heartbeats(transport), 2, "two presses produced more than one extra pass")
         XCTAssertEqual(enrolments(transport), 1)

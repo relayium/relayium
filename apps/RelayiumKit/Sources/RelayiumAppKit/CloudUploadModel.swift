@@ -1056,8 +1056,8 @@ public final class CloudUploadModel: ObservableObject {
     }
 
     /// Forget the selection entirely — what "Clear" means. Distinct from
-    /// `reset`, which deliberately keeps it so a failure does not make the user
-    /// choose everything again. Refuses mid-upload: the bytes being sent are the
+    /// retrying a failure, which keeps it so the user need not choose everything
+    /// again. Refuses mid-upload: the bytes being sent are the
     /// ones this list describes.
     public func clearSelection() {
         guard !isBusy else { return }
@@ -1069,6 +1069,12 @@ public final class CloudUploadModel: ObservableObject {
 
     /// Back to a state the user can start from, after a success or a failure.
     public func reset() {
+        // A completed share starts a NEW selection. Failures retain the files
+        // so Try again can retry, and cancellation retains its own semantics.
+        if case .done = state {
+            clearSelection()
+            return
+        }
         generation += 1
         restorePickedState()
     }

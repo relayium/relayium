@@ -164,6 +164,7 @@ struct DeviceConversationPage: View {
                 guard stagedFor.serving(FileDropContext(device)) else { return }
                 discardStagedDevice()
             }
+        receiveSection
         activeSection
         composeSection
         timelineSection
@@ -233,6 +234,22 @@ struct DeviceConversationPage: View {
             caption(L10n.t(.sendDeviceExplain))
                 .padding(.horizontal, Metrics.caption)
         }
+    }
+
+    private var receiveSection: some View {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
+            InboxCheckControl(inbox: inbox, showsStatus: true)
+            if let progress = inbox.receiveProgress, progress.sourceDeviceID == peerID {
+                InboxReceiveProgressView(progress: progress)
+            }
+        }
+    }
+
+    private func timelineState(_ entry: InboxTimelineEntry) -> String? {
+        if let activity = deliveries.activity(for: entry) {
+            return InboxSendPresentation.status(for: activity)
+        }
+        return InboxTimelinePresentation.state(of: entry)
     }
 
     // MARK: - what is happening to this device right now
@@ -653,7 +670,7 @@ struct DeviceConversationPage: View {
                         .accessibilityIdentifier("inbox-entry-direction")
                 }
                 entryBody(entry)
-                if let state = InboxTimelinePresentation.state(of: entry) {
+                if let state = timelineState(entry) {
                     HStack(spacing: 4) {
                         if let symbol = InboxTimelinePresentation.stateSymbol(of: entry) {
                             Image(systemName: symbol).accessibilityHidden(true)
@@ -669,7 +686,7 @@ struct DeviceConversationPage: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(InboxTimelinePresentation.accessibilityLabel(
-                of: entry, peerName: peerName))
+                of: entry, peerName: peerName, liveState: timelineState(entry)))
             Spacer()
             // **A visible command, not only a context menu.** A right-click is
             // not discoverable and is not reachable from the keyboard; the

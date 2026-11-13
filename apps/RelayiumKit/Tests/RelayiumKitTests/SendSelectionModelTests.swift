@@ -392,6 +392,22 @@ final class SendSelectionModelTests: XCTestCase {
         XCTAssertEqual(m.summary, expectedSummaryForOneFile)
     }
 
+    func testSendAnotherAfterSuccessClearsSelectionAndReleasesItsScopes() async {
+        let m = makeModel()
+        let file = fileURL("completed.txt")
+        m.chooseFiles(.success([file]))
+        XCTAssertFalse(access.heldURLs.isEmpty)
+        await upload.applyOutcome(UploadOutcome(id: "complete", expiresAt: 99, keyB64url: "KEY"))
+        m.resetUpload()
+        XCTAssertEqual(upload.state, .idle)
+        XCTAssertNil(m.summary)
+        XCTAssertTrue(access.heldURLs.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        m.resetUpload()
+        XCTAssertEqual(upload.state, .idle)
+        XCTAssertNil(m.summary)
+    }
+
     /// A refusal by the UPLOAD model (an oversized file) stays an upload
     /// failure, and the previous files must not be restorable — their access is
     /// already gone, so `reset()` returning to them would return to files the

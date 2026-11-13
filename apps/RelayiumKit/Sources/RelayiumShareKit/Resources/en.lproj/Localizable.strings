@@ -1237,3 +1237,6 @@
 
 "upload.discardConfirmTitle" = "Discard this saved upload?";
 "upload.discardConfirmBody" = "The upload may already be complete. Discarding can permanently remove your only way to recover its link. It does not delete the file on the server or refund usage. To check the same upload first, cancel and choose Resume.";
+
+"inbox.receiveBytes" = "Received %@ of %@";
+"inbox.receiveNoProgress" = "No new data for %@ seconds. Waiting for the connection…";

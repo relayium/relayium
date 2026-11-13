@@ -1,4 +1,5 @@
 import Darwin
+import CryptoKit
 import XCTest
 @testable import RelayiumAppKit
 @testable import RelayiumKit
@@ -484,9 +485,12 @@ final class InboxCLISenderLiveInteropTests: XCTestCase {
         ((try? FileManager.default.subpathsOfDirectory(atPath: root.path)) ?? []).sorted()
     }
 
-    private func send(_ w: World) async throws -> String {
+    private func send(_ w: World, largeBytes: Int? = nil) async throws -> String {
         let src = w.run.dir.appendingPathComponent("src")
         try writeFixture(src)
+        if let largeBytes {
+            try Data(repeating: 0x66, count: largeBytes).write(to: src.appendingPathComponent("payload/big.bin"))
+        }
         let (code, out, err) = try await cli(w, ["inbox", "send", "--to", try XCTUnwrap(w.meta["receiverDeviceId"]),
                                                  "--json", "--config-dir", try XCTUnwrap(w.meta["senderConfigDir"]),
                                                  src.appendingPathComponent("payload").path,
@@ -541,6 +545,35 @@ final class InboxCLISenderLiveInteropTests: XCTestCase {
         let exit = try await helperExit(w)
         XCTAssertEqual(exit["exit"] as? String, "stdin-eof")
         XCTAssertEqual(exit["tamperedPatches"] as? Int, 0)
+    }
+
+    func testLive66MBFileDownloadsWithProgressAndExactSHA256() async throws {
+        let run = try makeRun()
+        let w = try await startWorld(run, fault: "large-file", withCLI: true)
+        let r = try receiver(w)
+        try await prepare(r)
+        let uploadStarted = Date()
+        let taskID = try await send(w, largeBytes: 66_000_000)
+        let uploadSeconds = Date().timeIntervalSince(uploadStarted)
+        let progress = LiveReceiveProgress()
+        var engine = r.engine
+        engine.onProgress = { progress.add($0) }
+        let downloadStarted = Date()
+        let receivingEngine = engine
+        let outcome = try await bounded("66MB pass", seconds: Self.engineSeconds, session: r.session) {
+            try await receivingEngine.pass()
+        }
+        XCTAssertEqual(outcome, .worked)
+        XCTAssertEqual(r.receipts.count, 1)
+        let actual = try Data(contentsOf: r.root.appendingPathComponent("payload/big.bin"))
+        XCTAssertEqual(actual.count, 66_000_000)
+        XCTAssertEqual(SHA256.hash(data: actual), SHA256.hash(data: Data(repeating: 0x66, count: 66_000_000)))
+        XCTAssertTrue(progress.events.contains { $0.receivedBytes > 0 && $0.receivedBytes < $0.totalBytes })
+        XCTAssertEqual(progress.events.last?.phase, .verifying)
+        let task = try await sentTask(w, taskID, name: "cli-large-sent")
+        XCTAssertEqual(task["state"] as? String, "saved")
+        print("INBOX-LIVE-66MB upload=\(uploadSeconds)s receive=\(Date().timeIntervalSince(downloadStarted))s progressEvents=\(progress.events.count) fullSHA=PASS loopback-only")
+        _ = try await helperExit(w)
     }
 
     // MARK: - S1S-N1: tag corruption commits nothing
@@ -643,4 +676,11 @@ final class InboxCLISenderLiveInteropTests: XCTestCase {
         XCTAssertEqual(unreaped, [])
         XCTAssertFalse(FileManager.default.fileExists(atPath: run.dir.path))
     }
+}
+
+private final class LiveReceiveProgress: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [InboxReceiveProgress] = []
+    func add(_ value: InboxReceiveProgress) { lock.lock(); values.append(value); lock.unlock() }
+    var events: [InboxReceiveProgress] { lock.lock(); defer { lock.unlock() }; return values }
 }

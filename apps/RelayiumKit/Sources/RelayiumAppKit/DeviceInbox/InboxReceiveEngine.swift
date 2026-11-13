@@ -32,6 +32,7 @@ public struct InboxReceiveEngine: Sendable {
     /// was handed by a factory. Every event is a closed case carrying at most a
     /// task id, a protocol state, a closed code and counts — see `InboxLogEvent`.
     public var log: InboxLog?
+    public var onProgress: (@Sendable (InboxReceiveProgress) -> Void)?
     /// Passed through to the receiver; see `InboxReceiver.renewInterval`.
     public var renewInterval: TimeInterval
     public var streamAttempts: Int
@@ -230,6 +231,7 @@ public struct InboxReceiveEngine: Sendable {
                                      now: now, log: log,
                                      renewInterval: renewInterval, streamAttempts: streamAttempts,
                                      freeBytes: freeBytes)
+        receiver.onProgress = onProgress
         if claimed.leaseSeconds > 0 {
             // Follow what CENTRAL says a lease lasts rather than the compiled-in
             // constant, so a server that shortens it is followed instead of

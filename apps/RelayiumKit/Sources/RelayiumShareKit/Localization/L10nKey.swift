@@ -1833,6 +1833,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case inboxStatusReadyAuto = "inbox.statusReadyAuto"
     case inboxStatusReadyAsk = "inbox.statusReadyAsk"
     case inboxStatusPaused = "inbox.statusPaused"
+    case inboxReceiveBytes = "inbox.receiveBytes"
+    case inboxReceiveNoProgress = "inbox.receiveNoProgress"
     case inboxStatusWorking = "inbox.statusWorking"
     case inboxStatusOffline = "inbox.statusOffline"
     /// %@ — an already-formatted duration such as “30 seconds”.

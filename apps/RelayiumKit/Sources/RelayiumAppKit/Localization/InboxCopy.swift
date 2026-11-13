@@ -693,12 +693,13 @@ public enum InboxTimelinePresentation {
     /// The whole row as one spoken sentence: direction, what it was, and — for
     /// an outgoing row — what is actually known about it.
     public static func accessibilityLabel(of entry: InboxTimelineEntry, peerName: String,
-                                          language: AppLanguage? = nil) -> String {
+                                          language: AppLanguage? = nil,
+                                          liveState: String? = nil) -> String {
         var parts = [direction(of: entry, peerName: peerName, language: language)]
         if entry.kind == .files {
             parts.append(L10n.plural(.inboxSavedFiles, entry.fileCount, language: language))
         }
-        if let state = state(of: entry, language: language) { parts.append(state) }
+        if let state = liveState ?? state(of: entry, language: language) { parts.append(state) }
         parts.append(at(entry, language: language))
         return L10n.detail(parts, language: language)
     }

@@ -229,13 +229,25 @@ final class CloudUploadModelTests: XCTestCase {
         XCTAssertEqual(stored, "KEY", "the key for an upload the server accepted was thrown away")
     }
 
-    /// reset() from .done goes back to the picked files, so "send another" does
-    /// not make the user re-choose what they already chose.
-    func testResetReturnsToThePickedFiles() async {
+    /// Send another begins an empty share rather than resending the previous files.
+    func testResetAfterSuccessClearsThePickedFiles() async {
         let m = makeModel()
         let url = sized(10, name: "b.bin")
         m.pick([url])
         await m.applyOutcome(UploadOutcome(id: "x", expiresAt: 1, keyB64url: "K"))
+        m.reset()
+        XCTAssertEqual(m.state, .idle)
+        XCTAssertTrue(m.acceptsOpenedFiles)
+        m.reset()
+        XCTAssertEqual(m.state, .idle, "a second reset restored the old selection")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "clearing selection deleted the source")
+    }
+
+    func testResetAfterFailureRetainsTheSelectionForRetry() {
+        let m = makeModel()
+        let url = sized(10, name: "retry.bin")
+        m.pick([url])
+        m.fail("controlled failure")
         m.reset()
         guard case .picked(let files) = m.state else { return XCTFail("got \(m.state)") }
         XCTAssertEqual(files.map(\.url), [url])

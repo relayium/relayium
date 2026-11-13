@@ -1,5 +1,6 @@
 import XCTest
 import Darwin
+import CryptoKit
 @testable import RelayiumAppKit
 @testable import RelayiumKit
 
@@ -79,6 +80,47 @@ final class InboxReceiverTests: XCTestCase {
         try FileManager.default.contentsOfDirectory(atPath: root.path)
             .filter { $0 != InboxDestinationPlan.stagingDirectoryName }
             .sorted()
+    }
+
+    func test66MBFileReportsAuthenticatedProgressAndCommitsExactBytes() async throws {
+        let h = try await harness()
+        let bytes = [UInt8](repeating: 0x6a, count: 66_000_000)
+        let built = try InboxFixture.delivery(files: [("large.bin", bytes)], deviceKey: h.deviceKey)
+        h.transport.blobBody = built.ciphertext
+        h.transport.blobChunkSize = 256 << 10
+        let progress = ReceiveProgressRecorder()
+        var receiving = receiver(h)
+        receiving.onProgress = { progress.append($0) }
+        let start = Date()
+        let result = try await receiving.deliver(built.delivery)
+        XCTAssertEqual(result, .committed)
+        let actual = try Data(contentsOf: h.root.appendingPathComponent("large.bin"))
+        XCTAssertEqual(SHA256.hash(data: actual), SHA256.hash(data: Data(bytes)))
+        let events = progress.events
+        XCTAssertEqual(events.first?.receivedBytes, 0)
+        XCTAssertEqual(events.first?.fileNames, ["large.bin"])
+        XCTAssertTrue(events.contains { $0.receivedBytes > 0 && $0.receivedBytes < 66_000_000 })
+        XCTAssertEqual(events.last?.receivedBytes, 66_000_000)
+        XCTAssertEqual(events.last?.totalBytes, 66_000_000)
+        XCTAssertEqual(events.last?.phase, .verifying)
+        XCTAssertTrue(zip(events, events.dropFirst()).allSatisfy { $0.receivedBytes <= $1.receivedBytes })
+        print("INBOX-66MB authenticated full-hash local receiver: \(Date().timeIntervalSince(start)) seconds; \(events.count) progress events")
+    }
+
+    func testCorruptedFileNeverReportsFullyVerifiedProgressOrCommits() async throws {
+        let h = try await harness()
+        let built = try InboxFixture.delivery(files: [("bad.bin", [UInt8](repeating: 7, count: 2 << 20))], deviceKey: h.deviceKey)
+        var ciphertext = built.ciphertext
+        ciphertext[ciphertext.count - 1] ^= 1
+        h.transport.blobBody = ciphertext
+        let progress = ReceiveProgressRecorder()
+        var receiving = receiver(h)
+        receiving.onProgress = { progress.append($0) }
+        do { _ = try await receiving.deliver(built.delivery); XCTFail("tampered file accepted") }
+        catch { }
+        XCTAssertFalse(progress.events.contains { $0.phase == .verifying })
+        XCTAssertFalse(progress.events.contains { $0.receivedBytes == $0.totalBytes })
+        XCTAssertEqual(try delivered(h.root), [])
     }
 
     // MARK: - the happy path
@@ -671,4 +713,11 @@ final class LogRecorder: @unchecked Sendable {
     private var stored: [InboxLogEvent] = []
     func append(_ event: InboxLogEvent) { lock.lock(); stored.append(event); lock.unlock() }
     var events: [InboxLogEvent] { lock.lock(); defer { lock.unlock() }; return stored }
+}
+
+private final class ReceiveProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [InboxReceiveProgress] = []
+    func append(_ value: InboxReceiveProgress) { lock.lock(); values.append(value); lock.unlock() }
+    var events: [InboxReceiveProgress] { lock.lock(); defer { lock.unlock() }; return values }
 }

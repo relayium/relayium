@@ -57,6 +57,20 @@ public enum InboxLogEvent: Equatable, Sendable {
 
 public typealias InboxLog = @Sendable (InboxLogEvent) -> Void
 
+/// Ephemeral, local-only progress. File names come from the authenticated
+/// manifest and never enter InboxLogEvent, server reports, or durable history.
+/// A full byte count means downloaded, not saved: only a receipt proves commit.
+public struct InboxReceiveProgress: Equatable, Sendable {
+    public enum Phase: Equatable, Sendable { case receiving, verifying }
+    public let taskID: String
+    public let sourceDeviceID: String
+    public let fileNames: [String]
+    public let receivedBytes: Int64
+    public let totalBytes: Int64
+    public let updatedAt: Date
+    public let phase: Phase
+}
+
 public struct InboxReceiver: Sendable {
     public let transport: InboxTransport
     public let keys: InboxDeviceKeyStoring
@@ -76,6 +90,7 @@ public struct InboxReceiver: Sendable {
     public let root: URL?
     public let now: @Sendable () -> Date
     public let log: InboxLog?
+    public var onProgress: (@Sendable (InboxReceiveProgress) -> Void)?
 
     /// How often a working delivery re-reports its current state (an idempotent
     /// no-op that renews the lease). A third of the lease, so two renewals may be
@@ -208,13 +223,18 @@ public struct InboxReceiver: Sendable {
         }
         defer { writer.closeAll() }
         do {
-            try await stream(delivery, key: key, sink: writer, total: total)
+            onProgress?(fileProgress(delivery, manifest: manifest, received: 0, total: total))
+            try await stream(delivery, key: key, sink: writer, total: total) { bytes in
+                onProgress?(fileProgress(delivery, manifest: manifest, received: bytes, total: total))
+            }
         } catch {
             // Nothing outside staging exists yet, so removing it leaves no trace.
             InboxCommit.cleanStaging(root: root, taskID: task.id)
             throw error
         }
 
+        onProgress?(fileProgress(delivery, manifest: manifest, received: total,
+                                 total: total, phase: .verifying))
         // The bytes are proven. Tell central we are verifying BEFORE touching the
         // user's directory, so the sender's UI never shows a gap between
         // "downloaded" and "landed".
@@ -498,11 +518,22 @@ public struct InboxReceiver: Sendable {
     /// staging — resuming from the last COMPLETE frame boundary across transport
     /// failures.
     ///
+    private func fileProgress(_ delivery: InboxDelivery, manifest: InboxManifestV2,
+                              received: Int64, total: Int64,
+                              phase: InboxReceiveProgress.Phase = .receiving) -> InboxReceiveProgress {
+        InboxReceiveProgress(taskID: delivery.task.id,
+                             sourceDeviceID: delivery.task.sourceDeviceID,
+                             fileNames: manifest.items.compactMap(\.name),
+                             receivedBytes: received, totalBytes: total,
+                             updatedAt: now(), phase: phase)
+    }
+
     /// The resume offset comes from `StoreDecryptor.consumedCipher`, which only
     /// advances past frames that already authenticated, so a resumed request never
     /// re-feeds a partial frame and never skips one.
     private func stream(_ delivery: InboxDelivery, key: [UInt8], sink: InboxPayloadSink,
-                        total: Int64) async throws {
+                        total: Int64,
+                        onBytes: (@Sendable (Int64) -> Void)? = nil) async throws {
         let writer = sink
         let decryptor = StoreDecryptor(key: key)
         var lastRenew = now()
@@ -511,7 +542,7 @@ public struct InboxReceiver: Sendable {
         while true {
             do {
                 try await streamOnce(delivery, decryptor: decryptor, writer: writer,
-                                     lastRenew: &lastRenew)
+                                     lastRenew: &lastRenew, total: total, onBytes: onBytes)
                 break
             } catch let abandon as InboxAbandon {
                 throw abandon
@@ -549,7 +580,8 @@ public struct InboxReceiver: Sendable {
     }
 
     private func streamOnce(_ delivery: InboxDelivery, decryptor: StoreDecryptor,
-                            writer: InboxPayloadSink, lastRenew: inout Date) async throws {
+                            writer: InboxPayloadSink, lastRenew: inout Date, total: Int64,
+                            onBytes: (@Sendable (Int64) -> Void)?) async throws {
         try Task.checkCancellation()
         let start = Int64(decryptor.consumedCipher)
         let stream: InboxBlobStream
@@ -570,6 +602,8 @@ public struct InboxReceiver: Sendable {
         try Task.checkCancellation()
         guard start == 0 || stream.isPartial else { throw InboxError.rangeIgnored }
 
+        var lastPublishedBytes = decryptor.decryptedBytes
+        var lastPublishedAt = now()
         for try await chunk in stream.chunks {
             try Task.checkCancellation()
             let plaintexts: [[UInt8]]
@@ -578,6 +612,16 @@ public struct InboxReceiver: Sendable {
             for plaintext in plaintexts {
                 do { try writer.write(plaintext) }
                 catch { throw InboxClassify.filesystem(error) }
+            }
+            let received = decryptor.decryptedBytes
+            let tick = now()
+            if received > lastPublishedBytes,
+               received - lastPublishedBytes >= 1 << 20
+                || tick.timeIntervalSince(lastPublishedAt) >= 0.25
+                || Int64(received) == total {
+                onBytes?(Int64(received))
+                lastPublishedBytes = received
+                lastPublishedAt = tick
             }
             if now().timeIntervalSince(lastRenew) >= renewInterval {
                 // A refused renewal means the lease is gone. Finishing the download

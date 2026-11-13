@@ -765,10 +765,8 @@ public final class SendSelectionModel: ObservableObject {
 
     // MARK: - what the send screen's own buttons mean
 
-    /// "Send another" after a finished upload, and "Try again" after a failed
-    /// one. Both are the same transition — back to a state the user can start
-    /// from — and what that state IS depends on whether anything is left to
-    /// start from, which is `CloudUploadModel`'s to answer.
+    /// Send another clears the completed selection and its owned resources.
+    /// Try again after a failure retains them so it can retry the same files.
     ///
     /// It is a method here rather than `upload.reset()` in the view because the
     /// screen is two models' published state and only one of them is being
@@ -776,6 +774,12 @@ public final class SendSelectionModel: ObservableObject {
     /// failure before the job became durable it means the same draft still
     /// selected, which is what makes Try again retry something.
     public func resetUpload() {
+        if case .done = upload.state {
+            // A new share must release the old selection's scopes and staged
+            // photo batch as well as clearing the upload model.
+            clear()
+            return
+        }
         upload.reset()
         publishRenderState()
     }

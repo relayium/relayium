@@ -1206,9 +1206,9 @@ final class SharedDraftAdoptionTests: XCTestCase {
         XCTAssertNotNil(send.summary, "the line describing the user's own files disappeared")
     }
 
-    /// And Send another after an ordinary success keeps them too, which is the
-    /// behaviour the name promises: another send of the same files.
-    func testSendAnotherAfterAnOrdinaryUploadKeepsTheSelection() async throws {
+    /// Send another starts a new share after ordinary success; failure retry
+    /// and interrupted-job Discard keep their separate selection semantics.
+    func testSendAnotherAfterAnOrdinaryUploadClearsTheSelection() async throws {
         let session = CurrentValueSubject<SessionState, Never>(ready())
         let pendingStore = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
         let upload = makeUpload(store: pendingStore)
@@ -1227,11 +1227,11 @@ final class SharedDraftAdoptionTests: XCTestCase {
 
         send.resetUpload()
 
-        guard case let .picked(files) = upload.state else {
-            return XCTFail("Send another made the user choose again: \(upload.state)")
-        }
-        XCTAssertEqual(files.map(\.relativePath), ["picked.bin"])
-        XCTAssertNotNil(send.summary)
+        XCTAssertEqual(upload.state, .idle)
+        XCTAssertNil(send.summary)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: picked.path), "the original file was removed")
+        send.resetUpload()
+        XCTAssertEqual(upload.state, .idle, "the previous selection came back")
     }
 
     /// A picker send records no source and retires nothing, and a plan written

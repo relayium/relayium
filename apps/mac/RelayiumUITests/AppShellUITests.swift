@@ -1849,11 +1849,25 @@ final class AppShellUITests: XCTestCase {
         let another = window.buttons["Send another"]
         XCTAssertTrue(another.waitForExistence(timeout: 10),
                       "a completed send offers no way to start the next one")
+        // The CLI instructions can place this action below the visible scroll
+        // area. macOS reports that clipped button as existing, but clicking it
+        // does not activate it. Bring the actual control into view first.
+        let scroll = window.scrollViews.firstMatch
+        for _ in 0..<6 {
+            if scroll.frame.contains(another.frame), !another.frame.isEmpty { break }
+            scroll.scroll(byDeltaX: 0, deltaY: -180)
+        }
+        XCTAssertTrue(scroll.frame.contains(another.frame),
+                      "Send another could not be revealed in the result")
         another.click()
         XCTAssertTrue(chooser.waitForExistence(timeout: 10),
                       "Send another did not return to a new selection")
         XCTAssertFalse(link.exists,
                        "the previous result stayed on screen after Send another")
+        XCTAssertFalse(window.staticTexts[fixture.lastPathComponent].exists,
+                       "Send another retained the previous file in the transfer list")
+        XCTAssertFalse(window.buttons["Send"].exists,
+                       "Send another still offers to resend the old selection")
     }
 
     /// Signing in through the form turns an empty session into a real one.
