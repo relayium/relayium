@@ -279,6 +279,7 @@ const INTEROP_NAMED_CASES = [
   "InboxFinalizeRecoveryLiveTests/testLiveMixedAndAllEmptyManifestsAreUploadedAndCountedOnce",
   "InboxFinalizeRecoveryLiveTests/testLiveTwoConcurrentDeliveriesEachUploadOnceWhenOneAnswerIsLost",
   "InboxFinalizeRecoveryLiveTests/testLiveTheShareUploadStillSendsAPlainFinalize",
+  "InboxCLISenderLiveInteropTests/testLive66MBFileDownloadsWithProgressAndExactSHA256",
 ];
 /** Where each lane tees its `swift test` output for the proof to read. */
 const INTEROP_LOGS = new Map([[SWIFT_PACKAGE, "swift-test.log"], [INTEROP, "swift-interop.log"]]);

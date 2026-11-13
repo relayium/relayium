@@ -280,11 +280,11 @@ final class MacAppleSignInGuardTests: XCTestCase {
 
     // MARK: - version
 
-    /// Candidate 1.5.0 (48) retains the accepted App Store review safeguards.
+    /// Candidate 1.5.1 (49) retains the accepted App Store review safeguards.
     /// Each public distribution channel keeps its separately issued identity.
-    func testTheCandidateIsVersionOnePointFivePointZero() throws {
+    func testTheCandidateIsVersionOnePointFivePointOne() throws {
         let project = projectText
-        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.5.0;"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.5.1;"))
         XCTAssertFalse(project.contains("MARKETING_VERSION = 1.4.10;"),
                        "a target was left on the previous version")
         // **The App Store review fixes must not come back.** The app is named

@@ -21,9 +21,9 @@ struct EngineeringCandidateBanner: View {
 
     private var identity: String {
 #if RELAYIUM_ENGINEERING_CANDIDATE
-        "ENGINEERING · LOCAL SERVER · 127.0.0.1:18080"
+        "ENGINEERING · LOCAL SERVER · 127.0.0.1:18080" // nonlocalized: compile-time engineering identity
 #else
-        "ENGINEERING · PRIVATE TEST · relayium.com"
+        "ENGINEERING · PRIVATE TEST · relayium.com" // nonlocalized: compile-time engineering identity
 #endif
     }
 }

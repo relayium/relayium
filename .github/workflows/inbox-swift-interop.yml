@@ -342,7 +342,8 @@ jobs:
             InboxFinalizeRecoveryLiveTests/testLiveAnEarlierFinalizeWinningTheRaceWithTheSendersFinalizeIsRecovered \
             InboxFinalizeRecoveryLiveTests/testLiveMixedAndAllEmptyManifestsAreUploadedAndCountedOnce \
             InboxFinalizeRecoveryLiveTests/testLiveTwoConcurrentDeliveriesEachUploadOnceWhenOneAnswerIsLost \
-            InboxFinalizeRecoveryLiveTests/testLiveTheShareUploadStillSendsAPlainFinalize
+            InboxFinalizeRecoveryLiveTests/testLiveTheShareUploadStillSendsAPlainFinalize \
+            InboxCLISenderLiveInteropTests/testLive66MBFileDownloadsWithProgressAndExactSHA256
       # PR→main evidence: the toolchain this job actually ran on, captured after
       # every tool it used (scripts/ci/ci-evidence-toolchain.mjs). An unknown
       # toolchain uploads nothing, and a job without a certificate is never

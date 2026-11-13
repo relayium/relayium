@@ -53,35 +53,11 @@ final class BundleVersionTests: XCTestCase {
 
     /// macOS: two products, each with its Share extension.
     func testTheMacAppAndItsExtensionShipOneVersion() throws {
-        // Ten: five targets — the direct app and its Share extension, the App
-        // Store app and ITS Share extension, and the UI test bundle — each in
-        // Debug and Release. Every extension must match its containing app, and
-        // the two products must not drift apart either: they are the same
-        // release of the same app through two channels, and a user who installs
-        // one after the other must not see the version go backwards.
-        //
-        // Provider readback on 2026-10-09 found 1.4.6 (43) consumed by both
-        // the direct release (GitHub macos-v1.4.6, published 2026-10-06) and
-        // App Store Connect (latest macOS build 1.4.6 (43), VALID), and no
-        // build 44. The next candidate is therefore 1.4.7 (44) — a patch
-        // increment, major and minor unchanged; an issued version is never
-        // reused for changed content. (1.4.6 (43) itself followed the
-        // 2026-10-05 readback that found 1.4.5 (42) consumed in both
-        // channels.) This assertion does not advance either channel's
-        // published version.
-        //
-        // The 2026-10-16 provider snapshot has TestFlight 1.4.7 (44)
-        // and public App Store 1.4.7. Direct 1.4.8 (45) is issued too.
-        // This distinct 1.4.9 (46) candidate goes only to internal TestFlight;
-        // public release follows the owner's testing and manual action.
-        // The 2026-10-17 complete provider inventory confirms 1.4.9 (46)
-        // is consumed and 1.4.10 (47) is available. The parallel-share owner
-        // candidate advances both values; this does not publish any channel.
-        // Complete read-only GitHub and Apple inventories on 2026-10-21
-        // confirm 1.4.10 (47) is issued, and 1.5.0 (48) is unused. Restart
-        // recovery adds a compatible user-visible capability (minor release).
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.5.0", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "48", occurrences: 10)
+        // Fresh 2026-11-13 inventories confirm direct 1.5.0 (48) and
+        // Store/TestFlight 1.4.10 (47) are consumed. The Inbox repair advances
+        // both channels to a fresh patch/build; this test does not publish them.
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.5.1", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "49", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon

@@ -479,7 +479,8 @@ jobs:
             InboxFinalizeRecoveryLiveTests/testLiveAnEarlierFinalizeWinningTheRaceWithTheSendersFinalizeIsRecovered \
             InboxFinalizeRecoveryLiveTests/testLiveMixedAndAllEmptyManifestsAreUploadedAndCountedOnce \
             InboxFinalizeRecoveryLiveTests/testLiveTwoConcurrentDeliveriesEachUploadOnceWhenOneAnswerIsLost \
-            InboxFinalizeRecoveryLiveTests/testLiveTheShareUploadStillSendsAPlainFinalize
+            InboxFinalizeRecoveryLiveTests/testLiveTheShareUploadStillSendsAPlainFinalize \
+            InboxCLISenderLiveInteropTests/testLive66MBFileDownloadsWithProgressAndExactSHA256
       # Crash diagnostics, 3 and 4 of 4, ONLY after this job has already failed
       # — a green run skips both and pays nothing, and neither can turn a red
       # run green: the failure above is the verdict. The helper (one 60-second
