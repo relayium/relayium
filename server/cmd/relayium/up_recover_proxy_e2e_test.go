@@ -3,6 +3,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -11,6 +13,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -20,6 +23,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -71,8 +76,8 @@ func recoverThroughProxy(t *testing.T, e *upEnv, proxyURL string, tr *http.Trans
 }
 
 // goEarlyContinueProxy is a portable stand-in for such a proxy: Go's own
-// server answers 100 Continue the moment the proxy starts reading the body to
-// forward it, and the Director drops Expect, as nginx does.
+// front emits 100 Continue and removes Expect before net/http parses it. This
+// models nginx without coupling the fixture to Go's automatic body-reader locks.
 func goEarlyContinueProxy(t *testing.T, upstream string) *httptest.Server {
 	t.Helper()
 	u, err := url.Parse(upstream)
@@ -86,9 +91,65 @@ func goEarlyContinueProxy(t *testing.T, upstream string) *httptest.Server {
 		r.Header.Del("Expect")
 	}
 	rp.Transport = &http.Transport{ResponseHeaderTimeout: 3 * time.Second}
-	ts := httptest.NewServer(rp)
+	ts := httptest.NewUnstartedServer(rp)
+	ts.Listener = earlyContinueListener{ts.Listener}
+	// This wire front transforms one request per connection.
+	ts.Config.SetKeepAlivesEnabled(false)
+	ts.Start()
 	t.Cleanup(ts.Close)
 	return ts
+}
+
+// Only the request header is transformed; buffered body bytes and all other
+// headers are forwarded verbatim. The bound rejects malformed test traffic.
+type earlyContinueListener struct{ net.Listener }
+
+func (l earlyContinueListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &earlyContinueConn{Conn: c}, nil
+}
+
+type earlyContinueConn struct {
+	net.Conn
+	once   sync.Once
+	reader io.Reader
+	err    error
+}
+
+func (c *earlyContinueConn) Read(p []byte) (int, error) {
+	c.once.Do(func() {
+		br := bufio.NewReader(c.Conn)
+		var header bytes.Buffer
+		var total int
+		var expect bool
+		for {
+			line, err := br.ReadString('\n')
+			total += len(line)
+			if err != nil || total > 64<<10 {
+				c.err = fmt.Errorf("invalid early-continue fixture header")
+				return
+			}
+			if strings.EqualFold(strings.TrimSpace(line), "Expect: 100-continue") {
+				expect = true
+			} else {
+				header.WriteString(line)
+			}
+			if line == "\r\n" {
+				break
+			}
+		}
+		if expect {
+			_, c.err = io.WriteString(c.Conn, "HTTP/1.1 100 Continue\r\n\r\n")
+		}
+		c.reader = io.MultiReader(bytes.NewReader(header.Bytes()), br)
+	})
+	if c.err != nil {
+		return 0, c.err
+	}
+	return c.reader.Read(p)
 }
 
 // recoverSizes are the upload sizes every proxy case covers, as source-file

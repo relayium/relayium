@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -118,23 +119,29 @@ func TestPreparedUploadCancelAfterBodySentIsUnknown(t *testing.T) {
 // 100 Continue) still accepts a definitive answer that follows, and never
 // yields a byte.
 func TestRecoverAcceptsAnswerAfterEarlyContinue(t *testing.T) {
-	var bodyBytes int64
+	bodyBytes := make(chan int64, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Reading the body makes net/http send "100 Continue" at once; the
-		// probe body then blocks, yielding nothing, until the answer below.
-		done := make(chan int64, 1)
-		go func() {
-			n, _ := io.CopyN(io.Discard, r.Body, 1)
-			done <- n
-		}()
-		select {
-		case n := <-done:
-			bodyBytes = n
-		case <-time.After(300 * time.Millisecond):
+		// Control the wire directly: Go's automatic Continue reader holds its
+		// body mutex while waiting, so writing a final response concurrently
+		// depends on net/http implementation details rather than the protocol.
+		conn, rw, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
 		}
-		w.Header().Set("Idempotent-Replay", "true")
-		w.Header().Set("Connection", "close")
-		_, _ = w.Write([]byte(`{"id":"abc123","expiresAt":42}`))
+		defer conn.Close()
+		_, _ = rw.WriteString("HTTP/1.1 100 Continue\r\n\r\n")
+		_ = rw.Flush()
+		time.Sleep(300 * time.Millisecond)
+		answer := `{"id":"abc123","expiresAt":42}`
+		_, _ = fmt.Fprintf(rw, "HTTP/1.1 200 OK\r\nIdempotent-Replay: true\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s", len(answer), answer)
+		_ = rw.Flush()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+		n, readErr := io.CopyN(io.Discard, rw, 1)
+		if !errors.Is(readErr, io.EOF) {
+			t.Errorf("probe did not close after final answer: %v", readErr)
+		}
+		bodyBytes <- n
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL)
@@ -143,7 +150,7 @@ func TestRecoverAcceptsAnswerAfterEarlyContinue(t *testing.T) {
 	if err != nil || res.State != RecoveredCommitted || res.ID != "abc123" {
 		t.Fatalf("res %+v err %v", res, err)
 	}
-	if bodyBytes != 0 {
-		t.Fatalf("the probe yielded %d body byte(s)", bodyBytes)
+	if n := <-bodyBytes; n != 0 {
+		t.Fatalf("the probe yielded %d body byte(s)", n)
 	}
 }
