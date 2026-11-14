@@ -698,6 +698,10 @@ func TestDownloadRefusalsCreateNoRootAndRequestNoBlob(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "destination already exists") {
 			t.Fatalf("err = %v, want a collision refusal", err)
 		}
+		var collision *DestinationExistsError
+		if !errors.As(err, &collision) || collision.Path != existing {
+			t.Fatalf("collision = %#v, want typed path %q", err, existing)
+		}
 		if hits.Load() != 0 {
 			t.Fatalf("blob requests = %d, want 0", hits.Load())
 		}

@@ -552,6 +552,16 @@ type writeError struct{ err error }
 func (e *writeError) Error() string { return e.err.Error() }
 func (e *writeError) Unwrap() error { return e.err }
 
+// DestinationExistsError identifies a local preflight collision without making
+// callers parse a path or server-supplied text out of the error message.
+type DestinationExistsError struct {
+	Path string
+}
+
+func (e *DestinationExistsError) Error() string {
+	return fmt.Sprintf("destination already exists: %s", e.Path)
+}
+
 // manifestWriter routes a stream of decrypted plaintext (delivered in
 // arbitrary-sized chunks by Decryptor.Push) into the right output files, in
 // manifest order: the manifest is the sole source of truth for where one
@@ -584,7 +594,7 @@ func (w *manifestWriter) prepare() error {
 		}
 		seen[key] = struct{}{}
 		if _, err := os.Lstat(path); err == nil {
-			return fmt.Errorf("destination already exists: %s", path)
+			return &DestinationExistsError{Path: path}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}

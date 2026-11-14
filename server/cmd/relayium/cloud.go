@@ -15,6 +15,7 @@ import (
 
 	"github.com/relayium/relayium/internal/cloud"
 	"github.com/relayium/relayium/internal/devicelabel"
+	"github.com/relayium/relayium/internal/termtext"
 )
 
 // defaultCloudServer is the first-party account-bound cloud server that
@@ -555,7 +556,8 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	paths, err := client.Download(context.Background(), id, key, destDir)
 	bar.finish()
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Fprintln(stderr, termtext.Safe(err.Error()))
+		printDownCollisionHint(stderr, err, destDir, server != "")
 		return 1
 	}
 	for _, p := range paths {

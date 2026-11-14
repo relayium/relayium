@@ -412,3 +412,57 @@ func TestCloudDownUnusableRootKeepsOneUseLinkE2E(t *testing.T) {
 		})
 	}
 }
+
+// Exercise the actual CLI error path against a one-use link. A refused local
+// destination must preserve both the file and the remaining download slot.
+func TestCloudDownCollisionGuidanceE2E(t *testing.T) {
+	ts, svc, store := newE2EService(t)
+	ctx := context.Background()
+	u, err := store.UpsertUserByEmail(ctx, "collision@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := cloud.NewClient(ts.URL)
+	c.Token = cliToken(t, ts, svc, u.ID)
+	src := filepath.Join(t.TempDir(), "bark-alerts.env")
+	if err := os.WriteFile(src, []byte("new configuration"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	id, key, _, err := c.Upload(ctx, []string{src}, cloud.UploadOpts{MaxDownloads: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := c.DownloadLink(ts.URL, id, key)
+	dest := t.TempDir()
+	existing := filepath.Join(dest, "bark-alerts.env")
+	if err := os.WriteFile(existing, []byte("old configuration"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := runDown([]string{link, dest}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d", code)
+	}
+	for _, want := range []string{"destination already exists", "mv -i", existing + ".bak", "relayium down '<link-or-code>'", "download-new"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Errorf("missing %q: %s", want, &stderr)
+		}
+	}
+	if stdout.Len() != 0 || strings.Contains(stderr.String(), key) || strings.Contains(stderr.String(), link) {
+		t.Fatal("unexpected output or echoed secret")
+	}
+	if got, err := os.ReadFile(existing); err != nil || string(got) != "old configuration" {
+		t.Fatalf("original = %q, %v", got, err)
+	}
+	if _, err := os.Lstat(existing + ".bak"); !os.IsNotExist(err) {
+		t.Fatalf("hint made a backup: %v", err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	alternative := filepath.Join(dest, "download-new")
+	if code := runDown([]string{link, alternative}, &stdout, &stderr); code != 0 {
+		t.Fatalf("retry exit = %d: %s", code, &stderr)
+	}
+	if got, err := os.ReadFile(filepath.Join(alternative, "bark-alerts.env")); err != nil || string(got) != "new configuration" {
+		t.Fatalf("retry = %q, %v", got, err)
+	}
+}
