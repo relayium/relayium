@@ -8,6 +8,40 @@ any kind. The release manifest selects 0.3.3 (versionCode 12), signed on
 The release asset and relayium.com update feed are published and verified in
 separate steps; actual public URLs determine the version currently available.
 
+### Android 0.3.4 (13) prepared release inputs
+
+This candidate is signed and verified locally; it has not yet been published.
+The current public channel above remains 0.3.3 until immutable GitHub asset
+publication and subsequent website activation are independently verified.
+
+`Relayium-0.3.4-13.apk` comes from clean, pushed source
+`b2bb5c2ee04e37f1b9c5fc2c3a91b369601479d0`. SHA-256:
+`4cbc1526c4942c9ef25056dfe9945526758920595f418a0a7792d08cc1aea309`;
+size 46,074,442 bytes. The existing signing certificate remains unchanged:
+`ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`.
+
+While Device Inbox is visible, the existing serialized receiver checks pending
+work every two seconds. Empty probes avoid repeating folder/disk checks,
+device-directory reads and heartbeats. Those keep their maintenance cadence;
+failures retain backoff. Visible sent status is also polled every two seconds,
+independently of whether this device accepts incoming deliveries. Text messages
+have Copy above and below the full body. Ask consent, pause, foreground-only
+receiving, account isolation, encrypted storage and explicit file export retain
+their existing behavior. This improves discovery/status latency and does not
+claim higher file transfer throughput or OS background delivery.
+
+Acceptance: the prior scheduling source passed 1,743 JVM tests without skips
+or failures, and Android hosted CI; final source release build/lint and the
+new UI's Kotlin compilation passed. Signed v2/v3 APK, 16 KB alignment, unchanged
+SDK/permissions/components/ABIs and unsigned-entry equality passed. An isolated
+API 36 ARM64 emulator upgraded the provider-digest-verified public 0.3.3 APK in
+place, retained UID and a private synthetic data marker, cold-launched without a
+fatal exception, refused downgrade and rejected a one-byte signature mutation.
+This does not claim a signed-in physical-phone or WAN test of the new header
+Copy. The whole release still requires normal source-bound publication gates;
+private package verification alone is not publication. Server version policy
+and deployed backend remain independent and unchanged.
+
 ### Android 0.3.3 (12) release inputs
 
 `Relayium-0.3.3-12.apk` comes from clean, pushed source
