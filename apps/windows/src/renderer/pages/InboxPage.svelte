@@ -28,6 +28,7 @@
   nothing on screen telling them which of the four to fix.
 -->
 <script lang="ts">
+  import { onMount } from "svelte";
   import { t } from "../i18n/index.svelte.js";
   import Card from "../shell/Card.svelte";
   import { sendGate } from "../send/send-gate.svelte.js";
@@ -70,6 +71,17 @@
     onSignIn,
   }: { inbox: InboxController; send: InboxSendController; onSignIn?: () => void } = $props();
 
+  onMount(() => {
+    const update = () => inbox.setVisible(!document.hidden);
+    update();
+    const timer = setInterval(update, 10_000);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", update);
+      inbox.setVisible(false);
+    };
+  });
   const status = $derived(inbox.view.status);
   /**
    * Whether this PC is actually going to receive anything.

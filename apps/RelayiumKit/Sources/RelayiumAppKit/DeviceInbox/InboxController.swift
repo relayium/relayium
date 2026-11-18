@@ -212,8 +212,9 @@ public struct InboxRuntime: Sendable {
     public var capabilities: [String]
     public var appVersion: String
     public var backoff: InboxBackoff
-    /// How many completed receipts are kept for the Settings result list. Bounded
-    /// because it holds local file URLs, which describe the user's own content.
+    /// Monotonic time for presence maintenance; unaffected by wall-clock changes.
+    public var uptime: @Sendable () -> TimeInterval
+    /// How many completed receipts are kept for the Settings result list.
     public var resultLimit: Int
 
     public init(folder: InboxReceiveFolder,
@@ -238,7 +239,9 @@ public struct InboxRuntime: Sendable {
                 capabilities: [String] = InboxProtocol.capabilities,
                 appVersion: String,
                 backoff: InboxBackoff = InboxBackoff(),
-                resultLimit: Int = 10) {
+                resultLimit: Int = 10,
+                uptime: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+        self.uptime = uptime
         self.folder = folder
         self.makeEngine = makeEngine
         self.notifier = notifier
@@ -405,6 +408,15 @@ public final class InboxController: ObservableObject {
     /// seventh case is a compile error in three macOS screens that can never
     /// reach it.
     public private(set) var isForeground = true
+    private var inboxVisible = false
+
+    /// Presentation changes only the discovery cadence, never receiving consent.
+    public func setInboxVisible(_ visible: Bool) {
+        guard inboxVisible != visible else { return }
+        inboxVisible = visible
+        runtime.sleeper.wake()
+    }
+
     /// Whether macOS will show a banner when a delivery lands.
     ///
     /// Deliberately NOT part of `state`: a denied Mac receives, decrypts and
@@ -602,6 +614,7 @@ public final class InboxController: ObservableObject {
     private func run(_ generation: InboxGeneration, bearer: String) async {
         var failures = 0
         var prepared = false
+        var maintainedAt: TimeInterval?
         defer {
             // Returned while still current: a terminal failure. Nothing will run
             // under this generation until the user acts or the account changes.
@@ -684,7 +697,29 @@ public final class InboxController: ObservableObject {
             do {
                 let engine = try await resolveEngine(generation, bearer: bearer)
                 guard isCurrent(generation) else { return }
-                await refreshDeviceDirectory(bearer: bearer, generation: generation)
+                // Idle foreground ticks ask only for pending work. Heartbeat,
+                // directory and disk probing keep their original cadence.
+                if prepared, inboxVisible, !manualCheckPending,
+                   let maintainedAt, runtime.uptime() - maintainedAt < runtime.backoff.idle {
+                    let pending = try await engine.transport.pending(limit: InboxProtocol.claimBatch)
+                    guard isCurrent(generation), !Task.isCancelled else { return }
+                    if isPaused || !isForeground || runtime.folder.receivePolicy(account: generation.account) == .off {
+                        continue
+                    }
+                    if pending.isEmpty {
+                        adoptPending(pending)
+                        if case .asking = state { state = .ready(policy) }
+                        failures = 0
+                        await nap(2, generation)
+                        continue
+                    }
+                }
+                let maintenanceStarted = runtime.uptime()
+                let presenceDue = maintainedAt.map { maintenanceStarted - $0 >= runtime.backoff.idle } ?? true
+                let maintainPresence = !inboxVisible || manualCheckPending || presenceDue
+                if maintainPresence {
+                    await refreshDeviceDirectory(bearer: bearer, generation: generation)
+                }
                 if !prepared {
                     _ = try await engine.prepare(platform: runtime.platform,
                                                  appVersion: runtime.appVersion,
@@ -697,8 +732,9 @@ public final class InboxController: ObservableObject {
                 // answered by the next pass, which `nap` then starts at once.
                 let answering = manualCheckPending ? manualCheckSerial : nil
                 let (delay, foundNothing) = try await pass(engine, generation: generation,
-                                                           policy: policy)
+                                                           policy: policy, announcePresence: maintainPresence)
                 guard isCurrent(generation) else { return }
+                if maintainPresence { maintainedAt = maintenanceStarted }
                 failures = 0
                 if let answering {
                     answerManualCheck(answering, foundNothing ? .nothingNew : .checked)
@@ -711,6 +747,7 @@ public final class InboxController: ObservableObject {
                 // next attempt re-announces this device rather than assuming
                 // central still holds what the last successful pass established.
                 prepared = false
+                maintainedAt = nil
                 let delay = runtime.backoff.delay(afterFailures: failures)
                 let terminal = applyFailure(error, retryIn: delay)
                 // Whenever the request was made, this attempt was the one serving
@@ -737,7 +774,7 @@ public final class InboxController: ObservableObject {
     /// One pass, with this generation's observers attached for exactly its
     /// duration. Returns how long to wait before the next one.
     private func pass(_ engine: InboxReceiveEngine, generation: InboxGeneration,
-                      policy: InboxAutoAccept) async throws
+                      policy: InboxAutoAccept, announcePresence: Bool = true) async throws
         -> (delay: TimeInterval, foundNothing: Bool) {
         passToken += 1
         let token = passToken
@@ -789,7 +826,7 @@ public final class InboxController: ObservableObject {
             // frame must never restore progress after cancellation or failure.
             if passToken == token { passToken += 1; receiveProgress = nil }
         }
-        let result = try await live.pass()
+        let result = try await live.pass(announcePresence: announcePresence)
         receiveProgress = nil
         // Invalidate BEFORE reading the record, so nothing else can publish over
         // the decision about to be made.
@@ -843,7 +880,7 @@ public final class InboxController: ObservableObject {
         case .idle:
             if !asking.isEmpty {
                 state = .asking(count: asking.count)
-                return runtime.backoff.blocked
+                return inboxVisible ? 2 : runtime.backoff.blocked
             }
             if let blocker = record.blocker ?? pendingBlocker(record.pending) {
                 state = .attention(.delivery(blocker))
@@ -852,7 +889,7 @@ public final class InboxController: ObservableObject {
             }
             ledger.attentionCleared()
             state = .ready(policy)
-            return runtime.backoff.idle
+            return inboxVisible ? min(2, runtime.backoff.idle) : runtime.backoff.idle
 
         case .notReceiving(let folderState):
             folder = InboxFolderSummary(

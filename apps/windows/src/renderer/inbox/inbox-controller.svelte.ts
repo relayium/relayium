@@ -58,6 +58,7 @@ export interface InboxBridge {
   remove(payload: { id: string }): Promise<InboxSimpleOutcome>;
   rename(payload: { name: string }): Promise<InboxRenameOutcome>;
   wake(): Promise<{ ok: boolean }>;
+  visible?(payload: { visible: boolean }): Promise<{ ok: boolean }>;
   release(payload: { key: string }): Promise<InboxSimpleOutcome>;
   setPolicy(payload: { policy: InboxPolicy }): Promise<InboxEnableOutcome>;
   reveal(): Promise<InboxSimpleOutcome>;
@@ -175,6 +176,10 @@ export class InboxController {
    * told. Every assignment of `view` from a response goes through this.
    */
   #viewSeq = 0;
+
+  setVisible(visible: boolean): void {
+    void this.bridge.visible?.({ visible }).catch(() => {});
+  }
 
   constructor(private readonly bridge: InboxBridge) {
     // ONE subscription, for the life of the app. Rebuilding it per page would

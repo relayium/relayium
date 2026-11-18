@@ -40,7 +40,8 @@ final class InboxControllerTests: XCTestCase {
     }
 
     private func makeHarness(bookmarking: InboxFolderBookmarking? = nil,
-                             sleeper: InboxSleeping? = nil) throws -> Harness {
+                             sleeper: InboxSleeping? = nil,
+                             uptime: @escaping @Sendable () -> TimeInterval = { 0 }) throws -> Harness {
         let harness = Harness()
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("relayium-controller-\(UUID().uuidString)")
@@ -90,7 +91,7 @@ final class InboxControllerTests: XCTestCase {
             sleeper: sleeper ?? harness.sleeper,
             reveal: { [revealed = harness.revealed] urls in revealed.record(urls) },
             platform: "macos", appVersion: "test",
-            backoff: InboxBackoff(idle: 30, afterWork: 2, first: 5, cap: 300, blocked: 60)))
+            backoff: InboxBackoff(idle: 30, afterWork: 2, first: 5, cap: 300, blocked: 60), uptime: uptime))
         harness.controller = controller
         return harness
     }
@@ -167,6 +168,107 @@ final class InboxControllerTests: XCTestCase {
                               file: StaticString = #filePath, line: UInt = #line) async {
         await waitUntil({ harness.sleeper.delays.count >= count },
                         "the loop never reached sleep #\(count)", file: file, line: line)
+    }
+
+    func testVisibleInboxDiscoversEveryTwoSecondsWithoutRepeatedHeartbeats() async throws {
+        let h = try makeHarness()
+        try await seedKey(h, account: accountA)
+        try enable(h, account: accountA, policy: .auto)
+        let t = transport(h, accountA)
+        h.controller.session(identity(accountA))
+        await waitForSleep(h, atLeast: 1)
+        h.controller.setInboxVisible(true)
+        await waitForSleep(h, atLeast: 2)
+        XCTAssertEqual(h.sleeper.delays.last, 2)
+        XCTAssertEqual(heartbeats(t), 1)
+        XCTAssertEqual(pendingReads(t), 2)
+        h.sleeper.wake()
+        await waitForSleep(h, atLeast: 3)
+        XCTAssertEqual(pendingReads(t), 3)
+        XCTAssertEqual(heartbeats(t), 1)
+        h.controller.setInboxVisible(false)
+        await waitForSleep(h, atLeast: 4)
+        XCTAssertEqual(h.sleeper.delays.last, 30)
+        XCTAssertEqual(heartbeats(t), 2)
+        h.controller.session(nil)
+    }
+
+    func testVisibleDiscoveryStillMaintainsPresenceAtTheOriginalDeadline() async throws {
+        let clock = InboxDiscoveryTestClock()
+        let h = try makeHarness(uptime: { clock.read() })
+        try await seedKey(h, account: accountA)
+        try enable(h, account: accountA, policy: .auto)
+        let t = transport(h, accountA)
+        h.controller.setInboxVisible(true)
+        h.controller.session(identity(accountA))
+        await waitForSleep(h, atLeast: 1)
+        clock.set(29)
+        h.sleeper.wake()
+        await waitForSleep(h, atLeast: 2)
+        XCTAssertEqual(heartbeats(t), 1)
+        clock.set(30)
+        h.sleeper.wake()
+        await waitForSleep(h, atLeast: 3)
+        XCTAssertEqual(heartbeats(t), 2)
+        XCTAssertEqual(h.sleeper.delays.last, 2)
+        h.controller.session(nil)
+    }
+
+    func testVisibleProbeCannotPublishReadyAfterPauseDuringItsRequest() async throws {
+        let h = try makeHarness()
+        try await seedKey(h, account: accountA)
+        try enable(h, account: accountA, policy: .auto)
+        let t = transport(h, accountA)
+        h.controller.session(identity(accountA))
+        await waitForSleep(h, atLeast: 1)
+        t.pendingGate.close()
+        h.controller.setInboxVisible(true)
+        await waitUntil({ t.pendingGate.isWaiting }, "foreground probe did not start")
+        h.controller.pause()
+        t.pendingGate.open()
+        await waitForSleep(h, atLeast: 2)
+        XCTAssertEqual(h.controller.state, .paused)
+        XCTAssertEqual(heartbeats(t), 1)
+        h.controller.session(nil)
+    }
+
+    func testVisibleProbeNoticesAndCommitsANewMessageExactlyOnce() async throws {
+        let h = try makeHarness()
+        try await seedKey(h, account: accountA)
+        try enable(h, account: accountA, policy: .auto)
+        let t = transport(h, accountA)
+        h.controller.session(identity(accountA))
+        await waitForSleep(h, atLeast: 1)
+        try queueMessage(h, account: accountA, text: "foreground message")
+        // The real queue remains pending until claimed: both discovery and the
+        // bounded engine pass see it. The fixture advances on each read.
+        t.pendingResults.insert(t.pendingResults[0], at: 0)
+        h.controller.setInboxVisible(true)
+        await waitForSleep(h, atLeast: 2)
+        XCTAssertEqual(h.controller.results.count, 1)
+        XCTAssertEqual(heartbeats(t), 1)
+        h.sleeper.wake()
+        await waitForSleep(h, atLeast: 3)
+        XCTAssertEqual(h.controller.results.count, 1)
+        h.controller.session(nil)
+    }
+
+    func testVisibleDiscoveryFailureUsesFailureBackoffAndReprepares() async throws {
+        let h = try makeHarness()
+        try await seedKey(h, account: accountA)
+        try enable(h, account: accountA, policy: .auto)
+        let t = transport(h, accountA)
+        h.controller.session(identity(accountA))
+        await waitForSleep(h, atLeast: 1)
+        t.pendingResults = [.failure(InboxError.network)]
+        h.controller.setInboxVisible(true)
+        await waitForSleep(h, atLeast: 2)
+        XCTAssertEqual(h.sleeper.delays.last, 5)
+        h.sleeper.wake()
+        await waitForSleep(h, atLeast: 3)
+        XCTAssertEqual(enrolments(t), 2)
+        XCTAssertEqual(heartbeats(t), 2)
+        h.controller.session(nil)
     }
 
     // MARK: - default off
@@ -685,6 +787,26 @@ final class InboxControllerTests: XCTestCase {
 
     /// Under `ask`, central holds the task and this Mac claims nothing until a
     /// person answers. Nothing in the loop may answer for them.
+    func testVisibleAskStillChecksEveryTwoSecondsWithoutAcceptingForTheUser() async throws {
+        let h = try makeHarness()
+        try await seedKey(h, account: accountA)
+        try enable(h, account: accountA, policy: .ask)
+        let t = transport(h, accountA)
+        let held = InboxTask(id: "held-visible", state: .attentionRequired)
+        t.pendingResults = [.success([held]), .success([held]), .success([held])]
+        t.claimResult = .success((deliveries: [], leaseSeconds: 300))
+        h.controller.setInboxVisible(true)
+        h.controller.session(identity(accountA))
+        await waitForSleep(h, atLeast: 1)
+        XCTAssertEqual(h.sleeper.delays.last, 2)
+        XCTAssertEqual(h.controller.asking.map(\.id), [held.id])
+        h.sleeper.wake()
+        await waitForSleep(h, atLeast: 2)
+        XCTAssertEqual(h.sleeper.delays.last, 2)
+        XCTAssertFalse(t.calls.contains(.accept(taskID: held.id, accept: true)))
+        h.controller.session(nil)
+    }
+
     func testAskHoldsTheDeliveryUntilThePersonAnswers() async throws {
         let harness = try makeHarness()
         try await seedKey(harness, account: accountA)
@@ -1594,4 +1716,11 @@ private struct UnresolvableBookmarking: InboxFolderBookmarking {
     }
     func startAccess(to url: URL) -> Bool { false }
     func stopAccess(to url: URL) {}
+}
+
+private final class InboxDiscoveryTestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: TimeInterval = 0
+    func read() -> TimeInterval { lock.lock(); defer { lock.unlock() }; return value }
+    func set(_ value: TimeInterval) { lock.lock(); defer { lock.unlock() }; self.value = value }
 }

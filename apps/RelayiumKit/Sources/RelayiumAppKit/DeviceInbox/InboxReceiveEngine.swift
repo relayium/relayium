@@ -165,7 +165,7 @@ public struct InboxReceiveEngine: Sendable {
     /// including the commit. Re-opening it per step would take and release a
     /// sandbox extension around every syscall and would leave a window in which
     /// the scope is closed while staged plaintext is on disk.
-    public func pass() async throws -> PassResult {
+    public func pass(announcePresence: Bool = true) async throws -> PassResult {
         let opened = folder.open(account: account)
         defer { opened.access?.release() }
 
@@ -176,7 +176,9 @@ public struct InboxReceiveEngine: Sendable {
         // Presence is a claim about NOW, and it carries the folder verdict this
         // pass just measured — a real create-and-remove probe, not an inspection
         // of permission bits.
-        try await transport.heartbeat(receiveDirReady: opened.state.canReceive)
+        if announcePresence {
+            try await transport.heartbeat(receiveDirReady: opened.state.canReceive)
+        }
 
         // A folder verdict is NOT the claim gate any more, and that is the whole
         // point of the v2 receiver: a message is committed to the protected

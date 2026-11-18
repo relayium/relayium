@@ -47,7 +47,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { portFromArgv, startGoServer } from "./go-server.mjs";
-import { argPresent, launchBrowser, newTab, ok, fail, sleep, withWatchdog } from "./harness.mjs";
+import { activateTab, argPresent, launchBrowser, newTab, ok, fail, sleep, withWatchdog } from "./harness.mjs";
 
 // A runner only pkills the browser on the debug port it is configured with, so
 // scripts sharing a port must never run concurrently. 9447 is shared on purpose
@@ -238,6 +238,7 @@ const BLOCK = '[data-di="devices"]';
 
 async function openDeviceInbox(browser, cookie) {
   const tab = await newTab(browser, "about:blank", PAGE_HOOKS);
+  await activateTab(browser, tab);
   const [name, value] = cookie.split("=");
   await tab.send("Network.enable", {});
   await tab.send("Network.setCookie", { name, value, domain: "127.0.0.1", path: "/" });
@@ -373,6 +374,10 @@ async function main() {
     }
     ok("the worker unsealed, verified and atomically saved the browser's file, byte for byte");
 
+    // The browser may have opened another startup tab while the worker ran.
+    // Observing foreground status requires the real Inbox tab to be visible.
+    await tab.send("Page.bringToFront");
+    await activateTab(browser, tab);
     // ── 4. the browser observes saved ────────────────────────────────────
     await tab.waitFor(
       `/Saved on the device/.test(${statusScript})`,

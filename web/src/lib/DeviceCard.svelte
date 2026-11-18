@@ -305,35 +305,46 @@
     pollTimer = setTimeout(runPoll, pollDelay(pollAttempt));
   }
 
+  let pollInFlight = false;
   async function runPoll() {
     pollTimer = null;
-    const mine = gen;
-    const current = task;
-    if (!current) return;
-    const next = await fetchInboxTask(device.ID, current.ID);
-    if (mine !== gen || task?.ID !== current.ID) return; // superseded or reset mid-flight
-    if (next === null) {
-      // Central says the task is gone: cancelled elsewhere, or swept past its
-      // terminal retention. Stop rather than poll a 404 forever.
-      clearPoll();
-      task = null;
-      return;
+    if (pollInFlight) return;
+    pollInFlight = true;
+    try {
+      const mine = gen;
+      const current = task;
+      if (!current) return;
+      const next = await fetchInboxTask(device.ID, current.ID);
+      if (mine !== gen || task?.ID !== current.ID) return; // superseded or reset mid-flight
+      if (next === null) {
+        // Central says the task is gone: cancelled elsewhere, or swept past its
+        // terminal retention. Stop rather than poll a 404 forever.
+        clearPoll();
+        task = null;
+        return;
+      }
+      if (next) {
+        // Successful reads stay responsive even while the state is unchanged.
+        // Only transport failures back off; hidden tabs do not poll.
+        pollAttempt = 0;
+        task = next;
+      } else {
+        pollAttempt += 1; // transient failure: keep what we have, back off
+      }
+    } finally {
+      pollInFlight = false;
+      armPoll();
     }
-    if (next) {
-      // A state change is the only thing that resets the backoff, so a queued
-      // task waiting on an offline device decays to one poll every 30s while an
-      // active delivery stays responsive.
-      pollAttempt = next.State === current.State && next.ErrorCode === current.ErrorCode ? pollAttempt + 1 : 0;
-      task = next;
-    } else {
-      pollAttempt += 1; // transient failure: keep what we have, back off
-    }
-    armPoll();
   }
 
   function onVisibility() {
     if (typeof document !== "undefined" && !document.hidden) pollAttempt = 0;
-    armPoll();
+    if (typeof document !== "undefined" && !document.hidden && task && !task.Terminal) {
+      clearPoll();
+      void runPoll();
+    } else {
+      armPoll();
+    }
   }
 
   $effect(() => {

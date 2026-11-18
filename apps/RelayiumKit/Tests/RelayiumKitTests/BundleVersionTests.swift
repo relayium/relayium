@@ -53,11 +53,10 @@ final class BundleVersionTests: XCTestCase {
 
     /// macOS: two products, each with its Share extension.
     func testTheMacAppAndItsExtensionShipOneVersion() throws {
-        // Fresh 2026-11-13 inventories confirm direct 1.5.0 (48) and
-        // Store/TestFlight 1.4.10 (47) are consumed. The Inbox repair advances
-        // both channels to a fresh patch/build; this test does not publish them.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.5.1", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "49", occurrences: 10)
+        // Fresh 2026-11-18 inventories confirm 1.5.1 (49) consumed.
+        // Foreground Inbox discovery advances both channels to 1.5.2 (50).
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.5.2", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "50", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon
@@ -132,8 +131,8 @@ final class BundleVersionTests: XCTestCase {
         // 0.5.0 App Store version still in PREPARE_FOR_SUBMISSION (root
         // provider readback 2026-10-12). The next internal candidate takes a
         // new visible version, 0.5.1 (12); it did not touch that draft.
-        // Provider 2026-10-18 confirms build12 consumed; parallel Share ships13.
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.2", occurrences: 4)
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "13", occurrences: 4)
+        // Provider 2026-11-18 confirms build13 consumed; Inbox discovery ships14.
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.5.3", occurrences: 4)
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "14", occurrences: 4)
     }
 }

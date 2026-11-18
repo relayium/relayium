@@ -102,6 +102,13 @@ public final class InboxSendModel: ObservableObject {
     private let makeSender: @Sendable (String) -> InboxSenderTransport
     private let sleeper: InboxSleeping
     private let pollSeconds: TimeInterval
+    private var inboxVisible = false
+
+    public func setInboxVisible(_ visible: Bool) {
+        guard inboxVisible != visible else { return }
+        inboxVisible = visible
+        if visible { sleeper.wake() }
+    }
 
     /// Announced, on the main actor, the moment a durable device job has taken
     /// ownership of the current selection — with the account it belongs to and
@@ -1230,7 +1237,7 @@ public final class InboxSendModel: ObservableObject {
                     self?.polls[job] = nil
                     return
                 }
-                await self.sleeper.sleep(self.pollSeconds)
+                await self.sleeper.sleep(self.inboxVisible ? min(2, self.pollSeconds) : self.pollSeconds)
                 guard !Task.isCancelled, g == self.accountGeneration,
                       let live = self.records[job]?.result else { return }
                 let coordinator = self.coordinator(token: token)

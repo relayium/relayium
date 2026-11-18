@@ -46,6 +46,7 @@ import RelayiumKit
 /// remember to. All of those are drivable by `swift test`; a `switch` in a view
 /// is a `switch` no test can reach.
 struct DeviceInboxView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var inbox: InboxController
     @ObservedObject var deliveries: InboxSendModel
     /// Selects the Account destination. A closure rather than a session read, so
@@ -96,10 +97,18 @@ struct DeviceInboxView: View {
         // Opening the consent control rides on the same appearance event, and
         // only ever opens it: a return visit to a configured inbox leaves it
         // exactly as the user left it.
+        .onAppear { setInboxVisible(scenePhase == .active) }
+        .onDisappear { setInboxVisible(false) }
+        .onChange(of: scenePhase) { phase in setInboxVisible(phase == .active) }
         .task {
             refreshTargets()
             openSettingsIfUnconfigured()
         }
+    }
+
+    private func setInboxVisible(_ visible: Bool) {
+        inbox.setInboxVisible(visible)
+        deliveries.setInboxVisible(visible)
     }
 
     /// **The navigation path IS `InboxSendModel.focusedPeerID`.**

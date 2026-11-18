@@ -281,6 +281,7 @@ export interface InboxServiceDeps {
   directoryUsable?(path: string): Promise<FolderProbe>;
   makeApi?(context: AccountContext, bearer: string): FacadeApi & PresenceApi;
   now?(): number;
+  uptime?(): number;
   readonly backoff?: InboxBackoff;
 }
 
@@ -373,6 +374,18 @@ export class InboxService {
   readonly #presentations = new Map<string, InboxPresentationStore>();
   #grants: InboxGrantStore | null = null;
   #bound: Binding | null = null;
+  #visibleUntil = 0;
+  #maintainedAt = Number.NEGATIVE_INFINITY;
+
+  visible(visible: boolean): void {
+    const wasVisible = this.pollingNow() < this.#visibleUntil;
+    this.#visibleUntil = visible ? this.pollingNow() + 15_000 : 0;
+    if (wasVisible !== visible) this.wake();
+  }
+
+  private pollingNow(): number { return this.deps.uptime?.() ?? performance.now(); }
+  private get foregroundPolling(): boolean { return this.pollingNow() < this.#visibleUntil; }
+
   #nextBindingID = 1;
 
   /**
@@ -785,6 +798,7 @@ export class InboxService {
         // successful pass established.
         const bound = this.#bound;
         if (bound !== null) {
+          this.#maintainedAt = Number.NEGATIVE_INFINITY;
           bound.announced = null;
           bound.reconciled = false;
         }
@@ -856,6 +870,15 @@ export class InboxService {
       }
       this.publish({ kind: "disabled" });
       return this.backoff.idle;
+    }
+
+    if (this.foregroundPolling && bound.reconciled && bound.announced === bound.grant.policy &&
+        this.pollingNow() - this.#maintainedAt < this.backoff.idle * 1000) {
+      const pending = await facade.listPending(MAX_INBOX_PENDING, signal);
+      this.assertLive(bound, signal);
+      if (this.admissionClosed() || this.receivingStopped()) return this.backoff.idle;
+      this.#pending = pending.tasks.map(recordOfTask);
+      if (pending.tasks.length === 0) { this.publish(); return 2; }
     }
 
     // ---- 4. destination --------------------------------------------------
@@ -934,7 +957,11 @@ export class InboxService {
     // never sends this — it is not part of receiving a delivery — so the host
     // holds the concrete client for exactly this call.
     if (this.admissionClosed()) return this.backoff.idle;
-    await bound.api.heartbeat(true, signal);
+    if (!this.foregroundPolling || this.pollingNow() - this.#maintainedAt >= this.backoff.idle * 1000) {
+      const stamp = this.pollingNow();
+      await bound.api.heartbeat(true, signal);
+      this.#maintainedAt = stamp;
+    }
     this.assertLive(bound, signal);
 
     let worked = false;
@@ -963,7 +990,7 @@ export class InboxService {
     this.#pending = pending.tasks.map(recordOfTask);
 
     this.publish();
-    return worked ? this.backoff.afterWork : this.backoff.idle;
+    return worked ? this.backoff.afterWork : this.foregroundPolling ? 2 : this.backoff.idle;
   }
 
   /**
@@ -1054,6 +1081,7 @@ export class InboxService {
       announced: null,
       reconciled: false,
     };
+    this.#maintainedAt = Number.NEGATIVE_INFINITY;
     this.#bound = bound;
     return bound;
   }

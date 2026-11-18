@@ -1739,6 +1739,12 @@ export function registerHandlers(
     // page renders. This boundary only refuses an absurd allocation.
     return inbox.rename(expectString(body["name"], MAX_INBOX_DEVICE_NAME_LENGTH));
   });
+  router.handle(IPC.inboxVisible, async (payload) => {
+    const body = expectObject(payload);
+    if (typeof body["visible"] !== "boolean") throw new IpcRefusal("invalid inbox visibility");
+    inbox.visible(body["visible"]);
+    return { ok: true };
+  });
   router.handle(IPC.inboxWake, async () => {
     inbox.wake();
     return { ok: true };

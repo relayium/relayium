@@ -1926,6 +1926,8 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
 
     fun inboxRefresh() = inboxRuntime.refresh()
     fun inboxCheckNow() = inboxRuntime.checkNow()
+    fun inboxVisible(visible: Boolean) = inboxRuntime.setInboxVisible(visible)
+    fun inboxPollSentStates() = inboxRuntime.pollSentStates()
     fun inboxSetPolicy(policy: com.relayium.protocol.inbox.InboxAutoAccept) =
         inboxRuntime.setPolicy(policy)
     fun inboxRespond(taskId: String, accept: Boolean) = inboxRuntime.respond(taskId, accept)

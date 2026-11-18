@@ -2,6 +2,7 @@
 
 package com.relayium.android.ui
 
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -1767,6 +1768,19 @@ private fun InboxDestination(
     onNotice: (Int?) -> Unit,
     onOpenAccount: () -> Unit,
 ) {
+    val inboxLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(viewModel, inboxLifecycle) {
+        inboxLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            viewModel.inboxVisible(true)
+            try {
+                while (true) {
+                    val polling = viewModel.inboxPollSentStates()
+                    try { polling?.join() } finally { polling?.cancel() }
+                    kotlinx.coroutines.delay(2_000L)
+                }
+            } finally { viewModel.inboxVisible(false) }
+        }
+    }
     val state by viewModel.inbox.collectAsStateWithLifecycle()
     val unusable by viewModel.inboxAccountUnusable.collectAsStateWithLifecycle()
     val context = LocalContext.current

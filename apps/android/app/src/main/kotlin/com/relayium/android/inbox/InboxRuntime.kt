@@ -48,6 +48,7 @@ class InboxRuntime(
     private val appVersion: String,
     /** Injected so a test can drive the loop's cadence without waiting. */
     private val pause: suspend (Long) -> Unit = { delay(it) },
+    private val uptimeMillis: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
 
     /**
@@ -128,9 +129,16 @@ class InboxRuntime(
     @Volatile
     private var session: Session? = null
 
+    private val sentStateGate = kotlinx.coroutines.sync.Mutex()
     /** Whether the host says the surface is live. Receiving happens only here. */
-    @Volatile
-    private var live = false
+    @Volatile private var live = false
+    @Volatile private var inboxVisible = false
+
+    fun setInboxVisible(visible: Boolean) {
+        if (inboxVisible == visible) return
+        inboxVisible = visible
+        session?.wake?.trySend(Unit)
+    }
 
     /**
      * Serialises every lifecycle and policy transition.
@@ -355,7 +363,7 @@ class InboxRuntime(
                     sleeping.onJoin { false }
                     session.wake.onReceive { true }
                 }
-                if (woken && session.requestedCheck.get() != 0L) break
+                if (woken) break
             }
         } finally {
             sleeping.cancel()
@@ -372,6 +380,14 @@ class InboxRuntime(
      * resolved — it means the bearer and the id were paired wrongly, and every
      * path below would then act under an identity that is not this device's.
      */
+    fun pollSentStates(): Job? {
+        val session = session ?: return null
+        return model.launchOwned(session.authority) {
+            val services = services(session)
+            refreshSentStates(session, services, services.sendStore.all())
+        }
+    }
+
     fun refresh(): Job? {
         val session = session ?: return null
         return model.launchOwned(session.authority) {
@@ -465,7 +481,7 @@ class InboxRuntime(
         session: Session,
         services: InboxServices,
         jobs: List<InboxSendJob>,
-    ) {
+    ) = sentStateGate.withLock {
         var changed = false
         for (job in jobs) {
             val taskId = job.taskId ?: continue
@@ -494,7 +510,7 @@ class InboxRuntime(
             }
             changed = true
         }
-        if (!changed) return
+        if (!changed) return@withLock
         model.ensureCurrent(session.authority)
         publishSends(session, services)
         val conversations = services.conversations.conversations()
@@ -700,6 +716,7 @@ class InboxRuntime(
             { pending -> session.pending = pending },
             { journal -> onDelivered(session, services, journal) },
         )
+        var maintainedAt: Long? = null
         while (true) {
             currentCoroutineContext().ensureActive()
             model.ensureCurrent(session.authority)
@@ -731,13 +748,38 @@ class InboxRuntime(
             if (answers) session.answering = true
 
             val result = try {
-                engine.pass()
+                val last = maintainedAt
+                if (!answers && inboxVisible && last != null &&
+                    uptimeMillis() - last < session.heartbeatSeconds * 1000L) {
+                    val pending = services.device.pending(InboxProtocol.CLAIM_BATCH)
+                    model.ensureCurrent(session.authority)
+                    if (!live) return
+                    if (session.policy == InboxAutoAccept.OFF) continue
+                    if (pending.isEmpty()) {
+                        session.pending = pending
+                        model.publish(session.authority) { state ->
+                            state.copy(
+                                awaitingAnswer = emptyList(), failure = null,
+                                receiving = if (state.directory?.canReceive == true) InboxReceiving.LISTENING
+                                            else InboxReceiving.UNAVAILABLE,
+                            )
+                        }
+                        nap(session, 2_000L)
+                        continue
+                    }
+                }
+                val stamp = uptimeMillis()
+                val announcePresence = !inboxVisible || answers || last == null || stamp - last >= session.heartbeatSeconds * 1000L
+                val result = engine.pass(announcePresence)
+                if (announcePresence) maintainedAt = stamp
+                result
             } catch (e: InboxSupersededException) {
                 throw e
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
                 model.ensureCurrent(session.authority)
+                maintainedAt = null
                 val failure = model.classify(e)
                 model.publish(session.authority) {
                     it.copy(failure = failure, receiving = resting(session))
@@ -765,7 +807,7 @@ class InboxRuntime(
                 )
             }
             if (result is InboxReceiveEngine.PassResult.Worked) continue
-            nap(session, session.heartbeatSeconds * 1000L)
+            nap(session, if (inboxVisible) 2_000L else session.heartbeatSeconds * 1000L)
         }
     }
 

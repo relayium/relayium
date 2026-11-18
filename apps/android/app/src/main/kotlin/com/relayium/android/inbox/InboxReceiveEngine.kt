@@ -120,7 +120,7 @@ class InboxReceiveEngine(
     }
 
     /** One pass. */
-    suspend fun pass(): PassResult {
+    suspend fun pass(announcePresence: Boolean = true): PassResult {
         currentCoroutineContext().ensureActive()
         val state = container.probe(account)
 
@@ -135,7 +135,7 @@ class InboxReceiveEngine(
         // Presence is a claim about NOW, and it carries the container verdict
         // this pass just measured — a real create-and-remove, not an inspection
         // of permission bits.
-        transport.heartbeat(state.canReceive)
+        if (announcePresence) transport.heartbeat(state.canReceive)
 
         val pending = transport.pending(InboxProtocol.CLAIM_BATCH)
         onPending(pending)

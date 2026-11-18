@@ -170,6 +170,7 @@ contextBridge.exposeInMainWorld("relayium", {
     remove: invoke("relayium:inbox-delete-message"),
     rename: invoke("relayium:inbox-rename"),
     wake: invoke("relayium:inbox-wake"),
+    visible: invoke("relayium:inbox-visible"),
     release: invoke("relayium:inbox-release-retained"),
     setPolicy: invoke("relayium:inbox-set-policy"),
     reveal: invoke("relayium:inbox-reveal-folder"),

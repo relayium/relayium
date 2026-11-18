@@ -268,6 +268,7 @@ export const IPC = {
   inboxRename: "relayium:inbox-rename",
   /** "Try again now" — end the current backoff instead of waiting it out. */
   inboxWake: "relayium:inbox-wake",
+  inboxVisible: "relayium:inbox-visible",
   /** Ask a retained destination to tear down again. A key, never a path. */
   inboxReleaseRetained: "relayium:inbox-release-retained",
   /**

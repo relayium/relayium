@@ -13,6 +13,7 @@ import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -49,11 +50,13 @@ class InboxRuntimeTest {
      *  time instead of racing a timer. */
     private class Pause {
         val entered = AtomicInteger(0)
+        val delays = mutableListOf<Long>()
 
         @Volatile
         var gate = CompletableDeferred<Unit>()
 
         suspend fun await(millis: Long) {
+            delays.add(millis)
             entered.incrementAndGet()
             gate.await()
         }
@@ -91,6 +94,7 @@ class InboxRuntimeTest {
             nowSeconds = ::now,
             appVersion = "0.1.1",
             pause = pause::await,
+            uptimeMillis = { testScheduler.currentTime },
         )
         services.server.devices = listOf(services.self(), services.peer())
         return World(services, runtime, model, pause, opened)
@@ -843,6 +847,56 @@ class InboxRuntimeTest {
         assertNull(w.model.state.value.authority)
         assertTrue(w.model.state.value.conversations.isEmpty())
         assertEquals(InboxReceiving.OFF, w.model.state.value.receiving)
+    }
+
+    @Test
+    fun `visible inbox checks pending without refreshing heartbeat or container`() = runTest {
+        val w = listening()
+        val pending = w.services.server.device.count("pending")
+        w.runtime.setInboxVisible(true)
+        runCurrent()
+        assertEquals(pending + 1, w.services.server.device.count("pending"))
+        assertEquals(1, w.services.server.device.count("heartbeat"))
+        assertEquals(2_000L, w.pause.delays.last())
+        w.pause.release()
+        runCurrent()
+        assertEquals(pending + 2, w.services.server.device.count("pending"))
+        assertEquals(1, w.services.server.device.count("heartbeat"))
+        w.runtime.setInboxVisible(false)
+        runCurrent()
+        assertEquals(2, w.services.server.device.count("heartbeat"))
+        assertEquals(30_000L, w.pause.delays.last())
+    }
+
+    @Test
+    fun `visible discovery preserves the heartbeat deadline`() = runTest {
+        val w = listening()
+        w.runtime.setInboxVisible(true)
+        runCurrent()
+        advanceTimeBy(29_000)
+        w.pause.release()
+        runCurrent()
+        assertEquals(1, w.services.server.device.count("heartbeat"))
+        advanceTimeBy(1_000)
+        w.pause.release()
+        runCurrent()
+        assertEquals(2, w.services.server.device.count("heartbeat"))
+        assertEquals(2_000L, w.pause.delays.last())
+    }
+
+    @Test
+    fun `empty foreground probe does not turn a broken container into listening`() = runTest {
+        val w = listening()
+        val destination = w.services.container.directory(account)
+        destination.deleteRecursively()
+        destination.writeText("fixture blocks directory")
+        assertTrue(w.runtime.checkNow())
+        runCurrent()
+        assertEquals(InboxReceiving.UNAVAILABLE, w.model.state.value.receiving)
+        w.runtime.setInboxVisible(true)
+        runCurrent()
+        assertEquals(InboxReceiving.UNAVAILABLE, w.model.state.value.receiving)
+        assertEquals(2_000L, w.pause.delays.last())
     }
 
     // ── check now ───────────────────────────────────────────────────────────

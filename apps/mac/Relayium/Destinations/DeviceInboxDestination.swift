@@ -25,6 +25,9 @@ import RelayiumAppKit
 /// a single navigation write: the Account destination is one row away.
 struct DeviceInboxDestination: View {
     @EnvironmentObject private var navigation: AppNavigationModel
+    @EnvironmentObject private var inbox: InboxController
+    @EnvironmentObject private var deliveries: InboxSendModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         // A stack of reference cards like every other destination: the
@@ -36,5 +39,13 @@ struct DeviceInboxDestination: View {
                 navigation.selectAccount(intent: intent)
             }
         }
+        .onAppear { setVisible(scenePhase == .active) }
+        .onDisappear { setVisible(false) }
+        .onChange(of: scenePhase) { phase in setVisible(phase == .active) }
+    }
+
+    private func setVisible(_ visible: Bool) {
+        inbox.setInboxVisible(visible)
+        deliveries.setInboxVisible(visible)
     }
 }

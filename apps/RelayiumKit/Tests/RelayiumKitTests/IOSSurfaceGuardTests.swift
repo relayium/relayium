@@ -4379,8 +4379,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // things it drives from the phase are the camera's own suspend/resume.
         let scannerName = "PairingScannerView.swift"
         let readers = all.filter { $0.text.contains("scenePhase") }.map(\.name).sorted()
-        XCTAssertEqual(readers, [scannerName, "RelayiumApp.swift"].sorted(),
+        XCTAssertEqual(readers, [scannerName, "DeviceInboxView.swift", "RelayiumApp.swift"].sorted(),
                        "the scene phase is read in \(readers)")
+        let inbox = try XCTUnwrap(all.first { $0.name == "DeviceInboxView.swift" })
+        XCTAssertTrue(inbox.text.contains("phase in setInboxVisible(phase == .active)"))
+        XCTAssertTrue(inbox.text.contains("inbox.setInboxVisible(visible)"))
+        XCTAssertTrue(inbox.text.contains("deliveries.setInboxVisible(visible)"))
+        XCTAssertFalse(inbox.text.contains("inbox.foreground("),
+                       "page visibility must never own receiving lifecycle")
         let scanner = try XCTUnwrap(all.first { $0.name == scannerName })
         let onChange = try XCTUnwrap(scanner.text
             .components(separatedBy: ".onChange(of: scenePhase)").dropFirst().first?

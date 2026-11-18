@@ -45,6 +45,33 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
+it("foreground discovery skips idle heartbeats and folder probes, then restores background cadence", async () => {
+  const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
+  await waitFor("first pass", () => h.calls.pending >= 1 && h.calls.heartbeat === 1);
+  // The final pending read is followed by publish; wait until it has settled.
+  await waitFor("ready snapshot", () => h.states.length > 0);
+  const pending = h.calls.pending;
+  const probes = h.probeEntered;
+  h.service.visible(true);
+  await waitFor("foreground pending read", () => h.calls.pending > pending);
+  expect(h.calls.heartbeat).toBe(1);
+  expect(h.probeEntered).toBe(probes);
+  h.service.visible(false);
+  await waitFor("background maintenance", () => h.calls.heartbeat === 2);
+});
+
+it("a renderer that stops renewing visibility cannot leave fast polling active", async () => {
+  let stamp = 100_000;
+  const h = await harness({ now: () => stamp, grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
+  await waitFor("first heartbeat", () => h.calls.heartbeat === 1 && h.calls.pending > 0);
+  const pending = h.calls.pending;
+  h.service.visible(true);
+  await waitFor("foreground discovery", () => h.calls.pending > pending);
+  stamp += 16_000;
+  h.service.wake();
+  await waitFor("expired visibility maintenance", () => h.calls.heartbeat === 2);
+});
+
 async function tempRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "inbox-feature-"));
   roots.push(root);
@@ -201,6 +228,7 @@ async function harness(
     apiOptions?: Parameters<typeof fakeApi>[0];
     authority?: InboxAuthority;
     start?: boolean;
+    now?: () => number;
     /** A root and a secret store from an EARLIER service: what a restart is. */
     root?: string;
     secrets?: Map<string, string>;
@@ -268,6 +296,8 @@ async function harness(
 
   const deps: InboxServiceDeps = {
     origin: "https://relayium.com",
+    now: over.now,
+    uptime: over.now,
     dataRoot: () => root,
     platform: "windows",
     appVersion: "0.0.1",

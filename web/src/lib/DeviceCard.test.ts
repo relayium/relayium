@@ -655,22 +655,51 @@ describe("polling lifecycle", () => {
     await settle();
   }
 
-  it("polls with a bounded backoff and resets it when the state changes", async () => {
+  it("keeps successful unchanged states responsive", async () => {
     await startQueuedSend();
     fetchTaskSpy.mockResolvedValue(task({ State: "queued" }));
     await vi.advanceTimersByTimeAsync(2_100);
     expect(fetchTaskSpy).toHaveBeenCalledTimes(1);
-    // unchanged → the next poll is further out, so 2.1s more is not enough
-    await vi.advanceTimersByTimeAsync(2_100);
-    expect(fetchTaskSpy).toHaveBeenCalledTimes(1);
+    // Unchanged success still checks every two seconds.
     await vi.advanceTimersByTimeAsync(2_100);
     expect(fetchTaskSpy).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(fetchTaskSpy).toHaveBeenCalledTimes(3);
     // a change resets the backoff to the short interval
     fetchTaskSpy.mockResolvedValue(task({ State: "downloading" }));
     await vi.advanceTimersByTimeAsync(8_100);
     const afterChange = fetchTaskSpy.mock.calls.length;
     await vi.advanceTimersByTimeAsync(2_100);
     expect(fetchTaskSpy.mock.calls.length).toBeGreaterThan(afterChange);
+  });
+
+  it("does not overlap a slow poll when visibility changes repeatedly", async () => {
+    await startQueuedSend();
+    let finish!: (value: InboxTaskView) => void;
+    fetchTaskSpy.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(fetchTaskSpy).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 5; i++) document.dispatchEvent(new Event("visibilitychange"));
+    await settle();
+    expect(fetchTaskSpy).toHaveBeenCalledTimes(1);
+    finish(task({ State: "queued" }));
+    await settle();
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(fetchTaskSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("backs off failed queries and recovers to the fast cadence", async () => {
+    await startQueuedSend();
+    fetchTaskSpy.mockResolvedValue(undefined);
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(fetchTaskSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(fetchTaskSpy).toHaveBeenCalledTimes(1);
+    fetchTaskSpy.mockResolvedValue(task({ State: "queued" }));
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(fetchTaskSpy).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(fetchTaskSpy).toHaveBeenCalledTimes(3);
   });
 
   it("stops at a terminal state", async () => {
