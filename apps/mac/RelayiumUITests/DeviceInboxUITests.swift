@@ -899,10 +899,9 @@ final class DeviceInboxUITests: XCTestCase {
     /// claims nothing, then a found delivery whose saved claim is the status
     /// line's.**
     ///
-    /// The fixture stretches the automatic schedule to an hour, so nothing
-    /// below can be explained by the loop's own timer: each pass after launch is
-    /// one this test pressed for, and each is held for a moment so Checking… is
-    /// on screen long enough to read. No network is involved.
+    /// The fixture keeps foreground polling active but advances its delivery
+    /// script only when Check now enters Checking. Each explicit pending read
+    /// is held so Checking remains visible. No network is involved.
     func testCheckNowShowsCheckingThenNothingNewThenDefersToTheReceipt() {
         launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-check"])
         let window = openDeviceInboxDestination()
