@@ -575,6 +575,10 @@ struct DeviceConversationView: View {
                 Text(InboxTimelinePresentation.direction(of: entry, peerName: peerName))
                     .font(.caption.weight(.semibold))
                     .accessibilityIdentifier("inbox-entry-direction")
+                Spacer()
+                if entry.kind == .message, let message = messageBody(entry) {
+                    messageCopyButton(entry, message: message, identifier: "inbox-entry-copy-top")
+                }
             }
             entryBody(entry)
             if let state = InboxTimelinePresentation.state(of: entry) {
@@ -617,14 +621,7 @@ struct DeviceConversationView: View {
                 .font(.callout)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(L10n.t(copiedEntryID == entry.id ? .commonCopied : .commonCopy)) {
-                UIPasteboard.general.string = message.text
-                copiedEntryID = entry.id
-            }
-            .borderedAction()
-            .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
-                copied: copiedEntryID == entry.id))
-            .accessibilityIdentifier("inbox-entry-copy")
+            messageCopyButton(entry, message: message, identifier: "inbox-entry-copy")
         } else if entry.kind == .files {
             Text(InboxTimelinePresentation.fileNames(of: entry))
                 .font(.callout)
@@ -645,6 +642,18 @@ struct DeviceConversationView: View {
             InlineMessage(.warning, L10n.t(.inboxConversationMessageMissing))
                 .accessibilityIdentifier("inbox-conversation-message-missing")
         }
+    }
+
+    private func messageCopyButton(_ entry: InboxTimelineEntry, message: InboxMessage,
+                                   identifier: String) -> some View {
+        Button(L10n.t(copiedEntryID == entry.id ? .commonCopied : .commonCopy)) {
+            UIPasteboard.general.string = message.text
+            copiedEntryID = entry.id
+        }
+        .borderedAction()
+        .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
+            copied: copiedEntryID == entry.id))
+        .accessibilityIdentifier(identifier)
     }
 
     /// The protected body behind one row, read from the store its direction

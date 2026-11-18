@@ -282,9 +282,7 @@
   });
 
   let copyState = $state<{ id: string; ok: boolean } | null>(null);
-  async function copyOpen(): Promise<void> {
-    const id = inbox.openId;
-    if (id === null) return;
+  async function copyMessage(id: string): Promise<void> {
     const ok = await inbox.copy(id);
     copyState = { id, ok };
     // A success fades; a failure stays, because the user has to act on it.
@@ -533,6 +531,11 @@
               <button type="button" data-test="inbox-open" onclick={() => void inbox.open(message.id)}>
                 {inbox.openId === message.id ? t("inboxClose") : t("inboxOpen")}
               </button>
+              <button type="button" data-test="inbox-copy-top" onclick={() => void copyMessage(message.id)}>
+                {copyState?.id === message.id
+                  ? copyState.ok ? t("inboxCopied") : t("inboxCopyFailed")
+                  : t("inboxCopy")}
+              </button>
               <button class="danger" type="button" data-test="inbox-delete" onclick={() => void inbox.remove(message.id)}>
                 {t("inboxDelete")}
               </button>
@@ -540,7 +543,7 @@
             {#if inbox.openId === message.id}
               <div class="body" data-test="inbox-message-body">
                 <p>{inbox.openText}</p>
-                <button type="button" data-test="inbox-copy" onclick={() => void copyOpen()}>
+                <button type="button" data-test="inbox-copy" onclick={() => void copyMessage(message.id)}>
                   {copyState?.id === message.id
                     ? copyState.ok
                       ? t("inboxCopied")

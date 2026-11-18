@@ -1148,6 +1148,12 @@ private fun MessageBody(
         )
         return
     }
+    OutlinedButton(
+        onClick = { clipboard.setText(AnnotatedString(body)) },
+        colors = accentOutlinedColors(),
+        modifier = Modifier.defaultMinSize(minHeight = Metrics.touch)
+            .testTag("inbox-entry-copy-top:${entry.id}"),
+    ) { Text(stringResource(R.string.inbox_action_copy)) }
     SelectionContainer {
         Text(body, style = MaterialTheme.typography.bodyMedium)
     }

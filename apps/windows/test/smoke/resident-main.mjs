@@ -1324,7 +1324,7 @@ async function seedOneMessage(store) {
     id: "seeded-message",
     taskID: "seeded-task",
     sourceDeviceID: "another-device",
-    plaintext: new TextEncoder().encode("hello from the phone"),
+    plaintext: new TextEncoder().encode(INBOX_MESSAGE_TEXT),
     now: 1_700_000_000,
   });
 }
@@ -1505,17 +1505,25 @@ async function scenarioInboxPending(win) {
   );
 }
 
+// Multiple viewports, Unicode and a final sentinel catch truncated copies.
+const INBOX_MESSAGE_TEXT = "hello from the phone\n" + "长文本 👋 line\n".repeat(160) + "END全文";
+
 /** The message history: list, open, copy, delete — through the real vault. */
 async function scenarioInboxMessages(win) {
   const listed = await waitInbox(win, "the seeded message", `document.querySelector('[data-test="inbox-open"]') !== null`);
   check("a saved message is listed", listed === true);
-  check("its body is not on screen until it is opened", !(await js(win, `document.body.innerText`)).includes("hello from the phone"));
+  check("its body is not on screen until it is opened", !(await js(win, `document.body.innerText`)).includes(INBOX_MESSAGE_TEXT));
+
+  await setClipboard("header copy sentinel");
+  check("header copy is available before opening the text", await clickTest(win, "inbox-copy-top"));
+  await waitInbox(win, "header copy feedback", `document.querySelector('[data-test="inbox-copy-top"]')?.textContent?.trim() === "Copied"`);
+  check("header copies the complete long Unicode message", (await readClipboard()) === INBOX_MESSAGE_TEXT);
 
   check("open was clicked", await clickTest(win, "inbox-open"));
   const opened = await waitInbox(win, "the message body", `document.querySelector('[data-test="inbox-message-body"]') !== null`);
   check("opening it shows the text that was actually stored", opened === true);
   const body = await shown(win, "inbox-message-body");
-  check("the decrypted message is the one that was saved", body.includes("hello from the phone"), body);
+  check("the decrypted message is the one that was saved", body.includes(INBOX_MESSAGE_TEXT), body);
 
   // ## The clipboard is asserted by its BYTES, not by a label
   //
@@ -1531,8 +1539,8 @@ async function scenarioInboxMessages(win) {
     `document.querySelector('[data-test="inbox-copy"]')?.textContent?.trim() !== "Copy"`,
   );
   check("copying is never silently inert", answered === true);
-  const pasted = await readClipboard();
-  check("the message's own bytes reached the clipboard", pasted === "hello from the phone", JSON.stringify(pasted));
+  const bottomCopied = await waitForValue(async () => (await readClipboard()) === INBOX_MESSAGE_TEXT);
+  check("the message's own bytes reached the clipboard", bottomCopied === true);
   check("and the control says it worked", (await shown(win, "inbox-copy")).trim() === "Copied");
 
   check("delete was clicked", await clickTest(win, "inbox-delete"));

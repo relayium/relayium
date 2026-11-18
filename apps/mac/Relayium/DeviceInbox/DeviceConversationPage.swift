@@ -688,6 +688,9 @@ struct DeviceConversationPage: View {
             .accessibilityLabel(InboxTimelinePresentation.accessibilityLabel(
                 of: entry, peerName: peerName, liveState: timelineState(entry)))
             Spacer()
+            if entry.kind == .message, let message = messageBody(entry) {
+                messageCopyButton(entry, message: message, identifier: "inbox-entry-copy-top")
+            }
             // **A visible command, not only a context menu.** A right-click is
             // not discoverable and is not reachable from the keyboard; the
             // context menu below duplicates this one for the people who expect
@@ -724,13 +727,7 @@ struct DeviceConversationPage: View {
             Text(message.text).textSelection(.enabled)
                 .foregroundStyle(Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(L10n.t(copiedEntryID == entry.id ? .commonCopied : .commonCopy)) {
-                copyReceivedMessage(message.text)
-                copiedEntryID = entry.id
-            }
-            .buttonStyle(.referenceSecondary)
-            .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
-                copied: copiedEntryID == entry.id))
+            messageCopyButton(entry, message: message, identifier: "inbox-entry-copy")
         } else if entry.kind == .files {
             Text(InboxTimelinePresentation.fileNames(of: entry))
                 .foregroundStyle(Palette.text)
@@ -745,6 +742,18 @@ struct DeviceConversationPage: View {
             InlineMessage(.failure, L10n.t(.inboxConversationMessageMissing))
                 .accessibilityIdentifier("inbox-conversation-message-missing")
         }
+    }
+
+    private func messageCopyButton(_ entry: InboxTimelineEntry, message: InboxMessage,
+                                   identifier: String) -> some View {
+        Button(L10n.t(copiedEntryID == entry.id ? .commonCopied : .commonCopy)) {
+            copyReceivedMessage(message.text)
+            copiedEntryID = entry.id
+        }
+        .buttonStyle(.referenceSecondary)
+        .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
+            copied: copiedEntryID == entry.id))
+        .accessibilityIdentifier(identifier)
     }
 
     /// The protected body behind one row, read from the store its direction owns.
