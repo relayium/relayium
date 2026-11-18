@@ -72,6 +72,27 @@ it("a renderer that stops renewing visibility cannot leave fast polling active",
   await waitFor("expired visibility maintenance", () => h.calls.heartbeat === 2);
 });
 
+for (const mechanism of ["receiving", "quit", "policy"] as const) {
+  it(`rechecks destination health after a ${mechanism} pause even with a fresh foreground cache`, async () => {
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
+    await waitFor("first maintenance", () => h.calls.heartbeat === 1 && h.calls.pending > 0);
+    const pending = h.calls.pending;
+    h.service.visible(true);
+    await waitFor("foreground discovery", () => h.calls.pending > pending);
+    if (mechanism === "receiving") h.service.pauseReceiving();
+    else if (mechanism === "quit") h.service.fence();
+    else await h.service.setPolicy("off");
+    h.usable = false;
+    const probes = h.probeEntered;
+    if (mechanism === "receiving") h.service.resumeReceiving();
+    else if (mechanism === "quit") h.service.resume();
+    else await h.service.setPolicy("ask");
+    await waitFor("resumed destination probe", () => h.probeEntered > probes);
+    await waitFor("missing-folder verdict", () => h.states.at(-1)?.status.kind === "folder-missing");
+    expect(h.calls.heartbeat).toBe(1);
+  });
+}
+
 async function tempRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "inbox-feature-"));
   roots.push(root);

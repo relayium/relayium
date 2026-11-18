@@ -620,6 +620,8 @@ export class InboxService {
   resume(): void {
     if (this.#disposed) return;
     this.#fenced = false;
+    // A held quit may outlive the last folder/presence observation.
+    this.#maintainedAt = Number.NEGATIVE_INFINITY;
     this.start();
     this.wake();
   }
@@ -647,6 +649,8 @@ export class InboxService {
   resumeReceiving(): void {
     if (this.#disposed || !this.#userPaused) return;
     this.#userPaused = false;
+    // Consent resumes against a fresh destination verdict, even when visible.
+    this.#maintainedAt = Number.NEGATIVE_INFINITY;
     this.publish();
     // The loop is parked in `nap` between passes; without this the first
     // delivery after a resume waits out an idle interval for no reason.
@@ -1243,6 +1247,8 @@ export class InboxService {
       await grants.write(bound.accountKey, next);
       if (!bound.alive || this.#bound !== bound) return null;
       bound.grant = next;
+      // A changed receive policy or destination invalidates cached health.
+      this.#maintainedAt = Number.NEGATIVE_INFINITY;
       return next;
     });
     this.#grantTail = run.then(
