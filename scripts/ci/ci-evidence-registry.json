@@ -142,7 +142,7 @@
         "test": {
           "checks": ["test"],
           "runner": "ubuntu-latest",
-          "freshSteps": ["npm audit --audit-level=high"]
+          "freshSteps": ["Audit dependencies with the approved expiring policy","Retain raw full and production dependency audit reports"]
         },
         "sealed-box-interop": { "checks": ["sealed-box-interop"], "runner": "ubuntu-latest" },
         "device-inbox-e2e": { "checks": ["device-inbox-e2e"], "runner": "ubuntu-latest" },
