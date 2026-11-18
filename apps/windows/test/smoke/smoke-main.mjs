@@ -765,6 +765,8 @@ async function main() {
     "relayium:update-state", "relayium:update-act",
     "relayium:update-residue", "relayium:update-notes",
     "relayium:inbox-delete-message", "relayium:inbox-rename", "relayium:inbox-wake",
+    // Boolean visibility hint; main owns cadence and expires an unrenewed hint.
+    "relayium:inbox-visible",
     "relayium:inbox-release-retained",
     // The help's one journey out. A SCREEN and a language, never an address:
     // main owns the slug table and composes the URL on the product SITE's
