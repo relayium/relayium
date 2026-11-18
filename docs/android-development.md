@@ -39,8 +39,9 @@ place, retained UID and a private synthetic data marker, cold-launched without a
 fatal exception, refused downgrade and rejected a one-byte signature mutation.
 This does not claim a signed-in physical-phone or WAN test of the new header
 Copy. The whole release still requires normal source-bound publication gates;
-private package verification alone is not publication. Server version policy
-and deployed backend remain independent and unchanged.
+private package verification alone is not publication. The repository advisory
+recommendation is synchronized to 0.3.4 (13), revision 5, as required by the
+existing publication guard. The deployed backend and its policy remain unchanged.
 
 ### Android 0.3.3 (12) release inputs
 
