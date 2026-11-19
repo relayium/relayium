@@ -3,6 +3,7 @@ package account
 import (
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -461,7 +462,7 @@ func adminReturnPath(referer string, paths ...string) string {
 	// Path only: the host is discarded rather than compared, so there is nothing
 	// to get wrong about which hosts count as ours.
 	p := u.EscapedPath()
-	if p != base && !strings.HasPrefix(p, base+"/") {
+	if p != u.Path || path.Clean(p) != p || strings.Contains(p, "//") || (p != base && !strings.HasPrefix(p, base+"/")) {
 		return base
 	}
 	if u.RawQuery != "" {
