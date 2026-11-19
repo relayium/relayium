@@ -188,6 +188,8 @@ type Service struct {
 	// spendable exactly once on any instance — no process-local map here.
 	// pendingActions now live in the store (admin_pending_actions, item #2),
 	// claimable exactly once on any instance — no process-local map here.
+	passwordAttempts *passwordAttemptBudget
+
 	pwLogins       *loginThrottle              // per email+IP failed password-login limiter
 	magicRequests  *loginThrottle              // per email+IP magic-link request rate limiter
 	verifyRequests *loginThrottle              // per email+IP resend-verification limiter
@@ -371,6 +373,7 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 			}
 		}
 	}
+	svc.passwordAttempts = newPasswordAttemptBudget(PerInstanceThreshold(passwordAttemptsPerMinute, cfg.RateLimitDivisor))
 	svc.adminPasskeyLogins = newLoginThrottle(maxFails)
 	svc.clientIP = httpx.ClientIP
 	svc.rateLimitIP = httpx.ClientIP
