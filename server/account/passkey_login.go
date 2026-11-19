@@ -112,7 +112,7 @@ func (s *Service) putCeremony(ctx context.Context, w http.ResponseWriter, kind c
 		return false
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: passkeyCeremonyCookie, Value: tok, Path: "/admin",
+		Name: passkeyCeremonyCookie, Value: tok, Path: s.AdminPath(),
 		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 		MaxAge: int(passkeyCeremonyTTL / time.Second),
 	})
@@ -367,7 +367,7 @@ func (s *Service) HandleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: adminCookie, Value: tok, Path: "/admin",
+		Name: adminCookie, Value: tok, Path: s.AdminPath(),
 		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 		MaxAge: int(adminSessionAbsoluteTTL / time.Second),
 	})

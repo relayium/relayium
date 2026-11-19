@@ -255,6 +255,7 @@ func (s *Service) handleMacVersionPolicy(w http.ResponseWriter, r *http.Request)
 }
 
 type adminVersionPolicyData struct {
+	adminRouteData
 	Lang       string
 	Policy     OperationalVersionPolicy
 	Releases   []VerifiedMacRelease
@@ -264,7 +265,7 @@ type adminVersionPolicyData struct {
 
 func (s *Service) handleAdminVersionPolicy(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		http.Redirect(w, r, "/admin", http.StatusFound)
+		http.Redirect(w, r, s.AdminPath(), http.StatusFound)
 		return
 	}
 	policy, err := s.operationalVersionPolicy(r.Context())
@@ -282,7 +283,7 @@ func (s *Service) handleAdminVersionPolicy(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	_ = adminVersionPolicyTmpl.Execute(w, adminVersionPolicyData{
+	_ = adminVersionPolicyTmpl.Execute(w, adminVersionPolicyData{adminRouteData: s.adminRouteData(),
 		Lang: adminLangFrom(r), Policy: policy, Releases: releases, FleetBelow: below,
 	})
 }
@@ -322,15 +323,15 @@ func (s *Service) handleAdminUpdateVersionPolicy(w http.ResponseWriter, r *http.
 		http.Error(w, "policy changed; reload and confirm again", http.StatusConflict)
 		return
 	}
-	http.Redirect(w, r, "/admin/version-policy", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/version-policy", http.StatusFound)
 }
 
 var adminVersionPolicyTmpl = template.Must(template.New("version-policy").Parse(`<!doctype html>
 <html lang="{{.Lang}}"><head><meta charset="utf-8"><title>Relayium Version Policy</title>
 <style>body{font:15px system-ui;max-width:760px;margin:40px auto;padding:0 20px}label{display:block;margin:16px 0}select,input,button{font:inherit;padding:8px}small{display:block;color:#666;margin-top:5px}.warn{color:#a33}.tabs{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 24px}.tabs a{color:#6b6375;text-decoration:none;font-weight:600}.tabs a[aria-current=page]{color:#7c3aad}</style></head><body>
-<nav class="tabs" aria-label="Relayium Admin"><a href="/admin">{{if eq .Lang "en"}}Overview{{else}}后台概览{{end}}</a><a href="/admin/users">{{if eq .Lang "en"}}Users{{else}}用户{{end}}</a><a href="/admin/fleet">{{if eq .Lang "en"}}Fleet{{else}}机队{{end}}</a><a href="/admin/version-policy" aria-current="page">{{if eq .Lang "en"}}Version policy{{else}}版本策略{{end}}</a><a href="/admin/audit">{{if eq .Lang "en"}}Audit log{{else}}审计日志{{end}}</a></nav><h1>{{if eq .Lang "en"}}Operational version policy{{else}}运行版本策略{{end}}</h1>
+<nav class="tabs" aria-label="Relayium Admin"><a href="{{$.AdminPath}}">{{if eq .Lang "en"}}Overview{{else}}后台概览{{end}}</a><a href="{{$.AdminPath}}/users">{{if eq .Lang "en"}}Users{{else}}用户{{end}}</a><a href="{{$.AdminPath}}/fleet">{{if eq .Lang "en"}}Fleet{{else}}机队{{end}}</a><a href="{{$.AdminPath}}/version-policy" aria-current="page">{{if eq .Lang "en"}}Version policy{{else}}版本策略{{end}}</a><a href="{{$.AdminPath}}/audit">{{if eq .Lang "en"}}Audit log{{else}}审计日志{{end}}</a></nav><h1>{{if eq .Lang "en"}}Operational version policy{{else}}运行版本策略{{end}}</h1>
 <p>{{if eq .Lang "en"}}Revision {{.Policy.Revision}}. Changes require step-up confirmation and are audited.{{else}}修订号 {{.Policy.Revision}}。变更需要二次确认并写入审计日志。{{end}}</p>
-<form method="post" action="/admin/version-policy">
+<form method="post" action="{{$.AdminPath}}/version-policy">
 <input type="hidden" name="revision" value="{{.Policy.Revision}}">
 <label>{{if eq .Lang "en"}}Minimum fleet version{{else}}机队最低版本{{end}}
 <input name="fleet_min_version" value="{{.Policy.FleetMinimumVersion}}" required pattern="v[0-9]+\.[0-9]+\.[0-9]+">

@@ -50,6 +50,9 @@ Commands:
   sessions list                            live admin sessions (no tokens)
   sessions revoke-all                      end every session, confirmation and open enrollment
 
+  ip-access list                           denied IPs and permanent bans
+  ip-access unblock IP                     clear one IP record (local server only)
+
 See docs/admin-passkeys.md for the full runbook.
 `
 
@@ -60,6 +63,7 @@ func Main(args []string, stdout, stderr io.Writer) int {
 
 type env struct {
 	db, baseURL string
+	adminPath   string
 	out, errw   io.Writer
 	now         func() time.Time
 	tty         bool
@@ -70,6 +74,7 @@ func run(args []string, stdout, stderr io.Writer, now func() time.Time, tty bool
 	g.SetOutput(stderr)
 	g.Usage = func() { fmt.Fprint(stderr, usage) }
 	db := g.String("db", os.Getenv("RELAYIUM_DB"), "path of the server's SQLite database")
+	adminPath := g.String("admin-path", os.Getenv("RELAYIUM_ADMIN_PATH"), "admin console path (default /admin)")
 	base := g.String("base-url", os.Getenv("RELAYIUM_BASE_URL"), "the server's public base URL (e.g. https://relayium.com)")
 	if err := g.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -82,7 +87,12 @@ func run(args []string, stdout, stderr io.Writer, now func() time.Time, tty bool
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	e := &env{db: *db, baseURL: *base, out: stdout, errw: stderr, now: now, tty: tty}
+	path, pathErr := account.ResolveAdminPath(*adminPath)
+	if pathErr != nil {
+		fmt.Fprintln(stderr, pathErr)
+		return 2
+	}
+	e := &env{adminPath: path, db: *db, baseURL: *base, out: stdout, errw: stderr, now: now, tty: tty}
 	var err error
 	switch rest[0] {
 	case "help", "-h", "--help":
@@ -94,6 +104,8 @@ func run(args []string, stdout, stderr io.Writer, now func() time.Time, tty bool
 		err = e.enroll(rest[1:])
 	case "credentials":
 		err = e.credentials(rest[1:])
+	case "ip-access":
+		err = e.ipAccess(rest[1:])
 	case "sessions":
 		err = e.sessions(rest[1:])
 	default:
@@ -121,6 +133,7 @@ func (u usageError) Error() string { return u.msg }
 func (e *env) sub(name string, args []string, define func(*flag.FlagSet)) (*flag.FlagSet, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(e.errw)
+	fs.StringVar(&e.adminPath, "admin-path", e.adminPath, "admin console path (default /admin)")
 	fs.StringVar(&e.db, "db", e.db, "path of the server's SQLite database")
 	fs.StringVar(&e.baseURL, "base-url", e.baseURL, "the server's public base URL")
 	if define != nil {
@@ -129,6 +142,11 @@ func (e *env) sub(name string, args []string, define func(*flag.FlagSet)) (*flag
 	if err := fs.Parse(interleave(args)); err != nil {
 		return nil, usageError{err.Error()}
 	}
+	path, err := account.ResolveAdminPath(e.adminPath)
+	if err != nil {
+		return nil, usageError{err.Error()}
+	}
+	e.adminPath = path
 	return fs, nil
 }
 
@@ -221,7 +239,7 @@ func (e *env) status(args []string) error {
 	fmt.Fprintf(e.out, "live sessions:     %d\n", len(sessions))
 	fmt.Fprintf(e.out, "open enrollments:  %d\n", open)
 	if len(creds) == 0 {
-		fmt.Fprintln(e.out, "No passkey is registered: nobody can sign in to /admin. Enroll one with `enroll start`.")
+		fmt.Fprintln(e.out, "No passkey is registered: nobody can sign in to the admin console. Enroll one with `enroll start`.")
 	} else if len(creds) == 1 {
 		fmt.Fprintln(e.out, "Only one passkey is registered. Consider enrolling a second device or a hardware security key as a backup.")
 	}
@@ -283,7 +301,7 @@ func (e *env) enrollStart(args []string) error {
 	fmt.Fprintln(e.out, "Open this one-time link in the browser on the device that will hold the passkey.")
 	fmt.Fprintln(e.out, "It is a secret until used: do not paste it into chat, tickets or shared notes.")
 	fmt.Fprintln(e.out)
-	fmt.Fprintf(e.out, "  %s/admin/enroll#%s\n\n", origin, g.Grant)
+	fmt.Fprintf(e.out, "  %s%s/enroll#%s\n\n", origin, accountPath(e.adminPath), g.Grant)
 	fmt.Fprintln(e.out, "After the browser shows a fingerprint, approve it here:")
 	fmt.Fprintf(e.out, "  relayium-server admin enroll approve %s --fingerprint <FINGERPRINT>\n", g.ID)
 	return nil
@@ -396,8 +414,8 @@ func (e *env) enrollApprove(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(e.out, "Approved: passkey %q (ID %s, fingerprint %s) can now sign in to %s/admin.\n",
-		c.Name, c.ID, account.AdminCredentialFingerprint(c), origin)
+	fmt.Fprintf(e.out, "Approved: passkey %q (ID %s, fingerprint %s) can now sign in to %s%s.\n",
+		c.Name, c.ID, account.AdminCredentialFingerprint(c), origin, accountPath(e.adminPath))
 	return nil
 }
 
@@ -532,4 +550,44 @@ func isTerminal(w io.Writer) bool {
 	}
 	fi, err := f.Stat()
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
+func accountPath(path string) string {
+	if path == "" {
+		return account.DefaultAdminPath
+	}
+	return path
+}
+
+func (e *env) ipAccess(args []string) error {
+	if len(args) == 0 {
+		return usageError{"ip-access requires list or unblock IP"}
+	}
+	fs, err := e.sub("ip-access", args[1:], nil)
+	if err != nil {
+		return err
+	}
+	if (args[0] == "list" && fs.NArg() != 0) || (args[0] == "unblock" && fs.NArg() != 1) || (args[0] != "list" && args[0] != "unblock") {
+		return usageError{"use ip-access list or ip-access unblock IP"}
+	}
+	st, err := e.open()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	if args[0] == "unblock" {
+		if err := st.UnblockIP(context.Background(), fs.Arg(0)); err != nil {
+			return err
+		}
+		fmt.Fprintln(e.out, "IP access record cleared; the configured allowlist still applies.")
+		return nil
+	}
+	rows, err := st.ListIPAccess(context.Background())
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		fmt.Fprintf(e.out, "%s attempts=%d banned=%t\n", row.IP, row.Attempts, row.Attempts >= 4)
+	}
+	return nil
 }

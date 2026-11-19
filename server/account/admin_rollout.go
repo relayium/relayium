@@ -25,6 +25,7 @@ import (
 // path, one state object) hands that property straight back. If a panel cannot
 // be built, Err is set on THAT panel only and the other one renders as usual.
 type rolloutPanelView struct {
+	adminRouteData
 	// Lang is repeated here rather than read from the page data because
 	// {{template "rolloutPanel" .RolloutFleet}} rebinds $ to the ARGUMENT: inside
 	// the define, $.Lang means this struct's field, not the page's. Leaving it
@@ -345,7 +346,7 @@ func rolloutOwnerClass(track string) string {
 // panel regardless of Err, so a halt must already be recorded by the time
 // nodesErr can bail out.
 func (s *Service) rolloutPanel(ctx context.Context, track, title string, now time.Time, allNodes []Node, nodesErr bool) rolloutPanelView {
-	p := rolloutPanelView{Track: track, Title: title}
+	p := rolloutPanelView{adminRouteData: s.adminRouteData(), Track: track, Title: title}
 	tr, found, err := s.Store().GetRolloutTrack(ctx, track)
 	if err != nil {
 		log.Printf("admin: GetRolloutTrack(%s) failed: %v", track, err)
@@ -552,7 +553,7 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminReleaseRollout points the fleet track at the release the
@@ -649,7 +650,7 @@ func (s *Service) handleAdminReleaseRollout(w http.ResponseWriter, r *http.Reque
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminReleaseDismiss records (or, with an empty version, clears) the
@@ -673,7 +674,7 @@ func (s *Service) handleAdminReleaseDismiss(w http.ResponseWriter, r *http.Reque
 	s.WriteAudit(r, AuditReleaseDismiss, "release:notice", []ChangeField{
 		{Field: "dismissed_tag", Old: before.DismissedTag, New: version},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutByoRollbackPrevious rolls the BYO track back onto the
@@ -723,7 +724,7 @@ func (s *Service) handleAdminRolloutByoRollbackPrevious(w http.ResponseWriter, r
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutPause stops a track where it is. It is the kill switch for
@@ -757,7 +758,7 @@ func (s *Service) handleAdminRolloutPause(w http.ResponseWriter, r *http.Request
 	log.Printf("%s track=%s target=? reason=%q", rolloutHaltLogPrefix, track, "管理员手动暂停")
 	s.WriteAudit(r, AuditRolloutPause, "rollout:"+track,
 		[]ChangeField{{Field: "status", Old: "rolling", New: "halted"}}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutResume restarts a halted track on the version it already
@@ -812,7 +813,7 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 	}
 	s.WriteAudit(r, AuditRolloutResume, "rollout:"+track,
 		[]ChangeField{{Field: "status", Old: "halted", New: "rolling"}}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutRetry re-offers a finished rollout's target to ONE machine
@@ -924,7 +925,7 @@ func (s *Service) handleAdminRolloutRetry(w http.ResponseWriter, r *http.Request
 			{Field: "node", Old: nodeID + " " + n.UpdateResult, New: nodeID + " 重试"},
 			{Field: "status", Old: "complete", New: "rolling"},
 		}, StepUpNone)
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // handleAdminRolloutFast starts a MANUAL FAST fleet rollout: the ordinary
@@ -1079,7 +1080,7 @@ func (s *Service) rolloutStartFast(w http.ResponseWriter, r *http.Request, lbl f
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, lbl.name+"失败："+err.Error())
 		return
 	}
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }
 
 // staleFastRolloutMessage is shared by the handler's own staleness check and by
@@ -1088,7 +1089,7 @@ func (s *Service) rolloutStartFast(w http.ResponseWriter, r *http.Request, lbl f
 // written — and only differ in how narrowly they raced. One string so they
 // cannot drift into contradicting each other.
 const staleFastRolloutMessage = "手动快速发布失败：机队轨的状态在你确认之后发生了变化，" +
-	"本次操作没有改动任何东西。请刷新 /admin 重新确认当前目标版本与状态后再试。"
+	"本次操作没有改动任何东西。请刷新后台重新确认当前目标版本与状态后再试。"
 
 // staleCanaryFastRolloutMessage is the same sentence for the safe fast push. It
 // is a second constant rather than the first one with the action name
@@ -1096,7 +1097,7 @@ const staleFastRolloutMessage = "手动快速发布失败：机队轨的状态�
 // operator will see and can be pinned by its own test — and so that a future
 // edit to one mode's wording cannot silently reword the other's refusal.
 const staleCanaryFastRolloutMessage = "安全快速发布失败：机队轨的状态在你确认之后发生了变化，" +
-	"本次操作没有改动任何东西。请刷新 /admin 重新确认当前目标版本与状态后再试。"
+	"本次操作没有改动任何东西。请刷新后台重新确认当前目标版本与状态后再试。"
 
 // handleAdminRolloutEmergency releases the whole track at once: a single write
 // points the track at the target AND arms emergency mode, which makes the
@@ -1135,5 +1136,5 @@ func (s *Service) handleAdminRolloutEmergency(w http.ResponseWriter, r *http.Req
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "紧急发布失败："+err.Error())
 		return
 	}
-	http.Redirect(w, r, "/admin/fleet", http.StatusFound)
+	http.Redirect(w, r, s.AdminPath()+"/fleet", http.StatusFound)
 }

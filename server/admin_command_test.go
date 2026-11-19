@@ -236,3 +236,13 @@ func TestLegacyAdminSecretsSetReportsPresenceOnly(t *testing.T) {
 		t.Fatal("env presence not detected")
 	}
 }
+
+func TestAdminDeploymentSettingsNotPrintedByHelp(t *testing.T) {
+	env := []string{"RELAYIUM_ADMIN_PATH=/private_console_marker", "RELAYIUM_ADMIN_ALLOWED_IPS=192.0.2.199", "RELAYIUM_ADMIN_TRUSTED_PROXIES=198.51.100.200/32"}
+	out := rootHelp(t, env)
+	for _, value := range []string{"/private_console_marker", "192.0.2.199", "198.51.100.200"} {
+		if strings.Contains(out, value) {
+			t.Errorf("help disclosed admin deployment setting %s", value)
+		}
+	}
+}

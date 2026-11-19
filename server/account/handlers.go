@@ -82,7 +82,7 @@ func (s *Service) CSRFGuard(next http.Handler) http.Handler {
 		// origin (or a user-typed navigation, "none") is refused. A client that
 		// sends neither header is not a browser and carries no ambient cookie
 		// risk, so it is left to the admin session check as before.
-		if isAdminPath(r.URL.Path) {
+		if s.isAdminPath(r.URL.Path) {
 			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 				http.Error(w, "cross-site request rejected", http.StatusForbidden)
 				return
@@ -92,7 +92,9 @@ func (s *Service) CSRFGuard(next http.Handler) http.Handler {
 	})
 }
 
-func isAdminPath(p string) bool { return p == "/admin" || strings.HasPrefix(p, "/admin/") }
+func (s *Service) isAdminPath(p string) bool {
+	return p == s.AdminPath() || strings.HasPrefix(p, s.AdminPath()+"/")
+}
 
 func (s *Service) routeMux() *http.ServeMux {
 	mux := http.NewServeMux()

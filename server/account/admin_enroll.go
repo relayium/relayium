@@ -119,7 +119,7 @@ func adminEnrollNoStore(w http.ResponseWriter) {
 func (s *Service) handleAdminEnrollPage(w http.ResponseWriter, r *http.Request) {
 	adminEnrollNoStore(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = adminEnrollTmpl.Execute(w, adminEnrollData{Lang: adminLangFrom(r), Nonce: CSPNonce(r)})
+	_ = adminEnrollTmpl.Execute(w, adminEnrollData{adminRouteData: s.adminRouteData(), Lang: adminLangFrom(r), Nonce: CSPNonce(r)})
 }
 
 // handleAdminEnrollBegin issues a creation challenge for an issued grant.

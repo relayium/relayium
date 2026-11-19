@@ -109,6 +109,7 @@ var (
 // boot) and OpenAdminAuthStore (the local command), so whichever runs first
 // leaves the same shape behind. Every statement is idempotent.
 var adminAuthSchemaCreate = []string{
+	`CREATE TABLE IF NOT EXISTS admin_ip_access (ip TEXT PRIMARY KEY, attempts INTEGER NOT NULL CHECK(attempts BETWEEN 1 AND 4))`,
 	`CREATE TABLE IF NOT EXISTS admin_enrollments (
   id TEXT PRIMARY KEY,
   grant_hash TEXT NOT NULL UNIQUE,
