@@ -321,7 +321,9 @@ struct RootView: View {
                     sidebarRow(surface)
                 }
             }
-            .navigationTitle(L10n.t(.navA11ySections))
+            // The brand is the visible title; the destination description is for VoiceOver.
+            .navigationTitle(Text(verbatim: "Relayium"))
+            .accessibilityLabel(L10n.t(.navA11ySections))
             .accessibilityIdentifier("sidebar")
         } detail: {
             destination(for: shell.placement.background)
