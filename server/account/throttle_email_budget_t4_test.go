@@ -55,7 +55,15 @@ func TestEmailSendEndpointsCapPerAddressAcrossIPs(t *testing.T) {
 			var ip atomic.Int64
 			svc.rateLimitIP = func(*http.Request) string { return fmt.Sprintf("198.51.100.%d", ip.Add(1)) }
 
-			for range attempts {
+			// Reset sends also have a one-minute address cooldown. Space only
+			// the five admitted requests within the existing 15-minute budget;
+			// the remaining requests must still be refused, not move its clock.
+			now := time.Now()
+			svc.now = func() time.Time { return now }
+			for i := range attempts {
+				if tc.name == "forgot" && i > 0 && i < adminLoginMaxFails {
+					now = now.Add(time.Minute)
+				}
 				if rec := tc.call(svc, "victim@example.com"); rec.Code != http.StatusOK {
 					t.Fatalf("want 200 on every request, got %d", rec.Code)
 				}
