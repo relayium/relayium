@@ -19,7 +19,7 @@ func ResolveAdminPath(value string) (string, error) {
 		return "", fmt.Errorf("invalid admin path: use / followed by 1–64 ASCII letters, digits, underscores or hyphens")
 	}
 	switch value {
-	case "/apps", "/ar", "/de", "/es", "/fr", "/ja", "/ko", "/pt", "/releases", "/shots", "/support", "/gh", "/me", "/cli", "/pricing", "/security", "/privacy", "/terms", "/guides", "/how-to", "/compare", "/zh", "/en", "/api", "/health", "/healthz", "/ready", "/readyz", "/metrics", "/debug", "/ws", "/s", "/d", "/f", "/u", "/assets", "/static", "/downloads", "/.well-known":
+	case "/device", "/apps", "/ar", "/de", "/es", "/fr", "/ja", "/ko", "/pt", "/releases", "/shots", "/support", "/gh", "/me", "/cli", "/pricing", "/security", "/privacy", "/terms", "/guides", "/how-to", "/compare", "/zh", "/en", "/api", "/health", "/healthz", "/ready", "/readyz", "/metrics", "/debug", "/ws", "/s", "/d", "/f", "/u", "/assets", "/static", "/downloads", "/.well-known":
 		return "", fmt.Errorf("admin path conflicts with a reserved route")
 	}
 	return value, nil

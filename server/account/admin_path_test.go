@@ -16,7 +16,7 @@ func TestConfigurableAdminPathValidation(t *testing.T) {
 			t.Error(e)
 		}
 	}
-	for _, v := range []string{"/", "admin", "//a", "/a/b", "/a/", "/a?x", "/a#x", "/a%2fb", "/a.b", "/..", "/a b", "/后台", "/api", "/ws", "/readyz", "/" + strings.Repeat("x", 65)} {
+	for _, v := range []string{"/", "admin", "//a", "/a/b", "/a/", "/a?x", "/a#x", "/a%2fb", "/a.b", "/..", "/a b", "/后台", "/api", "/device", "/ws", "/readyz", "/" + strings.Repeat("x", 65)} {
 		if _, e := ResolveAdminPath(v); e == nil {
 			t.Errorf("accepted %q", v)
 		}
