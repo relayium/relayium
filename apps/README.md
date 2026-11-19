@@ -24,8 +24,9 @@ download URL are recorded in [`web/native-releases.json`](../web/native-releases
 The separately
 versioned Mac App Store channel is public at [1.4.10](https://apps.apple.com/app/id6801142976), released
 by Apple on 2026-10-21. Its version and publication date are recorded separately
-from the direct release in `web/mac-app-store-release.json`. Android **0.3.3 (12)** uses the public preview APK channel
-(`android-v0.3.3`), signed on 2026-10-26 from `1db78a4a7`. iOS has no public release: **0.5.3 (14)** has been in
+from the direct release in `web/mac-app-store-release.json`. Android **0.3.4 (13)** uses the public preview APK channel
+(`android-v0.3.4`), signed on 2026-11-18 from `b2bb5c2ee`; the metadata/tag
+target is `b5d9eff94`, with public assets verified on 2026-11-19. iOS has no public release: **0.5.3 (14)** has been in
 internal TestFlight testing since 2026-11-18 with faster foreground Inbox checks
 and Copy above and below received text. Earlier **0.5.2 (13)** remains internal.
 Earlier **0.5.1 (12)** remains internal, and **0.5.0 (11)** remains in the
@@ -62,8 +63,8 @@ the public URLs determine the version currently offered.
   six already-Approved `com.relayium.mac.*` subscription products instead of a
   catalogue of its own.
 - `android/` — native Android client (`com.relayium.android`), Kotlin + Jetpack
-  Compose over a pure-JVM `:protocol` module. **Public preview at 0.3.3
-  (versionCode 12)**, GitHub Release inputs `android-v0.3.3`; direct APK only,
+  Compose over a pure-JVM `:protocol` module. **Public preview at 0.3.4
+  (versionCode 13)**, GitHub Release inputs `android-v0.3.4`; direct APK only,
   no Google Play, no Play Services, no Play Billing. Five destinations — Transfer, Nearby, Inbox, Cloud, Account: it mints
   a six-digit code or `/cross-network#c=` link as well as joining one, finds
   devices with no code at all, receives Device Inbox deliveries into app-private

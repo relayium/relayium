@@ -3,16 +3,20 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The release manifest selects 0.3.3 (versionCode 12), signed on
-2026-10-26 for the GitHub direct-APK preview channel `android-v0.3.3`.
+any kind. The release manifest selects 0.3.4 (versionCode 13), signed on
+2026-11-18 and published on 2026-11-19 through the GitHub direct-APK preview
+channel `android-v0.3.4`.
 The release asset and relayium.com update feed are published and verified in
 separate steps; actual public URLs determine the version currently available.
 
-### Android 0.3.4 (13) prepared release inputs
+### Android 0.3.4 (13) public release inputs
 
-This candidate is signed and verified locally; it has not yet been published.
-The current public channel above remains 0.3.3 until immutable GitHub asset
-publication and subsequent website activation are independently verified.
+[GitHub Release `android-v0.3.4`](https://github.com/relayium/relayium/releases/tag/android-v0.3.4)
+is public, with the immutable APK and its checksum. Both assets were downloaded
+anonymously and verified. The tag and release metadata point at
+`b5d9eff94970f70723004b480c3f89344f82b42f`; the APK retains its true build source
+below. Website download metadata and the deployed advisory policy are separate
+from this GitHub release and require their own live read-back.
 
 `Relayium-0.3.4-13.apk` comes from clean, pushed source
 `b2bb5c2ee04e37f1b9c5fc2c3a91b369601479d0`. SHA-256:
@@ -38,12 +42,15 @@ API 36 ARM64 emulator upgraded the provider-digest-verified public 0.3.3 APK in
 place, retained UID and a private synthetic data marker, cold-launched without a
 fatal exception, refused downgrade and rejected a one-byte signature mutation.
 This does not claim a signed-in physical-phone or WAN test of the new header
-Copy. The whole release still requires normal source-bound publication gates;
-private package verification alone is not publication. The repository advisory
+Copy. Publication passed all three original metadata workflows and all 45
+provider checks (44 success and one existing certification skip), with the
+unfiltered gate passing. Anonymous reads assembled all 46,074,442 APK bytes
+from 88 verified HTTP ranges; the full hash, checksum, v2/v3 signatures,
+certificate, package and version match. The repository advisory
 recommendation is synchronized to 0.3.4 (13), revision 5, as required by the
 existing publication guard. The deployed backend and its policy remain unchanged.
 
-### Android 0.3.3 (12) release inputs
+### Historical Android 0.3.3 (12) release inputs — 2026-10-26
 
 `Relayium-0.3.3-12.apk` comes from clean, pushed source
 `1db78a4a730c4db44e6f7509cf13489475cbb9e3`. SHA-256:
