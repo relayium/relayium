@@ -134,6 +134,10 @@ func (s *Service) adminAccessGuard(next http.Handler) http.Handler {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
+			// Existing auth throttles and audit helpers read X-Forwarded-For.
+			// Pass the verified identity, not a client-controlled leading value.
+			r = r.Clone(r.Context())
+			r.Header.Set("X-Forwarded-For", ip.String())
 		}
 		next.ServeHTTP(w, r)
 	})

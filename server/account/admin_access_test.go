@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/relayium/relayium/httpx"
 )
 
 func TestAdminIPPolicyValidationAndProxyBoundary(t *testing.T) {
@@ -186,5 +188,60 @@ func TestAdminIPStoreFailureAndCapacityFailClosed(t *testing.T) {
 	}
 	if w.Code != 503 {
 		t.Fatalf("store failure bypassed policy: %d", w.Code)
+	}
+}
+
+func TestAdminIPPolicyPassesVerifiedIdentityToAuthAndAudit(t *testing.T) {
+	for _, proxy := range []bool{false, true} {
+		st := newTestStore(t)
+		cfg := Config{AdminAllowedIPs: "192.0.2.10"}
+		if proxy {
+			cfg.AdminTrustedProxies = "127.0.0.1/32"
+		}
+		svc := NewService(st, nil, cfg)
+		r := httptest.NewRequest("GET", "/admin", nil)
+		r.RemoteAddr = "192.0.2.10:123"
+		r.Header.Set("X-Forwarded-For", "198.51.100.55")
+		if proxy {
+			r.RemoteAddr = "127.0.0.1:123"
+			r.Header.Set("X-Forwarded-For", "198.51.100.55,192.0.2.10")
+		}
+		original := r.Header.Get("X-Forwarded-For")
+		w := httptest.NewRecorder()
+		svc.adminAccessGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(httpx.ClientIP(r))) })).ServeHTTP(w, r)
+		if w.Code != 200 || w.Body.String() != "192.0.2.10" {
+			t.Errorf("auth/audit saw spoofed identity: proxy=%v %d %s", proxy, w.Code, w.Body.String())
+		}
+		if r.Header.Get("X-Forwarded-For") != original {
+			t.Error("mutated original request")
+		}
+	}
+}
+
+func TestAdminIPBanDoesNotAffectPublicConfigOrDisclosePolicy(t *testing.T) {
+	svc := NewService(newTestStore(t), nil, Config{AdminEnabled: true, AdminPath: "/console_7-Z", AdminAllowedIPs: "192.0.2.10"})
+	mux := http.NewServeMux()
+	svc.RegisterAdmin(mux)
+	mux.Handle("/api/", svc.Routes())
+	for i := 0; i < 4; i++ {
+		r := httptest.NewRequest("GET", svc.AdminPath(), nil)
+		r.RemoteAddr = "198.51.100.55:123"
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		if w.Code != 403 {
+			t.Fatal(w.Code)
+		}
+	}
+	r := httptest.NewRequest("GET", "/api/config", nil)
+	r.RemoteAddr = "198.51.100.55:123"
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("admin ban blocked public API: %d", w.Code)
+	}
+	for _, private := range []string{svc.AdminPath(), svc.cfg.AdminAllowedIPs} {
+		if strings.Contains(w.Body.String(), private) {
+			t.Error("public config disclosed admin deployment policy")
+		}
 	}
 }
