@@ -56,7 +56,7 @@ func (s *Service) refuseStepUpLocked(w http.ResponseWriter, r *http.Request, ses
 		log.Printf("admin step-up: revoke session after repeated factor failures: %v", err)
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: adminCookie, Value: "", Path: "/admin", MaxAge: -1,
+		Name: adminCookie, Value: "", Path: s.AdminPath(), MaxAge: -1,
 		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 	})
 	http.Error(w, "too many failed passkey confirmations; this admin session has been signed out", http.StatusTooManyRequests)

@@ -391,6 +391,9 @@ func main() {
 	appleServerAPIProbe := flag.Bool("apple-server-api-probe", false, "probe App Store Server API credentials and TEST delivery for every configured app/environment, then exit")
 	appleServerAPIProbeEnvironment := flag.String("apple-server-api-probe-environment", "all", "probe target: all, Production, or Sandbox (used only with -apple-server-api-probe)")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
+	adminAllowedIPs := flag.String("admin-allowed-ips", envStr("RELAYIUM_ADMIN_ALLOWED_IPS", ""), "admin IP allowlist; empty disables IP restriction")
+	adminTrustedProxies := flag.String("admin-trusted-proxies", envStr("RELAYIUM_ADMIN_TRUSTED_PROXIES", ""), "trusted admin proxy IPs/CIDRs; empty ignores forwarded headers")
+	adminPathFlag := flag.String("admin-path", envStr("RELAYIUM_ADMIN_PATH", ""), "admin console path (default /admin); keep deployment values in server configuration")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	// Admin sign-in is Passkey-only (docs/admin-passkeys.md). The console is
 	// switched on by RELAYIUM_ADMIN_ENABLED; the two legacy secrets below are
@@ -491,6 +494,13 @@ func main() {
 
 	// Admin enablement is decided before the database opens, like the rest of
 	// the config validation: a contradictory value fails every boot.
+	adminPath, err := account.ResolveAdminPath(*adminPathFlag)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if _, err := account.ParseAdminAccessPolicy(*adminAllowedIPs, *adminTrustedProxies); err != nil {
+		log.Fatal(err)
+	}
 	legacyPass, legacyTOTP := legacyAdminSecretsSet(*adminPass, *adminTOTPSecret)
 	adminEnabled, adminNotes, err := resolveAdminEnabled(*adminEnabledFlag, legacyPass, legacyTOTP)
 	if err != nil {
@@ -975,6 +985,9 @@ func main() {
 			EnableMagic:          *enableMagic,
 			AdminUser:            *adminUser,
 			AdminEnabled:         adminEnabled,
+			AdminPath:            adminPath,
+			AdminAllowedIPs:      *adminAllowedIPs,
+			AdminTrustedProxies:  *adminTrustedProxies,
 			MaxFileSize:          *maxFileSize,
 			NodeTrafficDefault:   *nodeTrafficDefault,
 			DailyQuota:           *dailyQuota,
@@ -1482,7 +1495,7 @@ var secretBearingFlags = []string{
 	"stripe-secret-key", "stripe-webhook-secret", "billing-hold-secret", "redis-addr",
 	// The deprecated admin secrets already default to "" (never env-derived);
 	// listed so a future edit cannot quietly reintroduce the R5 leak.
-	"admin-pass", "admin-totp-secret",
+	"admin-pass", "admin-totp-secret", "admin-path", "admin-allowed-ips", "admin-trusted-proxies",
 }
 
 // redactSecretFlagDefaults blanks the help-display default of every

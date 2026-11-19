@@ -1,6 +1,6 @@
 # Admin console: Passkey-only sign-in
 
-The `/admin` console accepts **passkeys only**. There is no admin password, no
+The admin console (default path `/admin`) accepts **passkeys only**. There is no admin password, no
 TOTP code and no fallback: sign-in and every high-risk confirmation need a
 registered passkey. Passkeys are added, approved and revoked **only on the
 server**, with the local `relayium-server admin` command. No browser — not even
@@ -189,5 +189,77 @@ older password/TOTP sign-in and browser credential management. Keep
 that rollback path; remove it afterwards. Passkeys approved on the new version
 are ordinary `admin_credentials` rows and keep working on the older binary.
 
-Cloudflare, reverse-proxy or IP allowlists are independent of this change and
-remain a good additional layer for `/admin`.
+Cloudflare and reverse-proxy access controls can provide additional independent
+layers in front of the console. The built-in IP policy below applies before
+any admin page, login, enrollment or operation.
+
+
+## Deployment-only path and IP access policy
+
+Keep actual paths and IP addresses in the server environment or a private
+server environment file, never in the public repository. These examples use
+reserved documentation IPs and are not production configuration:
+
+```bash
+RELAYIUM_ADMIN_PATH=/operator_console
+RELAYIUM_ADMIN_ALLOWED_IPS=192.0.2.10,2001:db8::10
+# Only if a reverse proxy is used; list the actual trusted proxy peers/ranges.
+RELAYIUM_ADMIN_TRUSTED_PROXIES=127.0.0.1/32,::1/128
+```
+
+Equivalent server flags are `-admin-path`, `-admin-allowed-ips`, and
+`-admin-trusted-proxies`. The path defaults to `/admin`, must be one segment
+containing 1–64 ASCII letters, digits, underscores or hyphens (starting with a
+letter or digit), and cannot overlap reserved service/product routes. Malformed
+settings refuse startup. Custom paths replace `/admin` entirely: the old path
+returns 404, with no redirect. Links, passkey endpoints, language selection,
+confirmation, and cookie scopes use the configured path. Changing it requires
+signing in again; old-path cookies do not authenticate the new path.
+
+An empty allowlist disables the built-in IP restriction for compatibility.
+A nonempty allowlist admits only the exact IPv4/IPv6 addresses listed; it does
+not replace passkey authentication. CIDRs are supported only for trusted
+proxies, not for allowed clients. IPv4-mapped IPv6 clients normalize to IPv4.
+Every request within the configured admin path, including unknown endpoints
+and requests with an existing valid session, passes the same IP check first.
+Public pages, ordinary account APIs and file transfers are unaffected.
+
+Only requests from a nonallowlisted IP increment its persistent denial count.
+The first three are already refused; the fourth creates a permanent admin ban.
+Counts saturate at four, survive server restarts, and never expire. A ban wins
+even if the IP is subsequently added to the allowlist, until explicitly cleared
+on the server. Allowed IP requests never increment the count. The table is
+limited to 100,000 distinct IP records; on exhaustion new nonallowlisted IPs
+remain denied without storing a record or evicting existing bans. Disabling the
+IP policy intentionally disables this IP enforcement, but preserves records.
+
+Without explicitly trusted proxies, only the TCP peer IP is used and all
+forwarded headers are ignored. When the direct peer is trusted, the bounded
+`X-Forwarded-For` chain is walked from right to left through trusted hops to the
+first untrusted client. Missing or malformed required values fail closed.
+`CF-Connecting-IP`, `X-Real-IP` and `Forwarded` cannot override that choice.
+Configure each proxy to overwrite client-supplied headers or append its observed
+peer correctly; trust only the actual proxy ranges. A proxy that overwrites
+X-Forwarded-For with another proxy's IP hides the original client: verify the
+complete deployment chain before enabling the policy. There is no universal
+proxy default. Policy/database failures refuse admin access rather than bypass
+it; IP-denied requests return 403 without identifying the ban state.
+
+Use the same `RELAYIUM_ADMIN_PATH` for the local admin command, or pass
+`--admin-path /operator_console` alongside `--db` and `--base-url`, so enrollment
+and approval links point to the configured path. The command intentionally does
+not load the server's environment file automatically: supply the setting in its
+process environment or as a flag. It is local access to the database, not an
+HTTP endpoint, and remains available for recovery when HTTP access is denied:
+
+```bash
+relayium-server admin --db /var/lib/relayium/relayium.db ip-access list
+relayium-server admin --db /var/lib/relayium/relayium.db ip-access unblock 192.0.2.10
+```
+
+`list` shows denied counts and whether each record is permanently banned;
+`unblock` removes that IP's count/ban. It does not add the IP to the allowlist.
+Run as the database owner, with the existing local-command ownership rules.
+Keep a working server shell while first enabling the policy, verify allowed
+and denied paths from separate clients, and check both IPv4 and IPv6 routes.
+No production values or proxy trust changes are implied by a software upgrade.

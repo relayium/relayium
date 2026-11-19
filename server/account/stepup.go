@@ -91,7 +91,7 @@ var errConfirmBadRequest = errors.New("account: the submitted form cannot be con
 func (s *Service) RequireStepUp(action string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.isAdminReq(r) {
-			http.Redirect(w, r, "/admin", http.StatusFound)
+			http.Redirect(w, r, s.AdminPath(), http.StatusFound)
 			return
 		}
 		// A request forwarded by HandleAdminConfirm carries stepUpDoneKey and
@@ -182,6 +182,7 @@ func (s *Service) availableStepUpFactor(ctx context.Context) string {
 // admin_templates.go), following the same render-into-ResponseWriter pattern
 // as renderAdminLogin/handleAdminHome.
 func (s *Service) renderConfirmPage(w http.ResponseWriter, data confirmPageData) {
+	data.adminRouteData = s.adminRouteData()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := adminConfirmTmpl.Execute(w, data); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -273,7 +274,7 @@ func (s *Service) verifyStepUpFactor(r *http.Request, pending pendingAction) (st
 // refreshes the grace window.
 func (s *Service) HandleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		http.Redirect(w, r, "/admin", http.StatusFound)
+		http.Redirect(w, r, s.AdminPath(), http.StatusFound)
 		return
 	}
 	if err := r.ParseForm(); err != nil {

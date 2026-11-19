@@ -180,3 +180,55 @@ func TestHelpAndUnknownCommands(t *testing.T) {
 		t.Fatal("no command must be a usage error")
 	}
 }
+
+func TestConfiguredAdminPathEnrollmentLink(t *testing.T) {
+	db := newDB(t)
+	for _, args := range [][]string{
+		{"--db", db, "--base-url", "https://admin.example", "--admin-path", "/console_7-Z", "enroll", "start", "--name", "test"},
+		{"enroll", "start", "--db", db, "--base-url", "https://admin.example", "--admin-path", "/console_7-Z", "--name", "test"},
+	} {
+		code, out, errOut := cli(t, true, args...)
+		if code != 0 || !strings.Contains(out, "https://admin.example/console_7-Z/enroll#") || strings.Contains(out, "/admin/enroll#") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+	}
+	t.Setenv("RELAYIUM_ADMIN_PATH", "/server_console")
+	code, out, errOut := cli(t, true, "--db", db, "--base-url", "https://admin.example", "enroll", "start", "--name", "env")
+	if code != 0 || !strings.Contains(out, "/server_console/enroll#") {
+		t.Fatalf("env code %d %s %s", code, out, errOut)
+	}
+	for _, args := range [][]string{{"--admin-path", "/bad/path", "status"}, {"status", "--admin-path", "/api", "--db", db}} {
+		code, _, _ := cli(t, true, args...)
+		if code != 2 {
+			t.Errorf("invalid path code=%d", code)
+		}
+	}
+}
+
+func TestIPAccessLocalCLIRecovery(t *testing.T) {
+	db := newDB(t)
+	st, err := account.OpenSQLite(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		if _, err := st.AdminAccessAttempt(context.Background(), "198.51.100.7", false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	code, out, e := cli(t, false, "--db", db, "ip-access", "list")
+	if code != 0 || !strings.Contains(out, "198.51.100.7 attempts=4 banned=true") {
+		t.Fatalf("list %d %s %s", code, out, e)
+	}
+	code, out, e = cli(t, false, "ip-access", "unblock", "198.51.100.7", "--db", db)
+	if code != 0 {
+		t.Fatalf("unblock %d %s %s", code, out, e)
+	}
+	code, out, e = cli(t, false, "--db", db, "ip-access", "list")
+	if code != 0 || out != "" {
+		t.Fatalf("after %d %s %s", code, out, e)
+	}
+}

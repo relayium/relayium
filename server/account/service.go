@@ -95,7 +95,10 @@ type Config struct {
 	// request path can compare a submitted secret against one. main resolves
 	// this from RELAYIUM_ADMIN_ENABLED, falling back to "a legacy
 	// RELAYIUM_ADMIN_PASS is set" only as a migration enablement hint.
-	AdminEnabled bool
+	AdminEnabled        bool
+	AdminPath           string // deployment-only console path; empty defaults to /admin
+	AdminAllowedIPs     string // optional comma-separated exact IPs, configured only on server
+	AdminTrustedProxies string // explicit trusted proxy IPs/CIDRs for the admin ACL
 	// Stored-transfer limits (env/flag defaults; DB settings table overrides these live).
 	MaxFileSize int64 // bytes
 	// NodeTrafficDefault 是官方节点月度中继流量的默认上限（字节）；0 = 不限。
@@ -146,6 +149,7 @@ type Config struct {
 }
 
 type Service struct {
+	adminAccess     AdminAccessPolicy
 	store           Store
 	mailer          Mailer
 	cfg             Config
@@ -357,10 +361,19 @@ type guessBreaker interface {
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
+	path, err := ResolveAdminPath(cfg.AdminPath)
+	if err != nil {
+		panic(err)
+	}
+	cfg.AdminPath = path
+	access, err := ParseAdminAccessPolicy(cfg.AdminAllowedIPs, cfg.AdminTrustedProxies)
+	if err != nil {
+		panic(err)
+	}
 	// Per-instance lockout threshold: full for a single instance / IP-hash LB
 	// (divisor 1), lowered for a round-robin LB. See PerInstanceThreshold.
 	maxFails := PerInstanceThreshold(adminLoginMaxFails, cfg.RateLimitDivisor)
-	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
+	svc := &Service{adminAccess: access, store: store, mailer: mailer, cfg: cfg, now: time.Now,
 		adminLogins: newLoginThrottle(maxFails),
 		pwLogins:    newLoginThrottle(maxFails), magicRequests: newLoginThrottle(maxFails),
 		verifyRequests: newLoginThrottle(maxFails), resetRequests: newLoginThrottle(maxFails),
