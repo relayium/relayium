@@ -158,3 +158,13 @@ func TestConfigurableAdminTemplatesAndLinks(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigurableAdminReturnPathRejectsTraversal(t *testing.T) {
+	for _, base := range []string{"/admin", "/console_7-Z"} {
+		for _, suffix := range []string{"/../outside", "/%2e%2e/outside", "//outside", "/%2f%2fevil.example", "/a/../../outside"} {
+			if got := adminReturnPath("https://example.test"+base+suffix, base); got != base {
+				t.Errorf("unsafe return path %q escaped console %q", got, base)
+			}
+		}
+	}
+}
