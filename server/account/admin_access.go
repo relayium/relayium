@@ -112,6 +112,8 @@ type adminAccessStore interface {
 
 func (s *Service) adminAccessGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Shared caches must never reuse an allowed admin response for another IP.
+		w.Header().Set("Cache-Control", "no-store")
 		if s.adminAccess.enabled() {
 			ip, err := s.adminAccess.clientIP(r)
 			if err != nil {

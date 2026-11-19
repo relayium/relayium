@@ -120,6 +120,9 @@ func TestAdminIPGateEveryRouteAndExistingSession(t *testing.T) {
 			r.AddCookie(session)
 			w := httptest.NewRecorder()
 			mux.ServeHTTP(w, r)
+			if r.URL.Path != "/public" && w.Header().Get("Cache-Control") != "no-store" {
+				t.Errorf("admin response can be cached: %s %s status%d", r.Method, r.URL.Path, w.Code)
+			}
 			if w.Code != 403 {
 				t.Fatalf("bypass %s%s: %d", method, suffix, w.Code)
 			}
@@ -130,6 +133,9 @@ func TestAdminIPGateEveryRouteAndExistingSession(t *testing.T) {
 	r.AddCookie(session)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, r)
+	if r.URL.Path != "/public" && w.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("admin response can be cached: %s %s status%d", r.Method, r.URL.Path, w.Code)
+	}
 	if w.Code != 200 {
 		t.Fatal("allowed blocked", w.Code)
 	}
@@ -141,6 +147,9 @@ func TestAdminIPGateEveryRouteAndExistingSession(t *testing.T) {
 	r.RemoteAddr = "198.51.100.7:123"
 	w = httptest.NewRecorder()
 	mux.ServeHTTP(w, r)
+	if r.URL.Path != "/public" && w.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("admin response can be cached: %s %s status%d", r.Method, r.URL.Path, w.Code)
+	}
 	if w.Code != 200 {
 		t.Error("public route blocked")
 	}
@@ -172,6 +181,9 @@ func TestAdminIPStoreFailureAndCapacityFailClosed(t *testing.T) {
 	r.RemoteAddr = "192.0.2.10:123"
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, r)
+	if r.URL.Path != "/public" && w.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("admin response can be cached: %s %s status%d", r.Method, r.URL.Path, w.Code)
+	}
 	if w.Code != 503 {
 		t.Fatalf("store failure bypassed policy: %d", w.Code)
 	}
