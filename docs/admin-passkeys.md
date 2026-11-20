@@ -263,3 +263,88 @@ Run as the database owner, with the existing local-command ownership rules.
 Keep a working server shell while first enabling the policy, verify allowed
 and denied paths from separate clients, and check both IPv4 and IPv6 routes.
 No production values or proxy trust changes are implied by a software upgrade.
+
+
+## Optional browser authorization and retired-path trap
+
+`RELAYIUM_ADMIN_BROWSER_REQUIRED=true` adds a browser-profile authorization
+check after the IP allowlist and before every admin handler, including sign-in,
+passkey enrollment and sensitive-action confirmation. An unknown, expired or
+revoked browser receives 403; it does **not** ban an allowlisted IP or affect
+another authorized browser using that IP. Existing Passkey sessions alone do
+not bypass this gate. Passkey sign-in and confirmation remain mandatory.
+
+Generate an authorization link using the installed server binary, locally as
+the database owner (or build the server from this source first):
+
+```sh
+relayium-server admin --db /path/to/relayium.db \
+  --base-url https://example.com --admin-path /private-console \
+  browsers start --name 'My browser'
+```
+
+The link expires after 15 minutes (`--ttl` accepts 1m–1h), can be used once,
+and is bound to the exact origin and admin path. Its 256-bit secret is in the
+URL fragment, never a query parameter. Open it privately in the browser profile
+you want to authorize. The page removes the fragment from history before a
+same-origin POST; the server only stores hashes of grants and browser tokens.
+Non-terminal output requires explicit `--allow-non-terminal`.
+
+Successful redemption sets an HttpOnly, Secure (on HTTPS), SameSite=Strict
+cookie scoped to the configured admin path, with a 90-day maximum lifetime.
+This is a revocable **browser-profile bearer credential**, not an unclonable
+hardware/browser fingerprint. Copying a profile/cookie can copy its authority;
+clearing cookies, using a different profile, expiry or revocation requires a
+new authorization link. The IP gate and Passkey still apply independently.
+Manage authorizations locally; there is no HTTP browser-management endpoint:
+
+```sh
+relayium-server admin --db /path/to/relayium.db browsers list
+relayium-server admin --db /path/to/relayium.db browsers revoke BROWSER_ID
+relayium-server admin --db /path/to/relayium.db browsers cancel UNUSED_GRANT_ID
+```
+
+`RELAYIUM_ADMIN_LEGACY_TRAP=true` turns the retired exact `/admin` path and its
+subtree into an admin-access honeypot. It requires a custom admin path and a
+nonempty IP allowlist. Any method reaching it permanently bans that **verified
+client IP from admin access immediately**, even if it is allowlisted. This
+also applies before route normalization, including repeated slashes, encoded
+segments and dot segments resolving to the old entry. Prefix siblings such as
+`/administrator` and the configured randomized path are not the old entry.
+Only explicitly trusted proxies may supply client identity.
+
+Old bookmarks, automated probes and cross-site embedded requests can all
+trigger this deliberate denial-of-service tradeoff; the request alone does
+not prove who initiated it. The block affects the admin console only, not
+public APIs, transfers, the public site or SSH. Recovery remains the local
+`admin ip-access unblock IP` command; adding the IP to the allowlist does not
+clear its ban. Ban storage is bounded and never evicts a permanent ban;
+storage exhaustion/errors refuse the trap request instead of silently
+accepting it. Both switches default off for existing self-hosted installations.
+When embedding the account service, wrap the root mux with
+`svc.AdminLegacyTrapGuard(mux)` before its path-cleaning redirects.
+
+Keep actual admin paths, IPs and authorization links in private server
+configuration. Do not commit them to either repository.
+
+### Refreshing the macOS release recommendation locally
+
+The public signed update feed and the backend's operational policy are separate
+records. A release is not reflected in admin selectors until the deployed
+backend includes its verified `macos_release_catalog.json` entry. Publishing a
+new feed alone does not update the operational policy row.
+
+After deploying the verified catalog, a database owner may explicitly run:
+
+```sh
+relayium-server admin --db /path/to/relayium.db \
+  version-policy refresh-macos --expected-revision CURRENT_REVISION
+```
+
+This local-only maintenance command advances recommendation/latest to the
+highest verified macOS release, refuses downgrades and stale revisions, and
+leaves the fleet minimum and macOS minimum version/build untouched. It reuses
+the policy validator and commits its revision update and CLI audit together;
+audit failure rolls back the update. A no-op creates no revision or audit.
+It grants no browser session, invokes no provider and changes no customer or
+billing data. The HTTP policy form still requires Passkey step-up and auditing.

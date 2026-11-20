@@ -103,6 +103,67 @@ type operationalVersionStore interface {
 	UpdateOperationalVersionPolicy(context.Context, int64, OperationalVersionPolicy) (bool, error)
 }
 
+// RefreshMacVersionPolicy is deliberately local DB-owner authority. It only
+// advances recommendation/latest to this binary's verified catalog; neither
+// minimum may change. The update and its CLI audit either both commit or fail.
+func (a *AdminAuthStore) RefreshMacVersionPolicy(ctx context.Context, expected, now int64, actor string) (OperationalVersionPolicy, error) {
+	releases, err := verifiedMacReleases()
+	if err != nil {
+		return OperationalVersionPolicy{}, err
+	}
+	if len(releases) == 0 {
+		return OperationalVersionPolicy{}, errors.New("verified macOS release catalog is empty")
+	}
+	latest := releases[len(releases)-1].Version
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return OperationalVersionPolicy{}, err
+	}
+	defer tx.Rollback()
+	var p OperationalVersionPolicy
+	err = tx.QueryRowContext(ctx, `SELECT revision,fleet_min_version,mac_min_version,mac_min_build,mac_recommended_version,mac_latest_version,updated_at FROM operational_version_policy WHERE id=1`).Scan(&p.Revision, &p.FleetMinimumVersion, &p.MacMinimumVersion, &p.MacMinimumBuild, &p.MacRecommendedVersion, &p.MacLatestVersion, &p.UpdatedAt)
+	if err != nil {
+		return p, err
+	}
+	if p.Revision != expected {
+		return p, errors.New("policy revision changed; read the current policy and confirm again")
+	}
+	if compareAppVersions(p.MacRecommendedVersion, latest) > 0 || compareAppVersions(p.MacLatestVersion, latest) > 0 {
+		return p, errors.New("refusing to downgrade the macOS recommendation/latest")
+	}
+	if p.MacRecommendedVersion == latest && p.MacLatestVersion == latest {
+		return p, nil
+	}
+	next, err := parseOperationalVersionPolicyForm(url.Values{
+		"fleet_min_version": {p.FleetMinimumVersion}, "mac_min_release": {p.MacMinimumVersion + ":" + strconv.Itoa(p.MacMinimumBuild)},
+		"mac_recommended_version": {latest}, "mac_latest_version": {latest},
+	}, p)
+	if err != nil {
+		return p, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE operational_version_policy SET revision=revision+1,mac_recommended_version=?,mac_latest_version=?,updated_at=? WHERE id=1 AND revision=?`, latest, latest, now, expected)
+	if err != nil {
+		return p, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return p, err
+	}
+	if n != 1 {
+		return p, errors.New("policy revision changed")
+	}
+	if err = insertCLIAudit(ctx, tx, now, actor, AuditVersionPolicy, "operational-version-policy", []ChangeField{
+		{Field: "mac_recommended_version", Old: p.MacRecommendedVersion, New: latest},
+		{Field: "mac_latest_version", Old: p.MacLatestVersion, New: latest},
+		{Field: "revision", Old: strconv.FormatInt(expected, 10), New: strconv.FormatInt(expected+1, 10)},
+	}); err != nil {
+		return p, err
+	}
+	next.Revision = expected + 1
+	next.UpdatedAt = now
+	return next, tx.Commit()
+}
+
 func (s *SQLiteStore) GetOperationalVersionPolicy(ctx context.Context) (OperationalVersionPolicy, error) {
 	var policy OperationalVersionPolicy
 	err := s.reader().QueryRowContext(ctx, `SELECT revision, fleet_min_version,

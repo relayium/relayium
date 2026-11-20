@@ -95,10 +95,12 @@ type Config struct {
 	// request path can compare a submitted secret against one. main resolves
 	// this from RELAYIUM_ADMIN_ENABLED, falling back to "a legacy
 	// RELAYIUM_ADMIN_PASS is set" only as a migration enablement hint.
-	AdminEnabled        bool
-	AdminPath           string // deployment-only console path; empty defaults to /admin
-	AdminAllowedIPs     string // optional comma-separated exact IPs, configured only on server
-	AdminTrustedProxies string // explicit trusted proxy IPs/CIDRs for the admin ACL
+	AdminEnabled         bool
+	AdminPath            string // deployment-only console path; empty defaults to /admin
+	AdminAllowedIPs      string // optional comma-separated exact IPs, configured only on server
+	AdminBrowserRequired bool   // require a locally authorized browser profile before admin handlers
+	AdminLegacyTrap      bool   // permanently ban admin access for requests to the retired /admin namespace
+	AdminTrustedProxies  string // explicit trusted proxy IPs/CIDRs for the admin ACL
 	// Stored-transfer limits (env/flag defaults; DB settings table overrides these live).
 	MaxFileSize int64 // bytes
 	// NodeTrafficDefault 是官方节点月度中继流量的默认上限（字节）；0 = 不限。
@@ -366,6 +368,9 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		panic(err)
 	}
 	cfg.AdminPath = path
+	if err := ValidateAdminBrowserPolicy(path, cfg.AdminAllowedIPs, cfg.AdminLegacyTrap); err != nil {
+		panic(err)
+	}
 	access, err := ParseAdminAccessPolicy(cfg.AdminAllowedIPs, cfg.AdminTrustedProxies)
 	if err != nil {
 		panic(err)

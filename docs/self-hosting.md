@@ -520,3 +520,21 @@ curl -sS https://example.com/healthz     # → ok
 Then open the page on two devices and send a file. On the same LAN it should
 just work; across networks, use the pairing-code / QR flow (requires the
 sender to sign in).
+
+
+### Additional admin browser gate
+
+After configuring a private admin path and IP policy, optionally enable
+`RELAYIUM_ADMIN_BROWSER_REQUIRED=true`. Issue a one-time link with the server's
+local `admin browsers start --name NAME` command, then open it in the intended
+browser profile. Unknown browsers receive 403 without banning other browsers
+on the same IP; IP admission and Passkey sign-in remain required. The browser
+cookie expires after at most 90 days and can be revoked locally.
+
+`RELAYIUM_ADMIN_LEGACY_TRAP=true` additionally makes visits to the retired
+`/admin` entry immediately and permanently ban that verified client IP from
+admin access, including allowlisted IPs. It requires a custom path plus an IP
+allowlist; old bookmarks and cross-site requests can trigger it. Both options
+default off. Read the authorization, revocation and local-unblock recovery
+steps in [the admin runbook](admin-passkeys.md#optional-browser-authorization-and-retired-path-trap)
+before enabling them. Actual paths/IPs/one-time links stay private on the server.
