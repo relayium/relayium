@@ -529,7 +529,11 @@ After configuring a private admin path and IP policy, optionally enable
 local `admin browsers start --name NAME` command, then open it in the intended
 browser profile. Unknown browsers receive 403 without banning other browsers
 on the same IP; IP admission and Passkey sign-in remain required. The browser
-cookie expires after at most 90 days and can be revoked locally.
+server authorization remains valid until explicitly revoked locally. Its browser
+cookie refreshes for up to 400 days on each authorized visit, subject to the
+browser's own retention limits; clearing or losing the cookie requires binding
+again. Existing bindings remain authorized and their cookies refresh on the next
+visit.
 
 `RELAYIUM_ADMIN_LEGACY_TRAP=true` additionally makes visits to the retired
 `/admin` entry immediately and permanently ban that verified client IP from

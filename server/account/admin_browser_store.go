@@ -11,7 +11,13 @@ import (
 	"github.com/relayium/relayium/authx"
 )
 
-const adminBrowserLifetime = 90 * 24 * time.Hour
+// Browsers cap persistent cookies. Refresh on each authorized request, while
+// server-side authorization remains valid until explicitly revoked.
+const adminBrowserCookieLifetime = 400 * 24 * time.Hour
+
+// Preserve compatibility with older readers of the NOT NULL expires_at column.
+// This legacy metadata is not an authorization deadline in current readers.
+const adminBrowserLegacyExpiry int64 = 253402300799 // 9999-12-31T23:59:59Z
 const adminBrowserCapacity = 1024
 
 var ErrAdminBrowserGrant = errors.New("browser authorization link is invalid, expired, cancelled or already used")
@@ -116,7 +122,7 @@ func (s *SQLiteStore) RedeemAdminBrowserGrant(ctx context.Context, token, origin
 	if err != nil {
 		return "", err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM admin_browsers WHERE expires_at<=?`, now); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM admin_browsers WHERE revoked_at>0`); err != nil {
 		return "", err
 	}
 	var count int
@@ -127,7 +133,7 @@ func (s *SQLiteStore) RedeemAdminBrowserGrant(ctx context.Context, token, origin
 		return "", fmt.Errorf("browser authorization capacity reached")
 	}
 	raw := authx.RandToken()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO admin_browsers(id,token_hash,name,origin,admin_path,created_at,expires_at) VALUES(?,?,?,?,?,?,?)`, authx.NewID(), browserHash(raw), name, origin, path, now, now+int64(adminBrowserLifetime/time.Second)); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO admin_browsers(id,token_hash,name,origin,admin_path,created_at,expires_at) VALUES(?,?,?,?,?,?,?)`, authx.NewID(), browserHash(raw), name, origin, path, now, adminBrowserLegacyExpiry); err != nil {
 		return "", err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE admin_browser_grants SET consumed_at=? WHERE id=? AND consumed_at=0 AND cancelled=0 AND expires_at>?`, now, id, now)
@@ -152,7 +158,7 @@ func (s *SQLiteStore) AdminBrowserAuthorized(ctx context.Context, token, origin,
 		return false, nil
 	}
 	var one int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM admin_browsers WHERE token_hash=? AND origin=? AND admin_path=? AND expires_at>? AND revoked_at=0`, browserHash(token), origin, path, now).Scan(&one)
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM admin_browsers WHERE token_hash=? AND origin=? AND admin_path=? AND revoked_at=0`, browserHash(token), origin, path).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}

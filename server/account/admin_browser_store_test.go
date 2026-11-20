@@ -61,7 +61,7 @@ func TestAdminBrowserGrantStorageAdversarial(t *testing.T) {
 		token, origin, path string
 		now                 int64
 		want                bool
-	}{{cookie, origin, path, now, true}, {g.Token, origin, path, now, false}, {cookie, "https://other.test", path, now, false}, {cookie, origin, "/admin", now, false}, {cookie, origin, path, now + int64(adminBrowserLifetime/time.Second), false}, {strings.Repeat("0", 64), origin, path, now, false}} {
+	}{{cookie, origin, path, now, true}, {g.Token, origin, path, now, false}, {cookie, "https://other.test", path, now, false}, {cookie, origin, "/admin", now, false}, {cookie, origin, path, now + int64(adminBrowserCookieLifetime/time.Second), true}, {strings.Repeat("0", 64), origin, path, now, false}} {
 		ok, e := st.AdminBrowserAuthorized(ctx, c.token, c.origin, c.path, c.now)
 		if e != nil || ok != c.want {
 			t.Fatal("cookie validity", c.want, ok, e)
@@ -166,10 +166,63 @@ func TestAdminBrowserCapacityFailureDoesNotConsumeGrant(t *testing.T) {
 	if _, err = st.RedeemAdminBrowserGrant(ctx, g.Token, "https://example.test", "/console-test", now); err == nil {
 		t.Fatal("browser cap ignored")
 	}
-	if _, err = st.db.Exec(`DELETE FROM admin_browsers`); err != nil {
+	if err = st.AdminAuth().ChangeBrowserAuthorization(ctx, "capacity-1", false, now, "test"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = st.RedeemAdminBrowserGrant(ctx, g.Token, "https://example.test", "/console-test", now); err != nil {
 		t.Fatal("failed transaction consumed grant", err)
+	}
+}
+
+// A second enrollment must not garbage-collect an existing browser merely
+// because its legacy 90-day timestamp has passed. Revocation remains decisive.
+func TestAdminBrowserPermanentLegacyAndNewAuthorization(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	now := int64(1800000000)
+	const origin, path = "https://example.test", "/console-test"
+	g, err := st.AdminAuth().StartBrowserGrant(ctx, "first", origin, path, time.Minute, now, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie, err := st.RedeemAdminBrowserGrant(ctx, g.Token, origin, path, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Represent an already-bound browser from the original 90-day release.
+	if _, err = st.db.Exec(`UPDATE admin_browsers SET expires_at=?`, now+90*24*3600); err != nil {
+		t.Fatal(err)
+	}
+	future := now + 10*365*24*3600
+	if ok, err := st.AdminBrowserAuthorized(ctx, cookie, origin, path, future); err != nil || !ok {
+		t.Fatalf("legacy browser expired: %v %v", ok, err)
+	}
+	g2, err := st.AdminAuth().StartBrowserGrant(ctx, "second", origin, path, time.Minute, future, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := st.RedeemAdminBrowserGrant(ctx, g2.Token, origin, path, future)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := st.AdminBrowserAuthorized(ctx, cookie, origin, path, future); err != nil || !ok {
+		t.Fatalf("second grant removed legacy browser: %v %v", ok, err)
+	}
+	if ok, err := st.AdminBrowserAuthorized(ctx, second, origin, path, future+10*365*24*3600); err != nil || !ok {
+		t.Fatalf("new browser expired: %v %v", ok, err)
+	}
+	rows, err := st.AdminAuth().ListBrowsers(ctx)
+	if err != nil || len(rows) != 2 {
+		t.Fatal(rows, err)
+	}
+	for _, row := range rows {
+		if err := st.AdminAuth().ChangeBrowserAuthorization(ctx, row.ID, false, future, "test"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, token := range []string{cookie, second} {
+		if ok, err := st.AdminBrowserAuthorized(ctx, token, origin, path, future); err != nil || ok {
+			t.Fatalf("revocation ignored: %v %v", ok, err)
+		}
 	}
 }
