@@ -61,6 +61,7 @@ func (s *Service) adminBrowserGuard(next http.Handler) http.Handler {
 			http.Error(w, "browser authorization required", http.StatusForbidden)
 			return
 		}
+		s.setAdminBrowserCookie(w, c.Value)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -116,8 +117,14 @@ func (s *Service) handleAdminBrowserAuthorize(w http.ResponseWriter, r *http.Req
 		http.Error(w, "browser authorization unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: adminBrowserCookie, Value: token, Path: s.AdminPath(), HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteStrictMode, MaxAge: int(adminBrowserLifetime / time.Second), Expires: s.now().Add(adminBrowserLifetime)})
+	s.setAdminBrowserCookie(w, token)
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// Renew only after server-side authorization succeeds; a revoked/unknown token
+// never gains persistence. Existing 90-day cookies upgrade on their next visit.
+func (s *Service) setAdminBrowserCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{Name: adminBrowserCookie, Value: token, Path: s.AdminPath(), HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteStrictMode, MaxAge: int(adminBrowserCookieLifetime / time.Second), Expires: s.now().Add(adminBrowserCookieLifetime)})
 }
 
 type adminIPBanStore interface {

@@ -291,11 +291,23 @@ same-origin POST; the server only stores hashes of grants and browser tokens.
 Non-terminal output requires explicit `--allow-non-terminal`.
 
 Successful redemption sets an HttpOnly, Secure (on HTTPS), SameSite=Strict
-cookie scoped to the configured admin path, with a 90-day maximum lifetime.
+cookie scoped to the configured admin path. Server-side authorization has no
+automatic expiry: it remains valid until explicitly revoked, including browsers
+bound before this change. The old database expiry column is retained as legacy
+metadata and is no longer an authorization deadline. Only revoked browser rows
+may be reclaimed when adding a browser; old timestamps do not evict a binding.
+
+Browsers impose their own cookie limits. Each authorized visit refreshes the
+same cookie for up to 400 days; an existing 90-day cookie is upgraded on its
+next authorized visit. This does not extend a Passkey login session or bypass
+revocation. A browser can still discard cookies earlier, and an unused cookie
+can expire; server-side permanence cannot prevent either behavior. See the
+[Chrome cookie lifetime limit](https://developer.chrome.com/blog/cookie-max-age-expires).
+
 This is a revocable **browser-profile bearer credential**, not an unclonable
 hardware/browser fingerprint. Copying a profile/cookie can copy its authority;
-clearing cookies, using a different profile, expiry or revocation requires a
-new authorization link. The IP gate and Passkey still apply independently.
+clearing cookies, using a different profile, local cookie expiry or revocation
+requires a new authorization link. The IP gate and Passkey still apply independently.
 Manage authorizations locally; there is no HTTP browser-management endpoint:
 
 ```sh

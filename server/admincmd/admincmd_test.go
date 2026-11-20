@@ -258,7 +258,7 @@ func TestBrowserCLIPrivateLinkAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errOut = cli(t, true, append(base, "browsers", "list")...)
-	if code != 0 || strings.Contains(out+errOut, cookie) || strings.Contains(out+errOut, match[1]) {
+	if code != 0 || !strings.Contains(out, "expires=never") || strings.Contains(out+errOut, cookie) || strings.Contains(out+errOut, match[1]) {
 		t.Fatal("list disclosed tokens", code)
 	}
 	rows, err := dbStore.AdminAuth().ListBrowsers(context.Background())

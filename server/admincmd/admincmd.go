@@ -664,7 +664,7 @@ func (e *env) browsers(args []string) error {
 			return err
 		}
 		for _, b := range rows {
-			fmt.Fprintf(e.out, "%s name=%q expires=%s revoked=%s\n", b.ID, b.Name, ts(b.ExpiresAt), ts(b.RevokedAt))
+			fmt.Fprintf(e.out, "%s name=%q expires=never revoked=%s\n", b.ID, b.Name, ts(b.RevokedAt))
 		}
 	case "revoke", "cancel":
 		if err := st.ChangeBrowserAuthorization(ctx, fs.Arg(0), args[0] == "cancel", e.now().Unix(), actor()); err != nil {

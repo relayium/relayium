@@ -97,7 +97,7 @@ func TestAdminBrowserGrantHTTPAndRevocation(t *testing.T) {
 		t.Fatal("redemption", w.Code, w.Body.String())
 	}
 	cookie := w.Result().Cookies()[0]
-	if cookie.Path != svc.AdminPath() || !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode || cookie.MaxAge != int(adminBrowserLifetime/time.Second) {
+	if cookie.Path != svc.AdminPath() || !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode || cookie.MaxAge != int(adminBrowserCookieLifetime/time.Second) {
 		t.Fatalf("bad browser cookie %+v", cookie)
 	}
 	if browserRequest(h, "POST", svc.AdminPath()+adminBrowserAuthorizePath, payload, svc.selfOrigin(), nil).Code != 403 {
@@ -255,5 +255,54 @@ func TestAdminBrowserStoreUnavailableFailsClosed(t *testing.T) {
 	w := browserRequest(h, "GET", svc.AdminPath(), "", "", &http.Cookie{Name: adminBrowserCookie, Value: raw})
 	if w.Code != 503 || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("database error did not fail closed", w.Code)
+	}
+}
+
+func TestAdminBrowserCookieRenewsOnlyAuthorizedProfiles(t *testing.T) {
+	ctx := context.Background()
+	st, svc, h := browserFixture(t)
+	initial := time.Unix(1800000000, 0)
+	svc.SetNow(func() time.Time { return initial })
+	g, err := st.AdminAuth().StartBrowserGrant(ctx, "renewal", svc.selfOrigin(), svc.AdminPath(), time.Minute, initial.Unix(), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := st.RedeemAdminBrowserGrant(ctx, g.Token, svc.selfOrigin(), svc.AdminPath(), initial.Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie := &http.Cookie{Name: adminBrowserCookie, Value: raw}
+	later := initial.Add(91 * 24 * time.Hour)
+	svc.SetNow(func() time.Time { return later })
+	w := browserRequest(h, "GET", svc.AdminPath(), "", "", cookie)
+	if w.Code != 200 {
+		t.Fatal("existing browser denied", w.Code)
+	}
+	var renewed *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == adminBrowserCookie {
+			renewed = c
+		}
+	}
+	if renewed == nil || renewed.Value != raw || renewed.MaxAge != 400*24*3600 || !renewed.Expires.Equal(later.Add(400*24*time.Hour)) || renewed.Path != svc.AdminPath() || !renewed.HttpOnly || !renewed.Secure || renewed.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("unsafe or missing renewal: %+v", renewed)
+	}
+	rows, err := st.AdminAuth().ListBrowsers(ctx)
+	if err != nil || len(rows) != 1 {
+		t.Fatal(rows, err)
+	}
+	if err = st.AdminAuth().ChangeBrowserAuthorization(ctx, rows[0].ID, false, later.Unix(), "test"); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []*http.Cookie{cookie, nil, {Name: adminBrowserCookie, Value: strings.Repeat("0", 64)}} {
+		denied := browserRequest(h, "GET", svc.AdminPath(), "", "", c)
+		if denied.Code != 403 {
+			t.Fatal("unknown/revoked admitted", denied.Code)
+		}
+		for _, returned := range denied.Result().Cookies() {
+			if returned.Name == adminBrowserCookie {
+				t.Fatal("denied browser renewed")
+			}
+		}
 	}
 }
