@@ -65,6 +65,17 @@ const ENTRY = (over: Partial<PresentationRecord> = {}): PresentationRecord => ({
 });
 
 describe("the named history store", () => {
+  it("keeps read snapshots and deletion tombstones across restart without hiding later arrivals", async () => {
+    const { context, key, store: first } = await store();
+    await first.record(ENTRY()); await first.markRead(["task-1"], 100);
+    await first.record(ENTRY({ taskID: "task-2" })); await first.remove("task-1");
+    const reopened = new InboxPresentationStore(context, files, async () => key);
+    await reopened.record(ENTRY()); // late receiver capture must not resurrect it
+    expect((await reopened.list()).map((record) => record.taskID)).toEqual(["task-2"]);
+    expect(await reopened.state()).toEqual({ readAt: { "task-1": 100 }, deleted: ["task-1"] });
+    await reopened.markRead(["task-2"], 200); await reopened.markRead(["task-2"], 300);
+    expect((await reopened.state()).readAt["task-2"]).toBe(200);
+  });
   it("keeps names and sizes, newest first, and survives a reload", async () => {
     const { context, key, store: first } = await store();
     await first.record(ENTRY());

@@ -297,6 +297,16 @@ export const IPC = {
    * `inboxRevealFolder` is what opens that, from a path only main holds.
    */
   inboxHistory: "relayium:inbox-history",
+  inboxSentHistory: "relayium:inbox-sent-history",
+  inboxSentOpen: "relayium:inbox-sent-open",
+  inboxSentCopy: "relayium:inbox-sent-copy",
+  inboxSentForget: "relayium:inbox-sent-forget",
+  inboxSendRecovery: "relayium:inbox-send-recovery",
+  inboxSendResume: "relayium:inbox-send-resume",
+  inboxSendRefreshTracked: "relayium:inbox-send-refresh-tracked",
+  inboxSendDiscardRecovery: "relayium:inbox-send-discard-recovery",
+  inboxCancelDelivery: "relayium:inbox-cancel-delivery",
+  inboxMarkRead: "relayium:inbox-mark-read",
   /**
    * Forget one delivery's names, because the user asked.
    *
@@ -436,6 +446,9 @@ export const IPC = {
   storedSendCancel: "relayium:stored-send-cancel",
   /** This account's past sends. Counts and closed codes; no key, no link. */
   storedSendHistory: "relayium:stored-send-history",
+  storedSendRecovery: "relayium:stored-send-recovery",
+  storedSendResume: "relayium:stored-send-resume",
+  storedSendDiscardRecovery: "relayium:stored-send-discard-recovery",
   /** Compose the link for one published send, for exactly as long as it is
    *  shown. A link IS the key, so it is never stored. */
   storedSendLink: "relayium:stored-send-link",
@@ -1417,6 +1430,9 @@ export interface InboxNamedItemView {
  */
 export interface InboxNamedDeliveryView {
   readonly taskID: string;
+  /** Authenticated source. Absent for legacy records; never guessed. */
+  readonly sourceDeviceID?: string;
+  readonly readAt?: number;
   readonly receivedAt: number;
   /** True for a message, which lands in the vault and has no named items. */
   readonly text: boolean;
@@ -1442,6 +1458,7 @@ export interface InboxMessageView {
   readonly id: string;
   readonly taskID: string;
   readonly sourceDeviceID: string;
+  readonly readAt?: number;
   /** Plaintext length. */
   readonly bytes: number;
   readonly receivedAt: number;
@@ -1554,8 +1571,9 @@ export type { AccountExternalTarget, AccountMutationOutcome, AccountSectionName,
  * told the truth and offered a re-check.
  */
 export type StoredSendOutcome =
-  | { readonly status: "published"; readonly objectId: string; readonly expiresAt: number }
+  | { readonly status: "published"; readonly objectId: string; readonly expiresAt: number; readonly cleanupPending?: boolean }
   | { readonly status: "ambiguous"; readonly code: string }
+  | { readonly status: "interrupted"; readonly code: string }
   | { readonly status: "failed"; readonly code: string }
   | { readonly status: "cancelled" };
 
@@ -1634,9 +1652,33 @@ export const TASK_STATES = [
 
 export type TaskState = (typeof TASK_STATES)[number];
 
+/** Protected local presentation, independent of the task/recovery journal. */
+export type InboxSentState = TaskState | "preparing" | "unconfirmed" | "cancelled" | "refused" | "removed";
+export interface InboxSentHistoryView {
+  readonly id: string;
+  readonly peerID: string;
+  readonly kind: "file" | "text";
+  readonly createdAt: number;
+  readonly bytes: number;
+  readonly items: readonly InboxNamedItemView[];
+  /** Opened only on request; history lists redact the protected body. */
+  readonly body: string | null;
+  readonly state: InboxSentState;
+}
+
+export interface InboxSendRecoveryEntry {
+  readonly jobId: string;
+  readonly version: string;
+  readonly peerID: string;
+  readonly phase: "preparing" | "ready" | "unconfirmed" | "cleanup";
+  readonly canResume: boolean;
+  readonly canDiscard: boolean;
+}
+
 export const UPLOAD_STATES = [
   /** Init succeeded; bytes may be in flight. Nothing is publishable. */
   "pending",
+  "interrupted",
   /**
    * Finalize did not settle. The object MAY exist under an id this client never
    * learned. The key is retained and the record is never evicted.
@@ -1682,11 +1724,26 @@ export interface StoredSendHistoryEntry {
   readonly linkable: boolean;
 }
 
+/** Account-fenced local recovery presentation. Names are manifest-relative;
+ * no absolute path, content key, bearer or encrypted metadata crosses IPC. */
+export interface StoredSendRecoveryEntry {
+  readonly jobId: string;
+  readonly revision: number;
+  readonly phase: "preparing" | "ready" | "unconfirmed" | "cleanup";
+  readonly canResume: boolean;
+  readonly fileCount: number;
+  readonly totalBytes: number;
+  readonly createdAt: number;
+  readonly files: readonly { readonly name: string; readonly size: number }[];
+}
+
 /** Committed ciphertext bytes for one send, as the SERVER acknowledged them. */
+export type StoredSendPhase = "preparing" | "uploading" | "restarting" | "finalizing";
 export interface StoredSendProgress {
   readonly jobId: string;
   readonly committed: number;
   readonly total: number;
+  readonly phase?: StoredSendPhase;
 }
 
 // ---------------------------------------------------------------------------

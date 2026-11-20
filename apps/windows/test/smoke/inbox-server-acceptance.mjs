@@ -78,7 +78,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createServer } from "node:http";
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes, createHash, createCipheriv, createDecipheriv } from "node:crypto";
 import { buildServerForFixture, testDiskUsageWithOverlay } from "./server-platform.mjs";
 
 const WINDOWS = process.platform === "win32";
@@ -113,7 +113,7 @@ const SERVER_BIN = WINDOWS ? "relayium-server.exe" : "relayium-server";
  * It is the accepted harness's count, unchanged: this port adds no assertion and
  * removes none, so a divergence here is a real divergence in what was proven.
  */
-const EXPECTED_CHECKS = 52;
+const EXPECTED_CHECKS = 76;
 
 const RUN_BUDGET_MS = 10 * 60 * 1000;
 const OP_BUDGET_MS = 60 * 1000;
@@ -416,6 +416,7 @@ async function main() {
     if (!up) return;
 
     // ---- compiled modules, real crypto ------------------------------------
+    register("./electron-host-loader.mjs", import.meta.url);
     const load = (rel) => import(pathToFileURL(join(DIST, rel)).href);
     const runtime = (await load("inbox-runtime.js")).default;
     const { SendCoordinator } = await load("inbox/send-coordinator.js");
@@ -815,6 +816,107 @@ async function main() {
     step("and the saved task row was NOT deleted",
       (await call("GET", `/api/devices/${recvID}/inbox/tasks/${folderTaskID}`, undefined, sendToken)).status === 200);
 
+    // ---- Durable composed Inbox: full preparation, a committed lost create,
+    // fresh service/store, same task/key/bytes and exact once-only traffic. ----
+    {
+      const { InboxSendService } = await load("features/inbox-send-service.js");
+      const stored = await (await load("stored/runtime.js")).storedRuntime();
+      const context = captureAccount({ accountID: email, deviceID: sendID, epoch: 1, inboxRoot: join(root, "durable-inbox") });
+      const localKey = newAtRestKeyBytes(); const content = filled(300_001, 29);
+      const file = new File([content], "durable-device.bin");
+      const tasks = new SendTransport({ context: { origin, bearer: sendToken, epoch: 1 } });
+      const beforeTasks = new Set((await tasks.tasks(recvID, 100, opSignal())).map((task) => task.ID));
+      const beforeUsage = await call("GET", "/api/me/usage", undefined, sendToken);
+      let offline = true; let committed = false; let inits = 0; let finals = 0; let requests = 0;
+      const fetchFault = async (url, options) => {
+        requests++;
+        const path = new URL(url).pathname;
+        const create = path.endsWith("/inbox/tasks") && options?.method === "POST";
+        if (offline && committed && path.endsWith("/inbox/tasks") && options?.method === "GET") throw new TypeError("controlled offline lookup");
+        if (path === "/api/uploads" && options?.method === "POST") inits++;
+        if (path.endsWith("/finalize")) finals++;
+        const response = await fetch(url, options);
+        if (offline && create && response.ok) {
+          await collectBounded(response.body, "committed Inbox create response");
+          committed = true; throw new TypeError("controlled response loss AFTER real task commit");
+        }
+        return response;
+      };
+      const deps = { origin, authority: async () => ({ kind: "ok", bearer: sendToken, epoch: 1 }),
+        identity: () => ({ context, deviceID: sendID, epoch: 1 }), atRestKeyFor: async () => localKey,
+        runtime: async () => runtime, storedRuntime: async () => stored, accountEpoch: () => 1,
+        currentDocument: () => 1, fetchImpl: fetchFault };
+      const first = new InboxSendService(deps); let reopened;
+      try {
+        const start = await first.start({ target: recvID, kind: "file", entries: [{ path: file.name, size: file.size }], document: 1 });
+        if (!start.ok) throw new Error(`durable Inbox start refused: ${start.refusal}`);
+        const originalKey = await runtime.importStoreKey(runtime.decodeKey(start.contentKey)); let owed = start.expects;
+        for await (const bytes of runtime.encryptFiles([file], originalKey)) {
+          if (!owed) throw new Error("durable Inbox schedule ended early");
+          owed = (await first.feed(start.jobId, { ...owed, bytes })).expects;
+        }
+        step("durable Inbox prepares complete ciphertext before starting a metered upload", inits === 0 && finals === 0);
+        const unknown = await first.end(start.jobId);
+        step("durable Inbox preserves uncertainty after real task commit and lost replies", committed && unknown.kind === "unknown");
+        await first.dispose(); offline = false; reopened = new InboxSendService(deps);
+        const atDiscovery = requests; const entries = await reopened.recoveryEntries();
+        step("durable Inbox rediscovers the same job without automatic network recovery", requests === atDiscovery && entries.length === 1
+          && entries[0].jobId === start.jobId && entries[0].phase === "unconfirmed");
+        const stale = await reopened.resumeRecovery(start.jobId, "0".repeat(64));
+        step("durable Inbox refuses a stale recovery before any request", stale.kind === "unknown" && requests === atDiscovery);
+        const resumed = await reopened.resumeRecovery(start.jobId, entries[0].version);
+        const newTasks = (await tasks.tasks(recvID, 100, opSignal())).filter((task) => !beforeTasks.has(task.ID));
+        const afterUsage = await call("GET", "/api/me/usage", undefined, sendToken);
+        step("durable Inbox recovery creates one task/object and meters ciphertext exactly once", resumed.kind === "delivered"
+          && newTasks.length === 1 && inits === 1 && finals === 1 && afterUsage.json?.traffic?.used - beforeUsage.json?.traffic?.used === start.cipherBytes);
+        if (newTasks.length !== 1) throw new Error("durable Inbox task identity not established");
+        const task = newTasks[0];
+        step("durable Inbox cleans its confirmed temporary copy without deleting conversation history",
+          (await reopened.recoveryEntries()).length === 0 && (await reopened.sentHistory()).some((entry) => entry.id === start.jobId));
+        await call("POST", `/api/devices/${recvID}/inbox/tasks/${task.ID}/accept`, { accept: true }, recvToken);
+        const claimed = (await recvApi.claim(16, opSignal())).deliveries.find((entry) => entry.ID === task.ID);
+        if (!claimed) throw new Error("durable Inbox task could not be claimed");
+        const cancelClaimed = await reopened.cancelDelivery(start.jobId);
+        step("composed Inbox refuses cancellation while a real receiver holds its task",
+          cancelClaimed.kind === "refused" && cancelClaimed.reason === "task_in_progress"
+          && (await call("GET", `/api/devices/${recvID}/inbox/tasks/${task.ID}`, undefined, sendToken)).status === 200);
+        const key = await keys.openSealedContentKey(serverKey.ID, runtime.decodeKey(claimed.WrappedKey));
+        const manifest = runtime.decodeInboxManifest(await runtime.openManifestBytes(await runtime.importStoreKey(key), Buffer.from(claimed.EncManifest, "base64")));
+        step("durable Inbox preserves the original content key and manifest", runtime.encodeKey(key) === start.contentKey
+          && manifest.items.length === 1 && manifest.items[0].name === file.name && manifest.items[0].size === file.size);
+        const stream = await recvApi.blob(task.ID, claimed.ClaimToken, 0, claimed.CiphertextBytes, opSignal());
+        const plaintext = await decryptPayload(key, await collectBounded(stream.body, "durable Inbox payload"), content.length);
+        step("durable Inbox recovered delivery decrypts byte-for-byte", plaintext.equals(content));
+        await recvApi.report(task.ID, claimed.ClaimToken, "downloading", false, "", opSignal());
+        await recvApi.report(task.ID, claimed.ClaimToken, "verifying", false, "", opSignal());
+        await recvApi.report(task.ID, claimed.ClaimToken, "saved", true, "", opSignal());
+        const beforeHistory = await reopened.sentHistory(); await reopened.refreshTracked();
+        const afterHistory = await reopened.sentHistory();
+        step("durable Inbox tracks actual saved state without changing timeline order or uploading again", afterHistory[0].state === "saved"
+          && afterHistory[0].createdAt === beforeHistory[0].createdAt && inits === 1 && finals === 1);
+        const cancelSaved = await reopened.cancelDelivery(start.jobId);
+        step("composed Inbox reports a saved task as delivered when cancellation is requested",
+          cancelSaved.kind === "delivered" && (await call("GET", `/api/devices/${recvID}/inbox/tasks/${task.ID}`, undefined, sendToken)).status === 200);
+        const queuedFile = new File([filled(17, 41)], "queued-cancel.bin");
+        const existingTasks = new Set((await tasks.tasks(recvID, 100, opSignal())).map((entry) => entry.ID));
+        const queued = await reopened.start({ target: recvID, kind: "file", entries: [{ path: queuedFile.name, size: queuedFile.size }], document: 1 });
+        if (!queued.ok) throw new Error(`composed cancel start refused: ${queued.refusal}`);
+        let next = queued.expects;
+        for await (const bytes of runtime.encryptFiles([queuedFile], await runtime.importStoreKey(runtime.decodeKey(queued.contentKey)))) {
+          if (!next) throw new Error("composed cancel frame schedule exhausted");
+          next = (await reopened.feed(queued.jobId, { ...next, bytes })).expects;
+        }
+        const queuedResult = await reopened.end(queued.jobId);
+        const queuedTask = (await tasks.tasks(recvID, 100, opSignal())).find((entry) => !existingTasks.has(entry.ID));
+        const uploadsBeforeCancel = inits;
+        const cancelQueued = await reopened.cancelDelivery(queued.jobId);
+        step("composed Inbox cancels the original queued task, retaining its local history without another upload",
+          queuedResult.kind === "delivered" && !!queuedTask && cancelQueued.kind === "cancelled" && inits === uploadsBeforeCancel
+          && (await call("GET", `/api/devices/${recvID}/inbox/tasks/${queuedTask.ID}`, undefined, sendToken)).status === 404
+          && (await reopened.sentHistory()).some((entry) => entry.id === queued.jobId && entry.state === "cancelled"));
+      } finally { await first.dispose(); await reopened?.dispose(); }
+    }
+
     // ---- 8b. eligibility refuses before a byte moves ---------------------
     await call("PUT", `/api/devices/${recvID}/inbox`, {
       platform: "windows", appVersion: "0.0.1-sender-interop",
@@ -997,7 +1099,6 @@ async function main() {
       // specifier to resolve before it loads. Registered HERE, immediately
       // before those imports, and scoped to that one specifier — see
       // `electron-host-loader.mjs`. No product module is replaced.
-      register("./electron-host-loader.mjs", import.meta.url);
       const storedRt = await (await load("stored/runtime.js")).storedRuntime();
       const { receiveStoredLink } = await load("stored/receive.js");
       const { StoredTransport } = await load("stored/transport.js");
@@ -1110,6 +1211,141 @@ async function main() {
         refused.status !== "saved" && refused.status !== "complete"
           && tamperCode !== "link-invalid",
         JSON.stringify(refused).slice(0, 220));
+
+      // Commit the real PATCH fully, then lose ONLY its response. Status is
+      // the real Go handler's new offset, not a fake receipt. Exercise both a
+      // partially retained window and a completely consumed tail.
+      for (const length of [100_000, 8 * 1024 * 1024 + 100_000]) {
+        const name = `lost-response-${length}.bin`;
+        const content = Buffer.alloc(length);
+        for (let i = 0; i < length; i++) content[i] = (i * 31 + 7) % 251;
+        const beforeUsage = await call("GET", "/api/me/usage", undefined, sendToken);
+        const beforeFiles = await call("GET", "/api/files", undefined, sendToken);
+        const generated = await storedRt.generateKey();
+        const sealed = await storedRt.sealManifest(generated.key, { files: [{ name, size: length }] });
+        const plan = planUpload([{ path: name, size: length }], geometry);
+        if (!plan.ok) throw new Error("lost-response plan refused");
+        let initCount = 0; let finalCount = 0; let dropped = false; let invalidAppend = false;
+        const faultyFetch = async (url, options) => {
+          const path = new URL(url).pathname;
+          if (options?.method === "POST" && path === "/api/uploads") initCount++;
+          if (path.endsWith("/finalize")) finalCount++;
+          if (options?.method === "PATCH") {
+            const range = /bytes (\d+)-(\d+)\/(\d+)/.exec(options.headers["content-range"]);
+            if (!range || Number(range[2]) >= Number(range[3]) || options.body.byteLength === 0) invalidAppend = true;
+          }
+          const response = await fetch(url, options);
+          if (!dropped && options?.method === "PATCH" && response.ok) {
+            await collectBounded(response.body, "committed PATCH response");
+            dropped = true;
+            throw new TypeError("synthetic response loss AFTER real commit");
+          }
+          return response;
+        };
+        const recovery = await UploadEngine.open({
+          runtime, key: generated.key, sealedManifest: sealed, plan: plan.plan,
+          retention: { burnAfterRead: false, ttlSeconds: 3600 },
+          transport: new UploadTransport(origin, sendToken, { fetchImpl: faultyFetch }), fence: new Fence(),
+        });
+        for await (const frame of runtime.encryptFiles([new File([content], name)], generated.key)) {
+          const owed = recovery.expects;
+          if (!owed) throw new Error("unexpected ciphertext frame");
+          await recovery.feed({ ...owed, bytes: frame });
+        }
+        const result = await recovery.end();
+        step(`lost PATCH response (${length}) uses one session and publishes exactly once`,
+          result.status === "published" && dropped && !invalidAppend && initCount === 1 && finalCount === 1);
+        if (result.status !== "published") throw new Error("real committed-response recovery failed");
+        const afterUsage = await call("GET", "/api/me/usage", undefined, sendToken);
+        const afterFiles = await call("GET", "/api/files", undefined, sendToken);
+        const opened = await receiveStoredLink({
+          link: `relayium://d/${result.objectId}#k=${generated.encoded}`, authority: storedAuthority,
+          transport: new StoredTransport(origin), destination, runtime: async () => storedRt,
+        });
+        step(`lost PATCH response (${length}) meters the exact ciphertext once and opens byte-for-byte`,
+          afterUsage.json?.traffic?.used - beforeUsage.json?.traffic?.used === plan.plan.cipherBytes
+          && afterFiles.json?.files?.length === beforeFiles.json?.files?.length + 1
+          && ["saved", "complete"].includes(opened.status)
+          && landed.get(name)?.equals(content) === true);
+      }
+
+      // Drive the production durable SERVICE, not just its underlying engine.
+      // Fresh service/store instances reopen the same protected on-disk state.
+      // This portable cipher tests store ordering/integrity; DPAPI and actual
+      // process-kill durability have their separate Windows-native lane.
+      const { StoredUploadService } = await load("stored/upload/service.js");
+      const { SecretStore } = await load("secrets.js");
+      const cipherKey = randomBytes(32);
+      const localCipher = {
+        isAvailable: () => true,
+        encrypt: (text) => {
+          const iv = randomBytes(12); const cipher = createCipheriv("aes-256-gcm", cipherKey, iv);
+          const body = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
+          return Buffer.concat([iv, cipher.getAuthTag(), body]);
+        },
+        decrypt: (bytes) => {
+          const cipher = createDecipheriv("aes-256-gcm", cipherKey, bytes.subarray(0, 12));
+          cipher.setAuthTag(bytes.subarray(12, 28));
+          return Buffer.concat([cipher.update(bytes.subarray(28)), cipher.final()]).toString("utf8");
+        },
+      };
+      for (const fault of ["append", "finalize"]) {
+        const name = `durable-${fault}.bin`; const content = randomBytes(300_001);
+        const localRoot = join(root, `durable-${fault}`);
+        const authority = { accountId: email, deviceId: sendID, documentId: "durable-service", origin, bearer: sendToken };
+        const beforeUsage = await call("GET", "/api/me/usage", undefined, sendToken);
+        const beforeFiles = await call("GET", "/api/files", undefined, sendToken);
+        let initCount = 0; let finalizeCalls = 0; let patchCalls = 0; let dropped = false; let broken = true;
+        const observedFetch = async (url, options) => {
+          const path = new URL(url).pathname;
+          if (broken && dropped && (fault === "append" ? options?.method === "GET" && path.startsWith("/api/uploads/") : path.endsWith("/finalize"))) {
+            throw new TypeError("synthetic offline until explicit recovery");
+          }
+          if (options?.method === "POST" && path === "/api/uploads") initCount++;
+          if (path.endsWith("/finalize")) finalizeCalls++;
+          if (options?.method === "PATCH") patchCalls++;
+          const response = await fetch(url, options);
+          if (broken && !dropped && response.ok && (fault === "append" ? options?.method === "PATCH" : path.endsWith("/finalize"))) {
+            await collectBounded(response.body, `durable committed ${fault} response`);
+            dropped = true; throw new TypeError("synthetic response loss AFTER real commit");
+          }
+          return response;
+        };
+        const options = () => ({ secrets: new SecretStore(join(localRoot, "keys"), localCipher), journalDirectory: localRoot,
+          enableRecovery: true, runtime: async () => storedRt,
+          transportFactory: (auth) => new UploadTransport(auth.origin, auth.bearer, { fetchImpl: observedFetch }) });
+        const first = new StoredUploadService(options());
+        const start = await first.start({ authority, descriptors: [{ path: name, size: content.length }], retention: { burnAfterRead: false, ttlSeconds: 3600 } });
+        if (!start.ok) throw new Error(`durable ${fault} start refused: ${start.refusal.code}`);
+        const key = await storedRt.importKeyFromFragment(start.contentKey);
+        for await (const bytes of runtime.encryptFiles([new File([content], name)], key)) {
+          const owed = first.expects(start.jobId); if (!owed) throw new Error("durable schedule ended early");
+          await first.feed(start.jobId, { ...owed, bytes });
+        }
+        step(`durable ${fault}: complete encrypted preparation makes no HTTP requests`, initCount === 0 && patchCalls === 0 && finalizeCalls === 0);
+        const stopped = await first.end(start.jobId);
+        const retained = await first.recoveryPlans(email, origin);
+        step(`durable ${fault}: real committed response loss retains the original recoverable job`, dropped
+          && stopped.status === (fault === "append" ? "interrupted" : "ambiguous") && retained.length === 1
+          && retained[0].jobId === start.jobId && (fault !== "finalize" || retained[0].phase === "finalizing"));
+        if (retained.length !== 1) throw new Error("durable recovery material missing");
+        const patchesBeforeResume = patchCalls; broken = false;
+        const reopened = new StoredUploadService(options());
+        const result = await reopened.resume({ authority, jobId: start.jobId, revision: retained[0].revision });
+        const link = await reopened.linkFor(start.jobId, email, origin);
+        const afterUsage = await call("GET", "/api/me/usage", undefined, sendToken);
+        const afterFiles = await call("GET", "/api/files", undefined, sendToken);
+        step(`durable ${fault}: fresh service recovers one object with exact once-only metering`, result.status === "published" && initCount === 1
+          && afterFiles.json?.files?.length === beforeFiles.json?.files?.length + 1
+          && afterUsage.json?.traffic?.used - beforeUsage.json?.traffic?.used === start.cipherBytes
+          && (fault !== "finalize" || patchCalls === patchesBeforeResume));
+        if (result.status !== "published" || !link) throw new Error("durable original link not recovered");
+        const opened = await receiveStoredLink({ link: `relayium://d/${result.objectId}#k=${start.contentKey}`, authority: storedAuthority,
+          transport: new StoredTransport(origin), destination, runtime: async () => storedRt });
+        step(`durable ${fault}: original key opens exact content and only the local spool is removed`, ["saved", "complete"].includes(opened.status)
+          && landed.get(name)?.equals(content) === true && link.endsWith(`#k=${start.contentKey}`)
+          && (await reopened.recoveryPlans(email, origin, true)).length === 0);
+      }
     }
   } finally {
     clearTimeout(runTimer);

@@ -45,6 +45,7 @@ export type InboxPolicy = "off" | "ask" | "auto";
 
 /** The preload surface this controller uses. Declared, not inferred. */
 export interface InboxBridge {
+  markRead?(payload: { ids: readonly string[] }): Promise<InboxSimpleOutcome>;
   state(): Promise<InboxView>;
   enable(): Promise<InboxEnableOutcome>;
   disable(): Promise<InboxDisableOutcome>;
@@ -491,18 +492,29 @@ export class InboxController {
     return outcome.kind === "ok";
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string): Promise<boolean> {
+    const epoch = this.#epoch;
     // Invalidated BEFORE the delete, not after: an `open` already in flight for
     // this message would otherwise come back with its plaintext and put a
     // deleted message back on screen. The user asked for it to be gone.
     this.#openSeq += 1;
-    const outcome = await this.bridge.remove({ id });
+    const outcome = await this.bridge.remove({ id }).catch(() => ({ kind: "failed" as const, reason: "internal" }));
+    if (this.#epoch !== epoch) return false;
     if (outcome.kind === "failed") this.notice = { kind: "failed", reason: outcome.reason };
     if (this.openId === id) {
       this.openId = null;
       this.openText = "";
     }
     await this.refreshLists();
+    return this.#epoch === epoch && outcome.kind === "ok";
+  }
+
+  async markRead(ids: readonly string[]): Promise<boolean> {
+    if (!this.bridge.markRead) return false;
+    const epoch = this.#epoch;
+    const outcome = await this.bridge.markRead({ ids: [...ids] }).catch(() => ({ kind: "refused" } as const));
+    if (this.#epoch !== epoch || outcome.kind !== "ok") return false;
+    await this.refreshLists(); return this.#epoch === epoch;
   }
 
   /**
@@ -513,16 +525,19 @@ export class InboxController {
    * The files themselves are untouched: this is the record of what arrived, not
    * what arrived.
    */
-  async forget(taskID: string): Promise<void> {
-    if (this.working.includes(taskID)) return;
+  async forget(taskID: string): Promise<boolean> {
+    if (this.working.includes(taskID)) return false;
+    const epoch = this.#epoch;
     this.working = [...this.working, taskID];
     try {
       const outcome = await this.bridge.forget({ id: taskID }).catch(() => ({
         kind: "failed" as const,
         reason: "internal",
       }));
+      if (this.#epoch !== epoch) return false;
       if (outcome.kind === "failed") this.notice = { kind: "failed", reason: outcome.reason };
       await this.refreshLists();
+      return this.#epoch === epoch && outcome.kind === "ok";
     } finally {
       this.working = this.working.filter((entry) => entry !== taskID);
     }

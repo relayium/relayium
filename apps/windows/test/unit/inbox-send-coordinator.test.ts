@@ -21,6 +21,7 @@ import {
   MAX_REVOKED_DOCUMENTS,
   SendCoordinator,
   type SendOutcome,
+  type InboxUploadDriver,
 } from "../../src/main/inbox/send-coordinator.js";
 import { DeviceTaskByteTransport } from "../../src/main/inbox/send-bytes.js";
 import { UploadEngine } from "../../src/main/stored/upload/engine.js";
@@ -344,7 +345,7 @@ function frame(total: number): Uint8Array {
   return bytes;
 }
 
-async function feedAll(engine: UploadEngine): Promise<void> {
+async function feedAll(engine: InboxUploadDriver): Promise<void> {
   for (;;) {
     const next = engine.expects;
     if (next === null) return;

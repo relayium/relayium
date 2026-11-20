@@ -17,6 +17,7 @@ import type {
   StoredSendHistoryEntry,
   StoredSendOutcome,
   StoredSendStart,
+  StoredSendRecoveryEntry,
 } from "../../src/shared/ipc-contract.js";
 
 /**
@@ -104,6 +105,101 @@ function bridge(over: Partial<StoredSendBridge> = {}) {
 }
 
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+const RECOVERY: StoredSendRecoveryEntry = { jobId: "recovery-job", revision: 7, phase: "ready", canResume: true,
+  fileCount: 1, totalBytes: 42, createdAt: 100, files: [{ name: "original.txt", size: 42 }] };
+
+describe("local upload recovery actions", () => {
+  it("matches the current macOS expiry durations and defaults to one day", () => {
+    expect(TTL_CHOICES.map((days) => days * 86_400)).toEqual([3600, 86400, 259200, 604800, 1209600]);
+    const controller = new StoredSendController(bridge().bridge);
+    expect(controller.ttlDays * 86_400).toBe(86400);
+    controller.dispose();
+  });
+  it("resumes from the original job and revision without selecting or encrypting files again", async () => {
+    const resume = vi.fn(async () => ({ status: "published", objectId: "old-object", expiresAt: 1000 }) as const);
+    const b = bridge({ resume, recovery: async () => ({ entries: [] }) });
+    const controller = new StoredSendController(b.bridge);
+    await controller.resume(RECOVERY);
+    expect(resume).toHaveBeenCalledWith({ jobId: RECOVERY.jobId, revision: 7 });
+    expect(b.calls.start).toBe(0); expect(b.calls.feed).toBe(0);
+    expect(controller.outcome?.status).toBe("published");
+    expect(controller.linkJobId).toBe(RECOVERY.jobId);
+    controller.dispose();
+  });
+
+  it("drops a resumed result after an account change", async () => {
+    const answer = deferred<StoredSendOutcome>();
+    const b = bridge({ resume: () => answer.promise, recovery: async () => ({ entries: [] }) });
+    const controller = new StoredSendController(b.bridge);
+    const running = controller.resume(RECOVERY);
+    b.signOut(2);
+    answer.resolve({ status: "published", objectId: "previous-account-object", expiresAt: 1000 });
+    await running;
+    expect(controller.outcome).toBeNull(); expect(controller.link).toBeNull();
+    expect(controller.recoveries).toEqual([]);
+    controller.dispose();
+  });
+
+  it("refuses stale recovery-list reads without restoring an old job", async () => {
+    const old = deferred<{ entries: readonly StoredSendRecoveryEntry[] }>();
+    const fresh = deferred<{ entries: readonly StoredSendRecoveryEntry[] }>();
+    let reads = 0;
+    const b = bridge({ recovery: () => ++reads === 1 ? old.promise : fresh.promise });
+    const controller = new StoredSendController(b.bridge);
+    const first = controller.refreshRecovery(); const second = controller.refreshRecovery();
+    fresh.resolve({ entries: [] }); await second;
+    old.resolve({ entries: [RECOVERY] }); await first;
+    expect(controller.recoveries).toEqual([]);
+    controller.dispose();
+  });
+
+  it("passes only the exact discard snapshot and preserves a declined recovery", async () => {
+    let removed = false;
+    const discardRecovery = vi.fn(async () => ({ result: "declined" as "declined" | "discarded" }));
+    const b = bridge({ discardRecovery, recovery: async () => ({ entries: removed ? [] : [RECOVERY] }) });
+    const controller = new StoredSendController(b.bridge);
+    await controller.refreshRecovery();
+    await controller.discardRecovery(RECOVERY);
+    expect(discardRecovery).toHaveBeenCalledWith({ jobId: RECOVERY.jobId, revision: 7 });
+    expect(controller.recoveries).toEqual([RECOVERY]); expect(controller.recoveryNotice).toBeNull();
+    discardRecovery.mockImplementation(async () => { removed = true; return { result: "discarded" }; });
+    await controller.discardRecovery(RECOVERY);
+    expect(controller.recoveries).toEqual([]); expect(controller.recoveryNotice).toBe("discarded");
+    controller.dispose();
+  });
+
+  it("does not start another upload while discard is pending or show a stale discard result", async () => {
+    const answer = deferred<{ result: "discarded" }>();
+    const resume = vi.fn(async () => ({ status: "interrupted", code: "cancelled" }) as const);
+    const b = bridge({ discardRecovery: () => answer.promise, resume, recovery: async () => ({ entries: [] }) });
+    const controller = new StoredSendController(b.bridge);
+    controller.pick([new File(["new file"], "new.txt")]);
+    const removing = controller.discardRecovery(RECOVERY);
+    await controller.resume(RECOVERY); await controller.send();
+    expect(resume).not.toHaveBeenCalled(); expect(b.calls.start).toBe(0);
+    b.signOut(2); answer.resolve({ result: "discarded" }); await removing;
+    expect(controller.recoveryNotice).toBeNull(); expect(controller.discarding).toBeNull();
+    controller.dispose();
+  });
+
+  it("renders only closed upload phases, keeping preparation and confirmation distinct", async () => {
+    let progress!: (payload: unknown) => void;
+    const answer = deferred<StoredSendOutcome>();
+    const b = bridge({ resume: () => answer.promise, onProgress: (cb) => { progress = cb; return () => undefined; } });
+    const controller = new StoredSendController(b.bridge);
+    const running = controller.resume(RECOVERY);
+    progress({ jobId: RECOVERY.jobId, committed: 42, total: 42, phase: "finalizing" });
+    expect(controller.phase).toBe("finalizing");
+    progress({ jobId: RECOVERY.jobId, committed: 0, total: 42, phase: "restarting" });
+    expect(controller.phase).toBe("restarting");
+    progress({ jobId: RECOVERY.jobId, committed: 1, total: 42, phase: "untrusted-wire-text" });
+    expect(controller.phase).toBe("uploading");
+    answer.resolve({ status: "interrupted", code: "network" }); await running;
+    expect(controller.outcome?.status).toBe("interrupted");
+    controller.dispose();
+  });
+});
 
 /**
  * Wait for a state the controller reaches through several awaits.
@@ -511,17 +607,17 @@ describe("the plan's retention cap", () => {
 
   it("offers only what a limited plan can honour", () => {
     const week = allowedTtlChoices({ kind: "limited", seconds: 7 * 24 * 60 * 60 });
-    expect(week.days).toEqual([1, 7]);
+    expect(week.days).toEqual([1 / 24, 1, 3, 7]);
     expect(week.clamped).toBe(true);
     const day = allowedTtlChoices({ kind: "limited", seconds: 24 * 60 * 60 });
-    expect(day.days).toEqual([1]);
+    expect(day.days).toEqual([1 / 24, 1]);
   });
 
   it("never leaves the picker empty", () => {
     // A cap shorter than every choice still leaves the shortest: the server
     // clamps it, and a control with no options is one nobody can use.
     const tiny = allowedTtlChoices({ kind: "limited", seconds: 60 });
-    expect(tiny.days).toEqual([1]);
+    expect(tiny.days).toEqual([1 / 24]);
     expect(tiny.clamped).toBe(true);
   });
 
@@ -559,21 +655,16 @@ describe("the plan's retention cap", () => {
 
 describe("what the page may CLAIM about the cap", () => {
   it("states a three-day plan as three days, not as the preset that fits", () => {
-    // The presets are 1/7/14, so a three-day plan fits only the first. Saying
-    // "up to 1 day" understates what the account actually has — root found this
-    // against real server plans, which do include three days.
     const cap = { kind: "limited", seconds: 3 * 24 * 60 * 60 } as const;
-    expect(allowedTtlChoices(cap).days).toEqual([1]);
+    expect(allowedTtlChoices(cap).days).toEqual([1 / 24, 1, 3]);
     expect(capDuration(cap.seconds)).toEqual({ unit: "day", count: 3 });
     // And a one-day choice under a three-day plan is NOT a clamp.
     expect(exceedsCap(cap, 1)).toBe(false);
   });
 
   it("never promises longer than a sub-day plan keeps a link", () => {
-    // No preset fits, so the picker falls back to one day — which is longer
-    // than the plan allows. The page must say it will be shortened.
     const cap = { kind: "limited", seconds: 6 * 60 * 60 } as const;
-    expect(allowedTtlChoices(cap).days).toEqual([1]);
+    expect(allowedTtlChoices(cap).days).toEqual([1 / 24]);
     expect(exceedsCap(cap, 1)).toBe(true);
     expect(capDuration(cap.seconds)).toEqual({ unit: "hour", count: 6 });
   });

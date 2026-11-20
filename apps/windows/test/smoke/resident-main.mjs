@@ -850,6 +850,7 @@ const sendHeld = {
   ambiguous: false,
   /** Held while set, so a transfer can be observed mid-flight. */
   hold: null,
+  onAppendEntered: null,
   reset() {
     sendHeld.manifest = new Uint8Array(0);
     sendHeld.body = new Uint8Array(0);
@@ -863,8 +864,14 @@ const sendTransport = {
     sendHeld.manifest = new Uint8Array(sealedManifest);
     return { uploadId: `upload-${String(Date.now())}`, chunkSize: 1 << 20 };
   },
-  async append(_id, from, _total, bytes) {
-    if (sendHeld.hold) await sendHeld.hold;
+  async append(_id, from, _total, bytes, signal) {
+    sendHeld.onAppendEntered?.(); sendHeld.onAppendEntered = null;
+    if (sendHeld.hold) await new Promise((resolve, reject) => {
+      const abort = () => reject(new DOMException("controlled upload aborted", "AbortError"));
+      if (signal?.aborted) { abort(); return; }
+      signal?.addEventListener("abort", abort, { once: true });
+      void sendHeld.hold.then(resolve, reject).finally(() => signal?.removeEventListener("abort", abort));
+    });
     if (from !== sendHeld.body.byteLength) {
       return { outcome: "offset", received: sendHeld.body.byteLength };
     }
@@ -881,6 +888,10 @@ const sendTransport = {
     if (sendHeld.ambiguous) return { outcome: "already-finalized" };
     sendHeld.finalized = true;
     return { outcome: "finalized", id: "object-1", expiresAt: 4_000_000_000 };
+  },
+  async finalizeRecoverable() {
+    const result = await sendTransport.finalize();
+    return result.outcome === "finalized" ? result : { outcome: "unconfirmed" };
   },
   async remove(id) {
     sendHeld.removed.push(id);
@@ -934,6 +945,7 @@ let breakCleanup = false;
 async function main() {
   await bootstrap({
     showOnLaunch: false,
+    confirmRecoveryDiscard: async () => true,
     // The native consent, answered in process. The shipped adapter still does
     // every check around it — the re-check after the prompt, the cleanup
     // counts, the exclusion — this only supplies the ANSWER a person would.
@@ -1299,6 +1311,12 @@ async function openInbox(win) {
     || document.querySelector('[data-test="inbox-sign-in"]') !== null`);
 }
 
+/** Select the device through the actual conversation control before staging. */
+async function chooseConversation(win, peerID) {
+  await waitInbox(win, "the conversation device", `[...document.querySelectorAll('[data-test="conversation-device"]')].some((el) => el.dataset.peer === ${JSON.stringify(peerID)})`);
+  return js(win, `(() => { const el = [...document.querySelectorAll('[data-test="conversation-device"]')].find((el) => el.dataset.peer === ${JSON.stringify(peerID)}); if (!el || el.disabled) return false; el.click(); return true; })()`);
+}
+
 /**
  * Seed ONE real message before the account is adopted.
  *
@@ -1510,6 +1528,7 @@ const INBOX_MESSAGE_TEXT = "hello from the phone\n" + "长文本 👋 line\n".re
 
 /** The message history: list, open, copy, delete — through the real vault. */
 async function scenarioInboxMessages(win) {
+  check("the incoming device conversation opens", await chooseConversation(win, "another-device"));
   const listed = await waitInbox(win, "the seeded message", `document.querySelector('[data-test="inbox-open"]') !== null`);
   check("a saved message is listed", listed === true);
   check("its body is not on screen until it is opened", !(await js(win, `document.body.innerText`)).includes(INBOX_MESSAGE_TEXT));
@@ -1543,8 +1562,10 @@ async function scenarioInboxMessages(win) {
   check("the message's own bytes reached the clipboard", bottomCopied === true);
   check("and the control says it worked", (await shown(win, "inbox-copy")).trim() === "Copied");
 
-  check("delete was clicked", await clickTest(win, "inbox-delete"));
-  const gone = await waitInbox(win, "the empty message list", `document.querySelector('[data-test="inbox-messages-empty"]') !== null`);
+  check("delete was clicked", await clickTest(win, "conversation-delete-row"));
+  check("local deletion needs confirmation", await present(win, "conversation-confirm-delete"));
+  check("local deletion confirmed", await clickTest(win, "conversation-confirm-delete"));
+  const gone = await waitInbox(win, "the empty message list", `document.querySelector('[data-test="conversation-empty"]') !== null`);
   check("deleting a message removes it", gone === true);
 }
 
@@ -1956,12 +1977,22 @@ async function scenarioStoredSendAmbiguous(win) {
     `document.querySelector('[data-test="send-row-notice"]') !== null`,
   );
   check("the re-check reports what it found", answered === true);
+  const discardReady = await waitInbox(win, "the original recovery discard to be ready", `(() => {
+    const button = document.querySelector('[data-test="send-recovery-discard"]');
+    return !!button && !button.disabled;
+  })()`);
+  check("the exact recovery is ready for local discard", discardReady === true);
+  check("the original recovery offers explicit local discard", await clickTest(win, "send-recovery-discard"));
+  const discarded = await waitInbox(win, "the exact recovery copy to be discarded", `document.querySelector('[data-test="send-recovery-discard"]') === null`);
+  check("discard resolves the local recovery without claiming publication", discarded === true);
   sendHeld.ambiguous = false;
 }
 
 /** Cancel mid-transfer, and a navigation that must not lose the send. */
 async function scenarioStoredSendCancelAndNavigation(win) {
   let release;
+  let appendEntered = false;
+  sendHeld.onAppendEntered = () => { appendEntered = true; };
   sendHeld.hold = new Promise((resolve) => {
     release = resolve;
   });
@@ -1970,6 +2001,7 @@ async function scenarioStoredSendCancelAndNavigation(win) {
   check("a held send was started", await clickTest(win, "send-start"));
   const running = await waitInbox(win, "the transfer to be running", `document.querySelector('[data-test="send-progress"]') !== null`);
   check("progress is shown while it runs", running === true);
+  check("the complete encrypted copy reached the held HTTP append", await waitForValue(() => appendEntered, 8000));
 
   // ## Navigating away does not lose the send
   //
@@ -1990,10 +2022,11 @@ async function scenarioStoredSendCancelAndNavigation(win) {
   check("cancel was clicked", await clickTest(win, "send-cancel"));
   const cancelled = await waitInbox(
     win,
-    "the cancelled outcome",
-    `document.querySelector('[data-test="send-cancelled"]') !== null`,
+    "the interrupted outcome",
+    `document.querySelector('[data-test="send-interrupted"]') !== null`,
   );
-  check("cancelling reports it as cancelled", cancelled === true);
+  check("stopping a prepared upload preserves resumable ciphertext", cancelled === true);
+  check("the paused upload offers resume", (await present(win, "send-recovery-resume")) === true);
 
   sendHeld.hold = null;
   release?.();
@@ -2201,6 +2234,7 @@ async function scenarioInboxAutomaticReceive(win, runtime) {
      }))`,
   );
   process.stdout.write(`RELAYIUM_INBOX_HISTORY_DIAG ${records}\n`);
+  check("the sender conversation opens", await chooseConversation(win, "another-device"));
   const named = await waitInbox(
     win,
     "the named history",
@@ -2244,20 +2278,13 @@ async function scenarioInboxSend(win) {
   check("the send section is offered", refreshable === true);
   if (await present(win, "inbox-send-refresh")) await clickTest(win, "inbox-send-refresh");
 
-  const listed = await waitInbox(
-    win,
-    "this account's other devices",
-    `document.querySelectorAll('[data-test="inbox-send-target"]').length === 2`,
-  );
+  const listed = await waitInbox(win, "this account's other devices", `document.querySelector('[data-test="conversation-device"][data-peer="target-device"]') !== null && document.querySelector('[data-test="conversation-device"][data-peer="old-laptop"]') !== null`);
   check("the account's other devices are listed", listed === true);
-  // The device that cannot take a delivery says so, in central's own verdict.
   const refusal = await shown(win, "inbox-send-target-refusal");
   check("an ineligible device says why", refusal.length > 0, refusal);
-  const checkboxes = await js(
-    win,
-    `[...document.querySelectorAll('[data-test="inbox-send-target"]')].map((el) => el.disabled).join(",")`,
-  );
-  check("and cannot be selected", checkboxes === "false,true", checkboxes);
+  check("an ineligible peer can open its local history", await chooseConversation(win, "old-laptop"));
+  check("and cannot compose a delivery", !(await present(win, "inbox-send-start")));
+  check("the eligible target conversation opens", await chooseConversation(win, "target-device"));
 
   // ---- pick, choose, send -------------------------------------------------
   const picked = await pickFiles(win, [{ name: "holiday.txt", bytes: Buffer.from("sun and rain") }], "inbox-send-files");
@@ -2265,12 +2292,6 @@ async function scenarioInboxSend(win) {
   const shownName = await shown(win, "inbox-send-names");
   check("the page shows the actual name it will send", shownName.includes("holiday.txt"), shownName);
 
-  await js(
-    win,
-    `(() => { const el = document.querySelector('[data-test="inbox-send-target"]:not([disabled])');
-      if (el.disabled === true) return false;
-      el.click(); return true; })()`,
-  );
   const ready = await waitInbox(
     win,
     "the send button to become usable",
@@ -2282,9 +2303,9 @@ async function scenarioInboxSend(win) {
   const pageState = await js(
     win,
     `JSON.stringify({
-       checked: document.querySelectorAll('[data-test="inbox-send-target"]:checked').length,
+       checked: document.querySelectorAll('[data-test="conversation-device"][aria-pressed="true"]').length,
        statuses: [...document.querySelectorAll('[data-test="inbox-send-status"]')].map((n) => n.textContent.trim()),
-       rows: document.querySelectorAll('[data-test="inbox-send-target"]').length,
+       rows: document.querySelectorAll('[data-test="conversation-device"]').length,
      })`,
   );
   process.stdout.write(
@@ -2383,6 +2404,7 @@ async function scenarioRestartedHistory(win, runtime) {
     await openInbox(win);
   }
 
+  check("the sender conversation reopens after restart", await chooseConversation(win, "another-device"));
   const named = await waitFor(
     win,
     "the named history after a restart",
@@ -2400,6 +2422,7 @@ async function scenarioRestartedHistory(win, runtime) {
   // rather than an artefact of a fresh profile.
   check("receiving is still on", (await present(win, "inbox-disable")) === true);
 
+  check("a sendable conversation opens before staging", await chooseConversation(win, "target-device"));
   // ---- unsent work, in a process that is holding nothing else -------------
   //
   // The drafts half of the quit-risk fix, proven where it can be proven: this
@@ -2471,6 +2494,7 @@ let releaseHeldAppend = () => undefined;
 
 async function sendQuitRisk(win, runtime) {
   await openInbox(win);
+  check("the draft's device conversation opens", await chooseConversation(win, "target-device"));
 
   // ---- chosen, not yet sent: a DRAFT ---------------------------------------
   const picked = await pickFiles(
@@ -2527,12 +2551,7 @@ async function sendQuitRisk(win, runtime) {
     releaseUpload = resolve;
   });
   releaseHeldAppend = releaseUpload;
-  await js(
-    win,
-    `(() => { const el = document.querySelector('[data-test="inbox-send-target"]:not([disabled])');
-      if (el && el.disabled === true) return false;
-      if (el && !el.checked) el.click(); return true; })()`,
-  );
+  check("the staged delivery still belongs to the selected device", await js(win, `document.querySelector('[data-test="conversation-device"][data-peer="target-device"]')?.getAttribute('aria-pressed') === 'true'`));
   await waitInbox(
     win,
     "the send button to become usable",
@@ -2828,7 +2847,7 @@ async function scenarioStoredSendCard(win) {
 
   // ---- a cap the plan CAN honour: every choice offered ----------------------
   const all = await js(win, `document.querySelectorAll('[data-test="send-ttl"] option').length`);
-  check("a 14-day plan offers every choice", all === 3, String(all));
+  check("a 14-day plan offers every choice", all === 5, String(all));
   check("and says nothing about a cap", (await present(win, "send-ttl-capped")) === false);
   check("nor about an unreadable one", (await present(win, "send-ttl-unknown")) === false);
 
@@ -2838,7 +2857,7 @@ async function scenarioStoredSendCard(win) {
   const shrank = await waitFor(
     win,
     "the picker to follow the plan",
-    `document.querySelectorAll('[data-test="send-ttl"] option').length === 1`,
+    `document.querySelectorAll('[data-test="send-ttl"] option').length === 2`,
     20_000,
   );
   check("a one-day plan offers only what it can honour", shrank === true);
@@ -2859,7 +2878,7 @@ async function scenarioStoredSendCard(win) {
   // NOT shortened: the server clamps whatever is sent, so hiding choices on a
   // guess would invent a limit. What is owed here is the sentence above.
   const whenUnknown = await js(win, `document.querySelectorAll('[data-test="send-ttl"] option').length`);
-  check("and the choices are not silently shortened", whenUnknown === 3, String(whenUnknown));
+  check("and the choices are not silently shortened", whenUnknown === 5, String(whenUnknown));
   check("nor presented as a cap", (await present(win, "send-ttl-capped")) === false);
 
   accountSink.failUsage = false;

@@ -1,9 +1,8 @@
 <!--
   Send a link — receive, send and history, in one page.
 
-  Only RECEIVE is built. The other two modes say so in their own words rather
-  than showing controls that do nothing: a greyed button reads as "broken" and a
-  spinner reads as "nearly there", and both are lies a user acts on.
+  Receive requires explicit consent. Sending prepares a durable encrypted copy
+  before uploading; interrupted attempts and local cleanup remain explicit.
 
   ## Opening a link is not downloading it
 
@@ -288,6 +287,32 @@
       </button>
     {/if}
   {:else}
+  {#if send.recoveryUnavailable}
+    <p class="problem" data-test="send-recovery-unavailable">{t("sendRecoveryUnavailable")}</p>
+  {/if}
+  {#if send.recoveries.length > 0}
+    <section aria-label={t("sendRecoveryHeading")} data-test="send-recovery">
+      <h2>{t("sendRecoveryHeading")}</h2>
+      {#each send.recoveries as recovery (recovery.jobId)}
+        <div class="recovery-item">
+          <p>{t("sendPicked", { count: recovery.fileCount, size: bytes(recovery.totalBytes) })}</p>
+          <p class="dim small">{t(recovery.phase === "cleanup" ? "sendRecoveryCleanup" : recovery.phase === "preparing" ? "sendRecoveryIncomplete" : recovery.phase === "unconfirmed" ? "sendRecoveryUnconfirmed" : "sendRecoveryReady")}</p>
+          <ul class="names">
+            {#each recovery.files as file (file.name)}<li><span>{file.name}</span><span class="dim small">{bytes(file.size)}</span></li>{/each}
+          </ul>
+          {#if recovery.canResume}
+            <button type="button" class="primary" data-test="send-recovery-resume" disabled={send.busy || send.discarding !== null}
+              onclick={() => void send.resume(recovery)}>{t(recovery.phase === "unconfirmed" ? "sendRecoveryCheck" : "sendRecoveryResume")}</button>
+          {/if}
+          <button type="button" data-test="send-recovery-discard" disabled={send.busy || send.discarding !== null}
+            onclick={() => void send.discardRecovery(recovery)}>{t("sendRecoveryDiscard")}</button>
+        </div>
+      {/each}
+    </section>
+  {/if}
+  {#if send.recoveryNotice}
+    <p role="status" data-test="send-recovery-notice">{t(send.recoveryNotice === "discarded" ? "sendRecoveryDiscarded" : "sendRecoveryDiscardFailed")}</p>
+  {/if}
   <p class="dim">{t("sendBody")}</p>
 
   <!-- The native pickers. `webkitdirectory` opens the Windows folder dialog;
@@ -405,7 +430,7 @@
       -->
       <select id="send-ttl" data-test="send-ttl" bind:value={send.ttlDays} disabled={send.busy}>
         {#each ttl.days as days (days)}
-          <option value={days}>{t("sendExpiryDays", { days })}</option>
+          <option value={days}>{days < 1 ? t("sendExpiryHours", { hours: days * 24 }) : t("sendExpiryDays", { days })}</option>
         {/each}
       </select>
     </div>
@@ -417,9 +442,7 @@
       <p class="dim small" data-test="send-ttl-unknown">{t("sendExpiryUnknown")}</p>
     {:else if cap.kind === "limited"}
       {#if ttl.clamped}
-        <!-- The TRUE cap, read from the plan. The highest preset that fits is
-             not the limit: a three-day plan fits only the one-day preset, and
-             saying "up to 1 day" understates what the account has. -->
+        <!-- Show the actual plan cap, even when it lies between presets. -->
         <p class="dim small" data-test="send-ttl-capped">
           {t("sendExpiryCapped", { duration: capText(cap.seconds) })}
         </p>
@@ -437,17 +460,20 @@
 
   {#if send.busy}
     <p class="dim" data-test="send-progress">
-      {t("sendUploading", { percent: send.total > 0 ? Math.min(100, Math.round((send.committed / send.total) * 100)) : 0 })}
+      {#if send.phase === "preparing"}{t("sendPreparing")}
+      {:else if send.phase === "restarting"}{t("sendRestarting")}
+      {:else if send.phase === "finalizing"}{t("sendFinalizing")}
+      {:else}{t("sendUploading", { percent: send.total > 0 ? Math.min(100, Math.round((send.committed / send.total) * 100)) : 0 })}{/if}
     </p>
     <progress value={send.committed} max={Math.max(1, send.total)}></progress>
-    <button type="button" data-test="send-cancel" onclick={() => void send.cancel()}>{t("sendCancel")}</button>
+    <button type="button" data-test="send-cancel" onclick={() => void send.cancel()}>{t(send.phase === "preparing" ? "sendCancel" : "sendPause")}</button>
   {:else}
     <div class="row">
       <button
         class="primary"
         type="button"
         data-test="send-start"
-        disabled={send.files.length === 0 || sendGate.fenced}
+        disabled={send.files.length === 0 || sendGate.fenced || send.discarding !== null || send.recoveries.some((r) => r.phase !== "cleanup")}
         onclick={() => sendGate.start(() => void send.send())}
       >
         {t("sendStart")}
@@ -456,6 +482,10 @@
         <button type="button" data-test="send-clear" onclick={() => send.clear()}>{t("sendClear")}</button>
       {/if}
     </div>
+  {/if}
+
+  {#if send.recoveries.some((r) => r.phase !== "cleanup") && !send.busy}
+    <p class="dim small" data-test="send-recovery-first">{t("sendRecoveryFirst")}</p>
   {/if}
 
   {#if send.refusal}
@@ -473,6 +503,7 @@
   {#if send.outcome}
     {#if send.outcome.status === "published"}
       <p data-test="send-published">{t("sendPublished")}</p>
+      {#if send.outcome.cleanupPending}<p role="status" data-test="send-cleanup-pending">{t("sendRecoveryCleanup")}</p>{/if}
       {#if send.link}
         <div class="row">
           <label class="sr-only" for="send-link">{t("sendLinkLabel")}</label>
@@ -493,6 +524,8 @@
       <p class="problem" data-test="send-failed">
         <strong>{t("sendFailed")}</strong><br />{t("sendFailedBody")}
       </p>
+    {:else if send.outcome.status === "interrupted"}
+      <p class="dim" data-test="send-interrupted">{t("sendHistoryInterrupted")}</p>
     {:else}
       <p class="dim" data-test="send-cancelled">{t("sendCancelled")}</p>
     {/if}

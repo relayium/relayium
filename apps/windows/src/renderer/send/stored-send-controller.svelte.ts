@@ -36,6 +36,8 @@ import type {
   StoredSendHistoryEntry,
   StoredSendOutcome,
   StoredSendStart,
+  StoredSendRecoveryEntry,
+  StoredSendPhase,
 } from "../../shared/ipc-contract.js";
 
 /** The preload surface this controller uses. Declared, not inferred. */
@@ -53,6 +55,10 @@ export interface StoredSendBridge {
   end(payload: { jobId: string }): Promise<StoredSendOutcome>;
   cancel(payload: { jobId: string }): Promise<StoredSendOutcome>;
   history(): Promise<{ entries: readonly StoredSendHistoryEntry[] | null }>;
+  /** Optional for compatibility with earlier preload generations. */
+  recovery?(): Promise<{ entries: readonly StoredSendRecoveryEntry[] | null }>;
+  resume?(payload: { jobId: string; revision: number }): Promise<StoredSendOutcome>;
+  discardRecovery?(payload: { jobId: string; revision: number }): Promise<{ result: "discarded" | "declined" | "refused" | "failed" }>;
   link(payload: { jobId: string }): Promise<{ link: string | null }>;
   remove(payload: { jobId: string }): Promise<{ result: string }>;
   reconcile(payload: { jobId: string }): Promise<StoredSendOutcome>;
@@ -85,8 +91,8 @@ export type SendRefusal =
   | { readonly kind: "internal" }
   | { readonly kind: "refused"; readonly code: string; readonly manifest: string | null };
 
-/** How many days a link may last, offered as the Mac offers them. */
-export const TTL_CHOICES: readonly number[] = [1, 7, 14];
+/** Days, including one hour, matching macOS 1.5.2's exact durations. */
+export const TTL_CHOICES: readonly number[] = [1 / 24, 1, 3, 7, 14];
 export const DAY_SECONDS = 24 * 60 * 60;
 
 /**
@@ -128,13 +134,9 @@ export function retentionCapOf(usage: {
  *
  * ## Why the highest fitting preset is not the cap
  *
- * The presets are 1, 7 and 14 days. A three-day plan fits only the first, so
- * saying "up to {highest preset}" told a three-day account it keeps links for
- * ONE day — understating what they pay for. And a sub-day cap fits no preset at
- * all; the picker falls back to one day, and the same sentence then promised
- * LONGER than the plan allows, which is the direction that actually misleads.
- *
- * Both are fixed by taking the number from `cap.seconds`. The unit is chosen so
+ * The cap need not match any preset. Take the number from `cap.seconds`,
+ * rather than implying the highest fitting preset is the plan's limit.
+ * The unit is chosen so
  * the figure is exact rather than rounded into a different claim: whole days
  * where it divides, else whole hours, else minutes.
  */
@@ -224,7 +226,7 @@ export class StoredSendController {
     return this.picked.map((entry) => entry.file);
   }
   burnAfterRead = $state(false);
-  ttlDays = $state(7);
+  ttlDays = $state(1);
 
   /**
    * Hold the choice to what the plan allows.
@@ -244,6 +246,7 @@ export class StoredSendController {
   }
 
   busy = $state(false);
+  phase = $state<StoredSendPhase>("preparing");
   committed = $state(0);
   total = $state(0);
   outcome = $state<StoredSendOutcome | null>(null);
@@ -271,6 +274,11 @@ export class StoredSendController {
   /** What the last delete or re-check did, so neither is silent either. */
   rowNotice = $state<{ jobId: string; kind: "deleted" | "delete-failed" | "rechecked" | "still-unknown" } | null>(null);
   history = $state<readonly StoredSendHistoryEntry[]>([]);
+  recoveries = $state<readonly StoredSendRecoveryEntry[]>([]);
+  recoveryUnavailable = $state(false);
+  discarding = $state<string | null>(null);
+  recoveryNotice = $state<"discarded" | "failed" | null>(null);
+  #recoverySeq = 0;
   /**
    * The record could not be READ.
    *
@@ -316,7 +324,7 @@ export class StoredSendController {
    */
   #historySeq = 0;
   /** Progress frames that arrived before their acknowledgement did. */
-  readonly #early = new Map<string, { committed: number; total: number }>();
+  readonly #early = new Map<string, { committed: number; total: number; phase: StoredSendPhase }>();
   readonly #stop: Array<() => void> = [];
 
   constructor(private readonly bridge: StoredSendBridge) {
@@ -327,11 +335,12 @@ export class StoredSendController {
     // arrive before `start` has answered.
     this.#stop.push(
       bridge.onProgress((payload) => {
-        const shaped = payload as { jobId?: unknown; committed?: unknown; total?: unknown };
+        const shaped = payload as { jobId?: unknown; committed?: unknown; total?: unknown; phase?: unknown };
         if (typeof shaped.jobId !== "string") return;
         if (typeof shaped.committed !== "number" || typeof shaped.total !== "number") return;
+        const phase: StoredSendPhase = shaped.phase === "preparing" || shaped.phase === "restarting" || shaped.phase === "finalizing" ? shaped.phase : "uploading";
         if (this.#jobId === null) {
-          this.#early.set(shaped.jobId, { committed: shaped.committed, total: shaped.total });
+          this.#early.set(shaped.jobId, { committed: shaped.committed, total: shaped.total, phase });
           while (this.#early.size > 8) {
             const oldest = this.#early.keys().next().value;
             if (oldest === undefined) break;
@@ -342,6 +351,7 @@ export class StoredSendController {
         if (shaped.jobId !== this.#jobId) return;
         this.committed = shaped.committed;
         this.total = shaped.total;
+        this.phase = phase;
       }),
     );
     this.#stop.push(
@@ -385,6 +395,10 @@ export class StoredSendController {
     this.linkJobId = null;
     this.copied = null;
     this.history = [];
+    this.recoveries = [];
+    this.recoveryUnavailable = false;
+    this.discarding = null; this.recoveryNotice = null;
+    this.#recoverySeq++;
     this.historyUnavailable = false;
     // Any read already in flight is now stale by sequence as well as by epoch.
     this.#historySeq += 1;
@@ -392,6 +406,7 @@ export class StoredSendController {
     this.outcome = null;
     this.refusal = null;
     this.busy = false;
+    this.phase = "preparing";
     this.committed = 0;
     this.total = 0;
     // The picked files are the user's own choice and are NOT theirs to lose on
@@ -474,10 +489,11 @@ export class StoredSendController {
    * the engine rather than discovered as a corrupt object at the far end.
    */
   async send(): Promise<void> {
-    if (this.busy || this.files.length === 0) return;
+    if (this.busy || this.discarding || this.files.length === 0) return;
     const attempt = ++this.#attempt;
     const epoch = this.#epoch;
     this.busy = true;
+    this.phase = "preparing";
     this.outcome = null;
     this.refusal = null;
     this.link = null;
@@ -542,6 +558,7 @@ export class StoredSendController {
     if (early !== undefined) {
       this.committed = early.committed;
       this.total = early.total;
+      this.phase = early.phase;
       this.#early.delete(started.jobId);
     }
 
@@ -693,10 +710,62 @@ export class StoredSendController {
     if (this.#epoch !== epoch || this.#historySeq !== seq) return;
     if (answer.entries === null) {
       this.historyUnavailable = true;
+      await this.refreshRecovery();
       return;
     }
     this.historyUnavailable = false;
     this.history = answer.entries;
+    await this.refreshRecovery();
+  }
+
+  async refreshRecovery(): Promise<void> {
+    if (!this.bridge.recovery) return;
+    const epoch = this.#epoch;
+    const seq = ++this.#recoverySeq;
+    const answer = await this.bridge.recovery().catch(() => ({ entries: null }));
+    if (this.#epoch !== epoch || seq !== this.#recoverySeq) return;
+    this.recoveryUnavailable = answer.entries === null;
+    if (answer.entries !== null) this.recoveries = answer.entries;
+  }
+
+  async resume(entry: StoredSendRecoveryEntry): Promise<void> {
+    if (this.busy || this.discarding || !entry.canResume || !this.bridge.resume) return;
+    const attempt = ++this.#attempt;
+    const epoch = this.#epoch;
+    this.#jobId = entry.jobId;
+    this.busy = true;
+    this.phase = entry.phase === "unconfirmed" ? "finalizing" : "uploading";
+    this.outcome = null; this.refusal = null; this.link = null; this.linkJobId = null;
+    this.committed = 0;
+    try {
+      const outcome = await this.bridge.resume({ jobId: entry.jobId, revision: entry.revision });
+      if (!this.#current(attempt, epoch)) return;
+      this.outcome = outcome;
+      if (outcome.status === "published") await this.revealLink(entry.jobId, attempt, epoch);
+    } catch {
+      if (this.#current(attempt, epoch)) this.outcome = { status: "ambiguous", code: "internal" };
+    } finally {
+      if (this.#current(attempt, epoch)) {
+        this.#jobId = null; this.busy = false;
+        await this.refreshHistory();
+      }
+    }
+  }
+
+  async discardRecovery(entry: StoredSendRecoveryEntry): Promise<void> {
+    if (this.busy || this.discarding || !this.bridge.discardRecovery) return;
+    const epoch = this.#epoch;
+    this.discarding = entry.jobId; this.recoveryNotice = null;
+    try {
+      const answer = await this.bridge.discardRecovery({ jobId: entry.jobId, revision: entry.revision });
+      if (this.#epoch !== epoch) return;
+      this.recoveryNotice = answer.result === "discarded" ? "discarded" : answer.result === "declined" ? null : "failed";
+      if (answer.result === "discarded" && this.linkJobId === entry.jobId && this.outcome?.status === "published") {
+        this.outcome = { ...this.outcome, cleanupPending: false };
+      }
+      await this.refreshHistory();
+    } catch { if (this.#epoch === epoch) this.recoveryNotice = "failed"; }
+    finally { if (this.#epoch === epoch) this.discarding = null; }
   }
 
   /** Show the link for a past send, for exactly as long as it is on screen. */

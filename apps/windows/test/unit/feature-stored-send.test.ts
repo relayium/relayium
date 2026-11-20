@@ -22,8 +22,8 @@ function deferred<T = void>() {
 
 /** A stand-in engine whose every step is observable and holdable. */
 function fakeEngine() {
-  const calls = { start: 0, revoke: [] as string[], history: 0, link: 0, remove: 0 };
-  const holds = { start: null as Promise<void> | null };
+  const calls = { start: 0, resume: 0, revoke: [] as string[], history: 0, link: 0, remove: 0 };
+  const holds = { start: null as Promise<void> | null, resume: null as Promise<void> | null };
   let nextJob = 1;
   const engine = {
     async start() {
@@ -41,6 +41,15 @@ function fakeEngine() {
     async revoke(jobId: string) {
       calls.revoke.push(jobId);
       return { status: "cancelled" as const };
+    },
+    async resume() {
+      calls.resume += 1;
+      if (holds.resume) await holds.resume;
+      return { status: "interrupted" as const, code: "network" as const };
+    },
+    async discardRecovery(input: { signal: AbortSignal; confirm(signal: AbortSignal, unknown: boolean): Promise<boolean> }) {
+      const confirmed = await input.confirm(input.signal, true);
+      return input.signal.aborted ? "refused" as const : confirmed ? "discarded" as const : "declined" as const;
     },
     async revokeDocument() {},
     async end() {
@@ -81,7 +90,7 @@ interface Harness {
   optionsHold: Promise<void> | null;
 }
 
-function harness(over: { authority?: StoredSendDeps["authority"] } = {}): Harness {
+function harness(over: { authority?: StoredSendDeps["authority"]; confirmRecoveryDiscard?: StoredSendDeps["confirmRecoveryDiscard"] } = {}): Harness {
   const built = fakeEngine();
   const state = { epoch: 1, authorityHold: null as Promise<void> | null, optionsHold: null as Promise<void> | null };
   const service = new StoredSendService({
@@ -101,6 +110,7 @@ function harness(over: { authority?: StoredSendDeps["authority"] } = {}): Harnes
       return { secrets: {} as never, journalDirectory: "/tmp/unused" };
     },
     reportFailure: () => undefined,
+    ...(over.confirmRecoveryDiscard ? { confirmRecoveryDiscard: over.confirmRecoveryDiscard } : {}),
   });
   // The engine is built lazily from `options()`; this replaces the built one so
   // the host's lifecycle is what is under test rather than the store's.
@@ -137,6 +147,51 @@ function harness(over: { authority?: StoredSendDeps["authority"] } = {}): Harnes
 
 const ENTRY = [{ path: "a.bin", size: 16 }];
 const RETENTION = { burnAfterRead: false, ttlSeconds: 86_400 };
+
+describe("recovery belongs to the host lifecycle", () => {
+  it("registers a resume before authority resolves and joins a quitting admission", async () => {
+    const h = harness(); const gate = deferred(); h.authorityHold = gate.promise;
+    const running = h.service.resumeRecovery("original-job", 3, 7);
+    expect(h.service.active).toBe(1);
+    let stopped = false;
+    const quitting = h.service.dispose().then(() => { stopped = true; });
+    await Promise.resolve(); expect(stopped).toBe(false);
+    gate.resolve(); await quitting;
+    expect(await running).toMatchObject({ status: "ambiguous", code: "unavailable" });
+    expect(h.calls.resume).toBe(0); expect(h.service.active).toBe(0);
+  });
+
+  it("refuses a duplicate resume without retiring or revoking the original", async () => {
+    const h = harness(); const gate = deferred(); h.holds.resume = gate.promise;
+    const original = h.service.resumeRecovery("original-job", 3, 7);
+    await vi.waitFor(() => expect(h.calls.resume).toBe(1));
+    expect(await h.service.resumeRecovery("original-job", 3, 7)).toMatchObject({ code: "unavailable" });
+    expect(h.service.active).toBe(1); expect(h.calls.revoke).toEqual([]);
+    gate.resolve(); expect(await original).toMatchObject({ status: "interrupted" });
+    expect(h.service.active).toBe(0);
+  });
+
+  it.each(["account", "quit"] as const)("aborts an open discard confirmation on %s change and joins it", async (reason) => {
+    const opened = deferred<AbortSignal>(); const answer = deferred<boolean>();
+    const h = harness({ confirmRecoveryDiscard: async (signal) => { opened.resolve(signal); return answer.promise; } });
+    const discarding = h.service.discardRecovery("original-job", 3);
+    const signal = await opened.promise;
+    if (reason === "account") h.epoch += 1;
+    let stopped = false;
+    const teardown = (reason === "account" ? h.service.onAccountChanged() : h.service.quiesce()).then(() => { stopped = true; });
+    expect(signal.aborted).toBe(true); await Promise.resolve(); expect(stopped).toBe(false);
+    answer.resolve(true); await teardown;
+    expect(await discarding).toBe("refused");
+  });
+
+  it("requires the host confirmation and preserves a declined recovery", async () => {
+    expect(await harness().service.discardRecovery("original-job", 3)).toBe("declined");
+    const confirmRecoveryDiscard = vi.fn(async () => false);
+    const h = harness({ confirmRecoveryDiscard });
+    expect(await h.service.discardRecovery("original-job", 3)).toBe("declined");
+    expect(confirmRecoveryDiscard).toHaveBeenCalledOnce();
+  });
+});
 
 describe("an admission exists before a job id does", () => {
   it("does not start an upload for a process that is disposing", async () => {
@@ -206,6 +261,19 @@ describe("an admission exists before a job id does", () => {
 });
 
 describe("a teardown joins work the renderer never finished", () => {
+  it("keeps the admission when an end call was refused while the core still owns work", async () => {
+    const h = harness(); const started = await h.service.start(ENTRY, RETENTION, 7);
+    expect(started.ok).toBe(true); if (!started.ok) return;
+    let live = true;
+    const engine = { ...fakeEngine().engine, isLive: () => live,
+      end: async () => { throw new Error("controlled concurrent end refusal"); },
+      revoke: async () => { live = false; return { status: "cancelled" as const }; } };
+    (h.service as unknown as { engine(): Promise<unknown> }).engine = async () => engine;
+    (h.service as unknown as { built(): unknown }).built = () => engine;
+    expect(await h.service.end(started.jobId)).toMatchObject({ status: "ambiguous" });
+    expect(h.service.active).toBe(1);
+    await h.service.dispose(); expect(live).toBe(false); expect(h.service.active).toBe(0);
+  });
   it("quiesces an idle admitted job with no end or cancel from the page", async () => {
     // Root's second probe: an admitted job whose renderer never calls back.
     // `settled` was resolved only by `end`/`cancel`, so every join waited

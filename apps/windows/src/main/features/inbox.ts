@@ -376,6 +376,12 @@ export class InboxService {
   #bound: Binding | null = null;
   #visibleUntil = 0;
   #maintainedAt = Number.NEGATIVE_INFINITY;
+  #maintenanceRevision = 0;
+
+  private invalidateMaintenance(): void {
+    this.#maintenanceRevision += 1;
+    this.#maintainedAt = Number.NEGATIVE_INFINITY;
+  }
 
   visible(visible: boolean): void {
     const wasVisible = this.pollingNow() < this.#visibleUntil;
@@ -621,7 +627,7 @@ export class InboxService {
     if (this.#disposed) return;
     this.#fenced = false;
     // A held quit may outlive the last folder/presence observation.
-    this.#maintainedAt = Number.NEGATIVE_INFINITY;
+    this.invalidateMaintenance();
     this.start();
     this.wake();
   }
@@ -650,7 +656,7 @@ export class InboxService {
     if (this.#disposed || !this.#userPaused) return;
     this.#userPaused = false;
     // Consent resumes against a fresh destination verdict, even when visible.
-    this.#maintainedAt = Number.NEGATIVE_INFINITY;
+    this.invalidateMaintenance();
     this.publish();
     // The loop is parked in `nap` between passes; without this the first
     // delivery after a resume waits out an idle interval for no reason.
@@ -802,7 +808,7 @@ export class InboxService {
         // successful pass established.
         const bound = this.#bound;
         if (bound !== null) {
-          this.#maintainedAt = Number.NEGATIVE_INFINITY;
+          this.invalidateMaintenance();
           bound.announced = null;
           bound.reconciled = false;
         }
@@ -963,8 +969,13 @@ export class InboxService {
     if (this.admissionClosed()) return this.backoff.idle;
     if (!this.foregroundPolling || this.pollingNow() - this.#maintainedAt >= this.backoff.idle * 1000) {
       const stamp = this.pollingNow();
+      const revision = this.#maintenanceRevision;
       await bound.api.heartbeat(true, signal);
-      this.#maintainedAt = stamp;
+      this.assertLive(bound, signal);
+      // Stay, a policy change or a folder change invalidates the observation
+      // even when an older heartbeat was already in flight. Its late response
+      // must not make the next foreground pass reuse the retired observation.
+      if (revision === this.#maintenanceRevision) this.#maintainedAt = stamp;
     }
     this.assertLive(bound, signal);
 
@@ -1085,7 +1096,7 @@ export class InboxService {
       announced: null,
       reconciled: false,
     };
-    this.#maintainedAt = Number.NEGATIVE_INFINITY;
+    this.invalidateMaintenance();
     this.#bound = bound;
     return bound;
   }
@@ -1248,7 +1259,7 @@ export class InboxService {
       if (!bound.alive || this.#bound !== bound) return null;
       bound.grant = next;
       // A changed receive policy or destination invalidates cached health.
-      this.#maintainedAt = Number.NEGATIVE_INFINITY;
+      this.invalidateMaintenance();
       return next;
     });
     this.#grantTail = run.then(
@@ -1463,6 +1474,7 @@ export class InboxService {
     const write = this.own(async () => {
       await this.presentationFor(context).record({
         taskID: delivered.taskID,
+        ...(delivered.sourceDeviceID === undefined ? {} : { sourceDeviceID: delivered.sourceDeviceID }),
         receivedAt: this.now(),
         text: delivered.text,
         declared: delivered.declared,
@@ -1512,11 +1524,14 @@ export class InboxService {
     return this.own(async () => {
       try {
         const records = await this.presentationFor(bound.context).list();
+        const state = await this.presentationFor(bound.context).state();
         // The account that was live when this was issued must still be the one
         // live now, or these are the previous account's file names.
         if (!bound.alive || this.#bound !== bound) return null;
         return records.map((record) => ({
           taskID: record.taskID,
+          ...(record.sourceDeviceID === undefined ? {} : { sourceDeviceID: record.sourceDeviceID }),
+          ...(Object.hasOwn(state.readAt, record.taskID) ? { readAt: state.readAt[record.taskID]! } : {}),
           receivedAt: record.receivedAt,
           text: record.text,
           declared: record.declared,
@@ -2004,7 +2019,9 @@ export class InboxService {
     return this.own(async () => {
       try {
         const records = await this.require().messages();
-        return bound.alive ? records.map((record) => ({ ...record })) : [];
+        const state = await this.presentationFor(bound.context).state();
+        return bound.alive ? records.filter((record) => !state.deleted.includes(record.taskID)).map((record) => ({ ...record,
+          ...(Object.hasOwn(state.readAt, record.taskID) ? { readAt: state.readAt[record.taskID]! } : {}) })) : [];
       } catch (err) {
         this.deps.reportFailure?.(err);
         return [];
@@ -2088,8 +2105,34 @@ export class InboxService {
 
   /** Delete one message, because the user asked for that and nothing else. */
   deleteMessage(id: string): Promise<InboxSimpleOutcome> {
-    return this.simple(async () => {
-      await this.require().deleteMessage(id);
+    if (this.#disposed || this.#fenced) return Promise.resolve({ kind: "refused" });
+    const bound = this.live();
+    if (bound === "needs-account") return Promise.resolve({ kind: "refused" });
+    const facade = this.require();
+    return this.own(async () => {
+      try {
+        const entry = (await facade.messages()).find((entry) => entry.id === id);
+        if (!bound.alive) return { kind: "refused" } as const;
+        await facade.deleteMessage(id);
+        if (entry) await this.presentationFor(bound.context).remove(entry.taskID);
+        return bound.alive ? { kind: "ok" } as const : { kind: "refused" } as const;
+      } catch (error) { this.deps.reportFailure?.(error); return { kind: "failed", reason: "storage-unreadable" } as const; }
+    });
+  }
+
+  markRead(taskIDs: readonly string[]): Promise<InboxSimpleOutcome> {
+    if (this.#disposed || this.#fenced) return Promise.resolve({ kind: "refused" });
+    const snapshot = new Set(taskIDs); const bound = this.live();
+    if (bound === "needs-account") return Promise.resolve({ kind: "refused" });
+    const facade = this.require();
+    return this.own(async () => {
+      try {
+        const [messages, files] = await Promise.all([facade.messages(), this.presentationFor(bound.context).list()]);
+        if (!bound.alive) return { kind: "refused" } as const;
+        const known = [...messages.map((entry) => entry.taskID), ...files.map((entry) => entry.taskID)].filter((id) => snapshot.has(id));
+        await this.presentationFor(bound.context).markRead(known, this.now());
+        return bound.alive ? { kind: "ok" } as const : { kind: "refused" } as const;
+      } catch (error) { this.deps.reportFailure?.(error); return { kind: "failed", reason: "storage-unreadable" } as const; }
     });
   }
 

@@ -98,6 +98,12 @@ export type MessageKey =
   | "resident.login.confirmBody"
   | "resident.login.confirm"
   | "resident.login.cancel"
+  | "recovery.discard.title"
+  | "recovery.discard.body"
+  | "recovery.discard.unknownBody"
+  | "recovery.discard.confirm"
+  | "recovery.discard.inboxBody"
+  | "recovery.discard.inboxUnknownBody"
   | "resident.quit.transferTitle"
   | "resident.quit.transferBody"
   | "resident.quit.localTextTitle"
@@ -282,6 +288,12 @@ export const EN: Catalog = {
     "Relayium will be added to your Windows startup programs. You can remove it here or in Task Manager at any time.",
   "resident.login.confirm": "Add to startup",
   "resident.login.cancel": "Cancel",
+  "recovery.discard.title": "Discard this local recovery copy?",
+  "recovery.discard.body": "The encrypted files saved for this unfinished upload will be removed from this PC. You will need to select the originals to start again.",
+  "recovery.discard.unknownBody": "This upload may already have finished. Removing its local recovery copy cannot recall an uploaded file. The saved key is kept so the original result can still be checked.",
+  "recovery.discard.confirm": "Discard local copy",
+  "recovery.discard.inboxBody": "The encrypted copy of this unfinished device delivery will be removed from this PC. Select the originals to send a new delivery.",
+  "recovery.discard.inboxUnknownBody": "The upload or delivery may already have finished. This removes only the local encrypted copy and does not recall anything another device may have received. An unconfirmed task request is retained for later checking.",
   "resident.quit.transferTitle": "Quit while a transfer is running?",
   "resident.quit.transferBody": "The transfer will stop and will not finish.",
   "resident.quit.localTextTitle": "Quit with unsent text?",
@@ -409,6 +421,12 @@ export const ZH_HANS: Catalog = {
     "Relayium 将被添加到 Windows 启动项。你随时可以在这里或任务管理器中移除。",
   "resident.login.confirm": "添加到启动项",
   "resident.login.cancel": "取消",
+  "recovery.discard.title": "放弃这份本机恢复副本？",
+  "recovery.discard.body": "这次未完成上传的本机加密暂存将被删除。若要重新开始，需要再次选择原文件。",
+  "recovery.discard.unknownBody": "上传可能已经完成。删除本机恢复副本不能撤回已上传的文件；保存的密钥会保留，以便继续核对原来的结果。",
+  "recovery.discard.confirm": "放弃本机副本",
+  "recovery.discard.inboxBody": "这份未完成设备投递的本机加密副本将被删除。若要开始新投递，需要重新选择原内容。",
+  "recovery.discard.inboxUnknownBody": "上传或投递可能已经完成。此操作仅删除本机加密副本，不能撤回另一台设备可能已收到的内容。结果尚未确认的任务请求会保留，以便后续核对。",
   "resident.quit.transferTitle": "传输正在进行，仍要退出吗？",
   "resident.quit.transferBody": "传输将中止，且不会完成。",
   "resident.quit.localTextTitle": "还有未发送的文本，仍要退出吗？",

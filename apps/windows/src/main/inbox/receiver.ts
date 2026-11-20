@@ -229,6 +229,7 @@ export interface ReceiverKeys {
  */
 export interface DeliveredItems {
   readonly taskID: string;
+  readonly sourceDeviceID?: string;
   /** True for a message, which lands in the vault and has no names at all. */
   readonly text: boolean;
   /** How many items the manifest declared. */
@@ -920,7 +921,7 @@ export class Receiver {
     }
     let running: Promise<void>;
     try {
-      running = hook({ taskID: delivery.ID, text: plan.text, declared: plan.total, items });
+      running = hook({ taskID: delivery.ID, sourceDeviceID: delivery.SourceDeviceID, text: plan.text, declared: plan.total, items });
     } catch {
       // A hook that threw SYNCHRONOUSLY. Nothing is running and nothing is owed.
       return;

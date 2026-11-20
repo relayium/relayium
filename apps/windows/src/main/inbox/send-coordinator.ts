@@ -210,6 +210,9 @@ export interface SendJobInput {
   readonly authority: AuthorityInput;
 }
 
+/** Both live and durable-spool uploads share this lifecycle and frame contract. */
+export type InboxUploadDriver = Pick<UploadEngine, "feed" | "end" | "cancel" | "expects" | "progress" | "outcome">;
+
 export interface SendCoordinatorOptions {
   readonly plans: SendPlanStore;
   readonly tasks: SendTransport;
@@ -236,7 +239,7 @@ export interface SendCoordinatorOptions {
      * structurally subordinate to the tracked upload that created it.
      */
     onSession: (uploadID: string) => Promise<void>,
-  ): Promise<UploadEngine>;
+  ): Promise<InboxUploadDriver>;
   /** Seal the job's content key to a target's current public key. */
   sealToTarget(jobID: string, target: EligibleTarget): Promise<string>;
   /**
@@ -449,7 +452,7 @@ export class SendCoordinator {
    *      rather than the file;
    *   5. the exact request is durable BEFORE the create leaves this process.
    */
-  deliver(input: SendJobInput, feed: (engine: UploadEngine) => Promise<void>): SendDelivery {
+  deliver(input: SendJobInput, feed: (engine: InboxUploadDriver) => Promise<void>): SendDelivery {
     const job = this.admit(input.jobID, input.authority);
     try {
       this.validate(input);
@@ -488,6 +491,32 @@ export class SendCoordinator {
         this.runCreate(job).catch((error: unknown) => this.fromThrow(job, error, "resume-failed")),
       ),
     };
+  }
+
+  /** Explicit recovery of this plan's complete protected ciphertext. The
+   * callback may only reattach the original verified spool/session. The durable
+   * create request and idempotency key remain owned by this coordinator. */
+  resumePreparedUpload(jobID: string, authority: AuthorityInput, manifestDigest: string,
+    recover: (fence: Fence, onSession: (id: string) => Promise<void>) => Promise<UploadOutcome>): SendDelivery {
+    const job = this.admit(jobID, authority);
+    return { jobID, fence: job.fence, done: this.startPrimary(job, async () => {
+      const child = new Fence(job.fence.authority);
+      const inherit = () => child.revoke(job.fence.reason ?? "cancelled");
+      job.fence.signal.addEventListener("abort", inherit, { once: true });
+      if (!job.fence.valid) inherit();
+      try {
+        const plan = await this.options.plans.find(jobID); job.fence.assert();
+        if (!plan || plan.manifestDigest !== manifestDigest) throw new Error("send: recovery identity mismatch");
+        if (plan.taskID || plan.phase === "uploaded" || plan.phase === "creating") return await this.runCreate(job);
+        if (plan.phase !== "uploading" && plan.phase !== "upload-unknown") throw new Error("send: recovery is closed");
+        const outcome = await recover(child, (id) => this.recordUploadSession(job, child, id));
+        job.fence.assert();
+        if (outcome.status !== "published") return { kind: "unknown", reason: "upload-outcome-unresolved" } as const;
+        await this.options.plans.advance(jobID, "uploaded", { storedObjectID: outcome.objectId }, this.now());
+        return await this.runCreate(job);
+      } catch (error) { return this.fromThrow(job, error, "recovery-failed"); }
+      finally { child.revoke("job-settled"); job.fence.signal.removeEventListener("abort", inherit); }
+    }) };
   }
 
   /**
@@ -671,6 +700,14 @@ export class SendCoordinator {
       this.staleIdentity = true;
       this.admissionsClosed = true;
     }
+    return { quiet: await this.drain(this.revokedJobs(), this.invalidationDrainMs) };
+  }
+
+  /** The host retired the credential epoch, including when the account/device
+   * IDs stayed the same. This coordinator's captured bearer cannot be reused. */
+  async invalidateAuthority(): Promise<{ readonly quiet: boolean }> {
+    this.staleIdentity = true; this.admissionsClosed = true;
+    for (const job of this.jobs.values()) job.fence.revoke("account-changed");
     return { quiet: await this.drain(this.revokedJobs(), this.invalidationDrainMs) };
   }
 
@@ -882,7 +919,7 @@ export class SendCoordinator {
   }
 
   /** The whole sequence, with every terminal state expressed as an outcome. */
-  private async run(job: JobRecord, feed: (engine: UploadEngine) => Promise<void>): Promise<SendOutcome> {
+  private async run(job: JobRecord, feed: (engine: InboxUploadDriver) => Promise<void>): Promise<SendOutcome> {
     try {
       await this.prepare(job);
     } catch (error) {
@@ -902,6 +939,7 @@ export class SendCoordinator {
     switch (outcome.status) {
       case "published":
         break;
+      case "interrupted":
       case "ambiguous":
         // An object may exist that this side cannot name. Nothing is released
         // and the plan stays `upload-unknown`, which `discard` is the only exit
@@ -1044,7 +1082,7 @@ export class SendCoordinator {
    * `upload-unknown` records a finalize whose outcome was not observed — which
    * is never reported as "no object" and never settled on a guess.
    */
-  private async runUpload(job: JobRecord, feed: (engine: UploadEngine) => Promise<void>): Promise<UploadOutcome> {
+  private async runUpload(job: JobRecord, feed: (engine: InboxUploadDriver) => Promise<void>): Promise<UploadOutcome> {
     const input = job.input;
     if (input === null) throw new Error("send: this job has no staged intent");
     job.fence.assert();
@@ -1090,7 +1128,7 @@ export class SendCoordinator {
     if (!job.fence.valid) inherit();
     job.fence.signal.addEventListener("abort", inherit, { once: true });
     let outcome: UploadOutcome;
-    let engine: UploadEngine | null = null;
+    let engine: InboxUploadDriver | null = null;
     try {
       // `init` runs inside here and is bound to the child fence, so a revocation
       // during it aborts the request rather than being noticed afterwards.

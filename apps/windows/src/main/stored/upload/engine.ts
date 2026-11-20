@@ -47,7 +47,7 @@
 
 import type { StoredRuntime } from "../runtime-contract.js";
 import { AuthorityRevoked, Fence } from "./authority.js";
-import { frameLengthAt, type UploadPlan } from "./plan.js";
+import { FrameScheduleError, UploadFrameSchedule, type UploadPlan } from "./plan.js";
 import {
   UploadTransportError,
   type UploadByteTransport,
@@ -96,12 +96,14 @@ export class UploadFailure extends Error {
 
 export type UploadOutcome =
   /** Finalized. `objectId` is the server's, and the only thing a link may use. */
-  | { readonly status: "published"; readonly objectId: string; readonly expiresAt: number }
+  | { readonly status: "published"; readonly objectId: string; readonly expiresAt: number; readonly cleanupPending?: boolean }
   /**
    * The outcome could not be determined. An object MAY exist. The key is
    * retained and the journal record stays `ambiguous`.
    */
   | { readonly status: "ambiguous"; readonly code: UploadFailureCode }
+  /** Complete original ciphertext and its protected plan remain on this PC. */
+  | { readonly status: "interrupted"; readonly code: UploadFailureCode }
   /** Nothing was finalized, provably: finalize was never called. */
   | { readonly status: "failed"; readonly code: UploadFailureCode; readonly status_: number | null }
   | { readonly status: "cancelled" };
@@ -145,11 +147,6 @@ const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
 const backoff = (attempt: number): number =>
   Math.min(BACKOFF_BASE_MS * 2 ** (attempt - 1), BACKOFF_CAP_MS);
 
-interface Cursor {
-  file: number;
-  frameInFile: number;
-  seq: number;
-}
 
 export class UploadEngine {
   /** The replay buffer AND the pack buffer.
@@ -165,8 +162,11 @@ export class UploadEngine {
   private chunkStart = 0;
   /** What the server has acknowledged. */
   private committed = 0;
+  /** A resume may begin inside a frame. The complete original ciphertext
+   * frame is validated, then only its unacknowledged suffix enters the wire. */
+  private skipFromNextFrame = 0;
 
-  private readonly cursor: Cursor = { file: 0, frameInFile: 0, seq: 1 };
+  private readonly schedule: UploadFrameSchedule;
   private busy = false;
   private settled: UploadOutcome | null = null;
   /** The request currently in flight, so cancellation can JOIN it rather than
@@ -189,34 +189,7 @@ export class UploadEngine {
   ) {
     this.buffer = new Uint8Array(chunkSize + maxFrameBytes);
     this.signal = AbortSignal.any([this.aborter.signal, fence.signal]);
-    // The cursor must START on a file that owes a frame.
-    //
-    // It used to start at file 0 unconditionally, and the zero-skip only ran
-    // AFTER a frame had been consumed. So a manifest whose FIRST entry is
-    // empty — an empty folder, an empty file the user picked first — reported
-    // `expects === null` immediately, which reads as "nothing is owed" while
-    // the next file's frame was still required. Root's probe caught it:
-    // `[a-empty:0, b-data:1]` answered null instead of
-    // `{fileIndex: 1, seq: 1, bytes: 21}`.
-    this.settleCursor();
-  }
-
-  /**
-   * Advance the cursor to the next file that owes a frame.
-   *
-   * Called at construction and after every consumed frame, so `expects` is
-   * never asked about a file with no frames. Bounded by the manifest's file
-   * count, which `planManifest` caps at 1000 — an all-empty manifest settles
-   * past the end, which is exactly right: it owes no frames and is still a
-   * valid object to publish.
-   */
-  private settleCursor(): void {
-    while (this.cursor.file < this.plan.frames.length) {
-      const file = this.plan.frames[this.cursor.file];
-      if (file !== undefined && this.cursor.frameInFile < file.frameCount) return;
-      this.cursor.file += 1;
-      this.cursor.frameInFile = 0;
-    }
+    this.schedule = new UploadFrameSchedule(plan);
   }
 
   /**
@@ -265,6 +238,34 @@ export class UploadEngine {
     return this.settled;
   }
 
+  /** Reattach to a session whose offset was freshly read from the server.
+   * Callers must verify the complete persisted ciphertext before reaching this
+   * method. This never opens a second session or regenerates a nonce. */
+  static resume(input: {
+    readonly uploadId: string;
+    readonly chunkSize: number;
+    readonly received: number;
+    readonly runtime: StoredRuntime;
+    readonly plan: UploadPlan;
+    readonly transport: UploadByteTransport;
+    readonly fence: Fence;
+    readonly hooks?: EngineHooks;
+  }): UploadEngine {
+    if (!Number.isSafeInteger(input.received) || input.received < 0 || input.received > input.plan.cipherBytes) {
+      throw new UploadFailure("offset-invalid");
+    }
+    if (!Number.isSafeInteger(input.chunkSize) || input.chunkSize < 64 * 1024 || input.chunkSize > 16 * 1024 * 1024) {
+      throw new UploadFailure("internal");
+    }
+    input.fence.assert();
+    const engine = new UploadEngine(input.uploadId, input.chunkSize, input.plan, input.transport, input.fence,
+      input.hooks ?? {}, input.runtime.constants.storeChunkSize + input.runtime.constants.frameOverhead);
+    engine.chunkStart = input.received;
+    engine.committed = input.received;
+    engine.skipFromNextFrame = engine.schedule.seek(input.received);
+    return engine;
+  }
+
   /** Committed ciphertext bytes and the total this object owes. */
   get progress(): { readonly committed: number; readonly total: number } {
     return { committed: this.committed, total: this.plan.cipherBytes };
@@ -273,13 +274,7 @@ export class UploadEngine {
   /** What the producer must send next, so a host can drive it without keeping
    *  its own copy of the schedule. */
   get expects(): { readonly fileIndex: number; readonly seq: number; readonly bytes: number } | null {
-    const file = this.plan.frames[this.cursor.file];
-    if (file === undefined) return null;
-    // O(1) from the file's geometry — there is no list of frame lengths to
-    // index, by design.
-    const length = frameLengthAt(file, this.cursor.frameInFile);
-    if (length === null) return null;
-    return { fileIndex: this.cursor.file, seq: this.cursor.seq, bytes: length };
+    return this.schedule.next;
   }
 
   /**
@@ -300,8 +295,10 @@ export class UploadEngine {
     try {
       this.fence.assert();
       this.advanceCursorOver(frame);
-      this.buffer.set(frame.bytes, this.filled);
-      this.filled += frame.bytes.byteLength;
+      const suffix = frame.bytes.subarray(this.skipFromNextFrame);
+      this.skipFromNextFrame = 0;
+      this.buffer.set(suffix, this.filled);
+      this.filled += suffix.byteLength;
       if (this.filled >= this.chunkSize) await this.flush(false);
     } catch (error) {
       throw this.absorb(error);
@@ -312,29 +309,11 @@ export class UploadEngine {
 
   /** Validate one frame against the schedule and advance past it. */
   private advanceCursorOver(frame: CipherFrame): void {
-    const file = this.plan.frames[this.cursor.file];
-    if (file === undefined) throw this.fail("producer-overrun");
-    const expected = frameLengthAt(file, this.cursor.frameInFile);
-    if (expected === null) throw this.fail("producer-overrun");
-    if (frame.seq !== this.cursor.seq) throw this.fail("frame-sequence");
-    if (frame.fileIndex !== this.cursor.file) throw this.fail("frame-index");
-    if (frame.bytes.byteLength !== expected) throw this.fail("frame-length");
-    // The frame's own length prefix must agree with its length: the header is
-    // what a receiver reassembles by, so a frame whose prefix disagrees with
-    // its size would decrypt as garbage at the far end.
-    const declared = new DataView(
-      frame.bytes.buffer,
-      frame.bytes.byteOffset,
-      frame.bytes.byteLength,
-    ).getUint32(0, false);
-    if (declared !== frame.bytes.byteLength - 4) throw this.fail("frame-length");
-
-    this.cursor.seq += 1;
-    this.cursor.frameInFile += 1;
-    // Past every zero-byte file: they own no frames, so the next frame belongs
-    // to the next file that does. Same helper as the constructor uses, so the
-    // "first" case and the "next" case cannot diverge again.
-    this.settleCursor();
+    try { this.schedule.take(frame); }
+    catch (error) {
+      if (error instanceof FrameScheduleError) throw this.fail(error.code);
+      throw error;
+    }
   }
 
   /**
@@ -345,10 +324,14 @@ export class UploadEngine {
    */
   private async flush(force: boolean): Promise<void> {
     while (this.filled > 0 && (force || this.filled >= this.chunkSize)) {
-      const send = Math.min(this.filled, this.chunkSize);
       let attempt = 0;
       let stalled = 0;
       for (;;) {
+        // A status probe can consume all or part of the retained window after
+        // a lost response. Recompute from that NEW window: the old length can
+        // include stale buffer bytes, or send an empty window twice.
+        if (this.filled === 0) break;
+        const send = Math.min(this.filled, this.chunkSize);
         attempt += 1;
         this.fence.assert();
         const before = this.chunkStart;

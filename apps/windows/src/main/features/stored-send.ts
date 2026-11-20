@@ -44,6 +44,8 @@ import type {
   StoredSendHistoryEntry,
   StoredSendOutcome,
   StoredSendStart,
+  StoredSendRecoveryEntry,
+  StoredSendPhase,
 } from "../../shared/ipc-contract.js";
 
 /** The authority a send is admitted under. Captured, never looked up later. */
@@ -81,7 +83,7 @@ export interface StoredSendDeps {
   /** The current account epoch, read synchronously by the change watcher. */
   accountEpoch(): number;
   /** Progress and outcomes, emitted on the document that asked. */
-  onProgress?(job: { readonly id: string; readonly document: number }, committed: number, total: number): void;
+  onProgress?(job: { readonly id: string; readonly document: number }, committed: number, total: number, phase?: StoredSendPhase): void;
   onOutcome?(job: { readonly id: string; readonly document: number }, outcome: StoredSendOutcome): void;
   reportFailure?(err: unknown): void;
   /**
@@ -96,6 +98,7 @@ export interface StoredSendDeps {
   writeClipboard?(text: string): void;
   /** The document generation on screen, for the copy's liveness check. */
   currentDocument?(): number;
+  confirmRecoveryDiscard?(signal: AbortSignal, mayHaveFinished: boolean): Promise<boolean>;
   /**
    * The engine's own seams, declared here so a host can name them.
    *
@@ -393,9 +396,9 @@ export class StoredSendService {
         },
         descriptors,
         retention,
-        onProgress: (committed: number, total: number) => {
+        onProgress: (committed: number, total: number, phase?: StoredSendPhase) => {
           if (admission.control.signal.aborted) return;
-          this.deps.onProgress?.({ id: admission.jobId ?? "", document }, committed, total);
+          this.deps.onProgress?.({ id: admission.jobId ?? "", document }, committed, total, phase);
         },
       });
 
@@ -466,6 +469,69 @@ export class StoredSendService {
     return this.settle(jobId, async () => (await this.engine()).cancel(jobId));
   }
 
+  async recovery(): Promise<readonly StoredSendRecoveryEntry[] | null> {
+    return this.auxiliary(async (alive) => {
+      const authority = await this.deps.authority();
+      if (authority.kind === "signed-out") return [];
+      if (authority.kind !== "ok" || !alive()) return null;
+      const engine = await this.engine();
+      if (!alive()) return null;
+      const plans = await engine.recoveryPlans(authority.authority.accountId, this.deps.origin, true);
+      const entries: StoredSendRecoveryEntry[] = [];
+      for (const plan of plans) {
+        const record = await engine.record(plan.jobId);
+        if (!alive()) return null;
+        entries.push({ jobId: plan.jobId, revision: plan.revision,
+          phase: plan.phase === "published" ? "cleanup" : plan.phase === "preparing" ? "preparing" : plan.phase === "finalizing" ? "unconfirmed" : "ready",
+          canResume: !!record && record.accountId === authority.authority.accountId && record.state !== "closed" && plan.phase !== "preparing" && plan.phase !== "published",
+          fileCount: plan.descriptors.length, totalBytes: plan.descriptors.reduce((sum, file) => sum + file.size, 0),
+          createdAt: plan.createdAt, files: plan.descriptors.slice(0, 8).map((file) => ({ name: file.path, size: file.size })),
+        });
+      }
+      return entries.sort((a, b) => b.createdAt - a.createdAt);
+    }, null);
+  }
+
+  async discardRecovery(jobId: string, revision: number): Promise<"discarded" | "declined" | "refused" | "failed"> {
+    return this.auxiliary(async (alive, signal) => {
+      const authority = await this.deps.authority();
+      if (authority.kind !== "ok" || !alive()) return "refused";
+      const engine = await this.engine();
+      if (!alive()) return "refused";
+      return engine.discardRecovery({ jobId, revision, accountId: authority.authority.accountId, origin: this.deps.origin, signal,
+        confirm: async (signal, mayHaveFinished) => alive() && (await this.deps.confirmRecoveryDiscard?.(signal, mayHaveFinished)) === true,
+      });
+    }, "refused");
+  }
+
+  async resumeRecovery(jobId: string, revision: number, document: number): Promise<StoredSendOutcome> {
+    if (this.#disposed || this.#fenced || this.#admissions.size >= MAX_ACTIVE_JOBS) return { status: "ambiguous", code: "unavailable" };
+    let markSettled!: () => void;
+    const settled = new Promise<void>((resolve) => { markSettled = resolve; });
+    const admission: Admission = { jobId: null, document, epoch: this.deps.accountEpoch(), control: new AbortController(), settled, markSettled };
+    this.#admissions.add(admission);
+    try {
+      const authority = await this.deps.authority();
+      if (authority.kind !== "ok" || authority.authority.epoch !== admission.epoch || admission.control.signal.aborted) {
+        return { status: "ambiguous", code: "unavailable" };
+      }
+      const engine = await this.engine();
+      if (admission.control.signal.aborted || this.#disposed || this.#fenced) return { status: "ambiguous", code: "unavailable" };
+      if ([...this.#admissions].some((other) => other !== admission && other.jobId === jobId)) return { status: "ambiguous", code: "unavailable" };
+      admission.jobId = jobId;
+      return await this.settle(jobId, () => engine.resume({ jobId, revision,
+        authority: { accountId: authority.authority.accountId, deviceId: authority.authority.deviceId,
+          documentId: String(document), origin: this.deps.origin, bearer: authority.authority.bearer },
+        onProgress: (committed, total, phase) => {
+          if (!admission.control.signal.aborted) this.deps.onProgress?.({ id: jobId, document }, committed, total, phase);
+        },
+      }));
+    } catch (error) {
+      this.deps.reportFailure?.(error);
+      return { status: "ambiguous", code: "internal" };
+    } finally { this.#admissions.delete(admission); this.retire(admission); }
+  }
+
   private async settle(jobId: string, run: () => Promise<UploadOutcome>): Promise<StoredSendOutcome> {
     const job = [...this.#admissions].find((entry) => entry.jobId === jobId);
     try {
@@ -484,7 +550,7 @@ export class StoredSendService {
     } finally {
       // Released only once the engine has actually settled it, so a teardown
       // joining this job is joining something that has stopped.
-      if (job !== undefined) {
+      if (job !== undefined && !this.built()?.isLive?.(jobId)) {
         this.#admissions.delete(job);
         this.retire(job);
       }
@@ -556,7 +622,7 @@ export class StoredSendService {
    * request a quiesce reports as finished while it is still going out.
    */
   private async auxiliary<T>(
-    body: (check: () => boolean) => Promise<T>,
+    body: (check: () => boolean, signal: AbortSignal) => Promise<T>,
     refused: T,
   ): Promise<T> {
     if (this.#disposed || this.#fenced) return refused;
@@ -578,7 +644,7 @@ export class StoredSendService {
       !this.#fenced &&
       this.deps.accountEpoch() === operation.epoch;
     try {
-      const answer = await body(alive);
+      const answer = await body(alive, operation.control.signal);
       return alive() ? answer : refused;
     } catch (err) {
       this.deps.reportFailure?.(err);
@@ -753,9 +819,12 @@ export class StoredSendService {
 function describeOutcome(outcome: UploadOutcome): StoredSendOutcome {
   switch (outcome.status) {
     case "published":
-      return { status: "published", objectId: outcome.objectId, expiresAt: outcome.expiresAt };
+      return { status: "published", objectId: outcome.objectId, expiresAt: outcome.expiresAt,
+        ...(outcome.cleanupPending ? { cleanupPending: true } : {}) };
     case "ambiguous":
       return { status: "ambiguous", code: outcome.code };
+    case "interrupted":
+      return { status: "interrupted", code: outcome.code };
     case "failed":
       return { status: "failed", code: outcome.code };
     default:

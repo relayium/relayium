@@ -117,6 +117,56 @@ export function frameLengthAt(file: FileFrames, frameInFile: number): number | n
   return frameInFile < file.fullFrames ? file.fullBytes : file.tailBytes;
 }
 
+export type FrameScheduleCode = "producer-overrun" | "frame-sequence" | "frame-index" | "frame-length" | "offset-invalid";
+export class FrameScheduleError extends Error {
+  constructor(readonly code: FrameScheduleCode) { super(code); }
+}
+
+/** Shared by local preparation and network upload: one ordered frame/nonce
+ * schedule, including zero-byte files and a restart inside an existing frame. */
+export class UploadFrameSchedule {
+  private file = 0;
+  private frame = 0;
+  private seq = 1;
+  constructor(private readonly plan: UploadPlan) { this.settle(); }
+  private settle(): void {
+    while (this.file < this.plan.frames.length && this.frame >= this.plan.frames[this.file]!.frameCount) {
+      this.file++; this.frame = 0;
+    }
+  }
+  get next(): { readonly fileIndex: number; readonly seq: number; readonly bytes: number } | null {
+    const file = this.plan.frames[this.file];
+    if (!file) return null;
+    const length = frameLengthAt(file, this.frame);
+    return length === null ? null : { fileIndex: this.file, seq: this.seq, bytes: length };
+  }
+  take(frame: { readonly fileIndex: number; readonly seq: number; readonly bytes: Uint8Array }): void {
+    const next = this.next;
+    if (!next) throw new FrameScheduleError("producer-overrun");
+    if (frame.seq !== next.seq) throw new FrameScheduleError("frame-sequence");
+    if (frame.fileIndex !== next.fileIndex) throw new FrameScheduleError("frame-index");
+    if (frame.bytes.length !== next.bytes || frame.bytes.length < 4
+      || new DataView(frame.bytes.buffer, frame.bytes.byteOffset, frame.bytes.byteLength).getUint32(0, false) !== frame.bytes.length - 4) {
+      throw new FrameScheduleError("frame-length");
+    }
+    this.seq++; this.frame++; this.settle();
+  }
+  /** Returns how many already-committed bytes to skip in the next full frame. */
+  seek(offset: number): number {
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > this.plan.cipherBytes) throw new FrameScheduleError("offset-invalid");
+    this.file = this.plan.frames.length; this.frame = 0; this.seq = 1;
+    let remaining = offset;
+    for (const file of this.plan.frames) {
+      const bytes = file.fullFrames * file.fullBytes + file.tailBytes;
+      if (remaining >= bytes) { remaining -= bytes; this.seq += file.frameCount; continue; }
+      const full = file.fullBytes > 0 ? Math.min(file.fullFrames, Math.floor(remaining / file.fullBytes)) : 0;
+      this.file = file.index; this.frame = full; this.seq += full;
+      return remaining - full * file.fullBytes;
+    }
+    return 0;
+  }
+}
+
 /**
  * Validate an ordered descriptor list and derive the whole send schedule.
  *

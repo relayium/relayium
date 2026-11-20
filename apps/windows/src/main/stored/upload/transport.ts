@@ -168,6 +168,12 @@ export interface UploadRetention {
   readonly ttlSeconds: number;
 }
 
+export type FinalizeRecoveryReceipt =
+  | { readonly outcome: "finalized"; readonly id: string; readonly expiresAt: number }
+  | { readonly outcome: "running" }
+  | { readonly outcome: "terminal"; readonly reason: "failed" | "expired" | "removed" }
+  | { readonly outcome: "unconfirmed" };
+
 const isAbort = (error: unknown): boolean => {
   const name = (error as { name?: unknown } | null)?.name;
   return name === "AbortError" || name === "TimeoutError";
@@ -466,6 +472,37 @@ export class UploadTransport implements UploadByteTransport {
     if (typeof id !== "string" || !OBJECT_ID.test(id) || expiresAt === null) {
       throw new UploadTransportError("malformed");
     }
+    return { outcome: "finalized", id, expiresAt };
+  }
+
+  /** The server's durable session-to-object binding is the only recovery
+   * authority. Legacy/unknown conflicts remain unconfirmed; no object or new
+   * upload is inferred from a 409, 404 or a missing list entry. */
+  async finalizeRecoverable(uploadId: string, signal?: AbortSignal): Promise<FinalizeRecoveryReceipt> {
+    const response = await this.send(this.url(`/api/uploads/${this.checkedId(uploadId)}/finalize`), {
+      method: "POST", headers: this.headers({ "content-type": "application/json" }),
+      body: JSON.stringify({ recoverFinalized: true }),
+    }, withDeadline(this.requestTimeoutMs, signal), signal);
+    if (!response.ok && response.status !== 409) {
+      await UploadTransport.drop(response);
+      throw new UploadTransportError("http", response.status);
+    }
+    let parsed;
+    try { parsed = await this.json(response, MAX_JSON_BYTES, signal); }
+    catch (error) {
+      if (response.status === 409 && error instanceof UploadTransportError && error.code === "malformed") return { outcome: "unconfirmed" };
+      throw error;
+    }
+    if (!isRecord(parsed)) throw new UploadTransportError("malformed");
+    if (response.status === 409) {
+      const outcome = parsed["outcome"];
+      if (outcome === "running") return { outcome: "running" };
+      if (outcome === "failed" || outcome === "expired" || outcome === "removed") return { outcome: "terminal", reason: outcome };
+      return { outcome: "unconfirmed" };
+    }
+    const id = parsed["id"];
+    const expiresAt = integer(parsed["expiresAt"]);
+    if (typeof id !== "string" || !OBJECT_ID.test(id) || expiresAt === null) throw new UploadTransportError("malformed");
     return { outcome: "finalized", id, expiresAt };
   }
 
