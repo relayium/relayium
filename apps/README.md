@@ -86,6 +86,10 @@ the public URLs determine the version currently offered.
   Authenticode credential in this repository and the lane builds an unsigned
   NSIS installer as build evidence only.
 
+  For personal-machine testing and an executable handoff to a Windows-local
+  AI, see [Windows local QA](windows/TESTING.md). `npm run qa` records source,
+  individual logs and skips without installing the app or changing OS accounts.
+
   The current internal candidate is `0.0.2` x64, built from source `15466b04`
   in hosted run `35519546403`: installer SHA-256
   `5b822b592d29ea4aed66b2ffd72b87f21f391671e06ffa7860a23d1f9eeb08c1`,
