@@ -509,17 +509,25 @@ func (s *Service) RegisterAdmin(root *http.ServeMux) {
 		return
 	}
 	mux := http.NewServeMux()
-	guarded := s.adminAccessGuard(mux)
+	guarded := s.adminAccessGuard(s.adminBrowserGuard(mux))
 	root.Handle(s.AdminPath(), guarded)
 	root.Handle(s.AdminPath()+"/", guarded)
 	if s.AdminPath() != DefaultAdminPath {
-		root.Handle(DefaultAdminPath, http.NotFoundHandler())
-		root.Handle(DefaultAdminPath+"/", http.NotFoundHandler())
+		var legacy http.Handler = http.NotFoundHandler()
+		if s.cfg.AdminLegacyTrap {
+			legacy = s.adminLegacyTrap()
+		}
+		root.Handle(DefaultAdminPath, legacy)
+		root.Handle(DefaultAdminPath+"/", legacy)
 	}
 	// State-changing admin form posts go through the same Origin-based CSRF
 	// guard as the API. The admin panel is server-rendered same-origin HTML, so
 	// legitimate submissions carry a matching Origin; a cross-site forgery does
 	// not. GET /admin (the login/dashboard page) is a safe method, left alone.
+	if s.cfg.AdminBrowserRequired {
+		mux.HandleFunc("GET "+s.AdminPath()+adminBrowserAuthorizePath, s.handleAdminBrowserAuthorizePage)
+		mux.Handle("POST "+s.AdminPath()+adminBrowserAuthorizePath, s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminBrowserAuthorize))))
+	}
 	mux.HandleFunc("GET "+s.AdminPath(), s.handleAdminHome)
 	mux.HandleFunc("GET "+s.AdminPath()+"/users", s.handleAdminUsers)
 	mux.HandleFunc("GET "+s.AdminPath()+"/fleet", s.handleAdminFleet)

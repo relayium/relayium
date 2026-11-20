@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	ossignal "os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -391,6 +392,8 @@ func main() {
 	appleServerAPIProbe := flag.Bool("apple-server-api-probe", false, "probe App Store Server API credentials and TEST delivery for every configured app/environment, then exit")
 	appleServerAPIProbeEnvironment := flag.String("apple-server-api-probe-environment", "all", "probe target: all, Production, or Sandbox (used only with -apple-server-api-probe)")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
+	adminBrowserRequiredFlag := flag.String("admin-browser-required", envStr("RELAYIUM_ADMIN_BROWSER_REQUIRED", "false"), "require a locally authorized browser profile before admin access (true/false)")
+	adminLegacyTrapFlag := flag.String("admin-legacy-trap", envStr("RELAYIUM_ADMIN_LEGACY_TRAP", "false"), "permanently ban admin access for visits to retired /admin (requires custom path and IP allowlist)")
 	adminAllowedIPs := flag.String("admin-allowed-ips", envStr("RELAYIUM_ADMIN_ALLOWED_IPS", ""), "admin IP allowlist; empty disables IP restriction")
 	adminTrustedProxies := flag.String("admin-trusted-proxies", envStr("RELAYIUM_ADMIN_TRUSTED_PROXIES", ""), "trusted admin proxy IPs/CIDRs; empty ignores forwarded headers")
 	adminPathFlag := flag.String("admin-path", envStr("RELAYIUM_ADMIN_PATH", ""), "admin console path (default /admin); keep deployment values in server configuration")
@@ -499,6 +502,17 @@ func main() {
 		log.Fatal(err)
 	}
 	if _, err := account.ParseAdminAccessPolicy(*adminAllowedIPs, *adminTrustedProxies); err != nil {
+		log.Fatal(err)
+	}
+	adminBrowserRequired, err := strconv.ParseBool(*adminBrowserRequiredFlag)
+	if err != nil {
+		log.Fatal("invalid admin-browser-required: expected true or false")
+	}
+	adminLegacyTrap, err := strconv.ParseBool(*adminLegacyTrapFlag)
+	if err != nil {
+		log.Fatal("invalid admin-legacy-trap: expected true or false")
+	}
+	if err := account.ValidateAdminBrowserPolicy(adminPath, *adminAllowedIPs, adminLegacyTrap); err != nil {
 		log.Fatal(err)
 	}
 	legacyPass, legacyTOTP := legacyAdminSecretsSet(*adminPass, *adminTOTPSecret)
@@ -917,6 +931,7 @@ func main() {
 	var readyBlobs *storage.DiskStore
 
 	mux := http.NewServeMux()
+	var adminTrapGuard func(http.Handler) http.Handler
 	// Liveness and readiness. The bodies, statuses, exact route patterns and the
 	// two-second database bound are frozen in contracts/ops-deploy-v1.json,
 	// because the production deploy path polls /readyz and treats anything else
@@ -986,6 +1001,8 @@ func main() {
 			AdminUser:            *adminUser,
 			AdminEnabled:         adminEnabled,
 			AdminPath:            adminPath,
+			AdminBrowserRequired: adminBrowserRequired,
+			AdminLegacyTrap:      adminLegacyTrap,
 			AdminAllowedIPs:      *adminAllowedIPs,
 			AdminTrustedProxies:  *adminTrustedProxies,
 			MaxFileSize:          *maxFileSize,
@@ -1296,6 +1313,7 @@ func main() {
 		}
 		mux.Handle("/api/", acct.Routes())
 		acct.RegisterAdmin(mux)
+		adminTrapGuard = acct.AdminLegacyTrapGuard
 		acct.RegisterDevicePage(mux) // GET /device on the root mux (see RegisterDevicePage)
 
 		if *stripeSecretKey != "" {
@@ -1337,6 +1355,10 @@ func main() {
 	// shell (which is served as a plain file). Recomputed from the built files,
 	// so a Vite rebuild never silently breaks the policy.
 	spaHashes := spaScriptHashes(*static)
+	var rootHandler http.Handler = mux
+	if adminTrapGuard != nil {
+		rootHandler = adminTrapGuard(rootHandler)
+	}
 
 	// Explicit timeouts instead of http.ListenAndServe's unbounded defaults.
 	// ReadHeaderTimeout caps the request-header read phase, which is the Slowloris
@@ -1348,7 +1370,7 @@ func main() {
 	// detects dead peers instead).
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           securityHeaders(spaHashes, mux),
+		Handler:           securityHeaders(spaHashes, rootHandler),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

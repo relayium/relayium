@@ -4,7 +4,7 @@
 // It is the ONLY way to add, approve or revoke an admin passkey and to sign
 // every admin session out. It has no network listener and exposes nothing over
 // HTTP: it runs in a shell on the server, opens the server's SQLite file
-// directly (account.OpenAdminAuthStore — admin tables only, no server boot
+// directly (account.OpenAdminAuthStore — admin tables plus explicit version-policy maintenance, no server boot
 // jobs, no customer reads or writes), and exits. Whoever can run it can already
 // read the database file, so it adds no privilege that shell access did not
 // have.
@@ -49,6 +49,14 @@ Commands:
   credentials revoke ID [--allow-last]     delete a passkey and end every session it opened
   sessions list                            live admin sessions (no tokens)
   sessions revoke-all                      end every session, confirmation and open enrollment
+
+  version-policy refresh-macos --expected-revision N
+                                           advance macOS recommendation/latest, preserve minima, audit locally
+
+  browsers start --name NAME [--ttl 15m]   print a one-time browser authorization link
+  browsers list                           authorized browser profiles (no tokens)
+  browsers revoke ID                      revoke a browser profile
+  browsers cancel GRANT_ID                cancel an unused browser link
 
   ip-access list                           denied IPs and permanent bans
   ip-access unblock IP                     clear one IP record (local server only)
@@ -104,6 +112,10 @@ func run(args []string, stdout, stderr io.Writer, now func() time.Time, tty bool
 		err = e.enroll(rest[1:])
 	case "credentials":
 		err = e.credentials(rest[1:])
+	case "version-policy":
+		err = e.refreshMacPolicy(rest[1:])
+	case "browsers":
+		err = e.browsers(rest[1:])
 	case "ip-access":
 		err = e.ipAccess(rest[1:])
 	case "sessions":
@@ -133,6 +145,8 @@ func (u usageError) Error() string { return u.msg }
 func (e *env) sub(name string, args []string, define func(*flag.FlagSet)) (*flag.FlagSet, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(e.errw)
+	// Deployment paths and database locations must never become help defaults.
+	fs.Usage = func() { fmt.Fprint(e.errw, usage) }
 	fs.StringVar(&e.adminPath, "admin-path", e.adminPath, "admin console path (default /admin)")
 	fs.StringVar(&e.db, "db", e.db, "path of the server's SQLite database")
 	fs.StringVar(&e.baseURL, "base-url", e.baseURL, "the server's public base URL")
@@ -589,5 +603,101 @@ func (e *env) ipAccess(args []string) error {
 	for _, row := range rows {
 		fmt.Fprintf(e.out, "%s attempts=%d banned=%t\n", row.IP, row.Attempts, row.Attempts >= 4)
 	}
+	return nil
+}
+
+func (e *env) browsers(args []string) error {
+	if len(args) == 0 {
+		return usageError{"browsers requires start, list, revoke ID or cancel GRANT_ID"}
+	}
+	var name string
+	var ttl time.Duration
+	var allowNonTTY bool
+	fs, err := e.sub("browsers", args[1:], func(fs *flag.FlagSet) {
+		if args[0] == "start" {
+			fs.StringVar(&name, "name", "", "browser profile label")
+			fs.DurationVar(&ttl, "ttl", 15*time.Minute, "authorization link lifetime, 1m-1h")
+			fs.BoolVar(&allowNonTTY, "allow-non-terminal", false, "explicitly allow printing the secret one-time link to non-terminal stdout")
+		}
+	})
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "start", "list":
+		if fs.NArg() != 0 {
+			return usageError{"unexpected browser arguments"}
+		}
+	case "revoke", "cancel":
+		if fs.NArg() != 1 {
+			return usageError{"exactly one browser/grant ID is required"}
+		}
+	default:
+		return usageError{"unknown browser command"}
+	}
+	if args[0] == "start" && !e.tty && !allowNonTTY {
+		return usageError{"stdout is not a terminal; refusing to print the secret browser link (use --allow-non-terminal explicitly)"}
+	}
+	var origin string
+	if args[0] == "start" {
+		origin, _, err = e.binding()
+		if err != nil {
+			return err
+		}
+	}
+	st, err := e.open()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	ctx := context.Background()
+	switch args[0] {
+	case "start":
+		g, err := st.StartBrowserGrant(ctx, name, origin, e.adminPath, ttl, e.now().Unix(), actor())
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(e.out, "Browser grant %s for %q; expires at %s.\nSecret one-time link (keep private):\n%s%s/authorize-browser#%s\n", g.ID, g.Name, ts(g.ExpiresAt), origin, e.adminPath, g.Token)
+	case "list":
+		rows, err := st.ListBrowsers(ctx)
+		if err != nil {
+			return err
+		}
+		for _, b := range rows {
+			fmt.Fprintf(e.out, "%s name=%q expires=%s revoked=%s\n", b.ID, b.Name, ts(b.ExpiresAt), ts(b.RevokedAt))
+		}
+	case "revoke", "cancel":
+		if err := st.ChangeBrowserAuthorization(ctx, fs.Arg(0), args[0] == "cancel", e.now().Unix(), actor()); err != nil {
+			return err
+		}
+		fmt.Fprintln(e.out, "Browser authorization updated.")
+	}
+	return nil
+}
+
+func (e *env) refreshMacPolicy(args []string) error {
+	if len(args) == 0 || args[0] != "refresh-macos" {
+		return usageError{"use version-policy refresh-macos --expected-revision N"}
+	}
+	var expected int64
+	fs, err := e.sub("version-policy refresh-macos", args[1:], func(fs *flag.FlagSet) {
+		fs.Int64Var(&expected, "expected-revision", 0, "required current policy revision; stale values are refused")
+	})
+	if err != nil {
+		return err
+	}
+	if expected < 1 || fs.NArg() != 0 {
+		return usageError{"--expected-revision must name the current positive revision; no positional arguments"}
+	}
+	st, err := e.open()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	p, err := st.RefreshMacVersionPolicy(context.Background(), expected, e.now().Unix(), actor())
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(e.out, "Operational policy revision %d: macOS recommended=%s latest=%s; minimums unchanged (%s build %d, fleet %s).\n", p.Revision, p.MacRecommendedVersion, p.MacLatestVersion, p.MacMinimumVersion, p.MacMinimumBuild, p.FleetMinimumVersion)
 	return nil
 }

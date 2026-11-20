@@ -167,6 +167,11 @@ var adminAuthSchemaAlter = []string{
 }
 
 func ensureAdminAuthSchema(ctx context.Context, db *sql.DB) error {
+	for _, q := range adminBrowserSchema {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("admin browser schema: %w", err)
+		}
+	}
 	for _, q := range adminAuthSchemaCreate {
 		if _, err := db.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("admin auth schema: %w", err)
@@ -504,7 +509,7 @@ func (s *SQLiteStore) AdminAuth() *AdminAuthStore { return &AdminAuthStore{db: s
 
 // AdminAuthStore is the privileged, local-only admin credential manager. It is
 // never reachable over HTTP. OpenAdminAuthStore opens an EXISTING server
-// database touching only admin_* tables: no customer table is read or written,
+// database initializing only admin_* tables: no customer table is read or written,
 // no server boot job runs, no network or mail is initialised.
 type AdminAuthStore struct {
 	db    *sql.DB

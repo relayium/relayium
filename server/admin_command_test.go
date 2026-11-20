@@ -246,3 +246,37 @@ func TestAdminDeploymentSettingsNotPrintedByHelp(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminSecuritySwitchValidationBeforeDatabaseOpen(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-admin-browser-required", "maybe"}, "invalid admin-browser-required"},
+		{[]string{"-admin-legacy-trap", "maybe"}, "invalid admin-legacy-trap"},
+		{[]string{"-admin-legacy-trap", "true", "-admin-allowed-ips", "192.0.2.10"}, "trap requires"},
+		{[]string{"-admin-legacy-trap", "true", "-admin-path", "/console-test"}, "trap requires"},
+	} {
+		dir := t.TempDir()
+		db := filepath.Join(dir, "must-not-exist.db")
+		envFile := filepath.Join(dir, "empty.env")
+		if err := os.WriteFile(envFile, nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(os.Args[0], "-test.run=^TestAdminDispatchHelperProcess$")
+		cmd.Dir = dir
+		for _, entry := range os.Environ() {
+			if !strings.HasPrefix(entry, "RELAYIUM_") {
+				cmd.Env = append(cmd.Env, entry)
+			}
+		}
+		cmd.Env = append(cmd.Env, "RELAYIUM_ENV_FILE="+envFile, "RELAYIUM_TEST_MAIN_ARGS="+strings.Join(append(c.args, "-db", db), "\x1f"))
+		out, err := cmd.CombinedOutput()
+		if err == nil || !strings.Contains(string(out), c.want) {
+			t.Fatalf("bad config accepted: %v %s", err, out)
+		}
+		if _, err := os.Stat(db); !os.IsNotExist(err) {
+			t.Fatal("database opened before validation", err)
+		}
+	}
+}
