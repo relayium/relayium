@@ -107,7 +107,7 @@ describe("complete ciphertext recovery store", () => {
     try { await expect(store.verify(plan, control.signal)).rejects.toBe(reason); expect(reads).toBe(1); }
     finally { spy.mockRestore(); }
     await store.verify(plan);
-    expect(await readFile(join(path, "cipher.bin"))).toEqual(Buffer.from(body));
+    expect((await readFile(join(path, "cipher.bin"))).equals(body)).toBe(true);
   });
 
   it("never replaces a lost protected key beside existing recovery data", async () => {
