@@ -51,10 +51,14 @@ const ANDROID = JSON.parse(
 const ANDROID_AVAILABLE =
   ANDROID.available === true && Boolean(ANDROID.downloadUrl) && Boolean(ANDROID.versionName);
 
+const WINDOWS = JSON.parse(readFileSync(resolve(process.cwd(), "windows-release.json"), "utf8")).windows;
+const WINDOWS_AVAILABLE = WINDOWS.available === true && Boolean(WINDOWS.version) && Boolean(WINDOWS.downloadUrl)
+  && /^[a-f0-9]{64}$/.test(WINDOWS.sha256 ?? "") && Number.isSafeInteger(WINDOWS.size) && WINDOWS.size > 0;
+
 const en = {
-  title: "Get Relayium — Web, CLI, macOS and Android",
+  title: "Get Relayium — Web, CLI, macOS, Windows and Android",
   description:
-    "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app or the Android preview APK. End-to-end encrypted file and ephemeral text transfer.",
+    "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app, the unsigned Windows desktop preview or the Android preview APK. End-to-end encrypted file and ephemeral text transfer.",
   hero: {
     h1: "Get Relayium",
     pitch:
@@ -104,7 +108,7 @@ const en = {
       },
       {
         title: "Every other platform",
-        desc: "iPhone, iPad, Windows and Linux use Relayium through the browser — the same end-to-end encrypted transfer, with nothing to install. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no app for those platforms.",
+        desc: "iPhone, iPad, Windows and Linux use Relayium through the browser — the same end-to-end encrypted transfer, with nothing to install. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Windows also has an unsigned desktop preview; there is no public iPhone or iPad app.",
       },
     ],
   },
@@ -135,7 +139,7 @@ const en = {
       },
       {
         title: "On every other platform, the browser is the app",
-        body: "iPhone, iPad, Windows and Linux all open relayium.com and get the same end-to-end encrypted transfer, with nothing to install and nothing to update. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no client for those platforms, so the web app is not a fallback there — it is the product. On Android the browser works the same way, and there is additionally a direct-APK preview that does the whole job natively — pairing transfers either direction, nearby devices, Device Inbox and encrypted links — while the app is open.",
+        body: "iPhone, iPad, Windows and Linux all open relayium.com and get the same end-to-end encrypted transfer, with nothing to install and nothing to update. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Windows also has an unsigned desktop preview. There is no public iPhone or iPad app. On Android the browser works the same way, and there is additionally a direct-APK preview that does the whole job natively — pairing transfers either direction, nearby devices, Device Inbox and encrypted links — while the app is open.",
       },
     ],
   },
@@ -144,9 +148,9 @@ const en = {
 };
 
 const zh = {
-  title: "获取 Relayium——网页版、命令行、macOS 与 Android",
+  title: "获取 Relayium——网页版、命令行、macOS、Windows 与 Android",
   description:
-    "在任意现代浏览器里使用 Relayium，在 macOS、Linux 或 Windows 上安装命令行工具，或下载原生 macOS 应用与 Android 预览版 APK。端到端加密传输文件与临时文本。",
+    "在任意现代浏览器里使用 Relayium，在 macOS、Linux 或 Windows 上安装命令行工具，或下载原生 macOS 应用、未签名 Windows 桌面预览版与 Android 预览版 APK。端到端加密传输文件与临时文本。",
   hero: {
     h1: "获取 Relayium",
     pitch: "同一套端到端加密的传输，既传文件也发临时文本，随处可用。选择你的平台。",
@@ -192,7 +196,7 @@ const zh = {
       },
       {
         title: "其他所有平台",
-        desc: "iPhone、iPad、Windows 与 Linux 都通过浏览器使用 Relayium——同一套端到端加密传输，无需安装。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布任何客户端程序。",
+        desc: "iPhone、iPad、Windows 与 Linux 都通过浏览器使用 Relayium——同一套端到端加密传输，无需安装。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Windows 另有未签名桌面预览版；iPhone 和 iPad 暂无公开客户端。",
       },
     ],
   },
@@ -212,7 +216,7 @@ const zh = {
       },
       {
         title: "在其他平台上，浏览器就是那个应用",
-        body: "iPhone、iPad、Windows 与 Linux 打开 relayium.com，得到的就是同一套端到端加密传输，不用安装，也不用更新。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布客户端，所以在那里网页版不是退而求其次的方案——它就是产品本身。在 Android 上浏览器同样如此，另外还有一个以 APK 直接分发的预览版，在应用打开时原生完成整套工作——双向配对传输、附近设备、设备收件箱与加密链接。",
+        body: "iPhone、iPad、Windows 与 Linux 打开 relayium.com，得到的就是同一套端到端加密传输，不用安装，也不用更新。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Windows 另有未签名桌面预览版；iPhone 和 iPad 暂无公开客户端。在 Android 上浏览器同样如此，另外还有一个以 APK 直接分发的预览版，在应用打开时原生完成整套工作——双向配对传输、附近设备、设备收件箱与加密链接。",
       },
     ],
   },
@@ -663,6 +667,18 @@ const androidDownloadLabels = {
 };
 
 const langs = { en, zh, ja, ko, de, fr, ar, es, pt };
+for (const [code, doc] of Object.entries({ en, zh })) {
+  const preview = code === "zh"
+    ? "Windows 桌面预览版：x64，未签名，可在应用内输入邮箱和密码登录。安装时 Windows 可能提示发布者未知；尚未启用自动更新。"
+    : "Windows desktop preview: x64, unsigned, with email and password sign-in inside the app. Windows may show an unknown-publisher warning; automatic updating is not enabled.";
+  doc.how.steps.push(preview);
+  doc.why.items.push({ title: code === "zh" ? "Windows 预览版" : "Windows preview", desc: preview });
+  if (WINDOWS_AVAILABLE) {
+    doc.windowsDownload = { href: WINDOWS.downloadUrl,
+      label: code === "zh" ? `下载 Windows 预览版 ${WINDOWS.version}` : `Download Windows preview ${WINDOWS.version}` };
+  }
+}
+
 if (MAC_DOWNLOAD_URL) {
   for (const [code, doc] of Object.entries(langs)) {
     doc.nativeDownload = { href: MAC_DOWNLOAD_URL, label: downloadLabels[code] };

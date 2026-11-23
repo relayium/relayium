@@ -70,8 +70,9 @@ A separately versioned Mac App Store release is also public, currently
 [1.4.10](https://apps.apple.com/app/id6801142976). The two channels share the
 app's core transfer capabilities but are released independently, so a version on
 one channel may include changes the other does not have yet. An Android public preview is published as a
-direct APK. There is no Relayium app for iOS or Windows — on those platforms the
-browser is the client, and Windows and Linux can also install the CLI.
+direct APK. Windows has an unsigned x64 desktop preview with in-app email/password
+login, available from [Apps](https://relayium.com/apps). Automatic updating is not
+enabled. There is no public iOS app; Windows and Linux can also install the CLI.
 
 > 👉 **Try it now: [relayium.com](https://relayium.com/)** — use two devices on
 > the same LAN without an account, or sign in to create a cross-network pairing
@@ -380,7 +381,8 @@ pairing code requires sign-in; joining with that code does not.
 | **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
 | **macOS** | [1.5.2 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.5.2) and [1.4.10 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share the core transfer capabilities, are released on their own schedules, and use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
 | **Android** | Direct-APK public preview, from its own `android-v*` GitHub Release | Five screens — Transfer, Nearby, Inbox, Cloud, Account: pairing transfers either direction, nearby devices with no code, Device Inbox receiving with durable history, encrypted stored links, and an account. Foreground only — no background delivery and no resident session. Received files live in app-private storage; exporting elsewhere is explicit. No Google Play listing and no Play Services. |
-| **iPhone, iPad, Windows, Linux** | The web app, plus the CLI on Windows and Linux | Relayium publishes no app for these platforms. The browser is the client and is not a fallback there — it carries the same end-to-end encrypted transfer, with nothing to install. |
+| **Windows** | Unsigned x64 desktop preview, web app or CLI | Download the preview from the Apps page. It may have bugs; automatic updating is not enabled. |
+| **iPhone, iPad, Linux** | The web app, plus the CLI on Linux | No public native app is offered for these platforms. |
 
 Relayium currently maintains English and Simplified Chinese; the seven earlier
 locales are archived translations, not product languages. Detailed native

@@ -259,8 +259,8 @@ export const deviceInbox = {
         desc: "The Mac app is published: install it from the Apps page, sign in to the same account, choose a receive folder and set Receiving to Ask every time or Automatic. It receives while it is running, including with its window closed, and Open at Login brings it back after you log in again. It is not a system daemon — quit it and it stops receiving, which is what the launchd command-line receiver below is for on a Mac you run unattended or administer over SSH.",
       },
       {
-        title: "Windows — no native app",
-        desc: "Relayium publishes no Windows app: no tray receiver, no Windows service and no startup entry, and none is offered. What is verified today is the command-line receiver in the foreground: it receives while the terminal window stays open and ends when you close it. For a receiver that survives a logout and a reboot, use the Linux server deployment above.",
+        title: "Windows — unsigned desktop preview",
+        desc: "Get the unsigned Windows x64 desktop preview from the Apps page, sign in inside the app, select a receive folder and enable Receiving. Keep Relayium running; Quit or signing out of Windows stops receiving. The command-line receiver remains a foreground alternative. This is not a Windows system service.",
       },
       {
         title: "iPhone — no native app",
@@ -310,7 +310,7 @@ export const deviceInbox = {
       },
       {
         q: "Which platforms can receive today?",
-        a: "Linux servers, through the published installer and a low-privilege systemd system service, and Linux desktops through the CLI and a systemd --user service. macOS can receive in the published Mac app, or through the same command-line receiver under launchd on a Mac you run unattended. Windows can run the receiver in the foreground only. iPhone and Android are senders here: Relayium publishes no app for either, and none is offered.",
+        a: "Linux servers, through the published installer and a low-privilege systemd system service, and Linux desktops through the CLI and a systemd --user service. macOS can receive in the published Mac app, or through the same command-line receiver under launchd on a Mac you run unattended. Windows has an unsigned desktop preview that receives while Relayium is running in your signed-in session, plus a foreground CLI receiver. Android has a foreground preview receiver. iPhone uses the browser to send; there is no public iPhone app.",
       },
       {
         q: "Can Relayium read my files or their names?",

@@ -607,9 +607,9 @@ const zh: Messages = {
     cta: "了解 CLI →",
   },
   appsPage: {
-    metaTitle: "获取 Relayium——网页版、命令行、macOS 与 Android",
+    metaTitle: "获取 Relayium——网页版、命令行、macOS、Windows 与 Android",
     metaDesc:
-      "在任意现代浏览器里使用 Relayium，在 macOS、Linux 或 Windows 上安装命令行工具，或下载原生 macOS 应用与 Android 预览版 APK。端到端加密传输文件与临时文本。",
+      "在任意现代浏览器里使用 Relayium，在 macOS、Linux 或 Windows 上安装命令行工具，或下载原生 macOS 应用、未签名 Windows 桌面预览版与 Android 预览版 APK。端到端加密传输文件与临时文本。",
     heading: "获取 Relayium",
     subhead: "同一套端到端加密的传输，既传文件也发临时文本，随处可用。选择你的平台。",
     availableBadge: "现已可用",
@@ -620,6 +620,13 @@ const zh: Messages = {
       web: { name: "网页版", desc: "无需安装。在任意系统的现代浏览器中打开，即可传文件，也能发临时文本。", cta: "打开网页版" },
       cli: { name: "命令行", desc: "可脚本化的文件传输、文件夹同步、服务器间备份与临时文本，支持 macOS、Linux 与 Windows。", cta: "命令行文档与安装" },
       mac: { name: "macOS 应用", desc: "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。", cta: "下载 macOS 版", requirements: "需要搭载 Apple 芯片（M1 或更新）的 Mac · macOS 13 及以上" },
+      windows: {
+        name: "Windows 预览版",
+        desc: "早期桌面预览版，支持配对传输、附近设备、设备收件箱和加密链接。可以在应用内输入邮箱和密码登录，也可选择浏览器授权。",
+        cta: (version) => `下载 Windows 预览版 ${version}`,
+        requirements: "Windows x64 · 未签名测试预览版",
+        installNote: "安装包未签名，Windows 可能提示发布者未知。预览版可能存在问题；后续版本请在此下载，尚未启用自动更新。",
+      },
       android: {
         name: "Android 应用",
         desc: "公开预览版，以 APK 直接分发。五个页面——传输、附近、收件箱、云端与账户：可以自己发起配对传输，也可以加入别人的；可以在同一网络内免配对码直接连上另一台设备；可以接收自己其他设备发来的内容，也能发送和打开加密链接。",
@@ -658,7 +665,7 @@ const zh: Messages = {
         ],
       },
       elsewhereNote:
-        "在其他平台上，浏览器就是 Relayium 的客户端。iPhone、iPad、Windows 与 Linux 都能直接打开网页版，无需安装；Windows 与 Linux 还可以另外装命令行工具。Relayium 没有为这些平台发布任何客户端程序。",
+        "iPhone、iPad、Windows 与 Linux 都能直接打开网页版，无需安装；Windows 与 Linux 还可以另外装命令行工具。Windows 另有上方的未签名桌面预览版。iPhone 和 iPad 暂无公开客户端。",
     },
   },
   deviceInboxPage: {
@@ -783,15 +790,15 @@ const zh: Messages = {
         name: "Windows",
         use: "一台需要把文件收进你指定目录的 Windows 电脑。",
         setup:
-          "Relayium 不提供 Windows 原生应用：没有托盘接收端，没有 Windows 服务，也没有开机启动项。今天经过验证的是命令行接收端的前台运行：窗口开着才能接收，关掉窗口就结束。",
-        files: "你用 --dir 指定的目录 —— 上面例子里是 %USERPROFILE%\\Relayium-inbox。",
+          "在下载页获取未签名 Windows 桌面预览版，在应用内登录、选择接收目录并开启接收。命令行接收端的前台运行方式仍可使用：终端窗口开着才能接收，关闭终端便停止。",
+        files: "应用中选择的目录；使用命令行时则是 --dir 指定的目录。",
         residency:
-          "除了那个开着的窗口之外没有常驻。别把它当成常开接收端：需要常开就用 Linux 服务器接收端，那是能扛住退出登录和重启的那一个。",
+          "保持 Relayium 在已登录的 Windows 会话中运行。关闭窗口可留在托盘，退出应用或退出 Windows 登录会停止接收；可选择登录时启动。它不是 Windows 系统服务。",
         send: "在任意登录了同一账户的浏览器里打开本页。",
         recovery:
-          "relayium inbox status 会分别报出目录、凭据和 worker，这样才能把「目录不见了」和「登录过期了」区分开。",
+          "在应用内查看设备收件箱状态。使用命令行接收端时，relayium inbox status 会分别报告目录、凭据和 worker 状态。",
         stop:
-          "关掉窗口即可；也可以用 inbox pause 停止领取新任务但保留注册；inbox disable 则吊销收件箱并删除密钥。",
+          "在应用中关闭接收或退出应用。使用命令行接收端时，可关闭终端或用 inbox pause 暂停；inbox disable 会吊销收件箱并删除密钥。",
       },
       iphone: {
         name: "iPhone",

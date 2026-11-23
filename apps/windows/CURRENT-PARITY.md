@@ -1,7 +1,16 @@
+> Windows 0.0.4 unsigned x64 public preview was published on 2026-11-23 from
+> `189c037f2ad7d23e0d76354babb7f84da84d4ea3`. It adds in-app email/password
+> sign-in and retains optional browser authorization. Download:
+> https://github.com/relayium/relayium/releases/tag/windows-v0.0.4
+> There is no public signed release or enabled automatic update feed. The
+> installed-artifact and hosted Windows acceptance passed; personal Windows and
+> real-network testing remain open. Earlier candidate records below retain
+> their original dates and boundaries.
+
 # Windows candidate against macOS 1.5.2
 
 Target: macOS 1.5.2 (50). This private development candidate retains Windows
-source version 0.0.3. There is no public signed Windows release or enabled
+source version 0.0.4. There is no public signed Windows release or enabled
 public update channel. The [older ledger](DURABLE-PARITY.md) preserves historical
 Windows execution; its September counts are not current acceptance.
 

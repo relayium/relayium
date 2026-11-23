@@ -624,9 +624,9 @@ const en: Messages = {
     cta: "Explore the CLI →",
   },
   appsPage: {
-    metaTitle: "Get Relayium — Web, CLI, macOS and Android",
+    metaTitle: "Get Relayium — Web, CLI, macOS, Windows and Android",
     metaDesc:
-      "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app or the Android preview APK. End-to-end encrypted file and ephemeral text transfer.",
+      "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app, the unsigned Windows desktop preview or the Android preview APK. End-to-end encrypted file and ephemeral text transfer.",
     heading: "Get Relayium",
     subhead:
       "One end-to-end encrypted transfer for files and ephemeral text, everywhere you work. Pick your platform.",
@@ -650,6 +650,13 @@ const en: Messages = {
         desc: "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account and device management.",
         cta: "Download for macOS",
         requirements: "Requires a Mac with Apple silicon (M1 or later) · macOS 13 or later",
+      },
+      windows: {
+        name: "Windows preview",
+        desc: "An early desktop preview for pairing transfers, nearby devices, Device Inbox and encrypted links. Sign in with your email and password inside the app, or use browser authorization.",
+        cta: (version) => `Download Windows preview ${version}`,
+        requirements: "Windows x64 · unsigned test preview",
+        installNote: "The installer is unsigned, so Windows may show an unknown-publisher warning. This preview may have bugs. Download later previews here; automatic updating is not enabled.",
       },
       android: {
         name: "Android app",
@@ -689,7 +696,7 @@ const en: Messages = {
         ],
       },
       elsewhereNote:
-        "Everywhere else, the browser is the Relayium client. iPhone, iPad, Windows and Linux all run the web app with nothing to install, and Windows and Linux additionally run the command-line client. Relayium publishes no app for those platforms.",
+        "iPhone, iPad, Windows and Linux all run the web app in a browser with nothing to install, and Windows and Linux additionally run the command-line client. Windows also has an unsigned desktop preview above. There is no public iPhone or iPad app.",
     },
   },
   deviceInboxPage: {
@@ -819,15 +826,15 @@ const en: Messages = {
         name: "Windows",
         use: "A Windows PC that should receive files into a folder you choose.",
         setup:
-          "Relayium publishes no Windows app: no tray receiver, no Windows service and no startup entry, and none is offered. What is verified today is the command-line receiver running in the foreground: it receives while the window stays open, and closing that window ends it.",
-        files: "The folder you passed to --dir — %USERPROFILE%\\Relayium-inbox above.",
+          "Download the unsigned Windows desktop preview from the Apps page. Sign in inside the app, choose a receive folder and enable Receiving. Alternatively, use the command-line receiver running in the foreground: it receives while the terminal window stays open.",
+        files: "The folder you choose in the app, or the --dir folder for the command-line receiver.",
         residency:
-          "None beyond that open window. Do not treat this as an always-on receiver: for that, use the Linux server receiver, which is the one that survives a logout and a reboot.",
+          "Keep Relayium running in your signed-in Windows session. Closing the app window can leave it in the tray; Quit or signing out of Windows stops receiving. Open at sign-in is optional. This is not a Windows system service.",
         send: "From this page, in any browser signed in to the same account.",
         recovery:
-          "relayium inbox status names the folder, the credential and the worker separately, so a missing folder can be told from an expired sign-in.",
+          "Check Device Inbox status in the app. For the CLI receiver, relayium inbox status names the folder, credential and worker separately.",
         stop:
-          "Close the window, or use inbox pause to stop accepting new work while keeping the enrolment; inbox disable revokes the inbox and deletes its keys.",
+          "Set Receiving to Off or Quit in the app. For the CLI, close the terminal or use inbox pause; inbox disable revokes the inbox and deletes its keys.",
       },
       iphone: {
         name: "iPhone",

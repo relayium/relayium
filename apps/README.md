@@ -1,8 +1,7 @@
 # Relayium native apps
 
-**Internal TestFlight, read back 2026-11-18.** The current macOS internal
-build is `1.5.2 (50)`: App Store Connect build
-`1bcbda56-23a2-4c2c-8f3a-d7e9be46a77b`, package source
+**Internal TestFlight, read back 2026-11-18.** The current internal TestFlight build is `1.5.2 (50)`: App Store Connect build
+`1bcbda56-23a2-4c2c-8f3a-d7e9be46a77b`, built from source
 `b2bb5c2ee04e37f1b9c5fc2c3a91b369601479d0`. Its Mac and shared SDK inputs are
 identical to release-gate source `dfd08d0bb0d1a7e0d1e4f62fa11bfea663c759ce`.
 It is `VALID` and `IN_BETA_TESTING` in the existing Relayium Internal group.
@@ -81,10 +80,12 @@ the public URLs determine the version currently offered.
   its own Kotlin implementation, held to the same frozen wire fixtures by the
   always-on `compat.yml` gate.
 - `windows/` — Windows desktop client (`com.relayium.windows`), Electron +
-  Svelte. **In development, no public build, nothing signed.** Direct-download
-  EXE outside the Microsoft Store is the intended distribution; there is no
-  Authenticode credential in this repository and the lane builds an unsigned
-  NSIS installer as build evidence only.
+  Svelte. **Public unsigned x64 preview 0.0.4**, available at
+  [windows-v0.0.4](https://github.com/relayium/relayium/releases/tag/windows-v0.0.4).
+  Email/password sign-in runs inside the app; browser authorization is optional.
+  The NSIS installer is unsigned and automatic updating is not enabled. The
+  separate manual upload workflow stages the exact accepted CI artifact into a
+  draft; publication is an explicit operator action.
 
   For personal-machine testing and an executable handoff to a Windows-local
   AI, see [Windows local QA](windows/TESTING.md). `npm run qa` records source,
@@ -2327,3 +2328,16 @@ row with a long device name; and the Arabic right-to-left layout of the two new
 sections specifically. What `swift test` does cover is the model's scope, race
 and cleanup behaviour, the presentation decisions, and the wiring that connects
 them.
+
+
+### Native file-send buffer wakeup (source only, 2026-11-23)
+
+Source `189c037f2` wakes the native file producer from WebRTC buffer-change
+notifications, with the existing 50 ms timer retained as fallback. Initial and
+replacement transports use one-shot subscriptions fenced by producer run and
+transport identity. Receive credit, frame encryption, resume and TURN selection
+are unchanged. Full Swift regression and two controlled 64 MiB TURN directions
+with complete SHA-256 verification passed. This is not a WAN speedup measurement.
+The published macOS 1.5.2 and iOS 0.5.3 binaries predate this source change and
+need a new client release to receive it; Windows 0.0.4 ships the separate native
+password-login change and does not link the Apple SDK.
