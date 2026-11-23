@@ -922,3 +922,57 @@ describe("the account authority a resident feature subscribes to", () => {
     expect(await service.captureAccountAuthority()).toEqual({ kind: "unavailable" });
   });
 });
+
+
+describe("native password sign-in ownership", () => {
+  it("keeps the bearer in the existing encrypted store and returns no credential", async () => {
+    const { service, store } = harness({ makePasswordAuthClient: () => ({
+      login: async () => ({ status: "ok", accessToken: "password-bearer", accountEmail: "a@b.c" }),
+    }), openApproval: async () => { throw new Error("browser must not open"); } });
+    const result = await service.passwordSignIn(nextNonce(), "a@b.c", "secret-password");
+    expect(result).toEqual({ status: "ok", accountEmail: "a@b.c" });
+    expect(await store.get(BEARER_KEY)).toBe("password-bearer");
+    expect(JSON.stringify(result)).not.toContain("password-bearer");
+    expect(JSON.stringify(await service.authState())).not.toContain("secret-password");
+    await service.dispose();
+  });
+
+  it.each(["invalid-credentials", "email-unverified", "pending-deletion", "rate-limited"] as const)(
+    "never adopts a %s account", async (status) => {
+      const { service, store } = harness({ makePasswordAuthClient: () => ({ login: async () => ({ status }) }) });
+      await expect(service.passwordSignIn(nextNonce(), "a@b.c", "password")).resolves.toEqual({ status });
+      await expect(store.get(BEARER_KEY)).rejects.toMatchObject({ code: "not-found" });
+      await service.dispose();
+    });
+
+  it("aborts cancellation and refuses a late success even if transport ignores abort", async () => {
+    const barrier = deferred<{ status: "ok"; accessToken: string; accountEmail: string }>();
+    const entered = deferred<AbortSignal>();
+    const { service, store } = harness({ makePasswordAuthClient: () => ({ login: async (_email, _password, signal) => {
+      entered.resolve(signal!);
+      return barrier.promise;
+    } }) });
+    const nonce = nextNonce();
+    const login = service.passwordSignIn(nonce, "a@b.c", "password");
+    const rejected = expect(login).rejects.toThrow(/cancelled/);
+    const signal = await entered.promise;
+    await service.cancelSignIn(nonce);
+    expect(signal.aborted).toBe(true);
+    barrier.resolve({ status: "ok", accessToken: "late-bearer", accountEmail: "a@b.c" });
+    await rejected;
+    await expect(store.get(BEARER_KEY)).rejects.toMatchObject({ code: "not-found" });
+    await service.dispose();
+  });
+
+  it("refuses a pre-cancelled attempt without transmitting a password", async () => {
+    let requests = 0;
+    const { service } = harness({ makePasswordAuthClient: () => ({ login: async () => {
+      requests++; return { status: "ok", accessToken: "bearer", accountEmail: "a@b.c" };
+    } }) });
+    const nonce = nextNonce();
+    await service.cancelSignIn(nonce);
+    await expect(service.passwordSignIn(nonce, "a@b.c", "password")).rejects.toThrow(/cancelled/);
+    expect(requests).toBe(0);
+    await service.dispose();
+  });
+});

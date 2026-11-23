@@ -677,7 +677,7 @@ async function main() {
   // Every declared channel has a handler. A channel the renderer can call and
   // nothing answers is a hang, not an error.
   const declared = [
-    "relayium:app-info", "relayium:auth-start", "relayium:auth-poll",
+    "relayium:app-info", "relayium:auth-start", "relayium:auth-password", "relayium:auth-poll",
     "relayium:auth-cancel", "relayium:auth-sign-out", "relayium:auth-state",
     "relayium:receive-open", "relayium:receive-begin", "relayium:receive-write",
     "relayium:receive-finish", "relayium:receive-cancel", "relayium:receive-publish",

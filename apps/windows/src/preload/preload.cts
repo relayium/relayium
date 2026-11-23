@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld("relayium", {
   onClientSupport: subscribe("relayium:client-support-changed"),
   auth: {
     start: invoke("relayium:auth-start"),
+    password: invoke("relayium:auth-password"),
     poll: invoke("relayium:auth-poll"),
     cancel: invoke("relayium:auth-cancel"),
     signOut: invoke("relayium:auth-sign-out"),

@@ -52,6 +52,19 @@ final class WebRTCLinkTransportSourceTests: XCTestCase {
             .filter { !$0.isEmpty && !$0.hasPrefix("//") }
     }
 
+    func testBothTransportGenerationsWireFileBufferNotifications() throws {
+        for name in ["WebRTCLinkTransport", "WebRTCLinkReplacementTransport"] {
+            let code = try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumKit/Realtime/\(name).swift")
+                .components(separatedBy: "\n")
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+            XCTAssertTrue(code.contains("didChangeBufferedAmount amount: UInt64"))
+            XCTAssertTrue(code.contains("dataChannel.label == LinkLane.file.label"))
+            XCTAssertTrue(code.contains("fileBufferDrain.notify(bufferedAmount: self.establishment.bufferedAmount(on: .file))"))
+            XCTAssertTrue(code.contains("fileBufferDrain.observe(whenAtMost: threshold, wake: wake)"))
+        }
+    }
+
     // MARK: - two lanes, opened before the offer
 
     /// One negotiation must carry both lanes. Opening the text lane after the

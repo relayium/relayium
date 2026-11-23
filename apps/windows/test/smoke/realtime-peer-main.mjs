@@ -454,16 +454,13 @@ async function drive(win) {
   // ---- 2. sign in, only when this round needs a minted code -------------
   if (config.role === "create") {
     pollAnswer = { status: "ok", accessToken: config.token, accountEmail: config.accountEmail };
-    // The REAL button, not the IPC behind it.
-    //
-    // `relayium.auth.start` only mints the device code; `relayium.auth.poll` is a
-    // separate channel and the RENDERER's own controller is what drives it
-    // (`preload.cts:51-56`). Calling `start` directly therefore begins a flow
-    // nothing is polling, which is a sign-in that never lands. Clicking is also
-    // the point: this run is meant to exercise the shipped path.
+    // Exercise the actual email/password form, preload IPC, main-process
+    // native HTTP login and encrypted bearer adoption against the local server.
     await clickTest(win, "nav-account");
-    if (!await until(win, "the signed-out account page", hasTest(win, "sign-in"), 30_000)) return;
-    await clickTest(win, "sign-in");
+    if (!await until(win, "the native password form", hasTest(win, "password-sign-in"), 30_000)) return;
+    await typeInto(win, "login-email", config.accountEmail);
+    await typeInto(win, "login-password", config.password);
+    await clickTest(win, "password-sign-in");
     observed.signedIn = await until(win, "the signed-in account", hasTest(win, "sign-out"), 60_000);
     publishStatus({ phase: "signed-in", signedIn: observed.signedIn });
     if (!observed.signedIn) {

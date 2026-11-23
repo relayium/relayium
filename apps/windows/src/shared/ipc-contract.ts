@@ -40,6 +40,8 @@ export const IPC = {
   appInfo: "relayium:app-info",
   /** Begin device-code sign-in. Returns the user code and opens the browser. */
   authStart: "relayium:auth-start",
+  /** Native email/password login. Password is never persisted; no bearer is returned. */
+  authPassword: "relayium:auth-password",
   /** Poll once. Returns a status, never a token — see below. */
   authPoll: "relayium:auth-poll",
   /**
@@ -1818,3 +1820,8 @@ export const MAX_SEND_ENTRIES = 1000;
  * refused at the boundary rather than inside the engine.
  */
 export const MAX_SEND_FRAME_BYTES = 192 * 1024 + 16 + 256 + 4;
+
+/** Closed outcomes only: never server prose, reactivation credentials or a bearer. */
+export type PasswordSignInOutcome =
+  | { readonly status: "ok"; readonly accountEmail?: string }
+  | { readonly status: "invalid-credentials" | "email-unverified" | "pending-deletion" | "rate-limited" };

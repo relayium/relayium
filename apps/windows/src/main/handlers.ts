@@ -1,3 +1,4 @@
+import { PasswordAuthClient } from "./account/password-auth.js";
 // Electron wiring. All policy lives in `app-service.ts`; this file narrows
 // untrusted payloads and hands them on.
 //
@@ -471,6 +472,7 @@ export function registerHandlers(
         if (!root.ok) throw new IpcRefusal(`data root unavailable: ${root.reason}`);
         return new SecretStore(`${root.path}/secrets`, await platformCipher());
       }),
+    makePasswordAuthClient: () => new PasswordAuthClient(origin, new BoundedTransport(origin)),
     makeAuthClient:
       composition.makeAuthClient ??
       ((installationID) => new DeviceAuthClient(origin, new BoundedTransport(origin), installationID)),
@@ -539,6 +541,11 @@ export function registerHandlers(
 
   router.handle(IPC.authState, () => service.authState());
   router.handle(IPC.authStart, (payload) => service.startSignIn(attemptNonce(payload)));
+  router.handle(IPC.authPassword, (payload) => {
+    const body = expectObject(payload);
+    return service.passwordSignIn(attemptNonce(payload),
+      expectString(body["email"], 320), expectString(body["password"], 2048));
+  });
   router.handle(IPC.authPoll, (payload) => service.pollSignIn(attemptNonce(payload)));
   router.handle(IPC.authCancel, (payload) => service.cancelSignIn(attemptNonce(payload)));
   router.handle(IPC.authSignOut, () => service.signOut());

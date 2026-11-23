@@ -28,6 +28,10 @@
    * error here rather than a blank paragraph on the account screen.
    */
   const FAILURE_KEY = {
+    "invalid-credentials": "accountInvalidCredentials",
+    "email-unverified": "accountEmailUnverified",
+    "pending-deletion": "accountPendingDeletion",
+    "rate-limited": "accountRateLimited",
     unreachable: "accountFailedUnreachable",
     declined: "accountFailedDeclined",
     expired: "accountFailedExpired",
@@ -82,6 +86,15 @@
     // for what the chain this replaces got wrong about the third failure.
     return startup.ok ? t(startupStateKey(startup.state)) : t(startupFailureKey(startup.failure));
   });
+  let email = $state("");
+  let password = $state("");
+  function passwordSignIn(event: SubmitEvent) {
+    event.preventDefault();
+    const entered = password;
+    password = "";
+    void controller.signInWithPassword(email.trim(), entered);
+  }
+
   const startupChecked = $derived(startup?.ok === true && startup.state === "on");
 </script>
 
@@ -97,7 +110,7 @@
     <!-- Cancel is real here, not decoration: the attempt is named before the
          request is sent, so there is something to abandon even though `start`
          has not come back yet. -->
-    <p class="dim">{t("accountOpening")}</p>
+    <p class="dim">{t(phase.method === "password" ? "accountSigningIn" : "accountOpening")}</p>
     <button data-test="cancel" onclick={() => controller.cancel()}>{t("accountCancel")}</button>
   {:else if phase.kind === "cancelling"}
     <p class="dim">{t("accountCancel")}…</p>
@@ -113,14 +126,22 @@
          attempt could not succeed. -->
     <p class="problem">{t("accountStoreUnreadable")}</p>
     <button data-test="retry" onclick={() => controller.refresh()}>{t("accountRetry")}</button>
-  {:else if phase.kind === "failed"}
-    <p class="problem">{t(FAILURE_KEY[phase.reason])}</p>
-    <button data-test="sign-in" onclick={() => controller.signIn()}>{t("accountRetry")}</button>
   {:else}
-    <p class="dim">{t("accountSignedOut")}</p>
-    <p class="dim small">{t("accountWhy")}</p>
-    <button class="primary" data-test="sign-in" onclick={() => controller.signIn()}>
-      {t("accountSignIn")}
+    {#if phase.kind === "failed"}
+      <p class="problem" role="alert">{t(FAILURE_KEY[phase.reason])}</p>
+    {:else}
+      <p class="dim">{t("accountSignedOut")}</p>
+      <p class="dim small">{t("accountWhy")}</p>
+    {/if}
+    <form onsubmit={passwordSignIn} class="login-form">
+      <label>{t("accountEmail")}<input data-test="login-email" type="email" autocomplete="username"
+        bind:value={email} required maxlength="320" /></label>
+      <label>{t("accountPassword")}<input data-test="login-password" type="password" autocomplete="current-password"
+        bind:value={password} required maxlength="2048" /></label>
+      <button class="primary" data-test="password-sign-in" type="submit">{t("accountSignIn")}</button>
+    </form>
+    <button data-test="sign-in" onclick={() => { password = ""; void controller.signIn(); }}>
+      {t("accountBrowserSignIn")}
     </button>
   {/if}
 </Card>
@@ -194,6 +215,9 @@
 <UpdateDetails controller={update} />
 
 <style>
+  .login-form { display: grid; gap: var(--space-inline); max-width: 360px; margin-bottom: var(--space-inline); }
+  .login-form label { display: grid; gap: var(--space-hairline); }
+
   h1 { margin: 0 0 var(--space-section); font-size: 20px; font-weight: 600; }
   .dim { color: var(--text-dim); margin: 0 0 var(--space-tight); }
   .small { font-size: 13px; }

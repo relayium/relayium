@@ -30,14 +30,14 @@
 // what main reports. If the adoption legitimately beat the click, "signed in" is
 // the truth and this shows it rather than a comfortable lie.
 
-import type { AuthState, SupportReport } from "../shared/ipc-contract";
+import type { AuthState, SupportReport, PasswordSignInOutcome } from "../shared/ipc-contract";
 
 export type Phase =
   | { kind: "loading" }
   | { kind: "signedOut" }
   /** A `start` is in flight. Cancel is available here — that is the whole
    *  reason the nonce is minted before the call. */
-  | { kind: "starting" }
+  | { kind: "starting"; method?: "password" }
   | { kind: "waiting"; userCode: string; secondsLeft: number }
   | { kind: "cancelling" }
   | { kind: "signedIn"; accountEmail: string }
@@ -59,6 +59,10 @@ export type Phase =
  * detail belongs in main's log, not on this screen.
  */
 export type FailureReason =
+  | "invalid-credentials"
+  | "email-unverified"
+  | "pending-deletion"
+  | "rate-limited"
   | "unreachable"
   | "declined"
   | "expired"
@@ -90,6 +94,7 @@ export interface CancelResult {
 export interface SignInBridge {
   appInfo(): Promise<AppInfoView>;
   auth: {
+    password?(payload: { nonce: string; email: string; password: string }): Promise<PasswordSignInOutcome>;
     start(payload: { nonce: string }): Promise<{
       attemptNonce: string;
       userCode: string;
@@ -283,6 +288,34 @@ export class SignInController {
     // The server's own interval, not one invented here: polling faster than it
     // asks for is what gets a client rate-limited.
     this.schedulePoll(gen, started.interval * 1000);
+  }
+
+  async signInWithPassword(email: string, password: string): Promise<void> {
+    if (this.disposed || this.starting || this.phaseValue.kind === "waiting"
+        || this.phaseValue.kind === "cancelling" || this.phaseValue.kind === "signedIn") return;
+    const gen = this.bump();
+    const nonce = (this.deps.newNonce ?? defaultNonce)();
+    this.nonce = nonce;
+    this.starting = true;
+    this.setPhase({ kind: "starting", method: "password" });
+    try {
+      const login = this.deps.bridge.auth.password;
+      if (!login) throw new Error("unavailable");
+      const outcome = await login({ nonce, email, password });
+      if (!this.alive(gen)) {
+        void this.deps.bridge.auth.cancel({ nonce }).catch(() => undefined);
+        return;
+      }
+      this.bump();
+      this.nonce = null;
+      if (outcome.status === "ok") await this.refresh();
+      else this.setPhase({ kind: "failed", reason: outcome.status });
+    } catch {
+      if (!this.alive(gen)) return;
+      this.bump();
+      this.nonce = null;
+      this.setPhase({ kind: "failed", reason: "unreachable" });
+    }
   }
 
   private tickCountdown(gen: number): void {
