@@ -231,6 +231,9 @@ const NATIVE_RELEASES = JSON.parse(readFileSync(new URL("../native-releases.json
 const ANDROID_RELEASE = JSON.parse(
   readFileSync(new URL("../android-release.json", import.meta.url), "utf8"),
 ).android;
+const WINDOWS_RELEASE = JSON.parse(
+  readFileSync(new URL("../windows-release.json", import.meta.url), "utf8"),
+).windows;
 
 /** A required capture out of a source file, or a loud failure saying it moved. */
 function grab(source, re, what) {
@@ -259,6 +262,9 @@ const AVAILABILITY = {
   // The same three-part guard the component applies, and for the same reason:
   // the card renders its version, so a manifest that says `available` without
   // saying WHICH version must not produce an executable card either.
+  windowsAvailable: () => WINDOWS_RELEASE.available === true && Boolean(WINDOWS_RELEASE.version)
+    && Boolean(WINDOWS_RELEASE.downloadUrl) && /^[a-f0-9]{64}$/.test(WINDOWS_RELEASE.sha256 ?? "")
+    && Number.isSafeInteger(WINDOWS_RELEASE.size) && WINDOWS_RELEASE.size > 0,
   androidAvailable: () =>
     ANDROID_RELEASE.available === true &&
     Boolean(ANDROID_RELEASE.downloadUrl) &&
@@ -276,6 +282,7 @@ const CTA_TARGET = {
   cli: grab(ROUTER_SOURCE, /export const CLI_PATH = "([^"]+)";/, "CLI_PATH"),
   mac: NATIVE_RELEASES.macos.downloadUrl,
   android: ANDROID_RELEASE.downloadUrl,
+  windows: WINDOWS_RELEASE.downloadUrl,
 };
 
 /**
@@ -299,16 +306,24 @@ function appsCardModel() {
   const declared = grab(APPS_SOURCE, /type AppId = ([^;]+);/, "the AppId union");
   const list = grab(APPS_SOURCE, /const cards = \$derived<AppCard\[\]>\(\[([\s\S]*?)\n {2}\]\);/, "the cards array");
 
-  const ids = [...declared.matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
-  const entries = [...list.matchAll(/id: "([a-z]+)",[\s\S]*?available: ([A-Za-z]+),/g)]
-    .map(([, id, expr]) => ({ id, expr }));
-  if (JSON.stringify(entries.map((e) => e.id)) !== JSON.stringify(ids)) {
-    throw new Error(`apps card model: AppId ${JSON.stringify(ids)} does not match the cards array ${JSON.stringify(entries.map((e) => e.id))}`);
+  const declaredIds = [...declared.matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
+  const conditional = new Map([...list.matchAll(/\.\.\.\(([A-Za-z]+) \? \[\{\s*id: "([a-z]+)"/g)]
+    .map(([, guard, id]) => [id, guard]));
+  if ((list.match(/\.\.\.\(/g) ?? []).length !== conditional.size) {
+    throw new Error("apps card model: unrecognised conditional card expression");
   }
-  const unknown = entries.filter((e) => !(e.expr in AVAILABILITY));
+  const declaredEntries = [...list.matchAll(/id: "([a-z]+)"(?: as const)?,[\s\S]*?available: ([A-Za-z]+),/g)]
+    .map(([, id, expr]) => ({ id, expr }));
+  if (JSON.stringify(declaredEntries.map((e) => e.id)) !== JSON.stringify(declaredIds)) {
+    throw new Error(`apps card model: AppId ${JSON.stringify(declaredIds)} does not match the cards array ${JSON.stringify(declaredEntries.map((e) => e.id))}`);
+  }
+  const unknown = declaredEntries.filter((e) => !(e.expr in AVAILABILITY)
+    || (conditional.has(e.id) && !(conditional.get(e.id) in AVAILABILITY)));
   if (unknown.length) {
     throw new Error(`apps card model: unrecognised availability ${JSON.stringify(unknown)} — teach AVAILABILITY what it means rather than guessing`);
   }
+  const entries = declaredEntries.filter((e) => !conditional.has(e.id) || AVAILABILITY[conditional.get(e.id)]());
+  const ids = entries.map((e) => e.id);
   const available = entries.filter((e) => AVAILABILITY[e.expr]()).map((e) => e.id);
   const future = entries.filter((e) => !AVAILABILITY[e.expr]()).map((e) => e.id);
 
