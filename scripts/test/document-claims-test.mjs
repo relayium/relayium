@@ -88,7 +88,7 @@ const INPUTS = [...CLAIM_SURFACES, MAC_MANIFEST, APP_STORE];
  * than a shorter green run. Change it in the same commit as the claim you add
  * or retire, and say which in the message.
  */
-const EXPECTED_CLAIMS = 126;
+const EXPECTED_CLAIMS = 132;
 
 // ---------------------------------------------------------------------------
 // 1. Swift string semantics
@@ -311,8 +311,10 @@ const WHY = {
   iosRow: "the delivery-status table is what a reader can GET; iOS has shipped nothing, so it "
     + "has no row — and the section must still say what `apps/ios/` is, because a claim removed "
     + "instead of corrected is this repository's recurring documentation failure",
-  browsersRow: "the platforms with no native client must still be told what to use, and Android "
-    + "left that row when its APK was published",
+  browsersRow: "the platforms with no public native client must still be told what to use; Android "
+    + "and Windows have independent preview rows",
+  windowsRow: "Windows has a separate unsigned x64 preview with in-app password login and no automatic "
+    + "updating; its browser and CLI options stay available",
   androidRow: "Android has a row of its own that names the direct-APK channel and the limits "
     + "that are still real, and must not resurrect the 0.1.1-era denials",
   roadmap: "the root README is concise and points detailed future work at docs/ instead of "
@@ -400,9 +402,14 @@ const NEEDLE_CLAIMS = [
   need(README, "deliveryFlat", ROOT_IOS_STATE, WHY.iosRow),
   need(README, "deliveryFlat", "It has never been publicly released", WHY.iosRow),
   need(README, "deliveryLower", "no app store listing", WHY.iosRow),
-  need(README, "row:iPhone, iPad, Windows, Linux", "web app", WHY.browsersRow),
-  need(README, "row:iPhone, iPad, Windows, Linux", "publishes no app for these platforms", WHY.browsersRow),
-  ban(README, "row:iPhone, iPad, Windows, Linux", "android", WHY.browsersRow),
+  need(README, "row:iPhone, iPad, Linux", "web app", WHY.browsersRow),
+  need(README, "row:iPhone, iPad, Linux", "no public native app is offered for these platforms", WHY.browsersRow),
+  ban(README, "row:iPhone, iPad, Linux", "android", WHY.browsersRow),
+  ban(README, "row:iPhone, iPad, Linux", "windows", WHY.browsersRow),
+  need(README, "row:Windows", "unsigned x64 desktop preview", WHY.windowsRow),
+  need(README, "row:Windows", "web app or cli", WHY.windowsRow),
+  need(README, "row:Windows", "automatic updating is not enabled", WHY.windowsRow),
+  need(README, "flatLower", "in-app email/password login", WHY.windowsRow),
   need(README, "row:Android", "apk", WHY.androidRow),
   need(README, "row:Android", "no google play listing", WHY.androidRow),
   need(README, "row:Android", "foreground only", WHY.androidRow),
@@ -416,7 +423,7 @@ const NEEDLE_CLAIMS = [
   // Was `testTheReadmeOffersNoIOSDownload`.
   ...["download the ios app", "get it on the app store", "testflight.apple.com"]
     .map((offer) => ban(README, "flatLower", offer, WHY.iosOffer)),
-  need(README, "flatLower", "there is no relayium app for ios or windows", WHY.iosOffer),
+  need(README, "flatLower", "there is no public ios app", WHY.iosOffer),
   need(README, "flatLower", "an android public preview is published as a direct apk", WHY.iosOffer),
   ...["no relayium app for android", "relayium app for ios, android or windows",
     "publishes no android app"].map((denial) => ban(README, "flatLower", denial, WHY.iosOffer)),
@@ -625,9 +632,11 @@ function evaluate(world) {
   // -- was `testTheReadmeDoesNotListIOSAsADeliveryPlatform`, row-presence half
   claim("row-absent|iOS", haystack(doc(README), "row:iOS") === null,
     `${README}: iOS is back in the delivery-status table — ${WHY.iosRow}`);
-  claim("row-present|iPhone, iPad, Windows, Linux",
-    haystack(doc(README), "row:iPhone, iPad, Windows, Linux") !== null,
+  claim("row-present|iPhone, iPad, Linux",
+    haystack(doc(README), "row:iPhone, iPad, Linux") !== null,
     `${README}: the no-native-app platforms lost their delivery-status row — ${WHY.browsersRow}`);
+  claim("row-present|Windows", haystack(doc(README), "row:Windows") !== null,
+    `${README}: Windows has no independent preview row — ${WHY.windowsRow}`);
   claim("row-present|Android", haystack(doc(README), "row:Android") !== null,
     `${README}: Android has no delivery-status row of its own — ${WHY.androidRow}`);
 
@@ -833,9 +842,13 @@ const MUTATIONS = [
     world: () => sub(README, "\n| **Android** |", "\n| **iOS** | Internal TestFlight | In development. |\n| **Android** |"),
     expect: ["row-absent|iOS"] },
   { name: "the no-native-app row is deleted",
-    world: () => sub(README, "| **iPhone, iPad, Windows, Linux** |", "| **Other platforms** |"),
-    expect: ["row-present|iPhone, iPad, Windows, Linux", `require|${README}|row:iPhone, iPad, Windows, Linux|web app`,
-      `ban|${README}|row:iPhone, iPad, Windows, Linux|android`] },
+    world: () => sub(README, "| **iPhone, iPad, Linux** |", "| **Other platforms** |"),
+    expect: ["row-present|iPhone, iPad, Linux", `require|${README}|row:iPhone, iPad, Linux|web app`,
+      `ban|${README}|row:iPhone, iPad, Linux|android`] },
+  { name: "the Windows preview row is deleted",
+    world: () => sub(README, "| **Windows** |", "| **Other desktop** |"),
+    expect: ["row-present|Windows", `require|${README}|row:Windows|unsigned x64 desktop preview`,
+      `require|${README}|row:Windows|automatic updating is not enabled`] },
   { name: "the Android row is deleted",
     world: () => sub(README, "| **Android** |", "| **Robot** |"),
     expect: ["row-present|Android", `require|${README}|row:Android|apk`, `ban|${README}|row:Android|no device inbox`] },
