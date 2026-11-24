@@ -84,7 +84,7 @@ the public URLs determine the version currently offered.
   For personal-machine testing and an executable handoff to a Windows-local
   AI, see [Windows local QA](windows/TESTING.md). `npm run qa` records source,
   individual logs and skips without installing the app or changing OS accounts.
-  The macOS 1.5.2 parity candidate is described in
+  The Windows parity baseline is macOS 1.5.2 (50), as described in
   [current Windows scope](windows/CURRENT-PARITY.md).
 
   The earlier September candidate was `0.0.2` x64, built from source `15466b04`
