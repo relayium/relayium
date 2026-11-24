@@ -1,7 +1,8 @@
 # Relayium native apps
 
-**Internal TestFlight, read back 2026-11-24.** The internal macOS build is
-`1.5.3 (51)`, from `63f69a53b40d1f618ea65151a6328f502f220ded`. Apple reports
+**Internal TestFlight, read back 2026-11-24.** The current internal TestFlight build is `1.5.3 (51)`: App Store Connect build
+`756aa5b5-e69a-4eeb-814a-852e533a1f25`, built from source
+`63f69a53b40d1f618ea65151a6328f502f220ded`. Apple reports
 `VALID` and `IN_BETA_TESTING` in the existing Relayium Internal group.
 English and Simplified Chinese test notes are set. This release checkpoint
 records the internal package separately from the Developer ID download.
