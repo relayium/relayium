@@ -1,15 +1,10 @@
 # Relayium native apps
 
-**Internal TestFlight, read back 2026-11-18.** The current internal TestFlight build is `1.5.2 (50)`: App Store Connect build
-`1bcbda56-23a2-4c2c-8f3a-d7e9be46a77b`, built from source
-`b2bb5c2ee04e37f1b9c5fc2c3a91b369601479d0`. Its Mac and shared SDK inputs are
-identical to release-gate source `dfd08d0bb0d1a7e0d1e4f62fa11bfea663c759ce`.
-It is `VALID` and `IN_BETA_TESTING` in the existing Relayium Internal group.
-English and Simplified Chinese test notes are set; automatic tester notification
-is off. The independent provider read-back preserved all 38 earlier builds,
-groups, testers, external memberships and all nine Store versions and selections.
-No App Store version or review was created or submitted. This dated record is
-not a fresh private-provider query by every later documentation reader.
+**Internal TestFlight, read back 2026-11-24.** The internal macOS build is
+`1.5.3 (51)`, from `63f69a53b40d1f618ea65151a6328f502f220ded`. Apple reports
+`VALID` and `IN_BETA_TESTING` in the existing Relayium Internal group.
+English and Simplified Chinese test notes are set. This release checkpoint
+records the internal package separately from the Developer ID download.
 
 Since TestFlight `1.4.9 (46)`, Share a link can send the next encrypted part
 while waiting for the preceding part's storage confirmation, with at most two
@@ -25,11 +20,9 @@ versioned Mac App Store channel is public at [1.4.10](https://apps.apple.com/app
 by Apple on 2026-10-21. Its version and publication date are recorded separately
 from the direct release in `web/mac-app-store-release.json`. Android **0.3.4 (13)** uses the public preview APK channel
 (`android-v0.3.4`), signed on 2026-11-18 from `b2bb5c2ee`; the metadata/tag
-target is `b5d9eff94`, with public assets verified on 2026-11-19. iOS has no public release: **0.5.3 (14)** has been in
-internal TestFlight testing since 2026-11-18 with faster foreground Inbox checks
-and Copy above and below received text. Earlier **0.5.2 (13)** remains internal.
-Earlier **0.5.1 (12)** remains internal, and **0.5.0 (11)** remains in the
-internal and external testing groups (per the 2026-10-18 provider read-back). The website and Sparkle feed have their own deployment and public verification;
+target is `b5d9eff94`, with public assets verified on 2026-11-19. iOS has no public release. Internal TestFlight offers **0.5.5 (16)**.
+Earlier **0.5.3 (14)** introduced faster foreground Inbox checks and Copy above
+and below received text. The website and Sparkle feed have their own deployment and public verification;
 the public URLs determine the version currently offered.
 
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
@@ -253,13 +246,11 @@ The macOS status above covers macOS only. iOS development resumed on
 2026-09-01 at version 0.3.0: internal TestFlight builds were used for
 development acceptance before the earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
-offers iOS. The current internal TestFlight build is **`0.5.3 (14)`**, App Store Connect
-build `47671712-3238-496e-a301-01d75674a79e`, source
-`dfd08d0bb0d1a7e0d1e4f62fa11bfea663c759ce`, uploaded once on 2026-11-18.
-It is `VALID` and `IN_BETA_TESTING` internally, notification off, export compliance
-cleared, absent from external testing and every Store selection. The independent
-40-build snapshot preserved all 39 earlier builds, groups, testers and all nine
-Store versions and selections, including the newly delivered macOS build 50.
+offers iOS. The current internal TestFlight build is **`0.5.5 (16)`**, from source
+`63f69a53b40d1f618ea65151a6328f502f220ded`. Apple reports `VALID` and
+`IN_BETA_TESTING` in the internal group. The build includes the file-send
+wakeup and the iPad sidebar title correction. The read-back preserved all
+40 earlier builds, testers, external memberships and all ten Store selections.
 Device Inbox checks every two seconds while visible; long received text has
 Copy above and below its full body. Ask consent, pause and foreground-only
 transfers retain their existing behavior. This is discovery/status latency work,
@@ -2330,7 +2321,7 @@ and cleanup behaviour, the presentation decisions, and the wiring that connects
 them.
 
 
-### Native file-send buffer wakeup (source only, 2026-11-23)
+### Native file-send buffer wakeup
 
 Source `189c037f2` wakes the native file producer from WebRTC buffer-change
 notifications, with the existing 50 ms timer retained as fallback. Initial and
@@ -2338,6 +2329,6 @@ replacement transports use one-shot subscriptions fenced by producer run and
 transport identity. Receive credit, frame encryption, resume and TURN selection
 are unchanged. Full Swift regression and two controlled 64 MiB TURN directions
 with complete SHA-256 verification passed. This is not a WAN speedup measurement.
-The published macOS 1.5.2 and iOS 0.5.3 binaries predate this source change and
-need a new client release to receive it; Windows 0.0.4 ships the separate native
-password-login change and does not link the Apple SDK.
+The optimization is included in the internal macOS and iOS TestFlight builds
+listed above. It takes effect after installing a build that contains source
+`189c037f2`. Windows 0.0.4 ships the separate native password-login change.
