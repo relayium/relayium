@@ -95,14 +95,30 @@ func readHello(r io.Reader) (Hello, MsgType, error) {
 // receiveV1 is the body of Receive after its Hello was read: the v1 push and
 // sync protocol, exactly as Receive has always run it.
 func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Report, error) {
+	return receiveManifest(rw, hello, destDir, opts, false)
+}
+
+func receiveManifest(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts, pagingAgreed bool) (Report, error) {
 	if hello.Version != WireVersion {
 		return Report{}, fmt.Errorf("unsupported wire version %d", hello.Version)
 	}
 	var m Manifest
-	if _, err := ReadJSON(rw, &m); err != nil {
-		return Report{}, err
+	var err error
+	paged := hello.ManifestFiles != 0
+	limit := maxManifestFiles
+	if paged {
+		if !pagingAgreed || !hello.Sync || !opts.AllowSync || !hello.ContentCheck {
+			return Report{}, refuse(rw, ErrCodeProtocol, errors.New("large sync requires content checking and negotiated paging"))
+		}
+		m, err = readManifestPages(rw, hello.ManifestFiles)
+		limit = MaxSyncFiles
+	} else {
+		_, err = ReadJSON(rw, &m)
 	}
-	if err := validateManifest(destDir, m); err != nil {
+	if err == nil {
+		err = validateManifestLimit(destDir, m, limit)
+	}
+	if err != nil {
 		// The manifest cap is a structural refusal the sender can act on (split
 		// the batch), and by this point the peer is already authorized by the
 		// transport, so telling it why is safe. Every other validation failure
@@ -215,8 +231,12 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 	res.OK = true
 	for k, expectedIndex := range expectedIndices {
 		var fs FileStart
-		if _, err := ReadJSON(rw, &fs); err != nil {
+		frameType, err := ReadJSON(rw, &fs)
+		if err != nil {
 			return rep, err
+		}
+		if paged && frameType != MsgFileStart {
+			return rep, fmt.Errorf("expected file start, got frame type %d", frameType)
 		}
 		// fs.Index is peer-controlled; reject out-of-range values before indexing
 		// so a malicious/buggy sender can't panic the receiver (and, under serve,
@@ -264,14 +284,20 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 		}
 		if !ok {
 			res.OK = false
-			res.Failed = append(res.Failed, f.Path)
+			rep.Failed = append(rep.Failed, f.Path)
+			if paged {
+				res.FailedIndices = append(res.FailedIndices, fs.Index)
+			}
 			continue
 		}
 		rep.Files++
 		rep.Bytes += f.Size
 	}
 
-	if hello.Delete && opts.AllowDelete && len(m.Files) == 0 {
+	if paged && hello.Delete && opts.AllowDelete && !res.OK {
+		rep.DeleteDenied = true
+		rep.DeleteRefusedReason = "one or more files failed verification or could not be installed"
+	} else if hello.Delete && opts.AllowDelete && len(m.Files) == 0 {
 		// Refuse a mirror-delete driven by an EMPTY manifest — it would wipe the
 		// entire destination. The sync client already refuses --delete with an
 		// empty source, but a malicious/buggy peer can send Delete=true with a
@@ -310,7 +336,9 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 		res.DeletePartial = rep.DeletePartial != ""
 	}
 
-	rep.Failed = res.Failed
+	if !paged {
+		res.Failed = rep.Failed
+	}
 	return rep, WriteJSON(rw, MsgResult, res)
 }
 
@@ -322,10 +350,10 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 // Every trust decision (AllowSync, AllowDelete, the wire version) is made again
 // on the real Hello by receiveV1 itself.
 func receivePreflight(rw io.ReadWriter, hello Hello, m Manifest, sync bool, destDir string, opts RecvOpts) (Report, error) {
-	if !sync || !hello.ContentCheck || hello.Delete || len(m.Files) != 0 {
+	if !sync || !hello.ContentCheck || hello.Delete || hello.ManifestFiles != 0 || len(m.Files) != 0 {
 		return Report{}, refuse(rw, ErrCodeProtocol, errors.New("protocol error: a preflight must be an empty content-checked sync without delete"))
 	}
-	if err := WriteJSON(rw, MsgResume, ResumeState{ContentCheck: true, Preflight: true, DeleteReport: true}); err != nil {
+	if err := WriteJSON(rw, MsgResume, ResumeState{ContentCheck: true, Preflight: true, DeleteReport: true, PagedManifest: hello.PagedManifest}); err != nil {
 		return Report{}, err
 	}
 	next, t, err := readHello(rw)
@@ -335,7 +363,7 @@ func receivePreflight(rw io.ReadWriter, hello Hello, m Manifest, sync bool, dest
 	if t != MsgHello || next.Preflight || next.Stream {
 		return Report{}, refuse(rw, ErrCodeProtocol, errors.New("protocol error: a preflight must be followed by one ordinary hello"))
 	}
-	return receiveV1(rw, next, destDir, opts)
+	return receiveManifest(rw, next, destDir, opts, hello.PagedManifest)
 }
 
 // receiveOneFile streams one manifest entry into a temporary staging file,
@@ -464,8 +492,12 @@ const maxManifestPathBytes = 4096
 var errManifestTooLarge = errors.New("manifest contains too many files")
 
 func validateManifest(destDir string, m Manifest) error {
-	if len(m.Files) > maxManifestFiles {
-		return fmt.Errorf("%w: %d (this receiver accepts at most %d per transfer)", errManifestTooLarge, len(m.Files), maxManifestFiles)
+	return validateManifestLimit(destDir, m, maxManifestFiles)
+}
+
+func validateManifestLimit(destDir string, m Manifest, limit int) error {
+	if len(m.Files) > limit {
+		return fmt.Errorf("%w: %d (this receiver accepts at most %d per transfer)", errManifestTooLarge, len(m.Files), limit)
 	}
 	seen := make(map[string]struct{}, len(m.Files))
 	var total int64

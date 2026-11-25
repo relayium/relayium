@@ -44,6 +44,9 @@ const (
 	MsgStreamData   MsgType = 10
 	MsgStreamEnd    MsgType = 11
 	MsgStreamResult MsgType = 12
+
+	// MsgManifestPage is sent only after both peers negotiate a large sync.
+	MsgManifestPage MsgType = 13
 )
 
 // StreamChunkMax bounds one MsgStreamData payload.
@@ -90,9 +93,13 @@ type Hello struct {
 	// real Hello and manifest. An older receiver ignores the flag and sees an
 	// empty sync with nothing to delete -- it writes, removes and replaces
 	// nothing -- and its missing echo tells the sender to stop before the real
-	// request (with its Delete) is ever sent. Sent only for --checksum or
-	// --strict-delete.
+	// request (with its Delete) is ever sent. Sent for large sync, --checksum
+	// or --strict-delete.
 	Preflight bool `json:",omitempty"`
+	// PagedManifest requests support during preflight. ManifestFiles gives the
+	// exact entry count on the subsequent, negotiated transfer.
+	PagedManifest bool `json:",omitempty"`
+	ManifestFiles int  `json:",omitempty"`
 }
 
 type FileEntry struct {
@@ -129,8 +136,9 @@ type ResumeState struct {
 	// Preflight and DeleteReport answer a Preflight Hello: this receiver
 	// supports content checking and reports refused/partial deletes, and is
 	// now waiting for the real Hello on this connection.
-	Preflight    bool `json:",omitempty"`
-	DeleteReport bool `json:",omitempty"`
+	Preflight     bool `json:",omitempty"`
+	DeleteReport  bool `json:",omitempty"`
+	PagedManifest bool `json:",omitempty"`
 }
 
 type FileStart struct {
@@ -182,9 +190,11 @@ type StreamResult struct {
 }
 
 type Result struct {
-	OK           bool
-	Failed       []string
-	DeleteDenied bool // sync mode: Hello.Delete was set but the receiver isn't --allow-delete
+	OK     bool
+	Failed []string
+	// Large sync reports indices to keep the result bounded even for long paths.
+	FailedIndices []int `json:",omitempty"`
+	DeleteDenied  bool  // sync mode: Hello.Delete was set but the receiver isn't --allow-delete
 	// DeleteRefused and DeletePartial report a permitted mirror-delete that the
 	// receiver refused (nothing deleted) or that stopped part-way. They carry no
 	// receiver text (no local paths), and are sent only to a sender that set
@@ -244,6 +254,10 @@ func (e *RemoteError) Error() string {
 // It stays deliberately lenient about every OTHER type, exactly as ReadJSON is,
 // so nothing that interoperated before is rejected now.
 func readExpect(r io.Reader, v any) error {
+	return readSyncResponse(r, false, 0, v)
+}
+
+func readSyncResponse(r io.Reader, strict bool, want MsgType, v any) error {
 	t, payload, err := ReadFrame(r)
 	if err != nil {
 		return err
@@ -254,6 +268,9 @@ func readExpect(r io.Reader, v any) error {
 			return errors.New("receiver refused the transfer (unreadable error frame)")
 		}
 		return &RemoteError{Code: we.Code, Msg: we.Msg}
+	}
+	if strict && t != want {
+		return fmt.Errorf("expected response frame type %d, got %d", want, t)
 	}
 	return json.Unmarshal(payload, v)
 }

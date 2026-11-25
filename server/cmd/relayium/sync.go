@@ -24,8 +24,12 @@ A relayium:// destination is the direct server-to-server path: the receiver runs
 1.3 connection. No relay, no SSH, no Relayium account — the listener accepts this
 host only once its fingerprint ("relayium id") is authorized there.
 
-Only files that changed are sent, and a partial file resumes. "Unchanged" is
-decided by content: this side puts each source file's SHA-256 in the manifest
+A single run supports up to 100,000 files and a 32 MiB directory index.
+For more than 1,000 files, both machines need a version that supports large
+directory sync. If disconnected, rerun sync to skip already verified files.
+
+Only files that changed are sent, and an existing verified prefix can be reused.
+"Unchanged" is decided by content: each source file's SHA-256 goes in the manifest
 (one extra read of every source file per run), and the receiver skips a file
 only when its own copy has the same size and digest, and installs a received
 file only when its bytes match that digest. An edit that keeps the size within
@@ -205,12 +209,25 @@ func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []stri
 		fmt.Fprintln(stderr, "refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).")
 		return 1
 	}
+	if len(m.Files) > xfer.MaxSyncFiles {
+		fmt.Fprintf(stderr, "sync contains %d files; the maximum is %d per run\n", len(m.Files), xfer.MaxSyncFiles)
+		return 1
+	}
 	prog := newSendProgress(stderr)
 	// Content checking is the default: what counts as "unchanged" is decided
 	// by the bytes, not by size and whole-second mtime. --checksum makes it a
 	// requirement rather than a best effort.
 	opts := xfer.SendOpts{Sync: true, Delete: f.del, Progress: prog.report,
 		ContentCheck: true, RequireContentCheck: f.checksum, RequireDeleteReport: f.strictDelete}
+	if xfer.NeedsPagedSync(len(m.Files)) {
+		fmt.Fprintf(stderr, "Preparing SHA-256 checks for %d files...\n", len(m.Files))
+		opts.Progress = nil
+		opts.FileProgress = func(processed, total int) {
+			if processed == total || processed%((total+19)/20) == 0 {
+				fmt.Fprintf(stderr, "  %d/%d files checked or sent\n", processed, total)
+			}
+		}
+	}
 
 	if strings.HasPrefix(dest, daemonScheme) {
 		// Digests are computed BEFORE dialing: hashing a large tree takes
@@ -303,7 +320,7 @@ func reportSync(rep xfer.Report, f syncFlags, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "warning: the receiver ignored --delete (its listener isn't started with --allow-delete); nothing was deleted")
 	case rep.DeleteRefused:
 		deleteFailed = true
-		fmt.Fprintln(stderr, "warning: the receiver refused the mirror delete (it could not derive a safe scope); nothing was deleted")
+		fmt.Fprintln(stderr, "warning: the receiver refused the mirror delete; nothing was deleted")
 	case rep.DeletePartialRemote:
 		deleteFailed = true
 		fmt.Fprintln(stderr, "warning: the receiver's mirror delete stopped part-way; some stale files were removed and some remain (see the receiver's log)")
