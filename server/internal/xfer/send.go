@@ -10,11 +10,11 @@ import (
 
 type SendOpts struct {
 	Progress func(path string, sent, total int64)
-	// FileProgress counts files whose bytes have been sent or were skipped.
-	// The receiver's final result determines whether the sync succeeded.
-	FileProgress func(processed, total int)
-	Sync         bool // sync mode: set Hello.Sync and honor the receiver's Skip
-	Delete       bool // mirror: set Hello.Delete
+	// TransferProgress reports file-body bytes and completed or skipped files.
+	// The receiver's final result still determines whether the sync succeeded.
+	TransferProgress func(TransferProgress)
+	Sync             bool // sync mode: set Hello.Sync and honor the receiver's Skip
+	Delete           bool // mirror: set Hello.Delete
 	// ContentCheck (sync only) puts each source file's SHA-256 in the manifest
 	// and asks the receiver to skip and install by content (see content_check.go).
 	// It costs one extra read of every source file before anything is sent.
@@ -27,6 +27,19 @@ type SendOpts struct {
 	// refused or partial delete a failure (ErrDeleteReportUnsupported) before
 	// any file body is sent. Only a content-checking receiver reports it.
 	RequireDeleteReport bool
+
+	// A probe must receive the actual empty transaction's confirmation.
+	checkResult bool
+}
+
+// TransferProgress is a snapshot of the current scan or send.
+type TransferProgress struct {
+	Path           string
+	FilesDone      int
+	FilesTotal     int
+	BytesDone      int64
+	BytesTotal     int64
+	AwaitingResult bool
 }
 
 type Report struct {
@@ -104,12 +117,15 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 	// MsgError frame instead of the resume state, so check the frame type before
 	// decoding rather than mistaking a refusal for an empty resume.
 	var rs ResumeState
-	if err := readSyncResponse(rw, paged, MsgResume, &rs); err != nil {
+	if err := readSyncResponse(rw, paged || opts.checkResult, MsgResume, &rs); err != nil {
 		return Report{}, err
 	}
 	offsets := make([]int64, len(m.Files))
 	for _, e := range rs.Entries {
 		if e.Index >= 0 && e.Index < len(offsets) {
+			if e.Have < 0 || e.Have > m.Files[e.Index].Size {
+				return Report{}, fmt.Errorf("receiver returned an invalid resume offset for file %d", e.Index)
+			}
 			offsets[e.Index] = e.Have
 		}
 	}
@@ -134,6 +150,15 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 			rep.ContentCheckUnconfirmed = true
 		}
 	}
+	progress := TransferProgress{FilesTotal: len(m.Files)}
+	if opts.TransferProgress != nil {
+		for i, file := range m.Files {
+			if !skip[i] {
+				progress.BytesTotal += file.Size - offsets[i]
+			}
+		}
+		opts.TransferProgress(progress)
+	}
 	var buf []byte
 	for i, f := range m.Files {
 		if skip[i] {
@@ -142,23 +167,33 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 			if buf == nil {
 				buf = make([]byte, 192<<10)
 			}
-			if err := sendFile(rw, i, f, srcs[i], offsets[i], rs.ResumeProof, opts, buf); err != nil {
+			progress.Path = f.Path
+			if err := sendFile(rw, i, f, srcs[i], offsets[i], rs.ResumeProof, opts, buf, &progress); err != nil {
 				return rep, err
 			}
 			rep.Files++
 			rep.Bytes += f.Size
 		}
-		if opts.FileProgress != nil {
-			opts.FileProgress(i+1, len(m.Files))
+		if opts.TransferProgress != nil {
+			progress.Path = ""
+			progress.FilesDone = i + 1
+			opts.TransferProgress(progress)
 		}
+	}
+	if opts.TransferProgress != nil {
+		progress.AwaitingResult = true
+		opts.TransferProgress(progress)
 	}
 
 	// Read the final result (a late refusal still arrives as MsgError).
 	var res Result
-	if err := readSyncResponse(rw, paged, MsgResult, &res); err != nil {
+	if err := readSyncResponse(rw, paged || opts.checkResult, MsgResult, &res); err != nil {
 		return rep, err
 	}
 	rep.Failed = res.Failed
+	if opts.checkResult && (!res.OK || len(res.Failed) != 0) {
+		return rep, fmt.Errorf("receiver did not confirm the sync check")
+	}
 	if paged {
 		last := -1
 		for _, index := range res.FailedIndices {
@@ -188,7 +223,7 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 // a prefix proof and answer it (ResumeState.ResumeProof); without it this sends
 // exactly what it always did, because an older receiver would reject any offset
 // other than the one it negotiated.
-func sendFile(rw io.ReadWriter, i int, f FileEntry, src string, offset int64, proof bool, opts SendOpts, buf []byte) error {
+func sendFile(rw io.ReadWriter, i int, f FileEntry, src string, offset int64, proof bool, opts SendOpts, buf []byte, progress *TransferProgress) error {
 	file, err := os.Open(src)
 	if err != nil {
 		return err
@@ -226,6 +261,7 @@ func sendFile(rw io.ReadWriter, i int, f FileEntry, src string, offset int64, pr
 		if !v.Resume {
 			// Not a prefix of this file: send it whole. Bounded to this one
 			// restart — at offset 0 there is nothing left to disagree about.
+			progress.BytesTotal += offset
 			offset = 0
 			h.Reset()
 		}
@@ -246,6 +282,10 @@ func sendFile(rw io.ReadWriter, i int, f FileEntry, src string, offset int64, pr
 			sent += int64(n)
 			if opts.Progress != nil {
 				opts.Progress(f.Path, sent, f.Size)
+			}
+			if opts.TransferProgress != nil {
+				progress.BytesDone += int64(n)
+				opts.TransferProgress(*progress)
 			}
 		}
 		if rerr == io.EOF {
@@ -284,4 +324,18 @@ func preflight(rw io.ReadWriter, opts SendOpts, paged bool) error {
 		return ErrContentCheckUnsupported
 	}
 	return ErrDeleteReportUnsupported
+}
+
+// CheckSync verifies sync capability on an authorized connection without
+// transmitting a source manifest, replacing a file or requesting deletion.
+func CheckSync(rw io.ReadWriter, fileCount int, opts SendOpts) (Report, error) {
+	paged := NeedsPagedSync(fileCount)
+	if paged || opts.RequireContentCheck || (opts.Delete && opts.RequireDeleteReport) {
+		if err := preflight(rw, opts, paged); err != nil {
+			return Report{}, err
+		}
+	}
+	// Complete the empty transaction to release the listener cleanly. This
+	// also works on receivers which predate capability questions.
+	return Send(rw, Manifest{}, nil, SendOpts{Sync: true, ContentCheck: true, checkResult: true})
 }

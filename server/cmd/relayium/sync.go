@@ -9,14 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/relayium/relayium/internal/sshx"
 	"github.com/relayium/relayium/internal/xfer"
 )
 
 const syncUsage = `relayium sync — one-way incremental folder mirror
 
 usage:
-  relayium sync <src...> relayium://host[:port] [--delete [--strict-delete]] [--checksum] [--watch]
+  relayium sync <src...> relayium://host[:port] [--checksum] [--watch]
+                [--delete [--strict-delete] | --exclude PATTERN ...]
+  relayium sync --check [<src...>] relayium://host[:port]
                                                   direct, no SSH/account
 
 A relayium:// destination is the direct server-to-server path: the receiver runs
@@ -43,6 +44,18 @@ positional arguments:
   <dest>     relayium://host[:port]
 
 flags:
+  --check          check the authorized connection before hashing or sending
+                   files. Include sources to check capability for their file
+                   count. Use with a persistent receiver: serve --once exits
+                   after handling this check. No destination files change.
+  --exclude PATTERN
+                   skip only paths matched by a pattern you provide. Repeat
+                   the flag for multiple patterns. Use forward slashes, and
+                   quote shell globs. A pattern with a slash is relative to
+                   each source directory; a basename glob matches at any
+                   depth. A glob does not cross slashes. A matched directory
+                   skips its entire subtree.
+                   Exclusions cannot be combined with --delete.
   --delete         also delete files on the receiver that are gone from the
                    source. the listener must consent:
 
@@ -69,7 +82,9 @@ flags:
                    --strict-delete these outcomes stay warnings, as before.
   --watch          keep running and re-sync when the sources change. Changes are
                    debounced and runs never overlap, so a burst of edits becomes
-                   one sync.
+                   one sync. It runs in the foreground. Use a process
+                   supervisor to keep it running after logout and run the
+                   receiver without --once.
 
                    A failed sync retries on its own with exponential backoff
                    (1s, doubling, capped at 30s) — including the very first
@@ -106,8 +121,7 @@ The destination requires a Relayium listener. SSH destinations are disabled.
 `
 
 // runSync implements `relayium sync <src...> <dest> [--delete] [--watch]`: a
-// one-way incremental mirror over the same transports as push. It always uses
-// the native protocol (no tar fallback).
+// one-way incremental mirror over the direct protocol.
 func runSync(args []string, stdout, stderr io.Writer) int {
 	var f syncFlags
 	fs := syncFlagSet(&f)
@@ -120,7 +134,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	rest := fs.Args()
-	if len(rest) < 2 {
+	if len(rest) < 2 && !(f.check && len(rest) == 1) {
 		fmt.Fprintln(stderr, "sync needs <src...> <dest>")
 		return 2
 	}
@@ -135,23 +149,33 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	if f.del && len(f.excludes) != 0 {
+		fmt.Fprintln(stderr, "sync: --exclude cannot be combined with --delete: the receiving side must keep excluded paths")
+		return 2
+	}
+	if f.check && f.watch {
+		fmt.Fprintln(stderr, "sync: --check cannot be combined with --watch")
+		return 2
+	}
+
 	ctx, cancel := transferSignalContext()
 	defer cancel()
 	if !f.watch {
 		// One sync: a signal stops it at once (no drain).
-		return syncOnce(ctx, 0, dest, srcs, f, stdout, stderr)
+		return syncOnce(ctx, 0, dest, srcs, f, stderr)
 	}
 	// Watch mode: WatchAndSync owns the whole loop, including the first sync, so
 	// an initial failure retries on its own timer instead of waiting for a
 	// change that may never come. A signal starts no further attempt; the one
 	// running gets syncWatchDrain to finish and is then aborted.
 	err := xfer.WatchAndSync(ctx, srcs, func() error {
-		if code := syncOnce(ctx, syncWatchDrain, dest, srcs, f, stdout, stderr); code != 0 {
+		if code := syncOnce(ctx, syncWatchDrain, dest, srcs, f, stderr); code != 0 {
 			// syncOnce already printed why; the code is what the retry needs.
 			return fmt.Errorf("exit status %d", code)
 		}
 		return nil
 	}, xfer.WatchOpts{
+		Excludes: f.excludes,
 		OnNotice: func(err error) { fmt.Fprintln(stderr, "watch:", err) },
 	})
 	if err != nil {
@@ -169,6 +193,8 @@ type syncFlags struct {
 	checksum     bool
 	strictDelete bool
 	configDir    string
+	check        bool
+	excludes     xfer.Excludes
 }
 
 // syncFlagSet declares `sync`'s flags, binding them into f. The help pre-scan
@@ -179,6 +205,8 @@ func syncFlagSet(f *syncFlags) *flag.FlagSet {
 	fs.StringVar(&f.identity, "i", "", "ssh identity file")
 	fs.IntVar(&f.port, "p", 0, "ssh port")
 	fs.BoolVar(&f.del, "delete", false, "delete files on the receiver that are gone from the source")
+	fs.BoolVar(&f.check, "check", false, "check the receiver connection and capabilities without transferring")
+	fs.Func("exclude", "exclude a relative path or basename glob (repeatable)", f.excludes.Add)
 	fs.BoolVar(&f.watch, "watch", false, "keep running and re-sync on change, retrying failures")
 	fs.BoolVar(&f.checksum, "checksum", false, "require the receiver to compare content, refusing an older receiver before sending anything")
 	fs.BoolVar(&f.strictDelete, "strict-delete", false, "with --delete: exit non-zero unless the receiver confirms the delete ran in full")
@@ -192,11 +220,14 @@ var syncWatchDrain = 30 * time.Second
 
 // syncOnce runs a single incremental sync of srcs → dest. ctx stops it: a
 // transfer in flight gets drain to finish and is then aborted.
-func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []string, f syncFlags, stdout, stderr io.Writer) int {
+func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []string, f syncFlags, stderr io.Writer) int {
 	if ctx.Err() != nil {
 		return 130
 	}
-	m, paths, err := xfer.BuildManifest(srcs)
+	if len(srcs) != 0 {
+		fmt.Fprintln(stderr, "Scanning source paths...")
+	}
+	m, paths, excluded, err := xfer.BuildFilteredManifest(srcs, f.excludes)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -204,7 +235,12 @@ func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []stri
 	if ctx.Err() != nil {
 		return 130
 	}
-	xfer.WarnIfEmpty(m, stderr)
+	if len(f.excludes) != 0 {
+		fmt.Fprintf(stderr, "Excluded by your rules: %d files, %d directory trees\n", excluded.Files, excluded.Directories)
+	}
+	if !f.check {
+		xfer.WarnIfEmpty(m, stderr)
+	}
 	if f.del && len(paths) == 0 {
 		fmt.Fprintln(stderr, "refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).")
 		return 1
@@ -213,91 +249,73 @@ func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []stri
 		fmt.Fprintf(stderr, "sync contains %d files; the maximum is %d per run\n", len(m.Files), xfer.MaxSyncFiles)
 		return 1
 	}
-	prog := newSendProgress(stderr)
-	// Content checking is the default: what counts as "unchanged" is decided
-	// by the bytes, not by size and whole-second mtime. --checksum makes it a
-	// requirement rather than a best effort.
-	opts := xfer.SendOpts{Sync: true, Delete: f.del, Progress: prog.report,
-		ContentCheck: true, RequireContentCheck: f.checksum, RequireDeleteReport: f.strictDelete}
-	if xfer.NeedsPagedSync(len(m.Files)) {
-		fmt.Fprintf(stderr, "Preparing SHA-256 checks for %d files...\n", len(m.Files))
-		opts.Progress = nil
-		opts.FileProgress = func(processed, total int) {
-			if processed == total || processed%((total+19)/20) == 0 {
-				fmt.Fprintf(stderr, "  %d/%d files checked or sent\n", processed, total)
-			}
-		}
+	// Content checking is the default; --checksum makes it a requirement
+	// rather than a best effort when talking to an older receiver.
+	opts := xfer.SendOpts{Sync: true, Delete: f.del, ContentCheck: true,
+		RequireContentCheck: f.checksum, RequireDeleteReport: f.strictDelete,
+		TransferProgress: syncProgress(stderr, "Sending")}
+	if f.check {
+		return checkSync(ctx, dest, f.configDir, len(m.Files), opts, stderr)
 	}
 
-	if strings.HasPrefix(dest, daemonScheme) {
-		// Digests are computed BEFORE dialing: hashing a large tree takes
-		// time, and a listener bounds how long a connected peer may stay
-		// silent.
-		cm, err := xfer.WithContentDigestsContext(ctx, m, paths)
-		if ctx.Err() != nil {
-			// Stopped while hashing: nothing was dialed or sent.
-			fmt.Fprintln(stderr, "interrupted before anything was sent")
-			return 130
-		}
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		tconn, err := dialDaemon(dest, f.configDir, stderr)
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		defer tconn.Close()
-		rep, err := sendWithShutdown(ctx, tconn, cm, paths, opts, drain)
-		prog.finish()
-		if errors.Is(err, errTransferInterrupted) {
-			return reportInterrupted(rep, stderr)
-		}
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		return reportSync(rep, f, stderr)
+	// Hash before the data connection so a legacy receiver never waits for
+	// source I/O under its handshake idle deadline.
+	cm, err := xfer.WithContentDigestsProgress(ctx, m, paths, syncProgress(stderr, "Checking SHA-256"))
+	if ctx.Err() != nil {
+		fmt.Fprintln(stderr, "interrupted before anything was sent")
+		return 130
 	}
-
-	// SSH transport: sync requires relayium on the remote (native protocol).
-	ep, err := xfer.ParseEndpoint(dest)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
-	if !ep.IsRemote() {
-		fmt.Fprintln(stderr, "sync destination must be remote (host:path or relayium://host)")
-		return 2
-	}
-	sopts := sshx.Opts{IdentityFile: f.identity, Port: f.port}
-	has, err := sshx.RemoteHasRelayium(ep, sopts)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if !has {
-		fmt.Fprintln(stderr, "sync requires relayium installed on the remote (native protocol); install it there or use push")
-		return 1
-	}
-	sess, err := sshx.Dial(ep, "relayium __recv -- "+sshx.ShellQuote(ep.Path), sopts)
+	fmt.Fprintln(stderr, "Connecting and checking the receiver's existing files...")
+	tconn, err := dialDaemon(dest, f.configDir, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	rep, serr := xfer.Send(sess, m, paths, opts)
-	prog.finish()
-	cerr := sess.Close()
-	if serr != nil {
-		fmt.Fprintln(stderr, serr)
-		return 1
+	defer tconn.Close()
+	rep, err := sendWithShutdown(ctx, tconn, cm, paths, opts, drain)
+	if errors.Is(err, errTransferInterrupted) {
+		return reportInterrupted(rep, stderr)
 	}
-	if cerr != nil {
-		fmt.Fprintln(stderr, cerr)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	return reportSync(rep, f, stderr)
+}
+
+func checkSync(ctx context.Context, dest, configDir string, fileCount int, opts xfer.SendOpts, stderr io.Writer) int {
+	fmt.Fprintln(stderr, "Checking receiver connection...")
+	tconn, err := dialDaemon(dest, configDir, stderr)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	defer tconn.Close()
+	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	stop := context.AfterFunc(checkCtx, func() { abortRaw(tconn) })
+	defer stop()
+	rep, err := xfer.CheckSync(tconn, fileCount, opts)
+	if ctx.Err() != nil {
+		return 130
+	}
+	if errors.Is(checkCtx.Err(), context.DeadlineExceeded) {
+		fmt.Fprintln(stderr, "sync check: receiver did not reply in time")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	fmt.Fprintf(stderr, "Receiver connection and authorization OK (%d source files checked; no file data sent)\n", fileCount)
+	if rep.ContentCheckUnconfirmed {
+		fmt.Fprintln(stderr, "The receiver uses size and modification time to skip files. Use --checksum to require content checking.")
+	}
+	return 0
 }
 
 // reportSync prints a sync's outcome to stderr and returns its exit code.
