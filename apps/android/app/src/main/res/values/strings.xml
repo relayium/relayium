@@ -97,6 +97,8 @@
     <string name="text_too_long" tools:ignore="PluralsCandidate">This message is longer than one message can carry (%1$d of %2$d bytes).</string>
     <string name="text_from_peer">From the other device</string>
     <string name="text_from_me">From this device</string>
+    <string name="text_copy_message">Copy</string>
+    <string name="text_message_copied">Copied</string>
     <string name="text_requested">Waiting for the other device to accept the conversation…</string>
     <string name="text_failed">Messages stopped working on this connection. Files may still work; a new session restores messages.</string>
     <string name="text_legacy_unavailable">This connection is a file session. To send messages, disconnect and pair again once the other device has started a message session.</string>

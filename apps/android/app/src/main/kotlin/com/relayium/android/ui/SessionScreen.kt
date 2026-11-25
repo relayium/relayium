@@ -1,5 +1,9 @@
 package com.relayium.android.ui
 
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.os.PersistableBundle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -20,10 +24,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -487,8 +493,8 @@ private fun MessagesCard(
     viewModel: TransferViewModel,
 ) {
     // The draft lives in the ViewModel, NOT in rememberSaveable: saved
-    // instance state is written outside the app's memory, and the text
-    // contract is that message plaintext never leaves this process. The
+    // instance state is written outside the app's memory. Copying a displayed
+    // message to the system clipboard takes an explicit user action. The
     // ViewModel also owns when it clears — only after the controller confirms
     // this exact text entered the channel (see TransferViewModel.sendDraft).
     //
@@ -710,21 +716,42 @@ private fun ActionRow(
 private val ACTION_ROW_MIN_WIDTH = 280.dp
 
 @Composable
-private fun MessageRow(message: TransferController.Message) {
+internal fun MessageRow(message: TransferController.Message) {
+    val context = LocalContext.current
+    val copyLabel = stringResource(R.string.text_copy_message)
+    var copied by remember(message) { mutableStateOf(false) }
+
     Column {
-        Text(
-            text = if (message.fromPeer) {
-                stringResource(R.string.text_from_peer)
-            } else {
-                stringResource(R.string.text_from_me)
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = if (message.fromPeer) {
-                MaterialTheme.colorScheme.secondary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (message.fromPeer) {
+                    stringResource(R.string.text_from_peer)
+                } else {
+                    stringResource(R.string.text_from_me)
+                },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (message.fromPeer) {
+                    MaterialTheme.colorScheme.secondary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            TextButton(onClick = {
+                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                val clip = ClipData.newPlainText(copyLabel, message.body)
+                clip.description.extras = PersistableBundle().apply {
+                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+                }
+                clipboard.setPrimaryClip(clip)
+                copied = true
+            }) {
+                Text(if (copied) stringResource(R.string.text_message_copied) else copyLabel)
+            }
+        }
         Text(text = message.body, style = MaterialTheme.typography.bodyMedium)
     }
 }
