@@ -3,6 +3,7 @@ package com.relayium.android.ui
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
+import android.os.Build
 import android.os.PersistableBundle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -743,8 +744,10 @@ internal fun MessageRow(message: TransferController.Message) {
             TextButton(onClick = {
                 val clipboard = context.getSystemService(ClipboardManager::class.java)
                 val clip = ClipData.newPlainText(copyLabel, message.body)
-                clip.description.extras = PersistableBundle().apply {
-                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    clip.description.extras = PersistableBundle().apply {
+                        putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+                    }
                 }
                 clipboard.setPrimaryClip(clip)
                 copied = true

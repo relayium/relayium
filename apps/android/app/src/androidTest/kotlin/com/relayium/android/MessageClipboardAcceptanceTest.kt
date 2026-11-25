@@ -2,6 +2,7 @@ package com.relayium.android
 
 import android.content.ClipDescription
 import android.content.ClipboardManager
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
@@ -41,7 +42,9 @@ class MessageClipboardAcceptanceTest {
             val clipboard = activity.getSystemService(ClipboardManager::class.java)
             val clip = requireNotNull(clipboard.primaryClip)
             assertEquals(message.body, clip.getItemAt(0).text.toString())
-            assertTrue(clip.description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE) == true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                assertTrue(clip.description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE) == true)
+            }
         }
     }
 }
