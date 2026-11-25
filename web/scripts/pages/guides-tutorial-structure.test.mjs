@@ -84,7 +84,7 @@ const REVISED = {
   // moved with that rewrite; the six above were not touched by it.
   // cli-mode-chooser.test.mjs pins the whole rewritten set.
   "guides-receive-from-cli": "2026-09-01",
-  "howto-automate-server-backups": "2026-09-01",
+  "howto-automate-server-backups": "2026-11-25",
 };
 
 const sections = (doc) => doc.sections || [];

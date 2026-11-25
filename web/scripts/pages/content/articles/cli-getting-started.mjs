@@ -47,7 +47,7 @@ const en = {
         "relayium text — ephemeral encrypted messages between two terminals that are both online at the same time. Minting the code needs relayium login; joining with a code someone handed you needs no account, and Relayium servers keep no message bodies.",
         `relayium send / relayium receive — to another person across networks, using a short pairing code the sender's CLI mints (sign in once with relayium login; the receiver never does). The other end can be relayium receive, relayium pair, a Relayium app or the web page, and relayium pair is the two-way session over the same kind of code. A minted code is good for five minutes, so start the receiving end within that window. ${cliDirectFacts.en}`,
         "relayium serve + relayium push relayium:// (daemon direct) — straight between two machines you own, over pinned TLS 1.3. No relay, no SSH, no pairing code. The receiving host's authorized_fingerprints file is the whole trust decision, and being signed in to a Relayium account grants no one filesystem access.",
-        "relayium sync — one-way incremental mirroring over the same transports as push: files whose size and modification time are unchanged are skipped. It is the mode that continues a partial file at the destination on a later run, and it verifies the files it does transfer — but a one-way mirror is a copy of the current state, not a versioned backup.",
+        "relayium sync — create a one-way incremental mirror over relayium://. It keeps the current state, not a versioned backup. Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison. A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
       ],
     },
     {
@@ -229,7 +229,7 @@ const zh = {
         "relayium text——两个终端之间的临时加密消息，两端必须同时在线。生成配对码需要 relayium login；拿着别人给你的配对码加入则无需账号，Relayium 服务器也不保存消息正文。",
         `relayium send / relayium receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。对端可以是 relayium receive、relayium pair、Relayium 应用或网页；relayium pair 是基于同一种配对码的双向会话。铸出来的配对码有效期 5 分钟，所以要在这段时间内让接收端加入。${cliDirectFacts.zh}`,
         "relayium serve + relayium push relayium://（daemon 直连）——直接在你拥有的两台机器之间传输，走证书固定的 TLS 1.3。无中继、无 SSH、无需配对码。接收端主机的 authorized_fingerprints 文件就是全部的信任决定；登录 Relayium 账号并不会给任何人文件系统权限。",
-        "relayium sync——单向增量镜像，走和 push 相同的传输通道：大小与修改时间都没变的文件会被跳过。它是那个会在下一次运行时接着传目标端半截文件的模式，并且会校验它确实传输的文件——但单向镜像是当前状态的副本，不是带版本的备份。",
+        "relayium sync——通过 relayium:// 做单向增量镜像，只保留当前状态。 新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。 下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
       ],
     },
     {
@@ -1663,6 +1663,6 @@ const currentZh = {
 export default {
   slug: "guides/transfer-files-from-terminal",
   published: "2026-07-08",
-  updated: "2026-09-01",
+  updated: "2026-11-25",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

@@ -181,6 +181,8 @@ Keep a folder mirrored with **`sync`** — over daemon-direct, incremental (only
 relayium sync ./site relayium://host --delete --watch
 ```
 
+For a one-command transfer of a large directory, see the [cross-server sync walkthrough](https://relayium.com/guides/sync-a-large-folder-between-servers/).
+
 For `--delete`, the receiving listener must have been started with
 `--allow-delete`; otherwise nothing is deleted and the sender is told so.
 Deletion is confined to the
@@ -398,17 +400,12 @@ implementation notes, release evidence, acceptance procedures, and future work
 live in [`docs/`](docs/) rather than on this project overview.
 
 **On iOS:** `apps/ios/` exists in this repository and its development has
-**resumed**, at version `0.5.5`. It has never been publicly released — there is
-no App Store listing and this site offers no iOS download — and nothing here
-should be read as a commitment to ship it. The material under `apps/ios/` and
-the iOS sections of [`apps/README.md`](apps/README.md) describe a build in
-development, not something a reader can install.
+**resumed**, at version `0.5.5`. It has never been publicly released and has no App Store listing. Internal TestFlight testers can install build 16.
 
 **On Android:** `apps/android/` is a native Kotlin/Compose client, at version
-`0.3.4` (versionCode 13), offered as a **public preview** distributed as a direct
+`0.3.5` (versionCode 14), offered as a **public preview** distributed as a direct
 APK — no Google Play listing and no Google Play Services dependency of any kind.
-It has five destinations — Transfer, Nearby, Inbox, Cloud and Account — and none
-of them opens onto a placeholder:
+It has five destinations — Transfer, Nearby, Inbox, Cloud and Account. The Transfer and Nearby session messages each have a Copy button:
 
 * **Transfer** joins an existing transfer (a six-digit code or a `cross-network`
   link, anonymously) and now **mints** one too, under a signed-in account.

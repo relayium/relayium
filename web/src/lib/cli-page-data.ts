@@ -133,6 +133,9 @@ export const FLAG_ROWS = [
   { key: "allowDelete", flag: "--allow-delete", who: "serve" },
   { key: "noResume", flag: "--no-resume", who: "serve · push" },
   { key: "delete", flag: "--delete", who: "sync" },
+  { key: "syncCheck", flag: "--check", who: "sync" },
+  { key: "syncExclude", flag: "--exclude", who: "sync" },
+  { key: "syncChecksum", flag: "--checksum", who: "sync" },
   { key: "watch", flag: "--watch", who: "sync" },
   { key: "dest", flag: "--dest <dir>", who: "pair" },
   { key: "accept", flag: "--accept", who: "pair" },
@@ -403,7 +406,7 @@ relayium authorize 74318e3b…`,
   {
     key: "sync",
     name: "relayium sync",
-    code: `# one-way incremental mirror: unchanged files (same size and mtime) are skipped
+    code: `# one-way incremental mirror: current receivers compare size and SHA-256
 relayium sync ./site relayium://receiver.example.com
 
 # --delete mirrors removals too; on a relayium:// listener it only works if that

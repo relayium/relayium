@@ -10,7 +10,7 @@ const en = {
     "Mirror a big directory from one server to another with relayium sync — incremental, resumable after a dropped connection, and safe to run unattended. A retry loop under tmux moves gigabytes without babysitting a terminal.",
   updatedLabel: "Last updated",
   lead: [
-    "You have a large folder — tens of gigabytes — on one server and you want an exact copy on another. You can't watch a terminal for hours, and a transfer that dies halfway shouldn't start over from zero. relayium sync is built for this: a one-way incremental mirror that skips what's already there, resumes a half-sent file from where it stopped, and verifies every file it sends, end to end.",
+    "Both servers should use v0.28.1 or later. One run handles up to 100,000 regular files and a 32 MiB directory index. Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison. A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
     "This guide sets up an unattended, self-healing transfer: authorize the sender once, run the listener in the background, and drive relayium sync from a retry loop inside tmux so it keeps going across dropped connections until the whole folder has landed.",
   ],
   sections: [
@@ -20,16 +20,16 @@ const en = {
         "sync is a one-way incremental mirror over the native protocol (install relayium on both ends). Three properties make it safe to run and re-run unattended:",
       ],
       bullets: [
-        "Skips files already there: a file whose copy on the receiver matches by size and modification time isn't sent again.",
-        "Resumes partial files: if a file was half-transferred when the connection dropped, the next run continues from the byte offset already on disk instead of restarting it.",
-        "Verifies what it sends: every file it transfers — a resumed one included — is checked end to end against the sender's SHA-256, and a mismatch is reported as a failure. Files it skips are matched on size and mtime and never re-hashed, so sync says nothing about the contents it did not send.",
+        "Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison.",
+        "A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
+        "Matching du -sh totals are a coarse check. Rerun with --checksum to require SHA-256 comparison of the selected files.",
         "Because of these, the command is idempotent — running it again only does the work that's left, which is exactly what lets a retry loop finish a huge transfer.",
       ],
     },
     {
       heading: "Prerequisites",
       body: [
-        "Install relayium on both servers (sync speaks the native protocol, so it must be present on each end):",
+        "Both servers should use v0.28.1 or later. One run handles up to 100,000 regular files and a 32 MiB directory index. For one copy, use relayium serve --once on the receiver and one relayium sync on the sender. To probe first, run serve without --once and use sync --check; it verifies connectivity and authorization without sending file data. For ongoing synchronization, keep the receiver running and add --watch on the sender.",
       ],
       code: [
         `# on BOTH servers
@@ -105,17 +105,17 @@ tmux new -s xfer      # apt install -y tmux if it's missing`,
       success: {
         label: "What a successful pass looks like",
         body: [
-          "Each pass prints one line per file it actually sent, then a summary counting what it sent against what the receiver already had. The loop ends the first time sync returns success, and that summary is the state of the mirror.",
+          "Progress shows source hashing and sent bytes, including while one large file is in flight. Read the final sent/unchanged counts.",
         ],
         code: [
           `relayium sync /root/workspace relayium://203.0.113.43:9031
-  workspace/data/part-004.bin (1073741824 bytes)
+  Sending 1.0 GiB / 1.0 GiB · 1/1 files · workspace/data/part-004.bin
 synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "Each retry does less: already-transferred files are skipped, a half-sent file resumes — so the loop converges and finishes.",
-        "Progress prints one line per completed file, so a big file transfers quietly until it's done. Silence isn't a stall (see troubleshooting).",
+        "A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
+        "Progress shows source hashing and sent bytes, including while one large file is in flight. Read the final sent/unchanged counts.",
       ],
     },
     {
@@ -146,7 +146,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       success: {
         label: "What a finished mirror looks like",
         body: [
-          "du -sh reports the same total on both servers, and the until loop has returned you to an ordinary shell prompt rather than retrying again. Matching totals are a coarse completeness check, not proof of integrity: sync decided by size and mtime which files not to send, so the totals say nothing about the contents of the files it skipped.",
+          "Matching du -sh totals are a coarse check. Rerun with --checksum to require SHA-256 comparison of the selected files.",
         ],
         code: [
           `# the same total, on BOTH servers
@@ -154,7 +154,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
         ],
       },
       bullets: [
-        "What sync sent was verified: every file it transferred was SHA-256 checked on arrival, and a clean exit means none of those checks failed. What it skipped was matched on size and mtime only, so equal du -sh totals are a sanity check on completeness rather than proof that the skipped contents still match. Compare per-file checksums on both servers if you need that proof.",
+        "Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison.",
       ],
     },
     {
@@ -173,7 +173,7 @@ ss -tinp dst :9031
 # ESTAB    the listener was reached; not proof that bytes are moving
 # SYN-SENT it cannot reach the listener`,
             ],
-            fix: "Progress prints only when a file finishes, so one large file transfers in complete silence. ESTAB proves reachability only — an established socket can sit idle or stall — so it is never on its own evidence of forward progress. Run the check twice a few seconds apart and compare the bytes_acked counter that -i prints for that socket: a rising count is a transfer that is moving, an unchanged one is a real stall.",
+            fix: "ESTAB proves reachability only. Check the CLI byte progress or run ss -tinp twice and compare bytes_acked. While it is hashing locally there may be no transfer socket.",
           },
           {
             symptom: "The socket sits in SYN-SENT and the transfer never starts at all.",
@@ -203,11 +203,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             fix: "Killing by command-line pattern signals every process whose command line contains that text, which on a machine running more than one transfer is not the one you meant. It also does not stop the mirror: the until loop owns the sync, so a killed child is simply started again ten seconds later. Look with pgrep -af, then end the things this guide actually owns — tmux kill-session -t xfer ends the loop, and kill on the PID in ~/relayium-serve.pid ends the listener you launched. Print that PID's command line before you signal it if the file has been sitting there since an earlier run: a PID the system has reused belongs to something else entirely.",
           },
           {
-            symptom: "You want to leave one subdirectory out and there is no exclude flag.",
+            symptom: "Exclude a folder or file pattern you chose",
             code: [
-              `relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031`,
+              `relayium sync --exclude 'example-cache/' /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "sync takes -i and -p, --delete, --watch and --config-dir — nothing that filters a path out mid-tree. Name the subdirectories you do want instead: each source arrives under the receiver's --dir by its own name, so against serve --dir /root/workspace this rebuilds /root/workspace/src and /root/workspace/data and never walks a regenerable venv.",
+            fix: "Repeat --exclude for each rule. Use relative paths or quoted file-name globs. Rules are your choice; --exclude cannot be combined with --delete.",
           },
           {
             symptom: "A source you expected to mirror arrives with nothing in it.",
@@ -226,11 +226,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "What happens if the transfer is interrupted halfway?",
-        a: "Nothing is lost. Rerun relayium sync — it skips files already on the receiver and resumes a half-sent file from the byte offset already on disk. The until loop in this guide does that automatically until the whole folder is mirrored.",
+        a: "A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
       },
       {
         q: "How is this different from rsync?",
-        a: "Both do incremental one-way mirroring, but relayium sync runs over a pinned TLS connection with no SSH account required (daemon direct), authenticates the two machines by certificate fingerprint, and SHA-256 verifies every file it transfers. Like rsync's default, a file whose size and mtime already match on the receiver is skipped rather than re-hashed. It's the same transfer engine as relayium's other modes.",
+        a: "Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison.",
       },
       {
         q: "Does sync delete files on the receiver that I removed from the source?",
@@ -260,7 +260,7 @@ const zh = {
     "用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。",
   updatedLabel: "最近更新",
   lead: [
-    "你在一台服务器上有一个很大的文件夹——几十 GB——想在另一台上得到一份完整副本。你没法盯着终端好几个小时，而且传到一半断掉的传输不应该从头再来。relayium sync 正是为此而生：一个单向增量镜像，跳过已经存在的文件，把传了一半的文件从中断处续传，并对它发送的每个文件做端到端校验。",
+    "两台服务器都使用 v0.28.1 或更新版本。一次最多处理 100,000 个普通文件，目录索引上限为 32 MiB。 新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。 下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
     "本指南搭建一个无人值守、自动恢复的传输：把发送方授权一次，让监听端在后台运行，并在 tmux 里用重试循环驱动 relayium sync，让它在掉线之后继续跑，直到整个文件夹全部到达。",
   ],
   sections: [
@@ -270,16 +270,16 @@ const zh = {
         "sync 是走原生协议的单向增量镜像（两端都要装 relayium）。有三个特性让它可以安心地无人值守地反复运行：",
       ],
       bullets: [
-        "跳过已存在的文件：接收方上大小和修改时间都一致的文件不会重复发送。",
-        "续传半截文件：如果某个文件在连接断开时只传了一半，下次运行会从磁盘上已有的字节偏移继续，而不是重新传。",
-        "校验它发送的内容：它传输的每个文件——包括续传的那些——都会按发送端的 SHA-256 做端到端校验，对不上就报为失败。被跳过的文件只按大小和 mtime 判定，不会重新计算哈希，所以 sync 对它没有发送的内容不作任何保证。",
+        "新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。",
+        "下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
+        "du -sh 总量只是粗略核对。再用 --checksum 运行一次，可要求对选中的文件做 SHA-256 内容比对。",
         "正因如此，这条命令是幂等的——再跑一次只做剩下的活，这正是重试循环能完成一次超大传输的关键。",
       ],
     },
     {
       heading: "前提条件",
       body: [
-        "两端服务器都要装 relayium（sync 走原生协议，因此每一端都必须有）：",
+        "两台服务器都使用 v0.28.1 或更新版本。一次最多处理 100,000 个普通文件，目录索引上限为 32 MiB。 只传一次，接收端用 relayium serve --once，发送端执行一次 relayium sync。若想先检查，请让接收端去掉 --once，再用 sync --check，验证连通性和授权而不发送文件数据。需要持续同步时，保持接收端运行，并在发送端加 --watch。",
       ],
       code: [
         `# 两台服务器上都执行
@@ -355,17 +355,17 @@ tmux new -s xfer      # 没有 tmux 就 apt install -y tmux`,
       success: {
         label: "一次成功的传输是什么样",
         body: [
-          "每一趟都会为它真正发出去的每个文件打印一行，然后打印一行汇总：这次发了多少，接收方已经有多少。循环会在 sync 第一次返回成功时结束，而那行汇总就是镜像的状态。",
+          "进度会显示源文件校验和已发送字节，单个大文件传输期间也会更新。最终汇总显示发送和跳过的文件数。",
         ],
         code: [
           `relayium sync /root/workspace relayium://203.0.113.43:9031
-  workspace/data/part-004.bin (1073741824 bytes)
+  Sending 1.0 GiB / 1.0 GiB · 1/1 files · workspace/data/part-004.bin
 synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "每次重试做的活都更少：已传完的文件被跳过，传了一半的文件续传——所以循环会收敛并结束。",
-        "进度是每传完一个文件打印一行，因此一个大文件会安静地传到完成为止。没有输出不代表卡住（见排错）。",
+        "下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
+        "进度会显示源文件校验和已发送字节，单个大文件传输期间也会更新。最终汇总显示发送和跳过的文件数。",
       ],
     },
     {
@@ -396,7 +396,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       success: {
         label: "镜像完成是什么样",
         body: [
-          "两台服务器上的 du -sh 报出同一个总量，而且 until 循环已经把你送回普通的 shell 提示符，而不是又在重试。总量一致只是一次粗略的完整性核对，并不能证明内容无误：sync 是按大小和 mtime 决定哪些文件不发送的，所以总量说明不了被跳过文件的内容。",
+          "du -sh 总量只是粗略核对。再用 --checksum 运行一次，可要求对选中的文件做 SHA-256 内容比对。",
         ],
         code: [
           `# the same total, on BOTH servers
@@ -404,7 +404,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
         ],
       },
       bullets: [
-        "sync 发送过的内容是校验过的：它传输的每个文件在到达时都做过 SHA-256 校验，干净退出意味着没有一项校验失败。被跳过的部分只比对了大小和 mtime，所以 du -sh 总量一致只是对完整性的一次粗略核对，并不能证明被跳过文件的内容仍然一致。需要这种证明，就在两台服务器上逐个文件比对校验和。",
+        "新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。",
       ],
     },
     {
@@ -423,7 +423,7 @@ ss -tinp dst :9031
 # ESTAB    说明够得着监听端，但不能证明字节在动
 # SYN-SENT 连不上监听端`,
             ],
-            fix: "进度只在一个文件传完时才打印，所以一个大文件会在完全的安静中传输。ESTAB 只能证明够得着——一条已建立的连接照样可以闲着或者卡住——它本身永远不能证明还在往前走。隔几秒把这条检查跑两次，比较 -i 为该套接字打印的 bytes_acked 计数：数字在涨就是真的在传，一直不变才是真卡住。",
+            fix: "ESTAB 只说明已连接。查看 CLI 的字节进度，或运行两次 ss -tinp 并比较 bytes_acked。初始本地校验时可能还没有传输连接。",
           },
           {
             symptom: "套接字停在 SYN-SENT，传输压根没开始。",
@@ -453,11 +453,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             fix: "按命令行模式去杀，会对所有命令行里含这段文字的进程都发信号；机器上同时跑着不止一个传输时，杀掉的就不是你想杀的那个。而且它也停不下镜像：sync 是 until 循环的子进程，杀掉之后循环十秒后又拉起一个。先用 pgrep -af 看清楚，再去结束本指南真正拥有的东西——tmux kill-session -t xfer 结束那个循环，对 ~/relayium-serve.pid 里的 PID 执行 kill 结束你启动的监听端。如果那个 PID 文件是上一次运行留下的，先把它的命令行打出来再发信号：被系统重新分配出去的 PID，属于完全不相干的另一个进程。",
           },
           {
-            symptom: "你想排除某个子目录，但没有 exclude 参数。",
+            symptom: "排除你指定的目录或文件模式",
             code: [
-              `relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031`,
+              `relayium sync --exclude 'example-cache/' /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "sync 支持 --delete、--watch 和 --config-dir——没有任何能在树中间过滤掉某个路径的开关。改成直接点名你真正想要的子目录：每个源都会按自己的名字落在接收方的 --dir 下面，所以配合 serve --dir /root/workspace，这条命令会重建 /root/workspace/src 和 /root/workspace/data，而那个可以重新生成的 venv 根本不会被遍历。",
+            fix: "每条规则用一个 --exclude。可以用相对路径，也可以用加引号的文件名通配符。排除项由你决定，--exclude 不能和 --delete 同用。",
           },
           {
             symptom: "你以为会镜像过去的源，传过去却是空的。",
@@ -476,11 +476,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "传到一半被打断会怎样？",
-        a: "什么都不会丢。重新运行 relayium sync——它会跳过接收方已有的文件，并把传了一半的文件从磁盘上已有的字节偏移续传。本指南里的 until 循环会自动做这件事，直到整个文件夹镜像完成。",
+        a: "下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
       },
       {
         q: "这和 rsync 有什么不同？",
-        a: "两者都做增量单向镜像，但 relayium sync 走证书固定的 TLS 连接、不需要 SSH 账号（daemon 直连），通过证书指纹互相认证两台机器，并对它传输的每个文件做 SHA-256 校验。和 rsync 的默认行为一样，接收端上大小和 mtime 已经一致的文件会被跳过，而不是重新计算哈希。它和 relayium 其他模式用的是同一个传输引擎。",
+        a: "新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。",
       },
       {
         q: "sync 会把我从源端删掉的文件在接收方也删掉吗？",
@@ -510,7 +510,7 @@ const ja = {
     "relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。",
   updatedLabel: "最終更新",
   lead: [
-    "一方のサーバーに大きなフォルダー（数十 GB）があり、それをもう一方に完全な複製として欲しいとします。何時間もターミナルを見張ることはできませんし、途中で落ちた転送が最初からやり直しになるのも困ります。relayium sync はまさにこのために作られています。一方向の増分ミラーで、すでにあるものはスキップし、途中まで送ったファイルは止まったところから再開し、送信した各ファイルを端から端まで検証します。",
+    "両方のサーバーを v0.28.1 以降にしてください。1 回で最大 100,000 個の通常ファイル、ディレクトリインデックスは 32 MiB までです。 現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。 再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
     "本ガイドでは、無人で自己修復する転送を構築します。送信側を一度だけ承認し、リスナーをバックグラウンドで動かし、tmux 内のリトライループで relayium sync を回して、接続が切れても続行させ、フォルダー全体が届くまで走らせます。",
   ],
   sections: [
@@ -520,16 +520,16 @@ const ja = {
         "sync はネイティブプロトコル上の一方向増分ミラーです（両端に relayium をインストールします）。無人で繰り返し実行しても安全な理由が3つあります：",
       ],
       bullets: [
-        "すでにあるファイルはスキップ：受信側のコピーがサイズと更新時刻で一致するファイルは再送しません。",
-        "途中のファイルを再開：接続が切れたとき半分だけ送られていたファイルは、次回の実行でディスク上にすでにあるバイトオフセットから続行し、やり直しません。",
-        "送るものを検証：転送する各ファイルは（再開したものも含めて）送信側の SHA-256 と端から端まで照合され、一致しなければ失敗として報告されます。スキップするファイルはサイズと mtime で判定するだけでハッシュを取り直さないため、送らなかった内容について sync は何も保証しません。",
+        "現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。",
+        "再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
+        "du -sh の合計は目安です。選択したファイルを SHA-256 で比較するには --checksum を付けて再実行します。",
         "これらのおかげでコマンドは冪等です。もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。",
       ],
     },
     {
       heading: "前提条件",
       body: [
-        "両方のサーバーに relayium をインストールします（sync はネイティブプロトコルを話すため、各端に必要です）：",
+        "両方のサーバーを v0.28.1 以降にしてください。1 回で最大 100,000 個の通常ファイル、ディレクトリインデックスは 32 MiB までです。 一度だけコピーする場合は受信側で relayium serve --once、送信側で relayium sync を一度実行します。事前確認には --once を外し、ファイルデータを送信せず到達性と許可を確認する sync --check を使います。定期的に同期する場合は受信側を起動したまま送信側に --watch を付けます。",
       ],
       code: [
         `# 両方のサーバーで
@@ -605,17 +605,17 @@ tmux new -s xfer      # tmux が無ければ apt install -y tmux`,
       success: {
         label: "成功した一巡の表示",
         body: [
-          "一巡ごとに、実際に送ったファイルの数だけ行が表示され、続いて今回送った数と受信側にすでにあった数の要約が出ます。ループは sync が最初に成功を返した時点で終わり、その要約がミラーの状態です。",
+          "進捗は送信元のハッシュ計算と送信済みバイトを表示します。大きなファイルの途中でも更新され、最後に送信数とスキップ数が出ます。",
         ],
         code: [
           `relayium sync /root/workspace relayium://203.0.113.43:9031
-  workspace/data/part-004.bin (1073741824 bytes)
+  Sending 1.0 GiB / 1.0 GiB · 1/1 files · workspace/data/part-004.bin
 synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "再試行のたびに作業は減ります：転送済みのファイルはスキップされ、半分送ったファイルは再開されます。だからループは収束して終わります。",
-        "進捗はファイルが1つ完了するごとに1行表示されるので、大きなファイルは完了まで静かに転送されます。無音は停止ではありません（トラブルシューティング参照）。",
+        "再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
+        "進捗は送信元のハッシュ計算と送信済みバイトを表示します。大きなファイルの途中でも更新され、最後に送信数とスキップ数が出ます。",
       ],
     },
     {
@@ -646,7 +646,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       success: {
         label: "ミラーが完了したときの表示",
         body: [
-          "両方のサーバーで du -sh が同じ合計を報告し、until ループは再試行に戻らず、通常のシェルプロンプトへ戻っています。合計の一致は大まかな完了確認であって、内容が同一であることの証明ではありません。sync はサイズと mtime でどのファイルを送らないかを決めているため、スキップしたファイルの中身について合計は何も語りません。",
+          "du -sh の合計は目安です。選択したファイルを SHA-256 で比較するには --checksum を付けて再実行します。",
         ],
         code: [
           `# the same total, on BOTH servers
@@ -654,7 +654,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
         ],
       },
       bullets: [
-        "sync が送ったものは検証済みです。転送した各ファイルは到着時に SHA-256 で検査され、クリーンな終了はその検査が一つも失敗しなかったことを意味します。スキップした分はサイズと mtime を照合しただけなので、du -sh の合計が一致することは完了の目安であって、スキップしたファイルの中身が今も同じだという証明ではありません。その証明が要るなら、両方のサーバーでファイルごとのチェックサムを突き合わせてください。",
+        "現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。",
       ],
     },
     {
@@ -673,7 +673,7 @@ ss -tinp dst :9031
 # ESTAB    リスナーに届いたことを示すだけで、バイトが動いている証拠ではない
 # SYN-SENT リスナーに届いていない`,
             ],
-            fix: "進捗はファイルが1つ完了したときにしか表示されないので、大きなファイル1つはまったくの無音で転送されます。ESTAB が示すのは到達できたことだけで、確立済みのソケットが無通信のまま止まっていることもあり、それだけでは前進の証拠になりません。このチェックを数秒あけて2回実行し、-i がそのソケットについて表示する bytes_acked カウンターを比べてください。増えていれば転送は動いており、変わらなければ本当に止まっています。",
+            fix: "ESTAB は到達できたことだけを示します。CLI のバイト進捗を見るか、ss -tinp を 2 回実行して bytes_acked を比較してください。ローカルのハッシュ計算中は接続がない場合があります。",
           },
           {
             symptom: "ソケットが SYN-SENT のままで、転送がまったく始まらない。",
@@ -703,11 +703,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             fix: "コマンドラインのパターンで殺すやり方は、その文字列を含むプロセスすべてにシグナルを送るので、転送が複数動いているマシンでは狙った相手とは限りません。しかもミラーは止まりません。sync を所有しているのは until ループなので、子プロセスを殺しても10秒後にまた起動されます。まず pgrep -af で確認し、このガイドが実際に所有しているものを終わらせてください。tmux kill-session -t xfer でループを終了し、~/relayium-serve.pid にある PID を kill して、自分で起動したリスナーを止めます。その PID ファイルが前回の実行から残っているなら、シグナルを送る前にコマンドラインを表示してください。システムが再利用した PID は、まったく別のプロセスのものです。",
           },
           {
-            symptom: "あるサブディレクトリだけ除きたいのに、exclude のフラグが無い。",
+            symptom: "指定したフォルダーやファイルパターンを除外する",
             code: [
-              `relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031`,
+              `relayium sync --exclude 'example-cache/' /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "sync が取るのは -i と -p、--delete、--watch、--config-dir だけで、木の途中でパスを除外する仕組みはありません。代わりに欲しいサブディレクトリを列挙してください。各ソースは受信側の --dir の下に自分の名前で届くので、serve --dir /root/workspace に対してこのコマンドを実行すると /root/workspace/src と /root/workspace/data が再現され、作り直せる venv は一度も走査されません。",
+            fix: "ルールごとに --exclude を指定します。相対パスまたは引用符で囲んだファイル名パターンを使えます。除外は利用者が指定し、--delete とは併用できません。",
           },
           {
             symptom: "ミラーされるはずのソースが、中身のない状態で届く。",
@@ -726,11 +726,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "転送が途中で中断されたらどうなりますか？",
-        a: "何も失われません。relayium sync を再実行してください。受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。",
+        a: "再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
       },
       {
         q: "これは rsync と何が違いますか？",
-        a: "どちらも増分の一方向ミラーですが、relayium sync は証明書ピンニング付き TLS 接続で動作し、SSH アカウントを必要とせず（デーモン直結）、証明書のフィンガープリントで2台を認証し、転送する各ファイルを SHA-256 で検証します。rsync の既定と同じく、受信側でサイズと mtime がすでに一致するファイルはハッシュを取り直さずスキップされます。relayium の他モードと同じ転送エンジンです。",
+        a: "現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。",
       },
       {
         q: "ソースから削除したファイルを、sync は受信側でも削除しますか？",
@@ -760,7 +760,7 @@ const ko = {
     "relayium sync로 큰 디렉터리를 한 서버에서 다른 서버로 미러링하세요. 증분 전송, 연결이 끊겨도 재개 가능, 무인 실행도 안전합니다. tmux 안의 재시도 루프로 터미널에 붙어 있지 않고도 수십 GB를 옮길 수 있습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "한 서버에 큰 폴더(수십 GB)가 있고, 다른 서버에 똑같은 복사본을 원한다고 합시다. 몇 시간 동안 터미널을 지켜볼 수도 없고, 도중에 죽은 전송이 처음부터 다시 시작되어서도 안 됩니다. relayium sync는 바로 이를 위해 만들어졌습니다. 이미 있는 것은 건너뛰고, 절반만 보낸 파일은 멈춘 지점부터 재개하며, 보낸 파일을 끝에서 끝까지 검증하는 단방향 증분 미러입니다.",
+    "두 서버 모두 v0.28.1 이상을 사용하세요. 한 번에 일반 파일 최대 100,000개, 디렉터리 인덱스 최대 32 MiB를 처리합니다. 최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요. 다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
     "이 가이드는 무인으로 스스로 복구하는 전송을 구성합니다. 보내는 쪽을 한 번만 승인하고, 리스너를 백그라운드에서 돌리고, tmux 안의 재시도 루프로 relayium sync를 구동해 연결이 끊겨도 계속 진행하여 폴더 전체가 도착할 때까지 실행합니다.",
   ],
   sections: [
@@ -770,16 +770,16 @@ const ko = {
         "sync는 네이티브 프로토콜 위의 단방향 증분 미러입니다(양쪽 끝에 relayium을 설치). 무인으로 반복 실행해도 안전한 이유가 세 가지 있습니다:",
       ],
       bullets: [
-        "이미 있는 파일은 건너뜀: 받는 쪽 복사본이 크기와 수정 시각으로 일치하는 파일은 다시 보내지 않습니다.",
-        "부분 파일 재개: 연결이 끊길 때 절반만 전송된 파일은, 다음 실행에서 디스크에 이미 있는 바이트 오프셋부터 이어가며 다시 시작하지 않습니다.",
-        "보내는 것을 검증: 전송하는 각 파일은 — 이어받은 파일도 포함해 — 송신 측의 SHA-256과 끝에서 끝까지 대조되고, 어긋나면 실패로 보고됩니다. 건너뛰는 파일은 크기와 mtime으로만 판정하며 해시를 다시 계산하지 않으므로, 보내지 않은 내용에 대해 sync는 아무것도 보장하지 않습니다.",
+        "최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요.",
+        "다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
+        "du -sh의 총량은 대략적인 확인입니다. 선택한 파일을 SHA-256으로 비교하려면 --checksum으로 다시 실행하세요.",
         "이 덕분에 명령은 멱등적입니다. 다시 실행해도 남은 일만 합니다. 이것이 바로 재시도 루프가 거대한 전송을 끝낼 수 있게 하는 핵심입니다.",
       ],
     },
     {
       heading: "사전 준비",
       body: [
-        "양쪽 서버에 relayium을 설치하세요(sync는 네이티브 프로토콜을 쓰므로 각 끝에 필요합니다):",
+        "두 서버 모두 v0.28.1 이상을 사용하세요. 한 번에 일반 파일 최대 100,000개, 디렉터리 인덱스 최대 32 MiB를 처리합니다. 한 번만 복사할 때는 수신기에서 relayium serve --once, 송신기에서 relayium sync를 한 번 실행하세요. 사전 확인은 --once를 빼고 sync --check로 연결과 승인을 확인하며 파일 데이터는 보내지 않습니다. 계속 동기화하려면 수신기를 계속 실행하고 송신기에 --watch를 추가하세요.",
       ],
       code: [
         `# 양쪽 서버 모두에서
@@ -855,17 +855,17 @@ tmux new -s xfer      # tmux가 없으면 apt install -y tmux`,
       success: {
         label: "한 번의 성공적인 패스는 어떻게 보이나",
         body: [
-          "한 번 돌 때마다 실제로 보낸 파일마다 한 줄이 찍히고, 이어서 이번에 보낸 수와 받는 쪽이 이미 갖고 있던 수를 세는 요약이 나옵니다. 루프는 sync가 처음으로 성공을 반환할 때 끝나며, 그 요약이 곧 미러의 상태입니다.",
+          "진행률에는 원본 해시 계산과 전송된 바이트가 표시됩니다. 큰 파일 하나를 전송할 때도 갱신되며 마지막에 전송 수와 건너뛴 수가 표시됩니다.",
         ],
         code: [
           `relayium sync /root/workspace relayium://203.0.113.43:9031
-  workspace/data/part-004.bin (1073741824 bytes)
+  Sending 1.0 GiB / 1.0 GiB · 1/1 files · workspace/data/part-004.bin
 synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "재시도할 때마다 일이 줄어듭니다: 이미 전송된 파일은 건너뛰고, 절반 보낸 파일은 재개됩니다. 그래서 루프는 수렴하고 끝납니다.",
-        "진행 상황은 파일 하나가 완료될 때마다 한 줄씩 출력되므로, 큰 파일은 끝날 때까지 조용히 전송됩니다. 침묵은 멈춤이 아닙니다(문제 해결 참고).",
+        "다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
+        "진행률에는 원본 해시 계산과 전송된 바이트가 표시됩니다. 큰 파일 하나를 전송할 때도 갱신되며 마지막에 전송 수와 건너뛴 수가 표시됩니다.",
       ],
     },
     {
@@ -896,7 +896,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       success: {
         label: "미러가 끝났을 때 보이는 것",
         body: [
-          "두 서버에서 du -sh 가 같은 총량을 보고하고, until 루프는 다시 재시도하는 대신 평범한 셸 프롬프트로 돌아와 있습니다. 총량이 같다는 것은 대략적인 완료 확인일 뿐, 내용이 같다는 증명은 아닙니다. sync는 크기와 mtime으로 어떤 파일을 보내지 않을지 결정하므로, 건너뛴 파일의 내용에 대해서는 총량이 아무것도 말해 주지 않습니다.",
+          "du -sh의 총량은 대략적인 확인입니다. 선택한 파일을 SHA-256으로 비교하려면 --checksum으로 다시 실행하세요.",
         ],
         code: [
           `# the same total, on BOTH servers
@@ -904,7 +904,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
         ],
       },
       bullets: [
-        "sync가 보낸 것은 검증되었습니다. 전송한 각 파일은 도착 시 SHA-256으로 검사되었고, 깔끔한 종료는 그 검사 중 실패가 하나도 없었다는 뜻입니다. 건너뛴 쪽은 크기와 mtime만 대조했으므로, du -sh 총량이 같다는 것은 완료 여부에 대한 대략적인 확인일 뿐 건너뛴 파일의 내용이 여전히 같다는 증명은 아닙니다. 그 증명이 필요하면 두 서버에서 파일별 체크섬을 직접 비교하세요.",
+        "최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요.",
       ],
     },
     {
@@ -923,7 +923,7 @@ ss -tinp dst :9031
 # ESTAB    리스너에 닿았다는 뜻일 뿐, 바이트가 움직인다는 증거는 아님
 # SYN-SENT 리스너에 닿지 못함`,
             ],
-            fix: "진행 상황은 파일 하나가 끝날 때만 출력되므로, 큰 파일 하나는 완전한 침묵 속에 전송됩니다. ESTAB은 닿았다는 것만 증명합니다. established 소켓도 놀고 있거나 멈춰 있을 수 있으니, 그것만으로는 결코 전진의 증거가 되지 않습니다. 이 확인을 몇 초 간격으로 두 번 실행해, -i 가 그 소켓에 대해 출력하는 bytes_acked 카운터를 비교하세요. 숫자가 오르면 실제로 전송 중이고, 그대로면 진짜 멈춘 것입니다.",
+            fix: "ESTAB는 연결 가능 여부만 보여 줍니다. CLI 바이트 진행률을 보거나 ss -tinp를 두 번 실행해 bytes_acked를 비교하세요. 로컬 해시 계산 중에는 전송 연결이 없을 수 있습니다.",
           },
           {
             symptom: "소켓이 SYN-SENT에 머물고 전송이 아예 시작되지 않습니다.",
@@ -953,11 +953,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             fix: "명령줄 패턴으로 죽이면 그 문자열이 들어간 모든 프로세스에 시그널이 갑니다. 전송이 둘 이상 도는 기기에서는 노린 그것이 아닐 수 있습니다. 미러도 멈추지 않습니다. sync를 소유한 것은 until 루프라서, 자식을 죽여도 10초 뒤에 다시 뜹니다. 먼저 pgrep -af 로 확인한 뒤, 이 가이드가 실제로 소유한 것을 끝내세요. tmux kill-session -t xfer 로 루프를 끝내고, ~/relayium-serve.pid 에 있는 PID에 kill 을 보내 직접 띄운 리스너를 멈춥니다. 그 PID 파일이 이전 실행부터 남아 있었다면 시그널을 보내기 전에 명령줄부터 출력해 보세요. 시스템이 재사용한 PID는 전혀 다른 프로세스의 것입니다.",
           },
           {
-            symptom: "하위 디렉터리 하나를 빼고 싶은데 exclude 플래그가 없습니다.",
+            symptom: "지정한 폴더 또는 파일 패턴을 제외하기",
             code: [
-              `relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031`,
+              `relayium sync --exclude 'example-cache/' /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "sync가 받는 것은 -i와 -p, --delete, --watch, --config-dir 뿐이고, 트리 중간에서 경로를 걸러 내는 기능은 없습니다. 대신 원하는 하위 디렉터리를 직접 나열하세요. 각 소스는 받는 쪽 --dir 아래에 자기 이름으로 도착하므로, serve --dir /root/workspace 를 상대로 이 명령은 /root/workspace/src 와 /root/workspace/data 를 재현하고 다시 만들 수 있는 venv는 아예 훑지 않습니다.",
+            fix: "규칙마다 --exclude를 지정하세요. 상대 경로나 따옴표로 감싼 파일명 패턴을 사용할 수 있습니다. 제외 항목은 직접 선택하며 --delete와 함께 쓸 수 없습니다.",
           },
           {
             symptom: "미러될 줄 알았던 소스가 텅 빈 채로 도착합니다.",
@@ -976,11 +976,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "전송이 도중에 중단되면 어떻게 되나요?",
-        a: "아무것도 잃지 않습니다. relayium sync를 다시 실행하세요. 받는 쪽에 이미 있는 파일은 건너뛰고, 절반 보낸 파일은 디스크에 이미 있는 바이트 오프셋부터 재개합니다. 이 가이드의 until 루프가 폴더 전체가 미러될 때까지 이를 자동으로 합니다.",
+        a: "다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
       },
       {
         q: "이것은 rsync와 무엇이 다른가요?",
-        a: "둘 다 증분 단방향 미러링을 하지만, relayium sync는 인증서 고정 TLS 연결로 동작하고 SSH 계정이 필요 없으며(데몬 다이렉트), 인증서 핑거프린트로 두 기기를 인증하고, 전송하는 각 파일을 SHA-256으로 검증합니다. rsync의 기본 동작과 마찬가지로, 수신 측에서 크기와 mtime이 이미 일치하는 파일은 해시를 다시 계산하지 않고 건너뜁니다. relayium의 다른 모드와 같은 전송 엔진입니다.",
+        a: "최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요.",
       },
       {
         q: "sync는 소스에서 지운 파일을 받는 쪽에서도 지우나요?",
@@ -1010,7 +1010,7 @@ const de = {
     "Spiegle ein großes Verzeichnis von einem Server auf einen anderen mit relayium sync — inkrementell, nach einem Verbindungsabbruch fortsetzbar und sicher unbeaufsichtigt auszuführen. Eine Retry-Schleife unter tmux bewegt Gigabytes, ohne ein Terminal zu bewachen.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Du hast einen großen Ordner — zig Gigabyte — auf einem Server und willst eine exakte Kopie auf einem anderen. Du kannst kein Terminal stundenlang bewachen, und eine Übertragung, die auf halbem Weg abbricht, sollte nicht bei null neu beginnen. relayium sync ist genau dafür gebaut: ein einseitiger inkrementeller Spiegel, der überspringt, was schon da ist, eine halb gesendete Datei dort fortsetzt, wo sie stehen blieb, und jede Datei, die er sendet, Ende-zu-Ende prüft.",
+    "Verwende auf beiden Servern v0.28.1 oder neuer. Pro Lauf sind bis zu 100,000 reguläre Dateien und ein Verzeichnisindex bis 32 MiB möglich. Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich. Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
     "Diese Anleitung richtet eine unbeaufsichtigte, selbstheilende Übertragung ein: genehmige den Sender einmal, betreibe den Listener im Hintergrund und treibe relayium sync aus einer Retry-Schleife in tmux an, sodass es über Verbindungsabbrüche hinweg weiterläuft, bis der ganze Ordner angekommen ist.",
   ],
   sections: [
@@ -1020,16 +1020,16 @@ const de = {
         "sync ist ein einseitiger inkrementeller Spiegel über das native Protokoll (installiere relayium an beiden Enden). Drei Eigenschaften machen es sicher, es unbeaufsichtigt auszuführen und erneut auszuführen:",
       ],
       bullets: [
-        "Überspringt bereits vorhandene Dateien: Eine Datei, deren Kopie auf dem Empfänger in Größe und Änderungszeit übereinstimmt, wird nicht erneut gesendet.",
-        "Setzt Teildateien fort: War eine Datei beim Verbindungsabbruch halb übertragen, setzt der nächste Lauf beim bereits auf der Platte liegenden Byte-Offset fort, statt neu zu beginnen.",
-        "Prüft, was er sendet: Jede übertragene Datei — auch eine fortgesetzte — wird Ende-zu-Ende gegen die SHA-256 des Senders geprüft, und eine Abweichung wird als Fehler gemeldet. Übersprungene Dateien werden allein über Größe und mtime entschieden und nicht neu gehasht; über Inhalte, die er nicht gesendet hat, sagt sync nichts aus.",
+        "Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich.",
+        "Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
+        "Gleiche du -sh-Summen sind eine grobe Kontrolle. Führe den Lauf mit --checksum erneut aus, um die ausgewählten Dateien per SHA-256 zu vergleichen.",
         "Deshalb ist der Befehl idempotent — ein erneuter Lauf erledigt nur die verbleibende Arbeit, und genau das lässt eine Retry-Schleife eine riesige Übertragung abschließen.",
       ],
     },
     {
       heading: "Voraussetzungen",
       body: [
-        "Installiere relayium auf beiden Servern (sync spricht das native Protokoll, muss also an jedem Ende vorhanden sein):",
+        "Verwende auf beiden Servern v0.28.1 oder neuer. Pro Lauf sind bis zu 100,000 reguläre Dateien und ein Verzeichnisindex bis 32 MiB möglich. Für eine einmalige Kopie starte am Empfänger relayium serve --once und am Sender einmal relayium sync. Für den Vorabtest lasse --once weg und nutze sync --check, das Verbindung und Berechtigung ohne Dateidaten prüft. Für laufende Synchronisierung bleibt der Empfänger aktiv und der Sender nutzt --watch.",
       ],
       code: [
         `# auf BEIDEN Servern
@@ -1105,17 +1105,17 @@ tmux new -s xfer      # apt install -y tmux, falls es fehlt`,
       success: {
         label: "So sieht ein erfolgreicher Durchlauf aus",
         body: [
-          "Jeder Durchlauf gibt eine Zeile pro tatsächlich gesendeter Datei aus, dann eine Zusammenfassung, die Gesendetes gegen das stellt, was der Empfänger schon hatte. Die Schleife endet, sobald sync das erste Mal Erfolg meldet, und diese Zusammenfassung ist der Stand des Spiegels.",
+          "Der Fortschritt zeigt das Hashen an der Quelle und die gesendeten Bytes, auch während einer einzelnen großen Datei. Am Ende siehst du die Anzahl gesendeter und übersprungener Dateien.",
         ],
         code: [
           `relayium sync /root/workspace relayium://203.0.113.43:9031
-  workspace/data/part-004.bin (1073741824 bytes)
+  Sending 1.0 GiB / 1.0 GiB · 1/1 files · workspace/data/part-004.bin
 synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "Jeder Versuch tut weniger: bereits übertragene Dateien werden übersprungen, eine halb gesendete Datei wird fortgesetzt — so konvergiert die Schleife und ist fertig.",
-        "Der Fortschritt gibt pro fertiger Datei eine Zeile aus, eine große Datei überträgt also still, bis sie fertig ist. Stille ist kein Stillstand (siehe Fehlerbehebung).",
+        "Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
+        "Der Fortschritt zeigt das Hashen an der Quelle und die gesendeten Bytes, auch während einer einzelnen großen Datei. Am Ende siehst du die Anzahl gesendeter und übersprungener Dateien.",
       ],
     },
     {
@@ -1146,7 +1146,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       success: {
         label: "So sieht ein fertiger Spiegel aus",
         body: [
-          "du -sh meldet auf beiden Servern dieselbe Gesamtgröße, und die until-Schleife hat dich an einen gewöhnlichen Shell-Prompt zurückgegeben, statt erneut zu versuchen. Gleiche Summen sind eine grobe Vollständigkeitsprobe und kein Integritätsbeweis: sync hat über Größe und mtime entschieden, welche Dateien gar nicht erst gehen, also sagt die Summe nichts über den Inhalt der übersprungenen Dateien.",
+          "Gleiche du -sh-Summen sind eine grobe Kontrolle. Führe den Lauf mit --checksum erneut aus, um die ausgewählten Dateien per SHA-256 zu vergleichen.",
         ],
         code: [
           `# the same total, on BOTH servers
@@ -1154,7 +1154,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
         ],
       },
       bullets: [
-        "Was sync gesendet hat, ist geprüft: Jede übertragene Datei wurde beim Eintreffen mit SHA-256 kontrolliert, und ein sauberes Ende heißt, dass keine dieser Prüfungen fehlgeschlagen ist. Was übersprungen wurde, wurde nur über Größe und mtime abgeglichen; gleiche du -sh-Summen sind deshalb eine Plausibilitätsprobe auf Vollständigkeit und kein Beweis, dass die übersprungenen Inhalte noch übereinstimmen. Brauchst du diesen Beweis, vergleiche Prüfsummen pro Datei auf beiden Servern.",
+        "Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich.",
       ],
     },
     {
@@ -1173,7 +1173,7 @@ ss -tinp dst :9031
 # ESTAB    der Listener wurde erreicht; kein Beleg dafür, dass Bytes fließen
 # SYN-SENT erreicht den Listener nicht`,
             ],
-            fix: "Der Fortschritt erscheint nur, wenn eine Datei fertig ist, eine einzelne große Datei überträgt also völlig still. ESTAB belegt nur die Erreichbarkeit — ein aufgebauter Socket kann untätig sein oder hängen — und ist für sich genommen nie ein Beleg für Fortschritt. Führ die Prüfung zweimal im Abstand einiger Sekunden aus und vergleich den bytes_acked-Zähler, den -i für diesen Socket ausgibt: ein steigender Wert ist eine laufende Übertragung, ein unveränderter ein echter Stillstand.",
+            fix: "ESTAB zeigt nur Erreichbarkeit. Beobachte den Byte-Fortschritt oder führe ss -tinp zweimal aus und vergleiche bytes_acked. Beim lokalen Hashen kann die Verbindung noch fehlen.",
           },
           {
             symptom: "Der Socket bleibt in SYN-SENT, und die Übertragung beginnt gar nicht erst.",
@@ -1203,11 +1203,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             fix: "Über ein Kommandozeilen-Muster zu töten schickt das Signal an jeden Prozess, dessen Kommandozeile diesen Text enthält — auf einer Maschine mit mehr als einer Übertragung also nicht an den gemeinten. Es stoppt den Spiegel auch nicht: die until-Schleife besitzt das sync, ein getötetes Kind wird zehn Sekunden später einfach neu gestartet. Sieh mit pgrep -af nach und beende dann, was diese Anleitung wirklich besitzt — tmux kill-session -t xfer beendet die Schleife, und ein kill auf die PID in ~/relayium-serve.pid beendet den Listener, den du gestartet hast. Liegt die PID-Datei noch von einem früheren Lauf herum, lass dir vor dem Signal ihre Kommandozeile ausgeben: eine vom System neu vergebene PID gehört zu etwas ganz anderem.",
           },
           {
-            symptom: "Du willst ein Unterverzeichnis auslassen, und es gibt keine exclude-Option.",
+            symptom: "Einen gewählten Ordner oder ein Dateimuster ausschließen",
             code: [
-              `relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031`,
+              `relayium sync --exclude 'example-cache/' /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "sync nimmt -i und -p, --delete, --watch und --config-dir — nichts, was mitten im Baum einen Pfad herausfiltert. Nenn stattdessen die Unterverzeichnisse, die du willst: Jede Quelle landet unter dem --dir des Empfängers unter ihrem eigenen Namen, gegen serve --dir /root/workspace entstehen so wieder /root/workspace/src und /root/workspace/data, und ein neu erzeugbares venv wird nie durchlaufen.",
+            fix: "Setze --exclude pro Regel. Gib relative Pfade oder Dateinamensmuster in Anführungszeichen an. Du wählst die Ausschlüsse; --delete ist damit nicht kombinierbar.",
           },
           {
             symptom: "Eine Quelle, die gespiegelt werden sollte, kommt leer an.",
@@ -1226,11 +1226,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "Was passiert, wenn die Übertragung auf halbem Weg unterbrochen wird?",
-        a: "Nichts geht verloren. Führe relayium sync erneut aus — es überspringt bereits auf dem Empfänger vorhandene Dateien und setzt eine halb gesendete Datei beim bereits auf der Platte liegenden Byte-Offset fort. Die until-Schleife in dieser Anleitung tut das automatisch, bis der ganze Ordner gespiegelt ist.",
+        a: "Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
       },
       {
         q: "Wie unterscheidet sich das von rsync?",
-        a: "Beide machen inkrementelles einseitiges Spiegeln, aber relayium sync läuft über eine TLS-Verbindung mit Pinning ohne SSH-Konto (daemon-direct), authentifiziert die beiden Maschinen per Zertifikats-Fingerprint und prüft jede übertragene Datei mit SHA-256. Wie bei rsync in der Voreinstellung wird eine Datei, deren Größe und mtime auf dem Empfänger schon übereinstimmen, übersprungen statt neu gehasht. Es ist dieselbe Übertragungs-Engine wie die anderen Modi von relayium.",
+        a: "Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich.",
       },
       {
         q: "Löscht sync auf dem Empfänger Dateien, die ich aus der Quelle entfernt habe?",
@@ -1260,7 +1260,7 @@ const fr = {
     "Recopiez un gros répertoire d'un serveur vers un autre avec relayium sync — incrémental, avec reprise après une coupure, et sûr à exécuter sans surveillance. Une boucle de reprise sous tmux déplace des gigaoctets sans surveiller un terminal.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Vous avez un gros dossier — des dizaines de gigaoctets — sur un serveur et vous voulez une copie exacte sur un autre. Vous ne pouvez pas surveiller un terminal pendant des heures, et un transfert qui meurt à mi-chemin ne devrait pas repartir de zéro. relayium sync est fait pour cela : un miroir incrémental à sens unique qui saute ce qui est déjà là, reprend un fichier envoyé à moitié là où il s'est arrêté, et vérifie de bout en bout chaque fichier qu'il envoie.",
+    "Utilisez v0.28.1 ou une version ultérieure sur les deux serveurs. Une exécution accepte jusqu’à 100,000 fichiers ordinaires et un index de répertoire de 32 MiB. Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu. Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
     "Ce guide met en place un transfert sans surveillance et auto-réparateur : autorisez l'émetteur une fois, faites tourner le processus à l'écoute en arrière-plan, et pilotez relayium sync depuis une boucle de reprise dans tmux pour qu'il continue malgré les coupures jusqu'à ce que tout le dossier soit arrivé.",
   ],
   sections: [
@@ -1270,16 +1270,16 @@ const fr = {
         "sync est un miroir incrémental à sens unique via le protocole natif (installez relayium aux deux bouts). Trois propriétés le rendent sûr à exécuter et réexécuter sans surveillance :",
       ],
       bullets: [
-        "Saute les fichiers déjà présents : un fichier dont la copie sur le récepteur correspond par taille et date de modification n'est pas renvoyé.",
-        "Reprend les fichiers partiels : si un fichier était à moitié transféré à la coupure, l'exécution suivante continue depuis l'offset d'octets déjà sur le disque au lieu de le recommencer.",
-        "Vérifie ce qu'il envoie : chaque fichier transféré — y compris un fichier repris — est contrôlé de bout en bout face au SHA-256 de l'émetteur, et un écart est signalé comme un échec. Les fichiers ignorés sont décidés sur la taille et le mtime, jamais rehachés, et sync ne dit donc rien du contenu qu'il n'a pas envoyé.",
+        "Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu.",
+        "Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
+        "Les totaux de du -sh donnent un ordre de grandeur. Relancez avec --checksum pour imposer la comparaison SHA-256 des fichiers sélectionnés.",
         "De ce fait, la commande est idempotente — la relancer ne fait que le travail restant, ce qui est précisément ce qui permet à une boucle de reprise de terminer un transfert énorme.",
       ],
     },
     {
       heading: "Prérequis",
       body: [
-        "Installez relayium sur les deux serveurs (sync parle le protocole natif, il doit donc être présent à chaque bout) :",
+        "Utilisez v0.28.1 ou une version ultérieure sur les deux serveurs. Une exécution accepte jusqu’à 100,000 fichiers ordinaires et un index de répertoire de 32 MiB. Pour une copie ponctuelle, lancez relayium serve --once côté réception et relayium sync une fois côté envoi. Pour un contrôle préalable, omettez --once et utilisez sync --check, qui vérifie la connexion et l’autorisation sans envoyer de données de fichier. Pour une synchronisation continue, laissez le récepteur en marche et ajoutez --watch côté envoi.",
       ],
       code: [
         `# sur les DEUX serveurs
@@ -1355,17 +1355,17 @@ tmux new -s xfer      # apt install -y tmux s'il manque`,
       success: {
         label: "À quoi ressemble un passage réussi",
         body: [
-          "Chaque passage affiche une ligne par fichier réellement envoyé, puis un résumé opposant ce qu'il a envoyé à ce que le récepteur avait déjà. La boucle s'arrête au premier succès de sync, et ce résumé est l'état du miroir.",
+          "La progression indique le calcul des empreintes et les octets envoyés, y compris pendant le transfert d’un seul gros fichier. Le bilan final indique les fichiers envoyés et ignorés.",
         ],
         code: [
           `relayium sync /root/workspace relayium://203.0.113.43:9031
-  workspace/data/part-004.bin (1073741824 bytes)
+  Sending 1.0 GiB / 1.0 GiB · 1/1 files · workspace/data/part-004.bin
 synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "Chaque tentative fait moins : les fichiers déjà transférés sont sautés, un fichier envoyé à moitié reprend — la boucle converge donc et se termine.",
-        "La progression affiche une ligne par fichier terminé, un gros fichier se transfère donc en silence jusqu'à sa fin. Le silence n'est pas un blocage (voir dépannage).",
+        "Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
+        "La progression indique le calcul des empreintes et les octets envoyés, y compris pendant le transfert d’un seul gros fichier. Le bilan final indique les fichiers envoyés et ignorés.",
       ],
     },
     {
@@ -1396,7 +1396,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       success: {
         label: "À quoi ressemble un miroir terminé",
         body: [
-          "du -sh annonce le même total sur les deux serveurs, et la boucle until vous a rendu une invite de shell ordinaire au lieu de réessayer. Des totaux identiques sont un contrôle d'exhaustivité grossier, pas une preuve d'intégrité — sync a décidé sur la taille et le mtime quels fichiers ne pas envoyer, donc le total ne dit rien du contenu des fichiers ignorés.",
+          "Les totaux de du -sh donnent un ordre de grandeur. Relancez avec --checksum pour imposer la comparaison SHA-256 des fichiers sélectionnés.",
         ],
         code: [
           `# the same total, on BOTH servers
@@ -1404,7 +1404,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
         ],
       },
       bullets: [
-        "Ce que sync a envoyé est vérifié — chaque fichier transféré a été contrôlé en SHA-256 à l'arrivée, et une sortie propre signifie qu'aucun de ces contrôles n'a échoué. Ce qu'il a ignoré n'a été comparé que sur la taille et le mtime, donc des totaux du -sh identiques sont un contrôle de vraisemblance sur l'exhaustivité, pas une preuve que le contenu ignoré correspond toujours. Si vous avez besoin de cette preuve, comparez les sommes de contrôle fichier par fichier sur les deux serveurs.",
+        "Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu.",
       ],
     },
     {
@@ -1423,7 +1423,7 @@ ss -tinp dst :9031
 # ESTAB    le processus à l'écoute a été atteint, ce n'est pas une preuve que des octets circulent
 # SYN-SENT n'atteint pas le processus à l'écoute`,
             ],
-            fix: "La progression ne s'affiche qu'à la fin de chaque fichier, un seul gros fichier se transfère donc dans un silence complet. ESTAB ne prouve que l'accessibilité — une socket établie peut rester inactive ou bloquée — et ne constitue jamais à elle seule une preuve d'avancement ; relancez la vérification à quelques secondes d'intervalle et comparez le compteur bytes_acked que -i affiche pour cette socket, un compteur qui monte est un transfert qui avance, un compteur figé est un vrai blocage.",
+            fix: "ESTAB prouve seulement l’accessibilité. Regardez les octets dans le CLI ou exécutez ss -tinp deux fois et comparez bytes_acked. Le calcul local peut précéder toute connexion de transfert.",
           },
           {
             symptom: "La socket reste en SYN-SENT et le transfert ne démarre jamais.",
@@ -1453,11 +1453,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             fix: "Tuer par motif de ligne de commande envoie le signal à tout processus dont la ligne de commande contient ce texte, sur une machine où tourne plus d'un transfert ce n'est donc pas celui que vous visiez. Et cela n'arrête pas la copie, la boucle until possède le sync et un enfant tué est simplement relancé dix secondes plus tard. Regardez avec pgrep -af, puis terminez ce que ce guide possède réellement : tmux kill-session -t xfer met fin à la boucle, et un kill sur le PID contenu dans ~/relayium-serve.pid arrête le processus à l'écoute que vous avez lancé. Si le fichier de PID traîne depuis une exécution précédente, affichez sa ligne de commande avant d'envoyer le signal, car un PID réattribué par le système appartient à tout autre chose.",
           },
           {
-            symptom: "Vous voulez laisser un sous-répertoire de côté et il n'y a aucune option d'exclusion.",
+            symptom: "Exclure un dossier ou un motif de votre choix",
             code: [
-              `relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031`,
+              `relayium sync --exclude 'example-cache/' /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "sync accepte -i et -p, --delete, --watch et --config-dir — rien qui filtre un chemin au milieu de l'arborescence. Nommez plutôt les sous-répertoires que vous voulez : chaque source arrive sous le --dir du récepteur avec son propre nom, donc face à serve --dir /root/workspace cette commande reconstruit /root/workspace/src et /root/workspace/data sans jamais parcourir un venv régénérable.",
+            fix: "Répétez --exclude pour chaque règle. Utilisez des chemins relatifs ou des motifs de noms entre guillemets. Vous choisissez les exclusions. --exclude et --delete sont incompatibles.",
           },
           {
             symptom: "Une source censée être mise en miroir arrive vide.",
@@ -1476,11 +1476,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "Que se passe-t-il si le transfert est interrompu à mi-chemin ?",
-        a: "Rien n'est perdu. Relancez relayium sync — il saute les fichiers déjà sur le récepteur et reprend un fichier envoyé à moitié depuis l'offset d'octets déjà sur le disque. La boucle until de ce guide le fait automatiquement jusqu'à ce que tout le dossier soit recopié.",
+        a: "Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
       },
       {
         q: "En quoi est-ce différent de rsync ?",
-        a: "Les deux font un miroir incrémental à sens unique, mais relayium sync tourne sur une connexion TLS avec épinglage sans compte SSH (daemon-direct), authentifie les deux machines par empreinte de certificat, et vérifie en SHA-256 chaque fichier qu'il transfère. Comme rsync par défaut, un fichier dont la taille et le mtime correspondent déjà côté récepteur est ignoré plutôt que rehaché. C'est le même moteur de transfert que les autres modes de relayium.",
+        a: "Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu.",
       },
       {
         q: "sync supprime-t-il sur le récepteur les fichiers que j'ai retirés de la source ?",
@@ -1510,7 +1510,7 @@ const ar = {
     "انسخ دليلًا كبيرًا من خادم إلى آخر بـ relayium sync — تزايدية، قابلة للاستئناف بعد انقطاع الاتصال، وآمنة للتشغيل دون إشراف. حلقة إعادة محاولة تحت tmux تنقل غيغابايتات دون ملازمة طرفية.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "لديك مجلد كبير — عشرات الغيغابايتات — على خادم وتريد نسخة مطابقة على آخر. لا يمكنك مراقبة طرفية لساعات، ولا ينبغي لنقلٍ يموت في منتصف الطريق أن يبدأ من الصفر. صُمِّم relayium sync لهذا: مرآة تزايدية أحادية الاتجاه تتخطى ما هو موجود سلفًا، وتستأنف ملفًا أُرسِل نصفه من حيث توقف، وتتحقق من كل ملف تُرسِله من الطرف إلى الطرف.",
+    "استخدم v0.28.1 أو أحدث على الخادمين. تدعم العملية الواحدة حتى 100,000 ملف عادي وفهرس دليل يصل إلى 32 MiB. يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى. قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
     "يُعِدّ هذا الدليل نقلًا دون إشراف يُصلِح نفسه: فوِّض المُرسِل مرةً واحدة، وشغّل المُستمِع في الخلفية، وقُد relayium sync من حلقة إعادة محاولة داخل tmux كي يستمر عبر الانقطاعات حتى يصل المجلد كاملًا.",
   ],
   sections: [
@@ -1520,16 +1520,16 @@ const ar = {
         "sync مرآة تزايدية أحادية الاتجاه عبر البروتوكول الأصلي (ثبّت relayium على الطرفين). ثلاث خصائص تجعله آمنًا للتشغيل وإعادة التشغيل دون إشراف:",
       ],
       bullets: [
-        "يتخطى الملفات الموجودة سلفًا: الملف الذي تطابق نسخته لدى المُستقبِل في الحجم ووقت التعديل لا يُرسَل ثانيةً.",
-        "يستأنف الملفات الجزئية: إذا نُقِل نصف ملف عند انقطاع الاتصال، يُكمِل التشغيل التالي من إزاحة البايت الموجودة سلفًا على القرص بدل إعادته من البداية.",
-        "يتحقق مما يُرسِله: يُقارَن كل ملف مَنقول — بما في ذلك ملف استُؤنِف — بـ SHA-256 المُرسِل من الطرف إلى الطرف، وأي اختلاف يُبلَّغ عنه كفشل. أما الملفات المتخطّاة فتُحدَّد بالحجم وmtime فقط ولا يُعاد حساب بصمتها، فلا يقول sync شيئًا عن محتوى لم يُرسِله.",
+        "يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى.",
+        "قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
+        "تطابق إجمالي du -sh فحص تقريبي. أعد التشغيل مع --checksum لاشتراط مقارنة SHA-256 للملفات المحددة.",
         "بسبب هذا، الأمر خامل التكرار (idempotent) — إعادة تشغيله تنجز ما تبقى فقط، وهذا بالضبط ما يتيح لحلقة إعادة المحاولة إتمام نقلٍ ضخم.",
       ],
     },
     {
       heading: "المتطلبات المسبقة",
       body: [
-        "ثبّت relayium على كلا الخادمين (sync يتحدث البروتوكول الأصلي، فيجب أن يكون حاضرًا على كل طرف):",
+        "استخدم v0.28.1 أو أحدث على الخادمين. تدعم العملية الواحدة حتى 100,000 ملف عادي وفهرس دليل يصل إلى 32 MiB. للنسخ مرة واحدة، شغّل relayium serve --once على المستقبِل وrelayium sync مرة واحدة على المُرسِل. للفحص المسبق، احذف --once واستخدم sync --check لاختبار الاتصال والتفويض بلا إرسال بيانات الملفات. للمزامنة المستمرة، أبقِ المستقبِل قيد التشغيل وأضف --watch على المُرسِل.",
       ],
       code: [
         `# على كلا الخادمين
@@ -1605,17 +1605,17 @@ tmux new -s xfer      # نفّذ apt install -y tmux إن لم يكن موجود
       success: {
         label: "كيف تبدو جولة ناجحة",
         body: [
-          "تطبع كل جولة سطرًا لكل ملف أرسلته فعلًا، ثم سطر ملخّص يقابل ما أُرسِل بما كان لدى المُستقبِل سلفًا. وتنتهي الحلقة عند أول نجاح لـ sync، وذلك الملخّص هو حال المرآة.",
+          "يعرض التقدّم حساب البصمات والبايتات المرسلة حتى أثناء إرسال ملف كبير واحد. ويعرض الملخص عدد الملفات المرسلة والمتخطاة.",
         ],
         code: [
           `relayium sync /root/workspace relayium://203.0.113.43:9031
-  workspace/data/part-004.bin (1073741824 bytes)
+  Sending 1.0 GiB / 1.0 GiB · 1/1 files · workspace/data/part-004.bin
 synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "كل إعادة محاولة تنجز أقل: تُتخطى الملفات المنقولة سلفًا، ويُستأنف الملف المُرسَل نصفه — فتتقارب الحلقة وتنتهي.",
-        "يطبع التقدم سطرًا واحدًا لكل ملف مكتمل، فينتقل الملف الكبير بهدوء حتى يكتمل. الصمت ليس تعطّلًا (انظر استكشاف الأخطاء).",
+        "قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
+        "يعرض التقدّم حساب البصمات والبايتات المرسلة حتى أثناء إرسال ملف كبير واحد. ويعرض الملخص عدد الملفات المرسلة والمتخطاة.",
       ],
     },
     {
@@ -1646,7 +1646,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       success: {
         label: "كيف تبدو المرآة المكتملة",
         body: [
-          "يُبلِغ du -sh بالمجموع نفسه على الخادمين، وقد أعادتك حلقة until إلى مِحَث صَدَفة عادي بدل أن تعيد المحاولة من جديد. وتطابُق المجموع فحصٌ خشِن للاكتمال لا برهانٌ على السلامة: فقد قرّر sync بالحجم وmtime أي الملفات لا تُرسَل، فلا يقول المجموع شيئًا عن محتوى الملفات المتخطّاة.",
+          "تطابق إجمالي du -sh فحص تقريبي. أعد التشغيل مع --checksum لاشتراط مقارنة SHA-256 للملفات المحددة.",
         ],
         code: [
           `# the same total, on BOTH servers
@@ -1654,7 +1654,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
         ],
       },
       bullets: [
-        "ما أرسله sync مُتحقَّق منه: كل ملف نُقِل فُحِص بـ SHA-256 عند وصوله، والخروج النظيف يعني أن أيًّا من تلك الفحوص لم يفشل. أما ما تخطّاه فقُورِن بالحجم وmtime فقط، فتطابُق مجاميع du -sh فحصُ معقولية للاكتمال لا برهانٌ على أن المحتوى المتخطّى ما زال مطابقًا. إن احتجت هذا البرهان فقارِن بصمات كل ملف على الخادمين بنفسك.",
+        "يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى.",
       ],
     },
     {
@@ -1673,7 +1673,7 @@ ss -tinp dst :9031
 # ESTAB    وصلت إلى المُستمِع، وليس دليلًا على أن البايتات تتحرك
 # SYN-SENT لا يصل إلى المُستمِع`,
             ],
-            fix: "لا يُطبَع التقدم إلا عند اكتمال ملف، فينتقل ملف كبير واحد في صمت تام. ولا تثبت ESTAB إلا إمكانية الوصول، فالمقبس المُنشأ قد يبقى خاملًا أو متعطّلًا، وهي وحدها ليست دليلًا على التقدّم أبدًا. نفّذ الفحص مرتين بفارق ثوانٍ قليلة وقارِن عدّاد bytes_acked الذي يطبعه ‎-i‎ لذلك المقبس: تزايُده يعني نقلًا يتقدّم، وثباته يعني تعطّلًا حقيقيًا.",
+            fix: "يشير ESTAB إلى إمكانية الوصول فقط. راقب تقدّم البايتات أو نفّذ ss -tinp مرتين وقارن bytes_acked. قد لا يوجد اتصال نقل أثناء حساب البصمات محليًا.",
           },
           {
             symptom: "يبقى المقبس في حالة SYN-SENT ولا يبدأ النقل أصلًا.",
@@ -1703,11 +1703,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             fix: "القتل بمطابقة نمط في سطر الأوامر يُرسِل الإشارة إلى كل عملية يحتوي سطر أوامرها ذلك النص، وعلى جهاز يعمل عليه أكثر من نقل واحد لن تكون هي المقصودة. كما أنه لا يوقف المرآة: الحلقة until هي التي تملك sync، فالابن المقتول يُعاد تشغيله بعد عشر ثوانٍ. انظر أولًا بـ pgrep -af، ثم أنهِ ما يملكه هذا الدليل فعلًا — ينهي tmux kill-session -t xfer الحلقة، ويوقف kill على الـPID الموجود في ~/relayium-serve.pid المُستمِع الذي شغّلته. وإن كان ملف الـPID باقيًا من تشغيل سابق، فاعرض سطر أوامره قبل إرسال الإشارة، لأن مُعرّفًا أعاد النظام استخدامه يخص شيئًا آخر تمامًا.",
           },
           {
-            symptom: "تريد استثناء مجلد فرعي واحد ولا توجد راية استثناء.",
+            symptom: "استبعاد مجلد أو نمط أسماء تختاره",
             code: [
-              `relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031`,
+              `relayium sync --exclude 'example-cache/' /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "يقبل sync الرايتين -i و-p و--delete و--watch و--config-dir، ولا شيء فيها يرشّح مسارًا في وسط الشجرة. سمِّ المجلدات الفرعية التي تريدها بدلًا من ذلك: يصل كل مصدر تحت --dir لدى المُستقبِل باسمه هو، فمع serve --dir /root/workspace يعيد هذا الأمر بناء /root/workspace/src و/root/workspace/data ولا يمشي أبدًا في بيئة venv يمكن إعادة توليدها.",
+            fix: "كرّر --exclude لكل قاعدة. استخدم مسارات نسبية أو أنماط أسماء بين علامات اقتباس. أنت من يحدد ما يُستبعد، ولا يمكن الجمع بين --exclude و--delete.",
           },
           {
             symptom: "يصل مصدر كنت تتوقع نسخه فارغًا.",
@@ -1726,11 +1726,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "ماذا يحدث إذا انقطع النقل في منتصف الطريق؟",
-        a: "لا يُفقَد شيء. أعِد تشغيل relayium sync — يتخطى الملفات الموجودة سلفًا لدى المُستقبِل ويستأنف الملف المُرسَل نصفه من إزاحة البايت الموجودة سلفًا على القرص. حلقة until في هذا الدليل تفعل ذلك تلقائيًا حتى تُنسَخ صورة المجلد كاملة.",
+        a: "قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
       },
       {
         q: "بماذا يختلف هذا عن rsync؟",
-        a: "كلاهما يقوم بمرآة تزايدية أحادية الاتجاه، لكن relayium sync يعمل عبر اتصال TLS مُثبَّت دون الحاجة إلى حساب SSH (daemon direct)، ويصادق الجهازين ببصمة الشهادة، ويتحقق بـ SHA-256 من كل ملف يَنقُله. وكما في سلوك rsync الافتراضي، يُتخطّى الملف الذي يتطابق حجمه وmtime أصلًا على الطرف المستقبِل بدل إعادة حساب بصمته. إنه محرك النقل نفسه المُستخدَم في أوضاع relayium الأخرى.",
+        a: "يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى.",
       },
       {
         q: "هل يحذف sync لدى المُستقبِل الملفات التي أزلتها من المصدر؟",
@@ -1760,7 +1760,7 @@ const es = {
     "Replica un directorio grande de un servidor a otro con relayium sync — incremental, reanudable tras una caída de conexión y seguro para ejecutar sin supervisión. Un bucle de reintentos bajo tmux mueve gigabytes sin tener que vigilar una terminal.",
   updatedLabel: "Última actualización",
   lead: [
-    "Tienes una carpeta grande —decenas de gigabytes— en un servidor y quieres una copia exacta en otro. No puedes vigilar una terminal durante horas, y una transferencia que muere a mitad de camino no debería empezar de cero. relayium sync está hecho para esto: un espejo incremental unidireccional que se salta lo que ya está, reanuda un archivo enviado a medias desde donde se detuvo y verifica de extremo a extremo cada archivo que envía.",
+    "Usa v0.28.1 o posterior en ambos servidores. Una ejecución admite hasta 100,000 archivos regulares y un índice de directorio de 32 MiB. Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido. Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
     "Esta guía configura una transferencia sin supervisión y con recuperación automática: autoriza al emisor una vez, ejecuta el proceso a la escucha en segundo plano y dirige relayium sync desde un bucle de reintentos dentro de tmux para que siga adelante a través de las caídas de conexión hasta que toda la carpeta haya llegado.",
   ],
   sections: [
@@ -1770,16 +1770,16 @@ const es = {
         "sync es un espejo incremental unidireccional sobre el protocolo nativo (instala relayium en ambos extremos). Tres propiedades hacen que sea seguro ejecutarlo y volver a ejecutarlo sin supervisión:",
       ],
       bullets: [
-        "Se salta los archivos que ya están: un archivo cuya copia en el receptor coincide en tamaño y hora de modificación no se envía de nuevo.",
-        "Reanuda archivos parciales: si un archivo se transfirió a medias cuando cayó la conexión, la siguiente ejecución continúa desde el desplazamiento de bytes que ya está en disco en lugar de reiniciarlo.",
-        "Verifica lo que envía: cada archivo transferido —incluido uno reanudado— se comprueba de extremo a extremo contra el SHA-256 del emisor, y una discrepancia se informa como fallo. Los archivos que omite se deciden por tamaño y mtime, y no se vuelven a hashear, así que sync no dice nada del contenido que no envió.",
+        "Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido.",
+        "Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
+        "Los totales de du -sh sirven como comprobación aproximada. Repite con --checksum para exigir la comparación SHA-256 de los archivos seleccionados.",
         "Por todo esto, el comando es idempotente: volver a ejecutarlo solo hace el trabajo que queda, que es justo lo que permite a un bucle de reintentos terminar una transferencia enorme.",
       ],
     },
     {
       heading: "Requisitos previos",
       body: [
-        "Instala relayium en ambos servidores (sync habla el protocolo nativo, así que debe estar presente en cada extremo):",
+        "Usa v0.28.1 o posterior en ambos servidores. Una ejecución admite hasta 100,000 archivos regulares y un índice de directorio de 32 MiB. Para una copia puntual, usa relayium serve --once en el receptor y ejecuta relayium sync una vez en el emisor. Para comprobar primero, omite --once y usa sync --check, que verifica la conexión y la autorización sin enviar datos de archivos. Para sincronizar continuamente, deja el receptor activo y añade --watch en el emisor.",
       ],
       code: [
         `# en AMBOS servidores
@@ -1855,17 +1855,17 @@ tmux new -s xfer      # apt install -y tmux si falta`,
       success: {
         label: "Cómo se ve una pasada correcta",
         body: [
-          "Cada pasada imprime una línea por cada archivo que realmente envió, y luego un resumen que enfrenta lo enviado con lo que el receptor ya tenía. El bucle acaba la primera vez que sync devuelve éxito, y ese resumen es el estado del espejo.",
+          "El progreso muestra el cálculo de huellas en el origen y los bytes enviados, incluso durante el envío de un solo archivo grande. El resumen cuenta los archivos enviados y omitidos.",
         ],
         code: [
           `relayium sync /root/workspace relayium://203.0.113.43:9031
-  workspace/data/part-004.bin (1073741824 bytes)
+  Sending 1.0 GiB / 1.0 GiB · 1/1 files · workspace/data/part-004.bin
 synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "Cada reintento hace menos: los archivos ya transferidos se saltan, un archivo enviado a medias se reanuda; así el bucle converge y termina.",
-        "El progreso imprime una línea por archivo completado, así que un archivo grande se transfiere en silencio hasta que termina. El silencio no es un atasco (ver resolución de problemas).",
+        "Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
+        "El progreso muestra el cálculo de huellas en el origen y los bytes enviados, incluso durante el envío de un solo archivo grande. El resumen cuenta los archivos enviados y omitidos.",
       ],
     },
     {
@@ -1896,7 +1896,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       success: {
         label: "Cómo se ve un espejo terminado",
         body: [
-          "du -sh informa del mismo total en los dos servidores, y el bucle until te ha devuelto a un prompt de shell normal en lugar de reintentar otra vez. Que los totales coincidan es una comprobación gruesa de completitud, no una prueba de integridad: sync decidió por tamaño y mtime qué archivos no enviar, así que el total no dice nada del contenido de los archivos que omitió.",
+          "Los totales de du -sh sirven como comprobación aproximada. Repite con --checksum para exigir la comparación SHA-256 de los archivos seleccionados.",
         ],
         code: [
           `# the same total, on BOTH servers
@@ -1904,7 +1904,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
         ],
       },
       bullets: [
-        "Lo que sync envió está verificado: cada archivo transferido se comprobó con SHA-256 al llegar, y una salida limpia significa que ninguna de esas comprobaciones falló. Lo que omitió solo se cotejó por tamaño y mtime, así que unos totales de du -sh iguales son una comprobación de sensatez sobre la completitud, no una prueba de que el contenido omitido siga coincidiendo. Si necesitas esa prueba, compara las sumas de verificación archivo por archivo en los dos servidores.",
+        "Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido.",
       ],
     },
     {
@@ -1923,7 +1923,7 @@ ss -tinp dst :9031
 # ESTAB    se alcanzó el proceso a la escucha; no prueba que los bytes se muevan
 # SYN-SENT no alcanza al proceso a la escucha`,
             ],
-            fix: "El progreso solo se imprime cuando termina un archivo, así que un único archivo grande se transfiere en completo silencio. ESTAB solo demuestra alcanzabilidad — un socket establecido puede quedarse inactivo o atascado — y por sí solo nunca es prueba de avance. Ejecuta la comprobación dos veces con unos segundos de diferencia y compara el contador bytes_acked que -i imprime para ese socket: si sube, la transferencia avanza; si no cambia, es un atasco real.",
+            fix: "ESTAB solo confirma que se pudo conectar. Mira el progreso de bytes o ejecuta ss -tinp dos veces y compara bytes_acked. Durante el cálculo local puede no haber conexión de transferencia.",
           },
           {
             symptom: "El socket se queda en SYN-SENT y la transferencia no arranca en absoluto.",
@@ -1953,11 +1953,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             fix: "Matar por patrón de línea de comandos envía la señal a todo proceso cuya línea de comandos contenga ese texto, que en una máquina con más de una transferencia en marcha no es el que querías. Tampoco detiene el espejo: el bucle until es el dueño del sync, así que un hijo muerto vuelve a arrancar diez segundos después. Mira con pgrep -af y luego termina lo que esta guía realmente posee: tmux kill-session -t xfer acaba con el bucle, y un kill al PID que hay en ~/relayium-serve.pid detiene el proceso a la escucha que lanzaste. Si el archivo de PID lleva ahí desde una ejecución anterior, imprime su línea de comandos antes de señalarlo, porque un PID que el sistema ha reutilizado pertenece a algo completamente distinto.",
           },
           {
-            symptom: "Quieres dejar fuera un subdirectorio y no existe ninguna opción de exclusión.",
+            symptom: "Excluir una carpeta o un patrón a tu elección",
             code: [
-              `relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031`,
+              `relayium sync --exclude 'example-cache/' /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "sync acepta -i y -p, --delete, --watch y --config-dir; nada que filtre una ruta en medio del árbol. Nombra en su lugar los subdirectorios que sí quieres: cada fuente llega bajo el --dir del receptor con su propio nombre, así que frente a serve --dir /root/workspace este comando reconstruye /root/workspace/src y /root/workspace/data y nunca recorre un venv regenerable.",
+            fix: "Repite --exclude por cada regla. Usa rutas relativas o patrones de nombre entre comillas. Tú eliges qué excluir; --exclude es incompatible con --delete.",
           },
           {
             symptom: "Una fuente que esperabas duplicar llega vacía.",
@@ -1976,11 +1976,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "¿Qué pasa si la transferencia se interrumpe a mitad de camino?",
-        a: "No se pierde nada. Vuelve a ejecutar relayium sync: se salta los archivos que ya están en el receptor y reanuda un archivo enviado a medias desde el desplazamiento de bytes que ya está en disco. El bucle until de esta guía lo hace automáticamente hasta que toda la carpeta queda replicada.",
+        a: "Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
       },
       {
         q: "¿En qué se diferencia esto de rsync?",
-        a: "Ambos hacen replicación incremental unidireccional, pero relayium sync se ejecuta sobre una conexión TLS fijada sin necesidad de cuenta SSH (daemon directo), autentica las dos máquinas por huella de certificado y verifica con SHA-256 cada archivo que transfiere. Igual que rsync por defecto, un archivo cuyo tamaño y mtime ya coinciden en el receptor se omite en lugar de volver a hashearse. Es el mismo motor de transferencia que los otros modos de relayium.",
+        a: "Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido.",
       },
       {
         q: "¿sync elimina en el receptor los archivos que quité del origen?",
@@ -2010,7 +2010,7 @@ const pt = {
     "Espelhe um diretório grande de um servidor para outro com relayium sync — incremental, retomável após uma queda de conexão e seguro para executar sem supervisão. Um laço de repetição sob tmux move gigabytes sem precisar vigiar um terminal.",
   updatedLabel: "Última atualização",
   lead: [
-    "Você tem uma pasta grande — dezenas de gigabytes — em um servidor e quer uma cópia exata em outro. Você não pode vigiar um terminal por horas, e uma transferência que morre no meio do caminho não deveria recomeçar do zero. relayium sync foi feito para isso: um espelho incremental unidirecional que pula o que já está lá, retoma um arquivo enviado pela metade de onde parou e verifica de ponta a ponta cada arquivo que envia.",
+    "Use v0.28.1 ou posterior nos dois servidores. Uma execução aceita até 100,000 arquivos regulares e um índice de diretórios de 32 MiB. Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo. Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
     "Este guia configura uma transferência sem supervisão e com autorrecuperação: autorize o emissor uma vez, execute o processo à escuta em segundo plano e conduza relayium sync a partir de um laço de repetição dentro do tmux para que ele continue através das quedas de conexão até que a pasta inteira chegue.",
   ],
   sections: [
@@ -2020,16 +2020,16 @@ const pt = {
         "sync é um espelho incremental unidirecional sobre o protocolo nativo (instale relayium nas duas pontas). Três propriedades o tornam seguro para executar e reexecutar sem supervisão:",
       ],
       bullets: [
-        "Pula os arquivos que já estão lá: um arquivo cuja cópia no receptor coincide em tamanho e hora de modificação não é enviado de novo.",
-        "Retoma arquivos parciais: se um arquivo foi transferido pela metade quando a conexão caiu, a próxima execução continua a partir do deslocamento de bytes já em disco em vez de reiniciá-lo.",
-        "Verifica o que envia: cada arquivo transferido — inclusive um retomado — é conferido de ponta a ponta contra o SHA-256 do emissor, e uma divergência é relatada como falha. Os arquivos que ele pula são decididos por tamanho e mtime e não são re-hasheados, então o sync não diz nada sobre o conteúdo que não enviou.",
+        "Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo.",
+        "Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
+        "Os totais de du -sh são uma conferência aproximada. Execute novamente com --checksum para exigir a comparação SHA-256 dos arquivos selecionados.",
         "Por causa disso, o comando é idempotente — executá-lo novamente só faz o trabalho que resta, que é exatamente o que permite a um laço de repetição concluir uma transferência enorme.",
       ],
     },
     {
       heading: "Pré-requisitos",
       body: [
-        "Instale relayium nos dois servidores (sync fala o protocolo nativo, então ele precisa estar presente em cada ponta):",
+        "Use v0.28.1 ou posterior nos dois servidores. Uma execução aceita até 100,000 arquivos regulares e um índice de diretórios de 32 MiB. Para uma cópia única, use relayium serve --once no receptor e execute relayium sync uma vez no remetente. Para verificar primeiro, omita --once e use sync --check, que testa a conexão e a autorização sem enviar dados de arquivos. Para sincronização contínua, mantenha o receptor em execução e use --watch no remetente.",
       ],
       code: [
         `# nos DOIS servidores
@@ -2105,17 +2105,17 @@ tmux new -s xfer      # apt install -y tmux se estiver faltando`,
       success: {
         label: "Como é uma passada bem-sucedida",
         body: [
-          "Cada passada imprime uma linha por arquivo que realmente enviou, e depois um resumo que contrapõe o que enviou ao que o receptor já tinha. O laço termina na primeira vez que o sync retorna sucesso, e esse resumo é o estado do espelho.",
+          "O progresso mostra os hashes na origem e os bytes enviados, inclusive durante o envio de um único arquivo grande. O resumo conta arquivos enviados e ignorados.",
         ],
         code: [
           `relayium sync /root/workspace relayium://203.0.113.43:9031
-  workspace/data/part-004.bin (1073741824 bytes)
+  Sending 1.0 GiB / 1.0 GiB · 1/1 files · workspace/data/part-004.bin
 synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "Cada tentativa faz menos: os arquivos já transferidos são pulados, um arquivo enviado pela metade é retomado — então o laço converge e termina.",
-        "O progresso imprime uma linha por arquivo concluído, então um arquivo grande é transferido em silêncio até terminar. O silêncio não é um travamento (veja solução de problemas).",
+        "Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
+        "O progresso mostra os hashes na origem e os bytes enviados, inclusive durante o envio de um único arquivo grande. O resumo conta arquivos enviados e ignorados.",
       ],
     },
     {
@@ -2146,7 +2146,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       success: {
         label: "Como é um espelho concluído",
         body: [
-          "O du -sh informa o mesmo total nos dois servidores, e o laço until devolveu você a um prompt de shell comum em vez de tentar de novo. Totais iguais são uma conferência grosseira de completude, não uma prova de integridade: o sync decidiu por tamanho e mtime quais arquivos não enviar, então o total não diz nada sobre o conteúdo dos arquivos que ele pulou.",
+          "Os totais de du -sh são uma conferência aproximada. Execute novamente com --checksum para exigir a comparação SHA-256 dos arquivos selecionados.",
         ],
         code: [
           `# the same total, on BOTH servers
@@ -2154,7 +2154,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
         ],
       },
       bullets: [
-        "O que o sync enviou está verificado: cada arquivo transferido foi conferido com SHA-256 na chegada, e uma saída limpa significa que nenhuma dessas conferências falhou. O que ele pulou só foi comparado por tamanho e mtime, então totais de du -sh iguais são uma conferência de sanidade sobre a completude, não uma prova de que o conteúdo pulado ainda confere. Se você precisa dessa prova, compare as somas de verificação arquivo por arquivo nos dois servidores.",
+        "Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo.",
       ],
     },
     {
@@ -2173,7 +2173,7 @@ ss -tinp dst :9031
 # ESTAB    o processo à escuta foi alcançado; não prova que bytes estejam se movendo
 # SYN-SENT não alcança o processo à escuta`,
             ],
-            fix: "O progresso só é impresso quando um arquivo termina, então um único arquivo grande é transferido em completo silêncio. ESTAB prova apenas alcançabilidade — um socket estabelecido pode ficar ocioso ou travado — e sozinho nunca é prova de avanço. Rode a verificação duas vezes com alguns segundos de intervalo e compare o contador bytes_acked que o -i imprime para aquele socket: subindo, a transferência está andando; parado, é um travamento de verdade.",
+            fix: "ESTAB só confirma a conexão. Veja o progresso de bytes ou execute ss -tinp duas vezes e compare bytes_acked. O cálculo local de hashes pode ocorrer antes da conexão de transferência.",
           },
           {
             symptom: "O socket fica em SYN-SENT e a transferência nunca começa.",
@@ -2203,11 +2203,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             fix: "Matar por padrão de linha de comando envia o sinal a todo processo cuja linha de comando contenha aquele texto — numa máquina com mais de uma transferência rodando, não é o que você queria. E também não para o espelho: o laço until é o dono do sync, então um filho morto é iniciado de novo dez segundos depois. Olhe com pgrep -af e depois encerre o que este guia de fato possui: tmux kill-session -t xfer termina o laço, e um kill no PID que está em ~/relayium-serve.pid para o processo à escuta que você lançou. Se o arquivo de PID está ali desde uma execução anterior, imprima a linha de comando dele antes de sinalizá-lo, porque um PID que o sistema reutilizou pertence a outra coisa completamente.",
           },
           {
-            symptom: "Você quer deixar um subdiretório de fora e não existe nenhuma opção de exclusão.",
+            symptom: "Excluir uma pasta ou um padrão que você escolheu",
             code: [
-              `relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031`,
+              `relayium sync --exclude 'example-cache/' /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "O sync aceita -i e -p, --delete, --watch e --config-dir; nada que filtre um caminho no meio da árvore. Nomeie em vez disso os subdiretórios que você quer: cada origem chega sob o --dir do receptor com o próprio nome, então diante de serve --dir /root/workspace este comando reconstrói /root/workspace/src e /root/workspace/data e nunca percorre um venv regenerável.",
+            fix: "Repita --exclude para cada regra. Use caminhos relativos ou padrões de nomes entre aspas. Você escolhe as exclusões; --exclude é incompatível com --delete.",
           },
           {
             symptom: "Uma origem que você esperava espelhar chega vazia.",
@@ -2226,11 +2226,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "O que acontece se a transferência for interrompida no meio do caminho?",
-        a: "Nada se perde. Reexecute relayium sync — ele pula os arquivos que já estão no receptor e retoma um arquivo enviado pela metade a partir do deslocamento de bytes já em disco. O laço until deste guia faz isso automaticamente até que a pasta inteira seja espelhada.",
+        a: "Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
       },
       {
         q: "Em que isso difere do rsync?",
-        a: "Ambos fazem espelhamento incremental unidirecional, mas relayium sync roda sobre uma conexão TLS fixada sem exigir conta SSH (daemon direto), autentica as duas máquinas pela impressão digital do certificado e verifica com SHA-256 cada arquivo que transfere. Como no comportamento padrão do rsync, um arquivo cujo tamanho e mtime já coincidem no receptor é pulado em vez de ser re-hasheado. É o mesmo motor de transferência dos outros modos do relayium.",
+        a: "Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo.",
       },
       {
         q: "O sync apaga no receptor os arquivos que removi da origem?",
@@ -2257,6 +2257,6 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 export default {
   slug: "guides/sync-a-large-folder-between-servers",
   published: "2026-07-08",
-  updated: "2026-08-05",
+  updated: "2026-11-25",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

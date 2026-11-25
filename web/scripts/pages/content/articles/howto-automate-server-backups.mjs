@@ -174,11 +174,11 @@ $ echo $?
       },
       {
         q: "Is the copy encrypted and verified?",
-        a: "Yes in transit, and every transferred file is checked with SHA-256. sync decides what to send from size and modification time, so a skipped file is not re-hashed. Matching directory sizes are a sanity check, not proof that skipped contents still match.",
+        a: "Daemon-direct transfers use pinned TLS and verify file data. Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison.",
       },
       {
         q: "What happens if the cron job is interrupted halfway through?",
-        a: "It depends which command you scheduled. sync continues: the next run skips what already matches and carries on a partial file, and --no-resume turns that off. push does not resume — it refuses a destination that already exists, so a scheduled push would need a fresh (for example dated) destination every run; that is why this guide schedules sync. --no-resume is accepted by push and does nothing.",
+        a: "A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped. push does not resume — it refuses a destination that already exists, so a scheduled push would need a fresh (for example dated) destination every run; that is why this guide schedules sync. --no-resume is accepted by push and does nothing.",
       },
       {
         q: "Can --delete accidentally wipe my destination?",
@@ -371,11 +371,11 @@ $ echo $?
       },
       {
         q: "这份副本会加密并校验吗？",
-        a: "传输层会加密，真正传输的每个文件都会做 SHA-256 校验。但 sync 按大小和修改时间决定是否发送，被跳过的文件不会重新哈希。目录总大小一致只是粗略自检，不能证明跳过的内容仍一致。",
+        a: "直连使用固定指纹的 TLS，并校验传输的数据。新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。",
       },
       {
         q: "如果 cron 任务执行到一半被中断会怎样？",
-        a: "看你排的是哪条命令。sync 会接着来：下一次运行跳过已匹配的文件，并把半截的文件接着传，--no-resume 可以关掉这一点。push 不续传——它会拒绝已存在的目标，所以定时运行的 push 每次都需要一个新的（例如按日期命名的）目标目录；这正是本指南排的是 sync 的原因。--no-resume 在 push 上能被接受，但什么也不做。",
+        a: "下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。 push 不续传——它会拒绝已存在的目标，所以定时运行的 push 每次都需要一个新的（例如按日期命名的）目标目录；这正是本指南排的是 sync 的原因。--no-resume 在 push 上能被接受，但什么也不做。",
       },
       {
         q: "--delete 会不会不小心清空我的目标目录？",
@@ -555,11 +555,11 @@ const ja = {
       },
       {
         q: "バックアップは暗号化・検証されますか？",
-        a: "されます。転送中は暗号化され、転送されたすべてのファイルは SHA-256 で検証されます。sync はサイズと更新時刻で送るものを決めるので、飛ばしたファイルはハッシュを取り直しません。ディレクトリのサイズが一致するのは目安であって、飛ばした内容がまだ一致している証明ではありません。",
+        a: "現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。",
       },
       {
         q: "cron ジョブが途中で中断された場合はどうなりますか？",
-        a: "どちらのコマンドを予定したかによります。sync は続きます。次の実行はすでに一致するものを飛ばし、半端なファイルを続きから送ります。--no-resume はそれを切ります。push は再開しません。既存の宛先を拒否するので、繰り返し実行するなら sync を予定するか、実行ごとに新しい宛先へ push してください。--no-resume は push でも受け付けられますが、何もしません。",
+        a: "再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。 push は再開しません。既存の宛先を拒否するので、繰り返し実行するなら sync を予定するか、実行ごとに新しい宛先へ push してください。--no-resume は push でも受け付けられますが、何もしません。",
       },
       {
         q: "--delete で誤って宛先を消してしまうことはありますか？",
@@ -735,11 +735,11 @@ const ko = {
       },
       {
         q: "백업이 암호화되고 검증되나요?",
-        a: "네, 전송 중에 암호화되며 전송된 모든 파일은 SHA-256으로 검증됩니다. sync는 크기와 수정 시각으로 보낼 것을 정하므로, 건너뛴 파일은 다시 해시하지 않습니다. 디렉터리 크기가 같다는 것은 대략적인 확인일 뿐, 건너뛴 내용이 여전히 같다는 증거는 아닙니다.",
+        a: "최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요.",
       },
       {
         q: "cron 작업이 중간에 중단되면 어떻게 되나요?",
-        a: "어떤 명령을 예약했느냐에 따라 다릅니다. sync는 이어집니다: 다음 실행이 이미 일치하는 것은 건너뛰고 부분 파일을 이어서 보내며, --no-resume이 그것을 끕니다. push는 재개하지 않습니다 — 이미 존재하는 목적지를 거부하므로, 반복 실행하려면 sync를 예약하거나 실행마다 새 목적지로 push하세요. --no-resume은 push에서도 받아들여지지만 아무 일도 하지 않습니다.",
+        a: "다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
       },
       {
         q: "--delete가 실수로 대상을 지워버릴 수 있나요?",
@@ -915,11 +915,11 @@ const de = {
       },
       {
         q: "Ist das Backup verschlüsselt und geprüft?",
-        a: "Ja, während der Übertragung, und jede übertragene Datei wird per SHA-256 geprüft. sync entscheidet anhand von Größe und Änderungszeit, was gesendet wird, eine übersprungene Datei wird also nicht neu gehasht. Übereinstimmende Verzeichnisgrößen sind eine Plausibilitätsprüfung, kein Beweis, dass übersprungene Inhalte noch übereinstimmen.",
+        a: "Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich.",
       },
       {
         q: "Was passiert, wenn der cron-Job mittendrin unterbrochen wird?",
-        a: "Das hängt davon ab, welchen Befehl du eingeplant hast. sync macht weiter: Der nächste Lauf überspringt, was schon passt, und führt eine Teildatei fort — und --no-resume schaltet genau das ab. push setzt nicht fort: Es verweigert ein Ziel, das schon existiert; für wiederholte Läufe plane daher sync ein oder pushe bei jedem Lauf in ein neues Ziel. --no-resume wird von push angenommen und tut nichts.",
+        a: "Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen. push setzt nicht fort: Es verweigert ein Ziel, das schon existiert; für wiederholte Läufe plane daher sync ein oder pushe bei jedem Lauf in ein neues Ziel. --no-resume wird von push angenommen und tut nichts.",
       },
       {
         q: "Kann --delete versehentlich mein Ziel leeren?",
@@ -1095,11 +1095,11 @@ const fr = {
       },
       {
         q: "La sauvegarde est-elle chiffrée et vérifiée ?",
-        a: "Oui pendant le transfert, et chaque fichier transféré est vérifié par SHA-256. sync décide de ce qu'il envoie d'après la taille et la date de modification, donc un fichier sauté n'est pas re-haché. Des tailles de répertoire identiques sont un contrôle de cohérence, pas la preuve que les contenus sautés correspondent encore.",
+        a: "Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu.",
       },
       {
         q: "Que se passe-t-il si la tâche cron est interrompue en cours de route ?",
-        a: "Cela dépend de la commande que vous avez planifiée. sync continue : l'exécution suivante saute ce qui correspond déjà et poursuit un fichier partiel, et --no-resume désactive cela. push ne reprend pas — il refuse une destination qui existe déjà ; pour des exécutions répétées, planifiez donc sync ou poussez vers une nouvelle destination à chaque exécution. --no-resume est accepté par push et n'y fait rien.",
+        a: "Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés. push ne reprend pas — il refuse une destination qui existe déjà ; pour des exécutions répétées, planifiez donc sync ou poussez vers une nouvelle destination à chaque exécution. --no-resume est accepté par push et n'y fait rien.",
       },
       {
         q: "--delete peut-il vider ma destination par accident ?",
@@ -1275,11 +1275,11 @@ const ar = {
       },
       {
         q: "هل النسخة الاحتياطية مُشفَّرة ومُتحقَّق منها؟",
-        a: "نعم أثناء النقل، ويُتحقق من كل ملف منقول بـ SHA-256. يقرر sync ما يرسله بحسب الحجم ووقت التعديل، فلا يُعاد حساب تجزئة الملف المُتخطّى. وتطابق أحجام المجلدات فحص تقريبي، لا دليل على أن المحتويات المُتخطّاة ما زالت متطابقة.",
+        a: "يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى.",
       },
       {
         q: "ماذا يحدث إذا قوطعت مهمة cron في منتصفها؟",
-        a: "يعتمد على الأمر الذي جدولته. sync يُكمل: التشغيل التالي يتخطى ما يطابق سلفًا ويُكمل ملفًا جزئيًا، و‏--no-resume يوقف ذلك. أما push فلا يستأنف — فهو يرفض وجهة موجودة سلفًا؛ لذا جدوِل sync للتشغيل المتكرر أو ادفع بـ push إلى وجهة جديدة في كل تشغيل. و‏--no-resume مقبول في push ولا يفعل شيئًا.",
+        a: "قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها. push فلا يستأنف — فهو يرفض وجهة موجودة سلفًا؛ لذا جدوِل sync للتشغيل المتكرر أو ادفع بـ push إلى وجهة جديدة في كل تشغيل. و‏--no-resume مقبول في push ولا يفعل شيئًا.",
       },
       {
         q: "هل يمكن أن يمحو --delete وجهتي بالخطأ؟",
@@ -1455,11 +1455,11 @@ const es = {
       },
       {
         q: "¿La copia de seguridad va cifrada y verificada?",
-        a: "Sí durante la transferencia, y cada archivo transferido se comprueba con SHA-256. sync decide qué enviar por tamaño y fecha de modificación, así que un archivo saltado no se vuelve a hashear. Que coincidan los tamaños de directorio es una comprobación de cordura, no una prueba de que el contenido saltado siga coincidiendo.",
+        a: "Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido.",
       },
       {
         q: "¿Qué pasa si la tarea cron se interrumpe a mitad de camino?",
-        a: "Depende de qué comando hayas programado. sync continúa: la siguiente ejecución se salta lo que ya coincide y sigue con un archivo parcial, y --no-resume desactiva eso. push no reanuda: rechaza un destino que ya existe, así que para ejecuciones repetidas programa sync o haz push a un destino nuevo en cada ejecución. --no-resume se acepta en push y no hace nada.",
+        a: "Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten. push no reanuda: rechaza un destino que ya existe, así que para ejecuciones repetidas programa sync o haz push a un destino nuevo en cada ejecución. --no-resume se acepta en push y no hace nada.",
       },
       {
         q: "¿Puede --delete vaciar mi destino por accidente?",
@@ -1635,11 +1635,11 @@ const pt = {
       },
       {
         q: "O backup é criptografado e verificado?",
-        a: "Sim durante a transferência, e cada arquivo transferido é conferido com SHA-256. O sync decide o que enviar por tamanho e data de modificação, então um arquivo pulado não é re-hasheado. Tamanhos de diretório iguais são uma checagem de sanidade, não prova de que o conteúdo pulado ainda corresponde.",
+        a: "Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo.",
       },
       {
         q: "O que acontece se a tarefa cron for interrompida no meio?",
-        a: "Depende de qual comando você agendou. O sync continua: a próxima execução pula o que já corresponde e leva adiante um arquivo parcial, e o --no-resume desliga isso. O push não retoma — ele recusa um destino que já existe; para execuções repetidas, agende o sync ou faça push para um destino novo a cada execução. O --no-resume é aceito pelo push e não faz nada.",
+        a: "Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados. push não retoma — ele recusa um destino que já existe; para execuções repetidas, agende o sync ou faça push para um destino novo a cada execução. O --no-resume é aceito pelo push e não faz nada.",
       },
       {
         q: "O --delete pode apagar meu destino por acidente?",
@@ -1699,6 +1699,6 @@ const currentZh = {
 export default {
   slug: "how-to/automate-server-backups",
   published: "2026-07-09",
-  updated: "2026-09-01",
+  updated: "2026-11-25",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

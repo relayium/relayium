@@ -3,14 +3,14 @@
   "android": {
     "available": true,
     "applicationId": "com.relayium.android",
-    "versionCode": 13,
-    "versionName": "0.3.4",
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.3.4/Relayium-0.3.4-13.apk",
-    "sha256": "4cbc1526c4942c9ef25056dfe9945526758920595f418a0a7792d08cc1aea309",
+    "versionCode": 14,
+    "versionName": "0.3.5",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.3.5/Relayium-0.3.5-14.apk",
+    "sha256": "6467972ed84243f793505ae81b2d782dc5c960335c214b9805ebf429691baf78",
     "size": 46074442,
     "notes": {
-      "en": "Public preview 0.3.4. Device Inbox checks for new deliveries every two seconds while visible and refreshes sent status promptly. Long text has Copy above and below the full message. Ask consent and pause remain available. Transfers require the app in the foreground; this improves discovery, not file upload or download throughput. Direct APK; no Google Play or Play Billing.",
-      "zh": "公开预览版 0.3.4。Device Inbox 页面可见时每两秒检查新投递，并及时刷新发送状态。长文本上方和下方均可复制全文。仍支持询问接收和暂停。传输需保持应用在前台；本轮优化发现新内容的延迟，不代表文件上传或下载吞吐提升。仅以 APK 分发，不在 Google Play 上架，不含 Play 结算。"
+      "en": "Copy sent and received text in cross-network and nearby sessions. The Copy button preserves the full message.",
+      "zh": "跨网络中继和局域网会话中的发送及接收消息现在都可一键复制，并原样保留完整正文。"
     }
   }
 }
