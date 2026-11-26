@@ -573,8 +573,6 @@ final class DeviceInboxUITests: XCTestCase {
             XCTAssertTrue(element("inbox-policy-\(choice)", in: window).exists,
                           "the \(choice) receiving choice is not on the destination")
         }
-        XCTAssertTrue(revealed("inbox-conversations", in: window).exists,
-                      "the destination has no v3 conversation home")
         XCTAssertTrue(revealed("inbox-send", in: window).exists,
                       "the destination has no send-device section")
         XCTAssertTrue(revealed("inbox-send-refresh", in: window).exists,
@@ -1119,8 +1117,8 @@ final class DeviceInboxUITests: XCTestCase {
         second.click()
         // Wait on a landmark the LIST has and the conversation page does not, so
         // the absences below are read after the transition rather than during it.
-        XCTAssertTrue(revealed("inbox-conversations", in: window, timeout: 20).exists,
-                      "deleting the last item did not return to the conversation list")
+        XCTAssertTrue(revealed("inbox-send", in: window, timeout: 20).exists,
+                      "deleting the last item did not return to the device list")
         XCTAssertFalse(element("inbox-entry-menu", in: window).exists,
                        "the deleted row is still on screen")
         XCTAssertFalse(element("inbox-timeline", in: window).exists,

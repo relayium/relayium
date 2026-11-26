@@ -1636,7 +1636,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
         let status = try macAt("statusSection(offersControls: true)")
         let conversations = try macAt("conversationsSection")
         let send = try macAt("DeviceSendSection(")
-        for (name, later) in [("folderSection", try macAt("folderSection")),
+        for (name, later) in [("configured receive folder", try macAt("if inbox.folder.url != nil")),
                               ("policySection", try macAt("policySection")),
                               ("residencySection", try macAt("residencySection"))] {
             XCTAssertLessThan(ask, later,
@@ -1645,6 +1645,17 @@ final class InboxSurfaceGuardTests: XCTestCase {
             XCTAssertLessThan(conversations, later, "macOS: \(name) is above the conversations")
             XCTAssertLessThan(send, later, "macOS: \(name) is above the devices to send to")
         }
+
+        let setup = try macAt("if inbox.folder.url == nil")
+        XCTAssertLessThan(ask, setup)
+        XCTAssertLessThan(setup, send,
+                          "an unusable receive folder needs recovery above the device directory")
+        XCTAssertTrue(surface.contains("!listedDeviceIDs.contains($0.peerDeviceID)"),
+                      "history for listed devices would be repeated below the device directory")
+        let list = try macSource("DeviceInbox/DeviceSendSection.swift")
+        XCTAssertTrue(list.contains("$0.peerDeviceID == candidate.id"))
+        XCTAssertTrue(list.contains("deliveries.focusPeer(conversation.peerDeviceID)"),
+                      "a listed but blocked device must still be able to open its stored history")
 
         // ── iOS ────────────────────────────────────────────────────────────
         let ios = try code(try RepoRoot.directory("apps/ios/Relayium")

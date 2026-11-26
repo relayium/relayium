@@ -86,6 +86,7 @@ struct CrossNetworkConnectPane: View {
     @State private var actionError: String?
     /// Whether Copy code just acknowledged a copy. View state only.
     @State private var codeCopied = false
+    @FocusState private var joinCodeFocused: Bool
 
     private let route = AppDestination.pairingCode
 
@@ -134,8 +135,8 @@ struct CrossNetworkConnectPane: View {
                         .accessibilityIdentifier("pairing-code-minting-cancel")
                 }
             case .idle, .failed:
-                pairingCode
                 joinSection
+                pairingCode
             }
             if case let .failed(message) = code.state {
                 // **A failed mint needs a way out of itself.**
@@ -342,7 +343,7 @@ struct CrossNetworkConnectPane: View {
     /// runtime check that this screen states its own premise must go on
     /// passing.
     private var pairingCode: some View {
-        PairingHero {
+        SectionCard(title: L10n.t(.macPairCreateHeading)) {
             if case .allowed = gate {
                 createControls
             } else {
@@ -384,7 +385,7 @@ struct CrossNetworkConnectPane: View {
     /// The join half, as its own group: it needs no account and is rendered
     /// and enabled identically signed out, outside the gate above.
     private var joinSection: some View {
-        SectionCard(title: L10n.t(.workspaceJoinHeading), rows: true) {
+        SectionCard(title: L10n.t(.macPairJoinHeading), rows: true) {
             CardRows {
                 CardBlockRow {
                     joinControls
@@ -408,6 +409,8 @@ struct CrossNetworkConnectPane: View {
                     .strokeBorder(Palette.buttonBorder, lineWidth: 1))
                 .accessibilityLabel(L10n.t(.commonCode))
                 .accessibilityIdentifier("pairing.joinCode")
+                .focused($joinCodeFocused)
+                .onAppear { joinCodeFocused = !sessionLocked }
             Text(L10n.t(.directJoinNoAccountShort))
                 .font(.subheadline)
                 .foregroundStyle(Palette.textTertiary)

@@ -1216,3 +1216,8 @@
 
 "inbox.receiveBytes" = "已接收 %@ / %@";
 "inbox.receiveNoProgress" = "已 %@ 秒没有新数据，正在等待连接…";
+
+"mac.link.otherTransfers" = "其他传输";
+"mac.nearby.emptyRosterOpen" = "让对方设备连接同一网络，打开 Relayium 或下方网址，并保持打开：";
+"mac.pair.createHeading" = "我需要配对码";
+"mac.pair.joinHeading" = "我有配对码";
