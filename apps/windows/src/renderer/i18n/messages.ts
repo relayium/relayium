@@ -141,6 +141,9 @@ export const en = {
   textFlooding: "The other device sent too many messages; the session was closed.",
   textFailed: "The message session failed.",
   textDropped: "That message was not sent. It is still in the box.",
+  textCopy: "Copy",
+  textCopied: "Copied",
+  textCopyFailed: "Could not copy. Select the text and press Ctrl+C.",
   /**
    * Clearing is LOCAL, and every one of these says so.
    *
@@ -962,6 +965,9 @@ export const zh: Record<MessageKey, string> = {
   textFlooding: "对方发得太快，会话已关闭。",
   textFailed: "消息会话失败。",
   textDropped: "这条消息没有发送成功，内容仍保留在输入框里。",
+  textCopy: "复制",
+  textCopied: "已复制",
+  textCopyFailed: "无法复制。请选择文本后按 Ctrl+C。",
   textClear: "清除对话",
   textClearTitle: "清除这段对话？",
   textClearBody:

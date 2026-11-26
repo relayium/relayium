@@ -15,7 +15,7 @@
 // The room and its workspace are synthetic in-page stand-ins: no main process,
 // no transport, no peer.
 
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, clipboard } from "electron";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -99,6 +99,8 @@ async function main() {
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   const page = window_.webContents;
+  page.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  page.session.setPermissionCheckHandler(() => false);
   page.on("console-message", (_e, level, message) => {
     if (level >= 2) rendererErrors.push(message);
   });
@@ -318,6 +320,51 @@ async function main() {
   equal("and goes the moment the link is named as ended", await js(`window.__count('[data-test="link-path"]')`), 0);
   await js(`window.__set("setEndReason", "")`);
   await js(`window.__set("setPath", undefined)`);
+
+  at("copy a live message");
+  const messages = ["收到  两格\nsecond line", "outbound   text"];
+  await js(`window.__set("setText", "open", "")`);
+  await js(`window.__set("setHistory", ${JSON.stringify(messages)})`);
+  const copySelector = '[data-test="text-copy"]';
+  if (equal("a Copy control for both directions", await js(`window.__count(${JSON.stringify(copySelector)})`), 2)) {
+    // The Windows hosted runner owns its clipboard. Local smoke tests use a
+    // synthetic copy event so they never replace a developer's clipboard.
+    const onWindowsRunner = process.platform === "win32" && process.env.GITHUB_ACTIONS === "true";
+    if (!onWindowsRunner) {
+      await js(`document.execCommand = () => {
+        const data = new DataTransfer();
+        document.dispatchEvent(new ClipboardEvent("copy", { cancelable: true, clipboardData: data }));
+        window.__copyValue = data.getData("text/plain");
+        return true;
+      }; true`);
+    }
+    const readClipboard = async () => onWindowsRunner
+      ? (await clipboard.readText()).replace(/\r\n/g, "\n")
+      : await js(`window.__copyValue ?? ""`);
+    const before = await readClipboard();
+    await js(`window.__click(${JSON.stringify(copySelector)})`);
+    equal("a scripted click writes nothing", await readClipboard(), before);
+    page.debugger.attach();
+    try {
+      await page.debugger.sendCommand("Emulation.setFocusEmulationEnabled", { enabled: true });
+      for (const [index, body] of messages.entries()) {
+        const point = await js(`(() => {
+          const button = document.querySelectorAll(${JSON.stringify(copySelector)})[${index}];
+          button.scrollIntoView({ block: "center" });
+          const r = button.getBoundingClientRect();
+          return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        })()`);
+        for (const type of ["mousePressed", "mouseReleased"]) {
+          await page.debugger.sendCommand("Input.dispatchMouseEvent", { ...point, type, button: "left", clickCount: 1 });
+        }
+        await js(`window.__tick()`);
+        equal(`message ${index} preserves its plain text`, await readClipboard(), body);
+        equal(`message ${index} reports success`, await js(`window.__text('[data-test="history"] li:nth-child(${index + 1}) [role="status"]')`), "Copied");
+      }
+    } finally {
+      page.debugger.detach();
+    }
+  }
 
   at("a conversation can be cleared without ending it");
   // `PeerWorkspace.clearText()` has existed in the shared code Windows uses
