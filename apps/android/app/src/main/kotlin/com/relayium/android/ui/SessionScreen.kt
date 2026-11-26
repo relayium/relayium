@@ -189,7 +189,9 @@ private fun VerificationCard(
     SectionCard {
         run {
             Text(
-                text = stringResource(R.string.status_connected),
+                text = stringResource(
+                    if (state.linkInterrupted) R.string.status_link_recovering else R.string.status_connected,
+                ),
                 style = MaterialTheme.typography.titleMedium,
                 // The accent TEXT role: a state that has actually been reached
                 // is one of the three places the brand belongs.

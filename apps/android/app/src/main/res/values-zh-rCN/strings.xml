@@ -18,6 +18,7 @@
     <string name="status_connecting">正在连接…</string>
     <string name="status_waiting_peer">正在等待另一台设备…</string>
     <string name="status_connected">已连接</string>
+    <string name="status_link_recovering">正在重连</string>
     <string name="status_verification_code">验证码 %1$s</string>
     <string name="status_verification_hint">可选。只有对方开启了验证，它才会显示这六位数字；显示时两边应当一致。</string>
     <string name="status_verification_show">显示验证码</string>
