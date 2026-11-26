@@ -10,7 +10,7 @@ const en = {
     "Mirror a big directory from one server to another with relayium sync — incremental, resumable after a dropped connection, and safe to run unattended. A retry loop under tmux moves gigabytes without babysitting a terminal.",
   updatedLabel: "Last updated",
   lead: [
-    "Both servers should use v0.28.1 or later. One run handles up to 100,000 regular files and a 32 MiB directory index. Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison. A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
+    "Use v0.28.3 on both ends. One command automatically splits large selections into batches of up to 100,000 regular files and a 32 MiB directory index each. Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison. With v0.28.3 on the receiver, a sync can retain a private checkpoint for a file of at least 1 MiB. Rerun the same command to reuse a matching checkpoint. An interrupted file without one starts again. Completed, verified files are skipped.",
     "This guide sets up an unattended, self-healing transfer: authorize the sender once, run the listener in the background, and drive relayium sync from a retry loop inside tmux so it keeps going across dropped connections until the whole folder has landed.",
   ],
   sections: [
@@ -21,7 +21,7 @@ const en = {
       ],
       bullets: [
         "Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison.",
-        "A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
+        "With v0.28.3 on the receiver, a sync can retain a private checkpoint for a file of at least 1 MiB. Rerun the same command to reuse a matching checkpoint. An interrupted file without one starts again. Completed, verified files are skipped.",
         "Matching du -sh totals are a coarse check. Rerun with --checksum to require SHA-256 comparison of the selected files.",
         "Because of these, the command is idempotent — running it again only does the work that's left, which is exactly what lets a retry loop finish a huge transfer.",
       ],
@@ -29,7 +29,7 @@ const en = {
     {
       heading: "Prerequisites",
       body: [
-        "Both servers should use v0.28.1 or later. One run handles up to 100,000 regular files and a 32 MiB directory index. For one copy, use relayium serve --once on the receiver and one relayium sync on the sender. To probe first, run serve without --once and use sync --check; it verifies connectivity and authorization without sending file data. For ongoing synchronization, keep the receiver running and add --watch on the sender.",
+        "Use v0.28.3 on both ends. One command automatically splits large selections into batches of up to 100,000 regular files and a 32 MiB directory index each. For multiple batches, run relayium serve without --once. Multi-batch sync refuses --delete. To probe first, run serve without --once and use sync --check; it verifies connectivity and authorization without sending file data. For ongoing synchronization, keep the receiver running and add --watch on the sender.",
       ],
       code: [
         `# on BOTH servers
@@ -114,7 +114,7 @@ synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
+        "With v0.28.3 on the receiver, a sync can retain a private checkpoint for a file of at least 1 MiB. Rerun the same command to reuse a matching checkpoint. An interrupted file without one starts again. Completed, verified files are skipped.",
         "Progress shows source hashing and sent bytes, including while one large file is in flight. Read the final sent/unchanged counts.",
       ],
     },
@@ -226,7 +226,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "What happens if the transfer is interrupted halfway?",
-        a: "A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
+        a: "With v0.28.3 on the receiver, a sync can retain a private checkpoint for a file of at least 1 MiB. Rerun the same command to reuse a matching checkpoint. An interrupted file without one starts again. Completed, verified files are skipped.",
       },
       {
         q: "How is this different from rsync?",
@@ -260,7 +260,7 @@ const zh = {
     "用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。",
   updatedLabel: "最近更新",
   lead: [
-    "两台服务器都使用 v0.28.1 或更新版本。一次最多处理 100,000 个普通文件，目录索引上限为 32 MiB。 新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。 下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
+    "两端均使用 v0.28.3 或更新版本。一条命令会自动分批，每批最多 100,000 个普通文件和 32 MiB 目录索引。 新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。 接收端使用 v0.28.3 时，可为至少 1 MiB 的文件保留私有断点。重跑同一条命令可复用匹配的断点；没有可用断点的中断文件会重传，已经校验的文件会跳过。",
     "本指南搭建一个无人值守、自动恢复的传输：把发送方授权一次，让监听端在后台运行，并在 tmux 里用重试循环驱动 relayium sync，让它在掉线之后继续跑，直到整个文件夹全部到达。",
   ],
   sections: [
@@ -271,7 +271,7 @@ const zh = {
       ],
       bullets: [
         "新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。",
-        "下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
+        "接收端使用 v0.28.3 时，可为至少 1 MiB 的文件保留私有断点。重跑同一条命令可复用匹配的断点；没有可用断点的中断文件会重传，已经校验的文件会跳过。",
         "du -sh 总量只是粗略核对。再用 --checksum 运行一次，可要求对选中的文件做 SHA-256 内容比对。",
         "正因如此，这条命令是幂等的——再跑一次只做剩下的活，这正是重试循环能完成一次超大传输的关键。",
       ],
@@ -279,7 +279,7 @@ const zh = {
     {
       heading: "前提条件",
       body: [
-        "两台服务器都使用 v0.28.1 或更新版本。一次最多处理 100,000 个普通文件，目录索引上限为 32 MiB。 只传一次，接收端用 relayium serve --once，发送端执行一次 relayium sync。若想先检查，请让接收端去掉 --once，再用 sync --check，验证连通性和授权而不发送文件数据。需要持续同步时，保持接收端运行，并在发送端加 --watch。",
+        "两端均使用 v0.28.3 或更新版本。一条命令会自动分批，每批最多 100,000 个普通文件和 32 MiB 目录索引。 多批次同步请直接运行 relayium serve，去掉 --once。多批次同步会拒绝 --delete。若想先检查，请让接收端去掉 --once，再用 sync --check，验证连通性和授权而不发送文件数据。需要持续同步时，保持接收端运行，并在发送端加 --watch。",
       ],
       code: [
         `# 两台服务器上都执行
@@ -364,7 +364,7 @@ synced: 1 sent, 812 unchanged`,
         ],
       },
       bullets: [
-        "下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
+        "接收端使用 v0.28.3 时，可为至少 1 MiB 的文件保留私有断点。重跑同一条命令可复用匹配的断点；没有可用断点的中断文件会重传，已经校验的文件会跳过。",
         "进度会显示源文件校验和已发送字节，单个大文件传输期间也会更新。最终汇总显示发送和跳过的文件数。",
       ],
     },
@@ -476,7 +476,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
     items: [
       {
         q: "传到一半被打断会怎样？",
-        a: "下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
+        a: "接收端使用 v0.28.3 时，可为至少 1 MiB 的文件保留私有断点。重跑同一条命令可复用匹配的断点；没有可用断点的中断文件会重传，已经校验的文件会跳过。",
       },
       {
         q: "这和 rsync 有什么不同？",
@@ -510,7 +510,7 @@ const ja = {
     "relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。",
   updatedLabel: "最終更新",
   lead: [
-    "両方のサーバーを v0.28.1 以降にしてください。1 回で最大 100,000 個の通常ファイル、ディレクトリインデックスは 32 MiB までです。 現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。 再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
+    "両端を v0.28.3 以降にしてください。1 つのコマンドで自動的に分割し、各バッチは通常ファイル 100,000 個とディレクトリインデックス 32 MiB までです。 現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。 再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
     "本ガイドでは、無人で自己修復する転送を構築します。送信側を一度だけ承認し、リスナーをバックグラウンドで動かし、tmux 内のリトライループで relayium sync を回して、接続が切れても続行させ、フォルダー全体が届くまで走らせます。",
   ],
   sections: [
@@ -529,7 +529,7 @@ const ja = {
     {
       heading: "前提条件",
       body: [
-        "両方のサーバーを v0.28.1 以降にしてください。1 回で最大 100,000 個の通常ファイル、ディレクトリインデックスは 32 MiB までです。 一度だけコピーする場合は受信側で relayium serve --once、送信側で relayium sync を一度実行します。事前確認には --once を外し、ファイルデータを送信せず到達性と許可を確認する sync --check を使います。定期的に同期する場合は受信側を起動したまま送信側に --watch を付けます。",
+        "両端を v0.28.3 以降にしてください。1 つのコマンドで自動的に分割し、各バッチは通常ファイル 100,000 個とディレクトリインデックス 32 MiB までです。 複数バッチでは relayium serve を --once なしで実行します。複数バッチでは --delete を使用できません。事前確認には --once を外し、ファイルデータを送信せず到達性と許可を確認する sync --check を使います。定期的に同期する場合は受信側を起動したまま送信側に --watch を付けます。",
       ],
       code: [
         `# 両方のサーバーで
@@ -760,7 +760,7 @@ const ko = {
     "relayium sync로 큰 디렉터리를 한 서버에서 다른 서버로 미러링하세요. 증분 전송, 연결이 끊겨도 재개 가능, 무인 실행도 안전합니다. tmux 안의 재시도 루프로 터미널에 붙어 있지 않고도 수십 GB를 옮길 수 있습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "두 서버 모두 v0.28.1 이상을 사용하세요. 한 번에 일반 파일 최대 100,000개, 디렉터리 인덱스 최대 32 MiB를 처리합니다. 최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요. 다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
+    "양쪽 모두 v0.28.3 이상을 사용하세요. 명령 하나가 자동으로 분할하며, 배치당 일반 파일 최대 100,000개와 디렉터리 인덱스 최대 32 MiB를 처리합니다. 최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요. 다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
     "이 가이드는 무인으로 스스로 복구하는 전송을 구성합니다. 보내는 쪽을 한 번만 승인하고, 리스너를 백그라운드에서 돌리고, tmux 안의 재시도 루프로 relayium sync를 구동해 연결이 끊겨도 계속 진행하여 폴더 전체가 도착할 때까지 실행합니다.",
   ],
   sections: [
@@ -779,7 +779,7 @@ const ko = {
     {
       heading: "사전 준비",
       body: [
-        "두 서버 모두 v0.28.1 이상을 사용하세요. 한 번에 일반 파일 최대 100,000개, 디렉터리 인덱스 최대 32 MiB를 처리합니다. 한 번만 복사할 때는 수신기에서 relayium serve --once, 송신기에서 relayium sync를 한 번 실행하세요. 사전 확인은 --once를 빼고 sync --check로 연결과 승인을 확인하며 파일 데이터는 보내지 않습니다. 계속 동기화하려면 수신기를 계속 실행하고 송신기에 --watch를 추가하세요.",
+        "양쪽 모두 v0.28.3 이상을 사용하세요. 명령 하나가 자동으로 분할하며, 배치당 일반 파일 최대 100,000개와 디렉터리 인덱스 최대 32 MiB를 처리합니다. 여러 배치에서는 relayium serve를 --once 없이 실행하세요. 여러 배치에서는 --delete를 사용할 수 없습니다. 사전 확인은 --once를 빼고 sync --check로 연결과 승인을 확인하며 파일 데이터는 보내지 않습니다. 계속 동기화하려면 수신기를 계속 실행하고 송신기에 --watch를 추가하세요.",
       ],
       code: [
         `# 양쪽 서버 모두에서
@@ -1010,7 +1010,7 @@ const de = {
     "Spiegle ein großes Verzeichnis von einem Server auf einen anderen mit relayium sync — inkrementell, nach einem Verbindungsabbruch fortsetzbar und sicher unbeaufsichtigt auszuführen. Eine Retry-Schleife unter tmux bewegt Gigabytes, ohne ein Terminal zu bewachen.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Verwende auf beiden Servern v0.28.1 oder neuer. Pro Lauf sind bis zu 100,000 reguläre Dateien und ein Verzeichnisindex bis 32 MiB möglich. Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich. Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
+    "Verwende auf beiden Seiten v0.28.3 oder neuer. Ein Befehl teilt die Auswahl automatisch auf, mit bis zu 100,000 regulären Dateien und 32 MiB Verzeichnisindex je Stapel. Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich. Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
     "Diese Anleitung richtet eine unbeaufsichtigte, selbstheilende Übertragung ein: genehmige den Sender einmal, betreibe den Listener im Hintergrund und treibe relayium sync aus einer Retry-Schleife in tmux an, sodass es über Verbindungsabbrüche hinweg weiterläuft, bis der ganze Ordner angekommen ist.",
   ],
   sections: [
@@ -1029,7 +1029,7 @@ const de = {
     {
       heading: "Voraussetzungen",
       body: [
-        "Verwende auf beiden Servern v0.28.1 oder neuer. Pro Lauf sind bis zu 100,000 reguläre Dateien und ein Verzeichnisindex bis 32 MiB möglich. Für eine einmalige Kopie starte am Empfänger relayium serve --once und am Sender einmal relayium sync. Für den Vorabtest lasse --once weg und nutze sync --check, das Verbindung und Berechtigung ohne Dateidaten prüft. Für laufende Synchronisierung bleibt der Empfänger aktiv und der Sender nutzt --watch.",
+        "Verwende auf beiden Seiten v0.28.3 oder neuer. Ein Befehl teilt die Auswahl automatisch auf, mit bis zu 100,000 regulären Dateien und 32 MiB Verzeichnisindex je Stapel. Bei mehreren Stapeln läuft relayium serve ohne --once. Mehrere Stapel unterstützen kein --delete. Für den Vorabtest lasse --once weg und nutze sync --check, das Verbindung und Berechtigung ohne Dateidaten prüft. Für laufende Synchronisierung bleibt der Empfänger aktiv und der Sender nutzt --watch.",
       ],
       code: [
         `# auf BEIDEN Servern
@@ -1260,7 +1260,7 @@ const fr = {
     "Recopiez un gros répertoire d'un serveur vers un autre avec relayium sync — incrémental, avec reprise après une coupure, et sûr à exécuter sans surveillance. Une boucle de reprise sous tmux déplace des gigaoctets sans surveiller un terminal.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Utilisez v0.28.1 ou une version ultérieure sur les deux serveurs. Une exécution accepte jusqu’à 100,000 fichiers ordinaires et un index de répertoire de 32 MiB. Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu. Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
+    "Utilisez v0.28.3 ou une version ultérieure aux deux extrémités. Une commande divise automatiquement la sélection en lots de 100,000 fichiers ordinaires et 32 MiB d’index au maximum. Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu. Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
     "Ce guide met en place un transfert sans surveillance et auto-réparateur : autorisez l'émetteur une fois, faites tourner le processus à l'écoute en arrière-plan, et pilotez relayium sync depuis une boucle de reprise dans tmux pour qu'il continue malgré les coupures jusqu'à ce que tout le dossier soit arrivé.",
   ],
   sections: [
@@ -1279,7 +1279,7 @@ const fr = {
     {
       heading: "Prérequis",
       body: [
-        "Utilisez v0.28.1 ou une version ultérieure sur les deux serveurs. Une exécution accepte jusqu’à 100,000 fichiers ordinaires et un index de répertoire de 32 MiB. Pour une copie ponctuelle, lancez relayium serve --once côté réception et relayium sync une fois côté envoi. Pour un contrôle préalable, omettez --once et utilisez sync --check, qui vérifie la connexion et l’autorisation sans envoyer de données de fichier. Pour une synchronisation continue, laissez le récepteur en marche et ajoutez --watch côté envoi.",
+        "Utilisez v0.28.3 ou une version ultérieure aux deux extrémités. Une commande divise automatiquement la sélection en lots de 100,000 fichiers ordinaires et 32 MiB d’index au maximum. Pour plusieurs lots, lancez relayium serve sans --once. Le mode par lots refuse --delete. Pour un contrôle préalable, omettez --once et utilisez sync --check, qui vérifie la connexion et l’autorisation sans envoyer de données de fichier. Pour une synchronisation continue, laissez le récepteur en marche et ajoutez --watch côté envoi.",
       ],
       code: [
         `# sur les DEUX serveurs
@@ -1510,7 +1510,7 @@ const ar = {
     "انسخ دليلًا كبيرًا من خادم إلى آخر بـ relayium sync — تزايدية، قابلة للاستئناف بعد انقطاع الاتصال، وآمنة للتشغيل دون إشراف. حلقة إعادة محاولة تحت tmux تنقل غيغابايتات دون ملازمة طرفية.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "استخدم v0.28.1 أو أحدث على الخادمين. تدعم العملية الواحدة حتى 100,000 ملف عادي وفهرس دليل يصل إلى 32 MiB. يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى. قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
+    "استخدم v0.28.3 أو أحدث على الطرفين. يقسّم الأمر الملفات تلقائيًا إلى دفعات تضم كل منها حتى 100,000 ملف عادي وفهرسًا حتى 32 MiB. يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى. قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
     "يُعِدّ هذا الدليل نقلًا دون إشراف يُصلِح نفسه: فوِّض المُرسِل مرةً واحدة، وشغّل المُستمِع في الخلفية، وقُد relayium sync من حلقة إعادة محاولة داخل tmux كي يستمر عبر الانقطاعات حتى يصل المجلد كاملًا.",
   ],
   sections: [
@@ -1529,7 +1529,7 @@ const ar = {
     {
       heading: "المتطلبات المسبقة",
       body: [
-        "استخدم v0.28.1 أو أحدث على الخادمين. تدعم العملية الواحدة حتى 100,000 ملف عادي وفهرس دليل يصل إلى 32 MiB. للنسخ مرة واحدة، شغّل relayium serve --once على المستقبِل وrelayium sync مرة واحدة على المُرسِل. للفحص المسبق، احذف --once واستخدم sync --check لاختبار الاتصال والتفويض بلا إرسال بيانات الملفات. للمزامنة المستمرة، أبقِ المستقبِل قيد التشغيل وأضف --watch على المُرسِل.",
+        "استخدم v0.28.3 أو أحدث على الطرفين. يقسّم الأمر الملفات تلقائيًا إلى دفعات تضم كل منها حتى 100,000 ملف عادي وفهرسًا حتى 32 MiB. لعدة دفعات شغّل relayium serve بدون --once. لا يدعم النقل متعدد الدفعات --delete. للفحص المسبق، احذف --once واستخدم sync --check لاختبار الاتصال والتفويض بلا إرسال بيانات الملفات. للمزامنة المستمرة، أبقِ المستقبِل قيد التشغيل وأضف --watch على المُرسِل.",
       ],
       code: [
         `# على كلا الخادمين
@@ -1760,7 +1760,7 @@ const es = {
     "Replica un directorio grande de un servidor a otro con relayium sync — incremental, reanudable tras una caída de conexión y seguro para ejecutar sin supervisión. Un bucle de reintentos bajo tmux mueve gigabytes sin tener que vigilar una terminal.",
   updatedLabel: "Última actualización",
   lead: [
-    "Usa v0.28.1 o posterior en ambos servidores. Una ejecución admite hasta 100,000 archivos regulares y un índice de directorio de 32 MiB. Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido. Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
+    "Usa v0.28.3 o posterior en ambos extremos. Un comando divide la selección automáticamente en lotes de hasta 100,000 archivos regulares y 32 MiB de índice de directorio. Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido. Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
     "Esta guía configura una transferencia sin supervisión y con recuperación automática: autoriza al emisor una vez, ejecuta el proceso a la escucha en segundo plano y dirige relayium sync desde un bucle de reintentos dentro de tmux para que siga adelante a través de las caídas de conexión hasta que toda la carpeta haya llegado.",
   ],
   sections: [
@@ -1779,7 +1779,7 @@ const es = {
     {
       heading: "Requisitos previos",
       body: [
-        "Usa v0.28.1 o posterior en ambos servidores. Una ejecución admite hasta 100,000 archivos regulares y un índice de directorio de 32 MiB. Para una copia puntual, usa relayium serve --once en el receptor y ejecuta relayium sync una vez en el emisor. Para comprobar primero, omite --once y usa sync --check, que verifica la conexión y la autorización sin enviar datos de archivos. Para sincronizar continuamente, deja el receptor activo y añade --watch en el emisor.",
+        "Usa v0.28.3 o posterior en ambos extremos. Un comando divide la selección automáticamente en lotes de hasta 100,000 archivos regulares y 32 MiB de índice de directorio. Para varios lotes, ejecuta relayium serve sin --once. La sincronización en varios lotes rechaza --delete. Para comprobar primero, omite --once y usa sync --check, que verifica la conexión y la autorización sin enviar datos de archivos. Para sincronizar continuamente, deja el receptor activo y añade --watch en el emisor.",
       ],
       code: [
         `# en AMBOS servidores
@@ -2010,7 +2010,7 @@ const pt = {
     "Espelhe um diretório grande de um servidor para outro com relayium sync — incremental, retomável após uma queda de conexão e seguro para executar sem supervisão. Um laço de repetição sob tmux move gigabytes sem precisar vigiar um terminal.",
   updatedLabel: "Última atualização",
   lead: [
-    "Use v0.28.1 ou posterior nos dois servidores. Uma execução aceita até 100,000 arquivos regulares e um índice de diretórios de 32 MiB. Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo. Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
+    "Use v0.28.3 ou posterior nas duas pontas. Um comando divide a seleção automaticamente em lotes de até 100,000 arquivos regulares e 32 MiB de índice de diretórios. Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo. Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
     "Este guia configura uma transferência sem supervisão e com autorrecuperação: autorize o emissor uma vez, execute o processo à escuta em segundo plano e conduza relayium sync a partir de um laço de repetição dentro do tmux para que ele continue através das quedas de conexão até que a pasta inteira chegue.",
   ],
   sections: [
@@ -2029,7 +2029,7 @@ const pt = {
     {
       heading: "Pré-requisitos",
       body: [
-        "Use v0.28.1 ou posterior nos dois servidores. Uma execução aceita até 100,000 arquivos regulares e um índice de diretórios de 32 MiB. Para uma cópia única, use relayium serve --once no receptor e execute relayium sync uma vez no remetente. Para verificar primeiro, omita --once e use sync --check, que testa a conexão e a autorização sem enviar dados de arquivos. Para sincronização contínua, mantenha o receptor em execução e use --watch no remetente.",
+        "Use v0.28.3 ou posterior nas duas pontas. Um comando divide a seleção automaticamente em lotes de até 100,000 arquivos regulares e 32 MiB de índice de diretórios. Para vários lotes, execute relayium serve sem --once. A sincronização em vários lotes rejeita --delete. Para verificar primeiro, omita --once e use sync --check, que testa a conexão e a autorização sem enviar dados de arquivos. Para sincronização contínua, mantenha o receptor em execução e use --watch no remetente.",
       ],
       code: [
         `# nos DOIS servidores

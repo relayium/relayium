@@ -216,14 +216,14 @@ ol.steps>li>pre{margin:8px 0 0}
            generated Arabic page. -->
       <p class="updated">最終更新: <bdi>2026-11-25</bdi></p>
       <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/guides/sync-a-large-folder-between-servers/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/sync-a-large-folder-between-servers/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
-      <p class="lead">両方のサーバーを v0.28.1 以降にしてください。1 回で最大 100,000 個の通常ファイル、ディレクトリインデックスは 32 MiB までです。 現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。 再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。</p>
+      <p class="lead">両端を v0.28.3 以降にしてください。1 つのコマンドで自動的に分割し、各バッチは通常ファイル 100,000 個とディレクトリインデックス 32 MiB までです。 現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。 再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。</p>
       <p class="lead">本ガイドでは、無人で自己修復する転送を構築します。送信側を一度だけ承認し、リスナーをバックグラウンドで動かし、tmux 内のリトライループで relayium sync を回して、接続が切れても続行させ、フォルダー全体が届くまで走らせます。</p>
       <section class="sheet"><h2>なぜ relayium sync がこの用途に向くのか</h2>
       <p>sync はネイティブプロトコル上の一方向増分ミラーです（両端に relayium をインストールします）。無人で繰り返し実行しても安全な理由が3つあります：</p>
       <ul><li>現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。</li><li>再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。</li><li>du -sh の合計は目安です。選択したファイルを SHA-256 で比較するには --checksum を付けて再実行します。</li><li>これらのおかげでコマンドは冪等です。もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。</li></ul></section>
       <section class="sheet"><h2>前提条件</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>本ガイドはデーモン直結(relayium://)を使うため、2台のサーバー間に SSH アクセスは不要です。</li><li>受信側のファイアウォールまたはセキュリティグループで、リスナーのポート（既定 9031）を送信側に開放してください。</li><li>受信側にフォルダー全体が入る空き容量。数時間かかる転送を始める前に、送信側の du -sh /root/workspace と受信側の df -h /root を突き合わせてください。</li></ul></div>
-      <p>両方のサーバーを v0.28.1 以降にしてください。1 回で最大 100,000 個の通常ファイル、ディレクトリインデックスは 32 MiB までです。 一度だけコピーする場合は受信側で relayium serve --once、送信側で relayium sync を一度実行します。事前確認には --once を外し、ファイルデータを送信せず到達性と許可を確認する sync --check を使います。定期的に同期する場合は受信側を起動したまま送信側に --watch を付けます。</p>
+      <p>両端を v0.28.3 以降にしてください。1 つのコマンドで自動的に分割し、各バッチは通常ファイル 100,000 個とディレクトリインデックス 32 MiB までです。 複数バッチでは relayium serve を --once なしで実行します。複数バッチでは --delete を使用できません。事前確認には --once を外し、ファイルデータを送信せず到達性と許可を確認する sync --check を使います。定期的に同期する場合は受信側を起動したまま送信側に --watch を付けます。</p>
       <pre tabindex="0"><code># 両方のサーバーで
 curl -fsSL https://relayium.com/install.sh | sh</code></pre></section>
       <section class="sheet"><h2>送信側を一度だけ承認する（受信側）</h2>
