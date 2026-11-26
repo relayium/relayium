@@ -5,11 +5,51 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/relayium/relayium/internal/secure"
 )
+
+func TestSyncPreviewUsesLocalMetadataOnly(t *testing.T) {
+	root := t.TempDir()
+	config := filepath.Join(root, "uncreated-identity")
+	source := filepath.Join(root, "sample")
+	if err := os.Mkdir(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const secret = "body must never appear"
+	const name = "example\u202efile"
+	if err := os.WriteFile(filepath.Join(source, name), []byte(secret), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "skip.tmp"), []byte("skip"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	args := []string{"sync", "--preview", "--exclude", "*.tmp", "--config-dir", config,
+		source, "relayium://127.0.0.1:1"}
+	if code := Run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("preview exited %d: %s", code, &stderr)
+	}
+	line := fmt.Sprintf("%d\t%s\n", len(secret), strconv.Quote("sample/"+name))
+	if !strings.HasPrefix(stdout.String(), line) ||
+		!strings.Contains(stdout.String(), "1 candidate files") ||
+		!strings.Contains(stdout.String(), "Destination not checked.") ||
+		strings.Contains(stdout.String(), secret) || strings.Contains(stdout.String(), "skip.tmp") {
+		t.Fatalf("unexpected preview:\n%s", &stdout)
+	}
+	if _, err := os.Stat(config); !os.IsNotExist(err) {
+		t.Fatalf("preview touched identity storage: %v", err)
+	}
+	for _, option := range []string{"--check", "--watch", "--checksum", "--delete", "--strict-delete"} {
+		stdout.Reset()
+		if code := Run(append(append([]string(nil), args...), option), &stdout, &stderr); code != 2 || stdout.Len() != 0 {
+			t.Fatalf("preview accepted %s: code %d, output %q", option, code, stdout.String())
+		}
+	}
+}
 
 func TestSyncCheckLargeReceiverLeavesDestinationUntouched(t *testing.T) {
 	sender, receiver, dest, src := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
@@ -81,6 +121,7 @@ func TestSyncExcludeUsesOnlyExplicitPatterns(t *testing.T) {
 	for _, want := range []string{
 		"Excluded by your rules: 1 files, 1 directory trees",
 		"Checking SHA-256", "Sending", "Waiting for receiver confirmation", "2 sent, 0 unchanged",
+		"Receiver result: 2 saved, 0 existing matched (SHA-256), 0 failed",
 	} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("missing %q:\n%s", want, log)

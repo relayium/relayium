@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ usage:
   relayium sync <src...> relayium://host[:port] [--checksum] [--watch]
                 [--delete [--strict-delete] | --exclude PATTERN ...]
   relayium sync --check [<src...>] relayium://host[:port]
+  relayium sync --preview <src...> relayium://host[:port] [--exclude PATTERN ...]
                                                   direct, no SSH/account
 
 A relayium:// destination is the direct server-to-server path: the receiver runs
@@ -44,6 +47,9 @@ positional arguments:
   <dest>     relayium://host[:port]
 
 flags:
+  --preview        list local candidate paths and sizes using metadata only.
+                   No file content is opened or hashed, and no connection is
+                   made. Which files actually need sending is decided in sync.
   --check          check the authorized connection before hashing or sending
                    files. Include sources to check capability for their file
                    count. Use with a persistent receiver: serve --once exits
@@ -144,6 +150,13 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	if !strings.HasPrefix(dest, daemonScheme) || f.identity != "" || f.port != 0 {
 		return sshRetired(stderr)
 	}
+	if f.preview {
+		if f.check || f.watch || f.del || f.strictDelete || f.checksum {
+			fmt.Fprintln(stderr, "sync: --preview accepts file selection and exclusions only")
+			return 2
+		}
+		return previewSync(dest, srcs, f.excludes, stdout, stderr)
+	}
 	if f.strictDelete && !f.del {
 		fmt.Fprintln(stderr, "sync: --strict-delete only applies together with --delete")
 		return 2
@@ -194,6 +207,7 @@ type syncFlags struct {
 	strictDelete bool
 	configDir    string
 	check        bool
+	preview      bool
 	excludes     xfer.Excludes
 }
 
@@ -206,12 +220,51 @@ func syncFlagSet(f *syncFlags) *flag.FlagSet {
 	fs.IntVar(&f.port, "p", 0, "ssh port")
 	fs.BoolVar(&f.del, "delete", false, "delete files on the receiver that are gone from the source")
 	fs.BoolVar(&f.check, "check", false, "check the receiver connection and capabilities without transferring")
+	fs.BoolVar(&f.preview, "preview", false, "list local candidate paths and sizes without opening files or connecting")
 	fs.Func("exclude", "exclude a relative path or basename glob (repeatable)", f.excludes.Add)
 	fs.BoolVar(&f.watch, "watch", false, "keep running and re-sync on change, retrying failures")
 	fs.BoolVar(&f.checksum, "checksum", false, "require the receiver to compare content, refusing an older receiver before sending anything")
 	fs.BoolVar(&f.strictDelete, "strict-delete", false, "with --delete: exit non-zero unless the receiver confirms the delete ran in full")
 	fs.StringVar(&f.configDir, "config-dir", "", "identity/trust directory (daemon)")
 	return fs
+}
+
+func previewSync(dest string, srcs []string, excludes xfer.Excludes, stdout, stderr io.Writer) int {
+	if _, err := parseDaemonURL(dest); err != nil {
+		fmt.Fprintln(stderr, termSafe(err.Error()))
+		return 2
+	}
+	manifest, _, excluded, err := xfer.BuildFilteredManifest(srcs, excludes)
+	if err != nil {
+		fmt.Fprintln(stderr, termSafe(err.Error()))
+		return 1
+	}
+	if len(manifest.Files) > xfer.MaxSyncFiles {
+		fmt.Fprintf(stderr, "sync contains %d files; the maximum is %d per run\n", len(manifest.Files), xfer.MaxSyncFiles)
+		return 1
+	}
+	var size uint64
+	for _, file := range manifest.Files {
+		if uint64(file.Size) > math.MaxUint64-size {
+			fmt.Fprintln(stderr, "sync preview: total byte count is too large")
+			return 1
+		}
+		size += uint64(file.Size)
+	}
+	for _, file := range manifest.Files {
+		if _, err := fmt.Fprintf(stdout, "%d\t%s\n", file.Size, strconv.Quote(file.Path)); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
+	_, err = fmt.Fprintf(stdout,
+		"Preview: %d candidate files, %d bytes; excluded by your rules: %d files, %d directory trees. Destination not checked.\n",
+		len(manifest.Files), size, excluded.Files, excluded.Directories)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
 }
 
 // syncWatchDrain is how long `sync --watch` lets a transfer in flight finish
@@ -326,6 +379,12 @@ func checkSync(ctx context.Context, dest, configDir string, fileCount int, opts 
 // "ran in full" into a non-zero exit.
 func reportSync(rep xfer.Report, f syncFlags, stderr io.Writer) int {
 	fmt.Fprintf(stderr, "synced: %d sent, %d unchanged\n", rep.Files, rep.Skipped)
+	comparison := "size and modification time"
+	if rep.ContentChecked {
+		comparison = "SHA-256"
+	}
+	fmt.Fprintf(stderr, "Receiver result: %d saved, %d existing matched (%s), %d failed\n",
+		max(0, rep.Files-len(rep.Failed)), rep.Skipped, comparison, len(rep.Failed))
 	if rep.ContentCheckUnconfirmed {
 		fmt.Fprintln(stderr, "warning: the receiver runs an older relayium that decides what is unchanged by size and modification time only;")
 		fmt.Fprintln(stderr, "  a file whose content changed without changing either may have been skipped. Update relayium on the receiver,")
