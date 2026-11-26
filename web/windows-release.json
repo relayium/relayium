@@ -2,15 +2,15 @@
   "schema": 1,
   "windows": {
     "available": true,
-    "version": "0.0.4",
+    "version": "0.0.5",
     "architecture": "x64",
     "preview": true,
     "signed": false,
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/windows-v0.0.4/Relayium-0.0.4-x64.exe",
-    "sha256": "1c6d037fadf54e00787da34844d91c5ea165f4cfab7b1e3b48d9042e66d3e872",
-    "size": 118192076,
-    "sourceCommit": "189c037f2ad7d23e0d76354babb7f84da84d4ea3",
-    "tag": "windows-v0.0.4",
-    "publishedAt": "2026-11-23T14:34:02Z"
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/windows-v0.0.5/Relayium-0.0.5-x64.exe",
+    "sha256": "a95838c67f2c7fbcb7999cdd374ebce4a3d2c139339f582e6d834164d9922ec2",
+    "size": 118191531,
+    "sourceCommit": "19774ed999c68b9dc7eeab8a85c3cd8595b9a293",
+    "tag": "windows-v0.0.5",
+    "publishedAt": "2026-11-26T06:44:41Z"
   }
 }

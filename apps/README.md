@@ -72,12 +72,12 @@ the public URLs determine the version currently offered.
   its own Kotlin implementation, held to the same frozen wire fixtures by the
   always-on `compat.yml` gate.
 - `windows/` — Windows desktop client (`com.relayium.windows`), Electron +
-  Svelte. **Public unsigned x64 preview 0.0.4**, available at
-  [windows-v0.0.4](https://github.com/relayium/relayium/releases/tag/windows-v0.0.4).
+  Svelte. **Public unsigned x64 preview 0.0.5**, available at
+  [windows-v0.0.5](https://github.com/relayium/relayium/releases/tag/windows-v0.0.5).
+  Sent and received messages can be copied in cross-network and LAN sessions.
   Email/password sign-in runs inside the app; browser authorization is optional.
   The NSIS installer is unsigned and automatic updating is not enabled. The
-  separate manual upload workflow stages the exact accepted CI artifact into a
-  draft; publication is an explicit operator action.
+  release uses the exact accepted CI installer, with a SHA-256 checksum.
 
   For personal-machine testing and an executable handoff to a Windows-local
   AI, see [Windows local QA](windows/TESTING.md). `npm run qa` records source,
