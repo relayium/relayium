@@ -1091,6 +1091,7 @@ const en: Messages = {
       allowDelete: "Let a sync sender's --delete actually remove files on this listener. Without it, nothing on this host is ever deleted.",
       noResume: "Turn off resuming partial files on a serve listener receiving a sync; accepted and a no-op on push, which refuses a collision before a partial file could ever exist. It has no bearing on relayium down, whose reconnect happens inside one run and is not a flag.",
       delete: "Mirror deletions from the source to the receiver. Over relayium:// it needs the listener's --allow-delete.",
+      syncPreview: "List local candidate paths and sizes using file metadata. Does not open file contents or connect to the receiver.",
       syncCheck: "Check the connection and authorization without sending files. Use a listener without --once.",
       syncExclude: "Repeat to exclude selected relative paths or quoted filename patterns. Do not combine with --delete.",
       syncChecksum: "Refuse older receivers that cannot compare file contents.",

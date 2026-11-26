@@ -133,6 +133,7 @@ export const FLAG_ROWS = [
   { key: "allowDelete", flag: "--allow-delete", who: "serve" },
   { key: "noResume", flag: "--no-resume", who: "serve · push" },
   { key: "delete", flag: "--delete", who: "sync" },
+  { key: "syncPreview", flag: "--preview", who: "sync" },
   { key: "syncCheck", flag: "--check", who: "sync" },
   { key: "syncExclude", flag: "--exclude", who: "sync" },
   { key: "syncChecksum", flag: "--checksum", who: "sync" },

@@ -1051,6 +1051,7 @@ const zh: Messages = {
       allowDelete: "允许 sync 发送端的 --delete 真正删除本监听端上的文件。不加它，本机上的任何文件都不会被删除。",
       noResume: "关闭部分文件的续传。它在接收 sync 的 serve 监听端上是真的有效；在 push 上能被接受但什么也不做——push 在可能出现半截文件之前就已经因冲突而拒绝了。它和 relayium down 无关：那边的重连发生在同一次运行内，不由参数控制。",
       delete: "把源端的删除一起镜像到接收端。走 relayium:// 时需要监听端的 --allow-delete。",
+      syncPreview: "只用本机文件元数据列出候选路径和大小。不会打开文件正文或连接接收端。",
       syncCheck: "检查连接与授权，不发送文件。接收端请去掉 --once。",
       syncExclude: "可重复指定要排除的相对路径或加引号的文件名模式。不能与 --delete 同用。",
       syncChecksum: "如果旧接收端无法比对文件内容，则拒绝同步。",
