@@ -848,7 +848,7 @@
         {#each text.history as entry (entry.id)}
           {@const feedback = copied?.generation === workspace.linkGeneration && copied.id === entry.id ? copied.ok : null}
           <li class:out={entry.dir === "out"} class:failed={entry.failed}>
-            <span class="message-body">{entry.body}</span>
+            <span class="message-body" data-test="text-body">{entry.body}</span>
             <div class="message-actions">
               <button class="quiet" type="button" data-test="text-copy" onclick={(event) => copyMessage(event, entry.id, entry.body)}>
                 {t("textCopy")}
