@@ -6,9 +6,59 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestSyncBatchesSplitByCountAndEncodedBytes(t *testing.T) {
+	for _, tc := range []struct {
+		name, prefix string
+		count        int
+	}{
+		{name: "count", prefix: "dir/", count: MaxSyncFiles + 1},
+		{name: "escaped paths", prefix: strings.Repeat("\x01", 3800), count: 1900},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := Manifest{Files: make([]FileEntry, tc.count)}
+			for i := range m.Files {
+				m.Files[i] = FileEntry{Path: fmt.Sprintf("%s%06d", tc.prefix, i)}
+			}
+			ends, err := SyncBatches(m)
+			if err != nil || len(ends) < 2 || ends[len(ends)-1] != tc.count {
+				t.Fatalf("did not split the complete selection: %v, %v", ends, err)
+			}
+			if tc.name == "count" && !reflect.DeepEqual(ends, []int{MaxSyncFiles, MaxSyncFiles + 1}) {
+				t.Fatalf("count boundaries: %v", ends)
+			}
+			start := 0
+			for _, end := range ends {
+				batch := Manifest{Files: m.Files[start:end]}
+				for i := range batch.Files {
+					batch.Files[i].SHA256 = strings.Repeat("0", 64)
+				}
+				var wire bytes.Buffer
+				if NeedsPagedSync(end - start) {
+					err = writeManifestPages(&wire, batch)
+				} else {
+					err = WriteJSON(&wire, MsgManifest, batch)
+				}
+				if err != nil {
+					t.Fatalf("planner produced an unusable batch %d:%d: %v", start, end, err)
+				}
+				start = end
+			}
+		})
+	}
+}
+
+func TestBatchedSyncRejectsDuplicateAndAncestorPaths(t *testing.T) {
+	for _, paths := range [][2]string{{"a/b", "a/b"}, {"a/b", "A/B"}, {"a", "a/b"}} {
+		if err := ValidateBatchedSync(Manifest{Files: []FileEntry{{Path: paths[0]}, {Path: paths[1]}}}); err == nil {
+			t.Fatalf("accepted conflicting paths %q", paths)
+		}
+	}
+}
 
 func TestLargeSyncValidatesAcrossPagesBeforeWrites(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "destination")

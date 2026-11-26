@@ -32,6 +32,9 @@ func refuse(w io.Writer, code string, err error) error {
 type RecvOpts struct {
 	NoResume    bool
 	AllowDelete bool // sync mode: honor a Hello.Delete mirror request
+	// Only the direct listener supplies these, after fingerprint authorization.
+	CheckpointDir  string
+	CheckpointPeer string
 	// AllowSync authorizes the peer's Hello.Sync request against this
 	// destination: skipping unchanged files, resuming into an existing file,
 	// preserving the source mtime, and replacing a file that is already here.
@@ -185,6 +188,8 @@ func receiveManifest(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpt
 	}
 
 	rs := ResumeState{}
+	var checkpoint *syncCheckpoint
+	checkpointIndex := -1
 	switch {
 	case contentCheck:
 		// Skip is decided by content even with --no-resume: skipping a file
@@ -193,6 +198,13 @@ func receiveManifest(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpt
 		rs = contentSyncStateFor(destDir, m)
 		if opts.NoResume {
 			rs.Entries = nil
+		} else if sync && hello.ResumeProof {
+			checkpoint, err = openSyncCheckpoint(opts.CheckpointDir, opts.CheckpointPeer, destDir, m)
+			if err != nil {
+				return Report{}, fmt.Errorf("open sync checkpoint: %w", err)
+			}
+			defer checkpoint.close()
+			checkpointIndex = checkpoint.offer(m, &rs)
 		}
 	case sync && !opts.NoResume:
 		rs = syncStateFor(destDir, m)
@@ -257,6 +269,10 @@ func receiveManifest(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpt
 			return rep, err
 		}
 		offset := fs.Offset
+		prefix := dest
+		if checkpointIndex == fs.Index {
+			prefix = filepath.Join(checkpoint.dir, checkpoint.active)
+		}
 		if hello.ResumeProof && offset > 0 {
 			// Bytes that are not a prefix of the file being sent (an ordinary edit
 			// that made the file longer looks exactly like this) would fail
@@ -266,7 +282,7 @@ func receiveManifest(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpt
 			//
 			// Redefining a negotiated offset is the receiver's move alone — a
 			// receiver without this protocol rejects an offset it did not offer.
-			resume := prefixMatches(dest, offset, fs.PrefixSHA256)
+			resume := prefixMatches(prefix, offset, fs.PrefixSHA256)
 			if err := WriteJSON(rw, MsgResumeVerdict, ResumeVerdict{Index: fs.Index, Resume: resume}); err != nil {
 				return rep, err
 			}
@@ -278,7 +294,12 @@ func receiveManifest(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpt
 		if contentCheck {
 			want = f.SHA256
 		}
-		ok, err := receiveOneFileChecked(rw, destDir, dest, f, offset, sync, want, opts.Progress)
+		var fileCheckpoint *syncCheckpoint
+		// Don't replace a checkpoint we already offered for a later file.
+		if f.Size >= minSyncCheckpointSize && (checkpointIndex < 0 || fs.Index >= checkpointIndex) {
+			fileCheckpoint = checkpoint
+		}
+		ok, err := receiveOneFileChecked(rw, destDir, dest, f, offset, sync, want, opts.Progress, fileCheckpoint, prefix)
 		if err != nil {
 			return rep, err
 		}
@@ -378,7 +399,7 @@ func receivePreflight(rw io.ReadWriter, hello Hello, m Manifest, sync bool, dest
 //
 // ok=false with a nil error is ONE failed file, not a failed transfer.
 func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, progress func(path string, received, total int64)) (ok bool, err error) {
-	return receiveOneFileChecked(rw, base, dest, f, offset, replace, "", progress)
+	return receiveOneFileChecked(rw, base, dest, f, offset, replace, "", progress, nil, dest)
 }
 
 // receiveOneFileChecked is receiveOneFile with wantDigest: when set (a
@@ -388,7 +409,7 @@ func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int
 // hashed consistently by the sender, so only this comparison stops a body that
 // differs from what the manifest -- and the skip decisions made on it --
 // described.
-func receiveOneFileChecked(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, wantDigest string, progress func(path string, received, total int64)) (ok bool, err error) {
+func receiveOneFileChecked(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, wantDigest string, progress func(path string, received, total int64), checkpoint *syncCheckpoint, prefix string) (ok bool, err error) {
 	// The sender streams f.Size-offset bytes whether or not they can be written
 	// here -- it learns about a failed file only from the final result. So the body
 	// is fenced off, and whatever writeFileBody left unread is drained before the
@@ -398,7 +419,13 @@ func receiveOneFileChecked(rw io.ReadWriter, base, dest string, f FileEntry, off
 	// "frame payload too large: 1869881441" was the text "ot a", and one refused
 	// file became a failed transfer.
 	body := &io.LimitedReader{R: rw, N: f.Size - offset}
-	sum, staged, werr := writeFileBody(body, base, dest, f, offset, progress)
+	var sum, staged string
+	var werr error
+	if checkpoint == nil {
+		sum, staged, werr = writeFileBody(body, base, dest, f, offset, progress)
+	} else {
+		sum, werr = checkpoint.write(body, f, prefix, offset, progress)
+	}
 	installed := false
 	defer func() {
 		if staged != "" && !installed {
@@ -420,12 +447,23 @@ func receiveOneFileChecked(rw io.ReadWriter, base, dest string, f FileEntry, off
 		return false, err
 	}
 	if werr != nil || fh.SHA256 != sum {
+		if werr == nil && checkpoint != nil {
+			_ = checkpoint.discard()
+		}
 		return false, nil
 	}
 	if wantDigest != "" && sum != wantDigest {
+		if checkpoint != nil {
+			_ = checkpoint.discard()
+		}
 		return false, nil
 	}
-	if err := installStaged(staged, dest, replace); err != nil {
+	if checkpoint != nil {
+		err = checkpoint.install(base, dest, f)
+	} else {
+		err = installStaged(staged, dest, replace)
+	}
+	if err != nil {
 		return false, nil
 	}
 	installed = true

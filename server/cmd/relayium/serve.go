@@ -91,7 +91,10 @@ flags:
                    nothing on this host is ever deleted. With it, deletion is
                    still confined to the top-level directories the sender's
                    manifest actually contains — never the rest of --dir.
-  --no-resume      disable resuming partial files.
+  --no-resume      disable resuming partial files and saving sync checkpoints.
+                   By default, a content-checked sync can keep one partial
+                   file of at least 1 MiB per sender and receive directory.
+                   Checkpoints use disk space under --config-dir.
   --config-dir D   identity/trust directory (default ~/.config/relayium).
                    Use the SAME value with "relayium authorize": a fingerprint
                    added there takes effect on the next connection, with
@@ -107,7 +110,7 @@ one hidden ".relayium-recv-*" staging directory can remain; remove it.
 
 SIGINT (Ctrl-C) or SIGTERM stops serve: it stops accepting at once, lets
 transfers in flight finish for up to 30 seconds, then aborts the rest (their
-unverified files are discarded, never installed) and exits — 0 when nothing had
+only verified files reach their final names) and exits — 0 when nothing had
 to be aborted, 1 when a transfer was cut off. With --once, it exits 0 only if
 its one transfer completed.
 
@@ -351,7 +354,7 @@ func serveLoopCtx(ctx context.Context, ln net.Listener, h *serveHandler, once bo
 			return false
 		}
 		n := tracker.abortAll()
-		fmt.Fprintf(h.stderr, "relayium serve: stopping; aborted %d transfer(s) still in flight after %s (unverified files are discarded, none installed)\n", n, drain)
+		fmt.Fprintf(h.stderr, "relayium serve: stopping; aborted %d transfer(s) still in flight after %s (unverified files were not installed)\n", n, drain)
 		// Give the aborted handlers time to remove their staging files.
 		tracker.wait(5 * time.Second)
 		return n > 0
@@ -636,7 +639,8 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 	// never replaces anything, AllowSync or not. Its path is relative to
 	// --dir and resolved only through an os.Root on it.
 	got, err := xfer.ReceiveAny(&idleConn{Conn: tconn, idle: transferIdleTimeout}, tconn, h.dir,
-		xfer.RecvOpts{NoResume: h.noResume, AllowSync: true, AllowDelete: h.allowDelete},
+		xfer.RecvOpts{NoResume: h.noResume, AllowSync: true, AllowDelete: h.allowDelete,
+			CheckpointDir: h.cfgDir, CheckpointPeer: fp},
 		xfer.StreamRecvOpts{Idle: transferIdleTimeout})
 	if got.Stream {
 		return h.reportStream(got, err, fp, remote)

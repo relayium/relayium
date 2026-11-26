@@ -28,9 +28,10 @@ A relayium:// destination is the direct server-to-server path: the receiver runs
 1.3 connection. No relay, no SSH, no Relayium account — the listener accepts this
 host only once its fingerprint ("relayium id") is authorized there.
 
-A single run supports up to 100,000 files and a 32 MiB directory index.
-For more than 1,000 files, both machines need a version that supports large
-directory sync. If disconnected, rerun sync to skip already verified files.
+Large selections are automatically split into bounded batches. A multi-batch
+sync needs a receiver with large directory sync support and cannot use --delete.
+Keep the receiver running without --once. If disconnected, rerun sync to skip
+already verified files and reuse any matching receiver checkpoint.
 
 Only files that changed are sent, and an existing verified prefix can be reused.
 "Unchanged" is decided by content: each source file's SHA-256 goes in the manifest
@@ -117,8 +118,8 @@ flags:
 
                    Ctrl-C or SIGTERM stops it: no further attempt is started,
                    and a transfer in flight gets 30 seconds to finish before it
-                   is aborted (the receiver discards the file it was writing
-                   and keeps only verified files). A second Ctrl-C ends it at
+                   is aborted. The receiver keeps only verified files at their
+                   final paths. A second Ctrl-C ends it at
                    once.
   --config-dir D   identity/trust directory for relayium:// destinations
                    (default ~/.config/relayium)
@@ -239,10 +240,6 @@ func previewSync(dest string, srcs []string, excludes xfer.Excludes, stdout, std
 		fmt.Fprintln(stderr, termSafe(err.Error()))
 		return 1
 	}
-	if len(manifest.Files) > xfer.MaxSyncFiles {
-		fmt.Fprintf(stderr, "sync contains %d files; the maximum is %d per run\n", len(manifest.Files), xfer.MaxSyncFiles)
-		return 1
-	}
 	var size uint64
 	for _, file := range manifest.Files {
 		if uint64(file.Size) > math.MaxUint64-size {
@@ -298,46 +295,89 @@ func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []stri
 		fmt.Fprintln(stderr, "refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).")
 		return 1
 	}
-	if len(m.Files) > xfer.MaxSyncFiles {
-		fmt.Fprintf(stderr, "sync contains %d files; the maximum is %d per run\n", len(m.Files), xfer.MaxSyncFiles)
+	ends, err := xfer.SyncBatches(m)
+	if err != nil {
+		fmt.Fprintln(stderr, termSafe(err.Error()))
 		return 1
+	}
+	multiple := len(ends) > 1
+	if multiple {
+		if f.del {
+			fmt.Fprintln(stderr, "sync: --delete requires the complete selection to fit in one batch; nothing was sent")
+			return 1
+		}
+		if err := xfer.ValidateBatchedSync(m); err != nil {
+			fmt.Fprintln(stderr, termSafe(err.Error()))
+			return 1
+		}
 	}
 	// Content checking is the default; --checksum makes it a requirement
 	// rather than a best effort when talking to an older receiver.
 	opts := xfer.SendOpts{Sync: true, Delete: f.del, ContentCheck: true,
-		RequireContentCheck: f.checksum, RequireDeleteReport: f.strictDelete,
+		RequireContentCheck: f.checksum || multiple, RequireDeleteReport: f.strictDelete,
 		TransferProgress: syncProgress(stderr, "Sending")}
 	if f.check {
 		return checkSync(ctx, dest, f.configDir, len(m.Files), opts, stderr)
 	}
+	var total xfer.Report
+	start := 0
+	for i, end := range ends {
+		if multiple {
+			fmt.Fprintf(stderr, "Sync batch %d/%d (%d files)\n", i+1, len(ends), end-start)
+			opts.TransferProgress = syncProgress(stderr, "Sending")
+		}
+		rep, err := sendSyncBatch(ctx, drain, dest, f.configDir,
+			xfer.Manifest{Files: m.Files[start:end]}, paths[start:end], opts, stderr)
+		if multiple {
+			// A failed or interrupted wire transaction has no final receipt.
+			// Only count batches the receiver actually confirmed.
+			if err == nil {
+				total.Files += rep.Files
+				total.Bytes += rep.Bytes
+				total.Skipped += rep.Skipped
+				total.Failed = append(total.Failed, rep.Failed...)
+				total.ContentChecked = true
+			}
+			rep = total
+		}
+		if errors.Is(err, errTransferInterrupted) {
+			fmt.Fprintf(stderr, "interrupted after sending %d file(s); rerun sync to verify completed files and resume supported checkpoints\n", rep.Files)
+			return 130
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, termSafe(err.Error()))
+			if multiple {
+				fmt.Fprintf(stderr, "Confirmed before interruption: %d saved, %d existing matched, %d failed\n",
+					max(0, total.Files-len(total.Failed)), total.Skipped, len(total.Failed))
+			}
+			return 1
+		}
+		if !multiple {
+			return reportSync(rep, f, stderr)
+		}
+		start = end
+	}
+	return reportSync(total, f, stderr)
+}
 
+func sendSyncBatch(ctx context.Context, drain time.Duration, dest, configDir string, m xfer.Manifest,
+	paths []string, opts xfer.SendOpts, stderr io.Writer) (xfer.Report, error) {
 	// Hash before the data connection so a legacy receiver never waits for
 	// source I/O under its handshake idle deadline.
 	cm, err := xfer.WithContentDigestsProgress(ctx, m, paths, syncProgress(stderr, "Checking SHA-256"))
 	if ctx.Err() != nil {
-		fmt.Fprintln(stderr, "interrupted before anything was sent")
-		return 130
+		return xfer.Report{}, errTransferInterrupted
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return xfer.Report{}, err
 	}
 	fmt.Fprintln(stderr, "Connecting and checking the receiver's existing files...")
-	tconn, err := dialDaemon(dest, f.configDir, stderr)
+	tconn, err := dialDaemon(dest, configDir, stderr)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return xfer.Report{}, err
 	}
 	defer tconn.Close()
-	rep, err := sendWithShutdown(ctx, tconn, cm, paths, opts, drain)
-	if errors.Is(err, errTransferInterrupted) {
-		return reportInterrupted(rep, stderr)
-	}
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	return reportSync(rep, f, stderr)
+	return sendWithShutdown(ctx, tconn, cm, paths, opts, drain)
 }
 
 func checkSync(ctx context.Context, dest, configDir string, fileCount int, opts xfer.SendOpts, stderr io.Writer) int {
