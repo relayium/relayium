@@ -52,6 +52,7 @@ import SwiftUI
 struct DeviceSendSection: View {
     @ObservedObject var deliveries: InboxSendModel
     let conversations: [InboxConversation]
+    let conversationSummary: (InboxConversation) -> String
     /// Where a refusal whose remedy is the account goes.
     ///
     /// It takes NO half of the form, unlike the receive surface's version. This
@@ -160,9 +161,10 @@ struct DeviceSendSection: View {
                     .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let conversation {
-                    Text(L10n.date(conversation.lastActivity, dateStyle: .medium, timeStyle: .short))
+                    Text(conversationSummary(conversation))
                         .font(.subheadline)
                         .foregroundStyle(Palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     if conversation.unreadCount > 0 {
                         Text(L10n.t(.inboxConversationUnread, [L10n.number(conversation.unreadCount)]))
                             .font(.subheadline.weight(.medium))
@@ -172,8 +174,8 @@ struct DeviceSendSection: View {
             }
             Spacer(minLength: Metrics.inner)
             renameButton(id: candidate.id, name: candidate.name)
-            if let conversation {
-                Button(L10n.t(.inboxOpenDeviceInbox)) { deliveries.focusPeer(conversation.peerDeviceID) }
+            if conversation != nil {
+                Button(L10n.t(.inboxOpenDeviceInbox)) { open(candidate, conversation: conversation) }
                     .buttonStyle(.bordered)
                     .accessibilityLabel(L10n.detail([L10n.t(.inboxOpenDeviceInbox), candidate.name]))
                     .accessibilityIdentifier("inbox-conversation-open")
@@ -183,6 +185,11 @@ struct DeviceSendSection: View {
                     .accessibilityLabel(InboxSendPresentation.openLabel(for: candidate))
                     .accessibilityIdentifier("inbox-send-open.\(candidate.id)")
             }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard editingDeviceID != candidate.id else { return }
+            open(candidate, conversation: conversation)
         }
         .accessibilityElement(children: .contain)
     }
@@ -257,14 +264,13 @@ struct DeviceSendSection: View {
 
     /// Enter the device's own screen.
     ///
-    /// The model owns the whole of it. `selectTarget` refuses a row that cannot
-    /// receive, so a blocked device can never become the selection, and
-    /// `selectedCandidate` — which is what `DeviceInboxSurface` renders the child
-    /// on — goes nil again the moment that device is revoked, switched off or
-    /// left with the account. There is no second copy of "which device am I on"
-    /// in this app.
-    private func open(_ candidate: InboxSendCandidate) {
-        deliveries.selectTarget(candidate.id)
+    /// History and sending use the model's navigation and sending eligibility.
+    private func open(_ candidate: InboxSendCandidate, conversation: InboxConversation? = nil) {
+        if let conversation {
+            deliveries.focusPeer(conversation.peerDeviceID)
+        } else if candidate.isSendable {
+            deliveries.selectTarget(candidate.id)
+        }
     }
 
     // MARK: - what is already on its way

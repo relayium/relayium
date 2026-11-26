@@ -1034,6 +1034,10 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(surface.contains("copiedMessageID = nil"))
         XCTAssertTrue(surface.contains("conversation.entries.filter { $0.isUnread }"),
                       "the home summary counts all history instead of unread history")
+        let devices = try macSource("DeviceInbox/DeviceSendSection.swift")
+        XCTAssertTrue(surface.contains("conversationSummary: conversationSummary"))
+        XCTAssertTrue(devices.contains("Text(conversationSummary(conversation))"),
+                      "a linked device lost its unread message and file summary")
         let page = try macSource("DeviceInbox/DeviceConversationPage.swift")
         XCTAssertTrue(page.contains("} else if entry.kind == .files"),
                       "a missing message reference can fall through as an empty file row")

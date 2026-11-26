@@ -164,6 +164,7 @@ struct DeviceInboxSurface: View {
                     }
                     DeviceSendSection(deliveries: deliveries,
                                       conversations: inbox.conversations,
+                                      conversationSummary: conversationSummary,
                                       onAccount: { onAccount(.signIn) })
                     conversationsSection
                     if inbox.folder.url != nil {
