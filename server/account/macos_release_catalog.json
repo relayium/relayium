@@ -109,6 +109,11 @@
       "version": "1.5.3",
       "build": 51,
       "tag": "macos-v1.5.3"
+    },
+    {
+      "version": "1.5.4",
+      "build": 53,
+      "tag": "macos-v1.5.4"
     }
   ]
 }
