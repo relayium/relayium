@@ -3,14 +3,14 @@
   "android": {
     "available": true,
     "applicationId": "com.relayium.android",
-    "versionCode": 14,
-    "versionName": "0.3.5",
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.3.5/Relayium-0.3.5-14.apk",
-    "sha256": "6467972ed84243f793505ae81b2d782dc5c960335c214b9805ebf429691baf78",
+    "versionCode": 15,
+    "versionName": "0.3.6",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.3.6/Relayium-0.3.6-15.apk",
+    "sha256": "413dd16549b4fb7334c017dcfaf5afde8656c976bd3ba4cc81c41c1ae1764692",
     "size": 46074442,
     "notes": {
-      "en": "Copy sent and received text in cross-network and nearby sessions. The Copy button preserves the full message.",
-      "zh": "跨网络中继和局域网会话中的发送及接收消息现在都可一键复制，并原样保留完整正文。"
+      "en": "Long Device Inbox texts open as a compact preview. Expand each message separately and copy the whole original text at any time.",
+      "zh": "设备收件箱的长文本默认显示短预览，每条都可单独展开或收起，复制始终保留全文。"
     }
   }
 }

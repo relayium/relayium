@@ -420,7 +420,7 @@ live in [`docs/`](docs/) rather than on this project overview.
 **resumed**, at version `0.5.5`. It has never been publicly released and has no App Store listing. Internal TestFlight testers can install build 16.
 
 **On Android:** `apps/android/` is a native Kotlin/Compose client, at version
-`0.3.5` (versionCode 14), offered as a **public preview** distributed as a direct
+`0.3.6` (versionCode 15), offered as a **public preview** distributed as a direct
 APK — no Google Play listing and no Google Play Services dependency of any kind.
 It has five destinations — Transfer, Nearby, Inbox, Cloud and Account. The Transfer and Nearby session messages each have a Copy button:
 
