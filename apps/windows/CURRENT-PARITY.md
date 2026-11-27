@@ -1,7 +1,7 @@
-> Windows 0.0.5 unsigned x64 public preview was published on 2026-11-26 from
-> `19774ed999c68b9dc7eeab8a85c3cd8595b9a293`. Sent and received messages have a Copy action in
-> cross-network and LAN conversations. Download:
-> https://github.com/relayium/relayium/releases/tag/windows-v0.0.5
+> Windows 0.0.6 unsigned x64 public preview was published on 2026-11-27 from
+> `7409f16e9f6885169ac881e8f8c50dde1b3a908f`. Long Device Inbox messages fold independently.
+> Copy preserves the full body with the message expanded or collapsed. Download:
+> https://github.com/relayium/relayium/releases/tag/windows-v0.0.6
 > Updates are manual. The Windows clipboard and installed-artifact tests passed.
 > The earlier candidate records below retain their original scope.
 

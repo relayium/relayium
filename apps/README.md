@@ -72,9 +72,9 @@ the public URLs determine the version currently offered.
   its own Kotlin implementation, held to the same frozen wire fixtures by the
   always-on `compat.yml` gate.
 - `windows/` — Windows desktop client (`com.relayium.windows`), Electron +
-  Svelte. **Public unsigned x64 preview 0.0.5**, available at
-  [windows-v0.0.5](https://github.com/relayium/relayium/releases/tag/windows-v0.0.5).
-  Sent and received messages can be copied in cross-network and LAN sessions.
+  Svelte. **Public unsigned x64 preview 0.0.6**, available at
+  [windows-v0.0.6](https://github.com/relayium/relayium/releases/tag/windows-v0.0.6).
+  Long Device Inbox messages can be individually expanded or collapsed.
   Email/password sign-in runs inside the app; browser authorization is optional.
   The NSIS installer is unsigned and automatic updating is not enabled. The
   release uses the exact accepted CI installer, with a SHA-256 checksum.
