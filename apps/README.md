@@ -1,8 +1,8 @@
 # Relayium native apps
 
-**Internal TestFlight, read back 2026-11-27.** The current internal TestFlight build is `1.5.4 (52)`: App Store Connect build
-`6d1ad972-fc50-408b-a5c1-fe461cb13728`, built from source
-`7409f16e9f6885169ac881e8f8c50dde1b3a908f`. Apple reports
+**Internal TestFlight, read back 2026-11-27.** The current internal TestFlight build is `1.5.4 (53)`: App Store Connect build
+`e8b7e843-76a0-4ca8-afd9-8d1b7ecee4f0`, built from source
+`f4d148f5fe74c1745b01f45d321defa4896e4fdd`. Apple reports
 `VALID` and `IN_BETA_TESTING` in the existing Relayium Internal group.
 English and Simplified Chinese test notes cover long Inbox text and the transfer and device navigation refinements. This release checkpoint
 records the internal package separately from the Developer ID download.
