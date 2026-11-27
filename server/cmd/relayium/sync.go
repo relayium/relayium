@@ -30,8 +30,9 @@ host only once its fingerprint ("relayium id") is authorized there.
 
 Large selections are automatically split into bounded batches. A multi-batch
 sync needs a receiver with large directory sync support and cannot use --delete.
-Keep the receiver running without --once. If disconnected, rerun sync to skip
-already verified files and reuse any matching receiver checkpoint.
+Keep the receiver running without --once. If an ordinary sync is interrupted,
+it retries up to eight times within the current batch, rechecking completed
+files and reusing matching checkpoints. --delete disables reconnect within an attempt.
 
 Only files that changed are sent, and an existing verified prefix can be reused.
 "Unchanged" is decided by content: each source file's SHA-256 goes in the manifest
@@ -315,7 +316,7 @@ func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []stri
 	// rather than a best effort when talking to an older receiver.
 	opts := xfer.SendOpts{Sync: true, Delete: f.del, ContentCheck: true,
 		RequireContentCheck: f.checksum || multiple, RequireDeleteReport: f.strictDelete,
-		TransferProgress: syncProgress(stderr, "Sending")}
+		ReceiverCheckProgress: receiverCheckProgress(stderr)}
 	if f.check {
 		return checkSync(ctx, dest, f.configDir, len(m.Files), opts, stderr)
 	}
@@ -324,9 +325,8 @@ func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []stri
 	for i, end := range ends {
 		if multiple {
 			fmt.Fprintf(stderr, "Sync batch %d/%d (%d files)\n", i+1, len(ends), end-start)
-			opts.TransferProgress = syncProgress(stderr, "Sending")
 		}
-		rep, err := sendSyncBatch(ctx, drain, dest, f.configDir,
+		rep, err := sendSyncBatch(ctx, drain, i > 0, dest, f.configDir,
 			xfer.Manifest{Files: m.Files[start:end]}, paths[start:end], opts, stderr)
 		if multiple {
 			// A failed or interrupted wire transaction has no final receipt.
@@ -360,7 +360,7 @@ func syncOnce(ctx context.Context, drain time.Duration, dest string, srcs []stri
 	return reportSync(total, f, stderr)
 }
 
-func sendSyncBatch(ctx context.Context, drain time.Duration, dest, configDir string, m xfer.Manifest,
+func sendSyncBatch(ctx context.Context, drain time.Duration, continuing bool, dest, configDir string, m xfer.Manifest,
 	paths []string, opts xfer.SendOpts, stderr io.Writer) (xfer.Report, error) {
 	// Hash before the data connection so a legacy receiver never waits for
 	// source I/O under its handshake idle deadline.
@@ -371,18 +371,15 @@ func sendSyncBatch(ctx context.Context, drain time.Duration, dest, configDir str
 	if err != nil {
 		return xfer.Report{}, err
 	}
-	fmt.Fprintln(stderr, "Connecting and checking the receiver's existing files...")
-	tconn, err := dialDaemon(dest, configDir, stderr)
-	if err != nil {
-		return xfer.Report{}, err
-	}
-	defer tconn.Close()
-	return sendWithShutdown(ctx, tconn, cm, paths, opts, drain)
+	return retrySyncBatch(ctx, drain, continuing, dest, configDir, cm, paths, opts, stderr)
 }
 
 func checkSync(ctx context.Context, dest, configDir string, fileCount int, opts xfer.SendOpts, stderr io.Writer) int {
 	fmt.Fprintln(stderr, "Checking receiver connection...")
-	tconn, err := dialDaemon(dest, configDir, stderr)
+	tconn, err := dialDaemonContext(ctx, dest, configDir, stderr)
+	if ctx.Err() != nil {
+		return 130
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

@@ -13,8 +13,10 @@ type SendOpts struct {
 	// TransferProgress reports file-body bytes and completed or skipped files.
 	// The receiver's final result still determines whether the sync succeeded.
 	TransferProgress func(TransferProgress)
-	Sync             bool // sync mode: set Hello.Sync and honor the receiver's Skip
-	Delete           bool // mirror: set Hello.Delete
+	// ReceiverCheckProgress observes the receiving side comparing existing files.
+	ReceiverCheckProgress func(done, total int)
+	Sync                  bool // sync mode: set Hello.Sync and honor the receiver's Skip
+	Delete                bool // mirror: set Hello.Delete
 	// ContentCheck (sync only) puts each source file's SHA-256 in the manifest
 	// and asks the receiver to skip and install by content (see content_check.go).
 	// It costs one extra read of every source file before anything is sent.
@@ -99,6 +101,7 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 		}
 	}
 	hello := Hello{Version: WireVersion, Mode: "push", Sync: opts.Sync, Delete: opts.Delete, ResumeProof: true, ContentCheck: contentCheck}
+	hello.SyncProgress = contentCheck && opts.ReceiverCheckProgress != nil
 	if paged {
 		hello.ManifestFiles = len(m.Files)
 	}
@@ -117,7 +120,7 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 	// MsgError frame instead of the resume state, so check the frame type before
 	// decoding rather than mistaking a refusal for an empty resume.
 	var rs ResumeState
-	if err := readSyncResponse(rw, paged || opts.checkResult, MsgResume, &rs); err != nil {
+	if err := readSyncResume(rw, paged || opts.checkResult, len(m.Files), hello.SyncProgress, opts.ReceiverCheckProgress, &rs); err != nil {
 		return Report{}, err
 	}
 	offsets := make([]int64, len(m.Files))

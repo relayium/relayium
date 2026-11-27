@@ -156,7 +156,7 @@ func WithContentDigestsProgress(ctx context.Context, m Manifest, srcs []string, 
 // missing, unreadable or non-regular file, a symbolic link, or a parent
 // directory that resolves outside base -- the digest comparison must never be
 // a way to ask about a file outside the receive directory.
-func destMatchesDigest(base, dest string, size int64, want string) bool {
+func destMatchesDigest(base, dest string, size int64, want string, pulse func() error) bool {
 	info, err := os.Lstat(dest)
 	if err != nil || !info.Mode().IsRegular() || info.Size() != size {
 		return false
@@ -174,7 +174,11 @@ func destMatchesDigest(base, dest string, size int64, want string) bool {
 		return false
 	}
 	h := sha256.New()
-	if n, err := io.Copy(h, io.LimitReader(f, size+1)); err != nil || n != size {
+	var source io.Reader = f
+	if pulse != nil {
+		source = checkProgressReader{f, pulse}
+	}
+	if n, err := io.Copy(h, io.LimitReader(source, size+1)); err != nil || n != size {
 		return false
 	}
 	return hex.EncodeToString(h.Sum(nil)) == want
@@ -184,13 +188,24 @@ func destMatchesDigest(base, dest string, size int64, want string) bool {
 // file is skipped only when the on-disk copy has the same size and digest.
 // Modification time plays no part in the decision. Partial files still get a
 // resume offer, and their merged result must then match the manifest digest.
-func contentSyncStateFor(destDir string, m Manifest) ResumeState {
+func contentSyncStateFor(destDir string, m Manifest, progress func(int) error) (ResumeState, error) {
 	rs := ResumeState{ContentCheck: true}
 	base, err := filepath.Abs(destDir)
 	if err != nil {
-		return rs
+		return rs, nil
 	}
+	var pulseErr error
 	for i, f := range m.Files {
+		var pulse func() error
+		if progress != nil {
+			pulse = func() error {
+				pulseErr = progress(i)
+				return pulseErr
+			}
+			if err := pulse(); err != nil {
+				return ResumeState{}, err
+			}
+		}
 		dest, err := safeJoin(destDir, f.Path)
 		if err != nil {
 			continue
@@ -200,8 +215,11 @@ func contentSyncStateFor(destDir string, m Manifest) ResumeState {
 			continue // absent, or not a plain file → full send
 		}
 		if info.Size() == f.Size {
-			if destMatchesDigest(base, dest, f.Size, f.SHA256) {
+			if destMatchesDigest(base, dest, f.Size, f.SHA256, pulse) {
 				rs.Skip = append(rs.Skip, i)
+			}
+			if pulseErr != nil {
+				return ResumeState{}, pulseErr
 			}
 			continue
 		}
@@ -209,7 +227,7 @@ func contentSyncStateFor(destDir string, m Manifest) ResumeState {
 			rs.Entries = append(rs.Entries, ResumeEntry{Index: i, Have: info.Size()})
 		}
 	}
-	return rs
+	return rs, nil
 }
 
 // checkManifestDigests validates every entry's digest when the sender

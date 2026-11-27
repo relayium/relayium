@@ -47,6 +47,8 @@ const (
 
 	// MsgManifestPage is sent only after both peers negotiate a large sync.
 	MsgManifestPage MsgType = 13
+	// MsgSyncProgress precedes MsgResume only when the sender requests it.
+	MsgSyncProgress MsgType = 14
 )
 
 // StreamChunkMax bounds one MsgStreamData payload.
@@ -100,6 +102,8 @@ type Hello struct {
 	// exact entry count on the subsequent, negotiated transfer.
 	PagedManifest bool `json:",omitempty"`
 	ManifestFiles int  `json:",omitempty"`
+	// SyncProgress opts into receiver-side verification counts before MsgResume.
+	SyncProgress bool `json:",omitempty"`
 }
 
 type FileEntry struct {
@@ -209,6 +213,7 @@ const (
 	ErrCodeManifestTooLarge  = "manifest_too_large"
 	ErrCodeDestinationExists = "destination_exists"
 	ErrCodeSyncNotAllowed    = "sync_not_allowed"
+	ErrCodeSyncBusy          = "sync_busy"
 	// Stream-only codes (a v1 transfer never receives one).
 	ErrCodeStreamNotAccepted  = "stream_not_accepted"
 	ErrCodeInvalidDestination = "invalid_destination"
@@ -262,6 +267,10 @@ func readSyncResponse(r io.Reader, strict bool, want MsgType, v any) error {
 	if err != nil {
 		return err
 	}
+	return decodeSyncResponse(t, payload, strict, want, v)
+}
+
+func decodeSyncResponse(t MsgType, payload []byte, strict bool, want MsgType, v any) error {
 	if t == MsgError {
 		var we WireError
 		if err := json.Unmarshal(payload, &we); err != nil {

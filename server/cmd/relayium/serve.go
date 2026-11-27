@@ -38,12 +38,19 @@ var transferIdleTimeout = 2 * time.Minute
 // producing bytes for idle fails its next read instead of blocking indefinitely.
 type idleConn struct {
 	net.Conn
-	idle time.Duration
+	idle    time.Duration
+	readErr error
 }
 
 func (c *idleConn) Read(p []byte) (int, error) {
+	// A failed transport cannot be drained or resumed on the same TLS stream.
+	if c.readErr != nil {
+		return 0, c.readErr
+	}
 	_ = c.Conn.SetReadDeadline(time.Now().Add(c.idle))
-	return c.Conn.Read(p)
+	n, err := c.Conn.Read(p)
+	c.readErr = err
+	return n, err
 }
 
 // Write is bounded the same way: a sender that stops reading must not pin this
@@ -610,7 +617,7 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 	}()
 
 	// Bound the unauthenticated TLS handshake so a client that connects and then
-	// stalls can't wedge the (serial) accept loop indefinitely. Cleared once the
+	// stalls cannot keep a handler slot indefinitely. Cleared once the
 	// peer is cryptographically identified: interactive approval and large file
 	// receives legitimately take longer.
 	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))

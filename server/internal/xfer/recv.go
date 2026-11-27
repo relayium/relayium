@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/relayium/relayium/internal/inboxsend/sendlock"
 	"github.com/relayium/relayium/internal/termtext"
 )
 
@@ -195,15 +196,33 @@ func receiveManifest(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpt
 		// Skip is decided by content even with --no-resume: skipping a file
 		// that is already identical is not resuming one. Resume offers are
 		// withheld as before.
-		rs = contentSyncStateFor(destDir, m)
-		if opts.NoResume {
-			rs.Entries = nil
-		} else if sync && hello.ResumeProof {
+		if !opts.NoResume && hello.ResumeProof {
 			checkpoint, err = openSyncCheckpoint(opts.CheckpointDir, opts.CheckpointPeer, destDir, m)
+			if errors.Is(err, sendlock.ErrLocked) {
+				return Report{}, refuse(rw, ErrCodeSyncBusy, errors.New("the receiver is still using this sender's checkpoint; wait for its active sync to finish or its stalled session to time out"))
+			}
 			if err != nil {
+				_ = refuse(rw, ErrCodeWriteFailed, errors.New("the receiver could not open its sync checkpoint; check its serve log"))
 				return Report{}, fmt.Errorf("open sync checkpoint: %w", err)
 			}
 			defer checkpoint.close()
+		}
+		var progress func(int) error
+		if hello.SyncProgress {
+			progress = syncCheckReporter(rw, len(m.Files))
+		}
+		rs, err = contentSyncStateFor(destDir, m, progress)
+		if err != nil {
+			return Report{}, err
+		}
+		if progress != nil && len(m.Files) > 0 {
+			if err := progress(len(m.Files)); err != nil {
+				return Report{}, err
+			}
+		}
+		if opts.NoResume {
+			rs.Entries = nil
+		} else {
 			checkpointIndex = checkpoint.offer(m, &rs)
 		}
 	case sync && !opts.NoResume:

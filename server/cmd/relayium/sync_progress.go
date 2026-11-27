@@ -48,3 +48,9 @@ func syncProgress(w io.Writer, label string) func(xfer.TransferProgress) {
 		fmt.Fprintln(w)
 	}
 }
+
+func receiverCheckProgress(w io.Writer) func(done, total int) {
+	return func(done, total int) {
+		fmt.Fprintf(w, "Receiver checking existing files: %d/%d\n", done, total)
+	}
+}
