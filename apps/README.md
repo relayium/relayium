@@ -1,10 +1,10 @@
 # Relayium native apps
 
-**Internal TestFlight, read back 2026-11-24.** The current internal TestFlight build is `1.5.3 (51)`: App Store Connect build
-`756aa5b5-e69a-4eeb-814a-852e533a1f25`, built from source
-`63f69a53b40d1f618ea65151a6328f502f220ded`. Apple reports
+**Internal TestFlight, read back 2026-11-27.** The current internal TestFlight build is `1.5.4 (52)`: App Store Connect build
+`6d1ad972-fc50-408b-a5c1-fe461cb13728`, built from source
+`7409f16e9f6885169ac881e8f8c50dde1b3a908f`. Apple reports
 `VALID` and `IN_BETA_TESTING` in the existing Relayium Internal group.
-English and Simplified Chinese test notes are set. This release checkpoint
+English and Simplified Chinese test notes cover long Inbox text and the transfer and device navigation refinements. This release checkpoint
 records the internal package separately from the Developer ID download.
 
 Since TestFlight `1.4.9 (46)`, Share a link can send the next encrypted part
@@ -19,7 +19,7 @@ download URL are recorded in [`web/native-releases.json`](../web/native-releases
 The separately
 versioned Mac App Store channel is public at [1.4.10](https://apps.apple.com/app/id6801142976), released
 by Apple on 2026-10-21. Its version and publication date are recorded separately
-from the direct release in `web/mac-app-store-release.json`. Android **0.3.6 (15)** is the direct APK preview (`android-v0.3.6`), built from `7409f16e`. The signed build adds per-message folding to long Device Inbox texts and preserves full text on Copy. iOS has no public release. Internal TestFlight offers **0.5.5 (16)**.
+from the direct release in `web/mac-app-store-release.json`. Android **0.3.6 (15)** is the direct APK preview (`android-v0.3.6`), built from `7409f16e`. The signed build adds per-message folding to long Device Inbox texts and preserves full text on Copy. iOS has no public release. Internal TestFlight offers **0.5.6 (17)**.
 Earlier **0.5.3 (14)** introduced faster foreground Inbox checks and Copy above
 and below received text. The website and Sparkle feed have their own deployment and public verification;
 the public URLs determine the version currently offered.
@@ -245,11 +245,11 @@ The macOS status above covers macOS only. iOS development resumed on
 2026-09-01 at version 0.3.0: internal TestFlight builds were used for
 development acceptance before the earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
-offers iOS. The current internal TestFlight build is **`0.5.5 (16)`**, from source
-`63f69a53b40d1f618ea65151a6328f502f220ded`. Apple reports `VALID` and
-`IN_BETA_TESTING` in the internal group. The build includes the file-send
-wakeup and the iPad sidebar title correction. The read-back preserved all
-40 earlier builds, testers, external memberships and all ten Store selections.
+offers iOS. The current internal TestFlight build is **`0.5.6 (17)`**, from source
+`7409f16e9f6885169ac881e8f8c50dde1b3a908f`. Apple build `32885198-9872-41b8-aadb-e6096f80ccb8` reports
+`VALID` and `IN_BETA_TESTING` in the internal group. The build folds long
+Device Inbox texts individually and keeps Copy available for the full text.
+The read-back preserved 42 earlier builds and all 10 Store selections.
 Device Inbox checks every two seconds while visible; long received text has
 Copy above and below its full body. Ask consent, pause and foreground-only
 transfers retain their existing behavior. This is discovery/status latency work,

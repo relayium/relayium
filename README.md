@@ -417,7 +417,7 @@ implementation notes, release evidence, acceptance procedures, and future work
 live in [`docs/`](docs/) rather than on this project overview.
 
 **On iOS:** `apps/ios/` exists in this repository and its development has
-**resumed**, at version `0.5.6`. It has never been publicly released and has no App Store listing. Internal TestFlight testers can install build 16.
+**resumed**, at version `0.5.6`. It has never been publicly released and has no App Store listing. Internal TestFlight testers can install build 17.
 
 **On Android:** `apps/android/` is a native Kotlin/Compose client, at version
 `0.3.6` (versionCode 15), offered as a **public preview** distributed as a direct
