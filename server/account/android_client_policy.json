@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "android": {
-    "policyRevision": 6,
-    "recommendedVersion": "0.3.5",
-    "recommendedBuild": 14,
+    "policyRevision": 7,
+    "recommendedVersion": "0.3.6",
+    "recommendedBuild": 15,
     "channel": "direct"
   }
 }
