@@ -86,7 +86,6 @@ struct CrossNetworkConnectPane: View {
     @State private var actionError: String?
     /// Whether Copy code just acknowledged a copy. View state only.
     @State private var codeCopied = false
-    @FocusState private var joinCodeFocused: Bool
 
     private let route = AppDestination.pairingCode
 
@@ -409,8 +408,6 @@ struct CrossNetworkConnectPane: View {
                     .strokeBorder(Palette.buttonBorder, lineWidth: 1))
                 .accessibilityLabel(L10n.t(.commonCode))
                 .accessibilityIdentifier("pairing.joinCode")
-                .focused($joinCodeFocused)
-                .onAppear { joinCodeFocused = !sessionLocked }
             Text(L10n.t(.directJoinNoAccountShort))
                 .font(.subheadline)
                 .foregroundStyle(Palette.textTertiary)

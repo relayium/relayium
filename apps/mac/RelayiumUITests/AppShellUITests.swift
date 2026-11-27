@@ -1016,7 +1016,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.buttons["Connect"].isEnabled,
                       "a complete code cannot be connected with")
 
-        window.buttons["Connect"].click()
+        app.typeKey(.return, modifierFlags: [])
         // By label rather than by identifier: the joiner's wait is the handoff
         // card's own, now that the pane no longer draws a second one beside it.
         let waiting = window.activityIndicators["Waiting for the other device…"]
