@@ -1,17 +1,17 @@
 // web/scripts/pages/content/articles/cli-sync-large-folder.mjs
 // How-to: sync a large folder between two servers with relayium sync —
-// incremental, resumable, run unattended in the background via a retry loop + tmux.
+// Incremental sync with automatic reconnect, optionally run in tmux.
 // English is the master; every other locale follows the same structure and facts.
 // Commands stay English in every language; the # comments around them are translated.
 
 const en = {
   title: "Sync a large folder between two servers (resumable, in the background)",
   description:
-    "Mirror a big directory from one server to another with relayium sync — incremental, resumable after a dropped connection, and safe to run unattended. A retry loop under tmux moves gigabytes without babysitting a terminal.",
+    "Mirror a large directory between two servers with relayium sync. It can reconnect after temporary interruptions and reuse verified data.",
   updatedLabel: "Last updated",
   lead: [
-    "Use v0.28.3 on both ends. One command automatically splits large selections into batches of up to 100,000 regular files and a 32 MiB directory index each. Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison. With v0.28.3 on the receiver, a sync can retain a private checkpoint for a file of at least 1 MiB. Rerun the same command to reuse a matching checkpoint. An interrupted file without one starts again. Completed, verified files are skipped.",
-    "This guide sets up an unattended, self-healing transfer: authorize the sender once, run the listener in the background, and drive relayium sync from a retry loop inside tmux so it keeps going across dropped connections until the whole folder has landed.",
+    "Use v0.28.4 on both ends. One command automatically splits large selections into batches of up to 100,000 regular files and a 32 MiB directory index each. Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison. With v0.28.3 on the receiver, a sync can retain a private checkpoint for a file of at least 1 MiB. Rerun the same command to reuse a matching checkpoint. An interrupted file without one starts again. Completed, verified files are skipped.",
+    "Authorize the sender once, keep the receiver running in the background, and run sync in tmux if the transfer should survive logout.",
   ],
   sections: [
     {
@@ -23,13 +23,12 @@ const en = {
         "Matching size and SHA-256 let current receivers skip unchanged files. Older receivers can fall back to size and mtime; use --checksum to require content comparison.",
         "With v0.28.3 on the receiver, a sync can retain a private checkpoint for a file of at least 1 MiB. Rerun the same command to reuse a matching checkpoint. An interrupted file without one starts again. Completed, verified files are skipped.",
         "Matching du -sh totals are a coarse check. Rerun with --checksum to require SHA-256 comparison of the selected files.",
-        "Because of these, the command is idempotent — running it again only does the work that's left, which is exactly what lets a retry loop finish a huge transfer.",
       ],
     },
     {
       heading: "Prerequisites",
       body: [
-        "Use v0.28.3 on both ends. One command automatically splits large selections into batches of up to 100,000 regular files and a 32 MiB directory index each. For multiple batches, run relayium serve without --once. Multi-batch sync refuses --delete. To probe first, run serve without --once and use sync --check; it verifies connectivity and authorization without sending file data. For ongoing synchronization, keep the receiver running and add --watch on the sender.",
+        "Use v0.28.4 on both ends. One command automatically splits large selections into batches of up to 100,000 regular files and a 32 MiB directory index each. For multiple batches, run relayium serve without --once. Multi-batch sync refuses --delete. To probe first, run serve without --once and use sync --check; it verifies connectivity and authorization without sending file data. For ongoing synchronization, keep the receiver running and add --watch on the sender.",
       ],
       code: [
         `# on BOTH servers
@@ -73,32 +72,31 @@ Accept and remember this peer? [y/N] y`,
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 & echo $! > ~/relayium-serve.pid`,
       ],
       bullets: [
-        "serve handles connections one at a time and keeps running, so it's ready for every reconnect from the retry loop below.",
         "For an always-on inbox, run it under systemd instead (Restart=always, --config-dir /etc/relayium).",
       ],
     },
     {
-      heading: "Run the sync in a retry loop under tmux (on the sender)",
+      heading: "Run sync in tmux on the sender",
       body: [
-        "Long transfers get interrupted — a dropped session, a flaky network, a reboot. The fix isn't a fancy tool; it's a loop that reruns sync until it succeeds, plus a terminal multiplexer so it survives you logging out. tmux is cleaner than nohup here: no output redirection to get wrong, and you can reattach to watch progress.",
-        "Start a tmux session, then run the mirror in an until loop — it retries every 10 seconds until sync returns success, then exits on its own:",
+        "On v0.28.4, ordinary sync automatically reconnects up to eight times after a temporary interruption and continues the current batch. With --delete, reconnect is disabled within an attempt.",
+        "Keep serve running without --once. With v0.28.4 at both ends, sync shows receiver verification progress.",
       ],
       steps: [
         {
-          text: "Start a tmux session on the sender, so the loop outlives the ssh session you started it from.",
+          text: "Start a tmux session on the sender.",
           code: [
             `# on the SENDER
 tmux new -s xfer      # apt install -y tmux if it's missing`,
           ],
         },
         {
-          text: "Run the mirror inside an until loop. It retries every 10 seconds until sync returns success, then exits on its own.",
+          text: "Run the sync command once.",
           code: [
-            `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+            `relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
           ],
         },
         {
-          text: "Detach with Ctrl-b then d. The loop keeps running; reattach whenever you want to watch it.",
+          text: "Detach with Ctrl-b then d. Reattach to check the result.",
           code: ["tmux attach -t xfer"],
         },
       ],
@@ -121,11 +119,11 @@ synced: 1 sent, 812 unchanged`,
     {
       heading: "Verify and finish",
       body: [
-        "The transfer is complete when the until loop ends and you're back at a normal shell prompt. Confirm both sides match, then stop the listener:",
+        "Check the final receiver result before stopping the listener.",
       ],
       steps: [
         {
-          text: "Wait for the until loop to exit on its own. Being back at an ordinary shell prompt is the transfer finishing, not you interrupting it.",
+          text: "Continue once sync returns successfully and reports zero failed files.",
         },
         {
           text: "Compare the totals on both servers.",
@@ -188,9 +186,9 @@ ss -tlnp | grep 9031`,
             symptom: "Pasting the background command leaves the shell at a > continuation prompt.",
             code: [
               `tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "A multi-line nohup command with quotes and a > redirect usually breaks on the redirect when pasted. Use tmux plus this single-line loop instead: there is no redirection to get wrong, and you can reattach to watch it.",
+            fix: "Open tmux first, then paste the sync command on its own line.",
           },
           {
             symptom: "Cleaning up killed something you did not mean to kill.",
@@ -200,7 +198,7 @@ ps -p "$(cat ~/relayium-serve.pid)" -o command=
 tmux kill-session -t xfer
 kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             ],
-            fix: "Killing by command-line pattern signals every process whose command line contains that text, which on a machine running more than one transfer is not the one you meant. It also does not stop the mirror: the until loop owns the sync, so a killed child is simply started again ten seconds later. Look with pgrep -af, then end the things this guide actually owns — tmux kill-session -t xfer ends the loop, and kill on the PID in ~/relayium-serve.pid ends the listener you launched. Print that PID's command line before you signal it if the file has been sitting there since an earlier run: a PID the system has reused belongs to something else entirely.",
+            fix: "Inspect the PID with ps before signaling it. Stop only the tmux session and listener that you started for this transfer.",
           },
           {
             symptom: "Exclude a folder or file pattern you chose",
@@ -238,7 +236,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       },
       {
         q: "Can I keep two folders in sync continuously?",
-        a: "Yes. Add --watch and sync stays running, re-mirroring on any change under the source. For a one-time move of a large folder you don't need it — the retry loop plus a plain sync is enough.",
+        a: "Add --watch to repeat sync when sources change. For a one-time copy, run sync once.",
       },
       {
         q: "Do I have to open a port?",
@@ -257,11 +255,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 const zh = {
   title: "在两台服务器之间同步一个大文件夹（可续传、后台运行）",
   description:
-    "用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。",
+    "用 relayium sync 在两台服务器之间同步大目录。临时断线后可自动重连并复用已验证的数据。",
   updatedLabel: "最近更新",
   lead: [
-    "两端均使用 v0.28.3 或更新版本。一条命令会自动分批，每批最多 100,000 个普通文件和 32 MiB 目录索引。 新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。 接收端使用 v0.28.3 时，可为至少 1 MiB 的文件保留私有断点。重跑同一条命令可复用匹配的断点；没有可用断点的中断文件会重传，已经校验的文件会跳过。",
-    "本指南搭建一个无人值守、自动恢复的传输：把发送方授权一次，让监听端在后台运行，并在 tmux 里用重试循环驱动 relayium sync，让它在掉线之后继续跑，直到整个文件夹全部到达。",
+    "两端均使用 v0.28.4 或更新版本。一条命令会自动分批，每批最多 100,000 个普通文件和 32 MiB 目录索引。 新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。 接收端使用 v0.28.3 时，可为至少 1 MiB 的文件保留私有断点。重跑同一条命令可复用匹配的断点；没有可用断点的中断文件会重传，已经校验的文件会跳过。",
+    "授权发送方一次，让接收端持续运行。如需在退出登录后继续传输，可在 tmux 里运行 sync。",
   ],
   sections: [
     {
@@ -273,13 +271,12 @@ const zh = {
         "新版接收端按大小和 SHA-256 跳过内容相同的文件。旧接收端可能回退到大小和 mtime。用 --checksum 可要求内容比对。",
         "接收端使用 v0.28.3 时，可为至少 1 MiB 的文件保留私有断点。重跑同一条命令可复用匹配的断点；没有可用断点的中断文件会重传，已经校验的文件会跳过。",
         "du -sh 总量只是粗略核对。再用 --checksum 运行一次，可要求对选中的文件做 SHA-256 内容比对。",
-        "正因如此，这条命令是幂等的——再跑一次只做剩下的活，这正是重试循环能完成一次超大传输的关键。",
       ],
     },
     {
       heading: "前提条件",
       body: [
-        "两端均使用 v0.28.3 或更新版本。一条命令会自动分批，每批最多 100,000 个普通文件和 32 MiB 目录索引。 多批次同步请直接运行 relayium serve，去掉 --once。多批次同步会拒绝 --delete。若想先检查，请让接收端去掉 --once，再用 sync --check，验证连通性和授权而不发送文件数据。需要持续同步时，保持接收端运行，并在发送端加 --watch。",
+        "两端均使用 v0.28.4 或更新版本。一条命令会自动分批，每批最多 100,000 个普通文件和 32 MiB 目录索引。 多批次同步请直接运行 relayium serve，去掉 --once。多批次同步会拒绝 --delete。若想先检查，请让接收端去掉 --once，再用 sync --check，验证连通性和授权而不发送文件数据。需要持续同步时，保持接收端运行，并在发送端加 --watch。",
       ],
       code: [
         `# 两台服务器上都执行
@@ -323,32 +320,31 @@ Accept and remember this peer? [y/N] y`,
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 & echo $! > ~/relayium-serve.pid`,
       ],
       bullets: [
-        "serve 一次处理一个连接并持续运行，因此下面重试循环的每次重连它都准备好接收。",
         "若要做常驻收件箱，改用 systemd 运行（Restart=always，--config-dir /etc/relayium）。",
       ],
     },
     {
-      heading: "在 tmux 里用重试循环运行 sync（在发送方）",
+      heading: "在发送方的 tmux 中运行 sync",
       body: [
-        "长时间的传输总会被打断——会话断开、网络抖动、机器重启。解决办法不是什么高级工具，而是一个把 sync 反复重跑到成功为止的循环，再加一个终端复用器让它在你退出登录后存活。这里 tmux 比 nohup 更省心：没有容易写错的输出重定向，而且可以重新接入查看进度。",
-        "开一个 tmux 会话，然后在 until 循环里运行镜像——它每 10 秒重试一次，直到 sync 成功返回，然后自己退出：",
+        "从 v0.28.4 开始，普通 sync 遇到临时断线后最多自动重连八次，并从当前批次继续。带 --delete 时单次执行禁用自动重连。",
+        "让 serve 持续运行，去掉 --once。两端使用 v0.28.4 时，sync 会显示接收端校验进度。",
       ],
       steps: [
         {
-          text: "在发送方开一个 tmux 会话，好让循环活得比你启动它的那次 ssh 更久。",
+          text: "在发送方开启 tmux 会话。",
           code: [
             `# 在发送方
 tmux new -s xfer      # 没有 tmux 就 apt install -y tmux`,
           ],
         },
         {
-          text: "把镜像放进一个 until 循环里跑。它每 10 秒重试一次，直到 sync 返回成功，然后自己退出。",
+          text: "执行一次 sync。",
           code: [
-            `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+            `relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
           ],
         },
         {
-          text: "按 Ctrl-b 再按 d 脱离。循环照跑不误；想看的时候随时重新接入。",
+          text: "按 Ctrl-b，再按 d，即可分离会话。重新接入可查看结果。",
           code: ["tmux attach -t xfer"],
         },
       ],
@@ -371,11 +367,11 @@ synced: 1 sent, 812 unchanged`,
     {
       heading: "验证与收尾",
       body: [
-        "当 until 循环结束、你回到普通的 shell 提示符时，传输就完成了。确认两边一致，然后停掉监听端：",
+        "查看接收端最终回执，再停止监听。",
       ],
       steps: [
         {
-          text: "等 until 循环自己退出。回到普通的 shell 提示符，说明的是传输结束了，而不是你把它打断了。",
+          text: "确认 sync 成功退出并报告零失败文件后再继续。",
         },
         {
           text: "在两台服务器上比较总量。",
@@ -438,9 +434,9 @@ ss -tlnp | grep 9031`,
             symptom: "把后台命令粘进去之后，shell 停在一个 > 续行提示符上。",
             code: [
               `tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "带引号和 > 重定向的多行 nohup 命令，粘贴时通常会在重定向那里断掉。改用 tmux 加这条单行循环：没有重定向可写错，而且随时能重新接入观察。",
+            fix: "按 Ctrl-C 退出续行提示。先开启 tmux，再把完整的 sync 命令单独粘贴在一行，按回车运行。",
           },
           {
             symptom: "清理进程时误杀了不该杀的东西。",
@@ -450,7 +446,7 @@ ps -p "$(cat ~/relayium-serve.pid)" -o command=
 tmux kill-session -t xfer
 kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             ],
-            fix: "按命令行模式去杀，会对所有命令行里含这段文字的进程都发信号；机器上同时跑着不止一个传输时，杀掉的就不是你想杀的那个。而且它也停不下镜像：sync 是 until 循环的子进程，杀掉之后循环十秒后又拉起一个。先用 pgrep -af 看清楚，再去结束本指南真正拥有的东西——tmux kill-session -t xfer 结束那个循环，对 ~/relayium-serve.pid 里的 PID 执行 kill 结束你启动的监听端。如果那个 PID 文件是上一次运行留下的，先把它的命令行打出来再发信号：被系统重新分配出去的 PID，属于完全不相干的另一个进程。",
+            fix: "发信号前先用 ps 核对 PID。只结束本次传输启动的 tmux 会话和监听进程。",
           },
           {
             symptom: "排除你指定的目录或文件模式",
@@ -488,7 +484,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       },
       {
         q: "我能让两个文件夹持续保持同步吗？",
-        a: "可以。加 --watch，sync 会持续运行，在源目录下任何改动时重新镜像。对于一次性搬运一个大文件夹，你不需要它——重试循环加一个普通的 sync 就够了。",
+        a: "加 --watch 可在源文件变化时再次同步。只传一次时，执行一次 sync 即可。",
       },
       {
         q: "我必须开一个端口吗？",
@@ -507,11 +503,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 const ja = {
   title: "2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）",
   description:
-    "relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。",
+    "relayium sync で2台のサーバー間の大きなフォルダーを同期します。一時的な切断後に再接続し、検証済みデータを再利用できます。",
   updatedLabel: "最終更新",
   lead: [
-    "両端を v0.28.3 以降にしてください。1 つのコマンドで自動的に分割し、各バッチは通常ファイル 100,000 個とディレクトリインデックス 32 MiB までです。 現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。 再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
-    "本ガイドでは、無人で自己修復する転送を構築します。送信側を一度だけ承認し、リスナーをバックグラウンドで動かし、tmux 内のリトライループで relayium sync を回して、接続が切れても続行させ、フォルダー全体が届くまで走らせます。",
+    "両端を v0.28.4 以降にしてください。1 つのコマンドで自動的に分割し、各バッチは通常ファイル 100,000 個とディレクトリインデックス 32 MiB までです。 現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。 再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
+    "送信側を一度許可し、受信側を起動したままにします。ログアウト後も続けるには tmux で sync を実行します。",
   ],
   sections: [
     {
@@ -523,13 +519,12 @@ const ja = {
         "現行の受信側はサイズと SHA-256 が一致するファイルをスキップします。旧版ではサイズと mtime に戻ることがあります。内容比較を必須にするには --checksum を使います。",
         "再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
         "du -sh の合計は目安です。選択したファイルを SHA-256 で比較するには --checksum を付けて再実行します。",
-        "これらのおかげでコマンドは冪等です。もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。",
       ],
     },
     {
       heading: "前提条件",
       body: [
-        "両端を v0.28.3 以降にしてください。1 つのコマンドで自動的に分割し、各バッチは通常ファイル 100,000 個とディレクトリインデックス 32 MiB までです。 複数バッチでは relayium serve を --once なしで実行します。複数バッチでは --delete を使用できません。事前確認には --once を外し、ファイルデータを送信せず到達性と許可を確認する sync --check を使います。定期的に同期する場合は受信側を起動したまま送信側に --watch を付けます。",
+        "両端を v0.28.4 以降にしてください。1 つのコマンドで自動的に分割し、各バッチは通常ファイル 100,000 個とディレクトリインデックス 32 MiB までです。 複数バッチでは relayium serve を --once なしで実行します。複数バッチでは --delete を使用できません。事前確認には --once を外し、ファイルデータを送信せず到達性と許可を確認する sync --check を使います。定期的に同期する場合は受信側を起動したまま送信側に --watch を付けます。",
       ],
       code: [
         `# 両方のサーバーで
@@ -573,32 +568,31 @@ Accept and remember this peer? [y/N] y`,
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 & echo $! > ~/relayium-serve.pid`,
       ],
       bullets: [
-        "serve は接続を1つずつ処理して動き続けるため、下のリトライループの再接続のたびに受信の準備ができています。",
         "常時稼働の受信箱にするなら、代わりに systemd で動かします（Restart=always、--config-dir /etc/relayium）。",
       ],
     },
     {
-      heading: "tmux 内のリトライループで sync を回す（送信側）",
+      heading: "送信側の tmux で sync を実行する",
       body: [
-        "長い転送は中断されます。セッション切断、不安定なネットワーク、再起動。解決策は高級なツールではなく、sync を成功するまで再実行するループと、ログアウト後も生き残らせる端末マルチプレクサです。ここでは tmux のほうが nohup より扱いやすいです：間違えやすい出力リダイレクトがなく、再接続して進捗を見られます。",
-        "tmux セッションを開始し、until ループでミラーを実行します。10秒ごとに再試行し、sync が成功を返したら自分で終了します：",
+        "v0.28.4 の通常の sync は一時的な切断後に最大8回再接続し、現在のバッチを続行します。--delete を指定した実行では再接続しません。",
+        "serve は --once なしで起動したままにします。両端が v0.28.4 なら受信側の検証進捗を表示します。",
       ],
       steps: [
         {
-          text: "ループを起動元の ssh セッションより長生きさせるため、送信側で tmux セッションを開きます。",
+          text: "送信側で tmux セッションを開きます。",
           code: [
             `# 送信側で
 tmux new -s xfer      # tmux が無ければ apt install -y tmux`,
           ],
         },
         {
-          text: "until ループの中でミラーを回します。10秒ごとに再試行し、sync が成功を返したところで自分から終了します。",
+          text: "sync を一度実行します。",
           code: [
-            `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+            `relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
           ],
         },
         {
-          text: "Ctrl-b の次に d でデタッチします。ループはそのまま動き続けるので、見たくなったらいつでも再接続してください。",
+          text: "Ctrl-b、続けて d で切り離せます。結果を見るには再接続します。",
           code: ["tmux attach -t xfer"],
         },
       ],
@@ -621,11 +615,11 @@ synced: 1 sent, 812 unchanged`,
     {
       heading: "検証と仕上げ",
       body: [
-        "until ループが終わり、通常のシェルプロンプトに戻ったら転送は完了です。両側が一致することを確認してから、リスナーを停止します：",
+        "リスナーを止める前に受信結果を確認します。",
       ],
       steps: [
         {
-          text: "until ループが自分から終わるのを待ちます。通常のシェルプロンプトに戻っているのは、転送が終わったということであって、途中で中断されたということではありません。",
+          text: "sync が正常終了し、失敗が0件であることを確認します。",
         },
         {
           text: "両方のサーバーで合計を比較します。",
@@ -688,9 +682,9 @@ ss -tlnp | grep 9031`,
             symptom: "バックグラウンド用のコマンドを貼ると、シェルが > の継続プロンプトで止まる。",
             code: [
               `tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "引用符と > リダイレクトを含む複数行の nohup コマンドは、貼り付け時にリダイレクトのところで壊れがちです。代わりに tmux とこの1行ループを使ってください。書き間違えるリダイレクトが無く、再接続して様子も見られます。",
+            fix: "Ctrl-C で継続プロンプトを抜けます。tmux を開き、sync コマンド全体を一行に貼り付けて実行します。",
           },
           {
             symptom: "後片付けのつもりが、殺すつもりのないものまで殺してしまった。",
@@ -700,7 +694,7 @@ ps -p "$(cat ~/relayium-serve.pid)" -o command=
 tmux kill-session -t xfer
 kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             ],
-            fix: "コマンドラインのパターンで殺すやり方は、その文字列を含むプロセスすべてにシグナルを送るので、転送が複数動いているマシンでは狙った相手とは限りません。しかもミラーは止まりません。sync を所有しているのは until ループなので、子プロセスを殺しても10秒後にまた起動されます。まず pgrep -af で確認し、このガイドが実際に所有しているものを終わらせてください。tmux kill-session -t xfer でループを終了し、~/relayium-serve.pid にある PID を kill して、自分で起動したリスナーを止めます。その PID ファイルが前回の実行から残っているなら、シグナルを送る前にコマンドラインを表示してください。システムが再利用した PID は、まったく別のプロセスのものです。",
+            fix: "シグナルを送る前に ps で PID を確認します。今回起動した tmux セッションとリスナーだけを終了します。",
           },
           {
             symptom: "指定したフォルダーやファイルパターンを除外する",
@@ -738,7 +732,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       },
       {
         q: "2つのフォルダーを継続的に同期し続けられますか？",
-        a: "はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です。リトライループと素の sync で十分です。",
+        a: "変更時にも同期するには --watch を追加します。一度だけコピーする場合は sync を一度実行します。",
       },
       {
         q: "ポートを開ける必要がありますか？",
@@ -757,11 +751,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 const ko = {
   title: "두 서버 사이에서 큰 폴더 동기화하기(재개 가능, 백그라운드)",
   description:
-    "relayium sync로 큰 디렉터리를 한 서버에서 다른 서버로 미러링하세요. 증분 전송, 연결이 끊겨도 재개 가능, 무인 실행도 안전합니다. tmux 안의 재시도 루프로 터미널에 붙어 있지 않고도 수십 GB를 옮길 수 있습니다.",
+    "relayium sync로 두 서버 사이의 큰 폴더를 동기화합니다. 일시적인 연결 끊김 뒤에 다시 연결하고 검증된 데이터를 재사용할 수 있습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "양쪽 모두 v0.28.3 이상을 사용하세요. 명령 하나가 자동으로 분할하며, 배치당 일반 파일 최대 100,000개와 디렉터리 인덱스 최대 32 MiB를 처리합니다. 최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요. 다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
-    "이 가이드는 무인으로 스스로 복구하는 전송을 구성합니다. 보내는 쪽을 한 번만 승인하고, 리스너를 백그라운드에서 돌리고, tmux 안의 재시도 루프로 relayium sync를 구동해 연결이 끊겨도 계속 진행하여 폴더 전체가 도착할 때까지 실행합니다.",
+    "양쪽 모두 v0.28.4 이상을 사용하세요. 명령 하나가 자동으로 분할하며, 배치당 일반 파일 최대 100,000개와 디렉터리 인덱스 최대 32 MiB를 처리합니다. 최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요. 다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
+    "보내는 쪽을 한 번 승인하고 수신기를 계속 실행합니다. 로그아웃 후에도 계속하려면 tmux에서 sync를 실행하세요.",
   ],
   sections: [
     {
@@ -773,13 +767,12 @@ const ko = {
         "최신 수신기는 크기와 SHA-256이 같은 파일을 건너뜁니다. 이전 수신기는 크기와 mtime으로 대체할 수 있으므로 내용 비교를 요구하려면 --checksum을 사용하세요.",
         "다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
         "du -sh의 총량은 대략적인 확인입니다. 선택한 파일을 SHA-256으로 비교하려면 --checksum으로 다시 실행하세요.",
-        "이 덕분에 명령은 멱등적입니다. 다시 실행해도 남은 일만 합니다. 이것이 바로 재시도 루프가 거대한 전송을 끝낼 수 있게 하는 핵심입니다.",
       ],
     },
     {
       heading: "사전 준비",
       body: [
-        "양쪽 모두 v0.28.3 이상을 사용하세요. 명령 하나가 자동으로 분할하며, 배치당 일반 파일 최대 100,000개와 디렉터리 인덱스 최대 32 MiB를 처리합니다. 여러 배치에서는 relayium serve를 --once 없이 실행하세요. 여러 배치에서는 --delete를 사용할 수 없습니다. 사전 확인은 --once를 빼고 sync --check로 연결과 승인을 확인하며 파일 데이터는 보내지 않습니다. 계속 동기화하려면 수신기를 계속 실행하고 송신기에 --watch를 추가하세요.",
+        "양쪽 모두 v0.28.4 이상을 사용하세요. 명령 하나가 자동으로 분할하며, 배치당 일반 파일 최대 100,000개와 디렉터리 인덱스 최대 32 MiB를 처리합니다. 여러 배치에서는 relayium serve를 --once 없이 실행하세요. 여러 배치에서는 --delete를 사용할 수 없습니다. 사전 확인은 --once를 빼고 sync --check로 연결과 승인을 확인하며 파일 데이터는 보내지 않습니다. 계속 동기화하려면 수신기를 계속 실행하고 송신기에 --watch를 추가하세요.",
       ],
       code: [
         `# 양쪽 서버 모두에서
@@ -823,32 +816,31 @@ Accept and remember this peer? [y/N] y`,
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 & echo $! > ~/relayium-serve.pid`,
       ],
       bullets: [
-        "serve는 연결을 하나씩 처리하며 계속 실행되므로, 아래 재시도 루프의 매 재연결마다 받을 준비가 되어 있습니다.",
         "항상 켜져 있는 수신함을 원하면 대신 systemd로 돌리세요(Restart=always, --config-dir /etc/relayium).",
       ],
     },
     {
-      heading: "tmux 안의 재시도 루프로 sync 돌리기(보내는 쪽)",
+      heading: "보내는 쪽의 tmux에서 sync 실행하기",
       body: [
-        "긴 전송은 중단됩니다. 세션 끊김, 불안정한 네트워크, 재부팅. 해결책은 멋진 도구가 아니라 sync를 성공할 때까지 다시 실행하는 루프와, 로그아웃 후에도 살아남게 하는 터미널 멀티플렉서입니다. 여기서는 tmux가 nohup보다 깔끔합니다: 틀리기 쉬운 출력 리다이렉트가 없고, 다시 붙어 진행 상황을 볼 수 있습니다.",
-        "tmux 세션을 시작한 뒤 until 루프로 미러를 실행하세요. 10초마다 재시도하고 sync가 성공을 반환하면 스스로 종료합니다:",
+        "v0.28.4의 일반 sync는 일시적 연결 끊김 뒤에 최대 8번 다시 연결하여 현재 배치를 이어갑니다. --delete를 쓰면 한 번 실행하는 동안 다시 연결하지 않습니다.",
+        "serve는 --once 없이 계속 실행하세요. 양쪽이 v0.28.4이면 수신 쪽의 검증 진행률도 표시됩니다.",
       ],
       steps: [
         {
-          text: "루프가 그것을 시작한 ssh 세션보다 오래 살도록, 보내는 쪽에서 tmux 세션을 엽니다.",
+          text: "보내는 쪽에서 tmux 세션을 여세요.",
           code: [
             `# 보내는 쪽에서
 tmux new -s xfer      # tmux가 없으면 apt install -y tmux`,
           ],
         },
         {
-          text: "until 루프 안에서 미러를 돌립니다. 10초마다 재시도하다가 sync가 성공을 반환하면 스스로 끝납니다.",
+          text: "sync를 한 번 실행하세요.",
           code: [
-            `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+            `relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
           ],
         },
         {
-          text: "Ctrl-b 다음 d로 분리합니다. 루프는 계속 돌고, 보고 싶을 때 언제든 다시 붙으면 됩니다.",
+          text: "Ctrl-b를 누른 뒤 d를 눌러 분리합니다. 다시 접속하면 결과를 볼 수 있습니다.",
           code: ["tmux attach -t xfer"],
         },
       ],
@@ -871,11 +863,11 @@ synced: 1 sent, 812 unchanged`,
     {
       heading: "검증과 마무리",
       body: [
-        "until 루프가 끝나고 평범한 셸 프롬프트로 돌아오면 전송이 완료된 것입니다. 양쪽이 일치하는지 확인한 뒤 리스너를 멈추세요:",
+        "수신 결과를 확인한 뒤 수신기를 중지하세요.",
       ],
       steps: [
         {
-          text: "until 루프가 스스로 끝날 때까지 기다리세요. 평범한 셸 프롬프트로 돌아와 있다는 것은 전송이 끝났다는 뜻이지, 여러분이 중단했다는 뜻이 아닙니다.",
+          text: "sync가 성공적으로 종료하고 실패 파일이 0개인지 확인하세요.",
         },
         {
           text: "양쪽 서버에서 합계를 비교합니다.",
@@ -938,9 +930,9 @@ ss -tlnp | grep 9031`,
             symptom: "백그라운드용 명령을 붙여넣으면 셸이 > 계속 프롬프트에 머뭅니다.",
             code: [
               `tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "따옴표와 > 리다이렉트가 섞인 여러 줄짜리 nohup 명령은 붙여넣을 때 리다이렉트에서 깨지기 쉽습니다. 대신 tmux와 이 한 줄 루프를 쓰세요. 틀릴 리다이렉트가 없고, 다시 붙어서 지켜볼 수도 있습니다.",
+            fix: "Ctrl-C로 계속 프롬프트를 닫으세요. tmux를 먼저 연 다음, 완전한 sync 명령을 한 줄로 붙여 넣고 실행하세요.",
           },
           {
             symptom: "정리하다가 죽일 생각이 없던 것까지 죽였습니다.",
@@ -950,7 +942,7 @@ ps -p "$(cat ~/relayium-serve.pid)" -o command=
 tmux kill-session -t xfer
 kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             ],
-            fix: "명령줄 패턴으로 죽이면 그 문자열이 들어간 모든 프로세스에 시그널이 갑니다. 전송이 둘 이상 도는 기기에서는 노린 그것이 아닐 수 있습니다. 미러도 멈추지 않습니다. sync를 소유한 것은 until 루프라서, 자식을 죽여도 10초 뒤에 다시 뜹니다. 먼저 pgrep -af 로 확인한 뒤, 이 가이드가 실제로 소유한 것을 끝내세요. tmux kill-session -t xfer 로 루프를 끝내고, ~/relayium-serve.pid 에 있는 PID에 kill 을 보내 직접 띄운 리스너를 멈춥니다. 그 PID 파일이 이전 실행부터 남아 있었다면 시그널을 보내기 전에 명령줄부터 출력해 보세요. 시스템이 재사용한 PID는 전혀 다른 프로세스의 것입니다.",
+            fix: "신호를 보내기 전에 ps로 PID를 확인하세요. 이 전송을 위해 시작한 tmux 세션과 수신기만 중지합니다.",
           },
           {
             symptom: "지정한 폴더 또는 파일 패턴을 제외하기",
@@ -988,7 +980,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       },
       {
         q: "두 폴더를 계속 동기화 상태로 유지할 수 있나요?",
-        a: "네. --watch를 붙이면 sync가 계속 실행되며 소스 아래의 어떤 변경에도 다시 미러링합니다. 큰 폴더를 한 번 옮기는 데는 필요 없습니다. 재시도 루프와 평범한 sync면 충분합니다.",
+        a: "원본 변경 때마다 동기화하려면 --watch를 추가합니다. 한 번만 복사하려면 sync를 한 번 실행합니다.",
       },
       {
         q: "포트를 열어야 하나요?",
@@ -1007,11 +999,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 const de = {
   title: "Einen großen Ordner zwischen zwei Servern synchronisieren (fortsetzbar, im Hintergrund)",
   description:
-    "Spiegle ein großes Verzeichnis von einem Server auf einen anderen mit relayium sync — inkrementell, nach einem Verbindungsabbruch fortsetzbar und sicher unbeaufsichtigt auszuführen. Eine Retry-Schleife unter tmux bewegt Gigabytes, ohne ein Terminal zu bewachen.",
+    "Synchronisiere einen großen Ordner zwischen zwei Servern mit relayium sync. Nach einer vorübergehenden Unterbrechung kann es erneut verbinden und geprüfte Daten wiederverwenden.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Verwende auf beiden Seiten v0.28.3 oder neuer. Ein Befehl teilt die Auswahl automatisch auf, mit bis zu 100,000 regulären Dateien und 32 MiB Verzeichnisindex je Stapel. Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich. Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
-    "Diese Anleitung richtet eine unbeaufsichtigte, selbstheilende Übertragung ein: genehmige den Sender einmal, betreibe den Listener im Hintergrund und treibe relayium sync aus einer Retry-Schleife in tmux an, sodass es über Verbindungsabbrüche hinweg weiterläuft, bis der ganze Ordner angekommen ist.",
+    "Verwende auf beiden Seiten v0.28.4 oder neuer. Ein Befehl teilt die Auswahl automatisch auf, mit bis zu 100,000 regulären Dateien und 32 MiB Verzeichnisindex je Stapel. Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich. Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
+    "Autorisiere den Sender einmal und lass den Empfänger laufen. Starte sync in tmux, wenn die Übertragung nach dem Abmelden weiterlaufen soll.",
   ],
   sections: [
     {
@@ -1023,13 +1015,12 @@ const de = {
         "Aktuelle Empfänger überspringen Dateien mit gleicher Größe und gleichem SHA-256. Ältere Empfänger können auf Größe und mtime zurückfallen; --checksum erzwingt den Inhaltsvergleich.",
         "Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
         "Gleiche du -sh-Summen sind eine grobe Kontrolle. Führe den Lauf mit --checksum erneut aus, um die ausgewählten Dateien per SHA-256 zu vergleichen.",
-        "Deshalb ist der Befehl idempotent — ein erneuter Lauf erledigt nur die verbleibende Arbeit, und genau das lässt eine Retry-Schleife eine riesige Übertragung abschließen.",
       ],
     },
     {
       heading: "Voraussetzungen",
       body: [
-        "Verwende auf beiden Seiten v0.28.3 oder neuer. Ein Befehl teilt die Auswahl automatisch auf, mit bis zu 100,000 regulären Dateien und 32 MiB Verzeichnisindex je Stapel. Bei mehreren Stapeln läuft relayium serve ohne --once. Mehrere Stapel unterstützen kein --delete. Für den Vorabtest lasse --once weg und nutze sync --check, das Verbindung und Berechtigung ohne Dateidaten prüft. Für laufende Synchronisierung bleibt der Empfänger aktiv und der Sender nutzt --watch.",
+        "Verwende auf beiden Seiten v0.28.4 oder neuer. Ein Befehl teilt die Auswahl automatisch auf, mit bis zu 100,000 regulären Dateien und 32 MiB Verzeichnisindex je Stapel. Bei mehreren Stapeln läuft relayium serve ohne --once. Mehrere Stapel unterstützen kein --delete. Für den Vorabtest lasse --once weg und nutze sync --check, das Verbindung und Berechtigung ohne Dateidaten prüft. Für laufende Synchronisierung bleibt der Empfänger aktiv und der Sender nutzt --watch.",
       ],
       code: [
         `# auf BEIDEN Servern
@@ -1073,32 +1064,31 @@ Accept and remember this peer? [y/N] y`,
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 & echo $! > ~/relayium-serve.pid`,
       ],
       bullets: [
-        "serve verarbeitet Verbindungen nacheinander und läuft weiter, ist also für jede erneute Verbindung der Retry-Schleife unten bereit.",
         "Für einen dauerhaft laufenden Posteingang betreibe es stattdessen unter systemd (Restart=always, --config-dir /etc/relayium).",
       ],
     },
     {
-      heading: "sync in einer Retry-Schleife unter tmux ausführen (auf dem Sender)",
+      heading: "sync auf dem Sender in tmux ausführen",
       body: [
-        "Lange Übertragungen werden unterbrochen — eine abgebrochene Sitzung, ein wackeliges Netz, ein Neustart. Die Lösung ist kein raffiniertes Werkzeug, sondern eine Schleife, die sync erneut ausführt, bis es gelingt, plus ein Terminal-Multiplexer, damit es dein Ausloggen übersteht. tmux ist hier sauberer als nohup: keine Ausgabe-Umleitung, die man falsch machen kann, und du kannst dich wieder verbinden, um den Fortschritt zu sehen.",
-        "Starte eine tmux-Sitzung und führe den Spiegel in einer until-Schleife aus — sie versucht es alle 10 Sekunden erneut, bis sync Erfolg meldet, und beendet sich dann von selbst:",
+        "Ab v0.28.4 verbindet sich ein normaler sync nach einer vorübergehenden Unterbrechung bis zu achtmal neu und setzt den aktuellen Stapel fort. Mit --delete bleibt die Wiederverbindung innerhalb eines Versuchs aus.",
+        "Lass serve ohne --once laufen. Mit v0.28.4 auf beiden Seiten zeigt sync den Prüffortschritt des Empfängers.",
       ],
       steps: [
         {
-          text: "Starte auf dem Sender eine tmux-Sitzung, damit die Schleife die ssh-Sitzung überlebt, aus der du sie gestartet hast.",
+          text: "Öffne auf dem Sender eine tmux-Sitzung.",
           code: [
             `# auf dem SENDER
 tmux new -s xfer      # apt install -y tmux, falls es fehlt`,
           ],
         },
         {
-          text: "Lass den Spiegel in einer until-Schleife laufen. Sie versucht es alle 10 Sekunden erneut, bis sync Erfolg meldet, und beendet sich dann von selbst.",
+          text: "Führe sync einmal aus.",
           code: [
-            `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+            `relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
           ],
         },
         {
-          text: "Koppel mit Ctrl-b, dann d ab. Die Schleife läuft weiter; verbinde dich wieder, wann immer du zusehen willst.",
+          text: "Trenne die Sitzung mit Strg-b und dann d. Verbinde dich erneut, um das Ergebnis zu sehen.",
           code: ["tmux attach -t xfer"],
         },
       ],
@@ -1121,11 +1111,11 @@ synced: 1 sent, 812 unchanged`,
     {
       heading: "Prüfen und abschließen",
       body: [
-        "Die Übertragung ist abgeschlossen, wenn die until-Schleife endet und du wieder an einer normalen Shell-Eingabe bist. Prüfe, dass beide Seiten übereinstimmen, und stoppe dann den Listener:",
+        "Prüfe das Ergebnis am Empfänger, bevor du den Listener stoppst.",
       ],
       steps: [
         {
-          text: "Warte, bis die until-Schleife von allein endet. Wieder an einer gewöhnlichen Shell-Eingabe zu sein heißt, dass die Übertragung fertig ist, nicht dass du sie abgebrochen hast.",
+          text: "Warte auf einen erfolgreichen Abschluss und prüfe, dass keine Datei fehlgeschlagen ist.",
         },
         {
           text: "Vergleich die Gesamtgrößen auf beiden Servern.",
@@ -1188,9 +1178,9 @@ ss -tlnp | grep 9031`,
             symptom: "Nach dem Einfügen des Hintergrundbefehls hängt die Shell an einem >-Fortsetzungsprompt.",
             code: [
               `tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "Ein mehrzeiliger nohup-Befehl mit Anführungszeichen und einer >-Umleitung bricht beim Einfügen meist an der Umleitung. Nimm stattdessen tmux und diese einzeilige Schleife: Es gibt keine Umleitung, die schiefgehen kann, und du kannst dich wieder verbinden und zusehen.",
+            fix: "Öffne zuerst tmux und füge den sync-Befehl in eine eigene Zeile ein.",
           },
           {
             symptom: "Beim Aufräumen ist etwas gestorben, das du nicht treffen wolltest.",
@@ -1200,7 +1190,7 @@ ps -p "$(cat ~/relayium-serve.pid)" -o command=
 tmux kill-session -t xfer
 kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             ],
-            fix: "Über ein Kommandozeilen-Muster zu töten schickt das Signal an jeden Prozess, dessen Kommandozeile diesen Text enthält — auf einer Maschine mit mehr als einer Übertragung also nicht an den gemeinten. Es stoppt den Spiegel auch nicht: die until-Schleife besitzt das sync, ein getötetes Kind wird zehn Sekunden später einfach neu gestartet. Sieh mit pgrep -af nach und beende dann, was diese Anleitung wirklich besitzt — tmux kill-session -t xfer beendet die Schleife, und ein kill auf die PID in ~/relayium-serve.pid beendet den Listener, den du gestartet hast. Liegt die PID-Datei noch von einem früheren Lauf herum, lass dir vor dem Signal ihre Kommandozeile ausgeben: eine vom System neu vergebene PID gehört zu etwas ganz anderem.",
+            fix: "Prüfe die PID mit ps, bevor du ein Signal sendest. Beende nur die tmux-Sitzung und den Listener dieser Übertragung.",
           },
           {
             symptom: "Einen gewählten Ordner oder ein Dateimuster ausschließen",
@@ -1238,7 +1228,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       },
       {
         q: "Kann ich zwei Ordner dauerhaft synchron halten?",
-        a: "Ja. Füge --watch hinzu, und sync läuft weiter und spiegelt bei jeder Änderung unter der Quelle neu. Für ein einmaliges Verschieben eines großen Ordners brauchst du es nicht — die Retry-Schleife plus ein schlichtes sync genügen.",
+        a: "Mit --watch synchronisiert sync bei Änderungen erneut. Für eine einmalige Kopie führe sync einmal aus.",
       },
       {
         q: "Muss ich einen Port öffnen?",
@@ -1257,11 +1247,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 const fr = {
   title: "Synchroniser un gros dossier entre deux serveurs (avec reprise, en arrière-plan)",
   description:
-    "Recopiez un gros répertoire d'un serveur vers un autre avec relayium sync — incrémental, avec reprise après une coupure, et sûr à exécuter sans surveillance. Une boucle de reprise sous tmux déplace des gigaoctets sans surveiller un terminal.",
+    "Synchronisez un grand dossier entre deux serveurs avec relayium sync. Il peut se reconnecter après une interruption temporaire et réutiliser les données vérifiées.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Utilisez v0.28.3 ou une version ultérieure aux deux extrémités. Une commande divise automatiquement la sélection en lots de 100,000 fichiers ordinaires et 32 MiB d’index au maximum. Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu. Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
-    "Ce guide met en place un transfert sans surveillance et auto-réparateur : autorisez l'émetteur une fois, faites tourner le processus à l'écoute en arrière-plan, et pilotez relayium sync depuis une boucle de reprise dans tmux pour qu'il continue malgré les coupures jusqu'à ce que tout le dossier soit arrivé.",
+    "Utilisez v0.28.4 ou une version ultérieure aux deux extrémités. Une commande divise automatiquement la sélection en lots de 100,000 fichiers ordinaires et 32 MiB d’index au maximum. Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu. Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
+    "Autorisez l’émetteur une fois et laissez le récepteur tourner. Pour continuer après la déconnexion de votre terminal, lancez sync dans tmux.",
   ],
   sections: [
     {
@@ -1273,13 +1263,12 @@ const fr = {
         "Les récepteurs récents ignorent les fichiers dont la taille et le SHA-256 correspondent. Les anciens peuvent revenir à la taille et au mtime. --checksum impose la comparaison du contenu.",
         "Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
         "Les totaux de du -sh donnent un ordre de grandeur. Relancez avec --checksum pour imposer la comparaison SHA-256 des fichiers sélectionnés.",
-        "De ce fait, la commande est idempotente — la relancer ne fait que le travail restant, ce qui est précisément ce qui permet à une boucle de reprise de terminer un transfert énorme.",
       ],
     },
     {
       heading: "Prérequis",
       body: [
-        "Utilisez v0.28.3 ou une version ultérieure aux deux extrémités. Une commande divise automatiquement la sélection en lots de 100,000 fichiers ordinaires et 32 MiB d’index au maximum. Pour plusieurs lots, lancez relayium serve sans --once. Le mode par lots refuse --delete. Pour un contrôle préalable, omettez --once et utilisez sync --check, qui vérifie la connexion et l’autorisation sans envoyer de données de fichier. Pour une synchronisation continue, laissez le récepteur en marche et ajoutez --watch côté envoi.",
+        "Utilisez v0.28.4 ou une version ultérieure aux deux extrémités. Une commande divise automatiquement la sélection en lots de 100,000 fichiers ordinaires et 32 MiB d’index au maximum. Pour plusieurs lots, lancez relayium serve sans --once. Le mode par lots refuse --delete. Pour un contrôle préalable, omettez --once et utilisez sync --check, qui vérifie la connexion et l’autorisation sans envoyer de données de fichier. Pour une synchronisation continue, laissez le récepteur en marche et ajoutez --watch côté envoi.",
       ],
       code: [
         `# sur les DEUX serveurs
@@ -1323,32 +1312,31 @@ Accept and remember this peer? [y/N] y`,
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 & echo $! > ~/relayium-serve.pid`,
       ],
       bullets: [
-        "serve traite les connexions une par une et continue de tourner, il est donc prêt pour chaque reconnexion de la boucle de reprise ci-dessous.",
         "Pour une boîte de réception toujours active, faites-le tourner plutôt sous systemd (Restart=always, --config-dir /etc/relayium).",
       ],
     },
     {
-      heading: "Exécuter sync dans une boucle de reprise sous tmux (sur l'émetteur)",
+      heading: "Lancer sync dans tmux côté émetteur",
       body: [
-        "Les longs transferts sont interrompus — une session coupée, un réseau instable, un redémarrage. La solution n'est pas un outil sophistiqué ; c'est une boucle qui réexécute sync jusqu'à la réussite, plus un multiplexeur de terminal pour qu'il survive à votre déconnexion. Ici tmux est plus propre que nohup : pas de redirection de sortie à rater, et vous pouvez vous reconnecter pour voir la progression.",
-        "Démarrez une session tmux, puis exécutez le miroir dans une boucle until — elle réessaie toutes les 10 secondes jusqu'à ce que sync réussisse, puis se termine d'elle-même :",
+        "Depuis la v0.28.4, sync se reconnecte jusqu’à huit fois après une interruption temporaire et reprend le lot courant. Avec --delete, la reconnexion est désactivée au sein d’une tentative.",
+        "Laissez serve tourner sans --once. Avec la v0.28.4 aux deux extrémités, sync affiche la progression des vérifications côté réception.",
       ],
       steps: [
         {
-          text: "Ouvrez une session tmux sur l'émetteur, pour que la boucle survive à la session ssh depuis laquelle vous l'avez lancée.",
+          text: "Ouvrez une session tmux sur l’émetteur.",
           code: [
             `# sur l'ÉMETTEUR
 tmux new -s xfer      # apt install -y tmux s'il manque`,
           ],
         },
         {
-          text: "Faites tourner le miroir dans une boucle until. Elle réessaie toutes les 10 secondes jusqu'à ce que sync réussisse, puis s'arrête d'elle-même.",
+          text: "Exécutez sync une seule fois.",
           code: [
-            `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+            `relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
           ],
         },
         {
-          text: "Détachez-vous avec Ctrl-b puis d. La boucle continue ; reconnectez-vous quand vous voulez la regarder.",
+          text: "Détachez la session avec Ctrl-b puis d. Rattachez-la pour consulter le résultat.",
           code: ["tmux attach -t xfer"],
         },
       ],
@@ -1371,11 +1359,11 @@ synced: 1 sent, 812 unchanged`,
     {
       heading: "Vérifier et terminer",
       body: [
-        "Le transfert est terminé quand la boucle until s'achève et que vous revenez à une invite shell normale. Confirmez que les deux côtés correspondent, puis arrêtez le processus à l'écoute :",
+        "Vérifiez le résultat côté réception avant d’arrêter le processus à l’écoute.",
       ],
       steps: [
         {
-          text: "Attendez que la boucle until s'achève d'elle-même. Retrouver une invite shell ordinaire signifie que le transfert est terminé, pas que vous l'avez interrompu.",
+          text: "Attendez que sync se termine avec succès et confirme qu’aucun fichier n’a échoué.",
         },
         {
           text: "Comparez les totaux sur les deux serveurs.",
@@ -1438,9 +1426,9 @@ ss -tlnp | grep 9031`,
             symptom: "Coller la commande d'arrière-plan laisse le shell sur une invite de continuation >.",
             code: [
               `tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "Une commande nohup multiligne avec des guillemets et une redirection > casse le plus souvent sur la redirection au moment du collage. Utilisez plutôt tmux et cette boucle d'une seule ligne : aucune redirection à rater, et vous pouvez vous reconnecter pour regarder.",
+            fix: "Ouvrez d’abord tmux, puis collez la commande sync seule sur sa ligne.",
           },
           {
             symptom: "Le nettoyage a tué quelque chose que vous ne visiez pas.",
@@ -1450,7 +1438,7 @@ ps -p "$(cat ~/relayium-serve.pid)" -o command=
 tmux kill-session -t xfer
 kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             ],
-            fix: "Tuer par motif de ligne de commande envoie le signal à tout processus dont la ligne de commande contient ce texte, sur une machine où tourne plus d'un transfert ce n'est donc pas celui que vous visiez. Et cela n'arrête pas la copie, la boucle until possède le sync et un enfant tué est simplement relancé dix secondes plus tard. Regardez avec pgrep -af, puis terminez ce que ce guide possède réellement : tmux kill-session -t xfer met fin à la boucle, et un kill sur le PID contenu dans ~/relayium-serve.pid arrête le processus à l'écoute que vous avez lancé. Si le fichier de PID traîne depuis une exécution précédente, affichez sa ligne de commande avant d'envoyer le signal, car un PID réattribué par le système appartient à tout autre chose.",
+            fix: "Vérifiez le PID avec ps avant d’envoyer un signal. Arrêtez uniquement la session tmux et le processus à l’écoute lancés pour ce transfert.",
           },
           {
             symptom: "Exclure un dossier ou un motif de votre choix",
@@ -1488,7 +1476,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       },
       {
         q: "Puis-je garder deux dossiers synchronisés en continu ?",
-        a: "Oui. Ajoutez --watch et sync reste en marche, recopiant à chaque changement sous la source. Pour un déplacement ponctuel d'un gros dossier, inutile — la boucle de reprise plus un sync simple suffisent.",
+        a: "Ajoutez --watch pour synchroniser à chaque changement des sources. Pour une copie ponctuelle, lancez sync une fois.",
       },
       {
         q: "Dois-je ouvrir un port ?",
@@ -1507,11 +1495,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 const ar = {
   title: "مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)",
   description:
-    "انسخ دليلًا كبيرًا من خادم إلى آخر بـ relayium sync — تزايدية، قابلة للاستئناف بعد انقطاع الاتصال، وآمنة للتشغيل دون إشراف. حلقة إعادة محاولة تحت tmux تنقل غيغابايتات دون ملازمة طرفية.",
+    "زامن مجلدًا كبيرًا بين خادمين باستخدام relayium sync. يستطيع إعادة الاتصال بعد انقطاع مؤقت وإعادة استخدام البيانات التي تحقّق منها.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "استخدم v0.28.3 أو أحدث على الطرفين. يقسّم الأمر الملفات تلقائيًا إلى دفعات تضم كل منها حتى 100,000 ملف عادي وفهرسًا حتى 32 MiB. يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى. قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
-    "يُعِدّ هذا الدليل نقلًا دون إشراف يُصلِح نفسه: فوِّض المُرسِل مرةً واحدة، وشغّل المُستمِع في الخلفية، وقُد relayium sync من حلقة إعادة محاولة داخل tmux كي يستمر عبر الانقطاعات حتى يصل المجلد كاملًا.",
+    "استخدم v0.28.4 أو أحدث على الطرفين. يقسّم الأمر الملفات تلقائيًا إلى دفعات تضم كل منها حتى 100,000 ملف عادي وفهرسًا حتى 32 MiB. يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى. قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
+    "فوّض المُرسِل مرة واحدة وأبقِ المستقبِل قيد التشغيل. شغّل sync داخل tmux لمواصلة النقل بعد تسجيل الخروج.",
   ],
   sections: [
     {
@@ -1523,13 +1511,12 @@ const ar = {
         "يتخطّى المستقبِل الحديث الملفات التي يتطابق حجمها وبصمة SHA-256 لها. قد يرجع المستقبِل القديم إلى الحجم وmtime؛ استخدم --checksum لاشتراط مقارنة المحتوى.",
         "قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
         "تطابق إجمالي du -sh فحص تقريبي. أعد التشغيل مع --checksum لاشتراط مقارنة SHA-256 للملفات المحددة.",
-        "بسبب هذا، الأمر خامل التكرار (idempotent) — إعادة تشغيله تنجز ما تبقى فقط، وهذا بالضبط ما يتيح لحلقة إعادة المحاولة إتمام نقلٍ ضخم.",
       ],
     },
     {
       heading: "المتطلبات المسبقة",
       body: [
-        "استخدم v0.28.3 أو أحدث على الطرفين. يقسّم الأمر الملفات تلقائيًا إلى دفعات تضم كل منها حتى 100,000 ملف عادي وفهرسًا حتى 32 MiB. لعدة دفعات شغّل relayium serve بدون --once. لا يدعم النقل متعدد الدفعات --delete. للفحص المسبق، احذف --once واستخدم sync --check لاختبار الاتصال والتفويض بلا إرسال بيانات الملفات. للمزامنة المستمرة، أبقِ المستقبِل قيد التشغيل وأضف --watch على المُرسِل.",
+        "استخدم v0.28.4 أو أحدث على الطرفين. يقسّم الأمر الملفات تلقائيًا إلى دفعات تضم كل منها حتى 100,000 ملف عادي وفهرسًا حتى 32 MiB. لعدة دفعات شغّل relayium serve بدون --once. لا يدعم النقل متعدد الدفعات --delete. للفحص المسبق، احذف --once واستخدم sync --check لاختبار الاتصال والتفويض بلا إرسال بيانات الملفات. للمزامنة المستمرة، أبقِ المستقبِل قيد التشغيل وأضف --watch على المُرسِل.",
       ],
       code: [
         `# على كلا الخادمين
@@ -1573,32 +1560,31 @@ Accept and remember this peer? [y/N] y`,
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 & echo $! > ~/relayium-serve.pid`,
       ],
       bullets: [
-        "يعالج serve الاتصالات واحدًا تلو الآخر ويبقى شغّالًا، فيكون جاهزًا لكل إعادة اتصال من حلقة إعادة المحاولة أدناه.",
         "لصندوق وارد دائم التشغيل، شغّله تحت systemd بدلًا من ذلك (Restart=always، --config-dir /etc/relayium).",
       ],
     },
     {
-      heading: "شغّل sync في حلقة إعادة محاولة تحت tmux (على المُرسِل)",
+      heading: "تشغيل sync داخل tmux لدى المُرسِل",
       body: [
-        "تُقطَع عمليات النقل الطويلة — جلسة تسقط، شبكة متذبذبة، إعادة إقلاع. الحل ليس أداة متطورة؛ بل حلقة تعيد تشغيل sync حتى ينجح، مع مُعدِّد طرفيات كي يصمد بعد خروجك. هنا tmux أنظف من nohup: لا إعادة توجيه مخرجات يمكن أن تُخطئ فيها، ويمكنك إعادة الوصل لمتابعة التقدم.",
-        "ابدأ جلسة tmux، ثم شغّل المرآة في حلقة until — تعيد المحاولة كل 10 ثوانٍ حتى يُرجِع sync نجاحًا، ثم تخرج من تلقاء نفسها:",
+        "بدءًا من v0.28.4 يعيد sync العادي الاتصال حتى ثماني مرات بعد انقطاع مؤقت ويتابع الدفعة الحالية. عند استخدام --delete تتوقف إعادة الاتصال داخل المحاولة الواحدة.",
+        "أبقِ serve قيد التشغيل دون --once. مع v0.28.4 على الطرفين يعرض sync تقدّم التحقق لدى المستقبِل.",
       ],
       steps: [
         {
-          text: "افتح جلسة tmux على المُرسِل كي تعيش الحلقة أطول من جلسة ssh التي شغّلتها منها.",
+          text: "افتح جلسة tmux على المُرسِل.",
           code: [
             `# على المُرسِل
 tmux new -s xfer      # نفّذ apt install -y tmux إن لم يكن موجودًا`,
           ],
         },
         {
-          text: "شغّل المرآة داخل حلقة until. تعيد المحاولة كل 10 ثوانٍ حتى ينجح sync، ثم تنتهي من تلقاء نفسها.",
+          text: "شغّل sync مرة واحدة.",
           code: [
-            `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+            `relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
           ],
         },
         {
-          text: "افصِل بـ Ctrl-b ثم d. تظل الحلقة تعمل، وأعِد الوصل متى شئت لتراقبها.",
+          text: "اضغط Ctrl-b ثم d لفصل الجلسة. عاود الاتصال بها للاطلاع على النتيجة.",
           code: ["tmux attach -t xfer"],
         },
       ],
@@ -1621,11 +1607,11 @@ synced: 1 sent, 812 unchanged`,
     {
       heading: "التحقق والإنهاء",
       body: [
-        "يكتمل النقل حين تنتهي حلقة until وتعود إلى مُطالبة صدفة عادية. تأكد من تطابق الطرفين، ثم أوقِف المُستمِع:",
+        "افحص النتيجة النهائية لدى المستقبِل قبل إيقاف المستمع.",
       ],
       steps: [
         {
-          text: "انتظر حتى تنتهي حلقة until من تلقاء نفسها. عودتك إلى مِحَث صَدَفة عادي تعني أن النقل انتهى، لا أنك قطعته.",
+          text: "تأكّد من نجاح sync وأن عدد الملفات الفاشلة صفر.",
         },
         {
           text: "قارِن الإجماليات على كلا الخادمين.",
@@ -1688,9 +1674,9 @@ ss -tlnp | grep 9031`,
             symptom: "بعد لصق أمر التشغيل في الخلفية، تبقى الصَدَفة عند مِحَث المتابعة <.",
             code: [
               `tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "أمر nohup متعدد الأسطر فيه علامات اقتباس وإعادة توجيه ينكسر عادةً عند إعادة التوجيه لحظة اللصق. استخدم tmux مع حلقة السطر الواحد هذه بدلًا من ذلك: لا إعادة توجيه لتخطئ فيها، ويمكنك إعادة الوصل لتراقب.",
+            fix: "افتح tmux أولًا، ثم ألصق أمر sync وحده في سطر مستقل.",
           },
           {
             symptom: "قتل التنظيف شيئًا لم تكن تقصده.",
@@ -1700,7 +1686,7 @@ ps -p "$(cat ~/relayium-serve.pid)" -o command=
 tmux kill-session -t xfer
 kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             ],
-            fix: "القتل بمطابقة نمط في سطر الأوامر يُرسِل الإشارة إلى كل عملية يحتوي سطر أوامرها ذلك النص، وعلى جهاز يعمل عليه أكثر من نقل واحد لن تكون هي المقصودة. كما أنه لا يوقف المرآة: الحلقة until هي التي تملك sync، فالابن المقتول يُعاد تشغيله بعد عشر ثوانٍ. انظر أولًا بـ pgrep -af، ثم أنهِ ما يملكه هذا الدليل فعلًا — ينهي tmux kill-session -t xfer الحلقة، ويوقف kill على الـPID الموجود في ~/relayium-serve.pid المُستمِع الذي شغّلته. وإن كان ملف الـPID باقيًا من تشغيل سابق، فاعرض سطر أوامره قبل إرسال الإشارة، لأن مُعرّفًا أعاد النظام استخدامه يخص شيئًا آخر تمامًا.",
+            fix: "تحقّق من PID باستخدام ps قبل إرسال الإشارة. أوقف فقط جلسة tmux والمستمع اللذين شغّلتهما لهذا النقل.",
           },
           {
             symptom: "استبعاد مجلد أو نمط أسماء تختاره",
@@ -1738,7 +1724,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       },
       {
         q: "هل يمكنني إبقاء مجلدين متزامنين باستمرار؟",
-        a: "نعم. أضِف --watch فيبقى sync شغّالًا، مُعيدًا عكس الصورة عند أي تغيير تحت المصدر. لنقل مجلد كبير لمرة واحدة لا تحتاجه — تكفي حلقة إعادة المحاولة مع sync بسيط.",
+        a: "أضف --watch لإعادة المزامنة عند تغيّر المصادر. للنسخ مرة واحدة، شغّل sync مرة واحدة.",
       },
       {
         q: "هل عليّ فتح منفذ؟",
@@ -1757,11 +1743,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 const es = {
   title: "Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)",
   description:
-    "Replica un directorio grande de un servidor a otro con relayium sync — incremental, reanudable tras una caída de conexión y seguro para ejecutar sin supervisión. Un bucle de reintentos bajo tmux mueve gigabytes sin tener que vigilar una terminal.",
+    "Sincroniza una carpeta grande entre dos servidores con relayium sync. Puede reconectarse tras una interrupción temporal y reutilizar datos verificados.",
   updatedLabel: "Última actualización",
   lead: [
-    "Usa v0.28.3 o posterior en ambos extremos. Un comando divide la selección automáticamente en lotes de hasta 100,000 archivos regulares y 32 MiB de índice de directorio. Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido. Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
-    "Esta guía configura una transferencia sin supervisión y con recuperación automática: autoriza al emisor una vez, ejecuta el proceso a la escucha en segundo plano y dirige relayium sync desde un bucle de reintentos dentro de tmux para que siga adelante a través de las caídas de conexión hasta que toda la carpeta haya llegado.",
+    "Usa v0.28.4 o posterior en ambos extremos. Un comando divide la selección automáticamente en lotes de hasta 100,000 archivos regulares y 32 MiB de índice de directorio. Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido. Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
+    "Autoriza el emisor una sola vez y deja el receptor en marcha. Ejecuta sync en tmux para que siga después de cerrar sesión.",
   ],
   sections: [
     {
@@ -1773,13 +1759,12 @@ const es = {
         "Los receptores actuales omiten archivos con el mismo tamaño y SHA-256. Los antiguos pueden recurrir al tamaño y al mtime; --checksum exige comparar el contenido.",
         "Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
         "Los totales de du -sh sirven como comprobación aproximada. Repite con --checksum para exigir la comparación SHA-256 de los archivos seleccionados.",
-        "Por todo esto, el comando es idempotente: volver a ejecutarlo solo hace el trabajo que queda, que es justo lo que permite a un bucle de reintentos terminar una transferencia enorme.",
       ],
     },
     {
       heading: "Requisitos previos",
       body: [
-        "Usa v0.28.3 o posterior en ambos extremos. Un comando divide la selección automáticamente en lotes de hasta 100,000 archivos regulares y 32 MiB de índice de directorio. Para varios lotes, ejecuta relayium serve sin --once. La sincronización en varios lotes rechaza --delete. Para comprobar primero, omite --once y usa sync --check, que verifica la conexión y la autorización sin enviar datos de archivos. Para sincronizar continuamente, deja el receptor activo y añade --watch en el emisor.",
+        "Usa v0.28.4 o posterior en ambos extremos. Un comando divide la selección automáticamente en lotes de hasta 100,000 archivos regulares y 32 MiB de índice de directorio. Para varios lotes, ejecuta relayium serve sin --once. La sincronización en varios lotes rechaza --delete. Para comprobar primero, omite --once y usa sync --check, que verifica la conexión y la autorización sin enviar datos de archivos. Para sincronizar continuamente, deja el receptor activo y añade --watch en el emisor.",
       ],
       code: [
         `# en AMBOS servidores
@@ -1823,32 +1808,31 @@ Accept and remember this peer? [y/N] y`,
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 & echo $! > ~/relayium-serve.pid`,
       ],
       bullets: [
-        "serve maneja las conexiones de una en una y sigue ejecutándose, así que está listo para cada reconexión del bucle de reintentos de abajo.",
         "Para una bandeja de entrada siempre activa, ejecútalo bajo systemd en su lugar (Restart=always, --config-dir /etc/relayium).",
       ],
     },
     {
-      heading: "Ejecutar el sync en un bucle de reintentos bajo tmux (en el emisor)",
+      heading: "Ejecutar sync en tmux en el emisor",
       body: [
-        "Las transferencias largas se interrumpen: una sesión caída, una red inestable, un reinicio. La solución no es una herramienta sofisticada; es un bucle que vuelve a ejecutar sync hasta que tiene éxito, más un multiplexor de terminal para que sobreviva a tu cierre de sesión. Aquí tmux es más limpio que nohup: no hay redirección de salida que puedas equivocar, y puedes volver a conectarte para ver el progreso.",
-        "Inicia una sesión de tmux, luego ejecuta el espejo en un bucle until: reintenta cada 10 segundos hasta que sync devuelve éxito, y luego sale por sí solo:",
+        "Desde v0.28.4, un sync normal vuelve a conectarse hasta ocho veces tras una interrupción temporal y continúa el lote actual. Con --delete se desactiva la reconexión dentro del intento.",
+        "Deja serve en marcha sin --once. Con v0.28.4 en ambos extremos, sync muestra el progreso de la verificación del receptor.",
       ],
       steps: [
         {
-          text: "Abre una sesión de tmux en el emisor, para que el bucle sobreviva a la sesión ssh desde la que lo lanzaste.",
+          text: "Abre una sesión tmux en el emisor.",
           code: [
             `# en el EMISOR
 tmux new -s xfer      # apt install -y tmux si falta`,
           ],
         },
         {
-          text: "Ejecuta el espejo dentro de un bucle until. Reintenta cada 10 segundos hasta que sync devuelva éxito, y entonces sale por su cuenta.",
+          text: "Ejecuta sync una vez.",
           code: [
-            `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+            `relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
           ],
         },
         {
-          text: "Desconéctate con Ctrl-b y luego d. El bucle sigue en marcha; vuelve a conectarte cuando quieras mirarlo.",
+          text: "Pulsa Ctrl-b y después d para separar la sesión. Vuelve a conectarte para ver el resultado.",
           code: ["tmux attach -t xfer"],
         },
       ],
@@ -1871,11 +1855,11 @@ synced: 1 sent, 812 unchanged`,
     {
       heading: "Verificar y terminar",
       body: [
-        "La transferencia está completa cuando el bucle until termina y vuelves a un prompt de shell normal. Confirma que ambos lados coinciden, y luego detén el proceso a la escucha:",
+        "Comprueba el resultado del receptor antes de detener la escucha.",
       ],
       steps: [
         {
-          text: "Espera a que el bucle until termine por su cuenta. Volver a un prompt de shell normal significa que la transferencia acabó, no que la interrumpiste.",
+          text: "Espera a que sync termine correctamente y confirme que no hay archivos fallidos.",
         },
         {
           text: "Compara los totales en los dos servidores.",
@@ -1938,9 +1922,9 @@ ss -tlnp | grep 9031`,
             symptom: "Pegar el comando de segundo plano deja la shell en un prompt de continuación >.",
             code: [
               `tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "Un comando nohup de varias líneas con comillas y una redirección > suele romperse en la redirección al pegarlo. Usa en su lugar tmux con este bucle de una sola línea: no hay redirección que equivocar, y puedes volver a conectarte para mirarlo.",
+            fix: "Abre tmux primero y pega el comando sync en una línea independiente.",
           },
           {
             symptom: "La limpieza mató algo que no querías matar.",
@@ -1950,7 +1934,7 @@ ps -p "$(cat ~/relayium-serve.pid)" -o command=
 tmux kill-session -t xfer
 kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             ],
-            fix: "Matar por patrón de línea de comandos envía la señal a todo proceso cuya línea de comandos contenga ese texto, que en una máquina con más de una transferencia en marcha no es el que querías. Tampoco detiene el espejo: el bucle until es el dueño del sync, así que un hijo muerto vuelve a arrancar diez segundos después. Mira con pgrep -af y luego termina lo que esta guía realmente posee: tmux kill-session -t xfer acaba con el bucle, y un kill al PID que hay en ~/relayium-serve.pid detiene el proceso a la escucha que lanzaste. Si el archivo de PID lleva ahí desde una ejecución anterior, imprime su línea de comandos antes de señalarlo, porque un PID que el sistema ha reutilizado pertenece a algo completamente distinto.",
+            fix: "Comprueba el PID con ps antes de enviar una señal. Detén solo la sesión tmux y la escucha que iniciaste para esta transferencia.",
           },
           {
             symptom: "Excluir una carpeta o un patrón a tu elección",
@@ -1988,7 +1972,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       },
       {
         q: "¿Puedo mantener dos carpetas sincronizadas de forma continua?",
-        a: "Sí. Añade --watch y sync se mantiene en ejecución, volviendo a replicar ante cualquier cambio bajo el origen. Para un traslado puntual de una carpeta grande no lo necesitas: el bucle de reintentos más un sync normal bastan.",
+        a: "Añade --watch para sincronizar cuando cambien los archivos de origen. Para una copia puntual, ejecuta sync una vez.",
       },
       {
         q: "¿Tengo que abrir un puerto?",
@@ -2007,11 +1991,11 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 const pt = {
   title: "Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)",
   description:
-    "Espelhe um diretório grande de um servidor para outro com relayium sync — incremental, retomável após uma queda de conexão e seguro para executar sem supervisão. Um laço de repetição sob tmux move gigabytes sem precisar vigiar um terminal.",
+    "Sincronize uma pasta grande entre dois servidores com relayium sync. Ele pode reconectar após uma interrupção temporária e reutilizar dados verificados.",
   updatedLabel: "Última atualização",
   lead: [
-    "Use v0.28.3 ou posterior nas duas pontas. Um comando divide a seleção automaticamente em lotes de até 100,000 arquivos regulares e 32 MiB de índice de diretórios. Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo. Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
-    "Este guia configura uma transferência sem supervisão e com autorrecuperação: autorize o emissor uma vez, execute o processo à escuta em segundo plano e conduza relayium sync a partir de um laço de repetição dentro do tmux para que ele continue através das quedas de conexão até que a pasta inteira chegue.",
+    "Use v0.28.4 ou posterior nas duas pontas. Um comando divide a seleção automaticamente em lotes de até 100,000 arquivos regulares e 32 MiB de índice de diretórios. Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo. Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
+    "Autorize o emissor uma vez e mantenha o receptor em execução. Use tmux para que sync continue após encerrar a sessão.",
   ],
   sections: [
     {
@@ -2023,13 +2007,12 @@ const pt = {
         "Receptores atuais ignoram arquivos de mesmo tamanho e SHA-256. Os antigos podem usar tamanho e mtime; --checksum exige a comparação do conteúdo.",
         "Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
         "Os totais de du -sh são uma conferência aproximada. Execute novamente com --checksum para exigir a comparação SHA-256 dos arquivos selecionados.",
-        "Por causa disso, o comando é idempotente — executá-lo novamente só faz o trabalho que resta, que é exatamente o que permite a um laço de repetição concluir uma transferência enorme.",
       ],
     },
     {
       heading: "Pré-requisitos",
       body: [
-        "Use v0.28.3 ou posterior nas duas pontas. Um comando divide a seleção automaticamente em lotes de até 100,000 arquivos regulares e 32 MiB de índice de diretórios. Para vários lotes, execute relayium serve sem --once. A sincronização em vários lotes rejeita --delete. Para verificar primeiro, omita --once e use sync --check, que testa a conexão e a autorização sem enviar dados de arquivos. Para sincronização contínua, mantenha o receptor em execução e use --watch no remetente.",
+        "Use v0.28.4 ou posterior nas duas pontas. Um comando divide a seleção automaticamente em lotes de até 100,000 arquivos regulares e 32 MiB de índice de diretórios. Para vários lotes, execute relayium serve sem --once. A sincronização em vários lotes rejeita --delete. Para verificar primeiro, omita --once e use sync --check, que testa a conexão e a autorização sem enviar dados de arquivos. Para sincronização contínua, mantenha o receptor em execução e use --watch no remetente.",
       ],
       code: [
         `# nos DOIS servidores
@@ -2073,32 +2056,31 @@ Accept and remember this peer? [y/N] y`,
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 & echo $! > ~/relayium-serve.pid`,
       ],
       bullets: [
-        "serve trata as conexões uma de cada vez e continua rodando, então está pronto para cada reconexão do laço de repetição abaixo.",
         "Para uma caixa de entrada sempre ativa, execute-o sob systemd em vez disso (Restart=always, --config-dir /etc/relayium).",
       ],
     },
     {
-      heading: "Executar o sync em um laço de repetição sob tmux (no emissor)",
+      heading: "Executar sync em tmux no emissor",
       body: [
-        "Transferências longas são interrompidas: uma sessão caída, uma rede instável, uma reinicialização. A solução não é uma ferramenta sofisticada; é um laço que reexecuta sync até ter sucesso, mais um multiplexador de terminal para que sobreviva ao seu logout. Aqui o tmux é mais limpo que o nohup: não há redirecionamento de saída para errar, e você pode reconectar para acompanhar o progresso.",
-        "Inicie uma sessão do tmux, depois execute o espelho em um laço until — ele tenta de novo a cada 10 segundos até que sync retorne sucesso, e então sai sozinho:",
+        "A partir da v0.28.4, um sync comum reconecta até oito vezes após uma interrupção temporária e retoma o lote atual. Com --delete, a reconexão fica desativada dentro da tentativa.",
+        "Mantenha serve em execução sem --once. Com a v0.28.4 nas duas pontas, sync mostra o progresso da verificação do receptor.",
       ],
       steps: [
         {
-          text: "Abra uma sessão do tmux no emissor, para que o laço sobreviva à sessão ssh de onde você o lançou.",
+          text: "Abra uma sessão tmux no emissor.",
           code: [
             `# no EMISSOR
 tmux new -s xfer      # apt install -y tmux se estiver faltando`,
           ],
         },
         {
-          text: "Rode o espelho dentro de um laço until. Ele tenta de novo a cada 10 segundos até o sync retornar sucesso, e então sai sozinho.",
+          text: "Execute sync uma vez.",
           code: [
-            `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+            `relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
           ],
         },
         {
-          text: "Desanexe com Ctrl-b e depois d. O laço continua rodando; reanexe quando quiser acompanhar.",
+          text: "Use Ctrl-b e depois d para desconectar a sessão. Volte a ela para ver o resultado.",
           code: ["tmux attach -t xfer"],
         },
       ],
@@ -2121,11 +2103,11 @@ synced: 1 sent, 812 unchanged`,
     {
       heading: "Verificar e finalizar",
       body: [
-        "A transferência está completa quando o laço until termina e você volta a um prompt de shell normal. Confirme que os dois lados coincidem, depois pare o processo à escuta:",
+        "Confira o resultado do receptor antes de parar o processo à escuta.",
       ],
       steps: [
         {
-          text: "Espere o laço until terminar sozinho. Estar de volta a um prompt de shell comum significa que a transferência acabou, não que você a interrompeu.",
+          text: "Aguarde sync terminar com sucesso e confirmar zero falhas de arquivo.",
         },
         {
           text: "Compare os totais nos dois servidores.",
@@ -2188,9 +2170,9 @@ ss -tlnp | grep 9031`,
             symptom: "Colar o comando de segundo plano deixa o shell num prompt de continuação >.",
             code: [
               `tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
+relayium sync --checksum /root/workspace relayium://203.0.113.43:9031`,
             ],
-            fix: "Um comando nohup de várias linhas com aspas e um redirecionamento > costuma quebrar no redirecionamento na hora de colar. Use em vez disso o tmux com este laço de uma linha só: não há redirecionamento para errar, e você pode reanexar para acompanhar.",
+            fix: "Abra tmux primeiro e cole o comando sync em uma linha separada.",
           },
           {
             symptom: "A limpeza matou algo que você não queria matar.",
@@ -2200,7 +2182,7 @@ ps -p "$(cat ~/relayium-serve.pid)" -o command=
 tmux kill-session -t xfer
 kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
             ],
-            fix: "Matar por padrão de linha de comando envia o sinal a todo processo cuja linha de comando contenha aquele texto — numa máquina com mais de uma transferência rodando, não é o que você queria. E também não para o espelho: o laço until é o dono do sync, então um filho morto é iniciado de novo dez segundos depois. Olhe com pgrep -af e depois encerre o que este guia de fato possui: tmux kill-session -t xfer termina o laço, e um kill no PID que está em ~/relayium-serve.pid para o processo à escuta que você lançou. Se o arquivo de PID está ali desde uma execução anterior, imprima a linha de comando dele antes de sinalizá-lo, porque um PID que o sistema reutilizou pertence a outra coisa completamente.",
+            fix: "Confira o PID com ps antes de enviar um sinal. Encerre apenas a sessão tmux e o processo à escuta que iniciou para esta transferência.",
           },
           {
             symptom: "Excluir uma pasta ou um padrão que você escolheu",
@@ -2238,7 +2220,7 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
       },
       {
         q: "Posso manter duas pastas sincronizadas continuamente?",
-        a: "Sim. Adicione --watch e sync continua rodando, reespelhando a qualquer mudança sob a origem. Para uma movimentação única de uma pasta grande você não precisa dele — o laço de repetição mais um sync simples bastam.",
+        a: "Adicione --watch para sincronizar quando a origem mudar. Para uma cópia única, execute sync uma vez.",
       },
       {
         q: "Preciso abrir uma porta?",
@@ -2257,6 +2239,6 @@ kill "$(cat ~/relayium-serve.pid)" && rm ~/relayium-serve.pid`,
 export default {
   slug: "guides/sync-a-large-folder-between-servers",
   published: "2026-07-08",
-  updated: "2026-11-25",
+  updated: "2026-11-27",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

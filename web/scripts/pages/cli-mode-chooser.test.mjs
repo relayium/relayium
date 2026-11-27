@@ -58,7 +58,10 @@ const SYNC_UPDATED = new Set([
   "cli-sync-large-folder",
   "howto-automate-server-backups",
 ]);
-const expectedDate = (name) => SYNC_UPDATED.has(name) ? SYNC_REVISION : REWRITTEN_ON;
+const expectedDate = (name) => {
+  if (name === "cli-sync-large-folder") return "2026-11-27";
+  return SYNC_UPDATED.has(name) ? SYNC_REVISION : REWRITTEN_ON;
+};
 
 /** The six or seven documents revised in either batch, and nothing else. */
 const REWRITTEN = {

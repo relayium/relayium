@@ -732,7 +732,7 @@ describe("process cleanup is owned, never pattern-matched", () => {
     expect(bad).toEqual([]);
   });
 
-  it("stops the listener by recorded PID and the retry loop by its own tmux session", () => {
+  it("stops the listener by recorded PID and the sender by its own tmux session", () => {
     const bad = [];
     for (const lang of LANGS)
       bad.push(...lifecycleComplaints(`cli-sync-large-folder[${lang}]`, cliSyncLargeFolder.langs[lang], { owns: true }));
@@ -791,9 +791,10 @@ describe("the sync guide describes content-aware comparison", () => {
     const pages = buildArticlePages([cliSyncLargeFolder]);
     expect(pages).toHaveLength(9);
     for (const page of pages) {
-      for (const token of ["100,000", "32 MiB", "--check", "--exclude", "--watch", "--once"]) {
+      for (const token of ["v0.28.4", "100,000", "32 MiB", "--check", "--exclude", "--watch", "--once", "--delete"]) {
         expect(page.html).toContain(token);
       }
+      expect(page.html).not.toContain("until relayium sync");
       expect(page.html, `${page.path}: the skip rule never reaches the reader`).toContain(SKIP_INPUTS);
       expect(page.html, `${page.path}: the hash guarantee is gone`).toContain(HASH);
     }
