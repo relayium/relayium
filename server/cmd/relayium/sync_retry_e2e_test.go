@@ -136,12 +136,15 @@ func TestSyncReconnectsThroughTCPProxy(t *testing.T) {
 					})
 				}
 			}()
-			t.Cleanup(func() {
-				cancel()
+			stopProxy := func() {
 				_ = proxy.Close()
 				<-proxyDone
 				connections.Wait()
-			})
+			}
+			defer func() {
+				cancel()
+				stopProxy()
+			}()
 
 			var stderr bytes.Buffer
 			args := []string{"sync", "--checksum", "--config-dir", sender, src, "relayium://" + proxy.Addr().String()}
@@ -153,7 +156,7 @@ func TestSyncReconnectsThroughTCPProxy(t *testing.T) {
 				args = append(args, "--delete")
 			}
 			code := Run(args, io.Discard, &stderr)
-			connections.Wait()
+			stopProxy()
 			log := stderr.String()
 			if fault == "reset-with-delete" {
 				if code != 1 || !strings.Contains(log, "check the receiver's result before rerunning") ||
