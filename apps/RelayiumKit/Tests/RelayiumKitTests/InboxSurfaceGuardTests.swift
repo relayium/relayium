@@ -822,11 +822,10 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(branch.contains("conversationsSection"),
                       "the conversation history is rendered outside the usable-account branch")
 
-        // The body, whole and unformatted. `Text(message.text)` and not a
-        // presentation helper: a helper is where a preview or a truncation would
-        // be added, and this row is the one place the message may appear.
-        XCTAssertTrue(page.contains("Text(message.text)"),
-                      "the message rows no longer render the message")
+        // Long bodies render a compact prefix and can show the original text.
+        XCTAssertTrue(page.contains("InboxMessagePresentation.collapsedPreview(message.text)")
+                      && page.contains("Text(expanded ? message.text : preview ?? message.text)"),
+                      "the message rows no longer render their preview and original body")
         XCTAssertTrue(page.contains("InboxTimelinePresentation.at(entry)"),
                       "a conversation row no longer says when it happened")
         XCTAssertTrue(page.contains("inbox.message(for: entry)")
@@ -1246,7 +1245,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
             "Relayium/DeviceConversationView.swift"))
         XCTAssertTrue(page.contains("inbox.message(for: entry)"),
                       "iOS announces a text surface but reads no received message body")
-        XCTAssertTrue(page.contains("Text(message.text)"),
+        XCTAssertTrue(page.contains("Text(expanded ? message.text : preview ?? message.text)"),
                       "iOS announces a text surface that never renders the message")
     }
 

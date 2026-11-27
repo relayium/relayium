@@ -596,6 +596,8 @@ export const en = {
 
   inboxOpen: "Open",
   inboxClose: "Close",
+  inboxMessageExpand: "Expand text",
+  inboxMessageCollapse: "Collapse text",
   inboxCopy: "Copy",
   inboxCopied: "Copied",
   inboxCopyFailed: "Could not copy",
@@ -1256,6 +1258,8 @@ export const zh: Record<MessageKey, string> = {
 
   inboxOpen: "打开",
   inboxClose: "关闭",
+  inboxMessageExpand: "展开文本",
+  inboxMessageCollapse: "收起文本",
   inboxCopy: "复制",
   inboxCopied: "已复制",
   inboxCopyFailed: "无法复制",

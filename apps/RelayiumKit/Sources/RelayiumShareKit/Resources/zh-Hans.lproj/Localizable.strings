@@ -668,6 +668,8 @@
 "inbox.composeHeading" = "发送到这台设备";
 "inbox.composeUnavailable" = "这台 Mac 无法向该设备发送内容，因此这里只显示它的历史记录。";
 "inbox.sentMessageMissing" = "这台 Mac 已不再保存这条消息的正文。";
+"inbox.messageExpand" = "展开文本";
+"inbox.messageCollapse" = "收起文本";
 
 /* MARK: 设备收件箱在 iPhone 和 iPad 上的行为 */
 "inbox.iosExplain" = "你的其他 Relayium 设备可以把文件和消息直接发到这台设备。这里无需选择文件夹：收到的内容都保存在 Relayium 内，可在“文件”App 中打开。Relayium 永远看不到其中的内容。";

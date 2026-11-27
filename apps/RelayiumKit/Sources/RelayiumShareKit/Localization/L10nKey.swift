@@ -2061,6 +2061,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// and the process died before the body was written. Said out loud rather
     /// than rendered as an empty row.
     case inboxSentMessageMissing = "inbox.sentMessageMissing"
+    case inboxMessageExpand = "inbox.messageExpand"
+    case inboxMessageCollapse = "inbox.messageCollapse"
 
     // MARK: - what one outgoing row may claim
     //
