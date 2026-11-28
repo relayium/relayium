@@ -91,11 +91,14 @@ function body(slug, lang, doc, articleLinks, notice) {
   const androidDownload = doc.androidDownload
     ? `\n      <a class="cta" href="${esc(doc.androidDownload.href)}">${esc(doc.androidDownload.label)}</a>`
     : "";
+  const windowsDownload = doc.windowsDownload
+    ? `\n      <a class="cta" href="${esc(doc.windowsDownload.href)}">${esc(doc.windowsDownload.label)}</a>`
+    : "";
   const nativeDownload = doc.nativeDownload
-    ? `\n      <a class="cta" href="${esc(doc.nativeDownload.href)}">${esc(doc.nativeDownload.label)}</a>${androidDownload}`
+    ? `\n      <a class="cta" href="${esc(doc.nativeDownload.href)}">${esc(doc.nativeDownload.label)}</a>${androidDownload}${windowsDownload}`
     // No macOS download does NOT mean no download: the two manifests move on
     // their own schedules, so the Android anchor still has to render.
-    : androidDownload;
+    : androidDownload + windowsDownload;
 
   // The archived notice sits between the pitch and the CTA, not below the fold:
   // the button opens the app, and on an archived page the app will not be in

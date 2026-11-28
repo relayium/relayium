@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -20,6 +21,10 @@ const daemonDialTimeout = 10 * time.Second
 // returns the ready connection. It prints "learned …" on first contact and
 // returns a fatal error on a fingerprint mismatch.
 func dialDaemon(target, configDir string, stderr io.Writer) (*tls.Conn, error) {
+	return dialDaemonContext(context.Background(), target, configDir, stderr)
+}
+
+func dialDaemonContext(ctx context.Context, target, configDir string, stderr io.Writer) (*tls.Conn, error) {
 	hostport, err := parseDaemonURL(target)
 	if err != nil {
 		return nil, err
@@ -36,7 +41,8 @@ func dialDaemon(target, configDir string, stderr io.Writer) (*tls.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := net.DialTimeout("tcp", hostport, daemonDialTimeout)
+	dialer := net.Dialer{Timeout: daemonDialTimeout}
+	raw, err := dialer.DialContext(ctx, "tcp", hostport)
 	if err != nil {
 		return nil, err
 	}
@@ -46,12 +52,18 @@ func dialDaemon(target, configDir string, stderr io.Writer) (*tls.Conn, error) {
 	// operation instead (see phasedConn).
 	conn := &phasedConn{Conn: raw, readIdle: daemonReadIdle, writeIdle: daemonWriteIdle}
 	_ = raw.SetDeadline(time.Now().Add(daemonHandshakeTimeout))
+	stop := context.AfterFunc(ctx, func() { _ = raw.Close() })
 	tconn, presented, err := secure.ClientAny(conn, id)
+	stop()
+	if ctx.Err() != nil {
+		_ = raw.Close()
+		return nil, ctx.Err()
+	}
 	if err != nil {
 		raw.Close()
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
-			return nil, fmt.Errorf("TLS handshake with %s failed: no answer within %s (is a relayium listener running there?)", hostport, daemonHandshakeTimeout)
+			return nil, fmt.Errorf("TLS handshake with %s failed: no answer within %s (is a relayium listener running there?): %w", hostport, daemonHandshakeTimeout, err)
 		}
 		return nil, fmt.Errorf("TLS handshake with %s failed: %w", hostport, err)
 	}

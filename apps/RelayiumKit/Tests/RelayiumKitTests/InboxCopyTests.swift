@@ -192,13 +192,17 @@ final class InboxCopyTests: XCTestCase {
         InboxMessage(id: id, receivedAt: Date(timeIntervalSince1970: seconds), text: text)
     }
 
-    /// **The section's copy describes a message; it never contains one.**
-    ///
-    /// Everything this presentation returns is a heading, a footer, a timestamp
-    /// or a control name. The body reaches the screen straight off
-    /// `InboxMessage.text` at the view, because a presentation helper that took
-    /// the body is where a preview or a truncation would eventually be added —
-    /// and a preview is the one thing a received message must never have.
+    func testCollapsedMessagePreviewIsBoundedAndPreservesUnicodeAndLineBreaks() {
+        let emoji = String(repeating: "🙂", count: 160)
+        XCTAssertNil(InboxMessagePresentation.collapsedPreview(""))
+        XCTAssertNil(InboxMessagePresentation.collapsedPreview("short\ntext"))
+        XCTAssertNil(InboxMessagePresentation.collapsedPreview(emoji))
+        XCTAssertEqual(InboxMessagePresentation.collapsedPreview(emoji + "尾"), emoji + "…")
+        XCTAssertEqual(InboxMessagePresentation.collapsedPreview("one\r\ntwo\nthree\u{2028}four\nlast"),
+                       "one\r\ntwo\nthree\u{2028}four…")
+    }
+
+    /// Headings, timestamps and the copy control must never expose a message.
     func testTheMessageSectionCopyNeverContainsAMessage() {
         let secret = "the door code is 4321"
         let one = message("task1", secret, at: 1_700_000_000)

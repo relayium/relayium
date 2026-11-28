@@ -86,6 +86,7 @@ struct DeviceConversationPage: View {
     /// and something arriving while the page is open would otherwise move the
     /// confirmation onto somebody else's row.
     @State private var copiedEntryID: String?
+    @State private var expandedEntries: Set<String> = []
 
     /// The row a destructive confirmation is currently about, and the snapshot a
     /// whole-conversation confirmation was raised against.
@@ -156,6 +157,9 @@ struct DeviceConversationPage: View {
             // The first device this page renders for is not a substitution:
             // seeded here so the NEXT one is compared against something.
             .onAppear { _ = stagedFor.serving(FileDropContext(peerID)) }
+            .onChange(of: inbox.activeAccountID) { _ in
+                expandedEntries.removeAll()
+            }
             // **A batch belongs to the device it was staged for.** The parameter
             // rather than `peerID`, because the closure that runs may be the one
             // captured by the body that is being replaced — and reading the old
@@ -724,10 +728,24 @@ struct DeviceConversationPage: View {
     @ViewBuilder
     private func entryBody(_ entry: InboxTimelineEntry) -> some View {
         if entry.kind == .message, let message = messageBody(entry) {
-            Text(message.text).textSelection(.enabled)
+            let preview = InboxMessagePresentation.collapsedPreview(message.text)
+            let expanded = expandedEntries.contains(entry.id)
+            if preview != nil && expanded {
+                messageDisclosureButton(entry, expanded: true, placement: "top")
+            }
+            Text(expanded ? message.text : preview ?? message.text)
                 .foregroundStyle(Palette.text)
+                .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-            messageCopyButton(entry, message: message, identifier: "inbox-entry-copy")
+                .accessibilityIdentifier("inbox-entry-message-body")
+            HStack {
+                if preview != nil {
+                    messageDisclosureButton(entry, expanded: expanded, placement: "bottom")
+                }
+                if preview == nil || expanded {
+                    messageCopyButton(entry, message: message, identifier: "inbox-entry-copy")
+                }
+            }
         } else if entry.kind == .files {
             Text(InboxTimelinePresentation.fileNames(of: entry))
                 .foregroundStyle(Palette.text)
@@ -742,6 +760,19 @@ struct DeviceConversationPage: View {
             InlineMessage(.failure, L10n.t(.inboxConversationMessageMissing))
                 .accessibilityIdentifier("inbox-conversation-message-missing")
         }
+    }
+
+    private func messageDisclosureButton(_ entry: InboxTimelineEntry, expanded: Bool,
+                                         placement: String) -> some View {
+        Button(L10n.t(expanded ? .inboxMessageCollapse : .inboxMessageExpand)) {
+            if expanded {
+                expandedEntries.remove(entry.id)
+            } else {
+                expandedEntries.insert(entry.id)
+            }
+        }
+        .buttonStyle(.referenceSecondary)
+        .accessibilityIdentifier("inbox-entry-text-disclosure-\(placement)")
     }
 
     private func messageCopyButton(_ entry: InboxTimelineEntry, message: InboxMessage,

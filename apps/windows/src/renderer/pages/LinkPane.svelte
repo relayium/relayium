@@ -157,6 +157,40 @@
   const recv = $derived(workspace.recv);
   const send = $derived(workspace.send);
   const text = $derived(workspace.text);
+  let copied = $state<{ id: number; generation: number; ok: boolean } | null>(null);
+
+  function copyMessage(event: MouseEvent & { currentTarget: HTMLButtonElement }, id: number, body: string): void {
+    if (!event.isTrusted) return;
+    const node = event.currentTarget.closest("li")?.querySelector(".message-body");
+    const selection = window.getSelection();
+    if (!node || !selection) return;
+    const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    let wroteText = false;
+    const writePlainText = (copy: ClipboardEvent) => {
+      if (!copy.clipboardData) return;
+      copy.clipboardData.setData("text/plain", body);
+      copy.preventDefault();
+      wroteText = true;
+    };
+    // Chromium's current user-initiated Copy command supplies the writable
+    // event synchronously. No clipboard permission or renderer IPC is needed.
+    document.addEventListener("copy", writePlainText, { once: true });
+    let ok = false;
+    try {
+      ok = document.execCommand("copy") && wroteText;
+    } catch {
+      // A clipboard failure still leaves the text selectable.
+    } finally {
+      document.removeEventListener("copy", writePlainText);
+      selection.removeAllRanges();
+      if (anchorNode && focusNode) selection.setBaseAndExtent(anchorNode, anchorOffset, focusNode, focusOffset);
+      copied = { id, generation: workspace.linkGeneration, ok };
+    }
+  }
   /**
    * Why the connection did not open, when the LANE knows and the link does not.
    *
@@ -812,7 +846,16 @@
     {:else}
       <ul class="history" data-test="history">
         {#each text.history as entry (entry.id)}
-          <li class:out={entry.dir === "out"} class:failed={entry.failed}>{entry.body}</li>
+          {@const feedback = copied?.generation === workspace.linkGeneration && copied.id === entry.id ? copied.ok : null}
+          <li class:out={entry.dir === "out"} class:failed={entry.failed}>
+            <span class="message-body" data-test="text-body">{entry.body}</span>
+            <div class="message-actions">
+              <button class="quiet" type="button" data-test="text-copy" onclick={(event) => copyMessage(event, entry.id, entry.body)}>
+                {t("textCopy")}
+              </button>
+              <span role="status">{feedback === null ? "" : t(feedback ? "textCopied" : "textCopyFailed")}</span>
+            </div>
+          </li>
         {/each}
       </ul>
       <!-- Offered only when there is something to clear, and confirmed because
@@ -904,7 +947,10 @@
     overflow-wrap: anywhere;
   }
   .history li.out { margin-left: auto; background: color-mix(in srgb, var(--accent) 16%, transparent); }
-  .history li.failed { opacity: 0.6; text-decoration: line-through; }
+  .history li.failed { opacity: 0.6; }
+  .history li.failed .message-body { text-decoration: line-through; }
+  .message-body { white-space: pre-wrap; user-select: text; }
+  .message-actions { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-tight); font-size: 12px; }
   progress { width: 100%; height: 6px; margin-bottom: var(--space-inner); }
   .indeterminate {
     position: relative;

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Windows、Linux、Android 的隔空投送替代方案 · Relayium</title>
-    <meta name="description" content="Windows、Linux、Android 都没有官方版 AirDrop——这是最接近的做法：在浏览器里同一 Wi-Fi 即时互传，无需账号、无需安装，还能做到 AirDrop 做不到的跨网络传输。" />
+    <meta name="description" content="用浏览器在 Windows、Linux、安卓和 Apple 设备之间无线传文件。同一 Wi-Fi 下免登录，也可以用配对码异地互传。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/how-to/airdrop-for-windows-and-android/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/airdrop-for-windows-and-android/" />
@@ -22,7 +22,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Windows、Linux、Android 的隔空投送替代方案" />
-    <meta property="og:description" content="Windows、Linux、Android 都没有官方版 AirDrop——这是最接近的做法：在浏览器里同一 Wi-Fi 即时互传，无需账号、无需安装，还能做到 AirDrop 做不到的跨网络传输。" />
+    <meta property="og:description" content="用浏览器在 Windows、Linux、安卓和 Apple 设备之间无线传文件。同一 Wi-Fi 下免登录，也可以用配对码异地互传。" />
     <meta property="og:url" content="https://relayium.com/zh/how-to/airdrop-for-windows-and-android/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -32,9 +32,9 @@
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Windows、Linux、Android 的隔空投送替代方案" />
-    <meta name="twitter:description" content="Windows、Linux、Android 都没有官方版 AirDrop——这是最接近的做法：在浏览器里同一 Wi-Fi 即时互传，无需账号、无需安装，还能做到 AirDrop 做不到的跨网络传输。" />
+    <meta name="twitter:description" content="用浏览器在 Windows、Linux、安卓和 Apple 设备之间无线传文件。同一 Wi-Fi 下免登录，也可以用配对码异地互传。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Windows、Linux、Android 的隔空投送替代方案","description":"Windows、Linux、Android 都没有官方版 AirDrop——这是最接近的做法：在浏览器里同一 Wi-Fi 即时互传，无需账号、无需安装，还能做到 AirDrop 做不到的跨网络传输。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/airdrop-for-windows-and-android/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Windows、Linux、Android 的隔空投送替代方案"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Windows 或 Android 有官方版 AirDrop 吗？","acceptedAnswer":{"@type":"Answer","text":"没有——AirDrop 是 Apple 设备专属，Apple 从未推出过 Windows 或 Android 客户端。Relayium 是基于浏览器的替代方案：在两台设备上打开 relayium.com，无论平台组合如何都能一样使用，包括 Apple 与非 Apple 混搭的情况。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"同一 Wi-Fi 下的流程不需要——两端打开网页就能互相发现，完全无需登录。跨不同网络用配对码发送时需要发送方登录；无论哪种网络模式，接收方都始终无需账号。"}},{"@type":"Question","name":"需要安装什么吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。它在每个平台上都是一个网页——Windows、Linux、macOS、Android 和 iOS——所以不用从应用商店下载，也不用操心更新。"}},{"@type":"Question","name":"这和「Relayium 对比 AirDrop」那篇有什么不同？","acceptedAnswer":{"@type":"Answer","text":"那篇文章是客观的正面对比，讲清 AirDrop 真正更好的地方（纯 Apple 家庭）以及它的短板。本文则是操作指南，教你在至少一台设备不是 Apple 产品时，如何真正获得类似 AirDrop 的体验。"}},{"@type":"Question","name":"能像 AirDrop 一样发给一群人吗？","acceptedAnswer":{"@type":"Answer","text":"不能一次发完。本地房间不限于两台设备，所以从该网络打开页面的多台设备可以同时列出来（以服务器对房间人数和连接数的上限为限）——但一次传输是一对一的：你和某一个接收方打开工作区，这批文件就发给它。要把同一批文件分给房间里的好几个人，就依次和他们各开一次工作区。而跨网络的配对码模式只连接两台设备，且经由加密中继完成。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Windows、Linux、Android 的隔空投送替代方案","description":"用浏览器在 Windows、Linux、安卓和 Apple 设备之间无线传文件。同一 Wi-Fi 下免登录，也可以用配对码异地互传。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-11-28","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/airdrop-for-windows-and-android/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Windows、Linux、Android 的隔空投送替代方案"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Windows 或 Android 有官方版 AirDrop 吗？","acceptedAnswer":{"@type":"Answer","text":"Apple 没有推出 Windows 或安卓版本的 AirDrop。部分安卓手机可以通过 Quick Share 与 AirDrop 互传；Windows 用户可在两端打开 Relayium 发送文件。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"同一 Wi-Fi 下的流程不需要——两端打开网页就能互相发现，完全无需登录。跨不同网络用配对码发送时需要发送方登录；无论哪种网络模式，接收方都始终无需账号。"}},{"@type":"Question","name":"需要安装什么吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。它在每个平台上都是一个网页——Windows、Linux、macOS、Android 和 iOS——所以不用从应用商店下载，也不用操心更新。"}},{"@type":"Question","name":"这和「Relayium 对比 AirDrop」那篇有什么不同？","acceptedAnswer":{"@type":"Answer","text":"那篇文章是客观的正面对比，讲清 AirDrop 真正更好的地方（纯 Apple 家庭）以及它的短板。本文则是操作指南，教你在至少一台设备不是 Apple 产品时，如何真正获得类似 AirDrop 的体验。"}},{"@type":"Question","name":"能像 AirDrop 一样发给一群人吗？","acceptedAnswer":{"@type":"Answer","text":"不能一次发完。本地房间不限于两台设备，所以从该网络打开页面的多台设备可以同时列出来（以服务器对房间人数和连接数的上限为限）——但一次传输是一对一的：你和某一个接收方打开工作区，这批文件就发给它。要把同一批文件分给房间里的好几个人，就依次和他们各开一次工作区。而跨网络的配对码模式只连接两台设备，且经由加密中继完成。"}}]}]}</script>
     <style>
 :root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
@@ -212,10 +212,11 @@ ol.steps>li>pre{margin:8px 0 0}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-08-07</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-11-28</bdi></p>
       
-      <p class="lead">AirDrop 只活在 Apple 的世界里，这让 Windows、Linux、Android 用户，以及任何混用多种设备的家庭都没有对应的内置方案。本文展示非 Apple 设备最接近 AirDrop 的做法：两端各打开一个网页，文件就传过去了。</p>
-      <p class="lead">这种方式不区分平台，因此也覆盖了 AirDrop 一向处理不好的场景：同一个房间里有 Windows 笔记本、Linux 台式机和 Android 手机，或者这三者再加一台 iPhone。</p>
+      <p class="lead">要从 Windows 电脑向附近的手机传文件，让两台设备连上同一 Wi-Fi，分别打开 Relayium。在电脑上选中手机和文件，再到手机上接受传输。</p>
+      <a class="cta" href="/?lang=zh">打开传输页</a>
+      <p class="lead">部分安卓手机也能通过 Quick Share 与 AirDrop 互传。下面的浏览器方法适用于 Windows、Linux、安卓和 Apple 设备，无需安装应用。</p>
       <section class="sheet"><h2>类 AirDrop 流程：同一 Wi-Fi，浏览器内完成</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>每台设备上都有一个较新的浏览器——Windows 上用 Chrome 或 Edge，Linux 上用 Firefox 或 Chrome，Android 上用 Chrome。不用去应用商店，也没有要安装的东西。</li><li>两台设备在同一个 Wi-Fi 里。和 AirDrop 不同，判断依据不是「挨得近」：设备发现是按连接过来的公网 IP 分组的（IPv6 按 /64 网络前缀），所以一台还挂在移动数据上的手机，即使摆在同一张桌子上也不会出现。</li><li>两台都能正常联网，并且是通过 https://relayium.com/ 打开页面。AirDrop 完全不需要互联网；而这两个浏览器确实需要连上会合服务器才能找到彼此，所以完全隔离的局域网应改用自托管实例。</li><li>同网络场景下不需要账号，也不需要配对码——这正是这套流程和 AirDrop 相同的地方。</li></ul></div>
       <p>这正是 AirDrop 为之设计的日常场景，而 Relayium 无需从任何应用商店下载 App 就能做到同样效果。</p>
@@ -236,7 +237,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>文件夹也支持：在桌面端（非 iOS）选择一个文件夹，相对路径会被保留。如果接收方浏览器能直接写入选定目录（桌面版 Chrome、Edge），文件会各就各位；否则（Firefox、Safari 以及手机浏览器）整个文件夹会作为一个 .zip 到达，解压后结构不变。</p></section>
       <h2>常见问题</h2>
       <h3>Windows 或 Android 有官方版 AirDrop 吗？</h3>
-      <p>没有——AirDrop 是 Apple 设备专属，Apple 从未推出过 Windows 或 Android 客户端。Relayium 是基于浏览器的替代方案：在两台设备上打开 relayium.com，无论平台组合如何都能一样使用，包括 Apple 与非 Apple 混搭的情况。</p>
+      <p>Apple 没有推出 Windows 或安卓版本的 AirDrop。部分安卓手机可以通过 Quick Share 与 AirDrop 互传；Windows 用户可在两端打开 Relayium 发送文件。</p>
       <h3>需要账号吗？</h3>
       <p>同一 Wi-Fi 下的流程不需要——两端打开网页就能互相发现，完全无需登录。跨不同网络用配对码发送时需要发送方登录；无论哪种网络模式，接收方都始终无需账号。</p>
       <h3>需要安装什么吗？</h3>

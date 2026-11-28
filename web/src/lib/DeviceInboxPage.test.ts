@@ -109,7 +109,7 @@ function json(body: unknown, status = 200): Response {
 function render(props: Record<string, unknown> = {}) {
   const target = document.createElement("div");
   document.body.appendChild(target);
-  const app = mount(DeviceInboxPage, { target, props });
+  const app = mount(DeviceInboxPage, { target, props: { windowsRel: { available: false }, ...props } });
   mounted.push({ app, target });
   flushSync();
   return target;
@@ -295,8 +295,8 @@ describe("the six platform sections", () => {
     // foreground command — shown, with its limit stated in the same section.
     const win = root.querySelector('[data-platform="windows"]')!;
     expect(win.querySelector("pre")).not.toBeNull();
-    expect(win.textContent).toMatch(/no Windows service and no startup entry/i);
-    expect(win.textContent).toMatch(/while the window stays open/i);
+    expect(win.textContent).toMatch(/unsigned Windows desktop preview/i);
+    expect(win.textContent).toMatch(/while the terminal window stays open/i);
   });
 
   it("leads the server section with download-inspect-install, not with a foreground run", () => {
@@ -822,4 +822,14 @@ describe("keeping a trustworthy list across a presence refresh", () => {
     expect(root.querySelector('[data-di="device-workspace-heading"]')).toBeNull();
     expect(root.querySelectorAll("button.open")).toHaveLength(1);
   });
+});
+
+
+it("offers the verified Windows preview as an available receiver with a download", () => {
+  const root = render({ windowsRel: { available: true, version: "0.0.4", size: 100,
+    sha256: "a".repeat(64), downloadUrl: "https://example.test/Relayium.exe" } });
+  const section = root.querySelector('[data-platform="windows"]')!;
+  expect(section.getAttribute("data-status")).toBe("available");
+  expect(section.querySelector('[data-di="windows-download"]')?.getAttribute("href")).toBe("https://example.test/Relayium.exe");
+  expect(section.textContent).toMatch(/unsigned Windows desktop preview/);
 });

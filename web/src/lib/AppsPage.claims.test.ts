@@ -40,7 +40,7 @@ async function mountPage(lang: Lang = "en", platformOverride: Platform = "unknow
   await setLang(lang);
   target = document.createElement("div");
   document.body.appendChild(target);
-  app = mount(AppsPage, { target, props: { macRelease, androidRel, platformOverride } });
+  app = mount(AppsPage, { target, props: { macRelease, androidRel, windowsRel: { available: false }, platformOverride } });
   flushSync();
   return target;
 }
@@ -104,7 +104,7 @@ describe("what the Apps page may not claim", () => {
   // that said nothing. A negator only counts when it precedes the phrase and
   // shares its clause: a negator afterwards does not unsay it.
   it("reads a denial as a denial, and only forwards within one clause", () => {
-    const iosRule = FORBIDDEN_APP_CLAIMS.find((r) => r.why.includes("no iOS or Windows app"))!;
+    const iosRule = FORBIDDEN_APP_CLAIMS.find((r) => r.why.includes("no iOS app"))!;
     const pushRule = FORBIDDEN_APP_CLAIMS.find((r) => r.why.includes("push"))!;
 
     for (const denial of [
@@ -118,7 +118,7 @@ describe("what the Apps page may not claim", () => {
     // A negator that arrives after the claim does not retract it…
     expect(violatesClaim("We ship an iOS app, no really.", iosRule)).toBe(true);
     // …and one in an earlier clause is a different sentence, not a scope.
-    expect(violatesClaim("There is no Mac app yet. Download the Windows app.", iosRule)).toBe(true);
+    expect(violatesClaim("There is no Mac app yet. Download the iOS app.", iosRule)).toBe(true);
     // The denial must not disarm the rule for a promise later in the same text.
     expect(
       violatesClaim("Relayium publishes no Windows app. The iOS app is in development.", iosRule),
@@ -130,12 +130,12 @@ describe("what the Apps page may not claim", () => {
   // straight past it — while the one phrasing that is TRUE today, running the
   // web app in a phone browser, has to keep working.
   it("catches an app promised in any word order, and spares the web-platform one", () => {
-    const rule = FORBIDDEN_APP_CLAIMS.find((r) => r.why.includes("no iOS or Windows app"))!;
+    const rule = FORBIDDEN_APP_CLAIMS.find((r) => r.why.includes("no iOS app"))!;
     for (const promise of [
-      "Download the app for Windows.",
+      "Download the app for iOS.",
       "Install our client on iPhone.",
-      "The Windows version of the app lands this year.",
-      "客户端支持 Windows。",
+      "The iOS version of the app lands this year.",
+      "客户端支持 iOS。",
     ])
       expect(violatesClaim(promise, rule), `missed: ${promise}`).toBe(true);
     for (const truthful of [

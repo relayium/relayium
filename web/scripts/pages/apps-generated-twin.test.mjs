@@ -78,10 +78,11 @@ describe("the maintained twin carries the same product facts as the SPA", () => 
       // stay absent, and the regex below stops naming Android for the same
       // reason: naming it is now a fact rather than a promise.
       expect(APP[lang].appsPage.cards.android, `${lang} SPA lost its Android card`).toBeTruthy();
-      expect(APP[lang].appsPage.cards.windows, `${lang} SPA still has a Windows card`).toBeUndefined();
+      expect(APP[lang].appsPage.cards.windows, `${lang} SPA lost the Windows preview`).toBeTruthy();
       for (const [surface, copy] of [["static", prose], ["SPA", spa]]) {
-        expect(copy, `${lang} ${surface} /apps still describes a native app for an unshipped platform`)
-          .not.toMatch(/\b(?:iOS|iPhone|iPad|Windows)\s+(?:native\s+|desktop\s+)*app\b|(?:iOS|iPhone|iPad|Windows)\s*(?:桌面)?(?:原生)?应用/i);
+        const iosRule = FORBIDDEN_APP_CLAIMS.find((rule) => rule.why.includes("no iOS app"));
+        expect(iosRule).toBeTruthy();
+        expect(violatesClaim(copy, iosRule), `${lang} ${surface} promises an iOS app`).toBe(false);
       }
     }
   });

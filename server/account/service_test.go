@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -167,6 +168,7 @@ func TestRequestMagicLinkRejectsMalformedEmail(t *testing.T) {
 		"victim@example.com\r\nBcc: evil@x.com",
 		"a@b.com\nSubject: hijack",
 		"not-an-email",
+		"mu@mu",
 		"",
 	} {
 		if err := svc.RequestMagicLink(ctx, bad); err != nil {
@@ -175,6 +177,46 @@ func TestRequestMagicLinkRejectsMalformedEmail(t *testing.T) {
 	}
 	if mail.sends() != 0 {
 		t.Fatalf("mailer sent %d messages for malformed addresses; want 0", mail.sends())
+	}
+}
+
+// Simulate a historical account by changing its email directly in the fixture.
+func TestMagicLinkLegacySingleLabelAccount(t *testing.T) {
+	svc, mail := newMagicTestService(t)
+	ctx := context.Background()
+	store := svc.store.(*SQLiteStore)
+	u, err := store.UpsertUserByEmail(ctx, "old@example.org", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, "UPDATE users SET email=?,canonical_email=? WHERE id=?", "mu@mu", "mu@mu", u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RequestMagicLink(ctx, "mu@mu"); err != nil {
+		t.Fatal(err)
+	}
+	_, token, ok := strings.Cut(mail.lastLink, "token=")
+	if !ok {
+		t.Fatal("missing legacy login link")
+	}
+	session, err := svc.VerifyMagicLink(ctx, token)
+	if err != nil || session.UserID != u.ID {
+		t.Fatalf("legacy login failed: %v", err)
+	}
+}
+
+func TestMagicLinkCannotCreateSingleLabelAccountFromOldToken(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	// A still-valid link could have been issued before the registration policy changed.
+	if _, err := store.db.ExecContext(ctx, "INSERT INTO magic_tokens (token_hash,email,created_at,expires_at,used_at) VALUES (?,?,?,?,0)", "old-token-hash", "mu@mu", 1, 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, ok, err := store.UseMagicTokenForUser(ctx, "old-token-hash", 50); ok || !errors.Is(err, ErrInvalidEmail) {
+		t.Fatalf("old link created account or gave unexpected error: ok=%t err=%v", ok, err)
+	}
+	if _, exists, err := store.UserByCanonicalEmail(ctx, "mu@mu"); err != nil || exists {
+		t.Fatalf("unexpected account: exists=%t err=%v", exists, err)
 	}
 }
 

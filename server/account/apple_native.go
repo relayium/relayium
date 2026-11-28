@@ -181,6 +181,10 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resolved, created, err = s.store.UpsertUserByEmailForLogin(ctx, claims.Email, in.Name)
+		if errors.Is(err, ErrInvalidEmail) {
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_email"})
+			return
+		}
 		if err != nil {
 			serverError()
 			return

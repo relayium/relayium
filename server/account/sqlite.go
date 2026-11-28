@@ -2644,6 +2644,9 @@ func (s *SQLiteStore) upsertUserByEmailOn(ctx context.Context, q userUpsertExece
 	if err != sql.ErrNoRows {
 		return User{}, false, err
 	}
+	if !validRegistrationEmail(email) {
+		return User{}, false, ErrInvalidEmail
+	}
 	u = User{ID: authx.NewID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
 	_, err = q.ExecContext(ctx,
 		`INSERT INTO users (id, email, display_name, created_at, canonical_email, billing_hold_hmac) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -4094,6 +4097,16 @@ func (s *SQLiteStore) DeleteExpiredSessions(ctx context.Context, now int64) erro
 }
 
 func (s *SQLiteStore) CreateMagicToken(ctx context.Context, t MagicToken) error {
+	// Older accounts may have a single-label domain. They can still sign in.
+	if !validRegistrationEmail(normEmail(t.Email)) {
+		var exists bool
+		if err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)", normEmail(t.Email)).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return ErrInvalidEmail
+		}
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO magic_tokens (token_hash, email, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, 0)`,
 		t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt)

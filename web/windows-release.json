@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "windows": {
+    "available": true,
+    "version": "0.0.6",
+    "architecture": "x64",
+    "preview": true,
+    "signed": false,
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/windows-v0.0.6/Relayium-0.0.6-x64.exe",
+    "sha256": "ec7c822fca74ebbbc52130dd42f2256541f651df2c8aa4a31b2acd22e8be7ab0",
+    "size": 118193157,
+    "sourceCommit": "7409f16e9f6885169ac881e8f8c50dde1b3a908f",
+    "tag": "windows-v0.0.6",
+    "publishedAt": "2026-11-27T13:01:05Z"
+  }
+}

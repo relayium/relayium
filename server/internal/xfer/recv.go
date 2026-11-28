@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/relayium/relayium/internal/inboxsend/sendlock"
 	"github.com/relayium/relayium/internal/termtext"
 )
 
@@ -32,6 +33,9 @@ func refuse(w io.Writer, code string, err error) error {
 type RecvOpts struct {
 	NoResume    bool
 	AllowDelete bool // sync mode: honor a Hello.Delete mirror request
+	// Only the direct listener supplies these, after fingerprint authorization.
+	CheckpointDir  string
+	CheckpointPeer string
 	// AllowSync authorizes the peer's Hello.Sync request against this
 	// destination: skipping unchanged files, resuming into an existing file,
 	// preserving the source mtime, and replacing a file that is already here.
@@ -95,14 +99,30 @@ func readHello(r io.Reader) (Hello, MsgType, error) {
 // receiveV1 is the body of Receive after its Hello was read: the v1 push and
 // sync protocol, exactly as Receive has always run it.
 func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Report, error) {
+	return receiveManifest(rw, hello, destDir, opts, false)
+}
+
+func receiveManifest(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts, pagingAgreed bool) (Report, error) {
 	if hello.Version != WireVersion {
 		return Report{}, fmt.Errorf("unsupported wire version %d", hello.Version)
 	}
 	var m Manifest
-	if _, err := ReadJSON(rw, &m); err != nil {
-		return Report{}, err
+	var err error
+	paged := hello.ManifestFiles != 0
+	limit := maxManifestFiles
+	if paged {
+		if !pagingAgreed || !hello.Sync || !opts.AllowSync || !hello.ContentCheck {
+			return Report{}, refuse(rw, ErrCodeProtocol, errors.New("large sync requires content checking and negotiated paging"))
+		}
+		m, err = readManifestPages(rw, hello.ManifestFiles)
+		limit = MaxSyncFiles
+	} else {
+		_, err = ReadJSON(rw, &m)
 	}
-	if err := validateManifest(destDir, m); err != nil {
+	if err == nil {
+		err = validateManifestLimit(destDir, m, limit)
+	}
+	if err != nil {
 		// The manifest cap is a structural refusal the sender can act on (split
 		// the batch), and by this point the peer is already authorized by the
 		// transport, so telling it why is safe. Every other validation failure
@@ -169,14 +189,41 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 	}
 
 	rs := ResumeState{}
+	var checkpoint *syncCheckpoint
+	checkpointIndex := -1
 	switch {
 	case contentCheck:
 		// Skip is decided by content even with --no-resume: skipping a file
 		// that is already identical is not resuming one. Resume offers are
 		// withheld as before.
-		rs = contentSyncStateFor(destDir, m)
+		if !opts.NoResume && hello.ResumeProof {
+			checkpoint, err = openSyncCheckpoint(opts.CheckpointDir, opts.CheckpointPeer, destDir, m)
+			if errors.Is(err, sendlock.ErrLocked) {
+				return Report{}, refuse(rw, ErrCodeSyncBusy, errors.New("the receiver is still using this sender's checkpoint; wait for its active sync to finish or its stalled session to time out"))
+			}
+			if err != nil {
+				_ = refuse(rw, ErrCodeWriteFailed, errors.New("the receiver could not open its sync checkpoint; check its serve log"))
+				return Report{}, fmt.Errorf("open sync checkpoint: %w", err)
+			}
+			defer checkpoint.close()
+		}
+		var progress func(int) error
+		if hello.SyncProgress {
+			progress = syncCheckReporter(rw, len(m.Files))
+		}
+		rs, err = contentSyncStateFor(destDir, m, progress)
+		if err != nil {
+			return Report{}, err
+		}
+		if progress != nil && len(m.Files) > 0 {
+			if err := progress(len(m.Files)); err != nil {
+				return Report{}, err
+			}
+		}
 		if opts.NoResume {
 			rs.Entries = nil
+		} else {
+			checkpointIndex = checkpoint.offer(m, &rs)
 		}
 	case sync && !opts.NoResume:
 		rs = syncStateFor(destDir, m)
@@ -215,8 +262,12 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 	res.OK = true
 	for k, expectedIndex := range expectedIndices {
 		var fs FileStart
-		if _, err := ReadJSON(rw, &fs); err != nil {
+		frameType, err := ReadJSON(rw, &fs)
+		if err != nil {
 			return rep, err
+		}
+		if paged && frameType != MsgFileStart {
+			return rep, fmt.Errorf("expected file start, got frame type %d", frameType)
 		}
 		// fs.Index is peer-controlled; reject out-of-range values before indexing
 		// so a malicious/buggy sender can't panic the receiver (and, under serve,
@@ -237,6 +288,10 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 			return rep, err
 		}
 		offset := fs.Offset
+		prefix := dest
+		if checkpointIndex == fs.Index {
+			prefix = filepath.Join(checkpoint.dir, checkpoint.active)
+		}
 		if hello.ResumeProof && offset > 0 {
 			// Bytes that are not a prefix of the file being sent (an ordinary edit
 			// that made the file longer looks exactly like this) would fail
@@ -246,7 +301,7 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 			//
 			// Redefining a negotiated offset is the receiver's move alone — a
 			// receiver without this protocol rejects an offset it did not offer.
-			resume := prefixMatches(dest, offset, fs.PrefixSHA256)
+			resume := prefixMatches(prefix, offset, fs.PrefixSHA256)
 			if err := WriteJSON(rw, MsgResumeVerdict, ResumeVerdict{Index: fs.Index, Resume: resume}); err != nil {
 				return rep, err
 			}
@@ -258,20 +313,31 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 		if contentCheck {
 			want = f.SHA256
 		}
-		ok, err := receiveOneFileChecked(rw, destDir, dest, f, offset, sync, want, opts.Progress)
+		var fileCheckpoint *syncCheckpoint
+		// Don't replace a checkpoint we already offered for a later file.
+		if f.Size >= minSyncCheckpointSize && (checkpointIndex < 0 || fs.Index >= checkpointIndex) {
+			fileCheckpoint = checkpoint
+		}
+		ok, err := receiveOneFileChecked(rw, destDir, dest, f, offset, sync, want, opts.Progress, fileCheckpoint, prefix)
 		if err != nil {
 			return rep, err
 		}
 		if !ok {
 			res.OK = false
-			res.Failed = append(res.Failed, f.Path)
+			rep.Failed = append(rep.Failed, f.Path)
+			if paged {
+				res.FailedIndices = append(res.FailedIndices, fs.Index)
+			}
 			continue
 		}
 		rep.Files++
 		rep.Bytes += f.Size
 	}
 
-	if hello.Delete && opts.AllowDelete && len(m.Files) == 0 {
+	if paged && hello.Delete && opts.AllowDelete && !res.OK {
+		rep.DeleteDenied = true
+		rep.DeleteRefusedReason = "one or more files failed verification or could not be installed"
+	} else if hello.Delete && opts.AllowDelete && len(m.Files) == 0 {
 		// Refuse a mirror-delete driven by an EMPTY manifest — it would wipe the
 		// entire destination. The sync client already refuses --delete with an
 		// empty source, but a malicious/buggy peer can send Delete=true with a
@@ -310,7 +376,9 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 		res.DeletePartial = rep.DeletePartial != ""
 	}
 
-	rep.Failed = res.Failed
+	if !paged {
+		res.Failed = rep.Failed
+	}
 	return rep, WriteJSON(rw, MsgResult, res)
 }
 
@@ -322,10 +390,10 @@ func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Re
 // Every trust decision (AllowSync, AllowDelete, the wire version) is made again
 // on the real Hello by receiveV1 itself.
 func receivePreflight(rw io.ReadWriter, hello Hello, m Manifest, sync bool, destDir string, opts RecvOpts) (Report, error) {
-	if !sync || !hello.ContentCheck || hello.Delete || len(m.Files) != 0 {
+	if !sync || !hello.ContentCheck || hello.Delete || hello.ManifestFiles != 0 || len(m.Files) != 0 {
 		return Report{}, refuse(rw, ErrCodeProtocol, errors.New("protocol error: a preflight must be an empty content-checked sync without delete"))
 	}
-	if err := WriteJSON(rw, MsgResume, ResumeState{ContentCheck: true, Preflight: true, DeleteReport: true}); err != nil {
+	if err := WriteJSON(rw, MsgResume, ResumeState{ContentCheck: true, Preflight: true, DeleteReport: true, PagedManifest: hello.PagedManifest}); err != nil {
 		return Report{}, err
 	}
 	next, t, err := readHello(rw)
@@ -335,7 +403,7 @@ func receivePreflight(rw io.ReadWriter, hello Hello, m Manifest, sync bool, dest
 	if t != MsgHello || next.Preflight || next.Stream {
 		return Report{}, refuse(rw, ErrCodeProtocol, errors.New("protocol error: a preflight must be followed by one ordinary hello"))
 	}
-	return receiveV1(rw, next, destDir, opts)
+	return receiveManifest(rw, next, destDir, opts, hello.PagedManifest)
 }
 
 // receiveOneFile streams one manifest entry into a temporary staging file,
@@ -350,7 +418,7 @@ func receivePreflight(rw io.ReadWriter, hello Hello, m Manifest, sync bool, dest
 //
 // ok=false with a nil error is ONE failed file, not a failed transfer.
 func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, progress func(path string, received, total int64)) (ok bool, err error) {
-	return receiveOneFileChecked(rw, base, dest, f, offset, replace, "", progress)
+	return receiveOneFileChecked(rw, base, dest, f, offset, replace, "", progress, nil, dest)
 }
 
 // receiveOneFileChecked is receiveOneFile with wantDigest: when set (a
@@ -360,7 +428,7 @@ func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int
 // hashed consistently by the sender, so only this comparison stops a body that
 // differs from what the manifest -- and the skip decisions made on it --
 // described.
-func receiveOneFileChecked(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, wantDigest string, progress func(path string, received, total int64)) (ok bool, err error) {
+func receiveOneFileChecked(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, wantDigest string, progress func(path string, received, total int64), checkpoint *syncCheckpoint, prefix string) (ok bool, err error) {
 	// The sender streams f.Size-offset bytes whether or not they can be written
 	// here -- it learns about a failed file only from the final result. So the body
 	// is fenced off, and whatever writeFileBody left unread is drained before the
@@ -370,7 +438,13 @@ func receiveOneFileChecked(rw io.ReadWriter, base, dest string, f FileEntry, off
 	// "frame payload too large: 1869881441" was the text "ot a", and one refused
 	// file became a failed transfer.
 	body := &io.LimitedReader{R: rw, N: f.Size - offset}
-	sum, staged, werr := writeFileBody(body, base, dest, f, offset, progress)
+	var sum, staged string
+	var werr error
+	if checkpoint == nil {
+		sum, staged, werr = writeFileBody(body, base, dest, f, offset, progress)
+	} else {
+		sum, werr = checkpoint.write(body, f, prefix, offset, progress)
+	}
 	installed := false
 	defer func() {
 		if staged != "" && !installed {
@@ -392,12 +466,23 @@ func receiveOneFileChecked(rw io.ReadWriter, base, dest string, f FileEntry, off
 		return false, err
 	}
 	if werr != nil || fh.SHA256 != sum {
+		if werr == nil && checkpoint != nil {
+			_ = checkpoint.discard()
+		}
 		return false, nil
 	}
 	if wantDigest != "" && sum != wantDigest {
+		if checkpoint != nil {
+			_ = checkpoint.discard()
+		}
 		return false, nil
 	}
-	if err := installStaged(staged, dest, replace); err != nil {
+	if checkpoint != nil {
+		err = checkpoint.install(base, dest, f)
+	} else {
+		err = installStaged(staged, dest, replace)
+	}
+	if err != nil {
 		return false, nil
 	}
 	installed = true
@@ -464,8 +549,12 @@ const maxManifestPathBytes = 4096
 var errManifestTooLarge = errors.New("manifest contains too many files")
 
 func validateManifest(destDir string, m Manifest) error {
-	if len(m.Files) > maxManifestFiles {
-		return fmt.Errorf("%w: %d (this receiver accepts at most %d per transfer)", errManifestTooLarge, len(m.Files), maxManifestFiles)
+	return validateManifestLimit(destDir, m, maxManifestFiles)
+}
+
+func validateManifestLimit(destDir string, m Manifest, limit int) error {
+	if len(m.Files) > limit {
+		return fmt.Errorf("%w: %d (this receiver accepts at most %d per transfer)", errManifestTooLarge, len(m.Files), limit)
 	}
 	seen := make(map[string]struct{}, len(m.Files))
 	var total int64

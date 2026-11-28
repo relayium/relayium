@@ -23,6 +23,7 @@ struct LanConnectPane: View {
     private var presence: TransferPresence { module.presence }
 
     @State private var actionError: String?
+    @State private var showsThisMacDetails = false
     /// Read while listening and emptied otherwise, so a stopped screen cannot
     /// describe a network this Mac may have left. View state and nothing
     /// longer-lived: an address inventory is a fingerprint of somebody's home
@@ -55,8 +56,8 @@ struct LanConnectPane: View {
             // head already says what the route is — this network, end-to-end
             // encrypted, no account — and says nothing about a direct path
             // this client cannot observe.
-            thisMac
             sameNetwork
+            thisMac
             if let actionError {
                 InlineMessage(.failure, actionError)
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -175,36 +176,50 @@ struct LanConnectPane: View {
         .accessibilityHint(L10n.t(.nearbyNamesDisclaimer))
     }
 
-    /// What this Mac is called and where it is: the first-viewport answer to
-    /// "can the other side find me", above the card that holds the roster.
     private var thisMac: some View {
-        SectionCard(title: L10n.t(.nearbyThisMacHeading),
-                    footnote: thisMacFootnote,
-                    rows: true) {
-            CardRows {
-                CardBlockRow(explanation: identityCaption,
-                             subject: L10n.t(.nearbyThisMacHeading)) {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(L10n.t(.nearbyVisibleNameLabel))
-                            .font(.body)
-                            .foregroundStyle(Palette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: Metrics.tight)
-                        identity
+        VStack(alignment: .leading, spacing: Metrics.caption) {
+            Button { showsThisMacDetails.toggle() } label: {
+                HStack {
+                    Text(L10n.t(.nearbyThisMacHeading)).font(.callout.weight(.semibold))
+                    Spacer()
+                    Image(systemName: showsThisMacDetails ? "chevron.up" : "chevron.down")
+                        .accessibilityHidden(true)
+                }
+                .frame(minHeight: Metrics.hitTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(L10n.t(showsThisMacDetails ? .helpExpandedValue : .helpCollapsedValue))
+            .accessibilityIdentifier("lan-this-mac-details")
+            if showsThisMacDetails {
+                CardRows {
+                    CardBlockRow(explanation: identityCaption,
+                                 subject: L10n.t(.nearbyThisMacHeading)) {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(L10n.t(.nearbyVisibleNameLabel))
+                                .font(.body)
+                                .foregroundStyle(Palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: Metrics.tight)
+                            identity
+                        }
+                    }
+                    // The full privacy statement lives behind this ⓘ; where files
+                    // land is said only under the card, and only while listening.
+                    CardBlockRow(explanation: [L10n.t(.nearbyAddressesPrivacyNote),
+                                               L10n.t(.nearbyAddressesNotGroupingNote)]
+                                    .joined(separator: "\n\n"), // nonlocalized: paragraph break
+                                 subject: L10n.t(.nearbyLocalAddressesHeading)) {
+                        addresses
                     }
                 }
-                // The full privacy statement lives behind this ⓘ; where files
-                // land is said only under the card, and only while listening.
-                CardBlockRow(explanation: [L10n.t(.nearbyAddressesPrivacyNote),
-                                           L10n.t(.nearbyAddressesNotGroupingNote)]
-                                .joined(separator: "\n\n"), // nonlocalized: paragraph break
-                             subject: L10n.t(.nearbyLocalAddressesHeading)) {
-                    addresses
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(L10n.t(.nearbyA11yThisMac))
+                Text(thisMacFootnote)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textSecondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(L10n.t(.nearbyA11yThisMac))
         }
     }
 
@@ -448,7 +463,7 @@ struct LanConnectPane: View {
             CardBlockRow {
                 EmptyStateView(symbol: "dot.radiowaves.left.and.right",
                                title: L10n.t(.nearbyEmptyRosterTitle),
-                               body: L10n.t(.nearbyEmptyRosterOpen),
+                               body: L10n.t(.macNearbyEmptyRosterOpen),
                                link: EmptyStateLink(
                                 title: L10n.token(AppEnvironment.transferHost),
                                 url: AppEnvironment.transferBaseURL,

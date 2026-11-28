@@ -174,7 +174,10 @@ export function windowsTempDownloaderScript(link: string, dest: string): string 
     $sha.Dispose()
   }
   if ($actual -ne $expected) { throw 'relayium: pinned SHA-256 mismatch - nothing was run' }
-  Expand-Archive -LiteralPath $archive -DestinationPath $root
+  # Use the two-argument API available in Windows PowerShell/.NET Framework.
+  # Newer archive modules can require an overload absent in that runtime.
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [IO.Compression.ZipFile]::ExtractToDirectory($archive, $root)
   & (Join-Path $root 'relayium.exe') down ${psQuote(link)} ${psArg(dest)}
   if ($LASTEXITCODE -ne 0) { throw "relayium down failed with exit code $LASTEXITCODE" }
   } finally {
