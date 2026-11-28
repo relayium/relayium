@@ -51,6 +51,8 @@ import SwiftUI
 /// honest unauthorized list rather than a request with an empty credential.
 struct DeviceSendSection: View {
     @ObservedObject var deliveries: InboxSendModel
+    let conversations: [InboxConversation]
+    let conversationSummary: (InboxConversation) -> String
     /// Where a refusal whose remedy is the account goes.
     ///
     /// It takes NO half of the form, unlike the receive surface's version. This
@@ -123,7 +125,7 @@ struct DeviceSendSection: View {
                     .foregroundStyle(Palette.textSecondary)
                     .accessibilityIdentifier("inbox-send-blocked")
                 ForEach(blocked) { candidate in
-                    blockedRow(candidate)
+                    deviceRow(candidate)
                 }
             }
             // The refusal that survives leaving a device's screen — a staging or
@@ -143,57 +145,51 @@ struct DeviceSendSection: View {
         .task { refresh() }
     }
 
-    /// One device: what it is, and the way into its own screen.
-    ///
-    /// The whole row opens the device AND a named button on the trailing edge
-    /// does the same thing, which is not redundancy — the row is the Mac idiom
-    /// and the button is what says out loud that this list is about sending
-    /// rather than about managing credentials. Pressing either is one call to
-    /// `selectTarget`, so there is no second path into the child state.
+    /// A current peer has one row for both its availability and local history.
+    /// A peer that cannot receive can still open a history it already has.
     private func deviceRow(_ candidate: InboxSendCandidate) -> some View {
-        HStack(alignment: .center, spacing: 11) {
+        let conversation = conversations.first { $0.peerDeviceID == candidate.id }
+        return HStack(alignment: .center, spacing: 11) {
             GlyphChip(symbol: "laptopcomputer.and.iphone")
-            VStack(alignment: .leading, spacing: 1) {
-                editableName(id: candidate.id,
-                             name: InboxSendPresentation.name(of: candidate))
-                Text(InboxSendPresentation.detail(for: candidate))
-                    .font(.subheadline)
-                    .foregroundStyle(Palette.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: Metrics.inner)
-            renameButton(id: candidate.id, name: candidate.name)
-            // On the LEAF. Every identifier in this file is on a leaf or on a
-            // deliberately combined element, never on a container holding
-            // controls — the propagation defect the receive pane has already
-            // lost two controls to.
-            Button(L10n.t(.sendContentAction)) { open(candidate) }
-                .buttonStyle(.referencePrimary)
-                .accessibilityLabel(InboxSendPresentation.openLabel(for: candidate))
-                .accessibilityIdentifier("inbox-send-open.\(candidate.id)")
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { open(candidate) }
-    }
-
-    private func blockedRow(_ candidate: InboxSendCandidate) -> some View {
-        // Not a Button, and it opens nothing: a row whose screen could only
-        // refuse every send is a dead end the user has to discover by pressing
-        // it. The detail line names the one thing that would have to change.
-        HStack(alignment: .center, spacing: 11) {
-            GlyphChip(symbol: "laptopcomputer.and.iphone")
-                .opacity(0.6)
+                .opacity(candidate.isSendable ? 1 : 0.6)
             VStack(alignment: .leading, spacing: 1) {
                 editableName(id: candidate.id,
                              name: InboxSendPresentation.name(of: candidate),
-                             dimmed: true)
+                             dimmed: !candidate.isSendable)
                 Text(InboxSendPresentation.detail(for: candidate))
                     .font(.subheadline)
-                    .foregroundStyle(Palette.textTertiary)
+                    .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let conversation {
+                    Text(conversationSummary(conversation))
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if conversation.unreadCount > 0 {
+                        Text(L10n.t(.inboxConversationUnread, [L10n.number(conversation.unreadCount)]))
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Palette.actionLabel)
+                    }
+                }
             }
             Spacer(minLength: Metrics.inner)
             renameButton(id: candidate.id, name: candidate.name)
+            if conversation != nil {
+                Button(L10n.t(.inboxOpenDeviceInbox)) { open(candidate, conversation: conversation) }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(L10n.detail([L10n.t(.inboxOpenDeviceInbox), candidate.name]))
+                    .accessibilityIdentifier("inbox-conversation-open")
+            } else if candidate.isSendable {
+                Button(L10n.t(.sendContentAction)) { open(candidate) }
+                    .buttonStyle(.referencePrimary)
+                    .accessibilityLabel(InboxSendPresentation.openLabel(for: candidate))
+                    .accessibilityIdentifier("inbox-send-open.\(candidate.id)")
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard editingDeviceID != candidate.id else { return }
+            open(candidate, conversation: conversation)
         }
         .accessibilityElement(children: .contain)
     }
@@ -268,14 +264,13 @@ struct DeviceSendSection: View {
 
     /// Enter the device's own screen.
     ///
-    /// The model owns the whole of it. `selectTarget` refuses a row that cannot
-    /// receive, so a blocked device can never become the selection, and
-    /// `selectedCandidate` — which is what `DeviceInboxSurface` renders the child
-    /// on — goes nil again the moment that device is revoked, switched off or
-    /// left with the account. There is no second copy of "which device am I on"
-    /// in this app.
-    private func open(_ candidate: InboxSendCandidate) {
-        deliveries.selectTarget(candidate.id)
+    /// History and sending use the model's navigation and sending eligibility.
+    private func open(_ candidate: InboxSendCandidate, conversation: InboxConversation? = nil) {
+        if let conversation {
+            deliveries.focusPeer(conversation.peerDeviceID)
+        } else if candidate.isSendable {
+            deliveries.selectTarget(candidate.id)
+        }
     }
 
     // MARK: - what is already on its way

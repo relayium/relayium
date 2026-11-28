@@ -56,6 +56,9 @@ const macRelease = JSON.parse(
   readFileSync(resolve(here, "..", "native-releases.json"), "utf8"),
 ).macos;
 const macDownloadable = macRelease.available === true && !!macRelease.downloadUrl;
+const windowsRelease = JSON.parse(readFileSync(resolve(here, "..", "windows-release.json"), "utf8")).windows;
+const windowsDownloadable = windowsRelease.available === true && !!windowsRelease.version && !!windowsRelease.downloadUrl
+  && /^[a-f0-9]{64}$/.test(windowsRelease.sha256 ?? "") && Number.isSafeInteger(windowsRelease.size) && windowsRelease.size > 0;
 // A runner cleans up only the debug port it is configured with, so scripts that
 // share a port must never run concurrently. This script owns 9448 by itself, as
 // mixed-link owns 9445; 9446 is shared by a11y and share-target, and 9447 by
@@ -327,9 +330,14 @@ async function checkPage(tab, base, view) {
   // Android LEFT this set when 0.2.0 shipped a real Device Inbox receiver: it
   // enrols a key, holds the receiving policy and keeps a durable history, so
   // demanding "planned" here would require the badge to deny a feature the app
-  // has. Windows and iPhone still publish no receiver and keep the badge.
-  for (const planned of ["windows", "iphone"]) {
+  // has. iPhone still publishes no receiver and keeps the badge.
+  for (const planned of ["iphone"]) {
     if (status[planned] !== "planned") throw new Error(`${view.id}: ${planned} is marked ${status[planned]}`);
+  }
+  const wantWindows = windowsDownloadable ? "available" : "planned";
+  const windowsHref = await tab.evaluate(`document.querySelector('[data-di="windows-download"]')?.getAttribute('href') ?? null`);
+  if (status.windows !== wantWindows || windowsHref !== (windowsDownloadable ? windowsRelease.downloadUrl : null)) {
+    throw new Error(`${view.id}: Windows status/download disagrees with windows-release.json`);
   }
   // The positive half, asserted explicitly rather than by dropping the id — a
   // silently unchecked platform is how the macOS badge above drifted for weeks.

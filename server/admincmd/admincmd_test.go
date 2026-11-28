@@ -313,11 +313,18 @@ func TestVersionPolicyRefreshCLIRequiresRevisionAndKeepsMinimums(t *testing.T) {
 		t.Fatal("stale revision not refused", code)
 	}
 	code, out, errOut := cli(t, true, append(base, "--expected-revision", "6")...)
-	if code != 0 || !strings.Contains(out, "recommended=1.5.2 latest=1.5.2") {
+	if code != 0 {
 		t.Fatal(code, out, errOut)
 	}
 	next, err := st.GetOperationalVersionPolicy(context.Background())
 	if err != nil || next.FleetMinimumVersion != current.FleetMinimumVersion || next.MacMinimumVersion != current.MacMinimumVersion || next.MacMinimumBuild != current.MacMinimumBuild {
 		t.Fatal("CLI changed minimums", next, err)
+	}
+	if next.Revision != current.Revision+1 || next.MacLatestVersion == current.MacLatestVersion ||
+		next.MacRecommendedVersion != next.MacLatestVersion {
+		t.Fatal("CLI did not advance the durable macOS policy", current, next)
+	}
+	if want := "recommended=" + next.MacRecommendedVersion + " latest=" + next.MacLatestVersion; !strings.Contains(out, want) {
+		t.Fatalf("CLI reported %q instead of the stored versions %q", out, want)
 	}
 }

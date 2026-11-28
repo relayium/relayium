@@ -6,6 +6,7 @@
   import { conversationRows, deleteConversationSnapshot, snapshotConversation, type ConversationRow, type ConversationSnapshot } from "./conversation.js";
   import { PHASE_KEY } from "./phase-copy.js";
   import { deliveryStateKey } from "./delivery-copy.js";
+  import InboxMessageBody from "./InboxMessageBody.svelte";
   let { inbox, send }: { inbox: InboxController; send: InboxSendController } = $props();
   const rows = $derived(conversationRows(inbox.messages, Object.values(inbox.named), send.history).filter((row) => row.peer === send.conversationPeer));
   let deleting = $state<ConversationSnapshot | null>(null);
@@ -73,7 +74,7 @@
           {#if row.sent.kind === "text"}
             <div class="actions"><button type="button" data-test="conversation-open-sent" onclick={() => void send.openSent(row.sent.id)}>{t(send.openSentID === row.sent.id ? "inboxClose" : "inboxOpen")}</button>
               <button type="button" onclick={() => void copy(row)}>{t(copied?.id === row.id ? copied.ok ? "inboxCopied" : "inboxCopyFailed" : "inboxCopy")}</button></div>
-            {#if send.openSentID === row.sent.id}<p class="body" data-test="conversation-sent-body">{send.openSentText || t("conversationBodyUnavailable")}</p>{/if}
+            {#if send.openSentID === row.sent.id}<InboxMessageBody text={send.openSentText || t("conversationBodyUnavailable")} testID="conversation-sent-body" />{/if}
           {:else}<ul class="items">{#each row.sent.items as item}<li><span>{item.name}</span><small>{size(item.size)}</small></li>{/each}</ul>{/if}
           {#if ["queued", "notified", "downloading", "verifying", "attention_required", "failed_retryable"].includes(row.sent.state)}
             <button type="button" data-test="conversation-cancel-delivery" disabled={send.cancellingDelivery !== null}
@@ -82,7 +83,7 @@
         {:else if row.kind === "message"}
           <div class="actions"><button type="button" data-test="inbox-open" onclick={() => void inbox.open(row.message.id)}>{t(inbox.openId === row.message.id ? "inboxClose" : "inboxOpen")}</button>
             <button type="button" data-test="inbox-copy-top" onclick={() => void copy(row)}>{t(copied?.id === row.id ? copied.ok ? "inboxCopied" : "inboxCopyFailed" : "inboxCopy")}</button></div>
-          {#if inbox.openId === row.message.id}<div data-test="inbox-message-body"><p class="body" data-test="conversation-received-body">{inbox.openText}</p>
+          {#if inbox.openId === row.message.id}<div data-test="inbox-message-body"><InboxMessageBody text={inbox.openText} testID="conversation-received-body" />
             <button type="button" data-test="inbox-copy" onclick={() => void copy(row)}>{t(copied?.id === row.id ? copied.ok ? "inboxCopied" : "inboxCopyFailed" : "inboxCopy")}</button></div>{/if}
         {:else}
           {@const receipt = inbox.receipts.find((entry) => entry.taskID === row.delivery.taskID)}
@@ -111,7 +112,6 @@
   .timeline { padding: 0; list-style: none; display: grid; gap: 12px; }
   .timeline > li { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-right: 24px; }
   .timeline > li.outgoing { margin-left: 24px; margin-right: 0; }
-  .body { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow-y: auto; }
   .items { padding: 0; list-style: none; } .items li { display: flex; justify-content: space-between; gap: 12px; overflow-wrap: anywhere; }
   .forget { margin-top: 12px; } dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); max-width: 420px; padding: 24px; }
   dialog::backdrop { background: #0006; }

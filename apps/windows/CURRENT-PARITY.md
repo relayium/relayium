@@ -1,7 +1,14 @@
+> Windows 0.0.6 unsigned x64 public preview was published on 2026-11-27 from
+> `7409f16e9f6885169ac881e8f8c50dde1b3a908f`. Long Device Inbox messages fold independently.
+> Copy preserves the full body with the message expanded or collapsed. Download:
+> https://github.com/relayium/relayium/releases/tag/windows-v0.0.6
+> Updates are manual. The Windows clipboard and installed-artifact tests passed.
+> The earlier candidate records below retain their original scope.
+
 # Windows candidate against macOS 1.5.2
 
 Target: macOS 1.5.2 (50). This private development candidate retains Windows
-source version 0.0.3. There is no public signed Windows release or enabled
+source version 0.0.4. There is no public signed Windows release or enabled
 public update channel. The [older ledger](DURABLE-PARITY.md) preserves historical
 Windows execution; its September counts are not current acceptance.
 

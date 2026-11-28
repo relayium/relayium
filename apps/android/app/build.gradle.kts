@@ -46,8 +46,8 @@ android {
         // names, stale staging cleanup and the advisory client policy. The
         // public feed stays 0.3.0 (9) until this APK is published.
         // 0.3.2 (11): negotiated two-request Share upload pipeline.
-        versionCode = 13
-        versionName = "0.3.4"
+        versionCode = 15
+        versionName = "0.3.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

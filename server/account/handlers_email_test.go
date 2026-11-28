@@ -28,6 +28,17 @@ func TestHandleRegisterReturnsVerificationSentNoCookie(t *testing.T) {
 	}
 }
 
+func TestHandleRegisterRejectsSingleLabelDomain(t *testing.T) {
+	svc, mail := newTestService(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/register",
+		strings.NewReader(`{"email":"mu@mu","password":"supersecret"}`))
+	rec := httptest.NewRecorder()
+	svc.handleRegister(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"invalid_email"`) || mail.verify != "" {
+		t.Fatalf("registration response %d %s; verification sent=%t", rec.Code, rec.Body.String(), mail.verify != "")
+	}
+}
+
 func TestHandleLoginUnverifiedReturns403(t *testing.T) {
 	svc, _ := newTestService(t)
 	_, _ = svc.Register(context.Background(), "u@example.com", "supersecret", "")

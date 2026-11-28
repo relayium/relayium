@@ -674,6 +674,14 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(window.staticTexts[
             "Incoming files are written to your Downloads folder."
         ].exists, "an off listener still promises to deliver an incoming file")
+        let details = window.buttons["lan-this-mac-details"]
+        XCTAssertTrue(details.exists && details.isHittable)
+        let identity = window.descendants(matching: .any)["lan-configured-name"].firstMatch
+        XCTAssertFalse(identity.exists, "local identity should be hidden initially")
+        details.click()
+        XCTAssertTrue(identity.waitForExistence(timeout: 10),
+                      "local identity should remain available on demand")
+
     }
 
     /// A count is not the identity of a send. Drive a real file through the
@@ -1008,7 +1016,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.buttons["Connect"].isEnabled,
                       "a complete code cannot be connected with")
 
-        window.buttons["Connect"].click()
+        app.typeKey(.return, modifierFlags: [])
         // By label rather than by identifier: the joiner's wait is the handoff
         // card's own, now that the pane no longer draws a second one beside it.
         let waiting = window.activityIndicators["Waiting for the other device…"]
@@ -1081,6 +1089,11 @@ final class AppShellUITests: XCTestCase {
             id: "cross-network-explain", contains: "do not need to be on the same network",
             in: window).exists,
                       "the pairing screen does not say a shared network is unnecessary")
+
+        let joinField = window.textFields["pairing.joinCode"]
+        let create = window.buttons["Create a pairing code"]
+        XCTAssertLessThan(joinField.frame.minY, create.frame.minY,
+                          "the join field should come before the create action")
 
         // No same-network discovery here at all.
         XCTAssertFalse(window.buttons["Start receiving"].exists,

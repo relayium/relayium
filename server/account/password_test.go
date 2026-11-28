@@ -64,11 +64,11 @@ func TestRegisterRejectsInvalidEmail(t *testing.T) {
 	svc := newPwService(t)
 	ctx := context.Background()
 
-	if _, err := svc.Register(ctx, "not-an-email", "supersecret", ""); !errors.Is(err, ErrInvalidEmail) {
+	if _, err := svc.Register(ctx, "mu@mu", "supersecret", ""); !errors.Is(err, ErrInvalidEmail) {
 		t.Fatalf("invalid email: want ErrInvalidEmail, got %v", err)
 	}
 	// No user/credentials row should have been created for the malformed address.
-	if _, _, ok, err := svc.store.GetCredentials(ctx, "not-an-email"); err != nil {
+	if _, _, ok, err := svc.store.GetCredentials(ctx, "mu@mu"); err != nil {
 		t.Fatalf("get credentials: %v", err)
 	} else if ok {
 		t.Fatal("register with invalid email must not create credentials")
@@ -153,5 +153,18 @@ func TestChangePasswordRevokesOtherSessions(t *testing.T) {
 	}
 	if _, ok, _ := svc.ValidateSession(ctx, other.ID); ok {
 		t.Fatal("other session must be revoked")
+	}
+}
+
+func TestRegistrationEmailDomains(t *testing.T) {
+	for _, address := range []string{"mu@mu", "not-an-email", "name <me@example.com>", "a@-bad.com", "a@domain..com", "a@foo_bar.com", "a@127.0.0.1", "a@example.com."} {
+		if validRegistrationEmail(address) {
+			t.Errorf("accepted %q", address)
+		}
+	}
+	for _, address := range []string{"user+tag@dept.example.com", "user@例子.公司", "user@xn--fsqu00a.xn--55qx5d"} {
+		if !validRegistrationEmail(address) {
+			t.Errorf("rejected %q", address)
+		}
 	}
 }

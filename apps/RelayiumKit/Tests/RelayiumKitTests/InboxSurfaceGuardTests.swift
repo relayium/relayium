@@ -822,11 +822,10 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(branch.contains("conversationsSection"),
                       "the conversation history is rendered outside the usable-account branch")
 
-        // The body, whole and unformatted. `Text(message.text)` and not a
-        // presentation helper: a helper is where a preview or a truncation would
-        // be added, and this row is the one place the message may appear.
-        XCTAssertTrue(page.contains("Text(message.text)"),
-                      "the message rows no longer render the message")
+        // Long bodies render a compact prefix and can show the original text.
+        XCTAssertTrue(page.contains("InboxMessagePresentation.collapsedPreview(message.text)")
+                      && page.contains("Text(expanded ? message.text : preview ?? message.text)"),
+                      "the message rows no longer render their preview and original body")
         XCTAssertTrue(page.contains("InboxTimelinePresentation.at(entry)"),
                       "a conversation row no longer says when it happened")
         XCTAssertTrue(page.contains("inbox.message(for: entry)")
@@ -1034,6 +1033,10 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(surface.contains("copiedMessageID = nil"))
         XCTAssertTrue(surface.contains("conversation.entries.filter { $0.isUnread }"),
                       "the home summary counts all history instead of unread history")
+        let devices = try macSource("DeviceInbox/DeviceSendSection.swift")
+        XCTAssertTrue(surface.contains("conversationSummary: conversationSummary"))
+        XCTAssertTrue(devices.contains("Text(conversationSummary(conversation))"),
+                      "a linked device lost its unread message and file summary")
         let page = try macSource("DeviceInbox/DeviceConversationPage.swift")
         XCTAssertTrue(page.contains("} else if entry.kind == .files"),
                       "a missing message reference can fall through as an empty file row")
@@ -1242,7 +1245,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
             "Relayium/DeviceConversationView.swift"))
         XCTAssertTrue(page.contains("inbox.message(for: entry)"),
                       "iOS announces a text surface but reads no received message body")
-        XCTAssertTrue(page.contains("Text(message.text)"),
+        XCTAssertTrue(page.contains("Text(expanded ? message.text : preview ?? message.text)"),
                       "iOS announces a text surface that never renders the message")
     }
 
@@ -1636,7 +1639,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
         let status = try macAt("statusSection(offersControls: true)")
         let conversations = try macAt("conversationsSection")
         let send = try macAt("DeviceSendSection(")
-        for (name, later) in [("folderSection", try macAt("folderSection")),
+        for (name, later) in [("configured receive folder", try macAt("if inbox.folder.url != nil")),
                               ("policySection", try macAt("policySection")),
                               ("residencySection", try macAt("residencySection"))] {
             XCTAssertLessThan(ask, later,
@@ -1645,6 +1648,17 @@ final class InboxSurfaceGuardTests: XCTestCase {
             XCTAssertLessThan(conversations, later, "macOS: \(name) is above the conversations")
             XCTAssertLessThan(send, later, "macOS: \(name) is above the devices to send to")
         }
+
+        let setup = try macAt("if inbox.folder.url == nil")
+        XCTAssertLessThan(ask, setup)
+        XCTAssertLessThan(setup, send,
+                          "an unusable receive folder needs recovery above the device directory")
+        XCTAssertTrue(surface.contains("!listedDeviceIDs.contains($0.peerDeviceID)"),
+                      "history for listed devices would be repeated below the device directory")
+        let list = try macSource("DeviceInbox/DeviceSendSection.swift")
+        XCTAssertTrue(list.contains("$0.peerDeviceID == candidate.id"))
+        XCTAssertTrue(list.contains("deliveries.focusPeer(conversation.peerDeviceID)"),
+                      "a listed but blocked device must still be able to open its stored history")
 
         // ── iOS ────────────────────────────────────────────────────────────
         let ios = try code(try RepoRoot.directory("apps/ios/Relayium")

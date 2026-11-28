@@ -682,6 +682,8 @@
 "inbox.composeHeading" = "Send to this device";
 "inbox.composeUnavailable" = "This device can't be sent to from this Mac, so its history is shown on its own.";
 "inbox.sentMessageMissing" = "This Mac no longer has the text of this message.";
+"inbox.messageExpand" = "Expand text";
+"inbox.messageCollapse" = "Collapse text";
 
 /* MARK: Device Inbox, as it works on iPhone and iPad */
 "inbox.iosExplain" = "Your other Relayium devices can send files and messages straight to this one. There is no folder to choose: everything that arrives is saved inside Relayium, where the Files app can reach it. Relayium never sees what is inside.";
@@ -1240,3 +1242,8 @@
 
 "inbox.receiveBytes" = "Received %@ of %@";
 "inbox.receiveNoProgress" = "No new data for %@ seconds. Waiting for the connection…";
+
+"mac.link.otherTransfers" = "Other transfers";
+"mac.nearby.emptyRosterOpen" = "Connect the other device to the same network. Open Relayium or this address on that device and leave it open:";
+"mac.pair.createHeading" = "I need a pairing code";
+"mac.pair.joinHeading" = "I have a pairing code";

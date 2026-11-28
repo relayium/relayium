@@ -110,10 +110,16 @@ func TestFleetRolloutCannotTargetBelowOperationalMinimum(t *testing.T) {
 }
 
 func TestLocalMacPolicyRefreshPreservesFloorsAndAuditsAtomically(t *testing.T) {
+	releases, err := verifiedMacReleases()
+	if err != nil || len(releases) == 0 {
+		t.Fatalf("expected a verified release to refresh to: %v", err)
+	}
+	wantLatest := releases[len(releases)-1].Version
+
 	st := newTestStore(t)
 	ctx := context.Background()
 	now := int64(1800000000)
-	_, err := st.db.Exec(`UPDATE operational_version_policy SET revision=16,fleet_min_version='v0.25.0',mac_min_version='1.4.10',mac_min_build=47,mac_recommended_version='1.5.0',mac_latest_version='1.5.0' WHERE id=1`)
+	_, err = st.db.Exec(`UPDATE operational_version_policy SET revision=16,fleet_min_version='v0.25.0',mac_min_version='1.4.10',mac_min_build=47,mac_recommended_version='1.5.0',mac_latest_version='1.5.0' WHERE id=1`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +149,7 @@ func TestLocalMacPolicyRefreshPreservesFloorsAndAuditsAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Revision != 17 || updated.FleetMinimumVersion != "v0.25.0" || updated.MacMinimumVersion != "1.4.10" || updated.MacMinimumBuild != 47 || updated.MacRecommendedVersion != "1.5.2" || updated.MacLatestVersion != "1.5.2" {
+	if updated.Revision != 17 || updated.FleetMinimumVersion != "v0.25.0" || updated.MacMinimumVersion != "1.4.10" || updated.MacMinimumBuild != 47 || updated.MacRecommendedVersion != wantLatest || updated.MacLatestVersion != wantLatest {
 		t.Fatal("wrong refresh", updated)
 	}
 	var count int

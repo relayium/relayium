@@ -51,7 +51,8 @@
 #                              CONSUMED, in any state, for that record
 #   --build                    the next free build number
 #
-# `--build` must be exactly `--readback-highest-build` + 1. Be precise about what
+# `--build` follows the provider high-water mark and any immediately following
+# build already handed out privately (see `--reserved-local-build`). Be precise about what
 # that buys: it is an EXPLICIT OPERATOR ATTESTATION plus a consistency check, and
 # it is not proof that the read-back happened. Nothing here observes App Store
 # Connect, so somebody who guesses a highest build and adds one satisfies it just
@@ -397,13 +398,15 @@ usage: scripts/ios-app-store-candidate.sh
          --marketing-version <x.y.z>
          --build <n, decimal, no leading zero>
          --readback-highest-build <n, decimal, no leading zero>
+         [--reserved-local-build <n, decimal, no leading zero>]
          --readback-observed-at <YYYY-MM-DDTHH:MM:SSZ>
          --artifact-root <absolute path ending in -<short8 sha>, must not exist>
 
-Every option is required. The three App Store Connect values are your
+The version, build, read-back and artifact options are required. The App Store Connect values are your
 attestation of a fresh read-only inspection of the record: this script cannot
 see App Store Connect and cannot confirm that you performed one. --build must be
-exactly --readback-highest-build + 1 and both must already equal what the
+exactly --readback-highest-build + 1, plus one when the immediately following
+build was already distributed privately. The version and build must equal what the
 project declares, which catches an inconsistent or mistyped attestation, not a
 fabricated one. This script builds and verifies a candidate. It uploads nothing.
 USAGE
@@ -880,6 +883,7 @@ decimal_less_than() {
 marketing_version=''
 build_number=''
 readback_highest_build=''
+reserved_local_build=''
 readback_observed_at=''
 artifact_root=''
 
@@ -888,6 +892,11 @@ while [ "$#" -gt 0 ]; do
     --marketing-version) [ "$#" -ge 2 ] || usage; marketing_version="$2"; shift 2 ;;
     --build) [ "$#" -ge 2 ] || usage; build_number="$2"; shift 2 ;;
     --readback-highest-build) [ "$#" -ge 2 ] || usage; readback_highest_build="$2"; shift 2 ;;
+    --reserved-local-build)
+      [ "$#" -ge 2 ] && [ -z "$reserved_local_build" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage
+      reserved_local_build="$2"
+      shift 2
+      ;;
     --readback-observed-at) [ "$#" -ge 2 ] || usage; readback_observed_at="$2"; shift 2 ;;
     --artifact-root) [ "$#" -ge 2 ] || usage; artifact_root="$2"; shift 2 ;;
     -h|--help) usage ;;
@@ -961,6 +970,12 @@ step 'App Store Connect read-back attestation'
 # addition and is exact at any length, and `[ x != y ]` compares the canonical
 # spellings the regexes already pinned.
 next_free_build="$(decimal_increment "$readback_highest_build")"
+if [ -n "$reserved_local_build" ]; then
+  [ "$reserved_local_build" = "$next_free_build" ] ||
+    refuse "--reserved-local-build must be $next_free_build, immediately after the provider's highest build"
+  next_free_build="$(decimal_increment "$reserved_local_build")"
+  note "privately distributed build attested: $reserved_local_build"
+fi
 if [ "$build_number" != "$next_free_build" ]; then
   refuse "--build $build_number is not the next free build after the attested highest consumed build $readback_highest_build; the next free build is $next_free_build"
 fi
@@ -1673,6 +1688,7 @@ verified here, and not proof the inspection happened)
   attested observation    $readback_observed_at
   age at build            ${readback_age}s
   highest consumed build  $readback_highest_build
+  reserved private build  ${reserved_local_build:-none}
 
 Toolchain
   Xcode                   $xcode_version ($xcode_build)
@@ -1748,6 +1764,8 @@ cat >"$manifest_plist" <<MANIFEST_PLIST
 		<integer>$readback_age</integer>
 		<key>highestConsumedBuild</key>
 		<string>$(xml_escape "$readback_highest_build")</string>
+		<key>reservedLocalBuild</key>
+		<string>$(xml_escape "${reserved_local_build:-none}")</string>
 	</dict>
 	<key>toolchain</key>
 	<dict>

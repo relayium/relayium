@@ -45,7 +45,7 @@ describe("CLI getting-started guide includes ephemeral text", () => {
     // again when the chooser was corrected from three modes to the six the
     // product actually has — cli-mode-chooser.test.mjs owns that contract, and
     // pins the date with the rewrite that earned it.
-    expect(article.updated).toBe("2026-09-01");
+    expect(article.updated).toBe("2026-11-25");
     const en = article.langs.en.sections.find(
       (item) => item.heading === "The six ways it moves files and text",
     );

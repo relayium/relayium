@@ -8,6 +8,8 @@ import { buildLegalPages, buildSitemap, articleGroupsByLang, buildGuidesIndexPag
 import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS, SPA_ONLY_EN_SLUGS, NO_LOCALIZED_TWIN_SLUGS, urlPath, LANGS, MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 import guidesIndex from "./content/guides-index.mjs";
 
+import androidIphone from "./content/articles/howto-android-to-iphone.mjs";
+
 const docs = [privacy, terms];
 
 describe("buildLegalPages", () => {
@@ -154,6 +156,17 @@ describe("landing helpers", () => {
 });
 
 describe("buildSitemap lastmod", () => {
+  it("dates each translation of a revised article independently", () => {
+    const dates = lastmods(buildSitemap([], { home: false, articles: [androidIphone] }));
+    for (const lang of LANGS) {
+      const url = "https://relayium.com" + urlPath(androidIphone.slug, lang);
+      const expected = MAINTAINED_LANGS.includes(lang)
+        ? androidIphone.langs[lang].updated
+        : androidIphone.updated;
+      expect(dates.get(url), lang).toBe(expected);
+    }
+  });
+
   it("uses each doc's updated date instead of a hardcoded one", () => {
     const xml = buildSitemap(docs, { home: true });
     expect(xml).toContain(`<lastmod>${privacy.langs.en.updated}</lastmod>`);

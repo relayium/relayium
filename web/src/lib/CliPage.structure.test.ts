@@ -654,9 +654,9 @@ describe("产品事实", () => {
     // 进程退出后并不保留：这是最容易被读多的一半。
     expect(text).toMatch(/deletes the partial output|delete[sd]? the partial output/i);
     expect(text).not.toMatch(/relayium down[^.]{0,80}resumes? on the next run/i);
-    // sync 那一侧要说的是"目标端的半截文件"，而不是同一次运行内的重连。
+    // sync can reuse a verified prefix when a new run starts.
     expect(target.querySelector("#sync")!.textContent).toMatch(
-      /partial file left at the destination/i,
+      /can reuse verified prefixes/i,
     );
   });
 
@@ -669,10 +669,15 @@ describe("产品事实", () => {
     expect(FLAG_ROWS.map((f) => f.flag)).not.toContain("-p <n>");
   });
 
-  it("sync 说的是 size+mtime，而不是校验和比对", async () => {
+  it("sync documents content verification, preflight and user-selected exclusions", async () => {
     const target = await render();
     const text = target.querySelector("#sync")!.textContent ?? "";
-    expect(text).toMatch(/size and modification time/i);
+    expect(text).toMatch(/compare size and SHA-256/i);
+    expect(text).toContain("--checksum");
+    expect(text).toContain("--check");
+    expect(text).toContain("--exclude");
+    expect(text).toContain("100,000");
+    expect(text).toContain("32 MiB");
     expect(text).toMatch(/not a versioned backup/i);
   });
 

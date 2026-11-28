@@ -32,17 +32,19 @@ async function mountPage({
   macRelease = { available: false, downloadUrl: null },
   androidRel = ANDROID_PUBLISHED,
   platformOverride = "unknown",
+  windowsRel = { available: false },
 }: {
   macRelease?: MacRelease;
   androidRel?: AndroidRelease;
   platformOverride?: Platform;
+  windowsRel?: { available: boolean; version?: string; downloadUrl?: string; sha256?: string; size?: number };
 } = {}) {
   await setLang("en");
   history.pushState({}, "", "/apps");
   syncRouteFromLocation();
   target = document.createElement("div");
   document.body.appendChild(target);
-  app = mount(AppsPage, { target, props: { macRelease, androidRel, platformOverride } });
+  app = mount(AppsPage, { target, props: { macRelease, androidRel, windowsRel, platformOverride } });
   flushSync();
 }
 
@@ -246,5 +248,26 @@ describe("AppsPage macOS hardware requirement", () => {
   it("says nothing about hardware for a manifest without architectures", async () => {
     await mountPage({ macRelease: { available: true, downloadUrl: URL } });
     expect(target.querySelector('[data-apps="mac-requirements"]')).toBeNull();
+  });
+});
+
+
+describe("Windows public preview download", () => {
+  const preview = { available: true, version: "0.0.4", size: 123456,
+    sha256: "a".repeat(64), downloadUrl: "https://github.com/relayium/relayium/releases/download/windows-v0.0.4/Relayium-0.0.4-x64.exe" };
+  it("puts the verified Windows preview first for a Windows visitor and states its limits", async () => {
+    await mountPage({ windowsRel: preview, platformOverride: "windows" });
+    expect(idsIn("available-apps-heading")[0]).toBe("app-windows");
+    const card = target.querySelector("#app-windows")!;
+    expect(card.textContent).toContain("unsigned");
+    expect(card.textContent).toContain("0.0.4");
+    expect(card.querySelector("a")?.href).toBe(preview.downloadUrl);
+    await setLang("zh"); flushSync();
+    expect(card.textContent).toContain("未签名");
+    expect(card.textContent).toContain("预览版");
+  });
+  it("offers no download when the bytes have not been verified", async () => {
+    await mountPage({ windowsRel: { ...preview, sha256: "" }, platformOverride: "windows" });
+    expect(target.querySelector("#app-windows")).toBeNull();
   });
 });

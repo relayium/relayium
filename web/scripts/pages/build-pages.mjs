@@ -172,7 +172,7 @@ export function buildModePages(modeDef, { slug, learn = null }) {
   }));
 }
 
-export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, categoryHubs = [], modes = [], spaPages = [], releases = null } = {}) {
+export function buildSitemap(docs, { home = true, homeUpdated = null, landing = null, articles = [], guidesIndex = null, categoryHubs = [], modes = [], spaPages = [], releases = null } = {}) {
   // urlPath() only keeps an English URL slash-less if the slug is registered. A
   // mode or SPA page added to gen-pages.mjs but not registered would emit
   // /new-thing/ — a URL with no directory behind it, so a redirect in the
@@ -207,7 +207,7 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
     ...(guidesIndex ? [guidesIndex.updated] : []),
     ...modes.map((m) => m.def.updated),
   ].sort().at(-1);
-  if (home) urls.push({ loc: SITE.origin + "/", lastmod: newest, priority: "1.0", changefreq: "weekly" });
+  if (home) urls.push({ loc: SITE.origin + "/", lastmod: [homeUpdated, newest].filter(Boolean).sort().at(-1), priority: "1.0", changefreq: "weekly" });
   if (guidesIndex) {
     for (const lang of LANGS) {
       // 0.8, above the 0.6 articles it indexes. It was 0.5 — the one hub on the
@@ -234,7 +234,7 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
   }
   if (landing) {
     for (const lang of LANDING_LANGS) {
-      urls.push({ loc: absUrl(landingUrl(lang)), lastmod: landing.updated, priority: "0.8", changefreq: "weekly" });
+      urls.push({ loc: absUrl(landingUrl(lang)), lastmod: landing.langs[lang].updated || landing.updated, priority: "0.8", changefreq: "weekly" });
     }
   }
   for (const doc of docs) {
@@ -252,13 +252,13 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
   }
   for (const article of articles) {
     for (const lang of LANGS) {
-      urls.push({ loc: absUrl(urlPath(article.slug, lang)), lastmod: article.updated, priority: "0.6", changefreq: "monthly" });
+      urls.push({ loc: absUrl(urlPath(article.slug, lang)), lastmod: article.langs[lang].updated || article.updated, priority: "0.6", changefreq: "monthly" });
     }
   }
   for (const { def, slug } of modes) {
-    urls.push({ loc: absUrl(urlPath(slug, DEFAULT_LANG)), lastmod: def.updated, priority: "0.8", changefreq: "weekly" }); // english SPA route
+    urls.push({ loc: absUrl(urlPath(slug, DEFAULT_LANG)), lastmod: def.langs[DEFAULT_LANG]?.updated || def.updated, priority: "0.8", changefreq: "weekly" }); // english SPA route
     for (const lang of LANDING_LANGS) {
-      urls.push({ loc: absUrl(urlPath(slug, lang)), lastmod: def.updated, priority: "0.8", changefreq: "weekly" });
+      urls.push({ loc: absUrl(urlPath(slug, lang)), lastmod: def.langs[lang].updated || def.updated, priority: "0.8", changefreq: "weekly" });
     }
   }
   // English-only SPA routes (/pricing, /cli, /device-inbox). They have no

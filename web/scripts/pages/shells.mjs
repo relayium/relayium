@@ -140,6 +140,9 @@ export function proseBody(doc, { links = [], langSlug = null } = {}) {
   // eight localized pages and misses the one most readers land on. A page whose
   // prose says a build is downloadable while carrying no href is a page nobody
   // without JavaScript can act on.
+  if (doc.windowsDownload) {
+    p.push(`<p><a href="${esc(doc.windowsDownload.href)}">${esc(doc.windowsDownload.label)}</a></p>`);
+  }
   if (doc.androidDownload) {
     p.push(`<p><a href="${esc(doc.androidDownload.href)}">${esc(doc.androidDownload.label)}</a></p>`);
   }

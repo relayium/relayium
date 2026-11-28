@@ -3,13 +3,22 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The release manifest selects 0.3.4 (versionCode 13), signed on
-2026-11-18 and published on 2026-11-19 through the GitHub direct-APK preview
-channel `android-v0.3.4`.
-The release asset and relayium.com update feed are published and verified in
-separate steps; actual public URLs determine the version currently available.
+any kind. The release manifest selects 0.3.5 (versionCode 14) for the
+[GitHub direct-APK preview](https://github.com/relayium/relayium/releases/tag/android-v0.3.5).
+The asset and the relayium.com update feed are verified separately.
 
-### Android 0.3.4 (13) public release inputs
+### Android 0.3.5 (14) release inputs
+
+`Relayium-0.3.5-14.apk` was built from
+`95097e99b4b54bf1728cebb91993f5db266df8e3`. The APK checksum, size and
+release URL are in [android-release.json](../web/android-release.json).
+Connected cross-network and Nearby sessions can copy full sent and received
+messages. Android 13 and newer suppress the message text in the system
+clipboard preview. The APK passed same-certificate in-place upgrade from
+0.3.4 on an Android API 36 ARM64 emulator. Both message directions passed
+the clipboard UI tests.
+
+### Historical Android 0.3.4 (13) release inputs
 
 [GitHub Release `android-v0.3.4`](https://github.com/relayium/relayium/releases/tag/android-v0.3.4)
 is public, with the immutable APK and its checksum. Both assets were downloaded

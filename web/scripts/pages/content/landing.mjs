@@ -3,11 +3,12 @@
 // Terminology mirrors src/lib/i18n.svelte.ts for consistency.
 
 const zh = {
-  title: "Relayium — 端到端加密的点对点文件与文本传输",
-  description: "Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。",
+  updated: "2026-11-28",
+  title: "电脑和手机互传文件与文本，无需安装｜Relayium",
+  description: "电脑和手机打开浏览器即可互传文件与文本。同一 Wi-Fi 下无需安装或注册，异地可用配对码传输，文件与实时文本均端到端加密。",
   hero: {
-    h1: "端到端加密的点对点文件与文本传输",
-    pitch: "Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。",
+    h1: "在电脑和手机之间互传文件与文本",
+    pitch: "两台设备连上同一 Wi-Fi，打开网页，选中对方即可发送。文件和文本端到端加密，同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。",
     cta: "开始传输",
   },
   how: {
@@ -58,7 +59,7 @@ const zh = {
     items: [
       {
         title: "对比 AirDrop",
-        body: "AirDrop 原生流畅，但仅限 Apple 设备之间。Relayium 跨平台——Windows、Android 与 iPhone、Mac 之间也能同样直连，只要一个浏览器。",
+        body: "部分安卓手机可通过 Quick Share 与 AirDrop 互传。要从 Windows 发到 iPhone，或在不同网络之间传输，可在两台设备上打开 Relayium。",
       },
       {
         title: "对比 Snapdrop / PairDrop",
@@ -854,7 +855,6 @@ const pt = {
 // product-level surface. File-specific copy above remains unchanged.
 const TEXT_BOUNDARY = {
   zh: {
-    summary: "Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。",
     step: "文件逐块经 AES-256-GCM 加密传输，并以 SHA-256 校验完整性；临时文本使用独立的端到端加密会话。双方须同时在线，Relayium 服务器不保存消息正文或服务端历史，但端点可以留存文本。",
     detail: "双方同时在线时，可发送链接、命令或多行代码。每条消息最多 65,536 字节（UTF-8）；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。没有离线投递，更大的内容请作为文件发送。",
   },
@@ -898,8 +898,10 @@ const TEXT_BOUNDARY = {
 const landingLangs = { zh, ja, ko, de, fr, ar, es, pt };
 for (const [lang, doc] of Object.entries(landingLangs)) {
   const copy = TEXT_BOUNDARY[lang];
-  doc.description = copy.summary;
-  doc.hero.pitch = copy.summary;
+  if (copy.summary) {
+    doc.description = copy.summary;
+    doc.hero.pitch = copy.summary;
+  }
   doc.how.steps[3] = copy.step;
   doc.why.items[3].desc = copy.detail;
   const textFaq = doc.faq.items[5];
