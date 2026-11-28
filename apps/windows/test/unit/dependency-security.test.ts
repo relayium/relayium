@@ -139,9 +139,9 @@ describe("the packager's dependency graph", () => {
     // different @electron/get, the override stops matching and the graph tests
     // above say whether it is still needed.
     expect(pkg.overrides).toEqual({ "@electron/get@3.1.0": { "global-agent": "4.1.3" } });
-    expect(pkg.devDependencies.electron).toBe("44.3.0");
+    expect(pkg.devDependencies.electron).toBe("44.9.1");
     expect(pkg.devDependencies["electron-builder"]).toBe("26.15.3");
-    expect(lock.packages["node_modules/electron"].version).toBe("44.3.0");
+    expect(lock.packages["node_modules/electron"].version).toBe("44.9.1");
     expect(lock.packages["node_modules/electron-builder"].version).toBe("26.15.3");
     // Electron's own installer uses @electron/get 5, which has no proxy module.
     const own = lock.packages["node_modules/@electron/get"];
@@ -259,7 +259,7 @@ function selfSignedCert(): { key: string; certPem: string } {
   return { key: privateKey.export({ type: "pkcs8", format: "pem" }).toString(), certPem };
 }
 
-const VERSION = "44.3.0";
+const VERSION = "44.9.1";
 const FILE = `electron-v${VERSION}-win32-x64.zip`;
 const PAYLOAD = Buffer.alloc(64 * 1024, 0x5a);
 const PAYLOAD_SHA = createHash("sha256").update(PAYLOAD).digest("hex");
