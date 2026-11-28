@@ -164,6 +164,8 @@ const MAC_TAG = /^macos-v\d+(?:\.\d+){1,2}$/;
  * not be quietly accepted here.
  */
 const ANDROID_TAG = /^android-v\d+\.\d+\.\d+$/;
+/** The unsigned Windows desktop preview has its own release identity. */
+const WINDOWS_TAG = /^windows-v\d+\.\d+\.\d+$/;
 
 /**
  * Tags that are not a namespace at all — they are one incident's debris.
@@ -203,6 +205,7 @@ function partitionTags(tags) {
   const listed = {};
   const mac = [];
   const android = [];
+  const windows = [];
   const broken = [];
   const unknown = [];
   for (const [tag, date] of Object.entries(tags)) {
@@ -211,12 +214,13 @@ function partitionTags(tags) {
     else if (CLI_TAG.test(tag)) listed[tag] = date;
     else if (MAC_TAG.test(tag)) mac.push(tag);
     else if (ANDROID_TAG.test(tag)) android.push(tag);
+    else if (WINDOWS_TAG.test(tag)) windows.push(tag);
     else unknown.push(tag);
   }
   // `native` stays as the union, because every assertion about "a tag that is
-  // not a row" is true of both families; the split above is what lets a test
+  // not a row" is true of all native families; the split above is what lets a test
   // say which family a tag belongs to.
-  return { listed, mac, android, native: [...mac, ...android], broken, unknown };
+  return { listed, mac, android, windows, native: [...mac, ...android, ...windows], broken, unknown };
 }
 
 describe("the release list is internally consistent", () => {
@@ -280,10 +284,10 @@ describe("git tags are the source of truth", () => {
     // Every tag must be a shape this page has a rule for. `partitionTags` is
     // what classifies them; `unknown` being non-empty is the signal that a new
     // namespace appeared and nobody decided what /releases says about it.
-    const { listed, mac, android, broken, unknown } = partitionTags(tags);
+    const { listed, mac, android, windows, broken, unknown } = partitionTags(tags);
     expect(unknown, `unclassified tags in this clone: ${unknown.join(", ")}`).toEqual([]);
     expect(
-      Object.keys(listed).length + mac.length + android.length + broken.length,
+      Object.keys(listed).length + mac.length + android.length + windows.length + broken.length,
     ).toBe(Object.keys(tags).length);
   });
 
@@ -366,6 +370,27 @@ describe("which tags this page is responsible for", () => {
     expect(mac).toEqual(["macos-v1.3.10"]);
     expect(android).toEqual(["android-v0.1.1"]);
     expect(unknown).toEqual([]);
+  });
+
+  it("keeps Windows previews separate from CLI, Mac and Android releases", () => {
+    const { listed, mac, android, windows, native, unknown } = partitionTags({
+      "v0.27.5": "2026-11-15", "macos-v1.5.2": "2026-11-18",
+      "android-v0.3.4": "2026-11-18", "windows-v0.0.4": "2026-11-23",
+    });
+    expect(Object.keys(listed)).toEqual(["v0.27.5"]);
+    expect(mac).toEqual(["macos-v1.5.2"]);
+    expect(android).toEqual(["android-v0.3.4"]);
+    expect(windows).toEqual(["windows-v0.0.4"]);
+    expect(native).toEqual([...mac, ...android, ...windows]);
+    expect(unknown).toEqual([]);
+    expect(releases.releases.map((r) => r.version)).not.toContain("windows-v0.0.4");
+  });
+
+  it("rejects malformed Windows release identities", () => {
+    const invalid = ["windows-v0.4", "windows-vnext", "windows-v0.0.4-rc1", "windowsv0.0.4"];
+    const { windows, unknown } = partitionTags(Object.fromEntries(invalid.map((tag) => [tag, "2026-11-23"])));
+    expect(windows).toEqual([]);
+    expect(unknown).toEqual(invalid);
   });
 
   it("still refuses a namespace nobody has decided about", () => {

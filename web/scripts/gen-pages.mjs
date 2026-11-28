@@ -153,6 +153,7 @@ export function buildAllPages() {
 export function buildSiteSitemap() {
   return buildSitemap(legalDocs, {
     home: true,
+    homeUpdated: "2026-11-28",
     landing,
     articles,
     guidesIndex,

@@ -1,5 +1,6 @@
 package com.relayium.android
 
+import android.content.ClipboardManager
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -910,6 +912,48 @@ class InboxScreenAcceptanceTest {
         compose.waitForIdle()
         compose.onNodeWithText("the meeting moved to four").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(s(R.string.inbox_sent_saved)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun longMessagesExpandIndependentlyAndCollapseAgain() {
+        val sent = InboxConversationEntry(
+            id = "job00000000000000000000000001",
+            peerDeviceId = peerId,
+            direction = InboxConversationEntry.Direction.SENT,
+            kind = InboxConversationEntry.Kind.MESSAGE,
+            names = emptyList(),
+            byteCount = 300,
+            at = 1_700_000_300,
+            sentState = InboxConversationEntry.SentState.SAVED,
+        )
+        val received = sent.copy(id = taskId, direction = InboxConversationEntry.Direction.RECEIVED,
+            at = 1_700_000_200, sentState = null)
+        val sentText = "one\ntwo\nthree\nfour\nsent tail"
+        val receivedText = "甲\r\n乙\n丙\n丁\nreceived tail"
+        host(
+            ready().copy(conversations = listOf(conversationOf(sent, received))),
+            InboxActions(loadMessage = { if (it.id == sent.id) sentText else receivedText }),
+        )
+        clickText(R.string.inbox_history_open)
+
+        fun message(id: String) = compose.onNodeWithTag("inbox-entry-message-body:$id", useUnmergedTree = true)
+        fun fold(id: String) = compose.onNodeWithTag("inbox-entry-text-disclosure-bottom:$id")
+        message(sent.id).performScrollTo().assertTextEquals("one\ntwo\nthree\nfour…")
+        message(received.id).performScrollTo().assertTextEquals("甲\r\n乙\n丙\n丁…")
+        fold(sent.id).performScrollTo().performClick()
+        message(sent.id).performScrollTo().assertTextEquals(sentText)
+        message(received.id).performScrollTo().assertTextEquals("甲\r\n乙\n丙\n丁…")
+        fold(received.id).performScrollTo().performClick()
+        message(received.id).performScrollTo().assertTextEquals(receivedText)
+        fold(sent.id).performScrollTo().performClick()
+        message(sent.id).performScrollTo().assertTextEquals("one\ntwo\nthree\nfour…")
+        message(received.id).performScrollTo().assertTextEquals(receivedText)
+        compose.onNodeWithTag("inbox-entry-copy-top:${sent.id}").performScrollTo().performClick()
+        compose.runOnIdle {
+            val clipboard = InstrumentationRegistry.getInstrumentation().targetContext
+                .getSystemService(ClipboardManager::class.java)
+            assertEquals(sentText, clipboard?.primaryClip?.getItemAt(0)?.text?.toString())
+        }
     }
 
     /** A body that is genuinely gone says so, rather than loading forever. */

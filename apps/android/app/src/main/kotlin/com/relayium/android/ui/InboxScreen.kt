@@ -1148,20 +1148,50 @@ private fun MessageBody(
         )
         return
     }
+    val preview = remember(body) { collapsedMessagePreview(body) }
+    var expanded by remember(state.authority, entry.id) { mutableStateOf(false) }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Metrics.tight)) {
+        OutlinedButton(
+            onClick = { clipboard.setText(AnnotatedString(body)) },
+            colors = accentOutlinedColors(),
+            modifier = Modifier.defaultMinSize(minHeight = Metrics.touch)
+                .testTag("inbox-entry-copy-top:${entry.id}"),
+        ) { Text(stringResource(R.string.inbox_action_copy)) }
+        if (preview != null && expanded) {
+            MessageDisclosureButton(entry.id, true, "top") { expanded = false }
+        }
+    }
+    SelectionContainer {
+        Text(
+            if (expanded) body else preview ?: body,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag("inbox-entry-message-body:${entry.id}"),
+        )
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Metrics.tight)) {
+        if (preview != null) {
+            MessageDisclosureButton(entry.id, expanded, "bottom") { expanded = !expanded }
+        }
+        if (preview == null || expanded) {
+            OutlinedButton(
+                onClick = { clipboard.setText(AnnotatedString(body)) },
+                colors = accentOutlinedColors(),
+                modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
+            ) { Text(stringResource(R.string.inbox_action_copy)) }
+        }
+    }
+}
+
+@Composable
+private fun MessageDisclosureButton(id: String, expanded: Boolean, placement: String, onClick: () -> Unit) {
     OutlinedButton(
-        onClick = { clipboard.setText(AnnotatedString(body)) },
+        onClick = onClick,
         colors = accentOutlinedColors(),
         modifier = Modifier.defaultMinSize(minHeight = Metrics.touch)
-            .testTag("inbox-entry-copy-top:${entry.id}"),
-    ) { Text(stringResource(R.string.inbox_action_copy)) }
-    SelectionContainer {
-        Text(body, style = MaterialTheme.typography.bodyMedium)
+            .testTag("inbox-entry-text-disclosure-$placement:$id"),
+    ) {
+        Text(stringResource(if (expanded) R.string.inbox_message_collapse else R.string.inbox_message_expand))
     }
-    OutlinedButton(
-        onClick = { clipboard.setText(AnnotatedString(body)) },
-        colors = accentOutlinedColors(),
-        modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
-    ) { Text(stringResource(R.string.inbox_action_copy)) }
 }
 
 /** One resolved body, so absence is representable. */

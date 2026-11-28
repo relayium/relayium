@@ -2061,6 +2061,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// and the process died before the body was written. Said out loud rather
     /// than rendered as an empty row.
     case inboxSentMessageMissing = "inbox.sentMessageMissing"
+    case inboxMessageExpand = "inbox.messageExpand"
+    case inboxMessageCollapse = "inbox.messageCollapse"
 
     // MARK: - what one outgoing row may claim
     //
@@ -2503,6 +2505,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case pairingPassItOn = "pairing.passItOn"
     case pairingCodePlaceholder = "pairing.codePlaceholder"
     case workspaceJoinHeading = "workspace.joinHeading"
+    case macLinkOtherTransfers = "mac.link.otherTransfers"
+    case macNearbyEmptyRosterOpen = "mac.nearby.emptyRosterOpen"
+    case macPairCreateHeading = "mac.pair.createHeading"
+    case macPairJoinHeading = "mac.pair.joinHeading"
     case directJoinNoAccountShort = "direct.joinNoAccountShort"
     case nearbyListeningConsentShort = "nearby.listeningConsentShort"
     case nearbyAddressesPrivacyShort = "nearby.addressesPrivacyShort"

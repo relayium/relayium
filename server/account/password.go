@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/mail"
 	"time"
 
 	"github.com/relayium/relayium/authx"
@@ -71,7 +70,7 @@ func validateNewPassword(password string) error {
 // Register 创建密码账号（初始未验证）并发送验证邮件。不发 session：用户须先验证。
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (User, error) {
 	email = normEmail(email)
-	if _, err := mail.ParseAddress(email); err != nil {
+	if !validRegistrationEmail(email) {
 		return User{}, ErrInvalidEmail
 	}
 	// Invariant: a password that cannot be stored never reaches a durable write.

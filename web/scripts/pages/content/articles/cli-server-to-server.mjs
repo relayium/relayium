@@ -97,7 +97,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "No relay and no fallback: if the listener isn't reachable, the push fails — file bytes never route through anyone else.",
-        "The same transfer engine as the other modes: each file is checked with a per-file SHA-256 and staged before it is installed. push does not resume — it refuses a destination that already exists, so an interrupted run is finished by pushing the missing paths, or by relayium sync, which continues a partial file and which this listener honours unless it was started with --no-resume.",
+        "The same transfer engine as the other modes: each file is checked with a per-file SHA-256 and staged before it is installed. push does not resume — it refuses a destination that already exists, so an interrupted run is finished by pushing the missing paths, or by relayium sync. A later run can reuse a verified prefix. An interrupted file without one starts again. Completed, verified files are skipped.",
       ],
     },
     {
@@ -349,7 +349,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。",
-        "使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync（它会接着传半截文件，而这个监听端会遵守，除非它是以 --no-resume 启动的）。",
+        "使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync。下次运行可以重用已验证的文件前缀。中断时没有可用前缀的文件会重传，已经传完并校验的文件会跳过。",
       ],
     },
     {
@@ -598,7 +598,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "リレーもフォールバックもありません。リスナーに到達できなければプッシュは失敗します。ファイルのバイト列が他の誰かを経由することは決してありません。",
-        "他のモードと同じ転送エンジンです。各ファイルはファイルごとの SHA-256 でチェックされ、暫定領域に置かれてから設置されます。push は再開せず、すでに存在する宛先を拒否します。中断されたときは足りないパスを push するか、半端なファイルを続けてくれる relayium sync を使ってください（この待ち受け側は --no-resume 付きで起動されていない限りそれに従います）。",
+        "他のモードと同じ転送エンジンです。各ファイルはファイルごとの SHA-256 でチェックされ、暫定領域に置かれてから設置されます。push は再開せず、すでに存在する宛先を拒否します。中断されたときは足りないパスを push するか、半端なファイルを続けてくれる relayium sync。再実行では検証済みの先頭部分を再利用できます。検証できる先頭部分のない中断ファイルは送り直し、完了済みの検証されたファイルはスキップします。",
       ],
     },
     {
@@ -828,7 +828,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "릴레이도 폴백도 없습니다. 리스너에 도달할 수 없으면 푸시는 실패합니다. 파일 바이트는 결코 다른 누군가를 거쳐 전달되지 않습니다.",
-        "다른 모드와 동일한 전송 엔진입니다: 각 파일은 파일별 SHA-256으로 검사되고 스테이징된 뒤 설치됩니다. push는 재개하지 않으며 이미 존재하는 목적지를 거부합니다. 중단되었다면 빠진 경로를 push하거나, 부분 파일을 이어가는 relayium sync를 쓰세요(이 수신 측은 --no-resume으로 시작되지 않은 한 그것을 존중합니다).",
+        "다른 모드와 동일한 전송 엔진입니다: 각 파일은 파일별 SHA-256으로 검사되고 스테이징된 뒤 설치됩니다. push는 재개하지 않으며 이미 존재하는 목적지를 거부합니다. 중단되었다면 빠진 경로를 push하거나, 부분 파일을 이어가는 relayium sync. 다시 실행하면 검증된 앞부분을 재사용할 수 있습니다. 검증된 앞부분이 없는 중단 파일은 다시 보내고, 검증이 끝난 파일은 건너뜁니다.",
       ],
     },
     {
@@ -1058,7 +1058,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Kein Relay und kein Fallback: Ist der Listener nicht erreichbar, schlägt der Push fehl — die Datei-Bytes laufen nie über irgendjemand anderen.",
-        "Dieselbe Übertragungs-Engine wie die anderen Modi: Jede Datei wird per SHA-256 geprüft und zwischengelagert, bevor sie installiert wird. push setzt nicht fort — es verweigert ein Ziel, das schon existiert. Einen abgebrochenen Lauf beendest du, indem du die fehlenden Pfade pushst, oder mit relayium sync, das eine Teildatei weiterführt und das dieser Listener respektiert, sofern er nicht mit --no-resume gestartet wurde.",
+        "Dieselbe Übertragungs-Engine wie die anderen Modi: Jede Datei wird per SHA-256 geprüft und zwischengelagert, bevor sie installiert wird. push setzt nicht fort — es verweigert ein Ziel, das schon existiert. Einen abgebrochenen Lauf beendest du, indem du die fehlenden Pfade pushst, oder mit relayium sync. Ein weiterer Lauf kann ein geprüftes Präfix wiederverwenden. Eine unterbrochene Datei ohne solches Präfix wird neu gesendet; vollständig geprüfte Dateien werden übersprungen.",
       ],
     },
     {
@@ -1288,7 +1288,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Aucun relais et aucun repli : si le processus à l'écoute n'est pas joignable, l'envoi échoue — les octets du fichier ne transitent jamais par qui que ce soit d'autre.",
-        "Le même moteur de transfert que les autres modes : chaque fichier est contrôlé par un SHA-256 par fichier et mis en zone d'attente avant d'être installé. push ne reprend pas — il refuse une destination qui existe déjà. Une exécution interrompue se termine en poussant les chemins manquants, ou avec relayium sync, qui poursuit un fichier partiel et que ce processus à l'écoute respecte, sauf s'il a été démarré avec --no-resume.",
+        "Le même moteur de transfert que les autres modes : chaque fichier est contrôlé par un SHA-256 par fichier et mis en zone d'attente avant d'être installé. push ne reprend pas — il refuse une destination qui existe déjà. Une exécution interrompue se termine en poussant les chemins manquants, ou avec relayium sync. Une nouvelle exécution peut réutiliser un préfixe vérifié. Un fichier interrompu sans préfixe vérifié repart du début et les fichiers terminés et vérifiés sont ignorés.",
       ],
     },
     {
@@ -1518,7 +1518,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "لا مُرحِّل ولا احتياطي: إن تعذَّر الوصول إلى المُستمِع، تفشل الدفعة — ولا تمر بايتات الملف أبدًا عبر أي طرف آخر.",
-        "المحرك نفسه المُستخدَم في الأوضاع الأخرى: يُفحَص كل ملف بـ SHA-256 لكل ملف ويوضع في منطقة مؤقتة قبل تثبيته. ولا يستأنف push — فهو يرفض وجهة موجودة سلفًا. وإذا انقطع التشغيل، أكمِله بدفع المسارات الناقصة أو باستخدام relayium sync الذي يُكمل ملفًا جزئيًا ويحترمه هذا المُستمِع ما لم يكن قد بدأ بـ --no-resume.",
+        "المحرك نفسه المُستخدَم في الأوضاع الأخرى: يُفحَص كل ملف بـ SHA-256 لكل ملف ويوضع في منطقة مؤقتة قبل تثبيته. ولا يستأنف push — فهو يرفض وجهة موجودة سلفًا. وإذا انقطع التشغيل، أكمِله بدفع المسارات الناقصة أو باستخدام relayium sync. قد تعيد المحاولة استخدام بادئة جرى التحقق منها. يبدأ الملف المنقطع بلا بادئة صالحة من جديد، وتُتخطّى الملفات المكتملة التي جرى التحقق منها.",
       ],
     },
     {
@@ -1748,7 +1748,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Sin retransmisor y sin respaldo: si no se puede alcanzar el proceso a la escucha, el push falla; los bytes del archivo nunca se enrutan a través de nadie más.",
-        "El mismo motor de transferencia que los otros modos: cada archivo se comprueba con un SHA-256 por archivo y se coloca en un área temporal antes de instalarlo. push no reanuda: rechaza un destino que ya existe. Una ejecución interrumpida se termina enviando las rutas que faltan, o con relayium sync, que continúa un archivo parcial y que este proceso a la escucha respeta salvo que se haya arrancado con --no-resume.",
+        "El mismo motor de transferencia que los otros modos: cada archivo se comprueba con un SHA-256 por archivo y se coloca en un área temporal antes de instalarlo. push no reanuda: rechaza un destino que ya existe. Una ejecución interrumpida se termina enviando las rutas que faltan, o con relayium sync. Otra ejecución puede reutilizar un prefijo verificado. Un archivo interrumpido sin prefijo verificado vuelve a enviarse y los archivos completos verificados se omiten.",
       ],
     },
     {
@@ -1978,7 +1978,7 @@ received 1 file(s), 48213004 bytes from 74318e3b…`,
       },
       bullets: [
         "Sem retransmissor e sem retorno: se o processo à escuta não for alcançável, o push falha — os bytes do arquivo nunca são roteados por mais ninguém.",
-        "O mesmo motor de transferência dos outros modos: cada arquivo é conferido com um SHA-256 por arquivo e preparado em área temporária antes de ser instalado. O push não retoma — ele recusa um destino que já existe. Uma execução interrompida se conclui enviando os caminhos que faltam, ou com o relayium sync, que continua um arquivo parcial e que este processo à escuta respeita, a menos que tenha sido iniciado com --no-resume.",
+        "O mesmo motor de transferência dos outros modos: cada arquivo é conferido com um SHA-256 por arquivo e preparado em área temporária antes de ser instalado. O push não retoma — ele recusa um destino que já existe. Uma execução interrompida se conclui enviando os caminhos que faltam, ou com o relayium sync. Outra execução pode reutilizar um prefixo verificado. Um arquivo interrompido sem prefixo verificado é reenviado; arquivos completos e verificados são ignorados.",
       ],
     },
     {
@@ -2122,6 +2122,6 @@ ls -l /etc/relayium/id.key`,
 export default {
   slug: "guides/server-to-server-transfers",
   published: "2026-07-08",
-  updated: "2026-09-01",
+  updated: "2026-11-25",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

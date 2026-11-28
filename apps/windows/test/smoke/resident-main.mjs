@@ -1540,9 +1540,15 @@ async function scenarioInboxMessages(win) {
 
   check("open was clicked", await clickTest(win, "inbox-open"));
   const opened = await waitInbox(win, "the message body", `document.querySelector('[data-test="inbox-message-body"]') !== null`);
-  check("opening it shows the text that was actually stored", opened === true);
-  const body = await shown(win, "inbox-message-body");
-  check("the decrypted message is the one that was saved", body.includes(INBOX_MESSAGE_TEXT), body);
+  check("opening a long message shows its preview", opened === true);
+  const preview = await shown(win, "conversation-received-body");
+  const expectedPreview = INBOX_MESSAGE_TEXT.split("\n").slice(0, 4).join("\n") + "…";
+  check("the preview omits the tail of the stored message", preview === expectedPreview, preview);
+  check("expand text was clicked", await clickTest(win, "inbox-message-disclosure"));
+  const body = await js(win, `document.querySelector('[data-test="conversation-received-body"]')?.textContent`);
+  check("expanded text equals the exact stored message", body === INBOX_MESSAGE_TEXT);
+  check("collapse text was clicked", await clickTest(win, "inbox-message-disclosure"));
+  check("collapsing restores the preview", (await shown(win, "conversation-received-body")) === expectedPreview);
 
   // ## The clipboard is asserted by its BYTES, not by a label
   //

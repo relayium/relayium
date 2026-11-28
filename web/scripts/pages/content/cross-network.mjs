@@ -12,6 +12,7 @@
 // pages for LANDING_LANGS only; `en` feeds scripts/pages/shells.mjs.
 
 const en = {
+  updated: "2026-11-28",
   // title/description are byte-identical to titleCross/descCross in
   // src/lib/i18n/en.ts: the SPA rewrites the served <head> on boot, so the shell
   // and the app must agree or the URL has two different <head>s depending on who
@@ -68,7 +69,7 @@ const en = {
     items: [
       {
         title: "vs AirDrop",
-        body: "AirDrop is Apple-only and same-vicinity; Relayium connects Windows, Android, iPhone and Mac across different networks, end-to-end encrypted, with just a browser.",
+        body: "AirDrop starts with nearby devices, including compatible Android phones using Quick Share; Relayium connects Windows, Android, iPhone and Mac across different networks, end-to-end encrypted, with just a browser.",
       },
       {
         title: "vs Snapdrop / PairDrop",
@@ -106,6 +107,7 @@ const en = {
 };
 
 const zh = {
+  updated: "2026-11-28",
   title: "跨网络文件与实时文本传输——端到端加密 | Relayium",
   description:
     "用 6 位数字配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。",
@@ -158,7 +160,7 @@ const zh = {
     items: [
       {
         title: "对比 AirDrop",
-        body: "AirDrop 仅限 Apple 设备之间使用，且需彼此靠近；Relayium 能让 Windows、Android、iPhone 与 Mac 跨网络端到端加密互传，只需一个浏览器。",
+        body: "AirDrop 需要在设备靠近时发起，部分安卓手机可以通过 Quick Share 加入；Relayium 能让 Windows、Android、iPhone 与 Mac 跨网络端到端加密互传，只需一个浏览器。",
       },
       {
         title: "对比 Snapdrop / PairDrop",

@@ -208,7 +208,8 @@ describe("/apps native copy matches what the native apps actually do", () => {
     // browser rather than to describe an app.
     const fourth = doc.why.items[ELSEWHERE_CARD].desc;
     expect(fourth).toMatch(/iPhone, iPad, Windows and Linux/);
-    expect(fourth).toMatch(/publishes no app for those platforms/i);
+    expect(fourth).toMatch(/unsigned desktop preview/i);
+    expect(fourth).toMatch(/no public iPhone or iPad app/i);
     expect(fourth).not.toMatch(/background|notification|push\b/i);
     // The page-level positioning scoped ephemeral text to web + CLI; the macOS
     // client sends text too.

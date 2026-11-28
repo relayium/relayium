@@ -214,3 +214,33 @@ describe("the in-development coverage disclosure is pinned, not merely printed",
     expect(SCENARIO).toMatch(/ok\(futureCoverage\)/);
   });
 });
+
+
+describe("conditional release cards in the executed source model", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/lib/AppsPage.svelte"), "utf8");
+  const start = SOURCE.indexOf("function appsCardModel(");
+  const end = SOURCE.indexOf("\nasync function appsHierarchyScenario", start);
+  const evaluate = new Function("APPS_SOURCE", "AVAILABILITY", "CTA_TARGET", "grab", SOURCE.slice(start, end) + "\nreturn appsCardModel();");
+  const grab = (source, re, label) => { const m = source.match(re); if (!m) throw new Error(label); return m[1]; };
+  const availability = (published) => ({ true: () => true, macAvailable: () => true, androidAvailable: () => true, windowsAvailable: () => published });
+  const cta = { web: "/offline-transfer", cli: "/cli", mac: "/mac.dmg", android: "/android.apk", windows: "/windows.exe" };
+  it("includes a published conditional Windows card and counts its heading", () => {
+    const model = evaluate(appSource, availability(true), cta, grab);
+    expect(model.available).toContain("windows");
+    expect(model.cards).toContain("windows");
+    expect(model.h3).toBe(model.cards.length + 2);
+  });
+  it("excludes a withdrawn conditional card from both rendered groups and headings", () => {
+    const model = evaluate(appSource, availability(false), cta, grab);
+    expect(model.cards).not.toContain("windows");
+    expect(model.available).not.toContain("windows");
+    expect(model.future).not.toContain("windows");
+    expect(model.h3).toBe(model.cards.length + 2);
+  });
+  it("refuses conditional syntax the model cannot interpret", () => {
+    expect(() => evaluate(appSource.replace("windowsAvailable ? [{", "windowsAvailable && releaseReady ? [{"), availability(true), cta, grab)).toThrow("unrecognised conditional card expression");
+  });
+  it("refuses an unknown conditional expression", () => {
+    expect(() => evaluate(appSource.replace("windowsAvailable ? [{", "unknownRelease ? [{"), availability(true), cta, grab)).toThrow("unrecognised availability");
+  });
+});

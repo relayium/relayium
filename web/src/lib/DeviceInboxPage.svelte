@@ -61,7 +61,9 @@
   import Help from "./ui/Help.svelte";
   import DeviceSendList from "./DeviceSendList.svelte";
   import releases from "../../native-releases.json";
+  import windowsRelease from "../../windows-release.json";
 
+  type WindowsRelease = { available: boolean; version?: string; downloadUrl?: string; sha256?: string | null; size?: number | null };
   type MacRelease = { available: boolean; downloadUrl: string | null; architectures?: string[] };
 
   // The manifest and the fetcher are props so the two branches that matter —
@@ -69,9 +71,11 @@
   // a test without a second production truth source. App.svelte passes neither.
   let {
     macRelease = releases.macos as MacRelease,
+    windowsRel = windowsRelease.windows as WindowsRelease,
     fetchDevices = defaultFetchDevices,
   }: {
     macRelease?: MacRelease;
+    windowsRel?: WindowsRelease;
     /** Resolves to the raw device rows, or null when the account's devices
      *  could not be determined. Null is NOT an empty list — see `startState`. */
     fetchDevices?: () => Promise<unknown[] | null>;
@@ -340,7 +344,9 @@
   /** The badge and the download button now answer to ONE input. Reading
    *  `p.status` directly here is what let a released Mac app sit under an
    *  "In testing" badge on this very page. */
-  const statusOf = (p: InboxPlatform) => platformStatus(p, macDownloadable);
+  const windowsDownloadable = $derived(windowsRel.available === true && !!windowsRel.version && !!windowsRel.downloadUrl
+    && /^[a-f0-9]{64}$/.test(windowsRel.sha256 ?? "") && Number.isSafeInteger(windowsRel.size) && (windowsRel.size ?? 0) > 0);
+  const statusOf = (p: InboxPlatform) => platformStatus(p, macDownloadable, windowsDownloadable);
 
   /** /guides/device-inbox-server/ exists in all nine languages as a static
    *  page, so this one IS language-prefixed — unlike the SPA routes, whose
@@ -565,6 +571,11 @@
               {:else}
                 <p class="alt" data-di="mac-no-download">{t.deviceInboxPage.macNoDownload}</p>
               {/if}
+            {/if}
+            {#if p.id === "windows" && windowsDownloadable}
+              <p class="alt"><a href={windowsRel.downloadUrl!} data-di="windows-download">
+                {(t.appsPage.cards.windows ?? messages.en.appsPage.cards.windows!).cta(windowsRel.version!)}
+              </a></p>
             {/if}
             {#if p.id === "server"}
               <p class="alt">

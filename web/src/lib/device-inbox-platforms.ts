@@ -74,7 +74,8 @@ export type PlatformStatus = "available" | "testing" | "planned";
  * `status` stays as the pre-release answer, used when the manifest says there is
  * nothing to download.
  */
-export function platformStatus(p: InboxPlatform, macDownloadable: boolean): PlatformStatus {
+export function platformStatus(p: InboxPlatform, macDownloadable: boolean, windowsDownloadable = false): PlatformStatus {
+  if (p.id === "windows" && windowsDownloadable) return "available";
   if (p.id !== "macos") return p.status;
   return macDownloadable ? "available" : p.status;
 }

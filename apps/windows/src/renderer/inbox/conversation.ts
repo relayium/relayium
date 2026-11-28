@@ -41,3 +41,22 @@ export async function deleteConversationSnapshot(snapshot: ConversationSnapshot,
   for (const id of snapshot.deliveries) { if (!alive() || !await actions.delivery(id)) return false; }
   return alive();
 }
+
+/** A display-only prefix. Null means the full text needs no disclosure. */
+export function collapsedMessagePreview(text: string): string | null {
+  let end = 0;
+  let count = 0;
+  let lines = 1;
+  let previousWasCR = false;
+  for (const scalar of text) {
+    const point = scalar.codePointAt(0)!;
+    const startsLine = ((point >= 0x0a && point <= 0x0d) || point === 0x85 || point === 0x2028 || point === 0x2029) &&
+      !(previousWasCR && point === 0x0a);
+    if (count === 160 || (startsLine && lines === 4)) return text.slice(0, end) + "…";
+    if (startsLine) lines++;
+    previousWasCR = point === 0x0d;
+    end += scalar.length;
+    count++;
+  }
+  return null;
+}

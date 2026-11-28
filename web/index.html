@@ -30,8 +30,8 @@
          route-invariant tags (icons, manifest, theme-color) OUTSIDE the markers,
          and keep the marker comments themselves byte-exact. -->
     <!-- SEO-HEAD -->
-    <title>Relayium — Encrypted P2P file and text transfer</title>
-    <meta name="description" content="Send files, links, commands and multiline text between devices with end-to-end encryption. Realtime text is online-only and Relayium servers keep no message bodies; no install required." />
+    <title>Send files and text between your phone and computer | Relayium</title>
+    <meta name="description" content="Send files and text between Windows, Mac, Android and iPhone in your browser. Transfers are end-to-end encrypted. On the same Wi-Fi, no install or account is needed." />
     <meta name="keywords" content="file transfer, text transfer, clipboard sharing, end-to-end encryption, peer-to-peer, P2P, WebRTC, secure file sharing, send files between devices, open source, AirDrop alternative, Snapdrop alternative, Pairdrop alternative" />
     <meta name="author" content="Relayium" />
     <meta name="application-name" content="Relayium" />
@@ -53,8 +53,8 @@
     <!-- Open Graph (Facebook, WeChat, LinkedIn, Slack, Telegram, …) -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="Relayium — Encrypted P2P file and text transfer" />
-    <meta property="og:description" content="Send files, links, commands and multiline text between devices with end-to-end encryption. Realtime text is online-only and Relayium servers keep no message bodies." />
+    <meta property="og:title" content="Send files and text between your phone and computer | Relayium" />
+    <meta property="og:description" content="Send files and text between Windows, Mac, Android and iPhone in your browser. Transfers are end-to-end encrypted. On the same Wi-Fi, no install or account is needed." />
     <meta property="og:url" content="https://relayium.com/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -69,8 +69,8 @@
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Relayium — Encrypted P2P file and text transfer" />
-    <meta name="twitter:description" content="Send files, links, commands and multiline text between devices with end-to-end encryption. Realtime text is online-only and Relayium servers keep no message bodies." />
+    <meta name="twitter:title" content="Send files and text between your phone and computer | Relayium" />
+    <meta name="twitter:description" content="Send files and text between Windows, Mac, Android and iPhone in your browser. Transfers are end-to-end encrypted. On the same Wi-Fi, no install or account is needed." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <meta name="twitter:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file and text transfer" />
 
@@ -85,7 +85,7 @@
             "name": "Relayium",
             "alternateName": "Relayium — secure P2P file and text transfer",
             "url": "https://relayium.com/",
-            "description": "Send files, links, commands and multiline text between devices with end-to-end encryption. Realtime text is online-only and Relayium servers keep no message bodies; no install required.",
+            "description": "Send files and text between Windows, Mac, Android and iPhone in your browser. Transfers are end-to-end encrypted. On the same Wi-Fi, no install or account is needed.",
             "abstract": "Transfer files and ephemeral text between devices in the browser with end-to-end encryption and no install. Files move directly on a local network or through a ciphertext-only relay across networks; an optional stored-link mode keeps files as zero-knowledge ciphertext. Text uses its own live peer session and needs both devices online: Relayium servers keep no message bodies and no server-side history, while each device can copy or keep the text it receives.",
             "applicationCategory": "UtilitiesApplication",
             "applicationSubCategory": "File and text transfer",
@@ -139,7 +139,7 @@
               {
                 "@type": "Question",
                 "name": "Can I send files between different operating systems, like a PC and an iPhone?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium runs in the browser, so it works cross-platform — for example Windows to iPhone, or Android to Mac. Unlike AirDrop it is not limited to Apple devices." }
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium runs in the browser, so it works cross-platform — for example Windows to iPhone, or Android to Mac. Both devices just need a modern browser." }
               },
               {
                 "@type": "Question",
@@ -176,7 +176,8 @@
     <!-- SEO-BODY -->
     <noscript>
       <main>
-        <h1>Relayium — End-to-end encrypted peer-to-peer file and text transfer</h1>
+        <h1>Send files and text between your phone and computer</h1>
+        <p>Open Relayium on both devices on the same Wi-Fi. Choose the receiving device, send your file and accept the transfer on the other screen.</p>
         <p>
           <strong>Relayium</strong> is an open-source, end-to-end encrypted,
           peer-to-peer (P2P) file and text transfer tool that runs entirely in your
@@ -222,7 +223,7 @@
 
         <h2>How Relayium compares</h2>
         <ul>
-          <li><strong>vs AirDrop:</strong> cross-platform and browser-based, not limited to Apple devices — works between, e.g., a Windows PC and an iPhone.</li>
+          <li><strong>vs AirDrop:</strong> supported Android phones can share with AirDrop through Quick Share. For Windows to iPhone, open Relayium on both devices.</li>
           <li><strong>vs WeTransfer or Google Drive:</strong> in realtime mode, files move end-to-end encrypted with no stored server copy and no server size cap — directly device-to-device on the same network, or through an encrypted relay that only ever sees ciphertext across networks; the optional stored download-link mode encrypts files zero-knowledge before any upload so the server never sees plaintext.</li>
           <li><strong>vs Snapdrop / PairDrop:</strong> adds an application-layer end-to-end encryption layer (X25519 + AES-256-GCM) and a SAS verification code, so a malicious signaling server cannot read or MITM the transfer undetected.</li>
         </ul>

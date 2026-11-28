@@ -9,13 +9,15 @@
 import { browserCrossNetworkSection } from "../realtime-facts.mjs";
 
 const en = {
+  updated: "2026-11-28",
+  quickStart: "Open transfer page",
   title: "AirDrop for Windows, Linux and Android",
   description:
-    "There is no official AirDrop for Windows, Linux or Android — here is the closest thing: instant same-Wi-Fi sharing in the browser, no account, no install, plus a way to reach across the internet AirDrop can't.",
+    "Share files between Windows, Linux, Android and Apple devices in two browsers. Follow the same-Wi-Fi steps or use a pairing code across networks.",
   updatedLabel: "Last updated",
   lead: [
-    "AirDrop only exists inside Apple's world, which leaves everyone else — Windows, Linux, Android, and any household with a mix of devices — without a built-in equivalent. This guide shows the closest thing to AirDrop for non-Apple devices: open a web page on both ends and the file just moves.",
-    "It works the same way regardless of platform, so it also covers the case AirDrop never handles well: a Windows laptop, a Linux desktop and an Android phone all in the same room, or all three plus an iPhone thrown in.",
+    "To send a file from Windows to a nearby phone, open Relayium in both browsers on the same Wi-Fi. Choose the phone, select your file and accept the transfer on the phone.",
+    "Some Android phones can also use Quick Share with AirDrop. The browser method works across Windows, Linux, Android and Apple devices without installing an app.",
   ],
   sections: [
     {
@@ -114,7 +116,7 @@ const en = {
     items: [
       {
         q: "Is there an official AirDrop app for Windows or Android?",
-        a: "No — AirDrop is exclusive to Apple devices and Apple has never shipped a Windows or Android client. Relayium is a browser-based equivalent: open relayium.com on both devices and it works the same way regardless of platform, including mixed Apple/non-Apple pairs.",
+        a: "Apple does not offer an AirDrop app for Windows or Android. Supported Android phones can use Quick Share with AirDrop. For Windows, open Relayium on both devices.",
       },
       {
         q: "Do I need an account?",
@@ -142,13 +144,15 @@ const en = {
 };
 
 const zh = {
+  updated: "2026-11-28",
+  quickStart: "打开传输页",
   title: "Windows、Linux、Android 的隔空投送替代方案",
   description:
-    "Windows、Linux、Android 都没有官方版 AirDrop——这是最接近的做法：在浏览器里同一 Wi-Fi 即时互传，无需账号、无需安装，还能做到 AirDrop 做不到的跨网络传输。",
+    "用浏览器在 Windows、Linux、安卓和 Apple 设备之间无线传文件。同一 Wi-Fi 下免登录，也可以用配对码异地互传。",
   updatedLabel: "最近更新",
   lead: [
-    "AirDrop 只活在 Apple 的世界里，这让 Windows、Linux、Android 用户，以及任何混用多种设备的家庭都没有对应的内置方案。本文展示非 Apple 设备最接近 AirDrop 的做法：两端各打开一个网页，文件就传过去了。",
-    "这种方式不区分平台，因此也覆盖了 AirDrop 一向处理不好的场景：同一个房间里有 Windows 笔记本、Linux 台式机和 Android 手机，或者这三者再加一台 iPhone。",
+    "要从 Windows 电脑向附近的手机传文件，让两台设备连上同一 Wi-Fi，分别打开 Relayium。在电脑上选中手机和文件，再到手机上接受传输。",
+    "部分安卓手机也能通过 Quick Share 与 AirDrop 互传。下面的浏览器方法适用于 Windows、Linux、安卓和 Apple 设备，无需安装应用。",
   ],
   sections: [
     {
@@ -247,7 +251,7 @@ const zh = {
     items: [
       {
         q: "Windows 或 Android 有官方版 AirDrop 吗？",
-        a: "没有——AirDrop 是 Apple 设备专属，Apple 从未推出过 Windows 或 Android 客户端。Relayium 是基于浏览器的替代方案：在两台设备上打开 relayium.com，无论平台组合如何都能一样使用，包括 Apple 与非 Apple 混搭的情况。",
+        a: "Apple 没有推出 Windows 或安卓版本的 AirDrop。部分安卓手机可以通过 Quick Share 与 AirDrop 互传；Windows 用户可在两端打开 Relayium 发送文件。",
       },
       {
         q: "需要账号吗？",

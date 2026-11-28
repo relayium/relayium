@@ -1,7 +1,9 @@
 package account
 
 import (
+	"bytes"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,13 +35,20 @@ func TestAndroidClientPolicyIsAnonymousAdvisoryAndInert(t *testing.T) {
 	if !ok || body["schema"] != float64(1) {
 		t.Fatalf("body = %v", body)
 	}
-	for field, want := range map[string]any{
-		"policyRevision": float64(5), "recommendedVersion": "0.3.4",
-		"recommendedBuild": float64(13), "channel": "direct",
-	} {
-		if android[field] != want {
-			t.Errorf("%s = %v, want %v", field, android[field], want)
+	if !bytes.Equal(rec.Body.Bytes(), androidClientPolicyJSON) {
+		t.Fatal("policy route did not serve the embedded advisory")
+	}
+	for _, field := range []string{"policyRevision", "recommendedBuild"} {
+		value, ok := android[field].(float64)
+		if !ok || value <= 0 || value != math.Trunc(value) {
+			t.Errorf("%s = %v, want a positive integer", field, android[field])
 		}
+	}
+	if version, ok := android["recommendedVersion"].(string); !ok || version == "" {
+		t.Errorf("recommendedVersion = %v, want a nonempty version", android["recommendedVersion"])
+	}
+	if android["channel"] != "direct" {
+		t.Errorf("channel = %v, want direct", android["channel"])
 	}
 	if len(body) != 2 || len(android) != 4 {
 		t.Fatalf("unexpected fields: %v", body)

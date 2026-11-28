@@ -283,13 +283,12 @@ describe("llms.txt file and ephemeral text product facts", () => {
     assert.ok(llms.includes("https://apps.apple.com/app/id6801142976"));
     assert.ok(llms.includes("independently versioned"));
     assert.ok(llms.includes("their version numbers are not expected to match"));
-    // The three that do not exist. `apps/` holds mac/, ios/ and RelayiumKit/;
-    // iOS development is paused with no public listing, and there is no Android
-    // or Windows target at all. An answer engine that invented one of these
-    // would send a reader looking for a download that has never existed.
-    // Android left this denial on 2026-09-08: the APK is published, so naming
-    // it among the platforms with no app would be the untrue half.
-    assert.ok(llms.includes("There is no Relayium app for iOS or Windows"));
+    // Windows now has an unsigned public preview; iOS remains non-public.
+    assert.ok(llms.includes("There is no public Relayium iOS app"));
+    assert.match(llms, /unsigned x64 desktop preview/i);
+    assert.match(llms, /in-app email\/password login/i);
+    assert.match(llms, /automatic updating is not enabled/i);
+    assert.doesNotMatch(llms, /no Relayium app for iOS or Windows/i);
     // …and the answer engines must be told what Android actually gets, with its
     // limits, or the omission reads as a full-featured client.
     assert.match(llms, /Android app distributed as a direct APK/i);

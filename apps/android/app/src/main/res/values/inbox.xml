@@ -142,6 +142,8 @@
     <string name="inbox_action_export">Save a copy…</string>
     <string name="inbox_action_share">Share</string>
     <string name="inbox_action_copy">Copy</string>
+    <string name="inbox_message_expand">Expand text</string>
+    <string name="inbox_message_collapse">Collapse text</string>
     <string name="inbox_delete_title">Delete from history?</string>
     <string name="inbox_delete_body">This removes the entry from this device\'s history only. It does not cancel anything, does not clear the other device, and does not delete files you have already saved.</string>
     <string name="inbox_delete_action">Delete</string>

@@ -266,9 +266,11 @@ describe("buildShells", () => {
     ])
       expect(body, `${promise}`).not.toMatch(promise);
     // And each platform without a published Device Inbox receiver says so as an
-    // absence. Windows and iPhone are the two that are left.
-    for (const id of ["windows", "iphone"])
+    // absence. Only iPhone remains without a public receiver.
+    for (const id of ["iphone"])
       expect(body, id).toMatch(new RegExp(`publishes no [^.]*${id === "iphone" ? "iPhone" : id}`, "i"));
+    expect(body, "Windows preview").toMatch(/unsigned Windows x64 desktop preview/i);
+    expect(body, "Windows system service").toMatch(/not a Windows system service/i);
     // Android stopped being one of them on 2026-09-09. It went "no app" →
     // "no RECEIVER" on 2026-09-08 and then to a real receiver at 0.2.0, so BOTH
     // of those denials are now false and the crawler shell — which renders each
